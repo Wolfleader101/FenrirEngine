@@ -4,11 +4,10 @@
 #include "EngineContext.hpp"
 #include "ExtensionSet.hpp"
 #include "GenerationLifecycle.hpp"
-#include "NativeRegistrar.hpp"
+#include "IrisAdapters.hpp"
 #include "ScriptComponents.hpp"
 #include "ScriptData.hpp"
 #include "ScriptSystems.hpp"
-#include "SystemHostNames.hpp"
 
 #include <Iris/Iris.hpp>
 
@@ -91,161 +90,6 @@ namespace Fenrir
         }
     } // namespace
 
-    namespace Detail
-    {
-        // The extension set's registrar over Iris: the one line that reaches Iris's registration. NativeFunction's
-        // registrar sets the function's not-running value, state and name, then registers it under its binding name.
-        class IrisNativeRegistrar final : public NativeRegistrar
-        {
-          public:
-            Iris::CallResult<void> Register(const NativeFunction& function, void* state) override
-            {
-                return function.Register(state);
-            }
-        };
-    } // namespace Detail
-
-    namespace
-    {
-        // The lifecycle's loader over the Iris host: a loaded generation is an Iris component, and this is the one
-        // place that knows it. Scripting's hooks reach the component through Of.
-        class IrisScriptAssemblyLoader final : public Detail::ScriptAssemblyLoader
-        {
-          public:
-            explicit IrisScriptAssemblyLoader(Iris::Host& host) : m_host(host)
-            {
-            }
-
-            Iris::CallResult<std::unique_ptr<Detail::LoadedScriptAssembly>> Load(
-                const std::filesystem::path& path) override
-            {
-                auto loaded = m_host.LoadComponent(path);
-                if (!loaded.Succeeded())
-                {
-                    return {loaded.status, std::nullopt, std::move(loaded.diagnostic), loaded.diagnosticTruncated};
-                }
-                return {Iris::CallStatus::Success, std::make_unique<Loaded>(std::move(*loaded.value)), {}, false};
-            }
-
-            // The Iris component behind a generation this loader loaded.
-            [[nodiscard]] static Iris::Component& Of(Detail::LoadedScriptAssembly& loaded) noexcept
-            {
-                return static_cast<Loaded&>(loaded).component;
-            }
-
-          private:
-            struct Loaded final : Detail::LoadedScriptAssembly
-            {
-                explicit Loaded(Iris::Component&& owner) : component(std::move(owner))
-                {
-                }
-
-                Iris::CallResult<void> Release() override
-                {
-                    return component.Release();
-                }
-
-                Iris::CallResult<Iris::ComponentUnloadState> WaitForUnload(std::chrono::milliseconds timeout) override
-                {
-                    return component.WaitForUnload(timeout);
-                }
-
-                Iris::Component component;
-            };
-
-            Iris::Host& m_host;
-        };
-
-        // ScriptSystems' loader over the Iris component a generation is: the one place that knows the generated host
-        // is a managed type found by name, with four methods bound by name (SystemHostNames.hpp). The method lookup,
-        // and so the missing-method diagnostic, is this adapter's and no fake's.
-        class IrisSystemHostLoader final : public Detail::SystemHostLoader
-        {
-          public:
-            Iris::CallResult<std::unique_ptr<Detail::SystemHost>> Find(
-                Detail::LoadedScriptAssembly& generation) override
-            {
-                using Result = Iris::CallResult<std::unique_ptr<Detail::SystemHost>>;
-                const Iris::Component& component = IrisScriptAssemblyLoader::Of(generation);
-                const auto type = component.FindType(Detail::SystemHostNames::Type);
-                if (type.status == Iris::CallStatus::NotFound)
-                {
-                    return Result{Iris::CallStatus::NotFound, std::nullopt, type.diagnostic, false};
-                }
-                if (!type.Succeeded())
-                {
-                    return Result{type.status, std::nullopt,
-                                  "The script's system host could not be read: " + type.diagnostic, false};
-                }
-                const auto mask = type.value->FindInstanceMethod<std::int32_t()>(Detail::SystemHostNames::PhaseMask);
-                const auto create = type.value->FindInstanceMethod<void()>(Detail::SystemHostNames::OnCreate);
-                const auto run = type.value->FindInstanceMethod<void(std::int32_t)>(Detail::SystemHostNames::Run);
-                const auto destroy = type.value->FindInstanceMethod<void()>(Detail::SystemHostNames::OnDestroy);
-                for (const auto* found : {&mask.status, &create.status, &run.status, &destroy.status})
-                {
-                    if (*found != Iris::CallStatus::Success)
-                    {
-                        return Result{*found, std::nullopt,
-                                      "The script's system host is missing a method: " + mask.diagnostic +
-                                          create.diagnostic + run.diagnostic + destroy.diagnostic,
-                                      false};
-                    }
-                }
-                auto object = type.value->CreateObject();
-                if (!object.Succeeded())
-                {
-                    return Result{object.status, std::nullopt,
-                                  "The script's systems could not be created: " + object.diagnostic,
-                                  object.diagnosticTruncated};
-                }
-                return Result{Iris::CallStatus::Success,
-                              std::make_unique<Host>(std::move(*object.value), *mask.value, *create.value, *run.value,
-                                                     *destroy.value),
-                              {},
-                              false};
-            }
-
-          private:
-            // The managed host and its bound methods. Released before the component, which cannot be released while
-            // an object it made is alive: ScriptSystems drops it at Stop, before the generation is unloaded.
-            struct Host final : Detail::SystemHost
-            {
-                Host(Iris::Object&& instance, Iris::InstanceMethod<std::int32_t()> mask,
-                     Iris::InstanceMethod<void()> create, Iris::InstanceMethod<void(std::int32_t)> run,
-                     Iris::InstanceMethod<void()> destroy)
-                    : object(std::move(instance)), mask(mask), create(create), run(run), destroy(destroy)
-                {
-                }
-
-                Iris::CallResult<std::int32_t> PhaseMask() override
-                {
-                    return mask.Invoke(object);
-                }
-
-                Iris::CallResult<void> OnCreate() override
-                {
-                    return create.Invoke(object);
-                }
-
-                Iris::CallResult<void> Run(std::int32_t phase) override
-                {
-                    return run.Invoke(object, phase);
-                }
-
-                Iris::CallResult<void> OnDestroy() override
-                {
-                    return destroy.Invoke(object);
-                }
-
-                Iris::Object object;
-                Iris::InstanceMethod<std::int32_t()> mask;
-                Iris::InstanceMethod<void()> create;
-                Iris::InstanceMethod<void(std::int32_t)> run;
-                Iris::InstanceMethod<void()> destroy;
-            };
-        };
-    } // namespace
-
     struct Scripting::State
     {
         // Iris's messages arrive through a sink the host keeps until it is cleared, so the logger is borrowed
@@ -287,11 +131,11 @@ namespace Fenrir
         std::unique_ptr<Iris::Host> host;
         // What the lifecycle loads generations through: the host above. Declared before the lifecycle, which borrows
         // it.
-        std::optional<IrisScriptAssemblyLoader> loader;
+        std::optional<Detail::IrisScriptAssemblyLoader> loader;
         // Where a generation's system host comes from, and the systems themselves: started by the lifecycle's start
         // hook, run once per scheduled phase, stopped by its stop hook before the generation is released. Declared
         // after the loader, whose Of they reach the component through, and before the lifecycle, whose hooks call them.
-        IrisSystemHostLoader hostLoader;
+        Detail::IrisSystemHostLoader hostLoader;
         Detail::ScriptSystems systems;
         // The generations of the script assembly: copies, loading, replacing, retiring, and the file watcher.
         Detail::GenerationLifecycle generations;
@@ -490,7 +334,7 @@ namespace Fenrir
     Iris::Component* Scripting::LoadedComponent() noexcept
     {
         auto* loaded = m_state != nullptr ? m_state->generations.Component() : nullptr;
-        return loaded != nullptr ? &IrisScriptAssemblyLoader::Of(*loaded) : nullptr;
+        return loaded != nullptr ? &Detail::IrisScriptAssemblyLoader::Of(*loaded) : nullptr;
     }
 
     void Scripting::Shutdown() noexcept
@@ -718,7 +562,7 @@ namespace Fenrir
                 State* const self = state.get();
                 Detail::GenerationLifecycle::Hooks hooks;
                 hooks.reconcile = [self](Detail::LoadedScriptAssembly& loaded) {
-                    Detail::IrisScriptAssembly assembly(*self->context, IrisScriptAssemblyLoader::Of(loaded));
+                    Detail::IrisScriptAssembly assembly(*self->context, Detail::IrisScriptAssemblyLoader::Of(loaded));
                     return self->scriptData.Admit(*self->context->app, assembly);
                 };
                 hooks.start = [self](Detail::LoadedScriptAssembly& loaded) { return self->systems.Start(loaded); };
