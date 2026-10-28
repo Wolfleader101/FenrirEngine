@@ -69,7 +69,7 @@ public partial struct VehicleWheel
 }
 
 /// <remarks>
-/// From C#: an empty wheel is <see cref="EntityLink.None"/>, as when new. Make it with <c>new</c>:
+/// From C#: an empty wheel is <see cref="Entity.None"/>, as when new. Make it with <c>new</c>:
 /// <c>default(VehicleDifferential)</c> names entity 0 with no scene, so it is inactive, with a warning.
 /// </remarks>
 public partial struct VehicleDifferential

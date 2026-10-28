@@ -40,13 +40,13 @@ public static class Events
 
     public static int ContactBeginCount() => Begins.Count;
 
-    public static uint BeginBodyA(int index) => Begins[index].BodyA.Target.Value;
+    public static uint BeginBodyA(int index) => Begins[index].BodyA.Value;
 
-    public static uint BeginBodyB(int index) => Begins[index].BodyB.Target.Value;
+    public static uint BeginBodyB(int index) => Begins[index].BodyB.Value;
 
-    public static uint BeginColliderA(int index) => Begins[index].ColliderA.Target.Value;
+    public static uint BeginColliderA(int index) => Begins[index].ColliderA.Value;
 
-    public static uint BeginColliderB(int index) => Begins[index].ColliderB.Target.Value;
+    public static uint BeginColliderB(int index) => Begins[index].ColliderB.Value;
 
     public static float BeginPoint(int index, int axis) => Axis(Begins[index].Point, axis);
 
@@ -56,37 +56,37 @@ public static class Events
 
     public static int ContactEndCount() => Ends.Count;
 
-    public static uint EndBodyA(int index) => Ends[index].BodyA.Target.Value;
+    public static uint EndBodyA(int index) => Ends[index].BodyA.Value;
 
-    public static uint EndBodyB(int index) => Ends[index].BodyB.Target.Value;
+    public static uint EndBodyB(int index) => Ends[index].BodyB.Value;
 
-    public static uint EndColliderA(int index) => Ends[index].ColliderA.Target.Value;
+    public static uint EndColliderA(int index) => Ends[index].ColliderA.Value;
 
-    public static uint EndColliderB(int index) => Ends[index].ColliderB.Target.Value;
+    public static uint EndColliderB(int index) => Ends[index].ColliderB.Value;
 
     public static int TriggerEnterCount() => Enters.Count;
 
-    public static uint EnterTrigger(int index) => Enters[index].Trigger.Target.Value;
+    public static uint EnterTrigger(int index) => Enters[index].Trigger.Value;
 
-    public static uint EnterOtherBody(int index) => Enters[index].OtherBody.Target.Value;
+    public static uint EnterOtherBody(int index) => Enters[index].OtherBody.Value;
 
-    public static uint EnterOtherCollider(int index) => Enters[index].OtherCollider.Target.Value;
+    public static uint EnterOtherCollider(int index) => Enters[index].OtherCollider.Value;
 
     public static int TriggerExitCount() => Exits.Count;
 
-    public static uint ExitTrigger(int index) => Exits[index].Trigger.Target.Value;
+    public static uint ExitTrigger(int index) => Exits[index].Trigger.Value;
 
-    public static uint ExitOtherBody(int index) => Exits[index].OtherBody.Target.Value;
+    public static uint ExitOtherBody(int index) => Exits[index].OtherBody.Value;
 
-    public static uint ExitOtherCollider(int index) => Exits[index].OtherCollider.Target.Value;
+    public static uint ExitOtherCollider(int index) => Exits[index].OtherCollider.Value;
 
     public static int JointBrokenCount() => Breaks.Count;
 
-    public static uint BrokenJoint(int index) => Breaks[index].Joint.Target.Value;
+    public static uint BrokenJoint(int index) => Breaks[index].Joint.Value;
 
-    public static uint BrokenBodyA(int index) => Breaks[index].BodyA.Target.Value;
+    public static uint BrokenBodyA(int index) => Breaks[index].BodyA.Value;
 
-    public static bool BrokenBodyBIsWorld(int index) => Breaks[index].BodyB.IsNull;
+    public static bool BrokenBodyBIsWorld(int index) => Breaks[index].BodyB == Entity.None;
 
     public static float BrokenForce(int index, int axis) => Axis(Breaks[index].Force, axis);
 

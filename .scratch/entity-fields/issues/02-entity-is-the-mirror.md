@@ -24,12 +24,20 @@
 
 **Touches:** `packages/FenrirScripting/api/`, `packages/FenrirScripting/include/FenrirScripting/`, `packages/FenrirScripting/src/`, `packages/FenrirScripting/Managed/Fenrir.Scripting/`, `packages/FenrirScripting/Tests/`, `packages/FenrirPhysics/Scripting/`, `packages/FenrirPhysics/Managed/`, `packages/FenrirRenderer/Scripting/`, `packages/FenrirRenderer/Managed/`, `packages/FenrirDebugDraw/Scripting/`, `packages/FenrirDebugDraw/Managed/`, `examples/PhysicsDemo/scripts/`, `examples/RendererDemo/scripts/`, `GLOSSARY.md`, `docs/adr/0044-natives-pass-enums-text-and-wrappers-by-value-and-bindings-use-other-bindings-mirrors.md`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `grep -rn "EntityLink\|EntityValue" packages examples` finds nothing.
-- [ ] `ctest -R "Scripting|PhysicsCompile"` passes under the msvc-x64-debug preset, the new link cases included; both generators are no-ops afterwards; Iris.Bindings' tests pass unchanged.
-- [ ] clang-format and `check_tickets.py` pass.
+- [x] `grep -rn "EntityLink\|EntityValue" packages examples` finds nothing.
+- [x] `ctest -R "Scripting|PhysicsCompile"` passes under the msvc-x64-debug preset, the new link cases included; both generators are no-ops afterwards; Iris.Bindings' tests pass unchanged.
+- [x] clang-format and `check_tickets.py` pass.
 
 ## Comments
 
 Filed 2026-10-28 from the spec. Cut from the spec's branch after PR #202 merged into it. Widened the same day on the user's question: `EntityValue` goes too, natives taking the entity by pointer, so the generator needs no change.
+
+Built 2026-10-28 on branch `claude/entity-fields-02`. Beyond the list above, and needed: `InternalsVisibleTo` for the five
+fixture assemblies (they name entities by id through the internal constructor); the guard's owner rule looks an
+owner-less entity up by value, so those fixtures' entities and a zeroed field still resolve, and an entity another scene
+owns is not alive; one engine accessor, `Entity::HasEntityList()`, since `Entity(id, list)` is a creating constructor and
+cannot probe for a list; query rows carry the whole `Fenrir::Entity`, since `Query<T>` built its entity from the bare
+value and a query entity written into a native field would have had no scene; the Iris.Bindings fixture's two natives
+take the entity alias by pointer, since the SDK check compiles against the real `Entity`, no longer a wrapper.
