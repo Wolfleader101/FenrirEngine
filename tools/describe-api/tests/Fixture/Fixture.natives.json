@@ -146,7 +146,7 @@
       "namespace": "Fixture",
       "source": "Natives.cpp",
       "noexcept": true,
-      "doc": "Logs text: a native outside the others' namespace, noexcept, taking characters and their length.",
+      "doc": "Logs text: a native outside the others' namespace, noexcept, taking characters and their length, and a char by value. Both chars are u8, whatever the target's signedness.",
       "returns": {
         "type": "void",
         "kind": "void"
@@ -157,13 +157,18 @@
           "type": "const char*",
           "kind": "pointer",
           "pointee": "char",
-          "pointeeKind": "i8",
+          "pointeeKind": "u8",
           "const": true
         },
         {
           "name": "length",
           "type": "std::int32_t",
           "kind": "i32"
+        },
+        {
+          "name": "terminator",
+          "type": "char",
+          "kind": "u8"
         }
       ]
     },
