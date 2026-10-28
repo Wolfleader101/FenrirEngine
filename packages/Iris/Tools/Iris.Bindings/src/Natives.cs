@@ -91,27 +91,109 @@ internal sealed record FacadeName(string Class, string Method)
 }
 
 /// <summary>
+/// The crossing form: how a native's parameter or result crosses to C#, decided once by <see cref="Natives.Bind" />
+/// from the description and the binding's configuration (the rule is the README's "Natives" paragraph). A result is
+/// <see cref="None" /> (nothing), a <see cref="Value" /> or a <see cref="Pointer" /> (<c>void*</c>); a parameter is any
+/// of the other six.
+/// </summary>
+internal enum Crossing
+{
+    /// <summary>No result.</summary>
+    None,
+
+    /// <summary>A number, bool, enum or wrapper by value.</summary>
+    Value,
+
+    /// <summary>A <c>const T*</c> to one value: <c>in T</c>.</summary>
+    In,
+
+    /// <summary>A <c>T*</c> the native writes: <c>out T</c>, which the registration zeroes before the native runs.</summary>
+    Out,
+
+    /// <summary>A <c>T*</c> the native reads and writes, or a <c>void*</c>: <c>T*</c>, an address C# passes as it is.</summary>
+    Pointer,
+
+    /// <summary>A non-const pointer with a count folded into it: <c>Span&lt;T&gt;</c>.</summary>
+    Span,
+
+    /// <summary>A const pointer with a count folded into it: <c>ReadOnlySpan&lt;T&gt;</c>.</summary>
+    ReadOnlySpan,
+
+    /// <summary>
+    /// Text with its length folded into it: <c>ReadOnlySpan&lt;char&gt;</c> for a <c>std::string_view</c> (the type is
+    /// <c>char</c>, the span's element), <c>string</c> for a <c>const char*</c> and a length (the type is <c>string</c>).
+    /// </summary>
+    Text,
+}
+
+/// <summary>
+/// One parameter of a native's C# declaration: its crossing form, its C# type (a span's element, never a modifier),
+/// its C# name, and what the C++ parameter list says about it. The strings the writers need are spelled here, once.
+/// </summary>
+/// <param name="Form">How it crosses.</param>
+/// <param name="Type">The C# type without modifier or span: <c>Hit</c>, <c>Vector3</c>, <c>char</c>, <c>void</c>.</param>
+/// <param name="Name">The C# identifier (a keyword gets <c>@</c>).</param>
+/// <param name="Index">
+/// Its position in the C++ function's full parameter list, the call context and the state counted: what the
+/// registration's zeroing names for an <see cref="Crossing.Out" />.
+/// </param>
+/// <param name="Folded">
+/// The C++ parameter the declaration folds into this one, a span's count or a text's length, which is the span's
+/// <c>Length</c>, so it gets no parameter and no doc of its own; null otherwise.
+/// </param>
+/// <param name="Source">The described parameter it binds.</param>
+internal sealed record BoundParameter(Crossing Form, string Type, string Name, int Index, string? Folded, NativeParameter Source)
+{
+    /// <summary>As the declaration takes it: <c>in Vector3 origin</c>, <c>Span&lt;Hit&gt; hits</c>, <c>void* body</c>.</summary>
+    public string Declaration => $"{Spell(Form, Type)} {Name}";
+
+    /// <summary>As the facade method takes it: the declaration's, with <c>in</c> dropped to a value.</summary>
+    public string FacadeParameter => $"{FacadeType} {Name}";
+
+    /// <summary>The facade parameter's type, which tells two methods of one name apart.</summary>
+    public string FacadeType => Spell(Form == Crossing.In ? Crossing.Value : Form, Type);
+
+    /// <summary>As the facade method passes it: <c>in origin</c>, <c>out hit</c>, or the name alone.</summary>
+    public string FacadeArgument => Form switch
+    {
+        Crossing.In => $"in {Name}",
+        Crossing.Out => $"out {Name}",
+        _ => Name,
+    };
+
+    /// <summary>Whether it is spelled as a span, which <c>System</c> declares.</summary>
+    public bool IsSpan => Form is Crossing.Span or Crossing.ReadOnlySpan || (Form == Crossing.Text && Type != "string");
+
+    private static string Spell(Crossing form, string type) => form switch
+    {
+        Crossing.In => $"in {type}",
+        Crossing.Out => $"out {type}",
+        Crossing.Pointer => $"{type}*",
+        Crossing.Span => $"Span<{type}>",
+        Crossing.ReadOnlySpan => $"ReadOnlySpan<{type}>",
+        Crossing.Text when type != "string" => $"ReadOnlySpan<{type}>",
+        _ => type,
+    };
+}
+
+/// <summary>The result of a native's C# declaration: nothing, a value, or a <c>void*</c>, spelled once.</summary>
+internal sealed record BoundResult(Crossing Form, string Type)
+{
+    /// <summary>As the declaration returns it: <c>void</c>, <c>bool</c>, <c>Motion</c>, <c>void*</c>.</summary>
+    public string Declaration => Form == Crossing.Pointer ? $"{Type}*" : Type;
+
+    /// <summary>Whether a facade method returning an output may drop it: nothing or a <c>bool</c>.</summary>
+    public bool Droppable => Form == Crossing.None || this is { Form: Crossing.Value, Type: "bool" };
+}
+
+/// <summary>
 /// A native function resolved against a binding: its C# declaration, what is zeroed, and the public method its
 /// <c>@facade</c> names.
 /// </summary>
-/// <param name="Result">The C# result type of the declaration.</param>
-/// <param name="Parameters">The C# parameters of the declaration, each <c>[modifier] Type name</c>.</param>
+/// <param name="Result">The result of the declaration.</param>
+/// <param name="Parameters">The parameters of the declaration, each with its crossing form.</param>
 /// <param name="Named">The described types its declaration names, by C++ name.</param>
-/// <param name="Outputs">
-/// The indices, into the C++ function's full parameter list (the call context and the state counted), of the single
-/// outputs (<c>out T</c>) the registration zeroes before the native runs. An output span and an <c>inOut</c> pointer are
-/// not among them.
-/// </param>
-/// <param name="Folded">
-/// The C++ parameters the declaration folds into another: a span's count and a text's length, which are the span's
-/// <c>Length</c>, so they get no parameter and no doc of their own.
-/// </param>
 /// <param name="Facade">The public class and method its <c>@facade</c> names; null for a native with no mark.</param>
-/// <param name="FacadeParameters">
-/// The parameters of its facade method: the declaration's with <c>in</c> dropped (<c>in Vector3 force</c> becomes
-/// <c>Vector3 force</c>, passed as <c>in force</c>), everything else as declared, and without the first when it is
-/// <c>this</c>. Empty with no mark.
-/// </param>
 /// <param name="FacadeMirror">
 /// The struct this binding mirrors that the mark names as its class, whose generated part gets the method; null for
 /// a facade class.
@@ -124,41 +206,46 @@ internal sealed record FacadeName(string Class, string Method)
 /// The declaration's <c>out T name</c> parameter the mark's <c>returns</c> names, which the facade method declares in
 /// its call and gives back as its value, dropping the native's <c>bool</c>; null when the mark names none.
 /// </param>
-internal sealed record BoundNative(NativeFunction Function, string Result, IReadOnlyList<string> Parameters,
-                                   IReadOnlyList<string> Named, IReadOnlyList<int> Outputs, IReadOnlyList<string> Folded,
-                                   FacadeName? Facade, IReadOnlyList<string> FacadeParameters, DescribedType? FacadeMirror,
-                                   bool FacadeOnThis, string? FacadeReturned = null)
+internal sealed record BoundNative(NativeFunction Function, BoundResult Result, IReadOnlyList<BoundParameter> Parameters,
+                                   IReadOnlyList<string> Named, FacadeName? Facade, DescribedType? FacadeMirror,
+                                   bool FacadeOnThis, BoundParameter? FacadeReturned = null)
 {
+    /// <summary>
+    /// The indices, into the C++ function's full parameter list (the call context and the state counted), of the single
+    /// outputs (<c>out T</c>) the registration zeroes before the native runs. An output span and an <c>inOut</c> pointer are
+    /// not among them.
+    /// </summary>
+    public IReadOnlyList<int> Outputs => Parameters.Where(parameter => parameter.Form == Crossing.Out)
+                                                   .Select(parameter => parameter.Index).ToList();
+
+    /// <summary>The C++ parameters the declaration folds into another: a span's count and a text's length.</summary>
+    public IReadOnlyList<string> Folded => Parameters.Where(parameter => parameter.Folded is not null)
+                                                     .Select(parameter => parameter.Folded!).ToList();
+
+    /// <summary>
+    /// The parameters of its facade method: the declaration's without the first when it is <c>this</c> and without the
+    /// returned output, each taken as <see cref="BoundParameter.FacadeParameter" />. Empty with no mark.
+    /// </summary>
+    public IReadOnlyList<BoundParameter> FacadeParameters =>
+        Facade is null ? [] : Parameters.Skip(FacadeOnThis ? 1 : 0).Where(parameter => parameter != FacadeReturned).ToList();
+
     /// <summary>The facade method's result: the returned output's type when the mark names one, else the declaration's.</summary>
-    public string FacadeResult => FacadeReturned is null ? Result : TypeOf(FacadeReturned);
+    public string FacadeResult => FacadeReturned is null ? Result.Declaration : FacadeReturned.Type;
 
     /// <summary>The name of the output the facade method returns, or null.</summary>
-    public string? FacadeReturnedName => FacadeReturned is null ? null : ParameterName(FacadeReturned);
+    public string? FacadeReturnedName => FacadeReturned?.Name;
 
     /// <summary>
     /// The arguments the facade method passes when it returns an output: <see cref="FacadeArguments" />, with the
     /// returned output declared in place (<c>out Hit hit</c>) rather than passed by name.
     /// </summary>
     public IEnumerable<string> FacadeReturningArguments =>
-        Parameters.Select((parameter, index) => parameter == FacadeReturned ? parameter
+        Parameters.Select((parameter, index) => parameter == FacadeReturned ? parameter.Declaration
                                                 : FacadeOnThis && index == 0 ? "in this"
-                                                : parameter.StartsWith("in ", StringComparison.Ordinal) ||
-                                                  parameter.StartsWith("out ", StringComparison.Ordinal)
-                                                    ? $"{parameter[..parameter.IndexOf(' ')]} {ParameterName(parameter)}"
-                                                    : ParameterName(parameter));
-
-    // The type of a `[modifier] Type name` parameter, without its modifier.
-    private static string TypeOf(string parameter)
-    {
-        var type = parameter[..parameter.LastIndexOf(' ')];
-        return type.StartsWith("out ", StringComparison.Ordinal) ? type["out ".Length..]
-               : type.StartsWith("in ", StringComparison.Ordinal) ? type["in ".Length..]
-               : type;
-    }
+                                                : parameter.FacadeArgument);
 
     /// <summary>Whether its declaration takes a span (text, a <c>ReadOnlySpan&lt;char&gt;</c>, among them), which <c>System</c> declares.</summary>
-    public bool NeedsSystem => Parameters.Any(parameter => parameter.StartsWith("Span<", StringComparison.Ordinal) ||
-                                                           parameter.StartsWith("ReadOnlySpan<", StringComparison.Ordinal));
+    public bool NeedsSystem => Parameters.Any(parameter => parameter.IsSpan);
 
     /// <summary>
     /// The arguments the facade method passes to the declaration, one per parameter: <c>in</c> or <c>out</c> and the
@@ -166,24 +253,13 @@ internal sealed record BoundNative(NativeFunction Function, string Result, IRead
     /// instance method.
     /// </summary>
     public IEnumerable<string> FacadeArguments =>
-        Parameters.Select((parameter, index) => FacadeOnThis && index == 0 ? "in this"
-                                                : parameter.StartsWith("in ", StringComparison.Ordinal) ||
-                                                  parameter.StartsWith("out ", StringComparison.Ordinal)
-                                                    ? $"{parameter[..parameter.IndexOf(' ')]} {ParameterName(parameter)}"
-                                                    : ParameterName(parameter));
+        Parameters.Select((parameter, index) => FacadeOnThis && index == 0 ? "in this" : parameter.FacadeArgument);
 
     /// <summary>The C++ parameter an instance method binds to <c>this</c>, which its doc does not name; null otherwise.</summary>
     public string? FacadeReceiver => FacadeOnThis ? Function.Parameters[0].Name : null;
 
     /// <summary>The types of the facade method's parameters, which tell two methods of one name apart.</summary>
-    public IEnumerable<string> FacadeParameterTypes =>
-        FacadeParameters.Select(parameter => parameter[..parameter.LastIndexOf(' ')]);
-
-    // The name of a `[modifier] Type name` parameter: a type has no spaces.
-    private static string ParameterName(string parameter) => parameter[(parameter.LastIndexOf(' ') + 1)..];
-
-    /// <summary>The C# type of a <c>std::string_view</c> parameter.</summary>
-    public const string TextType = "ReadOnlySpan<char>";
+    public IEnumerable<string> FacadeParameterTypes => FacadeParameters.Select(parameter => parameter.FacadeType);
 }
 
 /// <summary>
@@ -293,29 +369,27 @@ internal static class Natives
     private static BoundNative Bind(Binding binding, NativesConfig config, NativeFunction function, string where)
     {
         var named = new List<string>();
-        string result;
+        BoundResult result;
         switch (function.Returns)
         {
             case { Kind: "void" }:
-                result = "void";
+                result = new BoundResult(Crossing.None, "void");
                 break;
             case { Kind: "pointer", PointeeKind: "void" }:
-                result = "void*";
+                result = new BoundResult(Crossing.Pointer, "void");
                 break;
             case { Kind: "pointer" or "string" }:
                 throw Unmappable(where + " (result)", function.Returns,
                                  "a native returns a number, a bool, an enum, a wrapper, nothing or a void*");
             case { Kind: "struct" or "enum" } type:
-                result = ByValue(binding, type, where + " (result)", named);
+                result = new BoundResult(Crossing.Value, ByValue(binding, type, where + " (result)", named));
                 break;
             case var type:
-                result = Scalar(type.Kind, where + " (result)", type);
+                result = new BoundResult(Crossing.Value, Scalar(type.Kind, where + " (result)", type));
                 break;
         }
 
-        var parameters = new List<string>();
-        var outputs = new List<int>();
-        var folded = new List<string>();
+        var parameters = new List<BoundParameter>();
         // The described parameters follow the call context and, when the native takes one, its state.
         var leading = function.State == null ? 1 : 2;
         var all = function.Parameters;
@@ -325,6 +399,7 @@ internal static class Natives
             var subject = $"{where}::{parameter.Name}";
             var name = Identifier(parameter.Name);
             var type = parameter.Type;
+            var position = leading + index;
             var countFollows = index + 1 < all.Count && all[index + 1].Type.Kind == "i32";
             if (type.Kind == "pointer")
             {
@@ -335,8 +410,7 @@ internal static class Natives
 
                 if (type.Const && type.Pointee == "char" && countFollows)
                 {
-                    parameters.Add($"string {name}");
-                    folded.Add(all[++index].Name);
+                    parameters.Add(new BoundParameter(Crossing.Text, "string", name, position, all[++index].Name, parameter));
                     continue;
                 }
 
@@ -348,8 +422,7 @@ internal static class Natives
 
                 if (parameter.Output)
                 {
-                    parameters.Add($"out {pointee} {name}");
-                    outputs.Add(leading + index);
+                    parameters.Add(new BoundParameter(Crossing.Out, pointee, name, position, null, parameter));
                 }
                 else if (countFollows && !parameter.Input && !parameter.InOut && type.PointeeKind != "void")
                 {
@@ -362,16 +435,16 @@ internal static class Natives
                                          "take a std::string_view, or a non-const buffer to fill");
                     }
 
-                    parameters.Add($"{(type.Const ? "ReadOnlySpan" : "Span")}<{pointee}> {name}");
-                    folded.Add(all[++index].Name);
+                    parameters.Add(new BoundParameter(type.Const ? Crossing.ReadOnlySpan : Crossing.Span, pointee, name, position,
+                                                      all[++index].Name, parameter));
                 }
                 else if (parameter.InOut || type.PointeeKind == "void")
                 {
-                    parameters.Add($"{pointee}* {name}");
+                    parameters.Add(new BoundParameter(Crossing.Pointer, pointee, name, position, null, parameter));
                 }
                 else if (type.Const)
                 {
-                    parameters.Add($"in {pointee} {name}");
+                    parameters.Add(new BoundParameter(Crossing.In, pointee, name, position, null, parameter));
                 }
                 else
                 {
@@ -385,19 +458,21 @@ internal static class Natives
 
             if (config.Types.TryGetValue(type.Spelling, out var mapped))
             {
-                parameters.Add($"{mapped} {name}");
+                parameters.Add(new BoundParameter(Crossing.Value, mapped, name, position, null, parameter));
             }
             else if (type.Kind == "string")
             {
-                parameters.Add($"{BoundNative.TextType} {name}");
+                parameters.Add(new BoundParameter(Crossing.Text, "char", name, position, null, parameter));
             }
             else if (type.Kind is "struct" or "enum")
             {
-                parameters.Add($"{ByValue(binding, type, subject, named)} {name}");
+                parameters.Add(new BoundParameter(Crossing.Value, ByValue(binding, type, subject, named), name, position, null,
+                                                  parameter));
             }
             else
             {
-                parameters.Add($"{Scalar(type.Kind, subject, type)} {name}");
+                parameters.Add(new BoundParameter(Crossing.Value, Scalar(type.Kind, subject, type), name, position, null,
+                                                  parameter));
             }
         }
 
@@ -408,26 +483,18 @@ internal static class Natives
                          ? null
                          : binding.Mirrored.FirstOrDefault(type => type.Category == Category.Struct &&
                                                                    binding.CSharpName(type) == facade.Class);
-        var onThis = mirror is not null && parameters.Count > 0 &&
-                     parameters[0].StartsWith($"in {binding.CSharpName(mirror)} ", StringComparison.Ordinal);
-        var returned = facade is null ? null : FacadeReturned(function, facade, parameters, result, outputs, where);
-        var facadeParameters = facade is null
-                                   ? []
-                                   : parameters.Skip(onThis ? 1 : 0)
-                                               .Where(parameter => parameter != returned)
-                                               .Select(parameter => parameter.StartsWith("in ", StringComparison.Ordinal)
-                                                                        ? parameter["in ".Length..]
-                                                                        : parameter).ToList();
-        return new BoundNative(function, result, parameters, named.Distinct().ToList(), outputs, folded, facade,
-                               facadeParameters, mirror, onThis, returned);
+        var onThis = mirror is not null && parameters is [{ Form: Crossing.In } first, ..] &&
+                     first.Type == binding.CSharpName(mirror);
+        var returned = facade is null ? null : FacadeReturned(function, facade, parameters, result, where);
+        return new BoundNative(function, result, parameters, named.Distinct().ToList(), facade, mirror, onThis, returned);
     }
 
     // The `out T name` parameter the mark's `returns` names, or null without one. Refused, naming the native and the
     // mark, when the name is not a single out of the declaration, when the declaration has another single out, or when
     // its result is neither bool nor void: the header reader refuses those shapes too, so a description it wrote never
     // reaches here with them, but one written by hand may.
-    private static string? FacadeReturned(NativeFunction function, FacadeName facade, IReadOnlyList<string> parameters,
-                                          string result, IReadOnlyList<int> outputs, string where)
+    private static BoundParameter? FacadeReturned(NativeFunction function, FacadeName facade,
+                                                  IReadOnlyList<BoundParameter> parameters, BoundResult result, string where)
     {
         if (function.FacadeReturns is null)
         {
@@ -435,21 +502,21 @@ internal static class Natives
         }
 
         var name = Identifier(function.FacadeReturns);
-        var returned = parameters.FirstOrDefault(parameter => parameter.StartsWith("out ", StringComparison.Ordinal) &&
-                                                              parameter[(parameter.LastIndexOf(' ') + 1)..] == name);
+        var returned = parameters.FirstOrDefault(parameter => parameter.Form == Crossing.Out && parameter.Name == name);
         if (returned is null)
         {
             throw new BindingException($"{where}: @facade {facade} returns '{function.FacadeReturns}', which is not an out of its declaration");
         }
 
-        if (outputs.Count > 1)
+        var outputs = parameters.Count(parameter => parameter.Form == Crossing.Out);
+        if (outputs > 1)
         {
-            throw new BindingException($"{where}: @facade {facade} returns one output, but the declaration has {outputs.Count} outs");
+            throw new BindingException($"{where}: @facade {facade} returns one output, but the declaration has {outputs} outs");
         }
 
-        if (result is not ("bool" or "void"))
+        if (!result.Droppable)
         {
-            throw new BindingException($"{where}: @facade {facade} returns an output, but the declaration's result is {result}, which the method would lose");
+            throw new BindingException($"{where}: @facade {facade} returns an output, but the declaration's result is {result.Declaration}, which the method would lose");
         }
 
         return returned;
@@ -457,8 +524,8 @@ internal static class Natives
 
     // The native's @facade as a class and method, or null without one. The mark is refused when the declaration cannot
     // be public: an internal mirror among the types it names, or a pointer among its parameters or as its result.
-    private static FacadeName? Facade(Binding binding, NativeFunction function, IReadOnlyList<string> parameters,
-                                      string result, IEnumerable<string> named, string where)
+    private static FacadeName? Facade(Binding binding, NativeFunction function, IReadOnlyList<BoundParameter> parameters,
+                                      BoundResult result, IEnumerable<string> named, string where)
     {
         if (function.Facade is null)
         {
@@ -480,14 +547,14 @@ internal static class Natives
             }
         }
 
-        foreach (var parameter in parameters.Where(parameter => parameter[..parameter.LastIndexOf(' ')].EndsWith('*')))
+        foreach (var parameter in parameters.Where(parameter => parameter.Form == Crossing.Pointer))
         {
-            throw new BindingException($"{where}: @facade {facade} cannot be public: it takes {parameter}");
+            throw new BindingException($"{where}: @facade {facade} cannot be public: it takes {parameter.Declaration}");
         }
 
-        if (result.EndsWith('*'))
+        if (result.Form == Crossing.Pointer)
         {
-            throw new BindingException($"{where}: @facade {facade} cannot be public: it returns {result}");
+            throw new BindingException($"{where}: @facade {facade} cannot be public: it returns {result.Declaration}");
         }
 
         return facade;
