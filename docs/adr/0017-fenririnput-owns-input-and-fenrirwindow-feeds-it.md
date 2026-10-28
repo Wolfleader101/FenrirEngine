@@ -35,6 +35,6 @@ C# gets the same as C++ through FenrirInput's scripting extension (ADR-0009): th
 
 ## Consequences
 
-- The DemoApp's `Events.hpp` input structs and its GLFW callbacks are not migrated. They go when the DemoApp is deleted.
+- The DemoApp's `Events.hpp` input structs and its GLFW callbacks were not migrated; they went with the DemoApp (the renderer foundation, PR #88).
 - Input mapping (actions and bindings) builds on FenrirInput later, out of this map's scope.
 - If an SDL3-only feature (rumble, IME, touch) is wanted, it joins FenrirInput's types and the feed, and only the window's library adapter changes.

@@ -80,4 +80,4 @@ FenrirSkeleton and FenrirPhysics stay unaware of each other.
 
 - *Refines ADR-0028's bone attachment line* (any parent, resolution outside the component, placement in dependency order) and *ADR-0031's engine names*: a source name over 255 UTF-8 bytes gets an engine name shortened at a UTF-8 character boundary and suffixed to stay unique, with a diagnostic, while the source name and identity are kept unchanged, so every bone remains attachable by engine name.
 - Ticket 33 mirrors `BoneAttachment` and `BoneName` (with its rejecting `Set`) in C#, and crosses `AttachmentState` and `Detach` as native functions.
-- Ticket 62 (kinematic bodies following bones) builds on this.
+- Ticket 62 (kinematic bodies following bones) builds on this. *Resolved by ADR-0040* for tick-posed skeletons: glue writes a bone-following kinematic body's `Transform` in `Tick` from the simulation pose, with no `BoneAttachment` on the body. Frame-posed skeletons keep the lag recorded above.

@@ -39,7 +39,7 @@ Immediate calls, as rich as Unreal's `DrawDebug*`:
 
 ## Physics draws into it
 
-FenrirPhysics depends on FenrirDebugDraw. Its tick systems draw each world's debug output into the world's scene's `DebugDraw`, in a `Physics` group, with duration 0, so the lines live exactly until the next step. It keeps its category flags (`Colliders`, `Contacts`…) to decide what to generate; groups only decide what is shown. `PhysicsWorld::DebugLines()`, the packed `DebugLine` and `DebugColour`'s packed colours go. That rewrite is the physics map's work.
+FenrirPhysics depends on FenrirDebugDraw. Its tick systems draw each world's debug output into the world's scene's `DebugDraw`, in a `Physics` group, with duration 0, so the lines live exactly until the next step. It keeps its category flags (`Colliders`, `Contacts`…) to decide what to generate; groups only decide what is shown. `PhysicsWorld::DebugLines()`, the packed `DebugLine` and `DebugColour`'s packed colours go. That rewrite is the physics map's work. *Done (renderer foundation ticket 18):* FenrirPhysics draws through its private `DebugCanvas` into the scene's `DebugDraw`, and the packed line type is gone.
 
 C# gets the same calls through FenrirDebugDraw's own scripting extension (ADR-0009), built only when scripting is on.
 
