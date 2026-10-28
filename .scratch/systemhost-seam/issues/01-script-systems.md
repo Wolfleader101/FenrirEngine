@@ -16,7 +16,7 @@
 
 **Touches:** `packages/FenrirScripting/src/SystemHost.hpp`, `packages/FenrirScripting/src/SystemHostNames.hpp`, `packages/FenrirScripting/src/ScriptSystems.hpp`, `packages/FenrirScripting/src/ScriptSystems.cpp`, `packages/FenrirScripting/src/Scripting.cpp`, `packages/FenrirScripting/Managed/Fenrir.Scripting.Generators/SystemGenerator.cs`, `packages/FenrirScripting/Tests/Rules/`, `packages/FenrirScripting/Tests/CMakeLists.txt`, `GLOSSARY.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Not cut until the test-support tickets touching `packages/FenrirScripting/Tests/CMakeLists.txt` and `src/ComponentLoader.hpp` have merged into `dotnet-scripting`; then cut from `dotnet-scripting` and target it.
 - [x] The spec's "Done looks like" greps hold; the seven Rules cases pass in under a second each.

@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 
 # SystemHost seam: the systems runner behind a seam, with its rules as Rules tests
 
