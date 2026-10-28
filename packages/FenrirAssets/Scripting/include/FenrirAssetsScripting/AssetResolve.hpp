@@ -6,12 +6,11 @@
 // once per place and message through the guard (NativeGuard, ADR-0045); the place is the caller's unless it passes
 // one, so a helper called from several natives can pass its caller's through.
 
-#include <cstdint>
 #include <source_location>
 #include <string>
 
+#include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirAssets/AssetStore.hpp"
-#include "FenrirAssetsScripting/AssetHandleBits.hpp"
 #include "FenrirScripting/NativeGuard.hpp"
 
 namespace Fenrir
@@ -25,15 +24,15 @@ namespace Fenrir
     }
 
     /**
-     * @brief The asset store, if `bits` (a handle as it crosses from C#, AssetHandleBits) names a live asset of kind
-     * `T` in it; null with a warning once if the app has no store or the handle is empty or stale.
+     * @brief The asset store, if `handle` (as a native takes it, through its pointer) names a live asset of kind `T`
+     * in it; null with a warning once if the app has no store or the handle is empty or stale.
      */
     template <typename T>
-    [[nodiscard]] AssetStore* Resolve(const NativeGuard& guard, std::uint64_t bits,
+    [[nodiscard]] AssetStore* Resolve(const NativeGuard& guard, const AssetHandle<T>& handle,
                                       std::source_location where = std::source_location::current())
     {
         AssetStore* store = StoreFor(guard, where);
-        if (store == nullptr || store->IsValid(AssetHandleFromBits<T>(bits)))
+        if (store == nullptr || store->IsValid(handle))
         {
             return store;
         }

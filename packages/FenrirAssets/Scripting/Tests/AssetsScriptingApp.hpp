@@ -38,7 +38,10 @@ namespace AssetsScriptingTests
     // The built-in name the fixture shader is registered under, so C# loads it as a game loads `builtin:lit`.
     inline constexpr const char* FixtureShaderName = "builtin:scripting-fixture";
 
-    // A handle as it crosses to the fixture: the generation in the high half, the index in the low.
+    // How the tests carry a handle across Iris's scalar-only invoke (FindMethod passes numbers and pointers, not
+    // structs): as two 32-bit halves in one std::uint64_t, the generation high and the index low, which the fixture's
+    // TestHandle (Fixture/Meshes.cs) packs and unpacks the same way. The harness's own convention; not how a native
+    // takes one (that is AssetHandle<T> itself, through a pointer).
     template <typename T>
     std::uint64_t BitsOf(Fenrir::AssetHandle<T> handle)
     {

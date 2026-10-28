@@ -142,6 +142,30 @@
       "alignment": 4
     },
     {
+      "name": "Fenrir::ScriptAssetHandle",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 8,
+      "alignment": 4,
+      "doc": "An asset handle of no stated kind, laid out as AssetHandle<T> is: C#'s AssetHandle<T>.ToNative() and FromNative(). Default is the empty handle.",
+      "fields": [
+        {
+          "name": "index",
+          "offset": 0,
+          "kind": "u32",
+          "default": 0,
+          "doc": "The slot in the store's table of the kind."
+        },
+        {
+          "name": "generation",
+          "offset": 4,
+          "kind": "u32",
+          "default": 0,
+          "doc": "The slot's generation when the asset was made; zero only in the empty handle."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::ScriptAssetOwner",
       "category": "enum",
       "size": 1,
