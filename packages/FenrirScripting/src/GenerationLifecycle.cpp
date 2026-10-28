@@ -103,7 +103,7 @@ namespace Fenrir::Detail
         }
     } // namespace
 
-    void GenerationLifecycle::Configure(ComponentLoader& loader, ILogger* logger, Settings settings, Hooks hooks)
+    void GenerationLifecycle::Configure(ScriptAssemblyLoader& loader, ILogger* logger, Settings settings, Hooks hooks)
     {
         m_loader = &loader;
         m_logger = logger;
@@ -184,7 +184,7 @@ namespace Fenrir::Detail
         return Result{Iris::CallStatus::Success, {}, false};
     }
 
-    void GenerationLifecycle::Retire(std::unique_ptr<LoadedComponent> released, std::shared_ptr<ScriptCopy> copy)
+    void GenerationLifecycle::Retire(std::unique_ptr<LoadedScriptAssembly> released, std::shared_ptr<ScriptCopy> copy)
     {
         (void)released->Release();
         m_retired.push_back({std::move(released), std::move(copy), m_generation, false});

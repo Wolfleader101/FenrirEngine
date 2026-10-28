@@ -11,9 +11,9 @@
 
 #include <Iris/Iris.hpp>
 
-#include "ComponentLoader.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "ReloadWatcher.hpp"
+#include "ScriptAssemblyLoader.hpp"
 
 namespace Fenrir::Detail
 {
@@ -23,7 +23,7 @@ namespace Fenrir::Detail
 
     /**
      * @brief The life of the script assembly's generations: each one a private copy of the file loaded through a
-     * ComponentLoader, replaced by the next build with the previous one restored if the next fails, released, and
+     * ScriptAssemblyLoader, replaced by the next build with the previous one restored if the next fails, released, and
      * waited for until the loader says it has been collected. It reads the file on disk, and a ReloadWatcher decides
      * from that when it is ready to be loaded again.
      *
@@ -57,9 +57,9 @@ namespace Fenrir::Detail
         struct Hooks
         {
             /** @brief All-or-nothing checks on a freshly loaded component. Nothing may change if this fails. */
-            std::function<Result(LoadedComponent&)> reconcile;
+            std::function<Result(LoadedScriptAssembly&)> reconcile;
             /** @brief Starts what runs inside the loaded generation (its systems). A failure releases it again. */
-            std::function<Result(LoadedComponent&)> start;
+            std::function<Result(LoadedScriptAssembly&)> start;
             /** @brief Stops what ran inside the generation, before it is released, and forgets what it defined. */
             std::function<void()> stop;
             /** @brief Runs before a reload takes the old generation down, so nothing a script recorded is left half
@@ -75,7 +75,7 @@ namespace Fenrir::Detail
         GenerationLifecycle& operator=(const GenerationLifecycle&) = delete;
 
         /** @brief Gives the lifecycle what it needs. `loader` and `logger` are borrowed and must outlive it. */
-        void Configure(ComponentLoader& loader, ILogger* logger, Settings settings, Hooks hooks);
+        void Configure(ScriptAssemblyLoader& loader, ILogger* logger, Settings settings, Hooks hooks);
 
         /** @brief Loads the first generation, from the file as it is now. NotInitialized before Configure. */
         [[nodiscard]] Result Load();
@@ -117,7 +117,7 @@ namespace Fenrir::Detail
         }
 
         /** @brief The loaded generation, or null. Valid until it is unloaded. */
-        [[nodiscard]] LoadedComponent* Component() noexcept
+        [[nodiscard]] LoadedScriptAssembly* Component() noexcept
         {
             return m_component.get();
         }
@@ -139,14 +139,14 @@ namespace Fenrir::Detail
 
         [[nodiscard]] std::optional<FileStamp> StampNow() const;
         [[nodiscard]] Result LoadGeneration(std::shared_ptr<ScriptCopy> existing);
-        void Retire(std::unique_ptr<LoadedComponent> released, std::shared_ptr<ScriptCopy> copy);
+        void Retire(std::unique_ptr<LoadedScriptAssembly> released, std::shared_ptr<ScriptCopy> copy);
 
-        ComponentLoader* m_loader = nullptr;
+        ScriptAssemblyLoader* m_loader = nullptr;
         ILogger* m_logger = nullptr;
         Settings m_settings;
         Hooks m_hooks;
 
-        std::unique_ptr<LoadedComponent> m_component;
+        std::unique_ptr<LoadedScriptAssembly> m_component;
         int m_generation = 0;
         int m_copyCounter = 0;
         std::shared_ptr<ScriptCopy> m_activeCopy;
@@ -155,7 +155,7 @@ namespace Fenrir::Detail
         // A released generation waits here until the loader confirms it was collected.
         struct Retired
         {
-            std::unique_ptr<LoadedComponent> component;
+            std::unique_ptr<LoadedScriptAssembly> component;
             std::shared_ptr<ScriptCopy> copy;
             int generation = 0;
             bool warned = false;
