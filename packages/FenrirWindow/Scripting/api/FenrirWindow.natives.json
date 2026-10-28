@@ -26,6 +26,8 @@
       "source": "../src/WindowScripting.cpp",
       "state": "Fenrir::WindowScripting",
       "doc": "`window`'s size in logical units.",
+      "facade": "Window.Size",
+      "facadeReturns": "size",
       "returns": {
         "type": "void",
         "kind": "void"
@@ -53,6 +55,8 @@
       "source": "../src/WindowScripting.cpp",
       "state": "Fenrir::WindowScripting",
       "doc": "`window`'s size in pixels.",
+      "facade": "Window.PixelSize",
+      "facadeReturns": "size",
       "returns": {
         "type": "void",
         "kind": "void"

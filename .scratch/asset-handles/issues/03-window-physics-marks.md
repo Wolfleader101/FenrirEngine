@@ -10,11 +10,11 @@
 
 **Touches:** `packages/FenrirWindow/Scripting/src/WindowScripting.cpp`, `packages/FenrirWindow/Scripting/api/`, `packages/FenrirWindow/Managed/Fenrir.Window/`, `packages/FenrirPhysics/Scripting/src/PhysicsScripting.cpp`, `packages/FenrirPhysics/Scripting/api/`, `packages/FenrirPhysics/Managed/Fenrir.Physics/`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `grep -n "out WindowSize\|out JointState" packages/FenrirWindow/Managed/Fenrir.Window/Window.cs packages/FenrirPhysics/Managed/Fenrir.Physics/PhysicsWorld.cs` finds nothing; both stages regenerate to a clean tree.
-- [ ] `FenrirWindowScripting` (and its display test where a display exists) and `FenrirPhysicsScripting` pass under the msvc-x64-debug preset.
-- [ ] `check_tickets.py` and clang-format pass.
+- [x] `grep -n "out WindowSize\|out JointState" packages/FenrirWindow/Managed/Fenrir.Window/Window.cs packages/FenrirPhysics/Managed/Fenrir.Physics/PhysicsWorld.cs` finds nothing; both stages regenerate to a clean tree.
+- [x] `FenrirWindowScripting` (and its display test where a display exists) and `FenrirPhysicsScripting` pass under the msvc-x64-debug preset.
+- [x] `check_tickets.py` and clang-format pass.
 
 ## Comments
 
