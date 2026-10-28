@@ -5,11 +5,12 @@
 #include "GenerationLifecycle.hpp"
 #include "ScriptComponents.hpp"
 #include "ScriptData.hpp"
+#include "ScriptSystems.hpp"
+#include "SystemHostNames.hpp"
 
 #include <Iris/Iris.hpp>
 
 #include <atomic>
-#include <cassert>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -21,7 +22,6 @@
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <thread>
 #include <typeindex>
 #include <unordered_map>
 #include <utility>
@@ -161,6 +161,94 @@ namespace Fenrir
 
             Iris::Host& m_host;
         };
+
+        // ScriptSystems' loader over the Iris component a generation is: the one place that knows the generated host
+        // is a managed type found by name, with four methods bound by name (SystemHostNames.hpp). The method lookup,
+        // and so the missing-method diagnostic, is this adapter's and no fake's.
+        class IrisSystemHostLoader final : public Detail::SystemHostLoader
+        {
+          public:
+            Iris::CallResult<std::unique_ptr<Detail::SystemHost>> Find(Detail::LoadedComponent& generation) override
+            {
+                using Result = Iris::CallResult<std::unique_ptr<Detail::SystemHost>>;
+                const Iris::Component& component = IrisComponentLoader::Of(generation);
+                const auto type = component.FindType(Detail::SystemHostNames::Type);
+                if (type.status == Iris::CallStatus::NotFound)
+                {
+                    return Result{Iris::CallStatus::NotFound, std::nullopt, type.diagnostic, false};
+                }
+                if (!type.Succeeded())
+                {
+                    return Result{type.status, std::nullopt,
+                                  "The script's system host could not be read: " + type.diagnostic, false};
+                }
+                const auto mask = type.value->FindInstanceMethod<std::int32_t()>(Detail::SystemHostNames::PhaseMask);
+                const auto create = type.value->FindInstanceMethod<void()>(Detail::SystemHostNames::OnCreate);
+                const auto run = type.value->FindInstanceMethod<void(std::int32_t)>(Detail::SystemHostNames::Run);
+                const auto destroy = type.value->FindInstanceMethod<void()>(Detail::SystemHostNames::OnDestroy);
+                for (const auto* found : {&mask.status, &create.status, &run.status, &destroy.status})
+                {
+                    if (*found != Iris::CallStatus::Success)
+                    {
+                        return Result{*found, std::nullopt,
+                                      "The script's system host is missing a method: " + mask.diagnostic +
+                                          create.diagnostic + run.diagnostic + destroy.diagnostic,
+                                      false};
+                    }
+                }
+                auto object = type.value->CreateObject();
+                if (!object.Succeeded())
+                {
+                    return Result{object.status, std::nullopt,
+                                  "The script's systems could not be created: " + object.diagnostic,
+                                  object.diagnosticTruncated};
+                }
+                return Result{Iris::CallStatus::Success,
+                              std::make_unique<Host>(std::move(*object.value), *mask.value, *create.value, *run.value,
+                                                     *destroy.value),
+                              {},
+                              false};
+            }
+
+          private:
+            // The managed host and its bound methods. Released before the component, which cannot be released while
+            // an object it made is alive: ScriptSystems drops it at Stop, before the generation is unloaded.
+            struct Host final : Detail::SystemHost
+            {
+                Host(Iris::Object&& instance, Iris::InstanceMethod<std::int32_t()> mask,
+                     Iris::InstanceMethod<void()> create, Iris::InstanceMethod<void(std::int32_t)> run,
+                     Iris::InstanceMethod<void()> destroy)
+                    : object(std::move(instance)), mask(mask), create(create), run(run), destroy(destroy)
+                {
+                }
+
+                Iris::CallResult<std::int32_t> PhaseMask() override
+                {
+                    return mask.Invoke(object);
+                }
+
+                Iris::CallResult<void> OnCreate() override
+                {
+                    return create.Invoke(object);
+                }
+
+                Iris::CallResult<void> Run(std::int32_t phase) override
+                {
+                    return run.Invoke(object, phase);
+                }
+
+                Iris::CallResult<void> OnDestroy() override
+                {
+                    return destroy.Invoke(object);
+                }
+
+                Iris::Object object;
+                Iris::InstanceMethod<std::int32_t()> mask;
+                Iris::InstanceMethod<void()> create;
+                Iris::InstanceMethod<void(std::int32_t)> run;
+                Iris::InstanceMethod<void()> destroy;
+            };
+        };
     } // namespace
 
     struct Scripting::State
@@ -175,7 +263,11 @@ namespace Fenrir
         {
             Shutdown();
         }
-        State() = default;
+        // The App's logger outlives every State; ScriptSystems borrows it from the start, while `logger` below is
+        // borrowed only while the Iris sink can call Forward.
+        explicit State(ILogger& appLogger) : systems(hostLoader, &appLogger)
+        {
+        }
         State(const State&) = delete;
         State& operator=(const State&) = delete;
 
@@ -199,17 +291,13 @@ namespace Fenrir
         // What the lifecycle loads generations through: the host above. Declared before the lifecycle, which borrows
         // it.
         std::optional<IrisComponentLoader> loader;
+        // Where a generation's system host comes from, and the systems themselves: started by the lifecycle's start
+        // hook, run once per scheduled phase, stopped by its stop hook before the generation is released. Declared
+        // after the loader, whose Of they reach the component through, and before the lifecycle, whose hooks call them.
+        IrisSystemHostLoader hostLoader;
+        Detail::ScriptSystems systems;
         // The generations of the script assembly: copies, loading, replacing, retiring, and the file watcher.
         Detail::GenerationLifecycle generations;
-
-        // The script's systems: one managed object (the generated SystemHost) the engine calls once per phase. Released
-        // before the component, which cannot be released while an object it made is alive.
-        std::optional<Iris::Object> runner;
-        std::optional<Iris::InstanceMethod<void(std::int32_t)>> runnerRun;
-        std::optional<Iris::InstanceMethod<void()>> runnerDestroy;
-        std::thread::id mainThread;
-        std::size_t phaseCalls = 0;
-        int phaseMask = 0; // Bit n is set when the loaded generation has a system in phase n.
 
         // The assembly named by the config is only ever copied; the copy is what loads.
         std::filesystem::path scriptAssembly;
@@ -221,90 +309,6 @@ namespace Fenrir
         // Reloads now, if scripting is running; see GenerationLifecycle::Reload.
         Iris::CallResult<void> Reload();
         void PollForReload();
-
-        // Stops the generation's systems before it is released: they say goodbye, and what they defined goes.
-        void StopSystems();
-
-        // Makes the generation's systems if the script assembly has any, and runs OnCreate. Nothing to do (and success)
-        // when the script defines no systems. The phases themselves are scheduled once, at Install.
-        Iris::CallResult<void> StartSystems(Detail::LoadedComponent& loaded)
-        {
-            using Result = Iris::CallResult<void>;
-            const Iris::Component& component = IrisComponentLoader::Of(loaded);
-            const auto type = component.FindType("Fenrir.Scripting.Generated.SystemHost");
-            if (type.status == Iris::CallStatus::NotFound)
-            {
-                return Result{Iris::CallStatus::Success, {}, false};
-            }
-            if (!type.Succeeded())
-            {
-                return Result{type.status, "The script's system host could not be read: " + type.diagnostic, false};
-            }
-            auto object = type.value->CreateObject();
-            if (!object.Succeeded())
-            {
-                return Result{object.status, "The script's systems could not be created: " + object.diagnostic,
-                              object.diagnosticTruncated};
-            }
-            const auto mask = type.value->FindInstanceMethod<std::int32_t()>("PhaseMask");
-            const auto create = type.value->FindInstanceMethod<void()>("OnCreate");
-            const auto run = type.value->FindInstanceMethod<void(std::int32_t)>("Run");
-            const auto destroy = type.value->FindInstanceMethod<void()>("OnDestroy");
-            for (const auto* found : {&mask.status, &create.status, &run.status, &destroy.status})
-            {
-                if (*found != Iris::CallStatus::Success)
-                {
-                    return Result{*found,
-                                  "The script's system host is missing a method: " + mask.diagnostic +
-                                      create.diagnostic + run.diagnostic + destroy.diagnostic,
-                                  false};
-                }
-            }
-            runner.emplace(std::move(*object.value));
-            runnerRun.emplace(*run.value);
-            runnerDestroy.emplace(*destroy.value);
-            mainThread = std::this_thread::get_id();
-
-            const auto phases = mask.value->Invoke(*runner);
-            if (!phases.Succeeded())
-            {
-                return Result{phases.status, "The script's systems could not be listed: " + phases.diagnostic,
-                              phases.diagnosticTruncated};
-            }
-            phaseMask = *phases.value;
-            const auto created = create.value->Invoke(*runner);
-            if (!created.Succeeded())
-            {
-                return Result{created.status, "The script's systems could not start: " + created.diagnostic,
-                              created.diagnosticTruncated};
-            }
-            return Result{Iris::CallStatus::Success, {}, false};
-        }
-
-        // One transition into managed code for the whole phase. Only ever on the main thread: Iris calls, script calls
-        // and the native functions they call all assume it.
-        void RunPhase(int phase)
-        {
-            if (!runner.has_value() || !runnerRun.has_value() || (phaseMask & (1 << phase)) == 0)
-            {
-                return;
-            }
-            if (std::this_thread::get_id() != mainThread)
-            {
-                assert(false && "Scripts must only run on the main thread");
-                if (ILogger* log = logger)
-                {
-                    log->Error("Scripting: a script phase was asked to run off the main thread and was skipped.");
-                }
-                return;
-            }
-            ++phaseCalls;
-            const auto ran = runnerRun->Invoke(*runner, phase);
-            if (!ran.Succeeded() && logger != nullptr)
-            {
-                logger->Error("Scripting: running the script's systems failed: {}", ran.diagnostic);
-            }
-        }
 
         void Forward(const Iris::LogMessage& message)
         {
@@ -341,7 +345,7 @@ namespace Fenrir
             {
                 // The systems say goodbye while the runtime is still up; the generation is released, its data removed
                 // and the runtime asked to unload it; then the host that loaded it goes.
-                if (generations.HasGeneration() || runner.has_value())
+                if (generations.HasGeneration() || systems.HasSystems())
                 {
                     generations.Unload();
                 }
@@ -402,23 +406,6 @@ namespace Fenrir
     bool Scripting::HasScripts() const noexcept
     {
         return m_state != nullptr && m_state->generations.HasGeneration();
-    }
-
-    void Scripting::State::StopSystems()
-    {
-        if (runner.has_value() && runnerDestroy.has_value() && contextActive)
-        {
-            const auto destroyed = runnerDestroy->Invoke(*runner);
-            if (!destroyed.Succeeded() && logger != nullptr)
-            {
-                logger->Error("Scripting: the script's systems could not shut down cleanly: {}", destroyed.diagnostic);
-            }
-        }
-        runnerRun.reset();
-        runnerDestroy.reset();
-        runner.reset();
-        phaseMask = 0;
-        scriptData.Forget();
     }
 
     Iris::CallResult<void> Scripting::State::Reload()
@@ -482,7 +469,7 @@ namespace Fenrir
         {
             return {};
         }
-        return {m_state->phaseCalls, m_state->context->queryCalls, m_state->changes.Size()};
+        return {m_state->systems.PhaseCalls(), m_state->context->queryCalls, m_state->changes.Size()};
     }
 
     Scripting::ChangeSummary Scripting::ApplyChanges()
@@ -579,8 +566,8 @@ namespace Fenrir
 
     Scripting Scripting::InstallImpl(App& app, ScriptingConfig config)
     {
-        auto state = std::make_shared<State>();
         ILogger& logger = *app.Logger();
+        auto state = std::make_shared<State>(logger);
 
         // Whatever happens below, the App finishing Run releases everything Iris owns, on the main thread
         // (a sequential system), before Run returns.
@@ -799,8 +786,12 @@ namespace Fenrir
                     Detail::IrisScriptAssembly assembly(*self->context, IrisComponentLoader::Of(loaded));
                     return self->scriptData.Admit(*self->context->app, assembly);
                 };
-                hooks.start = [self](Detail::LoadedComponent& loaded) { return self->StartSystems(loaded); };
-                hooks.stop = [self] { self->StopSystems(); };
+                hooks.start = [self](Detail::LoadedComponent& loaded) { return self->systems.Start(loaded); };
+                // The systems say goodbye, and what the generation defined goes.
+                hooks.stop = [self] {
+                    self->systems.Stop();
+                    self->scriptData.Forget();
+                };
                 hooks.beforeReload = [self] { (void)self->changes.Apply(*self->context->app, self->components); };
                 const bool hotReload = settings.hotReload;
                 state->loader.emplace(*state->host);
@@ -816,7 +807,8 @@ namespace Fenrir
                                                            SchedulePriority::Update, SchedulePriority::PostUpdate};
                 for (int phase = 0; phase < 4; ++phase)
                 {
-                    app.AddSequentialSystems(priorities[phase], {[state, phase](App&) { state->RunPhase(phase); }});
+                    app.AddSequentialSystems(priorities[phase],
+                                             {[state, phase](App&) { state->systems.RunPhase(phase); }});
                 }
                 return std::nullopt;
             },
