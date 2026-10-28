@@ -33,19 +33,18 @@
 #       Fenrir<Pkg>ScriptFixture target.
 #   fenrir_scripting_tests(<Pkg> SOURCES <files...> [TEST_ARGS <args...>])
 #       Fenrir<Pkg>ScriptingTests: the package from C#, through the scripting fixture harness (FenrirScripting's
-#       HeadlessApp, ExtensionTestApp and ScriptingProbe): an App with the package installed and scripting running the
-#       fixture assembly. Its sources, the generated defaults test, and the harness headers; the calling directory and
-#       FenrirScripting's Tests on its include path; links the library and Catch2; deploys scripting and the package's
-#       contract beside it; depends on the fixture. add_test(Fenrir<Pkg>Scripting) with TEST_ARGS, a 300 s timeout and
+#       HeadlessApp, ExtensionTestApp and ScriptingProbe, from the FenrirScriptingTestSupport library): an App with the
+#       package installed and scripting running the fixture assembly. Its sources and the generated defaults test; the
+#       calling directory on its include path; links the library, the test support and Catch2; deploys scripting and the
+#       package's contract beside it; depends on the fixture. add_test(Fenrir<Pkg>Scripting) with TEST_ARGS, a 300 s timeout and
 #       FENRIR_TEST_<PKG>_FIXTURE in its environment. It leaves FENRIR_<PKG>_FIXTURE_ENVIRONMENT in the caller's scope
 #       for a package that adds a test of its own on the same executable.
 #   fenrir_scripting_rules_tests(<Pkg> SOURCES <files...> [TEST_ARGS <args...>])
 #       Fenrir<Pkg>ScriptingRulesTests: the natives' rules (no package installed, a stale handle, each warning once under
 #       the native's name), called from C++ through FenrirScripting's NativeCallHarness with an extension state the test
-#       makes, so with no .NET and no fixture assembly. The harness includes FenrirScripting's private
-#       src/ChangeBuffer.hpp, so the executable sees that package's src as FenrirScriptingRulesTests does (a leak the
-#       harness's own change closes; until then it is encoded here once), and this package's src for the extension state
-#       and the natives header. add_test(Fenrir<Pkg>ScriptingRules) with TEST_ARGS and a 60 s timeout.
+#       makes, so with no .NET and no fixture assembly. The harness comes from the FenrirScriptingTestSupport library,
+#       which alone sees FenrirScripting's src; the executable sees this package's src for the extension state and the
+#       natives header. add_test(Fenrir<Pkg>ScriptingRules) with TEST_ARGS and a 60 s timeout.
 #
 # Timeouts are fixed here. FenrirScripting's own CMakeLists stay off these functions: its contract is the SDK, its
 # fixture builds twice for the reload tests, and the built-in extension is Install's own, not a package's.
@@ -169,7 +168,6 @@ endfunction()
 function(fenrir_scripting_tests pkg)
     cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "SOURCES;TEST_ARGS")
     string(TOUPPER "${pkg}" PKG)
-    set(tests_dir "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../Tests")
     include("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
     fenrir_add_catch2()
 
@@ -178,19 +176,10 @@ function(fenrir_scripting_tests pkg)
     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${defaults}")
         set(defaults "")
     endif()
-    add_executable(Fenrir${pkg}ScriptingTests
-        ${arg_SOURCES}
-        ${defaults}
-        "${tests_dir}/ExtensionTestApp.hpp"
-        "${tests_dir}/HeadlessApp.hpp"
-        "${tests_dir}/ScriptingProbe.hpp"
-    )
-    target_include_directories(Fenrir${pkg}ScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${tests_dir}")
-    target_link_libraries(Fenrir${pkg}ScriptingTests PRIVATE Fenrir${pkg}Scripting Catch2::Catch2WithMain)
-    # The harness reads the fixture's path with std::getenv, which MSVC's runtime calls unsafe.
-    if(MSVC)
-        target_compile_definitions(Fenrir${pkg}ScriptingTests PRIVATE _CRT_SECURE_NO_WARNINGS)
-    endif()
+    add_executable(Fenrir${pkg}ScriptingTests ${arg_SOURCES} ${defaults})
+    target_include_directories(Fenrir${pkg}ScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_link_libraries(Fenrir${pkg}ScriptingTests PRIVATE Fenrir${pkg}Scripting FenrirScriptingTestSupport
+        Catch2::Catch2WithMain)
     fenrir_deploy_scripting(Fenrir${pkg}ScriptingTests EXTENSIONS ${pkg})
     add_dependencies(Fenrir${pkg}ScriptingTests Fenrir${pkg}ScriptFixture)
 
@@ -202,18 +191,13 @@ endfunction()
 
 function(fenrir_scripting_rules_tests pkg)
     cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "SOURCES;TEST_ARGS")
-    set(tests_dir "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../Tests")
     include("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
     fenrir_add_catch2()
 
-    add_executable(Fenrir${pkg}ScriptingRulesTests
-        ${arg_SOURCES}
-        "${tests_dir}/HeadlessApp.hpp"
-        "${tests_dir}/NativeCallHarness.hpp"
-    )
-    target_include_directories(Fenrir${pkg}ScriptingRulesTests PRIVATE "${tests_dir}" "${tests_dir}/../src"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src")
-    target_link_libraries(Fenrir${pkg}ScriptingRulesTests PRIVATE Fenrir${pkg}Scripting Catch2::Catch2WithMain)
+    add_executable(Fenrir${pkg}ScriptingRulesTests ${arg_SOURCES})
+    target_include_directories(Fenrir${pkg}ScriptingRulesTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(Fenrir${pkg}ScriptingRulesTests PRIVATE Fenrir${pkg}Scripting FenrirScriptingTestSupport
+        Catch2::Catch2WithMain)
     add_test(NAME Fenrir${pkg}ScriptingRules COMMAND Fenrir${pkg}ScriptingRulesTests ${arg_TEST_ARGS})
     set_tests_properties(Fenrir${pkg}ScriptingRules PROPERTIES TIMEOUT 60)
 endfunction()

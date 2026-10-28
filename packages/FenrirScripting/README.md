@@ -751,7 +751,8 @@ passes a pointer or an optional through and warns when it is empty, and `Warn` w
 lookups (its world, its store) are built on them in its extension state. A span C# passes as a first element and a count
 is read with `Fenrir::SpanOf` (`NativeMarshalling.hpp`, which also has `WriteText` for text out into a capacity buffer
 and `Utf8ToUtf16`): the first element is the one pointer that can be null, for an empty span. A native's rules (no world,
-dead entity, each warning once) are tested from C++ with `Tests/NativeCallHarness.hpp`, with no .NET (see "Tests").
+dead entity, each warning once) are tested from C++ with `Tests/Support/NativeCallHarness.hpp`, with no .NET (see
+"Tests").
 
 ## Exposing a native function
 
@@ -877,19 +878,21 @@ FenrirScripting` shows them) and give `FenrirScriptingTests` Catch2's options: a
 with an `INFO` message.
 
 The counters and the loaded Iris component the tests need are not on `Scripting`; the tests read them through
-`ScriptingProbe` (`Tests/ScriptingProbe.hpp`), which `Scripting` names as a friend.
+`ScriptingProbe` (`Tests/Support/ScriptingProbe.hpp`), which `Scripting` names as a friend.
 
-`Tests/HeadlessApp.hpp` is the harness later tickets build on: `HeadlessApp` owns an `App` and a recording
+`Tests/Support/HeadlessApp.hpp` is the harness later tickets build on: `HeadlessApp` owns an `App` and a recording
 logger, and `Run(n)` runs exactly `n` frames.
 
-`Tests/NativeCallHarness.hpp` is the test seam for native functions: `Fenrir::Testing::NativeCallHarness` owns a
+`Tests/Support/NativeCallHarness.hpp` is the test seam for native functions: `Fenrir::Testing::NativeCallHarness` owns a
 `HeadlessApp` and a change buffer, `Context("PhysicsNative.Raycast")` gives the call context the registration's thunk
 would build for that native, and `ApplyChanges()` plays back what the native recorded, so a native is called from C++
 and its rules (no world, stale handle, dead entity, each warning once) are asserted on the app and its logger with no
-.NET and no fixture assembly. `CallContext` names it as a friend. It includes the package's private
-`src/ChangeBuffer.hpp`, so a test executable using it adds FenrirScripting's `src` directory to its includes beside
-`fenrir_scripting_tests_dir`, as `FenrirScriptingRulesTests` does. The rules tests of `NativeGuard`, `ZeroingOutputs`
-and the marshalling helpers (`Tests/Rules/`) are written on it.
+.NET and no fixture assembly. `CallContext` names it as a friend. The change buffer and the registry behind it are the
+package's private modules, so they sit behind a pimpl in `Tests/Support/NativeCallHarness.cpp`, and `ApplyChanges()`
+returns the harness's own `ApplyOutcome`; the `FenrirScriptingTestSupport` static library (`Tests/Support/`) owns the
+four shared headers and that file, and is the one test target given FenrirScripting's `src`. A test executable links the
+library. The rules tests of `NativeGuard`, `ZeroingOutputs` and the marshalling helpers (`Tests/Rules/`) are written on
+it.
 
 The reload rules (the previous copy restored when a build fails, a start failure releasing the generation, retire and
 sweep, the re-entrancy guard) are `Tests/Rules/GenerationLifecycleTests.cpp`: `GenerationLifecycle` loads through its
