@@ -61,13 +61,13 @@ public static class World
     {
         var filter = new QueryFilter { Mask = mask, IgnoreBody = new Entity(ignoreBody), HitTriggers = hitTriggers };
         return PhysicsWorld.Raycast(new Vector3(0, y, 0), new Vector3(0, -1, 0), 100, out RaycastHit hit, filter)
-            ? hit.Body.Value
+            ? hit.Body.Target.Value
             : uint.MaxValue;
     }
 
-    public static uint LastHitBody() => lastHit.Body.Value;
+    public static uint LastHitBody() => lastHit.Body.Target.Value;
 
-    public static uint LastHitCollider() => lastHit.Collider.Value;
+    public static uint LastHitCollider() => lastHit.Collider.Target.Value;
 
     public static float LastHitDistance() => lastHit.Distance;
 
@@ -86,7 +86,7 @@ public static class World
         return count;
     }
 
-    public static uint AllHitBody(int index) => allHits[index].Body.Value;
+    public static uint AllHitBody(int index) => allHits[index].Body.Target.Value;
 
     public static float AllHitDistance(int index) => allHits[index].Distance;
 
@@ -100,7 +100,7 @@ public static class World
         PhysicsWorld.ShapeCast(new SphereShape { Radius = radius }, At(x, y, z), new Vector3(dx, dy, dz), maxDistance,
             out lastCast);
 
-    public static uint LastCastBody() => lastCast.Body.Value;
+    public static uint LastCastBody() => lastCast.Body.Target.Value;
 
     public static float LastCastDistance() => lastCast.Distance;
 
@@ -134,9 +134,9 @@ public static class World
         return count;
     }
 
-    public static uint OverlapBody(int index) => overlaps[index].Body.Value;
+    public static uint OverlapBody(int index) => overlaps[index].Body.Target.Value;
 
-    public static uint OverlapCollider(int index) => overlaps[index].Collider.Value;
+    public static uint OverlapCollider(int index) => overlaps[index].Collider.Target.Value;
 
     public static float GravityY() => PhysicsWorld.Gravity.Y;
 
@@ -162,11 +162,11 @@ public static class World
         return count;
     }
 
-    public static uint ContactBody(int index) => contacts[index].Body.Value;
+    public static uint ContactBody(int index) => contacts[index].Body.Target.Value;
 
-    public static uint ContactOtherBody(int index) => contacts[index].OtherBody.Value;
+    public static uint ContactOtherBody(int index) => contacts[index].OtherBody.Target.Value;
 
-    public static uint ContactOtherCollider(int index) => contacts[index].OtherCollider.Value;
+    public static uint ContactOtherCollider(int index) => contacts[index].OtherCollider.Target.Value;
 
     public static float ContactNormalY(int index) => contacts[index].Normal.Y;
 

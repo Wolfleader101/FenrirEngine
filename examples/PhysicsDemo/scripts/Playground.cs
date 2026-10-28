@@ -314,9 +314,10 @@ public sealed class PlaygroundInput : ISystem
             return;
         }
 
-        context.Log.Info($"Raycast: hit {Playground.NameOf(hit.Body)} at {Playground.Format(hit.Point)}, " +
+        Entity body = hit.Body.Target;
+        context.Log.Info($"Raycast: hit {Playground.NameOf(body)} at {Playground.Format(hit.Point)}, " +
                          $"{hit.Distance:0.0} m away, normal {Playground.Format(hit.Normal)}.");
-        if (hit.Body.Has<RigidBody>() && hit.Body.Get<RigidBody>().MotionType == MotionType.Dynamic)
-            PhysicsWorld.AddImpulse(hit.Body, ray.Direction * 4);
+        if (body.Has<RigidBody>() && body.Get<RigidBody>().MotionType == MotionType.Dynamic)
+            PhysicsWorld.AddImpulse(body, ray.Direction * 4);
     }
 }

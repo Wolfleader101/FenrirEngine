@@ -10,8 +10,8 @@ internal partial struct NativeTextOptions
 {
     /// <summary>How long the item is kept, as TextOptions.Duration.</summary>
     public float Duration = 0;
-    /// <summary>The entity the item is relative to, or Entity.None (Entity::Null).</summary>
-    public Entity RelativeTo = new(4294967295);
+    /// <summary>The entity the item is relative to, or none.</summary>
+    public EntityLink RelativeTo = new();
     /// <summary>The height of the text in pixels.</summary>
     public float Size = 16;
 

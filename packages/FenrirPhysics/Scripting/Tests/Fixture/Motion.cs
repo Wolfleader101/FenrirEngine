@@ -25,7 +25,7 @@ public static class Motion
     {
         bool found = PhysicsWorld.MoveCast(new BoxShape(), At(x, y, z), new Vector3(dx, dy, dz), out MoveCastHit hit,
             Filter(ignoreBody, layers));
-        (hitBody, hitCollider, hitPoint, hitNormal, hitScalar) = (hit.Body, hit.Collider, hit.Point, hit.Normal, hit.Distance);
+        (hitBody, hitCollider, hitPoint, hitNormal, hitScalar) = (hit.Body.Target, hit.Collider.Target, hit.Point, hit.Normal, hit.Distance);
         return found;
     }
 
@@ -40,15 +40,15 @@ public static class Motion
         return count;
     }
 
-    public static uint PenetrationBody(int index) => penetrations[index].Body.Value;
+    public static uint PenetrationBody(int index) => penetrations[index].Body.Target.Value;
 
-    public static uint PenetrationCollider(int index) => penetrations[index].Collider.Value;
+    public static uint PenetrationCollider(int index) => penetrations[index].Collider.Target.Value;
 
     // Makes overlap `index` the hit read last.
     public static void ReadPenetration(int index)
     {
         PenetrationHit hit = penetrations[index];
-        (hitBody, hitCollider, hitPoint, hitNormal, hitScalar) = (hit.Body, hit.Collider, hit.Point, hit.Normal, hit.Depth);
+        (hitBody, hitCollider, hitPoint, hitNormal, hitScalar) = (hit.Body.Target, hit.Collider.Target, hit.Point, hit.Normal, hit.Depth);
     }
 
     private static Vector3 offset;
@@ -62,7 +62,7 @@ public static class Motion
     // The body a ray from the origin along +x hits first, or none.
     public static uint RaycastEast(uint ignoreBody, uint layers) =>
         PhysicsWorld.Raycast(Vector3.Zero, new Vector3(1, 0, 0), 100, out RaycastHit hit, Filter(ignoreBody, layers))
-            ? hit.Body.Value
+            ? hit.Body.Target.Value
             : uint.MaxValue;
 
     public static uint HitBody() => hitBody.Value;

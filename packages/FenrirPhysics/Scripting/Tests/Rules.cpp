@@ -21,17 +21,16 @@
 #include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/Physics.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
+#include "FenrirPhysics/Queries.hpp"
 #include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/ZeroingOutputs.hpp"
 #include "Generated/FenrirPhysicsNatives.hpp"
 #include "PhysicsScriptingState.hpp"
-#include "ScriptQueries.hpp"
 
 namespace
 {
     using namespace Fenrir;
-    namespace Script = ScriptQueries;
 
     // A release build warns about nothing (WarnOnceRecord, ADR-0043); a debug build once per native and message.
 #ifdef NDEBUG
@@ -92,8 +91,8 @@ namespace
         return physics;
     }
 
-    // C#'s default filter, every byte zero.
-    const Script::QueryFilter DefaultFilter{.mask = 0, .layers = 0, .ignoreBody = EntityValue(0), .hitTriggers = false};
+    // The default filter, which the C# facade passes for a query given none.
+    const QueryFilter DefaultFilter;
     const Math::Vec3 Up(0.0f, 1.0f, 0.0f);
     const Math::Vec3 Down(0.0f, -1.0f, 0.0f);
 } // namespace
@@ -120,14 +119,14 @@ TEST_CASE("With no physics world, a physics native does nothing, returns false o
     }
     {
         const CallContext context = harness.Context("PhysicsNative.Raycast");
-        Script::RaycastHit hit;
+        RaycastHit hit;
         INFO("A raycast with no world should find nothing");
         REQUIRE_FALSE(PhysicsNatives::Raycast(context, physics, &Up, &Down, 100.0f, &DefaultFilter, &hit));
         REQUIRE(Warnings(harness, Logged("Raycast", NoWorld)) == once);
     }
     {
         const CallContext context = harness.Context("PhysicsNative.RaycastAll");
-        Script::RaycastHit hits[4];
+        RaycastHit hits[4];
         INFO("An all-hit query with no world should write no hits");
         REQUIRE(PhysicsNatives::RaycastAll(context, physics, &Up, &Down, 100.0f, &DefaultFilter, hits, 4) == 0);
     }
@@ -135,7 +134,7 @@ TEST_CASE("With no physics world, a physics native does nothing, returns false o
         const CallContext context = harness.Context("PhysicsNative.MoveCast");
         const CollisionShape box;
         const Transform pose;
-        Script::MoveCastHit hit;
+        MoveCastHit hit;
         INFO("A move cast with no world should block nothing");
         REQUIRE_FALSE(PhysicsNatives::MoveCast(context, physics, &box, &pose, &Up, &DefaultFilter, &hit));
         REQUIRE(Warnings(harness, Logged("MoveCast", NoWorld)) == once);
@@ -153,7 +152,7 @@ TEST_CASE("With no physics world, a physics native does nothing, returns false o
     }
     {
         const CallContext context = harness.Context("PhysicsNative.ContactsOf");
-        Script::Contact contacts[4];
+        Contact contacts[4];
         INFO("Body state with no world should be zero or false");
         REQUIRE(PhysicsNatives::ContactsOf(context, physics, EntityValue(entity), contacts, 4) == 0);
         REQUIRE_FALSE(
@@ -205,7 +204,7 @@ TEST_CASE("On an entity without a body, a physics native does nothing, returns f
         REQUIRE(Warnings(harness, Logged("AddImpulse", NoBody)) == once);
     }
     {
-        Script::Contact contacts[4];
+        Contact contacts[4];
         Math::AABB bounds;
         INFO("An entity with no body has no contacts, does not sleep and has no bounds");
         REQUIRE(PhysicsNatives::ContactsOf(harness.Context("PhysicsNative.ContactsOf"), physics, EntityValue(plain),
