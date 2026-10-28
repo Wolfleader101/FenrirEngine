@@ -436,23 +436,15 @@ internal sealed class NativesDescriber
     {
         var canonical = declared.CanonicalType;
         var alias = Alias(declared);
+        if (Describer.ScalarKind(canonical) is { } scalar)
+        {
+            return new NativeType(alias ?? ScalarSpelling(canonical, scalar), scalar);
+        }
+
         switch (canonical.Handle.kind)
         {
             case CXTypeKind.CXType_Void:
                 return new NativeType("void", "void");
-            case CXTypeKind.CXType_Bool:
-                return new NativeType(alias ?? "bool", "bool");
-            case CXTypeKind.CXType_Char16:
-                return new NativeType(alias ?? "char16_t", "char16");
-            case CXTypeKind.CXType_Char32:
-                return new NativeType(alias ?? "char32_t", "u32");
-            case CXTypeKind.CXType_Float:
-                return new NativeType(alias ?? "float", "f32");
-            case CXTypeKind.CXType_Double:
-                return new NativeType(alias ?? "double", "f64");
-            case CXTypeKind.CXType_Char_S:
-            case CXTypeKind.CXType_Char_U:
-                return new NativeType(alias ?? "char", Describer.IntegerKind(canonical)!);
             case CXTypeKind.CXType_Record when IsStringView(canonical):
                 return new NativeType("std::string_view", "string");
             case CXTypeKind.CXType_Record:
@@ -468,14 +460,22 @@ internal sealed class NativesDescriber
                 return null;
         }
 
-        if (Describer.IntegerKind(canonical) is { } integer)
-        {
-            return new NativeType(alias ?? FixedWidth(integer), integer);
-        }
-
         Error(at, subject, $"its type '{declared.AsString}' is not a kind the description records");
         return null;
     }
+
+    // How a scalar of the given kind is spelled in a declaration: the keyword for the types that have one, else the
+    // fixed-width alias of its kind (`std::int32_t`, never `int` or `long`).
+    private static string ScalarSpelling(Type canonical, string kind) => canonical.Handle.kind switch
+    {
+        CXTypeKind.CXType_Bool => "bool",
+        CXTypeKind.CXType_Char16 => "char16_t",
+        CXTypeKind.CXType_Char32 => "char32_t",
+        CXTypeKind.CXType_Float => "float",
+        CXTypeKind.CXType_Double => "double",
+        CXTypeKind.CXType_Char_S or CXTypeKind.CXType_Char_U => "char",
+        _ => FixedWidth(kind),
+    };
 
     // The qualified name of the alias the type is written as, unless it is the standard library's or the global
     // namespace's (std::uint32_t is recorded as itself, by kind, on every platform).
