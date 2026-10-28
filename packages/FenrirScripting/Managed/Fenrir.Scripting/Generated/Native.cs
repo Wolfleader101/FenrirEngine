@@ -164,12 +164,11 @@ internal static unsafe partial class Native
     /// before its first read), moved past what the read yields.
     /// </param>
     /// <param name="view">
-    /// Five values written: the older part's address and count, the newer part's address and count, and how many events
-    /// the reader missed.
+    /// The events the read yields, as the queue holds them: the older and newer parts and how many the reader missed.
     /// </param>
     /// <returns>False when there is no such event.</returns>
     [NativeFunction]
-    public static partial bool EventReadAfter(int @event, ulong* seen, nuint* view);
+    public static partial bool EventReadAfter(int @event, ulong* seen, out RawEventRange view);
 
     /// <summary>
     /// How many entities have every component in `ids`: an upper bound on the rows QueryFill writes. A query is this

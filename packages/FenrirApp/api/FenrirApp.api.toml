@@ -1,0 +1,8 @@
+# FenrirApp's selection (ADR-0042, tools/describe-api/README.md): the headers to read, relative to this file, and each
+# type the package shares with bindings, with its role.
+headers = ["../include/FenrirApp/App.hpp"]
+
+[types]
+# What one read of an event queue yields through a reader's cursor: the older and newer parts of the queue's buffers
+# and how many events the reader missed. The built-in scripting binding's EventReadAfter native gives C# one of these.
+"Fenrir::RawEventRange" = "shared-struct"
