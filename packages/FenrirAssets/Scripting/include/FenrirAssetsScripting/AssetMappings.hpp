@@ -5,8 +5,8 @@
 // mirror in the Fenrir.Assets contract (Managed/Fenrir.Assets/Handles.cs) with the full generic name .NET gives it.
 // They are checked against it whenever a type that holds a handle is, so a drift fails the load and names the field.
 // Every other assets mapping is generated, into Generated/FenrirAssetsMappings.hpp, which includes this header; another
-// package's binding whose types hold asset handles (FenrirRenderer's) reaches both through that one. A handle a native
-// takes or returns by value crosses packed into one number instead (AssetHandleBits.hpp).
+// package's binding whose types hold asset handles (FenrirRenderer's) reaches both through that one. A native takes a
+// handle through a pointer to it and gives one through an output pointer, as these mappings' types (ADR-0044).
 
 #include <Iris/Iris.hpp>
 

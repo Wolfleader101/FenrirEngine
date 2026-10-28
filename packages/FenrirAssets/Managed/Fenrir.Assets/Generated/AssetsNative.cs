@@ -14,191 +14,278 @@ namespace Fenrir.Assets;
 internal static unsafe partial class AssetsNative
 {
     /// <summary>Loads the asset of `kind` at `path` for `owner` (AssetStore::Load).</summary>
-    /// <returns>The asset's handle, or the empty handle if the load failed (the store logs why).</returns>
+    /// <param name="handle">
+    /// The asset's handle, of no stated kind (C#'s AssetHandle&lt;T&gt;.FromNative); the empty handle if the load
+    /// failed (the store logs why).
+    /// </param>
+    /// <returns>Whether it loaded.</returns>
     [NativeFunction]
-    public static partial ulong Load(AssetKind kind, ReadOnlySpan<char> path, AssetOwner owner);
+    public static partial bool Load(AssetKind kind, ReadOnlySpan<char> path, AssetOwner owner,
+                                    out NativeAssetHandle handle);
 
     /// <summary>Frees the asset of `kind` now, whoever owns it.</summary>
+    /// <param name="handle">The asset's handle, of no stated kind (C#'s AssetHandle&lt;T&gt;.ToNative).</param>
     /// <returns>Whether the handle named a live asset.</returns>
     [NativeFunction]
-    public static partial bool Unload(AssetKind kind, ulong handle);
+    public static partial bool Unload(AssetKind kind, in NativeAssetHandle handle);
 
     /// <summary>Whether `handle` names a live asset of `kind`.</summary>
+    /// <param name="handle">The asset's handle, of no stated kind (C#'s AssetHandle&lt;T&gt;.ToNative).</param>
     [NativeFunction]
-    public static partial bool IsValid(AssetKind kind, ulong handle);
+    public static partial bool IsValid(AssetKind kind, in NativeAssetHandle handle);
 
-    /// <summary>Adds a mesh of these vertex streams and triangles for `owner`, drawn with one material.</summary>
-    /// <returns>The mesh, or the empty handle if the store refused it.</returns>
+    /// <summary>
+    /// Adds a mesh made of these vertex streams and triangles (three indices each, counter-clockwise seen from the
+    /// front) for `owner`, drawn with one material. `normals` and `uvs` may be empty; otherwise each holds one value
+    /// per position. The data is copied, and the mesh's bounds are computed from the positions.
+    /// </summary>
+    /// <param name="mesh">
+    /// The mesh; the empty handle (and an error logged) if the streams or indices break those rules.
+    /// </param>
+    /// <returns>Whether the store accepted it.</returns>
     [NativeFunction]
-    public static partial ulong AddMesh(ReadOnlySpan<Vector3> positions, ReadOnlySpan<Vector3> normals,
-                                        ReadOnlySpan<Vector2> uvs, ReadOnlySpan<uint> indices, AssetOwner owner);
+    public static partial bool AddMesh(ReadOnlySpan<Vector3> positions, ReadOnlySpan<Vector3> normals,
+                                       ReadOnlySpan<Vector2> uvs, ReadOnlySpan<uint> indices, AssetOwner owner,
+                                       out AssetHandle<Mesh> mesh);
 
-    /// <summary>Swaps the mesh's data for these streams and triangles.</summary>
-    /// <returns>Whether it was replaced.</returns>
+    /// <summary>
+    /// Swaps `mesh`'s data for these streams and triangles, as AddMesh takes them, and bumps its revision so every user
+    /// sees the change. Its bounds are computed again.
+    /// </summary>
+    /// <returns>
+    /// Whether it was replaced: false for a stale handle or data that breaks the rules, which leave it unchanged.
+    /// </returns>
     [NativeFunction]
-    public static partial bool ReplaceMesh(ulong mesh, ReadOnlySpan<Vector3> positions, ReadOnlySpan<Vector3> normals,
-                                           ReadOnlySpan<Vector2> uvs, ReadOnlySpan<uint> indices);
+    public static partial bool ReplaceMesh(in AssetHandle<Mesh> mesh, ReadOnlySpan<Vector3> positions,
+                                           ReadOnlySpan<Vector3> normals, ReadOnlySpan<Vector2> uvs,
+                                           ReadOnlySpan<uint> indices);
 
-    /// <summary>Adds a render target for `owner`: an RGBA8 sRGB image of this size with no pixels.</summary>
-    /// <returns>The image, or the empty handle if either side is under one pixel.</returns>
+    /// <summary>
+    /// Adds a render target for `owner`: an RGBA8 sRGB image of this size with no pixels, which a camera draws into and
+    /// materials sample (ADR-0026).
+    /// </summary>
+    /// <param name="image">The image; the empty handle if either side is under one pixel.</param>
+    /// <returns>Whether the store accepted it.</returns>
     [NativeFunction]
-    public static partial ulong AddRenderTarget(int width, int height, AssetOwner owner);
+    public static partial bool AddRenderTarget(int width, int height, AssetOwner owner, out AssetHandle<Image> image);
 
-    /// <summary>Gives the render target a new size.</summary>
-    /// <returns>Whether it was resized.</returns>
+    /// <summary>Gives the render target `image` a new size, bumping its revision.</summary>
+    /// <param name="image">One handle, not a span of them, though `width` follows it.</param>
+    /// <returns>
+    /// Whether it was resized: false for a stale handle, an image with pixels (which is not a render target), or a side
+    /// under one pixel.
+    /// </returns>
     [NativeFunction]
-    public static partial bool ResizeRenderTarget(ulong image, int width, int height);
+    public static partial bool ResizeRenderTarget(in AssetHandle<Image> image, int width, int height);
 
-    /// <summary>Adds an RGBA8 sRGB image of this size from `rgba8` for `owner`.</summary>
-    /// <returns>The image, or the empty handle if the store refused it.</returns>
+    /// <summary>
+    /// Adds an RGBA8 sRGB image of this size from `rgba8` for `owner`: four bytes per pixel (red, green, blue, alpha),
+    /// rows top to bottom. The pixels are copied.
+    /// </summary>
+    /// <param name="image">
+    /// The image; the empty handle (and an error logged) if the pixels are not `width * height * 4` bytes.
+    /// </param>
+    /// <returns>Whether the store accepted it.</returns>
     [NativeFunction]
-    public static partial ulong AddImage(int width, int height, ReadOnlySpan<byte> rgba8, AssetOwner owner);
+    public static partial bool AddImage(int width, int height, ReadOnlySpan<byte> rgba8, AssetOwner owner,
+                                        out AssetHandle<Image> image);
 
-    /// <summary>Swaps the image's data for an RGBA8 sRGB image from `rgba8`.</summary>
-    /// <returns>Whether it was replaced.</returns>
+    /// <summary>
+    /// Swaps `image`'s data for an RGBA8 sRGB image of this size from `rgba8`, as AddImage takes it, and bumps its
+    /// revision.
+    /// </summary>
+    /// <param name="image">One handle, not a span of them, though `width` follows it.</param>
+    /// <returns>
+    /// Whether it was replaced: false for a stale handle or the wrong number of bytes, which leave it unchanged.
+    /// </returns>
     [NativeFunction]
-    public static partial bool ReplaceImage(ulong image, int width, int height, ReadOnlySpan<byte> rgba8);
+    public static partial bool ReplaceImage(in AssetHandle<Image> image, int width, int height,
+                                            ReadOnlySpan<byte> rgba8);
 
-    /// <summary>A new material drawing with `shader`, for `owner` (AssetStore::CreateMaterial).</summary>
-    /// <returns>The material, or the empty handle if the shader does not resolve.</returns>
+    /// <summary>
+    /// A new material drawing with `shader`, for `owner` (AssetStore::CreateMaterial): opaque, single-sided, with no
+    /// overrides.
+    /// </summary>
+    /// <param name="material">The material; the empty handle if the shader handle does not resolve.</param>
+    /// <returns>Whether it was made.</returns>
     [NativeFunction]
-    public static partial ulong CreateMaterial(ulong shader, AssetOwner owner);
+    public static partial bool CreateMaterial(in AssetHandle<Shader> shader, AssetOwner owner,
+                                              out AssetHandle<Material> material);
 
-    /// <summary>A copy of `material` for `owner` (AssetStore::CloneMaterial).</summary>
-    /// <returns>The clone, or the empty handle if the material does not resolve.</returns>
+    /// <summary>
+    /// A new material for `owner` copying `material`'s shader, blend mode, alpha cutoff, double-sidedness and parameter
+    /// overrides (AssetStore::CloneMaterial). Only overrides are copied, so the clone's unset parameters still follow
+    /// the shader's defaults.
+    /// </summary>
+    /// <param name="clone">The clone; the empty handle if `material` does not resolve.</param>
+    /// <returns>Whether it was made.</returns>
     [NativeFunction]
-    public static partial ulong CloneMaterial(ulong material, AssetOwner owner);
+    public static partial bool CloneMaterial(in AssetHandle<Material> material, AssetOwner owner,
+                                             out AssetHandle<Material> clone);
 
     /// <summary>Sets a `float` parameter (AssetStore::SetFloat).</summary>
     [NativeFunction]
-    public static partial bool SetFloat(ulong material, ReadOnlySpan<char> name, float value);
+    public static partial bool SetFloat(in AssetHandle<Material> material, ReadOnlySpan<char> name, float value);
 
     /// <summary>Sets a `vec2` parameter (AssetStore::SetVector2).</summary>
     [NativeFunction]
-    public static partial bool SetVector2(ulong material, ReadOnlySpan<char> name, in Vector2 value);
+    public static partial bool SetVector2(in AssetHandle<Material> material, ReadOnlySpan<char> name, in Vector2 value);
 
     /// <summary>Sets a `vec3` parameter (AssetStore::SetVector3).</summary>
     [NativeFunction]
-    public static partial bool SetVector3(ulong material, ReadOnlySpan<char> name, in Vector3 value);
+    public static partial bool SetVector3(in AssetHandle<Material> material, ReadOnlySpan<char> name, in Vector3 value);
 
     /// <summary>Sets a `vec4` parameter (AssetStore::SetVector4).</summary>
     [NativeFunction]
-    public static partial bool SetVector4(ulong material, ReadOnlySpan<char> name, in Vector4 value);
+    public static partial bool SetVector4(in AssetHandle<Material> material, ReadOnlySpan<char> name, in Vector4 value);
 
-    /// <summary>Sets a `vec4` parameter to a colour (AssetStore::SetColour).</summary>
+    /// <summary>
+    /// Sets a `vec4` parameter to a colour's linear red, green, blue and alpha (AssetStore::SetColour).
+    /// </summary>
     [NativeFunction]
-    public static partial bool SetColour(ulong material, ReadOnlySpan<char> name, in Colour value);
+    public static partial bool SetColour(in AssetHandle<Material> material, ReadOnlySpan<char> name, in Colour value);
 
     /// <summary>Sets a texture parameter to `image`, read with `sampler` (AssetStore::SetTexture).</summary>
     [NativeFunction]
-    public static partial bool SetTexture(ulong material, ReadOnlySpan<char> name, ulong image,
-                                          in SamplerDescription sampler);
+    public static partial bool SetTexture(in AssetHandle<Material> material, ReadOnlySpan<char> name,
+                                          in AssetHandle<Image> image, in SamplerDescription sampler);
 
     /// <summary>Sets how the material's pixels combine with what is behind them (AssetStore::SetBlendMode).</summary>
     [NativeFunction]
-    public static partial bool SetBlendMode(ulong material, BlendMode blendMode);
+    public static partial bool SetBlendMode(in AssetHandle<Material> material, BlendMode blendMode);
 
     /// <summary>Sets the alpha below which a masked material discards a pixel (AssetStore::SetAlphaCutoff).</summary>
     [NativeFunction]
-    public static partial bool SetAlphaCutoff(ulong material, float alphaCutoff);
+    public static partial bool SetAlphaCutoff(in AssetHandle<Material> material, float alphaCutoff);
 
     /// <summary>Sets whether both faces of the material are drawn (AssetStore::SetDoubleSided).</summary>
     [NativeFunction]
-    public static partial bool SetDoubleSided(ulong material, bool doubleSided);
+    public static partial bool SetDoubleSided(in AssetHandle<Material> material, bool doubleSided);
 
-    /// <summary>Reads a `float` parameter's effective value (AssetStore::TryGetFloat).</summary>
+    /// <summary>
+    /// Reads a `float` parameter's effective value: the material's override, else the shader's parameter default
+    /// (AssetStore::TryGetFloat).
+    /// </summary>
     /// <param name="value">The value; the default when there is none.</param>
-    /// <returns>Whether there was one.</returns>
+    /// <returns>
+    /// Whether there was one: false only if the material does not resolve, its shader lacks the name, or the parameter
+    /// is another type.
+    /// </returns>
     [NativeFunction]
-    public static partial bool TryGetFloat(ulong material, ReadOnlySpan<char> name, out float value);
+    public static partial bool TryGetFloat(in AssetHandle<Material> material, ReadOnlySpan<char> name, out float value);
 
     /// <summary>Reads a `vec2` parameter's effective value (AssetStore::TryGetVector2).</summary>
     /// <param name="value">The value; the default when there is none.</param>
     /// <returns>Whether there was one.</returns>
     [NativeFunction]
-    public static partial bool TryGetVector2(ulong material, ReadOnlySpan<char> name, out Vector2 value);
+    public static partial bool TryGetVector2(in AssetHandle<Material> material, ReadOnlySpan<char> name,
+                                             out Vector2 value);
 
     /// <summary>Reads a `vec3` parameter's effective value (AssetStore::TryGetVector3).</summary>
     /// <param name="value">The value; the default when there is none.</param>
     /// <returns>Whether there was one.</returns>
     [NativeFunction]
-    public static partial bool TryGetVector3(ulong material, ReadOnlySpan<char> name, out Vector3 value);
+    public static partial bool TryGetVector3(in AssetHandle<Material> material, ReadOnlySpan<char> name,
+                                             out Vector3 value);
 
     /// <summary>Reads a `vec4` parameter's effective value (AssetStore::TryGetVector4).</summary>
     /// <param name="value">The value; the default when there is none.</param>
     /// <returns>Whether there was one.</returns>
     [NativeFunction]
-    public static partial bool TryGetVector4(ulong material, ReadOnlySpan<char> name, out Vector4 value);
+    public static partial bool TryGetVector4(in AssetHandle<Material> material, ReadOnlySpan<char> name,
+                                             out Vector4 value);
 
     /// <summary>Reads a `vec4` parameter's effective value as a colour (AssetStore::TryGetColour).</summary>
     /// <param name="value">The value; the default (white) when there is none.</param>
     /// <returns>Whether there was one.</returns>
     [NativeFunction]
-    public static partial bool TryGetColour(ulong material, ReadOnlySpan<char> name, out Colour value);
+    public static partial bool TryGetColour(in AssetHandle<Material> material, ReadOnlySpan<char> name,
+                                            out Colour value);
 
-    /// <summary>Reads a texture parameter's effective value (AssetStore::TryGetTexture).</summary>
+    /// <summary>
+    /// Reads a texture parameter's effective value (AssetStore::TryGetTexture). Left unset, it reads the empty image
+    /// (the shader's default texture) with the default sampler.
+    /// </summary>
     /// <param name="value">The value; the default when there is none.</param>
-    /// <returns>Whether there was one.</returns>
+    /// <returns>
+    /// Whether there was one: false only if the material does not resolve, its shader lacks the name, or the parameter
+    /// is another type.
+    /// </returns>
     [NativeFunction]
-    public static partial bool TryGetTexture(ulong material, ReadOnlySpan<char> name, out MaterialTexture value);
+    public static partial bool TryGetTexture(in AssetHandle<Material> material, ReadOnlySpan<char> name,
+                                             out MaterialTexture value);
 
-    /// <summary>Reads the material's own `float` override (AssetStore::TryGetOverrideFloat).</summary>
+    /// <summary>
+    /// Reads the material's own `float` override, if it sets one of this type (AssetStore::TryGetOverrideFloat). It
+    /// does not consult the shader, so it also reads an override the shader no longer has.
+    /// </summary>
     /// <param name="value">The override; the default when there is none.</param>
     /// <returns>Whether there was one.</returns>
     [NativeFunction]
-    public static partial bool TryGetOverrideFloat(ulong material, ReadOnlySpan<char> name, out float value);
+    public static partial bool TryGetOverrideFloat(in AssetHandle<Material> material, ReadOnlySpan<char> name,
+                                                   out float value);
 
     /// <summary>Reads the material's own `vec2` override (AssetStore::TryGetOverrideVector2).</summary>
     /// <param name="value">The override; the default when there is none.</param>
     /// <returns>Whether there was one.</returns>
     [NativeFunction]
-    public static partial bool TryGetOverrideVector2(ulong material, ReadOnlySpan<char> name, out Vector2 value);
+    public static partial bool TryGetOverrideVector2(in AssetHandle<Material> material, ReadOnlySpan<char> name,
+                                                     out Vector2 value);
 
     /// <summary>Reads the material's own `vec3` override (AssetStore::TryGetOverrideVector3).</summary>
     /// <param name="value">The override; the default when there is none.</param>
     /// <returns>Whether there was one.</returns>
     [NativeFunction]
-    public static partial bool TryGetOverrideVector3(ulong material, ReadOnlySpan<char> name, out Vector3 value);
+    public static partial bool TryGetOverrideVector3(in AssetHandle<Material> material, ReadOnlySpan<char> name,
+                                                     out Vector3 value);
 
     /// <summary>Reads the material's own `vec4` override (AssetStore::TryGetOverrideVector4).</summary>
     /// <param name="value">The override; the default when there is none.</param>
     /// <returns>Whether there was one.</returns>
     [NativeFunction]
-    public static partial bool TryGetOverrideVector4(ulong material, ReadOnlySpan<char> name, out Vector4 value);
+    public static partial bool TryGetOverrideVector4(in AssetHandle<Material> material, ReadOnlySpan<char> name,
+                                                     out Vector4 value);
 
     /// <summary>Reads the material's own `vec4` override as a colour (AssetStore::TryGetOverrideColour).</summary>
     /// <param name="value">The override; the default (white) when there is none.</param>
     /// <returns>Whether there was one.</returns>
     [NativeFunction]
-    public static partial bool TryGetOverrideColour(ulong material, ReadOnlySpan<char> name, out Colour value);
+    public static partial bool TryGetOverrideColour(in AssetHandle<Material> material, ReadOnlySpan<char> name,
+                                                    out Colour value);
 
     /// <summary>Reads the material's own texture override (AssetStore::TryGetOverrideTexture).</summary>
     /// <param name="value">The override; the default when there is none.</param>
     /// <returns>Whether there was one.</returns>
     [NativeFunction]
-    public static partial bool TryGetOverrideTexture(ulong material, ReadOnlySpan<char> name,
+    public static partial bool TryGetOverrideTexture(in AssetHandle<Material> material, ReadOnlySpan<char> name,
                                                      out MaterialTexture value);
 
     /// <summary>Whether the material has an override of the parameter (AssetStore::IsSet).</summary>
     [NativeFunction]
-    public static partial bool IsSet(ulong material, ReadOnlySpan<char> name);
-
-    /// <summary>Removes the material's override of the parameter (AssetStore::Reset).</summary>
-    /// <returns>Whether there was one to remove.</returns>
-    [NativeFunction]
-    public static partial bool Reset(ulong material, ReadOnlySpan<char> name);
-
-    /// <summary>How many material parameters the shader has (AssetStore::GetShaderParameters).</summary>
-    [NativeFunction]
-    public static partial int GetShaderParameterCount(ulong shader);
+    public static partial bool IsSet(in AssetHandle<Material> material, ReadOnlySpan<char> name);
 
     /// <summary>
-    /// Reads parameter `index` of the shader: its type and default, and as much of its name as `capacity` chars from
-    /// `name` on hold.
+    /// Removes the material's override of the parameter, so it reads the shader's default again (AssetStore::Reset).
     /// </summary>
-    /// <param name="parameter">The parameter without its name; the default when there is none.</param>
-    /// <returns>The name's whole length in chars, or zero if there is no such parameter.</returns>
+    /// <returns>True, and the revision bumped, only if there was an override to remove.</returns>
     [NativeFunction]
-    public static partial int GetShaderParameter(ulong shader, int index, out ShaderParameter parameter,
-                                                 Span<char> name);
+    public static partial bool Reset(in AssetHandle<Material> material, ReadOnlySpan<char> name);
+
+    /// <summary>How many material parameters `shader` has (AssetStore::GetShaderParameters).</summary>
+    [NativeFunction]
+    public static partial int GetShaderParameterCount(in AssetHandle<Shader> shader);
+
+    /// <summary>
+    /// Reads parameter `index` of `shader`: its type and default into `parameter`, and its name into `name`, as much as
+    /// fits.
+    /// </summary>
+    /// <param name="shader">One handle, not a span of them, though `index` follows it.</param>
+    /// <param name="parameter">The parameter without its name; the default when there is none.</param>
+    /// <returns>
+    /// The name's whole length in chars, so a result larger than the span says how large a span would hold it; zero,
+    /// with `parameter` zeroed, if there is no such parameter.
+    /// </returns>
+    [NativeFunction]
+    public static partial int GetShaderParameter(in AssetHandle<Shader> shader, int index,
+                                                 out ShaderParameter parameter, Span<char> name);
 }

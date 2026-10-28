@@ -24,7 +24,6 @@
 #include "AssetsScriptingState.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
-#include "FenrirAssetsScripting/AssetHandleBits.hpp"
 #include "FenrirAssetsScripting/AssetResolve.hpp"
 #include "FenrirAssetsScripting/ScriptAssets.hpp"
 #include "FenrirMath/Colour.hpp"
@@ -63,14 +62,21 @@ namespace
         return "[assets scripting] " + std::string(native) + ": " + std::string(message);
     }
 
-    // The handles every native that takes one is called with.
+    // The handles every native that takes one is called with, as the natives take them.
     struct Handles
     {
-        std::uint64_t mesh;
-        std::uint64_t image;
-        std::uint64_t material;
-        std::uint64_t shader;
+        AssetHandle<Mesh> mesh;
+        AssetHandle<Image> image;
+        AssetHandle<Material> material;
+        AssetHandle<Shader> shader;
     };
+
+    // `handle` as the kind-generic natives take it.
+    template <typename T>
+    ScriptAssetHandle Generic(AssetHandle<T> handle)
+    {
+        return {handle.index, handle.generation};
+    }
 
     // One native call: its name as its context carries it, and the call, which says whether the native did nothing
     // (returned false, zero or the empty handle, and wrote no output).
@@ -79,38 +85,6 @@ namespace
         const char* native;
         std::function<bool(const CallContext&, AssetsScripting&)> didNothing;
     };
-
-    // Every native that needs only the store: those that make an asset, and IsValid.
-    std::vector<NativeCall> StoreCalls(const Handles& handles)
-    {
-        static const Math::Vec3 positions[] = {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}};
-        static const std::uint32_t indices[] = {0, 1, 2};
-        static const std::uint8_t pixel[] = {255, 255, 255, 255};
-        return {
-            {"AssetsNative.Load",
-             [](const CallContext& context, AssetsScripting& assets) {
-                 return AssetsNatives::Load(context, assets, Detail::AssetKind::Mesh, "models/scene.gltf#Mesh0",
-                                            ScriptAssetOwner::App) == 0;
-             }},
-            {"AssetsNative.IsValid",
-             [=](const CallContext& context, AssetsScripting& assets) {
-                 return !AssetsNatives::IsValid(context, assets, Detail::AssetKind::Mesh, handles.mesh);
-             }},
-            {"AssetsNative.AddMesh",
-             [](const CallContext& context, AssetsScripting& assets) {
-                 return AssetsNatives::AddMesh(context, assets, positions, 3, nullptr, 0, nullptr, 0, indices, 3,
-                                               ScriptAssetOwner::App) == 0;
-             }},
-            {"AssetsNative.AddRenderTarget",
-             [](const CallContext& context, AssetsScripting& assets) {
-                 return AssetsNatives::AddRenderTarget(context, assets, 4, 4, ScriptAssetOwner::App) == 0;
-             }},
-            {"AssetsNative.AddImage",
-             [](const CallContext& context, AssetsScripting& assets) {
-                 return AssetsNatives::AddImage(context, assets, 1, 1, pixel, 4, ScriptAssetOwner::App) == 0;
-             }},
-        };
-    }
 
     // Whether an output still holds its default. Colour and ScriptShaderParameter have no operator==.
     template <typename Out>
@@ -127,6 +101,10 @@ namespace
         return out.type == ShaderParameterType::Float && out.value == Math::Vec4(0.0f) &&
                out.texture == DefaultTexture::White;
     }
+    bool Untouched(const ScriptAssetHandle& out)
+    {
+        return out.index == 0 && out.generation == 0;
+    }
 
     // One output read: the native must return false and leave `out` at its default.
     template <typename Out, typename Native>
@@ -136,160 +114,207 @@ namespace
         return !native(&out) && Untouched(out);
     }
 
+    // Every native that needs only the store: those that make an asset, and IsValid.
+    std::vector<NativeCall> StoreCalls(const Handles& handles)
+    {
+        static const Math::Vec3 positions[] = {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}};
+        static const std::uint32_t indices[] = {0, 1, 2};
+        static const std::uint8_t pixel[] = {255, 255, 255, 255};
+        return {
+            {"AssetsNative.Load",
+             [](const CallContext& context, AssetsScripting& assets) {
+                 return ReadsNothing<ScriptAssetHandle>([&](ScriptAssetHandle* out) {
+                     return AssetsNatives::Load(context, assets, Detail::AssetKind::Mesh, "models/scene.gltf#Mesh0",
+                                                ScriptAssetOwner::App, out);
+                 });
+             }},
+            {"AssetsNative.IsValid",
+             [=](const CallContext& context, AssetsScripting& assets) {
+                 const ScriptAssetHandle mesh = Generic(handles.mesh);
+                 return !AssetsNatives::IsValid(context, assets, Detail::AssetKind::Mesh, &mesh);
+             }},
+            {"AssetsNative.AddMesh",
+             [](const CallContext& context, AssetsScripting& assets) {
+                 return ReadsNothing<AssetHandle<Mesh>>([&](AssetHandle<Mesh>* out) {
+                     return AssetsNatives::AddMesh(context, assets, positions, 3, nullptr, 0, nullptr, 0, indices, 3,
+                                                   ScriptAssetOwner::App, out);
+                 });
+             }},
+            {"AssetsNative.AddRenderTarget",
+             [](const CallContext& context, AssetsScripting& assets) {
+                 return ReadsNothing<AssetHandle<Image>>([&](AssetHandle<Image>* out) {
+                     return AssetsNatives::AddRenderTarget(context, assets, 4, 4, ScriptAssetOwner::App, out);
+                 });
+             }},
+            {"AssetsNative.AddImage",
+             [](const CallContext& context, AssetsScripting& assets) {
+                 return ReadsNothing<AssetHandle<Image>>([&](AssetHandle<Image>* out) {
+                     return AssetsNatives::AddImage(context, assets, 1, 1, pixel, 4, ScriptAssetOwner::App, out);
+                 });
+             }},
+        };
+    }
+
     // Every native that takes a handle, called with `handles`.
     std::vector<NativeCall> HandleCalls(const Handles& handles)
     {
         static const Math::Vec3 positions[] = {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}};
         static const std::uint32_t indices[] = {0, 1, 2};
         static const std::uint8_t pixel[] = {255, 255, 255, 255};
-        const std::uint64_t mesh = handles.mesh;
-        const std::uint64_t image = handles.image;
-        const std::uint64_t material = handles.material;
-        const std::uint64_t shader = handles.shader;
+        // Each lambda copies its handles, so the pointers it passes are to its own.
+        const AssetHandle<Mesh> mesh = handles.mesh;
+        const AssetHandle<Image> image = handles.image;
+        const AssetHandle<Material> material = handles.material;
+        const AssetHandle<Shader> shader = handles.shader;
         return {
             {"AssetsNative.Unload",
              [=](const CallContext& c, AssetsScripting& a) {
-                 return !AssetsNatives::Unload(c, a, Detail::AssetKind::Mesh, mesh);
+                 const ScriptAssetHandle generic = Generic(mesh);
+                 return !AssetsNatives::Unload(c, a, Detail::AssetKind::Mesh, &generic);
              }},
             {"AssetsNative.ReplaceMesh",
              [=](const CallContext& c, AssetsScripting& a) {
-                 return !AssetsNatives::ReplaceMesh(c, a, mesh, positions, 3, nullptr, 0, nullptr, 0, indices, 3);
+                 return !AssetsNatives::ReplaceMesh(c, a, &mesh, positions, 3, nullptr, 0, nullptr, 0, indices, 3);
              }},
             {"AssetsNative.ResizeRenderTarget",
              [=](const CallContext& c, AssetsScripting& a) {
-                 return !AssetsNatives::ResizeRenderTarget(c, a, image, 8, 8);
+                 return !AssetsNatives::ResizeRenderTarget(c, a, &image, 8, 8);
              }},
             {"AssetsNative.ReplaceImage",
              [=](const CallContext& c, AssetsScripting& a) {
-                 return !AssetsNatives::ReplaceImage(c, a, image, 1, 1, pixel, 4);
+                 return !AssetsNatives::ReplaceImage(c, a, &image, 1, 1, pixel, 4);
              }},
             {"AssetsNative.CreateMaterial",
              [=](const CallContext& c, AssetsScripting& a) {
-                 return AssetsNatives::CreateMaterial(c, a, shader, ScriptAssetOwner::App) == 0;
+                 return ReadsNothing<AssetHandle<Material>>([&](AssetHandle<Material>* out) {
+                     return AssetsNatives::CreateMaterial(c, a, &shader, ScriptAssetOwner::App, out);
+                 });
              }},
             {"AssetsNative.CloneMaterial",
              [=](const CallContext& c, AssetsScripting& a) {
-                 return AssetsNatives::CloneMaterial(c, a, material, ScriptAssetOwner::App) == 0;
+                 return ReadsNothing<AssetHandle<Material>>([&](AssetHandle<Material>* out) {
+                     return AssetsNatives::CloneMaterial(c, a, &material, ScriptAssetOwner::App, out);
+                 });
              }},
             {"AssetsNative.SetFloat",
              [=](const CallContext& c, AssetsScripting& a) {
-                 return !AssetsNatives::SetFloat(c, a, material, "roughness", 1.0f);
+                 return !AssetsNatives::SetFloat(c, a, &material, "roughness", 1.0f);
              }},
             {"AssetsNative.SetVector2",
              [=](const CallContext& c, AssetsScripting& a) {
                  const Math::Vec2 value(1, 1);
-                 return !AssetsNatives::SetVector2(c, a, material, "offset", &value);
+                 return !AssetsNatives::SetVector2(c, a, &material, "offset", &value);
              }},
             {"AssetsNative.SetVector3",
              [=](const CallContext& c, AssetsScripting& a) {
                  const Math::Vec3 value(1, 1, 1);
-                 return !AssetsNatives::SetVector3(c, a, material, "emissive", &value);
+                 return !AssetsNatives::SetVector3(c, a, &material, "emissive", &value);
              }},
             {"AssetsNative.SetVector4",
              [=](const CallContext& c, AssetsScripting& a) {
                  const Math::Vec4 value(1, 1, 1, 1);
-                 return !AssetsNatives::SetVector4(c, a, material, "tint", &value);
+                 return !AssetsNatives::SetVector4(c, a, &material, "tint", &value);
              }},
             {"AssetsNative.SetColour",
              [=](const CallContext& c, AssetsScripting& a) {
                  const Colour value = Colour::White;
-                 return !AssetsNatives::SetColour(c, a, material, "tint", &value);
+                 return !AssetsNatives::SetColour(c, a, &material, "tint", &value);
              }},
             {"AssetsNative.SetTexture",
              [=](const CallContext& c, AssetsScripting& a) {
                  const SamplerDescription sampler;
-                 return !AssetsNatives::SetTexture(c, a, material, "baseColourTexture", image, &sampler);
+                 return !AssetsNatives::SetTexture(c, a, &material, "baseColourTexture", &image, &sampler);
              }},
             {"AssetsNative.SetBlendMode",
              [=](const CallContext& c, AssetsScripting& a) {
-                 return !AssetsNatives::SetBlendMode(c, a, material, BlendMode::Additive);
+                 return !AssetsNatives::SetBlendMode(c, a, &material, BlendMode::Additive);
              }},
             {"AssetsNative.SetAlphaCutoff",
              [=](const CallContext& c, AssetsScripting& a) {
-                 return !AssetsNatives::SetAlphaCutoff(c, a, material, 0.1f);
+                 return !AssetsNatives::SetAlphaCutoff(c, a, &material, 0.1f);
              }},
             {"AssetsNative.SetDoubleSided",
              [=](const CallContext& c, AssetsScripting& a) {
-                 return !AssetsNatives::SetDoubleSided(c, a, material, true);
+                 return !AssetsNatives::SetDoubleSided(c, a, &material, true);
              }},
             {"AssetsNative.TryGetFloat",
              [=](const CallContext& c, AssetsScripting& a) {
                  return ReadsNothing<float>(
-                     [&](float* out) { return AssetsNatives::TryGetFloat(c, a, material, "roughness", out); });
+                     [&](float* out) { return AssetsNatives::TryGetFloat(c, a, &material, "roughness", out); });
              }},
             {"AssetsNative.TryGetVector2",
              [=](const CallContext& c, AssetsScripting& a) {
                  return ReadsNothing<Math::Vec2>(
-                     [&](Math::Vec2* out) { return AssetsNatives::TryGetVector2(c, a, material, "offset", out); });
+                     [&](Math::Vec2* out) { return AssetsNatives::TryGetVector2(c, a, &material, "offset", out); });
              }},
             {"AssetsNative.TryGetVector3",
              [=](const CallContext& c, AssetsScripting& a) {
                  return ReadsNothing<Math::Vec3>(
-                     [&](Math::Vec3* out) { return AssetsNatives::TryGetVector3(c, a, material, "emissive", out); });
+                     [&](Math::Vec3* out) { return AssetsNatives::TryGetVector3(c, a, &material, "emissive", out); });
              }},
             {"AssetsNative.TryGetVector4",
              [=](const CallContext& c, AssetsScripting& a) {
                  return ReadsNothing<Math::Vec4>(
-                     [&](Math::Vec4* out) { return AssetsNatives::TryGetVector4(c, a, material, "tint", out); });
+                     [&](Math::Vec4* out) { return AssetsNatives::TryGetVector4(c, a, &material, "tint", out); });
              }},
             {"AssetsNative.TryGetColour",
              [=](const CallContext& c, AssetsScripting& a) {
                  return ReadsNothing<Colour>(
-                     [&](Colour* out) { return AssetsNatives::TryGetColour(c, a, material, "tint", out); });
+                     [&](Colour* out) { return AssetsNatives::TryGetColour(c, a, &material, "tint", out); });
              }},
             {"AssetsNative.TryGetTexture",
              [=](const CallContext& c, AssetsScripting& a) {
                  return ReadsNothing<MaterialTexture>([&](MaterialTexture* out) {
-                     return AssetsNatives::TryGetTexture(c, a, material, "baseColourTexture", out);
+                     return AssetsNatives::TryGetTexture(c, a, &material, "baseColourTexture", out);
                  });
              }},
             {"AssetsNative.IsSet",
-             [=](const CallContext& c, AssetsScripting& a) { return !AssetsNatives::IsSet(c, a, material, "tint"); }},
+             [=](const CallContext& c, AssetsScripting& a) { return !AssetsNatives::IsSet(c, a, &material, "tint"); }},
             {"AssetsNative.TryGetOverrideFloat",
              [=](const CallContext& c, AssetsScripting& a) {
                  return ReadsNothing<float>(
-                     [&](float* out) { return AssetsNatives::TryGetOverrideFloat(c, a, material, "roughness", out); });
+                     [&](float* out) { return AssetsNatives::TryGetOverrideFloat(c, a, &material, "roughness", out); });
              }},
             {"AssetsNative.TryGetOverrideVector2",
              [=](const CallContext& c, AssetsScripting& a) {
                  return ReadsNothing<Math::Vec2>([&](Math::Vec2* out) {
-                     return AssetsNatives::TryGetOverrideVector2(c, a, material, "offset", out);
+                     return AssetsNatives::TryGetOverrideVector2(c, a, &material, "offset", out);
                  });
              }},
             {"AssetsNative.TryGetOverrideVector3",
              [=](const CallContext& c, AssetsScripting& a) {
                  return ReadsNothing<Math::Vec3>([&](Math::Vec3* out) {
-                     return AssetsNatives::TryGetOverrideVector3(c, a, material, "emissive", out);
+                     return AssetsNatives::TryGetOverrideVector3(c, a, &material, "emissive", out);
                  });
              }},
             {"AssetsNative.TryGetOverrideVector4",
              [=](const CallContext& c, AssetsScripting& a) {
                  return ReadsNothing<Math::Vec4>([&](Math::Vec4* out) {
-                     return AssetsNatives::TryGetOverrideVector4(c, a, material, "tint", out);
+                     return AssetsNatives::TryGetOverrideVector4(c, a, &material, "tint", out);
                  });
              }},
             {"AssetsNative.TryGetOverrideColour",
              [=](const CallContext& c, AssetsScripting& a) {
                  return ReadsNothing<Colour>(
-                     [&](Colour* out) { return AssetsNatives::TryGetOverrideColour(c, a, material, "tint", out); });
+                     [&](Colour* out) { return AssetsNatives::TryGetOverrideColour(c, a, &material, "tint", out); });
              }},
             {"AssetsNative.TryGetOverrideTexture",
              [=](const CallContext& c, AssetsScripting& a) {
                  return ReadsNothing<MaterialTexture>([&](MaterialTexture* out) {
-                     return AssetsNatives::TryGetOverrideTexture(c, a, material, "baseColourTexture", out);
+                     return AssetsNatives::TryGetOverrideTexture(c, a, &material, "baseColourTexture", out);
                  });
              }},
             {"AssetsNative.Reset",
-             [=](const CallContext& c, AssetsScripting& a) { return !AssetsNatives::Reset(c, a, material, "tint"); }},
+             [=](const CallContext& c, AssetsScripting& a) { return !AssetsNatives::Reset(c, a, &material, "tint"); }},
             {"AssetsNative.GetShaderParameterCount",
              [=](const CallContext& c, AssetsScripting& a) {
-                 return AssetsNatives::GetShaderParameterCount(c, a, shader) == 0;
+                 return AssetsNatives::GetShaderParameterCount(c, a, &shader) == 0;
              }},
             {"AssetsNative.GetShaderParameter",
              [=](const CallContext& c, AssetsScripting& a) {
                  char16_t name[16] = {};
                  const bool wroteNothing = ReadsNothing<ScriptShaderParameter>([&](ScriptShaderParameter* out) {
-                     return AssetsNatives::GetShaderParameter(c, a, shader, 0, out, name, 16) != 0;
+                     return AssetsNatives::GetShaderParameter(c, a, &shader, 0, out, name, 16) != 0;
                  });
                  return wroteNothing && name[0] == u'\0';
              }},
@@ -360,7 +385,7 @@ namespace
         REQUIRE(store.Unload(image));
         REQUIRE(store.Unload(material));
         REQUIRE(store.Unload(shader));
-        return {AssetHandleBits(mesh), AssetHandleBits(image), AssetHandleBits(material), AssetHandleBits(shader)};
+        return {mesh, image, material, shader};
     }
 } // namespace
 
@@ -369,9 +394,8 @@ TEST_CASE("With no asset store, every assets native does nothing and warns once 
 {
     Testing::NativeCallHarness harness;
     AssetsScripting assets;
-    // Handles that would name the first asset of each kind.
-    const std::uint64_t first = std::uint64_t{1} << 32u;
-    const Handles handles{first, first, first, first};
+    // Handles that would name the first asset of each kind: slot 0, generation 1.
+    const Handles handles{{0, 1}, {0, 1}, {0, 1}, {0, 1}};
     EachDoesNothing(harness, assets, StoreCalls(handles), NoStore);
     EachDoesNothing(harness, assets, HandleCalls(handles), NoStore);
 }
@@ -401,8 +425,8 @@ TEST_CASE("A stale handle makes every assets native do nothing, warning once per
     }
     {
         INFO("Nothing was made from the stale handles");
-        REQUIRE_FALSE(store.IsValid(AssetHandleFromBits<Mesh>(handles.mesh)));
-        REQUIRE_FALSE(store.IsValid(AssetHandleFromBits<Image>(handles.image)));
+        REQUIRE_FALSE(store.IsValid(handles.mesh));
+        REQUIRE_FALSE(store.IsValid(handles.image));
     }
 }
 
@@ -411,7 +435,7 @@ TEST_CASE("The empty handle makes every assets native do nothing", "[assets][scr
     Testing::NativeCallHarness harness;
     Assets installed = InstallAssets(harness);
     AssetsScripting assets;
-    EachDoesNothing(harness, assets, HandleCalls(Handles{0, 0, 0, 0}), "the ");
+    EachDoesNothing(harness, assets, HandleCalls(Handles{}), "the ");
 }
 
 TEST_CASE("The public Resolve<Model> is null with no store, then with a stale handle, warning once each in Assets' "
@@ -426,7 +450,8 @@ TEST_CASE("The public Resolve<Model> is null with no store, then with a stale ha
     const CallContext context = harness.Context(Native);
     const NativeGuard guard(context, warnings);
     const std::string prefix = std::string("[renderer scripting] ") + Native + ": ";
-    const std::uint64_t first = std::uint64_t{1} << 32u;
+    // The handle that would name the first model: slot 0, generation 1.
+    const AssetHandle<Model> first{0, 1};
 
     for (int time = 0; time < 2; ++time)
     {
@@ -448,13 +473,13 @@ TEST_CASE("The public Resolve<Model> is null with no store, then with a stale ha
     }
     {
         INFO("Resolve<Model> did not give the store for a live model");
-        REQUIRE(Resolve<Model>(guard, AssetHandleBits(model)) == &store);
+        REQUIRE(Resolve<Model>(guard, model) == &store);
     }
     REQUIRE(store.Unload(model));
     for (int time = 0; time < 2; ++time)
     {
         INFO("Resolve<Model> resolved a stale model");
-        REQUIRE(Resolve<Model>(guard, AssetHandleBits(model)) == nullptr);
+        REQUIRE(Resolve<Model>(guard, model) == nullptr);
     }
     {
         INFO("Two resolves of a stale model from one place did not warn once, under the caller's native, in Assets' "
@@ -464,6 +489,6 @@ TEST_CASE("The public Resolve<Model> is null with no store, then with a stale ha
     }
     {
         INFO("The empty model handle did not resolve as stale");
-        REQUIRE(Resolve<Model>(guard, 0) == nullptr);
+        REQUIRE(Resolve<Model>(guard, AssetHandle<Model>{}) == nullptr);
     }
 }
