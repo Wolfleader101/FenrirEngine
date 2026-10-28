@@ -8,12 +8,14 @@ public static partial class World
 }
 
 // The scratch buffer a query reads its rows from. Two native calls fill it, however many entities there are: one for an
-// upper bound on the rows and one that writes them. A row is the entity (two words: an Entity as C++ lays it out, its
-// value and its scene's list) followed by a pointer to each component.
+// upper bound on the rows and one that writes them. A row is the entity (an Entity as C++ lays it out, its value and
+// its scene's list) followed by a pointer to each component.
 internal static unsafe class QueryNative
 {
-    // The words a row spends on the entity: sizeof(Entity) in pointers, as the generated query types index a row.
-    internal const int EntityWords = 2;
+    // The words a row spends on the entity: the size of the Entity mirror, which the engine checks against C++ when a
+    // script assembly loads, in pointers. The generated query types index a row by it. (A struct's sizeof is not a C#
+    // constant; the JIT folds a static readonly int once the method is tiered up.)
+    internal static readonly int EntityWords = sizeof(Entity) / sizeof(nuint);
 
     // Fills a new buffer with every entity that has all the components. Null (and a count of zero) when there are none.
     // The caller owns it: give it back with Release.
