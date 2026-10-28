@@ -20,8 +20,7 @@
 
 **Touches:** `packages/FenrirScripting/src/Bindings.cpp`, `packages/FenrirScripting/api/FenrirScripting.natives.json`, `packages/FenrirScripting/src/Generated/FenrirScriptingNatives.hpp`, `packages/FenrirScripting/Managed/Fenrir.Scripting/Generated/Native.cs`
 
-**Status:** claimed
-
+**Status:** resolved
 - [x] `grep -n "const char\*" packages/FenrirScripting/src/Bindings.cpp` finds nothing; `grep -n "== nullptr" packages/FenrirScripting/src/Bindings.cpp` finds no parameter of a native (registry and queue lookups may still compare their results); `grep -c '"i8"' packages/FenrirScripting/api/FenrirScripting.natives.json` is 0.
 - [x] `Native.cs` declares `Log(int level, ReadOnlySpan<char> text)` and `QueryCount(ReadOnlySpan<int> ids)`; the contract and every fixture build without a change outside `Generated/`.
 - [x] The `ScriptingTests.cpp` cases for `Log`, `WorldTransform`, queries and event readers pass unchanged; every scripting test passes under the msvc-x64-debug preset; `fenrir-describe-api` and `fenrir-generate-bindings` are no-ops after the commit; `check_tickets.py` and clang-format pass.

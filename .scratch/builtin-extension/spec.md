@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 
 # Built-in extension: the built-in extension is an extension like the six
 

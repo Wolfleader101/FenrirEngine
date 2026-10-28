@@ -14,8 +14,7 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/src/`, `packages/Iris/Tools/Iris.Bindings/tests/`, `packages/Iris/Tools/Iris.Bindings/README.md`, `packages/FenrirScripting/api/`, `packages/FenrirScripting/include/FenrirScripting/Generated/`, `packages/FenrirPhysics/Scripting/api/`, `packages/FenrirDebugDraw/Scripting/api/`, `packages/FenrirRenderer/Scripting/api/`, `packages/FenrirRenderer/Scripting/CMakeLists.txt`
 
-**Status:** claimed
-
+**Status:** resolved
 - [x] `BindingTests.cs`: the Uses fixture's native taking Common's bound type and struct generates declarations typed with Common's C# names, and the fixture's own description does not describe them; a used type this binding also names in `[bound-types]` still fails.
 - [x] `grep -rln "EntityValue.hpp" packages/*/Scripting/api/` finds nothing; `packages/FenrirRenderer/Scripting/api/` holds `FenrirRenderer.binding.toml` only; `grep -n "bound-types" packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml` finds nothing (or the PR names the entry kept and why).
 - [x] `git diff --stat` after regeneration shows no change under any package's `Managed/*/Generated/` or `Generated/*Mappings.hpp` beyond the built-in mappings header's new include; every scripting test passes under the msvc-x64-debug preset; `fenrir-describe-api` and `fenrir-generate-bindings` are no-ops after the commit; `check_tickets.py` and clang-format pass.
