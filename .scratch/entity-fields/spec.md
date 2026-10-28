@@ -21,18 +21,15 @@ Surveyed 2026-10-28, for the engine-side alternatives this spec rejects (below):
 The built-in binding names the mirror of `Fenrir::Entity` `Entity`. The generated half is what `EntityLink`'s is today: a `readonly partial struct` (`immutable-structs`) with the two private fields `value` and `owner` (`private-fields`, `[names]`) and the constructor. The hand-written half is today's `Entity.cs` moved onto that partial: `Create`, `Destroy`, `Add<T>`, `Remove<T>`, `Has<T>`, `Get<T>`, `GetReadOnly<T>`, `IsValid`, the transform members, equality, `ToString`, `None`, and the constructor from a value. `EntityLink.cs` is deleted.
 
 - A script-side `Entity` is 16 bytes, as a C++ one is. `Entity.None` is value `uint.MaxValue` and owner 0, which is what C++ `Entity{}` holds and what a component's `= new()` initialiser gives. Equality and the hash are by value: scripts see one scene.
-- The constructor from a value (`new Entity(value)`, what every native result goes through) stamps the owner with the active scene's list through `Native.EntityLinkOwner`, as `EntityLink`'s conversion does today, except for `Entity.None`, which keeps owner 0. The native is a function-pointer call; caching the owner is an optimisation for later, if measured.
+- No C# code stamps an owner: every entity a script holds came from C++ (a native's out parameter, a component field, a query hit) with its list set. The constructor from a value is `internal`, for tests that name an entity by id, and gives owner 0.
 - `default(Entity)` is value 0 with no scene, as `default(Joint)` is today: a zeroed link C++ reads as not valid. The doc comment says so.
 - A component field is then `public Entity BodyA = new();` in a writable mirror and `public readonly Entity BodyA = new();` in a read-only one, with no conversion, projection or second type: `joint.BodyA = door`, `if (contact.BodyB == Entity.None)`, `foreach` over `Relationship` by `.FirstChild` and `.NextSibling`.
 
-### `EntityValue` is for natives only
+### `EntityValue` goes: natives take the entity
 
-`Fenrir::EntityValue` stays the bound type natives take and return the entity's value through (`wrapper = "u32"`, `constructor = ["value"]`, `type = "Entity"`): a native declared `std::uint32_t entity` or `EntityValue` is `Entity` in C#, passed as its value and wrapped on return. It can no longer be a field of a struct a binding mirrors, since C# `Entity` is 16 bytes and `EntityValue` 4: a struct holding one is refused by the generator, naming the field ("`<Type>::<field>` holds `Fenrir::EntityValue`, which is 4 bytes where C# `Entity` is 16: hold a `Fenrir::Entity`"). The generator's rule that a bound type's C# type may not be a mirror's name is relaxed for a bound type with a `wrapper`: such a type never has a layout of its own in C#.
+`Fenrir::EntityValue` existed so a native could take or return an entity as its 32-bit value while C# `Entity` was that value. With C# `Entity` the mirror of `Fenrir::Entity`, a native takes the entity itself: a `const Fenrir::Entity*` parameter is `in Entity` in C# (the generator's pointer rule), and a native that makes one returns it through a `@param[out] Fenrir::Entity*`, which C# calls with `out Entity`. C++ reads the owner off the entity it is given and stamps it on the entity it returns, so no C# code ever stamps an owner: `Native.EntityLinkOwner` goes, and the constructor from a value is `internal`, for tests that name an entity by id. `NativeGuard::Alive` takes a `const Entity&` and may also check that its owner is the active scene's list (a stale link from another scene is not alive). `EntityValue.hpp`, `EntityValueMapping.hpp`, the bound-type entry in `FenrirScripting.binding-defaults.toml` and every selection's `"Fenrir::EntityValue" = "bound-type"` line are deleted; the generator needs no new rule.
 
-Physics's query structs and DebugDraw's options therefore hold the engine's `Fenrir::Entity`:
-
-- Physics binds the engine's own `QueryFilter`, `RaycastHit`, `ShapeCastHit`, `MoveCastHit`, `OverlapHit`, `PenetrationHit` and `Contact` (`packages/FenrirPhysics/include/FenrirPhysics/Queries.hpp`, already selected as shared structs in `FenrirPhysics.api.toml`): the `exclude` list in `FenrirPhysics.binding.toml` goes, `ScriptQueries.hpp` and `FenrirPhysicsScripting.api.toml`'s shadow types go, and the query natives in `PhysicsScripting.cpp` take and fill the engine's structs with no conversion. Scripts read `hit.Body` as an `Entity`, which they already spell.
-- DebugDraw's `ScriptOptions.hpp` holds `Fenrir::Entity relativeTo` instead of `EntityValue`; its natives resolve it as they resolve any entity.
+The natives that take an `EntityValue` today, by file: `FenrirPhysics/Scripting/src/PhysicsScripting.cpp` (20 uses), `FenrirRenderer/Scripting/src/RendererScripting.cpp` (12), `FenrirDebugDraw/Scripting/src/DebugDrawScriptingState.hpp` and `PhysicsScriptingState.hpp`, `RendererScriptingState.hpp` (2 each), with their tests (`Rules.cpp`, `NoOps.cpp`) and `FenrirScripting/Tests/ScriptingTests.cpp`'s guard test. The built-in natives in `FenrirScripting/src/Bindings.cpp` take `std::uint32_t value` today and move to `const Fenrir::Entity*` the same way, `EntityCreate` returning its entity through an out pointer. Ticket 01 already moved every struct that held an `EntityValue` to hold a `Fenrir::Entity`.
 
 ### Scripts, tests, docs
 
@@ -51,16 +48,15 @@ Two engine-side ways to a 4-byte stored reference were considered and rejected o
 
 ### Out of scope
 
-- Caching the active scene's owner on the C# side (a `static` refreshed by the host when the scene changes): measure first.
-- Natives taking a `Fenrir::Entity` by value instead of its 32-bit value: `EntityValue` does the job and the natives are unchanged.
+- Natives taking a `Fenrir::Entity` by value (16 bytes) rather than by pointer: the pointer rule exists and costs nothing measurable.
 
 ## Decisions
 
 1. One `Entity` in C#, the generated mirror of `Fenrir::Entity`, 16 bytes, with today's API as its hand-written partial; `EntityLink` is deleted.
 2. The engine's `Entity` keeps its list pointer and API; C# mirrors the shape instead of inventing a storage type.
-3. `EntityValue` is the natives' wrapper only; a struct a binding mirrors holds `Fenrir::Entity`. Physics binds the engine's query structs and drops its shadow copy; DebugDraw's options hold an `Entity`.
-4. Equality by value; `Entity.None` is `{uint.MaxValue, 0}`; a native-returned entity is stamped with the active scene's list.
-5. The generator allows a wrapper bound type to name a mirror's C# type, and refuses `EntityValue` as a field.
+3. `EntityValue` is deleted: natives take `const Fenrir::Entity*` (`in Entity`) and return an entity through an out pointer. Physics binds the engine's query structs and drops its shadow copy; DebugDraw's options hold an `Entity`.
+4. Equality by value; `Entity.None` is `{uint.MaxValue, 0}`; C++ stamps every owner, C# never does, and `Native.EntityLinkOwner` goes.
+5. No generator change: the pointer rules already give `in Entity` and `out Entity`.
 6. No ADR: ADR-0044's rule stands; its `EntityLink` sentence is corrected. The glossary's "Entity link" entry goes.
 
 ## Tickets
@@ -68,14 +64,14 @@ Two engine-side ways to a 4-byte stored reference were considered and rejected o
 | Ticket | Scope | Blocked by |
 |---|---|---|
 | 01 | Physics binds the engine's query structs (no shadow copy, no `exclude`, no conversions); DebugDraw's options hold `Fenrir::Entity` | none |
-| 02 | `Entity` is the mirror: the built-in binding, `Entity.cs`, `EntityLink.cs` deleted, the generator's two rules, the scripting tests, glossary, ADR-0044 note; everything regenerated; the examples' scripts | 01 |
+| 02 | `Entity` is the mirror: the built-in binding, `Entity.cs`, `EntityLink.cs` deleted; natives take the entity and `EntityValue` is deleted; the scripting tests, glossary, ADR-0044 note; everything regenerated; the examples' scripts | 01 |
 | 03 | Optional: facade parts on a mirror generate `Entity`'s native-backed members | 02 |
 
-A stack. 01 lands first because, under 02's rule, `EntityValue` may no longer be a field: in 01 the migrated structs hold `Fenrir::Entity`, which the physics and DebugDraw bindings show as `EntityLink` through `uses` until 02 renames it. Branch `entity-fields-01` from this spec's branch, each later ticket from the previous ticket's pushed branch.
+A stack. 01 landed first (PR #202) so that no struct holds an `EntityValue` when 02 deletes it; its migrated structs show `EntityLink` through `uses` until 02 renames it. Branch `entity-fields-01` from this spec's branch, each later ticket from the previous ticket's pushed branch.
 
 ## Done looks like
 
 - `grep -rn "EntityLink" packages examples` finds nothing.
-- `grep -rn "EntityValue" --include=*.hpp packages` finds only `EntityValue.hpp`, its mapping, and natives' parameters; `ls packages/FenrirPhysics/Scripting/src/ScriptQueries.hpp` fails.
+- `grep -rn "EntityValue\|EntityLinkOwner" packages examples` finds nothing; `ls packages/FenrirPhysics/Scripting/src/ScriptQueries.hpp` fails.
 - `grep -n "exclude" packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml` finds nothing.
 - Every scripting test passes under the msvc-x64-debug preset, every physics compile-fail case included; both generators are no-ops; Iris.Bindings' tests pass.

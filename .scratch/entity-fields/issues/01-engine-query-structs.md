@@ -13,7 +13,7 @@
 
 **Touches:** `packages/FenrirPhysics/Scripting/`, `packages/FenrirPhysics/Managed/Fenrir.Physics/Generated/`, `packages/FenrirDebugDraw/Scripting/`, `packages/FenrirDebugDraw/Managed/`, `examples/PhysicsDemo/scripts/`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `grep -rn "EntityValue" --include=*.hpp packages/FenrirPhysics packages/FenrirDebugDraw` finds only natives' parameters; `ScriptQueries.hpp` is gone; `grep -n "exclude" packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml` finds nothing.
 - [x] `ctest -R "Scripting|PhysicsCompile"` passes under the msvc-x64-debug preset; both generators are no-ops afterwards.
@@ -22,3 +22,5 @@
 ## Comments
 
 Filed 2026-10-28 from the spec. Cut from the spec's branch (`claude/entity-fields-spec`, on PR #199's). The test-support stack's ticket 03 (PR #198) edited physics test sources: cut from a base that has it, or rebase.
+
+Built 2026-10-28 as PR #202, merged into the spec branch.
