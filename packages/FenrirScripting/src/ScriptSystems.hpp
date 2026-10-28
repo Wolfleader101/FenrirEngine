@@ -35,7 +35,7 @@ namespace Fenrir::Detail
          * OnCreate. Success and nothing held when the script defines no systems. A failure holds nothing and is the
          * load's failure.
          */
-        [[nodiscard]] Result Start(LoadedComponent& generation);
+        [[nodiscard]] Result Start(LoadedScriptAssembly& generation);
 
         /**
          * @brief One transition for the phase: nothing when no host is held or the mask bit is clear; off the main

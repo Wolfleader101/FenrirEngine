@@ -116,14 +116,15 @@ namespace Fenrir
     {
         // The lifecycle's loader over the Iris host: a loaded generation is an Iris component, and this is the one
         // place that knows it. Scripting's hooks reach the component through Of.
-        class IrisComponentLoader final : public Detail::ComponentLoader
+        class IrisScriptAssemblyLoader final : public Detail::ScriptAssemblyLoader
         {
           public:
-            explicit IrisComponentLoader(Iris::Host& host) : m_host(host)
+            explicit IrisScriptAssemblyLoader(Iris::Host& host) : m_host(host)
             {
             }
 
-            Iris::CallResult<std::unique_ptr<Detail::LoadedComponent>> Load(const std::filesystem::path& path) override
+            Iris::CallResult<std::unique_ptr<Detail::LoadedScriptAssembly>> Load(
+                const std::filesystem::path& path) override
             {
                 auto loaded = m_host.LoadComponent(path);
                 if (!loaded.Succeeded())
@@ -134,13 +135,13 @@ namespace Fenrir
             }
 
             // The Iris component behind a generation this loader loaded.
-            [[nodiscard]] static Iris::Component& Of(Detail::LoadedComponent& loaded) noexcept
+            [[nodiscard]] static Iris::Component& Of(Detail::LoadedScriptAssembly& loaded) noexcept
             {
                 return static_cast<Loaded&>(loaded).component;
             }
 
           private:
-            struct Loaded final : Detail::LoadedComponent
+            struct Loaded final : Detail::LoadedScriptAssembly
             {
                 explicit Loaded(Iris::Component&& owner) : component(std::move(owner))
                 {
@@ -168,10 +169,11 @@ namespace Fenrir
         class IrisSystemHostLoader final : public Detail::SystemHostLoader
         {
           public:
-            Iris::CallResult<std::unique_ptr<Detail::SystemHost>> Find(Detail::LoadedComponent& generation) override
+            Iris::CallResult<std::unique_ptr<Detail::SystemHost>> Find(
+                Detail::LoadedScriptAssembly& generation) override
             {
                 using Result = Iris::CallResult<std::unique_ptr<Detail::SystemHost>>;
-                const Iris::Component& component = IrisComponentLoader::Of(generation);
+                const Iris::Component& component = IrisScriptAssemblyLoader::Of(generation);
                 const auto type = component.FindType(Detail::SystemHostNames::Type);
                 if (type.status == Iris::CallStatus::NotFound)
                 {
@@ -290,7 +292,7 @@ namespace Fenrir
         std::unique_ptr<Iris::Host> host;
         // What the lifecycle loads generations through: the host above. Declared before the lifecycle, which borrows
         // it.
-        std::optional<IrisComponentLoader> loader;
+        std::optional<IrisScriptAssemblyLoader> loader;
         // Where a generation's system host comes from, and the systems themselves: started by the lifecycle's start
         // hook, run once per scheduled phase, stopped by its stop hook before the generation is released. Declared
         // after the loader, whose Of they reach the component through, and before the lifecycle, whose hooks call them.
@@ -493,7 +495,7 @@ namespace Fenrir
     Iris::Component* Scripting::LoadedComponent() noexcept
     {
         auto* loaded = m_state != nullptr ? m_state->generations.Component() : nullptr;
-        return loaded != nullptr ? &IrisComponentLoader::Of(*loaded) : nullptr;
+        return loaded != nullptr ? &IrisScriptAssemblyLoader::Of(*loaded) : nullptr;
     }
 
     void Scripting::Shutdown() noexcept
@@ -782,11 +784,11 @@ namespace Fenrir
                 // lifecycle, so the raw pointer the hooks keep lives as long as they do.
                 State* const self = state.get();
                 Detail::GenerationLifecycle::Hooks hooks;
-                hooks.reconcile = [self](Detail::LoadedComponent& loaded) {
-                    Detail::IrisScriptAssembly assembly(*self->context, IrisComponentLoader::Of(loaded));
+                hooks.reconcile = [self](Detail::LoadedScriptAssembly& loaded) {
+                    Detail::IrisScriptAssembly assembly(*self->context, IrisScriptAssemblyLoader::Of(loaded));
                     return self->scriptData.Admit(*self->context->app, assembly);
                 };
-                hooks.start = [self](Detail::LoadedComponent& loaded) { return self->systems.Start(loaded); };
+                hooks.start = [self](Detail::LoadedScriptAssembly& loaded) { return self->systems.Start(loaded); };
                 // The systems say goodbye, and what the generation defined goes.
                 hooks.stop = [self] {
                     self->systems.Stop();

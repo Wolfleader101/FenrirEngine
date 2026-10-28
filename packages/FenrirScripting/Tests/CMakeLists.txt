@@ -1,43 +1,57 @@
-# The headless scripting tests: an App with no window runs a few frames around a fixture script assembly.
+# The shared test support: the four headers every scripting test executable uses and the native call harness's
+# implementation, the one place outside src that sees FenrirScripting's private modules.
+add_subdirectory(Support)
+
+# The headless scripting tests: an App with no window runs a few frames around a fixture script assembly. The cases are
+# split by theme, each source under 1000 lines, over two helper headers: the fixture calls and the test-only extension.
+# The test runs with --order decl, which follows link order across files, so the sources are listed in the order the
+# cases ran before the split.
 add_executable(FenrirScriptingTests
-    ScriptingTests.cpp
-    ExtensionTestApp.hpp
+    HostingTests.cpp
+    NativeComponentTests.cpp
+    MathTests.cpp
+    AdmissionTests.cpp
+    TaggedUnionTests.cpp
+    ScriptComponentTests.cpp
+    QueryTests.cpp
+    SystemTests.cpp
+    EventTests.cpp
+    ReloadTests.cpp
+    NativeTests.cpp
+    ResourceTests.cpp
+    TestExtension.cpp
+    FixtureCalls.hpp
     FixtureApp.hpp
-    HeadlessApp.hpp
-    NativeCallHarness.hpp
-    ScriptingProbe.hpp
+    TestExtension.hpp
     Generated/FenrirScriptingDefaultsTests.cpp
     Generated/FenrirMathDefaultsTests.cpp
 )
-# NativeCallHarness.hpp includes the package's private ChangeBuffer.hpp, so this executable is given the source directory
-# too, as every test executable using the harness is.
-target_include_directories(FenrirScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_include_directories(FenrirScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
-target_link_libraries(FenrirScriptingTests PRIVATE FenrirScripting Catch2::Catch2WithMain)
+target_link_libraries(FenrirScriptingTests PRIVATE FenrirScripting FenrirScriptingTestSupport Catch2::Catch2WithMain)
 # Puts nethost, the Iris bridge and the contract next to the executable, which is where Scripting looks by default.
 fenrir_deploy_scripting(FenrirScriptingTests)
 
 # The rules tests: FenrirScripting's own modules (the change buffer, and the others as they are split out) and what a
 # native function is written with (the native guard, the marshalling helpers, the zeroing registration) tested through
 # their interfaces, with no .NET runtime and no fixture assembly. The modules are private to the package, so this
-# executable is given the package's source directory, as is any that uses NativeCallHarness.hpp.
+# executable is given the package's source directory.
 add_executable(FenrirScriptingRulesTests
     Rules/ChangeBufferTests.cpp
     Rules/RegistryTableTests.cpp
     Rules/ReloadWatcherTests.cpp
     Rules/ScriptDataTests.cpp
+    Rules/QueriesTests.cpp
     Rules/GenerationLifecycleTests.cpp
-    Rules/FakeComponentLoader.hpp
+    Rules/FakeScriptAssemblyLoader.hpp
     Rules/ScriptSystemsTests.cpp
     Rules/FakeSystemHost.hpp
     Rules/NativeGuardTests.cpp
     Rules/NativeMarshallingTests.cpp
     Rules/ZeroingOutputsTests.cpp
-    HeadlessApp.hpp
-    NativeCallHarness.hpp
 )
-target_link_libraries(FenrirScriptingRulesTests PRIVATE FenrirScripting Catch2::Catch2WithMain)
+target_link_libraries(FenrirScriptingRulesTests PRIVATE FenrirScripting FenrirScriptingTestSupport Catch2::Catch2WithMain)
 target_include_directories(FenrirScriptingRulesTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 add_test(NAME FenrirScriptingRules COMMAND FenrirScriptingRulesTests --order decl)
 set_tests_properties(FenrirScriptingRules PROPERTIES TIMEOUT 60)

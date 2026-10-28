@@ -15,7 +15,7 @@
 namespace RulesTest
 {
     // A generation the fake is given and never looks at: the host is found by the knobs below, not in it.
-    struct UnusedGeneration final : Fenrir::Detail::LoadedComponent
+    struct UnusedGeneration final : Fenrir::Detail::LoadedScriptAssembly
     {
         Iris::CallResult<void> Release() override
         {
@@ -65,7 +65,8 @@ namespace RulesTest
             return names;
         }
 
-        Iris::CallResult<std::unique_ptr<Fenrir::Detail::SystemHost>> Find(Fenrir::Detail::LoadedComponent&) override
+        Iris::CallResult<std::unique_ptr<Fenrir::Detail::SystemHost>> Find(
+            Fenrir::Detail::LoadedScriptAssembly&) override
         {
             Record("Find");
             switch (answer)

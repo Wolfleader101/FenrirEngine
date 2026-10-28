@@ -2,7 +2,7 @@
 // guard's entity-alive rule, requirement check and warning each warn once per place and message under that name.
 #include <catch2/catch_test_macros.hpp>
 
-#include "../NativeCallHarness.hpp"
+#include "NativeCallHarness.hpp"
 
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"

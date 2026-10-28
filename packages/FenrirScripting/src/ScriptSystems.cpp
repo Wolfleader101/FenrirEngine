@@ -8,7 +8,7 @@ namespace Fenrir::Detail
     {
     }
 
-    ScriptSystems::Result ScriptSystems::Start(LoadedComponent& generation)
+    ScriptSystems::Result ScriptSystems::Start(LoadedScriptAssembly& generation)
     {
         // A host from an earlier generation is never started over: Stop is the only way it says goodbye.
         m_host.reset();
