@@ -12,8 +12,7 @@
 
 **Touches:** `packages/FenrirScripting/Tests/Support/`, `packages/FenrirScripting/Tests/CMakeLists.txt`, `packages/FenrirScripting/Tests/*.hpp`, `packages/FenrirScripting/Tests/Rules/NativeGuardTests.cpp`, `packages/FenrirScripting/Tests/Rules/ZeroingOutputsTests.cpp`, `packages/FenrirScripting/cmake/FenrirScriptingExtension.cmake`
 
-**Status:** claimed
-
+**Status:** resolved
 - [x] `grep -rn "ChangeBuffer.hpp\|ComponentRegistry.hpp\|ApplyResult" packages/FenrirScripting/Tests/Support/*.hpp` finds nothing; `grep -n '/../src' packages/FenrirScripting/cmake/FenrirScriptingExtension.cmake` finds only the package's own `src` line.
 - [x] Every scripting test target configures and builds under the msvc-x64-debug preset; `ctest -R "Scripting"` passes with the same test names as before.
 - [x] `check_tickets.py` and clang-format pass.

@@ -10,8 +10,7 @@
 
 **Touches:** `packages/FenrirPhysics/Scripting/Tests/PhysicsScriptingTests.cpp`, `packages/FenrirPhysics/Scripting/Tests/CMakeLists.txt`, `packages/FenrirScripting/Tests/Rules/`, `packages/FenrirScripting/Tests/CMakeLists.txt`, `packages/FenrirScripting/src/ComponentLoader.hpp`, `packages/FenrirScripting/src/ScriptAssemblyLoader.hpp`, `packages/FenrirScripting/src/GenerationLifecycle.hpp`, `packages/FenrirScripting/src/GenerationLifecycle.cpp`, `packages/FenrirScripting/src/Scripting.cpp`, `packages/FenrirScripting/CMakeLists.txt`, `packages/FenrirScripting/README.md`
 
-**Status:** claimed
-
+**Status:** resolved
 - [x] `grep -c "Drifted" packages/FenrirPhysics/Scripting/Tests/PhysicsScriptingTests.cpp` is 0 and `FenrirPhysicsScripting` passes.
 - [x] `QueriesTests.cpp` has six cases and `FenrirScriptingRules` passes.
 - [x] `grep -rn "ComponentLoader\|LoadedComponent" packages/FenrirScripting docs .scratch` finds nothing outside git history; the msvc-x64-debug preset builds and every scripting test passes.

@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 
 # Test support: FenrirScripting's tests reach it through its interface, and its test files are sized by theme
 
