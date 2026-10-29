@@ -10,6 +10,7 @@
 
 #include "ExtensionSet.hpp"
 
+#include "FenrirScripting/NativeFunctionMake.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 
 #include <filesystem>
