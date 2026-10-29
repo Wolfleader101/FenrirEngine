@@ -12,7 +12,7 @@
 
 **Touches:** `packages/Iris/Native/include/Iris/FieldDifferences.hpp`, `packages/Iris/Native/include/Iris/Iris.hpp`, `packages/Iris/Tests/`, `packages/Iris/README.md`, `packages/Iris/Tools/Iris.Bindings/src/CppWriter.cs`, `packages/Iris/Tools/Iris.Bindings/tests/`, `packages/Iris/Tools/Iris.Bindings/README.md`, `packages/*/Scripting/Tests/Generated/*DefaultsTests.cpp`, `packages/FenrirScripting/Tests/Generated/*DefaultsTests.cpp`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `grep -rn "Iris::Detail" packages tools --include=*.cpp --include=*.hpp | grep -v "packages/Iris/"` finds nothing.
 - [x] The Iris test, Iris.Bindings' tests and every `*Scripting` CTest pass under the msvc-x64-debug preset.
@@ -21,3 +21,5 @@
 ## Comments
 
 Filed from the rules-harness grilling (spec decision 6). Cut from `dotnet-scripting`; ticket 05 is cut from this branch.
+
+Resolved: PR #227 merged into the spec's branch, and the spec #218 squash-merged into `dotnet-scripting` carrying it.

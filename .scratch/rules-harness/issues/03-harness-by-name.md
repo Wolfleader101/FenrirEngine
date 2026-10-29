@@ -16,7 +16,7 @@
 
 **Touches:** `packages/FenrirScripting/include/FenrirScripting/ScriptingExtension.hpp`, `packages/FenrirScripting/include/FenrirScripting/NativeFunctionMake.hpp`, `packages/FenrirScripting/include/FenrirScripting/WarnOnceRecord.hpp`, `packages/FenrirScripting/include/FenrirScripting/NativeGuard.hpp`, `packages/FenrirScripting/Tests/Support/NativeCallHarness.hpp`, `packages/FenrirScripting/Tests/Support/NativeCallHarness.cpp`, `packages/FenrirScripting/Tests/Rules/`, `packages/FenrirScripting/Tests/CMakeLists.txt`, `packages/FenrirScripting/README.md`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `grep -rn "warned once" packages/FenrirScripting --include=*.hpp --include=*.cpp` finds only `WarnOnceRecord.hpp`.
 - [x] The new harness cases pass; every `*Scripting*` CTest passes under the msvc-x64-debug preset (the six package rules tests still compile against the unchanged `Context`).
@@ -25,3 +25,5 @@
 ## Comments
 
 Filed from the rules-harness grilling (spec decisions 1, 2, 3, 5). Cut from ticket 02's branch; ticket 04 is cut from this one.
+
+Resolved: PR #229 merged into the spec's branch, and the spec #218 squash-merged into `dotnet-scripting` carrying it.

@@ -10,7 +10,7 @@
 
 **Touches:** `packages/FenrirScripting/Tests/ScriptingApp.hpp`, `packages/FenrirScripting/Tests/FixtureApp.hpp`, `packages/FenrirScripting/Tests/CMakeLists.txt`, `packages/FenrirScripting/api/FenrirScripting.binding.toml`, `packages/FenrirScripting/api/FenrirMath.binding.toml`, `packages/*/Scripting/Tests/*ScriptingApp.hpp`, `packages/*/Scripting/Tests/*.cpp` (the .NET-driven test sources, not the rules tests ticket 04 edits), `packages/*/Scripting/api/*.binding.toml`, `packages/*/Scripting/Tests/Generated/*DefaultsTests.cpp`, `packages/FenrirScripting/Tests/Generated/*DefaultsTests.cpp`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `grep -rn "^namespace" packages/*/Scripting/Tests/*ScriptingApp.hpp packages/FenrirScripting/Tests/ScriptingApp.hpp` finds only `Fenrir::Testing`; `grep -rn "ScriptingTests::" packages` finds nothing; `FixtureApp.hpp` does not exist.
 - [x] Every `[tests] setup` reads `Fenrir::Testing::<Name>ScriptingApp app;`; `fenrir-generate-bindings` re-run changes nothing further.
@@ -19,3 +19,5 @@
 ## Comments
 
 Filed from the rules-harness grilling (spec decisions 7, 8, 9). Cut from ticket 01's branch, side by side with the 02 to 04 stack: its Touches are disjoint from theirs (the rules tests are 04's, the .NET-driven sources and apps are this ticket's).
+
+Resolved: PR #228 merged into the spec's branch, and the spec #218 squash-merged into `dotnet-scripting` carrying it.

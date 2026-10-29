@@ -10,7 +10,7 @@
 
 **Touches:** `packages/FenrirPhysics/Scripting/Tests/Rules.cpp`, `packages/FenrirWindow/Scripting/Tests/Rules.cpp`, `packages/FenrirInput/Scripting/Tests/NoInput.cpp`, `packages/FenrirAssets/Scripting/Tests/NoOps.cpp`, `packages/FenrirRenderer/Scripting/Tests/NoOps.cpp`, `packages/FenrirDebugDraw/Scripting/Tests/NoOps.cpp`, `packages/*/Scripting/src/*ScriptingState.hpp`, `packages/*/Scripting/src/*Scripting.cpp`, `packages/FenrirAssets/Scripting/include/FenrirAssetsScripting/AssetResolve.hpp`, `packages/FenrirScripting/cmake/FenrirScriptingExtension.cmake`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `grep -rn "ZeroingOutputs<\|harness.Context(\|warned once\|constexpr std::size_t once\|Generated/.*Natives.hpp" packages/*/Scripting/Tests` finds nothing.
 - [x] `grep -rn 'so it [a-z ]*"' packages/*/Scripting/src/*.cpp` finds nothing: every text is on a state header or `AssetResolve.hpp`.
@@ -19,3 +19,5 @@
 ## Comments
 
 Filed from the rules-harness grilling (spec decisions 1 to 4). Cut from ticket 03's branch.
+
+Resolved: PR #232 merged into `dotnet-scripting` directly (rebased onto it, since the spec #218 had been squash-merged with tickets 01, 02, 03 and 05 inside).

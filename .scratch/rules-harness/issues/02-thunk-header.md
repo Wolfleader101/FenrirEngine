@@ -12,7 +12,7 @@
 
 **Touches:** `packages/FenrirScripting/include/FenrirScripting/ScriptingExtension.hpp`, `packages/FenrirScripting/include/FenrirScripting/NativeFunctionMake.hpp`, `packages/FenrirScripting/api/FenrirScripting.binding-defaults.toml`, `packages/FenrirScripting/src/Bindings.cpp`, `packages/FenrirScripting/Tests/TestExtension.cpp`, `packages/FenrirScripting/Tests/AdmissionTests.cpp`, `packages/FenrirScripting/Tests/Rules/ZeroingOutputsTests.cpp`, `packages/FenrirScripting/README.md`, `packages/*/Scripting/src/Generated/*Natives.hpp`, `packages/FenrirScripting/src/Generated/FenrirScriptingNatives.hpp`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `grep -n "Iris/Iris.hpp\|NativeFunctionCall\b.*{\|NativeFunctionTraits\|StateTypeOf" packages/FenrirScripting/include/FenrirScripting/ScriptingExtension.hpp` finds nothing but the friend's forward declaration.
 - [x] Every generated natives header includes `FenrirScripting/NativeFunctionMake.hpp`; `fenrir-generate-bindings` re-run changes nothing further.
@@ -21,3 +21,5 @@
 ## Comments
 
 Filed from the rules-harness grilling (spec decision 10). Cut from `dotnet-scripting`; ticket 03 is cut from this branch.
+
+Resolved: PR #224 merged into the spec's branch, and the spec #218 squash-merged into `dotnet-scripting` carrying it.
