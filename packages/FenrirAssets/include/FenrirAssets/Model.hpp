@@ -78,6 +78,11 @@ namespace Fenrir
         std::vector<AssetHandle<Image>> images;
         /** @brief The model's skeletons, by label number. */
         std::vector<AssetHandle<Skeleton>> skeletons;
+        /**
+         * @brief Each skeleton's owner, as Model::skeletons is numbered: the index in Model::nodes of the node whose
+         * entity carries the skeleton's pose (its skeleton entity), an ordinary node or a synthetic owner.
+         */
+        std::vector<std::int32_t> skeletonOwners;
         /** @brief The model's clips, by label number. */
         std::vector<AssetHandle<Clip>> clips;
     };

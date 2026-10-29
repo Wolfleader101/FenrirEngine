@@ -716,6 +716,10 @@ A tick-posed skeleton's base pose as the last fixed tick evaluated it, with no p
 A skeleton's final pose for this frame, what is drawn and what attachments follow. On a tick-posed skeleton it is built from the blend of the last two tick poses at physics's interpolation fraction, then modified as usual (ADR-0040).
 *Avoid:* display pose, interpolated pose, visual pose.
 
+**Pose kind**
+`PoseKind`, an argument of FenrirSkeleton's base-pose and world reads: `Render` (the default) for the render pose, or `Simulation` for the simulation pose. On a frame-posed skeleton both give the render pose (ADR-0040).
+*Avoid:* pose mode, pose source, pose timing (which says when a pose is evaluated, not which is read).
+
 **Animator**
 `Animator`: the plain component on a skeleton entity naming the clip to play, its speed, its loop mode (`Loop` or `Once`) and whether it plays. Game code writes it and FenrirAnimation never does; it holds no time. While it names a clip, FenrirAnimation owns the skeleton's whole base pose (ADR-0034). It is the skeleton's base animation layer, and gains a crossfade on a clip change (ADR-0036).
 *Avoid:* animation player, animation component, FenrirAnimation (the package).

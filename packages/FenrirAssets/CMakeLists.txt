@@ -33,6 +33,7 @@ add_library(FenrirAssets STATIC
     src/CubemapLoading.cpp
     src/Materials.cpp
     src/ModelLoading.cpp
+    src/ModelData.cpp
     src/SpawnNodes.cpp
 
     src/Importers/ImageImporter.hpp

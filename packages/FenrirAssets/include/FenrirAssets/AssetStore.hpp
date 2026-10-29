@@ -66,6 +66,7 @@ namespace Fenrir
         [[nodiscard]] std::string PrepareAsset(SkeletonData& skeleton, AssetWarnings& warnings);
         [[nodiscard]] std::string PrepareAsset(ClipData& clip, AssetWarnings& warnings);
         [[nodiscard]] std::string PrepareAsset(BoneMaskData& mask, AssetWarnings& warnings);
+        [[nodiscard]] std::string PrepareAsset(Model& model, AssetWarnings& warnings);
         /** @} */
     } // namespace Detail
 
