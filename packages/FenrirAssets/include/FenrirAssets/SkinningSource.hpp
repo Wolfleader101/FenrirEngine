@@ -70,4 +70,15 @@ namespace Fenrir
         SkinningSource(const SkinningSource&) = default;
         SkinningSource& operator=(const SkinningSource&) = default;
     };
+
+    /**
+     * @brief The app resource the skinning source is registered as: `app.TryGetResource<SkinningSourceRegistration>()`
+     * finds it, and `source` is the implementation, owned by whoever registered it (FenrirSkeleton's `Skeletons`
+     * owner, which removes the resource when it is destroyed). No resource means no skinning source.
+     */
+    struct SkinningSourceRegistration
+    {
+        /** @brief The registered implementation; never null while the resource exists. */
+        SkinningSource* source = nullptr;
+    };
 } // namespace Fenrir

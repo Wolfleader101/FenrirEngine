@@ -15,12 +15,27 @@ No demo scene: Seam 8 is the proof. The renderer does not link the package and s
 
 **Blocked by:** 01
 
-**Touches:** `packages/FenrirSkeleton/`, `CMakeLists.txt`, `GLOSSARY.md`
+**Touches:** `packages/FenrirSkeleton/`, `CMakeLists.txt`, `GLOSSARY.md` (built: also `README.md`, `Model::skeletonOwners` and `SkinningSourceRegistration` in FenrirAssets' headers, and `Add<Model>` in `packages/FenrirAssets/src/ModelData.cpp` with its test)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Seam 8 instance cases: a procedural three-bone chain posed through `EditBasePose`, its model matrices and `GetBoneWorldMatrix` under a moved skeleton entity; reconcile create, rebuild and sweep; `Ensure`; `Ready`/`Unavailable`/`Missing` and recovery; span validity; `PoseGeneration` advancing on pose changes and rebuilds but not on moves, never repeating under a recycled entity; the palette built lazily and only when read.
-- [ ] Seam 8 pipeline cases: stage order and `int` order with registration ties; handle removal; the write rules per stage; inactive scenes paused; local, model and world targets; channel masks; sequential composition; lazy model matrices; degenerate inverses warned and skipped; shear dropped; clean instances skipped.
-- [ ] Seam 8 spawning cases: owners and synthetic owners get `SkeletonPose` and are `Ready`; install fails without FenrirAssets; the skinning source is registered on install and gone on teardown.
-- [ ] The package builds with `FENRIR_ENABLE_RENDERER=OFF`; FenrirRenderer and FenrirPhysics link nothing from it.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Seam 8 instance cases: a procedural three-bone chain posed through `EditBasePose`, its model matrices and `GetBoneWorldMatrix` under a moved skeleton entity; reconcile create, rebuild and sweep; `Ensure`; `Ready`/`Unavailable`/`Missing` and recovery; span validity; `PoseGeneration` advancing on pose changes and rebuilds but not on moves, never repeating under a recycled entity; the palette built lazily and only when read.
+- [x] Seam 8 pipeline cases: stage order and `int` order with registration ties; handle removal; the write rules per stage; inactive scenes paused; local, model and world targets; channel masks; sequential composition; lazy model matrices; degenerate inverses warned and skipped; shear dropped; clean instances skipped.
+- [x] Seam 8 spawning cases: owners and synthetic owners get `SkeletonPose` and are `Ready`; install fails without FenrirAssets; the skinning source is registered on install and gone on teardown.
+- [x] The package builds with `FENRIR_ENABLE_RENDERER=OFF`; FenrirRenderer and FenrirPhysics link nothing from it.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+
+## Comments
+
+Built 2026-10-29, stacked on 01's branch beside ticket 02. Decisions to review:
+
+- **How the renderer finds the source (for ticket 05):** FenrirAssets' `SkinningSource.hpp` gains `struct SkinningSourceRegistration { SkinningSource* source; }`, the app resource `Skeletons::Install` adds and the owner's teardown removes (only if it still points at its own source). The renderer calls `app.TryGetResource<SkinningSourceRegistration>()` in each `Render` and each call that needs it; null means no skinning source.
+- **Reads take the scene:** every read and `EditBasePose` is a static `Skeletons::F(scene, entity, ...)`, because an `Entity` cannot name its scene and the instances are a scene resource. Static reads need no owner, so stage work, the skinning source and later packages call them without capturing the move-only owner. `Ensure`, `SpawnSkeletons`, `SpawnModel`, stage registration and `Remove` are owner members.
+- **A second install fails whole:** it logs one error and returns an owner whose `IsValid()` is false, adding no second pipeline system, so the spec's "a second registration is logged and ignored" never runs two pipelines.
+- **Owners come from `Model::skeletonOwners`:** ticket 02 adds that field to `Model`; this ticket declares the same field with 02's text in the same place, so the stacks merge cleanly. `Add<Model>` is new in FenrirAssets (a `PrepareAsset(Model&)` checking parents first, bone nodes naming a skeleton of the model, and one non-bone owner per skeleton), so the spawning tests build procedural models; once 02 lands they can use its fixtures as well.
+- **Stage work:** `AddAnimate`, `AddModifier` and `AddLate` take `std::function`s of `AnimateContext&`, `ModifierContext&` and `LateContext&`. `PoseStageHandle` is a plain id that `Skeletons::Remove` takes; `Remove` inside the pipeline is refused with an error. Each stage runs a snapshot of its work taken when it starts, so work added during the pipeline waits for the next frame.
+- **Skipping, precisely:** prepare and finalise run for an instance whose base pose is dirty or that a modifier edited last frame (so its final pose returns to the base pose); a modifier's first `Edit` of the frame prepares any other instance on demand. Only finalised instances get a new generation, so a clean instance keeps its own.
+- **World targets** read the inverse skeleton world matrix at the instance's first edit of the frame's `Modify`, which equals "when `Modify` starts" since no modifier may move entities.
+- **Refusals:** `EditBasePose` is refused (empty span, one warning per call site, by `std::source_location`) during `Modify` and `Late`, and during `Animate` on the other timing. A degenerate inverse is warned at most once every 300 frames per entity and bone. Unavailability is warned once each time an instance becomes unavailable.
+- **`PoseKind`** is accepted everywhere the spec puts it and ignored for now: tick-posed skeletons (ticket 11) are what tell the kinds apart. A tick-posed skeleton keeps its base pose until then; frame `Animate` work may not write it.
+- **Checks:** `PublicHeaders.cpp` fails the build if a header reaches the renderer, physics, a window or GL; the package's CMake fails configuring if FenrirRenderer or FenrirPhysics links it (a deferred check run once every target exists).
