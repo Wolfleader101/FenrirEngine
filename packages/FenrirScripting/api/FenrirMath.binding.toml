@@ -21,8 +21,8 @@ includes = ["FenrirMath/Colour.hpp", "FenrirMath/Math.hpp"]
 cpp = "../Tests/Generated/FenrirMathDefaultsTests.cpp"
 csharp = "../Tests/Generated/FenrirMathDefaults.cs"
 class = "Fenrir.ScriptFixture.MathDefaults"
-includes = ["FixtureApp.hpp", "ScriptingProbe.hpp"]
-setup = "Fenrir::Testing::FixtureApp app;"
+includes = ["ScriptingApp.hpp", "ScriptingProbe.hpp"]
+setup = "Fenrir::Testing::ScriptingApp app;"
 component = "Fenrir::ScriptingProbe::Component(app.scripting)"
 tags = "[scripting][bindings]"
 

@@ -9,14 +9,14 @@
 #include "FenrirInputScripting/InputScripting.hpp"
 #include "FenrirWindowScripting/WindowScripting.hpp"
 
-namespace WindowScriptingTests
+namespace Fenrir::Testing
 {
-    struct WindowScriptingApp : Fenrir::Testing::ExtensionTestApp<Fenrir::Testing::NoPackages>
+    struct WindowScriptingApp : ExtensionTestApp<NoPackages>
     {
         WindowScriptingApp()
-            : ExtensionTestApp(Fenrir::Testing::FixtureFromEnvironment("FENRIR_TEST_WINDOW_FIXTURE"),
-                               {Fenrir::Input::ScriptingExtension(), Fenrir::Window::ScriptingExtension()})
+            : ExtensionTestApp(FixtureFromEnvironment("FENRIR_TEST_WINDOW_FIXTURE"),
+                               {Input::ScriptingExtension(), Window::ScriptingExtension()})
         {
         }
     };
-} // namespace WindowScriptingTests
+} // namespace Fenrir::Testing

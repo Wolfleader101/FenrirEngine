@@ -13,12 +13,10 @@
 #include "FenrirDebugDraw/DebugDrawing.hpp"
 #include "FenrirDebugDrawScripting/DebugDrawScripting.hpp"
 
-namespace DebugDrawScriptingTests
+namespace Fenrir::Testing
 {
-    using Fenrir::Testing::oneTick;
-
     // A frame too short to run a tick.
-    inline constexpr double noTick = oneTick * 0.25;
+    inline constexpr double debugDrawNoTick = oneTick * 0.25;
 
     // The fixture's types the tests call.
     inline constexpr const char* ShapeCallsType = "DebugDrawScriptFixture.ShapeCalls";
@@ -29,39 +27,39 @@ namespace DebugDrawScriptingTests
     // Debug drawing, with a Render-phase system keeping what the active scene's DebugDraw tessellates to in `seen`.
     struct DebugDrawPackages
     {
-        explicit DebugDrawPackages(Fenrir::App& app) : drawing(Fenrir::DebugDrawing::Install(app))
+        explicit DebugDrawPackages(App& app) : drawing(DebugDrawing::Install(app))
         {
-            app.AddSequentialSystem(Fenrir::SchedulePriority::Render, [this](Fenrir::App& running) {
-                if (const Fenrir::DebugDraw* draw = running.GetActiveScene().GetResource<Fenrir::DebugDraw>())
+            app.AddSequentialSystem(SchedulePriority::Render, [this](App& running) {
+                if (const DebugDraw* draw = running.GetActiveScene().GetResource<DebugDraw>())
                 {
                     seen = draw->Tessellate();
                 }
             });
         }
 
-        Fenrir::DebugDrawing drawing;
-        Fenrir::DebugBatches seen;
+        DebugDrawing drawing;
+        DebugBatches seen;
     };
 
     // An App with debug drawing installed and scripting running the fixture with the debug draw extension.
-    struct DebugDrawScriptingApp : Fenrir::Testing::ExtensionTestApp<DebugDrawPackages>
+    struct DebugDrawScriptingApp : ExtensionTestApp<DebugDrawPackages>
     {
         DebugDrawScriptingApp()
-            : ExtensionTestApp(Fenrir::Testing::FixtureFromEnvironment("FENRIR_TEST_DEBUGDRAW_FIXTURE"),
-                               {Fenrir::DebugDrawing::ScriptingExtension()})
+            : ExtensionTestApp(FixtureFromEnvironment("FENRIR_TEST_DEBUGDRAW_FIXTURE"),
+                               {DebugDrawing::ScriptingExtension()})
         {
         }
 
         // The active scene's DebugDraw.
-        Fenrir::DebugDraw& Draw()
+        DebugDraw& Draw()
         {
-            Fenrir::DebugDraw* draw = headless.Get().GetActiveScene().GetResource<Fenrir::DebugDraw>();
+            DebugDraw* draw = headless.Get().GetActiveScene().GetResource<DebugDraw>();
             REQUIRE(draw != nullptr);
             return *draw;
         }
 
         // Runs one frame of `deltaTime` seconds and returns what its Render phase saw.
-        const Fenrir::DebugBatches& Frame(double deltaTime = oneTick)
+        const DebugBatches& Frame(double deltaTime = oneTick)
         {
             seen = {};
             headless.Get().RunFrame(deltaTime);
@@ -70,13 +68,13 @@ namespace DebugDrawScriptingTests
     };
 
     // How many lines every line batch holds together.
-    inline std::size_t LineCount(const Fenrir::DebugBatches& batches)
+    inline std::size_t LineCount(const DebugBatches& batches)
     {
         std::size_t count = 0;
-        for (const Fenrir::DebugLineBatch& batch : batches.lines)
+        for (const DebugLineBatch& batch : batches.lines)
         {
             count += batch.vertices.size() / 2;
         }
         return count;
     }
-} // namespace DebugDrawScriptingTests
+} // namespace Fenrir::Testing

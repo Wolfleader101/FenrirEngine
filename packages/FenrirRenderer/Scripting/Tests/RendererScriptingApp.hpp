@@ -24,10 +24,8 @@
 #include "FenrirRendererScripting/RendererScripting.hpp"
 #include "RendererProbe.hpp"
 
-namespace RendererScriptingTests
+namespace Fenrir::Testing
 {
-    using Fenrir::Testing::noEntity;
-
     // The fixture's types the tests call.
     inline constexpr const char* SceneBuilderType = "RendererScriptFixture.SceneBuilder";
     inline constexpr const char* ModelSpawnerType = "RendererScriptFixture.ModelSpawner";
@@ -35,40 +33,40 @@ namespace RendererScriptingTests
     inline constexpr const char* ResourceCallsType = "RendererScriptFixture.ResourceCalls";
     inline constexpr const char* NewCallsType = "RendererScriptFixture.NewCalls";
 
-    inline Fenrir::RendererConfig NullBackend()
+    inline RendererConfig NullBackend()
     {
-        Fenrir::RendererConfig config;
-        config.backend = Fenrir::GraphicsBackend::Null;
+        RendererConfig config;
+        config.backend = GraphicsBackend::Null;
         return config;
     }
 
     // Assets with its asset root FenrirRenderer's test fixtures, then the renderer on the null backend over it.
     struct RendererPackages
     {
-        explicit RendererPackages(Fenrir::App& app)
-            : assets(Fenrir::Assets::Install(app, {std::filesystem::absolute(FENRIR_RENDERER_FIXTURES)})),
-              renderer(Fenrir::Renderer::Install(app, NullBackend()))
+        explicit RendererPackages(App& app)
+            : assets(Assets::Install(app, {std::filesystem::absolute(FENRIR_RENDERER_FIXTURES)})),
+              renderer(Renderer::Install(app, NullBackend()))
         {
         }
 
-        Fenrir::Assets assets;
-        Fenrir::Renderer renderer;
+        Assets assets;
+        Renderer renderer;
     };
 
     // An App with assets and the renderer installed and scripting running the fixture with the extensions the
     // renderer's contract builds on, then the renderer's.
-    struct RendererScriptingApp : Fenrir::Testing::ExtensionTestApp<RendererPackages>
+    struct RendererScriptingApp : ExtensionTestApp<RendererPackages>
     {
         RendererScriptingApp()
-            : ExtensionTestApp(Fenrir::Testing::FixtureFromEnvironment("FENRIR_TEST_RENDERER_FIXTURE"),
-                               {Fenrir::Input::ScriptingExtension(), Fenrir::Assets::ScriptingExtension(),
-                                Fenrir::Renderer::ScriptingExtension()})
+            : ExtensionTestApp(
+                  FixtureFromEnvironment("FENRIR_TEST_RENDERER_FIXTURE"),
+                  {Input::ScriptingExtension(), Assets::ScriptingExtension(), Renderer::ScriptingExtension()})
         {
             INFO("The renderer did not install on the null backend");
             REQUIRE(renderer.IsValid());
         }
 
-        Fenrir::AssetStore& Store()
+        AssetStore& Store()
         {
             return assets.Store();
         }
@@ -79,14 +77,14 @@ namespace RendererScriptingTests
             return Call<float>(RendererCallsType, "Value", index);
         }
 
-        [[nodiscard]] const std::vector<Fenrir::Graphics::CommandList>& Submitted() const
+        [[nodiscard]] const std::vector<Graphics::CommandList>& Submitted() const
         {
-            return Fenrir::RendererProbe::Submitted(renderer);
+            return RendererProbe::Submitted(renderer);
         }
 
-        [[nodiscard]] Fenrir::Graphics::GraphicsDevice& Device() const
+        [[nodiscard]] Graphics::GraphicsDevice& Device() const
         {
-            return Fenrir::RendererProbe::Device(renderer);
+            return RendererProbe::Device(renderer);
         }
     };
 
@@ -108,15 +106,14 @@ namespace RendererScriptingTests
     // One indexed draw the device received in a pass, with the binding groups bound for it.
     struct RecordedDraw
     {
-        std::vector<Fenrir::Graphics::BindingGroupHandle> groups = std::vector<Fenrir::Graphics::BindingGroupHandle>(4);
-        Fenrir::Graphics::CmdDrawIndexed draw;
+        std::vector<Graphics::BindingGroupHandle> groups = std::vector<Graphics::BindingGroupHandle>(4);
+        Graphics::CmdDrawIndexed draw;
     };
 
     // Every indexed draw in passes labelled `pass`, in order.
-    inline std::vector<RecordedDraw> DrawsIn(const std::vector<Fenrir::Graphics::CommandList>& lists,
-                                             std::string_view pass)
+    inline std::vector<RecordedDraw> DrawsIn(const std::vector<Graphics::CommandList>& lists, std::string_view pass)
     {
-        using namespace Fenrir::Graphics;
+        using namespace Graphics;
         std::vector<RecordedDraw> draws;
         for (const CommandList& list : lists)
         {
@@ -145,11 +142,10 @@ namespace RendererScriptingTests
     }
 
     // The bytes of the buffer bound at `binding` of binding group `group`; empty if there is none.
-    inline std::vector<std::byte> BoundBytes(const Fenrir::Graphics::GraphicsDevice& device,
-                                             Fenrir::Graphics::BindingGroupHandle group, std::uint32_t binding,
-                                             std::size_t* offset = nullptr)
+    inline std::vector<std::byte> BoundBytes(const Graphics::GraphicsDevice& device, Graphics::BindingGroupHandle group,
+                                             std::uint32_t binding, std::size_t* offset = nullptr)
     {
-        for (const Fenrir::Graphics::BindingGroupEntry& entry : Fenrir::RendererProbe::Entries(device, group))
+        for (const Graphics::BindingGroupEntry& entry : RendererProbe::Entries(device, group))
         {
             if (entry.binding == binding)
             {
@@ -157,9 +153,9 @@ namespace RendererScriptingTests
                 {
                     *offset = entry.offset;
                 }
-                return Fenrir::RendererProbe::Bytes(device, entry.buffer);
+                return RendererProbe::Bytes(device, entry.buffer);
             }
         }
         return {};
     }
-} // namespace RendererScriptingTests
+} // namespace Fenrir::Testing

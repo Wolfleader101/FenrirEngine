@@ -34,7 +34,7 @@ cpp = "../Tests/Generated/FenrirRendererDefaultsTests.cpp"
 csharp = "../Tests/Generated/FenrirRendererDefaults.cs"
 class = "RendererScriptFixture.Defaults"
 includes = ["RendererScriptingApp.hpp"]
-setup = "RendererScriptingTests::RendererScriptingApp app;"
+setup = "Fenrir::Testing::RendererScriptingApp app;"
 tags = "[renderer][scripting][bindings]"
 
 # The native functions: tools/describe-api's natives mode reads every function in `sources` taking `context` first (with

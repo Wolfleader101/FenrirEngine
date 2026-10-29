@@ -58,73 +58,73 @@ namespace
 
 TEST_CASE("C#'s new GamepadId() has C++'s Fenrir::GamepadId{} defaults, field by field", "[input][scripting][bindings]")
 {
-    InputScriptingTests::InputScriptingApp app;
+    Fenrir::Testing::InputScriptingApp app;
     CheckDefaults<Fenrir::GamepadId>(Fenrir::ScriptingProbe::Component(app.scripting), "GamepadId");
 }
 
 TEST_CASE("C#'s new GamepadAxisEvent() has C++'s Fenrir::GamepadAxisEvent{} defaults, field by field", "[input][scripting][bindings]")
 {
-    InputScriptingTests::InputScriptingApp app;
+    Fenrir::Testing::InputScriptingApp app;
     CheckDefaults<Fenrir::GamepadAxisEvent>(Fenrir::ScriptingProbe::Component(app.scripting), "GamepadAxisEvent");
 }
 
 TEST_CASE("C#'s new GamepadButtonEvent() has C++'s Fenrir::GamepadButtonEvent{} defaults, field by field", "[input][scripting][bindings]")
 {
-    InputScriptingTests::InputScriptingApp app;
+    Fenrir::Testing::InputScriptingApp app;
     CheckDefaults<Fenrir::GamepadButtonEvent>(Fenrir::ScriptingProbe::Component(app.scripting), "GamepadButtonEvent");
 }
 
 TEST_CASE("C#'s new GamepadConnectionEvent() has C++'s Fenrir::GamepadConnectionEvent{} defaults, field by field", "[input][scripting][bindings]")
 {
-    InputScriptingTests::InputScriptingApp app;
+    Fenrir::Testing::InputScriptingApp app;
     CheckDefaults<Fenrir::GamepadConnectionEvent>(Fenrir::ScriptingProbe::Component(app.scripting), "GamepadConnectionEvent");
 }
 
 TEST_CASE("C#'s new WindowId() has C++'s Fenrir::WindowId{} defaults, field by field", "[input][scripting][bindings]")
 {
-    InputScriptingTests::InputScriptingApp app;
+    Fenrir::Testing::InputScriptingApp app;
     CheckDefaults<Fenrir::WindowId>(Fenrir::ScriptingProbe::Component(app.scripting), "WindowId");
 }
 
 TEST_CASE("C#'s new KeyEvent() has C++'s Fenrir::KeyEvent{} defaults, field by field", "[input][scripting][bindings]")
 {
-    InputScriptingTests::InputScriptingApp app;
+    Fenrir::Testing::InputScriptingApp app;
     CheckDefaults<Fenrir::KeyEvent>(Fenrir::ScriptingProbe::Component(app.scripting), "KeyEvent");
 }
 
 TEST_CASE("C#'s new MouseButtonEvent() has C++'s Fenrir::MouseButtonEvent{} defaults, field by field", "[input][scripting][bindings]")
 {
-    InputScriptingTests::InputScriptingApp app;
+    Fenrir::Testing::InputScriptingApp app;
     CheckDefaults<Fenrir::MouseButtonEvent>(Fenrir::ScriptingProbe::Component(app.scripting), "MouseButtonEvent");
 }
 
 TEST_CASE("C#'s new MouseMotionEvent() has C++'s Fenrir::MouseMotionEvent{} defaults, field by field", "[input][scripting][bindings]")
 {
-    InputScriptingTests::InputScriptingApp app;
+    Fenrir::Testing::InputScriptingApp app;
     CheckDefaults<Fenrir::MouseMotionEvent>(Fenrir::ScriptingProbe::Component(app.scripting), "MouseMotionEvent");
 }
 
 TEST_CASE("C#'s new MouseScrollEvent() has C++'s Fenrir::MouseScrollEvent{} defaults, field by field", "[input][scripting][bindings]")
 {
-    InputScriptingTests::InputScriptingApp app;
+    Fenrir::Testing::InputScriptingApp app;
     CheckDefaults<Fenrir::MouseScrollEvent>(Fenrir::ScriptingProbe::Component(app.scripting), "MouseScrollEvent");
 }
 
 TEST_CASE("C#'s new TextEvent() has C++'s Fenrir::TextEvent{} defaults, field by field", "[input][scripting][bindings]")
 {
-    InputScriptingTests::InputScriptingApp app;
+    Fenrir::Testing::InputScriptingApp app;
     CheckDefaults<Fenrir::TextEvent>(Fenrir::ScriptingProbe::Component(app.scripting), "TextEvent");
 }
 
 TEST_CASE("C#'s new WindowFocusEvent() has C++'s Fenrir::WindowFocusEvent{} defaults, field by field", "[input][scripting][bindings]")
 {
-    InputScriptingTests::InputScriptingApp app;
+    Fenrir::Testing::InputScriptingApp app;
     CheckDefaults<Fenrir::WindowFocusEvent>(Fenrir::ScriptingProbe::Component(app.scripting), "WindowFocusEvent");
 }
 
 TEST_CASE("C#'s new InputClaims() has C++'s Fenrir::Detail::ScriptInputClaims{} defaults, field by field", "[input][scripting][bindings]")
 {
-    InputScriptingTests::InputScriptingApp app;
+    Fenrir::Testing::InputScriptingApp app;
     CheckDefaults<Fenrir::Detail::ScriptInputClaims>(Fenrir::ScriptingProbe::Component(app.scripting), "InputClaims");
 }
 

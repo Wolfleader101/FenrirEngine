@@ -17,7 +17,7 @@
 #include "InputScriptingApp.hpp"
 
 using namespace Fenrir;
-using namespace InputScriptingTests;
+using namespace Fenrir::Testing;
 
 namespace
 {

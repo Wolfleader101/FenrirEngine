@@ -11,7 +11,7 @@
 #include "AssetsScriptingApp.hpp"
 
 using namespace Fenrir;
-using namespace AssetsScriptingTests;
+using namespace Fenrir::Testing;
 
 TEST_CASE("A C# system loads a model by path and its mesh by file#Label, as C++ loads them", "[assets][scripting]")
 {

@@ -58,19 +58,19 @@ namespace
 
 TEST_CASE("C#'s new SamplerDescription() has C++'s Fenrir::SamplerDescription{} defaults, field by field", "[assets][scripting][bindings]")
 {
-    AssetsScriptingTests::AssetsScriptingApp app;
+    Fenrir::Testing::AssetsScriptingApp app;
     CheckDefaults<Fenrir::SamplerDescription>(Fenrir::ScriptingProbe::Component(app.scripting), "SamplerDescription");
 }
 
 TEST_CASE("C#'s new MaterialTexture() has C++'s Fenrir::MaterialTexture{} defaults, field by field", "[assets][scripting][bindings]")
 {
-    AssetsScriptingTests::AssetsScriptingApp app;
+    Fenrir::Testing::AssetsScriptingApp app;
     CheckDefaults<Fenrir::MaterialTexture>(Fenrir::ScriptingProbe::Component(app.scripting), "MaterialTexture");
 }
 
 TEST_CASE("C#'s new ShaderParameter() has C++'s Fenrir::ScriptShaderParameter{} defaults, field by field", "[assets][scripting][bindings]")
 {
-    AssetsScriptingTests::AssetsScriptingApp app;
+    Fenrir::Testing::AssetsScriptingApp app;
     CheckDefaults<Fenrir::ScriptShaderParameter>(Fenrir::ScriptingProbe::Component(app.scripting), "ShaderParameter");
 }
 

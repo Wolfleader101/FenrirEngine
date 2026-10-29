@@ -21,7 +21,7 @@ add_executable(FenrirScriptingTests
     ResourceTests.cpp
     TestExtension.cpp
     FixtureCalls.hpp
-    FixtureApp.hpp
+    ScriptingApp.hpp
     TestExtension.hpp
     Generated/FenrirScriptingDefaultsTests.cpp
     Generated/FenrirMathDefaultsTests.cpp

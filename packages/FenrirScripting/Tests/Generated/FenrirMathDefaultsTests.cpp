@@ -4,7 +4,7 @@
 // C#'s new T() equals C++'s T{} for every type the binding registers, field by field.
 
 #include "../../include/FenrirScripting/Generated/FenrirMathMappings.hpp"
-#include "FixtureApp.hpp"
+#include "ScriptingApp.hpp"
 #include "ScriptingProbe.hpp"
 
 #include <Iris/FieldDifferences.hpp>
@@ -58,19 +58,19 @@ namespace
 
 TEST_CASE("C#'s new Colour() has C++'s Fenrir::Colour{} defaults, field by field", "[scripting][bindings]")
 {
-    Fenrir::Testing::FixtureApp app;
+    Fenrir::Testing::ScriptingApp app;
     CheckDefaults<Fenrir::Colour>(Fenrir::ScriptingProbe::Component(app.scripting), "Colour");
 }
 
 TEST_CASE("C#'s new Bounds() has C++'s Fenrir::Math::AABB{} defaults, field by field", "[scripting][bindings]")
 {
-    Fenrir::Testing::FixtureApp app;
+    Fenrir::Testing::ScriptingApp app;
     CheckDefaults<Fenrir::Math::AABB>(Fenrir::ScriptingProbe::Component(app.scripting), "Bounds");
 }
 
 TEST_CASE("C#'s new Ray() has C++'s Fenrir::Math::Ray{} defaults, field by field", "[scripting][bindings]")
 {
-    Fenrir::Testing::FixtureApp app;
+    Fenrir::Testing::ScriptingApp app;
     CheckDefaults<Fenrir::Math::Ray>(Fenrir::ScriptingProbe::Component(app.scripting), "Ray");
 }
 
