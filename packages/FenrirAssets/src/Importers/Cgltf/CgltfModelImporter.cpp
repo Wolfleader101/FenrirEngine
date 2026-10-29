@@ -1,11 +1,14 @@
 // cgltf's half of the model importer seam: glTF and GLB files (ADR-0031).
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <format>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -175,6 +178,8 @@ namespace Fenrir::Detail
                 }
                 ReadMeshes();
                 ReadNodes();
+                ReadSkins();
+                ReadAnimations();
             }
 
           private:
@@ -320,25 +325,6 @@ namespace Fenrir::Detail
                 return *m_defaultMaterial;
             }
 
-            bool IsSkinned(const cgltf_mesh& mesh) const
-            {
-                for (const cgltf_node& node : CArray(m_data.nodes, m_data.nodes_count))
-                {
-                    if (node.mesh == &mesh && node.skin != nullptr)
-                    {
-                        return true;
-                    }
-                }
-                for (const cgltf_primitive& primitive : CArray(mesh.primitives, mesh.primitives_count))
-                {
-                    if (cgltf_find_accessor(&primitive, cgltf_attribute_type_joints, 0) != nullptr)
-                    {
-                        return true;
-                    }
-                }
-                return false;
-            }
-
             template <typename V>
             static std::vector<V> ReadStream(const cgltf_accessor* accessor, cgltf_size components)
             {
@@ -367,29 +353,241 @@ namespace Fenrir::Detail
                 return values;
             }
 
+            // Each glTF mesh is imported once rigid, unless only skinned nodes draw it, and once for each skin that
+            // draws it: a skinned copy is baked into its own skeleton's bind space.
             void ReadMeshes()
             {
-                m_meshIndices.resize(m_data.meshes_count);
+                std::vector<bool> drawnRigid(m_data.meshes_count, false);
+                std::vector<bool> drawn(m_data.meshes_count, false);
+                std::vector<std::vector<std::size_t>> skinsOf(m_data.meshes_count);
+                for (const cgltf_node& node : CArray(m_data.nodes, m_data.nodes_count))
+                {
+                    if (node.mesh == nullptr)
+                    {
+                        continue;
+                    }
+                    const cgltf_size mesh = cgltf_mesh_index(&m_data, node.mesh);
+                    drawn[mesh] = true;
+                    if (node.skin == nullptr)
+                    {
+                        drawnRigid[mesh] = true;
+                        continue;
+                    }
+                    const cgltf_size skin = cgltf_skin_index(&m_data, node.skin);
+                    if (std::find(skinsOf[mesh].begin(), skinsOf[mesh].end(), skin) == skinsOf[mesh].end())
+                    {
+                        skinsOf[mesh].push_back(skin);
+                    }
+                }
+
                 std::size_t m = 0;
                 for (const cgltf_mesh& mesh : CArray(m_data.meshes, m_data.meshes_count))
                 {
                     const std::size_t index = m++;
                     const std::string name = NameOf(mesh.name);
-                    if (IsSkinned(mesh))
+                    if (drawnRigid[index] || !drawn[index])
                     {
-                        m_out.warnings.push_back(std::format(
-                            "mesh '{}' is skinned in its file and is left out: skinned meshes are not imported yet",
-                            name));
+                        AddMeshes(name, mesh, -1, m_meshIndices[{index, -1}]);
+                    }
+                    for (const std::size_t skin : skinsOf[index])
+                    {
+                        const auto skinIndex = static_cast<std::int32_t>(skin);
+                        AddMeshes(name, mesh, skinIndex, m_meshIndices[{index, skinIndex}]);
+                    }
+                }
+            }
+
+            void AddMeshes(const std::string& name, const cgltf_mesh& mesh, std::int32_t skin,
+                           std::vector<std::uint32_t>& indices)
+            {
+                for (const cgltf_primitive& primitive : CArray(mesh.primitives, mesh.primitives_count))
+                {
+                    std::optional<ImportedMesh> imported = MeshOf(name, primitive);
+                    if (imported && skin >= 0 && !ReadSkinWeights(primitive, *imported))
+                    {
+                        // Never imported unskinned: the mesh is left out with its skin's other failures.
+                        m_out.failures.push_back(std::format(
+                            "mesh '{}' is drawn with skin '{}' but a primitive has "
+                            "no joints or weights, so it is left out",
+                            name,
+                            NameOf(CArray(m_data.skins, m_data.skins_count)[static_cast<std::size_t>(skin)].name)));
                         continue;
                     }
-                    for (const cgltf_primitive& primitive : CArray(mesh.primitives, mesh.primitives_count))
+                    if (imported)
                     {
-                        if (std::optional<ImportedMesh> imported = MeshOf(name, primitive))
+                        imported->skin = skin;
+                        indices.push_back(static_cast<std::uint32_t>(m_out.meshes.size()));
+                        m_out.meshes.push_back(std::move(*imported));
+                    }
+                }
+            }
+
+            // Reads every JOINTS_n and WEIGHTS_n pair and keeps each vertex's four largest influences.
+            static bool ReadSkinWeights(const cgltf_primitive& primitive, ImportedMesh& mesh)
+            {
+                const std::size_t count = mesh.data.positions.size();
+                std::vector<std::vector<std::pair<float, std::uint32_t>>> influences(count);
+                bool any = false;
+                for (cgltf_int set = 0;; ++set)
+                {
+                    const cgltf_accessor* joints = cgltf_find_accessor(&primitive, cgltf_attribute_type_joints, set);
+                    const cgltf_accessor* weights = cgltf_find_accessor(&primitive, cgltf_attribute_type_weights, set);
+                    if (joints == nullptr || weights == nullptr)
+                    {
+                        break;
+                    }
+                    any = true;
+                    for (std::size_t v = 0; v < count && v < joints->count && v < weights->count; ++v)
+                    {
+                        std::array<cgltf_uint, 4> j{};
+                        std::array<float, 4> w{};
+                        cgltf_accessor_read_uint(joints, v, j.data(), 4);
+                        cgltf_accessor_read_float(weights, v, w.data(), 4);
+                        for (std::size_t i = 0; i < 4; ++i)
                         {
-                            m_meshIndices[index].push_back(static_cast<std::uint32_t>(m_out.meshes.size()));
-                            m_out.meshes.push_back(std::move(*imported));
+                            influences[v].emplace_back(w[i], j[i]);
                         }
                     }
+                }
+                if (!any)
+                {
+                    return false;
+                }
+                mesh.joints.resize(count);
+                mesh.weights.resize(count);
+                for (std::size_t v = 0; v < count; ++v)
+                {
+                    std::vector<std::pair<float, std::uint32_t>>& list = influences[v];
+                    const bool malformed = std::any_of(list.begin(), list.end(), [](const auto& influence) {
+                        return !(influence.first >= 0.0f) || !std::isfinite(influence.first);
+                    });
+                    std::stable_sort(list.begin(), list.end(),
+                                     [](const auto& a, const auto& b) { return a.first > b.first; });
+                    std::array<std::uint32_t, 4> joints{};
+                    Math::Vec4 weights(0.0f);
+                    for (std::size_t i = 0; i < 4 && i < list.size(); ++i)
+                    {
+                        joints[i] = list[i].second;
+                        weights[static_cast<int>(i)] = list[i].first;
+                    }
+                    // A negative or non-finite weight anywhere fails the skin in ResolveSkinning.
+                    if (malformed)
+                    {
+                        weights[0] = -1.0f;
+                    }
+                    mesh.joints[v] = joints;
+                    mesh.weights[v] = weights;
+                }
+                return true;
+            }
+
+            void ReadSkins()
+            {
+                for (const cgltf_skin& skin : CArray(m_data.skins, m_data.skins_count))
+                {
+                    ImportedSkin imported;
+                    imported.name = NameOf(skin.name);
+                    for (const cgltf_node* joint : CArray(skin.joints, skin.joints_count))
+                    {
+                        imported.joints.push_back(m_nodeIndex[cgltf_node_index(&m_data, joint)]);
+                    }
+                    // An omitted accessor means identity inverse binds, as glTF says.
+                    imported.inverseBinds.assign(skin.joints_count, Math::Mat4(1.0f));
+                    if (skin.inverse_bind_matrices != nullptr)
+                    {
+                        for (cgltf_size i = 0; i < skin.joints_count && i < skin.inverse_bind_matrices->count; ++i)
+                        {
+                            cgltf_accessor_read_float(skin.inverse_bind_matrices, i, &imported.inverseBinds[i][0][0],
+                                                      16);
+                        }
+                    }
+                    if (skin.skeleton != nullptr)
+                    {
+                        imported.skeletonNode =
+                            static_cast<std::int32_t>(m_nodeIndex[cgltf_node_index(&m_data, skin.skeleton)]);
+                    }
+                    m_out.skins.push_back(std::move(imported));
+                }
+            }
+
+            static std::vector<Math::Vec4> ReadKeys(const cgltf_accessor* accessor, cgltf_size components,
+                                                    cgltf_size first, cgltf_size stride, cgltf_size count)
+            {
+                std::vector<Math::Vec4> values(count, Math::Vec4(0.0f));
+                for (cgltf_size i = 0; i < count; ++i)
+                {
+                    std::array<float, 4> value{};
+                    cgltf_accessor_read_float(accessor, first + i * stride, value.data(), components);
+                    values[i] = {value[0], value[1], value[2], value[3]};
+                }
+                return values;
+            }
+
+            void ReadAnimations()
+            {
+                std::size_t a = 0;
+                for (const cgltf_animation& animation : CArray(m_data.animations, m_data.animations_count))
+                {
+                    ImportedClip clip;
+                    clip.name = NameOf(animation.name);
+                    if (clip.name.empty())
+                    {
+                        clip.name = std::format("animation {}", a);
+                    }
+                    ++a;
+                    for (const cgltf_animation_channel& source : CArray(animation.channels, animation.channels_count))
+                    {
+                        if (source.target_node == nullptr || source.sampler == nullptr)
+                        {
+                            continue;
+                        }
+                        ClipChannel channel;
+                        cgltf_size components = 3;
+                        switch (source.target_path)
+                        {
+                        case cgltf_animation_path_type_translation:
+                            channel.path = ClipPath::Translation;
+                            break;
+                        case cgltf_animation_path_type_rotation:
+                            channel.path = ClipPath::Rotation;
+                            components = 4;
+                            break;
+                        case cgltf_animation_path_type_scale:
+                            channel.path = ClipPath::Scale;
+                            break;
+                        default:
+                            m_out.warnings.push_back(std::format("clip '{}' keys morph target weights, which are not "
+                                                                 "imported",
+                                                                 clip.name));
+                            continue;
+                        }
+                        const cgltf_animation_sampler& sampler = *source.sampler;
+                        channel.interpolation = sampler.interpolation == cgltf_interpolation_type_step
+                                                    ? ClipInterpolation::Step
+                                                : sampler.interpolation == cgltf_interpolation_type_cubic_spline
+                                                    ? ClipInterpolation::CubicSpline
+                                                    : ClipInterpolation::Linear;
+                        const cgltf_size keys = sampler.input->count;
+                        channel.times.resize(keys);
+                        for (cgltf_size k = 0; k < keys; ++k)
+                        {
+                            cgltf_accessor_read_float(sampler.input, k, &channel.times[k], 1);
+                        }
+                        // A cubic key is three values: its in tangent, its value and its out tangent.
+                        if (channel.interpolation == ClipInterpolation::CubicSpline)
+                        {
+                            channel.inTangents = ReadKeys(sampler.output, components, 0, 3, keys);
+                            channel.values = ReadKeys(sampler.output, components, 1, 3, keys);
+                            channel.outTangents = ReadKeys(sampler.output, components, 2, 3, keys);
+                        }
+                        else
+                        {
+                            channel.values = ReadKeys(sampler.output, components, 0, 1, keys);
+                        }
+                        clip.data.channels.push_back(std::move(channel));
+                        clip.targets.push_back(m_nodeIndex[cgltf_node_index(&m_data, source.target_node)]);
+                    }
+                    m_out.clips.push_back(std::move(clip));
                 }
             }
 
@@ -446,6 +644,7 @@ namespace Fenrir::Detail
 
             void ReadNodes()
             {
+                m_nodeIndex.assign(m_data.nodes_count, 0);
                 std::vector<bool> visited(m_data.nodes_count, false);
                 const cgltf_scene* scene = m_data.scene;
                 if (scene == nullptr && m_data.scenes_count > 0)
@@ -508,9 +707,13 @@ namespace Fenrir::Detail
                 }
                 if (node.mesh != nullptr)
                 {
-                    imported.meshes = m_meshIndices[cgltf_mesh_index(&m_data, node.mesh)];
+                    const std::int32_t skin =
+                        node.skin != nullptr ? static_cast<std::int32_t>(cgltf_skin_index(&m_data, node.skin)) : -1;
+                    imported.meshes = m_meshIndices[{cgltf_mesh_index(&m_data, node.mesh), skin}];
                 }
+                imported.carriesContent = node.mesh != nullptr || node.camera != nullptr || node.light != nullptr;
                 const auto self = static_cast<std::int32_t>(m_out.nodes.size());
+                m_nodeIndex[index] = static_cast<std::uint32_t>(self);
                 m_out.nodes.push_back(std::move(imported));
                 for (const cgltf_node* child : CArray(node.children, node.children_count))
                 {
@@ -522,8 +725,10 @@ namespace Fenrir::Detail
             const std::filesystem::path& m_file;
             ModelImport& m_out;
             std::optional<std::uint32_t> m_defaultMaterial;
-            // Each glTF mesh's imported meshes, one per primitive kept.
-            std::vector<std::vector<std::uint32_t>> m_meshIndices;
+            // Each glTF mesh's imported meshes, one per primitive kept, by mesh and the skin drawing it (-1 rigid).
+            std::map<std::pair<std::size_t, std::int32_t>, std::vector<std::uint32_t>> m_meshIndices;
+            // Each glTF node's index in ModelImport::nodes.
+            std::vector<std::uint32_t> m_nodeIndex;
         };
     } // namespace
 

@@ -49,6 +49,8 @@ namespace Fenrir::Detail
         std::filesystem::path root;
         std::array<AssetTable, AssetKindCount> tables;
         OwnerId nextSceneOwner = 1;
+        /** @brief By model file key, the units its last import left out, for the files that left any out. */
+        std::unordered_map<std::string, std::vector<std::string>> modelFailures;
 
         /** @brief The live record `slot` names in `kind`'s table, or null. */
         [[nodiscard]] AssetRecord* Find(AssetKind kind, AssetSlot slot);

@@ -39,6 +39,7 @@ add_library(FenrirAssets STATIC
     src/Importers/Stb/StbImageImporter.cpp
     src/Importers/ModelImporter.hpp
     src/Importers/ModelImporter.cpp
+    src/Importers/SkinnedImport.cpp
     src/Importers/Cgltf/CgltfModelImporter.cpp
     src/Importers/Ufbx/UfbxModelImporter.cpp
 )

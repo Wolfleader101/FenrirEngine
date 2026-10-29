@@ -30,6 +30,12 @@ namespace Fenrir
         AssetHandle<Mesh> mesh;
         /** @brief The material its one submesh draws with, a sub-asset of the model (`file#Material0`...). */
         AssetHandle<Material> material;
+        /**
+         * @brief For a skinned mesh, the skeleton it was baked against, by index into Model::skeletons; -1 for a rigid
+         * mesh. A skinned mesh's vertices are in that skeleton's bind space, so its node's own transform does not
+         * place it: the skeleton's owner does (ADR-0031, ADR-0035).
+         */
+        std::int32_t skeleton = -1;
     };
 
     /** @brief One node of a model file, as the file has it. */
@@ -70,7 +76,10 @@ namespace Fenrir
     {
         /** @brief Every node of the file, each before its children, in the file's order otherwise. */
         std::vector<ModelNode> nodes;
-        /** @brief The model's meshes, by label number. A mesh skinned in its file is left out (static content only). */
+        /**
+         * @brief The model's meshes, by label number. A mesh whose skin or skeleton failed to import is left out, never
+         * imported unskinned. FBX and OBJ skinned meshes are still left out.
+         */
         std::vector<AssetHandle<Mesh>> meshes;
         /** @brief The model's materials, by label number. */
         std::vector<AssetHandle<Material>> materials;
@@ -78,6 +87,11 @@ namespace Fenrir
         std::vector<AssetHandle<Image>> images;
         /** @brief The model's skeletons, by label number. */
         std::vector<AssetHandle<Skeleton>> skeletons;
+        /**
+         * @brief Each skeleton's owner, as Model::skeletons is numbered: the index in Model::nodes of the node whose
+         * entity carries the skeleton's pose (its skeleton entity), an ordinary node or a synthetic owner.
+         */
+        std::vector<std::int32_t> skeletonOwners;
         /** @brief The model's clips, by label number. */
         std::vector<AssetHandle<Clip>> clips;
     };

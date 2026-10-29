@@ -1,6 +1,7 @@
 // Spawning a model's node tree as entities (ADR-0028, ADR-0031): the model's half of spawning, which FenrirRenderer's
 // SpawnModel builds on.
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -9,6 +10,7 @@
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/Model.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirScene/Scene.hpp"
 
@@ -49,12 +51,26 @@ namespace Fenrir
         spawned.nodes.reserve(data->nodes.size());
         for (const ModelNode& node : data->nodes)
         {
+            // Bones are FenrirSkeleton's, posed in its arrays: they get no entity.
+            if (node.kind == ModelNodeKind::Bone)
+            {
+                spawned.nodes.emplace_back();
+                continue;
+            }
+            // An ordinary node below bones hangs from its nearest spawned ancestor, at its rest place through the
+            // bones between; FenrirSkeleton's bone attachment then makes it follow the bone above it.
+            Transform rest = node.rest;
+            std::int32_t parent = node.parent;
+            while (parent >= 0 && data->nodes[static_cast<std::size_t>(parent)].kind == ModelNodeKind::Bone)
+            {
+                rest = ComposeTransform(data->nodes[static_cast<std::size_t>(parent)].rest, rest);
+                parent = data->nodes[static_cast<std::size_t>(parent)].parent;
+            }
             Entity entity = entities.CreateEntity();
             entity.GetComponent<Name>().Set(node.name.c_str());
-            entity.GetComponent<Transform>() = node.rest;
+            entity.GetComponent<Transform>() = rest;
             // Nodes come parents first, so the parent's entity already exists.
-            const Entity& above =
-                node.parent >= 0 ? spawned.nodes[static_cast<std::size_t>(node.parent)] : spawned.root;
+            const Entity& above = parent >= 0 ? spawned.nodes[static_cast<std::size_t>(parent)] : spawned.root;
             above.AddChild(entity);
             spawned.nodes.push_back(entity);
         }

@@ -17,11 +17,24 @@ No demo scene: the proof is the Seam 4 importer tests.
 
 **Touches:** `packages/FenrirAssets/src/Importers/`, `packages/FenrirAssets/src/ModelLoading.cpp`, `packages/FenrirAssets/src/SpawnNodes.cpp`, `packages/FenrirAssets/include/FenrirAssets/Model.hpp`, `packages/FenrirAssets/include/FenrirAssets/SpawnNodes.hpp`, `packages/FenrirAssets/tests/`, `packages/FenrirRenderer/src/Facade/SpawnModel.cpp`, `packages/FenrirRenderer/Tests/SpawnModel.cpp`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Every glTF fixture reconstructs its bind pose: for each skinned vertex, `M_model_bind × B` is the identity against the bind pose, within tolerance.
-- [ ] The numerical owner test matches glTF's formula for a non-identity owner rest world; baked normals and tangents are checked under non-uniform scale and a negative determinant.
-- [ ] Each glTF fixture on ADR-0031's list loads with the expected skeleton count, owners (synthetic ones named `<first root bone>.Skeleton`), bone kinds and attachment nodes; the incompatible skin and duplicate-name cases give `Partial` with the named units failed and nothing imported unskinned.
-- [ ] The hemisphere-flip case checks key and tangent values; the foundation's "skinned mesh left out" test is replaced by one expecting a skinned mesh with a skin section and `expectedSignature`; FBX files load as before.
-- [ ] `SpawnNodes` leaves bones out and spawns synthetic owners; the renderer's `SpawnModel` test shows skinned meshes skipped with one warning and rigid meshes unchanged.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Every glTF fixture reconstructs its bind pose: for each skinned vertex, `M_model_bind × B` is the identity against the bind pose, within tolerance.
+- [x] The numerical owner test matches glTF's formula for a non-identity owner rest world; baked normals and tangents are checked under non-uniform scale and a negative determinant.
+- [x] Each glTF fixture on ADR-0031's list loads with the expected skeleton count, owners (synthetic ones named `<first root bone>.Skeleton`), bone kinds and attachment nodes; the incompatible skin and duplicate-name cases give `Partial` with the named units failed and nothing imported unskinned.
+- [x] The hemisphere-flip case checks key and tangent values; the foundation's "skinned mesh left out" test is replaced by one expecting a skinned mesh with a skin section and `expectedSignature`; FBX files load as before.
+- [x] `SpawnNodes` leaves bones out and spawns synthetic owners; the renderer's `SpawnModel` test shows skinned meshes skipped with one warning and rigid meshes unchanged.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+
+## Comments
+
+Built 2026-10-29. Decisions to review:
+
+- `LoadResult` gains `failedUnits` and `Status()` (`Succeeded`, `Partial`, `Failed`); `Ok()` stays true for `Partial`. Every load of a file's model or sub-assets reports its last import's failures. Failures are logged as errors, warnings stay warnings.
+- `Model::skeletonOwners` (parallel to `skeletons`) and `ModelMesh::skeleton` (-1 for rigid) say which node owns each skeleton and which skeleton a mesh was baked against; ticket 03's `SpawnSkeletons` and ticket 05's skinned `SpawnModel` read them. `ClipChannel::playable` marks channels on ordinary nodes.
+- Path bones are the nodes between a joint and a joint above it, so every root bone is a joint; rule 3 (animated, no mesh, camera or light) applies to a direct child of a bone. A skeleton whose roots have no common non-bone ancestor gets a synthetic owner at the top of the model. A synthetic owner's `sourceId` is its first root bone's with the top bit set.
+- A skin naming a node twice fails its whole skeleton; that is the fixture's "duplicate" Partial case. Repeated bone names are a warning with `#2` engine names, and the load still succeeds.
+- A glTF mesh drawn by several skins is imported once per skin, plus once rigid if a rigid node draws it or nothing does.
+- `SpawnNodes` hangs an ordinary node below bones from its nearest spawned ancestor at its rest place through the bones (until ticket 10's attachments). Meshes on a bone node are kept in the `Model` but have no entity to draw on yet.
+- The renderer's `SpawnModel` logs through the new `AssetStore::Logger()`.
+- All fixtures are written by `make_fixtures.py`, so none carries a third-party licence.

@@ -62,6 +62,11 @@ namespace Fenrir
         std::optional<std::uint64_t> targetSourceId;
         /** @brief The target bone's engine name, which every other skeleton binds by. */
         std::string targetName;
+        /**
+         * @brief Whether the target is a bone. A channel on an ordinary node of its file is kept but marked unplayable
+         * (false): node animation is out of scope, and the channel is never redirected into a skeleton (ADR-0031).
+         */
+        bool playable = true;
         /** @brief What the channel keys. */
         ClipPath path = ClipPath::Translation;
         /** @brief How it runs between keys. */

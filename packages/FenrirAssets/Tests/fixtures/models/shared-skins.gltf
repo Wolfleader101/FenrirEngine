@@ -1,0 +1,354 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "FenrirEngine make_fixtures.py"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 128
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 128,
+      "byteLength": 128
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 256,
+      "byteLength": 128
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 384,
+      "byteLength": 36,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 420,
+      "byteLength": 12,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 432,
+      "byteLength": 48,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 480,
+      "byteLength": 12,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 492,
+      "byteLength": 36,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 528,
+      "byteLength": 12,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 540,
+      "byteLength": 48,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 588,
+      "byteLength": 12,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 600,
+      "byteLength": 36,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 636,
+      "byteLength": 12,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 648,
+      "byteLength": 48,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 696,
+      "byteLength": 12,
+      "target": 34963
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 2,
+      "type": "MAT4"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 2,
+      "type": "MAT4"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 2,
+      "type": "MAT4"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3",
+      "min": [
+        0,
+        0.5,
+        0
+      ],
+      "max": [
+        0.2,
+        1,
+        0
+      ]
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5121,
+      "count": 3,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5125,
+      "count": 3,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3",
+      "min": [
+        0,
+        0,
+        0
+      ],
+      "max": [
+        0.2,
+        0.5,
+        0
+      ]
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5121,
+      "count": 3,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 10,
+      "componentType": 5125,
+      "count": 3,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 11,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3",
+      "min": [
+        0,
+        0,
+        -2
+      ],
+      "max": [
+        0.3,
+        0.2,
+        -2
+      ]
+    },
+    {
+      "bufferView": 12,
+      "componentType": 5121,
+      "count": 3,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 13,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 14,
+      "componentType": 5125,
+      "count": 3,
+      "type": "SCALAR"
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Rig",
+      "children": [
+        1,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "name": "Hip",
+      "translation": [
+        0,
+        1,
+        0
+      ],
+      "children": [
+        2
+      ]
+    },
+    {
+      "name": "Knee",
+      "translation": [
+        0,
+        -0.5,
+        0
+      ],
+      "children": [
+        3
+      ]
+    },
+    {
+      "name": "Foot",
+      "translation": [
+        0,
+        -0.5,
+        0
+      ]
+    },
+    {
+      "name": "Thigh",
+      "mesh": 0,
+      "skin": 0
+    },
+    {
+      "name": "Shin",
+      "mesh": 1,
+      "skin": 1
+    },
+    {
+      "name": "Boot",
+      "mesh": 2,
+      "skin": 2
+    }
+  ],
+  "skins": [
+    {
+      "name": "ThighSkin",
+      "joints": [
+        1,
+        2
+      ],
+      "inverseBindMatrices": 0
+    },
+    {
+      "name": "ShinSkin",
+      "joints": [
+        2,
+        3
+      ],
+      "inverseBindMatrices": 1
+    },
+    {
+      "name": "BootSkin",
+      "joints": [
+        3,
+        2
+      ],
+      "inverseBindMatrices": 2
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Thigh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 3,
+            "JOINTS_0": 4,
+            "WEIGHTS_0": 5
+          },
+          "indices": 6
+        }
+      ]
+    },
+    {
+      "name": "Shin",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 7,
+            "JOINTS_0": 8,
+            "WEIGHTS_0": 9
+          },
+          "indices": 10
+        }
+      ]
+    },
+    {
+      "name": "Boot",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 11,
+            "JOINTS_0": 12,
+            "WEIGHTS_0": 13
+          },
+          "indices": 14
+        }
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "buffers": [
+    {
+      "uri": "shared-skins.bin",
+      "byteLength": 708
+    }
+  ]
+}

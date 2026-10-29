@@ -137,6 +137,20 @@ namespace Fenrir
         std::string importerMessage;
     };
 
+    /** @brief How a load went (ADR-0031). */
+    enum class LoadStatus : std::uint8_t
+    {
+        /** @brief Everything in the file loaded. */
+        Succeeded,
+        /**
+         * @brief The asset loaded, but its file's import left units out (a skeleton with its skins and meshes, a skin
+         * with its meshes, a clip); LoadResult::failedUnits says which and why.
+         */
+        Partial,
+        /** @brief Nothing loaded; LoadResult::diagnostic says why. */
+        Failed,
+    };
+
     /** @brief What AssetStore::Load gives back: the handle, or the diagnostic saying why there is none. */
     template <typename T>
     struct LoadResult
@@ -145,11 +159,26 @@ namespace Fenrir
         AssetHandle<T> handle;
         /** @brief Why the load failed; empty when it succeeded. */
         std::optional<LoadDiagnostic> diagnostic;
+        /**
+         * @brief For an asset from a model file, each unit its import left out, saying why; empty when none was. The
+         * same for every load of the file's model or sub-assets, until the file is imported again.
+         */
+        std::vector<std::string> failedUnits;
 
-        /** @brief Whether the load succeeded. */
+        /** @brief Whether the load gave a handle: it succeeded, wholly or in part. */
         [[nodiscard]] bool Ok() const noexcept
         {
             return !diagnostic.has_value();
+        }
+
+        /** @brief Whether the load succeeded, in part, or failed. */
+        [[nodiscard]] LoadStatus Status() const noexcept
+        {
+            if (diagnostic.has_value())
+            {
+                return LoadStatus::Failed;
+            }
+            return failedUnits.empty() ? LoadStatus::Succeeded : LoadStatus::Partial;
         }
     };
 
@@ -186,8 +215,12 @@ namespace Fenrir
          * A model loads from glTF, GLB, FBX or OBJ, and its meshes, materials and images load from the same file by
          * label (`scene.gltf#Mesh0`, see Model). Either way the whole file is imported once: the model and every
          * sub-asset are stored, all owned by `owner`, and a later load of any of them gives the same handle. Loading a
-         * model again adds the owner to its sub-assets too. Problems that leave the model usable (a skinned mesh left
-         * out, an image that failed and was replaced by white, a conflicting colour space) are logged as warnings.
+         * model again adds the owner to its sub-assets too. Problems that leave the model usable (an image that failed
+         * and was replaced by white, a conflicting colour space, a repeated bone name) are logged as warnings. A glTF
+         * file's skins, skeletons and clips are imported into one bind space (ADR-0031); an error in one fails only its
+         * smallest unit (a skeleton with its skins and meshes, a skin with its meshes, a clip), logged as an error, and
+         * the load is `LoadStatus::Partial`, naming each in `LoadResult::failedUnits`. FBX and OBJ skinned meshes are
+         * still left out with a warning.
          *
          * A `builtin:` name loads what AssetStore::AddBuiltin registered under it, and fails until something has.
          */
@@ -195,7 +228,8 @@ namespace Fenrir
         [[nodiscard]] LoadResult<T> Load(std::string_view path, AssetOwner owner)
         {
             LoadResult<T> result;
-            const Detail::AssetSlot slot = LoadSlot(Detail::AssetTraits<T>::kind, path, owner, result.diagnostic);
+            const Detail::AssetSlot slot =
+                LoadSlot(Detail::AssetTraits<T>::kind, path, owner, result.diagnostic, result.failedUnits);
             result.handle = {slot.index, slot.generation};
             return result;
         }
@@ -465,9 +499,12 @@ namespace Fenrir
         /** @brief The asset root relative paths resolve against, absolute. */
         [[nodiscard]] const std::filesystem::path& Root() const noexcept;
 
+        /** @brief The logger the store's messages go to, for code that loads or spawns through it and reports alike. */
+        [[nodiscard]] ILogger& Logger() const noexcept;
+
       private:
         Detail::AssetSlot LoadSlot(Detail::AssetKind kind, std::string_view path, AssetOwner owner,
-                                   std::optional<LoadDiagnostic>& diagnostic);
+                                   std::optional<LoadDiagnostic>& diagnostic, std::vector<std::string>& failedUnits);
         Detail::AssetSlot AddSlot(Detail::AssetKind kind, Detail::AssetBox data, AssetOwner owner);
         Detail::AssetSlot AddBuiltinSlot(Detail::AssetKind kind, std::string_view name, Detail::AssetBox data);
         Detail::AssetSlot ReserveBuiltin(Detail::AssetKind kind, std::string_view name);

@@ -15,7 +15,8 @@ namespace Fenrir
      * material. A node's first mesh goes on the node's own entity; each further one on a child entity of it, named
      * after the node and the mesh's place (`Body mesh 2`), at the identity transform. Every model mesh holds one
      * submesh (the importer makes one mesh per material), so this is one MeshRenderer per mesh and submesh. The
-     * animation spec adds its skeletons between the two steps.
+     * animation spec adds its skeletons between the two steps. Until skinned drawing exists, a skinned mesh
+     * (`ModelMesh::skeleton` set) gets no MeshRenderer, never drawn unskinned, and one warning counts those skipped.
      *
      * It needs no Renderer installed: the MeshRenderers draw once one is. Returns a null Entity, spawning nothing, for
      * a stale or empty model handle (logged by SpawnNodes).
