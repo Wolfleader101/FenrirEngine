@@ -995,6 +995,17 @@ public sealed class BindingTests
     }
 
     [Fact]
+    public void TheDefaultsTestComparesThroughIrisFieldDifferencesAndNamesNothingInIrisDetail()
+    {
+        var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);
+
+        var defaults = Output(generated, "FixtureDefaultsTests.cpp");
+        Assert.True(defaults.Contains("Iris::FieldDifferences(native, managed, taggedUnions)", StringComparison.Ordinal) &&
+                    !defaults.Contains("Iris::Detail", StringComparison.Ordinal),
+                    $"The comparison is Iris's, so the defaults test should call Iris::FieldDifferences and name nothing in Iris::Detail, but is:\n{defaults}");
+    }
+
+    [Fact]
     public void AnInternalStructIsMirroredInternalWithNoDefaultsCase()
     {
         var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);

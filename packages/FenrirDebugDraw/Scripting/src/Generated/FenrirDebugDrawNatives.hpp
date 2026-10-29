@@ -7,6 +7,7 @@
 
 #include "FenrirScripting/ComponentRegistry.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
+#include "FenrirScripting/NativeFunctionMake.hpp"
 #include "FenrirScripting/ZeroingOutputs.hpp"
 #include "DebugDrawScriptingState.hpp"
 #include "ScriptOptions.hpp"

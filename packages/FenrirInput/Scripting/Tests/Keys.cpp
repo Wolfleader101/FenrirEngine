@@ -12,7 +12,7 @@
 #include "InputScriptingApp.hpp"
 
 using namespace Fenrir;
-using namespace InputScriptingTests;
+using namespace Fenrir::Testing;
 
 namespace
 {
@@ -46,7 +46,7 @@ TEST_CASE("A fed key reads as just pressed in C# by the phase's edges, as in C++
 
     // Pressed before a frame that runs no tick, which reads it in Update; the tick at the next frame reads it there.
     test.Feed().KeyDown(mainWindow, Key::Space, Scancode::Space, KeyModifiers::Shift);
-    test.Get().RunFrame(noTick);
+    test.Get().RunFrame(inputNoTick);
     test.Get().RunFrame(oneTick);
     // Released before a frame of two ticks: the first tick reads the release, the second does not.
     test.Feed().KeyUp(mainWindow, Key::Space, Scancode::Space);

@@ -38,10 +38,12 @@ attribute = "NativeFunction"
 make = "Fenrir::NativeFunction::Make"
 # A native with outputs is registered through FenrirScripting's ZeroingOutputs (ADR-0045), which zeroes each before it runs.
 zero-outputs = "Fenrir::ZeroingOutputs"
-# What every natives header names, for itself and the registration that includes it: the extension, the factories, and
-# the zeroing template (ADR-0045).
+# What every natives header names, for itself and the registration that includes it: the extension, the factories,
+# NativeFunction::Make's definition with the thunk it registers (NativeFunctionMake.hpp, which only a registration
+# needs), and the zeroing template (ADR-0045).
 includes = [
     "FenrirScripting/ComponentRegistry.hpp",
     "FenrirScripting/ScriptingExtension.hpp",
+    "FenrirScripting/NativeFunctionMake.hpp",
     "FenrirScripting/ZeroingOutputs.hpp",
 ]

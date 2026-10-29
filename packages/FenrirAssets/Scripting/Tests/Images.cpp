@@ -11,7 +11,7 @@
 #include "FenrirAssets/ImageData.hpp"
 
 using namespace Fenrir;
-using namespace AssetsScriptingTests;
+using namespace Fenrir::Testing;
 
 TEST_CASE("AddRenderTarget makes a pixel-less RGBA8 sRGB image that ResizeRenderTarget resizes", "[assets][scripting]")
 {

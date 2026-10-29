@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "FenrirApp/App.hpp"
+#include "FenrirScripting/NativeFunctionMake.hpp"
 #include "FenrirScripting/Scripting.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 

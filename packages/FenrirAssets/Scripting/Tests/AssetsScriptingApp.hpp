@@ -18,12 +18,8 @@
 #include "FenrirAssets/ShaderContainer.hpp"
 #include "FenrirAssetsScripting/AssetsScripting.hpp"
 
-namespace AssetsScriptingTests
+namespace Fenrir::Testing
 {
-    using Fenrir::Testing::Call;
-    using Fenrir::Testing::LoggedWith;
-    using Fenrir::Testing::oneTick;
-
     // The fixture's types the tests call.
     inline constexpr const char* MeshBuilderType = "AssetsScriptFixture.MeshBuilder";
     inline constexpr const char* AssetCallsType = "AssetsScriptFixture.AssetCalls";
@@ -43,20 +39,20 @@ namespace AssetsScriptingTests
     // TestHandle (Fixture/Meshes.cs) packs and unpacks the same way. The harness's own convention; not how a native
     // takes one (that is AssetHandle<T> itself, through a pointer).
     template <typename T>
-    std::uint64_t BitsOf(Fenrir::AssetHandle<T> handle)
+    std::uint64_t BitsOf(AssetHandle<T> handle)
     {
         return (std::uint64_t{handle.generation} << 32u) | handle.index;
     }
 
     template <typename T>
-    Fenrir::AssetHandle<T> HandleFrom(std::uint64_t bits)
+    AssetHandle<T> HandleFrom(std::uint64_t bits)
     {
         return {static_cast<std::uint32_t>(bits), static_cast<std::uint32_t>(bits >> 32u)};
     }
 
     // Calls a fixture method that returns text; "<null>" if it returned null.
     template <typename... Args>
-    std::string Text(Fenrir::Scripting& scripting, const char* typeName, const char* method, Args... arguments)
+    std::string Text(Scripting& scripting, const char* typeName, const char* method, Args... arguments)
     {
         return Call<std::optional<std::string>>(scripting, typeName, method, arguments...).value_or("<null>");
     }
@@ -64,60 +60,59 @@ namespace AssetsScriptingTests
     // The fixture shader's parameters: tint (vec4, a colour), roughness (float), offset (vec2), emissive (vec3, no
     // pragma so zero) and baseColourTexture (default normal), as FenrirShaderCompiler would reflect `#pragma fenrir
     // default` lines for them (FenrirAssets's own material tests use the same).
-    inline std::vector<Fenrir::ShaderParameter> FixtureParameters()
+    inline std::vector<ShaderParameter> FixtureParameters()
     {
-        using Type = Fenrir::ShaderParameterType;
+        using Type = ShaderParameterType;
         return {
             {"tint", Type::Vector4, {1.0f, 0.5f, 0.25f, 1.0f}},
             {"roughness", Type::Float, {0.5f}},
             {"offset", Type::Vector2, {2.0f, 3.0f}},
             {"emissive", Type::Vector3, {}},
-            {"baseColourTexture", Type::Texture, {}, Fenrir::DefaultTexture::Normal},
+            {"baseColourTexture", Type::Texture, {}, DefaultTexture::Normal},
         };
     }
 
     // A shader container written by hand: one variant with the fixture's parameters.
-    inline Fenrir::ShaderData FixtureShader()
+    inline ShaderData FixtureShader()
     {
-        Fenrir::ShaderContainer container;
+        ShaderContainer container;
         container.name = "ScriptingFixture";
-        Fenrir::ShaderVariant variant;
-        variant.stages.push_back({Fenrir::ShaderStage::Vertex, {0x07230203u}, {0x07230203u}});
-        variant.stages.push_back({Fenrir::ShaderStage::Fragment, {0x07230203u}, {0x07230203u}});
+        ShaderVariant variant;
+        variant.stages.push_back({ShaderStage::Vertex, {0x07230203u}, {0x07230203u}});
+        variant.stages.push_back({ShaderStage::Fragment, {0x07230203u}, {0x07230203u}});
         variant.parameters = FixtureParameters();
         container.variants.push_back(std::move(variant));
-        Fenrir::ShaderData data;
-        data.bytes = Fenrir::WriteShaderContainer(container);
+        ShaderData data;
+        data.bytes = WriteShaderContainer(container);
         return data;
     }
 
     // Assets with its asset root FenrirAssets's test fixtures.
     struct AssetsPackages
     {
-        explicit AssetsPackages(Fenrir::App& app)
-            : assets(Fenrir::Assets::Install(app, {std::filesystem::absolute(FENRIR_ASSETS_FIXTURES)}))
+        explicit AssetsPackages(App& app)
+            : assets(Assets::Install(app, {std::filesystem::absolute(FENRIR_ASSETS_FIXTURES)}))
         {
         }
 
-        Fenrir::Assets assets;
+        Assets assets;
     };
 
     // An App with assets installed, the fixture shader registered as a built-in, and scripting running the fixture
     // with assets' extension.
-    struct AssetsScriptingApp : Fenrir::Testing::ExtensionTestApp<AssetsPackages>
+    struct AssetsScriptingApp : ExtensionTestApp<AssetsPackages>
     {
         AssetsScriptingApp()
-            : ExtensionTestApp(Fenrir::Testing::FixtureFromEnvironment("FENRIR_TEST_ASSETS_FIXTURE"),
-                               {Fenrir::Assets::ScriptingExtension()})
+            : ExtensionTestApp(FixtureFromEnvironment("FENRIR_TEST_ASSETS_FIXTURE"), {Assets::ScriptingExtension()})
         {
-            shader = Store().AddBuiltin<Fenrir::Shader>(FixtureShaderName, FixtureShader());
+            shader = Store().AddBuiltin<Shader>(FixtureShaderName, FixtureShader());
             INFO("The fixture shader was refused");
             REQUIRE(Store().IsValid(shader));
         }
 
-        Fenrir::AssetHandle<Fenrir::Shader> shader;
+        AssetHandle<Shader> shader;
 
-        Fenrir::AssetStore& Store()
+        AssetStore& Store()
         {
             return assets.Store();
         }
@@ -125,7 +120,7 @@ namespace AssetsScriptingTests
         template <typename... Args>
         std::string Text(const char* typeName, const char* method, Args... arguments)
         {
-            return AssetsScriptingTests::Text(scripting, typeName, method, arguments...);
+            return Testing::Text(scripting, typeName, method, arguments...);
         }
     };
-} // namespace AssetsScriptingTests
+} // namespace Fenrir::Testing

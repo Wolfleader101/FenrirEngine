@@ -203,12 +203,20 @@ A static C# class over a package's generated native functions, its generated par
 A struct of exactly one field, which a native function takes or returns by value as that field (`WindowId`, `GamepadId`, `CollisionMesh`), under Iris's wrapper trait on the C++ side and the SDK generator's rule on the C# side (ADR-0044). An `Entity` is not one: it is a mirror of two fields, and crosses by pointer.
 *Avoid:* handle (an `AssetHandle<T>` has two fields and crosses by pointer, as a bound type), strong typedef, newtype.
 
+**Crossing form**
+The form in which a native function's parameter or result crosses to C#, decided once by the binding from the natives description and the binding's configuration: a value, `in T`, `out T`, a pointer (`T*`, `void*`), a span, a read-only span, or text. The registration zeroes each `out` before the native runs; a span or text folds the C++ count or length after it. Iris.Bindings carries it as a typed record (`BoundParameter`; the `.scratch/bound-parameter` spec, built and removed, is last held by commit ed1516a7), and the description stays raw: a pointee's C# name, a wrapper and a `[natives] types` alias are the binding's facts, not the C++ header's.
+*Avoid:* parameter kind (the description's `kind` is the C++ type's), modifier (only `in` and `out` have one), marshalling.
+
 **Call context**
 What a native function receives first (`CallContext`): the App the running Scripting serves, through it the active scene's entities and the change buffer, and the name of the native function being called (its type-and-method part, `PhysicsNative.Raycast`), built for each call by the registration's thunk. A native function may read and write component and resource data through it, and makes structural changes only by recording them in the change buffer (ADR-0029). It carries nothing of any extension: that is the extension state.
 
 **Native guard**
 What a native function checks a call against before acting (`NativeGuard`): its extension's warn-once record and the call context, giving the entity-alive rule, a requirement check and a warning, each naming the native and warning once per place and message. `in` and `out` pointers are not checked and outputs are not zeroed by it: the generated declaration and the registration settle both (ADR-0045).
 *Avoid:* checker, validator, precondition.
+
+**Native call harness**
+The test adapter at the registration seam (`NativeCallHarness`, in FenrirScripting's test support): given scripting extensions, it registers their native functions as `Scripting::Install` does and is the active Scripting while it lives, so a test calls a native by its registered name through the registration's own thunk, with no .NET, and reads what it returned, wrote and warned (`WarnedOnce`). What the registration settles (the context, the state, the zeroed outputs) is therefore under test, never re-spelled by the test.
+*Avoid:* mock scripting, fake runtime, test context.
 
 **Script**
 Informal: user C# code in general. Not the name of any type or concept.

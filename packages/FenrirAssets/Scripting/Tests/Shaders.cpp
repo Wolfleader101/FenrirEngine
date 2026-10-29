@@ -10,7 +10,7 @@
 #include "AssetsScriptingApp.hpp"
 
 using namespace Fenrir;
-using namespace AssetsScriptingTests;
+using namespace Fenrir::Testing;
 
 TEST_CASE("Shaders.GetParameter lists every parameter with its type, default and name", "[assets][scripting]")
 {

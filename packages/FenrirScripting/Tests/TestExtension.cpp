@@ -14,6 +14,7 @@
 
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
+#include "FenrirScripting/NativeFunctionMake.hpp"
 #include "FenrirScripting/NativeGuard.hpp"
 #include "FenrirScripting/Scripting.hpp"
 

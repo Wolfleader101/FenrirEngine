@@ -32,8 +32,26 @@ namespace Fenrir
         }
 
         /**
-         * @brief Logs "[<extension>] <message> (warned once)" to `app`'s logger, unless this record has logged
-         * `message` for `where` before.
+         * @brief The line Warn(app, message) logs after its "[<extension>] " prefix: "<message> (warned once)". The one
+         * spelling of the format: a test matches a logged warning against it, never against the text.
+         */
+        [[nodiscard]] static std::string Line(std::string_view message)
+        {
+            return std::string(message) + " (warned once)";
+        }
+
+        /**
+         * @brief The line Warn(context, message) logs after its prefix for the native function `native`
+         * (CallContext::Native): "<native>: <message> (warned once)".
+         */
+        [[nodiscard]] static std::string Line(std::string_view native, std::string_view message)
+        {
+            return std::string(native) + ": " + Line(message);
+        }
+
+        /**
+         * @brief Logs "[<extension>] " + Line(message) to `app`'s logger, unless this record has logged `message` for
+         * `where` before.
          */
         void Warn(const App& app, const std::string& message,
                   std::source_location where = std::source_location::current())
@@ -47,7 +65,7 @@ namespace Fenrir
                     return;
                 }
             }
-            app.Logger()->Warn("[{}] {} (warned once)", m_extension, message);
+            app.Logger()->Warn("[{}] {}", m_extension, Line(message));
 #else
             (void)app;
             (void)message;
@@ -56,9 +74,9 @@ namespace Fenrir
         }
 
         /**
-         * @brief Warn for the native call `context` is: logs "[<extension>] <native>: <message> (warned once)" to its
-         * app's logger, with the native function's name from the context (CallContext::Native), so a native function
-         * never spells its own.
+         * @brief Warn for the native call `context` is: logs "[<extension>] " + Line(native, message) to its app's
+         * logger, with the native function's name from the context (CallContext::Native), so a native function never
+         * spells its own.
          */
         void Warn(const CallContext& context, const std::string& message,
                   std::source_location where = std::source_location::current())

@@ -18,7 +18,7 @@
 #include "FenrirAssets/MaterialData.hpp"
 
 using namespace Fenrir;
-using namespace AssetsScriptingTests;
+using namespace Fenrir::Testing;
 using Math::Vec2;
 using Math::Vec3;
 using Math::Vec4;
