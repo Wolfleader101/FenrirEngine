@@ -2,8 +2,9 @@
 
 #include "ComponentRegistry.hpp"
 #include "EngineContext.hpp"
-#include "GeneratedNames.hpp"
+#include "ExtensionSet.hpp"
 #include "GenerationLifecycle.hpp"
+#include "IrisAdapters.hpp"
 #include "ScriptComponents.hpp"
 #include "ScriptData.hpp"
 #include "ScriptSystems.hpp"
@@ -13,7 +14,6 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
-#include <cstdlib>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -22,8 +22,6 @@
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <typeindex>
-#include <unordered_map>
 #include <utility>
 
 #if defined(_WIN32)
@@ -39,10 +37,6 @@
 #include <mach-o/dyld.h>
 #endif
 #include <unistd.h>
-#endif
-
-#if __has_include(<cxxabi.h>)
-#include <cxxabi.h>
 #endif
 
 namespace Fenrir
@@ -94,163 +88,6 @@ namespace Fenrir
             return static_cast<int>(getpid());
 #endif
         }
-
-        // A type's name as its source spells it, for a diagnostic. MSVC's type_info already gives it; the Itanium ABI
-        // (GCC, and clang off Windows) gives the mangled name, which is demangled here.
-        std::string ReadableName(const std::type_index& type)
-        {
-#if __has_include(<cxxabi.h>)
-            int status = 0;
-            const std::unique_ptr<char, decltype(&std::free)> demangled(
-                abi::__cxa_demangle(type.name(), nullptr, nullptr, &status), &std::free);
-            if (status == 0 && demangled != nullptr)
-            {
-                return demangled.get();
-            }
-#endif
-            return type.name();
-        }
-    } // namespace
-
-    namespace
-    {
-        // The lifecycle's loader over the Iris host: a loaded generation is an Iris component, and this is the one
-        // place that knows it. Scripting's hooks reach the component through Of.
-        class IrisScriptAssemblyLoader final : public Detail::ScriptAssemblyLoader
-        {
-          public:
-            explicit IrisScriptAssemblyLoader(Iris::Host& host) : m_host(host)
-            {
-            }
-
-            Iris::CallResult<std::unique_ptr<Detail::LoadedScriptAssembly>> Load(
-                const std::filesystem::path& path) override
-            {
-                auto loaded = m_host.LoadComponent(path);
-                if (!loaded.Succeeded())
-                {
-                    return {loaded.status, std::nullopt, std::move(loaded.diagnostic), loaded.diagnosticTruncated};
-                }
-                return {Iris::CallStatus::Success, std::make_unique<Loaded>(std::move(*loaded.value)), {}, false};
-            }
-
-            // The Iris component behind a generation this loader loaded.
-            [[nodiscard]] static Iris::Component& Of(Detail::LoadedScriptAssembly& loaded) noexcept
-            {
-                return static_cast<Loaded&>(loaded).component;
-            }
-
-          private:
-            struct Loaded final : Detail::LoadedScriptAssembly
-            {
-                explicit Loaded(Iris::Component&& owner) : component(std::move(owner))
-                {
-                }
-
-                Iris::CallResult<void> Release() override
-                {
-                    return component.Release();
-                }
-
-                Iris::CallResult<Iris::ComponentUnloadState> WaitForUnload(std::chrono::milliseconds timeout) override
-                {
-                    return component.WaitForUnload(timeout);
-                }
-
-                Iris::Component component;
-            };
-
-            Iris::Host& m_host;
-        };
-
-        // ScriptSystems' loader over the Iris component a generation is: the one place that knows the generated host
-        // is a managed type found by name, with four methods bound by name (GeneratedNames.hpp). The method lookup,
-        // and so the missing-method diagnostic, is this adapter's and no fake's.
-        class IrisSystemHostLoader final : public Detail::SystemHostLoader
-        {
-          public:
-            Iris::CallResult<std::unique_ptr<Detail::SystemHost>> Find(
-                Detail::LoadedScriptAssembly& generation) override
-            {
-                using Result = Iris::CallResult<std::unique_ptr<Detail::SystemHost>>;
-                const Iris::Component& component = IrisScriptAssemblyLoader::Of(generation);
-                const auto type = component.FindType(Detail::GeneratedNames::SystemHost);
-                if (type.status == Iris::CallStatus::NotFound)
-                {
-                    return Result{Iris::CallStatus::NotFound, std::nullopt, type.diagnostic, false};
-                }
-                if (!type.Succeeded())
-                {
-                    return Result{type.status, std::nullopt,
-                                  "The script's system host could not be read: " + type.diagnostic, false};
-                }
-                const auto mask = type.value->FindInstanceMethod<std::int32_t()>(Detail::GeneratedNames::PhaseMask);
-                const auto create = type.value->FindInstanceMethod<void()>(Detail::GeneratedNames::OnCreate);
-                const auto run = type.value->FindInstanceMethod<void(std::int32_t)>(Detail::GeneratedNames::Run);
-                const auto destroy = type.value->FindInstanceMethod<void()>(Detail::GeneratedNames::OnDestroy);
-                for (const auto* found : {&mask.status, &create.status, &run.status, &destroy.status})
-                {
-                    if (*found != Iris::CallStatus::Success)
-                    {
-                        return Result{*found, std::nullopt,
-                                      "The script's system host is missing a method: " + mask.diagnostic +
-                                          create.diagnostic + run.diagnostic + destroy.diagnostic,
-                                      false};
-                    }
-                }
-                auto object = type.value->CreateObject();
-                if (!object.Succeeded())
-                {
-                    return Result{object.status, std::nullopt,
-                                  "The script's systems could not be created: " + object.diagnostic,
-                                  object.diagnosticTruncated};
-                }
-                return Result{Iris::CallStatus::Success,
-                              std::make_unique<Host>(std::move(*object.value), *mask.value, *create.value, *run.value,
-                                                     *destroy.value),
-                              {},
-                              false};
-            }
-
-          private:
-            // The managed host and its bound methods. Released before the component, which cannot be released while
-            // an object it made is alive: ScriptSystems drops it at Stop, before the generation is unloaded.
-            struct Host final : Detail::SystemHost
-            {
-                Host(Iris::Object&& instance, Iris::InstanceMethod<std::int32_t()> mask,
-                     Iris::InstanceMethod<void()> create, Iris::InstanceMethod<void(std::int32_t)> run,
-                     Iris::InstanceMethod<void()> destroy)
-                    : object(std::move(instance)), mask(mask), create(create), run(run), destroy(destroy)
-                {
-                }
-
-                Iris::CallResult<std::int32_t> PhaseMask() override
-                {
-                    return mask.Invoke(object);
-                }
-
-                Iris::CallResult<void> OnCreate() override
-                {
-                    return create.Invoke(object);
-                }
-
-                Iris::CallResult<void> Run(std::int32_t phase) override
-                {
-                    return run.Invoke(object, phase);
-                }
-
-                Iris::CallResult<void> OnDestroy() override
-                {
-                    return destroy.Invoke(object);
-                }
-
-                Iris::Object object;
-                Iris::InstanceMethod<std::int32_t()> mask;
-                Iris::InstanceMethod<void()> create;
-                Iris::InstanceMethod<void(std::int32_t)> run;
-                Iris::InstanceMethod<void()> destroy;
-            };
-        };
     } // namespace
 
     struct Scripting::State
@@ -280,8 +117,10 @@ namespace Fenrir
         // native functions.
         std::shared_ptr<Detail::EngineContext> context = std::make_shared<Detail::EngineContext>();
         bool contextActive = false;
-        // Every extension's extension state, kept alive as long as the native functions that receive it can be called.
-        std::vector<std::shared_ptr<void>> extensionStates;
+        // Every extension, its native functions registered and its state kept alive as long as they can be called;
+        // built after the context is active (registering re-points each native's state at this Install's), and never
+        // released (Iris cannot unregister).
+        std::optional<Detail::ExtensionSet> extensions;
 
         // Scripting is live when the engine context points at this state and an App is attached: only then can scripts
         // act on the scene, and only then do changes and reloads mean anything.
@@ -292,11 +131,11 @@ namespace Fenrir
         std::unique_ptr<Iris::Host> host;
         // What the lifecycle loads generations through: the host above. Declared before the lifecycle, which borrows
         // it.
-        std::optional<IrisScriptAssemblyLoader> loader;
+        std::optional<Detail::IrisScriptAssemblyLoader> loader;
         // Where a generation's system host comes from, and the systems themselves: started by the lifecycle's start
         // hook, run once per scheduled phase, stopped by its stop hook before the generation is released. Declared
         // after the loader, whose Of they reach the component through, and before the lifecycle, whose hooks call them.
-        IrisSystemHostLoader hostLoader;
+        Detail::IrisSystemHostLoader hostLoader;
         Detail::ScriptSystems systems;
         // The generations of the script assembly: copies, loading, replacing, retiring, and the file watcher.
         Detail::GenerationLifecycle generations;
@@ -495,7 +334,7 @@ namespace Fenrir
     Iris::Component* Scripting::LoadedComponent() noexcept
     {
         auto* loaded = m_state != nullptr ? m_state->generations.Component() : nullptr;
-        return loaded != nullptr ? &IrisScriptAssemblyLoader::Of(*loaded) : nullptr;
+        return loaded != nullptr ? &Detail::IrisScriptAssemblyLoader::Of(*loaded) : nullptr;
     }
 
     void Scripting::Shutdown() noexcept
@@ -588,24 +427,6 @@ namespace Fenrir
         std::filesystem::path math;
         Detail::GenerationLifecycle::Settings settings;
 
-        // Why `function` cannot be listed by `extension`: it takes an extension state the extension does not carry, or
-        // one of another type. Nothing for a stateless function.
-        const auto checkState = [](const NativeFunction& function,
-                                   const ScriptingExtension& extension) -> std::optional<StartupFailure> {
-            const auto& wanted = function.StateType();
-            const auto& carried = extension.m_stateType;
-            if (!wanted.has_value() || wanted == carried)
-            {
-                return std::nullopt;
-            }
-            const std::string start = "the native function '" + function.Name() + "' of extension '" + extension.name +
-                                      "' takes an extension state of type '" + ReadableName(*wanted) +
-                                      "', but the extension ";
-            return StartupFailure{carried.has_value() ? start + "carries one of type '" + ReadableName(*carried) + "'"
-                                                      : start + "carries none",
-                                  {}};
-        };
-
         // Starting is a list of stages, run in order, and the first to fail ends it: one place reports why, gives
         // everything back and returns a Scripting without scripts. The order matters where the comments say so.
         const std::vector<StartupStage> stages = {
@@ -662,64 +483,23 @@ namespace Fenrir
                 }
                 return std::nullopt;
             },
-            // Every extension's native functions are named Namespace.Type.Method, no name is declared twice, and each
-            // one that takes an extension state is listed by an extension carrying a state of its type.
-            [&]() -> std::optional<StartupFailure> {
-                std::unordered_map<std::string, std::string> declaredBy;
-                for (const auto& extension : config.extensions)
-                {
-                    for (const auto& function : extension.functions)
-                    {
-                        if (function.BindingName().empty())
-                        {
-                            return StartupFailure{"the native function '" + function.Name() + "' of extension '" +
-                                                      extension.name + "' is not named Namespace.Type.Method",
-                                                  {}};
-                        }
-                        if (auto failure = checkState(function, extension))
-                        {
-                            return failure;
-                        }
-                        const auto [first, added] = declaredBy.emplace(function.Name(), extension.name);
-                        if (!added)
-                        {
-                            return StartupFailure{first->second == extension.name
-                                                      ? "the native function '" + function.Name() +
-                                                            "' is declared twice by extension '" + extension.name + "'"
-                                                      : "the native function '" + function.Name() +
-                                                            "' is declared by both extension '" + first->second +
-                                                            "' and extension '" + extension.name + "'",
-                                                  {}};
-                        }
-                    }
-                }
-                return std::nullopt;
-            },
-            // Only one Scripting is active in a process, and the native functions are registered before .NET starts.
+            // Only one Scripting is active in a process; then the extension set: every extension's native functions
+            // checked (named Namespace.Type.Method, declared once, taking a state their extension carries) and
+            // registered with their states, before the host shares the extensions' contracts, since sharing binds their
+            // fields to these.
             [&]() -> std::optional<StartupFailure> {
                 if (!Detail::ActivateEngineContext(state->context.get()))
                 {
                     return StartupFailure{"another Scripting is already active in this process", {}};
                 }
                 state->contextActive = true;
-                // Before the host shares the extensions' contracts: sharing binds their fields to these.
-                for (const auto& extension : config.extensions)
+                Detail::IrisNativeRegistrar registrar;
+                auto installed = Detail::ExtensionSet::Install(std::move(config.extensions), registrar);
+                if (!installed.Succeeded())
                 {
-                    if (extension.m_state != nullptr)
-                    {
-                        state->extensionStates.push_back(extension.m_state);
-                    }
-                    for (const auto& function : extension.functions)
-                    {
-                        // A stateless function ignores the state; checkState made sure a stateful one gets its type.
-                        if (const auto registered = function.Register(extension.m_state.get()); !registered.Succeeded())
-                        {
-                            return StartupFailure{"the native function '" + function.Name() + "' of extension '" +
-                                                      extension.name + "' could not be registered",
-                                                  registered.diagnostic};
-                        }
-                    }
+                    return StartupFailure{std::move(installed.diagnostic), {}};
                 }
+                state->extensions = std::move(*installed);
                 return std::nullopt;
             },
             // .NET, with the contract shared, and Iris's messages going to the engine's logger.
@@ -731,12 +511,9 @@ namespace Fenrir
                 // Every extension's contract, in order, so the built-in extension's (Fenrir.Math, then the scripting
                 // contract) come first: the others may refer to them, and each is bound as it is shared.
                 // A relative path is beside the scripting contract, where the build deploys a package's contract.
-                for (const auto& extension : config.extensions)
+                for (const auto& assembly : state->extensions->SharedAssemblies())
                 {
-                    for (const auto& assembly : extension.sharedAssemblies)
-                    {
-                        configuration.sharedAssemblies.push_back(bridgeDirectory / assembly);
-                    }
+                    configuration.sharedAssemblies.push_back(bridgeDirectory / assembly);
                 }
 
                 state->logger = &logger;
@@ -785,7 +562,7 @@ namespace Fenrir
                 State* const self = state.get();
                 Detail::GenerationLifecycle::Hooks hooks;
                 hooks.reconcile = [self](Detail::LoadedScriptAssembly& loaded) {
-                    Detail::IrisScriptAssembly assembly(*self->context, IrisScriptAssemblyLoader::Of(loaded));
+                    Detail::IrisScriptAssembly assembly(*self->context, Detail::IrisScriptAssemblyLoader::Of(loaded));
                     return self->scriptData.Admit(*self->context->app, assembly);
                 };
                 hooks.start = [self](Detail::LoadedScriptAssembly& loaded) { return self->systems.Start(loaded); };
