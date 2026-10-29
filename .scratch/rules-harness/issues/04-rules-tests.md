@@ -10,11 +10,11 @@
 
 **Touches:** `packages/FenrirPhysics/Scripting/Tests/Rules.cpp`, `packages/FenrirWindow/Scripting/Tests/Rules.cpp`, `packages/FenrirInput/Scripting/Tests/NoInput.cpp`, `packages/FenrirAssets/Scripting/Tests/NoOps.cpp`, `packages/FenrirRenderer/Scripting/Tests/NoOps.cpp`, `packages/FenrirDebugDraw/Scripting/Tests/NoOps.cpp`, `packages/*/Scripting/src/*ScriptingState.hpp`, `packages/*/Scripting/src/*Scripting.cpp`, `packages/FenrirAssets/Scripting/include/FenrirAssetsScripting/AssetResolve.hpp`, `packages/FenrirScripting/cmake/FenrirScriptingExtension.cmake`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `grep -rn "ZeroingOutputs<\|harness.Context(\|warned once\|constexpr std::size_t once\|Generated/.*Natives.hpp" packages/*/Scripting/Tests` finds nothing.
-- [ ] `grep -rn 'so it [a-z ]*"' packages/*/Scripting/src/*.cpp` finds nothing: every text is on a state header or `AssetResolve.hpp`.
-- [ ] `ctest -N` lists the same `*ScriptingRules` tests; all pass under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] `grep -rn "ZeroingOutputs<\|harness.Context(\|warned once\|constexpr std::size_t once\|Generated/.*Natives.hpp" packages/*/Scripting/Tests` finds nothing.
+- [x] `grep -rn 'so it [a-z ]*"' packages/*/Scripting/src/*.cpp` finds nothing: every text is on a state header or `AssetResolve.hpp`.
+- [x] `ctest -N` lists the same `*ScriptingRules` tests; all pass under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
 
 ## Comments
 

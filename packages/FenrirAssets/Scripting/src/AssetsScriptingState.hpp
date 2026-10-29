@@ -2,6 +2,8 @@
 
 #include <optional>
 #include <source_location>
+#include <string>
+#include <string_view>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
@@ -18,10 +20,32 @@ namespace Fenrir
      * by Assets::ScriptingExtension and kept by the Scripting given the extension. In a header of its own because the
      * generated registration (Generated/FenrirAssetsRegistration.cpp) declares the natives, which name it. The lookups
      * every package may need, the store and a handle's asset, are the public AssetResolve.hpp's; what is here is only
-     * Assets' own: where an asset is put. Each warns once per place and message through the native's guard.
+     * Assets' own: where an asset is put. Each warns once per place and message through the native's guard. The
+     * texts Assets' own natives warn with are named here, one per rule, so the package's rules read in one place
+     * and its rules tests name them; the store and handle rules' texts are AssetResolve.hpp's.
      */
     struct AssetsScripting
     {
+        /** @brief Warned when `owner` is neither the scene nor the app: the native does nothing. */
+        static constexpr std::string_view NoOwner = "no such asset owner, so it does nothing";
+
+        /** @brief Warned when an asset kind C# names is none of AssetKind's: the native does nothing. */
+        static constexpr std::string_view NoKind =
+            "the handle's type is not Mesh, Image, Material, Shader or Model, so it does nothing";
+
+        /** @brief Warned when an image's width or height is under one pixel: the native does nothing. */
+        static constexpr std::string_view NoPixels = "an image is at least one pixel each way, so it does nothing";
+
+        /** @brief Warned by ResizeRenderTarget when the image has pixels, so is no render target: it does nothing. */
+        static constexpr std::string_view NotRenderTarget =
+            "the image has pixels, so it is not a render target and it does nothing";
+
+        /** @brief Warned by SetBlendMode when the mode is none of BlendMode's enumerators: it does nothing. */
+        static constexpr std::string_view NoBlendMode = "no such blend mode, so it does nothing";
+
+        /** @brief Warned by GetShaderParameter when the index is past the shader's parameters: it does nothing. */
+        static constexpr std::string_view NoParameter = "the shader has no parameter at that index, so it does nothing";
+
         /** @brief Where a native puts an asset: the store, and the owner C# named. */
         struct StoreAndOwner
         {
@@ -63,7 +87,7 @@ namespace Fenrir
             {
                 return AssetOwner::App();
             }
-            guard.Warn("no such asset owner, so it does nothing", where);
+            guard.Warn(std::string(NoOwner), where);
             return std::nullopt;
         }
 

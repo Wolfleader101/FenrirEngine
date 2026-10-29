@@ -60,7 +60,7 @@ namespace Fenrir
         {
             if (width < 1 || height < 1)
             {
-                guard.Warn("an image is at least one pixel each way, so it does nothing", where);
+                guard.Warn(std::string(AssetsScripting::NoPixels), where);
                 return std::nullopt;
             }
             const std::span<const std::uint8_t> bytes = SpanOf(rgba8, byteCount);
@@ -101,7 +101,7 @@ namespace Fenrir
             {
                 return action(AssetHandle<Model>{});
             }
-            guard.Warn("the handle's type is not Mesh, Image, Material, Shader or Model, so it does nothing", where);
+            guard.Warn(std::string(AssetsScripting::NoKind), where);
             return otherwise;
         }
 
@@ -290,7 +290,7 @@ namespace Fenrir
             }
             if (!store->TryGet(*image)->pixels.empty())
             {
-                guard.Warn("the image has pixels, so it is not a render target and it does nothing");
+                guard.Warn(std::string(AssetsScripting::NotRenderTarget));
                 return false;
             }
             std::optional<ImageData> data = ImageFrom(guard, width, height, nullptr, 0);
@@ -455,7 +455,7 @@ namespace Fenrir
             const NativeGuard guard(context, assets.warnings);
             if (!IsEnumerator<BlendMode::Additive>(blendMode))
             {
-                guard.Warn("no such blend mode, so it does nothing");
+                guard.Warn(std::string(AssetsScripting::NoBlendMode));
                 return false;
             }
             AssetStore* store = Resolve<Material>(guard, *material);
@@ -732,7 +732,7 @@ namespace Fenrir
             const std::span<const ShaderParameter> parameters = store->GetShaderParameters(*shader);
             if (index < 0 || static_cast<std::size_t>(index) >= parameters.size())
             {
-                guard.Warn("the shader has no parameter at that index, so it does nothing");
+                guard.Warn(std::string(AssetsScripting::NoParameter));
                 return 0;
             }
             const ShaderParameter& found = parameters[static_cast<std::size_t>(index)];

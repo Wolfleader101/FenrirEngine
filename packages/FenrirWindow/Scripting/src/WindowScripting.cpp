@@ -113,7 +113,7 @@ namespace Fenrir
         {
             if (!IsEnumerator<CursorMode::Captured>(mode))
             {
-                NativeGuard(context, windows.warnings).Warn("no such cursor mode, so it does nothing");
+                NativeGuard(context, windows.warnings).Warn(std::string(WindowScripting::NoCursorMode));
                 return false;
             }
             return windows.Made(context, window) && Window::SetCursorMode(context.GetApp(), window, mode);
@@ -128,7 +128,7 @@ namespace Fenrir
         {
             if (!IsEnumerator<CursorShape::Hidden>(shape))
             {
-                NativeGuard(context, windows.warnings).Warn("no such cursor shape, so it does nothing");
+                NativeGuard(context, windows.warnings).Warn(std::string(WindowScripting::NoCursorShape));
                 return false;
             }
             return windows.Made(context, window) && Window::SetCursorShape(context.GetApp(), window, shape);
