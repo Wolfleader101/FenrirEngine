@@ -4,4 +4,5 @@ Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0): https
 
 Changes: material assignment modified by Joey de Vries (LearnOpenGL) for easier loading in OpenGL, with albedo renamed
 diffuse and metallic renamed specular. These files are the same as the deleted legacy DemoApp's copy; this copy leaves
-out its unreferenced ao.jpg and roughness.jpg.
+out its unreferenced ao.jpg and roughness.jpg, and its backpack.obj has every texture coordinate's V written as 1 - V,
+so its UVs start at the image's bottom-left as OBJ's do (LearnOpenGL's copy had them starting at the top).
