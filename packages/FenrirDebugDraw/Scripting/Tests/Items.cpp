@@ -9,7 +9,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 
 using namespace Fenrir;
-using namespace DebugDrawScriptingTests;
+using namespace Fenrir::Testing;
 using Math::Vec3;
 
 namespace
@@ -37,7 +37,7 @@ TEST_CASE("A line drawn from a C# Tick system lasts until the next tick", "[debu
     }
     {
         INFO("A frame with no tick should still show it");
-        REQUIRE(LineCount(test.Frame(noTick)) == 1);
+        REQUIRE(LineCount(test.Frame(debugDrawNoTick)) == 1);
         REQUIRE(test.Call<int>(TickDrawerType, "Ticks") == 1);
     }
     INFO("After the next tick, which drew nothing, it should be gone");

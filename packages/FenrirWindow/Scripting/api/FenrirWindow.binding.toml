@@ -27,7 +27,7 @@ cpp = "../Tests/Generated/FenrirWindowDefaultsTests.cpp"
 csharp = "../Tests/Generated/FenrirWindowDefaults.cs"
 class = "Fenrir.WindowScriptFixture.Defaults"
 includes = ["WindowScriptingApp.hpp"]
-setup = "WindowScriptingTests::WindowScriptingApp app;"
+setup = "Fenrir::Testing::WindowScriptingApp app;"
 tags = "[window][scripting][bindings]"
 
 # The native functions: tools/describe-api's natives mode reads every function in `sources` taking `context` first (with

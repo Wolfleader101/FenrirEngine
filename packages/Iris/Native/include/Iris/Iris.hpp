@@ -4,6 +4,7 @@
 #include "Array.hpp"
 #include "CallResult.hpp"
 #include "Component.hpp"
+#include "FieldDifferences.hpp"
 #include "Host.hpp"
 #include "InternalCall.hpp"
 #include "Log.hpp"
