@@ -2,11 +2,11 @@
 
 #include "ComponentRegistry.hpp"
 #include "EngineContext.hpp"
+#include "GeneratedNames.hpp"
 #include "GenerationLifecycle.hpp"
 #include "ScriptComponents.hpp"
 #include "ScriptData.hpp"
 #include "ScriptSystems.hpp"
-#include "SystemHostNames.hpp"
 
 #include <Iris/Iris.hpp>
 
@@ -164,7 +164,7 @@ namespace Fenrir
         };
 
         // ScriptSystems' loader over the Iris component a generation is: the one place that knows the generated host
-        // is a managed type found by name, with four methods bound by name (SystemHostNames.hpp). The method lookup,
+        // is a managed type found by name, with four methods bound by name (GeneratedNames.hpp). The method lookup,
         // and so the missing-method diagnostic, is this adapter's and no fake's.
         class IrisSystemHostLoader final : public Detail::SystemHostLoader
         {
@@ -174,7 +174,7 @@ namespace Fenrir
             {
                 using Result = Iris::CallResult<std::unique_ptr<Detail::SystemHost>>;
                 const Iris::Component& component = IrisScriptAssemblyLoader::Of(generation);
-                const auto type = component.FindType(Detail::SystemHostNames::Type);
+                const auto type = component.FindType(Detail::GeneratedNames::SystemHost);
                 if (type.status == Iris::CallStatus::NotFound)
                 {
                     return Result{Iris::CallStatus::NotFound, std::nullopt, type.diagnostic, false};
@@ -184,10 +184,10 @@ namespace Fenrir
                     return Result{type.status, std::nullopt,
                                   "The script's system host could not be read: " + type.diagnostic, false};
                 }
-                const auto mask = type.value->FindInstanceMethod<std::int32_t()>(Detail::SystemHostNames::PhaseMask);
-                const auto create = type.value->FindInstanceMethod<void()>(Detail::SystemHostNames::OnCreate);
-                const auto run = type.value->FindInstanceMethod<void(std::int32_t)>(Detail::SystemHostNames::Run);
-                const auto destroy = type.value->FindInstanceMethod<void()>(Detail::SystemHostNames::OnDestroy);
+                const auto mask = type.value->FindInstanceMethod<std::int32_t()>(Detail::GeneratedNames::PhaseMask);
+                const auto create = type.value->FindInstanceMethod<void()>(Detail::GeneratedNames::OnCreate);
+                const auto run = type.value->FindInstanceMethod<void(std::int32_t)>(Detail::GeneratedNames::Run);
+                const auto destroy = type.value->FindInstanceMethod<void()>(Detail::GeneratedNames::OnDestroy);
                 for (const auto* found : {&mask.status, &create.status, &run.status, &destroy.status})
                 {
                     if (*found != Iris::CallStatus::Success)

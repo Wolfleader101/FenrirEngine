@@ -60,7 +60,7 @@ add_library(FenrirScripting STATIC
     src/ScriptSystems.cpp
     src/ScriptSystems.hpp
     src/SystemHost.hpp
-    src/SystemHostNames.hpp
+    src/GeneratedNames.hpp
     src/GenerationLifecycle.cpp
     src/ReloadWatcher.cpp
     src/ReloadWatcher.hpp
