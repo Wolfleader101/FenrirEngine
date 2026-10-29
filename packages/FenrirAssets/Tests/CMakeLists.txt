@@ -5,7 +5,7 @@ fenrir_add_catch2()
 
 add_executable(FenrirAssetsTests PublicHeaders.cpp Owners.cpp Revisions.cpp Loading.cpp Images.cpp ShaderContainers.cpp
                                  Materials.cpp Models.cpp SpawnNodes.cpp Cubemaps.cpp Skeletons.cpp Skins.cpp
-                                 Clips.cpp BoneMasks.cpp
+                                 Clips.cpp BoneMasks.cpp SkinnedImport.cpp
                                  AssetsTest.hpp)
 target_link_libraries(FenrirAssetsTests PRIVATE FenrirAssets Catch2::Catch2WithMain)
 target_compile_definitions(FenrirAssetsTests PRIVATE FENRIR_ASSETS_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")

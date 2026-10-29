@@ -142,6 +142,40 @@ TEST_CASE("SpawnModel puts a node's first mesh on its entity and each further me
     REQUIRE(test.Draws().size() == 2);
 }
 
+TEST_CASE("SpawnModel skips skinned meshes with one warning and spawns rigid ones as before", "[renderer][spawn-model]")
+{
+    RendererTestApp test;
+    test.AddCamera({0.0f, 0.0f, 10.0f});
+    // FenrirAssets's armatures fixture: four skinned meshes on three skeletons, and HatMesh, a rigid mesh on Hat.
+    const Fenrir::LoadResult<Fenrir::Model> model =
+        test.Store().Load<Fenrir::Model>(FENRIR_TEST_ARMATURES, Fenrir::AssetOwner::App());
+    REQUIRE(model.Ok());
+    const Fenrir::Model& data = *test.Store().TryGet(model.handle);
+    std::size_t skinned = 0;
+    for (const Fenrir::ModelNode& node : data.nodes)
+    {
+        for (const Fenrir::ModelMesh& mesh : node.meshes)
+        {
+            skinned += mesh.skeleton >= 0 ? 1 : 0;
+        }
+    }
+    INFO("the model has skinned meshes to skip");
+    REQUIRE(skinned == 4);
+
+    const Entity root = Fenrir::SpawnModel(test.Store(), test.ActiveScene(), model.handle);
+    test.Frame();
+
+    INFO("only the rigid mesh gets a MeshRenderer, on its node's entity, and is drawn");
+    REQUIRE(root.IsValid());
+    const std::vector<Entity> renderers = MeshRenderers(test);
+    REQUIRE(renderers.size() == 1);
+    REQUIRE(std::string(renderers[0].GetComponent<Fenrir::Name>().Get()) == "Hat");
+    REQUIRE(test.Draws().size() == 1);
+    INFO("one warning says skinned meshes were skipped, never drawn unskinned");
+    REQUIRE(RendererTest::CountContaining(test.messages->warnings, "skinned") == 1);
+    REQUIRE(test.messages->errors.empty());
+}
+
 TEST_CASE("SpawnModel with a stale model spawns nothing and returns a null entity", "[renderer][spawn-model]")
 {
     RendererTestApp test;

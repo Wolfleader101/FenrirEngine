@@ -9,6 +9,7 @@
 #include "FenrirAssets/SpawnNodes.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/EntityList.hpp"
+#include "FenrirLogger/ILogger.hpp"
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirScene/Scene.hpp"
 
@@ -17,12 +18,13 @@ namespace Fenrir
     namespace
     {
         /**
-         * @brief SpawnModel's second step: a MeshRenderer per mesh of each spawned node, the first on the node's entity
-         * and each further one on a child entity of it.
+         * @brief SpawnModel's second step: a MeshRenderer per rigid mesh of each spawned node, the first on the node's
+         * entity and each further one on a child entity of it. Returns how many skinned meshes it skipped.
          */
-        void AddMeshRenderers(Scene& scene, const Model& model, const SpawnedNodes& spawned)
+        std::size_t AddMeshRenderers(Scene& scene, const Model& model, const SpawnedNodes& spawned)
         {
             EntityList& entities = scene.GetEntityList();
+            std::size_t skipped = 0;
             for (std::size_t i = 0; i < model.nodes.size() && i < spawned.nodes.size(); ++i)
             {
                 const ModelNode& node = model.nodes[i];
@@ -31,20 +33,29 @@ namespace Fenrir
                 {
                     continue;
                 }
-                for (std::size_t m = 0; m < node.meshes.size(); ++m)
+                std::size_t placed = 0;
+                for (const ModelMesh& mesh : node.meshes)
                 {
-                    const MeshRenderer renderer{node.meshes[m].mesh, node.meshes[m].material, true};
-                    if (m == 0)
+                    // Its vertices are in its skeleton's bind space: drawn rigidly they would look plausible and be
+                    // wrong (ADR-0035), so skinned meshes wait for skinned drawing.
+                    if (mesh.skeleton >= 0)
+                    {
+                        ++skipped;
+                        continue;
+                    }
+                    const MeshRenderer renderer{mesh.mesh, mesh.material, true};
+                    if (placed++ == 0)
                     {
                         entity.AddComponent<MeshRenderer>(renderer);
                         continue;
                     }
                     Entity extra = entities.CreateEntity();
-                    extra.GetComponent<Name>().Set(std::format("{} mesh {}", node.name, m + 1).c_str());
+                    extra.GetComponent<Name>().Set(std::format("{} mesh {}", node.name, placed).c_str());
                     entity.AddChild(extra);
                     extra.AddComponent<MeshRenderer>(renderer);
                 }
             }
+            return skipped;
         }
     } // namespace
 
@@ -58,7 +69,12 @@ namespace Fenrir
         }
         // The animation spec's SpawnSkeletons and skin references go here, between the nodes and their MeshRenderers
         // (ADR-0031, ADR-0041).
-        AddMeshRenderers(scene, *data, spawned);
+        if (const std::size_t skipped = AddMeshRenderers(scene, *data, spawned); skipped > 0)
+        {
+            store.Logger().Warn("SpawnModel skipped {} skinned mesh(es) of model '{}': skinned meshes are not drawn "
+                                "yet, and are never drawn unskinned",
+                                skipped, spawned.root.GetComponent<Name>().Get());
+        }
         return spawned.root;
     }
 } // namespace Fenrir

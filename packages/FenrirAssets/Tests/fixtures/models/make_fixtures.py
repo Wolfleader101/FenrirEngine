@@ -1,5 +1,6 @@
 """Writes FenrirAssets's model fixtures: one small scene as glTF, GLB, FBX (ASCII 7.4) and OBJ, plus the skinned,
-missing-texture, colour-space-conflict and corrupt glTF files. Run by hand (`python make_fixtures.py`) from any directory; the
+missing-texture, colour-space-conflict and corrupt glTF files, and the skinned glTF fixtures of ADR-0031's list
+(armatures, shared-skins, incompatible-skin, owners and cubic-clip; each function's docstring describes its file). Run by hand (`python make_fixtures.py`) from any directory; the
 files are written beside this script and checked in. The build never runs it.
 
 Everything here is written from scratch by this script, so the fixtures carry no third-party licence.
@@ -16,6 +17,7 @@ at 0.3 with base colour (0, 1, 0, 1). FBX and OBJ say what they can of that; the
 
 import base64
 import json
+import math
 import os
 import struct
 import zlib
@@ -73,13 +75,16 @@ class Buffer:
         self.doc["bufferViews"].append(view)
         return len(self.doc["bufferViews"]) - 1
 
-    def floats(self, rows, kind):
+    def floats(self, rows, kind, target=34962):
         flat = [c for row in rows for c in row]
-        view = self.view(struct.pack("<%df" % len(flat), *flat), 34962)
+        view = self.view(struct.pack("<%df" % len(flat), *flat), target)
         accessor = {"bufferView": view, "componentType": 5126, "count": len(rows), "type": kind}
         if kind == "VEC3":
             accessor["min"] = [min(r[i] for r in rows) for i in range(3)]
             accessor["max"] = [max(r[i] for r in rows) for i in range(3)]
+        if kind == "SCALAR":
+            accessor["min"] = [min(r[0] for r in rows)]
+            accessor["max"] = [max(r[0] for r in rows)]
         self.doc["accessors"].append(accessor)
         return len(self.doc["accessors"]) - 1
 
@@ -292,6 +297,328 @@ def write_skinned():
     write_gltf("skinned.gltf", doc, buf)
 
 
+# Skinned fixtures (ADR-0031's glTF list). Matrices are 16 floats, column-major as glTF and glm store them.
+
+def quat(axis, degrees):
+    """The unit quaternion (x, y, z, w) turning `degrees` about `axis`."""
+    length = math.sqrt(sum(a * a for a in axis))
+    half = math.radians(degrees) / 2
+    s = math.sin(half) / length
+    return (axis[0] * s, axis[1] * s, axis[2] * s, math.cos(half))
+
+
+def trs(t=(0, 0, 0), r=(0, 0, 0, 1), s=(1, 1, 1)):
+    x, y, z, w = r
+    rot = [[1 - 2 * (y * y + z * z), 2 * (x * y + z * w), 2 * (x * z - y * w)],
+           [2 * (x * y - z * w), 1 - 2 * (x * x + z * z), 2 * (y * z + x * w)],
+           [2 * (x * z + y * w), 2 * (y * z - x * w), 1 - 2 * (x * x + y * y)]]
+    m = []
+    for c in range(3):
+        m += [rot[c][0] * s[c], rot[c][1] * s[c], rot[c][2] * s[c], 0.0]
+    return m + [t[0], t[1], t[2], 1.0]
+
+
+def mul(a, b):
+    return [sum(a[k * 4 + r] * b[c * 4 + k] for k in range(4)) for c in range(4) for r in range(4)]
+
+
+def inverse(m):
+    rows = [[m[c * 4 + r] for c in range(4)] + [1.0 if r == i else 0.0 for i in range(4)] for r in range(4)]
+    for col in range(4):
+        pivot = max(range(col, 4), key=lambda r: abs(rows[r][col]))
+        rows[col], rows[pivot] = rows[pivot], rows[col]
+        p = rows[col][col]
+        rows[col] = [v / p for v in rows[col]]
+        for r in range(4):
+            if r != col:
+                f = rows[r][col]
+                rows[r] = [v - f * w for v, w in zip(rows[r], rows[col])]
+    return [rows[r][4 + c] for c in range(4) for r in range(4)]
+
+
+def transform_point(m, p):
+    return tuple(m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r] for r in range(3))
+
+
+class Rig:
+    """A glTF document's nodes, with each node's rest world for inverse binds."""
+
+    def __init__(self, doc):
+        self.doc = doc
+        doc.setdefault("nodes", [])
+
+    def node(self, name, parent=None, t=None, r=None, s=None, **extra):
+        node = {"name": name}
+        if t:
+            node["translation"] = list(t)
+        if r:
+            node["rotation"] = list(r)
+        if s:
+            node["scale"] = list(s)
+        node.update(extra)
+        index = len(self.doc["nodes"])
+        self.doc["nodes"].append(node)
+        node["_parent"] = parent
+        if parent is not None:
+            self.doc["nodes"][parent].setdefault("children", []).append(index)
+        return index
+
+    def world(self, index):
+        node = self.doc["nodes"][index]
+        local = trs(node.get("translation", (0, 0, 0)), node.get("rotation", (0, 0, 0, 1)), node.get("scale", (1, 1, 1)))
+        parent = node["_parent"]
+        return local if parent is None else mul(self.world(parent), local)
+
+    def finish(self):
+        for node in self.doc["nodes"]:
+            del node["_parent"]
+
+
+def skin(doc, buf, name, joints, inverse_binds, skeleton=None):
+    entry = {"name": name, "joints": joints,
+             "inverseBindMatrices": buf.floats(inverse_binds, "MAT4", None)}
+    if skeleton is not None:
+        entry["skeleton"] = skeleton
+    doc.setdefault("skins", []).append(entry)
+    return len(doc["skins"]) - 1
+
+
+def skinned_mesh(doc, buf, name, positions, joints, weights, normals=None, tangents=None, indices=None):
+    attributes = {"POSITION": buf.floats(positions, "VEC3"),
+                  "JOINTS_0": buf.bytes_accessor(joints, 5121, "B", "VEC4"),
+                  "WEIGHTS_0": buf.floats(weights, "VEC4")}
+    if normals:
+        attributes["NORMAL"] = buf.floats(normals, "VEC3")
+    if tangents:
+        attributes["TANGENT"] = buf.floats(tangents, "VEC4")
+    doc.setdefault("meshes", []).append(
+        {"name": name, "primitives": [{"attributes": attributes, "indices": buf.indices(indices or list(range(len(positions))))}]})
+    return len(doc["meshes"]) - 1
+
+
+def rigid_mesh(doc, buf, name):
+    doc.setdefault("meshes", []).append(
+        {"name": name, "primitives": [{"attributes": {"POSITION": buf.floats(MARKER_POSITIONS, "VEC3")},
+                                       "indices": buf.indices(MARKER_INDICES)}]})
+    return len(doc["meshes"]) - 1
+
+
+def channel(doc, buf, animation, node, path, times, values, interpolation="LINEAR"):
+    sampler = {"input": buf.floats([(t,) for t in times], "SCALAR", None),
+               "output": buf.floats(values, "VEC4" if path == "rotation" else "VEC3", None),
+               "interpolation": interpolation}
+    animation["samplers"].append(sampler)
+    animation["channels"].append({"sampler": len(animation["samplers"]) - 1, "target": {"node": node, "path": path}})
+
+
+def new_document():
+    doc = {"asset": {"version": "2.0", "generator": "FenrirEngine make_fixtures.py"}}
+    return doc, Buffer(doc)
+
+
+def write_armatures():
+    """Two unrelated armatures under Scene, a third under Rig, and the bone rules (ADR-0031).
+
+    Scene
+      Hips   joint of HumanSkin, T(0, 1, 0)
+        Spine  no joint, between Hips and Chest: an intermediate bone, T(0, 0.5, 0)
+          Chest  joint, T(0, 0.5, 0)
+            Head    joint no vertex is weighted to: an unweighted leaf, T(0, 0.5, 0)
+            Socket  an empty child of a bone: an ordinary node, T(0.2, 0, 0)
+            Hat     a mesh child of a bone, animated: still ordinary, T(0, 0.6, 0)
+            Tail    an empty child of a bone, animated: a bone, T(0, 0, -0.3)
+      Pelvis  joint of TwinSkin, T(3, 1, 0)
+        Pelvis  joint, a repeated name, T(0, 0.5, 0)
+      Rig    T(-3, 0, 0)
+        Root   joint of PropSkin, T(0, 1, 0)
+      BodyA, BodyB  two meshes skinned with HumanSkin (one skeleton shared)
+      Legs   skinned with TwinSkin; Prop skinned with PropSkin
+    HumanSkin names Chest, a joint, as its skeleton, so it names no owner. The rest pose is the bind pose. The clip
+    "Wave" keys Spine and Tail rotations and Hat's translation.
+    """
+    doc, buf = new_document()
+    rig = Rig(doc)
+    scene = rig.node("Scene")
+    hips = rig.node("Hips", scene, t=(0, 1, 0))
+    spine = rig.node("Spine", hips, t=(0, 0.5, 0))
+    chest = rig.node("Chest", spine, t=(0, 0.5, 0))
+    head = rig.node("Head", chest, t=(0, 0.5, 0))
+    rig.node("Socket", chest, t=(0.2, 0, 0))
+    hat = rig.node("Hat", chest, t=(0, 0.6, 0), mesh=rigid_mesh(doc, buf, "HatMesh"))
+    tail = rig.node("Tail", chest, t=(0, 0, -0.3))
+    pelvis = rig.node("Pelvis", scene, t=(3, 1, 0))
+    pelvis2 = rig.node("Pelvis", pelvis, t=(0, 0.5, 0))
+    holder = rig.node("Rig", scene, t=(-3, 0, 0))
+    root = rig.node("Root", holder, t=(0, 1, 0))
+
+    human = skin(doc, buf, "HumanSkin", [hips, chest, head], [inverse(rig.world(j)) for j in (hips, chest, head)],
+                 skeleton=chest)
+    twin = skin(doc, buf, "TwinSkin", [pelvis, pelvis2], [inverse(rig.world(j)) for j in (pelvis, pelvis2)])
+    prop = skin(doc, buf, "PropSkin", [root], [inverse(rig.world(root))])
+
+    body_a = skinned_mesh(doc, buf, "BodyA", [(0, 1, 0), (0.5, 1.5, 0), (0, 2, 0)],
+                          [(0, 1, 0, 0), (0, 1, 0, 0), (1, 0, 0, 0)], [(1, 0, 0, 0), (0.5, 0.5, 0, 0), (1, 0, 0, 0)])
+    body_b = skinned_mesh(doc, buf, "BodyB", [(0, 2, 0), (0.5, 2, 0), (0, 2.5, 0)],
+                          [(1, 0, 0, 0)] * 3, [(1, 0, 0, 0)] * 3)
+    legs = skinned_mesh(doc, buf, "Legs", [(3, 1, 0), (3.5, 1, 0), (3, 1.5, 0)],
+                        [(0, 1, 0, 0), (0, 0, 0, 0), (1, 0, 0, 0)], [(0.25, 0.75, 0, 0), (1, 0, 0, 0), (1, 0, 0, 0)])
+    prop_mesh = skinned_mesh(doc, buf, "Prop", [(-3, 1, 0), (-2, 1, 0), (-3, 2, 0)], [(0, 0, 0, 0)] * 3,
+                             [(1, 0, 0, 0)] * 3)
+    rig.node("BodyA", scene, mesh=body_a, skin=human)
+    rig.node("BodyB", scene, mesh=body_b, skin=human)
+    rig.node("Legs", scene, mesh=legs, skin=twin)
+    rig.node("Prop", scene, mesh=prop_mesh, skin=prop)
+
+    wave = {"name": "Wave", "samplers": [], "channels": []}
+    channel(doc, buf, wave, spine, "rotation", [0, 1], [(0, 0, 0, 1), quat((0, 0, 1), 30)])
+    channel(doc, buf, wave, tail, "rotation", [0, 1], [(0, 0, 0, 1), quat((1, 0, 0), 45)])
+    channel(doc, buf, wave, hat, "translation", [0, 1], [(0, 0.6, 0), (0, 0.8, 0)])
+    doc["animations"] = [wave]
+    rig.finish()
+    doc["scenes"] = [{"nodes": [scene]}]
+    doc["scene"] = 0
+    write_gltf("armatures.gltf", doc, buf)
+
+
+def write_shared_skins():
+    """Three skins on one leg (Rig > Hip > Knee > Foot, each T(0, 1, 0), (0, -0.5, 0), (0, -0.5, 0)).
+
+    ThighSkin [Hip, Knee] and ShinSkin [Knee, Foot] have equal binds, so they merge. BootSkin [Foot, Knee] has binds
+    B x C with C = T(0, 0, 2): its vertices are written at bind positions minus (0, 0, 2), and one conversion takes
+    them into the others'. Its joints come in another order. The rest pose is the bind pose.
+    """
+    doc, buf = new_document()
+    rig = Rig(doc)
+    holder = rig.node("Rig")
+    hip = rig.node("Hip", holder, t=(0, 1, 0))
+    knee = rig.node("Knee", hip, t=(0, -0.5, 0))
+    foot = rig.node("Foot", knee, t=(0, -0.5, 0))
+    ibm = {j: inverse(rig.world(j)) for j in (hip, knee, foot)}
+    conversion = trs(t=(0, 0, 2))
+    thigh = skin(doc, buf, "ThighSkin", [hip, knee], [ibm[hip], ibm[knee]])
+    shin = skin(doc, buf, "ShinSkin", [knee, foot], [ibm[knee], ibm[foot]])
+    boot = skin(doc, buf, "BootSkin", [foot, knee], [mul(ibm[foot], conversion), mul(ibm[knee], conversion)])
+    thigh_mesh = skinned_mesh(doc, buf, "Thigh", [(0, 1, 0), (0.2, 0.75, 0), (0, 0.5, 0)],
+                              [(0, 0, 0, 0), (0, 1, 0, 0), (1, 0, 0, 0)], [(1, 0, 0, 0), (0.5, 0.5, 0, 0), (1, 0, 0, 0)])
+    shin_mesh = skinned_mesh(doc, buf, "Shin", [(0, 0.5, 0), (0.2, 0.25, 0), (0, 0, 0)],
+                             [(0, 0, 0, 0), (0, 1, 0, 0), (1, 0, 0, 0)], [(1, 0, 0, 0), (0.5, 0.5, 0, 0), (1, 0, 0, 0)])
+    boot_mesh = skinned_mesh(doc, buf, "Boot", [(0, 0, -2), (0.3, 0, -2), (0, 0.2, -2)],
+                             [(0, 0, 0, 0), (0, 0, 0, 0), (0, 1, 0, 0)], [(1, 0, 0, 0), (1, 0, 0, 0), (0.5, 0.5, 0, 0)])
+    rig.node("Thigh", holder, mesh=thigh_mesh, skin=thigh)
+    rig.node("Shin", holder, mesh=shin_mesh, skin=shin)
+    rig.node("Boot", holder, mesh=boot_mesh, skin=boot)
+    rig.finish()
+    doc["scenes"] = [{"nodes": [holder]}]
+    doc["scene"] = 0
+    write_gltf("shared-skins.gltf", doc, buf)
+
+
+def write_incompatible_skin():
+    """Rig > Arm > Hand, with SleeveSkin [Arm, Hand] and GloveSkin [Hand, Arm], whose binds are SleeveSkin's moved
+    by T(1, 0, 0) for Hand and T(0, 1, 0) for Arm: no one conversion takes them into SleeveSkin's, so GloveSkin fails.
+    Other > Bone, with CloakSkin naming Bone twice as a joint: its skeleton fails. Badge is a rigid mesh on Rig.
+    """
+    doc, buf = new_document()
+    rig = Rig(doc)
+    holder = rig.node("Rig", mesh=rigid_mesh(doc, buf, "Badge"))
+    arm = rig.node("Arm", holder, t=(0, 1, 0))
+    hand = rig.node("Hand", arm, t=(1, 0, 0))
+    other = rig.node("Other", t=(0, 0, 5))
+    bone = rig.node("Bone", other, t=(0, 1, 0))
+    ibm = {j: inverse(rig.world(j)) for j in (arm, hand, bone)}
+    sleeve = skin(doc, buf, "SleeveSkin", [arm, hand], [ibm[arm], ibm[hand]])
+    glove = skin(doc, buf, "GloveSkin", [hand, arm], [mul(ibm[hand], trs(t=(1, 0, 0))), mul(ibm[arm], trs(t=(0, 1, 0)))])
+    cloak = skin(doc, buf, "CloakSkin", [bone, bone], [ibm[bone], ibm[bone]])
+    triangle = [(0, 1, 0), (1, 1, 0), (0, 2, 0)]
+    rig.node("Sleeve", holder, mesh=skinned_mesh(doc, buf, "Sleeve", triangle, [(0, 0, 0, 0)] * 3,
+                                                 [(1, 0, 0, 0)] * 3), skin=sleeve)
+    rig.node("Glove", holder, mesh=skinned_mesh(doc, buf, "Glove", triangle, [(0, 0, 0, 0)] * 3,
+                                                [(1, 0, 0, 0)] * 3), skin=glove)
+    rig.node("Cloak", other, mesh=skinned_mesh(doc, buf, "Cloak", triangle, [(0, 0, 0, 0)] * 3,
+                                               [(1, 0, 0, 0)] * 3), skin=cloak)
+    rig.finish()
+    doc["scenes"] = [{"nodes": [holder, other]}]
+    doc["scene"] = 0
+    write_gltf("incompatible-skin.gltf", doc, buf)
+
+
+# owners.gltf's numbers, which the numerical owner test repeats.
+OWNER_T, OWNER_R, OWNER_S = (1, 2, 3), quat((1, 1, 0), 30), (2, 0.5, 1.5)
+UPPER_REST = ((0, 1, 0), quat((0, 0, 1), 20))
+LOWER_REST = ((0, 1, 0), quat((1, 0, 0), -35))
+SLEEVE_POSITIONS = [(0.1, 1.0, 0.0), (0.0, 1.5, 0.2), (-0.1, 2.0, 0.0), (0.2, 2.5, -0.1)]
+SLEEVE_JOINTS = [(0, 1, 0, 0), (0, 1, 0, 0), (1, 0, 0, 0), (1, 0, 0, 0)]
+SLEEVE_WEIGHTS = [(0.7, 0.3, 0, 0), (0.5, 0.5, 0, 0), (0.6, 0.4, 0, 0), (1, 0, 0, 0)]
+
+
+def write_owners():
+    """Two skinned meshes under owners that are not the identity.
+
+    Owner  T(1, 2, 3), R 30 degrees about (1, 1, 0), S(2, 0.5, 1.5)
+      Upper  joint, rest T(0, 1, 0) R 20 degrees about +Z
+        Lower  joint, rest T(0, 1, 0) R -35 degrees about +X
+      Sleeve  skinned with ArmSkin, several influences per vertex, a normal and a tangent each
+    Mirror  S(-1, 1, 1): a negative determinant
+      Bone  joint, T(0, 1, 0)
+      Mirrored  skinned with MirrorSkin
+    ArmSkin's inverse binds are of the bind pose with Upper and Lower unrotated (so rest and bind differ); MirrorSkin's
+    are of its rest pose. Vertices, normals and tangents are glTF's, in scene-root space.
+    """
+    doc, buf = new_document()
+    rig = Rig(doc)
+    owner = rig.node("Owner", t=OWNER_T, r=OWNER_R, s=OWNER_S)
+    upper = rig.node("Upper", owner, t=UPPER_REST[0], r=UPPER_REST[1])
+    lower = rig.node("Lower", upper, t=LOWER_REST[0], r=LOWER_REST[1])
+    owner_world = rig.world(owner)
+    upper_bind = mul(owner_world, trs(t=UPPER_REST[0]))
+    lower_bind = mul(upper_bind, trs(t=LOWER_REST[0]))
+    arm = skin(doc, buf, "ArmSkin", [upper, lower], [inverse(upper_bind), inverse(lower_bind)])
+    positions = [transform_point(owner_world, p) for p in SLEEVE_POSITIONS]
+    normals = [(1, 0, 0), (0, 0, 1), (0.6, 0.8, 0), (0, 1, 0)]
+    tangents = [(0, 1, 0, 1), (1, 0, 0, 1), (0.8, -0.6, 0, -1), (0, 0, 1, 1)]
+    sleeve = skinned_mesh(doc, buf, "Sleeve", positions, SLEEVE_JOINTS, SLEEVE_WEIGHTS, normals, tangents,
+                          [0, 1, 2, 1, 3, 2])
+    rig.node("Sleeve", owner, mesh=sleeve, skin=arm)
+
+    mirror = rig.node("Mirror", s=(-1, 1, 1))
+    bone = rig.node("Bone", mirror, t=(0, 1, 0))
+    mirror_skin = skin(doc, buf, "MirrorSkin", [bone], [inverse(rig.world(bone))])
+    mirrored = skinned_mesh(doc, buf, "Mirrored", [(-1, 1, 0), (-2, 1, 0), (-1, 2, 0)], [(0, 0, 0, 0)] * 3,
+                            [(1, 0, 0, 0)] * 3, [(0, 0, 1)] * 3, [(-1, 0, 0, 1)] * 3)
+    rig.node("Mirrored", mirror, mesh=mirrored, skin=mirror_skin)
+    rig.finish()
+    doc["scenes"] = [{"nodes": [owner, mirror]}]
+    doc["scene"] = 0
+    write_gltf("owners.gltf", doc, buf)
+
+
+def write_cubic_clip():
+    """Rig > Joint, with Body skinned to it, and the clip "Turn": a cubic rotation of Joint over keys at 0, 1 and 2 s.
+
+    Key 1's value (0, 0, -0.3826834, -0.9238795) is 45 degrees about +Z in the far hemisphere from key 0's identity,
+    with in tangent (0, 0, 0.1, 0.2) and out tangent (0, 0, -0.1, 0.3); key 2 is 90 degrees about +Z, near key 1 once
+    key 1 is flipped (but not as written). Keys 0 and 2 have tangents (0, 0, 0.05, 0) in and (0, 0, 0.02, 0) out.
+    """
+    doc, buf = new_document()
+    rig = Rig(doc)
+    holder = rig.node("Rig")
+    joint = rig.node("Joint", holder, t=(0, 1, 0))
+    body_skin = skin(doc, buf, "BodySkin", [joint], [inverse(rig.world(joint))])
+    body = skinned_mesh(doc, buf, "Body", [(0, 1, 0), (1, 1, 0), (0, 2, 0)], [(0, 0, 0, 0)] * 3, [(1, 0, 0, 0)] * 3)
+    rig.node("Body", holder, mesh=body, skin=body_skin)
+    turn = {"name": "Turn", "samplers": [], "channels": []}
+    edge_in, edge_out = (0, 0, 0.05, 0), (0, 0, 0.02, 0)
+    values = [edge_in, (0, 0, 0, 1), edge_out,
+              (0, 0, 0.1, 0.2), (0, 0, -0.3826834, -0.9238795), (0, 0, -0.1, 0.3),
+              edge_in, (0, 0, 0.7071068, 0.7071068), edge_out]
+    channel(doc, buf, turn, joint, "rotation", [0, 1, 2], values, "CUBICSPLINE")
+    doc["animations"] = [turn]
+    rig.finish()
+    doc["scenes"] = [{"nodes": [holder]}]
+    doc["scene"] = 0
+    write_gltf("cubic-clip.gltf", doc, buf)
+
+
 def write_missing_texture():
     """One triangle whose material's base colour texture names a file that is not there."""
     doc = {"asset": {"version": "2.0", "generator": "FenrirEngine make_fixtures.py"}}
@@ -337,6 +664,11 @@ def main():
     write_obj()
     write_fbx()
     write_skinned()
+    write_armatures()
+    write_shared_skins()
+    write_incompatible_skin()
+    write_owners()
+    write_cubic_clip()
     write_missing_texture()
     write_conflict()
     # Not glTF at all: the importer's failure.

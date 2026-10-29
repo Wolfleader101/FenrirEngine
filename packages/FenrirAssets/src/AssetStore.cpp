@@ -291,12 +291,24 @@ namespace Fenrir
         return m_state->root;
     }
 
+    ILogger& AssetStore::Logger() const noexcept
+    {
+        return *m_state->logger;
+    }
+
     Detail::AssetSlot AssetStore::LoadSlot(Detail::AssetKind kind, std::string_view path, AssetOwner owner,
-                                           std::optional<LoadDiagnostic>& diagnostic)
+                                           std::optional<LoadDiagnostic>& diagnostic,
+                                           std::vector<std::string>& failedUnits)
     {
         const bool builtin = path.starts_with(BuiltinPrefix);
         const AssetPath resolved = builtin ? AssetPath{{}, {}, false, std::string(path)} : Resolve(m_state->root, path);
         Detail::AssetTable& table = TableOf(*m_state, kind);
+        // Every load of a model file's assets reports what its import left out.
+        if (const auto failed = m_state->modelFailures.find(resolved.key.substr(0, resolved.key.find('#')));
+            !builtin && failed != m_state->modelFailures.end())
+        {
+            failedUnits = failed->second;
+        }
         // A built-in name an import reserved, with no data registered yet, is not loaded.
         if (const auto loaded = table.byKey.find(resolved.key);
             loaded != table.byKey.end() && table.records[loaded->second].data != nullptr)
@@ -315,6 +327,7 @@ namespace Fenrir
             m_state->logger->Error("Could not load {} '{}': {} ({})", KindName(kind), resolved.key, ReasonText(reason),
                                    message);
             diagnostic = LoadDiagnostic{resolved.key, reason, std::move(message)};
+            failedUnits.clear();
             return {};
         };
 
@@ -356,6 +369,10 @@ namespace Fenrir
                 if (std::string problem = ImportModelFile(resolved.file, fileKey, owner); !problem.empty())
                 {
                     return fail(LoadFailure::ImportFailed, std::move(problem));
+                }
+                if (const auto failed = m_state->modelFailures.find(fileKey); failed != m_state->modelFailures.end())
+                {
+                    failedUnits = failed->second;
                 }
             }
             const auto found = table.byKey.find(resolved.key);

@@ -415,20 +415,48 @@ TEST_CASE("A texture that cannot be loaded is replaced by a white image with a w
     REQUIRE(test.errors->empty());
 }
 
-TEST_CASE("A skinned mesh is left out with one diagnostic naming it", "[assets][models]")
+TEST_CASE("A skinned glTF mesh is imported with a skin section baked against its skeleton", "[assets][models]")
 {
     AssetsApp test;
     const Fenrir::Model& model = LoadScene(test, "skinned.gltf");
 
     INFO("every node is kept, the joint included");
     REQUIRE(model.nodes.size() == 4);
-    INFO("only the static mesh is imported");
-    REQUIRE(model.meshes.size() == 1);
-    REQUIRE(FindNode(model, "Body").meshes.empty());
-    REQUIRE(FindNode(model, "Prop").meshes.size() == 1);
-    INFO("one warning names the skinned mesh");
-    REQUIRE(test.warnings->size() == 1);
-    REQUIRE(Contains(*test.warnings, "SkinnedBody"));
+    INFO("the skinned mesh and the static mesh are both imported");
+    REQUIRE(model.meshes.size() == 2);
+    REQUIRE(model.skeletons.size() == 1);
+    const Fenrir::SkeletonData* skeleton = test.store.TryGet(model.skeletons[0]);
+    REQUIRE(skeleton != nullptr);
+    REQUIRE(skeleton->BoneCount() == 1);
+
+    const Fenrir::ModelNode& body = FindNode(model, "Body");
+    REQUIRE(body.meshes.size() == 1);
+    INFO("the skinned mesh names the skeleton it was baked against");
+    REQUIRE(body.meshes[0].skeleton == 0);
+    const Fenrir::MeshData* mesh = test.store.TryGet(body.meshes[0].mesh);
+    REQUIRE(mesh != nullptr);
+    REQUIRE(mesh->skin.has_value());
+    INFO("every vertex is weighted wholly to the one joint");
+    REQUIRE(mesh->skin->joints == std::vector<Fenrir::BoneQuad>(3, {0, 0, 0, 0}));
+    REQUIRE(mesh->skin->weights == std::vector<Fenrir::BoneQuad>(3, {65535, 0, 0, 0}));
+    INFO("its expected signature is the skeleton's bind signature");
+    REQUIRE(mesh->skin->expectedSignature == skeleton->BindSignature());
+    REQUIRE(mesh->skin->expectedSignature != 0);
+
+    INFO("the rigid mesh names no skeleton and has no skin");
+    const Fenrir::ModelNode& prop = FindNode(model, "Prop");
+    REQUIRE(prop.meshes.size() == 1);
+    REQUIRE(prop.meshes[0].skeleton == -1);
+    REQUIRE_FALSE(test.store.TryGet(prop.meshes[0].mesh)->skin.has_value());
+
+    INFO("the joint is bone 0 of skeleton 0, and Rig, its parent, is the skeleton's owner");
+    REQUIRE(FindNode(model, "Bone").kind == Fenrir::ModelNodeKind::Bone);
+    REQUIRE(FindNode(model, "Bone").skeleton == 0);
+    REQUIRE(FindNode(model, "Bone").bone == 0);
+    REQUIRE(model.skeletonOwners == std::vector<std::int32_t>{0});
+    REQUIRE(model.nodes[0].name == "Rig");
+    INFO("nothing is warned");
+    REQUIRE(test.warnings->empty());
 }
 
 TEST_CASE("A sub-asset loads by label with the same handle the model holds", "[assets][models][loading]")
