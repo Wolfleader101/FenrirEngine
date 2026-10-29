@@ -758,7 +758,7 @@ passes a pointer or an optional through and warns when it is empty, and `Warn` w
 lookups (its world, its store) are built on them in its extension state. A span C# passes as a first element and a count
 is read with `Fenrir::SpanOf` (`NativeMarshalling.hpp`, which also has `WriteText` for text out into a capacity buffer
 and `Utf8ToUtf16`): the first element is the one pointer that can be null, for an empty span. A native's rules (no world,
-dead entity, each warning once) are tested from C++ with `Tests/Support/NativeCallHarness.hpp`, with no .NET (see
+dead entity, each warning once) are tested from C++ through `Tests/Support/NativeCallHarness.hpp`, which runs the extension and calls a native by name, with no .NET (see
 "Tests").
 
 ## Exposing a native function
@@ -892,17 +892,27 @@ The counters and the loaded Iris component the tests need are not on `Scripting`
 `Tests/Support/HeadlessApp.hpp` is the harness later tickets build on: `HeadlessApp` owns an `App` and a recording
 logger, and `Run(n)` runs exactly `n` frames.
 
-`Tests/Support/NativeCallHarness.hpp` is the test seam for native functions: `Fenrir::Testing::NativeCallHarness` owns a
-`HeadlessApp` and a change buffer, `Context("PhysicsNative.Raycast")` gives the call context the registration's thunk
+`Tests/Support/NativeCallHarness.hpp` is the native call harness, the test adapter at the registration seam:
+`Fenrir::Testing::NativeCallHarness harness(Physics::ScriptingExtension());` registers each extension's native functions
+as `Scripting::Install` does (`NativeFunction::Register` with the extension's state, which needs no .NET: Iris keeps a
+registration until a bridge is up) and is the active Scripting while it lives, over its own `HeadlessApp`, an empty
+registry and a change buffer. `harness.Call<bool>("PhysicsNative.AddImpulse", &body, &up)` calls a native by its
+registered name (the type-and-method part, `NativeFunction::NativeNameFor`) through the registration's thunk
 (`Detail::NativeFunctionCall` in `include/FenrirScripting/NativeFunctionMake.hpp`, with `NativeFunction::Make`'s
-definition; only a registration includes it) would build for that native, and `ApplyChanges()` plays back what the native recorded, so a native is called from C++
-and its rules (no world, stale handle, dead entity, each warning once) are asserted on the app and its logger with no
-.NET and no fixture assembly. `CallContext` names it as a friend. The change buffer and the registry behind it are the
-package's private modules, so they sit behind a pimpl in `Tests/Support/NativeCallHarness.cpp`, and `ApplyChanges()`
+definition; only a registration includes it): the result type is explicit, the parameter types are the arguments', and
+`NativeFunction` carries the thunk's pointer and a `std::type_index` of its `R(Args...)`, checked before the call, so a
+mismatch throws naming the native and both signatures. The context, the state, the "not running" value and the zeroing
+of outputs are the registration's, never re-spelled by the test. `WarnedOnce("PhysicsNative.AddImpulse", message)`
+reads the logger for `WarnOnceRecord::Line(native, message)`, the one spelling of the "(warned once)" format, exactly
+`once` (one in a debug build, zero in release); `Context("PhysicsNative.Raycast")` still hands out the call context the
+thunk would build, for a test of what a native is written with that calls no registered native, and `ApplyChanges()`
+plays back what a native recorded. `NativeFunction`, `ScriptingExtension` and `CallContext` name it as a friend. One
+harness is active at a time, as one Scripting is. The change buffer, the registry and the engine context behind it are
+the package's private modules, so they sit behind a pimpl in `Tests/Support/NativeCallHarness.cpp`, and `ApplyChanges()`
 returns the harness's own `ApplyOutcome`; the `FenrirScriptingTestSupport` static library (`Tests/Support/`) owns the
 four shared headers and that file, and is the one test target given FenrirScripting's `src`. A test executable links the
 library. The rules tests of `NativeGuard`, `ZeroingOutputs` and the marshalling helpers (`Tests/Rules/`) are written on
-it.
+it, and `Tests/Rules/NativeCallHarnessTests.cpp` runs the test-only extension through it.
 
 The reload rules (the previous copy restored when a build fails, a start failure releasing the generation, retire and
 sweep, the re-entrancy guard) are `Tests/Rules/GenerationLifecycleTests.cpp`: `GenerationLifecycle` loads through its

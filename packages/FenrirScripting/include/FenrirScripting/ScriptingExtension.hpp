@@ -253,12 +253,31 @@ namespace Fenrir
 
       private:
         friend class Scripting;
+        // The native call harness registers a function as Scripting does and calls it through its thunk.
+        friend class Testing::NativeCallHarness;
         using Registrar = std::function<Iris::CallResult<void>(std::string_view bindingName,
                                                                std::string_view nativeName, void* state)>;
 
-        NativeFunction(std::string name, std::optional<std::type_index> stateType, Registrar registrar)
-            : m_name(std::move(name)), m_stateType(stateType), m_register(std::move(registrar))
+        // `thunk` is the function Iris calls (NativeFunctionMake.hpp's thunk for Function), of the signature
+        // `signature` names: R(Args...), the C# signature, with the context and the state dropped.
+        NativeFunction(std::string name, std::optional<std::type_index> stateType, Registrar registrar, void* thunk,
+                       std::type_index signature)
+            : m_name(std::move(name)), m_stateType(stateType), m_register(std::move(registrar)), m_thunk(thunk),
+              m_signature(signature)
         {
+        }
+
+        // The thunk Register installs, as a plain pointer: Thunk() cast to `R (*)(Args...)` is the function Iris
+        // calls, when Signature() is typeid(R(Args...)).
+        [[nodiscard]] void* Thunk() const noexcept
+        {
+            return m_thunk;
+        }
+
+        // The thunk's signature R(Args...): what C# declares, with the call context and the extension state dropped.
+        [[nodiscard]] const std::type_index& Signature() const noexcept
+        {
+            return m_signature;
         }
 
         // Sets the "not running" value, the extension state (`state`, of the type StateType() names, or null for a
@@ -278,6 +297,8 @@ namespace Fenrir
         std::string m_name;
         std::optional<std::type_index> m_stateType;
         Registrar m_register;
+        void* m_thunk;
+        std::type_index m_signature;
     };
 
     /**
@@ -342,6 +363,8 @@ namespace Fenrir
 
       private:
         friend class Scripting;
+        // The native call harness registers an extension's functions with its state, as Scripting does.
+        friend class Testing::NativeCallHarness;
         std::shared_ptr<void> m_state;
         std::optional<std::type_index> m_stateType;
     };

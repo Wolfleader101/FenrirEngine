@@ -36,7 +36,8 @@ fenrir_deploy_scripting(FenrirScriptingTests)
 # The rules tests: FenrirScripting's own modules (the change buffer, and the others as they are split out) and what a
 # native function is written with (the native guard, the marshalling helpers, the zeroing registration) tested through
 # their interfaces, with no .NET runtime and no fixture assembly. The modules are private to the package, so this
-# executable is given the package's source directory.
+# executable is given the package's source directory. The native call harness's own cases run the test-only extension
+# (TestExtension.cpp, whose natives need no .NET), so this executable compiles it and sees this directory.
 add_executable(FenrirScriptingRulesTests
     Rules/ChangeBufferTests.cpp
     Rules/RegistryTableTests.cpp
@@ -50,9 +51,13 @@ add_executable(FenrirScriptingRulesTests
     Rules/NativeGuardTests.cpp
     Rules/NativeMarshallingTests.cpp
     Rules/ZeroingOutputsTests.cpp
+    Rules/NativeCallHarnessTests.cpp
+    TestExtension.cpp
+    TestExtension.hpp
 )
 target_link_libraries(FenrirScriptingRulesTests PRIVATE FenrirScripting FenrirScriptingTestSupport Catch2::Catch2WithMain)
-target_include_directories(FenrirScriptingRulesTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_include_directories(FenrirScriptingRulesTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src"
+    "${CMAKE_CURRENT_SOURCE_DIR}")
 add_test(NAME FenrirScriptingRules COMMAND FenrirScriptingRulesTests --order decl)
 set_tests_properties(FenrirScriptingRules PROPERTIES TIMEOUT 60)
 

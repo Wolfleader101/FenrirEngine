@@ -16,11 +16,11 @@
 
 **Touches:** `packages/FenrirScripting/include/FenrirScripting/ScriptingExtension.hpp`, `packages/FenrirScripting/include/FenrirScripting/NativeFunctionMake.hpp`, `packages/FenrirScripting/include/FenrirScripting/WarnOnceRecord.hpp`, `packages/FenrirScripting/include/FenrirScripting/NativeGuard.hpp`, `packages/FenrirScripting/Tests/Support/NativeCallHarness.hpp`, `packages/FenrirScripting/Tests/Support/NativeCallHarness.cpp`, `packages/FenrirScripting/Tests/Rules/`, `packages/FenrirScripting/Tests/CMakeLists.txt`, `packages/FenrirScripting/README.md`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `grep -rn "warned once" packages/FenrirScripting --include=*.hpp --include=*.cpp` finds only `WarnOnceRecord.hpp`.
-- [ ] The new harness cases pass; every `*Scripting*` CTest passes under the msvc-x64-debug preset (the six package rules tests still compile against the unchanged `Context`).
-- [ ] `check_tickets.py` and clang-format pass.
+- [x] `grep -rn "warned once" packages/FenrirScripting --include=*.hpp --include=*.cpp` finds only `WarnOnceRecord.hpp`.
+- [x] The new harness cases pass; every `*Scripting*` CTest passes under the msvc-x64-debug preset (the six package rules tests still compile against the unchanged `Context`).
+- [x] `check_tickets.py` and clang-format pass.
 
 ## Comments
 

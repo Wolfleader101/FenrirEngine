@@ -42,6 +42,9 @@ namespace Fenrir
             using Result = R;
             // The extension state it takes, or void for none.
             using StateType = State;
+            // Call's signature: the C# one, with the context and the state dropped. What NativeFunction records, so
+            // the native call harness checks a call's types against it.
+            using Signature = R(Args...);
 
             struct NoValue
             {
@@ -132,16 +135,18 @@ namespace Fenrir
     NativeFunction NativeFunction::Make(std::string name)
     {
         using Traits = Detail::NativeFunctionTraits<Function>;
-        return NativeFunction(std::move(name), Detail::StateTypeOf<typename Traits::StateType>(),
-                              [](std::string_view bindingName, std::string_view nativeName, void* state) {
-                                  if constexpr (!std::is_void_v<typename Traits::Result>)
-                                  {
-                                      Traits::notRunning = {};
-                                  }
-                                  Traits::state = static_cast<typename Traits::StateType*>(state);
-                                  Traits::name = std::string(nativeName);
-                                  return Iris::RegisterInternalCall<&Traits::Call>(bindingName);
-                              });
+        return NativeFunction(
+            std::move(name), Detail::StateTypeOf<typename Traits::StateType>(),
+            [](std::string_view bindingName, std::string_view nativeName, void* state) {
+                if constexpr (!std::is_void_v<typename Traits::Result>)
+                {
+                    Traits::notRunning = {};
+                }
+                Traits::state = static_cast<typename Traits::StateType*>(state);
+                Traits::name = std::string(nativeName);
+                return Iris::RegisterInternalCall<&Traits::Call>(bindingName);
+            },
+            reinterpret_cast<void*>(&Traits::Call), std::type_index(typeid(typename Traits::Signature)));
     }
 
     template <auto Function>
@@ -150,12 +155,14 @@ namespace Fenrir
                                         typename Detail::NativeFunctionTraits<Function>::Result whenNotRunning)
     {
         using Traits = Detail::NativeFunctionTraits<Function>;
-        return NativeFunction(std::move(name), Detail::StateTypeOf<typename Traits::StateType>(),
-                              [whenNotRunning](std::string_view bindingName, std::string_view nativeName, void* state) {
-                                  Traits::notRunning = whenNotRunning;
-                                  Traits::state = static_cast<typename Traits::StateType*>(state);
-                                  Traits::name = std::string(nativeName);
-                                  return Iris::RegisterInternalCall<&Traits::Call>(bindingName);
-                              });
+        return NativeFunction(
+            std::move(name), Detail::StateTypeOf<typename Traits::StateType>(),
+            [whenNotRunning](std::string_view bindingName, std::string_view nativeName, void* state) {
+                Traits::notRunning = whenNotRunning;
+                Traits::state = static_cast<typename Traits::StateType*>(state);
+                Traits::name = std::string(nativeName);
+                return Iris::RegisterInternalCall<&Traits::Call>(bindingName);
+            },
+            reinterpret_cast<void*>(&Traits::Call), std::type_index(typeid(typename Traits::Signature)));
     }
 } // namespace Fenrir
