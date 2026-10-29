@@ -32,6 +32,8 @@ namespace Fenrir
     namespace Detail
     {
         class ChangeBuffer;
+        class ExtensionSet;
+        class IrisNativeRegistrar;
 
         template <auto Function, typename State, typename R, typename... Args>
         struct NativeFunctionCall;
@@ -253,7 +255,9 @@ namespace Fenrir
 
       private:
         friend class Scripting;
-        // The native call harness registers a function as Scripting does and calls it through its thunk.
+        friend class Detail::ExtensionSet;        // StateType, for the extension state rule.
+        friend class Detail::IrisNativeRegistrar; // Register, the one adapter at the NativeRegistrar seam over Iris.
+        // The native call harness registers a function as the registrar does and calls it through its thunk.
         friend class Testing::NativeCallHarness;
         using Registrar = std::function<Iris::CallResult<void>(std::string_view bindingName,
                                                                std::string_view nativeName, void* state)>;
@@ -362,8 +366,8 @@ namespace Fenrir
         std::vector<ResourceRegistration> resources;
 
       private:
-        friend class Scripting;
-        // The native call harness registers an extension's functions with its state, as Scripting does.
+        friend class Detail::ExtensionSet;
+        // The native call harness registers an extension's functions with its state, as the extension set does.
         friend class Testing::NativeCallHarness;
         std::shared_ptr<void> m_state;
         std::optional<std::type_index> m_stateType;

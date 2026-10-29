@@ -1,9 +1,7 @@
 #include "ScriptData.hpp"
 
-#include "GeneratedNames.hpp"
 #include "ScriptComponents.hpp"
 
-#include <cctype>
 #include <functional>
 #include <string>
 #include <unordered_map>
@@ -26,57 +24,6 @@ namespace Fenrir::Detail
         Result Failed(std::string diagnostic)
         {
             return Result{Iris::CallStatus::InvalidArgument, std::move(diagnostic), false};
-        }
-
-        // Every registration of one table whose C# struct can be checked (a script-defined one has no mapping to
-        // check against) matches it, or the first that does not, named with the table's noun.
-        template <typename Registration>
-        Result ValidateTable(const RegistryTable<Registration>& table, const Iris::Component& component)
-        {
-            for (const auto& registration : table.All())
-            {
-                if (!registration.validate)
-                {
-                    continue;
-                }
-                if (auto validated = registration.validate(component); !validated.Succeeded())
-                {
-                    std::string noun(table.Noun());
-                    noun[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(noun[0])));
-                    validated.diagnostic =
-                        noun + " '" + registration.name + "' does not match its C# struct: " + validated.diagnostic;
-                    return validated;
-                }
-            }
-            return Succeeded();
-        }
-
-        // Size and alignment, and each field's name, type, kind and offset: two builds of a struct with the same
-        // fingerprint lay the same bytes out the same way. A type the assembly does not expose (internal) can only be
-        // told apart by its size.
-        std::string FingerprintOf(const Iris::Component& component, const Description& description)
-        {
-            std::string text = std::to_string(description.size) + "/" + std::to_string(description.alignment);
-            const auto type = component.FindType(description.name);
-            if (!type.Succeeded())
-            {
-                return text + ";opaque";
-            }
-            const auto fields = type.value->GetFields();
-            if (!fields.Succeeded())
-            {
-                return text + ";opaque";
-            }
-            for (const auto& field : *fields.value)
-            {
-                if (!field.isStatic)
-                {
-                    text += ";" + field.name + ":" + field.type.fullName + ":" +
-                            std::to_string(static_cast<int>(field.kind)) + "@" +
-                            (field.offset.has_value() ? std::to_string(*field.offset) : std::string("?"));
-                }
-            }
-            return text;
         }
 
         // Removes every component of a script component type from every scene, and says how many there were.
@@ -338,74 +285,6 @@ namespace Fenrir::Detail
             return kind;
         }
     } // namespace
-
-    IrisScriptAssembly::IrisScriptAssembly(EngineContext& context, const Iris::Component& component)
-        : m_context(context), m_component(component)
-    {
-    }
-
-    Result IrisScriptAssembly::Report(ScriptReport& report)
-    {
-        struct Table
-        {
-            const char* noun;
-            std::string_view type;
-        };
-        constexpr Table tables[] = {{"component", GeneratedNames::ComponentTable},
-                                    {"event", GeneratedNames::EventTable}};
-        for (const auto& [noun, type] : tables)
-        {
-            const auto table = m_component.FindType(type);
-            if (table.status == Iris::CallStatus::NotFound)
-            {
-                continue;
-            }
-            if (!table.Succeeded())
-            {
-                return Result{table.status,
-                              std::string("The ") + noun + " table could not be read: " + table.diagnostic, false};
-            }
-            const auto run = table.value->FindMethod<void()>(GeneratedNames::Register);
-            if (!run.Succeeded())
-            {
-                return Result{run.status,
-                              std::string("The ") + noun + " table has no Register method: " + run.diagnostic, false};
-            }
-            // The table's Register calls the engine's natives, which put what it reports where the slot points.
-            m_context.reporting = &report;
-            const auto ran = run.value->Invoke();
-            m_context.reporting = nullptr;
-            if (!ran.Succeeded())
-            {
-                return Result{ran.status,
-                              std::string("The script assembly could not report its ") + noun + "s: " + ran.diagnostic,
-                              ran.diagnosticTruncated};
-            }
-        }
-        return Succeeded();
-    }
-
-    std::string IrisScriptAssembly::Fingerprint(const Description& description)
-    {
-        return FingerprintOf(m_component, description);
-    }
-
-    Result IrisScriptAssembly::CheckNativeAgainstCSharp(const ComponentRegistry& registry)
-    {
-        if (auto validated = ValidateTable(registry.Components(), m_component); !validated.Succeeded())
-        {
-            return validated;
-        }
-        if (auto validated = ValidateTable(registry.Events(), m_component); !validated.Succeeded())
-        {
-            return validated;
-        }
-        if (auto validated = ValidateTable(registry.SharedStructs(), m_component); !validated.Succeeded())
-        {
-            return validated;
-        }
-        return ValidateTable(registry.Resources(), m_component);
-    }
 
     // Admission, in an order that puts the one irreversible step as late as it can go and undoes everything after it:
     //   1. discover what the script defines, kind by kind, and check it;
