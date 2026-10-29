@@ -1,4 +1,4 @@
-# 07: the pose override and override weights let a subtree go limp and blend back, shown in the Going limp scene
+# 09: the pose override and override weights let a subtree go limp and blend back, shown in the Going limp scene
 
 **What to build:** gameplay (or ragdoll glue) sets world-space targets on bones through `PoseOverride`, scales them per bone or per subtree with override weights, and the skeleton blends between animation and the targets, proven by ADR-0038's headless handover test and AnimationDemo's scene 6 (spec: "Pose override, override weights and the ragdoll handover"; ADR-0033, ADR-0038).
 

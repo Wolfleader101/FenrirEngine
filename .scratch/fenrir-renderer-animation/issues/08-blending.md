@@ -1,4 +1,4 @@
-# 06: clips blend through crossfades, override and additive layers and bone masks, shown in the Blending scene
+# 08: clips blend through crossfades, override and additive layers and bone masks, shown in the Blending scene
 
 **What to build:** changing a clip crossfades, `AnimationLayer` entities layer upper-body and additive clips over the `Animator`, bone masks shape them, weights never touch clocks, and events fire only from contributing clips, all proven headlessly and in AnimationDemo's scene 4 (spec: "FenrirAnimation: blending"; ADR-0036).
 

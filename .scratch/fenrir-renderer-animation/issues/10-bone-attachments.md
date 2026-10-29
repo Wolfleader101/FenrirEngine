@@ -1,4 +1,4 @@
-# 08: bone attachments place entities at bones under any parent, and models spawn their attachment points
+# 10: bone attachments place entities at bones under any parent, and models spawn their attachment points
 
 **What to build:** a `BoneAttachment` on an entity places it at a bone every frame under any parent, attachments chain in dependency order, failures keep the last transform and report an `AttachmentState`, detaching keeps the local or world transform, and `SpawnSkeletons` attaches a model's ordinary nodes below bones, shown in the first part of AnimationDemo's scene 5 (spec: "Bone attachments", "Spawning" step 3; ADR-0037).
 

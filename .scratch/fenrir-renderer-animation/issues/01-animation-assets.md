@@ -8,14 +8,13 @@
 - **`BoneMaskData`** (`AssetHandle<BoneMask>`): ordered `{ boneName, weight, scope }` entries with `Bone` or `Subtree` scope, later entries overriding, unlisted bones 0; `Include` and `Clear` bump the revision.
 - **`Model`**: each node record gains its kind (ordinary, synthetic owner, or bone *i* of skeleton *k*), and the model lists skeletons and clips as labelled sub-assets.
 - **`SkinningSource`**: the abstract, stateless interface in FenrirAssets' public headers with `PoseState` (`Ready`, `Unavailable`, `Missing`), the per-scene-and-entity answers (skeleton handle, `PoseGeneration`, palette, model matrices) and `SpawnSkeletons(scene, model, spawned)`. Nothing implements it yet; `PublicHeaders.cpp` proves it compiles without FenrirSkeleton.
-- **`Fenrir.Assets`**: `AssetHandle<T>` gains the `Skeleton`, `Clip` and `BoneMask` markers so the later C# tickets can mirror handles (spec: "Scripting: Packaging"). No other C# here.
 - **GLOSSARY.md** gains any of the spec's vocabulary these types introduce that it lacks (bone, clip, bone mask, bind signature, skinning source, skeleton bind space…).
 
-The importer still leaves skinned meshes out (ticket 02 changes that). No demo scene: this ticket's proof is the tests.
+No C#: the `Fenrir.Assets` handle markers come with ticket 13. The importer still leaves skinned meshes out (ticket 02 changes that for glTF, ticket 06 for FBX). No demo scene: this ticket's proof is the tests.
 
 **Blocked by:** None (can start immediately)
 
-**Touches:** `packages/FenrirAssets/include/FenrirAssets/`, `packages/FenrirAssets/src/`, `packages/FenrirAssets/tests/`, `packages/FenrirAssets/Managed/Fenrir.Assets/Handles.cs`, `GLOSSARY.md`
+**Touches:** `packages/FenrirAssets/include/FenrirAssets/`, `packages/FenrirAssets/src/`, `packages/FenrirAssets/tests/`, `GLOSSARY.md`
 
 **Status:** ready-for-agent
 
