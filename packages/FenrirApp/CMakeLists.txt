@@ -11,3 +11,6 @@ target_include_directories(FenrirApp PUBLIC include)
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)
 endif()
+
+# Its shared types (ADR-0042): `cmake --build <dir> --target fenrir-describe-api` regenerates api/FenrirApp.api.json.
+fenrir_describe_api(FenrirApp api/FenrirApp.api.toml)

@@ -56,6 +56,9 @@ public sealed class QueryGenerator : IIncrementalGenerator
         return text.ToString();
     }
 
+    // Where component i (1-based) sits in a row: after the entity's words.
+    private static string ComponentIndex(int i) => i == 1 ? "QueryNative.EntityWords" : "QueryNative.EntityWords + " + (i - 1);
+
     private static string Names(int arity) => string.Join(", ", Enumerable.Range(1, arity).Select(static i => "T" + i));
 
     private static string Constraints(int arity) =>
@@ -65,8 +68,9 @@ public sealed class QueryGenerator : IIncrementalGenerator
     {
         string names = Names(arity);
         string constraints = Constraints(arity);
-        // A row is the entity (two words: a C++ Fenrir::Entity, which C# reads whole) and a pointer per component.
-        string stride = (arity + 2).ToString();
+        // A row is the entity (QueryNative.EntityWords words: a C++ Fenrir::Entity, which C# reads whole) and a pointer
+        // per component, so component i (1-based) is at EntityWords + i - 1.
+        string stride = "(" + arity + " + QueryNative.EntityWords)";
         IEnumerable<int> each = Enumerable.Range(1, arity);
 
         // The delegate ForEach takes (a ref struct cannot be a type argument of Action<>, on every runtime we target).
@@ -81,7 +85,7 @@ public sealed class QueryGenerator : IIncrementalGenerator
         text.Append("        internal QueryRow(nuint* row) => this.row = row;\n");
         text.Append("        /// <summary>The entity, with its scene set as C++ holds it.</summary>\n        public Entity Entity => *(Entity*)row;\n");
         foreach (int i in each)
-            text.Append($"        /// <summary>The entity's T{i}.</summary>\n        public Ref<T{i}> Component{i} => new((T{i}*)row[{i + 1}]);\n");
+            text.Append($"        /// <summary>The entity's T{i}.</summary>\n        public Ref<T{i}> Component{i} => new((T{i}*)row[{ComponentIndex(i)}]);\n");
         text.Append("        public void Deconstruct(out Entity entity, ")
             .Append(string.Join(", ", each.Select(static i => $"out Ref<T{i}> component{i}"))).Append(")\n        {\n");
         text.Append("            entity = Entity;\n");
@@ -113,7 +117,7 @@ public sealed class QueryGenerator : IIncrementalGenerator
         text.Append("            try\n            {\n                for (int index = 0; index < count; index++)\n                {\n");
         text.Append("                    nuint* row = rows + (long)index * ").Append(stride).Append(";\n");
         text.Append("                    action(*(Entity*)row, ")
-            .Append(string.Join(", ", each.Select(static i => $"new Ref<T{i}>((T{i}*)row[{i + 1}])"))).Append(");\n");
+            .Append(string.Join(", ", each.Select(static i => $"new Ref<T{i}>((T{i}*)row[{ComponentIndex(i)}])"))).Append(");\n");
         text.Append("                }\n            }\n            finally\n            {\n                QueryNative.Release(rows);\n            }\n        }\n    }\n\n");
     }
 
