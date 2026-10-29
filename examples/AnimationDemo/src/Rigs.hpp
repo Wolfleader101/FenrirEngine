@@ -34,6 +34,12 @@ namespace AnimationDemo
     /** @brief The asset paths of the stand-in models, under the asset root. */
     inline constexpr std::string_view MannequinFile = "mannequin.gltf";
     inline constexpr std::string_view CritterFile = "critter.gltf";
+    /** @brief Khronos's Fox (assets/ATTRIBUTION.md): about 80 units tall, so drawn at FoxScale. Clips: Survey, Walk,
+     * Run. */
+    inline constexpr std::string_view FoxFile = "fox/Fox.gltf";
+    inline constexpr float FoxScale = 0.01f;
+    /** @brief Khronos's CesiumMan, untextured (assets/ATTRIBUTION.md): one walk clip. */
+    inline constexpr std::string_view CesiumManFile = "cesium-man/CesiumMan.gltf";
 
     /** @brief A model spawned through the renderer's SpawnModel, with its skeleton entity and skinned mesh entities. */
     struct Rig
@@ -55,11 +61,11 @@ namespace AnimationDemo
     };
 
     /**
-     * @brief Loads `file` for `scene` (owned by it) and spawns it at `position`, turned `yaw` radians about +Y. An
-     * invalid Rig, logged as an error, when the file does not load or has no skeleton.
+     * @brief Loads `file` for `scene` (owned by it) and spawns it at `position`, turned `yaw` radians about +Y and
+     * scaled by `scale`. An invalid Rig, logged as an error, when the file does not load or has no skeleton.
      */
     Rig SpawnRig(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file, Fenrir::Math::Vec3 position,
-                 float yaw = 0.0f);
+                 float yaw = 0.0f, float scale = 1.0f);
 
     /** @brief Gives the skeleton entity an Animator playing `clip`. */
     void Play(Fenrir::Entity skeleton, Fenrir::AssetHandle<Fenrir::Clip> clip,

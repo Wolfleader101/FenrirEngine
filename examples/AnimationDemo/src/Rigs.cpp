@@ -42,7 +42,7 @@ namespace AnimationDemo
         return data != nullptr && index < data->clips.size() ? data->clips[index] : Fenrir::AssetHandle<Fenrir::Clip>{};
     }
 
-    Rig SpawnRig(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file, Vec3 position, float yaw)
+    Rig SpawnRig(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file, Vec3 position, float yaw, float scale)
     {
         Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
         const auto model = store.Load<Fenrir::Model>(file, scene);
@@ -62,6 +62,7 @@ namespace AnimationDemo
         auto& transform = rig.root.GetComponent<Fenrir::Transform>();
         transform.pos = position;
         transform.rot = Fenrir::Math::AngleAxis(yaw, Vec3(0.0f, 1.0f, 0.0f));
+        transform.scale = Vec3(scale);
         Collect(rig.root, rig);
         if (!rig.skeleton.IsValid())
         {

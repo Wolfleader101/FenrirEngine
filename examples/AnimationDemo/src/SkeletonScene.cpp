@@ -1,8 +1,12 @@
+#include <array>
+#include <cstddef>
 #include <format>
+#include <string_view>
 
 #include "AnimationScenes.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirDebugDraw/DebugDraw.hpp"
+#include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirScene/Scene.hpp"
@@ -15,38 +19,53 @@ namespace AnimationDemo
         using Fenrir::Colour;
         using Fenrir::Math::Vec3;
 
+        /** @brief One model in the row: what it is, where it stands, and the clip it plays. */
+        struct Model
+        {
+            std::string_view file;
+            std::string_view label;
+            Vec3 position;
+            float yaw;
+            float scale;
+            std::size_t clip;
+            /** @brief How high above its root its label sits, in world units. */
+            float labelHeight;
+        };
+
+        const std::array<Model, 3> Models{{
+            {MannequinFile,
+             "Mannequin (procedural)",
+             {-1.6f, 0.0f, 0.0f},
+             0.5f,
+             1.0f,
+             static_cast<std::size_t>(MannequinClip::Walk),
+             2.3f},
+            {CesiumManFile, "CesiumMan (Khronos, untextured)", {0.0f, 0.0f, -0.2f}, 0.0f, 1.0f, 0, 1.8f},
+            // The Fox's clips are Survey, Walk and Run.
+            {FoxFile, "Fox (Khronos)", {1.8f, 0.0f, 0.2f}, -0.9f, FoxScale, 1, 1.1f},
+        }};
+
         /** @brief Scene 2's state, a resource of its FenrirScene. */
         struct SkeletonState
         {
-            Rig mannequin;
-            Rig critter;
+            std::array<Rig, 3> rigs;
             bool meshes = true;
             bool bones = true;
             bool names = false;
         };
 
-        void ShowMeshes(const Rig& rig, bool visible)
-        {
-            for (const Fenrir::Entity& mesh : rig.meshes)
-            {
-                mesh.GetComponent<Fenrir::MeshRenderer>().visible = visible;
-            }
-        }
-
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
         {
             AddStage(app, scene);
             SkeletonState& state = scene.AddResource<SkeletonState>();
-            state.mannequin = SpawnRig(app, scene, MannequinFile, Vec3(-0.8f, 0.0f, 0.0f), 0.5f);
-            state.critter = SpawnRig(app, scene, CritterFile, Vec3(1.2f, 0.0f, 0.3f), -0.9f);
-            if (state.mannequin.IsValid())
+            for (std::size_t i = 0; i < Models.size(); ++i)
             {
-                Play(state.mannequin.skeleton,
-                     state.mannequin.Clip(app, static_cast<std::size_t>(MannequinClip::Walk)));
-            }
-            if (state.critter.IsValid())
-            {
-                Play(state.critter.skeleton, state.critter.Clip(app, 0));
+                const Model& model = Models.at(i);
+                state.rigs.at(i) = SpawnRig(app, scene, model.file, model.position, model.yaw, model.scale);
+                if (state.rigs.at(i).IsValid())
+                {
+                    Play(state.rigs.at(i).skeleton, state.rigs.at(i).Clip(app, model.clip));
+                }
             }
         }
 
@@ -54,7 +73,7 @@ namespace AnimationDemo
         {
             SkeletonState* state = scene.GetResource<SkeletonState>();
             Fenrir::DebugDraw* draw = scene.GetResource<Fenrir::DebugDraw>();
-            if (state == nullptr || draw == nullptr || !state->mannequin.IsValid() || !state->critter.IsValid())
+            if (state == nullptr || draw == nullptr)
             {
                 return;
             }
@@ -62,8 +81,13 @@ namespace AnimationDemo
             if (keyboard.JustPressed(Fenrir::Key::M))
             {
                 state->meshes = !state->meshes;
-                ShowMeshes(state->mannequin, state->meshes);
-                ShowMeshes(state->critter, state->meshes);
+                for (const Rig& rig : state->rigs)
+                {
+                    for (const Fenrir::Entity& mesh : rig.meshes)
+                    {
+                        mesh.GetComponent<Fenrir::MeshRenderer>().visible = state->meshes;
+                    }
+                }
                 app.Logger()->Info("Skeleton: M, meshes {}", state->meshes ? "shown" : "hidden");
             }
             if (keyboard.JustPressed(Fenrir::Key::B))
@@ -76,12 +100,18 @@ namespace AnimationDemo
                 state->names = !state->names;
                 app.Logger()->Info("Skeleton: N, names {}", state->names ? "shown" : "hidden");
             }
-            DrawBones(app, scene, *draw, state->mannequin.skeleton, state->bones, state->names);
-            DrawBones(app, scene, *draw, state->critter.skeleton, state->bones, state->names);
-            draw->WorldText(Vec3(0.0f, 2.3f, 0.0f), "Mannequin (stand-in for the Quaternius humanoid)", Colour::White,
-                            {.relativeTo = state->mannequin.root});
-            draw->WorldText(Vec3(0.0f, 1.0f, 0.0f), "Critter (stand-in for the Khronos Fox)", Colour::White,
-                            {.relativeTo = state->critter.root});
+            for (std::size_t i = 0; i < Models.size(); ++i)
+            {
+                const Rig& rig = state->rigs.at(i);
+                if (!rig.IsValid())
+                {
+                    continue;
+                }
+                DrawBones(app, scene, *draw, rig.skeleton, state->bones, state->names);
+                // In world units: the Fox's root is scaled, so text relative to it would be too.
+                const Vec3 at = rig.root.GetComponent<Fenrir::Transform>().pos;
+                draw->WorldText(at + Vec3(-0.4f, Models.at(i).labelHeight, 0.0f), Models.at(i).label, Colour::White);
+            }
             draw->ScreenText({16.0f, 120.0f},
                              std::format("Meshes {}, bones {}, names {}", state->meshes ? "on" : "off",
                                          state->bones ? "on" : "off", state->names ? "on" : "off"),
@@ -95,7 +125,7 @@ namespace AnimationDemo
         scene.name = "Skeleton";
         scene.keyHelp = "M: show or hide the meshes. B: the bones and their axes. N: the bones' names.";
         scene.keys = {Fenrir::Key::N, Fenrir::Key::M, Fenrir::Key::B, Fenrir::Key::M, Fenrir::Key::B, Fenrir::Key::N};
-        scene.camera = {{0.2f, 1.3f, 4.0f}, 0.0f, -0.12f};
+        scene.camera = {{0.0f, 1.3f, 4.5f}, 0.0f, -0.12f};
         scene.spawn = Spawn;
         scene.update = Update;
         return scene;
