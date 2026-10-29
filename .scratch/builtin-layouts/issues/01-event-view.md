@@ -13,13 +13,16 @@
 
 **Touches:** `packages/FenrirApp/api/`, `packages/FenrirApp/CMakeLists.txt`, `packages/FenrirScripting/api/FenrirScripting.binding.toml`, `packages/FenrirScripting/api/FenrirScripting.natives.json`, `packages/FenrirScripting/CMakeLists.txt`, `packages/FenrirScripting/src/Bindings.cpp` (the `EventReadAfter` native only; ticket 02 edits `QueryCount`'s doc in the same file), `packages/FenrirScripting/src/EngineContext.hpp`, `packages/FenrirScripting/Managed/Fenrir.Scripting/Events.cs`, `packages/FenrirScripting/Managed/Fenrir.Scripting/Generated/`, `packages/FenrirScripting/include/FenrirScripting/Generated/`, `packages/FenrirScripting/README.md`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `packages/FenrirApp/api/FenrirApp.api.json` describes `Fenrir::RawEventRange` with five fields; `grep -rn "nuint\[5\]\|view\[" packages/FenrirScripting/Managed/Fenrir.Scripting/Events.cs packages/FenrirScripting/src/Bindings.cpp` finds nothing.
-- [ ] `fenrir-describe-api` and `fenrir-generate-bindings` re-run with no further change; every package binding is unchanged (the bindings that `uses` the built-in one load its descriptions through it: if one of them changes, say so in the PR).
-- [ ] The scripting tests pass under the msvc-x64-debug preset, `EventTests.cpp` and `Tests/Fixture/Events.cs` unchanged (the `missed=` case there reads the fifth field end to end).
-- [ ] `check_tickets.py` and clang-format pass.
+- [x] `packages/FenrirApp/api/FenrirApp.api.json` describes `Fenrir::RawEventRange` with five fields; `grep -rn "nuint\[5\]\|view\[" packages/FenrirScripting/Managed/Fenrir.Scripting/Events.cs packages/FenrirScripting/src/Bindings.cpp` finds nothing.
+- [x] `fenrir-describe-api` and `fenrir-generate-bindings` re-run with no further change; every package binding is unchanged (the bindings that `uses` the built-in one load its descriptions through it: if one of them changes, say so in the PR).
+- [x] The scripting tests pass under the msvc-x64-debug preset, `EventTests.cpp` and `Tests/Fixture/Events.cs` unchanged (the `missed=` case there reads the fifth field end to end).
+- [x] `check_tickets.py` and clang-format pass.
 
 ## Comments
+
+Built 2026-10-28 in the spec worktree, stacked on the spec branch. `QueryFill` still takes `Detail::NativeAddress*`, so the alias and the `[natives] types` line stay. The mirror's generated fields are capitalised (`Older`, `OlderCount`, `Newer`, `NewerCount`, `Missed`), pointers as `ulong`. No other binding's output changed; the README had no five-word mention. msvc-x64-debug: 17/17 scripting tests.
+
 
 Filed from the builtin-layouts grilling (spec decisions 2, 3). Cut from `dotnet-scripting`; runs side by side with 02 and 03.
