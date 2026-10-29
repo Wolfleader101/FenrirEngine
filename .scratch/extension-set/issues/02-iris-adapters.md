@@ -15,7 +15,9 @@ No behaviour changes; no test changes. The `friend class Detail::IrisNativeRegis
 
 **Touches:** `packages/FenrirScripting/src/IrisAdapters.hpp`, `packages/FenrirScripting/src/IrisAdapters.cpp`, `packages/FenrirScripting/src/Scripting.cpp`, `packages/FenrirScripting/src/ScriptData.hpp`, `packages/FenrirScripting/src/ScriptData.cpp`, `packages/FenrirScripting/CMakeLists.txt`
 
-**Status:** claimed
+**Status:** resolved
+
+Resolved: PR #226 merged into ticket 01's branch, #222 into the spec's, and the spec #217 into `dotnet-scripting` as `134c4fcf`.
 
 - [x] Cut `extension-set-02-iris-adapters` from 01's pushed branch, targeting it.
 - [x] `grep -n "class Iris" packages/FenrirScripting/src/*.hpp packages/FenrirScripting/src/*.cpp` finds the four adapters in `IrisAdapters.hpp` only; `grep -n "IrisScriptAssembly" packages/FenrirScripting/src/ScriptData.hpp packages/FenrirScripting/src/ScriptData.cpp` finds nothing.

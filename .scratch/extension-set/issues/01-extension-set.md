@@ -16,7 +16,9 @@
 
 **Touches:** `packages/FenrirScripting/src/NativeRegistrar.hpp`, `packages/FenrirScripting/src/ExtensionSet.hpp`, `packages/FenrirScripting/src/ExtensionSet.cpp`, `packages/FenrirScripting/src/Scripting.cpp`, `packages/FenrirScripting/include/FenrirScripting/ScriptingExtension.hpp`, `packages/FenrirScripting/Tests/Rules/`, `packages/FenrirScripting/Tests/CMakeLists.txt`, `packages/FenrirScripting/Tests/AdmissionTests.cpp`, `GLOSSARY.md`
 
-**Status:** claimed
+**Status:** resolved
+
+Resolved: PR #222 merged into the spec branch, and the spec #217 (rewritten as the stack) into `dotnet-scripting` as `134c4fcf`.
 
 - [x] Cut `extension-set-01-extension-set` from `dotnet-scripting`, targeting it. If candidate 1+7's tickets have touched `packages/FenrirScripting/Tests/CMakeLists.txt` meanwhile, rebase onto them.
 - [x] The spec's "Done looks like" greps hold (the ticket-02 lines excepted); the eleven Rules cases pass in under a second each.

@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 
 # Extension set: the extensions' native rules behind a seam in Install, with a fake registrar for Rules tests
 
