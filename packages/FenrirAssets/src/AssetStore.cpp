@@ -38,8 +38,8 @@ namespace Fenrir
     namespace
     {
         // The words log messages use for each kind, in AssetKind's order.
-        constexpr std::array<std::string_view, Detail::AssetKindCount> kindNames = {"mesh", "image", "material",
-                                                                                    "shader", "model"};
+        constexpr std::array<std::string_view, Detail::AssetKindCount> kindNames = {
+            "mesh", "image", "material", "shader", "model", "skeleton", "clip", "bone mask"};
 
         std::string_view KindName(Detail::AssetKind kind)
         {
@@ -335,15 +335,20 @@ namespace Fenrir
             {
                 return fail(LoadFailure::NoImporter, "a model file holds no shaders");
             }
+            if (kind == Detail::AssetKind::BoneMask)
+            {
+                return fail(LoadFailure::NoImporter, "a model file holds no bone masks");
+            }
             if (kind == Detail::AssetKind::Model && resolved.labelled)
             {
-                return fail(LoadFailure::LabelNotFound, "a model's sub-assets are meshes, materials and images, so '" +
-                                                            resolved.label + "' names no model");
+                return fail(LoadFailure::LabelNotFound,
+                            "a model's sub-assets are meshes, materials, images, skeletons and clips, so '" +
+                                resolved.label + "' names no model");
             }
             if (kind != Detail::AssetKind::Model && !resolved.labelled)
             {
-                return fail(LoadFailure::LabelNotFound,
-                            "a model file's meshes, materials and images load by label, such as 'file#Mesh0'");
+                return fail(LoadFailure::LabelNotFound, "a model file's meshes, materials, images, skeletons and clips "
+                                                        "load by label, such as 'file#Mesh0'");
             }
             const std::string fileKey = Utf8Text(resolved.file);
             if (!TableOf(*m_state, Detail::AssetKind::Model).byKey.contains(fileKey))
@@ -385,7 +390,8 @@ namespace Fenrir
         {
             return fail(LoadFailure::ImportFailed, std::move(imported.error));
         }
-        if (std::string problem = Detail::PrepareAsset(*imported.image); !problem.empty())
+        Detail::AssetWarnings warnings;
+        if (std::string problem = Detail::PrepareAsset(*imported.image, warnings); !problem.empty())
         {
             return fail(LoadFailure::ImportFailed, std::move(problem));
         }
@@ -454,6 +460,14 @@ namespace Fenrir
         {
             share(Detail::AssetKind::Image, image.index, image.generation);
         }
+        for (const AssetHandle<Skeleton> skeleton : model.skeletons)
+        {
+            share(Detail::AssetKind::Skeleton, skeleton.index, skeleton.generation);
+        }
+        for (const AssetHandle<Clip> clip : model.clips)
+        {
+            share(Detail::AssetKind::Clip, clip.index, clip.generation);
+        }
     }
 
     bool AssetStore::ReplaceSlot(Detail::AssetKind kind, Detail::AssetSlot slot, Detail::AssetBox data)
@@ -505,5 +519,24 @@ namespace Fenrir
     void AssetStore::Refuse(std::string_view assetName, std::string_view action, const std::string& problem)
     {
         m_state->logger->Error("Could not {} a {}: {}", action, assetName, problem);
+    }
+
+    void AssetStore::Warn(std::string_view assetName, std::string_view action, const Detail::AssetWarnings& warnings)
+    {
+        for (const std::string& warning : warnings)
+        {
+            m_state->logger->Warn("A {} {}: {}", assetName, action, warning);
+        }
+    }
+
+    Detail::AssetRecord* AssetStore::EditRecord(Detail::AssetKind kind, Detail::AssetSlot slot, std::string_view action)
+    {
+        Detail::AssetRecord* record = m_state->Find(kind, slot);
+        if (record == nullptr || record->data == nullptr)
+        {
+            m_state->logger->Error("Could not {}: the {} handle is empty or stale", action, KindName(kind));
+            return nullptr;
+        }
+        return record;
     }
 } // namespace Fenrir

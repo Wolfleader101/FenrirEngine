@@ -63,6 +63,7 @@ The rule throughout is that a wrong configuration is visible and skipped, never 
 ## Bounds
 
 - **Per-bone boxes on `MeshData`.** FenrirAssets computes one box per bone in that bone's space (`B[i] × v`, over the vertices whose quantised weight for bone *i* is positive), plus one box for zero-weight vertices in skeleton bind space. They are rebuilt with every import, `Add` and `Replace`, so they follow the mesh's revision.
+  - *Amended while building the animation spec's ticket 01 (2026-10-29):* a mesh holds no inverse binds, which are its skeleton's, so FenrirAssets keeps each bone's box in skeleton bind space (over `v`, not `B[i] × v`). `GetWorldBounds` moves each by the bone's palette matrix (`M_model[i] × B[i]`) instead of by `M_model[i]`, which bounds the same vertices and stays conservative.
 - **`GetWorldBounds` for a skinned mesh** unions `M_model[i] × box_i` over the bones, plus the zero-weight box, then applies `W(owner)`. It is computed on call from FenrirSkeleton's current model matrices (ADR-0023's on-call rule) and returns `nullopt` when the skeleton is not `Ready`. It is conservative for linear blend skinning with non-negative normalised weights, not necessarily tight. The public API stays the same if better bounds replace it, and later culling uses the same boxes.
 
 ## Compatibility
