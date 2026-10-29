@@ -10,7 +10,7 @@
 #include "RendererScriptingApp.hpp"
 
 using namespace Fenrir;
-using namespace RendererScriptingTests;
+using namespace Fenrir::Testing;
 
 namespace
 {

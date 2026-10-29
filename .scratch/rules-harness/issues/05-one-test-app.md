@@ -10,11 +10,11 @@
 
 **Touches:** `packages/FenrirScripting/Tests/ScriptingApp.hpp`, `packages/FenrirScripting/Tests/FixtureApp.hpp`, `packages/FenrirScripting/Tests/CMakeLists.txt`, `packages/FenrirScripting/api/FenrirScripting.binding.toml`, `packages/FenrirScripting/api/FenrirMath.binding.toml`, `packages/*/Scripting/Tests/*ScriptingApp.hpp`, `packages/*/Scripting/Tests/*.cpp` (the .NET-driven test sources, not the rules tests ticket 04 edits), `packages/*/Scripting/api/*.binding.toml`, `packages/*/Scripting/Tests/Generated/*DefaultsTests.cpp`, `packages/FenrirScripting/Tests/Generated/*DefaultsTests.cpp`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `grep -rn "^namespace" packages/*/Scripting/Tests/*ScriptingApp.hpp packages/FenrirScripting/Tests/ScriptingApp.hpp` finds only `Fenrir::Testing`; `grep -rn "ScriptingTests::" packages` finds nothing; `FixtureApp.hpp` does not exist.
-- [ ] Every `[tests] setup` reads `Fenrir::Testing::<Name>ScriptingApp app;`; `fenrir-generate-bindings` re-run changes nothing further.
-- [ ] `ctest -N` lists the same test names; every `*Scripting` CTest passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] `grep -rn "^namespace" packages/*/Scripting/Tests/*ScriptingApp.hpp packages/FenrirScripting/Tests/ScriptingApp.hpp` finds only `Fenrir::Testing`; `grep -rn "ScriptingTests::" packages` finds nothing; `FixtureApp.hpp` does not exist.
+- [x] Every `[tests] setup` reads `Fenrir::Testing::<Name>ScriptingApp app;`; `fenrir-generate-bindings` re-run changes nothing further.
+- [x] `ctest -N` lists the same test names; every `*Scripting` CTest passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
 
 ## Comments
 

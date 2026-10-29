@@ -41,7 +41,7 @@ cpp = "../Tests/Generated/FenrirAssetsDefaultsTests.cpp"
 csharp = "../Tests/Generated/FenrirAssetsDefaults.cs"
 class = "AssetsScriptFixture.Defaults"
 includes = ["AssetsScriptingApp.hpp"]
-setup = "AssetsScriptingTests::AssetsScriptingApp app;"
+setup = "Fenrir::Testing::AssetsScriptingApp app;"
 tags = "[assets][scripting][bindings]"
 
 # Hand-written in the contract (Handles.cs) and mapped by hand (AssetMappings.hpp, included where they are bound):

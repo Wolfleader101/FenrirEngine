@@ -58,19 +58,19 @@ namespace
 
 TEST_CASE("C#'s new WindowCloseRequestedEvent() has C++'s Fenrir::WindowCloseRequestedEvent{} defaults, field by field", "[window][scripting][bindings]")
 {
-    WindowScriptingTests::WindowScriptingApp app;
+    Fenrir::Testing::WindowScriptingApp app;
     CheckDefaults<Fenrir::WindowCloseRequestedEvent>(Fenrir::ScriptingProbe::Component(app.scripting), "WindowCloseRequestedEvent");
 }
 
 TEST_CASE("C#'s new WindowSize() has C++'s Fenrir::WindowSize{} defaults, field by field", "[window][scripting][bindings]")
 {
-    WindowScriptingTests::WindowScriptingApp app;
+    Fenrir::Testing::WindowScriptingApp app;
     CheckDefaults<Fenrir::WindowSize>(Fenrir::ScriptingProbe::Component(app.scripting), "WindowSize");
 }
 
 TEST_CASE("C#'s new WindowResizedEvent() has C++'s Fenrir::WindowResizedEvent{} defaults, field by field", "[window][scripting][bindings]")
 {
-    WindowScriptingTests::WindowScriptingApp app;
+    Fenrir::Testing::WindowScriptingApp app;
     CheckDefaults<Fenrir::WindowResizedEvent>(Fenrir::ScriptingProbe::Component(app.scripting), "WindowResizedEvent");
 }
 

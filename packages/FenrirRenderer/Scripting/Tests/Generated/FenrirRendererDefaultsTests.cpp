@@ -62,37 +62,37 @@ namespace
 
 TEST_CASE("C#'s new AmbientLight() has C++'s Fenrir::AmbientLight{} defaults, field by field", "[renderer][scripting][bindings]")
 {
-    RendererScriptingTests::RendererScriptingApp app;
+    Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::AmbientLight>(Fenrir::ScriptingProbe::Component(app.scripting), "AmbientLight");
 }
 
 TEST_CASE("C#'s new Camera() has C++'s Fenrir::Camera{} defaults, field by field", "[renderer][scripting][bindings]")
 {
-    RendererScriptingTests::RendererScriptingApp app;
+    Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::Camera>(Fenrir::ScriptingProbe::Component(app.scripting), "Camera");
 }
 
 TEST_CASE("C#'s new DirectionalLight() has C++'s Fenrir::DirectionalLight{} defaults, field by field", "[renderer][scripting][bindings]")
 {
-    RendererScriptingTests::RendererScriptingApp app;
+    Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::DirectionalLight>(Fenrir::ScriptingProbe::Component(app.scripting), "DirectionalLight");
 }
 
 TEST_CASE("C#'s new MeshRenderer() has C++'s Fenrir::MeshRenderer{} defaults, field by field", "[renderer][scripting][bindings]")
 {
-    RendererScriptingTests::RendererScriptingApp app;
+    Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::MeshRenderer>(Fenrir::ScriptingProbe::Component(app.scripting), "MeshRenderer");
 }
 
 TEST_CASE("C#'s new RendererStats() has C++'s Fenrir::RendererStats{} defaults, field by field", "[renderer][scripting][bindings]")
 {
-    RendererScriptingTests::RendererScriptingApp app;
+    Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::RendererStats>(Fenrir::ScriptingProbe::Component(app.scripting), "RendererStats");
 }
 
 TEST_CASE("C#'s new Sky() has C++'s Fenrir::Sky{} defaults, field by field", "[renderer][scripting][bindings]")
 {
-    RendererScriptingTests::RendererScriptingApp app;
+    Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::Sky>(Fenrir::ScriptingProbe::Component(app.scripting), "Sky");
 }
 

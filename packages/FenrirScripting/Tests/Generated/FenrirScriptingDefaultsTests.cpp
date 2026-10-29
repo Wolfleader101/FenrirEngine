@@ -5,7 +5,7 @@
 
 #include "../../include/FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 #include "ScriptingProbe.hpp"
-#include "FixtureApp.hpp"
+#include "ScriptingApp.hpp"
 
 #include <Iris/FieldDifferences.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -58,25 +58,25 @@ namespace
 
 TEST_CASE("C#'s new Entity() has C++'s Fenrir::Entity{} defaults, field by field", "[scripting][bindings]")
 {
-    Fenrir::Testing::FixtureApp app;
+    Fenrir::Testing::ScriptingApp app;
     CheckDefaults<Fenrir::Entity>(Fenrir::ScriptingProbe::Component(app.scripting), "Entity");
 }
 
 TEST_CASE("C#'s new Name() has C++'s Fenrir::Name{} defaults, field by field", "[scripting][bindings]")
 {
-    Fenrir::Testing::FixtureApp app;
+    Fenrir::Testing::ScriptingApp app;
     CheckDefaults<Fenrir::Name>(Fenrir::ScriptingProbe::Component(app.scripting), "Name");
 }
 
 TEST_CASE("C#'s new Relationship() has C++'s Fenrir::Relationship{} defaults, field by field", "[scripting][bindings]")
 {
-    Fenrir::Testing::FixtureApp app;
+    Fenrir::Testing::ScriptingApp app;
     CheckDefaults<Fenrir::Relationship>(Fenrir::ScriptingProbe::Component(app.scripting), "Relationship");
 }
 
 TEST_CASE("C#'s new Transform() has C++'s Fenrir::Transform{} defaults, field by field", "[scripting][bindings]")
 {
-    Fenrir::Testing::FixtureApp app;
+    Fenrir::Testing::ScriptingApp app;
     CheckDefaults<Fenrir::Transform>(Fenrir::ScriptingProbe::Component(app.scripting), "Transform");
 }
 

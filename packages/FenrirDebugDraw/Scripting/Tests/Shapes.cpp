@@ -10,7 +10,7 @@
 #include "DebugDrawScriptingApp.hpp"
 
 using namespace Fenrir;
-using namespace DebugDrawScriptingTests;
+using namespace Fenrir::Testing;
 using Math::Vec3;
 
 namespace

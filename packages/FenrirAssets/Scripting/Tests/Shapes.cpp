@@ -11,7 +11,7 @@
 #include "FenrirAssetsScripting/AssetMappings.hpp"
 
 using namespace Fenrir;
-using namespace AssetsScriptingTests;
+using namespace Fenrir::Testing;
 
 namespace
 {
