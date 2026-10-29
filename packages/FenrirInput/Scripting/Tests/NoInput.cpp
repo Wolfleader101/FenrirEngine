@@ -1,22 +1,18 @@
-// The no-op rule (spec: "Scripting: the extensions"), with no .NET: with input's extension state but no input installed
-// in the app, every input native function does nothing, returns false or zero, and warns once per native function under
-// its name, through NativeCallHarness (the native guard spec: "Rule tests move onto it").
+// The no-op rule (spec: "Scripting: the extensions"), with no .NET: with the input extension as shipped
+// (Input::ScriptingExtension()) but no input installed in the app, every input native function does nothing, returns
+// false or zero, and warns once per native function under its name, through NativeCallHarness (the native guard spec:
+// "Rule tests move onto it"), which calls each native by its registered name through the registration's own thunk.
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <string>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirInput/Devices.hpp"
 #include "FenrirInput/InputTypes.hpp"
+#include "FenrirInputScripting/InputScripting.hpp"
 #include "FenrirMath/Math.hpp"
-#include "FenrirScripting/ScriptingExtension.hpp"
-#include "FenrirScripting/ZeroingOutputs.hpp"
-#include "Generated/FenrirInputNatives.hpp"
 #include "InputClaimsResource.hpp"
 #include "InputScriptingState.hpp"
 #include "NativeCallHarness.hpp"
@@ -25,88 +21,52 @@ namespace
 {
     using namespace Fenrir;
 
-    // A release build warns about nothing (WarnOnceRecord, ADR-0043); a debug build once per place and message.
-#ifdef NDEBUG
-    constexpr std::size_t once = 0;
-#else
-    constexpr std::size_t once = 1;
-#endif
-
     constexpr GamepadId pad{1};
-    constexpr const char* NoInput = "the app has no input (Input::Install), so it reads nothing";
-
-    // How many warnings the app logged that read `text`.
-    std::size_t Warnings(const Testing::NativeCallHarness& harness, const std::string& text)
-    {
-        const auto messages = harness.Logger().Messages();
-        return static_cast<std::size_t>(
-            std::count_if(messages.begin(), messages.end(), [&](const Testing::LoggedMessage& message) {
-                return message.level == Testing::LogLevel::Warn && message.text.find(text) != std::string::npos;
-            }));
-    }
-
-    // The warning the input extension's record logs for `message` in the native `native` (its type-and-method name).
-    std::string Logged(const char* native, const std::string& message)
-    {
-        return "[input scripting] " + std::string(native) + ": " + message + " (warned once)";
-    }
 } // namespace
 
 TEST_CASE("With no input installed, every input native reads false or zero and warns once under its name",
           "[input][scripting][rules]")
 {
-    Testing::NativeCallHarness harness;
-    InputScripting input;
+    Testing::NativeCallHarness harness({Input::ScriptingExtension()});
 
     // Each native twice, from one place, so a second call shows the warning was given once.
     for (int call = 0; call < 2; ++call)
     {
         INFO("Call " << call << ": a read did not give false or zero");
-        REQUIRE_FALSE(InputNatives::KeyIsDown(harness.Context("InputNative.KeyIsDown"), input, Key::Space));
-        REQUIRE_FALSE(
-            InputNatives::ScancodeIsDown(harness.Context("InputNative.ScancodeIsDown"), input, Scancode::Space));
-        REQUIRE_FALSE(InputNatives::KeyJustPressed(harness.Context("InputNative.KeyJustPressed"), input, Key::Space));
-        REQUIRE_FALSE(InputNatives::ScancodeJustPressed(harness.Context("InputNative.ScancodeJustPressed"), input,
-                                                        Scancode::Space));
-        REQUIRE_FALSE(InputNatives::KeyJustReleased(harness.Context("InputNative.KeyJustReleased"), input, Key::Space));
-        REQUIRE_FALSE(InputNatives::ScancodeJustReleased(harness.Context("InputNative.ScancodeJustReleased"), input,
-                                                         Scancode::Space));
-        REQUIRE(InputNatives::KeyModifiersOf(harness.Context("InputNative.KeyModifiersOf"), input) ==
-                KeyModifiers::None);
-        REQUIRE_FALSE(InputNatives::MouseIsDown(harness.Context("InputNative.MouseIsDown"), input, MouseButton::Left));
-        REQUIRE_FALSE(
-            InputNatives::MouseJustPressed(harness.Context("InputNative.MouseJustPressed"), input, MouseButton::Left));
-        REQUIRE_FALSE(InputNatives::MouseJustReleased(harness.Context("InputNative.MouseJustReleased"), input,
-                                                      MouseButton::Left));
+        REQUIRE_FALSE(harness.Call<bool>("InputNative.KeyIsDown", Key::Space));
+        REQUIRE_FALSE(harness.Call<bool>("InputNative.ScancodeIsDown", Scancode::Space));
+        REQUIRE_FALSE(harness.Call<bool>("InputNative.KeyJustPressed", Key::Space));
+        REQUIRE_FALSE(harness.Call<bool>("InputNative.ScancodeJustPressed", Scancode::Space));
+        REQUIRE_FALSE(harness.Call<bool>("InputNative.KeyJustReleased", Key::Space));
+        REQUIRE_FALSE(harness.Call<bool>("InputNative.ScancodeJustReleased", Scancode::Space));
+        REQUIRE(harness.Call<KeyModifiers>("InputNative.KeyModifiersOf") == KeyModifiers::None);
+        REQUIRE_FALSE(harness.Call<bool>("InputNative.MouseIsDown", MouseButton::Left));
+        REQUIRE_FALSE(harness.Call<bool>("InputNative.MouseJustPressed", MouseButton::Left));
+        REQUIRE_FALSE(harness.Call<bool>("InputNative.MouseJustReleased", MouseButton::Left));
 
         // The outputs through the registration's zeroing (ADR-0045), as C# reaches them: each starts off nonzero and
         // comes back zero, because the registration zeroes it and the native then writes nothing.
         Math::Vec2 position(3.0f, 4.0f);
-        ZeroingOutputs<&InputNatives::MousePosition, 2>::Call(harness.Context("InputNative.MousePosition"), input,
-                                                              &position);
+        harness.Call<void>("InputNative.MousePosition", &position);
         REQUIRE(position == Math::Vec2(0.0f, 0.0f));
         Math::Vec2 motion(3.0f, 4.0f);
-        ZeroingOutputs<&InputNatives::MouseMotion, 2>::Call(harness.Context("InputNative.MouseMotion"), input, &motion);
+        harness.Call<void>("InputNative.MouseMotion", &motion);
         REQUIRE(motion == Math::Vec2(0.0f, 0.0f));
         Math::Vec2 scroll(3.0f, 4.0f);
-        ZeroingOutputs<&InputNatives::MouseScroll, 2>::Call(harness.Context("InputNative.MouseScroll"), input, &scroll);
+        harness.Call<void>("InputNative.MouseScroll", &scroll);
         REQUIRE(scroll == Math::Vec2(0.0f, 0.0f));
 
         GamepadId pads[2] = {GamepadId{7}, GamepadId{8}};
-        REQUIRE(InputNatives::GamepadsConnected(harness.Context("InputNative.GamepadsConnected"), input, pads, 2) == 0);
+        REQUIRE(harness.Call<std::int32_t>("InputNative.GamepadsConnected", pads, 2) == 0);
         {
             INFO("A span was written to with no pads connected");
             REQUIRE(pads[0] == GamepadId{7});
         }
-        REQUIRE_FALSE(InputNatives::GamepadIsConnected(harness.Context("InputNative.GamepadIsConnected"), input, pad));
-        REQUIRE_FALSE(InputNatives::GamepadIsDown(harness.Context("InputNative.GamepadIsDown"), input, pad,
-                                                  GamepadButton::South));
-        REQUIRE_FALSE(InputNatives::GamepadJustPressed(harness.Context("InputNative.GamepadJustPressed"), input, pad,
-                                                       GamepadButton::South));
-        REQUIRE_FALSE(InputNatives::GamepadJustReleased(harness.Context("InputNative.GamepadJustReleased"), input, pad,
-                                                        GamepadButton::South));
-        REQUIRE(InputNatives::GamepadAxisOf(harness.Context("InputNative.GamepadAxisOf"), input, pad,
-                                            GamepadAxis::LeftX) == 0.0f);
+        REQUIRE_FALSE(harness.Call<bool>("InputNative.GamepadIsConnected", pad));
+        REQUIRE_FALSE(harness.Call<bool>("InputNative.GamepadIsDown", pad, GamepadButton::South));
+        REQUIRE_FALSE(harness.Call<bool>("InputNative.GamepadJustPressed", pad, GamepadButton::South));
+        REQUIRE_FALSE(harness.Call<bool>("InputNative.GamepadJustReleased", pad, GamepadButton::South));
+        REQUIRE(harness.Call<float>("InputNative.GamepadAxisOf", pad, GamepadAxis::LeftX) == 0.0f);
     }
 
     for (const char* native :
@@ -119,13 +79,13 @@ TEST_CASE("With no input installed, every input native reads false or zero and w
           "InputNative.GamepadAxisOf"})
     {
         INFO(native << " did not warn once in a debug build (never in a release build), though called twice");
-        REQUIRE(Warnings(harness, Logged(native, NoInput)) == once);
+        REQUIRE(harness.WarnedOnce(native, InputScripting::NoInput));
     }
     {
         INFO("A native warned under a hand-typed facade name rather than its own");
-        REQUIRE(Warnings(harness, "Keyboard.") == 0);
-        REQUIRE(Warnings(harness, "Mouse.") == 0);
-        REQUIRE(Warnings(harness, "Gamepads.") == 0);
+        REQUIRE_FALSE(harness.Logger().Contains(Testing::LogLevel::Warn, "Keyboard."));
+        REQUIRE_FALSE(harness.Logger().Contains(Testing::LogLevel::Warn, "Mouse."));
+        REQUIRE_FALSE(harness.Logger().Contains(Testing::LogLevel::Warn, "Gamepads."));
     }
 }
 
@@ -140,6 +100,6 @@ TEST_CASE("With no input installed, the InputClaims C# reads is not found", "[in
     }
     {
         INFO("Not finding the claims warned");
-        REQUIRE(Warnings(harness, "input scripting") == 0);
+        REQUIRE_FALSE(harness.Logger().Contains(Testing::LogLevel::Warn, "input scripting"));
     }
 }

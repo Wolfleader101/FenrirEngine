@@ -1,18 +1,19 @@
-// The no-op rules (spec: "Scripting: the extensions"), with no .NET: through NativeCallHarness, with an AssetsScripting
-// state the test makes, every assets native function called with no asset store, a stale handle or the empty handle
-// does nothing, returns false, zero or the empty handle, leaves its output untouched (the registration zeroes it,
-// ADR-0045), and warns once per native call site under its own name. And the public "no store, then stale handle"
-// rule (AssetResolve.hpp) warns in the words another package's native (FenrirRenderer's SpawnModel) will reuse.
+// The no-op rules (spec: "Scripting: the extensions"), with no .NET: through NativeCallHarness, which runs the assets
+// extension as shipped (Assets::ScriptingExtension()) and calls each native by its registered name through the
+// registration's own thunk, every assets native function called with no asset store, a stale handle or the empty
+// handle does nothing, returns false, zero or the empty handle, leaves its output untouched (the registration zeroes
+// it, ADR-0045), and warns once per native call site under its own name, in the words AssetResolve names. And the
+// public "no store, then stale handle" rule (AssetResolve.hpp) warns in those words under whichever native reaches it,
+// as another package's native (FenrirRenderer's SpawnModel) does.
 //
-// A native call site warns once per extension state (its record), so each case counts its own warnings. They still
-// run in a process of their own (CTest's FenrirAssetsScripting-NoOps), in declaration order (--order decl).
+// A native call site warns once per extension state (its record), so each case runs its own extension and counts its
+// own warnings. They still run in a process of their own (CTest's FenrirAssetsScripting-NoOps), in declaration order
+// (--order decl).
 
 #include <catch2/catch_test_macros.hpp>
 
 #include "NativeCallHarness.hpp"
 
-#include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -21,46 +22,20 @@
 #include <utility>
 #include <vector>
 
-#include "AssetsScriptingState.hpp"
+#include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
 #include "FenrirAssetsScripting/AssetResolve.hpp"
+#include "FenrirAssetsScripting/AssetsScripting.hpp"
 #include "FenrirAssetsScripting/ScriptAssets.hpp"
 #include "FenrirMath/Colour.hpp"
 #include "FenrirMath/Math.hpp"
-#include "FenrirScripting/NativeGuard.hpp"
-#include "Generated/FenrirAssetsNatives.hpp"
 
 using namespace Fenrir;
 
 namespace
 {
-    // A release build warns about nothing (WarnOnceRecord, ADR-0043); a debug build once per native call site.
-#ifdef NDEBUG
-    constexpr std::size_t once = 0;
-#else
-    constexpr std::size_t once = 1;
-#endif
-
-    constexpr const char* NoStore = "the app has no asset store (FenrirAssets is not installed), so it does nothing";
-
-    // How many warnings the app logged that read `text` (and `alsoText`, when given).
-    std::size_t Warnings(const Testing::NativeCallHarness& harness, const std::string& text,
-                         const std::string& alsoText = {})
-    {
-        const auto messages = harness.Logger().Messages();
-        return static_cast<std::size_t>(
-            std::count_if(messages.begin(), messages.end(), [&](const Testing::LoggedMessage& message) {
-                return message.level == Testing::LogLevel::Warn && message.text.find(text) != std::string::npos &&
-                       message.text.find(alsoText) != std::string::npos;
-            }));
-    }
-
-    // How the assets record logs `message` in the native `native` (the record then says it warned once).
-    std::string Logged(std::string_view native, std::string_view message)
-    {
-        return "[assets scripting] " + std::string(native) + ": " + std::string(message);
-    }
+    using namespace std::string_view_literals;
 
     // The handles every native that takes one is called with, as the natives take them.
     struct Handles
@@ -78,12 +53,14 @@ namespace
         return {handle.index, handle.generation};
     }
 
-    // One native call: its name as its context carries it, and the call, which says whether the native did nothing
-    // (returned false, zero or the empty handle, and wrote no output).
+    // One native call: its registered name, the word log messages use for the kind of the first handle it resolves
+    // (Detail::AssetTraits<T>::name; empty for a native that needs only the store), and the call, which says whether
+    // the native did nothing (returned false, zero or the empty handle, and wrote no output).
     struct NativeCall
     {
         const char* native;
-        std::function<bool(const CallContext&, AssetsScripting&)> didNothing;
+        std::string_view handleKind;
+        std::function<bool(Testing::NativeCallHarness&)> didNothing;
     };
 
     // Whether an output still holds its default. Colour and ScriptShaderParameter have no operator==.
@@ -114,6 +91,11 @@ namespace
         return !native(&out) && Untouched(out);
     }
 
+    // The empty vertex streams a mesh native is given, typed as the natives take them (Call deduces each argument's
+    // type, and a bare nullptr is none of the pointer types).
+    constexpr const Math::Vec3* noNormals = nullptr;
+    constexpr const Math::Vec2* noUvs = nullptr;
+
     // Every native that needs only the store: those that make an asset, and IsValid.
     std::vector<NativeCall> StoreCalls(const Handles& handles)
     {
@@ -122,34 +104,39 @@ namespace
         static const std::uint8_t pixel[] = {255, 255, 255, 255};
         return {
             {"AssetsNative.Load",
-             [](const CallContext& context, AssetsScripting& assets) {
+             {},
+             [](Testing::NativeCallHarness& harness) {
                  return ReadsNothing<ScriptAssetHandle>([&](ScriptAssetHandle* out) {
-                     return AssetsNatives::Load(context, assets, Detail::AssetKind::Mesh, "models/scene.gltf#Mesh0",
-                                                ScriptAssetOwner::App, out);
+                     return harness.Call<bool>("AssetsNative.Load", Detail::AssetKind::Mesh,
+                                               "models/scene.gltf#Mesh0"sv, ScriptAssetOwner::App, out);
                  });
              }},
             {"AssetsNative.IsValid",
-             [=](const CallContext& context, AssetsScripting& assets) {
+             {},
+             [=](Testing::NativeCallHarness& harness) {
                  const ScriptAssetHandle mesh = Generic(handles.mesh);
-                 return !AssetsNatives::IsValid(context, assets, Detail::AssetKind::Mesh, &mesh);
+                 return !harness.Call<bool>("AssetsNative.IsValid", Detail::AssetKind::Mesh, &mesh);
              }},
             {"AssetsNative.AddMesh",
-             [](const CallContext& context, AssetsScripting& assets) {
+             {},
+             [](Testing::NativeCallHarness& harness) {
                  return ReadsNothing<AssetHandle<Mesh>>([&](AssetHandle<Mesh>* out) {
-                     return AssetsNatives::AddMesh(context, assets, positions, 3, nullptr, 0, nullptr, 0, indices, 3,
-                                                   ScriptAssetOwner::App, out);
+                     return harness.Call<bool>("AssetsNative.AddMesh", positions, 3, noNormals, 0, noUvs, 0, indices, 3,
+                                               ScriptAssetOwner::App, out);
                  });
              }},
             {"AssetsNative.AddRenderTarget",
-             [](const CallContext& context, AssetsScripting& assets) {
+             {},
+             [](Testing::NativeCallHarness& harness) {
                  return ReadsNothing<AssetHandle<Image>>([&](AssetHandle<Image>* out) {
-                     return AssetsNatives::AddRenderTarget(context, assets, 4, 4, ScriptAssetOwner::App, out);
+                     return harness.Call<bool>("AssetsNative.AddRenderTarget", 4, 4, ScriptAssetOwner::App, out);
                  });
              }},
             {"AssetsNative.AddImage",
-             [](const CallContext& context, AssetsScripting& assets) {
+             {},
+             [](Testing::NativeCallHarness& harness) {
                  return ReadsNothing<AssetHandle<Image>>([&](AssetHandle<Image>* out) {
-                     return AssetsNatives::AddImage(context, assets, 1, 1, pixel, 4, ScriptAssetOwner::App, out);
+                     return harness.Call<bool>("AssetsNative.AddImage", 1, 1, pixel, 4, ScriptAssetOwner::App, out);
                  });
              }},
         };
@@ -167,177 +154,195 @@ namespace
         const AssetHandle<Material> material = handles.material;
         const AssetHandle<Shader> shader = handles.shader;
         return {
-            {"AssetsNative.Unload",
-             [=](const CallContext& c, AssetsScripting& a) {
+            {"AssetsNative.Unload", "mesh",
+             [=](Testing::NativeCallHarness& h) {
                  const ScriptAssetHandle generic = Generic(mesh);
-                 return !AssetsNatives::Unload(c, a, Detail::AssetKind::Mesh, &generic);
+                 return !h.Call<bool>("AssetsNative.Unload", Detail::AssetKind::Mesh, &generic);
              }},
-            {"AssetsNative.ReplaceMesh",
-             [=](const CallContext& c, AssetsScripting& a) {
-                 return !AssetsNatives::ReplaceMesh(c, a, &mesh, positions, 3, nullptr, 0, nullptr, 0, indices, 3);
+            {"AssetsNative.ReplaceMesh", "mesh",
+             [=](Testing::NativeCallHarness& h) {
+                 return !h.Call<bool>("AssetsNative.ReplaceMesh", &mesh, positions, 3, noNormals, 0, noUvs, 0, indices,
+                                      3);
              }},
-            {"AssetsNative.ResizeRenderTarget",
-             [=](const CallContext& c, AssetsScripting& a) {
-                 return !AssetsNatives::ResizeRenderTarget(c, a, &image, 8, 8);
+            {"AssetsNative.ResizeRenderTarget", "image",
+             [=](Testing::NativeCallHarness& h) {
+                 return !h.Call<bool>("AssetsNative.ResizeRenderTarget", &image, 8, 8);
              }},
-            {"AssetsNative.ReplaceImage",
-             [=](const CallContext& c, AssetsScripting& a) {
-                 return !AssetsNatives::ReplaceImage(c, a, &image, 1, 1, pixel, 4);
+            {"AssetsNative.ReplaceImage", "image",
+             [=](Testing::NativeCallHarness& h) {
+                 return !h.Call<bool>("AssetsNative.ReplaceImage", &image, 1, 1, pixel, 4);
              }},
-            {"AssetsNative.CreateMaterial",
-             [=](const CallContext& c, AssetsScripting& a) {
+            {"AssetsNative.CreateMaterial", "shader",
+             [=](Testing::NativeCallHarness& h) {
                  return ReadsNothing<AssetHandle<Material>>([&](AssetHandle<Material>* out) {
-                     return AssetsNatives::CreateMaterial(c, a, &shader, ScriptAssetOwner::App, out);
+                     return h.Call<bool>("AssetsNative.CreateMaterial", &shader, ScriptAssetOwner::App, out);
                  });
              }},
-            {"AssetsNative.CloneMaterial",
-             [=](const CallContext& c, AssetsScripting& a) {
+            {"AssetsNative.CloneMaterial", "material",
+             [=](Testing::NativeCallHarness& h) {
                  return ReadsNothing<AssetHandle<Material>>([&](AssetHandle<Material>* out) {
-                     return AssetsNatives::CloneMaterial(c, a, &material, ScriptAssetOwner::App, out);
+                     return h.Call<bool>("AssetsNative.CloneMaterial", &material, ScriptAssetOwner::App, out);
                  });
              }},
-            {"AssetsNative.SetFloat",
-             [=](const CallContext& c, AssetsScripting& a) {
-                 return !AssetsNatives::SetFloat(c, a, &material, "roughness", 1.0f);
+            {"AssetsNative.SetFloat", "material",
+             [=](Testing::NativeCallHarness& h) {
+                 return !h.Call<bool>("AssetsNative.SetFloat", &material, "roughness"sv, 1.0f);
              }},
-            {"AssetsNative.SetVector2",
-             [=](const CallContext& c, AssetsScripting& a) {
+            {"AssetsNative.SetVector2", "material",
+             [=](Testing::NativeCallHarness& h) {
                  const Math::Vec2 value(1, 1);
-                 return !AssetsNatives::SetVector2(c, a, &material, "offset", &value);
+                 return !h.Call<bool>("AssetsNative.SetVector2", &material, "offset"sv, &value);
              }},
-            {"AssetsNative.SetVector3",
-             [=](const CallContext& c, AssetsScripting& a) {
+            {"AssetsNative.SetVector3", "material",
+             [=](Testing::NativeCallHarness& h) {
                  const Math::Vec3 value(1, 1, 1);
-                 return !AssetsNatives::SetVector3(c, a, &material, "emissive", &value);
+                 return !h.Call<bool>("AssetsNative.SetVector3", &material, "emissive"sv, &value);
              }},
-            {"AssetsNative.SetVector4",
-             [=](const CallContext& c, AssetsScripting& a) {
+            {"AssetsNative.SetVector4", "material",
+             [=](Testing::NativeCallHarness& h) {
                  const Math::Vec4 value(1, 1, 1, 1);
-                 return !AssetsNatives::SetVector4(c, a, &material, "tint", &value);
+                 return !h.Call<bool>("AssetsNative.SetVector4", &material, "tint"sv, &value);
              }},
-            {"AssetsNative.SetColour",
-             [=](const CallContext& c, AssetsScripting& a) {
+            {"AssetsNative.SetColour", "material",
+             [=](Testing::NativeCallHarness& h) {
                  const Colour value = Colour::White;
-                 return !AssetsNatives::SetColour(c, a, &material, "tint", &value);
+                 return !h.Call<bool>("AssetsNative.SetColour", &material, "tint"sv, &value);
              }},
-            {"AssetsNative.SetTexture",
-             [=](const CallContext& c, AssetsScripting& a) {
+            {"AssetsNative.SetTexture", "material",
+             [=](Testing::NativeCallHarness& h) {
                  const SamplerDescription sampler;
-                 return !AssetsNatives::SetTexture(c, a, &material, "baseColourTexture", &image, &sampler);
+                 return !h.Call<bool>("AssetsNative.SetTexture", &material, "baseColourTexture"sv, &image, &sampler);
              }},
-            {"AssetsNative.SetBlendMode",
-             [=](const CallContext& c, AssetsScripting& a) {
-                 return !AssetsNatives::SetBlendMode(c, a, &material, BlendMode::Additive);
+            {"AssetsNative.SetBlendMode", "material",
+             [=](Testing::NativeCallHarness& h) {
+                 return !h.Call<bool>("AssetsNative.SetBlendMode", &material, BlendMode::Additive);
              }},
-            {"AssetsNative.SetAlphaCutoff",
-             [=](const CallContext& c, AssetsScripting& a) {
-                 return !AssetsNatives::SetAlphaCutoff(c, a, &material, 0.1f);
+            {"AssetsNative.SetAlphaCutoff", "material",
+             [=](Testing::NativeCallHarness& h) {
+                 return !h.Call<bool>("AssetsNative.SetAlphaCutoff", &material, 0.1f);
              }},
-            {"AssetsNative.SetDoubleSided",
-             [=](const CallContext& c, AssetsScripting& a) {
-                 return !AssetsNatives::SetDoubleSided(c, a, &material, true);
+            {"AssetsNative.SetDoubleSided", "material",
+             [=](Testing::NativeCallHarness& h) {
+                 return !h.Call<bool>("AssetsNative.SetDoubleSided", &material, true);
              }},
-            {"AssetsNative.TryGetFloat",
-             [=](const CallContext& c, AssetsScripting& a) {
-                 return ReadsNothing<float>(
-                     [&](float* out) { return AssetsNatives::TryGetFloat(c, a, &material, "roughness", out); });
-             }},
-            {"AssetsNative.TryGetVector2",
-             [=](const CallContext& c, AssetsScripting& a) {
-                 return ReadsNothing<Math::Vec2>(
-                     [&](Math::Vec2* out) { return AssetsNatives::TryGetVector2(c, a, &material, "offset", out); });
-             }},
-            {"AssetsNative.TryGetVector3",
-             [=](const CallContext& c, AssetsScripting& a) {
-                 return ReadsNothing<Math::Vec3>(
-                     [&](Math::Vec3* out) { return AssetsNatives::TryGetVector3(c, a, &material, "emissive", out); });
-             }},
-            {"AssetsNative.TryGetVector4",
-             [=](const CallContext& c, AssetsScripting& a) {
-                 return ReadsNothing<Math::Vec4>(
-                     [&](Math::Vec4* out) { return AssetsNatives::TryGetVector4(c, a, &material, "tint", out); });
-             }},
-            {"AssetsNative.TryGetColour",
-             [=](const CallContext& c, AssetsScripting& a) {
-                 return ReadsNothing<Colour>(
-                     [&](Colour* out) { return AssetsNatives::TryGetColour(c, a, &material, "tint", out); });
-             }},
-            {"AssetsNative.TryGetTexture",
-             [=](const CallContext& c, AssetsScripting& a) {
-                 return ReadsNothing<MaterialTexture>([&](MaterialTexture* out) {
-                     return AssetsNatives::TryGetTexture(c, a, &material, "baseColourTexture", out);
+            {"AssetsNative.TryGetFloat", "material",
+             [=](Testing::NativeCallHarness& h) {
+                 return ReadsNothing<float>([&](float* out) {
+                     return h.Call<bool>("AssetsNative.TryGetFloat", &material, "roughness"sv, out);
                  });
              }},
-            {"AssetsNative.IsSet",
-             [=](const CallContext& c, AssetsScripting& a) { return !AssetsNatives::IsSet(c, a, &material, "tint"); }},
-            {"AssetsNative.TryGetOverrideFloat",
-             [=](const CallContext& c, AssetsScripting& a) {
-                 return ReadsNothing<float>(
-                     [&](float* out) { return AssetsNatives::TryGetOverrideFloat(c, a, &material, "roughness", out); });
-             }},
-            {"AssetsNative.TryGetOverrideVector2",
-             [=](const CallContext& c, AssetsScripting& a) {
+            {"AssetsNative.TryGetVector2", "material",
+             [=](Testing::NativeCallHarness& h) {
                  return ReadsNothing<Math::Vec2>([&](Math::Vec2* out) {
-                     return AssetsNatives::TryGetOverrideVector2(c, a, &material, "offset", out);
+                     return h.Call<bool>("AssetsNative.TryGetVector2", &material, "offset"sv, out);
                  });
              }},
-            {"AssetsNative.TryGetOverrideVector3",
-             [=](const CallContext& c, AssetsScripting& a) {
+            {"AssetsNative.TryGetVector3", "material",
+             [=](Testing::NativeCallHarness& h) {
                  return ReadsNothing<Math::Vec3>([&](Math::Vec3* out) {
-                     return AssetsNatives::TryGetOverrideVector3(c, a, &material, "emissive", out);
+                     return h.Call<bool>("AssetsNative.TryGetVector3", &material, "emissive"sv, out);
                  });
              }},
-            {"AssetsNative.TryGetOverrideVector4",
-             [=](const CallContext& c, AssetsScripting& a) {
+            {"AssetsNative.TryGetVector4", "material",
+             [=](Testing::NativeCallHarness& h) {
                  return ReadsNothing<Math::Vec4>([&](Math::Vec4* out) {
-                     return AssetsNatives::TryGetOverrideVector4(c, a, &material, "tint", out);
+                     return h.Call<bool>("AssetsNative.TryGetVector4", &material, "tint"sv, out);
                  });
              }},
-            {"AssetsNative.TryGetOverrideColour",
-             [=](const CallContext& c, AssetsScripting& a) {
+            {"AssetsNative.TryGetColour", "material",
+             [=](Testing::NativeCallHarness& h) {
                  return ReadsNothing<Colour>(
-                     [&](Colour* out) { return AssetsNatives::TryGetOverrideColour(c, a, &material, "tint", out); });
+                     [&](Colour* out) { return h.Call<bool>("AssetsNative.TryGetColour", &material, "tint"sv, out); });
              }},
-            {"AssetsNative.TryGetOverrideTexture",
-             [=](const CallContext& c, AssetsScripting& a) {
+            {"AssetsNative.TryGetTexture", "material",
+             [=](Testing::NativeCallHarness& h) {
                  return ReadsNothing<MaterialTexture>([&](MaterialTexture* out) {
-                     return AssetsNatives::TryGetOverrideTexture(c, a, &material, "baseColourTexture", out);
+                     return h.Call<bool>("AssetsNative.TryGetTexture", &material, "baseColourTexture"sv, out);
                  });
              }},
-            {"AssetsNative.Reset",
-             [=](const CallContext& c, AssetsScripting& a) { return !AssetsNatives::Reset(c, a, &material, "tint"); }},
-            {"AssetsNative.GetShaderParameterCount",
-             [=](const CallContext& c, AssetsScripting& a) {
-                 return AssetsNatives::GetShaderParameterCount(c, a, &shader) == 0;
+            {"AssetsNative.IsSet", "material",
+             [=](Testing::NativeCallHarness& h) { return !h.Call<bool>("AssetsNative.IsSet", &material, "tint"sv); }},
+            {"AssetsNative.TryGetOverrideFloat", "material",
+             [=](Testing::NativeCallHarness& h) {
+                 return ReadsNothing<float>([&](float* out) {
+                     return h.Call<bool>("AssetsNative.TryGetOverrideFloat", &material, "roughness"sv, out);
+                 });
              }},
-            {"AssetsNative.GetShaderParameter",
-             [=](const CallContext& c, AssetsScripting& a) {
+            {"AssetsNative.TryGetOverrideVector2", "material",
+             [=](Testing::NativeCallHarness& h) {
+                 return ReadsNothing<Math::Vec2>([&](Math::Vec2* out) {
+                     return h.Call<bool>("AssetsNative.TryGetOverrideVector2", &material, "offset"sv, out);
+                 });
+             }},
+            {"AssetsNative.TryGetOverrideVector3", "material",
+             [=](Testing::NativeCallHarness& h) {
+                 return ReadsNothing<Math::Vec3>([&](Math::Vec3* out) {
+                     return h.Call<bool>("AssetsNative.TryGetOverrideVector3", &material, "emissive"sv, out);
+                 });
+             }},
+            {"AssetsNative.TryGetOverrideVector4", "material",
+             [=](Testing::NativeCallHarness& h) {
+                 return ReadsNothing<Math::Vec4>([&](Math::Vec4* out) {
+                     return h.Call<bool>("AssetsNative.TryGetOverrideVector4", &material, "tint"sv, out);
+                 });
+             }},
+            {"AssetsNative.TryGetOverrideColour", "material",
+             [=](Testing::NativeCallHarness& h) {
+                 return ReadsNothing<Colour>([&](Colour* out) {
+                     return h.Call<bool>("AssetsNative.TryGetOverrideColour", &material, "tint"sv, out);
+                 });
+             }},
+            {"AssetsNative.TryGetOverrideTexture", "material",
+             [=](Testing::NativeCallHarness& h) {
+                 return ReadsNothing<MaterialTexture>([&](MaterialTexture* out) {
+                     return h.Call<bool>("AssetsNative.TryGetOverrideTexture", &material, "baseColourTexture"sv, out);
+                 });
+             }},
+            {"AssetsNative.Reset", "material",
+             [=](Testing::NativeCallHarness& h) { return !h.Call<bool>("AssetsNative.Reset", &material, "tint"sv); }},
+            {"AssetsNative.GetShaderParameterCount", "shader",
+             [=](Testing::NativeCallHarness& h) {
+                 return h.Call<std::int32_t>("AssetsNative.GetShaderParameterCount", &shader) == 0;
+             }},
+            {"AssetsNative.GetShaderParameter", "shader",
+             [=](Testing::NativeCallHarness& h) {
                  char16_t name[16] = {};
                  const bool wroteNothing = ReadsNothing<ScriptShaderParameter>([&](ScriptShaderParameter* out) {
-                     return AssetsNatives::GetShaderParameter(c, a, &shader, 0, out, name, 16) != 0;
+                     return h.Call<std::int32_t>("AssetsNative.GetShaderParameter", &shader, 0, out, name, 16) != 0;
                  });
                  return wroteNothing && name[0] == u'\0';
              }},
         };
     }
 
-    // Calls each native twice from one place and checks it did nothing both times and warned `message` once.
-    void EachDoesNothing(Testing::NativeCallHarness& harness, AssetsScripting& assets,
-                         const std::vector<NativeCall>& calls, std::string_view message)
+    // Calls each native twice from one place and checks it did nothing both times and warned `message(call)` once.
+    void EachDoesNothing(Testing::NativeCallHarness& harness, const std::vector<NativeCall>& calls,
+                         const std::function<std::string(const NativeCall&)>& message)
     {
         for (const NativeCall& call : calls)
         {
-            const CallContext context = harness.Context(call.native);
             for (int time = 0; time < 2; ++time)
             {
                 INFO(call.native << ", call " << time
                                  << ": did something, returned other than false, zero or the empty handle, or "
                                     "wrote its output");
-                REQUIRE(call.didNothing(context, assets));
+                REQUIRE(call.didNothing(harness));
             }
             INFO(call.native << " did not warn once in a debug build (never in a release build), though called twice");
-            REQUIRE(Warnings(harness, Logged(call.native, message)) == once);
+            REQUIRE(harness.WarnedOnce(call.native, message(call)));
         }
+    }
+
+    // What every native warns with no store, whatever handle it takes.
+    std::string NoStore(const NativeCall&)
+    {
+        return std::string(AssetResolve::NoStore);
+    }
+
+    // What a native warns when the first handle it resolves is empty or stale.
+    std::string StaleHandle(const NativeCall& call)
+    {
+        return AssetResolve::StaleHandle(call.handleKind);
     }
 
     // A shader container written by hand: one variant, two stages, no parameters, enough for the store to accept.
@@ -392,36 +397,33 @@ namespace
 TEST_CASE("With no asset store, every assets native does nothing and warns once per native call site",
           "[assets][scripting][noops]")
 {
-    Testing::NativeCallHarness harness;
-    AssetsScripting assets;
+    Testing::NativeCallHarness harness({Assets::ScriptingExtension()});
     // Handles that would name the first asset of each kind: slot 0, generation 1.
     const Handles handles{{0, 1}, {0, 1}, {0, 1}, {0, 1}};
-    EachDoesNothing(harness, assets, StoreCalls(handles), NoStore);
-    EachDoesNothing(harness, assets, HandleCalls(handles), NoStore);
+    EachDoesNothing(harness, StoreCalls(handles), NoStore);
+    EachDoesNothing(harness, HandleCalls(handles), NoStore);
 }
 
 TEST_CASE("A stale handle makes every assets native do nothing, warning once per native call site",
           "[assets][scripting][noops]")
 {
-    Testing::NativeCallHarness harness;
+    Testing::NativeCallHarness harness({Assets::ScriptingExtension()});
     Assets installed = InstallAssets(harness);
     AssetStore& store = installed.Store();
-    AssetsScripting assets;
     const Handles handles = StaleHandles(store);
 
     for (const NativeCall& call : HandleCalls(handles))
     {
-        const CallContext context = harness.Context(call.native);
         for (int time = 0; time < 2; ++time)
         {
             INFO(call.native << ", call " << time
                              << ": did something with a stale handle, returned other than false, zero or the empty "
                                 "handle, or wrote its output");
-            REQUIRE(call.didNothing(context, assets));
+            REQUIRE(call.didNothing(harness));
         }
         INFO(call.native << " did not warn once in a debug build (never in a release build), though called twice");
-        REQUIRE(Warnings(harness, Logged(call.native, "the "), "handle is empty or stale, so it does nothing") == once);
-        REQUIRE(Warnings(harness, NoStore) == 0);
+        REQUIRE(harness.WarnedOnce(call.native, AssetResolve::StaleHandle(call.handleKind)));
+        REQUIRE(harness.Warnings(call.native, AssetResolve::NoStore) == 0);
     }
     {
         INFO("Nothing was made from the stale handles");
@@ -432,36 +434,35 @@ TEST_CASE("A stale handle makes every assets native do nothing, warning once per
 
 TEST_CASE("The empty handle makes every assets native do nothing", "[assets][scripting][noops]")
 {
-    Testing::NativeCallHarness harness;
+    Testing::NativeCallHarness harness({Assets::ScriptingExtension()});
     Assets installed = InstallAssets(harness);
-    AssetsScripting assets;
-    EachDoesNothing(harness, assets, HandleCalls(Handles{}), "the ");
+    EachDoesNothing(harness, HandleCalls(Handles{}), StaleHandle);
 }
 
 TEST_CASE("The public Resolve<Model> is null with no store, then with a stale handle, warning once each in Assets' "
           "words under the caller's native",
           "[assets][scripting][noops]")
 {
-    // The native another package's extension would call it from (FenrirRenderer's SpawnModel), with that
-    // extension's record: the warning names the caller, in Assets' words.
-    constexpr const char* Native = "RendererNative.SpawnModel";
-    Testing::NativeCallHarness harness;
-    WarnOnceRecord warnings("renderer scripting");
-    const CallContext context = harness.Context(Native);
-    const NativeGuard guard(context, warnings);
-    const std::string prefix = std::string("[renderer scripting] ") + Native + ": ";
+    // Resolve<Model> is reached as another package's native reaches it (FenrirRenderer's SpawnModel): through a
+    // registered native that resolves the kind C# names, here Unload, so the warning names the caller, in Assets'
+    // words. Unloading a live model is the resolve that finds the store, and leaves the handle stale.
+    constexpr const char* Native = "AssetsNative.Unload";
+    Testing::NativeCallHarness harness({Assets::ScriptingExtension()});
+    const auto unload = [&](const ScriptAssetHandle& handle) {
+        return harness.Call<bool>(Native, Detail::AssetKind::Model, &handle);
+    };
     // The handle that would name the first model: slot 0, generation 1.
-    const AssetHandle<Model> first{0, 1};
+    const ScriptAssetHandle first{0, 1};
 
     for (int time = 0; time < 2; ++time)
     {
         INFO("Resolve<Model> found a store in an app with none");
-        REQUIRE(Resolve<Model>(guard, first) == nullptr);
+        REQUIRE_FALSE(unload(first));
     }
     {
         INFO("Two resolves with no store from one place did not warn once, under the caller's native, in Assets' "
              "words");
-        REQUIRE(Warnings(harness, prefix + NoStore + " (warned once)") == once);
+        REQUIRE(harness.WarnedOnce(Native, AssetResolve::NoStore));
     }
 
     Assets installed = InstallAssets(harness);
@@ -473,22 +474,24 @@ TEST_CASE("The public Resolve<Model> is null with no store, then with a stale ha
     }
     {
         INFO("Resolve<Model> did not give the store for a live model");
-        REQUIRE(Resolve<Model>(guard, model) == &store);
+        REQUIRE(unload(Generic(model)));
     }
-    REQUIRE(store.Unload(model));
+    {
+        INFO("Unloading the model did not leave its handle stale");
+        REQUIRE_FALSE(store.IsValid(model));
+    }
     for (int time = 0; time < 2; ++time)
     {
         INFO("Resolve<Model> resolved a stale model");
-        REQUIRE(Resolve<Model>(guard, model) == nullptr);
+        REQUIRE_FALSE(unload(Generic(model)));
     }
     {
         INFO("Two resolves of a stale model from one place did not warn once, under the caller's native, in Assets' "
              "words");
-        REQUIRE(Warnings(harness, prefix + "the model handle is empty or stale, so it does nothing (warned once)") ==
-                once);
+        REQUIRE(harness.WarnedOnce(Native, AssetResolve::StaleHandle("model")));
     }
     {
         INFO("The empty model handle did not resolve as stale");
-        REQUIRE(Resolve<Model>(guard, AssetHandle<Model>{}) == nullptr);
+        REQUIRE_FALSE(unload(ScriptAssetHandle{}));
     }
 }

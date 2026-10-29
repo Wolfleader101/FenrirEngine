@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include "FenrirApp/App.hpp"
@@ -17,10 +18,15 @@ namespace Fenrir
      * @brief The debug draw extension's state, which every debug draw native function is given second: what they share,
      * made by DebugDrawing::ScriptingExtension and kept by the Scripting given the extension. In a header of its own
      * because the generated registration (Generated/FenrirDebugDrawRegistration.cpp) declares the natives, which name
-     * it.
+     * it. The text the natives warn with is named here, so the package's rule reads in one place and its rules
+     * tests name it.
      */
     struct DebugDrawScripting
     {
+        /** @brief Warned when the active scene has no DebugDraw: the native draws nothing. */
+        static constexpr std::string_view NoDebugDraw =
+            "the active scene has no DebugDraw (FenrirDebugDraw is not installed), so it draws nothing";
+
         /**
          * @brief Where a call draws: the active scene's DebugDraw, and the relativeTo entity C# named, as a handle of
          * that scene (a null Entity for none).
@@ -59,9 +65,8 @@ namespace Fenrir
         std::optional<Target> TargetFor(const CallContext& context, const Entity& relativeTo = Entity())
         {
             const NativeGuard guard(context, warnings);
-            DebugDraw* draw = guard.Require(
-                context.GetApp().GetActiveScene().GetResource<DebugDraw>(),
-                "the active scene has no DebugDraw (FenrirDebugDraw is not installed), so it draws nothing");
+            DebugDraw* draw =
+                guard.Require(context.GetApp().GetActiveScene().GetResource<DebugDraw>(), std::string(NoDebugDraw));
             if (draw == nullptr)
             {
                 return std::nullopt;

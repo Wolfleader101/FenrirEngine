@@ -1,6 +1,8 @@
 #pragma once
 
 #include <optional>
+#include <string>
+#include <string_view>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/Entity.hpp"
@@ -19,10 +21,19 @@ namespace Fenrir
      * natives, which name it.
      *
      * Its lookups are built on the native guard (NativeGuard.hpp): each warns once per native function and message,
-     * under the native's name, which the call context carries, so no native spells its own.
+     * under the native's name, which the call context carries, so no native spells its own. The texts the natives
+     * warn with are named here, one per rule, so the package's rules read in one place and its rules tests name
+     * them; SpawnModel's handle rule is Assets' (AssetResolve.hpp), in Assets' words.
      */
     struct RendererScripting
     {
+        /** @brief Warned when the app has no renderer: the native does nothing. */
+        static constexpr std::string_view NoRenderer =
+            "the app has no renderer (FenrirRenderer is not installed), so it does nothing";
+
+        /** @brief Warned when the entity is alive but has no Camera: the native does nothing. */
+        static constexpr std::string_view NoCamera = "the entity has no Camera, so it does nothing";
+
         /** @brief Whether the app has a renderer; warns once that the native does nothing if not. */
         bool HasRenderer(const CallContext& context)
         {
@@ -31,7 +42,7 @@ namespace Fenrir
                 return true;
             }
             const NativeGuard guard(context, warnings);
-            guard.Warn("the app has no renderer (FenrirRenderer is not installed), so it does nothing");
+            guard.Warn(std::string(NoRenderer));
             return false;
         }
 
@@ -50,7 +61,7 @@ namespace Fenrir
             const std::optional<Entity> camera = guard.Alive(entity);
             if (camera && !camera->HasComponent<Camera>())
             {
-                guard.Warn("the entity has no Camera, so it does nothing");
+                guard.Warn(std::string(NoCamera));
                 return std::nullopt;
             }
             return camera;
