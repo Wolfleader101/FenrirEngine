@@ -552,6 +552,22 @@ TEST_CASE("A rotation key in the far hemisphere is flipped with its tangents", "
     REQUIRE(Near(turn.outTangents[2], Vec4(0.0f, 0.0f, 0.02f, 0.0f)));
 }
 
+TEST_CASE("A model's skeletons and clips are from one file, and assets from other files or code are not",
+          "[assets][skinned-import]")
+{
+    AssetsApp test;
+    const Fenrir::Model& cubic = *Load(test, "cubic-clip.gltf").model;
+    const Fenrir::Model& armatures = *Load(test, "armatures.gltf").model;
+    // The same clip's data, added in code: it has no file.
+    const auto added = test.store.Add<Fenrir::Clip>(*test.store.TryGet(cubic.clips[0]), AssetOwner::App());
+
+    INFO("a clip and a skeleton of one file are from the same file; across files, or added in code, they are not");
+    REQUIRE(test.store.FromSameFile(cubic.clips[0], cubic.skeletons[0]));
+    REQUIRE(!test.store.FromSameFile(cubic.clips[0], armatures.skeletons[0]));
+    REQUIRE(!test.store.FromSameFile(added, cubic.skeletons[0]));
+    REQUIRE(!test.store.FromSameFile(Fenrir::AssetHandle<Fenrir::Clip>{}, cubic.skeletons[0]));
+}
+
 TEST_CASE("SpawnNodes leaves bones out and spawns synthetic owners", "[assets][skinned-import][spawn]")
 {
     AssetsApp test;

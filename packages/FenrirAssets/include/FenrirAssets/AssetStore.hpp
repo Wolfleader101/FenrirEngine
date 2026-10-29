@@ -343,6 +343,18 @@ namespace Fenrir
         }
 
         /**
+         * @brief Whether both assets were loaded from one file, as a model's sub-assets are (a skeleton and a clip of
+         * one glTF file): how FenrirAnimation knows a clip may bind to a skeleton by node identity (ADR-0031). False
+         * when either handle does not resolve, or either asset was added in code rather than loaded.
+         */
+        template <typename A, typename B>
+        [[nodiscard]] bool FromSameFile(AssetHandle<A> a, AssetHandle<B> b) const
+        {
+            return SameFileOf(Detail::AssetTraits<A>::kind, {a.index, a.generation}, Detail::AssetTraits<B>::kind,
+                              {b.index, b.generation});
+        }
+
+        /**
          * @brief The material parameters of the shader `handle` names, each with its type and parameter default, read
          * from its container alone (ShaderData::parameters). For an editor, or anything showing what a material
          * inherits. Empty if the handle does not resolve. Valid until the shader is replaced or freed.
@@ -516,6 +528,8 @@ namespace Fenrir
         bool UnloadSlot(Detail::AssetKind kind, Detail::AssetSlot slot);
         [[nodiscard]] const void* Find(Detail::AssetKind kind, Detail::AssetSlot slot) const;
         [[nodiscard]] std::uint32_t RevisionOf(Detail::AssetKind kind, Detail::AssetSlot slot) const;
+        [[nodiscard]] bool SameFileOf(Detail::AssetKind kindA, Detail::AssetSlot a, Detail::AssetKind kindB,
+                                      Detail::AssetSlot b) const;
         void Refuse(std::string_view assetName, std::string_view action, const std::string& problem);
         void Warn(std::string_view assetName, std::string_view action, const Detail::AssetWarnings& warnings);
         [[nodiscard]] Detail::AssetRecord* EditRecord(Detail::AssetKind kind, Detail::AssetSlot slot,
