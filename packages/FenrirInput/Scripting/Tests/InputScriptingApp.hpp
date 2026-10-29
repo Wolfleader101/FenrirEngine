@@ -12,16 +12,13 @@
 #include "FenrirInput/Input.hpp"
 #include "FenrirInputScripting/InputScripting.hpp"
 
-namespace InputScriptingTests
+namespace Fenrir::Testing
 {
-    using Fenrir::Testing::Call;
-    using Fenrir::Testing::oneTick;
-
     // Frames of exactly two ticks and of none.
     inline constexpr double twoTicks = 2.0 * oneTick;
-    inline constexpr double noTick = 0.0;
+    inline constexpr double inputNoTick = 0.0;
 
-    inline constexpr Fenrir::WindowId mainWindow{1};
+    inline constexpr WindowId mainWindow{1};
 
     // The fixture's types the tests call.
     inline constexpr const char* KeysType = "Fenrir.InputScriptFixture.KeyReadings";
@@ -31,31 +28,30 @@ namespace InputScriptingTests
 
     struct InputPackages
     {
-        explicit InputPackages(Fenrir::App& app) : input(Fenrir::Input::Install(app))
+        explicit InputPackages(App& app) : input(Input::Install(app))
         {
         }
 
-        Fenrir::Input input;
+        Input input;
     };
 
     // An App with input installed and scripting running the fixture with input's extension.
-    struct InputScriptingApp : Fenrir::Testing::ExtensionTestApp<InputPackages>
+    struct InputScriptingApp : ExtensionTestApp<InputPackages>
     {
         InputScriptingApp()
-            : ExtensionTestApp(Fenrir::Testing::FixtureFromEnvironment("FENRIR_TEST_INPUT_FIXTURE"),
-                               {Fenrir::Input::ScriptingExtension()})
+            : ExtensionTestApp(FixtureFromEnvironment("FENRIR_TEST_INPUT_FIXTURE"), {Input::ScriptingExtension()})
         {
         }
 
-        Fenrir::InputFeed& Feed()
+        InputFeed& Feed()
         {
-            return headless.Get().GetResource<Fenrir::InputFeed>();
+            return headless.Get().GetResource<InputFeed>();
         }
     };
 
     // How many warnings the app logged that contain `text`.
-    inline std::size_t WarningsWith(const Fenrir::Testing::HeadlessApp& headless, const std::string& text)
+    inline std::size_t WarningsWith(const HeadlessApp& headless, const std::string& text)
     {
-        return Fenrir::Testing::LoggedWith(headless, Fenrir::Testing::LogLevel::Warn, text);
+        return LoggedWith(headless, LogLevel::Warn, text);
     }
-} // namespace InputScriptingTests
+} // namespace Fenrir::Testing

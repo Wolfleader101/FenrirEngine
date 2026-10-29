@@ -36,8 +36,8 @@ read-only = ["Fenrir::Relationship"]
 cpp = "../Tests/Generated/FenrirScriptingDefaultsTests.cpp"
 csharp = "../Tests/Generated/FenrirScriptingDefaults.cs"
 class = "Fenrir.ScriptFixture.Defaults"
-includes = ["FixtureApp.hpp"]
-setup = "Fenrir::Testing::FixtureApp app;"
+includes = ["ScriptingApp.hpp"]
+setup = "Fenrir::Testing::ScriptingApp app;"
 tags = "[scripting][bindings]"
 
 [names]

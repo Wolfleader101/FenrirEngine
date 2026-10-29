@@ -7,12 +7,9 @@
 #include "ScriptingProbe.hpp"
 #include "RendererScriptingApp.hpp"
 
+#include <Iris/FieldDifferences.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
-#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -21,130 +18,12 @@ namespace
 {
     constexpr std::string_view DefaultsClass = "RendererScriptFixture.Defaults";
 
-    struct UnionKind
-    {
-        std::uint64_t tag;
-        std::size_t field;
-    };
-
-    struct TaggedUnion
-    {
-        std::string_view typeName;
-        std::vector<UnionKind> kinds;
-    };
-
     // Of a tagged union only the tag and the kind it selects are compared: the other kinds' bytes are not set.
-    const std::vector<TaggedUnion> taggedUnions = {
+    const std::vector<Iris::UnionLayout> taggedUnions = {
         {"Fenrir.Renderer.CameraBackground", {{0u, 1}, {1u, 2}}},
         {"Fenrir.Renderer.CameraProjection", {{0u, 1}, {1u, 2}}},
         {"Fenrir.Renderer.RenderTarget", {{0u, 1}, {1u, 2}}},
         {"Fenrir.Renderer.Sky", {{0u, 1}, {1u, 2}}},
-    };
-
-    using Iris::Detail::StructInfo;
-    using Iris::Detail::ValueKind;
-
-    std::size_t ScalarSize(ValueKind kind)
-    {
-        switch (kind)
-        {
-        case ValueKind::Bool:
-        case ValueKind::Int8:
-        case ValueKind::UInt8:
-            return 1;
-        case ValueKind::Int16:
-        case ValueKind::UInt16:
-        case ValueKind::Char:
-            return 2;
-        case ValueKind::Int32:
-        case ValueKind::UInt32:
-        case ValueKind::Float:
-            return 4;
-        default:
-            return 8;
-        }
-    }
-
-    std::string Hex(std::span<const std::byte> bytes)
-    {
-        constexpr std::string_view digits = "0123456789abcdef";
-        std::string text;
-        for (const std::byte byte : bytes)
-        {
-            text += digits[static_cast<unsigned>(byte) >> 4];
-            text += digits[static_cast<unsigned>(byte) & 15];
-        }
-        return text;
-    }
-
-    struct Comparison
-    {
-        std::span<const std::byte> native;
-        std::span<const std::byte> managed;
-        std::vector<std::string> differences;
-
-        void Bytes(std::size_t offset, std::size_t size, const std::string& path)
-        {
-            const auto cpp = native.subspan(offset, size);
-            const auto cs = managed.subspan(offset, size);
-            if (std::memcmp(cpp.data(), cs.data(), size) != 0)
-            {
-                differences.push_back(path + " at offset " + std::to_string(offset) + ": C++ " + Hex(cpp) + ", C# " + Hex(cs));
-            }
-        }
-
-        std::uint64_t Unsigned(std::size_t offset, std::size_t size) const
-        {
-            std::uint64_t value = 0;
-            std::memcpy(&value, native.subspan(offset, size).data(), size);
-            return value;
-        }
-
-        void Value(ValueKind kind, const StructInfo* nested, std::size_t offset, const std::string& path)
-        {
-            if (kind == ValueKind::Struct)
-                Struct(*nested, offset, path);
-            else
-                Bytes(offset, kind == ValueKind::Enum ? nested->size : ScalarSize(kind), path);
-        }
-
-        void Struct(const StructInfo& info, std::size_t offset, const std::string& path)
-        {
-            for (const TaggedUnion& union_ : taggedUnions)
-            {
-                if (union_.typeName != info.typeName)
-                    continue;
-                const auto& tag = info.fields[0];
-                Value(tag.kind, tag.nested, offset + tag.offset, path + "." + std::string(tag.name));
-                const std::uint64_t value = Unsigned(offset + tag.offset, tag.nested->size);
-                for (const UnionKind& kind : union_.kinds)
-                {
-                    if (kind.tag == value)
-                    {
-                        const auto& field = info.fields[kind.field];
-                        Value(field.kind, field.nested, offset + field.offset, path + "." + std::string(field.name));
-                    }
-                }
-                return;
-            }
-            for (const auto& field : info.fields)
-            {
-                const std::string name = path + "." + std::string(field.name);
-                if (field.kind != ValueKind::InlineArray)
-                {
-                    Value(field.kind, field.nested, offset + field.offset, name);
-                    continue;
-                }
-                const std::size_t size = field.element == ValueKind::Struct || field.element == ValueKind::Enum
-                                             ? field.nested->size
-                                             : ScalarSize(field.element);
-                for (std::size_t index = 0; index < field.length; ++index)
-                {
-                    Value(field.element, field.nested, offset + field.offset + index * size,
-                          name + "[" + std::to_string(index) + "]");
-                }
-            }
-        }
     };
 
     // Calls the C# class's method for T and compares what it returns with T{}, naming every field that differs.
@@ -172,50 +51,48 @@ namespace
         }
         const T managed = *result.value;
         const T native{};
-        Comparison comparison{std::as_bytes(std::span(&native, 1)), std::as_bytes(std::span(&managed, 1)), {}};
-        const StructInfo& info = Iris::Detail::StructInfoOf<T>;
-        comparison.Struct(info, 0, std::string(info.typeName));
+        const std::vector<std::string> differing = Iris::FieldDifferences(native, managed, taggedUnions);
         std::string differences;
-        for (const std::string& difference : comparison.differences)
+        for (const std::string& difference : differing)
             differences += "\n  " + difference;
         INFO("These fields of C#'s new() differ from C++'s T{}:" << differences);
-        REQUIRE(comparison.differences.empty());
+        REQUIRE(differing.empty());
     }
 } // namespace
 
 TEST_CASE("C#'s new AmbientLight() has C++'s Fenrir::AmbientLight{} defaults, field by field", "[renderer][scripting][bindings]")
 {
-    RendererScriptingTests::RendererScriptingApp app;
+    Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::AmbientLight>(Fenrir::ScriptingProbe::Component(app.scripting), "AmbientLight");
 }
 
 TEST_CASE("C#'s new Camera() has C++'s Fenrir::Camera{} defaults, field by field", "[renderer][scripting][bindings]")
 {
-    RendererScriptingTests::RendererScriptingApp app;
+    Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::Camera>(Fenrir::ScriptingProbe::Component(app.scripting), "Camera");
 }
 
 TEST_CASE("C#'s new DirectionalLight() has C++'s Fenrir::DirectionalLight{} defaults, field by field", "[renderer][scripting][bindings]")
 {
-    RendererScriptingTests::RendererScriptingApp app;
+    Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::DirectionalLight>(Fenrir::ScriptingProbe::Component(app.scripting), "DirectionalLight");
 }
 
 TEST_CASE("C#'s new MeshRenderer() has C++'s Fenrir::MeshRenderer{} defaults, field by field", "[renderer][scripting][bindings]")
 {
-    RendererScriptingTests::RendererScriptingApp app;
+    Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::MeshRenderer>(Fenrir::ScriptingProbe::Component(app.scripting), "MeshRenderer");
 }
 
 TEST_CASE("C#'s new RendererStats() has C++'s Fenrir::RendererStats{} defaults, field by field", "[renderer][scripting][bindings]")
 {
-    RendererScriptingTests::RendererScriptingApp app;
+    Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::RendererStats>(Fenrir::ScriptingProbe::Component(app.scripting), "RendererStats");
 }
 
 TEST_CASE("C#'s new Sky() has C++'s Fenrir::Sky{} defaults, field by field", "[renderer][scripting][bindings]")
 {
-    RendererScriptingTests::RendererScriptingApp app;
+    Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::Sky>(Fenrir::ScriptingProbe::Component(app.scripting), "Sky");
 }
 

@@ -7,6 +7,7 @@
 #include <optional>
 #include <source_location>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 #include "FenrirECS/Entity.hpp"
@@ -51,6 +52,9 @@ namespace Fenrir
         {
         }
 
+        /** @brief What Alive warns for an entity that is not alive in the active scene. */
+        static constexpr std::string_view NotAlive = "the entity is not alive, so it does nothing";
+
         /**
          * @brief The entity's value as an entity of `entities`, the owner rule every native resolves an entity it is
          * given by: its value when `entities` owns it, or when it has no owner (a test names an entity by its id, and
@@ -76,7 +80,7 @@ namespace Fenrir
             {
                 return entities.GetEntity(value);
             }
-            m_warnings->Warn(*m_context, "the entity is not alive, so it does nothing", where);
+            m_warnings->Warn(*m_context, std::string(NotAlive), where);
             return std::nullopt;
         }
 

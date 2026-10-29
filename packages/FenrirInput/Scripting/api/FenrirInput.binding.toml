@@ -47,7 +47,7 @@ cpp = "../Tests/Generated/FenrirInputDefaultsTests.cpp"
 csharp = "../Tests/Generated/FenrirInputDefaults.cs"
 class = "Fenrir.InputScriptFixture.Defaults"
 includes = ["InputScriptingApp.hpp"]
-setup = "InputScriptingTests::InputScriptingApp app;"
+setup = "Fenrir::Testing::InputScriptingApp app;"
 tags = "[input][scripting][bindings]"
 
 # The native functions: tools/describe-api's natives mode reads every function in `sources` taking `context` first (with
