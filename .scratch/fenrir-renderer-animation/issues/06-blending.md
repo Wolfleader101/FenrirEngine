@@ -1,0 +1,23 @@
+# 06: clips blend through crossfades, override and additive layers and bone masks, shown in the Blending scene
+
+**What to build:** changing a clip crossfades, `AnimationLayer` entities layer upper-body and additive clips over the `Animator`, bone masks shape them, weights never touch clocks, and events fire only from contributing clips, all proven headlessly and in AnimationDemo's scene 4 (spec: "FenrirAnimation: blending"; ADR-0036).
+
+- **Layers:** `Animator` is the base layer, always first; `AnimationLayer` as the spec's struct on any entity, ordered by `order` then entity, its `skeleton` free of the ECS hierarchy; `Seek` and `Playback` taking the skeleton entity for the base or the layer entity; a layer with no base `Animator` layering over the retained base pose. `Animators` grows per-layer state (cursor, fades, snapshots, mask and reference caches).
+- **Composition:** layers in sequence with no normalisation at `weight × mask(bone)` clamped to [0, 1]; the base resolving unanimated channels to rest, override layers passing them through, additive layers treating them as identity deltas; override as lerp and shortest-arc nlerp; additive translation, rotation and scale as the spec's formulas, with the positive-ratio rule and one diagnostic per binding; reference poses `ClipStart` and `RestPose` as complete local poses cached per (clip, skeleton, mode) revisions.
+- **Crossfades:** `fadeSeconds > 0` fades, 0 cuts; the outgoing clip keeps advancing on its own cursor; an interrupted fade freezes a snapshot with coverage bits and fades from it, with no transition stack; progress by unscaled `deltaTime`, frozen while paused, clamped, `Linear` or `Smooth`; a `fadeSeconds` change leaving a running fade alone; coverage-aware per channel; layer empty→clip fading in and clip→empty fading out then clearing; base clip→empty keeping the last pose and empty→clip fading from the retained pose; a seek moving only the incoming cursor; only the current clip reporting `finished`.
+- **Weight and cost:** weight never touching cursors or fades; a zero-weight layer or zero-mask bone not sampled while its clock and events still run; a skipped layer sampling on demand for a snapshot or when its weight returns.
+- **Masks:** bound per skeleton by engine name, cached per (mask, skeleton) revisions, unmatched or ambiguous names diagnosed once and selecting nothing.
+- **Events across layers:** firing only while `weight > 0` and fade-eligible (incoming from fade start inclusive, outgoing until fade end exclusive, snapshots never), the mask ignored, silent crossings never replayed, eligibility judged at the crossing's frame fraction, crossings merged chronologically across layers (ties by layer order then index) into the per-skeleton budget with overflow counted per layer; `AnimationEvent` and `AnimationEventsDropped` carry `layer`; `ClipFinished` firing whatever the weight.
+- **Lifecycle:** a layer on a missing, non-skeleton or unready entity contributing nothing and not advancing; changing `skeleton` restarting with no fade; removal cutting with state freed at reconcile; other fields applying at the next evaluation.
+- **Scene 4, Blending**, in AnimationDemo, with its README row and hand checks: a crossfade with both curves and an interruption mid-fade; an upper-body override layer with a subtree mask over the walk; an additive layer with both reference modes; a layer weight ramped to 0 and back with its clock running; events silenced at weight 0.
+
+**Blocked by:** 05
+
+**Touches:** `packages/FenrirAnimation/`, `examples/AnimationDemo/src/`, `examples/AnimationDemo/README.md`, `GLOSSARY.md`
+
+**Status:** ready-for-agent
+
+- [ ] Seam 9 covers ADR-0036's composition, additive, crossfade, event and lifecycle cases: sequential override and additive maths against hand-computed poses, both reference modes, the positive-ratio rule, an interrupted fade continuing from its snapshot, coverage per channel, weight leaving clocks alone, a masked bone selecting nothing on an unmatched name, events from contributing clips only and merged in time order across layers, and `ClipFinished` at weight 0.
+- [ ] Scene 4 is in AnimationDemo's scene list, in its README with keys and hand checks, and the smoke runs still pass.
+- [ ] Hand check (left to the user as a `Hand check:` line on resolve): the crossfade shows no pop when interrupted, the wave plays on the upper body over the walk, the additive lean adds onto any clip in both modes, the ramped layer comes back in sync, and the event text stops at weight 0.
+- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
