@@ -320,7 +320,7 @@ TEST_CASE("a released generation's copy is deleted only once it is collected, wi
 
     REQUIRE(life.generations.Reload().Succeeded());
 
-    INFO("The reload's sweep should have found the old generation pending and warned once");
+    INFO("The reload's sweep should have found the old generation pending and logged one warning");
     REQUIRE((life.generations.PendingUnloadCount() == 1 && life.CopyExists(1)));
     REQUIRE(life.Logged(LogLevel::Warn, "has not unloaded") == 1);
 
