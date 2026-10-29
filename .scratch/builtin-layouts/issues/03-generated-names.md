@@ -13,7 +13,7 @@
 
 **Touches:** `packages/FenrirScripting/src/GeneratedNames.hpp` (renamed from `SystemHostNames.hpp`), `packages/FenrirScripting/src/ScriptData.cpp`, `packages/FenrirScripting/src/Scripting.cpp` (lines 9 and 167 to 190 only; overlaps candidate 4's spec), `packages/FenrirScripting/CMakeLists.txt`, `packages/FenrirScripting/Managed/Fenrir.Scripting.Generators/GeneratedNames.cs`, `packages/FenrirScripting/Managed/Fenrir.Scripting.Generators/ComponentFieldsGenerator.cs`, `packages/FenrirScripting/Managed/Fenrir.Scripting.Generators/EventGenerator.cs`, `packages/FenrirScripting/Managed/Fenrir.Scripting.Generators/SystemGenerator.cs`, `packages/FenrirScripting/README.md`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `packages/FenrirScripting/src/SystemHostNames.hpp` does not exist; `grep -rn "Fenrir.Scripting.Generated" packages/FenrirScripting/src packages/FenrirScripting/Managed/Fenrir.Scripting.Generators --include=*.cpp --include=*.hpp --include=*.cs` finds a string literal only in `GeneratedNames.hpp` and `GeneratedNames.cs` (doc comments excepted).
 - [x] The generated `.g.cs` text is byte-for-byte what it was (compare a fixture's generated output before and after, or rely on the end-to-end tests passing with no fixture change).

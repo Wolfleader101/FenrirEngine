@@ -13,7 +13,7 @@
 
 **Touches:** `packages/FenrirApp/api/`, `packages/FenrirApp/CMakeLists.txt`, `packages/FenrirScripting/api/FenrirScripting.binding.toml`, `packages/FenrirScripting/api/FenrirScripting.natives.json`, `packages/FenrirScripting/CMakeLists.txt`, `packages/FenrirScripting/src/Bindings.cpp` (the `EventReadAfter` native only; ticket 02 edits `QueryCount`'s doc in the same file), `packages/FenrirScripting/src/EngineContext.hpp`, `packages/FenrirScripting/Managed/Fenrir.Scripting/Events.cs`, `packages/FenrirScripting/Managed/Fenrir.Scripting/Generated/`, `packages/FenrirScripting/include/FenrirScripting/Generated/`, `packages/FenrirScripting/README.md`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `packages/FenrirApp/api/FenrirApp.api.json` describes `Fenrir::RawEventRange` with five fields; `grep -rn "nuint\[5\]\|view\[" packages/FenrirScripting/Managed/Fenrir.Scripting/Events.cs packages/FenrirScripting/src/Bindings.cpp` finds nothing.
 - [x] `fenrir-describe-api` and `fenrir-generate-bindings` re-run with no further change; every package binding is unchanged (the bindings that `uses` the built-in one load its descriptions through it: if one of them changes, say so in the PR).

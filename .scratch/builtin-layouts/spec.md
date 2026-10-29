@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 
 # Built-in layouts: the built-in extension's last hand-agreed layouts get one owner each
 

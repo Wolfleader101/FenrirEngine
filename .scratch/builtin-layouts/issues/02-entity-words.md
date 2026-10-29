@@ -12,7 +12,7 @@
 
 **Touches:** `packages/FenrirScripting/src/Queries.hpp`, `packages/FenrirScripting/src/Queries.cpp`, `packages/FenrirScripting/src/Bindings.cpp` (the `QueryCount` doc comment only; ticket 01 edits `EventReadAfter` in the same file), `packages/FenrirScripting/api/FenrirScripting.natives.json`, `packages/FenrirScripting/Managed/Fenrir.Scripting/QueryNative.cs`, `packages/FenrirScripting/Managed/Fenrir.Scripting/Generated/Native.cs`, `packages/FenrirScripting/Managed/Fenrir.Scripting.Generators/QueryGenerator.cs`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `grep -rn "EntityWords = 2\|arity + 2\|i + 1\]\|two words" packages/FenrirScripting/src packages/FenrirScripting/Managed` finds nothing.
 - [x] `fenrir-describe-api` and `fenrir-generate-bindings` re-run with no further change.
