@@ -59,7 +59,7 @@ namespace Fenrir::Detail
 
     /**
      * @brief ScriptSystems' loader over the Iris component a generation is: the one place that knows the generated host
-     * is a managed type found by name, with four methods bound by name (SystemHostNames.hpp). The method lookup, and so
+     * is a managed type found by name, with four methods bound by name (GeneratedNames.hpp). The method lookup, and so
      * the missing-method diagnostic, is this adapter's and no fake's.
      */
     class IrisSystemHostLoader final : public SystemHostLoader

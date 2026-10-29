@@ -1,10 +1,11 @@
 #include "IrisAdapters.hpp"
 
+#include "GeneratedNames.hpp"
 #include "ScriptComponents.hpp"
-#include "SystemHostNames.hpp"
 
 #include <cctype>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace Fenrir::Detail
@@ -101,7 +102,7 @@ namespace Fenrir::Detail
     {
         using FindResult = Iris::CallResult<std::unique_ptr<SystemHost>>;
         const Iris::Component& component = IrisScriptAssemblyLoader::Of(generation);
-        const auto type = component.FindType(SystemHostNames::Type);
+        const auto type = component.FindType(GeneratedNames::SystemHost);
         if (type.status == Iris::CallStatus::NotFound)
         {
             return FindResult{Iris::CallStatus::NotFound, std::nullopt, type.diagnostic, false};
@@ -111,10 +112,10 @@ namespace Fenrir::Detail
             return FindResult{type.status, std::nullopt,
                               "The script's system host could not be read: " + type.diagnostic, false};
         }
-        const auto mask = type.value->FindInstanceMethod<std::int32_t()>(SystemHostNames::PhaseMask);
-        const auto create = type.value->FindInstanceMethod<void()>(SystemHostNames::OnCreate);
-        const auto run = type.value->FindInstanceMethod<void(std::int32_t)>(SystemHostNames::Run);
-        const auto destroy = type.value->FindInstanceMethod<void()>(SystemHostNames::OnDestroy);
+        const auto mask = type.value->FindInstanceMethod<std::int32_t()>(GeneratedNames::PhaseMask);
+        const auto create = type.value->FindInstanceMethod<void()>(GeneratedNames::OnCreate);
+        const auto run = type.value->FindInstanceMethod<void(std::int32_t)>(GeneratedNames::Run);
+        const auto destroy = type.value->FindInstanceMethod<void()>(GeneratedNames::OnDestroy);
         for (const auto* found : {&mask.status, &create.status, &run.status, &destroy.status})
         {
             if (*found != Iris::CallStatus::Success)
@@ -174,10 +175,10 @@ namespace Fenrir::Detail
         struct Table
         {
             const char* noun;
-            const char* type;
+            std::string_view type;
         };
-        constexpr Table tables[] = {{"component", "Fenrir.Scripting.Generated.ComponentTable"},
-                                    {"event", "Fenrir.Scripting.Generated.EventTable"}};
+        constexpr Table tables[] = {{"component", GeneratedNames::ComponentTable},
+                                    {"event", GeneratedNames::EventTable}};
         for (const auto& [noun, type] : tables)
         {
             const auto table = m_component.FindType(type);
@@ -190,7 +191,7 @@ namespace Fenrir::Detail
                 return Result{table.status,
                               std::string("The ") + noun + " table could not be read: " + table.diagnostic, false};
             }
-            const auto run = table.value->FindMethod<void()>("Register");
+            const auto run = table.value->FindMethod<void()>(GeneratedNames::Register);
             if (!run.Succeeded())
             {
                 return Result{run.status,

@@ -1,0 +1,48 @@
+{
+  "package": "FenrirApp",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fenrir::RawEventRange",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 40,
+      "alignment": 8,
+      "doc": "What one type-erased read through a cursor yields (IEventQueue::ReadRawAfter): the events sent since the previous read, oldest first, as up to two arrays of EventSize()-byte elements in the queue's buffers (nothing is copied). Valid until the queue is next sent to or swapped. The byte form of EventRange.",
+      "fields": [
+        {
+          "name": "older",
+          "offset": 0,
+          "kind": "pointer",
+          "default": null
+        },
+        {
+          "name": "olderCount",
+          "offset": 8,
+          "kind": "u64",
+          "default": 0
+        },
+        {
+          "name": "newer",
+          "offset": 16,
+          "kind": "pointer",
+          "default": null
+        },
+        {
+          "name": "newerCount",
+          "offset": 24,
+          "kind": "u64",
+          "default": 0
+        },
+        {
+          "name": "missed",
+          "offset": 32,
+          "kind": "u64",
+          "default": 0,
+          "doc": "How many events were dropped before the reader got to them (it went two swaps without reading)."
+        }
+      ]
+    }
+  ]
+}

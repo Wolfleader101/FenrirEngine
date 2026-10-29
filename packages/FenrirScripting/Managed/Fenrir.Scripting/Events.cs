@@ -57,15 +57,14 @@ public sealed unsafe class EventReader<T> where T : unmanaged, IEvent
     /// <exception cref="InvalidOperationException">The engine does not know the event.</exception>
     public EventRange<T> Read()
     {
-        // older data, older count, newer data, newer count, missed
-        nuint* view = stackalloc nuint[5];
         int id = RegistryIds<T, EventKind>.Require();
         bool read;
+        RawEventRange view;
         fixed (ulong* cursor = &seen)
-            read = Native.EventReadAfter(id, cursor, view);
+            read = Native.EventReadAfter(id, cursor, out view);
         if (!read)
             throw new InvalidOperationException($"Cannot read {typeof(T).Name}: the engine has no queue for it.");
-        return new EventRange<T>((T*)view[0], (int)view[1], (T*)view[2], (int)view[3], (int)view[4]);
+        return new EventRange<T>((T*)view.Older, (int)view.OlderCount, (T*)view.Newer, (int)view.NewerCount, (int)view.Missed);
     }
 }
 
