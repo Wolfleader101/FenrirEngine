@@ -11,6 +11,7 @@
 #include <glm/gtc/packing.hpp>
 
 #include "Core/BuiltinShaders.hpp"
+#include "Core/Skinning.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
 namespace Fenrir::Render
@@ -46,8 +47,15 @@ namespace Fenrir::Render
         {
             Math::Mat4 world;
             Math::Mat4 normal;
+            /** @brief A skinned item's first palette entry, in bones. */
+            std::uint32_t paletteOffset = 0;
+            /** @brief The sign of the world matrix's determinant: -1 when it mirrors, else 1. */
+            float worldSign = 1.0f;
+            std::uint32_t padding0 = 0;
+            std::uint32_t padding1 = 0;
         };
-        static_assert(sizeof(DrawBlock) == 128);
+        static_assert(sizeof(DrawBlock) == 144);
+        static_assert(offsetof(DrawBlock, paletteOffset) == 128 && offsetof(DrawBlock, worldSign) == 132);
 
         /** @brief The background block, as `builtin:background` declares it (std140). */
         struct BackgroundBlock
@@ -64,11 +72,13 @@ namespace Fenrir::Render
             std::uint32_t size = 0;
         };
 
-        // Sets 0, 1 and 3, declared in C++ (ADR-0024). The draw buffer's size depends on its item count.
-        [[maybe_unused]] constexpr std::array<FixedBinding, 3> FixedBindings{{
+        // Sets 0, 1 and 3, declared in C++ (ADR-0024, ADR-0035). The draw and palette buffers hold as many records as
+        // they need; reflection sizes such a block by one record, so their record layouts are checked.
+        [[maybe_unused]] constexpr std::array<FixedBinding, 4> FixedBindings{{
             {0, 0, ShaderBindingKind::UniformBuffer, sizeof(FrameBlock)},
             {1, 0, ShaderBindingKind::UniformBuffer, sizeof(ViewBlock)},
-            {3, 0, ShaderBindingKind::StorageBuffer, 0},
+            {3, 0, ShaderBindingKind::StorageBuffer, sizeof(DrawBlock)},
+            {3, 1, ShaderBindingKind::StorageBuffer, sizeof(GpuBone)},
         }};
 
         /** @brief The binding set of the material. */
@@ -85,24 +95,31 @@ namespace Fenrir::Render
             std::string_view defaultName;
         };
 
-        constexpr std::array<StreamFormat, 6> Streams{{
+        // Joints and weights (ADR-0035) are a skinned mesh's; their zero defaults weigh nothing, the identity.
+        constexpr std::array<StreamFormat, 8> Streams{{
             {"positions", VertexFormat::Float3, 12, 0, "the origin"},
             {"normals", VertexFormat::Float3, 12, 12, "normal +Y"},
             {"tangents", VertexFormat::Float4, 16, 24, "tangent +X"},
             {"uv0", VertexFormat::Float2, 8, 40, "UV 0"},
             {"uv1", VertexFormat::Float2, 8, 48, "UV 0"},
             {"colours", VertexFormat::Float4, 16, 56, "white"},
+            {"joints", VertexFormat::Uint16x4, 8, 72, "bone 0"},
+            {"weights", VertexFormat::Unorm16x4, 8, 80, "no weight"},
         }};
 
-        // The constants above, back to back: position, normal, tangent, UV0, UV1, colour.
-        constexpr std::array<float, 18> DefaultStreams{0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
-                                                       1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+        // The constants above, back to back: position, normal, tangent, UV0, UV1, colour, then the joints' and weights'
+        // zero bits.
+        constexpr std::array<float, 22> DefaultStreams{0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+                                                       0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+                                                       1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 
         constexpr std::uint8_t OpaqueStage = static_cast<std::uint8_t>(RenderStage::Opaque);
         constexpr std::uint8_t TransparentStage = static_cast<std::uint8_t>(RenderStage::Transparent);
 
         /** @brief The variant key the renderer sets for a `Masked` material (ADR-0024). */
         constexpr std::string_view AlphaMaskKey = "ALPHA_MASK";
+        /** @brief The variant key the renderer sets for a skinned draw (ADR-0035). */
+        constexpr std::string_view SkinnedKey = "SKINNED";
         /** @brief The block member a `Masked` material's alpha cutoff is written into. */
         constexpr std::string_view AlphaCutoffMember = "alphaCutoff";
 
@@ -479,6 +496,24 @@ namespace Fenrir::Render
             return container.FindVariant({});
         }
 
+        /** @brief The container's variant with `SKINNED` added to `keys`; null if it has no such key. */
+        const ShaderVariant* SkinnedVariant(const ShaderContainer& container, std::span<const std::string_view> keys)
+        {
+            if (std::ranges::find(container.keys, SkinnedKey) == container.keys.end())
+            {
+                return nullptr;
+            }
+            std::vector<std::string_view> wanted(keys.begin(), keys.end());
+            wanted.push_back(SkinnedKey);
+            return container.FindVariant(wanted);
+        }
+
+        /** @brief -1 when `world` mirrors (a negative determinant of its 3x3), else 1. */
+        float WorldSign(const Math::Mat4& world)
+        {
+            return glm::determinant(Math::Mat3(world)) < 0.0f ? -1.0f : 1.0f;
+        }
+
         /** @brief The device sampler a material texture parameter's description asks for. */
         SamplerDesc ToSamplerDesc(const SamplerDescription& description)
         {
@@ -534,7 +569,8 @@ namespace Fenrir::Render
     {
         m_frameLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Frame");
         m_viewLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "View");
-        m_drawLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::StorageBuffer}}}, "Draw");
+        m_drawLayout = m_device.CreateBindingGroupLayout(
+            {{{0, ShaderBindingKind::StorageBuffer}, {1, ShaderBindingKind::StorageBuffer}}}, "Draw");
 
         // The default textures (ADR-0024): 1x1 white, black and the flat tangent-space normal, linear.
         constexpr std::array<std::array<std::uint8_t, 4>, 3> texels{{
@@ -570,6 +606,11 @@ namespace Fenrir::Render
         {
             m_fallback.materialLayout = MaterialLayoutOf(*m_fallback.variant);
             m_fallback.variants.push_back({m_fallback.variant, m_fallback.materialLayout});
+            // Its SKINNED variant, which skinned draws fall back to: never drawn unskinned (ADR-0035).
+            if (const ShaderVariant* skinned = SkinnedVariant(m_fallback.container, {}))
+            {
+                m_fallback.variants.push_back({skinned, m_fallback.materialLayout});
+            }
         }
         m_fallback.id = 0;
 
@@ -601,7 +642,11 @@ namespace Fenrir::Render
         m_viewBlocks = std::make_unique<BlockRing>(m_device, m_viewLayout, false, sizeof(ViewBlock), "View");
         m_backgroundBlocks =
             std::make_unique<BlockRing>(m_device, m_backgroundLayout, false, sizeof(BackgroundBlock), "Background");
-        m_drawBlocks = std::make_unique<BlockRing>(m_device, m_drawLayout, true, sizeof(DrawBlock), "Draw");
+        // The draw set's groups bind both of these rings, so the rings make none of their own.
+        m_drawBlocks =
+            std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true, sizeof(DrawBlock), "Draw");
+        m_paletteBlocks =
+            std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true, sizeof(GpuBone), "Palette");
         m_frameBlocks->Reserve(1);
     }
 
@@ -647,10 +692,15 @@ namespace Fenrir::Render
         {
             m_device.Destroy(group);
         }
+        for (const DrawGroup& group : m_drawGroups)
+        {
+            m_device.Destroy(group.group);
+        }
         m_frameBlocks.reset();
         m_viewBlocks.reset();
         m_backgroundBlocks.reset();
         m_drawBlocks.reset();
+        m_paletteBlocks.reset();
         m_device.Destroy(m_fallback.materialLayout);
         m_device.Destroy(m_backgroundPipeline);
         m_device.Destroy(m_skyPipeline);
@@ -1000,6 +1050,13 @@ namespace Fenrir::Render
         append(3, mesh.uv0);
         append(4, mesh.uv1);
         append(5, mesh.colours);
+        if (mesh.skin.has_value())
+        {
+            append(6, mesh.skin->joints);
+            append(7, mesh.skin->weights);
+            entry.skinned = true;
+            entry.boneCount = mesh.skin->boneCount;
+        }
         if (!vertices.empty())
         {
             entry.vertices = m_device.CreateBuffer({vertices.size(), BufferUsage::Vertex}, vertices, "Mesh vertices");
@@ -1076,6 +1133,16 @@ namespace Fenrir::Render
                 return v.variant == (picked != nullptr ? picked : entry.shader->variant);
             });
         entry.variant = &*variantEntry;
+        const ShaderVariant* skinned =
+            SkinnedVariant(entry.shader->container,
+                           masked ? std::span<const std::string_view>(maskKeys) : std::span<const std::string_view>());
+        for (const VariantEntry& v : entry.shader->variants)
+        {
+            if (skinned != nullptr && v.variant == skinned)
+            {
+                entry.skinnedVariant = &v;
+            }
+        }
         const ShaderVariant& variant = *entry.variant->variant;
 
         std::vector<BindingGroupEntry> bindings;
@@ -1315,18 +1382,42 @@ namespace Fenrir::Render
             {
                 continue;
             }
+            // Only a mesh with skin data draws skinned; the facade asks for it only then.
+            const bool skinned = request.skinned && mesh->second.skinned;
+            if (skinned && std::uint64_t{request.paletteOffset} + mesh->second.boneCount > m_frame.palette.size())
+            {
+                m_logger.Error("FenrirRenderer: internal error: a skinned draw of mesh {} reads palette entries {} to "
+                               "{}, past the {} written this frame, so it is not drawn",
+                               request.mesh.index, request.paletteOffset,
+                               std::uint64_t{request.paletteOffset} + mesh->second.boneCount, m_frame.palette.size());
+                continue;
+            }
             const auto material = m_materials.find(request.material);
             MaterialEntry* found = material == m_materials.end() ? nullptr : &material->second;
-            const bool usable = found != nullptr && found->variant != nullptr;
+            bool usable = found != nullptr && found->variant != nullptr;
+            if (skinned && usable && found->skinnedVariant == nullptr)
+            {
+                // Never drawn unskinned (ADR-0035): the fallback material's SKINNED variant draws it instead.
+                if (m_loggedUnskinned.insert(found->shaderKey).second)
+                {
+                    m_logger.Warn("FenrirRenderer: shader '{}' has no SKINNED variant, so its skinned meshes are drawn "
+                                  "with the fallback material",
+                                  found->shader->container.name);
+                }
+                usable = false;
+            }
+            const VariantEntry& fallbackVariant =
+                skinned && m_fallback.variants.size() > 1 ? m_fallback.variants[1] : m_fallback.variants.front();
             const ShaderEntry* shader = usable ? found->shader : &m_fallback;
-            const VariantEntry* variant = usable ? found->variant : &m_fallback.variants.front();
+            const VariantEntry* variant =
+                usable ? (skinned ? found->skinnedVariant : found->variant) : &fallbackVariant;
             Fenrir::BlendMode blend = usable ? found->blendMode : Fenrir::BlendMode::Opaque;
             const PipelineEntry* pipeline =
                 &MeshPipeline(*shader, *variant, mesh->second, blend, usable && found->doubleSided);
             if (pipeline->pipeline.IsEmpty() && shader != &m_fallback)
             {
                 shader = &m_fallback;
-                variant = &m_fallback.variants.front();
+                variant = &fallbackVariant;
                 blend = Fenrir::BlendMode::Opaque;
                 pipeline = &MeshPipeline(m_fallback, *variant, mesh->second, blend, false);
             }
@@ -1353,6 +1444,8 @@ namespace Fenrir::Render
             draw.mesh = &mesh->second;
             draw.world = request.world;
             draw.transparent = IsTransparent(blend);
+            draw.paletteOffset = skinned ? request.paletteOffset : 0;
+            draw.sortPoint = request.sortPoint.value_or(Math::Vec3(request.world[3]));
             const std::uint64_t stage = draw.transparent ? TransparentStage : OpaqueStage;
             const std::uint64_t materialId = fallback ? 0 : found->id;
             draw.sortKey = (stage << 56u) | ((std::uint64_t{pipeline->id} & 0xFFFFu) << 40u) |
@@ -1409,6 +1502,28 @@ namespace Fenrir::Render
             // Each item reads its own record of the draw buffer, by its place in the draw list.
             encoder.DrawIndexed({.indexCount = draw.mesh->indexCount, .firstInstance = static_cast<std::uint32_t>(i)});
         }
+    }
+
+    BindingGroupHandle SceneRenderer::DrawGroupFor(std::uint64_t frameIndex)
+    {
+        const BufferHandle draws = m_drawBlocks->Buffer(frameIndex);
+        const BufferHandle palette = m_paletteBlocks->Buffer(frameIndex);
+        // One group per copy, made again when either ring has remade its buffers.
+        const std::size_t copies = std::max<std::size_t>(m_device.FramesInFlight(), 1);
+        m_drawGroups.resize(copies);
+        DrawGroup& group = m_drawGroups[static_cast<std::size_t>(frameIndex % copies)];
+        if (group.group.IsEmpty() || group.draws != draws || group.palette != palette)
+        {
+            m_device.Destroy(group.group);
+            BindingGroupEntry drawEntry;
+            drawEntry.binding = 0;
+            drawEntry.buffer = draws;
+            BindingGroupEntry paletteEntry;
+            paletteEntry.binding = 1;
+            paletteEntry.buffer = palette;
+            group = {draws, palette, m_device.CreateBindingGroup({m_drawLayout, {drawEntry, paletteEntry}}, "Draw")};
+        }
+        return group.group;
     }
 
     BindingGroupHandle SceneRenderer::OutputGroup(TextureHandle sceneColour)
@@ -1471,9 +1586,19 @@ namespace Fenrir::Render
         m_drawBlocks->Reserve(draws->size());
         for (std::size_t i = 0; i < draws->size(); ++i)
         {
-            const Math::Mat4& world = (*draws)[i].world;
-            const DrawBlock block{world, glm::transpose(glm::inverse(world))};
+            const ResolvedDraw& draw = (*draws)[i];
+            DrawBlock block;
+            block.world = draw.world;
+            block.normal = glm::transpose(glm::inverse(draw.world));
+            block.paletteOffset = draw.paletteOffset;
+            block.worldSign = WorldSign(draw.world);
             m_drawBlocks->Write(frameIndex, i, BytesOf(block));
+        }
+        // Every palette written again each frame (ADR-0035): nothing is kept across frames.
+        m_paletteBlocks->Reserve(m_frame.palette.size());
+        for (std::size_t bone = 0; bone < m_frame.palette.size(); ++bone)
+        {
+            m_paletteBlocks->Write(frameIndex, bone, BytesOf(GpuBone::FromMatrix(m_frame.palette[bone])));
         }
         const std::vector<ViewRequest>& views = m_frame.views;
         m_viewBlocks->Reserve(views.size());
@@ -1553,7 +1678,7 @@ namespace Fenrir::Render
         }
 
         const BindingGroupHandle frameGroup = m_frameBlocks->Group(frameIndex, 0);
-        const BindingGroupHandle drawGroup = m_drawBlocks->Group(frameIndex, 0);
+        const BindingGroupHandle drawGroup = DrawGroupFor(frameIndex);
         // The targets drawn into so far: the first view into each clears it. The window's key is empty.
         std::set<AssetKey> cleared;
         for (std::size_t v = 0; v < views.size(); ++v)
@@ -1626,7 +1751,7 @@ namespace Fenrir::Render
             {
                 const ResolvedDraw& draw = (*draws)[i];
                 (draw.transparent ? *transparent : *opaque).push_back(i);
-                depth[i] = (request.view * draw.world[3]).z;
+                depth[i] = (request.view * Math::Vec4(draw.sortPoint, 1.0f)).z;
             }
             std::stable_sort(transparent->begin(), transparent->end(),
                              [&](std::size_t a, std::size_t b) { return depth[a] < depth[b]; });

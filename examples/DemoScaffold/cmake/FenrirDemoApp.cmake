@@ -50,6 +50,10 @@ function(fenrir_add_demo_app name)
 
     if(demo_SCRIPTS AND FENRIR_ENABLE_SCRIPTING)
         fenrir_add_demo_scripts(${name} "${demo_SCRIPTS}")
+    elseif(FENRIR_ENABLE_SCRIPTING)
+        # The scaffold links the scripting host whenever scripting is built, so an app with no scripts of its own still
+        # needs its run-time files and the contracts of the extensions the scaffold installs beside the executable.
+        fenrir_deploy_scripting(${name} EXTENSIONS Input Window Assets Renderer DebugDraw)
     endif()
 
     # Every scene, whatever FENRIR_DEMO_SCENE and FENRIR_DEMO_KEYS the shell has: empty is unset.

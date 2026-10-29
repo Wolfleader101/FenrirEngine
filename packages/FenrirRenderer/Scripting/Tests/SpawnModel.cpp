@@ -95,7 +95,7 @@ TEST_CASE("SpawnModel from C# returns a root usable in the same system, over the
     }
 
     const auto model = test.Store().Load<Model>("two_parts.gltf", AssetOwner::App()).handle;
-    const Entity expected = SpawnModel(test.Store(), test.Get().GetActiveScene(), model);
+    const Entity expected = SpawnModel(test.Get(), test.Get().GetActiveScene(), model);
     const Node spawned = Describe(root);
     const Node made = Describe(expected);
     INFO("The tree under the root should be C++'s: two_parts, Body drawing its first mesh, under it Tip and "

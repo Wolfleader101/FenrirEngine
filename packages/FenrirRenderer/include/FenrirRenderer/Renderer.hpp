@@ -127,6 +127,11 @@ namespace Fenrir
          * @brief The box around `entity`'s drawn mesh in world space, from the mesh's local bounds and the entity's
          * world matrix now. Empty if the entity is not alive, has no MeshRenderer, its mesh does not resolve, or this
          * owner is invalid.
+         *
+         * A skinned mesh's (ADR-0035) comes from its skeleton's pose now: each bone's box moved by the bone's palette
+         * matrix, with the box of its unweighted vertices, under the skeleton entity's world matrix. It is
+         * conservative, not tight. Empty when the mesh has no SkinnedMesh, no skinning source is registered, or the
+         * skeleton is not `Ready`.
          */
         [[nodiscard]] std::optional<Math::AABB> GetWorldBounds(const Entity& entity) const;
 

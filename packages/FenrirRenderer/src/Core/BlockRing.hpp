@@ -22,7 +22,8 @@ namespace Fenrir::Render
       public:
         /**
          * @brief Blocks of `slotSize` bytes bound at binding 0 of groups of `layout`: one group per slot for uniform
-         * blocks, or, with `storage`, one storage block per copy spanning every slot.
+         * blocks, or, with `storage`, one storage block per copy spanning every slot. With an empty `layout` it makes
+         * no groups: the caller binds `Buffer` in groups of its own.
          */
         BlockRing(Graphics::GraphicsDevice& device, Graphics::BindingGroupLayoutHandle layout, bool storage,
                   std::size_t slotSize, std::string label);
@@ -42,6 +43,13 @@ namespace Fenrir::Render
          * spanning every slot.
          */
         [[nodiscard]] Graphics::BindingGroupHandle Group(std::uint64_t frameIndex, std::size_t slot) const;
+        /** @brief Frame `frameIndex`'s copy of the buffer; empty before the first Reserve. */
+        [[nodiscard]] Graphics::BufferHandle Buffer(std::uint64_t frameIndex) const;
+        /** @brief How many slots each copy holds now. */
+        [[nodiscard]] std::size_t Capacity() const noexcept
+        {
+            return m_slots;
+        }
 
       private:
         void DestroyGroups();

@@ -189,7 +189,7 @@ namespace Fenrir
             // spawned model is; the tree is then recorded into the active scene, which a native function may not change
             // directly (ADR-0029).
             Scene scratch(std::string(context.Native()));
-            const Entity spawned = Fenrir::SpawnModel(*store, scratch, *model);
+            const Entity spawned = Fenrir::SpawnModel(context.GetApp(), scratch, *model);
             if (!spawned.IsValid())
             {
                 return false;

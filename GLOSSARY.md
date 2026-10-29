@@ -785,7 +785,7 @@ Whoever took a key's, button's or pointer's press: the router that consumed it, 
 ## FenrirEngine demo apps
 
 **Demo app**
-One executable under `examples/` per feature area (RendererDemo, ScriptingDemo, PhysicsDemo, later AnimationDemo), built on the demo scaffold, with an ordered list of scenes; a C++ scene and its C# twin are separate entries. An app may be split further when it outgrows one list. Not a reference for engine code beyond what it shows.
+One executable under `examples/` per feature area (RendererDemo, ScriptingDemo, PhysicsDemo, AnimationDemo), built on the demo scaffold, with an ordered list of scenes; a C++ scene and its C# twin are separate entries. An app may be split further when it outgrows one list. Not a reference for engine code beyond what it shows.
 *Avoid:* DemoApp (the legacy single app, which the demo apps replaced), sample, example (alone).
 
 **Demo scaffold**

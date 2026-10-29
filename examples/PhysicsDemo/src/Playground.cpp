@@ -195,7 +195,7 @@ namespace PhysicsDemo
                 Fenrir::EntityList& entityList = scene.GetEntityList();
                 const Fenrir::Math::Quat identity(1.0f, 0.0f, 0.0f, 0.0f);
                 const Vec3 base(5.0f, -3.75f - shape.min.y, -7.0f);
-                Fenrir::Entity bag = Fenrir::SpawnModel(store, scene, model.handle);
+                Fenrir::Entity bag = Fenrir::SpawnModel(app, scene, model.handle);
                 bag.GetComponent<Fenrir::Name>().Set("Mesh collider (backpack)");
                 bag.GetComponent<Fenrir::Transform>() = Fenrir::Transform(base, identity, Vec3(1.0f));
                 bag.AddComponent<Fenrir::Collider>(Fenrir::Collider{Fenrir::MeshShape{collisionMesh}});

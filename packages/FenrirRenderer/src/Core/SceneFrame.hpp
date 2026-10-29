@@ -2,6 +2,7 @@
 
 #include <compare>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "Device/CommandList.hpp"
@@ -44,8 +45,20 @@ namespace Fenrir::Render
         AssetKey mesh;
         /** @brief A material the core has prepared; an empty or unknown one draws with the fallback material. */
         AssetKey material;
-        /** @brief Local to world. */
+        /** @brief Local to world; for a skinned item, its skeleton entity's world matrix. */
         Math::Mat4 world{1.0f};
+        /**
+         * @brief Whether it is skinned (ADR-0035): drawn with its shader's `SKINNED` variant from the palette entries
+         * starting at `paletteOffset` in SceneFrame::palette. Only a mesh with skin data is drawn skinned.
+         */
+        bool skinned = false;
+        /** @brief A skinned item's first palette entry, in bones. */
+        std::uint32_t paletteOffset = 0;
+        /**
+         * @brief The world point a transparent item is sorted by; empty for its world origin. A skinned item's is the
+         * centre of its skinned bounds.
+         */
+        std::optional<Math::Vec3> sortPoint;
     };
 
     /**
@@ -93,6 +106,12 @@ namespace Fenrir::Render
     struct SceneFrame
     {
         std::vector<DrawRequest> draws;
+        /**
+         * @brief The skinning palettes the skinned draws read (ADR-0035), back to back, one skinning matrix (model x
+         * inverse bind) per bone: written into the frame's palette buffer, whose entries the draws index by
+         * `paletteOffset`.
+         */
+        std::vector<Math::Mat4> palette;
         /**
          * @brief The views, in order: views into one target draw in this order, the first clearing it. A view
          * sampling an image another view draws is drawn after it, unless that would close a cycle of views waiting on
