@@ -47,6 +47,8 @@ add_executable(FenrirScriptingRulesTests
     Rules/FakeScriptAssemblyLoader.hpp
     Rules/ScriptSystemsTests.cpp
     Rules/FakeSystemHost.hpp
+    Rules/ExtensionSetTests.cpp
+    Rules/FakeNativeRegistrar.hpp
     Rules/NativeGuardTests.cpp
     Rules/NativeMarshallingTests.cpp
     Rules/ZeroingOutputsTests.cpp

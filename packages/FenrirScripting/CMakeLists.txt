@@ -52,6 +52,11 @@ include(cmake/FenrirScriptingExtension.cmake)
 add_library(FenrirScripting STATIC
     src/Scripting.cpp
     src/Bindings.cpp
+    src/ExtensionSet.cpp
+    src/IrisAdapters.cpp
+    src/IrisAdapters.hpp
+    src/ExtensionSet.hpp
+    src/NativeRegistrar.hpp
     src/ChangeBuffer.cpp
     src/Queries.cpp
     src/Queries.hpp
