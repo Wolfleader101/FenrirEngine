@@ -5,11 +5,15 @@
 #include <span>
 
 #include "ComponentRegistry.hpp"
+#include "FenrirECS/Entity.hpp"
 
 namespace Fenrir::Detail
 {
-    // The words a query row spends on the entity: a Fenrir::Entity, which C# reads whole.
-    inline constexpr std::size_t EntityWords = 2;
+    // The words a query row spends on the entity: a Fenrir::Entity, as the engine lays it out, which C# reads whole
+    // through its mirror (so C#'s QueryNative.EntityWords is the same size over the same word).
+    inline constexpr std::size_t EntityWords = sizeof(Entity) / sizeof(std::uintptr_t);
+    static_assert(sizeof(Entity) == EntityWords * sizeof(std::uintptr_t) && alignof(Entity) <= alignof(std::uintptr_t),
+                  "a query row holds the entity as the engine lays it out: value, then list");
 
     // How many entities have every listed component, or -1 if any id is not a registered component.
     [[nodiscard]] std::int32_t CountQueryRows(EntityList& entities, const ComponentRegistry& registry,

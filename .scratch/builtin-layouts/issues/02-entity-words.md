@@ -12,13 +12,16 @@
 
 **Touches:** `packages/FenrirScripting/src/Queries.hpp`, `packages/FenrirScripting/src/Queries.cpp`, `packages/FenrirScripting/src/Bindings.cpp` (the `QueryCount` doc comment only; ticket 01 edits `EventReadAfter` in the same file), `packages/FenrirScripting/api/FenrirScripting.natives.json`, `packages/FenrirScripting/Managed/Fenrir.Scripting/QueryNative.cs`, `packages/FenrirScripting/Managed/Fenrir.Scripting/Generated/Native.cs`, `packages/FenrirScripting/Managed/Fenrir.Scripting.Generators/QueryGenerator.cs`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `grep -rn "EntityWords = 2\|arity + 2\|i + 1\]\|two words" packages/FenrirScripting/src packages/FenrirScripting/Managed` finds nothing.
-- [ ] `fenrir-describe-api` and `fenrir-generate-bindings` re-run with no further change.
-- [ ] The scripting tests pass under the msvc-x64-debug preset with `Tests/QueryTests.cpp` and `Tests/Rules/QueriesTests.cpp` unchanged ("the widest query has eight components" exercises the stride at arity 8).
-- [ ] `check_tickets.py` and clang-format pass.
+- [x] `grep -rn "EntityWords = 2\|arity + 2\|i + 1\]\|two words" packages/FenrirScripting/src packages/FenrirScripting/Managed` finds nothing.
+- [x] `fenrir-describe-api` and `fenrir-generate-bindings` re-run with no further change.
+- [x] The scripting tests pass under the msvc-x64-debug preset with `Tests/QueryTests.cpp` and `Tests/Rules/QueriesTests.cpp` unchanged ("the widest query has eight components" exercises the stride at arity 8).
+- [x] `check_tickets.py` and clang-format pass.
 
 ## Comments
+
+Built 2026-10-28 in the spec worktree, stacked on the spec branch. The generated query types compile into Fenrir.Scripting itself (the generator emits only there), so `QueryNative.EntityWords` is reachable unqualified; no InternalsVisibleTo was needed. msvc-x64-debug: 17/17 scripting tests, query tests unchanged.
+
 
 Filed from the builtin-layouts grilling (spec decision 4). Cut from `dotnet-scripting`; runs side by side with 01 and 03.

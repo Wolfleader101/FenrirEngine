@@ -327,8 +327,8 @@ namespace Fenrir::ScriptingNatives
 
     /**
      * @brief How many entities have every component in `ids`: an upper bound on the rows QueryFill writes. A query is
-     * this call and QueryFill however many entities match; a row is the entity (two words: a Fenrir::Entity, with its
-     * scene's list set) followed by the address of its component for each id, in order.
+     * this call and QueryFill however many entities match; a row is the entity (a Fenrir::Entity, `sizeof(Entity)` in
+     * words, with its scene's list set) followed by the address of its component for each id, in order.
      * @return The count; negative when an id is unknown.
      * @notrunning -1
      */
