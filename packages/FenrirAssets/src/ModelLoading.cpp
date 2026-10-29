@@ -98,7 +98,8 @@ namespace Fenrir
             if (problem.empty())
             {
                 Detail::ImageImport decoded = Detail::ImportImage(source.bytes);
-                if (decoded.image && Detail::PrepareAsset(*decoded.image).empty())
+                Detail::AssetWarnings imageWarnings;
+                if (decoded.image && Detail::PrepareAsset(*decoded.image, imageWarnings).empty())
                 {
                     images.push_back(std::move(*decoded.image));
                     continue;
@@ -167,10 +168,15 @@ namespace Fenrir
         for (std::size_t i = 0; i < imported.meshes.size(); ++i)
         {
             Detail::ImportedMesh& source = imported.meshes[i];
-            if (std::string problem = Detail::PrepareAsset(source.data); !problem.empty())
+            Detail::AssetWarnings meshWarnings;
+            if (std::string problem = Detail::PrepareAsset(source.data, meshWarnings); !problem.empty())
             {
                 logger.Warn("Model '{}': mesh '{}' is left out: {}", fileKey, source.name, problem);
                 continue;
+            }
+            for (const std::string& warning : meshWarnings)
+            {
+                logger.Warn("Model '{}': mesh '{}': {}", fileKey, source.name, warning);
             }
             Detail::AssetBox data(new MeshData(std::move(source.data)), &Detail::DestroyAssetData<MeshData>);
             const auto mesh = HandleOf<Mesh>(

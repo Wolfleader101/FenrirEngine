@@ -10,10 +10,14 @@
 #include <string_view>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include "FenrirAssets/AssetHandle.hpp"
+#include "FenrirAssets/BoneMaskData.hpp"
+#include "FenrirAssets/ClipData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
+#include "FenrirAssets/SkeletonData.hpp"
 #include "FenrirAssets/SpawnNodes.hpp"
 #include "FenrirMath/Colour.hpp"
 #include "FenrirMath/Math.hpp"
@@ -27,6 +31,7 @@ namespace Fenrir
     {
         /** @brief What the store set up. Defined in FenrirAssets's private headers; nothing else can use it. */
         struct AssetStoreState;
+        struct AssetRecord;
 
         /** @brief An asset handle without its type: what the store's untyped core works with. */
         struct AssetSlot
@@ -44,16 +49,23 @@ namespace Fenrir
             delete static_cast<D*>(data);
         }
 
+        /** @brief What a check found that leaves the data usable, one message each, logged as warnings. */
+        using AssetWarnings = std::vector<std::string>;
+
         /**
          * @name Checks before the store takes data
-         * Each checks one kind of data and completes what the store computes (a mesh's bounds). It returns an empty
-         * string when the data is usable, else why it is not.
+         * Each checks one kind of data and completes what the store computes (a mesh's bounds and skin boxes, a
+         * skeleton's engine names and signature, a clip's duration and event order). It returns an empty string when
+         * the data is usable, else why it is not, and adds to `warnings` what is usable but suspect.
          * @{
          */
-        [[nodiscard]] std::string PrepareAsset(MeshData& mesh);
-        [[nodiscard]] std::string PrepareAsset(ImageData& image);
-        [[nodiscard]] std::string PrepareAsset(ShaderData& shader);
-        [[nodiscard]] std::string PrepareAsset(MaterialData& material);
+        [[nodiscard]] std::string PrepareAsset(MeshData& mesh, AssetWarnings& warnings);
+        [[nodiscard]] std::string PrepareAsset(ImageData& image, AssetWarnings& warnings);
+        [[nodiscard]] std::string PrepareAsset(ShaderData& shader, AssetWarnings& warnings);
+        [[nodiscard]] std::string PrepareAsset(MaterialData& material, AssetWarnings& warnings);
+        [[nodiscard]] std::string PrepareAsset(SkeletonData& skeleton, AssetWarnings& warnings);
+        [[nodiscard]] std::string PrepareAsset(ClipData& clip, AssetWarnings& warnings);
+        [[nodiscard]] std::string PrepareAsset(BoneMaskData& mask, AssetWarnings& warnings);
         /** @} */
     } // namespace Detail
 
@@ -190,18 +202,22 @@ namespace Fenrir
 
         /**
          * @brief Adds `data` as a new asset owned by `owner`. It has no path, so nothing else ever shares it. Data
-         * that breaks its type's rules is refused with a logged error, and the handle is empty. A mesh's bounds are
+         * that breaks its type's rules is refused with a logged error, and the handle is empty; data that is usable
+         * but suspect (a skinned vertex with no weight, a repeated bone name) is taken with a warning. What the store
+         * derives (a mesh's bounds and skin boxes, a skeleton's engine names and bind signature, a clip's duration) is
          * computed here.
          */
         template <typename T>
         [[nodiscard]] AssetHandle<T> Add(AssetData<T> data, AssetOwner owner)
         {
             using Data = AssetData<T>;
-            if (const std::string problem = Detail::PrepareAsset(data); !problem.empty())
+            Detail::AssetWarnings warnings;
+            if (const std::string problem = Detail::PrepareAsset(data, warnings); !problem.empty())
             {
                 Refuse(Detail::AssetTraits<T>::name, "add", problem);
                 return {};
             }
+            Warn(Detail::AssetTraits<T>::name, "added", warnings);
             Detail::AssetBox box(new Data(std::move(data)), &Detail::DestroyAssetData<Data>);
             const Detail::AssetSlot slot = AddSlot(Detail::AssetTraits<T>::kind, std::move(box), owner);
             return {slot.index, slot.generation};
@@ -218,11 +234,13 @@ namespace Fenrir
         AssetHandle<T> AddBuiltin(std::string_view name, AssetData<T> data)
         {
             using Data = AssetData<T>;
-            if (const std::string problem = Detail::PrepareAsset(data); !problem.empty())
+            Detail::AssetWarnings warnings;
+            if (const std::string problem = Detail::PrepareAsset(data, warnings); !problem.empty())
             {
                 Refuse(Detail::AssetTraits<T>::name, "add a built-in", problem);
                 return {};
             }
+            Warn(Detail::AssetTraits<T>::name, "added as a built-in", warnings);
             Detail::AssetBox box(new Data(std::move(data)), &Detail::DestroyAssetData<Data>);
             const Detail::AssetSlot slot = AddBuiltinSlot(Detail::AssetTraits<T>::kind, name, std::move(box));
             return {slot.index, slot.generation};
@@ -231,7 +249,7 @@ namespace Fenrir
         /**
          * @brief Swaps the data of the asset `handle` names for `data` and bumps its revision, so every user sees the
          * change. Its owners, path and handle stay. False, with a logged error, if the handle does not resolve or the
-         * data breaks its type's rules; the asset is then unchanged. A mesh's bounds are computed here. Replacing a
+         * data breaks its type's rules; the asset is then unchanged. What Add derives is derived here too. Replacing a
          * shader logs a warning, once per material, for each parameter override of a material on it that the new
          * shader lacks or types differently: the override is kept and ignored.
          */
@@ -239,11 +257,13 @@ namespace Fenrir
         bool Replace(AssetHandle<T> handle, AssetData<T> data)
         {
             using Data = AssetData<T>;
-            if (const std::string problem = Detail::PrepareAsset(data); !problem.empty())
+            Detail::AssetWarnings warnings;
+            if (const std::string problem = Detail::PrepareAsset(data, warnings); !problem.empty())
             {
                 Refuse(Detail::AssetTraits<T>::name, "replace", problem);
                 return false;
             }
+            Warn(Detail::AssetTraits<T>::name, "replaced", warnings);
             Detail::AssetBox box(new Data(std::move(data)), &Detail::DestroyAssetData<Data>);
             return ReplaceSlot(Detail::AssetTraits<T>::kind, {handle.index, handle.generation}, std::move(box));
         }
@@ -394,6 +414,47 @@ namespace Fenrir
         /** @} */
 
         /**
+         * @name Clip event edits
+         * A clip's events, edited through the store so that every reader sees the clip's revision move (ADR-0034).
+         * Each edit that changes the clip bumps its revision; an edit on a handle that does not resolve is logged and
+         * changes nothing.
+         * @{
+         */
+
+        /**
+         * @brief Adds an event named `name` at `time`, placed by time after any events already at that time, and gives
+         * its index. Empty, with a logged error, when the clip does not resolve or `time` is not finite or lies outside
+         * the clip's duration.
+         */
+        std::optional<std::uint32_t> AddClipEvent(AssetHandle<Clip> clip, float time, std::string_view name);
+
+        /** @brief Removes the event at `index`; later events move down one. False when there is no such event. */
+        bool RemoveClipEvent(AssetHandle<Clip> clip, std::uint32_t index);
+        /** @} */
+
+        /**
+         * @name Bone mask edits
+         * Bone masks made and edited through the store (ADR-0036), each edit bumping the mask's revision. An edit on a
+         * handle that does not resolve is logged and changes nothing.
+         * @{
+         */
+
+        /** @brief A new bone mask with no entries, owned by `owner`; on a layer it covers no bone until one is
+         * included. */
+        [[nodiscard]] AssetHandle<BoneMask> CreateBoneMask(AssetOwner owner);
+
+        /**
+         * @brief Appends an entry giving the bone named `boneName` (by engine name), or its whole subtree, `weight`; it
+         * overrides earlier entries for the bones it covers. False, with a logged error, for a non-finite weight.
+         */
+        bool IncludeInBoneMask(AssetHandle<BoneMask> mask, std::string_view boneName, float weight,
+                               MaskScope scope = MaskScope::Bone);
+
+        /** @brief Removes every entry. */
+        bool ClearBoneMask(AssetHandle<BoneMask> mask);
+        /** @} */
+
+        /**
          * @brief Spawns `model`'s node tree into `scene` (ADR-0028, ADR-0031): a root entity under `parent` (or at the
          * top of the scene if `parent` is null), and below it one entity per model node with its `Name`, its rest
          * transform as its `Transform`, and its parent link. It adds nothing that draws: FenrirRenderer's SpawnModel
@@ -418,6 +479,9 @@ namespace Fenrir
         [[nodiscard]] const void* Find(Detail::AssetKind kind, Detail::AssetSlot slot) const;
         [[nodiscard]] std::uint32_t RevisionOf(Detail::AssetKind kind, Detail::AssetSlot slot) const;
         void Refuse(std::string_view assetName, std::string_view action, const std::string& problem);
+        void Warn(std::string_view assetName, std::string_view action, const Detail::AssetWarnings& warnings);
+        [[nodiscard]] Detail::AssetRecord* EditRecord(Detail::AssetKind kind, Detail::AssetSlot slot,
+                                                      std::string_view action);
         bool SetParameter(AssetHandle<Material> material, std::string_view name, MaterialValue value);
         [[nodiscard]] MaterialData* EditMaterial(AssetHandle<Material> material, std::string_view action);
         [[nodiscard]] std::optional<MaterialValue> EffectiveValue(AssetHandle<Material> material, std::string_view name,

@@ -16,9 +16,13 @@ No C#: the `Fenrir.Assets` handle markers come with ticket 13. The importer stil
 
 **Touches:** `packages/FenrirAssets/include/FenrirAssets/`, `packages/FenrirAssets/src/`, `packages/FenrirAssets/tests/`, `GLOSSARY.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Seam 4 tests cover `SkeletonData` fields, engine names (duplicates, over-long), `bindSignature` determinism and canonical zero, `IsDescendant` and subtrees, `Add<SkeletonData>` validation, the quantiser (exact sums, remainder distribution, zero weights, malformed input refused), per-bone boxes, and clip-event and mask edits bumping revisions.
-- [ ] `PublicHeaders.cpp` includes the `SkinningSource` header and the FenrirAssets tests build with no FenrirSkeleton target in the tree.
-- [ ] The existing FenrirAssets and renderer tests still pass: static models load as before.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Seam 4 tests cover `SkeletonData` fields, engine names (duplicates, over-long), `bindSignature` determinism and canonical zero, `IsDescendant` and subtrees, `Add<SkeletonData>` validation, the quantiser (exact sums, remainder distribution, zero weights, malformed input refused), per-bone boxes, and clip-event and mask edits bumping revisions.
+- [x] `PublicHeaders.cpp` includes the `SkinningSource` header and the FenrirAssets tests build with no FenrirSkeleton target in the tree.
+- [x] The existing FenrirAssets and renderer tests still pass: static models load as before.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+
+## Comments
+
+Built 2026-10-29. The per-bone boxes are kept in skeleton bind space, not bone space, because a mesh holds no inverse binds; ADR-0035 gains an amendment line, and ticket 05's `GetWorldBounds` moves each box by the bone's palette matrix. `MeshSkin::boneCount` left 0 is derived from the highest index; set, every index must be below it. The `Fenrir.Assets` handle markers stay for ticket 13; only the generated `AssetKind` enum gains the three kinds, as the API description check requires.

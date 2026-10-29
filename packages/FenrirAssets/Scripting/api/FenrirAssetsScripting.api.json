@@ -117,6 +117,18 @@
         {
           "name": "Model",
           "value": 4
+        },
+        {
+          "name": "Skeleton",
+          "value": 5
+        },
+        {
+          "name": "Clip",
+          "value": 6
+        },
+        {
+          "name": "BoneMask",
+          "value": 7
         }
       ]
     },
