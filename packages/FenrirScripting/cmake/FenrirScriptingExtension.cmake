@@ -41,10 +41,12 @@
 #       for a package that adds a test of its own on the same executable.
 #   fenrir_scripting_rules_tests(<Pkg> SOURCES <files...> [TEST_ARGS <args...>])
 #       Fenrir<Pkg>ScriptingRulesTests: the natives' rules (no package installed, a stale handle, each warning once under
-#       the native's name), called from C++ through FenrirScripting's NativeCallHarness with an extension state the test
-#       makes, so with no .NET and no fixture assembly. The harness comes from the FenrirScriptingTestSupport library,
-#       which alone sees FenrirScripting's src; the executable sees this package's src for the extension state and the
-#       natives header. add_test(Fenrir<Pkg>ScriptingRules) with TEST_ARGS and a 60 s timeout.
+#       the native's name), called from C++ through FenrirScripting's NativeCallHarness, which runs the package's own
+#       <Pkg>::ScriptingExtension() and calls each native by its registered name through the registration's thunk, so
+#       with no .NET and no fixture assembly. The harness comes from the FenrirScriptingTestSupport library, which alone
+#       sees FenrirScripting's src; the executable sees this package's src for the extension state header, whose
+#       constants name the texts the natives warn with. add_test(Fenrir<Pkg>ScriptingRules) with TEST_ARGS and a 60 s
+#       timeout.
 #
 # Timeouts are fixed here. FenrirScripting's own CMakeLists stay off these functions: its contract is the SDK, its
 # fixture builds twice for the reload tests, and the built-in extension is Install's own, not a package's.

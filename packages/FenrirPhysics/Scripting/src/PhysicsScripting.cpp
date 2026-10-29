@@ -452,7 +452,7 @@ namespace Fenrir
             if (!aliveA || (!world && !entities.HasEntity(b)))
             {
                 const NativeGuard guard(context, physics.warnings);
-                guard.Warn(std::string(aliveA ? "bodyB" : "bodyA") + " is not alive, so it gives identity frames");
+                guard.Warn(PhysicsScripting::NotAliveFrames(aliveA ? "bodyB" : "bodyA"));
                 return;
             }
             // Qualified: this function's own name hides FenrirPhysics's within this namespace.
@@ -481,7 +481,7 @@ namespace Fenrir
             if (!entities.HasEntity(value) || !entities.GetEntity(value).HasComponent<Joint>())
             {
                 const NativeGuard guard(context, physics.warnings);
-                guard.Warn("the entity has no Joint, so it reads zeroed");
+                guard.Warn(std::string(PhysicsScripting::NoJoint));
                 return;
             }
             *state = world->GetJointState(entities.HandleOf(value));
