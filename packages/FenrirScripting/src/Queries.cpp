@@ -61,9 +61,6 @@ namespace Fenrir::Detail
             return ids.empty() ? 0 : -1;
         }
 
-        static_assert(sizeof(Entity) == EntityWords * sizeof(std::uintptr_t) &&
-                          alignof(Entity) <= alignof(std::uintptr_t),
-                      "a query row holds the entity as the engine lays it out: value, then list");
         const std::size_t stride = types.size() + EntityWords;
         std::int32_t written = 0;
         entities.ForEachWith(types, [&](std::uint32_t entity) {

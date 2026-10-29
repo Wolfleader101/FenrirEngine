@@ -305,13 +305,13 @@ namespace Fenrir::ScriptingNatives
      * good until something is sent to the queue or it swaps.
      * @param[in,out] seen The reader's cursor: how many of the queue's events it has gone past (all ones, the engine's
      * NewReaderCursor, before its first read), moved past what the read yields.
-     * @param[in,out] view Five values written: the older part's address and count, the newer part's address and count,
-     * and how many events the reader missed.
+     * @param[out] view The events the read yields, as the queue holds them: the older and newer parts and how many the
+     * reader missed.
      * @return False when there is no such event.
      * @notrunning false
      */
     bool EventReadAfter(const CallContext& context, Detail::EngineContext& engine, std::int32_t event,
-                        std::uint64_t* seen, Detail::NativeAddress* view)
+                        std::uint64_t* seen, RawEventRange* view)
     {
         const auto* registration = engine.components->Events().Get(event);
         const IEventQueue* queue =
@@ -321,20 +321,15 @@ namespace Fenrir::ScriptingNatives
             return false;
         }
         auto cursor = static_cast<std::size_t>(*seen);
-        const RawEventRange events = queue->ReadRawAfter(cursor);
+        *view = queue->ReadRawAfter(cursor);
         *seen = cursor;
-        view[0] = reinterpret_cast<Detail::NativeAddress>(events.older);
-        view[1] = events.olderCount;
-        view[2] = reinterpret_cast<Detail::NativeAddress>(events.newer);
-        view[3] = events.newerCount;
-        view[4] = events.missed;
         return true;
     }
 
     /**
      * @brief How many entities have every component in `ids`: an upper bound on the rows QueryFill writes. A query is
-     * this call and QueryFill however many entities match; a row is the entity (two words: a Fenrir::Entity, with its
-     * scene's list set) followed by the address of its component for each id, in order.
+     * this call and QueryFill however many entities match; a row is the entity (a Fenrir::Entity, `sizeof(Entity)` in
+     * words, with its scene's list set) followed by the address of its component for each id, in order.
      * @return The count; negative when an id is unknown.
      * @notrunning -1
      */

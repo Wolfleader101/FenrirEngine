@@ -503,12 +503,12 @@
         },
         {
           "name": "view",
-          "type": "Fenrir::Detail::NativeAddress*",
+          "type": "Fenrir::RawEventRange*",
           "kind": "pointer",
-          "pointee": "Fenrir::Detail::NativeAddress",
-          "pointeeKind": "u64",
-          "inOut": true,
-          "doc": "Five values written: the older part's address and count, the newer part's address and count, and how many events the reader missed."
+          "pointee": "Fenrir::RawEventRange",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The events the read yields, as the queue holds them: the older and newer parts and how many the reader missed."
         }
       ]
     },
@@ -517,7 +517,7 @@
       "namespace": "Fenrir::ScriptingNatives",
       "source": "../src/Bindings.cpp",
       "state": "Fenrir::Detail::EngineContext",
-      "doc": "How many entities have every component in `ids`: an upper bound on the rows QueryFill writes. A query is this call and QueryFill however many entities match; a row is the entity (two words: a Fenrir::Entity, with its scene's list set) followed by the address of its component for each id, in order.",
+      "doc": "How many entities have every component in `ids`: an upper bound on the rows QueryFill writes. A query is this call and QueryFill however many entities match; a row is the entity (a Fenrir::Entity, `sizeof(Entity)` in words, with its scene's list set) followed by the address of its component for each id, in order.",
       "notRunning": "-1",
       "returns": {
         "type": "std::int32_t",
