@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <string_view>
 #include <vector>
@@ -38,6 +39,23 @@ namespace AnimationDemo
      * Run. */
     inline constexpr std::string_view FoxFile = "fox/Fox.gltf";
     inline constexpr float FoxScale = 0.01f;
+    /**
+     * @brief Quaternius's human (assets/ATTRIBUTION.md): a 71-bone skinned rig with no clips of its own, and its clips,
+     * one file each on the same skeleton, bound to it by bone name. Clips: idle, walk, jog, sprint, and a call (the
+     * library has no wave), in QuaterniusClip's order.
+     */
+    inline constexpr std::string_view QuaterniusFile = "quaternius/rig-human.glb";
+    inline constexpr std::array<std::string_view, 5> QuaterniusClips{
+        "quaternius/idle_loop.glb", "quaternius/walk_loop.glb", "quaternius/jog_fwd_loop.glb",
+        "quaternius/sprint_loop.glb", "quaternius/idle_rail_call.glb"};
+    enum class QuaterniusClip : std::size_t
+    {
+        Idle,
+        Walk,
+        Run,
+        Sprint,
+        Call,
+    };
     /** @brief Khronos's CesiumMan, untextured (assets/ATTRIBUTION.md): one walk clip. */
     inline constexpr std::string_view CesiumManFile = "cesium-man/CesiumMan.gltf";
 
@@ -66,6 +84,9 @@ namespace AnimationDemo
      */
     Rig SpawnRig(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file, Fenrir::Math::Vec3 position,
                  float yaw = 0.0f, float scale = 1.0f);
+
+    /** @brief The first clip of the model in `file`, loaded for `scene`; an empty handle, logged, if there is none. */
+    Fenrir::AssetHandle<Fenrir::Clip> LoadClip(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file);
 
     /** @brief Gives the skeleton entity an Animator playing `clip`. */
     void Play(Fenrir::Entity skeleton, Fenrir::AssetHandle<Fenrir::Clip> clip,

@@ -72,6 +72,19 @@ namespace AnimationDemo
         return rig;
     }
 
+    Fenrir::AssetHandle<Fenrir::Clip> LoadClip(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file)
+    {
+        Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
+        const auto model = store.Load<Fenrir::Model>(file, scene);
+        const Fenrir::Model* data = model.Ok() ? store.TryGet(model.handle) : nullptr;
+        if (data == nullptr || data->clips.empty())
+        {
+            app.Logger()->Error("AnimationDemo: {} has no clip to load", file);
+            return {};
+        }
+        return data->clips.front();
+    }
+
     void Play(Fenrir::Entity skeleton, Fenrir::AssetHandle<Fenrir::Clip> clip, Fenrir::ClipLoop loop, float speed)
     {
         Fenrir::Animator animator;

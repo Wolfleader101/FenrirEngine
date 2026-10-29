@@ -28,27 +28,38 @@ namespace AnimationDemo
             float yaw;
             float scale;
             std::size_t clip;
+            /** @brief A file holding the clip to play instead, for a rig whose clips are files of their own. */
+            std::string_view clipFile;
             /** @brief How high above its root its label sits, in world units. */
             float labelHeight;
         };
 
-        const std::array<Model, 3> Models{{
-            {MannequinFile,
-             "Mannequin (procedural)",
-             {-1.6f, 0.0f, 0.0f},
+        const std::array<Model, 4> Models{{
+            {QuaterniusFile,
+             "Quaternius human",
+             {-2.6f, 0.0f, 0.0f},
              0.5f,
              1.0f,
+             0,
+             QuaterniusClips.at(static_cast<std::size_t>(QuaterniusClip::Walk)),
+             2.1f},
+            {MannequinFile,
+             "Mannequin (procedural)",
+             {-0.9f, 0.0f, 0.0f},
+             0.3f,
+             1.0f,
              static_cast<std::size_t>(MannequinClip::Walk),
+             {},
              2.3f},
-            {CesiumManFile, "CesiumMan (Khronos, untextured)", {0.0f, 0.0f, -0.2f}, 0.0f, 1.0f, 0, 1.8f},
+            {CesiumManFile, "CesiumMan (Khronos, untextured)", {0.6f, 0.0f, -0.2f}, 0.0f, 1.0f, 0, {}, 1.8f},
             // The Fox's clips are Survey, Walk and Run.
-            {FoxFile, "Fox (Khronos)", {1.8f, 0.0f, 0.2f}, -0.9f, FoxScale, 1, 1.1f},
+            {FoxFile, "Fox (Khronos)", {2.3f, 0.0f, 0.2f}, -0.9f, FoxScale, 1, {}, 1.1f},
         }};
 
         /** @brief Scene 2's state, a resource of its FenrirScene. */
         struct SkeletonState
         {
-            std::array<Rig, 3> rigs;
+            std::array<Rig, 4> rigs;
             bool meshes = true;
             bool bones = true;
             bool names = false;
@@ -64,7 +75,8 @@ namespace AnimationDemo
                 state.rigs.at(i) = SpawnRig(app, scene, model.file, model.position, model.yaw, model.scale);
                 if (state.rigs.at(i).IsValid())
                 {
-                    Play(state.rigs.at(i).skeleton, state.rigs.at(i).Clip(app, model.clip));
+                    Play(state.rigs.at(i).skeleton, model.clipFile.empty() ? state.rigs.at(i).Clip(app, model.clip)
+                                                                           : LoadClip(app, scene, model.clipFile));
                 }
             }
         }
@@ -125,7 +137,7 @@ namespace AnimationDemo
         scene.name = "Skeleton";
         scene.keyHelp = "M: show or hide the meshes. B: the bones and their axes. N: the bones' names.";
         scene.keys = {Fenrir::Key::N, Fenrir::Key::M, Fenrir::Key::B, Fenrir::Key::M, Fenrir::Key::B, Fenrir::Key::N};
-        scene.camera = {{0.0f, 1.3f, 4.5f}, 0.0f, -0.12f};
+        scene.camera = {{0.0f, 1.3f, 5.5f}, 0.0f, -0.12f};
         scene.spawn = Spawn;
         scene.update = Update;
         return scene;

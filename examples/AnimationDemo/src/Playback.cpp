@@ -24,9 +24,11 @@ namespace AnimationDemo
         using Fenrir::Colour;
         using Fenrir::Math::Vec3;
 
-        constexpr std::array<std::string_view, 4> ClipNames{"Idle", "Walk", "Run", "Wave"};
-        constexpr std::array<Fenrir::Key, 4> ClipKeys{Fenrir::Key::Num1, Fenrir::Key::Num2, Fenrir::Key::Num3,
-                                                      Fenrir::Key::Num4};
+        // The Quaternius human's clips the keys pick, in QuaterniusClip's order; its library has no wave, so 5 calls
+        // out.
+        constexpr std::array<std::string_view, 5> ClipNames{"Idle", "Walk", "Run", "Sprint", "Call"};
+        constexpr std::array<Fenrir::Key, 5> ClipKeys{Fenrir::Key::Num1, Fenrir::Key::Num2, Fenrir::Key::Num3,
+                                                      Fenrir::Key::Num4, Fenrir::Key::Num5};
         /** @brief Flutter's events: far more than the 64 a skeleton may be sent in one frame at its speed. */
         constexpr int FlutterEvents = 600;
         constexpr float FlutterSpeed = 2.0f;
@@ -36,9 +38,12 @@ namespace AnimationDemo
         /** @brief Scene 1's state, a resource of its FenrirScene. */
         struct PlaybackState
         {
+            /** @brief Quaternius's human, playing the clips in `clips`. */
             Rig walker;
+            std::array<Fenrir::AssetHandle<Fenrir::Clip>, QuaterniusClips.size()> clips{};
+            /** @brief The procedural mannequin, playing its Flutter clip. */
             Rig flutterer;
-            std::size_t clip = static_cast<std::size_t>(MannequinClip::Walk);
+            std::size_t clip = static_cast<std::size_t>(QuaterniusClip::Walk);
             float speed = 1.0f;
             Fenrir::ClipLoop loop = Fenrir::ClipLoop::Loop;
             bool playing = true;
@@ -51,19 +56,24 @@ namespace AnimationDemo
         };
 
         /** @brief Names the moments of each clip as events, so their crossings show as world text. */
-        void AddEvents(Fenrir::App& app, const Rig& rig)
+        void AddEvents(Fenrir::App& app, const PlaybackState& state)
         {
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
-            const auto add = [&](MannequinClip clip, float time, std::string_view name) {
-                store.AddClipEvent(rig.Clip(app, static_cast<std::size_t>(clip)), time, name);
+            // At fractions of each clip's duration, so a cycle's two halves each get one.
+            const auto add = [&](QuaterniusClip clip, float fraction, std::string_view name) {
+                const auto handle = state.clips.at(static_cast<std::size_t>(clip));
+                if (const Fenrir::ClipData* data = store.TryGet(handle))
+                {
+                    store.AddClipEvent(handle, data->duration * fraction, name);
+                }
             };
-            add(MannequinClip::Idle, 1.0f, "Breathe");
-            add(MannequinClip::Walk, 0.0f, "Step.L");
-            add(MannequinClip::Walk, 0.5f, "Step.R");
-            add(MannequinClip::Run, 0.0f, "Stride.L");
-            add(MannequinClip::Run, 0.3f, "Stride.R");
-            add(MannequinClip::Wave, 0.5f, "Hello");
-            add(MannequinClip::Wave, 1.3f, "Bye");
+            add(QuaterniusClip::Idle, 0.5f, "Breathe");
+            add(QuaterniusClip::Walk, 0.0f, "Step.A");
+            add(QuaterniusClip::Walk, 0.5f, "Step.B");
+            add(QuaterniusClip::Run, 0.0f, "Stride.A");
+            add(QuaterniusClip::Run, 0.5f, "Stride.B");
+            add(QuaterniusClip::Sprint, 0.0f, "Dash");
+            add(QuaterniusClip::Call, 0.3f, "Hey!");
         }
 
         void Apply(PlaybackState& state)
@@ -78,22 +88,25 @@ namespace AnimationDemo
         {
             AddStage(app, scene);
             PlaybackState& state = scene.AddResource<PlaybackState>();
-            state.walker = SpawnRig(app, scene, MannequinFile, Vec3(-1.5f, 0.0f, 0.0f), 0.4f);
+            state.walker = SpawnRig(app, scene, QuaterniusFile, Vec3(-1.5f, 0.0f, 0.0f), 0.4f);
+            for (std::size_t i = 0; i < QuaterniusClips.size(); ++i)
+            {
+                state.clips.at(i) = LoadClip(app, scene, QuaterniusClips.at(i));
+            }
             state.flutterer = SpawnRig(app, scene, MannequinFile, Vec3(2.0f, 0.0f, -0.5f), -0.4f);
             if (!state.walker.IsValid() || !state.flutterer.IsValid())
             {
                 return;
             }
-            // The two share the model's clips; the events are added once, then each plays its own clip.
-            AddEvents(app, state.walker);
+            AddEvents(app, state);
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
-            const auto flutter = state.walker.Clip(app, static_cast<std::size_t>(MannequinClip::Flutter));
+            const auto flutter = state.flutterer.Clip(app, static_cast<std::size_t>(MannequinClip::Flutter));
             const float duration = store.TryGet(flutter)->duration;
             for (int i = 0; i < FlutterEvents; ++i)
             {
                 store.AddClipEvent(flutter, duration * static_cast<float>(i) / FlutterEvents, "Tick");
             }
-            Play(state.walker.skeleton, state.walker.Clip(app, state.clip));
+            Play(state.walker.skeleton, state.clips.at(state.clip));
             Play(state.flutterer.skeleton, flutter, Fenrir::ClipLoop::Loop, FlutterSpeed);
             // Readers start at what is sent from now on.
             (void)state.events.Read(app);
@@ -116,7 +129,7 @@ namespace AnimationDemo
                 const std::string name =
                     clip != nullptr && event.index < clip->events.size() ? clip->events[event.index].name : "?";
                 // Above the walker's head for a second, following it.
-                draw.WorldText(Vec3(0.0f, 2.35f, 0.0f), std::format("{} (lap {})", name, event.loop),
+                draw.WorldText(Vec3(0.0f, 2.1f, 0.0f), std::format("{} (lap {})", name, event.loop),
                                Colour::FromSrgb(0x80FF80FF),
                                {.duration = 1.0f, .relativeTo = state.walker.skeleton, .size = 20.0f});
                 app.Logger()->Info("Playback: event {} at {:.2f} s, lap {}", name, event.time, event.loop);
@@ -146,7 +159,7 @@ namespace AnimationDemo
                 if (keyboard.JustPressed(ClipKeys.at(i)))
                 {
                     state.clip = i;
-                    state.walker.skeleton.GetComponent<Fenrir::Animator>().clip = state.walker.Clip(app, i);
+                    state.walker.skeleton.GetComponent<Fenrir::Animator>().clip = state.clips.at(i);
                     app.Logger()->Info("Playback: {} plays {}", i + 1, ClipNames.at(i));
                 }
             }
@@ -197,8 +210,7 @@ namespace AnimationDemo
             ReadEvents(app, *state, *draw);
 
             const Fenrir::PlaybackInfo info = Fenrir::Animation::Playback(scene, state->walker.skeleton);
-            const Fenrir::ClipData* clip =
-                app.GetResource<Fenrir::AssetStore>().TryGet(state->walker.Clip(app, state->clip));
+            const Fenrir::ClipData* clip = app.GetResource<Fenrir::AssetStore>().TryGet(state->clips.at(state->clip));
             draw->ScreenText({16.0f, 120.0f},
                              std::format("Walker: {} {:.2f} / {:.2f} s, speed {:.2f}, {}, {}{}, laps {}",
                                          ClipNames.at(state->clip), info.time, clip != nullptr ? clip->duration : 0.0f,
@@ -222,10 +234,11 @@ namespace AnimationDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Playback";
-        scene.keyHelp = "1-4: Idle, Walk, Run, Wave. Up/Down: speed. R: reverse. L: Loop or Once. Space: pause. "
-                        "Left/Right: seek 0.25 s. Home: seek to 0.";
+        scene.keyHelp =
+            "1-5: Idle, Walk, Run, Sprint, Call. Up/Down: speed. R: reverse. L: Loop or Once. Space: pause. "
+            "Left/Right: seek 0.25 s. Home: seek to 0.";
         scene.keys = {Fenrir::Key::Num3,  Fenrir::Key::Up,    Fenrir::Key::R,    Fenrir::Key::Space,
-                      Fenrir::Key::Right, Fenrir::Key::Space, Fenrir::Key::Num4, Fenrir::Key::L,
+                      Fenrir::Key::Right, Fenrir::Key::Space, Fenrir::Key::Num5, Fenrir::Key::L,
                       Fenrir::Key::Left,  Fenrir::Key::Home,  Fenrir::Key::Down, Fenrir::Key::Num2};
         scene.camera = {{0.0f, 1.4f, 5.5f}, 0.0f, -0.1f};
         scene.spawn = Spawn;
