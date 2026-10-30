@@ -117,6 +117,47 @@ TEST_CASE("Two meshes on one skeleton, seen by two cameras, share one palette ra
     REQUIRE(offsets == std::set<std::uint32_t>{0});
 }
 
+TEST_CASE("Stats count one palette for two meshes and two cameras on one skeleton, and reset each frame",
+          "[renderer][skinning][facade]")
+{
+    SkinningTestApp test;
+    test.AddCamera({0.0f, 1.0f, 10.0f});
+    test.AddCamera({0.0f, 1.0f, 12.0f});
+    const RendererTest::SkinnedRig rig = test.AddRig();
+    const Fenrir::Entity second = test.AddSkinned(rig.owner, test.StripMesh(), test.Material());
+    test.AddMeshRenderer(test.Mesh(), test.Material());
+
+    INFO("before any frame, every palette count is zero");
+    REQUIRE(test.renderer.Stats().paletteBytesUploaded == 0);
+    REQUIRE(test.renderer.Stats().distinctPalettesWritten == 0);
+    REQUIRE(test.renderer.Stats().skinnedDraws == 0);
+
+    // Twice, so a count kept across frames would show as doubled.
+    for (int frame = 0; frame < 2; ++frame)
+    {
+        test.Frame();
+        const Fenrir::RendererStats stats = test.renderer.Stats();
+        INFO("frame " << frame);
+        INFO("three items in each of two views, four of them skinned");
+        REQUIRE(stats.draws == 6);
+        REQUIRE(stats.skinnedDraws == 4);
+        INFO("one palette for the skeleton, its two bones uploaded once");
+        REQUIRE(stats.distinctPalettesWritten == 1);
+        REQUIRE(stats.paletteBytesUploaded == 2 * sizeof(Fenrir::Render::GpuBone));
+    }
+
+    rig.mesh.GetComponent<Fenrir::MeshRenderer>().visible = false;
+    second.GetComponent<Fenrir::MeshRenderer>().visible = false;
+    test.Frame();
+    const Fenrir::RendererStats hidden = test.renderer.Stats();
+    INFO("with the skinned meshes hidden, the next frame writes no palette and draws only the rigid item");
+    REQUIRE(hidden.draws == 2);
+    REQUIRE(hidden.skinnedDraws == 0);
+    REQUIRE(hidden.distinctPalettesWritten == 0);
+    REQUIRE(hidden.paletteBytesUploaded == 0);
+    REQUIRE(test.messages->errors.empty());
+}
+
 TEST_CASE("A skinned draw uses its shader's SKINNED variant, and a rigid one does not", "[renderer][skinning]")
 {
     SkinningTestApp test;

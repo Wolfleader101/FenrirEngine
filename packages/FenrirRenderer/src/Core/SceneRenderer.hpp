@@ -37,6 +37,12 @@ namespace Fenrir::Render
         std::uint32_t draws = 0;
         /** @brief Meshes, images and material blocks uploaded since the last call. */
         std::uint32_t uploads = 0;
+        /** @brief Bytes written into the last frame's palette buffer. */
+        std::uint32_t paletteBytes = 0;
+        /** @brief Skeleton palettes the last frame's palette buffer held (SceneFrame::palettes). */
+        std::uint32_t palettes = 0;
+        /** @brief Skinned draws in the last frame, one per item per view. */
+        std::uint32_t skinnedDraws = 0;
     };
 
     /** @brief A view the scene renderer added passes for this frame, for render features that draw into it. */
@@ -347,6 +353,8 @@ namespace Fenrir::Render
             bool transparent = false;
             /** @brief A skinned draw's first palette entry, in bones; 0 for a rigid one. */
             std::uint32_t paletteOffset = 0;
+            /** @brief Drawn skinned, from the palette. */
+            bool skinned = false;
             /** @brief The world point a transparent draw is sorted by. */
             Math::Vec3 sortPoint{0.0f};
         };

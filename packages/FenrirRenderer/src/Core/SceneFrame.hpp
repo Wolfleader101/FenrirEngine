@@ -112,6 +112,8 @@ namespace Fenrir::Render
          * `paletteOffset`.
          */
         std::vector<Math::Mat4> palette;
+        /** @brief How many skeleton palettes `palette` holds back to back, each once however many draws read it. */
+        std::uint32_t palettes = 0;
         /**
          * @brief The views, in order: views into one target draw in this order, the first clearing it. A view
          * sampling an image another view draws is drawn after it, unless that would close a cycle of views waiting on

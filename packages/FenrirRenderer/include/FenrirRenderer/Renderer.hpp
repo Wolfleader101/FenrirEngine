@@ -76,6 +76,15 @@ namespace Fenrir
         std::uint32_t passes = 0;
         /** @brief Assets uploaded to the GPU by the prepare step: a mesh, or a material's parameter block. */
         std::uint32_t uploads = 0;
+        /** @brief Bytes copied into the frame's palette buffer: every skeleton palette the frame's draws read. */
+        std::uint32_t paletteBytesUploaded = 0;
+        /**
+         * @brief Skeleton palettes written, one per skeleton and pose however many meshes and views draw it
+         * (ADR-0035).
+         */
+        std::uint32_t distinctPalettesWritten = 0;
+        /** @brief Draws of skinned MeshRenderers, one per item per view; part of `draws`. */
+        std::uint32_t skinnedDraws = 0;
     };
 
     /**

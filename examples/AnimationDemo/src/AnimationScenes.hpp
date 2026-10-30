@@ -2,7 +2,8 @@
 
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 
-// AnimationDemo's scenes, in the order of its scene list (README.md). Each animation ticket adds its scene here.
+// AnimationDemo's scenes, in the order of its scene list (README.md). Each animation ticket adds its scene here, in the
+// spec's order: Blending, Bone attachments and Going limp (tickets 08-10) go before Crowd.
 namespace AnimationDemo
 {
     /**
@@ -24,4 +25,11 @@ namespace AnimationDemo
      * warning.
      */
     [[nodiscard]] FenrirDemo::DemoScene SkinDiagnostics();
+
+    /**
+     * @brief Crowd: a grid of Kenney's character, 64 at first, doubled and halved between 1 and 1024 by the keys, the
+     * members taking the idle and run in turn from staggered starts (Seek), with pause and reset. The screen text
+     * shows the instances, their bones, the frame time and the renderer's palette stats.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene Crowd();
 } // namespace AnimationDemo

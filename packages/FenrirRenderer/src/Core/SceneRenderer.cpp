@@ -1445,6 +1445,7 @@ namespace Fenrir::Render
             draw.world = request.world;
             draw.transparent = IsTransparent(blend);
             draw.paletteOffset = skinned ? request.paletteOffset : 0;
+            draw.skinned = skinned;
             draw.sortPoint = request.sortPoint.value_or(Math::Vec3(request.world[3]));
             const std::uint64_t stage = draw.transparent ? TransparentStage : OpaqueStage;
             const std::uint64_t materialId = fallback ? 0 : found->id;
@@ -1569,6 +1570,9 @@ namespace Fenrir::Render
         }
 
         m_stats.draws = 0;
+        m_stats.paletteBytes = 0;
+        m_stats.palettes = 0;
+        m_stats.skinnedDraws = 0;
         m_drawnViews.clear();
         if (m_frame.views.empty())
         {
@@ -1600,6 +1604,10 @@ namespace Fenrir::Render
         {
             m_paletteBlocks->Write(frameIndex, bone, BytesOf(GpuBone::FromMatrix(m_frame.palette[bone])));
         }
+        m_stats.paletteBytes = static_cast<std::uint32_t>(m_frame.palette.size() * sizeof(GpuBone));
+        m_stats.palettes = m_frame.palettes;
+        const auto skinnedDraws = static_cast<std::uint32_t>(
+            std::count_if(draws->begin(), draws->end(), [](const ResolvedDraw& draw) { return draw.skinned; }));
         const std::vector<ViewRequest>& views = m_frame.views;
         m_viewBlocks->Reserve(views.size());
         m_backgroundBlocks->Reserve(views.size());
@@ -1790,6 +1798,7 @@ namespace Fenrir::Render
                     });
             }
             m_stats.draws += static_cast<std::uint32_t>(draws->size());
+            m_stats.skinnedDraws += skinnedDraws;
 
             graph.AddPass(
                 "Background", RenderStage::Background, QueueKind::Graphics,

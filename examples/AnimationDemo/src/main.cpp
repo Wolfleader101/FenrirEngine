@@ -14,7 +14,8 @@ int main()
 
     FenrirDemo::DemoConfig config;
     config.appName = "AnimationDemo";
-    config.scenes = {AnimationDemo::Playback(), AnimationDemo::SkeletonScene(), AnimationDemo::SkinDiagnostics()};
+    config.scenes = {AnimationDemo::Playback(), AnimationDemo::SkeletonScene(), AnimationDemo::SkinDiagnostics(),
+                     AnimationDemo::Crowd()};
     config.msaa = 4;
 
     FenrirDemo::DemoScaffold demo = FenrirDemo::DemoScaffold::Install(app, std::move(config));

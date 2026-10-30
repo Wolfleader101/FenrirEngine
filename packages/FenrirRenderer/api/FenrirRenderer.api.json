@@ -73,7 +73,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader` or `Model`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip` or `BoneMask`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Material>",
@@ -81,7 +81,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader` or `Model`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip` or `BoneMask`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Mesh>",
@@ -89,7 +89,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader` or `Model`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip` or `BoneMask`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::BackgroundType",
@@ -643,7 +643,7 @@
       "name": "Fenrir::RendererStats",
       "category": "struct",
       "role": "shared-struct",
-      "size": 12,
+      "size": 24,
       "alignment": 4,
       "doc": "What the renderer did in its last drawn frame (ADR-0023).",
       "fields": [
@@ -667,6 +667,27 @@
           "kind": "u32",
           "default": 0,
           "doc": "Assets uploaded to the GPU by the prepare step: a mesh, or a material's parameter block."
+        },
+        {
+          "name": "paletteBytesUploaded",
+          "offset": 12,
+          "kind": "u32",
+          "default": 0,
+          "doc": "Bytes copied into the frame's palette buffer: every skeleton palette the frame's draws read."
+        },
+        {
+          "name": "distinctPalettesWritten",
+          "offset": 16,
+          "kind": "u32",
+          "default": 0,
+          "doc": "Skeleton palettes written, one per skeleton and pose however many meshes and views draw it (ADR-0035)."
+        },
+        {
+          "name": "skinnedDraws",
+          "offset": 20,
+          "kind": "u32",
+          "default": 0,
+          "doc": "Draws of skinned MeshRenderers, one per item per view; part of `draws`."
         }
       ]
     },

@@ -775,13 +775,13 @@ namespace Fenrir
         }
 
         /**
-         * @brief The active scene's visible MeshRenderers as draws, preparing what they name, and the palettes their
-         * skinned draws read.
+         * @brief The active scene's visible MeshRenderers as `frame`'s draws, preparing what they name, and the
+         * palettes their skinned draws read.
          */
-        std::vector<Render::DrawRequest> ReadDraws(Detail::RendererState& state, const AssetStore& store, Scene& scene,
-                                                   std::vector<Math::Mat4>& palette)
+        void ReadDraws(Detail::RendererState& state, const AssetStore& store, Scene& scene, Render::SceneFrame& frame)
         {
-            std::vector<Render::DrawRequest> draws;
+            std::vector<Render::DrawRequest>& draws = frame.draws;
+            std::vector<Math::Mat4>& palette = frame.palette;
             PaletteRanges ranges;
             std::set<std::uint32_t> drawn;
             EntityList& entities = scene.GetEntityList();
@@ -839,7 +839,7 @@ namespace Fenrir
             });
             // The compatibility verdicts of mesh entities no longer drawn skinned go.
             std::erase_if(state.skinPairings, [&](const auto& entry) { return !drawn.contains(entry.first); });
-            return draws;
+            frame.palettes = static_cast<std::uint32_t>(ranges.size());
         }
 
         /** @brief The core's copy of a FenrirDebugDraw vertex. */
@@ -982,7 +982,7 @@ namespace Fenrir
                 ReleaseStale(*state.scene, *state.draw2D, *store);
                 frame.lighting = ReadLighting(state, scene);
                 frame.views = ReadViews(state, *store, scene, ReadSky(state, *store, scene));
-                frame.draws = ReadDraws(state, *store, scene, frame.palette);
+                ReadDraws(state, *store, scene, frame);
                 debug = ReadDebug(state, scene);
                 frame.time = static_cast<float>(state.time);
                 frame.deltaTime = static_cast<float>(app.GetTime().deltaTime);
@@ -1011,6 +1011,9 @@ namespace Fenrir
                 state.stats.draws = scene.draws;
                 state.stats.passes = report.passesRun;
                 state.stats.uploads = scene.uploads;
+                state.stats.paletteBytesUploaded = scene.paletteBytes;
+                state.stats.distinctPalettesWritten = scene.palettes;
+                state.stats.skinnedDraws = scene.skinnedDraws;
             }
         }
 
