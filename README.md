@@ -12,6 +12,7 @@ A modular C++20 game engine: every system is its own package, and you build only
 | `FenrirRenderer` | An ECS-facing renderer: `MeshRenderer`, `Camera` and lights, drawn through an OpenGL 4.6 backend (or a null backend for tests) with build-time compiled GLSL shaders |
 | `FenrirWindow`, `FenrirInput` | An SDL3 window and graphics surface; keyboard, mouse and gamepad input as polled resources and events |
 | `FenrirAssets`, `FenrirDraw2D` | Plain-data assets behind generational handles (PNG, JPEG, HDR, glTF/GLB, FBX, OBJ); 2D draw data for UIs |
+| `FenrirSkeleton`, `FenrirAnimation` | Skeleton poses and the pose pipeline with no renderer; clip playback, blending, bone masks, pose overrides and bone attachments, skinned on the GPU by the renderer |
 | `FenrirPhysics` | Rigid bodies, joints, character bodies and vehicles over JoltPhysics, hidden behind the engine's own components |
 | `FenrirDebugDraw` | Debug shapes and text, recorded per scene and drawn by the renderer |
 | `FenrirScripting`, `Iris` | C# scripting: Iris hosts .NET (CoreCLR) with collectible, reloadable components; the engine exposes its packages to C# as `Fenrir.*` contracts |
@@ -47,12 +48,13 @@ The [examples](examples) are the quickest way to see what the engine does, and t
 | [RendererDemo](examples/RendererDemo/README.md) | One scene per renderer feature | renderer |
 | [PhysicsDemo](examples/PhysicsDemo/README.md) | Bodies, joints, characters, vehicles; C# scenes with scripting | renderer, physics |
 | [ScriptingDemo](examples/ScriptingDemo/README.md) | C# scripts driving a scene | renderer, scripting |
+| [AnimationDemo](examples/AnimationDemo/README.md) | Playback, skeletons, skinning, blending, attachments, going limp and a crowd; C# scenes with scripting | renderer |
 
-All three sit on the [demo scaffold](examples/DemoScaffold/README.md), which documents the shared keys and the smoke-run switches.
+All four sit on the [demo scaffold](examples/DemoScaffold/README.md), which documents the shared keys and the smoke-run switches.
 
 ## Documentation
 
-- Each package has its own README next to its code: [FenrirRenderer](packages/FenrirRenderer/README.md), [FenrirInput](packages/FenrirInput/README.md), [FenrirWindow](packages/FenrirWindow/README.md), [FenrirScripting](packages/FenrirScripting/README.md), [FenrirDebugDraw](packages/FenrirDebugDraw/README.md), [FenrirDraw2D](packages/FenrirDraw2D/README.md) and [Iris](packages/Iris/README.md).
+- Each package has its own README next to its code: [FenrirRenderer](packages/FenrirRenderer/README.md), [FenrirInput](packages/FenrirInput/README.md), [FenrirWindow](packages/FenrirWindow/README.md), [FenrirScripting](packages/FenrirScripting/README.md), [FenrirDebugDraw](packages/FenrirDebugDraw/README.md), [FenrirDraw2D](packages/FenrirDraw2D/README.md), [FenrirSkeleton](packages/FenrirSkeleton/README.md), [FenrirAnimation](packages/FenrirAnimation/README.md) and [Iris](packages/Iris/README.md).
 - [docs/adr](docs/adr) holds the architecture decisions; [GLOSSARY.md](GLOSSARY.md) the terms.
 - [CODING_STANDARDS.md](CODING_STANDARDS.md) is what review checks against.
 
