@@ -269,10 +269,24 @@ struct Iris::StructMapping<Fenrir::RendererStats>
     static constexpr auto fields = Iris::StructFields(
         Iris::Field<std::uint32_t>("Draws", 0),
         Iris::Field<std::uint32_t>("Passes", 4),
-        Iris::Field<std::uint32_t>("Uploads", 8));
+        Iris::Field<std::uint32_t>("Uploads", 8),
+        Iris::Field<std::uint32_t>("PaletteBytesUploaded", 12),
+        Iris::Field<std::uint32_t>("DistinctPalettesWritten", 16),
+        Iris::Field<std::uint32_t>("SkinnedDraws", 20));
 };
-static_assert(sizeof(Fenrir::RendererStats) == 12 && alignof(Fenrir::RendererStats) == 4,
+static_assert(sizeof(Fenrir::RendererStats) == 24 && alignof(Fenrir::RendererStats) == 4,
               "Fenrir::RendererStats is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fenrir::SkinnedMesh>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.SkinnedMesh";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<Fenrir::Entity>("Skeleton", 0));
+};
+static_assert(sizeof(Fenrir::SkinnedMesh) == 16 && alignof(Fenrir::SkinnedMesh) == 8,
+              "Fenrir::SkinnedMesh is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
 template <>

@@ -391,7 +391,7 @@ namespace RendererTest
 
         /**
          * @brief The world position of the item a draw drew: column 3 of the world matrix in its record of the draw
-         * buffer (set 3, binding 0; 128 bytes a record, `Fenrir/Draw.glsl`).
+         * buffer (set 3, binding 0; 144 bytes a record, `Fenrir/Draw.glsl`).
          */
         [[nodiscard]] Fenrir::Math::Vec3 DrawPosition(const RecordedDraw& draw) const
         {
@@ -401,7 +401,7 @@ namespace RendererTest
                 if (entry.binding == 0)
                 {
                     const std::vector<std::byte> bytes = Fenrir::RendererProbe::Bytes(Device(), entry.buffer);
-                    const std::size_t at = std::size_t{draw.draw.firstInstance} * 128 + 48;
+                    const std::size_t at = std::size_t{draw.draw.firstInstance} * 144 + 48;
                     return {FloatAt(bytes, at), FloatAt(bytes, at + 4), FloatAt(bytes, at + 8)};
                 }
             }

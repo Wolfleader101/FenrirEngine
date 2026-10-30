@@ -55,7 +55,7 @@ namespace Fenrir::Render
         m_ring.reset();
         const BufferUsage usage = m_storage ? BufferUsage::Storage : BufferUsage::Uniform;
         m_ring = std::make_unique<FrameRingBuffer>(m_device, BufferDesc{m_slots * m_slotSize, usage}, m_label);
-        for (std::size_t copy = 0; copy < m_ring->CopyCount(); ++copy)
+        for (std::size_t copy = 0; copy < m_ring->CopyCount() && !m_layout.IsEmpty(); ++copy)
         {
             const BufferHandle buffer = m_ring->Current(copy);
             std::vector<BindingGroupHandle>& groups = m_groups.emplace_back();
@@ -75,6 +75,11 @@ namespace Fenrir::Render
     void BlockRing::Write(std::uint64_t frameIndex, std::size_t slot, std::span<const std::byte> bytes)
     {
         m_ring->Write(frameIndex, slot * m_slotSize, bytes);
+    }
+
+    BufferHandle BlockRing::Buffer(std::uint64_t frameIndex) const
+    {
+        return m_ring == nullptr ? BufferHandle{} : m_ring->Current(frameIndex);
     }
 
     BindingGroupHandle BlockRing::Group(std::uint64_t frameIndex, std::size_t slot) const

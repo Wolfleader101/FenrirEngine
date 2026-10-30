@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Version is part of the contract: the host shares one copy, and a script compiled against a newer minor fails to load. -->
+    <Version>0.1.0</Version>
+    <AssemblyName>Fenrir.Skeleton</AssemblyName>
+    <RootNamespace>Fenrir.Skeleton</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- FenrirSkeleton's scripting contract (ADR-0039): the SkeletonPose and BoneAttachment components, the pose target,
+       the Skeletons, SkeletonData and PoseStages classes and PoseEdit over the native functions FenrirSkeletonScripting
+       gives C#. Built against the scripting SDK (for the generators) and the Fenrir.Assets contract (for asset handles);
+       CMake passes -p:FenrirScriptingSdk=<the SDK folder>/ and -p:FenrirAssetsContractDir=<the folder holding
+       Fenrir.Assets.dll>/. The host shares it with every script load, after Fenrir.Assets. -->
+  <ItemGroup>
+    <!-- The scripting tests' fixture calls the pose edit's natives with a token it kept, which no public call can: the
+         only way to show a stale token writes nothing. -->
+    <InternalsVisibleTo Include="Fenrir.SkeletonScriptFixture" />
+  </ItemGroup>
+  <Import Project="$(MSBuildThisFileDirectory)../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <ItemGroup Condition="'$(FenrirAssetsContractDir)' != ''">
+    <Reference Include="Fenrir.Assets">
+      <HintPath>$(FenrirAssetsContractDir)Fenrir.Assets.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <!-- In an editor, which passes no folders, the contracts come from their source projects. -->
+  <ItemGroup Condition="'$(FenrirAssetsContractDir)' == ''">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../FenrirAssets/Managed/Fenrir.Assets/Fenrir.Assets.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

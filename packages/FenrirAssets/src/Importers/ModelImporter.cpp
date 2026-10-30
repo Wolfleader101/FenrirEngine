@@ -82,6 +82,7 @@ namespace Fenrir::Detail
         if (model.error.empty())
         {
             Normalise(model);
+            ResolveSkinning(model);
         }
         return model;
     }

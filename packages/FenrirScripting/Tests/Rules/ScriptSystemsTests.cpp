@@ -1,8 +1,10 @@
 // The engine's rules for running a script's systems, with no .NET: a script with no system host has no systems; a host
 // that cannot be found, listed or created fails the load; a phase the mask leaves out costs nothing; a phase asked for
 // off the main thread is skipped with one error; a failing run is logged and the next phase still runs; OnDestroy runs
-// once at Stop and nothing runs after it; a Start after Stop binds the new host. What runs inside a phase (the order of
-// systems, the playback after each, a system that throws) is C#'s, pinned by ScriptingTests through the real runtime.
+// once at Stop and nothing runs after it; a Start after Stop binds the new host; a stage no extension declares fails
+// the load, naming the system and the stage; each extension is given its own groups, sorted, and lets go of them before
+// OnDestroy, after which a kept group runs nothing. What runs inside a phase or a group (the order of systems, the
+// playback, a system that throws) is C#'s, pinned by ScriptingTests through the real runtime.
 #include <catch2/catch_test_macros.hpp>
 
 #include "FakeSystemHost.hpp"
@@ -12,8 +14,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace
@@ -47,7 +51,7 @@ namespace
         }
     };
 
-    const Names Started{"Find", "PhaseMask", "OnCreate"};
+    const Names Started{"Find", "PhaseMask", "StageSystems", "OnCreate"};
 } // namespace
 
 TEST_CASE("a script with no system host has no systems: Start succeeds and holds nothing", "[script-systems]")
@@ -131,7 +135,7 @@ TEST_CASE("a phase whose mask bit is clear runs nothing, and one whose bit is se
     fixture.systems.RunPhase(2);
 
     INFO("The phase the mask names should run once, with that phase, and be counted");
-    REQUIRE(fixture.loader.Names() == Names{"Find", "PhaseMask", "OnCreate", "Run 2"});
+    REQUIRE(fixture.loader.Names() == Names{"Find", "PhaseMask", "StageSystems", "OnCreate", "Run 2"});
     REQUIRE(fixture.systems.PhaseCalls() == 1);
     INFO("Every call should have been on the thread that started the host");
     REQUIRE(fixture.AllOnThisThread());
@@ -154,7 +158,7 @@ TEST_CASE("a phase asked for off the main thread runs nothing and logs one error
     fixture.systems.RunPhase(0);
 
     INFO("The same phase from the main thread should run");
-    REQUIRE((fixture.loader.Names() == Names{"Find", "PhaseMask", "OnCreate", "Run 0"} &&
+    REQUIRE((fixture.loader.Names() == Names{"Find", "PhaseMask", "StageSystems", "OnCreate", "Run 0"} &&
              fixture.systems.PhaseCalls() == 1));
 }
 
@@ -175,7 +179,7 @@ TEST_CASE("a failing run is logged once and the next phase still runs", "[script
     fixture.systems.RunPhase(1);
 
     INFO("The next phase should have run and been counted");
-    REQUIRE(fixture.loader.Names() == Names{"Find", "PhaseMask", "OnCreate", "Run 0", "Run 1"});
+    REQUIRE(fixture.loader.Names() == Names{"Find", "PhaseMask", "StageSystems", "OnCreate", "Run 0", "Run 1"});
     REQUIRE(fixture.systems.PhaseCalls() == 2);
 }
 
@@ -199,14 +203,14 @@ TEST_CASE("Stop runs OnDestroy once, and a second Stop or a phase after it runs 
     }
 
     INFO("OnDestroy should have run once and nothing should be held");
-    REQUIRE(fixture.loader.Names() == Names{"Find", "PhaseMask", "OnCreate", "OnDestroy"});
+    REQUIRE(fixture.loader.Names() == Names{"Find", "PhaseMask", "StageSystems", "OnCreate", "OnDestroy"});
     REQUIRE(!fixture.systems.HasSystems());
 
     fixture.systems.Stop();
     fixture.systems.RunPhase(0);
 
     INFO("A second Stop and a phase after Stop should run nothing");
-    REQUIRE(fixture.loader.Names() == Names{"Find", "PhaseMask", "OnCreate", "OnDestroy"});
+    REQUIRE(fixture.loader.Names() == Names{"Find", "PhaseMask", "StageSystems", "OnCreate", "OnDestroy"});
     REQUIRE(fixture.systems.PhaseCalls() == 0);
 }
 
@@ -224,8 +228,8 @@ TEST_CASE("Start after Stop binds the new host", "[script-systems]")
     INFO("The second Start should succeed: " + restarted.diagnostic);
     REQUIRE((restarted.Succeeded() && fixture.systems.HasSystems()));
     INFO("The new host should have been found, listed and created like the first");
-    REQUIRE(fixture.loader.Names() ==
-            Names{"Find", "PhaseMask", "OnCreate", "Run 0", "OnDestroy", "Find", "PhaseMask", "OnCreate"});
+    REQUIRE(fixture.loader.Names() == Names{"Find", "PhaseMask", "StageSystems", "OnCreate", "Run 0", "OnDestroy",
+                                            "Find", "PhaseMask", "StageSystems", "OnCreate"});
 
     fixture.systems.RunPhase(0);
     fixture.systems.RunPhase(1);
@@ -233,4 +237,126 @@ TEST_CASE("Start after Stop binds the new host", "[script-systems]")
     INFO("Phases should follow the new host's mask, and the count should carry on across generations");
     REQUIRE(fixture.loader.Names().back() == "Run 1");
     REQUIRE(fixture.systems.PhaseCalls() == 2);
+}
+
+namespace
+{
+    using Fenrir::Detail::StageHost;
+    using Fenrir::Detail::StageSystemReport;
+
+    // What one fake extension that hosts stages was given, and when it was told to let go, beside the host's calls.
+    struct PlacedStages
+    {
+        std::vector<Fenrir::StageGroup> groups;
+        std::optional<Fenrir::StageChanges> changes;
+        int places = 0;
+        int removes = 0;
+    };
+
+    StageHost FakeStageHost(std::string extension, std::vector<std::string> stages, PlacedStages& placed,
+                            RulesTest::FakeSystemHostLoader& loader)
+    {
+        return StageHost{std::move(extension), std::move(stages),
+                         [&placed](std::vector<Fenrir::StageGroup> groups, Fenrir::StageChanges changes) {
+                             ++placed.places;
+                             placed.groups = std::move(groups);
+                             placed.changes = std::move(changes);
+                         },
+                         [&placed, &loader] {
+                             ++placed.removes;
+                             loader.calls.push_back({"Remove", std::this_thread::get_id()});
+                         }};
+    }
+} // namespace
+
+TEST_CASE("a stage system naming a stage no extension declares fails Start, naming the system and the stage",
+          "[script-systems][stages]")
+{
+    Systems fixture;
+    PlacedStages placed;
+    fixture.systems.SetStages({FakeStageHost("bench", {"Test.Bench"}, placed, fixture.loader)}, [] {});
+    fixture.loader.mask = 1;
+    fixture.loader.stageSystems = {{"Game.Good", "Test.Bench", 5, 0}, {"Game.Lost", "Test.Nowhere", 5, 1}};
+
+    const auto started = fixture.systems.Start(fixture.generation);
+
+    INFO("Start should have failed: " + started.diagnostic);
+    REQUIRE(!started.Succeeded());
+    INFO("The diagnostic should name the system and the stage: " + started.diagnostic);
+    REQUIRE((started.diagnostic.find("'Game.Lost'") != std::string::npos &&
+             started.diagnostic.find("'Test.Nowhere'") != std::string::npos));
+    INFO("Nothing of the script should have run, and nothing should be placed or held");
+    REQUIRE(fixture.loader.Names() == Names{"Find", "PhaseMask", "StageSystems"});
+    REQUIRE((placed.places == 0 && !fixture.systems.HasSystems()));
+}
+
+TEST_CASE("each extension is given its own groups, sorted, and lets go of them before OnDestroy",
+          "[script-systems][stages]")
+{
+    Systems fixture;
+    PlacedStages bench;
+    PlacedStages idle;
+    int playBacks = 0;
+    fixture.systems.SetStages({FakeStageHost("bench", {"Test.Bench", "Test.After"}, bench, fixture.loader),
+                               FakeStageHost("idle", {"Test.Idle"}, idle, fixture.loader)},
+                              [&playBacks] { ++playBacks; });
+    // Two systems share group 1; the script numbers groups as it likes.
+    fixture.loader.stageSystems = {{"Game.Late", "Test.Bench", 20, 2},
+                                   {"Game.Early", "Test.Bench", 10, 1},
+                                   {"Game.EarlyToo", "Test.Bench", 10, 1},
+                                   {"Game.After", "Test.After", -5, 0}};
+
+    const auto started = fixture.systems.Start(fixture.generation);
+    INFO("Start should succeed: " + started.diagnostic);
+    REQUIRE(started.Succeeded());
+
+    INFO("Each extension should be placed once, the one with no groups too");
+    REQUIRE((bench.places == 1 && idle.places == 1 && idle.groups.empty()));
+    INFO("The bench's groups should be one per group number, by stage name and then order");
+    REQUIRE(bench.groups.size() == 3);
+    REQUIRE((bench.groups[0].Stage() == "Test.After" && bench.groups[0].Order() == -5));
+    REQUIRE((bench.groups[1].Stage() == "Test.Bench" && bench.groups[1].Order() == 10));
+    REQUIRE((bench.groups[2].Stage() == "Test.Bench" && bench.groups[2].Order() == 20));
+
+    bench.groups[1].Run();
+    bench.groups[2].Run();
+    bench.changes->PlayBack();
+    INFO("A group's Run should be one call into the script, by its number, and PlayBack the session's playback");
+    REQUIRE(fixture.loader.Names() ==
+            Names{"Find", "PhaseMask", "StageSystems", "OnCreate", "RunStage 1", "RunStage 2"});
+    REQUIRE((playBacks == 1 && fixture.systems.StageCalls() == 2));
+
+    fixture.systems.Stop();
+    INFO("Both extensions should let go of their groups, before OnDestroy");
+    REQUIRE((bench.removes == 1 && idle.removes == 1));
+    REQUIRE(fixture.loader.Names().back() == "OnDestroy");
+    REQUIRE(fixture.loader.Names()[fixture.loader.Names().size() - 2] == "Remove");
+
+    const auto calls = fixture.loader.calls.size();
+    bench.groups[0].Run();
+    bench.changes->PlayBack();
+    INFO("A group or a playback kept past Stop should do nothing");
+    REQUIRE((fixture.loader.calls.size() == calls && playBacks == 1));
+}
+
+TEST_CASE("a failing stage group is logged, and a group asked for off the main thread is skipped with one error",
+          "[script-systems][stages]")
+{
+    Systems fixture;
+    PlacedStages bench;
+    fixture.systems.SetStages({FakeStageHost("bench", {"Test.Bench"}, bench, fixture.loader)}, [] {});
+    fixture.loader.stageSystems = {{"Game.Only", "Test.Bench", 0, 0}};
+    REQUIRE(fixture.systems.Start(fixture.generation).Succeeded());
+    REQUIRE(bench.groups.size() == 1);
+
+    fixture.loader.failRunStage = true;
+    bench.groups[0].Run();
+    INFO("The failing run should have been logged");
+    REQUIRE(fixture.Errors("running the script's stage systems failed: the fake host refused RunStage") == 1);
+
+    std::thread([&] { bench.groups[0].Run(); }).join();
+    INFO("The run off the main thread should have been skipped with one error");
+    REQUIRE(fixture.Errors("stage group was asked to run off the main thread") == 1);
+    REQUIRE(fixture.systems.StageCalls() == 1);
+    fixture.systems.Stop();
 }

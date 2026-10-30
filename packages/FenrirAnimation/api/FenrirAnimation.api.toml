@@ -1,0 +1,34 @@
+# FenrirAnimation's selection (ADR-0042, tools/describe-api/README.md): the headers to read, relative to this file, and
+# each type the package shares with bindings, with its role. The loop, layer, reference and fade enums are described
+# because the components hold them, ClipEventId because the animation event does.
+headers = [
+    "../include/FenrirAnimation/Animator.hpp",
+    "../include/FenrirAnimation/AnimationLayer.hpp",
+    "../include/FenrirAnimation/AnimationEvents.hpp",
+    "../include/FenrirAnimation/Animation.hpp",
+    "../../FenrirAssets/include/FenrirAssets/BoneMaskData.hpp",
+]
+
+# The layer and the events hold the engine's Entity, which keeps its value and entity list private: described here as
+# nested with the layout FenrirECS shares, and mirrored by the built-in binding.
+private-members = ["Fenrir::Entity"]
+
+[types]
+# The animation extension's components.
+"Fenrir::Animator" = "component"
+"Fenrir::AnimationLayer" = "component"
+
+# Its events.
+"Fenrir::AnimationEvent" = "event"
+"Fenrir::ClipFinished" = "event"
+"Fenrir::AnimationEventsDropped" = "event"
+
+# The plain data its natives give by pointer.
+"Fenrir::PlaybackInfo" = "shared-struct"
+
+# Held by no shared type, but taken by the bone mask natives: FenrirAssets's, described all the same.
+"Fenrir::MaskScope" = "enum"
+
+# Types every binding has its own of.
+"Fenrir::AssetHandle<Fenrir::Clip>" = "bound-type"
+"Fenrir::AssetHandle<Fenrir::BoneMask>" = "bound-type"

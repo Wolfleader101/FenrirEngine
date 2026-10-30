@@ -140,6 +140,21 @@ namespace Fenrir::ShaderCompiler
             if (block)
             {
                 binding.size = found->block.padded_size;
+                // A storage block ending in a runtime array (the draw records, the skinning palette) is as long as its
+                // contents; its size is that of one record, the array's offset plus its stride, so the renderer can
+                // check the record layout against its own (ADR-0024, ADR-0035).
+                // SPIRV-Reflect keeps a runtime array's traits on its type, not on the member.
+                if (found->block.member_count > 0)
+                {
+                    const SpvReflectBlockVariable& last = found->block.members[found->block.member_count - 1];
+                    const SpvReflectArrayTraits* array =
+                        last.type_description != nullptr ? &last.type_description->traits.array : nullptr;
+                    if (array != nullptr && array->dims_count == 1 && array->dims[0] == SPV_REFLECT_ARRAY_DIM_RUNTIME &&
+                        array->stride != 0)
+                    {
+                        binding.size = last.offset + array->stride;
+                    }
+                }
                 for (const SpvReflectBlockVariable& member : CArray(found->block.members, found->block.member_count))
                 {
                     reflected.members.push_back({member.name != nullptr ? member.name : "",

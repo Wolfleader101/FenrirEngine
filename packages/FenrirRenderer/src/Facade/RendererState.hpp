@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -118,7 +119,32 @@ namespace Fenrir::Detail
         StaleHandleLog skyCubemaps;
         /** @brief Windows the renderer does not draw that overlay submissions named, by id. */
         std::set<std::uint32_t> loggedOverlayWindows;
+        /** @brief Whether a skinned draw found no skinning source registered. */
+        bool loggedNoSkinningSource = false;
+        /** @brief Mesh entities whose skinning was skipped or ignored, by entity id and why (SkinProblem). */
+        std::set<std::pair<std::uint32_t, std::uint8_t>> loggedSkins;
         /** @} */
+
+        /**
+         * @brief A mesh entity's last compatibility verdict against its skeleton (ADR-0035), kept while the mesh and
+         * skeleton handles and revisions it was reached for hold, so it is checked only when the pairing changes.
+         */
+        struct SkinPairing
+        {
+            AssetHandle<Mesh> mesh;
+            std::uint32_t meshRevision = 0;
+            AssetHandle<Skeleton> skeleton;
+            std::uint32_t skeletonRevision = 0;
+            bool compatible = false;
+
+            [[nodiscard]] bool SameAs(const SkinPairing& other) const noexcept
+            {
+                return mesh == other.mesh && meshRevision == other.meshRevision && skeleton == other.skeleton &&
+                       skeletonRevision == other.skeletonRevision;
+            }
+        };
+        /** @brief By mesh entity id; entities not drawn in a frame are dropped. */
+        std::map<std::uint32_t, SkinPairing> skinPairings;
 
         RendererState() = default;
         RendererState(const RendererState&) = delete;

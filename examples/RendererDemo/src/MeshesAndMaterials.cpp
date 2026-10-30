@@ -172,7 +172,7 @@ namespace RendererDemo
             place(cube.handle, make(lit, 0x606060FF), {0.0f, -0.1f, 0.0f}, {22.0f, 0.2f, 14.0f});
 
             // The imported backpack, spawned as a node tree of MeshRenderers.
-            state.backpack = Fenrir::SpawnModel(store, scene, backpack.handle);
+            state.backpack = Fenrir::SpawnModel(app, scene, backpack.handle);
             auto& backpackTransform = state.backpack.GetComponent<Fenrir::Transform>();
             backpackTransform.pos = {-7.6f, 0.9f, -0.5f};
             backpackTransform.rot = YawPitch(0.6f, 0.0f);

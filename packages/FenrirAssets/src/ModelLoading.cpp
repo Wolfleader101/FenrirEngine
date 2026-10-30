@@ -1,5 +1,5 @@
-// Turning an imported model file into assets (ADR-0021, ADR-0024, ADR-0031): its images, materials, meshes and the
-// model itself, each stored under the file's path and a label.
+// Turning an imported model file into assets (ADR-0021, ADR-0024, ADR-0031): its images, materials, skeletons, meshes,
+// clips and the model itself, each stored under the file's path and a label.
 #include <cstddef>
 #include <format>
 #include <optional>
@@ -10,11 +10,13 @@
 
 #include "AssetStoreState.hpp"
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirAssets/ClipData.hpp"
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/Model.hpp"
 #include "FenrirAssets/ShaderData.hpp"
+#include "FenrirAssets/SkeletonData.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "Importers/ImageImporter.hpp"
 #include "Importers/ModelImporter.hpp"
@@ -98,7 +100,8 @@ namespace Fenrir
             if (problem.empty())
             {
                 Detail::ImageImport decoded = Detail::ImportImage(source.bytes);
-                if (decoded.image && Detail::PrepareAsset(*decoded.image).empty())
+                Detail::AssetWarnings imageWarnings;
+                if (decoded.image && Detail::PrepareAsset(*decoded.image, imageWarnings).empty())
                 {
                     images.push_back(std::move(*decoded.image));
                     continue;
@@ -162,21 +165,66 @@ namespace Fenrir
                 HandleOf<Material>(store(Detail::AssetKind::Material, std::move(data), std::format("Material{}", i))));
         }
 
-        // Meshes: each checked as Add checks one; a mesh that fails is left out with a warning.
+        // Skeletons: already checked and derived by the importer (ResolveSkinning), each with its owner.
+        for (std::size_t i = 0; i < imported.skeletons.size(); ++i)
+        {
+            Detail::ImportedSkeleton& source = imported.skeletons[i];
+            Detail::AssetBox data(new SkeletonData(std::move(source.data)), &Detail::DestroyAssetData<SkeletonData>);
+            model.skeletons.push_back(
+                HandleOf<Skeleton>(store(Detail::AssetKind::Skeleton, std::move(data), std::format("Skeleton{}", i))));
+            model.skeletonOwners.push_back(static_cast<std::int32_t>(source.owner));
+        }
+
+        // Meshes: each checked as Add checks one; a mesh that fails is left out, and one whose skin or skeleton
+        // failed is never imported unskinned.
         std::vector<std::optional<ModelMesh>> meshes(imported.meshes.size());
         for (std::size_t i = 0; i < imported.meshes.size(); ++i)
         {
             Detail::ImportedMesh& source = imported.meshes[i];
-            if (std::string problem = Detail::PrepareAsset(source.data); !problem.empty())
+            if (source.failed)
             {
-                logger.Warn("Model '{}': mesh '{}' is left out: {}", fileKey, source.name, problem);
                 continue;
+            }
+            Detail::AssetWarnings meshWarnings;
+            if (std::string problem = Detail::PrepareAsset(source.data, meshWarnings); !problem.empty())
+            {
+                if (source.skeleton >= 0)
+                {
+                    imported.failures.push_back(std::format("mesh '{}' is left out: {}", source.name, problem));
+                }
+                else
+                {
+                    logger.Warn("Model '{}': mesh '{}' is left out: {}", fileKey, source.name, problem);
+                }
+                continue;
+            }
+            for (const std::string& warning : meshWarnings)
+            {
+                logger.Warn("Model '{}': mesh '{}': {}", fileKey, source.name, warning);
             }
             Detail::AssetBox data(new MeshData(std::move(source.data)), &Detail::DestroyAssetData<MeshData>);
             const auto mesh = HandleOf<Mesh>(
                 store(Detail::AssetKind::Mesh, std::move(data), std::format("Mesh{}", model.meshes.size())));
             model.meshes.push_back(mesh);
-            meshes[i] = ModelMesh{mesh, model.materials[source.material]};
+            meshes[i] = ModelMesh{mesh, model.materials[source.material], source.skeleton};
+        }
+
+        // Clips: checked as Add checks one; a clip that fails is left out.
+        for (Detail::ImportedClip& source : imported.clips)
+        {
+            Detail::AssetWarnings clipWarnings;
+            if (std::string problem = Detail::PrepareAsset(source.data, clipWarnings); !problem.empty())
+            {
+                imported.failures.push_back(std::format("clip '{}' is left out: {}", source.name, problem));
+                continue;
+            }
+            for (const std::string& warning : clipWarnings)
+            {
+                logger.Warn("Model '{}': clip '{}': {}", fileKey, source.name, warning);
+            }
+            Detail::AssetBox data(new ClipData(std::move(source.data)), &Detail::DestroyAssetData<ClipData>);
+            model.clips.push_back(HandleOf<Clip>(
+                store(Detail::AssetKind::Clip, std::move(data), std::format("Clip{}", model.clips.size()))));
         }
 
         for (Detail::ImportedNode& source : imported.nodes)
@@ -186,6 +234,9 @@ namespace Fenrir
             node.sourceId = source.sourceId;
             node.rest = source.rest;
             node.parent = source.parent;
+            node.kind = source.kind;
+            node.skeleton = source.skeleton;
+            node.bone = source.bone;
             for (const std::uint32_t mesh : source.meshes)
             {
                 if (meshes[mesh])
@@ -194,6 +245,20 @@ namespace Fenrir
                 }
             }
             model.nodes.push_back(std::move(node));
+        }
+
+        // What failed leaves the rest usable: the load is Partial, and each load of the file says so.
+        for (const std::string& failure : imported.failures)
+        {
+            logger.Error("Model '{}': {}", fileKey, failure);
+        }
+        if (imported.failures.empty())
+        {
+            m_state->modelFailures.erase(fileKey);
+        }
+        else
+        {
+            m_state->modelFailures.insert_or_assign(fileKey, std::move(imported.failures));
         }
 
         Detail::AssetBox data(new Model(std::move(model)), &Detail::DestroyAssetData<Model>);

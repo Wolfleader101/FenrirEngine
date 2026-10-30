@@ -1,0 +1,36 @@
+# FenrirSkeleton's selection (ADR-0042, tools/describe-api/README.md): the headers to read, relative to this file, and
+# each type the package shares with bindings, with its role. The timing, space and channel enums are described because
+# the types below hold them; the rest are taken or returned by the natives.
+headers = [
+    "../include/FenrirSkeleton/SkeletonPose.hpp",
+    "../include/FenrirSkeleton/BoneAttachment.hpp",
+    "../include/FenrirSkeleton/PoseStages.hpp",
+    "../../FenrirAssets/include/FenrirAssets/SkinningSource.hpp",
+]
+
+# BoneAttachment holds the engine's Entity, which keeps its value and entity list private, and its BoneName, which keeps
+# its bytes private behind Set (ADR-0037): both described with the layout they share, Entity mirrored by the built-in
+# binding.
+private-members = ["Fenrir::Entity", "Fenrir::BoneName"]
+
+[types]
+# The skeleton extension's components.
+"Fenrir::SkeletonPose" = "component"
+"Fenrir::BoneAttachment" = "component"
+
+# The plain data its natives take or give by pointer.
+"Fenrir::Target" = "shared-struct"
+
+# Held by no shared type, but taken or returned by the natives: described all the same. PoseState is FenrirAssets's
+# (the skinning source's), the one state every skeleton read reports.
+"Fenrir::PoseState" = "enum"
+"Fenrir::PoseKind" = "enum"
+"Fenrir::AttachmentState" = "enum"
+"Fenrir::DetachMode" = "enum"
+"Fenrir::DetachResult" = "enum"
+"Fenrir::OverrideScope" = "enum"
+
+# Types every binding has its own of.
+"Fenrir::AssetHandle<Fenrir::Skeleton>" = "bound-type"
+"Fenrir::Math::Vec3" = "bound-type"
+"Fenrir::Math::Quat" = "bound-type"

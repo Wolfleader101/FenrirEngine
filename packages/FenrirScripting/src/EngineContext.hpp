@@ -3,12 +3,14 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <vector>
 
 #include "ChangeBuffer.hpp"
 #include "ComponentRegistry.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "ScriptComponents.hpp"
+#include "SystemHost.hpp"
 
 namespace Fenrir::Detail
 {
@@ -35,6 +37,10 @@ namespace Fenrir::Detail
         // Set only while a script assembly gives its script report (while it loads): the report the natives fill. Null
         // at any other time, so a stray call from a script is ignored.
         ScriptReport* reporting = nullptr;
+
+        // Set only while a generation's system host reports its stage systems (as its systems start): where the native
+        // puts each. Null at any other time, so a stray call is ignored.
+        std::vector<StageSystemReport>* stageReporting = nullptr;
     };
 
     // Makes `context` the active one. False (and nothing changes) if another is already active.

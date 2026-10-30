@@ -1,6 +1,6 @@
 // Fenrir/Vertex.glsl: the standard vertex locations, for vertex stages. A mesh stream the shader reads but the mesh
-// lacks binds a constant default instead (normal +Y, UV 0, colour white). Locations 6 and 7 are left free for the
-// joints and weights the animation spec adds (ADR-0035).
+// lacks binds a constant default instead (normal +Y, UV 0, colour white). Locations 6 and 7 are a skinned mesh's
+// joints and weights, which Fenrir/Skinning.glsl declares (ADR-0035).
 #ifndef FENRIR_VERTEX_GLSL
 #define FENRIR_VERTEX_GLSL
 

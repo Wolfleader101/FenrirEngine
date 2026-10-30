@@ -5,11 +5,15 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
 #include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirRenderer/Components.hpp"
 #include "FenrirRenderer/SpawnModel.hpp"
+#include "FenrirSkeleton/SkeletonPose.hpp"
+#include "FenrirSkeleton/Skeletons.hpp"
 #include "RendererScriptingApp.hpp"
 
 using namespace Fenrir;
@@ -95,7 +99,7 @@ TEST_CASE("SpawnModel from C# returns a root usable in the same system, over the
     }
 
     const auto model = test.Store().Load<Model>("two_parts.gltf", AssetOwner::App()).handle;
-    const Entity expected = SpawnModel(test.Store(), test.Get().GetActiveScene(), model);
+    const Entity expected = SpawnModel(test.Get(), test.Get().GetActiveScene(), model);
     const Node spawned = Describe(root);
     const Node made = Describe(expected);
     INFO("The tree under the root should be C++'s: two_parts, Body drawing its first mesh, under it Tip and "
@@ -116,4 +120,50 @@ TEST_CASE("SpawnModel from C# with no parent spawns at the top of the scene", "[
     REQUIRE(test.Entities().HasEntity(rootId));
     INFO("The root should have no parent");
     REQUIRE_FALSE(test.Entities().GetEntity(rootId).GetComponent<Relationship>().parent.IsValid());
+}
+
+TEST_CASE(
+    "SpawnModel from C# gives a skinned model its SkinnedMeshes, naming the spawned skeleton, and its SkeletonPose",
+    "[renderer][scripting][skinning]")
+{
+    RendererScriptingApp test;
+    // The skinning source the playback gives the skeletons through; installed after scripting, which it need not
+    // precede, since SpawnModel finds it when its changes play back.
+    Skeletons skeletons = Skeletons::Install(test.Get());
+    const auto model = test.Store().Load<Model>(FENRIR_RENDERER_SCRIPTING_RIG, AssetOwner::App());
+    REQUIRE(model.Ok());
+    const auto rootId =
+        test.Call<std::uint32_t>(RendererCallsType, "SpawnHandle", model.handle.index, model.handle.generation);
+    REQUIRE(test.Entities().HasEntity(rootId));
+    test.ApplyChanges();
+
+    int skinned = 0;
+    int ready = 0;
+    std::vector<Entity> tree;
+    std::function<void(const Entity&)> visit = [&](const Entity& entity) {
+        tree.push_back(entity);
+        entity.ForEachChild(visit);
+    };
+    visit(test.Entities().GetEntity(rootId));
+    for (const Entity& entity : tree)
+    {
+        if (entity.HasComponent<SkeletonPose>() &&
+            Skeletons::GetPoseState(test.Get().GetActiveScene(), entity) == PoseState::Ready)
+        {
+            ++ready;
+        }
+        if (!entity.HasComponent<SkinnedMesh>())
+        {
+            continue;
+        }
+        ++skinned;
+        const Entity skeleton = entity.GetComponent<SkinnedMesh>().skeleton;
+        INFO("The SkinnedMesh should name the spawned owner, the mesh entity's parent, which carries the pose");
+        CHECK(skeleton.IsValid());
+        CHECK(entity.GetComponent<Relationship>().parent == skeleton);
+        CHECK(skeleton.HasComponent<SkeletonPose>());
+        CHECK(entity.HasComponent<MeshRenderer>());
+    }
+    CHECK(skinned >= 1);
+    CHECK(ready == 1);
 }

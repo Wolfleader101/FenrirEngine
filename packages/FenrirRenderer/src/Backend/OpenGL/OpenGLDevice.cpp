@@ -72,15 +72,19 @@ namespace Fenrir::Graphics
             GLint size = 3;
             GLenum type = GL_FLOAT;
             GLboolean normalised = GL_FALSE;
+            /** @brief Read as integers, not converted to floats: set up with glVertexArrayAttribIFormat. */
+            bool integer = false;
         };
 
         /** @brief The GL attribute format of each VertexFormat. */
-        constexpr std::array<AttributeFormat, 5> attributeFormats{{
+        constexpr std::array<AttributeFormat, 7> attributeFormats{{
             {1, GL_FLOAT, GL_FALSE},
             {2, GL_FLOAT, GL_FALSE},
             {3, GL_FLOAT, GL_FALSE},
             {4, GL_FLOAT, GL_FALSE},
             {4, GL_UNSIGNED_BYTE, GL_TRUE},
+            {4, GL_UNSIGNED_SHORT, GL_FALSE, true},
+            {4, GL_UNSIGNED_SHORT, GL_TRUE},
         }};
 
         /** @brief A blend mode's source and destination factors, for colour then alpha; `enabled` false for None. */
@@ -500,8 +504,16 @@ namespace Fenrir::Graphics
             {
                 const AttributeFormat format = attributeFormats.at(IndexOf(attribute.format));
                 gl.EnableVertexArrayAttrib(pipeline.vertexArray, attribute.location);
-                gl.VertexArrayAttribFormat(pipeline.vertexArray, attribute.location, format.size, format.type,
-                                           format.normalised, attribute.offset);
+                if (format.integer)
+                {
+                    gl.VertexArrayAttribIFormat(pipeline.vertexArray, attribute.location, format.size, format.type,
+                                                attribute.offset);
+                }
+                else
+                {
+                    gl.VertexArrayAttribFormat(pipeline.vertexArray, attribute.location, format.size, format.type,
+                                               format.normalised, attribute.offset);
+                }
                 gl.VertexArrayAttribBinding(pipeline.vertexArray, attribute.location, static_cast<GLuint>(slot));
             }
         }

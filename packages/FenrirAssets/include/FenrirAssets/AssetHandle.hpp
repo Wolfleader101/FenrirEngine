@@ -16,16 +16,18 @@ namespace Fenrir
     struct Material;
     struct Shader;
     struct Model;
-    /** @brief Reserved for the animation spec: no data, store or importer yet. */
     struct Skeleton;
-    /** @brief Reserved for the animation spec: no data, store or importer yet. */
     struct Clip;
+    struct BoneMask;
     /** @} */
 
     struct MeshData;
     struct ImageData;
     struct MaterialData;
     struct ShaderData;
+    struct SkeletonData;
+    struct ClipData;
+    struct BoneMaskData;
 
     namespace Detail
     {
@@ -37,10 +39,13 @@ namespace Fenrir
             Material,
             Shader,
             Model,
+            Skeleton,
+            Clip,
+            BoneMask,
         };
 
         /** @brief How many kinds of asset the store holds. */
-        inline constexpr std::size_t AssetKindCount = 5;
+        inline constexpr std::size_t AssetKindCount = 8;
 
         /** @brief What an asset name resolves to: its data type, its kind and the word log messages use for it. */
         template <typename T>
@@ -85,6 +90,30 @@ namespace Fenrir
             static constexpr AssetKind kind = AssetKind::Model;
             static constexpr std::string_view name = "model";
         };
+
+        template <>
+        struct AssetTraits<Skeleton>
+        {
+            using Data = SkeletonData;
+            static constexpr AssetKind kind = AssetKind::Skeleton;
+            static constexpr std::string_view name = "skeleton";
+        };
+
+        template <>
+        struct AssetTraits<Clip>
+        {
+            using Data = ClipData;
+            static constexpr AssetKind kind = AssetKind::Clip;
+            static constexpr std::string_view name = "clip";
+        };
+
+        template <>
+        struct AssetTraits<BoneMask>
+        {
+            using Data = BoneMaskData;
+            static constexpr AssetKind kind = AssetKind::BoneMask;
+            static constexpr std::string_view name = "bone mask";
+        };
     } // namespace Detail
 
     /** @brief The data an asset handle of `T` resolves to: `AssetData<Mesh>` is `MeshData`. */
@@ -92,10 +121,11 @@ namespace Fenrir
     using AssetData = typename Detail::AssetTraits<T>::Data;
 
     /**
-     * @brief Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader` or `Model`) in the asset store: a slot
-     * index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive,
-     * so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and
-     * the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves.
+     * @brief Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip` or
+     * `BoneMask`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021).
+     * Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed
+     * the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made
+     * handle is empty and never resolves.
      */
     template <typename T>
     struct AssetHandle

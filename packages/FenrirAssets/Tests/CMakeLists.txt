@@ -4,8 +4,11 @@ include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
 add_executable(FenrirAssetsTests PublicHeaders.cpp Owners.cpp Revisions.cpp Loading.cpp Images.cpp ShaderContainers.cpp
-                                 Materials.cpp Models.cpp SpawnNodes.cpp Cubemaps.cpp
+                                 Materials.cpp Models.cpp SpawnNodes.cpp Cubemaps.cpp Skeletons.cpp Skins.cpp
+                                 Clips.cpp BoneMasks.cpp SkinnedImport.cpp
                                  AssetsTest.hpp)
+# Models built in code, which FenrirSkeleton's spawning tests also build on.
+target_sources(FenrirAssetsTests PRIVATE ProceduralModels.cpp)
 target_link_libraries(FenrirAssetsTests PRIVATE FenrirAssets Catch2::Catch2WithMain)
 target_compile_definitions(FenrirAssetsTests PRIVATE FENRIR_ASSETS_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 add_test(NAME FenrirAssets COMMAND FenrirAssetsTests)

@@ -3,10 +3,15 @@
 # unions; their kinds, the Viewport and the tag enums are described through what holds them.
 headers = ["../include/FenrirRenderer/Components.hpp", "../include/FenrirRenderer/Renderer.hpp"]
 
+# SkinnedMesh holds the engine's Entity, which keeps its value and entity list private: described here as nested with the
+# layout FenrirECS shares, and mirrored by the built-in binding.
+private-members = ["Fenrir::Entity"]
+
 [types]
 "Fenrir::MeshRenderer" = "component"
 "Fenrir::Camera" = "component"
 "Fenrir::DirectionalLight" = "component"
+"Fenrir::SkinnedMesh" = "component"
 "Fenrir::AmbientLight" = "scene-resource"
 "Fenrir::Sky" = "scene-resource"
 "Fenrir::RendererStats" = "shared-struct"

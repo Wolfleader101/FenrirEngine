@@ -10,10 +10,14 @@
 #include <string_view>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include "FenrirAssets/AssetHandle.hpp"
+#include "FenrirAssets/BoneMaskData.hpp"
+#include "FenrirAssets/ClipData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
+#include "FenrirAssets/SkeletonData.hpp"
 #include "FenrirAssets/SpawnNodes.hpp"
 #include "FenrirMath/Colour.hpp"
 #include "FenrirMath/Math.hpp"
@@ -27,6 +31,7 @@ namespace Fenrir
     {
         /** @brief What the store set up. Defined in FenrirAssets's private headers; nothing else can use it. */
         struct AssetStoreState;
+        struct AssetRecord;
 
         /** @brief An asset handle without its type: what the store's untyped core works with. */
         struct AssetSlot
@@ -44,16 +49,24 @@ namespace Fenrir
             delete static_cast<D*>(data);
         }
 
+        /** @brief What a check found that leaves the data usable, one message each, logged as warnings. */
+        using AssetWarnings = std::vector<std::string>;
+
         /**
          * @name Checks before the store takes data
-         * Each checks one kind of data and completes what the store computes (a mesh's bounds). It returns an empty
-         * string when the data is usable, else why it is not.
+         * Each checks one kind of data and completes what the store computes (a mesh's bounds and skin boxes, a
+         * skeleton's engine names and signature, a clip's duration and event order). It returns an empty string when
+         * the data is usable, else why it is not, and adds to `warnings` what is usable but suspect.
          * @{
          */
-        [[nodiscard]] std::string PrepareAsset(MeshData& mesh);
-        [[nodiscard]] std::string PrepareAsset(ImageData& image);
-        [[nodiscard]] std::string PrepareAsset(ShaderData& shader);
-        [[nodiscard]] std::string PrepareAsset(MaterialData& material);
+        [[nodiscard]] std::string PrepareAsset(MeshData& mesh, AssetWarnings& warnings);
+        [[nodiscard]] std::string PrepareAsset(ImageData& image, AssetWarnings& warnings);
+        [[nodiscard]] std::string PrepareAsset(ShaderData& shader, AssetWarnings& warnings);
+        [[nodiscard]] std::string PrepareAsset(MaterialData& material, AssetWarnings& warnings);
+        [[nodiscard]] std::string PrepareAsset(SkeletonData& skeleton, AssetWarnings& warnings);
+        [[nodiscard]] std::string PrepareAsset(ClipData& clip, AssetWarnings& warnings);
+        [[nodiscard]] std::string PrepareAsset(BoneMaskData& mask, AssetWarnings& warnings);
+        [[nodiscard]] std::string PrepareAsset(Model& model, AssetWarnings& warnings);
         /** @} */
     } // namespace Detail
 
@@ -125,6 +138,20 @@ namespace Fenrir
         std::string importerMessage;
     };
 
+    /** @brief How a load went (ADR-0031). */
+    enum class LoadStatus : std::uint8_t
+    {
+        /** @brief Everything in the file loaded. */
+        Succeeded,
+        /**
+         * @brief The asset loaded, but its file's import left units out (a skeleton with its skins and meshes, a skin
+         * with its meshes, a clip); LoadResult::failedUnits says which and why.
+         */
+        Partial,
+        /** @brief Nothing loaded; LoadResult::diagnostic says why. */
+        Failed,
+    };
+
     /** @brief What AssetStore::Load gives back: the handle, or the diagnostic saying why there is none. */
     template <typename T>
     struct LoadResult
@@ -133,11 +160,26 @@ namespace Fenrir
         AssetHandle<T> handle;
         /** @brief Why the load failed; empty when it succeeded. */
         std::optional<LoadDiagnostic> diagnostic;
+        /**
+         * @brief For an asset from a model file, each unit its import left out, saying why; empty when none was. The
+         * same for every load of the file's model or sub-assets, until the file is imported again.
+         */
+        std::vector<std::string> failedUnits;
 
-        /** @brief Whether the load succeeded. */
+        /** @brief Whether the load gave a handle: it succeeded, wholly or in part. */
         [[nodiscard]] bool Ok() const noexcept
         {
             return !diagnostic.has_value();
+        }
+
+        /** @brief Whether the load succeeded, in part, or failed. */
+        [[nodiscard]] LoadStatus Status() const noexcept
+        {
+            if (diagnostic.has_value())
+            {
+                return LoadStatus::Failed;
+            }
+            return failedUnits.empty() ? LoadStatus::Succeeded : LoadStatus::Partial;
         }
     };
 
@@ -174,8 +216,12 @@ namespace Fenrir
          * A model loads from glTF, GLB, FBX or OBJ, and its meshes, materials and images load from the same file by
          * label (`scene.gltf#Mesh0`, see Model). Either way the whole file is imported once: the model and every
          * sub-asset are stored, all owned by `owner`, and a later load of any of them gives the same handle. Loading a
-         * model again adds the owner to its sub-assets too. Problems that leave the model usable (a skinned mesh left
-         * out, an image that failed and was replaced by white, a conflicting colour space) are logged as warnings.
+         * model again adds the owner to its sub-assets too. Problems that leave the model usable (an image that failed
+         * and was replaced by white, a conflicting colour space, a repeated bone name) are logged as warnings. A glTF
+         * file's skins, skeletons and clips are imported into one bind space (ADR-0031); an error in one fails only its
+         * smallest unit (a skeleton with its skins and meshes, a skin with its meshes, a clip), logged as an error, and
+         * the load is `LoadStatus::Partial`, naming each in `LoadResult::failedUnits`. FBX and OBJ skinned meshes are
+         * still left out with a warning.
          *
          * A `builtin:` name loads what AssetStore::AddBuiltin registered under it, and fails until something has.
          */
@@ -183,25 +229,30 @@ namespace Fenrir
         [[nodiscard]] LoadResult<T> Load(std::string_view path, AssetOwner owner)
         {
             LoadResult<T> result;
-            const Detail::AssetSlot slot = LoadSlot(Detail::AssetTraits<T>::kind, path, owner, result.diagnostic);
+            const Detail::AssetSlot slot =
+                LoadSlot(Detail::AssetTraits<T>::kind, path, owner, result.diagnostic, result.failedUnits);
             result.handle = {slot.index, slot.generation};
             return result;
         }
 
         /**
          * @brief Adds `data` as a new asset owned by `owner`. It has no path, so nothing else ever shares it. Data
-         * that breaks its type's rules is refused with a logged error, and the handle is empty. A mesh's bounds are
+         * that breaks its type's rules is refused with a logged error, and the handle is empty; data that is usable
+         * but suspect (a skinned vertex with no weight, a repeated bone name) is taken with a warning. What the store
+         * derives (a mesh's bounds and skin boxes, a skeleton's engine names and bind signature, a clip's duration) is
          * computed here.
          */
         template <typename T>
         [[nodiscard]] AssetHandle<T> Add(AssetData<T> data, AssetOwner owner)
         {
             using Data = AssetData<T>;
-            if (const std::string problem = Detail::PrepareAsset(data); !problem.empty())
+            Detail::AssetWarnings warnings;
+            if (const std::string problem = Detail::PrepareAsset(data, warnings); !problem.empty())
             {
                 Refuse(Detail::AssetTraits<T>::name, "add", problem);
                 return {};
             }
+            Warn(Detail::AssetTraits<T>::name, "added", warnings);
             Detail::AssetBox box(new Data(std::move(data)), &Detail::DestroyAssetData<Data>);
             const Detail::AssetSlot slot = AddSlot(Detail::AssetTraits<T>::kind, std::move(box), owner);
             return {slot.index, slot.generation};
@@ -218,11 +269,13 @@ namespace Fenrir
         AssetHandle<T> AddBuiltin(std::string_view name, AssetData<T> data)
         {
             using Data = AssetData<T>;
-            if (const std::string problem = Detail::PrepareAsset(data); !problem.empty())
+            Detail::AssetWarnings warnings;
+            if (const std::string problem = Detail::PrepareAsset(data, warnings); !problem.empty())
             {
                 Refuse(Detail::AssetTraits<T>::name, "add a built-in", problem);
                 return {};
             }
+            Warn(Detail::AssetTraits<T>::name, "added as a built-in", warnings);
             Detail::AssetBox box(new Data(std::move(data)), &Detail::DestroyAssetData<Data>);
             const Detail::AssetSlot slot = AddBuiltinSlot(Detail::AssetTraits<T>::kind, name, std::move(box));
             return {slot.index, slot.generation};
@@ -231,7 +284,7 @@ namespace Fenrir
         /**
          * @brief Swaps the data of the asset `handle` names for `data` and bumps its revision, so every user sees the
          * change. Its owners, path and handle stay. False, with a logged error, if the handle does not resolve or the
-         * data breaks its type's rules; the asset is then unchanged. A mesh's bounds are computed here. Replacing a
+         * data breaks its type's rules; the asset is then unchanged. What Add derives is derived here too. Replacing a
          * shader logs a warning, once per material, for each parameter override of a material on it that the new
          * shader lacks or types differently: the override is kept and ignored.
          */
@@ -239,11 +292,13 @@ namespace Fenrir
         bool Replace(AssetHandle<T> handle, AssetData<T> data)
         {
             using Data = AssetData<T>;
-            if (const std::string problem = Detail::PrepareAsset(data); !problem.empty())
+            Detail::AssetWarnings warnings;
+            if (const std::string problem = Detail::PrepareAsset(data, warnings); !problem.empty())
             {
                 Refuse(Detail::AssetTraits<T>::name, "replace", problem);
                 return false;
             }
+            Warn(Detail::AssetTraits<T>::name, "replaced", warnings);
             Detail::AssetBox box(new Data(std::move(data)), &Detail::DestroyAssetData<Data>);
             return ReplaceSlot(Detail::AssetTraits<T>::kind, {handle.index, handle.generation}, std::move(box));
         }
@@ -285,6 +340,18 @@ namespace Fenrir
         [[nodiscard]] std::uint32_t Revision(AssetHandle<T> handle) const
         {
             return RevisionOf(Detail::AssetTraits<T>::kind, {handle.index, handle.generation});
+        }
+
+        /**
+         * @brief Whether both assets were loaded from one file, as a model's sub-assets are (a skeleton and a clip of
+         * one glTF file): how FenrirAnimation knows a clip may bind to a skeleton by node identity (ADR-0031). False
+         * when either handle does not resolve, or either asset was added in code rather than loaded.
+         */
+        template <typename A, typename B>
+        [[nodiscard]] bool FromSameFile(AssetHandle<A> a, AssetHandle<B> b) const
+        {
+            return SameFileOf(Detail::AssetTraits<A>::kind, {a.index, a.generation}, Detail::AssetTraits<B>::kind,
+                              {b.index, b.generation});
         }
 
         /**
@@ -394,6 +461,47 @@ namespace Fenrir
         /** @} */
 
         /**
+         * @name Clip event edits
+         * A clip's events, edited through the store so that every reader sees the clip's revision move (ADR-0034).
+         * Each edit that changes the clip bumps its revision; an edit on a handle that does not resolve is logged and
+         * changes nothing.
+         * @{
+         */
+
+        /**
+         * @brief Adds an event named `name` at `time`, placed by time after any events already at that time, and gives
+         * its index. Empty, with a logged error, when the clip does not resolve or `time` is not finite or lies outside
+         * the clip's duration.
+         */
+        std::optional<std::uint32_t> AddClipEvent(AssetHandle<Clip> clip, float time, std::string_view name);
+
+        /** @brief Removes the event at `index`; later events move down one. False when there is no such event. */
+        bool RemoveClipEvent(AssetHandle<Clip> clip, std::uint32_t index);
+        /** @} */
+
+        /**
+         * @name Bone mask edits
+         * Bone masks made and edited through the store (ADR-0036), each edit bumping the mask's revision. An edit on a
+         * handle that does not resolve is logged and changes nothing.
+         * @{
+         */
+
+        /** @brief A new bone mask with no entries, owned by `owner`; on a layer it covers no bone until one is
+         * included. */
+        [[nodiscard]] AssetHandle<BoneMask> CreateBoneMask(AssetOwner owner);
+
+        /**
+         * @brief Appends an entry giving the bone named `boneName` (by engine name), or its whole subtree, `weight`; it
+         * overrides earlier entries for the bones it covers. False, with a logged error, for a non-finite weight.
+         */
+        bool IncludeInBoneMask(AssetHandle<BoneMask> mask, std::string_view boneName, float weight,
+                               MaskScope scope = MaskScope::Bone);
+
+        /** @brief Removes every entry. */
+        bool ClearBoneMask(AssetHandle<BoneMask> mask);
+        /** @} */
+
+        /**
          * @brief Spawns `model`'s node tree into `scene` (ADR-0028, ADR-0031): a root entity under `parent` (or at the
          * top of the scene if `parent` is null), and below it one entity per model node with its `Name`, its rest
          * transform as its `Transform`, and its parent link. It adds nothing that draws: FenrirRenderer's SpawnModel
@@ -404,9 +512,12 @@ namespace Fenrir
         /** @brief The asset root relative paths resolve against, absolute. */
         [[nodiscard]] const std::filesystem::path& Root() const noexcept;
 
+        /** @brief The logger the store's messages go to, for code that loads or spawns through it and reports alike. */
+        [[nodiscard]] ILogger& Logger() const noexcept;
+
       private:
         Detail::AssetSlot LoadSlot(Detail::AssetKind kind, std::string_view path, AssetOwner owner,
-                                   std::optional<LoadDiagnostic>& diagnostic);
+                                   std::optional<LoadDiagnostic>& diagnostic, std::vector<std::string>& failedUnits);
         Detail::AssetSlot AddSlot(Detail::AssetKind kind, Detail::AssetBox data, AssetOwner owner);
         Detail::AssetSlot AddBuiltinSlot(Detail::AssetKind kind, std::string_view name, Detail::AssetBox data);
         Detail::AssetSlot ReserveBuiltin(Detail::AssetKind kind, std::string_view name);
@@ -417,7 +528,12 @@ namespace Fenrir
         bool UnloadSlot(Detail::AssetKind kind, Detail::AssetSlot slot);
         [[nodiscard]] const void* Find(Detail::AssetKind kind, Detail::AssetSlot slot) const;
         [[nodiscard]] std::uint32_t RevisionOf(Detail::AssetKind kind, Detail::AssetSlot slot) const;
+        [[nodiscard]] bool SameFileOf(Detail::AssetKind kindA, Detail::AssetSlot a, Detail::AssetKind kindB,
+                                      Detail::AssetSlot b) const;
         void Refuse(std::string_view assetName, std::string_view action, const std::string& problem);
+        void Warn(std::string_view assetName, std::string_view action, const Detail::AssetWarnings& warnings);
+        [[nodiscard]] Detail::AssetRecord* EditRecord(Detail::AssetKind kind, Detail::AssetSlot slot,
+                                                      std::string_view action);
         bool SetParameter(AssetHandle<Material> material, std::string_view name, MaterialValue value);
         [[nodiscard]] MaterialData* EditMaterial(AssetHandle<Material> material, std::string_view action);
         [[nodiscard]] std::optional<MaterialValue> EffectiveValue(AssetHandle<Material> material, std::string_view name,

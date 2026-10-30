@@ -132,6 +132,29 @@ internal static unsafe partial class Native
     public static partial void ChangesDiscard();
 
     /// <summary>
+    /// How many structural changes are recorded and not yet played back: a mark for ChangesDiscardFrom. The system
+    /// runner takes one before each stage system, whose changes wait for the stage's host.
+    /// </summary>
+    [NativeFunction]
+    public static partial int ChangesMark();
+
+    /// <summary>
+    /// Drops the structural changes recorded after `mark` (from ChangesMark), and destroys the entities they created;
+    /// the ones before it stay recorded. A negative mark drops nothing.
+    /// </summary>
+    [NativeFunction]
+    public static partial void ChangesDiscardFrom(int mark);
+
+    /// <summary>
+    /// A generation's system host reports one stage system it defines, while its systems start: the system's full name,
+    /// the stage it joins, its order, and the number of its (stage, order) group.
+    /// </summary>
+    /// <returns>False when nothing is starting.</returns>
+    [NativeFunction]
+    public static partial bool RegisterStageSystem(ReadOnlySpan<char> system, ReadOnlySpan<char> stage, int order,
+                                                   int group);
+
+    /// <summary>
     /// The id of the event registered under `name` for the C# type `typeName`. Each event is a queue the engine owns:
     /// the queue C++ SendEvent and EventReader use for a native event.
     /// </summary>

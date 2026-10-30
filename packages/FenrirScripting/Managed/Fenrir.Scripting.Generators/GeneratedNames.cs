@@ -17,6 +17,12 @@ internal static class GeneratedNames
     /// <summary><c>int PhaseMask()</c> on the system host: bit n is set when the script has a system in phase n.</summary>
     public const string PhaseMask = "PhaseMask";
 
+    /// <summary><c>void ReportStages()</c> on the system host: reports each stage system, with its stage, order and group.</summary>
+    public const string ReportStages = "ReportStages";
+
+    /// <summary><c>void RunStage(int group)</c> on the system host: the systems of one stage group, in name order.</summary>
+    public const string RunStage = "RunStage";
+
     /// <summary><c>void OnCreate()</c> on the system host: every system's OnCreate, once the generation is loaded.</summary>
     public const string OnCreate = "OnCreate";
 

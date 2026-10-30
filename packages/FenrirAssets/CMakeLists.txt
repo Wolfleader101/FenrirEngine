@@ -10,27 +10,37 @@ add_library(FenrirAssets STATIC
     include/FenrirAssets/AssetHandle.hpp
     include/FenrirAssets/Assets.hpp
     include/FenrirAssets/AssetStore.hpp
+    include/FenrirAssets/BoneMaskData.hpp
+    include/FenrirAssets/ClipData.hpp
     include/FenrirAssets/ImageData.hpp
     include/FenrirAssets/MaterialData.hpp
     include/FenrirAssets/MeshData.hpp
     include/FenrirAssets/Model.hpp
     include/FenrirAssets/ShaderData.hpp
+    include/FenrirAssets/SkeletonData.hpp
+    include/FenrirAssets/SkinningSource.hpp
     include/FenrirAssets/SpawnNodes.hpp
 
     src/Assets.cpp
     src/AssetStore.cpp
     src/AssetStoreState.hpp
     src/AssetData.cpp
+    src/AnimationData.cpp
+    src/AnimationEdits.cpp
+    src/SkinPreparation.hpp
+    src/SkinPreparation.cpp
     src/CubemapLoading.hpp
     src/CubemapLoading.cpp
     src/Materials.cpp
     src/ModelLoading.cpp
+    src/ModelData.cpp
     src/SpawnNodes.cpp
 
     src/Importers/ImageImporter.hpp
     src/Importers/Stb/StbImageImporter.cpp
     src/Importers/ModelImporter.hpp
     src/Importers/ModelImporter.cpp
+    src/Importers/SkinnedImport.cpp
     src/Importers/Cgltf/CgltfModelImporter.cpp
     src/Importers/Ufbx/UfbxModelImporter.cpp
 )

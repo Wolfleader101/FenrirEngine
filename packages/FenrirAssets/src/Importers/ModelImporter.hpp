@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -7,8 +8,11 @@
 #include <utility>
 #include <vector>
 
+#include "FenrirAssets/ClipData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/MeshData.hpp"
+#include "FenrirAssets/Model.hpp"
+#include "FenrirAssets/SkeletonData.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 
 namespace Fenrir::Detail
@@ -60,14 +64,61 @@ namespace Fenrir::Detail
         std::string error;
     };
 
-    /** @brief One imported mesh: one submesh's worth of a source mesh, drawn with one material. */
+    /**
+     * @brief One imported mesh: one submesh's worth of a source mesh, drawn with one material. A skinned one is read
+     * as its file has it, then ResolveSkinning bakes it into its skeleton's bind space.
+     */
     struct ImportedMesh
     {
         std::string name;
-        /** @brief Its streams and indices, with one submesh over every index. */
+        /** @brief Its streams and indices, with one submesh over every index; a skin section once resolved. */
         MeshData data;
         /** @brief Its material, by index into ModelImport::materials. */
         std::uint32_t material = 0;
+        /** @brief The skin it is drawn with, by index into ModelImport::skins; -1 for a rigid mesh. */
+        std::int32_t skin = -1;
+        /** @brief As read, per vertex: four indices into its skin's joints. */
+        std::vector<std::array<std::uint32_t, 4>> joints;
+        /** @brief As read, per vertex: the weights of those four joints. */
+        std::vector<Math::Vec4> weights;
+        /** @brief Once resolved, the skeleton it was baked against, by index into ModelImport::skeletons; else -1. */
+        std::int32_t skeleton = -1;
+        /** @brief Whether its skin or skeleton failed, so that it is left out: never imported unskinned. */
+        bool failed = false;
+    };
+
+    /** @brief One skin of the file: the joints its meshes' vertices name, and their inverse binds. */
+    struct ImportedSkin
+    {
+        std::string name;
+        /** @brief Its joints, by index into ModelImport::nodes, in the file's order. */
+        std::vector<std::uint32_t> joints;
+        /**
+         * @brief One inverse bind per joint, in the space the backend reads nodes' rest worlds in (glTF's scene-root
+         * space, ufbx's world); identity matrices when the file gives none.
+         */
+        std::vector<Math::Mat4> inverseBinds;
+        /** @brief The node the file names as the skin's skeleton root (glTF's `skin.skeleton`), or -1. */
+        std::int32_t skeletonNode = -1;
+    };
+
+    /** @brief One animation of the file, its channels' targets named by node. */
+    struct ImportedClip
+    {
+        std::string name;
+        /** @brief Its channels, their targets left for ResolveSkinning to fill in. */
+        ClipData data;
+        /** @brief Each channel's target, by index into ModelImport::nodes. */
+        std::vector<std::uint32_t> targets;
+    };
+
+    /** @brief One skeleton ResolveSkinning made: its bones, checked as the store checks one, and its owner. */
+    struct ImportedSkeleton
+    {
+        /** @brief Its bones, prepared, so that its engine names and bind signature are set. */
+        SkeletonData data;
+        /** @brief Its owner, the node of its skeleton entity, by index into ModelImport::nodes. */
+        std::uint32_t owner = 0;
     };
 
     /** @brief One source node. */
@@ -80,11 +131,20 @@ namespace Fenrir::Detail
         std::int32_t parent = -1;
         /** @brief Its meshes, by index into ModelImport::meshes. */
         std::vector<std::uint32_t> meshes;
+        /** @brief Whether the file gives it a mesh, camera or light, so that an animation cannot make it a bone. */
+        bool carriesContent = false;
+        /** @brief Whether the format marks it as a bone: an FBX skeleton node (`LimbNode`, `Limb` or `Root`). */
+        bool markedBone = false;
+        /** @brief What it is, once ResolveSkinning has run; for a bone, `skeleton` and `bone` say whose. */
+        ModelNodeKind kind = ModelNodeKind::Ordinary;
+        std::int32_t skeleton = -1;
+        std::int32_t bone = -1;
     };
 
     /**
      * @brief What a model importer made of a file: plain data, with sub-assets named by index, that the store turns
-     * into assets. Nodes come parents first; skinned meshes are already left out, each with a warning naming it.
+     * into assets. Nodes come parents first. A backend fills the nodes, meshes, skins and clips as its file has them;
+     * ResolveSkinning then makes the skeletons and puts every skinned mesh in one bind space (ADR-0031).
      */
     struct ModelImport
     {
@@ -92,8 +152,17 @@ namespace Fenrir::Detail
         std::vector<ImportedMesh> meshes;
         std::vector<ImportedMaterial> materials;
         std::vector<ImportedImage> images;
-        /** @brief Problems that leave the model usable (a skinned mesh left out, a primitive skipped). */
+        std::vector<ImportedSkin> skins;
+        std::vector<ImportedClip> clips;
+        /** @brief Filled by ResolveSkinning. */
+        std::vector<ImportedSkeleton> skeletons;
+        /** @brief Problems that leave the model usable (a primitive skipped, a repeated bone name). */
         std::vector<std::string> warnings;
+        /**
+         * @brief Each unit that failed and was left out (a skeleton with its skins and meshes, a skin with its meshes,
+         * a clip), saying why; the load is then `Partial`.
+         */
+        std::vector<std::string> failures;
         /** @brief Why the file could not be imported at all; empty when it was. */
         std::string error;
     };
@@ -103,9 +172,9 @@ namespace Fenrir::Detail
 
     /**
      * @brief Reads the model file at `file` (absolute) with the importer for its format, then normalises what it gave:
-     * rotations made unit quaternions, and normals generated for meshes without them. The private model importer seam
-     * (ADR-0021, ADR-0031): cgltf reads glTF and GLB, ufbx reads FBX and OBJ, and nothing outside FenrirAssets's
-     * sources sees either.
+     * rotations made unit quaternions, normals generated for meshes without them, and skins resolved into skeletons
+     * (ResolveSkinning). The private model importer seam (ADR-0021, ADR-0031): cgltf reads glTF and GLB, ufbx reads
+     * FBX and OBJ, and nothing outside FenrirAssets's sources sees either.
      */
     [[nodiscard]] ModelImport ImportModel(const std::filesystem::path& file);
 
@@ -114,4 +183,21 @@ namespace Fenrir::Detail
 
     /** @brief ufbx's half of the seam: an FBX or OBJ file, before normalisation. */
     [[nodiscard]] ModelImport ImportUfbx(const std::filesystem::path& file);
+
+    /**
+     * @brief The format-independent rules of skinned import (ADR-0031), run on what a backend read: which nodes are
+     * bones; skins grouped into skeletons by joint identity (or by one tree of format-marked bones), merged when their
+     * binds agree or one conversion takes one into the other; marked bones no skin reaches made skeletons of their own,
+     * bound at their rest; each skeleton's owner, with synthetic owners added where several share a node; every skinned
+     * mesh baked into its skeleton's bind space, its joints remapped and its weights quantised; clip rotations kept in
+     * one hemisphere, and each channel's target named. Each error fails its smallest unit into `failures`, its meshes
+     * marked failed. An ordinary node with a degenerate transform is a warning.
+     */
+    void ResolveSkinning(ModelImport& model);
+
+    /**
+     * @brief Moves a mesh's vertices by `matrix`: positions by it, normals by its inverse transpose (renormalised),
+     * tangents by its upper 3x3 (renormalised), with their handedness flipped when its determinant is negative.
+     */
+    void BakeVertices(MeshData& mesh, const Math::Mat4& matrix);
 } // namespace Fenrir::Detail

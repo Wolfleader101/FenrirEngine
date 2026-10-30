@@ -1,0 +1,110 @@
+; FBX 7.4.0 project file
+; FenrirAssets model fixture, written by hand-rolled make_fixtures.py (no FBX SDK involved).
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+	Creator: "FenrirEngine make_fixtures.py"
+}
+GlobalSettings:  {
+	Version: 1000
+	Properties70:  {
+		P: "UpAxis", "int", "Integer", "",1
+		P: "UpAxisSign", "int", "Integer", "",1
+		P: "FrontAxis", "int", "Integer", "",2
+		P: "FrontAxisSign", "int", "Integer", "",1
+		P: "CoordAxis", "int", "Integer", "",0
+		P: "CoordAxisSign", "int", "Integer", "",1
+		P: "UnitScaleFactor", "double", "Number", "",100
+		P: "OriginalUnitScaleFactor", "double", "Number", "",100
+	}
+}
+Objects:  {
+	Model: 1001, "Model::Armature", "Null" {
+		Version: 232
+		Properties70:  {
+
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	Model: 1002, "Model::Root", "LimbNode" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,1,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	NodeAttribute: 1003, "NodeAttribute::Root", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1004, "Model::Arm", "LimbNode" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,1,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	NodeAttribute: 1005, "NodeAttribute::Arm", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1006, "Model::Control", "LimbNode" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",1,0,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	NodeAttribute: 1007, "NodeAttribute::Control", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	AnimationStack: 1008, "AnimStack::Raise", "" {
+		Properties70:  {
+			P: "LocalStart", "KTime", "Time", "",0
+			P: "LocalStop", "KTime", "Time", "",46186158000
+		}
+	}
+	AnimationLayer: 1009, "AnimLayer::BaseLayer", "" {
+	}
+	AnimationCurveNode: 1010, "AnimCurveNode::R", "" {
+		Properties70:  {
+			P: "d|X", "Number", "", "A",0
+			P: "d|Y", "Number", "", "A",0
+			P: "d|Z", "Number", "", "A",0
+		}
+	}
+	AnimationCurve: 1011, "AnimCurve::", "" {
+		Default: 0
+		KeyVer: 4009
+		KeyTime: *2 {
+			a: 0,46186158000
+		}
+		KeyValueFloat: *2 {
+			a: 0,90
+		}
+		KeyAttrFlags: *2 {
+			a: 4,4
+		}
+		KeyAttrDataFloat: *8 {
+			a: 0,0,0,0,0,0,0,0
+		}
+		KeyAttrRefCount: *2 {
+			a: 1,1
+		}
+	}
+}
+Connections:  {
+	C: "OO",1001,0
+	C: "OO",1002,1001
+	C: "OO",1003,1002
+	C: "OO",1004,1002
+	C: "OO",1005,1004
+	C: "OO",1006,1001
+	C: "OO",1007,1006
+	C: "OO",1009,1008
+	C: "OO",1010,1009
+	C: "OP",1010,1004, "Lcl Rotation"
+	C: "OP",1011,1010, "d|X"
+}

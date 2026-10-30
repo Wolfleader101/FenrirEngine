@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Version is part of the contract: the host shares one copy, and a script compiled against a newer minor fails to load. -->
+    <Version>0.1.0</Version>
+    <AssemblyName>Fenrir.Animation</AssemblyName>
+    <RootNamespace>Fenrir.Animation</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- FenrirAnimation's scripting contract (ADR-0039): the Animator and AnimationLayer components, the animation events,
+       and the Animation, Clips and BoneMasks classes over the native functions FenrirAnimationScripting gives C#. Built
+       against the scripting SDK (for the generators), the Fenrir.Assets contract (for asset handles) and the
+       Fenrir.Skeleton contract (for PoseState); CMake passes -p:FenrirScriptingSdk=<the SDK folder>/,
+       -p:FenrirAssetsContractDir=<the folder holding Fenrir.Assets.dll>/ and -p:FenrirSkeletonContractDir=<the folder
+       holding Fenrir.Skeleton.dll>/. The host shares it with every script load, after Fenrir.Assets and
+       Fenrir.Skeleton. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <ItemGroup Condition="'$(FenrirAssetsContractDir)' != ''">
+    <Reference Include="Fenrir.Assets">
+      <HintPath>$(FenrirAssetsContractDir)Fenrir.Assets.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Skeleton">
+      <HintPath>$(FenrirSkeletonContractDir)Fenrir.Skeleton.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <!-- In an editor, which passes no folders, the contracts come from their source projects. -->
+  <ItemGroup Condition="'$(FenrirAssetsContractDir)' == ''">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../FenrirAssets/Managed/Fenrir.Assets/Fenrir.Assets.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../FenrirSkeleton/Managed/Fenrir.Skeleton/Fenrir.Skeleton.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

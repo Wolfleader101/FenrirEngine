@@ -69,10 +69,10 @@ namespace ScriptingDemo
             Fenrir::Entity backpacks = entities.CreateEntity();
             backpacks.GetComponent<Fenrir::Name>().Set("Backpacks");
 
-            Fenrir::Entity backpack1 = Fenrir::SpawnModel(store, scene, backpack.handle, backpacks);
+            Fenrir::Entity backpack1 = Fenrir::SpawnModel(app, scene, backpack.handle, backpacks);
             backpack1.GetComponent<Fenrir::Name>().Set("Backpack 1");
 
-            Fenrir::Entity backpack2 = Fenrir::SpawnModel(store, scene, backpack.handle, backpacks);
+            Fenrir::Entity backpack2 = Fenrir::SpawnModel(app, scene, backpack.handle, backpacks);
             backpack2.GetComponent<Fenrir::Name>().Set("Backpack 2");
             constexpr float backpack2Y = 5.0f;
             backpack2.GetComponent<Fenrir::Transform>().pos = Vec3(0.0f, backpack2Y, 0.0f);

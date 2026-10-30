@@ -40,12 +40,37 @@ public sealed class Model
     }
 }
 
+/// <summary>A skeleton asset: bones with their rest pose and inverse binds, from a model or built in code. Never made.</summary>
+public sealed class Skeleton
+{
+    private Skeleton()
+    {
+    }
+}
+
+/// <summary>A clip asset: keyed bone transforms over time, and timed events. Never made.</summary>
+public sealed class Clip
+{
+    private Clip()
+    {
+    }
+}
+
+/// <summary>A bone mask asset: bones by engine name with the weights an animation layer gives them. Never made.</summary>
+public sealed class BoneMask
+{
+    private BoneMask()
+    {
+    }
+}
+
 /// <summary>
 /// Names one asset of kind <typeparamref name="T"/> (<see cref="Mesh"/>, <see cref="Image"/>, <see cref="Material"/>,
-/// <see cref="Shader"/> or <see cref="Model"/>) in the asset store, laid out exactly like FenrirAssets'
-/// <c>AssetHandle&lt;T&gt;</c>: a slot index and the slot's generation when the asset was made (ADR-0021). Plain data that
-/// keeps nothing alive. Once the asset is freed the handle is stale: it no longer resolves, and everything that takes it
-/// does nothing. <c>default</c> is the empty handle, which names no asset.
+/// <see cref="Shader"/>, <see cref="Model"/>, <see cref="Skeleton"/>, <see cref="Clip"/> or <see cref="BoneMask"/>) in
+/// the asset store, laid out exactly like FenrirAssets' <c>AssetHandle&lt;T&gt;</c>: a slot index and the slot's
+/// generation when the asset was made (ADR-0021). Plain data that keeps nothing alive. Once the asset is freed the
+/// handle is stale: it no longer resolves, and everything that takes it does nothing. <c>default</c> is the empty
+/// handle, which names no asset.
 /// </summary>
 public struct AssetHandle<T> : IEquatable<AssetHandle<T>> where T : class
 {
@@ -101,5 +126,8 @@ internal static class AssetKind<T> where T : class
         typeof(T) == typeof(Material) ? AssetKind.Material :
         typeof(T) == typeof(Shader) ? AssetKind.Shader :
         typeof(T) == typeof(Model) ? AssetKind.Model :
+        typeof(T) == typeof(Skeleton) ? AssetKind.Skeleton :
+        typeof(T) == typeof(Clip) ? AssetKind.Clip :
+        typeof(T) == typeof(BoneMask) ? AssetKind.BoneMask :
         Unknown;
 }

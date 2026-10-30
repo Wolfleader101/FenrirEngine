@@ -113,7 +113,11 @@ namespace Fenrir
         std::uint32_t binding = 0;
         ShaderBindingKind kind = ShaderBindingKind::UniformBuffer;
         std::string name;
-        /** @brief A block's size in bytes, padded as the layout rules pad it; zero for a texture. */
+        /**
+         * @brief A block's size in bytes, padded as the layout rules pad it; zero for a texture. A storage block ending
+         * in a runtime array is as long as its contents, so its size is that of one record: the array's offset plus
+         * its stride.
+         */
         std::uint32_t size = 0;
 
         friend bool operator==(const ShaderBinding&, const ShaderBinding&) = default;

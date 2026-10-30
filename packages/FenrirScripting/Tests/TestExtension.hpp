@@ -7,10 +7,13 @@
 
 #include <cassert>
 #include <cstdint>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <vector>
 
 #include "FenrirECS/Entity.hpp"
 #include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
@@ -405,13 +408,34 @@ namespace TestExtension
     // Creates an entity and records parenting it under `parent`; a dead parent records no parenting.
     void SpawnUnder(const Fenrir::CallContext& context, const Fenrir::Entity* parent, Fenrir::Entity* child);
 
+    // The extension stage the test extension hosts: its bench.
+    constexpr const char* BenchStage = "Fenrir.TestExtension.Bench";
+
+    // One item of the bench: a test's C++ work at an order, or a script's stage group placed there.
+    struct BenchItem
+    {
+        std::int32_t order = 0;
+        bool script = false;
+        std::function<void()> run;
+    };
+
     // The test extension's extension state: a running total its Tally native adds to, and its warn-once record, as a
-    // package's state holds one.
+    // package's state holds one; and its bench, the extension's own work, which a script's groups for BenchStage are
+    // placed in, with the trace its items and the stage systems add to.
     struct Tally
     {
         std::int32_t total = 0;
         Fenrir::WarnOnceRecord warnings{"test extension"};
+        std::vector<BenchItem> bench;
+        std::optional<Fenrir::StageChanges> changes;
+        std::vector<std::string> trace;
     };
+
+    // Runs the bench once, as a package runs its own work: every item by order, a C++ one before a group at the same
+    // order, then what the stage systems recorded played back.
+    void RunBench(Tally& tally);
+
+    void Trace(const Fenrir::CallContext&, Tally& tally, std::string_view text);
 
     // A state of another type, which Tally does not take.
     struct Other
@@ -544,9 +568,10 @@ struct Iris::StructMapping<TestExtension::BadWeather>
 namespace Fenrir::Testing::ScriptFixture
 {
     // The test extension, as an engine package would describe what it gives scripting, carrying `tally` as its
-    // extension state (none if it is null).
+    // extension state (none if it is null). With a state it hosts the bench stage, unless `declareBench` is false.
     ScriptingExtension TheTestExtension(
-        std::shared_ptr<TestExtension::Tally> tally = std::make_shared<TestExtension::Tally>());
+        std::shared_ptr<TestExtension::Tally> tally = std::make_shared<TestExtension::Tally>(),
+        bool declareBench = true);
 
     // The config for the script assembly that uses the test extension, with `extensions` installed.
     ScriptingConfig ExtensionConfig(std::vector<ScriptingExtension> extensions);

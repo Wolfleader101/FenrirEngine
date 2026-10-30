@@ -9,6 +9,7 @@
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/ShaderData.hpp"
+#include "SkinPreparation.hpp"
 
 namespace Fenrir::Detail
 {
@@ -26,7 +27,7 @@ namespace Fenrir::Detail
         }
     } // namespace
 
-    std::string PrepareAsset(MeshData& mesh)
+    std::string PrepareAsset(MeshData& mesh, AssetWarnings& warnings)
     {
         const std::size_t vertices = mesh.positions.size();
         for (const std::string& problem :
@@ -70,10 +71,14 @@ namespace Fenrir::Detail
                 mesh.bounds.max = glm::max(mesh.bounds.max, position);
             }
         }
+        if (mesh.skin)
+        {
+            return PrepareSkin(*mesh.skin, mesh.positions, warnings);
+        }
         return {};
     }
 
-    std::string PrepareAsset(ImageData& image)
+    std::string PrepareAsset(ImageData& image, AssetWarnings&)
     {
         if (image.width == 0 || image.height == 0)
         {
@@ -99,7 +104,7 @@ namespace Fenrir::Detail
         return {};
     }
 
-    std::string PrepareAsset(ShaderData& shader)
+    std::string PrepareAsset(ShaderData& shader, AssetWarnings&)
     {
         ShaderContainerResult read = ReadShaderContainer(shader.bytes);
         if (!read.Ok())
@@ -110,7 +115,7 @@ namespace Fenrir::Detail
         return {};
     }
 
-    std::string PrepareAsset(MaterialData&)
+    std::string PrepareAsset(MaterialData&, AssetWarnings&)
     {
         // Any material is usable: names and types are checked against its shader when they are set, and a stale
         // shader handle is the renderer's to report (it draws the fallback material).

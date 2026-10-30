@@ -184,7 +184,7 @@ A value that holds exactly one of several kinds, with a tag saying which one (a 
 *Avoid:* variant, sum type, discriminated union (a proposed C# language feature, not this).
 
 **Extension stage**
-A named point inside a package's own C++ work where C# systems run, declared by the package's scripting extension and joined with `[StageSystem(name, Order)]` (ADR-0039). The pose stages are the first. The extension runs each order group with one call into the script, and the systems' structural changes play back when the hosting system returns.
+A named point inside a package's own C++ work where C# systems run, declared by full name in the package's scripting extension (`ScriptingExtension::stages`) and joined with `[StageSystem(name, Order = n)]` (ADR-0039). The pose stages are the first. When a script loads, the extension is given one *stage group* (`StageGroup`) per (stage, order) the script has, and places each as an item of its own work at that order, after its C++ work of the same order; it removes them when the script is released. A group's `Run` is one call into the script, running its systems in name order. Their structural changes wait until the hosting work returns and the extension calls `StageChanges::PlayBack`. A stage no extension declares fails the script's load; a stage that never runs is no error.
 *Avoid:* phase (FenrirApp's), hook, callback.
 
 **Native function**
@@ -701,8 +701,12 @@ A deterministic hash of a skeleton's bones, parents, engine names and inverse bi
 *Avoid:* socket, mount point, parent bone.
 
 **Attachment state**
-Whether a bone attachment was placed this frame, and if not why: attached, skeleton missing, skeleton unavailable, bone not found, transform missing, or unplaceable. An attachment that is not placed keeps its last `Transform` (ADR-0037).
+Whether a bone attachment was placed this frame, and if not why: attached, skeleton missing, skeleton unavailable, bone not found, transform missing, or unplaceable; `NotAttached` for an entity with no bone attachment, or none placed yet. An attachment that is not placed keeps its last `Transform` (ADR-0037).
 *Avoid:* attachment status, resolved flag.
+
+**Detach**
+`Skeletons::Detach`: ending a bone attachment, keeping either the entity's local `Transform` and parent (`KeepLocal`, the component removed only) or its place in the world under a new parent (`KeepWorld`, transactional: on any failure nothing changes) (ADR-0037).
+*Avoid:* unattach, drop (for the call; a game may call its use dropping).
 
 **Pose timing**
 `PoseTiming`, a field of `SkeletonPose`: whether a skeleton's base pose is animated once a frame (`Frame`, the default) or once per fixed tick at tick time (`Tick`, a *tick-posed* skeleton), for bodies that must follow its bones during the physics step (ADR-0040).
@@ -716,12 +720,28 @@ A tick-posed skeleton's base pose as the last fixed tick evaluated it, with no p
 A skeleton's final pose for this frame, what is drawn and what attachments follow. On a tick-posed skeleton it is built from the blend of the last two tick poses at physics's interpolation fraction, then modified as usual (ADR-0040).
 *Avoid:* display pose, interpolated pose, visual pose.
 
+**Pose kind**
+`PoseKind`, an argument of FenrirSkeleton's base-pose and world reads: `Render` (the default) for the render pose, or `Simulation` for the simulation pose. On a frame-posed skeleton both give the render pose (ADR-0040).
+*Avoid:* pose mode, pose source, pose timing (which says when a pose is evaluated, not which is read).
+
+**Tick pass**
+The pose pipeline's run in a fixed tick's `PreTick`, only while the active scene has a tick-posed skeleton: reconcile, `Animate` over the tick-posed instances stepping by `Time::tickRate`, then their base finalise, giving each its simulation pose. The pipeline's once-a-frame run in `PostUpdate` is the *frame pass*. Every `Animate` item runs in both, told which by its context (ADR-0040).
+*Avoid:* fixed update, physics pass, tick stage (a pass hosts stages; it is not one).
+
+**Hosted work**
+Pose stage work placed through the App rather than the `Skeletons` owner (`Skeletons::HostAnimate`, `HostModifier`, `HostLate`, and `HostPassEnd` for work run when each pass returns), by a package that reaches FenrirSkeleton only through the App: FenrirSkeletonScripting, placing a script's stage groups. At an equal order it runs after the owner's work, however the two were added (ADR-0039).
+*Avoid:* script modifier (hosted work need not be C#'s), plugin stage.
+
+**Edit token**
+The number a C# `PoseEdit` carries from `Skeletons.Edit` (ADR-0039): the running `Modify` group's, advanced as each group starts and ends, so an edit kept past its group, or opened outside `Modify`, reads and writes nothing and warns once.
+*Avoid:* edit handle (an edit is no asset), session.
+
 **Animator**
-`Animator`: the plain component on a skeleton entity naming the clip to play, its speed, its loop mode (`Loop` or `Once`) and whether it plays. Game code writes it and FenrirAnimation never does; it holds no time. While it names a clip, FenrirAnimation owns the skeleton's whole base pose (ADR-0034). It is the skeleton's base animation layer, and gains a crossfade on a clip change (ADR-0036).
+`Animator`: the plain component on a skeleton entity naming the clip to play, its speed, its loop mode (`Loop` or `Once`) and whether it plays. Game code writes it and FenrirAnimation never does; it holds no time. While it names a clip, FenrirAnimation owns the skeleton's whole base pose (ADR-0034). It is the skeleton's base animation layer, and crossfades on a clip change (ADR-0036).
 *Avoid:* animation player, animation component, FenrirAnimation (the package).
 
 **Playback cursor**
-Where an `Animator`'s clip is, in seconds, owned by FenrirAnimation: it advances by frame time × speed, wraps or clamps by loop mode, and moves otherwise only by an explicit seek, which crosses no events.
+Where an `Animator`'s or animation layer's clip is, in seconds, owned by FenrirAnimation (a crossfade's outgoing clip has one of its own): it advances by frame time × speed, wraps or clamps by loop mode, and moves otherwise only by an explicit seek, a clip change's restart, or the clamp or wrap into a changed clip's duration, none of which crosses events.
 *Avoid:* playhead, animation time, clip time (a key's authored time).
 
 **Animation event**
@@ -781,7 +801,7 @@ Whoever took a key's, button's or pointer's press: the router that consumed it, 
 ## FenrirEngine demo apps
 
 **Demo app**
-One executable under `examples/` per feature area (RendererDemo, ScriptingDemo, PhysicsDemo, later AnimationDemo), built on the demo scaffold, with an ordered list of scenes; a C++ scene and its C# twin are separate entries. An app may be split further when it outgrows one list. Not a reference for engine code beyond what it shows.
+One executable under `examples/` per feature area (RendererDemo, ScriptingDemo, PhysicsDemo, AnimationDemo), built on the demo scaffold, with an ordered list of scenes; a C++ scene and its C# twin are separate entries. An app may be split further when it outgrows one list. Not a reference for engine code beyond what it shows.
 *Avoid:* DemoApp (the legacy single app, which the demo apps replaced), sample, example (alone).
 
 **Demo scaffold**
