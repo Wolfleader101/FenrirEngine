@@ -95,7 +95,7 @@ namespace Fenrir::Detail
         std::vector<std::uint32_t> joints;
         /**
          * @brief One inverse bind per joint, in the space the backend reads nodes' rest worlds in (glTF's scene-root
-         * space); identity matrices when the file gives none.
+         * space, ufbx's world); identity matrices when the file gives none.
          */
         std::vector<Math::Mat4> inverseBinds;
         /** @brief The node the file names as the skin's skeleton root (glTF's `skin.skeleton`), or -1. */
@@ -133,6 +133,8 @@ namespace Fenrir::Detail
         std::vector<std::uint32_t> meshes;
         /** @brief Whether the file gives it a mesh, camera or light, so that an animation cannot make it a bone. */
         bool carriesContent = false;
+        /** @brief Whether the format marks it as a bone: an FBX skeleton node (`LimbNode`, `Limb` or `Root`). */
+        bool markedBone = false;
         /** @brief What it is, once ResolveSkinning has run; for a bone, `skeleton` and `bone` say whose. */
         ModelNodeKind kind = ModelNodeKind::Ordinary;
         std::int32_t skeleton = -1;
@@ -184,8 +186,9 @@ namespace Fenrir::Detail
 
     /**
      * @brief The format-independent rules of skinned import (ADR-0031), run on what a backend read: which nodes are
-     * bones; skins grouped into skeletons by joint identity, merged when their binds agree or one conversion takes one
-     * into the other; each skeleton's owner, with synthetic owners added where several share a node; every skinned
+     * bones; skins grouped into skeletons by joint identity (or by one tree of format-marked bones), merged when their
+     * binds agree or one conversion takes one into the other; marked bones no skin reaches made skeletons of their own,
+     * bound at their rest; each skeleton's owner, with synthetic owners added where several share a node; every skinned
      * mesh baked into its skeleton's bind space, its joints remapped and its weights quantised; clip rotations kept in
      * one hemisphere, and each channel's target named. Each error fails its smallest unit into `failures`, its meshes
      * marked failed. An ordinary node with a degenerate transform is a warning.

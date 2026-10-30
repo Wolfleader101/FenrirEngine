@@ -72,17 +72,33 @@ namespace AnimationDemo
         return rig;
     }
 
-    Fenrir::AssetHandle<Fenrir::Clip> LoadClip(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file)
+    Fenrir::AssetHandle<Fenrir::Clip> LoadClip(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file,
+                                               std::size_t index)
     {
         Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
         const auto model = store.Load<Fenrir::Model>(file, scene);
         const Fenrir::Model* data = model.Ok() ? store.TryGet(model.handle) : nullptr;
-        if (data == nullptr || data->clips.empty())
+        if (data == nullptr || index >= data->clips.size())
         {
-            app.Logger()->Error("AnimationDemo: {} has no clip to load", file);
+            app.Logger()->Error("AnimationDemo: {} has no clip {} to load", file, index);
             return {};
         }
-        return data->clips.front();
+        return data->clips[index];
+    }
+
+    void Paint(Fenrir::App& app, Fenrir::Scene& scene, const Rig& rig, std::string_view file)
+    {
+        Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
+        const auto image = store.Load<Fenrir::Image>(file, scene);
+        if (!image.Ok())
+        {
+            app.Logger()->Error("AnimationDemo: {} did not load from the asset root", file);
+            return;
+        }
+        for (const Fenrir::Entity& mesh : rig.meshes)
+        {
+            store.SetTexture(mesh.GetComponent<Fenrir::MeshRenderer>().material, "baseColourTexture", image.handle);
+        }
     }
 
     void Play(Fenrir::Entity skeleton, Fenrir::AssetHandle<Fenrir::Clip> clip, Fenrir::ClipLoop loop, float speed)

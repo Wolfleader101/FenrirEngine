@@ -1,4 +1,8 @@
-// ufbx's half of the model importer seam: FBX and OBJ files (ADR-0031).
+// ufbx's half of the model importer seam: FBX and OBJ files (ADR-0031). Skins come from ufbx's cluster binds and
+// clips from its baking API; ResolveSkinning then applies the rules glTF shares.
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstring>
 #include <format>
 #include <memory>
@@ -7,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <ufbx.h>
@@ -46,11 +51,28 @@ namespace Fenrir::Detail
 #endif
         }
 
+        // FBX clips are baked to linear keys (ADR-0031): a stretch ufbx cannot keep linear (a cubic curve, or a
+        // rotation, which FBX interpolates as Euler angles) is resampled at this many keys a second; keys the file
+        // already gives at this rate or faster, and the ends of linear stretches, are kept as written.
+        constexpr double ClipSampleRate = 30.0;
+        // A stepped key becomes two keys this many seconds apart, as linear keys cannot step.
+        constexpr double StepDuration = 0.001;
+        // A skin's clusters agree on where its mesh was bound when their bind matrices match to this, relative to size.
+        constexpr double BindAgreement = 1e-4;
+
         struct SceneDeleter
         {
             void operator()(ufbx_scene* scene) const noexcept
             {
                 ufbx_free_scene(scene);
+            }
+        };
+
+        struct BakedDeleter
+        {
+            void operator()(ufbx_baked_anim* baked) const noexcept
+            {
+                ufbx_free_baked_anim(baked);
             }
         };
 
@@ -68,6 +90,34 @@ namespace Fenrir::Detail
         Math::Vec3 Vec3Of(ufbx_vec3 v)
         {
             return {static_cast<float>(v.x), static_cast<float>(v.y), static_cast<float>(v.z)};
+        }
+
+        // ufbx's 3x4 affine matrix, column by column, as glm's column-major 4x4.
+        Math::Mat4 Mat4Of(const ufbx_matrix& m)
+        {
+            Math::Mat4 out(1.0f);
+            for (glm::length_t c = 0; c < 4; ++c)
+            {
+                out[c] = Math::Vec4(Vec3Of(m.cols[c]), c == 3 ? 1.0f : 0.0f);
+            }
+            return out;
+        }
+
+        bool Agree(const ufbx_matrix& a, const ufbx_matrix& b)
+        {
+            for (std::size_t c = 0; c < 4; ++c)
+            {
+                for (std::size_t r = 0; r < 3; ++r)
+                {
+                    const double x = a.cols[c].v[r];
+                    const double y = b.cols[c].v[r];
+                    if (!(std::abs(x - y) <= BindAgreement * std::max({1.0, std::abs(x), std::abs(y)})))
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
 
         SamplerWrap WrapOf(ufbx_wrap_mode wrap)
@@ -89,6 +139,9 @@ namespace Fenrir::Detail
             Math::Vec2 uv0{0.0f};
             Math::Vec2 uv1{0.0f};
             Colour colour;
+            // A skinned mesh's four largest influences, by cluster index; all zero for a rigid one.
+            std::array<std::uint32_t, 4> joints{};
+            Math::Vec4 weights{0.0f};
         };
 
         class UfbxReader
@@ -112,9 +165,106 @@ namespace Fenrir::Detail
                 {
                     Visit(*child, -1);
                 }
+                ReadSkinJoints();
+                ReadClips();
             }
 
           private:
+            // Each skin's joints are its clusters' bones, named once every node has its index. Its inverse binds are
+            // ufbx's bind_to_world inverted: in ufbx's world, which the nodes' rest worlds compose to (ADR-0031).
+            void ReadSkinJoints()
+            {
+                for (const auto& [index, deformer] : m_pendingSkins)
+                {
+                    ImportedSkin& skin = m_out.skins[index];
+                    for (const ufbx_skin_cluster* cluster : CArray(deformer->clusters))
+                    {
+                        skin.joints.push_back(m_nodeIndices.at(cluster->bone_node->element_id));
+                        skin.inverseBinds.push_back(Mat4Of(ufbx_matrix_invert(&cluster->bind_to_world)));
+                    }
+                }
+            }
+
+            void ReadClips()
+            {
+                ufbx_bake_opts options{};
+                options.trim_start_time = true;
+                options.resample_rate = ClipSampleRate;
+                options.minimum_sample_rate = ClipSampleRate;
+                options.step_handling = UFBX_BAKE_STEP_HANDLING_CUSTOM_DURATION;
+                options.step_custom_duration = StepDuration;
+                std::size_t a = 0;
+                for (const ufbx_anim_stack* stack : CArray(m_scene.anim_stacks))
+                {
+                    ImportedClip clip;
+                    clip.name = Text(stack->name);
+                    if (clip.name.empty())
+                    {
+                        clip.name = std::format("animation {}", a);
+                    }
+                    ++a;
+                    ufbx_error error{};
+                    const std::unique_ptr<ufbx_baked_anim, BakedDeleter> baked(
+                        ufbx_bake_anim(&m_scene, stack->anim, &options, &error));
+                    if (baked == nullptr)
+                    {
+                        m_out.failures.push_back(
+                            std::format("clip '{}' could not be baked: {}", clip.name,
+                                        std::string_view(error.description.data, error.description.length)));
+                        continue;
+                    }
+                    const std::span<ufbx_node* const> nodes = CArray(m_scene.nodes);
+                    for (const ufbx_baked_node& bakedNode : CArray(baked->nodes))
+                    {
+                        const auto target = m_nodeIndices.find(nodes[bakedNode.typed_id]->element_id);
+                        if (target == m_nodeIndices.end())
+                        {
+                            continue;
+                        }
+                        AddChannel(clip, target->second, ClipPath::Translation, CArray(bakedNode.translation_keys));
+                        AddChannel(clip, target->second, ClipPath::Rotation, CArray(bakedNode.rotation_keys));
+                        AddChannel(clip, target->second, ClipPath::Scale, CArray(bakedNode.scale_keys));
+                    }
+                    m_out.clips.push_back(std::move(clip));
+                }
+            }
+
+            static Math::Vec4 KeyValue(const ufbx_baked_vec3& key)
+            {
+                return {Vec3Of(key.value), 0.0f};
+            }
+
+            static Math::Vec4 KeyValue(const ufbx_baked_quat& key)
+            {
+                return {static_cast<float>(key.value.x), static_cast<float>(key.value.y),
+                        static_cast<float>(key.value.z), static_cast<float>(key.value.w)};
+            }
+
+            // Baked keys as one linear channel; a key whose time, as a float, does not follow the one before is
+            // dropped, so that the times stay strictly increasing.
+            template <typename Keys>
+            static void AddChannel(ImportedClip& clip, std::uint32_t target, ClipPath path, const Keys& keys)
+            {
+                if (keys.empty())
+                {
+                    return;
+                }
+                ClipChannel channel;
+                channel.path = path;
+                channel.interpolation = ClipInterpolation::Linear;
+                for (const auto& key : keys)
+                {
+                    const auto time = static_cast<float>(key.time);
+                    if (!channel.times.empty() && !(time > channel.times.back()))
+                    {
+                        continue;
+                    }
+                    channel.times.push_back(time);
+                    channel.values.push_back(KeyValue(key));
+                }
+                clip.data.channels.push_back(std::move(channel));
+                clip.targets.push_back(target);
+            }
             std::uint32_t ImageOf(const ufbx_texture& texture)
             {
                 const ufbx_texture& file = texture.file_textures.count > 0 ? *texture.file_textures.data[0] : texture;
@@ -236,11 +386,28 @@ namespace Fenrir::Detail
                 }
                 std::vector<std::uint32_t>& indices = m_meshIndices[mesh.element_id];
                 const std::string name = Text(mesh.name);
-                if (mesh.skin_deformers.count > 0)
+                const ufbx_skin_deformer* skin =
+                    mesh.skin_deformers.count > 0 ? CArray(mesh.skin_deformers).front() : nullptr;
+                std::int32_t skinIndex = -1;
+                ufbx_matrix bindToWorld = ufbx_identity_matrix;
+                if (skin != nullptr)
                 {
-                    m_out.warnings.push_back(std::format(
-                        "mesh '{}' is skinned in its file and is left out: skinned meshes are not imported yet", name));
-                    return indices;
+                    if (mesh.skin_deformers.count > 1)
+                    {
+                        m_out.warnings.push_back(std::format("mesh '{}' has {} skins; only its first is read", name,
+                                                             mesh.skin_deformers.count));
+                    }
+                    const std::optional<ufbx_matrix> bound = MeshBindToWorld(name, *skin);
+                    if (!bound)
+                    {
+                        return indices;
+                    }
+                    bindToWorld = *bound;
+                    skinIndex = static_cast<std::int32_t>(m_out.skins.size());
+                    ImportedSkin imported;
+                    imported.name = skin->name.length > 0 ? Text(skin->name) : name;
+                    m_out.skins.push_back(std::move(imported));
+                    m_pendingSkins.emplace_back(static_cast<std::size_t>(skinIndex), skin);
                 }
                 for (const ufbx_mesh_part& part : CArray(mesh.material_parts))
                 {
@@ -248,14 +415,87 @@ namespace Fenrir::Detail
                     {
                         continue;
                     }
-                    ImportedMesh imported = MeshOf(name, mesh, part);
+                    ImportedMesh imported = MeshOf(name, mesh, part, skin);
+                    if (skin != nullptr)
+                    {
+                        // Into ufbx's world at the bind pose, where the skin's inverse binds take it (ADR-0031).
+                        imported.skin = skinIndex;
+                        BakeVertices(imported.data, Mat4Of(bindToWorld));
+                    }
                     indices.push_back(static_cast<std::uint32_t>(m_out.meshes.size()));
                     m_out.meshes.push_back(std::move(imported));
                 }
                 return indices;
             }
 
-            ImportedMesh MeshOf(const std::string& name, const ufbx_mesh& mesh, const ufbx_mesh_part& part)
+            // Where the skin's mesh was bound in ufbx's world: bind_to_world x geometry_to_bone, which every cluster
+            // must agree on. A cluster with no bone, or clusters that disagree, fail the skin with its mesh.
+            std::optional<ufbx_matrix> MeshBindToWorld(const std::string& name, const ufbx_skin_deformer& skin)
+            {
+                std::optional<ufbx_matrix> bound;
+                for (const ufbx_skin_cluster* cluster : CArray(skin.clusters))
+                {
+                    if (cluster->bone_node == nullptr)
+                    {
+                        m_out.failures.push_back(
+                            std::format("the skin of mesh '{}' fails with its mesh: a cluster names no bone", name));
+                        return std::nullopt;
+                    }
+                    const ufbx_matrix matrix = ufbx_matrix_mul(&cluster->bind_to_world, &cluster->geometry_to_bone);
+                    if (!bound)
+                    {
+                        bound = matrix;
+                    }
+                    else if (!Agree(*bound, matrix))
+                    {
+                        m_out.failures.push_back(std::format("the skin of mesh '{}' fails with its mesh: its clusters "
+                                                             "disagree on where the mesh was bound",
+                                                             name));
+                        return std::nullopt;
+                    }
+                }
+                if (!bound)
+                {
+                    m_out.failures.push_back(
+                        std::format("the skin of mesh '{}' fails with its mesh: it has no clusters", name));
+                }
+                return bound;
+            }
+
+            // A vertex's four largest influences, by cluster index; a negative or non-finite weight anywhere fails
+            // the skin in ResolveSkinning.
+            static void ReadInfluences(const ufbx_skin_deformer& skin, std::uint32_t vertex, Corner& corner)
+            {
+                if (vertex >= skin.vertices.count)
+                {
+                    return;
+                }
+                const ufbx_skin_vertex influence = CArray(skin.vertices)[vertex];
+                const std::span<const ufbx_skin_weight> weights =
+                    CArray(skin.weights).subspan(influence.weight_begin, influence.num_weights);
+                std::vector<ufbx_skin_weight> sorted(weights.begin(), weights.end());
+                std::stable_sort(
+                    sorted.begin(), sorted.end(),
+                    [](const ufbx_skin_weight& a, const ufbx_skin_weight& b) { return a.weight > b.weight; });
+                bool malformed = false;
+                for (std::size_t i = 0; i < sorted.size(); ++i)
+                {
+                    const auto weight = static_cast<float>(sorted[i].weight);
+                    malformed = malformed || !(weight >= 0.0f) || !std::isfinite(weight);
+                    if (i < 4)
+                    {
+                        corner.joints[i] = sorted[i].cluster_index;
+                        corner.weights[static_cast<glm::length_t>(i)] = weight;
+                    }
+                }
+                if (malformed)
+                {
+                    corner.weights[0] = -1.0f;
+                }
+            }
+
+            ImportedMesh MeshOf(const std::string& name, const ufbx_mesh& mesh, const ufbx_mesh_part& part,
+                                const ufbx_skin_deformer* skin)
             {
                 const bool normals = mesh.vertex_normal.exists;
                 const bool tangents = normals && mesh.vertex_tangent.exists && mesh.vertex_bitangent.exists;
@@ -306,6 +546,10 @@ namespace Fenrir::Detail
                             corner.colour = {static_cast<float>(colour.x), static_cast<float>(colour.y),
                                              static_cast<float>(colour.z), static_cast<float>(colour.w)};
                         }
+                        if (skin != nullptr)
+                        {
+                            ReadInfluences(*skin, CArray(mesh.vertex_indices)[index], corner);
+                        }
                         corners.push_back(corner);
                     }
                 }
@@ -345,6 +589,11 @@ namespace Fenrir::Detail
                     {
                         data.colours.push_back(corner.colour);
                     }
+                    if (skin != nullptr)
+                    {
+                        imported.joints.push_back(corner.joints);
+                        imported.weights.push_back(corner.weights);
+                    }
                 }
                 data.indices = std::move(indices);
                 data.submeshes = {{0, static_cast<std::uint32_t>(data.indices.size()), imported.material}};
@@ -363,11 +612,14 @@ namespace Fenrir::Detail
                     Math::Quat(static_cast<float>(local.rotation.w), static_cast<float>(local.rotation.x),
                                static_cast<float>(local.rotation.y), static_cast<float>(local.rotation.z));
                 imported.rest.scale = Vec3Of(local.scale);
+                imported.carriesContent = node.mesh != nullptr || node.camera != nullptr || node.light != nullptr;
+                imported.markedBone = node.bone != nullptr;
                 if (node.mesh != nullptr)
                 {
                     imported.meshes = MeshesOf(*node.mesh);
                 }
                 const auto self = static_cast<std::int32_t>(m_out.nodes.size());
+                m_nodeIndices.emplace(node.element_id, static_cast<std::uint32_t>(self));
                 m_out.nodes.push_back(std::move(imported));
                 for (const ufbx_node* child : CArray(node.children))
                 {
@@ -383,6 +635,10 @@ namespace Fenrir::Detail
             std::unordered_map<std::uint32_t, std::uint32_t> m_materialIndices;
             std::unordered_map<std::uint32_t, std::uint32_t> m_imageIndices;
             std::unordered_map<std::uint32_t, std::vector<std::uint32_t>> m_meshIndices;
+            // Each node's index, by ufbx element id; ufbx's own root has none.
+            std::unordered_map<std::uint32_t, std::uint32_t> m_nodeIndices;
+            // Each skin read, by index into ModelImport::skins, with its deformer, its joints named once all nodes are.
+            std::vector<std::pair<std::size_t, const ufbx_skin_deformer*>> m_pendingSkins;
         };
     } // namespace
 
@@ -390,11 +646,13 @@ namespace Fenrir::Detail
     {
         ModelImport model;
         ufbx_load_opts options{};
-        // Into the engine's space: right-handed, +Y up, metres, baked into the geometry and transforms so no
-        // conversion node sits above the file's roots.
+        // Into the engine's space: right-handed, +Y up, metres. The axis and unit conversion is an adjustment on the
+        // file's root nodes only (ADR-0031), so it sits above every skeleton owner. Nodes below keep their own
+        // transforms and rigid meshes their own vertices, in the file's units; ufbx's world, which skin binds and
+        // skinned vertices are read in, includes the conversion.
         options.target_axes = ufbx_axes_right_handed_y_up;
         options.target_unit_meters = 1.0;
-        options.space_conversion = UFBX_SPACE_CONVERSION_MODIFY_GEOMETRY;
+        options.space_conversion = UFBX_SPACE_CONVERSION_ADJUST_TRANSFORMS;
         options.geometry_transform_handling = UFBX_GEOMETRY_TRANSFORM_HANDLING_MODIFY_GEOMETRY;
         options.obj_axes = ufbx_axes_right_handed_y_up;
         options.obj_unit_meters = 1.0;

@@ -1,6 +1,7 @@
-// Skinned glTF import (ADR-0031, ADR-0035): skeletons, owners, one bind space, clips and partial loads, on the skinned
-// fixtures fixtures/models/make_fixtures.py writes (each function's docstring there describes its file). Expected
-// values are the fixtures' own numbers, or glTF's skinning formula worked from them, never the importer's code.
+// Skinned glTF and FBX import (ADR-0031, ADR-0035): skeletons, owners, one bind space, clips and partial loads, on the
+// skinned fixtures fixtures/models/make_fixtures.py writes (each function's docstring there describes its file).
+// Expected values are the fixtures' own numbers, or glTF's skinning formula worked from them, never the importer's
+// code.
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -595,4 +596,338 @@ TEST_CASE("SpawnNodes leaves bones out and spawns synthetic owners", "[assets][s
             spawned.nodes[static_cast<std::size_t>(FindNode(model, "Scene"))]);
     // Scene > Hips (0, 1, 0) > Spine (0, 0.5, 0) > Chest (0, 0.5, 0) > Socket (0.2, 0, 0).
     REQUIRE(Near(Vec3(Fenrir::GetWorldMatrix(socket)[3]), Vec3(0.2f, 2.0f, 0.0f)));
+}
+
+// The FBX half (ticket 06): the same rules through ufbx, on the FBX fixtures make_fixtures.py writes (its write_fbx_*
+// docstrings describe each file). FBX's skeleton nodes (LimbNode) are bones besides glTF's rules.
+
+TEST_CASE("Every FBX fixture reconstructs its bind pose", "[assets][skinned-import][fbx]")
+{
+    const std::string file = GENERATE("armatures.fbx", "shared-skins.fbx", "incompatible-skin.fbx", "units.fbx",
+                                      "baked-clip.fbx", "clips-only.fbx");
+    AssetsApp test;
+    const Loaded loaded = Load(test, file);
+    const Fenrir::Model& model = *loaded.model;
+    REQUIRE_FALSE(model.skeletons.empty());
+
+    std::vector<std::vector<Mat4>> matrices;
+    for (std::size_t k = 0; k < model.skeletons.size(); ++k)
+    {
+        const Fenrir::SkeletonData& skeleton = SkeletonOf(test, model, k);
+        matrices.push_back(RestModelMatrices(skeleton));
+        for (std::size_t i = 0; i < skeleton.BoneCount(); ++i)
+        {
+            INFO(file << ": skeleton " << k << "'s bone " << skeleton.EngineName(static_cast<std::int32_t>(i))
+                      << " has M_model_bind x B = I");
+            REQUIRE(Near(matrices[k][i] * skeleton.bones[i].inverseBind, Mat4(1.0f)));
+        }
+    }
+    for (const Fenrir::ModelNode& node : model.nodes)
+    {
+        for (const Fenrir::ModelMesh& mesh : node.meshes)
+        {
+            if (mesh.skeleton < 0)
+            {
+                continue;
+            }
+            const Fenrir::MeshData& data = *test.store.TryGet(mesh.mesh);
+            const auto k = static_cast<std::size_t>(mesh.skeleton);
+            for (std::size_t v = 0; v < data.positions.size(); ++v)
+            {
+                INFO(file << ": mesh on " << node.name << ", vertex " << v
+                          << ", skinned at the bind pose, is where it was baked");
+                REQUIRE(Near(Skin(data, v, SkeletonOf(test, model, k), matrices[k]), data.positions[v]));
+            }
+        }
+    }
+}
+
+TEST_CASE("FBX's axis and unit conversion lands on the root node only", "[assets][skinned-import][fbx]")
+{
+    AssetsApp test;
+    const Loaded loaded = Load(test, "units.fbx");
+    const Fenrir::Model& model = *loaded.model;
+    INFO("left out: " << Joined(loaded.result.failedUnits));
+    REQUIRE(loaded.result.Status() == Fenrir::LoadStatus::Succeeded);
+
+    // units.fbx's numbers (make_fixtures.py: UNITS_*), Z up and in centimetres. The conversion to +Y up and metres
+    // turns -90 degrees about X and scales by 0.01.
+    const auto euler = [](float x, float y, float z) {
+        return AxisAngle({0.0f, 0.0f, 1.0f}, z) * AxisAngle({0.0f, 1.0f, 0.0f}, y) * AxisAngle({1.0f, 0.0f, 0.0f}, x);
+    };
+    const Mat4 conversion = glm::mat4_cast(AxisAngle({1.0f, 0.0f, 0.0f}, -90.0f)) * glm::scale(Mat4(1.0f), Vec3(0.01f));
+    const Mat4 ownerFile = TRS({100.0f, 200.0f, 300.0f}, euler(30.0f, 0.0f, 45.0f), {2.0f, 0.5f, 1.5f});
+
+    INFO("Owner, the root, carries the conversion: its rest is the conversion x its file transform");
+    const Fenrir::ModelNode& owner = NodeNamed(model, "Owner");
+    REQUIRE(owner.parent == -1);
+    REQUIRE(Near(Fenrir::TransformToMat4(owner.rest), conversion * ownerFile, 1e-5f));
+    REQUIRE(Near(owner.rest.pos, Vec3(1.0f, 3.0f, -2.0f)));
+
+    INFO("the bones below keep their file transforms, in centimetres and Z up");
+    const Fenrir::SkeletonData& skeleton = SkeletonOf(test, model, 0);
+    REQUIRE(EngineNames(skeleton) == std::vector<std::string>{"Upper", "Lower"});
+    REQUIRE(model.skeletonOwners[0] == FindNode(model, "Owner"));
+    REQUIRE(Near(skeleton.bones[0].rest.pos, Vec3(0.0f, 0.0f, 100.0f)));
+    REQUIRE(Near(skeleton.bones[1].rest.pos, Vec3(0.0f, 0.0f, 100.0f)));
+    REQUIRE(Near(std::abs(glm::dot(skeleton.bones[0].rest.rot, euler(0.0f, 20.0f, 0.0f))), 1.0f));
+    REQUIRE(Near(std::abs(glm::dot(skeleton.bones[1].rest.rot, euler(-35.0f, 0.0f, 0.0f))), 1.0f));
+    REQUIRE(Near(NodeNamed(model, "Sleeve").rest.pos, Vec3(0.0f)));
+
+    INFO("the skinned vertices are in Owner's space, as written; the owner's world takes them to metres, Y up");
+    const Fenrir::MeshData& sleeve = MeshOn(test, model, "Sleeve");
+    const std::vector<Vec3> written = {{10, 0, 100}, {0, 20, 150}, {-10, 0, 200}, {20, -10, 250}};
+    const Mat4 ownerWorld = NodeWorld(model, model.skeletonOwners[0]);
+    for (const Vec3& corner : written)
+    {
+        const auto found = std::find_if(sleeve.positions.begin(), sleeve.positions.end(),
+                                        [&](const Vec3& p) { return Near(p, corner, 1e-3f); });
+        INFO("a vertex is at " << corner.x << ", " << corner.y << ", " << corner.z);
+        REQUIRE(found != sleeve.positions.end());
+        const Vec3 world = Vec3(conversion * ownerFile * Vec4(corner, 1.0f));
+        REQUIRE(Near(Vec3(ownerWorld * Vec4(*found, 1.0f)), world, 1e-5f));
+    }
+}
+
+TEST_CASE("FBX armatures are separate skeletons with synthetic owners where they share a node",
+          "[assets][skinned-import][fbx]")
+{
+    AssetsApp test;
+    const Loaded loaded = Load(test, "armatures.fbx");
+    const Fenrir::Model& model = *loaded.model;
+    INFO("left out: " << Joined(loaded.result.failedUnits));
+    REQUIRE(loaded.result.Status() == Fenrir::LoadStatus::Succeeded);
+    INFO("skinned meshes are imported, no longer left out with a warning");
+    REQUIRE_FALSE(Contains(*test.warnings, "not imported yet"));
+
+    INFO("the body armature, the pelvis pair and the root under Rig: three skeletons");
+    REQUIRE(model.skeletons.size() == 3);
+    const std::int32_t scene = FindNode(model, "Scene");
+    for (std::size_t k = 0; k < 2; ++k)
+    {
+        const Fenrir::ModelNode& owner = model.nodes[static_cast<std::size_t>(model.skeletonOwners[k])];
+        REQUIRE(owner.kind == ModelNodeKind::SyntheticOwner);
+        REQUIRE(owner.parent == scene);
+    }
+    REQUIRE(model.nodes[static_cast<std::size_t>(model.skeletonOwners[0])].name == "Base.Skeleton");
+    REQUIRE(model.nodes[static_cast<std::size_t>(model.skeletonOwners[1])].name == "Pelvis.Skeleton");
+    REQUIRE(model.skeletonOwners[2] == FindNode(model, "Rig"));
+
+    INFO("Prop's vertices are in Rig's space: Rig is at (-3, 0, 0)");
+    const Fenrir::MeshData& prop = MeshOn(test, model, "Prop");
+    REQUIRE(Near(prop.positions[0], Vec3(0.0f, 1.0f, 0.0f)));
+    REQUIRE(
+        Near(Vec3(NodeWorld(model, model.skeletonOwners[2]) * Vec4(prop.positions[0], 1.0f)), Vec3(-3.0f, 1.0f, 0.0f)));
+}
+
+TEST_CASE("FBX bones are LimbNodes besides glTF's rules, and attachments stay ordinary nodes",
+          "[assets][skinned-import][fbx]")
+{
+    AssetsApp test;
+    const Loaded loaded = Load(test, "armatures.fbx");
+    const Fenrir::Model& model = *loaded.model;
+    const Fenrir::SkeletonData& body = SkeletonOf(test, model, 0);
+
+    INFO("Base is a LimbNode above the joints, Spine is between joints, HeadEnd is a LimbNode leaf, and Tail is an "
+         "animated empty below a bone");
+    REQUIRE(EngineNames(body) == std::vector<std::string>{"Base", "Hips", "Spine", "Chest", "Head", "HeadEnd", "Tail"});
+    REQUIRE(body.Parent(0) == Fenrir::NoBone);
+    REQUIRE(body.Parent(1) == 0);
+    REQUIRE(body.Parent(5) == 4);
+    REQUIRE(body.Parent(6) == 3);
+    for (std::size_t i = 0; i < body.BoneCount(); ++i)
+    {
+        const Fenrir::ModelNode& node = model.nodes[static_cast<std::size_t>(body.bones[i].modelNode)];
+        REQUIRE(node.kind == ModelNodeKind::Bone);
+        REQUIRE(node.bone == static_cast<std::int32_t>(i));
+    }
+    INFO("Base, no joint, is bound at its rest");
+    REQUIRE(Near(body.bones[0].inverseBind, glm::inverse(TRS({0.0f, 0.5f, 0.0f}))));
+
+    INFO("an empty child of a bone is an ordinary node, an attachment; an animated mesh child stays ordinary");
+    REQUIRE(NodeNamed(model, "Socket").kind == ModelNodeKind::Ordinary);
+    REQUIRE(NodeNamed(model, "Socket").parent == FindNode(model, "Chest"));
+    REQUIRE(NodeNamed(model, "Hat").kind == ModelNodeKind::Ordinary);
+    REQUIRE(NodeNamed(model, "Hat").meshes.at(0).skeleton == -1);
+    REQUIRE(NodeNamed(model, "BodyA").kind == ModelNodeKind::Ordinary);
+}
+
+TEST_CASE("FBX meshes skinned in one armature share its skeleton", "[assets][skinned-import][fbx]")
+{
+    AssetsApp test;
+    const Loaded loaded = Load(test, "armatures.fbx");
+    const Fenrir::Model& model = *loaded.model;
+    INFO("BodyA's skin and BodyB's are two deformers sharing Chest: one skeleton");
+    REQUIRE(NodeNamed(model, "BodyA").meshes.at(0).skeleton == 0);
+    REQUIRE(NodeNamed(model, "BodyB").meshes.at(0).skeleton == 0);
+    REQUIRE(NodeNamed(model, "Legs").meshes.at(0).skeleton == 1);
+    const std::uint64_t signature = SkeletonOf(test, model, 0).BindSignature();
+    REQUIRE(MeshOn(test, model, "BodyA").skin->expectedSignature == signature);
+    REQUIRE(MeshOn(test, model, "BodyB").skin->expectedSignature == signature);
+
+    INFO("BodyA's (0.5, 1.5, 0) is split evenly between Hips (bone 1) and Chest (bone 3)");
+    const Fenrir::MeshData& bodyA = MeshOn(test, model, "BodyA");
+    const auto split = std::find_if(bodyA.positions.begin(), bodyA.positions.end(),
+                                    [](const Vec3& p) { return Near(p, Vec3(0.5f, 1.5f, 0.0f)); });
+    REQUIRE(split != bodyA.positions.end());
+    const auto v = static_cast<std::size_t>(split - bodyA.positions.begin());
+    const Fenrir::BoneQuad& joints = bodyA.skin->joints[v];
+    REQUIRE(((joints[0] == 1 && joints[1] == 3) || (joints[0] == 3 && joints[1] == 1)));
+    REQUIRE(bodyA.skin->weights[v][0] + bodyA.skin->weights[v][1] == 65535);
+    REQUIRE(bodyA.skin->weights[v][2] == 0);
+
+    INFO("the repeated Pelvis gets a suffixed engine name");
+    REQUIRE(EngineNames(SkeletonOf(test, model, 1)) == std::vector<std::string>{"Pelvis", "Pelvis#2"});
+    REQUIRE(Contains(*test.warnings, "Pelvis#2"));
+}
+
+TEST_CASE("FBX skins sharing joints merge, through a conversion when their binds differ by one",
+          "[assets][skinned-import][fbx]")
+{
+    AssetsApp test;
+    const Loaded loaded = Load(test, "shared-skins.fbx");
+    const Fenrir::Model& model = *loaded.model;
+    INFO("left out: " << Joined(loaded.result.failedUnits));
+    REQUIRE(loaded.result.Status() == Fenrir::LoadStatus::Succeeded);
+    REQUIRE(model.skeletons.size() == 1);
+    REQUIRE(EngineNames(SkeletonOf(test, model, 0)) == std::vector<std::string>{"Hip", "Knee", "Foot"});
+    for (const char* node : {"Thigh", "Shin", "Boot"})
+    {
+        INFO(node << " is drawn with the one skeleton");
+        REQUIRE(NodeNamed(model, node).meshes.at(0).skeleton == 0);
+    }
+    INFO("Boot's vertices were bound C^-1 from the others'; the conversion is baked into them");
+    const Fenrir::MeshData& boot = MeshOn(test, model, "Boot");
+    for (const Vec3& corner : {Vec3(0.0f), Vec3(0.3f, 0.0f, 0.0f), Vec3(0.0f, 0.2f, 0.0f)})
+    {
+        REQUIRE(
+            std::any_of(boot.positions.begin(), boot.positions.end(), [&](const Vec3& p) { return Near(p, corner); }));
+    }
+    INFO("its joints, Foot then Knee in its skin, are remapped to the skeleton's Foot (2) and Knee (1)");
+    for (std::size_t v = 0; v < boot.positions.size(); ++v)
+    {
+        REQUIRE((boot.skin->joints[v][0] == 2 || boot.skin->joints[v][0] == 1));
+    }
+}
+
+TEST_CASE("An incompatible FBX skin and a bone named twice fail only their units, and the load is Partial",
+          "[assets][skinned-import][fbx]")
+{
+    AssetsApp test;
+    const Loaded loaded = Load(test, "incompatible-skin.fbx");
+    const Fenrir::Model& model = *loaded.model;
+    INFO("left out: " << Joined(loaded.result.failedUnits));
+    REQUIRE(loaded.result.Status() == Fenrir::LoadStatus::Partial);
+    REQUIRE(loaded.result.failedUnits.size() == 2);
+    REQUIRE(Contains(loaded.result.failedUnits, "GloveSkin"));
+    REQUIRE(Contains(loaded.result.failedUnits, "CloakSkin"));
+
+    REQUIRE(model.skeletons.size() == 1);
+    REQUIRE(EngineNames(SkeletonOf(test, model, 0)) == std::vector<std::string>{"Arm", "Hand"});
+    REQUIRE(NodeNamed(model, "Sleeve").meshes.at(0).skeleton == 0);
+    INFO("the failed skins' meshes are left out, never imported unskinned");
+    REQUIRE(NodeNamed(model, "Glove").meshes.empty());
+    REQUIRE(NodeNamed(model, "Cloak").meshes.empty());
+    REQUIRE(model.meshes.size() == 2);
+    REQUIRE(NodeNamed(model, "Rig").meshes.at(0).skeleton == -1);
+    INFO("the failed skeleton's LimbNode is an ordinary node, not a skeleton of its own");
+    REQUIRE(NodeNamed(model, "Bone").kind == ModelNodeKind::Ordinary);
+}
+
+TEST_CASE("An FBX clip is baked to linear keys at 30 a second that follow the source curve",
+          "[assets][skinned-import][fbx]")
+{
+    AssetsApp test;
+    const Loaded loaded = Load(test, "baked-clip.fbx");
+    const Fenrir::Model& model = *loaded.model;
+    REQUIRE(model.clips.size() == 1);
+    const Fenrir::ClipData& clip = *test.store.TryGet(model.clips[0]);
+    REQUIRE(Near(clip.duration, 1.0f));
+    const auto channel = [&](Fenrir::ClipPath path) -> const Fenrir::ClipChannel& {
+        const auto found = std::find_if(clip.channels.begin(), clip.channels.end(), [&](const Fenrir::ClipChannel& c) {
+            return c.targetName == "Joint" && c.path == path;
+        });
+        REQUIRE(found != clip.channels.end());
+        return *found;
+    };
+
+    INFO("the cubic translation is resampled: 31 linear keys at k / 30 s, each on 1 + 3t^2 - 2t^3");
+    const Fenrir::ClipChannel& lift = channel(Fenrir::ClipPath::Translation);
+    REQUIRE(lift.playable);
+    REQUIRE(lift.interpolation == Fenrir::ClipInterpolation::Linear);
+    REQUIRE(lift.times.size() == 31);
+    for (std::size_t k = 0; k < lift.times.size(); ++k)
+    {
+        const float t = static_cast<float>(k) / 30.0f;
+        CAPTURE(k);
+        REQUIRE(Near(lift.times[k], t, 1e-5f));
+        REQUIRE(Near(lift.values[k], Vec4(0.0f, 1.0f + 3.0f * t * t - 2.0f * t * t * t, 0.0f, 0.0f)));
+    }
+
+    INFO("the Euler rotation is resampled too, each key 270t degrees about Z, all in one hemisphere");
+    const Fenrir::ClipChannel& turn = channel(Fenrir::ClipPath::Rotation);
+    REQUIRE(turn.interpolation == Fenrir::ClipInterpolation::Linear);
+    REQUIRE(turn.times.size() == 31);
+    for (std::size_t k = 0; k < turn.times.size(); ++k)
+    {
+        CAPTURE(k);
+        REQUIRE(Near(turn.times[k], static_cast<float>(k) / 30.0f, 1e-5f));
+        const Quat expected = AxisAngle({0.0f, 0.0f, 1.0f}, 270.0f * turn.times[k]);
+        const Vec4& value = turn.values[k];
+        REQUIRE(Near(std::abs(glm::dot(Quat(value.w, value.x, value.y, value.z), expected)), 1.0f));
+        if (k > 0)
+        {
+            REQUIRE(glm::dot(turn.values[k], turn.values[k - 1]) >= 0.0f);
+        }
+    }
+}
+
+TEST_CASE("FBX clip channels name their targets, and those on ordinary nodes are kept but not played",
+          "[assets][skinned-import][fbx]")
+{
+    AssetsApp test;
+    const Loaded loaded = Load(test, "armatures.fbx");
+    const Fenrir::Model& model = *loaded.model;
+    REQUIRE(model.clips.size() == 1);
+    const Fenrir::ClipData& clip = *test.store.TryGet(model.clips[0]);
+    const auto channelOn = [&](const std::string& name, Fenrir::ClipPath path) -> const Fenrir::ClipChannel& {
+        const auto found = std::find_if(clip.channels.begin(), clip.channels.end(), [&](const Fenrir::ClipChannel& c) {
+            return c.targetName == name && c.path == path;
+        });
+        INFO("a channel keys " << name);
+        REQUIRE(found != clip.channels.end());
+        return *found;
+    };
+    REQUIRE(channelOn("Spine", Fenrir::ClipPath::Rotation).playable);
+    REQUIRE(channelOn("Tail", Fenrir::ClipPath::Rotation).playable);
+    REQUIRE(channelOn("Tail", Fenrir::ClipPath::Rotation).targetSourceId == NodeNamed(model, "Tail").sourceId);
+    INFO("Hat is an ordinary node: its channel is kept, unplayable, not redirected");
+    const Fenrir::ClipChannel& hat = channelOn("Hat", Fenrir::ClipPath::Translation);
+    REQUIRE_FALSE(hat.playable);
+    REQUIRE(Near(hat.values.back(), Vec4(0.0f, 0.8f, 0.0f, 0.0f)));
+}
+
+TEST_CASE("An FBX file of clips makes one skeleton of its armature's trees, so its channels play",
+          "[assets][skinned-import][fbx]")
+{
+    AssetsApp test;
+    const Loaded loaded = Load(test, "clips-only.fbx");
+    const Fenrir::Model& model = *loaded.model;
+    INFO("left out: " << Joined(loaded.result.failedUnits));
+    REQUIRE(loaded.result.Status() == Fenrir::LoadStatus::Succeeded);
+    REQUIRE(model.meshes.empty());
+    REQUIRE(model.skeletons.size() == 1);
+    REQUIRE(model.skeletonOwners[0] == FindNode(model, "Armature"));
+    INFO("Root's tree and Control's, both under Armature, are one skeleton");
+    REQUIRE(EngineNames(SkeletonOf(test, model, 0)) == std::vector<std::string>{"Root", "Arm", "Control"});
+
+    REQUIRE(model.clips.size() == 1);
+    const Fenrir::ClipData& clip = *test.store.TryGet(model.clips[0]);
+    const auto raise = std::find_if(clip.channels.begin(), clip.channels.end(), [](const Fenrir::ClipChannel& c) {
+        return c.targetName == "Arm" && c.path == Fenrir::ClipPath::Rotation;
+    });
+    REQUIRE(raise != clip.channels.end());
+    REQUIRE(raise->playable);
+    const Vec4& last = raise->values.back();
+    REQUIRE(Near(std::abs(glm::dot(Quat(last.w, last.x, last.y, last.z), AxisAngle({1.0f, 0.0f, 0.0f}, 90.0f))), 1.0f));
 }

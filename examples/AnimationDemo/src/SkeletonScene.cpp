@@ -27,17 +27,20 @@ namespace AnimationDemo
             Vec3 position;
             float yaw;
             float scale;
+            /** @brief The clip to play, by index in the model's file, or in clipFile when it is given. */
             std::size_t clip;
             /** @brief A file holding the clip to play instead, for a rig whose clips are files of their own. */
             std::string_view clipFile;
             /** @brief How high above its root its label sits, in world units. */
             float labelHeight;
+            /** @brief An image to paint its meshes with, for a model whose file names no texture. */
+            std::string_view skin = {};
         };
 
-        const std::array<Model, 4> Models{{
+        const std::array<Model, 5> Models{{
             {QuaterniusFile,
              "Quaternius human",
-             {-2.6f, 0.0f, 0.0f},
+             {-3.5f, 0.0f, 0.0f},
              0.5f,
              1.0f,
              0,
@@ -45,21 +48,31 @@ namespace AnimationDemo
              2.1f},
             {MannequinFile,
              "Mannequin (procedural)",
-             {-0.9f, 0.0f, 0.0f},
+             {-1.8f, 0.0f, 0.0f},
              0.3f,
              1.0f,
              static_cast<std::size_t>(MannequinClip::Walk),
              {},
              2.3f},
-            {CesiumManFile, "CesiumMan (Khronos, untextured)", {0.6f, 0.0f, -0.2f}, 0.0f, 1.0f, 0, {}, 1.8f},
+            {CesiumManFile, "CesiumMan (Khronos, untextured)", {0.0f, 0.0f, -0.2f}, 0.0f, 1.0f, 0, {}, 1.8f},
             // The Fox's clips are Survey, Walk and Run.
-            {FoxFile, "Fox (Khronos)", {2.3f, 0.0f, 0.2f}, -0.9f, FoxScale, 1, {}, 1.1f},
+            {FoxFile, "Fox (Khronos)", {1.7f, 0.0f, 0.2f}, -0.9f, FoxScale, 1, {}, 1.1f},
+            // The FBX character (ticket 06), running: its clips are files of their own.
+            {KenneyFile,
+             "Kenney character (FBX)",
+             {3.4f, 0.0f, 0.0f},
+             -0.3f,
+             KenneyScale,
+             KenneyClip,
+             KenneyClips.at(1),
+             2.1f,
+             KenneySkin},
         }};
 
         /** @brief Scene 2's state, a resource of its FenrirScene. */
         struct SkeletonState
         {
-            std::array<Rig, 4> rigs;
+            std::array<Rig, Models.size()> rigs;
             bool meshes = true;
             bool bones = true;
             bool names = false;
@@ -75,8 +88,13 @@ namespace AnimationDemo
                 state.rigs.at(i) = SpawnRig(app, scene, model.file, model.position, model.yaw, model.scale);
                 if (state.rigs.at(i).IsValid())
                 {
-                    Play(state.rigs.at(i).skeleton, model.clipFile.empty() ? state.rigs.at(i).Clip(app, model.clip)
-                                                                           : LoadClip(app, scene, model.clipFile));
+                    Play(state.rigs.at(i).skeleton, model.clipFile.empty()
+                                                        ? state.rigs.at(i).Clip(app, model.clip)
+                                                        : LoadClip(app, scene, model.clipFile, model.clip));
+                    if (!model.skin.empty())
+                    {
+                        Paint(app, scene, state.rigs.at(i), model.skin);
+                    }
                 }
             }
         }
@@ -137,7 +155,7 @@ namespace AnimationDemo
         scene.name = "Skeleton";
         scene.keyHelp = "M: show or hide the meshes. B: the bones and their axes. N: the bones' names.";
         scene.keys = {Fenrir::Key::N, Fenrir::Key::M, Fenrir::Key::B, Fenrir::Key::M, Fenrir::Key::B, Fenrir::Key::N};
-        scene.camera = {{0.0f, 1.3f, 5.5f}, 0.0f, -0.12f};
+        scene.camera = {{0.0f, 1.4f, 6.8f}, 0.0f, -0.12f};
         scene.spawn = Spawn;
         scene.update = Update;
         return scene;

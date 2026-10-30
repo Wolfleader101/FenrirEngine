@@ -138,7 +138,21 @@ namespace Fenrir::Detail
                 }
             }
 
-            // Skins grouped by the joints they share, each group in skin order, the groups by their first skin.
+            // The top of the chain of format-marked bones a joint hangs from; the joint itself when it is unmarked.
+            std::uint32_t MarkedRoot(std::uint32_t joint) const
+            {
+                std::uint32_t top = joint;
+                while (m_model.nodes[top].markedBone && m_model.nodes[top].parent >= 0 &&
+                       m_model.nodes[static_cast<std::size_t>(m_model.nodes[top].parent)].markedBone)
+                {
+                    top = static_cast<std::uint32_t>(m_model.nodes[top].parent);
+                }
+                return top;
+            }
+
+            // Skins grouped by the joints they share, or by the tree of marked bones their joints are in (an FBX
+            // armature, whose meshes each have a skin of their own), each group in skin order, the groups by their
+            // first skin.
             std::vector<Group> GroupSkins() const
             {
                 std::vector<std::size_t> root(m_model.skins.size());
@@ -151,6 +165,16 @@ namespace Fenrir::Detail
                     return s;
                 };
                 std::map<std::uint32_t, std::size_t> firstSkin;
+                std::map<std::uint32_t, std::size_t> firstInTree;
+                const auto join = [&](std::map<std::uint32_t, std::size_t>& first, std::uint32_t key, std::size_t s) {
+                    const auto [found, added] = first.emplace(key, s);
+                    if (!added)
+                    {
+                        const std::size_t a = find(found->second);
+                        const std::size_t b = find(s);
+                        root[std::max(a, b)] = std::min(a, b);
+                    }
+                };
                 for (std::size_t s = 0; s < m_model.skins.size(); ++s)
                 {
                     if (m_skinFailed[s])
@@ -159,12 +183,10 @@ namespace Fenrir::Detail
                     }
                     for (const std::uint32_t joint : m_model.skins[s].joints)
                     {
-                        const auto [found, added] = firstSkin.emplace(joint, s);
-                        if (!added)
+                        join(firstSkin, joint, s);
+                        if (m_model.nodes[joint].markedBone)
                         {
-                            const std::size_t a = find(found->second);
-                            const std::size_t b = find(s);
-                            root[std::max(a, b)] = std::min(a, b);
+                            join(firstInTree, MarkedRoot(joint), s);
                         }
                     }
                 }
@@ -243,13 +265,17 @@ namespace Fenrir::Detail
                 pending.erase(pending.begin());
                 while (!pending.empty())
                 {
-                    // The first skin left that shares a joint with those merged; one always does, as the group is
-                    // connected.
-                    const auto next = std::find_if(pending.begin(), pending.end(), [&](std::size_t s) {
+                    // The first skin left that shares a joint with those merged, else the first left: a group joined
+                    // only through a tree of marked bones shares no joint, and its binds are all in one space.
+                    auto next = std::find_if(pending.begin(), pending.end(), [&](std::size_t s) {
                         const std::vector<std::uint32_t>& joints = m_model.skins[s].joints;
                         return std::any_of(joints.begin(), joints.end(),
                                            [&](std::uint32_t joint) { return group.binds.contains(joint); });
                     });
+                    if (next == pending.end())
+                    {
+                        next = pending.begin();
+                    }
                     const std::size_t s = *next;
                     pending.erase(next);
                     if (!MergeSkin(group, s))
@@ -279,7 +305,7 @@ namespace Fenrir::Detail
                     });
                 };
                 Math::Mat4 conversion(1.0f);
-                if (!agrees(conversion))
+                if (!shared.empty() && !agrees(conversion))
                 {
                     const Math::Mat4& merged = group.binds.at(skin.joints[shared.front()]);
                     if (Invertible(merged))
@@ -336,6 +362,7 @@ namespace Fenrir::Detail
                         }
                     }
                 }
+                FindMarkedBones();
                 std::vector<bool> animated(m_model.nodes.size(), false);
                 for (const ImportedClip& clip : m_model.clips)
                 {
@@ -355,6 +382,76 @@ namespace Fenrir::Detail
                 for (std::size_t k = 0; k < m_groups.size(); ++k)
                 {
                     OrderBones(m_groups[k], static_cast<std::int32_t>(k));
+                }
+            }
+
+            // Nodes the format marks as bones (ADR-0031's fourth rule, FBX's LimbNode): a chain of them above a
+            // skeleton's root bones joins it, as does one below a bone. Marked nodes no skin reaches (an FBX file of
+            // clips, its armature without a mesh) make a skeleton of their own, one per node their trees hang from,
+            // bound at their rest; a tree with a failed skin's joint stays ordinary nodes, as the skeleton failed.
+            void FindMarkedBones()
+            {
+                std::vector<bool> failedTree(m_model.nodes.size(), false);
+                for (std::size_t s = 0; s < m_model.skins.size(); ++s)
+                {
+                    for (const std::uint32_t joint : m_model.skins[s].joints)
+                    {
+                        if (m_skinFailed[s] && m_model.nodes[joint].markedBone)
+                        {
+                            failedTree[MarkedRoot(joint)] = true;
+                        }
+                    }
+                }
+                for (std::size_t i = m_model.nodes.size(); i-- > 0;)
+                {
+                    const std::int32_t skeleton = m_skeletonOf[i];
+                    if (skeleton < 0)
+                    {
+                        continue;
+                    }
+                    for (std::int32_t above = m_model.nodes[i].parent;
+                         above >= 0 && m_skeletonOf[static_cast<std::size_t>(above)] < 0 &&
+                         m_model.nodes[static_cast<std::size_t>(above)].markedBone;
+                         above = m_model.nodes[static_cast<std::size_t>(above)].parent)
+                    {
+                        m_skeletonOf[static_cast<std::size_t>(above)] = skeleton;
+                    }
+                }
+                // Each skeleton by the node its root bones hang from: an unreached tree of marked bones beside them
+                // (a rig's controls no skin names) joins it, and trees with no skeleton beside them share one.
+                std::map<std::int32_t, std::int32_t> byParent;
+                for (std::size_t i = 0; i < m_model.nodes.size(); ++i)
+                {
+                    const std::int32_t parent = m_model.nodes[i].parent;
+                    if (m_skeletonOf[i] >= 0 && (parent < 0 || m_skeletonOf[static_cast<std::size_t>(parent)] < 0))
+                    {
+                        byParent.emplace(parent, m_skeletonOf[i]);
+                    }
+                }
+                for (std::size_t i = 0; i < m_model.nodes.size(); ++i)
+                {
+                    const ImportedNode& node = m_model.nodes[i];
+                    if (!node.markedBone || m_skeletonOf[i] >= 0)
+                    {
+                        continue;
+                    }
+                    if (node.parent >= 0 && m_skeletonOf[static_cast<std::size_t>(node.parent)] >= 0)
+                    {
+                        m_skeletonOf[i] = m_skeletonOf[static_cast<std::size_t>(node.parent)];
+                        continue;
+                    }
+                    if (failedTree[i] || (node.parent >= 0 && failedTree[static_cast<std::size_t>(node.parent)]))
+                    {
+                        failedTree[i] = true;
+                        continue;
+                    }
+                    const auto [found, added] =
+                        byParent.emplace(node.parent, static_cast<std::int32_t>(m_groups.size()));
+                    if (added)
+                    {
+                        m_groups.emplace_back();
+                    }
+                    m_skeletonOf[i] = found->second;
                 }
             }
 
@@ -523,8 +620,11 @@ namespace Fenrir::Detail
                     }
                     else
                     {
+                        // A root bone that is no joint (a marked bone above the joints) is bound at its rest.
                         const Math::Mat4 model =
-                            bindModel[static_cast<std::size_t>(bone.parent)] * LocalMatrix(source.rest);
+                            bone.parent != NoBone
+                                ? bindModel[static_cast<std::size_t>(bone.parent)] * LocalMatrix(source.rest)
+                                : LocalMatrix(bone.rest);
                         if (!Invertible(model))
                         {
                             FailSkeleton(group,

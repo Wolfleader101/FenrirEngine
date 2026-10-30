@@ -8,16 +8,16 @@ skinning source `Skeletons` registers (ADR-0041).
 
 Its models (`assets/ATTRIBUTION.md`): Quaternius's CC0 human from ActionForge's animation library, a skinned mannequin
 whose clips are files of their own on the same skeleton (they bind to it by bone name); Khronos's `Fox`; Khronos's
-`CesiumMan`, untextured; and two procedural models, `mannequin.gltf` (a blocky humanoid with a short Flutter clip, used
-for the event budget and scene 3) and `critter.gltf` (a four-legged rig, scene 3's wrong-skeleton case). Scene 2's FBX
-character is ticket 06's.
+`CesiumMan`, untextured; Kenney's CC0 animated character, the FBX model (ticket 06), its run clip a file of its own
+and its skin painted on in code; and two procedural models, `mannequin.gltf` (a blocky humanoid with a short Flutter clip, used
+for the event budget and scene 3) and `critter.gltf` (a four-legged rig, scene 3's wrong-skeleton case).
 
 ## Scenes
 
 | Scene | What it shows | Keys | Tickets |
 | --- | --- | --- | --- |
 | Playback | The Quaternius human, whose `Animator` the keys drive, its clip events as green world text above its head for a second each (`Step.A`/`Step.B` on the walk, `Stride.A`/`Stride.B` on the jog, `Dash` on the sprint, `Breathe` on the idle, `Hey!` on the call), and `ClipFinished` as a message when a `Once` clip ends. The walk, jog and sprint carry root motion, so it travels forward through each cycle and steps back to the start when the clip wraps. Beside it the procedural mannequin plays Flutter, a quarter-second clip given 600 events, at speed 2: about 80 crossings a frame against the 64-event budget, so the text above it shows 64 sent and the `AnimationEventsDropped` count each frame, and the drop is logged once as a warning. The screen text shows the walker's clip, time, speed, Loop or Once, paused or playing, finished and laps. | 1-5: Idle, Walk, Run (the jog), Sprint, Call (the library has no wave). Up/Down: speed up or down by 0.25. R: reverse. L: Loop or Once. Space: pause or play. Left/Right: seek 0.25 s back or on. Home: seek to 0. | 04, 05 |
-| Skeleton | Four skinned models in a row, each labelled: the Quaternius human, the procedural mannequin, CesiumMan and the Fox (drawn at a hundredth of its size), all walking. Their bones are drawn through FenrirDebugDraw on top of the meshes: a yellow line from each bone to its parent, small axes at each joint, and each bone's engine name as world text. | M: show or hide the meshes. B: the bones and axes. N: the names (off at first). | 03, 05 (06 adds the FBX character) |
+| Skeleton | Five skinned models in a row, each labelled: the Quaternius human, the procedural mannequin, CesiumMan and the Fox (drawn at a hundredth of its size), all walking, and Kenney's character from its FBX file (drawn at about half its size), running. Their bones are drawn through FenrirDebugDraw on top of the meshes: a yellow line from each bone to its parent, small axes at each joint, and each bone's engine name as world text. | M: show or hide the meshes. B: the bones and axes. N: the names (off at first). | 03, 05, 06 |
 | Skin diagnostics | A row of five mannequin-sized slots, each labelled from above with a ring on the floor, the label placed by its slot so it shows when nothing is drawn there: a working skinned mannequin playing Idle; one whose mesh entities have no `SkinnedMesh` (not drawn); one whose `SkeletonPose` names no skeleton, so it is `Unavailable` (not drawn); the critter's mesh skinned by a skeleton entity posing the mannequin's skeleton, whose bind signature differs (not drawn); and a mannequin waving in a user shader built without `SKINNED`, drawn magenta by the fallback material. Each skipped case logs one warning, never an error. | None. | 05 |
 
 | Key | What it does |
@@ -42,7 +42,9 @@ Run each scene on OpenGL (`FENRIR_DEMO_SCENE=<scene>`, or PageDown through the l
   end, holds there, and shows `ClipFinished`. Beside it the second mannequin's hands flutter, and the text above it shows
   64 sent and a nonzero `AnimationEventsDropped` count each frame, with a running total.
 - **Skeleton:** the Quaternius human, the mannequin, CesiumMan and the Fox stand upright on the floor at a person's and a fox's size, facing
-  roughly the camera, and walk in place without torn or collapsed vertices. The yellow bone lines and axes sit inside
+  roughly the camera, and walk in place without torn or collapsed vertices. Kenney's FBX character, on the right, stands the
+  right way up at a person's size, painted with its skater skin, and runs in place with its bones drawn over it, without
+  torn or collapsed vertices. The yellow bone lines and axes sit inside
   each body and move with it; M hides the meshes leaving the bones walking, B hides the bones, N shows each bone's name at
   its joint. The Fox has no normals in its file, so it is lit flat.
 - **Skin diagnostics:** five labels in a row. Only the first slot (moving gently) and the last (magenta, waving) draw a

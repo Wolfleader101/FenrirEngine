@@ -1,0 +1,581 @@
+; FBX 7.4.0 project file
+; FenrirAssets model fixture, written by hand-rolled make_fixtures.py (no FBX SDK involved).
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+	Creator: "FenrirEngine make_fixtures.py"
+}
+GlobalSettings:  {
+	Version: 1000
+	Properties70:  {
+		P: "UpAxis", "int", "Integer", "",1
+		P: "UpAxisSign", "int", "Integer", "",1
+		P: "FrontAxis", "int", "Integer", "",2
+		P: "FrontAxisSign", "int", "Integer", "",1
+		P: "CoordAxis", "int", "Integer", "",0
+		P: "CoordAxisSign", "int", "Integer", "",1
+		P: "UnitScaleFactor", "double", "Number", "",100
+		P: "OriginalUnitScaleFactor", "double", "Number", "",100
+	}
+}
+Objects:  {
+	Model: 1001, "Model::Scene", "Null" {
+		Version: 232
+		Properties70:  {
+
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	Model: 1002, "Model::Base", "LimbNode" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,0.5,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	NodeAttribute: 1003, "NodeAttribute::Base", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1004, "Model::Hips", "LimbNode" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,0.5,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	NodeAttribute: 1005, "NodeAttribute::Hips", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1006, "Model::Spine", "LimbNode" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,0.5,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	NodeAttribute: 1007, "NodeAttribute::Spine", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1008, "Model::Chest", "LimbNode" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,0.5,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	NodeAttribute: 1009, "NodeAttribute::Chest", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1010, "Model::Head", "LimbNode" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,0.5,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	NodeAttribute: 1011, "NodeAttribute::Head", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1012, "Model::HeadEnd", "LimbNode" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,0.2,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	NodeAttribute: 1013, "NodeAttribute::HeadEnd", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1014, "Model::Socket", "Null" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0.2,0,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	Model: 1015, "Model::Hat", "Mesh" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,0.6,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	Geometry: 1016, "Geometry::Hat", "Mesh" {
+		Vertices: *9 {
+			a: 0,0,0,1,0,0,0,1,0
+		}
+		PolygonVertexIndex: *3 {
+			a: 0,1,-3
+		}
+		GeometryVersion: 124
+		LayerElementMaterial: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "AllSame"
+			ReferenceInformationType: "IndexToDirect"
+			Materials: *1 {
+				a: 0
+			}
+		}
+		Layer: 0 {
+			Version: 100
+			LayerElement:  {
+				Type: "LayerElementMaterial"
+				TypedIndex: 0
+			}
+		}
+	}
+	Model: 1017, "Model::Tail", "Null" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,0,-0.3
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	Model: 1018, "Model::Pelvis", "LimbNode" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",3,1,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	NodeAttribute: 1019, "NodeAttribute::Pelvis", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1020, "Model::Pelvis", "LimbNode" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,0.5,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	NodeAttribute: 1021, "NodeAttribute::Pelvis", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1022, "Model::Rig", "Null" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-3,0,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	Model: 1023, "Model::Root", "LimbNode" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,1,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	NodeAttribute: 1024, "NodeAttribute::Root", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1025, "Model::BodyA", "Mesh" {
+		Version: 232
+		Properties70:  {
+
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	Geometry: 1026, "Geometry::BodyA", "Mesh" {
+		Vertices: *9 {
+			a: 0,1,0,0.5,1.5,0,0,2,0
+		}
+		PolygonVertexIndex: *3 {
+			a: 0,1,-3
+		}
+		GeometryVersion: 124
+		LayerElementMaterial: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "AllSame"
+			ReferenceInformationType: "IndexToDirect"
+			Materials: *1 {
+				a: 0
+			}
+		}
+		Layer: 0 {
+			Version: 100
+			LayerElement:  {
+				Type: "LayerElementMaterial"
+				TypedIndex: 0
+			}
+		}
+	}
+	Deformer: 1027, "Deformer::BodyASkin", "Skin" {
+		Version: 101
+		Link_DeformAcuracy: 50
+	}
+	Deformer: 1028, "SubDeformer::BodyASkin", "Cluster" {
+		Version: 100
+		Indexes: *2 {
+			a: 0,1
+		}
+		Weights: *2 {
+			a: 1,0.5
+		}
+		Transform: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,0,-1,0,1
+		}
+		TransformLink: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,0,1,0,1
+		}
+	}
+	Deformer: 1029, "SubDeformer::BodyASkin", "Cluster" {
+		Version: 100
+		Indexes: *2 {
+			a: 1,2
+		}
+		Weights: *2 {
+			a: 0.5,1
+		}
+		Transform: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,0,-2,0,1
+		}
+		TransformLink: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,0,2,0,1
+		}
+	}
+	Deformer: 1030, "SubDeformer::BodyASkin", "Cluster" {
+		Version: 100
+		Transform: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,0,-2.5,0,1
+		}
+		TransformLink: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,0,2.5,0,1
+		}
+	}
+	Model: 1031, "Model::BodyB", "Mesh" {
+		Version: 232
+		Properties70:  {
+
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	Geometry: 1032, "Geometry::BodyB", "Mesh" {
+		Vertices: *9 {
+			a: 0,2,0,0.5,2,0,0,2.5,0
+		}
+		PolygonVertexIndex: *3 {
+			a: 0,1,-3
+		}
+		GeometryVersion: 124
+		LayerElementMaterial: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "AllSame"
+			ReferenceInformationType: "IndexToDirect"
+			Materials: *1 {
+				a: 0
+			}
+		}
+		Layer: 0 {
+			Version: 100
+			LayerElement:  {
+				Type: "LayerElementMaterial"
+				TypedIndex: 0
+			}
+		}
+	}
+	Deformer: 1033, "Deformer::BodyBSkin", "Skin" {
+		Version: 101
+		Link_DeformAcuracy: 50
+	}
+	Deformer: 1034, "SubDeformer::BodyBSkin", "Cluster" {
+		Version: 100
+		Indexes: *3 {
+			a: 0,1,2
+		}
+		Weights: *3 {
+			a: 1,1,1
+		}
+		Transform: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,0,-2,0,1
+		}
+		TransformLink: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,0,2,0,1
+		}
+	}
+	Model: 1035, "Model::Legs", "Mesh" {
+		Version: 232
+		Properties70:  {
+
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	Geometry: 1036, "Geometry::Legs", "Mesh" {
+		Vertices: *9 {
+			a: 3,1,0,3.5,1,0,3,1.5,0
+		}
+		PolygonVertexIndex: *3 {
+			a: 0,1,-3
+		}
+		GeometryVersion: 124
+		LayerElementMaterial: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "AllSame"
+			ReferenceInformationType: "IndexToDirect"
+			Materials: *1 {
+				a: 0
+			}
+		}
+		Layer: 0 {
+			Version: 100
+			LayerElement:  {
+				Type: "LayerElementMaterial"
+				TypedIndex: 0
+			}
+		}
+	}
+	Deformer: 1037, "Deformer::LegsSkin", "Skin" {
+		Version: 101
+		Link_DeformAcuracy: 50
+	}
+	Deformer: 1038, "SubDeformer::LegsSkin", "Cluster" {
+		Version: 100
+		Indexes: *3 {
+			a: 0,1,2
+		}
+		Weights: *3 {
+			a: 0.25,1,1
+		}
+		Transform: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,-3,-1,0,1
+		}
+		TransformLink: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,3,1,0,1
+		}
+	}
+	Deformer: 1039, "SubDeformer::LegsSkin", "Cluster" {
+		Version: 100
+		Indexes: *1 {
+			a: 0
+		}
+		Weights: *1 {
+			a: 0.75
+		}
+		Transform: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,-3,-1.5,0,1
+		}
+		TransformLink: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,3,1.5,0,1
+		}
+	}
+	Model: 1040, "Model::Prop", "Mesh" {
+		Version: 232
+		Properties70:  {
+
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	Geometry: 1041, "Geometry::Prop", "Mesh" {
+		Vertices: *9 {
+			a: -3,1,0,-2,1,0,-3,2,0
+		}
+		PolygonVertexIndex: *3 {
+			a: 0,1,-3
+		}
+		GeometryVersion: 124
+		LayerElementMaterial: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "AllSame"
+			ReferenceInformationType: "IndexToDirect"
+			Materials: *1 {
+				a: 0
+			}
+		}
+		Layer: 0 {
+			Version: 100
+			LayerElement:  {
+				Type: "LayerElementMaterial"
+				TypedIndex: 0
+			}
+		}
+	}
+	Deformer: 1042, "Deformer::PropSkin", "Skin" {
+		Version: 101
+		Link_DeformAcuracy: 50
+	}
+	Deformer: 1043, "SubDeformer::PropSkin", "Cluster" {
+		Version: 100
+		Indexes: *3 {
+			a: 0,1,2
+		}
+		Weights: *3 {
+			a: 1,1,1
+		}
+		Transform: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,3,-1,0,1
+		}
+		TransformLink: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,-3,1,0,1
+		}
+	}
+	AnimationStack: 1044, "AnimStack::Wave", "" {
+		Properties70:  {
+			P: "LocalStart", "KTime", "Time", "",0
+			P: "LocalStop", "KTime", "Time", "",46186158000
+		}
+	}
+	AnimationLayer: 1045, "AnimLayer::BaseLayer", "" {
+	}
+	AnimationCurveNode: 1046, "AnimCurveNode::R", "" {
+		Properties70:  {
+			P: "d|X", "Number", "", "A",0
+			P: "d|Y", "Number", "", "A",0
+			P: "d|Z", "Number", "", "A",0
+		}
+	}
+	AnimationCurve: 1047, "AnimCurve::", "" {
+		Default: 0
+		KeyVer: 4009
+		KeyTime: *2 {
+			a: 0,46186158000
+		}
+		KeyValueFloat: *2 {
+			a: 0,30
+		}
+		KeyAttrFlags: *2 {
+			a: 4,4
+		}
+		KeyAttrDataFloat: *8 {
+			a: 0,0,0,0,0,0,0,0
+		}
+		KeyAttrRefCount: *2 {
+			a: 1,1
+		}
+	}
+	AnimationCurveNode: 1048, "AnimCurveNode::R", "" {
+		Properties70:  {
+			P: "d|X", "Number", "", "A",0
+			P: "d|Y", "Number", "", "A",0
+			P: "d|Z", "Number", "", "A",0
+		}
+	}
+	AnimationCurve: 1049, "AnimCurve::", "" {
+		Default: 0
+		KeyVer: 4009
+		KeyTime: *2 {
+			a: 0,46186158000
+		}
+		KeyValueFloat: *2 {
+			a: 0,45
+		}
+		KeyAttrFlags: *2 {
+			a: 4,4
+		}
+		KeyAttrDataFloat: *8 {
+			a: 0,0,0,0,0,0,0,0
+		}
+		KeyAttrRefCount: *2 {
+			a: 1,1
+		}
+	}
+	AnimationCurveNode: 1050, "AnimCurveNode::T", "" {
+		Properties70:  {
+			P: "d|X", "Number", "", "A",0
+			P: "d|Y", "Number", "", "A",0
+			P: "d|Z", "Number", "", "A",0
+		}
+	}
+	AnimationCurve: 1051, "AnimCurve::", "" {
+		Default: 0
+		KeyVer: 4009
+		KeyTime: *2 {
+			a: 0,46186158000
+		}
+		KeyValueFloat: *2 {
+			a: 0.6,0.8
+		}
+		KeyAttrFlags: *2 {
+			a: 4,4
+		}
+		KeyAttrDataFloat: *8 {
+			a: 0,0,0,0,0,0,0,0
+		}
+		KeyAttrRefCount: *2 {
+			a: 1,1
+		}
+	}
+}
+Connections:  {
+	C: "OO",1001,0
+	C: "OO",1002,1001
+	C: "OO",1003,1002
+	C: "OO",1004,1002
+	C: "OO",1005,1004
+	C: "OO",1006,1004
+	C: "OO",1007,1006
+	C: "OO",1008,1006
+	C: "OO",1009,1008
+	C: "OO",1010,1008
+	C: "OO",1011,1010
+	C: "OO",1012,1010
+	C: "OO",1013,1012
+	C: "OO",1014,1008
+	C: "OO",1015,1008
+	C: "OO",1016,1015
+	C: "OO",1017,1008
+	C: "OO",1018,1001
+	C: "OO",1019,1018
+	C: "OO",1020,1018
+	C: "OO",1021,1020
+	C: "OO",1022,1001
+	C: "OO",1023,1022
+	C: "OO",1024,1023
+	C: "OO",1025,1001
+	C: "OO",1026,1025
+	C: "OO",1027,1026
+	C: "OO",1028,1027
+	C: "OO",1004,1028
+	C: "OO",1029,1027
+	C: "OO",1008,1029
+	C: "OO",1030,1027
+	C: "OO",1010,1030
+	C: "OO",1031,1001
+	C: "OO",1032,1031
+	C: "OO",1033,1032
+	C: "OO",1034,1033
+	C: "OO",1008,1034
+	C: "OO",1035,1001
+	C: "OO",1036,1035
+	C: "OO",1037,1036
+	C: "OO",1038,1037
+	C: "OO",1018,1038
+	C: "OO",1039,1037
+	C: "OO",1020,1039
+	C: "OO",1040,1001
+	C: "OO",1041,1040
+	C: "OO",1042,1041
+	C: "OO",1043,1042
+	C: "OO",1023,1043
+	C: "OO",1045,1044
+	C: "OO",1046,1045
+	C: "OP",1046,1006, "Lcl Rotation"
+	C: "OP",1047,1046, "d|Z"
+	C: "OO",1048,1045
+	C: "OP",1048,1017, "Lcl Rotation"
+	C: "OP",1049,1048, "d|Z"
+	C: "OO",1050,1045
+	C: "OP",1050,1015, "Lcl Translation"
+	C: "OP",1051,1050, "d|Y"
+}

@@ -58,6 +58,17 @@ namespace AnimationDemo
     };
     /** @brief Khronos's CesiumMan, untextured (assets/ATTRIBUTION.md): one walk clip. */
     inline constexpr std::string_view CesiumManFile = "cesium-man/CesiumMan.gltf";
+    /**
+     * @brief Kenney's animated character (assets/ATTRIBUTION.md), the FBX model: about 3.8 units tall, so drawn at
+     * KenneyScale, with no clips of its own and no texture named in its file (KenneySkin is one of the pack's skins).
+     * Its clips are files of their own on the same skeleton, each holding a one-frame clip and then the clip itself,
+     * so KenneyClip is the clip to take from each.
+     */
+    inline constexpr std::string_view KenneyFile = "kenney/characterMedium.fbx";
+    inline constexpr std::string_view KenneySkin = "kenney/skaterMaleA.png";
+    inline constexpr std::array<std::string_view, 2> KenneyClips{"kenney/idle.fbx", "kenney/run.fbx"};
+    inline constexpr std::size_t KenneyClip = 1;
+    inline constexpr float KenneyScale = 0.48f;
 
     /** @brief A model spawned through the renderer's SpawnModel, with its skeleton entity and skinned mesh entities. */
     struct Rig
@@ -85,8 +96,12 @@ namespace AnimationDemo
     Rig SpawnRig(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file, Fenrir::Math::Vec3 position,
                  float yaw = 0.0f, float scale = 1.0f);
 
-    /** @brief The first clip of the model in `file`, loaded for `scene`; an empty handle, logged, if there is none. */
-    Fenrir::AssetHandle<Fenrir::Clip> LoadClip(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file);
+    /** @brief Clip `index` of the model in `file`, loaded for `scene`; an empty handle, logged, if there is none. */
+    Fenrir::AssetHandle<Fenrir::Clip> LoadClip(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file,
+                                               std::size_t index = 0);
+
+    /** @brief Loads the image `file` for `scene` and makes it the base colour texture of each of the rig's meshes. */
+    void Paint(Fenrir::App& app, Fenrir::Scene& scene, const Rig& rig, std::string_view file);
 
     /** @brief Gives the skeleton entity an Animator playing `clip`. */
     void Play(Fenrir::Entity skeleton, Fenrir::AssetHandle<Fenrir::Clip> clip,
