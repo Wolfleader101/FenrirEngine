@@ -24,6 +24,8 @@ namespace Fenrir
 {
     class App;
     class Scene;
+    // Only named here: FenrirSkeletonScripting defines Skeletons::ScriptingExtension().
+    struct ScriptingExtension;
 
     namespace Detail
     {
@@ -110,6 +112,43 @@ namespace Fenrir
          */
         bool Remove(PoseStageHandle handle);
         /** @} */
+
+        /** @name Hosting pose stage work through the App (ADR-0039)
+         * For a package that reaches FenrirSkeleton through the App rather than its owner: FenrirSkeletonScripting,
+         * whose extension stages place each script's groups here. Each acts on the install `app` holds; with none
+         * (FenrirSkeleton not installed, or its owner gone) it adds nothing and returns the empty handle. Hosted work
+         * runs as the owner's does, but after the owner's work at an equal order, whenever either was added, so C++
+         * runs first at equal orders. `HostPassEnd` work runs when each pass of the pipeline returns, the frame pass's
+         * and each tick pass's (whether or not it posed anything), outside the pipeline, so it may change the scene
+         * structurally; it is given the pass's timing.
+         * @{
+         */
+
+        /** @brief Hosts a base-pose writer in `Animate`, as AddAnimate. */
+        static PoseStageHandle HostAnimate(App& app, std::string name, int order,
+                                           std::function<void(AnimateContext&)> work);
+
+        /** @brief Hosts a pose modifier in `Modify`, as AddModifier. */
+        static PoseStageHandle HostModifier(App& app, std::string name, int order,
+                                            std::function<void(ModifierContext&)> work);
+
+        /** @brief Hosts work in `Late`, as AddLate. */
+        static PoseStageHandle HostLate(App& app, std::string name, int order, std::function<void(LateContext&)> work);
+
+        /** @brief Hosts work run when each pass returns, in the order added. */
+        static PoseStageHandle HostPassEnd(App& app, std::function<void(PoseTiming)> work);
+
+        /** @brief Removes hosted work, as Remove: refused, with a logged error, while the pose pipeline runs. */
+        static bool RemoveHosted(App& app, PoseStageHandle handle);
+        /** @} */
+
+        /**
+         * @brief FenrirSkeleton's scripting extension (ADR-0039): the Fenrir.Skeleton contract's natives, mirrors and
+         * the pose stages `Fenrir.Skeleton.Animate`, `.Modify` and `.Late`. Only named here: FenrirSkeletonScripting
+         * defines it, built with FENRIR_ENABLE_SCRIPTING. Install FenrirSkeleton before Scripting, so that a script's
+         * stage systems find the pipeline when it loads.
+         */
+        [[nodiscard]] static Fenrir::ScriptingExtension ScriptingExtension();
 
         /**
          * @brief Reconciles one entity at once, as the pipeline would: makes, rebuilds or drops its instance. Returns

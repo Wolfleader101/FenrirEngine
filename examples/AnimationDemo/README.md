@@ -3,8 +3,11 @@
 The animation spec's demo app (`GLOSSARY.md`: demo app): skeletons, clip playback and GPU skinning on the demo
 scaffold (`examples/DemoScaffold/README.md`), one scene per feature. Built with the examples when the renderer is on;
 FenrirSkeleton and FenrirAnimation come with FenrirAssets, so the app needs no option of its own. It installs
-`Skeletons` and then `Animation` itself, after the scaffold (which installs FenrirAssets), and the renderer finds the
-skinning source `Skeletons` registers (ADR-0041). With `FENRIR_ENABLE_PHYSICS` it also installs FenrirPhysics, before
+`Skeletons` and then `Animation` itself, through the scaffold's `DemoConfig::installPackages`, after the scaffold's own
+packages (FenrirAssets among them) and before Scripting, so the C# scenes' pose stage systems find the pipeline when the
+scripts load; the renderer finds the skinning source `Skeletons` registers (ADR-0041). With scripting built
+(`FENRIR_ENABLE_SCRIPTING`) it adds scenes 8 and 9, the C# twins of Playback and Bone attachments (`scripts/`, ticket 13),
+run with the skeleton and animation extensions as PhysicsDemo's C# scenes are with physics's. With `FENRIR_ENABLE_PHYSICS` it also installs FenrirPhysics, before
 the scaffold, for scene 5's shield and boxes, and adds that scene's `Tick` glue.
 
 Its models (`assets/ATTRIBUTION.md`): Quaternius's CC0 human from ActionForge's animation library, a skinned mannequin
@@ -24,6 +27,8 @@ for the event budget and scene 3) and `critter.gltf` (a four-legged rig, scene 3
 | Bone attachments | The Quaternius human idling, C stepping it through the walk, jog, sprint and call, with three `BoneAttachment`s, each labelled with its `AttachmentState`: a rifle in its right hand (`hand_r`), itself a skeleton entity with a stock and a rail bone; a scope attached to the rifle's rail, an attachment on an attachment, placed after the rifle each frame; and a hat on its head. To its right, five amber balls on rings, one per failure case, each labelled with what is wrong and its state: a destroyed skeleton entity (`SkeletonMissing`), a `SkeletonPose` naming no skeleton (`SkeletonUnavailable`), a bone the human lacks (`BoneNotFound`), an entity with no `Transform`, so no ball (`TransformMissing`), and a ball attached to a skeleton parented under it, a cycle (`Unplaceable`). Each keeps its place and is logged once as a warning. W detaches the rifle with `KeepWorld`, so it stays where it was, the scope still on it; K detaches the hat with `KeepLocal`, so it hangs where the head last was; R attaches both again. To the left, a second Quaternius human sprints in place (the sprint on an `AnimationLayer` masked to `pelvis`'s subtree, so its root motion is left out) with an orange shield on its right forearm: a kinematic body whose entity has no `BoneAttachment`. Demo glue in `Tick` writes its `Transform` from `GetBoneWorldMatrix(…, lowerarm_r, PoseKind::Simulation) × offset`, and physics's `PostTick` moves it there, so each swing knocks the blue boxes off the table in front of it; the boxes are set out again every 5 s. Both humans start tick-posed (`PoseTiming::Tick`, ADR-0040): the bearer's simulation pose is evaluated in each tick, so the shield is on this tick's arm. T switches both to frame timing, where the same read gives last frame's render pose, so the shield lags a frame, and back. Built without physics (`FENRIR_ENABLE_PHYSICS=OFF`), the shield still follows the arm and the boxes stand still. | C: the next clip. W: drop the rifle (`KeepWorld`). K: leave the hat (`KeepLocal`). R: attach both again. T: tick or frame timing for both humans. B: set the boxes out again. | 10, 11 |
 | Going limp | The Quaternius human walking, its left arm overridden through FenrirSkeleton's `PoseOverride`: demo code standing in for ragdoll glue writes world targets each frame in `Update` that hang the upper arm, forearm and hand from the shoulder, swaying, each placed at the end of its parent. The override weight on `upperarm_l`'s subtree steps to 1 to go limp and ramps to 0 over 1.5 s to blend back, the targets cleared once it reaches 0. The fingers have no targets and follow the hand; the rest of the body keeps walking. The screen text shows the weight, whether targets are written, the state and the human's timing. | L: go limp. B: blend back into the walk. S: the sway on or off. T: tick or frame timing for the human. | 09, 11 |
 | Crowd | A grid of Kenney's character, 64 at first: the members take the idle and the run in turn, each starting at its own point of its clip through `Animation::Seek`, so no two neighbours move together. Doubling adds a block of the grid beside the old one and halving removes the newest half, between 1 and 1024. The screen text shows the instances, their total bones, the frame time and the renderer's palette stats (`distinctPalettesWritten`, `paletteBytesUploaded`, with the draws and `skinnedDraws`): one palette per member however many cameras see it, so the cost follows skeletons, not draws. No pass/fail thresholds. | Up: double the crowd. Down: halve it. Space: pause or play every member. R: reset to 64, restarted. | 07 |
+| Playback (C#) | Built only with scripting. Scene 1's human, made and driven entirely from C# (`scripts/Playback.cs`): `Renderer.SpawnModel` spawns it (with its `SkinnedMesh`es and `SkeletonPose`), its clips load by label (`walk_loop.glb#Clip0`), and C# writes its `Animator`. A clip change crossfades over 0.4 s. Its clip events, authored from C# with `Clips.AddEvent` (`C# Step.A`, `C# Step.B` and the rest), are read through `EventReader<AnimationEvent>` and shown as green world text above its head, `ClipFinished` as a message. One `AnimationLayer` plays the call over the upper body through a `BoneMask` made with `BoneMasks` (`spine_01`'s subtree), its weight ramped in and out. The screen text is `Animation.Playback`'s: clip, time, speed, Loop or Once, paused or playing, laps and the crossfade's progress, and the layer's weight. | 1-5: crossfade to Idle, Walk, Run (the jog), Sprint, Call. Up/Down: speed. R: reverse. L: Loop or Once. Space: pause or play. Left/Right: seek 0.25 s back or on (`Animation.Seek`). Home: seek to 0. M: ramp the upper-body layer in or out. | 13 |
+| Bone attachments (C#) | Built only with scripting. The walking human with three `BoneAttachment`s C# makes and edits (`scripts/BoneAttachments.cs`), each labelled with `Skeletons.GetAttachmentState`: a grey blade on `hand_r`, a blue hat on `Head`, and an amber tag naming `no_such_bone`, which stays `BoneNotFound`. The screen text shows bone reads: the bone count (`SkeletonData.BoneCount`), the pose state and generation, and `Head`'s world position (`GetBoneWorldMatrix`). Two stage systems run inside the pose pipeline: a `Fenrir.Skeleton.Modify` system at order 1010, after the pose override, nods the head through a `PoseEdit`; a `Fenrir.Skeleton.Late` system draws a pink dot on `hand_r` where this frame's pose put it. | W: detach the blade keeping its world place (`KeepWorld`). K: detach the hat keeping its local transform (`KeepLocal`). R: attach both again. Left/Right: slide the blade along `hand_r`'s X (its `offset`). N: the C# nod on or off. C: the next clip (idle, walk, jog). | 13 |
 
 | Key | What it does |
 | --- | --- |
@@ -33,7 +38,8 @@ for the event budget and scene 3) and `critter.gltf` (a four-legged rig, scene 3
 
 The scaffold's `AnimationDemo-Smoke-null` (everywhere) and `AnimationDemo-Smoke-opengl` (label `gl`; on llvmpipe in the
 Linux CI job when it runs) run every scene for 60 frames with its keys pressed, and fail on any error. Scene 3's
-diagnostics are warnings (ADR-0035), and so are scene 5's attachment failures (ADR-0037), so both pass with no exceptions. `FENRIR_DEMO_SCENE="Skin diagnostics"
+diagnostics are warnings (ADR-0035), and so are scene 5's attachment failures (ADR-0037), so both pass with no exceptions. With scripting built
+the runs include scenes 8 and 9, and without it the list ends at the Crowd. `FENRIR_DEMO_SCENE="Skin diagnostics"
 FENRIR_DEMO_KEYS=1` runs one scene through its keys.
 
 ## Hand checks
@@ -63,5 +69,17 @@ Run each scene on OpenGL (`FENRIR_DEMO_SCENE=<scene>`, or PageDown through the l
   through each step the text's `distinctPalettesWritten` equals the instance count, `skinnedDraws` equals it too (one
   mesh each, one camera), and `paletteBytesUploaded` is the instances times 58 bones times 48 bytes. Space freezes every
   member mid-pose and plays on; R brings back the 64, moving again from their staggered starts.
+- **Playback (C#):** the human walks as in Playback, with `C# Step.A` and `C# Step.B` above its head in turn. 1-5 change
+  its clip with a visible crossfade (the screen text shows `crossfading` and its progress) rather than a cut. Up, Down,
+  R, L, Space, Left, Right and Home behave as scene 1's keys do; a `Once` clip ends with the `ClipFinished (C#)`
+  message. M brings the call into the arms and head over half a second while the legs keep the clip, and M again eases it
+  back out; the layer's weight on screen follows.
+- **Bone attachments (C#):** the blade stays in the right hand and the hat on the head through every clip C steps to,
+  both labelled `Attached`; the tag beside the human stays put, labelled `BoneNotFound`, with one warning in the log. The
+  head nods up and down over the walk (the C# `Modify` system), and N stops and restarts the nod, the hat nodding with
+  it. The pink dot sits on the right hand with no lag (the C# `Late` system). W leaves the blade in the air where it was;
+  K leaves the hat where the head last was; R puts both back. Left and Right slide the blade along the hand while it
+  stays attached. The screen text shows 71 bones, `Ready`, a generation that keeps rising, and the head's position
+  moving with the walk.
 - **Lighting:** the skinned limbs are lit on their moving faces as the floor is, with no faces going dark or flashing as
   they turn.

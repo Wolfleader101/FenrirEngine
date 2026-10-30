@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 
 namespace Fenrir
@@ -65,4 +67,27 @@ namespace AnimationDemo
      * shows the instances, their bones, the frame time and the renderer's palette stats.
      */
     [[nodiscard]] FenrirDemo::DemoScene Crowd();
+
+    /** @brief Playback (C#)'s number, which its C# systems know it by (scripts/Playback.cs). */
+    inline constexpr std::uint32_t PlaybackCSharpScene = 1;
+
+    /**
+     * @brief Playback (C#), scene 1's twin, made and run by C# (scripts/Playback.cs): the Quaternius human's Animator
+     * under the keys (crossfades between its clips, speed, reverse, Loop or Once, pause, seeks), its clip events read
+     * through an EventReader and shown above it, and one AnimationLayer playing the call on its upper body through a
+     * BoneMask, ramped in and out. The floor and sun are C++'s. Built only with scripting.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene PlaybackCSharp();
+
+    /** @brief Bone attachments (C#)'s number, which its C# systems know it by (scripts/BoneAttachments.cs). */
+    inline constexpr std::uint32_t BoneAttachmentsCSharpScene = 2;
+
+    /**
+     * @brief Bone attachments (C#), scene 5's twin, made and run by C# (scripts/BoneAttachments.cs): a blade, a hat and
+     * a tag naming no bone, attached to the walking human with BoneAttachments C# writes, each labelled with its
+     * AttachmentState; keys detach them both ways, attach them again and move the blade along its bone. A C# Modify
+     * stage system nods the head through a PoseEdit, and a C# Late stage system marks the hand where this frame's pose
+     * puts it. The floor and sun are C++'s. Built only with scripting.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene BoneAttachmentsCSharp();
 } // namespace AnimationDemo

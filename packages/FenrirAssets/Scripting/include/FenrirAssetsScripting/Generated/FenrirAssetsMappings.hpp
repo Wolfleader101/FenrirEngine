@@ -17,6 +17,14 @@
 #include <cstdint>
 #include <string_view>
 
+static_assert(sizeof(Fenrir::AssetHandle<Fenrir::BoneMask>) == 8 && alignof(Fenrir::AssetHandle<Fenrir::BoneMask>) == 4,
+              "Fenrir::AssetHandle<Fenrir::BoneMask> is not the layout FenrirAssets.api.json describes: "
+              "regenerate the description, then this binding");
+
+static_assert(sizeof(Fenrir::AssetHandle<Fenrir::Clip>) == 8 && alignof(Fenrir::AssetHandle<Fenrir::Clip>) == 4,
+              "Fenrir::AssetHandle<Fenrir::Clip> is not the layout FenrirAssets.api.json describes: "
+              "regenerate the description, then this binding");
+
 static_assert(sizeof(Fenrir::AssetHandle<Fenrir::Image>) == 8 && alignof(Fenrir::AssetHandle<Fenrir::Image>) == 4,
               "Fenrir::AssetHandle<Fenrir::Image> is not the layout FenrirAssets.api.json describes: "
               "regenerate the description, then this binding");
@@ -35,6 +43,10 @@ static_assert(sizeof(Fenrir::AssetHandle<Fenrir::Model>) == 8 && alignof(Fenrir:
 
 static_assert(sizeof(Fenrir::AssetHandle<Fenrir::Shader>) == 8 && alignof(Fenrir::AssetHandle<Fenrir::Shader>) == 4,
               "Fenrir::AssetHandle<Fenrir::Shader> is not the layout FenrirAssets.api.json describes: "
+              "regenerate the description, then this binding");
+
+static_assert(sizeof(Fenrir::AssetHandle<Fenrir::Skeleton>) == 8 && alignof(Fenrir::AssetHandle<Fenrir::Skeleton>) == 4,
+              "Fenrir::AssetHandle<Fenrir::Skeleton> is not the layout FenrirAssets.api.json describes: "
               "regenerate the description, then this binding");
 
 template <>

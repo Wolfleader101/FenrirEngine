@@ -77,6 +77,11 @@ namespace Fenrir
 
     Entity SpawnModel(App& app, Scene& scene, AssetHandle<Model> model, Entity parent)
     {
+        return SpawnModelNodes(app, scene, model, parent).root;
+    }
+
+    SpawnedNodes SpawnModelNodes(App& app, Scene& scene, AssetHandle<Model> model, Entity parent)
+    {
         AssetStore* store = app.TryGetResource<AssetStore>();
         if (store == nullptr)
         {
@@ -104,6 +109,6 @@ namespace Fenrir
             }
         }
         AddMeshRenderers(scene, *data, spawned);
-        return spawned.root;
+        return spawned;
     }
 } // namespace Fenrir

@@ -12,6 +12,7 @@
 #include <type_traits>
 #include <typeindex>
 #include <typeinfo>
+#include <utility>
 #include <vector>
 
 #include "FenrirApp/App.hpp"
@@ -116,6 +117,16 @@ namespace Fenrir
         void RemoveAppResource() const
         {
             Record([](App& app) { app.RemoveResource<T>(); });
+        }
+
+        /**
+         * @brief Runs `change` at playback, in order with every other change: a package's own structural function a
+         * native cannot call now (FenrirSkeleton's Detach, its SpawnSkeletons on entities this buffer created), called
+         * when it may change the scene. It gets the App, whose active scene is the one the earlier changes played into.
+         */
+        void RecordCall(std::function<void(App&)> change) const
+        {
+            Record(std::move(change));
         }
 
       private:

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FenrirAssets/AssetHandle.hpp"
+#include "FenrirAssets/SpawnNodes.hpp"
 #include "FenrirECS/Entity.hpp"
 
 namespace Fenrir
@@ -29,4 +30,12 @@ namespace Fenrir
      * a stale or empty model handle (logged by SpawnNodes) or an app with no AssetStore (logged).
      */
     Entity SpawnModel(App& app, Scene& scene, AssetHandle<Model> model, Entity parent = {});
+
+    /**
+     * @brief SpawnModel, giving every node's entity as SpawnNodes does (its root, and one per model node, null for a
+     * bone) rather than the root alone: for code that must follow the model's nodes into the spawned tree, as the
+     * scripting extension's SpawnModel does when it records the tree into a live scene. Empty when SpawnModel spawns
+     * nothing.
+     */
+    SpawnedNodes SpawnModelNodes(App& app, Scene& scene, AssetHandle<Model> model, Entity parent = {});
 } // namespace Fenrir

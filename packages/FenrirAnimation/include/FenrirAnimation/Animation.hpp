@@ -14,6 +14,8 @@ namespace Fenrir
     class App;
     class Scene;
     class Skeletons;
+    // Only named here: FenrirAnimationScripting defines Animation::ScriptingExtension().
+    struct ScriptingExtension;
 
     namespace Detail
     {
@@ -140,6 +142,13 @@ namespace Fenrir
 
         /** @brief Where the entity's playback stands: its `Animator`'s, or else its `AnimationLayer`'s. */
         [[nodiscard]] static PlaybackInfo Playback(Scene& scene, Entity entity);
+
+        /**
+         * @brief FenrirAnimation's scripting extension (ADR-0039): the Fenrir.Animation contract's natives (playback,
+         * clips, bone masks), its mirrors and its events. Only named here: FenrirAnimationScripting defines it, built
+         * with FENRIR_ENABLE_SCRIPTING.
+         */
+        [[nodiscard]] static Fenrir::ScriptingExtension ScriptingExtension();
 
       private:
         explicit Animation(std::shared_ptr<Detail::AnimationState> state) noexcept;

@@ -12,6 +12,28 @@
 #include "FenrirPhysics/Physics.hpp"
 #endif
 
+#ifdef FENRIR_DEMO_SCRIPT_ASSEMBLY
+#include "FenrirAnimationScripting/AnimationScripting.hpp"
+#include "FenrirSkeletonScripting/SkeletonScripting.hpp"
+#endif
+
+namespace
+{
+    // FenrirSkeleton and FenrirAnimation, which need the scaffold's FenrirAssets and come before Scripting, so a
+    // script's pose stage systems find the pose pipeline when it loads. They end in reverse: Animation before the
+    // Skeletons owner it was installed with. The renderer finds the skinning source Skeletons registers.
+    struct AnimationPackages
+    {
+        explicit AnimationPackages(Fenrir::App& app)
+            : skeletons(Fenrir::Skeletons::Install(app)), animation(Fenrir::Animation::Install(app, skeletons))
+        {
+        }
+
+        Fenrir::Skeletons skeletons;
+        Fenrir::Animation animation;
+    };
+} // namespace
+
 int main()
 {
     Fenrir::App app(std::make_unique<Fenrir::ConsoleLogger>());
@@ -28,11 +50,18 @@ int main()
                      AnimationDemo::Blending(), AnimationDemo::BoneAttachments(app), AnimationDemo::GoingLimp(),
                      AnimationDemo::Crowd()};
     config.msaa = 4;
+    // The scaffold keeps them, after its own packages and before Scripting.
+    config.installPackages = [](Fenrir::App& installing) -> std::shared_ptr<void> {
+        return std::make_shared<AnimationPackages>(installing);
+    };
+#ifdef FENRIR_DEMO_SCRIPT_ASSEMBLY
+    // Scenes 8 and 9, the C# twins of Playback and Bone attachments, through the skeleton and animation extensions.
+    config.scenes.push_back(AnimationDemo::PlaybackCSharp());
+    config.scenes.push_back(AnimationDemo::BoneAttachmentsCSharp());
+    config.scriptAssembly = FENRIR_DEMO_SCRIPT_ASSEMBLY;
+    config.scriptingExtensions = {Fenrir::Skeletons::ScriptingExtension(), Fenrir::Animation::ScriptingExtension()};
+#endif
 
     FenrirDemo::DemoScaffold demo = FenrirDemo::DemoScaffold::Install(app, std::move(config));
-    // After the scaffold, which installs FenrirAssets that both need, so they end before it: Animation before the
-    // Skeletons owner it was installed with. The renderer finds the skinning source Skeletons registers.
-    Fenrir::Skeletons skeletons = Fenrir::Skeletons::Install(app);
-    Fenrir::Animation animation = Fenrir::Animation::Install(app, skeletons);
     return demo.Run();
 }

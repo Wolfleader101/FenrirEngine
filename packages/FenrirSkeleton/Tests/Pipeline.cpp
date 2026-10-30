@@ -1,6 +1,7 @@
 // The pose pipeline (ADR-0033): its stages' order, the order of work within a stage, removing work, what each stage
-// may write, the Animate context, and inactive scenes pausing.
+// may write, the Animate context, inactive scenes pausing, and work hosted through the App (ADR-0039).
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -222,4 +223,43 @@ TEST_CASE("an inactive scene's pose pipeline pauses, and resumes without catchin
     REQUIRE(Near(Translation(*Skeletons::GetModel(other, away, 2)), {0.0f, 4.0f, 0.0f}));
     REQUIRE(scenes.back() == &other);
     REQUIRE(Near(static_cast<float>(steps.back()), 0.02f));
+}
+
+TEST_CASE("hosted work runs after the owner's at an equal order, and pass-end work after the pass, outside it",
+          "[skeleton][pipeline][hosted]")
+{
+    SkeletonApp test;
+    std::vector<std::string> ran;
+    auto record = [&](std::string name) { return [&ran, name](Fenrir::ModifierContext&) { ran.push_back(name); }; };
+    const auto hosted = Skeletons::HostModifier(test.app, "hosted", 5, record("hosted 5"));
+    (void)Skeletons::HostModifier(test.app, "early", 1, record("hosted 1"));
+    // Added after the hosted work at the same order, and still before it.
+    test.skeletons.AddModifier("owner", 5, record("owner 5"));
+    const auto end = Skeletons::HostPassEnd(test.app, [&](Fenrir::PoseTiming timing) {
+        ran.push_back(timing == Fenrir::PoseTiming::Frame ? "end of frame pass" : "end of tick pass");
+    });
+    REQUIRE(hosted.id != 0);
+    REQUIRE(end.id != 0);
+
+    test.RunFrame();
+    // Each fixed tick's pass ends before the frame pass runs, whether or not it posed anything.
+    const auto ticks = std::erase(ran, std::string("end of tick pass"));
+    CHECK(ticks == static_cast<std::size_t>(test.app.GetTime().tickCount));
+    CHECK(ran == std::vector<std::string>{"hosted 1", "owner 5", "hosted 5", "end of frame pass"});
+
+    ran.clear();
+    CHECK(Skeletons::RemoveHosted(test.app, hosted));
+    CHECK(Skeletons::RemoveHosted(test.app, end));
+    CHECK_FALSE(Skeletons::RemoveHosted(test.app, end));
+    test.RunFrame();
+    CHECK(ran == std::vector<std::string>{"hosted 1", "owner 5"});
+}
+
+TEST_CASE("with FenrirSkeleton not installed, hosting adds nothing", "[skeleton][pipeline][hosted]")
+{
+    Fenrir::App app{std::make_unique<SkeletonTest::RecordingLogger>(std::make_shared<std::vector<std::string>>(),
+                                                                    std::make_shared<std::vector<std::string>>())};
+    CHECK(Skeletons::HostLate(app, "late", 0, [](Fenrir::LateContext&) {}).id == 0);
+    CHECK(Skeletons::HostPassEnd(app, [](Fenrir::PoseTiming) {}).id == 0);
+    CHECK_FALSE(Skeletons::RemoveHosted(app, Fenrir::PoseStageHandle{1}));
 }

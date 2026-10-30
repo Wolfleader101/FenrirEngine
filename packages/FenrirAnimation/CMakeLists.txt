@@ -41,3 +41,7 @@ cmake_language(DEFER DIRECTORY ${CMAKE_SOURCE_DIR} CALL fenrir_animation_check_u
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)
 endif()
+
+# Its shared types (ADR-0042): `cmake --build <dir> --target fenrir-describe-api` regenerates api/FenrirAnimation.api.json,
+# which FenrirAnimationScripting's binding binds.
+fenrir_describe_api(FenrirAnimation api/FenrirAnimation.api.toml)

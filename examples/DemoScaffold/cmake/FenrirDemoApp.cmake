@@ -9,7 +9,8 @@
 # SCRIPTS names the directory of the app's C# scripts project, `<name>.Scripts.csproj`. With scripting built
 # (FENRIR_ENABLE_SCRIPTING) it is built against the scripting SDK and the contracts (Fenrir.Input, Fenrir.Window,
 # Fenrir.Assets, Fenrir.Renderer, Fenrir.DebugDraw and the scaffold's Fenrir.Demo, whose folders it gets as -p:Fenrir<Name>ContractDir=,
-# and Fenrir.Physics's too when physics's scripting extension is built, for an app that installs physics),
+# and Fenrir.Physics's, Fenrir.Skeleton's and Fenrir.Animation's too when their scripting extensions are built, for an
+# app that installs those packages),
 # and copied to `scripts/` beside the executable, with the contracts and what scripting needs at run time; the app's
 # sources get FENRIR_DEMO_SCRIPT_ASSEMBLY, its path relative to the executable's directory, for
 # DemoConfig::scriptAssembly. Without scripting, SCRIPTS is ignored.
@@ -89,13 +90,18 @@ function(fenrir_add_demo_scripts name scripts_dir)
     # Built into a folder of its own, then copied beside the executable: the contracts are compile-time only (the host
     # shares its own copies), so the folder holds the scripts alone.
     set(out "${CMAKE_CURRENT_BINARY_DIR}/${name}-scripts")
-    # Physics is the app's to install, not the scaffold's, but its contract is passed like the others when it is built.
-    set(physics_args "")
-    set(physics_depends "")
-    if(TARGET FenrirPhysicsContract)
-        set(physics_args "-p:FenrirPhysicsContractDir=${FENRIR_PHYSICS_CONTRACT_DIR}/")
-        set(physics_depends FenrirPhysicsContract "${FENRIR_PHYSICS_CONTRACT_DIR}/Fenrir.Physics.dll")
-    endif()
+    # Physics, Skeleton and Animation are the app's to install, not the scaffold's, but each one's contract is passed like
+    # the others when it is built.
+    set(optional_args "")
+    set(optional_depends "")
+    foreach(optional IN ITEMS Physics Skeleton Animation)
+        string(TOUPPER "${optional}" OPTIONAL_UPPER)
+        if(TARGET Fenrir${optional}Contract)
+            list(APPEND optional_args "-p:Fenrir${optional}ContractDir=${FENRIR_${OPTIONAL_UPPER}_CONTRACT_DIR}/")
+            list(APPEND optional_depends Fenrir${optional}Contract
+                "${FENRIR_${OPTIONAL_UPPER}_CONTRACT_DIR}/Fenrir.${optional}.dll")
+        endif()
+    endforeach()
     add_custom_command(
         OUTPUT "${out}/${name}.Scripts.dll"
         COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${project}" --configuration Release --output "${out}" -nologo -v:q
@@ -106,7 +112,7 @@ function(fenrir_add_demo_scripts name scripts_dir)
             "-p:FenrirRendererContractDir=${FENRIR_RENDERER_CONTRACT_DIR}/"
             "-p:FenrirDebugDrawContractDir=${FENRIR_DEBUGDRAW_CONTRACT_DIR}/"
             "-p:FenrirDemoContractDir=${FENRIR_DEMO_CONTRACT_DIR}/"
-            ${physics_args}
+            ${optional_args}
             "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/${name}-scripts-obj/"
         DEPENDS ${sources} "${project}"
             FenrirScriptingContract "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.dll"
@@ -117,7 +123,7 @@ function(fenrir_add_demo_scripts name scripts_dir)
             FenrirRendererContract "${FENRIR_RENDERER_CONTRACT_DIR}/Fenrir.Renderer.dll"
             FenrirDebugDrawContract "${FENRIR_DEBUGDRAW_CONTRACT_DIR}/Fenrir.DebugDraw.dll"
             FenrirDemoContract "${FENRIR_DEMO_CONTRACT_DIR}/Fenrir.Demo.dll"
-            ${physics_depends}
+            ${optional_depends}
         COMMENT "Building ${name}'s C# scripts"
         VERBATIM
     )

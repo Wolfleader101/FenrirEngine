@@ -39,3 +39,7 @@ cmake_language(DEFER DIRECTORY ${CMAKE_SOURCE_DIR} CALL fenrir_skeleton_check_un
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)
 endif()
+
+# Its shared types (ADR-0042): `cmake --build <dir> --target fenrir-describe-api` regenerates api/FenrirSkeleton.api.json,
+# which FenrirSkeletonScripting's binding binds.
+fenrir_describe_api(FenrirSkeleton api/FenrirSkeleton.api.toml)

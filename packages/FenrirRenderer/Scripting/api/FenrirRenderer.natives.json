@@ -181,7 +181,7 @@
       "namespace": "Fenrir::RendererNatives",
       "source": "../src/RendererScripting.cpp",
       "state": "Fenrir::RendererScripting",
-      "doc": "Spawns `model` into the active scene as C++'s SpawnModel does, under `parent` unless it is no entity: a root named after the file holding one entity per node, each mesh a MeshRenderer. The root is usable at once (alive, so it can be given components or parented in the same call); the tree is made, as every structural change is, when the system returns. It needs no renderer in the app.",
+      "doc": "Spawns `model` into the active scene as C++'s SpawnModel does, under `parent` unless it is no entity: a root named after the file holding one entity per node, each mesh a MeshRenderer, each skinned mesh with a SkinnedMesh naming its skeleton's owner, and with FenrirSkeleton installed a SkeletonPose on each owner and bone attachments below bones, given when the tree plays back. The root is usable at once (alive, so it can be given components or parented in the same call); the tree is made, as every structural change is, when the system returns. It needs no renderer in the app.",
       "facade": "Renderer.SpawnModel",
       "facadeReturns": "root",
       "returns": {

@@ -56,6 +56,10 @@ public static class RendererCalls
         Renderer.SpawnModel(Assets.Load<Model>("two_parts.gltf"), new Entity(parent)).Value;
 
     public static uint None() => Entity.None.Value;
+
+    // Spawns the model a test loaded, by its handle: a skinned one gets its SkinnedMeshes and skeletons.
+    public static uint SpawnHandle(uint index, uint generation) =>
+        Renderer.SpawnModel(new AssetHandle<Model>(index, generation)).Value;
 }
 
 // The scene resources as C# writes them: in place when the active scene has one, else by inserting one.

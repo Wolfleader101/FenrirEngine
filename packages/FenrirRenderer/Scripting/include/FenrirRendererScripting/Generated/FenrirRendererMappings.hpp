@@ -279,6 +279,17 @@ static_assert(sizeof(Fenrir::RendererStats) == 24 && alignof(Fenrir::RendererSta
               "regenerate the description, then this binding");
 
 template <>
+struct Iris::StructMapping<Fenrir::SkinnedMesh>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.SkinnedMesh";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<Fenrir::Entity>("Skeleton", 0));
+};
+static_assert(sizeof(Fenrir::SkinnedMesh) == 16 && alignof(Fenrir::SkinnedMesh) == 8,
+              "Fenrir::SkinnedMesh is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
 struct Iris::EnumMapping<Fenrir::SkyType>
 {
     static constexpr std::string_view typeName = "Fenrir.Renderer.SkyType";

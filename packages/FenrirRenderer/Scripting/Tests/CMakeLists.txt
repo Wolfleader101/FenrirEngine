@@ -13,3 +13,8 @@ target_compile_definitions(FenrirRendererScriptingTests PRIVATE
     FENRIR_RENDERER_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/../../Tests/fixtures")
 target_compile_definitions(FenrirRendererScriptingRulesTests PRIVATE
     FENRIR_RENDERER_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/../../Tests/fixtures")
+# FenrirSkeleton, which the skinned SpawnModel case installs as its skinning source (the renderer itself never links
+# it), and the animation tests' skinned rig it spawns.
+target_link_libraries(FenrirRendererScriptingTests PRIVATE FenrirSkeleton)
+target_compile_definitions(FenrirRendererScriptingTests PRIVATE
+    FENRIR_RENDERER_SCRIPTING_RIG="${CMAKE_CURRENT_SOURCE_DIR}/../../../FenrirAnimation/Tests/fixtures/rig.gltf")

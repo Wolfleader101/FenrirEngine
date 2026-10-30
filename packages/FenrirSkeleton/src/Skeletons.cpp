@@ -435,6 +435,19 @@ namespace Fenrir
         }
     } // namespace
 
+    namespace
+    {
+        // The hosted pass-end work, as it stands when the pass returns, given the pass's timing.
+        void RunPassEnds(const Detail::SkeletonsState& state, PoseTiming timing)
+        {
+            const auto snapshot = state.passEnds;
+            for (const auto& entry : snapshot)
+            {
+                (*entry.second)(timing);
+            }
+        }
+    } // namespace
+
     Skeletons Skeletons::Install(App& app)
     {
         if (app.TryGetResource<AssetStore>() == nullptr)
@@ -452,6 +465,7 @@ namespace Fenrir
         auto state = std::make_shared<Detail::SkeletonsState>(app);
         state->source = std::make_unique<SkeletonsSkinningSource>(*state);
         app.AddResource<SkinningSourceRegistration>(SkinningSourceRegistration{state->source.get()});
+        app.AddResource<Detail::SkeletonsHost>(Detail::SkeletonsHost{state});
         // PoseOverride, the first modifier (ADR-0033, ADR-0038): each instance's entries in bone order, parents first.
         state->modify.Add({state->nextId++, "PoseOverride", ModifierOrder::Override,
                            std::make_shared<std::function<void(ModifierContext&)>>(RunPoseOverride)});
@@ -460,6 +474,7 @@ namespace Fenrir
                                     if (const std::shared_ptr<Detail::SkeletonsState> current = installed.lock())
                                     {
                                         Detail::PosePipeline::RunTick(*current, running);
+                                        RunPassEnds(*current, PoseTiming::Tick);
                                     }
                                 });
         app.AddSequentialSystem(SchedulePriority::PostUpdate,
@@ -467,6 +482,7 @@ namespace Fenrir
                                     if (const std::shared_ptr<Detail::SkeletonsState> current = installed.lock())
                                     {
                                         Detail::PosePipeline::Run(*current, running);
+                                        RunPassEnds(*current, PoseTiming::Frame);
                                     }
                                 });
         return Skeletons(std::move(state));
@@ -509,6 +525,11 @@ namespace Fenrir
         if (registration != nullptr && registration->source == m_state->source.get())
         {
             app.RemoveResource<SkinningSourceRegistration>();
+        }
+        const Detail::SkeletonsHost* host = app.TryGetResource<Detail::SkeletonsHost>();
+        if (host != nullptr && host->state.lock() == m_state)
+        {
+            app.RemoveResource<Detail::SkeletonsHost>();
         }
         app.ForEachScene([](Scene& scene) { scene.RemoveResource<SkeletonPoses>(); });
         m_state.reset();
@@ -564,6 +585,80 @@ namespace Fenrir
         }
         return m_state->animate.Remove(handle.id) || m_state->modify.Remove(handle.id) ||
                m_state->late.Remove(handle.id);
+    }
+
+    namespace
+    {
+        // The install `app` holds, through its host resource; null with none.
+        std::shared_ptr<Detail::SkeletonsState> HostOf(App& app)
+        {
+            const Detail::SkeletonsHost* host = app.TryGetResource<Detail::SkeletonsHost>();
+            return host == nullptr ? nullptr : host->state.lock();
+        }
+
+        template <typename Context>
+        PoseStageHandle Host(App& app, Detail::Stage<Context> Detail::SkeletonsState::* stage, std::string name,
+                             int order, std::function<void(Context&)> work)
+        {
+            const std::shared_ptr<Detail::SkeletonsState> state = HostOf(app);
+            if (!state)
+            {
+                return {};
+            }
+            const std::uint64_t id = state->nextId++;
+            ((*state).*stage)
+                .Add({id, std::move(name), order, std::make_shared<std::function<void(Context&)>>(std::move(work)),
+                      true});
+            return {id};
+        }
+    } // namespace
+
+    PoseStageHandle Skeletons::HostAnimate(App& app, std::string name, int order,
+                                           std::function<void(AnimateContext&)> work)
+    {
+        return Host(app, &Detail::SkeletonsState::animate, std::move(name), order, std::move(work));
+    }
+
+    PoseStageHandle Skeletons::HostModifier(App& app, std::string name, int order,
+                                            std::function<void(ModifierContext&)> work)
+    {
+        return Host(app, &Detail::SkeletonsState::modify, std::move(name), order, std::move(work));
+    }
+
+    PoseStageHandle Skeletons::HostLate(App& app, std::string name, int order, std::function<void(LateContext&)> work)
+    {
+        return Host(app, &Detail::SkeletonsState::late, std::move(name), order, std::move(work));
+    }
+
+    PoseStageHandle Skeletons::HostPassEnd(App& app, std::function<void(PoseTiming)> work)
+    {
+        const std::shared_ptr<Detail::SkeletonsState> state = HostOf(app);
+        if (!state)
+        {
+            return {};
+        }
+        const std::uint64_t id = state->nextId++;
+        state->passEnds.emplace_back(id, std::make_shared<std::function<void(PoseTiming)>>(std::move(work)));
+        return {id};
+    }
+
+    bool Skeletons::RemoveHosted(App& app, PoseStageHandle handle)
+    {
+        const std::shared_ptr<Detail::SkeletonsState> state = HostOf(app);
+        if (!state || handle.id == 0)
+        {
+            return false;
+        }
+        if (state->running)
+        {
+            app.Logger()->Error(
+                "{}", "Skeletons::RemoveHosted was refused: pose stage work is removed outside the pose pipeline");
+            return false;
+        }
+        const bool passEnd =
+            std::erase_if(state->passEnds, [&](const auto& entry) { return entry.first == handle.id; });
+        return passEnd || state->animate.Remove(handle.id) || state->modify.Remove(handle.id) ||
+               state->late.Remove(handle.id);
     }
 
     PoseState Skeletons::Ensure(Scene& scene, Entity skeleton) const

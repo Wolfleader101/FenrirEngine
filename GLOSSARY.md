@@ -728,6 +728,14 @@ A skeleton's final pose for this frame, what is drawn and what attachments follo
 The pose pipeline's run in a fixed tick's `PreTick`, only while the active scene has a tick-posed skeleton: reconcile, `Animate` over the tick-posed instances stepping by `Time::tickRate`, then their base finalise, giving each its simulation pose. The pipeline's once-a-frame run in `PostUpdate` is the *frame pass*. Every `Animate` item runs in both, told which by its context (ADR-0040).
 *Avoid:* fixed update, physics pass, tick stage (a pass hosts stages; it is not one).
 
+**Hosted work**
+Pose stage work placed through the App rather than the `Skeletons` owner (`Skeletons::HostAnimate`, `HostModifier`, `HostLate`, and `HostPassEnd` for work run when each pass returns), by a package that reaches FenrirSkeleton only through the App: FenrirSkeletonScripting, placing a script's stage groups. At an equal order it runs after the owner's work, however the two were added (ADR-0039).
+*Avoid:* script modifier (hosted work need not be C#'s), plugin stage.
+
+**Edit token**
+The number a C# `PoseEdit` carries from `Skeletons.Edit` (ADR-0039): the running `Modify` group's, advanced as each group starts and ends, so an edit kept past its group, or opened outside `Modify`, reads and writes nothing and warns once.
+*Avoid:* edit handle (an edit is no asset), session.
+
 **Animator**
 `Animator`: the plain component on a skeleton entity naming the clip to play, its speed, its loop mode (`Loop` or `Once`) and whether it plays. Game code writes it and FenrirAnimation never does; it holds no time. While it names a clip, FenrirAnimation owns the skeleton's whole base pose (ADR-0034). It is the skeleton's base animation layer, and crossfades on a clip change (ADR-0036).
 *Avoid:* animation player, animation component, FenrirAnimation (the package).
