@@ -77,6 +77,15 @@ namespace Fenrir
         inline constexpr int Override = 1000;
     } // namespace ModifierOrder
 
+    /** @brief Which bones an override weight assignment reaches (ADR-0038). */
+    enum class OverrideScope : std::uint8_t
+    {
+        /** @brief The bone alone. */
+        Bone,
+        /** @brief The bone and every bone below it, each given the value. */
+        BoneSubtree,
+    };
+
     /**
      * @brief A pose edit (ADR-0033): a pose modifier's only access to one skeleton instance's final pose while the
      * `Modify` stage builds it. Opened by `ModifierContext::Edit`, and valid only during the modifier call that opened

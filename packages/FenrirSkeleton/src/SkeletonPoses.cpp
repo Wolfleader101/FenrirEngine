@@ -151,6 +151,9 @@ namespace Fenrir::Detail
             instance.bonesByName.emplace(std::string(data.EngineName(bone)), bone);
         }
         instance.final = instance.base;
+        instance.overrides.assign(count, std::nullopt);
+        instance.overrideWeights.assign(count, 1.0f);
+        instance.overrideCount = 0;
         instance.model.assign(count, Math::Mat4(1.0f));
         instance.modelValid.assign(count, 0);
         AllModels(instance);

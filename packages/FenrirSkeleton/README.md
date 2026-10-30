@@ -30,6 +30,15 @@ One sequential `PostUpdate` system runs it on the active scene: reconcile, `Anim
 - **`Late`** items get a `LateContext` and read this frame's final poses; they may write ordinary ECS state, never a pose.
 - **Cost:** an instance whose base pose is clean and that no modifier edited this frame or the last skips prepare and finalise, and keeps its generation.
 
+## The pose override (ADR-0033, ADR-0038)
+
+- **`PoseOverride`** is FenrirSkeleton's own modifier, added by `Install` at `ModifierOrder::Override` (1000): the first modifier, not the contract, so modifiers at higher orders, or added later at 1000, see its results. Each instance holds a persistent entry per bone, set with `SetOverride(scene, entity, bone, Target)`, read with `GetOverride` and removed with `ClearOverride` or `ClearOverrides`. Each frame it writes the entries in bone order, parents first, skipping bones with no entry, so a `World` target resolves through its parent's current model matrix, after any override of an ancestor. A bone with no entry keeps its animated local, and the bones below an overridden bone follow it. The last `SetOverride` on a bone wins, whoever made it.
+- **Override weights:** one per bone, default 1, gameplay's. An entry is written at `clamp(Target.weight × overrideWeight[bone], 0, 1)` and skipped at 0. `SetOverrideWeight(scene, entity, bone, weight, OverrideScope::Bone | BoneSubtree)` writes the bone's value, or each bone's in its subtree (latest assignment wins, nothing multiplied); `GetOverrideWeight` reads it, and `ClearOverrideWeight` sets it back to 1. Weights survive every entry update and clear. There are no fades: game code ramps the weights.
+- **Rebuilds:** entries and weights are both dropped when the instance is destroyed or rebuilt (a handle or asset revision change).
+- The calls work on a `Ready` instance and do nothing on anything else.
+
+**The ragdoll handover contract**, for the physics map's ragdoll spec: bone names, indices and parents (`SkeletonData`, `FindBone`) and the subtree query (`GetSubtree`); glue writes world targets through `SetOverride` in `Update`; gameplay sets override weights; base-pose reads (`GetBaseLocal`, `GetBaseModel`) never see overrides and are valid from `Animate` to the next `Animate`, so on frame-posed skeletons glue reads them a frame late. Bones with no entry keep their animated locals, and unmapped children follow their nearest mapped ancestor because model matrices are built parents first. While bodies simulate, glue writes every mapped bone each frame; blending back, it writes the live poses or nothing (the held last pose); once the weight is 0 it clears its entries.
+
 ## Spawning
 
 `SpawnSkeletons(scene, model, spawned)` adds a `SkeletonPose` to each skeleton's owner (`Model::skeletonOwners`, an ordinary node or a synthetic owner) whose skeleton loaded, and `Ensure`s it. An owner that already has one keeps it, with a warning. `SpawnModel(scene, model, parent)` is `SpawnNodes` then `SpawnSkeletons`, for apps with no renderer. Giving ordinary nodes below bones a bone attachment is a later ticket's.
@@ -40,4 +49,4 @@ FenrirSkeleton's `SkinningSource` answers the renderer per scene and entity: `Ge
 
 ## Tests
 
-`FenrirSkeletonTests` (with `FENRIR_BUILD_TESTS`) is the spec's seam 8: instances, generations and the palette, the pipeline, modifiers, spawning and install, on skeletons and models built in code, driven by `App::RunFrame`. `PublicHeaders.cpp` fails the build if a header reaches the renderer, physics, a window or a graphics API, and configuring fails if FenrirRenderer or FenrirPhysics links the package.
+`FenrirSkeletonTests` (with `FENRIR_BUILD_TESTS`) is the spec's seam 8: instances, generations and the palette, the pipeline, modifiers, the pose override and ADR-0038's ragdoll handover with plain entities as bodies (`PoseOverride.cpp`), spawning and install, on skeletons and models built in code, driven by `App::RunFrame`. `PublicHeaders.cpp` fails the build if a header reaches the renderer, physics, a window or a graphics API, and configuring fails if FenrirRenderer or FenrirPhysics links the package.

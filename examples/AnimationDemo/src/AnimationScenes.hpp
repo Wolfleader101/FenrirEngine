@@ -3,7 +3,7 @@
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 
 // AnimationDemo's scenes, in the order of its scene list (README.md). Each animation ticket adds its scene here, in the
-// spec's order: Bone attachments and Going limp (tickets 09-10) go between Blending and Crowd.
+// spec's order: Bone attachments (ticket 10) goes between Blending and Going limp.
 namespace AnimationDemo
 {
     /**
@@ -33,6 +33,13 @@ namespace AnimationDemo
      * weight ramping to 0 and back with its clock running and its events silent at 0.
      */
     [[nodiscard]] FenrirDemo::DemoScene Blending();
+
+    /**
+     * @brief Going limp: the Quaternius human walking while demo code, standing in for ragdoll glue, writes world
+     * targets that let its left arm hang and sway from the shoulder through the pose override. The arm's override
+     * weight steps to 1 to go limp and ramps back to 0 to blend into the walk, its targets cleared at 0.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene GoingLimp();
 
     /**
      * @brief Crowd: a grid of Kenney's character, 64 at first, doubled and halved between 1 and 1024 by the keys, the

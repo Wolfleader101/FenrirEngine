@@ -16,6 +16,7 @@
 #include "FenrirECS/Entity.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirMath/Math.hpp"
+#include "FenrirSkeleton/PoseStages.hpp"
 #include "FenrirSkeleton/SkeletonPose.hpp"
 
 namespace Fenrir
@@ -79,6 +80,12 @@ namespace Fenrir
             // The inverse of the skeleton entity's world matrix, read at the first edit of the frame's Modify.
             std::optional<Math::Mat4> worldInverse;
             std::uint64_t worldInverseFrame = 0;
+
+            // The pose override (ADR-0033, ADR-0038): each bone's persistent entry, if any, and its override weight.
+            // Both are dropped when the instance is rebuilt.
+            std::vector<std::optional<Target>> overrides;
+            std::vector<float> overrideWeights;
+            std::size_t overrideCount = 0;
         };
 
         /**

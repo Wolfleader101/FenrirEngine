@@ -8,6 +8,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirAssets/SkinningSource.hpp"
@@ -185,6 +186,56 @@ namespace Fenrir
          */
         [[nodiscard]] static std::span<Transform> EditBasePose(
             Scene& scene, Entity skeleton, std::source_location site = std::source_location::current());
+
+        /** @name The pose override (ADR-0033, ADR-0038)
+         * `PoseOverride`, FenrirSkeleton's own modifier at `ModifierOrder::Override` (1000): the first modifier, not
+         * the contract, so a modifier at a higher order (or added later at 1000) sees its results. Each instance holds
+         * a persistent entry per bone, `{ bone, Target }`, written each frame in bone order (parents first, bones with
+         * no entry skipped), so a `World` target goes through its parent's current model matrix, after any override of
+         * an ancestor; a bone with no entry keeps its animated local, and the bones below an overridden one follow it.
+         *
+         * Each bone also has an **override weight**, default 1, gameplay's: an entry is written at `clamp(Target.weight
+         * × overrideWeight, 0, 1)`, and skipped at 0. Entries are the glue's, refreshed each frame; weights survive
+         * every entry update and clear. FenrirSkeleton has no fades: game code ramps the weights. The last
+         * `SetOverride` on a bone wins, whoever made it. Entries and weights are both dropped when the instance is
+         * destroyed or rebuilt (a handle or asset revision change).
+         *
+         * Each call works on a `Ready` instance, from the main thread (glue writes its targets in `Update`, before the
+         * pose pipeline); on anything else it does nothing and returns false (or 1 for a weight). Base-pose reads
+         * (`GetBaseLocal`, `GetBaseModel`) never see overrides.
+         * @{
+         */
+
+        /** @brief Sets the bone's entry, replacing any. */
+        static bool SetOverride(Scene& scene, Entity skeleton, std::int32_t bone, const Target& target);
+
+        /** @brief The bone's entry, if it has one. */
+        [[nodiscard]] static std::optional<Target> GetOverride(Scene& scene, Entity skeleton, std::int32_t bone);
+
+        /** @brief Removes the bone's entry; its override weight stays. False when it had none. */
+        static bool ClearOverride(Scene& scene, Entity skeleton, std::int32_t bone);
+
+        /** @brief Removes every entry of the instance; override weights stay. */
+        static bool ClearOverrides(Scene& scene, Entity skeleton);
+
+        /**
+         * @brief Sets the bone's override weight, or with `BoneSubtree` the bone's and every descendant's, each to
+         * `weight` clamped to [0, 1]: a later assignment replaces earlier ones bone by bone, never multiplying.
+         */
+        static bool SetOverrideWeight(Scene& scene, Entity skeleton, std::int32_t bone, float weight,
+                                      OverrideScope scope = OverrideScope::Bone);
+
+        /** @brief The bone's override weight: 1 unless set, and 1 for a bone or entity that has none. */
+        [[nodiscard]] static float GetOverrideWeight(Scene& scene, Entity skeleton, std::int32_t bone);
+
+        /** @brief Sets the bone's override weight (or its subtree's) back to 1. */
+        static bool ClearOverrideWeight(Scene& scene, Entity skeleton, std::int32_t bone,
+                                        OverrideScope scope = OverrideScope::Bone);
+
+        /** @brief The bone and every bone below it, in index order (each after its parent); empty when out of range.
+         */
+        [[nodiscard]] static std::vector<std::int32_t> GetSubtree(Scene& scene, Entity skeleton, std::int32_t bone);
+        /** @} */
 
       private:
         explicit Skeletons(std::shared_ptr<Detail::SkeletonsState> state) noexcept;

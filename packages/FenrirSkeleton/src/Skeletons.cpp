@@ -1,8 +1,14 @@
 #include "FenrirSkeleton/Skeletons.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <format>
+#include <functional>
+#include <memory>
+#include <optional>
 #include <utility>
+#include <vector>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
@@ -252,6 +258,71 @@ namespace Fenrir
           private:
             Detail::SkeletonsState* m_state;
         };
+
+        // Writes every instance's override entries, parents first, at their effective weights.
+        void RunPoseOverride(ModifierContext& context)
+        {
+            SkeletonPoses* poses = context.GetScene().GetResource<SkeletonPoses>();
+            if (poses == nullptr)
+            {
+                return;
+            }
+            std::vector<Entity> overridden;
+            poses->ForEach([&](SkeletonInstance& instance) {
+                if (instance.ready && instance.overrideCount != 0)
+                {
+                    overridden.push_back(instance.entity);
+                }
+            });
+            for (const Entity& skeleton : overridden)
+            {
+                PoseEdit edit = context.Edit(skeleton);
+                const SkeletonInstance* instance = poses->FindReady(skeleton);
+                if (edit.IsEmpty() || instance == nullptr)
+                {
+                    continue;
+                }
+                for (std::size_t bone = 0; bone < instance->overrides.size(); ++bone)
+                {
+                    const std::optional<Target>& entry = instance->overrides[bone];
+                    if (!entry)
+                    {
+                        continue;
+                    }
+                    const float weight = std::clamp(entry->weight * instance->overrideWeights[bone], 0.0f, 1.0f);
+                    if (!(weight > 0.0f))
+                    {
+                        continue;
+                    }
+                    Target target = *entry;
+                    target.weight = weight;
+                    edit.Write(static_cast<std::int32_t>(bone), target);
+                }
+            }
+        }
+
+        // The bones a weight assignment reaches: the bone, and with BoneSubtree everything below it.
+        std::vector<std::int32_t> Reach(const SkeletonInstance& instance, std::int32_t bone, OverrideScope scope)
+        {
+            if (scope == OverrideScope::Bone)
+            {
+                return {bone};
+            }
+            // Parents come before their children, so one pass in index order finds the subtree.
+            std::vector<std::uint8_t> inside(instance.parents.size(), 0);
+            std::vector<std::int32_t> reached;
+            for (std::size_t i = static_cast<std::size_t>(bone); i < instance.parents.size(); ++i)
+            {
+                const std::int32_t parent = instance.parents[i];
+                if (static_cast<std::int32_t>(i) == bone ||
+                    (parent >= 0 && inside[static_cast<std::size_t>(parent)] != 0))
+                {
+                    inside[i] = 1;
+                    reached.push_back(static_cast<std::int32_t>(i));
+                }
+            }
+            return reached;
+        }
     } // namespace
 
     Skeletons Skeletons::Install(App& app)
@@ -271,6 +342,9 @@ namespace Fenrir
         auto state = std::make_shared<Detail::SkeletonsState>(app);
         state->source = std::make_unique<SkeletonsSkinningSource>(*state);
         app.AddResource<SkinningSourceRegistration>(SkinningSourceRegistration{state->source.get()});
+        // PoseOverride, the first modifier (ADR-0033, ADR-0038): each instance's entries in bone order, parents first.
+        state->modify.Add({state->nextId++, "PoseOverride", ModifierOrder::Override,
+                           std::make_shared<std::function<void(ModifierContext&)>>(RunPoseOverride)});
         app.AddSequentialSystem(SchedulePriority::PostUpdate,
                                 [installed = std::weak_ptr<Detail::SkeletonsState>(state)](App& running) {
                                     if (const std::shared_ptr<Detail::SkeletonsState> current = installed.lock())
@@ -537,5 +611,93 @@ namespace Fenrir
         instance->poseDirty = true;
         instance->baseModelValid = false;
         return instance->base;
+    }
+
+    bool Skeletons::SetOverride(Scene& scene, Entity skeleton, std::int32_t bone, const Target& target)
+    {
+        SkeletonInstance* instance = ReadyIn(scene, skeleton);
+        if (instance == nullptr || !InRange(*instance, bone))
+        {
+            return false;
+        }
+        std::optional<Target>& entry = instance->overrides[static_cast<std::size_t>(bone)];
+        instance->overrideCount += entry ? 0 : 1;
+        entry = target;
+        return true;
+    }
+
+    std::optional<Target> Skeletons::GetOverride(Scene& scene, Entity skeleton, std::int32_t bone)
+    {
+        const SkeletonInstance* instance = ReadyIn(scene, skeleton);
+        if (instance == nullptr || !InRange(*instance, bone))
+        {
+            return std::nullopt;
+        }
+        return instance->overrides[static_cast<std::size_t>(bone)];
+    }
+
+    bool Skeletons::ClearOverride(Scene& scene, Entity skeleton, std::int32_t bone)
+    {
+        SkeletonInstance* instance = ReadyIn(scene, skeleton);
+        if (instance == nullptr || !InRange(*instance, bone) || !instance->overrides[static_cast<std::size_t>(bone)])
+        {
+            return false;
+        }
+        instance->overrides[static_cast<std::size_t>(bone)].reset();
+        --instance->overrideCount;
+        return true;
+    }
+
+    bool Skeletons::ClearOverrides(Scene& scene, Entity skeleton)
+    {
+        SkeletonInstance* instance = ReadyIn(scene, skeleton);
+        if (instance == nullptr)
+        {
+            return false;
+        }
+        instance->overrides.assign(instance->overrides.size(), std::nullopt);
+        instance->overrideCount = 0;
+        return true;
+    }
+
+    bool Skeletons::SetOverrideWeight(Scene& scene, Entity skeleton, std::int32_t bone, float weight,
+                                      OverrideScope scope)
+    {
+        SkeletonInstance* instance = ReadyIn(scene, skeleton);
+        if (instance == nullptr || !InRange(*instance, bone))
+        {
+            return false;
+        }
+        const float clamped = std::isfinite(weight) ? std::clamp(weight, 0.0f, 1.0f) : 0.0f;
+        for (const std::int32_t reached : Reach(*instance, bone, scope))
+        {
+            instance->overrideWeights[static_cast<std::size_t>(reached)] = clamped;
+        }
+        return true;
+    }
+
+    float Skeletons::GetOverrideWeight(Scene& scene, Entity skeleton, std::int32_t bone)
+    {
+        const SkeletonInstance* instance = ReadyIn(scene, skeleton);
+        if (instance == nullptr || !InRange(*instance, bone))
+        {
+            return 1.0f;
+        }
+        return instance->overrideWeights[static_cast<std::size_t>(bone)];
+    }
+
+    bool Skeletons::ClearOverrideWeight(Scene& scene, Entity skeleton, std::int32_t bone, OverrideScope scope)
+    {
+        return SetOverrideWeight(scene, skeleton, bone, 1.0f, scope);
+    }
+
+    std::vector<std::int32_t> Skeletons::GetSubtree(Scene& scene, Entity skeleton, std::int32_t bone)
+    {
+        const SkeletonInstance* instance = ReadyIn(scene, skeleton);
+        if (instance == nullptr || !InRange(*instance, bone))
+        {
+            return {};
+        }
+        return Reach(*instance, bone, OverrideScope::BoneSubtree);
     }
 } // namespace Fenrir
