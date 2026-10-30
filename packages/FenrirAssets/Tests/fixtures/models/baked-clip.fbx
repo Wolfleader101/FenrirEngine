@@ -1,0 +1,170 @@
+; FBX 7.4.0 project file
+; FenrirAssets model fixture, written by hand-rolled make_fixtures.py (no FBX SDK involved).
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+	Creator: "FenrirEngine make_fixtures.py"
+}
+GlobalSettings:  {
+	Version: 1000
+	Properties70:  {
+		P: "UpAxis", "int", "Integer", "",1
+		P: "UpAxisSign", "int", "Integer", "",1
+		P: "FrontAxis", "int", "Integer", "",2
+		P: "FrontAxisSign", "int", "Integer", "",1
+		P: "CoordAxis", "int", "Integer", "",0
+		P: "CoordAxisSign", "int", "Integer", "",1
+		P: "UnitScaleFactor", "double", "Number", "",100
+		P: "OriginalUnitScaleFactor", "double", "Number", "",100
+	}
+}
+Objects:  {
+	Model: 1001, "Model::Rig", "Null" {
+		Version: 232
+		Properties70:  {
+
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	Model: 1002, "Model::Joint", "LimbNode" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,1,0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	NodeAttribute: 1003, "NodeAttribute::Joint", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1004, "Model::Body", "Mesh" {
+		Version: 232
+		Properties70:  {
+
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	Geometry: 1005, "Geometry::Body", "Mesh" {
+		Vertices: *9 {
+			a: 0,1,0,1,1,0,0,2,0
+		}
+		PolygonVertexIndex: *3 {
+			a: 0,1,-3
+		}
+		GeometryVersion: 124
+		LayerElementMaterial: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "AllSame"
+			ReferenceInformationType: "IndexToDirect"
+			Materials: *1 {
+				a: 0
+			}
+		}
+		Layer: 0 {
+			Version: 100
+			LayerElement:  {
+				Type: "LayerElementMaterial"
+				TypedIndex: 0
+			}
+		}
+	}
+	Deformer: 1006, "Deformer::BodySkin", "Skin" {
+		Version: 101
+		Link_DeformAcuracy: 50
+	}
+	Deformer: 1007, "SubDeformer::BodySkin", "Cluster" {
+		Version: 100
+		Indexes: *3 {
+			a: 0,1,2
+		}
+		Weights: *3 {
+			a: 1,1,1
+		}
+		Transform: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,0,-1,0,1
+		}
+		TransformLink: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,0,1,0,1
+		}
+	}
+	AnimationStack: 1008, "AnimStack::Lift", "" {
+		Properties70:  {
+			P: "LocalStart", "KTime", "Time", "",0
+			P: "LocalStop", "KTime", "Time", "",46186158000
+		}
+	}
+	AnimationLayer: 1009, "AnimLayer::BaseLayer", "" {
+	}
+	AnimationCurveNode: 1010, "AnimCurveNode::T", "" {
+		Properties70:  {
+			P: "d|X", "Number", "", "A",0
+			P: "d|Y", "Number", "", "A",0
+			P: "d|Z", "Number", "", "A",0
+		}
+	}
+	AnimationCurve: 1011, "AnimCurve::", "" {
+		Default: 0
+		KeyVer: 4009
+		KeyTime: *2 {
+			a: 0,46186158000
+		}
+		KeyValueFloat: *2 {
+			a: 1,2
+		}
+		KeyAttrFlags: *2 {
+			a: 1032,1032
+		}
+		KeyAttrDataFloat: *8 {
+			a: 0,0,0,0,0,0,0,0
+		}
+		KeyAttrRefCount: *2 {
+			a: 1,1
+		}
+	}
+	AnimationCurveNode: 1012, "AnimCurveNode::R", "" {
+		Properties70:  {
+			P: "d|X", "Number", "", "A",0
+			P: "d|Y", "Number", "", "A",0
+			P: "d|Z", "Number", "", "A",0
+		}
+	}
+	AnimationCurve: 1013, "AnimCurve::", "" {
+		Default: 0
+		KeyVer: 4009
+		KeyTime: *2 {
+			a: 0,46186158000
+		}
+		KeyValueFloat: *2 {
+			a: 0,270
+		}
+		KeyAttrFlags: *2 {
+			a: 4,4
+		}
+		KeyAttrDataFloat: *8 {
+			a: 0,0,0,0,0,0,0,0
+		}
+		KeyAttrRefCount: *2 {
+			a: 1,1
+		}
+	}
+}
+Connections:  {
+	C: "OO",1001,0
+	C: "OO",1002,1001
+	C: "OO",1003,1002
+	C: "OO",1004,1001
+	C: "OO",1005,1004
+	C: "OO",1006,1005
+	C: "OO",1007,1006
+	C: "OO",1002,1007
+	C: "OO",1009,1008
+	C: "OO",1010,1009
+	C: "OP",1010,1002, "Lcl Translation"
+	C: "OP",1011,1010, "d|Y"
+	C: "OO",1012,1009
+	C: "OP",1012,1002, "Lcl Rotation"
+	C: "OP",1013,1012, "d|Z"
+}

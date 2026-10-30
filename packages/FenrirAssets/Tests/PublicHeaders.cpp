@@ -5,6 +5,8 @@
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/Assets.hpp"
+#include "FenrirAssets/BoneMaskData.hpp"
+#include "FenrirAssets/ClipData.hpp"
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/MeshData.hpp"
@@ -12,6 +14,8 @@
 #include "FenrirAssets/ShaderContainer.hpp"
 #include "FenrirAssets/ShaderData.hpp"
 #include "FenrirAssets/ShaderGlBindings.hpp"
+#include "FenrirAssets/SkeletonData.hpp"
+#include "FenrirAssets/SkinningSource.hpp"
 #include "FenrirAssets/SpawnNodes.hpp"
 
 #if defined(STBI_VERSION) || defined(STBI_INCLUDE_STB_IMAGE_H)
@@ -60,6 +64,7 @@ TEST_CASE("Asset handles are plain data that can be copied byte for byte", "[ass
     REQUIRE(std::is_trivially_copyable_v<Fenrir::AssetHandle<Fenrir::Model>>);
     REQUIRE(std::is_trivially_copyable_v<Fenrir::AssetHandle<Fenrir::Skeleton>>);
     REQUIRE(std::is_trivially_copyable_v<Fenrir::AssetHandle<Fenrir::Clip>>);
+    REQUIRE(std::is_trivially_copyable_v<Fenrir::AssetHandle<Fenrir::BoneMask>>);
 
     INFO("a handle is an index and a generation, nothing more");
     REQUIRE(sizeof(Fenrir::AssetHandle<Fenrir::Mesh>) == 8);
@@ -70,4 +75,14 @@ TEST_CASE("Asset handles are plain data that can be copied byte for byte", "[ass
     REQUIRE(std::is_same_v<Fenrir::AssetData<Fenrir::Material>, Fenrir::MaterialData>);
     REQUIRE(std::is_same_v<Fenrir::AssetData<Fenrir::Shader>, Fenrir::ShaderData>);
     REQUIRE(std::is_same_v<Fenrir::AssetData<Fenrir::Model>, Fenrir::Model>);
+    REQUIRE(std::is_same_v<Fenrir::AssetData<Fenrir::Skeleton>, Fenrir::SkeletonData>);
+    REQUIRE(std::is_same_v<Fenrir::AssetData<Fenrir::Clip>, Fenrir::ClipData>);
+    REQUIRE(std::is_same_v<Fenrir::AssetData<Fenrir::BoneMask>, Fenrir::BoneMaskData>);
+}
+
+TEST_CASE("The skinning source is an interface FenrirAssets declares and nothing here implements", "[assets][seam]")
+{
+    INFO("FenrirSkeleton implements it; FenrirAssets and the renderer compile against it alone (ADR-0041)");
+    REQUIRE(std::is_abstract_v<Fenrir::SkinningSource>);
+    REQUIRE(std::has_virtual_destructor_v<Fenrir::SkinningSource>);
 }

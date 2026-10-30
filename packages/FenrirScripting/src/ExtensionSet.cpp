@@ -84,6 +84,31 @@ namespace Fenrir::Detail
                 }
             }
         }
+        std::unordered_map<std::string, std::string> stageDeclaredBy;
+        for (const auto& extension : extensions)
+        {
+            if (!extension.stages.empty() && (!extension.placeStages || !extension.removeStages))
+            {
+                return refused("extension '" + extension.name +
+                               "' declares stages but does not give both placeStages and removeStages");
+            }
+            for (const auto& stage : extension.stages)
+            {
+                if (stage.empty())
+                {
+                    return refused("extension '" + extension.name + "' declares a stage with no name");
+                }
+                const auto [first, added] = stageDeclaredBy.emplace(stage, extension.name);
+                if (!added)
+                {
+                    return refused(first->second == extension.name
+                                       ? "the stage '" + stage + "' is declared twice by extension '" + extension.name +
+                                             "'"
+                                       : "the stage '" + stage + "' is declared by both extension '" + first->second +
+                                             "' and extension '" + extension.name + "'");
+                }
+            }
+        }
 
         ExtensionSet set;
         for (auto& extension : extensions)
@@ -107,6 +132,11 @@ namespace Fenrir::Detail
             for (auto& assembly : extension.sharedAssemblies)
             {
                 set.m_sharedAssemblies.push_back(std::move(assembly));
+            }
+            if (!extension.stages.empty())
+            {
+                set.m_stages.push_back({extension.name, std::move(extension.stages), std::move(extension.placeStages),
+                                        std::move(extension.removeStages)});
             }
         }
         return Result{Iris::CallStatus::Success, std::move(set), {}, false};

@@ -1,0 +1,68 @@
+# FenrirSkeleton's C# binding (ADR-0039, ADR-0042, packages/Iris/Tools/Iris.Bindings/README.md):
+# ../../api/FenrirSkeleton.api.json bound to the Fenrir.Skeleton contract and Skeletons::ScriptingExtension(). Paths are
+# relative to this file. `cmake --build <dir> --target fenrir-generate-bindings` regenerates every output below; they
+# are committed.
+namespace = "Fenrir.Skeleton"
+# Named so the bindings that use this one (FenrirAnimation's, whose playback info holds a PoseState) can read them.
+descriptions = ["../../api/FenrirSkeleton.api.json"]
+# The engine's Entity and Transform are the built-in binding's, the vectors and matrices the math binding's, the asset
+# handles FenrirAssets's: named as theirs, never mirrored here.
+uses = [
+    "../../../FenrirScripting/api/FenrirScripting.binding.toml",
+    "../../../FenrirScripting/api/FenrirMath.binding.toml",
+    "../../../FenrirAssets/Scripting/api/FenrirAssets.binding.toml",
+]
+# The scripting SDK's names are its defaults file's (FenrirScripting.binding-defaults.toml): this file states only what is this binding's.
+defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
+
+[csharp]
+contract = "../../Managed/Fenrir.Skeleton"
+generated = "../../Managed/Fenrir.Skeleton/Generated"
+# A bone name's bytes, as Name's are: a fixed buffer, private behind the hand-written Set and Get (BoneName.cs).
+fixed-buffers = ["Fenrir::BoneName::m_bytes"]
+private-fields = ["Fenrir::BoneName::m_bytes"]
+
+[cpp]
+# On the include path, for the bindings that use this one.
+mappings = "../include/FenrirSkeletonScripting/Generated/FenrirSkeletonMappings.hpp"
+includes = [
+    "FenrirSkeleton/BoneAttachment.hpp",
+    "FenrirSkeleton/PoseStages.hpp",
+    "FenrirSkeleton/SkeletonPose.hpp",
+    "FenrirAssets/SkinningSource.hpp",
+]
+
+[registration]
+source = "../src/Generated/FenrirSkeletonRegistration.cpp"
+function = "Fenrir::Generated::RegisterSkeleton"
+# Makes the extension from its state (ADR-0046): what the package's public function returns, its stages added.
+maker = "Fenrir::Generated::MakeSkeletonExtension"
+
+[tests]
+cpp = "../Tests/Generated/FenrirSkeletonDefaultsTests.cpp"
+csharp = "../Tests/Generated/FenrirSkeletonDefaults.cs"
+class = "Fenrir.SkeletonScriptFixture.Defaults"
+includes = ["SkeletonScriptingApp.hpp"]
+setup = "Fenrir::Testing::SkeletonScriptingApp app;"
+tags = "[skeleton][scripting][bindings]"
+
+[names]
+"Fenrir::BoneName::m_bytes" = "Bytes"
+
+# The native functions behind Skeletons, SkeletonData, PoseStages and PoseEdit: tools/describe-api's natives mode reads
+# every function in `sources` taking `context` first (with the extension's state second) into
+# FenrirSkeleton.natives.json, and this binding generates from it their C# declarations, the SkeletonNative class, their
+# registration, and from their @facade marks the generated parts of Skeletons and SkeletonData.
+[natives]
+sources = ["../src/SkeletonScripting.cpp"]
+class = "SkeletonNative"
+header = "../src/Generated/FenrirSkeletonNatives.hpp"
+includes = [
+    # What the natives' declarations name: their extension state, the poses' types and the engine's transform.
+    "SkeletonScriptingState.hpp",
+    "FenrirSkeleton/BoneAttachment.hpp",
+    "FenrirSkeleton/PoseStages.hpp",
+    "FenrirAssets/AssetHandle.hpp",
+    "FenrirECS/DefaultComponents.hpp",
+    "FenrirMath/Math.hpp",
+]

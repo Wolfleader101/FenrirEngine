@@ -76,6 +76,15 @@ namespace Fenrir
         std::uint32_t passes = 0;
         /** @brief Assets uploaded to the GPU by the prepare step: a mesh, or a material's parameter block. */
         std::uint32_t uploads = 0;
+        /** @brief Bytes copied into the frame's palette buffer: every skeleton palette the frame's draws read. */
+        std::uint32_t paletteBytesUploaded = 0;
+        /**
+         * @brief Skeleton palettes written, one per skeleton and pose however many meshes and views draw it
+         * (ADR-0035).
+         */
+        std::uint32_t distinctPalettesWritten = 0;
+        /** @brief Draws of skinned MeshRenderers, one per item per view; part of `draws`. */
+        std::uint32_t skinnedDraws = 0;
     };
 
     /**
@@ -127,6 +136,11 @@ namespace Fenrir
          * @brief The box around `entity`'s drawn mesh in world space, from the mesh's local bounds and the entity's
          * world matrix now. Empty if the entity is not alive, has no MeshRenderer, its mesh does not resolve, or this
          * owner is invalid.
+         *
+         * A skinned mesh's (ADR-0035) comes from its skeleton's pose now: each bone's box moved by the bone's palette
+         * matrix, with the box of its unweighted vertices, under the skeleton entity's world matrix. It is
+         * conservative, not tight. Empty when the mesh has no SkinnedMesh, no skinning source is registered, or the
+         * skeleton is not `Ready`.
          */
         [[nodiscard]] std::optional<Math::AABB> GetWorldBounds(const Entity& entity) const;
 

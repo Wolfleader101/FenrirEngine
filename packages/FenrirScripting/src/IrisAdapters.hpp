@@ -59,12 +59,18 @@ namespace Fenrir::Detail
 
     /**
      * @brief ScriptSystems' loader over the Iris component a generation is: the one place that knows the generated host
-     * is a managed type found by name, with four methods bound by name (GeneratedNames.hpp). The method lookup, and so
-     * the missing-method diagnostic, is this adapter's and no fake's.
+     * is a managed type found by name, with six methods bound by name (GeneratedNames.hpp), and that the host reports
+     * its stage systems through the engine context's slot, which a native fills. The method lookup, and so the
+     * missing-method diagnostic, is this adapter's and no fake's.
      */
     class IrisSystemHostLoader final : public SystemHostLoader
     {
       public:
+        /** @brief `context` is where the native puts the stage systems the host reports; borrowed. */
+        explicit IrisSystemHostLoader(EngineContext& context) : m_context(context)
+        {
+        }
+
         [[nodiscard]] Iris::CallResult<std::unique_ptr<SystemHost>> Find(LoadedScriptAssembly& generation) override;
 
       private:
@@ -72,24 +78,33 @@ namespace Fenrir::Detail
         // object it made is alive: ScriptSystems drops it at Stop, before the generation is unloaded.
         struct Host final : SystemHost
         {
-            Host(Iris::Object&& instance, Iris::InstanceMethod<std::int32_t()> mask,
-                 Iris::InstanceMethod<void()> create, Iris::InstanceMethod<void(std::int32_t)> run,
+            Host(EngineContext& context, Iris::Object&& instance, Iris::InstanceMethod<std::int32_t()> mask,
+                 Iris::InstanceMethod<void()> stages, Iris::InstanceMethod<void()> create,
+                 Iris::InstanceMethod<void(std::int32_t)> run, Iris::InstanceMethod<void(std::int32_t)> runStage,
                  Iris::InstanceMethod<void()> destroy)
-                : object(std::move(instance)), mask(mask), create(create), run(run), destroy(destroy)
+                : context(context), object(std::move(instance)), mask(mask), stages(stages), create(create), run(run),
+                  runStage(runStage), destroy(destroy)
             {
             }
 
             [[nodiscard]] Iris::CallResult<std::int32_t> PhaseMask() override;
+            [[nodiscard]] Iris::CallResult<std::vector<StageSystemReport>> StageSystems() override;
             [[nodiscard]] Iris::CallResult<void> OnCreate() override;
             [[nodiscard]] Iris::CallResult<void> Run(std::int32_t phase) override;
+            [[nodiscard]] Iris::CallResult<void> RunStage(std::int32_t group) override;
             [[nodiscard]] Iris::CallResult<void> OnDestroy() override;
 
+            EngineContext& context;
             Iris::Object object;
             Iris::InstanceMethod<std::int32_t()> mask;
+            Iris::InstanceMethod<void()> stages;
             Iris::InstanceMethod<void()> create;
             Iris::InstanceMethod<void(std::int32_t)> run;
+            Iris::InstanceMethod<void(std::int32_t)> runStage;
             Iris::InstanceMethod<void()> destroy;
         };
+
+        EngineContext& m_context;
     };
 
     /**

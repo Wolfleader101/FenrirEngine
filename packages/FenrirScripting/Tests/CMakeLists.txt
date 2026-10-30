@@ -19,6 +19,7 @@ add_executable(FenrirScriptingTests
     ReloadTests.cpp
     NativeTests.cpp
     ResourceTests.cpp
+    StageTests.cpp
     TestExtension.cpp
     FixtureCalls.hpp
     ScriptingApp.hpp
@@ -211,6 +212,9 @@ fenrir_expect_compile(SystemControl OK)
 fenrir_expect_compile(SystemNotASystem FENRIR0010)
 fenrir_expect_compile(SystemPrivateConstructor FENRIR0011)
 fenrir_expect_compile(SystemBadPhase FENRIR0013)
+fenrir_expect_compile(SystemStageControl OK)
+fenrir_expect_compile(SystemStageEmpty FENRIR0015)
+fenrir_expect_compile(SystemPhaseAndStage FENRIR0016)
 fenrir_expect_compile(EventControl OK)
 fenrir_expect_compile(EventManaged FENRIR0014)
 fenrir_expect_compile(EventReadOnly CS8332)    # a read view cannot be written through

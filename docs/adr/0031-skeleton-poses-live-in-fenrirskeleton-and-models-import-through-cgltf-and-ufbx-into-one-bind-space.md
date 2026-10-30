@@ -62,6 +62,7 @@ Every other node stays an ordinary node, including empty children of bones. `Spa
   - Disjoint skins are separate skeletons.
   - Skins that share joints merge if their binds agree, or if one matrix `C` takes the later skin's normalised vertex space into the first skin's: `B_first[j] × C = B_later[j]` for every joint they share. `C` is checked over all of the later skin's joints and baked into its vertices.
   - Otherwise the later skin is incompatible and fails. It is never merged silently.
+  - *Refined by animation ticket 06 (FBX):* skins whose joints lie in one tree of `LimbNode`s are one skeleton even when they share no joint, since FBX gives each mesh of an armature a skin of its own; their binds are in one space, so they merge with no conversion. `LimbNode`s no skin reaches (the armature of an FBX file of clips, or a rig's controls) form a skeleton bound at their rest, one per node their trees hang from, or join the skinned skeleton whose root bones hang from that node. A tree holding a failed skin's joint stays ordinary nodes.
 - **The owner (skeleton entity)** is the `skin.skeleton` node when that node is not a joint. Otherwise it is the nearest non-bone ancestor of the group's root bones. `skin.skeleton` is never used in skinning maths. When two or more skeletons resolve to one node, each of them gets a **synthetic owner**: an importer-made node, a child of that node with an identity transform, with its identity taken from its skeleton group and its display name `<first root bone>.Skeleton`. One `SkeletonPose` per entity stays a hard rule, and unrelated rigs are never merged to satisfy it.
 
 ## One bind space
@@ -81,6 +82,7 @@ Per format:
 
 - **glTF (cgltf).** When the owner's rest world `W_o` (in glTF's scene-root space) is the identity, the skin's inverse binds and the vertices are kept unchanged. Otherwise they are converted: `B = IBM × W_o` and `v = W_o⁻¹ × v_gltf`. A skinned mesh node's transform is ignored, as glTF specifies. An omitted inverse-bind accessor means identity matrices, as the spec says.
 - **FBX (ufbx).** `B[i] = (W_o⁻¹ × bind_to_world[i])⁻¹`, from ufbx's explicit cluster bind transforms. Vertices become `W_o⁻¹ × bind_to_world[i] × geometry_to_bone[i] × v`, and that product must agree across all of the skin's clusters. ufbx's axis and unit conversion is applied as an adjustment on the root node, so it sits above every owner.
+  FBX clips are baked through ufbx's baking API to linear keys: a stretch that cannot stay linear (a cubic curve, or a rotation, which FBX interpolates as Euler angles) is resampled at 30 keys a second, and keys the file gives at that rate or faster, and the ends of linear stretches, are kept.
 - **Baking.**
   - Positions are transformed by the matrix.
   - Normals are transformed by its inverse transpose and renormalised.

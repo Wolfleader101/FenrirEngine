@@ -144,6 +144,13 @@ namespace FenrirDemo
          * app's sources). Empty, or with scripting not built, the app has no C# systems.
          */
         std::filesystem::path scriptAssembly;
+        /**
+         * @brief Installs the app's own packages that need the scaffold's (FenrirSkeleton and FenrirAnimation need
+         * FenrirAssets) and must come before Scripting (a script's pose stage systems are placed when it loads): run
+         * by Install after the renderer and before Scripting. What it returns holds the packages' owners: the scaffold
+         * keeps it, and destroys it after Scripting ends and before its own packages. Empty, nothing runs.
+         */
+        std::function<std::shared_ptr<void>(Fenrir::App& app)> installPackages;
 #ifdef FENRIR_DEMO_SCRIPTING
         /**
          * @brief The app's own scripting extensions (its components and events shared with C#), which Scripting runs

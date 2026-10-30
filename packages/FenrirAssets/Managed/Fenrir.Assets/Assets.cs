@@ -26,8 +26,8 @@ public static partial class Assets
 {
     /// <summary>
     /// Loads the asset at <paramref name="path"/> for <paramref name="owner"/>: a path relative to the asset root (or
-    /// absolute), <c>file#Label</c> for a model's mesh, material or image, or a <c>builtin:</c> name. A path already loaded
-    /// gives back the same handle, with <paramref name="owner"/> added.
+    /// absolute), <c>file#Label</c> for a model's mesh, material, image, skeleton or clip (<c>rig.glb#Clip0</c>), or a
+    /// <c>builtin:</c> name. A path already loaded gives back the same handle, with <paramref name="owner"/> added.
     /// </summary>
     /// <returns>The asset, or the empty handle if the load failed (logged with its reason).</returns>
     public static AssetHandle<T> Load<T>(ReadOnlySpan<char> path, AssetOwner owner = AssetOwner.Scene) where T : class

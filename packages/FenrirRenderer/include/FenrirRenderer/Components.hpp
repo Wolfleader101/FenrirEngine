@@ -5,6 +5,7 @@
 #include <type_traits>
 
 #include "FenrirAssets/AssetHandle.hpp"
+#include "FenrirECS/Entity.hpp"
 #include "FenrirInput/InputTypes.hpp"
 #include "FenrirMath/Colour.hpp"
 
@@ -25,6 +26,27 @@ namespace Fenrir
         AssetHandle<Material> material;
         /** @brief False hides this entity only; its children are drawn as their own MeshRenderers say. */
         bool visible = true;
+    };
+
+    /**
+     * @brief Skins the MeshRenderer beside it from a skeleton's pose (ADR-0035): plain data naming the skeleton entity,
+     * the entity carrying FenrirSkeleton's `SkeletonPose`. The mesh is drawn on the GPU from that skeleton's palette.
+     *
+     * **A skinned item is drawn with the skeleton entity's world matrix. The mesh entity's own Transform and its
+     * ancestors are never applied**, unlike an ordinary MeshRenderer's: the mesh's vertices are already in the
+     * skeleton's bind space. `visible` and the material stay on the mesh entity's MeshRenderer. SpawnModel makes each
+     * skinned mesh entity a child of its skeleton entity at the identity, so the hierarchy reads naturally.
+     *
+     * A mesh with skin data and no SkinnedMesh is not drawn; nor is one whose skeleton entity is dead, has no
+     * `SkeletonPose` or is not `Ready`, whose skeleton it was not baked for (more bones than the skeleton has, or a
+     * different bind signature), or when no skinning source is registered (FenrirSkeleton is not installed). A user
+     * shader without the `SKINNED` key draws it with the fallback material. Each is logged once as a warning. A
+     * SkinnedMesh on a mesh with no skin data is ignored, and the mesh draws rigidly (logged once).
+     */
+    struct SkinnedMesh
+    {
+        /** @brief The skeleton entity whose pose skins the mesh. */
+        Entity skeleton;
     };
 
     /**

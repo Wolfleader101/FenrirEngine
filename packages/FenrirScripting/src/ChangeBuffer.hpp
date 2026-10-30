@@ -61,6 +61,11 @@ namespace Fenrir::Detail
         // behind.
         void Discard(EntityList& entities);
 
+        // Forgets the changes recorded after the first `mark` (a Size() taken earlier), as Discard forgets them all:
+        // what a stage system that threw recorded, with what the systems before it recorded kept. A mark at or past
+        // the end forgets nothing.
+        void DiscardFrom(EntityList& entities, std::size_t mark);
+
         [[nodiscard]] bool Empty() const noexcept
         {
             return m_changes.empty();

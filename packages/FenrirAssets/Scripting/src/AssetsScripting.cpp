@@ -101,6 +101,18 @@ namespace Fenrir
             {
                 return action(AssetHandle<Model>{});
             }
+            if (kind == Detail::AssetKind::Skeleton)
+            {
+                return action(AssetHandle<Skeleton>{});
+            }
+            if (kind == Detail::AssetKind::Clip)
+            {
+                return action(AssetHandle<Clip>{});
+            }
+            if (kind == Detail::AssetKind::BoneMask)
+            {
+                return action(AssetHandle<BoneMask>{});
+            }
             guard.Warn(std::string(AssetsScripting::NoKind), where);
             return otherwise;
         }

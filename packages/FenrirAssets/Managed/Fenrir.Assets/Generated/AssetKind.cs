@@ -11,4 +11,7 @@ public enum AssetKind : byte
     Material = 2,
     Shader = 3,
     Model = 4,
+    Skeleton = 5,
+    Clip = 6,
+    BoneMask = 7,
 }

@@ -59,6 +59,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/SceneFrame.hpp
     src/Core/SceneRenderer.hpp
     src/Core/SceneRenderer.cpp
+    src/Core/Skinning.hpp
+    src/Core/Skinning.cpp
     src/Core/TransientPool.hpp
     src/Core/TransientPool.cpp
 )
@@ -82,13 +84,14 @@ target_include_directories(FenrirRendererCore PRIVATE "${CMAKE_CURRENT_BINARY_DI
 target_include_directories(FenrirRendererCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../FenrirAssets/include"
                                                      "${CMAKE_CURRENT_SOURCE_DIR}/../FenrirDraw2D/include")
 # The built-in shader programs, embedded, so the renderer runs with no files beside it.
-# ALPHA_MASK: the variant a Masked material draws with (ADR-0024).
+# ALPHA_MASK: the variant a Masked material draws with (ADR-0024). SKINNED: the variant skinned draws use (ADR-0035);
+# the fallback has it too, so a skinned draw falling back to it is never drawn unskinned.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinUnlit VERTEX Shaders/Builtin/mesh.vert
-                   FRAGMENT Shaders/Builtin/unlit.frag KEYS ALPHA_MASK EMBED)
+                   FRAGMENT Shaders/Builtin/unlit.frag KEYS ALPHA_MASK SKINNED EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinLit VERTEX Shaders/Builtin/mesh.vert
-                   FRAGMENT Shaders/Builtin/lit.frag KEYS ALPHA_MASK EMBED)
+                   FRAGMENT Shaders/Builtin/lit.frag KEYS ALPHA_MASK SKINNED EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinFallback VERTEX Shaders/Builtin/mesh.vert
-                   FRAGMENT Shaders/Builtin/fallback.frag EMBED)
+                   FRAGMENT Shaders/Builtin/fallback.frag KEYS SKINNED EMBED)
 # CUBEMAP: the variant that draws a Sky cubemap.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBackground VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/background.frag KEYS CUBEMAP EMBED)

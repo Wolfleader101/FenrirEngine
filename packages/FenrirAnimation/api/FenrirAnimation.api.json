@@ -1,0 +1,538 @@
+{
+  "package": "FenrirAnimation",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fenrir::AdditiveReference",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "What an additive layer's clip is measured from (ADR-0036).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "ClipStart",
+          "value": 0,
+          "doc": "The clip's own pose at time 0, rest where the clip is silent: the default."
+        },
+        {
+          "name": "RestPose",
+          "value": 1,
+          "doc": "The skeleton's rest pose."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::AssetHandle<Fenrir::Clip>",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4,
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip` or `BoneMask`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+    },
+    {
+      "name": "Fenrir::ClipEventId",
+      "category": "struct",
+      "role": "nested",
+      "size": 4,
+      "alignment": 4,
+      "doc": "A short number for a clip event's name: the 32-bit FNV-1a hash of its UTF-8 bytes. A convenience for comparing names cheaply; an event is identified by its index and its clip's revision, never by this.",
+      "fields": [
+        {
+          "name": "value",
+          "offset": 0,
+          "kind": "u32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Entity",
+      "category": "struct",
+      "role": "nested",
+      "size": 16,
+      "alignment": 8,
+      "doc": "Entity class that is used to interact with the entity list. This forms the basis of the ECS",
+      "fields": [
+        {
+          "name": "m_entityId",
+          "offset": 0,
+          "kind": "u32",
+          "default": 4294967295
+        },
+        {
+          "name": "m_entityList",
+          "offset": 8,
+          "kind": "pointer",
+          "default": null
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::AnimationEvent",
+      "category": "struct",
+      "role": "event",
+      "size": 64,
+      "alignment": 8,
+      "doc": "An animation event (ADR-0034): sent from the `Animate` stage when a playback cursor crosses one of its clip's timed events. Read it with an `EventReader<AnimationEvent>`: a `PostUpdate` reader that runs after the pose pipeline sees it the same frame, an `Update` reader the next frame.\n\nForward playback crosses the events in (previous, current], reverse playback those in [current, previous), in playback order, every lap of a wrap included; when playback starts, the event at its starting boundary is crossed too. Seeks, clip changes, pauses, a speed of 0 and recovery from an unavailable clip cross nothing. Delivery is best-effort: at most `AnimationConfig::maxEventsPerInstancePerFrame` are sent per skeleton per frame, the earliest, and the rest are counted in one `AnimationEventsDropped`. A tick-posed skeleton's events (ADR-0040) are sent per tick, from that tick's `PreTick`, with the budget per tick: a `Tick` reader sees them in the tick that crossed them.",
+      "fields": [
+        {
+          "name": "skeleton",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Entity",
+          "default": {},
+          "doc": "The skeleton entity whose playback crossed the event."
+        },
+        {
+          "name": "layer",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fenrir::Entity",
+          "default": {},
+          "doc": "The layer that played the clip: the skeleton entity for its `Animator`."
+        },
+        {
+          "name": "clip",
+          "offset": 32,
+          "kind": "struct",
+          "type": "Fenrir::AssetHandle<Fenrir::Clip>",
+          "default": {},
+          "doc": "The clip."
+        },
+        {
+          "name": "clipRevision",
+          "offset": 40,
+          "kind": "u32",
+          "default": 0,
+          "doc": "The clip's revision when the event was crossed: `index` names an event only in this revision."
+        },
+        {
+          "name": "index",
+          "offset": 44,
+          "kind": "u32",
+          "default": 0,
+          "doc": "The event's index in the clip's event list."
+        },
+        {
+          "name": "nameId",
+          "offset": 48,
+          "kind": "struct",
+          "type": "Fenrir::ClipEventId",
+          "default": {},
+          "doc": "The id of the event's name, for comparing names cheaply."
+        },
+        {
+          "name": "time",
+          "offset": 52,
+          "kind": "f32",
+          "default": 0,
+          "doc": "The event's authored time, in seconds."
+        },
+        {
+          "name": "loop",
+          "offset": 56,
+          "kind": "u64",
+          "default": 0,
+          "doc": "The lap the crossing happened in: the playback's completed loops at that moment."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::AnimationEventsDropped",
+      "category": "struct",
+      "role": "event",
+      "size": 48,
+      "alignment": 8,
+      "doc": "Sent from the `Animate` stage when one frame's playback crossed more clip events than the budget lets through (ADR-0034): how many were crossed and not sent. The drop is also logged, once per skeleton instance.",
+      "fields": [
+        {
+          "name": "skeleton",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Entity",
+          "default": {},
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "layer",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fenrir::Entity",
+          "default": {},
+          "doc": "The layer that played the clip: the skeleton entity for its `Animator`."
+        },
+        {
+          "name": "clip",
+          "offset": 32,
+          "kind": "struct",
+          "type": "Fenrir::AssetHandle<Fenrir::Clip>",
+          "default": {},
+          "doc": "The clip whose events were dropped."
+        },
+        {
+          "name": "dropped",
+          "offset": 40,
+          "kind": "u64",
+          "default": 0,
+          "doc": "How many crossings were not sent, saturating at the largest `uint64_t`."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::AssetHandle<Fenrir::BoneMask>",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4,
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip` or `BoneMask`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+    },
+    {
+      "name": "Fenrir::ClipLoop",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "What a clip does at its boundary (ADR-0034).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Loop",
+          "value": 0,
+          "doc": "Wraps to the other end, however many laps one step covers."
+        },
+        {
+          "name": "Once",
+          "value": 1,
+          "doc": "Clamps at the end, or at 0 in reverse, holds that pose and is finished."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::FadeCurve",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How a crossfade's progress becomes its blend weight (ADR-0036).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Linear",
+          "value": 0,
+          "doc": "The weight is the progress."
+        },
+        {
+          "name": "Smooth",
+          "value": 1,
+          "doc": "Smoothstep, `t·t·(3 − 2t)`: the default."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::LayerMode",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How an animation layer combines with the pose beneath it (ADR-0036).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Override",
+          "value": 0,
+          "doc": "Blends toward the layer's clip: translation and scale lerp, rotation nlerps along the shortest arc. Channels the clip does not animate pass through."
+        },
+        {
+          "name": "Additive",
+          "value": 1,
+          "doc": "Adds the clip's difference from its reference pose onto the pose beneath. Channels the clip does not animate add nothing."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::AnimationLayer",
+      "category": "struct",
+      "role": "component",
+      "size": 64,
+      "alignment": 8,
+      "doc": "An animation layer (ADR-0036): plain data on any entity, playing a clip over the skeleton entity `skeleton` after its base `Animator`. Game code writes every field and FenrirAnimation never writes any; the layer's cursors, fade and caches are FenrirAnimation's (read them with `Animation::Playback(scene, layer)`, move the cursor with `Animation::Seek(scene, layer, seconds)`).\n\nA skeleton's layers apply in sequence, by `order` then entity, each at an effective weight of `weight × mask weight(bone)` clamped to [0, 1], with nothing normalised. A layer with no base `Animator` layers over the skeleton's retained base pose. The clock and fade fields work as the `Animator`'s do; a weight of 0 removes the layer's effect and silences its events but never stops its clock.",
+      "fields": [
+        {
+          "name": "skeleton",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Entity",
+          "default": {},
+          "doc": "The skeleton entity it layers onto; it need not be the layer's ECS parent."
+        },
+        {
+          "name": "order",
+          "offset": 16,
+          "kind": "i32",
+          "default": 0,
+          "doc": "Where it applies among the skeleton's layers: after the base `Animator`, by order, then by entity."
+        },
+        {
+          "name": "weight",
+          "offset": 20,
+          "kind": "f32",
+          "default": 1,
+          "doc": "How much of it shows, clamped to [0, 1]. Never touches its clock."
+        },
+        {
+          "name": "mode",
+          "offset": 24,
+          "kind": "enum",
+          "type": "Fenrir::LayerMode",
+          "default": "Override",
+          "doc": "Override or Additive."
+        },
+        {
+          "name": "mask",
+          "offset": 28,
+          "kind": "struct",
+          "type": "Fenrir::AssetHandle<Fenrir::BoneMask>",
+          "default": {},
+          "doc": "The bones it reaches, by engine name; empty reaches every bone at 1."
+        },
+        {
+          "name": "reference",
+          "offset": 36,
+          "kind": "enum",
+          "type": "Fenrir::AdditiveReference",
+          "default": "ClipStart",
+          "doc": "What an additive clip is measured from; ignored by override layers."
+        },
+        {
+          "name": "clip",
+          "offset": 40,
+          "kind": "struct",
+          "type": "Fenrir::AssetHandle<Fenrir::Clip>",
+          "default": {},
+          "doc": "The clip to play; empty contributes nothing."
+        },
+        {
+          "name": "speed",
+          "offset": 48,
+          "kind": "f32",
+          "default": 1,
+          "doc": "Seconds of clip per second of frame time: negative plays in reverse, 0 holds."
+        },
+        {
+          "name": "loop",
+          "offset": 52,
+          "kind": "enum",
+          "type": "Fenrir::ClipLoop",
+          "default": "Loop",
+          "doc": "Whether the clip wraps or clamps at its boundary."
+        },
+        {
+          "name": "playing",
+          "offset": 53,
+          "kind": "bool",
+          "default": true,
+          "doc": "False freezes the cursor and any running fade; the pose is still sampled there."
+        },
+        {
+          "name": "fadeSeconds",
+          "offset": 56,
+          "kind": "f32",
+          "default": 0,
+          "doc": "How long a clip change crossfades, in seconds; 0 cuts."
+        },
+        {
+          "name": "fadeCurve",
+          "offset": 60,
+          "kind": "enum",
+          "type": "Fenrir::FadeCurve",
+          "default": "Smooth",
+          "doc": "The crossfade's curve."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Animator",
+      "category": "struct",
+      "role": "component",
+      "size": 24,
+      "alignment": 4,
+      "doc": "The animator (ADR-0034): plain data on a skeleton entity naming the clip to play, how fast and in which direction, its loop mode and whether it plays. Game code writes every field and FenrirAnimation never writes any; it holds no time, because the playback cursor is FenrirAnimation's (read it with `Animation::Playback`, move it with `Animation::Seek`).\n\nWhile `clip` names a clip, FenrirAnimation owns the skeleton's whole base pose: each frame it starts from the rest pose and applies the clip's channels. With no `Animator`, or an empty `clip`, the base pose is left alone. Changing `clip` restarts playback, at 0 or, with a negative `speed`, at the clip's duration, and crossfades from the outgoing clip over `fadeSeconds` (ADR-0036): the outgoing clip keeps playing on its own cursor, a change during a fade fades on from a snapshot of the blended pose, and 0 cuts. From no clip it fades from the retained base pose; to no clip it cuts, leaving the pose as last sampled. It is the skeleton's base animation layer: a full override, always first, under any `AnimationLayer`s.",
+      "fields": [
+        {
+          "name": "clip",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::AssetHandle<Fenrir::Clip>",
+          "default": {},
+          "doc": "The clip to play; empty plays nothing and leaves the base pose alone."
+        },
+        {
+          "name": "speed",
+          "offset": 8,
+          "kind": "f32",
+          "default": 1,
+          "doc": "Seconds of clip per second of frame time: negative plays in reverse, 0 holds."
+        },
+        {
+          "name": "loop",
+          "offset": 12,
+          "kind": "enum",
+          "type": "Fenrir::ClipLoop",
+          "default": "Loop",
+          "doc": "Whether the clip wraps or clamps at its boundary."
+        },
+        {
+          "name": "playing",
+          "offset": 13,
+          "kind": "bool",
+          "default": true,
+          "doc": "False freezes the playback cursor; the pose is still sampled there."
+        },
+        {
+          "name": "fadeSeconds",
+          "offset": 16,
+          "kind": "f32",
+          "default": 0,
+          "doc": "How long a clip change crossfades, in seconds, by unscaled frame time, frozen while paused; 0 cuts. A change during a fade applies to the next clip change."
+        },
+        {
+          "name": "fadeCurve",
+          "offset": 20,
+          "kind": "enum",
+          "type": "Fenrir::FadeCurve",
+          "default": "Smooth",
+          "doc": "The crossfade's curve: its weight as a function of progress."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ClipFinished",
+      "category": "struct",
+      "role": "event",
+      "size": 40,
+      "alignment": 8,
+      "doc": "Sent once, from the `Animate` stage, when a `ClipLoop::Once` clip reaches its boundary: each time its playback becomes finished (ADR-0034).",
+      "fields": [
+        {
+          "name": "skeleton",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Entity",
+          "default": {},
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "layer",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fenrir::Entity",
+          "default": {},
+          "doc": "The layer that played the clip: the skeleton entity for its `Animator`."
+        },
+        {
+          "name": "clip",
+          "offset": 32,
+          "kind": "struct",
+          "type": "Fenrir::AssetHandle<Fenrir::Clip>",
+          "default": {},
+          "doc": "The clip that finished."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::MaskScope",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Whether a bone mask entry covers one bone or the bone and everything below it.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Bone",
+          "value": 0
+        },
+        {
+          "name": "Subtree",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::PoseState",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Whether a skeleton entity's pose can be read (ADR-0031).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Ready",
+          "value": 0,
+          "doc": "Its skeleton asset resolves and its pose is built: reads give the current pose."
+        },
+        {
+          "name": "Unavailable",
+          "value": 1,
+          "doc": "Its `SkeletonPose` names an empty or stale skeleton: reads are empty until it resolves."
+        },
+        {
+          "name": "Missing",
+          "value": 2,
+          "doc": "It is dead, or has no `SkeletonPose`."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::PlaybackInfo",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 32,
+      "alignment": 8,
+      "doc": "Where an animator's or a layer's playback stands, as `Animation::Playback` reads it.",
+      "fields": [
+        {
+          "name": "state",
+          "offset": 0,
+          "kind": "enum",
+          "type": "Fenrir::PoseState",
+          "default": "Missing",
+          "doc": "`Ready` while it plays (or holds) a clip on a `Ready` skeleton; `Unavailable` while the skeleton is not `Ready` or the clip handle is stale; `Missing` for an entity with no `Animator` or `AnimationLayer`, or a layer whose `skeleton` is no skeleton entity."
+        },
+        {
+          "name": "time",
+          "offset": 8,
+          "kind": "f64",
+          "default": 0,
+          "doc": "The current clip's playback cursor, in seconds: in [0, duration]. An outgoing clip's is not shown."
+        },
+        {
+          "name": "completedLoops",
+          "offset": 16,
+          "kind": "u64",
+          "default": 0,
+          "doc": "How many times playback wrapped, in either direction, since the clip started; saturating."
+        },
+        {
+          "name": "finished",
+          "offset": 24,
+          "kind": "bool",
+          "default": false,
+          "doc": "Whether a `ClipLoop::Once` clip has reached its boundary and holds there."
+        },
+        {
+          "name": "fading",
+          "offset": 25,
+          "kind": "bool",
+          "default": false,
+          "doc": "Whether a crossfade is running."
+        },
+        {
+          "name": "fadeProgress",
+          "offset": 28,
+          "kind": "f32",
+          "default": 0,
+          "doc": "The running crossfade's progress in [0, 1], before its curve; 0 when none runs."
+        }
+      ]
+    }
+  ]
+}

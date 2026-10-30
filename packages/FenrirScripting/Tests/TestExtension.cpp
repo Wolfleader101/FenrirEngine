@@ -4,6 +4,7 @@
 
 #include "FixtureCalls.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -127,11 +128,33 @@ namespace TestExtension
     {
         return Tag{static_cast<std::uint16_t>(tag.code + static_cast<std::uint16_t>(by))};
     }
+
+    void RunBench(Tally& tally)
+    {
+        // A copy, so an item may change the bench without moving what is being run.
+        std::vector<BenchItem> items = tally.bench;
+        std::stable_sort(items.begin(), items.end(), [](const BenchItem& left, const BenchItem& right) {
+            return left.order != right.order ? left.order < right.order : !left.script && right.script;
+        });
+        for (const auto& item : items)
+        {
+            item.run();
+        }
+        if (tally.changes.has_value())
+        {
+            tally.changes->PlayBack();
+        }
+    }
+
+    void Trace(const Fenrir::CallContext&, Tally& tally, std::string_view text)
+    {
+        tally.trace.emplace_back(text);
+    }
 } // namespace TestExtension
 
 namespace Fenrir::Testing::ScriptFixture
 {
-    ScriptingExtension TheTestExtension(std::shared_ptr<TestExtension::Tally> tally)
+    ScriptingExtension TheTestExtension(std::shared_ptr<TestExtension::Tally> tally, bool declareBench)
     {
         ScriptingExtension extension;
         extension.name = "test extension";
@@ -151,6 +174,7 @@ namespace Fenrir::Testing::ScriptFixture
             NativeFunction::Make<&TestExtension::Nudge>("Fenrir.TestExtension.Gadgets.Nudge"),
             // As the generated registration names a native with an output (ADR-0045).
             NativeFunction::Make<&TestExtension::ZeroingWeigh::Call>("Fenrir.TestExtension.Gadgets.Weigh", -1),
+            NativeFunction::Make<&TestExtension::Trace>("Fenrir.TestExtension.Gadgets.Trace"),
         };
         extension.components = {MakeComponent<TestExtension::Charge>("Fenrir.TestExtension.Charge")};
         extension.events = {MakeEvent<TestExtension::Ping>("Fenrir.TestExtension.Ping")};
@@ -160,6 +184,23 @@ namespace Fenrir::Testing::ScriptFixture
             MakeAppResource<TestExtension::Settings>("Fenrir.TestExtension.Settings"),
             MakeReadOnlyAppResource<TestExtension::Clock>("Fenrir.TestExtension.Clock"),
         };
+        if (tally != nullptr && declareBench)
+        {
+            // The bench is the extension's own work: each group a script has for it becomes an item at its order, and
+            // goes when the script is released.
+            extension.stages = {TestExtension::BenchStage};
+            extension.placeStages = [tally](App&, std::vector<StageGroup> groups, StageChanges changes) {
+                for (auto& group : groups)
+                {
+                    tally->bench.push_back({group.Order(), true, [group] { group.Run(); }});
+                }
+                tally->changes = std::move(changes);
+            };
+            extension.removeStages = [tally](App&) {
+                std::erase_if(tally->bench, [](const TestExtension::BenchItem& item) { return item.script; });
+                tally->changes.reset();
+            };
+        }
         if (tally != nullptr)
         {
             extension.SetState(std::move(tally));

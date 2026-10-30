@@ -1,5 +1,7 @@
 #include "ChangeBuffer.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <utility>
 
@@ -279,5 +281,35 @@ namespace Fenrir::Detail
         m_changes.clear();
         m_values.clear();
         m_native.clear();
+    }
+
+    void ChangeBuffer::DiscardFrom(EntityList& entities, std::size_t mark)
+    {
+        if (mark >= m_changes.size())
+        {
+            return;
+        }
+        // The bytes and native changes the forgotten ones own are at the end of their vectors, after the kept ones'.
+        std::size_t values = m_values.size();
+        std::size_t native = m_native.size();
+        for (std::size_t index = mark; index < m_changes.size(); ++index)
+        {
+            const Change& change = m_changes[index];
+            if (change.kind == Kind::Create)
+            {
+                entities.DestroyEntity(change.entity);
+            }
+            else if (change.kind == Kind::Native)
+            {
+                native = std::min(native, change.valueOffset);
+            }
+            else if (change.hasValue)
+            {
+                values = std::min(values, change.valueOffset);
+            }
+        }
+        m_changes.resize(mark);
+        m_values.resize(values);
+        m_native.erase(m_native.begin() + static_cast<std::ptrdiff_t>(native), m_native.end());
     }
 } // namespace Fenrir::Detail

@@ -1,0 +1,719 @@
+{
+  "package": "FenrirSkeleton",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fenrir::AssetHandle<Fenrir::Skeleton>",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4,
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip` or `BoneMask`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+    },
+    {
+      "name": "Fenrir::AttachmentState",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Whether the last Attach placed a bone attachment's entity, and why not (ADR-0037).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "NotAttached",
+          "value": 0,
+          "doc": "The entity has no `BoneAttachment`, or no Attach has seen it yet."
+        },
+        {
+          "name": "Attached",
+          "value": 1,
+          "doc": "Placed at its bone this frame."
+        },
+        {
+          "name": "SkeletonMissing",
+          "value": 2,
+          "doc": "The skeleton entity is dead, or has no `SkeletonPose`."
+        },
+        {
+          "name": "SkeletonUnavailable",
+          "value": 3,
+          "doc": "The skeleton entity's instance is `Unavailable`."
+        },
+        {
+          "name": "BoneNotFound",
+          "value": 4,
+          "doc": "No bone has that engine name, or the name is malformed."
+        },
+        {
+          "name": "TransformMissing",
+          "value": 5,
+          "doc": "The entity has no `Transform` to place."
+        },
+        {
+          "name": "Unplaceable",
+          "value": 6,
+          "doc": "The parent's world matrix has no inverse, or the attachment is in a dependency cycle."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::BoneName",
+      "category": "struct",
+      "role": "nested",
+      "size": 256,
+      "alignment": 1,
+      "doc": "A bone's engine name as a component field (ADR-0037): a fixed 256-byte UTF-8 buffer, like `Name`, holding at most 255 bytes and a terminator. `Set` refuses a longer name rather than truncating it, since a truncated name could match another bone. A buffer written raw with no terminator is malformed: `Get` gives nothing, and an attachment naming it is diagnosed and never resolved.",
+      "fields": [
+        {
+          "name": "m_bytes",
+          "offset": 0,
+          "kind": "array",
+          "elementKind": "u8",
+          "length": 256,
+          "default": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "doc": "The bytes, zero-terminated when well-formed."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Entity",
+      "category": "struct",
+      "role": "nested",
+      "size": 16,
+      "alignment": 8,
+      "doc": "Entity class that is used to interact with the entity list. This forms the basis of the ECS",
+      "fields": [
+        {
+          "name": "m_entityId",
+          "offset": 0,
+          "kind": "u32",
+          "default": 4294967295
+        },
+        {
+          "name": "m_entityList",
+          "offset": 8,
+          "kind": "pointer",
+          "default": null
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Math::Quat",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 16,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::Math::Vec3",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 12,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::Transform",
+      "category": "struct",
+      "role": "nested",
+      "size": 40,
+      "alignment": 4,
+      "doc": "An entity's place in the world, relative to its parent: every entity has one.",
+      "fields": [
+        {
+          "name": "pos",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "doc": "The position, relative to the parent."
+        },
+        {
+          "name": "rot",
+          "offset": 12,
+          "kind": "struct",
+          "type": "Fenrir::Math::Quat",
+          "default": {
+            "w": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "doc": "The rotation, relative to the parent."
+        },
+        {
+          "name": "scale",
+          "offset": 28,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          },
+          "doc": "The scale on each axis, relative to the parent."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::BoneAttachment",
+      "category": "struct",
+      "role": "component",
+      "size": 312,
+      "alignment": 8,
+      "doc": "A bone attachment (ADR-0037): plain data placing its entity at a bone of a skeleton entity every frame, at `GetBoneWorldMatrix(skeleton, bone) × offset`, under whatever ECS parent the entity has. The full bone transform is inherited, translation, rotation and scale.\n\nWhile an entity has one, FenrirSkeleton owns its local `Transform`, written in the pose pipeline's Attach step: move the object relative to its bone through `offset`, since a direct write to the `Transform` is overwritten at the next Attach. Any field may be edited at any time; the bone is looked up again by engine name whenever the skeleton entity, the name or the skeleton's instance changes. `Skeletons::GetAttachmentState` reports whether it placed the entity, and why not.",
+      "fields": [
+        {
+          "name": "skeleton",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Entity",
+          "default": {},
+          "doc": "The skeleton entity: an entity with a `SkeletonPose`."
+        },
+        {
+          "name": "bone",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fenrir::BoneName",
+          "default": {},
+          "doc": "The bone, by engine name."
+        },
+        {
+          "name": "offset",
+          "offset": 272,
+          "kind": "struct",
+          "type": "Fenrir::Transform",
+          "default": {},
+          "doc": "The entity's place relative to the bone."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Channels",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Which parts of a bone's local transform a pose target writes: a mask, combined with `|`.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "None",
+          "value": 0
+        },
+        {
+          "name": "Translation",
+          "value": 1
+        },
+        {
+          "name": "Rotation",
+          "value": 2
+        },
+        {
+          "name": "Scale",
+          "value": 4
+        },
+        {
+          "name": "All",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::DetachMode",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "What `Skeletons::Detach` keeps (ADR-0037).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "KeepLocal",
+          "value": 0,
+          "doc": "Removes the `BoneAttachment` only: the entity keeps its local `Transform` and its parent."
+        },
+        {
+          "name": "KeepWorld",
+          "value": 1,
+          "doc": "Reparents the entity, keeping where it is in the world now."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::DetachResult",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "What `Skeletons::Detach` did. Every result but `Detached` changed nothing.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Detached",
+          "value": 0
+        },
+        {
+          "name": "NotAttached",
+          "value": 1,
+          "doc": "The entity is dead or has no `BoneAttachment`."
+        },
+        {
+          "name": "InsidePipeline",
+          "value": 2,
+          "doc": "Called while the pose pipeline runs, where structural changes are refused."
+        },
+        {
+          "name": "InvalidParent",
+          "value": 3,
+          "doc": "The new parent is dead, the entity itself or one of its descendants."
+        },
+        {
+          "name": "ParentNotInvertible",
+          "value": 4,
+          "doc": "The new parent's world matrix has no inverse."
+        },
+        {
+          "name": "NotRepresentable",
+          "value": 5,
+          "doc": "The world transform cannot be held as position, rotation and scale under the new parent (shear)."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::OverrideScope",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Which bones an override weight assignment reaches (ADR-0038).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Bone",
+          "value": 0,
+          "doc": "The bone alone."
+        },
+        {
+          "name": "BoneSubtree",
+          "value": 1,
+          "doc": "The bone and every bone below it, each given the value."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::PoseKind",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Which of a skeleton's poses a base-pose read gives (ADR-0040).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Render",
+          "value": 0,
+          "doc": "The pose this frame draws, the render pose: the default."
+        },
+        {
+          "name": "Simulation",
+          "value": 1,
+          "doc": "The pose the last fixed tick evaluated, the simulation pose: the base pose at tick time, with no modifiers, so a world read of it is the bone's model matrix in that pose. On a frame-posed skeleton it is the render pose."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::PoseSpace",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "The space a pose target's transform is given in (ADR-0028, ADR-0033).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Local",
+          "value": 0,
+          "doc": "Relative to the bone's parent bone; for a root bone, to the skeleton entity."
+        },
+        {
+          "name": "Model",
+          "value": 1,
+          "doc": "Relative to the skeleton entity: model space, never including the entity's own `Transform`."
+        },
+        {
+          "name": "World",
+          "value": 2,
+          "doc": "The scene's world space."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::PoseState",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Whether a skeleton entity's pose can be read (ADR-0031).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Ready",
+          "value": 0,
+          "doc": "Its skeleton asset resolves and its pose is built: reads give the current pose."
+        },
+        {
+          "name": "Unavailable",
+          "value": 1,
+          "doc": "Its `SkeletonPose` names an empty or stale skeleton: reads are empty until it resolves."
+        },
+        {
+          "name": "Missing",
+          "value": 2,
+          "doc": "It is dead, or has no `SkeletonPose`."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::PoseTiming",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "When a skeleton's base pose is evaluated (ADR-0040).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Frame",
+          "value": 0,
+          "doc": "Once a frame, in the frame pass of the pose pipeline: the default."
+        },
+        {
+          "name": "Tick",
+          "value": 1,
+          "doc": "Once per fixed tick, at tick time: a tick-posed skeleton, for bodies that follow its bones. Its base pose is evaluated by the tick pass of `Animate` in `PreTick`, giving the simulation pose, and the frame draws the last two ticks' blend at `Time::accumulator / Time::tickRate`, with modifiers on top: the render pose."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::SkeletonPose",
+      "category": "struct",
+      "role": "component",
+      "size": 12,
+      "alignment": 4,
+      "doc": "The skeleton pose (ADR-0031): plain data on a skeleton entity, naming the skeleton asset its pose instances. One per entity. FenrirSkeleton keeps the pose itself (base and final locals, model matrices, the palette) in a private scene resource, made for the component when the pose pipeline next reconciles, or at once by `Skeletons::Ensure`. Changing `skeleton` rebuilds the instance at the rest pose; switching `timing` is a field edit, taking effect at the next pass's reconcile. Switching to `Tick` seeds both tick poses with the current base pose, so nothing jumps; switching back to `Frame` resumes frame `Animate` from where the tick clock stopped.",
+      "fields": [
+        {
+          "name": "skeleton",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::AssetHandle<Fenrir::Skeleton>",
+          "default": {},
+          "doc": "The skeleton asset this instance poses. Empty or stale, the instance is `Unavailable`."
+        },
+        {
+          "name": "timing",
+          "offset": 8,
+          "kind": "enum",
+          "type": "Fenrir::PoseTiming",
+          "default": "Frame",
+          "doc": "When its base pose is evaluated."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Target",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 52,
+      "alignment": 4,
+      "doc": "A pose target (ADR-0033): one write a pose modifier makes to a bone. It is resolved into the bone's local transform when written, and blended into it by `weight` for the masked channels (translation and scale lerp, rotation nlerps along the shortest arc). It is met when written, not held against later moves of the bone's ancestors.",
+      "fields": [
+        {
+          "name": "space",
+          "offset": 0,
+          "kind": "enum",
+          "type": "Fenrir::PoseSpace",
+          "default": "Local",
+          "doc": "The space `trs` is in."
+        },
+        {
+          "name": "trs",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::Transform",
+          "default": {},
+          "doc": "The transform the bone should have, in `space`."
+        },
+        {
+          "name": "channels",
+          "offset": 44,
+          "kind": "enum",
+          "type": "Fenrir::Channels",
+          "default": "All",
+          "doc": "The channels written; the others keep the bone's current local values."
+        },
+        {
+          "name": "weight",
+          "offset": 48,
+          "kind": "f32",
+          "default": 1,
+          "doc": "How far towards `trs` the bone moves, clamped to [0, 1]: 0 writes nothing, 1 writes it exactly."
+        }
+      ]
+    }
+  ]
+}

@@ -73,7 +73,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader` or `Model`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip` or `BoneMask`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Material>",
@@ -81,7 +81,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader` or `Model`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip` or `BoneMask`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Mesh>",
@@ -89,7 +89,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader` or `Model`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip` or `BoneMask`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::BackgroundType",
@@ -542,6 +542,28 @@
       ]
     },
     {
+      "name": "Fenrir::Entity",
+      "category": "struct",
+      "role": "nested",
+      "size": 16,
+      "alignment": 8,
+      "doc": "Entity class that is used to interact with the entity list. This forms the basis of the ECS",
+      "fields": [
+        {
+          "name": "m_entityId",
+          "offset": 0,
+          "kind": "u32",
+          "default": 4294967295
+        },
+        {
+          "name": "m_entityList",
+          "offset": 8,
+          "kind": "pointer",
+          "default": null
+        }
+      ]
+    },
+    {
       "name": "Fenrir::Math::Vec3",
       "category": "bound-type",
       "role": "bound-type",
@@ -643,7 +665,7 @@
       "name": "Fenrir::RendererStats",
       "category": "struct",
       "role": "shared-struct",
-      "size": 12,
+      "size": 24,
       "alignment": 4,
       "doc": "What the renderer did in its last drawn frame (ADR-0023).",
       "fields": [
@@ -667,6 +689,45 @@
           "kind": "u32",
           "default": 0,
           "doc": "Assets uploaded to the GPU by the prepare step: a mesh, or a material's parameter block."
+        },
+        {
+          "name": "paletteBytesUploaded",
+          "offset": 12,
+          "kind": "u32",
+          "default": 0,
+          "doc": "Bytes copied into the frame's palette buffer: every skeleton palette the frame's draws read."
+        },
+        {
+          "name": "distinctPalettesWritten",
+          "offset": 16,
+          "kind": "u32",
+          "default": 0,
+          "doc": "Skeleton palettes written, one per skeleton and pose however many meshes and views draw it (ADR-0035)."
+        },
+        {
+          "name": "skinnedDraws",
+          "offset": 20,
+          "kind": "u32",
+          "default": 0,
+          "doc": "Draws of skinned MeshRenderers, one per item per view; part of `draws`."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::SkinnedMesh",
+      "category": "struct",
+      "role": "component",
+      "size": 16,
+      "alignment": 8,
+      "doc": "Skins the MeshRenderer beside it from a skeleton's pose (ADR-0035): plain data naming the skeleton entity, the entity carrying FenrirSkeleton's `SkeletonPose`. The mesh is drawn on the GPU from that skeleton's palette.\n\n**A skinned item is drawn with the skeleton entity's world matrix. The mesh entity's own Transform and its ancestors are never applied**, unlike an ordinary MeshRenderer's: the mesh's vertices are already in the skeleton's bind space. `visible` and the material stay on the mesh entity's MeshRenderer. SpawnModel makes each skinned mesh entity a child of its skeleton entity at the identity, so the hierarchy reads naturally.\n\nA mesh with skin data and no SkinnedMesh is not drawn; nor is one whose skeleton entity is dead, has no `SkeletonPose` or is not `Ready`, whose skeleton it was not baked for (more bones than the skeleton has, or a different bind signature), or when no skinning source is registered (FenrirSkeleton is not installed). A user shader without the `SKINNED` key draws it with the fallback material. Each is logged once as a warning. A SkinnedMesh on a mesh with no skin data is ignored, and the mesh draws rigidly (logged once).",
+      "fields": [
+        {
+          "name": "skeleton",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Entity",
+          "default": {},
+          "doc": "The skeleton entity whose pose skins the mesh."
         }
       ]
     },

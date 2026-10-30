@@ -1,0 +1,1247 @@
+{
+  "binding": "FenrirSkeleton",
+  "context": "Fenrir::CallContext",
+  "functions": [
+    {
+      "name": "GetPoseState",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Whether the entity's pose can be read: Ready, Unavailable (an empty or stale skeleton handle) or Missing (dead, or no SkeletonPose).",
+      "facade": "Skeletons.GetPoseState",
+      "returns": {
+        "type": "Fenrir::PoseState",
+        "kind": "enum"
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "GetPoseGeneration",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "The pose generation (ADR-0035): a number that moves on whenever the final pose changes or the instance is rebuilt, never repeating in the scene, so a cache can key on it. 0 when not Ready.",
+      "facade": "Skeletons.GetPoseGeneration",
+      "returns": {
+        "type": "std::uint64_t",
+        "kind": "u64"
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "FindBone",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "The bone of the skeleton entity whose engine name is exactly `name`.",
+      "facade": "Skeletons.FindBone",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "The bone, or -1 when none has that name or the entity is not Ready."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "GetLocal",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "The bone's local transform in the final pose: this frame's after Modify, the last frame's before.",
+      "facade": "Skeletons.GetLocal",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it read: false when the entity is not Ready or the bone is out of range."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "local",
+          "type": "Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The transform; the default when it reads nothing."
+        }
+      ]
+    },
+    {
+      "name": "GetBaseLocal",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "The bone's local transform in the base pose, the render pose's or the simulation pose's (`kind`).",
+      "facade": "Skeletons.GetBaseLocal",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it read: false when the entity is not Ready or the bone is out of range."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "kind",
+          "type": "Fenrir::PoseKind",
+          "kind": "enum"
+        },
+        {
+          "name": "local",
+          "type": "Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The transform; the default when it reads nothing."
+        }
+      ]
+    },
+    {
+      "name": "GetModel",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "The bone's model-space matrix in the final pose, relative to the skeleton entity.",
+      "facade": "Skeletons.GetModel",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it read: false when the entity is not Ready or the bone is out of range."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "model",
+          "type": "Fenrir::Math::Mat4*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Mat4",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The matrix; zero when it reads nothing."
+        }
+      ]
+    },
+    {
+      "name": "GetBaseModel",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "The bone's model-space matrix in the base pose (`kind`'s), relative to the skeleton entity.",
+      "facade": "Skeletons.GetBaseModel",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it read: false when the entity is not Ready or the bone is out of range."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "kind",
+          "type": "Fenrir::PoseKind",
+          "kind": "enum"
+        },
+        {
+          "name": "model",
+          "type": "Fenrir::Math::Mat4*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Mat4",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The matrix; zero when it reads nothing."
+        }
+      ]
+    },
+    {
+      "name": "GetBoneWorldMatrix",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "The bone's world matrix: the skeleton entity's world matrix now times the bone's model matrix, the final pose's for Render and, on a tick-posed skeleton, the simulation pose's for Simulation.",
+      "facade": "Skeletons.GetBoneWorldMatrix",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it read: false when the entity is not Ready or the bone is out of range."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "kind",
+          "type": "Fenrir::PoseKind",
+          "kind": "enum"
+        },
+        {
+          "name": "world",
+          "type": "Fenrir::Math::Mat4*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Mat4",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The matrix; zero when it reads nothing."
+        }
+      ]
+    },
+    {
+      "name": "ReadLocals",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Copies the final pose's local transforms, one per bone in bone order, into `locals`.",
+      "facade": "Skeletons.ReadLocals",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many bones it wrote: the fewer of the span's length and the bone count; 0 when not Ready."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "locals",
+          "type": "Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct"
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "ReadBaseLocals",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Copies the base pose's local transforms (`kind`'s), one per bone in bone order, into `locals`.",
+      "facade": "Skeletons.ReadBaseLocals",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many bones it wrote: the fewer of the span's length and the bone count; 0 when not Ready."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "locals",
+          "type": "Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct"
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "kind",
+          "type": "Fenrir::PoseKind",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "ReadModel",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Copies the final pose's model-space matrices, one per bone in bone order, into `models`.",
+      "facade": "Skeletons.ReadModel",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many bones it wrote: the fewer of the span's length and the bone count; 0 when not Ready."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "models",
+          "type": "Fenrir::Math::Mat4*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Mat4",
+          "pointeeKind": "struct"
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "SetBaseLocal",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Writes the bone's local transform in the base pose, marking the pose dirty (C++'s EditBasePose): seen by this frame's pose before the pipeline or in Animate, by the next frame's after it. Refused, writing nothing, in Modify and Late, and during Animate on a skeleton of the other pass's timing.",
+      "facade": "Skeletons.SetBaseLocal",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it wrote."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "local",
+          "type": "const Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "SetBasePose",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Writes the base pose's local transforms from `pose`, one per bone in bone order, as SetBaseLocal does each. A span shorter than the bone count leaves the bones after it as they are; a longer one's extra entries are ignored.",
+      "facade": "Skeletons.SetBasePose",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many bones it wrote; 0 when refused or not Ready."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "pose",
+          "type": "const Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "GetTiming",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "The running pass's timing, inside a Fenrir.Skeleton.Animate stage system: Frame in the frame pass, Tick in a tick pass. Frame anywhere else.",
+      "returns": {
+        "type": "Fenrir::PoseTiming",
+        "kind": "enum"
+      },
+      "parameters": []
+    },
+    {
+      "name": "GetStep",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "The running pass's step in seconds, inside a Fenrir.Skeleton.Animate stage system: the frame's delta in the frame pass, the tick rate in a tick pass. 0 anywhere else.",
+      "returns": {
+        "type": "double",
+        "kind": "f64"
+      },
+      "parameters": []
+    },
+    {
+      "name": "EditOpen",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Opens a pose edit on the skeleton entity for the running Fenrir.Skeleton.Modify stage system (C#'s Skeletons.Edit): its token, valid until the system's group returns.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the edit reaches a Ready instance: false outside Modify, or on an entity that is not Ready."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "token",
+          "type": "std::uint64_t*",
+          "kind": "pointer",
+          "pointee": "std::uint64_t",
+          "pointeeKind": "u64",
+          "output": true,
+          "doc": "The edit's token; 0 outside Modify, when the edit writes nothing."
+        }
+      ]
+    },
+    {
+      "name": "EditBase",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "The bone's base-pose local transform, as Animate left it, through the edit `token` opened.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it read: false for a stale token, an empty edit or a bone out of range."
+      },
+      "parameters": [
+        {
+          "name": "token",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "local",
+          "type": "Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The transform; the default when it reads nothing."
+        }
+      ]
+    },
+    {
+      "name": "EditLocal",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "The bone's current local transform in the final pose, with every write so far applied.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it read: false for a stale token, an empty edit or a bone out of range."
+      },
+      "parameters": [
+        {
+          "name": "token",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "local",
+          "type": "Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The transform; the default when it reads nothing."
+        }
+      ]
+    },
+    {
+      "name": "EditModel",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "The bone's current model-space matrix, with every write so far applied.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it read: false for a stale token, an empty edit or a bone out of range."
+      },
+      "parameters": [
+        {
+          "name": "token",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "model",
+          "type": "Fenrir::Math::Mat4*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Mat4",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The matrix; zero when it reads nothing."
+        }
+      ]
+    },
+    {
+      "name": "EditWrite",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Writes `target` to the bone now, as C++'s PoseEdit::Write does: later writes and modifiers see it.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it wrote: false for a stale token, an empty edit, a bone out of range or an inverse that does not exist (FenrirSkeleton warns of that one)."
+      },
+      "parameters": [
+        {
+          "name": "token",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "target",
+          "type": "const Fenrir::Target*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Target",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "SetOverride",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Sets the bone's pose override entry, replacing any (ADR-0038): written each frame by PoseOverride.",
+      "facade": "Skeletons.SetOverride",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was set: false when the entity is not Ready or the bone is out of range."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "target",
+          "type": "const Fenrir::Target*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Target",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "GetOverride",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "The bone's pose override entry, if it has one.",
+      "facade": "Skeletons.GetOverride",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it has one."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "target",
+          "type": "Fenrir::Target*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Target",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The entry; the default when it has none."
+        }
+      ]
+    },
+    {
+      "name": "ClearOverride",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Removes the bone's pose override entry; its override weight stays.",
+      "facade": "Skeletons.ClearOverride",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it had one."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "ClearOverrides",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Removes every pose override entry of the skeleton entity; override weights stay.",
+      "facade": "Skeletons.ClearOverrides",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the entity is Ready."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "SetOverrideWeight",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Sets the bone's override weight, or with BoneSubtree the bone's and every descendant's, to `weight` clamped to [0, 1]: an entry is written at its target's weight times this.",
+      "facade": "Skeletons.SetOverrideWeight",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was set: false when the entity is not Ready or the bone is out of range."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "weight",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "scope",
+          "type": "Fenrir::OverrideScope",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "GetOverrideWeight",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "The bone's override weight: 1 unless set, and 1 for an entity that is not Ready or a bone out of range.",
+      "facade": "Skeletons.GetOverrideWeight",
+      "returns": {
+        "type": "float",
+        "kind": "f32"
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "ClearOverrideWeight",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Sets the bone's override weight (or its subtree's) back to 1.",
+      "facade": "Skeletons.ClearOverrideWeight",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was set: false when the entity is not Ready or the bone is out of range."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "scope",
+          "type": "Fenrir::OverrideScope",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "GetAttachmentState",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Whether the last Attach placed the entity at its bone, and why not (ADR-0037).",
+      "facade": "Skeletons.GetAttachmentState",
+      "returns": {
+        "type": "Fenrir::AttachmentState",
+        "kind": "enum"
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "Detach",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Detaches the entity from its bone (C++'s Skeletons::Detach), when the system returns: a structural change, so it is recorded and runs outside the pose pipeline, after the calling system or (from a stage system) after the pass. KeepLocal removes the BoneAttachment only; KeepWorld reparents the entity under `newParent` (no entity for the top of the scene), keeping where it is in the world. What it can tell now it returns; a refusal at playback (a parent that died or cannot hold the transform) changes nothing and is logged.",
+      "facade": "Skeletons.Detach",
+      "returns": {
+        "type": "Fenrir::DetachResult",
+        "kind": "enum",
+        "doc": "Detached when it was recorded; NotAttached for a dead entity or one with no BoneAttachment; InvalidParent for a KeepWorld whose new parent is not alive."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "mode",
+          "type": "Fenrir::DetachMode",
+          "kind": "enum"
+        },
+        {
+          "name": "newParent",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "SpawnModel",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Spawns `model` into the active scene with its skeletons, for apps with no renderer (C++'s Skeletons::SpawnModel): a root named after the file holding one entity per ordinary node with its Name and Transform, under `parent` unless it is no entity, and at playback a SkeletonPose on each skeleton's owner and bone attachments below bones. The root is usable at once (alive); the tree is made when the system returns.",
+      "facade": "Skeletons.SpawnModel",
+      "facadeReturns": "root",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it spawned: false with no asset store, a stale model or a parent not alive."
+      },
+      "parameters": [
+        {
+          "name": "model",
+          "type": "const Fenrir::AssetHandle<Fenrir::Model>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Model>",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "The model's handle."
+        },
+        {
+          "name": "parent",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "The entity to spawn under; no entity for none. A parent that is not alive spawns nothing."
+        },
+        {
+          "name": "root",
+          "type": "Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The model's root entity; no entity when nothing was spawned."
+        }
+      ]
+    },
+    {
+      "name": "BoneCount",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "How many bones the skeleton asset has.",
+      "facade": "SkeletonData.BoneCount",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "The count; 0 for an empty or stale handle."
+      },
+      "parameters": [
+        {
+          "name": "skeleton",
+          "type": "const Fenrir::AssetHandle<Fenrir::Skeleton>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Skeleton>",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "Parent",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "The bone's parent in the skeleton asset.",
+      "facade": "SkeletonData.Parent",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "The parent; -1 for a root, a bone out of range or a stale handle."
+      },
+      "parameters": [
+        {
+          "name": "skeleton",
+          "type": "const Fenrir::AssetHandle<Fenrir::Skeleton>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Skeleton>",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton asset."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "IsDescendant",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Whether `bone` lies below `ancestor` in the skeleton asset; a bone is not its own descendant.",
+      "facade": "SkeletonData.IsDescendant",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "False also when either is out of range or the handle is stale."
+      },
+      "parameters": [
+        {
+          "name": "skeleton",
+          "type": "const Fenrir::AssetHandle<Fenrir::Skeleton>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Skeleton>",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton asset."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "ancestor",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "EngineName",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Writes the bone's engine name (unique in the skeleton, what FindBone and bone names match) into `name`, as much as fits.",
+      "facade": "SkeletonData.EngineName",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "The whole name's length in chars, so a caller can tell a cut-short copy; 0 for a bone out of range or a stale handle."
+      },
+      "parameters": [
+        {
+          "name": "skeleton",
+          "type": "const Fenrir::AssetHandle<Fenrir::Skeleton>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Skeleton>",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton asset."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "name",
+          "type": "char16_t*",
+          "kind": "pointer",
+          "pointee": "char16_t",
+          "pointeeKind": "char16"
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "SourceName",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Writes the bone's name in its file into `name`, as much as fits; it may be empty or repeated.",
+      "facade": "SkeletonData.SourceName",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "The whole name's length in chars; 0 for a bone out of range or a stale handle."
+      },
+      "parameters": [
+        {
+          "name": "skeleton",
+          "type": "const Fenrir::AssetHandle<Fenrir::Skeleton>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Skeleton>",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton asset."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "name",
+          "type": "char16_t*",
+          "kind": "pointer",
+          "pointee": "char16_t",
+          "pointeeKind": "char16"
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "Subtree",
+      "namespace": "Fenrir::SkeletonNatives",
+      "source": "../src/SkeletonScripting.cpp",
+      "state": "Fenrir::SkeletonScripting",
+      "doc": "Writes the bone and every bone below it, in index order (each after its parent), into `bones`, as many as fit.",
+      "facade": "SkeletonData.Subtree",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "The whole subtree's size, so a caller can tell a cut-short copy; 0 for a bone out of range or a stale handle."
+      },
+      "parameters": [
+        {
+          "name": "skeleton",
+          "type": "const Fenrir::AssetHandle<Fenrir::Skeleton>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Skeleton>",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton asset."
+        },
+        {
+          "name": "bone",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "bones",
+          "type": "std::int32_t*",
+          "kind": "pointer",
+          "pointee": "std::int32_t",
+          "pointeeKind": "i32"
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    }
+  ]
+}

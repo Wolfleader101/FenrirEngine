@@ -45,15 +45,19 @@ setup = "Fenrir::Testing::AssetsScriptingApp app;"
 tags = "[assets][scripting][bindings]"
 
 # Hand-written in the contract (Handles.cs) and mapped by hand (AssetMappings.hpp, included where they are bound):
-# default is the empty handle, all zero. The bindings that use this one (FenrirRenderer's) inherit them. A native takes
+# default is the empty handle, all zero. The bindings that use this one (FenrirRenderer's, FenrirSkeleton's and FenrirAnimation's) inherit them. A native takes
 # one as `const AssetHandle<T>*` (C#'s `in AssetHandle<T>`) and gives one through an `AssetHandle<T>*` marked
-# `@param[out]`, by the pointer rule over these keys.
+# `@param[out]`, by the pointer rule over these keys. The skeleton's marker is named in full: inside the Fenrir.Skeleton
+# namespace, `Skeleton` is that namespace.
 [bound-types]
 "Fenrir::AssetHandle<Fenrir::Mesh>" = { type = "AssetHandle<Mesh>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
 "Fenrir::AssetHandle<Fenrir::Image>" = { type = "AssetHandle<Image>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
 "Fenrir::AssetHandle<Fenrir::Material>" = { type = "AssetHandle<Material>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
 "Fenrir::AssetHandle<Fenrir::Shader>" = { type = "AssetHandle<Shader>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
 "Fenrir::AssetHandle<Fenrir::Model>" = { type = "AssetHandle<Model>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
+"Fenrir::AssetHandle<Fenrir::Skeleton>" = { type = "AssetHandle<global::Fenrir.Assets.Skeleton>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
+"Fenrir::AssetHandle<Fenrir::Clip>" = { type = "AssetHandle<Clip>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
+"Fenrir::AssetHandle<Fenrir::BoneMask>" = { type = "AssetHandle<BoneMask>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
 
 [names]
 "Fenrir::ScriptShaderParameter" = "ShaderParameter"

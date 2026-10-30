@@ -33,6 +33,9 @@ namespace Fenrir::ScriptingNatives
     Fenrir::ChangeError ComponentRemove(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t id, const Fenrir::Entity* entity);
     std::int32_t ChangesApply(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
     void ChangesDiscard(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
+    std::int32_t ChangesMark(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
+    void ChangesDiscardFrom(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t mark);
+    bool RegisterStageSystem(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::string_view system, std::string_view stage, std::int32_t order, std::int32_t group);
     std::int32_t EventIdOf(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::string_view name, std::string_view typeName);
     bool RegisterScriptEvent(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::string_view name, std::int32_t size, std::int32_t alignment);
     Fenrir::ChangeError EventSend(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t event, const void* value);

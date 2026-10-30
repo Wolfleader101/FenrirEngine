@@ -1,0 +1,390 @@
+{
+  "binding": "FenrirAnimation",
+  "context": "Fenrir::CallContext",
+  "functions": [
+    {
+      "name": "Seek",
+      "namespace": "Fenrir::AnimationNatives",
+      "source": "../src/AnimationScripting.cpp",
+      "state": "Fenrir::AnimationScripting",
+      "doc": "Queues a seek of the entity's playback cursor to `seconds` (C++'s Animation::Seek): the skeleton entity for its Animator, or a layer entity. Applied at its next evaluation, after any clip change; crosses no events, and works while paused.",
+      "facade": "Animation.Seek",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was queued: false for an entity that is not alive."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "seconds",
+          "type": "double",
+          "kind": "f64"
+        }
+      ]
+    },
+    {
+      "name": "Playback",
+      "namespace": "Fenrir::AnimationNatives",
+      "source": "../src/AnimationScripting.cpp",
+      "state": "Fenrir::AnimationScripting",
+      "doc": "Where the entity's playback stands: its Animator's, or else its AnimationLayer's.",
+      "facade": "Animation.Playback",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the entity plays anything: false when its state is Missing."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "info",
+          "type": "Fenrir::PlaybackInfo*",
+          "kind": "pointer",
+          "pointee": "Fenrir::PlaybackInfo",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The playback; Missing with nothing playing when it reads nothing."
+        }
+      ]
+    },
+    {
+      "name": "Duration",
+      "namespace": "Fenrir::AnimationNatives",
+      "source": "../src/AnimationScripting.cpp",
+      "state": "Fenrir::AnimationScripting",
+      "doc": "How long the clip plays, in seconds.",
+      "facade": "Clips.Duration",
+      "returns": {
+        "type": "float",
+        "kind": "f32",
+        "doc": "The duration; 0 for an empty or stale handle."
+      },
+      "parameters": [
+        {
+          "name": "clip",
+          "type": "const Fenrir::AssetHandle<Fenrir::Clip>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Clip>",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "EventCount",
+      "namespace": "Fenrir::AnimationNatives",
+      "source": "../src/AnimationScripting.cpp",
+      "state": "Fenrir::AnimationScripting",
+      "doc": "How many timed events the clip has, in time order.",
+      "facade": "Clips.EventCount",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "The count; 0 for an empty or stale handle."
+      },
+      "parameters": [
+        {
+          "name": "clip",
+          "type": "const Fenrir::AssetHandle<Fenrir::Clip>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Clip>",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "GetEvent",
+      "namespace": "Fenrir::AnimationNatives",
+      "source": "../src/AnimationScripting.cpp",
+      "state": "Fenrir::AnimationScripting",
+      "doc": "The time of the clip's event at `index`.",
+      "facade": "Clips.GetEvent",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the clip has an event there."
+      },
+      "parameters": [
+        {
+          "name": "clip",
+          "type": "const Fenrir::AssetHandle<Fenrir::Clip>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Clip>",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "index",
+          "type": "std::uint32_t",
+          "kind": "u32"
+        },
+        {
+          "name": "time",
+          "type": "float*",
+          "kind": "pointer",
+          "pointee": "float",
+          "pointeeKind": "f32",
+          "output": true,
+          "doc": "Its authored time in seconds; 0 when there is none."
+        }
+      ]
+    },
+    {
+      "name": "EventName",
+      "namespace": "Fenrir::AnimationNatives",
+      "source": "../src/AnimationScripting.cpp",
+      "state": "Fenrir::AnimationScripting",
+      "doc": "Writes the name of the clip's event at `index` into `name`, as much as fits.",
+      "facade": "Clips.EventName",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "The whole name's length in chars, so a caller can tell a cut-short copy; 0 when there is no event."
+      },
+      "parameters": [
+        {
+          "name": "clip",
+          "type": "const Fenrir::AssetHandle<Fenrir::Clip>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Clip>",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "index",
+          "type": "std::uint32_t",
+          "kind": "u32"
+        },
+        {
+          "name": "name",
+          "type": "char16_t*",
+          "kind": "pointer",
+          "pointee": "char16_t",
+          "pointeeKind": "char16"
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "FindEvents",
+      "namespace": "Fenrir::AnimationNatives",
+      "source": "../src/AnimationScripting.cpp",
+      "state": "Fenrir::AnimationScripting",
+      "doc": "Writes the index of every event of the clip named exactly `name`, in time order, into `indices`, as many as fit.",
+      "facade": "Clips.FindEvents",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many events have that name, so a caller can tell a cut-short copy; 0 for a stale handle."
+      },
+      "parameters": [
+        {
+          "name": "clip",
+          "type": "const Fenrir::AssetHandle<Fenrir::Clip>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Clip>",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "indices",
+          "type": "std::uint32_t*",
+          "kind": "pointer",
+          "pointee": "std::uint32_t",
+          "pointeeKind": "u32"
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "AddEvent",
+      "namespace": "Fenrir::AnimationNatives",
+      "source": "../src/AnimationScripting.cpp",
+      "state": "Fenrir::AnimationScripting",
+      "doc": "Adds an event named `name` at `time` to the clip, after any events already at that time, bumping its revision (ADR-0034).",
+      "facade": "Clips.AddEvent",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was added: false for a stale handle, or a time that is not finite or lies outside the clip's duration (the store logs which)."
+      },
+      "parameters": [
+        {
+          "name": "clip",
+          "type": "const Fenrir::AssetHandle<Fenrir::Clip>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Clip>",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "time",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "index",
+          "type": "std::uint32_t*",
+          "kind": "pointer",
+          "pointee": "std::uint32_t",
+          "pointeeKind": "u32",
+          "output": true,
+          "doc": "The new event's index; 0 when nothing was added."
+        }
+      ]
+    },
+    {
+      "name": "RemoveEvent",
+      "namespace": "Fenrir::AnimationNatives",
+      "source": "../src/AnimationScripting.cpp",
+      "state": "Fenrir::AnimationScripting",
+      "doc": "Removes the clip's event at `index`, bumping its revision; later events move down one.",
+      "facade": "Clips.RemoveEvent",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was one to remove."
+      },
+      "parameters": [
+        {
+          "name": "clip",
+          "type": "const Fenrir::AssetHandle<Fenrir::Clip>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Clip>",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "index",
+          "type": "std::uint32_t",
+          "kind": "u32"
+        }
+      ]
+    },
+    {
+      "name": "Create",
+      "namespace": "Fenrir::AnimationNatives",
+      "source": "../src/AnimationScripting.cpp",
+      "state": "Fenrir::AnimationScripting",
+      "doc": "Makes a new bone mask with no entries for `owner`: on a layer it covers no bone until one is included.",
+      "facade": "BoneMasks.Create",
+      "facadeReturns": "mask",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether one was made: false with no asset store or an owner that is neither."
+      },
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "Fenrir::ScriptAssetOwner",
+          "kind": "enum"
+        },
+        {
+          "name": "mask",
+          "type": "Fenrir::AssetHandle<Fenrir::BoneMask>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::BoneMask>",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The new mask; the empty handle when none was made."
+        }
+      ]
+    },
+    {
+      "name": "Include",
+      "namespace": "Fenrir::AnimationNatives",
+      "source": "../src/AnimationScripting.cpp",
+      "state": "Fenrir::AnimationScripting",
+      "doc": "Appends an entry giving the bone named `bone` (by engine name), or with Subtree its whole subtree, `weight`; it overrides earlier entries for the bones it covers, and bumps the mask's revision.",
+      "facade": "BoneMasks.Include",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was added: false for a stale handle or a weight that is not finite."
+      },
+      "parameters": [
+        {
+          "name": "mask",
+          "type": "const Fenrir::AssetHandle<Fenrir::BoneMask>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::BoneMask>",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "bone",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "weight",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "scope",
+          "type": "Fenrir::MaskScope",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "Clear",
+      "namespace": "Fenrir::AnimationNatives",
+      "source": "../src/AnimationScripting.cpp",
+      "state": "Fenrir::AnimationScripting",
+      "doc": "Removes every entry of the mask, bumping its revision.",
+      "facade": "BoneMasks.Clear",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the handle named a mask."
+      },
+      "parameters": [
+        {
+          "name": "mask",
+          "type": "const Fenrir::AssetHandle<Fenrir::BoneMask>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::BoneMask>",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    }
+  ]
+}

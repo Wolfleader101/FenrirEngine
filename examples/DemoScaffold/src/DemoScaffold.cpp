@@ -194,6 +194,9 @@ namespace FenrirDemo
             std::optional<Fenrir::Assets> assets;
             std::optional<Fenrir::DebugDrawing> debugDrawing;
             std::optional<Fenrir::Renderer> renderer;
+            // DemoConfig::installPackages's owners: after the scaffold's packages, which they need, and before
+            // Scripting.
+            std::shared_ptr<void> appPackages;
 #ifdef FENRIR_DEMO_SCRIPTING
             // Last, so it ends first, while the packages its extensions reach are there.
             std::optional<Fenrir::Scripting> scripting;
@@ -756,6 +759,10 @@ namespace FenrirDemo
             renderer.vsync = Fenrir::Vsync::Off;
         }
         state->renderer = Fenrir::Renderer::Install(app, renderer);
+        if (state->config.installPackages)
+        {
+            state->appPackages = state->config.installPackages(app);
+        }
 #ifdef FENRIR_DEMO_SCRIPTING
         if (!state->config.scriptAssembly.empty())
         {

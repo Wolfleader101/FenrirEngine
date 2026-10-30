@@ -14,4 +14,12 @@ public partial struct RendererStats
     public uint Passes;
     /// <summary>Assets uploaded to the GPU by the prepare step: a mesh, or a material's parameter block.</summary>
     public uint Uploads;
+    /// <summary>Bytes copied into the frame's palette buffer: every skeleton palette the frame's draws read.</summary>
+    public uint PaletteBytesUploaded;
+    /// <summary>
+    /// Skeleton palettes written, one per skeleton and pose however many meshes and views draw it (ADR-0035).
+    /// </summary>
+    public uint DistinctPalettesWritten;
+    /// <summary>Draws of skinned MeshRenderers, one per item per view; part of `draws`.</summary>
+    public uint SkinnedDraws;
 }

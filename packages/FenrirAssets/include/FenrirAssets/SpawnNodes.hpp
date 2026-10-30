@@ -15,8 +15,9 @@ namespace Fenrir
          */
         Entity root;
         /**
-         * @brief One entity per model node, indexed as Model::nodes is. In the foundation every node is an entity; the
-         * animation spec leaves bones out, and their entries null (ADR-0031).
+         * @brief One entity per model node, indexed as Model::nodes is: ordinary nodes and synthetic owners. Bones get
+         * no entity, so their entries are null (ADR-0031). An ordinary node below bones is a child of its nearest
+         * spawned ancestor, its Transform its rest place relative to that ancestor.
          */
         std::vector<Entity> nodes;
     };
