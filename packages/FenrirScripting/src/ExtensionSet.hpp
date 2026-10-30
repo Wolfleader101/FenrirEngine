@@ -19,11 +19,22 @@ namespace Fenrir::Detail
      * contracts in extension order. The rules live here: every native function is named Namespace.Type.Method; no name
      * is declared twice, by one extension or by two; a native taking an extension state is listed by an extension
      * carrying a state of its type; every rule is checked before anything is registered; and a set exists only once
-     * every native is registered, so the contracts it lists are shared after the natives they bind.
+     * every native is registered, so the contracts it lists are shared after the natives they bind. It also keeps the
+     * extension stages, under their own rules: every stage has a name, no name is declared twice, and an extension
+     * declaring stages places and removes them.
      */
     class ExtensionSet
     {
       public:
+        /** @brief The stages one extension declares, and how it places and removes a script's groups for them. */
+        struct DeclaredStages
+        {
+            std::string extension;
+            std::vector<std::string> stages;
+            ScriptingExtension::PlaceStages place;
+            ScriptingExtension::RemoveStages remove;
+        };
+
         ExtensionSet(ExtensionSet&&) noexcept = default;
         ExtensionSet& operator=(ExtensionSet&&) noexcept = default;
 
@@ -44,6 +55,12 @@ namespace Fenrir::Detail
             return m_sharedAssemblies;
         }
 
+        /** @brief The extensions that declare stages, in extension order; one that declares none is not here. */
+        [[nodiscard]] const std::vector<DeclaredStages>& Stages() const noexcept
+        {
+            return m_stages;
+        }
+
       private:
         ExtensionSet() = default;
 
@@ -55,5 +72,6 @@ namespace Fenrir::Detail
         // Every extension's extension state, kept alive as long as the native functions that receive it can be called.
         std::vector<std::shared_ptr<void>> m_states;
         std::vector<std::filesystem::path> m_sharedAssemblies;
+        std::vector<DeclaredStages> m_stages;
     };
 } // namespace Fenrir::Detail

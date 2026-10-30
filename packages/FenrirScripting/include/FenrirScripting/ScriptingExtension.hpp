@@ -34,6 +34,8 @@ namespace Fenrir
         class ChangeBuffer;
         class ExtensionSet;
         class IrisNativeRegistrar;
+        class ScriptSystems;
+        struct StageSession;
 
         template <auto Function, typename State, typename R, typename... Args>
         struct NativeFunctionCall;
@@ -306,12 +308,89 @@ namespace Fenrir
     };
 
     /**
+     * @brief One group of a script's stage systems: the C# systems that join one extension stage at one order
+     * (`[StageSystem(name, Order = n)]`), as the extension that declares the stage is given it to place in its own
+     * work. A copy is the same group. It is good while the script generation that has it is loaded: once the script is
+     * released (ScriptingExtension::removeStages runs then), Run does nothing.
+     */
+    class StageGroup
+    {
+      public:
+        /** @brief The stage's full name, as the extension declares it. */
+        [[nodiscard]] const std::string& Stage() const noexcept
+        {
+            return m_stage;
+        }
+
+        /** @brief The order every system of the group gave. */
+        [[nodiscard]] std::int32_t Order() const noexcept
+        {
+            return m_order;
+        }
+
+        /**
+         * @brief Runs the group's systems, in name order, in one call into the script; off the main thread one error
+         * and nothing runs. A system that throws has its changes dropped and is disabled until the next reload. The
+         * structural changes the others record wait for StageChanges::PlayBack.
+         */
+        void Run() const;
+
+      private:
+        friend class Detail::ScriptSystems;
+        StageGroup(std::shared_ptr<Detail::StageSession> session, std::string stage, std::int32_t order,
+                   std::int32_t index)
+            : m_session(std::move(session)), m_stage(std::move(stage)), m_order(order), m_index(index)
+        {
+        }
+
+        std::shared_ptr<Detail::StageSession> m_session;
+        std::string m_stage;
+        std::int32_t m_order;
+        std::int32_t m_index; // The script's number for the group, which it runs it by.
+    };
+
+    /**
+     * @brief The structural changes a script's stage systems record, as the extension that runs them plays them back.
+     * Good as long as the StageGroups it came with.
+     */
+    class StageChanges
+    {
+      public:
+        /**
+         * @brief Plays back, in order, the structural changes recorded since the last playback. The extension calls it
+         * when the work hosting its groups returns, never between two groups, so its own work never sees entities or
+         * components appear or vanish halfway through. Nothing once the script is released.
+         */
+        void PlayBack() const;
+
+      private:
+        friend class Detail::ScriptSystems;
+        explicit StageChanges(std::shared_ptr<Detail::StageSession> session) : m_session(std::move(session))
+        {
+        }
+
+        std::shared_ptr<Detail::StageSession> m_session;
+    };
+
+    /**
      * @brief What one engine package, or the app, gives scripting: its native functions, its components, events,
-     * shared structs and resources, its extension state, and the shared assemblies that are its C# contract. Passed to
-     * Scripting::Install in ScriptingConfig::extensions; scripting knows nothing of the package beyond this.
+     * shared structs and resources, its extension state, the shared assemblies that are its C# contract, and the
+     * extension stages it hosts. Passed to Scripting::Install in ScriptingConfig::extensions; scripting knows nothing
+     * of the package beyond this.
      */
     struct ScriptingExtension
     {
+        /**
+         * @brief Places the groups of one script generation that join this extension's stages: one item per group in
+         * the extension's own work, at the group's order. Equal orders run the extension's C++ work first. The groups
+         * come sorted by stage name, then by order; a stage no system joins has none, and the function is called even
+         * with none.
+         */
+        using PlaceStages = std::function<void(App& app, std::vector<StageGroup> groups, StageChanges changes)>;
+
+        /** @brief Removes every item PlaceStages placed, when the script generation is released. */
+        using RemoveStages = std::function<void(App& app)>;
+
         /**
          * @brief Gives the extension its extension state: the object its native functions of the form
          * `R F(const CallContext&, State&, Args...)` receive. One state per extension; setting it again replaces it.
@@ -364,6 +443,20 @@ namespace Fenrir
          * extension.
          */
         std::vector<ResourceRegistration> resources;
+
+        /**
+         * @brief The extension stages it hosts, by full name (`Fenrir.Skeleton.Modify`): named parts of its own C++
+         * work that C# systems join with `[StageSystem(name, Order = n)]`. A name is declared by one extension only. A
+         * script whose stage system names a stage no extension declares fails to load. Like its native functions, a
+         * stage needs no installed package: a stage that never runs is not an error.
+         */
+        std::vector<std::string> stages;
+
+        /** @brief Places a loaded script's groups for `stages`. Required when `stages` is not empty. */
+        PlaceStages placeStages;
+
+        /** @brief Removes what placeStages placed. Required when `stages` is not empty. */
+        RemoveStages removeStages;
 
       private:
         friend class Detail::ExtensionSet;

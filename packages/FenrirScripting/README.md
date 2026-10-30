@@ -474,6 +474,32 @@ Within a phase, the lowest `Order` runs first (ties by full name). `OnCreate` an
   covered by a test, because the debug assert aborts the process.
 - `SystemContext` has `Time`, `Log`, `CreateEntity()`, `Query<...>()` and `Events` (sending; see Events).
 
+### Stage systems
+
+```csharp
+[StageSystem(PoseStages.Modify, Order = ModifierOrder.Override + 10)]
+public sealed class LookAt : ISystem
+{
+    public void OnUpdate(in SystemContext ctx) { /* runs inside FenrirSkeleton's Modify, after the pose override */ }
+}
+```
+
+A system may run inside an *extension stage* instead of a phase: a named part of an engine package's own C++ work, which
+the package's scripting extension declares (see "Hosting stages" below). `[StageSystem(stage, Order)]` takes the stage's
+full name; a contract gives the names as constants. Everything else about the system is as above.
+
+- **Run by the package, at its order.** The package runs the stage's systems among its own C++ work: lowest `Order` first,
+  and C++ work before C# at the same order. Systems with the same stage and order are one *group*, run in name order with
+  one call into the script.
+- **Checked at load.** A stage no loaded extension declares fails the script's load, logged with the system and the stage
+  named. A stage that never runs (its package is not installed, or its scene is inactive) is not an error: the system
+  simply does not run, like the C++ work beside it.
+- **Changes wait for the package.** What a stage system records plays back when the package's work returns, not when the
+  system does, so neither the systems after it nor the package's C++ work see an entity or component appear halfway
+  through. A throw drops only what the thrower recorded, logs it once, and disables it until the next reload.
+- **Found at build time.** `[StageSystem]` with an empty stage name is FENRIR0015; a class with both `[System]` and
+  `[StageSystem]` is FENRIR0016.
+
 ## Events
 
 ```csharp
@@ -546,7 +572,8 @@ Build the script project while the game runs and the new code takes over between
 
 ## Scripting extensions
 
-An engine package, or the app, makes itself scriptable with a `ScriptingExtension` (ADR-0009, amended by ADR-0029),
+An engine package, or the app, makes itself scriptable with a `ScriptingExtension` (ADR-0009, amended by ADR-0029 and
+ADR-0039),
 which the app lists in `ScriptingConfig::extensions`. FenrirScripting never names the package. An extension carries:
 
 - **native functions**: C++ functions C# calls, made with `NativeFunction::Make<&Function>("Namespace.Type.Method")`, named
@@ -566,7 +593,9 @@ which the app lists in `ScriptingConfig::extensions`. FenrirScripting never name
   variants), registered and checked the same way, which C# reads and writes in place through `Resources`;
 - **shared assemblies**: its C# contract, shared with every script load. A relative path is in the bridge directory,
   beside `Fenrir.Scripting.dll`, where the build deploys a package's contract (`fenrir_deploy_scripting(<target>
-  EXTENSIONS Physics)`, say).
+  EXTENSIONS Physics)`, say);
+- **extension stages**: named parts of its own C++ work that C# stage systems join (ADR-0039), with how it places and
+  removes them (see "Hosting stages").
 
 Extensions are the only way to give scripting anything, so the app's own components, resources, events and contract go in
 an extension of its own, just as a package's do:
@@ -621,6 +650,34 @@ never links FenrirScripting), whose natives take its extension state, its contra
 extension is a generated binding, as FenrirPhysics's is (`packages/<Package>/Scripting/api/<Package>.binding.toml`): its
 mirrors, mappings, native declarations, registration and tests are generated, and its contract holds only its facades and
 its mirrors' behaviour by hand.
+
+### Hosting stages
+
+An extension that wants C# inside its own work declares the stages by full name, and says how a script's groups are
+placed and removed:
+
+```cpp
+extension.stages = {"Fenrir.Skeleton.Modify"};
+extension.placeStages = [state](App& app, std::vector<Fenrir::StageGroup> groups, Fenrir::StageChanges changes) {
+    for (const auto& group : groups)   // sorted by stage, then order
+        state->handles.push_back(AddModifier(app, group.Order(), [group] { group.Run(); }));
+    state->changes = changes;          // played back once the pipeline returns
+};
+extension.removeStages = [state](App& app) { /* remove every handle placeStages added */ };
+```
+
+- **Once per generation.** When a script generation's systems start, `placeStages` gets that generation's groups for the
+  extension's stages (one `StageGroup` per stage and order; none is possible) and the `StageChanges` they record into.
+  Before the generation's systems stop (a reload, or shutdown), `removeStages` must take every item away. A group kept
+  past that does nothing when run.
+- **The extension orders them.** Each group goes in at `Order()`, after the extension's own C++ work of the same order.
+  `Run()` is one call into the script; call it on the main thread, from the extension's work.
+- **The extension plays back.** Call `StageChanges::PlayBack()` once the work hosting the groups returns, never between
+  two groups.
+- **The rules.** A stage name is declared by one extension only, and an extension declaring stages gives both
+  functions, or `Install` fails. Declaring a stage needs no installed package, as a native function needs none.
+- The test extension's bench (`Tests/TestExtension.cpp`, joined by `Tests/ExtensionScript/Stages.cs` and tested in
+  `Tests/StageTests.cpp`) is a complete example.
 
 ### Native resources
 

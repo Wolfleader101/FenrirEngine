@@ -32,11 +32,36 @@ public sealed class SystemAttribute : Attribute
 }
 
 /// <summary>
-/// Logic that runs once per frame phase. The engine makes one instance when the script assembly loads. It needs a public or
-/// internal constructor with no parameters and a <see cref="SystemAttribute"/>. Structural changes it makes
+/// Marks an <see cref="ISystem"/> class to be run inside an extension stage: a named part of an engine package's own work
+/// (<c>Fenrir.Skeleton.Modify</c>), which the package runs at <see cref="Order"/> among its C++ work, lowest first. At an
+/// order C++ work also has, the C++ work runs first. A class has this or <see cref="SystemAttribute"/>, never both.
+/// <para>
+/// A script naming a stage no loaded extension declares fails to load, with the system and the stage named. A stage the
+/// engine never runs (its package is not installed, its scene is inactive) is not an error: the system simply does not run.
+/// Structural changes a stage system makes take effect when the package's work returns, not when the system does, so the
+/// systems after it in the stage do not see them. A throw drops what it changed and disables it until the next reload.
+/// </para>
+/// </summary>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+public sealed class StageSystemAttribute : Attribute
+{
+    public StageSystemAttribute(string stage) => Stage = stage;
+
+    /// <summary>The stage's full name, as the extension that hosts it declares it.</summary>
+    public string Stage { get; }
+
+    /// <summary>Lowest runs first. Systems with the same order run in the order of their full names.</summary>
+    public int Order { get; set; }
+}
+
+/// <summary>
+/// Logic that runs once per frame phase, or inside an extension stage. The engine makes one instance when the script assembly
+/// loads. It needs a public or internal constructor with no parameters and a <see cref="SystemAttribute"/> or a
+/// <see cref="StageSystemAttribute"/>. Structural changes it makes
 /// (<see cref="Entity.Create"/>, <see cref="Entity.Destroy"/>, <see cref="Entity.Add{T}()"/>, <see cref="Entity.Remove{T}"/>) take
-/// effect when the call returns, so the next system sees them. If a call throws, the exception is logged with the system's
-/// name, the changes it made are dropped, and the system stops running until the next reload; the others keep going.
+/// effect when the call returns, so the next system sees them (a stage system's when its stage's host returns). If a call
+/// throws, the exception is logged with the system's name, the changes it made are dropped, and the system stops running
+/// until the next reload; the others keep going.
 /// </summary>
 public interface ISystem
 {
@@ -92,13 +117,28 @@ public readonly struct SystemRegistration
     {
         Name = name;
         Phase = phase;
+        Stage = null;
+        Order = order;
+        Create = create;
+    }
+
+    /// <summary>A stage system: one that joins the extension stage <paramref name="stage"/> at <paramref name="order"/>.</summary>
+    public SystemRegistration(string name, string stage, int order, Func<ISystem> create)
+    {
+        Name = name;
+        Phase = default;
+        Stage = stage;
         Order = order;
         Create = create;
     }
 
     public string Name { get; }
 
+    /// <summary>The phase of a phase system; meaningless for a stage system.</summary>
     public Phase Phase { get; }
+
+    /// <summary>The extension stage a stage system joins, or null for a phase system.</summary>
+    public string? Stage { get; }
 
     public int Order { get; }
 
@@ -107,8 +147,9 @@ public readonly struct SystemRegistration
 
 /// <summary>
 /// Runs a script assembly's systems for the engine. The engine makes one (through the generated
-/// <c>Fenrir.Scripting.Generated.SystemHost</c>) and calls it once per phase, so a phase costs one transition however many
-/// systems it has. Scripts do not use it directly.
+/// <c>Fenrir.Scripting.Generated.SystemHost</c>) and calls it once per phase, and once per stage group where the extension
+/// hosting the stage runs it, so a phase or a group costs one transition however many systems it has. Scripts do not use it
+/// directly.
 /// </summary>
 public sealed class SystemRunner
 {
@@ -116,18 +157,29 @@ public sealed class SystemRunner
     {
         public required string Name { get; init; }
         public required Phase Phase { get; init; }
+        public string? Stage { get; init; }
         public required int Order { get; init; }
+        public int Group { get; set; } = -1; // A stage system's (stage, order) group; -1 for a phase system.
         public ISystem? Instance { get; set; }
     }
 
     private readonly Entry[] entries;
+
+    // Each stage group's systems, in name order, by group number.
+    private readonly Entry[][] groups;
 
     public SystemRunner(SystemRegistration[] registrations)
     {
         var sorted = new List<Entry>(registrations.Length);
         foreach (SystemRegistration registration in registrations)
         {
-            var entry = new Entry { Name = registration.Name, Phase = registration.Phase, Order = registration.Order };
+            var entry = new Entry
+            {
+                Name = registration.Name,
+                Phase = registration.Phase,
+                Stage = registration.Stage,
+                Order = registration.Order,
+            };
             try
             {
                 entry.Instance = registration.Create();
@@ -138,15 +190,33 @@ public sealed class SystemRunner
             }
             sorted.Add(entry);
         }
+        // Phase systems first, by phase; then stage systems, by stage. Within either, by order, then by name.
         sorted.Sort(static (left, right) =>
         {
-            int byPhase = left.Phase.CompareTo(right.Phase);
-            if (byPhase != 0)
-                return byPhase;
+            int byKind = (left.Stage != null).CompareTo(right.Stage != null);
+            if (byKind != 0)
+                return byKind;
+            int byPlace = left.Stage != null ? string.CompareOrdinal(left.Stage, right.Stage) : left.Phase.CompareTo(right.Phase);
+            if (byPlace != 0)
+                return byPlace;
             int byOrder = left.Order.CompareTo(right.Order);
             return byOrder != 0 ? byOrder : string.CompareOrdinal(left.Name, right.Name);
         });
         entries = sorted.ToArray();
+
+        var grouped = new List<List<Entry>>();
+        Entry? previous = null;
+        foreach (Entry entry in entries)
+        {
+            if (entry.Stage == null)
+                continue;
+            if (previous == null || previous.Stage != entry.Stage || previous.Order != entry.Order)
+                grouped.Add(new List<Entry>());
+            entry.Group = grouped.Count - 1;
+            grouped[^1].Add(entry);
+            previous = entry;
+        }
+        groups = grouped.Select(static group => group.ToArray()).ToArray();
     }
 
     /// <summary>Bit <c>1 &lt;&lt; (int)phase</c> is set for each phase that has a system, so the engine runs only those.</summary>
@@ -154,9 +224,49 @@ public sealed class SystemRunner
     {
         int mask = 0;
         foreach (Entry entry in entries)
-            if (entry.Instance != null) // One whose constructor threw is already out of service.
+            if (entry.Stage == null && entry.Instance != null) // One whose constructor threw is already out of service.
                 mask |= 1 << (int)entry.Phase;
         return mask;
+    }
+
+    /// <summary>
+    /// Tells the engine of each stage system, with its stage, order and group, so it can check every stage is declared and
+    /// hand each group to the extension hosting its stage. One whose constructor threw is reported too: its stage is still
+    /// checked.
+    /// </summary>
+    public void ReportStages()
+    {
+        foreach (Entry entry in entries)
+            if (entry.Stage != null)
+                Native.RegisterStageSystem(entry.Name, entry.Stage, entry.Order, entry.Group);
+    }
+
+    /// <summary>
+    /// Runs the systems of one stage group, in name order, without playing back what they change: the extension hosting the
+    /// stage does that when its work returns. A system that throws has only what it recorded dropped. An unknown group does
+    /// nothing.
+    /// </summary>
+    public void RunStage(int group)
+    {
+        if (group < 0 || group >= groups.Length)
+            return;
+        SystemContext context = default;
+        foreach (Entry entry in groups[group])
+        {
+            ISystem? system = entry.Instance;
+            if (system == null)
+                continue;
+            int mark = Native.ChangesMark();
+            try
+            {
+                system.OnUpdate(in context);
+            }
+            catch (Exception exception)
+            {
+                Native.ChangesDiscardFrom(mark);
+                Fail(entry, "OnUpdate", exception);
+            }
+        }
     }
 
     /// <summary>Calls OnCreate on each system, in phase and order.</summary>
@@ -172,7 +282,7 @@ public sealed class SystemRunner
     {
         SystemContext context = default;
         foreach (Entry entry in entries)
-            if ((int)entry.Phase == phase)
+            if (entry.Stage == null && (int)entry.Phase == phase)
                 Invoke(entry, Stage.Update, in context);
     }
 

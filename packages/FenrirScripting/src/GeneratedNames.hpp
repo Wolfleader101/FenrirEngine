@@ -17,6 +17,15 @@ namespace Fenrir::Detail::GeneratedNames
     /** @brief `int PhaseMask()`: bit n is set when the script has a system in phase n. */
     constexpr std::string_view PhaseMask = "PhaseMask";
 
+    /**
+     * @brief `void ReportStages()`: calls the engine's RegisterStageSystem native once per stage system, with its
+     * stage, order and group.
+     */
+    constexpr std::string_view ReportStages = "ReportStages";
+
+    /** @brief `void RunStage(int group)`: the systems of one stage group, in name order, with no playback. */
+    constexpr std::string_view RunStage = "RunStage";
+
     /** @brief `void OnCreate()`: every system's OnCreate, once the generation is loaded. */
     constexpr std::string_view OnCreate = "OnCreate";
 

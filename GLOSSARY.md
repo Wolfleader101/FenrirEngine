@@ -184,7 +184,7 @@ A value that holds exactly one of several kinds, with a tag saying which one (a 
 *Avoid:* variant, sum type, discriminated union (a proposed C# language feature, not this).
 
 **Extension stage**
-A named point inside a package's own C++ work where C# systems run, declared by the package's scripting extension and joined with `[StageSystem(name, Order)]` (ADR-0039). The pose stages are the first. The extension runs each order group with one call into the script, and the systems' structural changes play back when the hosting system returns.
+A named point inside a package's own C++ work where C# systems run, declared by full name in the package's scripting extension (`ScriptingExtension::stages`) and joined with `[StageSystem(name, Order = n)]` (ADR-0039). The pose stages are the first. When a script loads, the extension is given one *stage group* (`StageGroup`) per (stage, order) the script has, and places each as an item of its own work at that order, after its C++ work of the same order; it removes them when the script is released. A group's `Run` is one call into the script, running its systems in name order. Their structural changes wait until the hosting work returns and the extension calls `StageChanges::PlayBack`. A stage no extension declares fails the script's load; a stage that never runs is no error.
 *Avoid:* phase (FenrirApp's), hook, callback.
 
 **Native function**

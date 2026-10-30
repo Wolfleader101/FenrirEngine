@@ -57,6 +57,16 @@ public static partial class Gadgets
     // the native runs: zero readings, and a zeroed `reading`, for a dead entity; -1 when no Scripting runs.
     [NativeFunction]
     public static partial int Weigh(in Entity entity, out Reading reading);
+
+    // Adds the text to the trace the extension keeps in its extension state, beside what its bench's C++ items add.
+    [NativeFunction]
+    public static partial void Trace(string text);
+}
+
+/// <summary>The extension stage the test extension hosts: its bench, C++ items by order that stage systems join.</summary>
+public static class Bench
+{
+    public const string Stage = "Fenrir.TestExtension.Bench";
 }
 
 /// <summary>A heading, which the test extension's natives take and return by value.</summary>

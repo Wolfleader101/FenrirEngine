@@ -2,8 +2,9 @@
 // twice, by one extension or by two; a native taking an extension state is listed by an extension carrying a state of
 // its type; every rule is checked before anything is registered; every native is registered in extension order with its
 // extension's state; a refused registration fails the set and names the function; the states outlive the extensions
-// and expire with the set; the shared assemblies come back in extension order. What Iris checks when the contracts are
-// shared (an unbound C# field, a mismatched signature) is pinned by AdmissionTests through the real runtime.
+// and expire with the set; the shared assemblies come back in extension order; a stage is declared once, with a name,
+// by an extension that places and removes its groups. What Iris checks when the contracts are shared (an unbound C#
+// field, a mismatched signature) is pinned by AdmissionTests through the real runtime.
 #include <catch2/catch_test_macros.hpp>
 
 #include "FakeNativeRegistrar.hpp"
@@ -296,4 +297,81 @@ TEST_CASE("the shared assemblies come back in extension order", "[extension-set]
     REQUIRE(installed.Succeeded());
     INFO("The shared assemblies were not every extension's, in extension order");
     REQUIRE((*installed).SharedAssemblies() == Paths{"Fenrir.Math.dll", "Fenrir.Scripting.dll", "Rules.Gadgets.dll"});
+}
+
+namespace
+{
+    // An extension hosting `stages`, whose placing and removing do nothing (or are left out, when `hooks` is false).
+    ScriptingExtension Stages(const char* name, std::vector<std::string> stages, bool hooks = true)
+    {
+        auto extension = Extension(name, {});
+        extension.stages = std::move(stages);
+        if (hooks)
+        {
+            extension.placeStages = [](Fenrir::App&, std::vector<Fenrir::StageGroup>, Fenrir::StageChanges) {};
+            extension.removeStages = [](Fenrir::App&) {};
+        }
+        return extension;
+    }
+} // namespace
+
+TEST_CASE("the stage rules: a stage declared twice, one with no name, or stages with no hooks fail the set",
+          "[extension-set][stages]")
+{
+    RulesTest::FakeNativeRegistrar registrar;
+    std::vector<ScriptingExtension> extensions;
+    std::vector<const char*> expected;
+
+    SECTION("one stage declared by two extensions")
+    {
+        extensions.push_back(Stages("first", {"Rules.Stage"}));
+        extensions.push_back(Stages("second", {"Rules.Stage"}));
+        expected = {"'Rules.Stage'", "'first'", "'second'"};
+    }
+    SECTION("one stage declared twice by one extension")
+    {
+        extensions.push_back(Stages("twice", {"Rules.Stage", "Rules.Stage"}));
+        expected = {"'Rules.Stage'", "declared twice", "'twice'"};
+    }
+    SECTION("a stage with no name")
+    {
+        extensions.push_back(Stages("nameless", {""}));
+        expected = {"'nameless'", "a stage with no name"};
+    }
+    SECTION("stages with no placing or removing")
+    {
+        extensions.push_back(Stages("hookless", {"Rules.Stage"}, false));
+        expected = {"'hookless'", "placeStages and removeStages"};
+    }
+
+    const auto installed = ExtensionSet::Install(std::move(extensions), registrar);
+
+    INFO("The set should be refused as InvalidArgument");
+    REQUIRE((!installed.Succeeded() && installed.status == Iris::CallStatus::InvalidArgument));
+    for (const char* part : expected)
+    {
+        INFO("The failure did not say " + std::string(part) + ": " + installed.diagnostic);
+        REQUIRE(Contains(installed.diagnostic, part));
+    }
+}
+
+TEST_CASE("the set keeps the extensions that declare stages, in extension order, and leaves out the rest",
+          "[extension-set][stages]")
+{
+    RulesTest::FakeNativeRegistrar registrar;
+    std::vector<ScriptingExtension> extensions;
+    extensions.push_back(Stages("pose", {"Rules.Animate", "Rules.Modify"}));
+    extensions.push_back(Extension("plain", {NativeFunction::Make<&Stateless>("Rules.Plain.Answer")}));
+    extensions.push_back(Stages("camera", {"Rules.Follow"}));
+
+    const auto installed = ExtensionSet::Install(std::move(extensions), registrar);
+
+    INFO("The set should install: " + installed.diagnostic);
+    REQUIRE(installed.Succeeded());
+    const auto& stages = installed.value->Stages();
+    INFO("Only the two extensions with stages should be kept, in order, with their stages and hooks");
+    REQUIRE(stages.size() == 2);
+    REQUIRE((stages[0].extension == "pose" && stages[0].stages == Names{"Rules.Animate", "Rules.Modify"}));
+    REQUIRE((stages[1].extension == "camera" && stages[1].stages == Names{"Rules.Follow"}));
+    REQUIRE((stages[0].place && stages[0].remove && stages[1].place && stages[1].remove));
 }

@@ -104,7 +104,7 @@ namespace Fenrir
         }
         // The App's logger outlives every State; ScriptSystems borrows it from the start, while `logger` below is
         // borrowed only while the Iris sink can call Forward.
-        explicit State(ILogger& appLogger) : systems(hostLoader, &appLogger)
+        explicit State(ILogger& appLogger) : hostLoader(*context), systems(hostLoader, &appLogger)
         {
         }
         State(const State&) = delete;
@@ -500,6 +500,25 @@ namespace Fenrir
                     return StartupFailure{std::move(installed.diagnostic), {}};
                 }
                 state->extensions = std::move(*installed);
+                // The extensions that host stages, each told of a generation's groups as its systems start and told to
+                // let them go as they stop. Their changes play back when the extension's own work returns.
+                std::vector<Detail::StageHost> stageHosts;
+                for (const auto& declared : state->extensions->Stages())
+                {
+                    stageHosts.push_back(
+                        {declared.extension, declared.stages,
+                         [&app, place = declared.place](std::vector<StageGroup> groups, StageChanges changes) {
+                             place(app, std::move(groups), std::move(changes));
+                         },
+                         [&app, remove = declared.remove] { remove(app); }});
+                }
+                State* const self = state.get();
+                state->systems.SetStages(std::move(stageHosts), [self] {
+                    if (self->IsLive())
+                    {
+                        (void)self->changes.Apply(*self->context->app, self->components);
+                    }
+                });
                 return std::nullopt;
             },
             // .NET, with the contract shared, and Iris's messages going to the engine's logger.
