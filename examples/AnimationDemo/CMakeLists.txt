@@ -9,6 +9,7 @@ fenrir_add_demo_app(AnimationDemo
         src/Playback.cpp
         src/SkeletonScene.cpp
         src/SkinDiagnostics.cpp
+        src/Blending.cpp
         src/Crowd.cpp
     ASSETS assets
 )

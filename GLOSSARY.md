@@ -721,11 +721,11 @@ A skeleton's final pose for this frame, what is drawn and what attachments follo
 *Avoid:* pose mode, pose source, pose timing (which says when a pose is evaluated, not which is read).
 
 **Animator**
-`Animator`: the plain component on a skeleton entity naming the clip to play, its speed, its loop mode (`Loop` or `Once`) and whether it plays. Game code writes it and FenrirAnimation never does; it holds no time. While it names a clip, FenrirAnimation owns the skeleton's whole base pose (ADR-0034). It is the skeleton's base animation layer, and gains a crossfade on a clip change (ADR-0036).
+`Animator`: the plain component on a skeleton entity naming the clip to play, its speed, its loop mode (`Loop` or `Once`) and whether it plays. Game code writes it and FenrirAnimation never does; it holds no time. While it names a clip, FenrirAnimation owns the skeleton's whole base pose (ADR-0034). It is the skeleton's base animation layer, and crossfades on a clip change (ADR-0036).
 *Avoid:* animation player, animation component, FenrirAnimation (the package).
 
 **Playback cursor**
-Where an `Animator`'s clip is, in seconds, owned by FenrirAnimation: it advances by frame time × speed, wraps or clamps by loop mode, and moves otherwise only by an explicit seek, a clip change's restart, or the clamp or wrap into a changed clip's duration, none of which crosses events.
+Where an `Animator`'s or animation layer's clip is, in seconds, owned by FenrirAnimation (a crossfade's outgoing clip has one of its own): it advances by frame time × speed, wraps or clamps by loop mode, and moves otherwise only by an explicit seek, a clip change's restart, or the clamp or wrap into a changed clip's duration, none of which crosses events.
 *Avoid:* playhead, animation time, clip time (a key's authored time).
 
 **Animation event**

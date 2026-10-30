@@ -4,6 +4,7 @@
 # from it.
 add_library(FenrirAnimation STATIC
     include/FenrirAnimation/Animator.hpp
+    include/FenrirAnimation/AnimationLayer.hpp
     include/FenrirAnimation/AnimationEvents.hpp
     include/FenrirAnimation/Animation.hpp
 
@@ -12,6 +13,8 @@ add_library(FenrirAnimation STATIC
     src/Animators.cpp
     src/Bindings.hpp
     src/Bindings.cpp
+    src/Blending.hpp
+    src/Blending.cpp
     src/Sampling.hpp
     src/Sampling.cpp
     src/Animation.cpp

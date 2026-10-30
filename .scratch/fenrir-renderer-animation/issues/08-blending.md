@@ -15,9 +15,23 @@
 
 **Touches:** `packages/FenrirAnimation/`, `examples/AnimationDemo/src/`, `examples/AnimationDemo/README.md`, `GLOSSARY.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Seam 9 covers ADR-0036's composition, additive, crossfade, event and lifecycle cases: sequential override and additive maths against hand-computed poses, both reference modes, the positive-ratio rule, an interrupted fade continuing from its snapshot, coverage per channel, weight leaving clocks alone, a masked bone selecting nothing on an unmatched name, events from contributing clips only and merged in time order across layers, and `ClipFinished` at weight 0.
-- [ ] Scene 4 is in AnimationDemo's scene list, in its README with keys and hand checks, and the smoke runs still pass.
+- [x] Seam 9 covers ADR-0036's composition, additive, crossfade, event and lifecycle cases: sequential override and additive maths against hand-computed poses, both reference modes, the positive-ratio rule, an interrupted fade continuing from its snapshot, coverage per channel, weight leaving clocks alone, a masked bone selecting nothing on an unmatched name, events from contributing clips only and merged in time order across layers, and `ClipFinished` at weight 0.
+- [x] Scene 4 is in AnimationDemo's scene list, in its README with keys and hand checks, and the smoke runs still pass.
 - [ ] Hand check (left to the user as a `Hand check:` line on resolve): the crossfade shows no pop when interrupted, the wave plays on the upper body over the walk, the additive lean adds onto any clip in both modes, the ramped layer comes back in sync, and the event text stops at weight 0.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+Hand check: in scene Blending (`FENRIR_DEMO_SCENE=Blending`, on OpenGL), C on the left human crossfades to the next clip with no pop, V switches the next fade between smooth and linear, and I's second change mid-fade carries on from the half-blended pose without a jump; the middle human's arms and head play the call over its walking legs, and U turns that off and on; the right human's upper body sways over its idle, A moves the sway between its start and rest references, and W eases the lean out to 0, holds, and brings it back in step, the green `Sway` text and its count stopping while the weight is 0.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+
+## Comments
+
+Built 2026-10-30 on `claude/animation-07-crowd-5622a9` (ticket 07, PR #243, not merged yet), as a stacked PR. Decisions to review:
+
+- **One evaluation per skeleton:** `Animators` keys base state by skeleton entity and layer state by layer entity (`LayerPlayback`: a current `ClipTrack`, an optional outgoing track or snapshot, the fade), and evaluates each `Ready` skeleton's base then layers in one pass, writing the base pose once. Layers are gathered each pass from the scene's `AnimationLayer`s, grouped by the skeleton they name.
+- **The foundation:** with no active base (no `Animator`, no clip, or a stale clip), layers apply over the retained base pose. Because FenrirAnimation writes into that same pose, it keeps the pose under its layers (`SkeletonBlend::foundation`) and what it wrote; if the base pose still equals what it wrote, the kept foundation is used, else (a hand edit) the base pose becomes the foundation. When the last contributing layer goes, the foundation is written back once, so a removed layer is cut at once.
+- **Snapshots** hold the layer's blended value with coverage bits (local values for override and the base, deltas for additive), taken at the change from the cursors as the last frame left them, so the interruption is continuous with the last written pose.
+- **Fade eligibility** of an outgoing clip's crossings is a distance along its step: the fraction at which progress reaches 1, `(1 − p) / (step / fadeSeconds)`, times the step's length; crossings at or past it are not eligible. Counting the eligible ones past the budget stays arithmetic (whole laps times events, plus binary-searched partial laps).
+- **Merging:** each stream (a layer's current clip, or its outgoing one) yields its earliest eligible crossings up to the budget; they are sorted by (frame fraction, layer rank, stream, playback order), the base ranked first, and the first `maxEventsPerInstancePerFrame` sent. Each stream with drops sends its own `AnimationEventsDropped`; the drop is logged once per skeleton.
+- **A stale clip on a layer** freezes it entirely (no advance, no contribution), as the base's freezes its cursor and pose. **A stale mask** reaches no bone, logged once per layer. **A mask name** that is no engine name selects nothing; it is called ambiguous when several bones have it as a source name.
+- **Seeks** on an entity carrying both an `Animator` and an `AnimationLayer` go to the `Animator`.
+- **Scene 4, Blending** is fourth in the list, before Crowd; 09 and 10 go between them. Its lean is a clip made in code (Quaternius has no lean) on `spine_02`, keyed as a sway about Z on top of the rest rotation, so its two reference modes differ by a constant 10 degrees.

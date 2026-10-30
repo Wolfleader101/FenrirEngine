@@ -103,17 +103,35 @@ namespace Fenrir
     {
         PlaybackInfo info;
         const Detail::Animators* animators = scene.GetResource<Detail::Animators>();
-        if (animators == nullptr || !entity.IsValid() || !entity.HasComponent<Animator>())
+        if (animators == nullptr || !entity.IsValid())
         {
             return info;
         }
-        const PoseState pose = Skeletons::GetPoseState(scene, entity);
-        info.state = pose;
-        if (const Detail::AnimatorPlayback* playback = animators->Find(entity))
+        const bool base = entity.HasComponent<Animator>();
+        Entity skeleton = entity;
+        if (!base)
         {
-            info.time = playback->cursor;
-            info.completedLoops = playback->completedLoops;
-            info.finished = playback->finished;
+            if (!entity.HasComponent<AnimationLayer>())
+            {
+                return info;
+            }
+            // A layer reads as its skeleton does: Missing when it names no skeleton entity (ADR-0036).
+            skeleton = entity.GetComponent<AnimationLayer>().skeleton;
+            if (!skeleton.IsValid() || !skeleton.HasComponent<SkeletonPose>())
+            {
+                return info;
+            }
+        }
+        const PoseState pose = Skeletons::GetPoseState(scene, skeleton);
+        info.state = pose;
+        const Detail::LayerPlayback* playback = base ? animators->FindBase(entity) : animators->FindLayer(entity);
+        if (playback != nullptr && playback->skeleton == skeleton)
+        {
+            info.time = playback->current.cursor;
+            info.completedLoops = playback->current.completedLoops;
+            info.finished = playback->current.finished;
+            info.fading = playback->fading;
+            info.fadeProgress = playback->fading ? static_cast<float>(playback->fadeProgress) : 0.0f;
             if (pose == PoseState::Ready && playback->unavailable)
             {
                 info.state = PoseState::Unavailable;

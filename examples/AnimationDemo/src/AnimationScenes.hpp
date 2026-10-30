@@ -3,7 +3,7 @@
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 
 // AnimationDemo's scenes, in the order of its scene list (README.md). Each animation ticket adds its scene here, in the
-// spec's order: Blending, Bone attachments and Going limp (tickets 08-10) go before Crowd.
+// spec's order: Bone attachments and Going limp (tickets 09-10) go between Blending and Crowd.
 namespace AnimationDemo
 {
     /**
@@ -25,6 +25,14 @@ namespace AnimationDemo
      * warning.
      */
     [[nodiscard]] FenrirDemo::DemoScene SkinDiagnostics();
+
+    /**
+     * @brief Blending: three Quaternius humans. The left crossfades through idle, walk, run and sprint by either curve,
+     * and can be interrupted mid-fade; the middle walks with the call played on its upper body by an override layer
+     * masked to the spine's subtree; the right idles with an additive lean measured from its start or from rest, its
+     * weight ramping to 0 and back with its clock running and its events silent at 0.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene Blending();
 
     /**
      * @brief Crowd: a grid of Kenney's character, 64 at first, doubled and halved between 1 and 1024 by the keys, the

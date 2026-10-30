@@ -32,8 +32,11 @@ namespace Fenrir
      *
      * While `clip` names a clip, FenrirAnimation owns the skeleton's whole base pose: each frame it starts from the
      * rest pose and applies the clip's channels. With no `Animator`, or an empty `clip`, the base pose is left alone.
-     * Changing `clip` restarts playback, at 0 or, with a negative `speed`, at the clip's duration. It is the skeleton's
-     * base animation layer; for now a clip change cuts, and the fade fields wait for crossfades (ADR-0036).
+     * Changing `clip` restarts playback, at 0 or, with a negative `speed`, at the clip's duration, and crossfades from
+     * the outgoing clip over `fadeSeconds` (ADR-0036): the outgoing clip keeps playing on its own cursor, a change
+     * during a fade fades on from a snapshot of the blended pose, and 0 cuts. From no clip it fades from the retained
+     * base pose; to no clip it cuts, leaving the pose as last sampled. It is the skeleton's base animation layer: a
+     * full override, always first, under any `AnimationLayer`s.
      */
     struct Animator
     {
@@ -45,9 +48,12 @@ namespace Fenrir
         ClipLoop loop = ClipLoop::Loop;
         /** @brief False freezes the playback cursor; the pose is still sampled there. */
         bool playing = true;
-        /** @brief How long a clip change crossfades, in seconds. Not used yet: a clip change cuts. */
+        /**
+         * @brief How long a clip change crossfades, in seconds, by unscaled frame time, frozen while paused; 0 cuts. A
+         * change during a fade applies to the next clip change.
+         */
         float fadeSeconds = 0.0f;
-        /** @brief The crossfade's curve. Not used yet. */
+        /** @brief The crossfade's curve: its weight as a function of progress. */
         FadeCurve fadeCurve = FadeCurve::Smooth;
     };
 } // namespace Fenrir
