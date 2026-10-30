@@ -1,8 +1,68 @@
 # FenrirEngine
 
-Modular Engine designed from the ground up to allow users to use only the modules they want to use.
+A modular C++20 game engine: every system is its own package, and you build only the ones you use.
 
-## Currently a Work In Progress
+> **Status: work in progress.** The engine is built in the open, package by package. APIs change without notice and there are no releases yet.
+
+## What is in it
+
+| Package | What it gives you |
+| --- | --- |
+| `FenrirECS`, `FenrirApp`, `FenrirScene`, `FenrirScheduler`, `FenrirTime` | The entity-component-system core, the app that hosts it, scenes, scheduling and time |
+| `FenrirRenderer` | An ECS-facing renderer: `MeshRenderer`, `Camera` and lights, drawn through an OpenGL 4.6 backend (or a null backend for tests) with build-time compiled GLSL shaders |
+| `FenrirWindow`, `FenrirInput` | An SDL3 window and graphics surface; keyboard, mouse and gamepad input as polled resources and events |
+| `FenrirAssets`, `FenrirDraw2D` | Plain-data assets behind generational handles (PNG, JPEG, HDR, glTF/GLB, FBX, OBJ); 2D draw data for UIs |
+| `FenrirPhysics` | Rigid bodies, joints, character bodies and vehicles over JoltPhysics, hidden behind the engine's own components |
+| `FenrirDebugDraw` | Debug shapes and text, recorded per scene and drawn by the renderer |
+| `FenrirScripting`, `Iris` | C# scripting: Iris hosts .NET (CoreCLR) with collectible, reloadable components; the engine exposes its packages to C# as `Fenrir.*` contracts |
+| `FenrirMath`, `FenrirCore`, `FenrirLogger` | Math, core utilities and logging |
+
+Design choices that shape the engine:
+
+- **Modular by construction.** Each package is a CMake feature flag, so a headless physics sandbox does not pull in a renderer, and nothing looks for .NET unless scripting is on.
+- **ECS first.** Game code draws a mesh by putting a `MeshRenderer` on an entity. C# scripts work on the same components.
+- **Plain data between packages.** Shared types are described once in C++ headers, then `tools/describe-api` and the Iris binding generator produce the C# mirrors and registrations, and CI fails when they are stale.
+- **Decisions are written down.** Over forty [architecture decision records](docs/adr) explain why things are the way they are, and [GLOSSARY.md](GLOSSARY.md) fixes the vocabulary.
+
+## Quick start
+
+You need CMake, a C++20 compiler (Clang or MSVC on Windows, GCC or Clang on Linux), and, only for scripting, the .NET 10 SDK.
+
+```sh
+git clone --recurse-submodules https://github.com/Wolfleader101/FenrirEngine.git
+cd FenrirEngine
+cmake --preset clang-x64-debug
+cmake --build out/build/clang-x64-debug
+ctest --test-dir out/build/clang-x64-debug
+```
+
+Already cloned without submodules? Run `git submodule update --init --recursive`. The presets are in [CMakePresets.json](CMakePresets.json); the options that switch packages on and off are in the table below.
+
+## Demo apps
+
+The [examples](examples) are the quickest way to see what the engine does, and the way scene changes are checked by hand:
+
+| App | Shows | Needs |
+| --- | --- | --- |
+| [RendererDemo](examples/RendererDemo/README.md) | One scene per renderer feature | renderer |
+| [PhysicsDemo](examples/PhysicsDemo/README.md) | Bodies, joints, characters, vehicles; C# scenes with scripting | renderer, physics |
+| [ScriptingDemo](examples/ScriptingDemo/README.md) | C# scripts driving a scene | renderer, scripting |
+
+All three sit on the [demo scaffold](examples/DemoScaffold/README.md), which documents the shared keys and the smoke-run switches.
+
+## Documentation
+
+- Each package has its own README next to its code: [FenrirRenderer](packages/FenrirRenderer/README.md), [FenrirInput](packages/FenrirInput/README.md), [FenrirWindow](packages/FenrirWindow/README.md), [FenrirScripting](packages/FenrirScripting/README.md), [FenrirDebugDraw](packages/FenrirDebugDraw/README.md), [FenrirDraw2D](packages/FenrirDraw2D/README.md) and [Iris](packages/Iris/README.md).
+- [docs/adr](docs/adr) holds the architecture decisions; [GLOSSARY.md](GLOSSARY.md) the terms.
+- [CODING_STANDARDS.md](CODING_STANDARDS.md) is what review checks against.
+
+## Contributing
+
+Run `git config core.hooksPath .githooks` once per clone to turn on the pre-commit hook (clang-format, and ticket headers in `.scratch`). Work is planned as markdown specs and tickets under `.scratch/<feature>/`. Before opening a PR, follow the build-and-test routine below.
+
+## License
+
+[MIT](LICENSE). Bundled third-party libraries keep their own licenses; the debug font is JetBrains Mono under the SIL Open Font License.
 
 ## Building and testing
 
