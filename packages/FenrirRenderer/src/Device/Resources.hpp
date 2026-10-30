@@ -187,6 +187,10 @@ namespace Fenrir::Graphics
         Float4,
         /** @brief Four bytes read as [0, 1] floats, such as a packed colour. */
         Unorm8x4,
+        /** @brief Four 16-bit unsigned integers read as integers (a `uvec4`), such as a vertex's bone indices. */
+        Uint16x4,
+        /** @brief Four 16-bit unsigned integers read as [0, 1] floats, such as a vertex's bone weights. */
+        Unorm16x4,
     };
 
     /** @brief One vertex attribute: the shader location it feeds and where it sits in its buffer's vertex. */

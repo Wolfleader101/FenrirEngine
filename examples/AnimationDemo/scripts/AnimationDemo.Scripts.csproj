@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>AnimationDemo.Scripts</AssemblyName>
+    <RootNamespace>AnimationDemo.Scripts</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- AnimationDemo's C# scenes, 8 and 9 (examples/AnimationDemo/README.md). fenrir_add_demo_app's SCRIPTS builds it,
+       passing -p:FenrirScriptingSdk=<the SDK folder>/ and the folder of each contract (-p:Fenrir<Name>ContractDir=). The
+       contracts are compile-time only: the host shares its own copies. Fenrir.Skeleton's and Fenrir.Animation's folders
+       come as -p:FenrirSkeletonContractDir= and -p:FenrirAnimationContractDir= too, the scaffold passing them whenever
+       their scripting extensions are built. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../packages/FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <ItemGroup Condition="'$(FenrirDemoContractDir)' != ''">
+    <Reference Include="Fenrir.Input">
+      <HintPath>$(FenrirInputContractDir)Fenrir.Input.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Assets">
+      <HintPath>$(FenrirAssetsContractDir)Fenrir.Assets.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Renderer">
+      <HintPath>$(FenrirRendererContractDir)Fenrir.Renderer.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.DebugDraw">
+      <HintPath>$(FenrirDebugDrawContractDir)Fenrir.DebugDraw.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Demo">
+      <HintPath>$(FenrirDemoContractDir)Fenrir.Demo.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Skeleton">
+      <HintPath>$(FenrirSkeletonContractDir)Fenrir.Skeleton.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Animation">
+      <HintPath>$(FenrirAnimationContractDir)Fenrir.Animation.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <!-- In an editor, which passes no folders, the contracts come from their source projects. -->
+  <ItemGroup Condition="'$(FenrirDemoContractDir)' == ''">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../packages/FenrirInput/Managed/Fenrir.Input/Fenrir.Input.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../packages/FenrirAssets/Managed/Fenrir.Assets/Fenrir.Assets.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../packages/FenrirRenderer/Managed/Fenrir.Renderer/Fenrir.Renderer.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/Fenrir.DebugDraw.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../DemoScaffold/Managed/Fenrir.Demo/Fenrir.Demo.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../packages/FenrirSkeleton/Managed/Fenrir.Skeleton/Fenrir.Skeleton.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../packages/FenrirAnimation/Managed/Fenrir.Animation/Fenrir.Animation.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

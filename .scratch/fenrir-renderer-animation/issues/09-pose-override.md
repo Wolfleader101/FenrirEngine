@@ -11,10 +11,21 @@
 
 **Touches:** `packages/FenrirSkeleton/`, `examples/AnimationDemo/src/`, `examples/AnimationDemo/README.md`, `GLOSSARY.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Seam 8's ADR-0038 headless test: plain `Transform` entities as fake bodies with a test glue writing world targets in `Update`; mapped bones match their bodies; unmapped children follow; skipped bones keep their animated pose; a subtree weight of 0.5 blends halfway and a later per-bone weight wins; clearing entries keeps weights; a rebuild drops both; base reads ignore overrides.
-- [ ] `PoseOverride` runs at order 1000 among other modifiers, and a modifier registered after it sees its results.
-- [ ] Scene 6 is in the scene list and README with keys and hand checks; smoke runs still pass.
+- [x] Seam 8's ADR-0038 headless test: plain `Transform` entities as fake bodies with a test glue writing world targets in `Update`; mapped bones match their bodies; unmapped children follow; skipped bones keep their animated pose; a subtree weight of 0.5 blends halfway and a later per-bone weight wins; clearing entries keeps weights; a rebuild drops both; base reads ignore overrides.
+- [x] `PoseOverride` runs at order 1000 among other modifiers, and a modifier registered after it sees its results.
+- [x] Scene 6 is in the scene list and README with keys and hand checks; smoke runs still pass.
 - [ ] Hand check (left to the user as a `Hand check:` line on resolve): the arm goes limp, its fingers follow it, the rest of the body keeps animating, and ramping the weight back blends the arm into the walk without a pop.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+Hand check: in scene Going limp (`FENRIR_DEMO_SCENE="Going limp"`, on OpenGL), L makes the walking human's left arm hang limp from the shoulder and sway, its fingers following the hand while the rest of the body keeps walking; S stops and restarts the sway; B blends the arm back into the walk over 1.5 s without a pop, and the screen text shows the weight reaching 0 and no targets.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+
+## Comments
+
+Built 2026-10-30 on `claude/animation-08-blending` (ticket 08, PR #244, not merged yet), as a stacked PR. Decisions to review:
+
+- **Where the state lives:** each `SkeletonInstance` holds `overrides` (an optional `Target` per bone), `overrideWeights` (1 by default) and a count of entries, all reset by `Rebuild`, so a handle or revision change (and destroying the instance) drops entries and weights together, as ADR-0038 documents.
+- **`PoseOverride` is registered by `Skeletons::Install`** as an ordinary `Modify` item at `ModifierOrder::Override`, first in the stage's id order, so a modifier at 1000 added later, or at a higher order, sees its results. It edits only instances with entries, writing each entry in bone index order (parents first) at `clamp(weight × overrideWeight)`, skipping 0, through `PoseEdit::Write`, so world targets resolve through the parent's current model matrix.
+- **The API is static, on `Skeletons`**, like the reads: `SetOverride`, `GetOverride`, `ClearOverride`, `ClearOverrides`, `SetOverrideWeight` / `GetOverrideWeight` / `ClearOverrideWeight` with `OverrideScope::Bone` or `BoneSubtree` (the spec's `Scope`, named for what it scopes), and `GetSubtree` for the handover contract's subtree query. They work on a `Ready` instance only; the test fixture `Ensure`s its skeleton so its glue's first `Update` finds it, as a spawned skeleton is.
+- **No refusal inside the pipeline:** the calls are not blocked during the pose stages; ADR-0038's contract is that glue writes in `Update`, and a write later in the frame simply lands next frame.
+- **Scene 6, Going limp** is fifth in the list for now, after Blending; ticket 10's Bone attachments goes between them. Its glue hangs `upperarm_l`, `lowerarm_l` and `hand_l` from the shoulder with world targets built from the base pose's world matrices (a frame late, as the contract says), each bone turned from its animated direction to the sagging one and placed at the end of its parent, translation and rotation channels only.

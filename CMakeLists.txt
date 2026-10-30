@@ -73,6 +73,7 @@ if(FENRIR_ENABLE_ASSETS)
     add_subdirectory(packages/FenrirAssets)
     add_subdirectory(packages/FenrirDraw2D)
     add_subdirectory(packages/FenrirSkeleton)
+    add_subdirectory(packages/FenrirAnimation)
 endif()
 # Always built: it links no library (ADR-0025).
 add_subdirectory(packages/FenrirDebugDraw)
@@ -104,6 +105,11 @@ endif()
 # Assets's builds with assets on.
 if(FENRIR_ENABLE_ASSETS AND FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirAssets/Scripting)
+endif()
+# Skeleton's and Animation's build with assets on, after Assets's, whose contract both use; Animation's uses Skeleton's.
+if(FENRIR_ENABLE_ASSETS AND FENRIR_ENABLE_SCRIPTING)
+    add_subdirectory(packages/FenrirSkeleton/Scripting)
+    add_subdirectory(packages/FenrirAnimation/Scripting)
 endif()
 # Renderer's builds with the renderer, after Input's and Assets's, whose contracts it uses.
 if(FENRIR_ENABLE_RENDERER AND FENRIR_ENABLE_SCRIPTING)

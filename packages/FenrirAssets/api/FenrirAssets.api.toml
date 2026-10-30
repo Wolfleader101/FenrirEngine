@@ -15,3 +15,6 @@ headers = ["../include/FenrirAssets/AssetHandle.hpp", "../include/FenrirAssets/M
 "Fenrir::AssetHandle<Fenrir::Material>" = "bound-type"
 "Fenrir::AssetHandle<Fenrir::Shader>" = "bound-type"
 "Fenrir::AssetHandle<Fenrir::Model>" = "bound-type"
+"Fenrir::AssetHandle<Fenrir::Skeleton>" = "bound-type"
+"Fenrir::AssetHandle<Fenrir::Clip>" = "bound-type"
+"Fenrir::AssetHandle<Fenrir::BoneMask>" = "bound-type"

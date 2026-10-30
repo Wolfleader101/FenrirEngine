@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- A script assembly that uses animation from C#. The build passes -p:FenrirScriptingSdk=<the SDK folder>/ and the
+       folders holding Fenrir.Assets.dll, Fenrir.Skeleton.dll and Fenrir.Animation.dll (-p:FenrirAssetsContractDir=...,
+       -p:FenrirSkeletonContractDir=... and -p:FenrirAnimationContractDir=...). The contracts are compile-time only: the
+       host shares its own copies. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <!-- The generated defaults test's C# half (../Generated, from Scripting/api/FenrirAnimation.binding.toml). -->
+  <ItemGroup>
+    <Compile Include="../Generated/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Fenrir.Assets">
+      <HintPath>$(FenrirAssetsContractDir)Fenrir.Assets.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Skeleton">
+      <HintPath>$(FenrirSkeletonContractDir)Fenrir.Skeleton.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Animation">
+      <HintPath>$(FenrirAnimationContractDir)Fenrir.Animation.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

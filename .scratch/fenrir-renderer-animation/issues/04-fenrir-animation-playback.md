@@ -18,10 +18,26 @@ No demo scene yet: scene 1 (Playback) is built with AnimationDemo in ticket 05.
 
 **Touches:** `packages/FenrirAnimation/`, `CMakeLists.txt`, `GLOSSARY.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Seam 9 covers ADR-0034's interval table (forward from 0, across a wrap, reverse across 0, a seek, a pause, zero duration, 100 laps against the budget), seek and clip-change precedence, completion resets, and `Step`, `Linear` and `CubicSpline` against glTF's formulas with tangent scaling and hemisphere flips.
-- [ ] Seam 9 covers clip loss and recovery with no catch-up, revision rebinding with clamp or wrap, binding diagnostics and cache cleanup, and install failing without FenrirSkeleton.
-- [ ] The headless bone check: a small checked-in fixture (Khronos `RiggedSimple` or a hand-written rig) played to known times gives bone world transforms within tolerance of analytic values.
-- [ ] FenrirAnimation links nothing from FenrirRenderer or FenrirPhysics and builds with `FENRIR_ENABLE_RENDERER=OFF`.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Seam 9 covers ADR-0034's interval table (forward from 0, across a wrap, reverse across 0, a seek, a pause, zero duration, 100 laps against the budget), seek and clip-change precedence, completion resets, and `Step`, `Linear` and `CubicSpline` against glTF's formulas with tangent scaling and hemisphere flips.
+- [x] Seam 9 covers clip loss and recovery with no catch-up, revision rebinding with clamp or wrap, binding diagnostics and cache cleanup, and install failing without FenrirSkeleton.
+- [x] The headless bone check: a small checked-in fixture (Khronos `RiggedSimple` or a hand-written rig) played to known times gives bone world transforms within tolerance of analytic values.
+- [x] FenrirAnimation links nothing from FenrirRenderer or FenrirPhysics and builds with `FENRIR_ENABLE_RENDERER=OFF`.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+
+## Comments
+
+Built 2026-10-29 on `fenrir-renderer-animation` at d0c43afa (tickets 01 to 03 merged). Decisions to review:
+
+- **`Install` takes the `Skeletons` owner:** `Animation::Install(App&, Skeletons&, AnimationConfig = {})`, not `(App&, AnimationConfig)`. The sampler must join that owner's `Animate` stage, and nothing in the app reaches the owner; "a valid `Skeletons` owner" is then literally `skeletons.IsValid()`. A second install in one app is refused too (a private app resource marks it), so two samplers never double-advance clocks. The sampler holds the install weakly: destroying the `Animation` owner leaves a no-op `Animate` item behind until the `Skeletons` owner goes, because `Animation` cannot safely keep a pointer to a move-only owner to `Remove` it. The order constant is `AnimateOrder::Clips` (0).
+- **`Seek` and `Playback` take the scene:** `Animation::Seek(scene, entity, seconds)` and `Animation::Playback(scene, entity)`, static, as ticket 03 made FenrirSkeleton's reads. ADR-0034 records both signatures in its consequences.
+- **"Own file" needed a FenrirAssets query:** clip channels and bones carry node ids, but glTF ids are per file, so ids alone cannot tell a skeleton from the clip's file. `AssetStore::FromSameFile(a, b)` (outside the Touches line, with a FenrirAssets test) compares the two assets' load keys; assets added in code and built-ins are from no file. Within one file a channel binds by identity only; otherwise by exact engine name.
+- **"Ambiguous"** is a name match on a bone whose source name the skeleton repeats (engine names are unique, so `Twin` and `Twin#2` both look exact); such channels are not played. `twins.gltf` shows identity binding the repeated name in its own file and the ambiguity on a coded copy.
+- **A seek or clip change, then the step:** in the evaluation that applies a clip change or a seek, the cursor is placed first and the frame's step then advances it, so `clip = run; Seek(e, 0.5)` paused reads 0.5, and playing reads 0.5 + step. The first move after a start includes the starting boundary ([0, …] or […, duration]); a seek clears that, so it crosses from the seek exclusively.
+- **Recovery:** a stale clip handle never resolves again in this store (unloading bumps the generation), so recovery of a clip is reachable only through a revision change, which is tested (clamp, wrap, no events for the adjustment). Recovery with no catch-up is tested through a skeleton that is not `Ready` and then is. A finished `Once` clip whose revision changes stays finished at its boundary.
+- **Events:** `ClipFinished` and `AnimationEventsDropped` carry `layer` (the skeleton entity for the `Animator`) as `AnimationEvent` does, per ADR-0036, so ticket 08 adds no field. `AnimationEvent::loop` is the playback's completed loops at the crossing. On a wrap both an event at the duration and one at 0 fire at each lap boundary, in that order. A dropped-events warning is logged once per skeleton instance, surviving clip changes.
+- **`fadeProgress`** is 0 when no fade runs.
+- **Glossary:** the three entries already existed; "playback cursor" now also names the restart and the revision clamp or wrap as moves that cross no events.
+- **Fixtures:** `packages/FenrirAnimation/Tests/fixtures/{rig,twins}.gltf` from `make_fixtures.py`, a hand-written rig rather than Khronos `RiggedSimple`, so the expected values are worked by hand in the test. `rig.gltf`'s "Turn" clip repeats FenrirAssets' cubic-clip keys for the imported hemisphere-flip sampling test.
+- **Test-first, with a caveat:** the first slice's implementation was written before its first build, so its red was not observed; later slices were run red first (they caught three bugs in how the tests read events: two read less than once per queue swap, one read twice). Two mutations (identity binding off, tangent interval scaling off) each failed a test.

@@ -124,6 +124,17 @@ TEST_CASE("Each binding is reflected with its set, kind and name", "[shader-comp
     REQUIRE(find(2, 3)->name == "second");
 }
 
+TEST_CASE("A storage block ending in a runtime array is reflected one record long", "[shader-compiler][reflection]")
+{
+    const Fenrir::ShaderVariant& variant = FlattenVariant();
+    const auto draws = std::ranges::find_if(
+        variant.bindings, [](const Fenrir::ShaderBinding& b) { return b.set == 3 && b.binding == 0; });
+    REQUIRE(draws != variant.bindings.end());
+
+    INFO("DrawData holds DrawItem items[]: two mat4s, a uint and a float, padded to 144 bytes in std430");
+    REQUIRE(draws->size == 144);
+}
+
 TEST_CASE("The vertex stage's inputs are reflected by location", "[shader-compiler][reflection]")
 {
     const Fenrir::ShaderVariant& variant = FlattenVariant();

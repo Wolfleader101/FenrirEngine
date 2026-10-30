@@ -37,6 +37,12 @@ namespace Fenrir::Render
         std::uint32_t draws = 0;
         /** @brief Meshes, images and material blocks uploaded since the last call. */
         std::uint32_t uploads = 0;
+        /** @brief Bytes written into the last frame's palette buffer. */
+        std::uint32_t paletteBytes = 0;
+        /** @brief Skeleton palettes the last frame's palette buffer held (SceneFrame::palettes). */
+        std::uint32_t palettes = 0;
+        /** @brief Skinned draws in the last frame, one per item per view. */
+        std::uint32_t skinnedDraws = 0;
     };
 
     /** @brief A view the scene renderer added passes for this frame, for render features that draw into it. */
@@ -73,7 +79,14 @@ namespace Fenrir::Render
      *
      * **Variants** (ADR-0024): the renderer picks the keys. A `Masked` material draws with its shader's `ALPHA_MASK`
      * variant if the shader has the key, its `MaterialData::alphaCutoff` written into the variant's `alphaCutoff` block
-     * member; every other key stays off (`SKINNED` is reserved for the animation spec).
+     * member. A skinned draw (ADR-0035) draws with the `SKINNED` variant; a shader without the key draws it with the
+     * fallback material's, logged once per shader as a warning. Every other key stays off.
+     *
+     * **Skinning** (ADR-0035): each frame's palettes are written into the frame's palette buffer, set 3 binding 1, as
+     * `GpuBone`s, ring-buffered per frame in flight and grown by doubling, with nothing kept across frames. A skinned
+     * draw's record carries its `paletteOffset`; one whose palette range (`paletteOffset` plus its mesh's bone count)
+     * passes the buffer's capacity is an internal error and is not drawn. Every record also carries the sign of its
+     * world matrix's determinant, for the shaders' tangent handedness.
      *
      * **Images** with pixels that materials name are prepared like assets: uploaded as 2D textures (RGBA8, sRGB or
      * linear as the image is, RGBA16F or RGBA32F) with every mip level made at upload, and bound with their texture
@@ -246,8 +259,12 @@ namespace Fenrir::Render
             Graphics::BufferHandle indices;
             std::uint32_t indexCount = 0;
             /** @brief Each standard stream's offset in `vertices`, by vertex location; empty if the mesh lacks it. */
-            std::array<std::optional<std::size_t>, 6> streams{};
+            std::array<std::optional<std::size_t>, 8> streams{};
             std::uint32_t id = 0;
+            /** @brief Whether the mesh has skin data, so its joints and weights are streams 6 and 7. */
+            bool skinned = false;
+            /** @brief How many palette entries a skinned draw of it reads, from its paletteOffset. */
+            std::uint32_t boneCount = 0;
         };
 
         /** @brief A prepared render target image: its texture and size. */
@@ -281,6 +298,8 @@ namespace Fenrir::Render
             std::uint32_t shaderRevision = 0;
             /** @brief The shader's variant it draws with, picked from its blend mode. */
             const VariantEntry* variant = nullptr;
+            /** @brief The variant it draws skinned items with, `SKINNED` added; null if the shader has no such key. */
+            const VariantEntry* skinnedVariant = nullptr;
             BlendMode blendMode = BlendMode::Opaque;
             Graphics::BufferHandle block;
             Graphics::BindingGroupHandle group;
@@ -332,6 +351,20 @@ namespace Fenrir::Render
             Math::Mat4 world{1.0f};
             /** @brief Drawn in the Transparent pass, not Opaque. */
             bool transparent = false;
+            /** @brief A skinned draw's first palette entry, in bones; 0 for a rigid one. */
+            std::uint32_t paletteOffset = 0;
+            /** @brief Drawn skinned, from the palette. */
+            bool skinned = false;
+            /** @brief The world point a transparent draw is sorted by. */
+            Math::Vec3 sortPoint{0.0f};
+        };
+
+        /** @brief One copy's draw set binding group (set 3), for the draw and palette buffers it was made with. */
+        struct DrawGroup
+        {
+            Graphics::BufferHandle draws;
+            Graphics::BufferHandle palette;
+            Graphics::BindingGroupHandle group;
         };
 
         [[nodiscard]] const PipelineEntry& MeshPipeline(const ShaderEntry& shader, const VariantEntry& variant,
@@ -358,6 +391,8 @@ namespace Fenrir::Render
         void DestroyMaterial(MaterialEntry& material);
         void DestroyMesh(MeshEntry& mesh);
         [[nodiscard]] std::vector<ResolvedDraw> ResolveDraws();
+        /** @brief The draw set's group for frame `frameIndex`: its copies of the draw and palette buffers. */
+        [[nodiscard]] Graphics::BindingGroupHandle DrawGroupFor(std::uint64_t frameIndex);
         [[nodiscard]] std::uint32_t NextId();
 
         Graphics::GraphicsDevice& m_device;
@@ -404,6 +439,10 @@ namespace Fenrir::Render
         std::unique_ptr<BlockRing> m_viewBlocks;
         std::unique_ptr<BlockRing> m_backgroundBlocks;
         std::unique_ptr<BlockRing> m_drawBlocks;
+        /** @brief The palette buffer, one GpuBone a slot. */
+        std::unique_ptr<BlockRing> m_paletteBlocks;
+        /** @brief Each copy's draw set group, by frame index modulo the copies. */
+        std::vector<DrawGroup> m_drawGroups;
         /** @brief The Output pass's binding group for each SceneColor texture, while the texture lives. */
         std::map<std::pair<std::uint32_t, std::uint32_t>, Graphics::BindingGroupHandle> m_outputGroups;
 
@@ -414,5 +453,7 @@ namespace Fenrir::Render
         std::set<std::pair<AssetKey, std::uint32_t>> m_loggedStreams;
         /** @brief The images views could not sample already logged, by the view's target and the image. */
         std::set<std::pair<AssetKey, AssetKey>> m_loggedSampling;
+        /** @brief Shaders without `SKINNED` that skinned draws fell back from, already logged. */
+        std::set<AssetKey> m_loggedUnskinned;
     };
 } // namespace Fenrir::Render

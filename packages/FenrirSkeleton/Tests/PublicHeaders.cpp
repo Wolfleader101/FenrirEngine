@@ -2,6 +2,7 @@
 // ADR-0041): it knows no renderer, physics, animation, window or graphics API. This file includes its headers before
 // anything else, so if one of them reaches for any of those, or their include paths reach a user of FenrirSkeleton
 // (this test target is one), the build fails here.
+#include "FenrirSkeleton/BoneAttachment.hpp"
 #include "FenrirSkeleton/PoseStages.hpp"
 #include "FenrirSkeleton/SkeletonPose.hpp"
 #include "FenrirSkeleton/Skeletons.hpp"
@@ -32,4 +33,9 @@ TEST_CASE("FenrirSkeleton's headers compile with no renderer, physics or GPU cod
     STATIC_REQUIRE(std::is_trivially_copyable_v<Fenrir::SkeletonPose>);
     REQUIRE(Fenrir::SkeletonPose{}.timing == Fenrir::PoseTiming::Frame);
     REQUIRE(Fenrir::SkeletonPose{}.skeleton.IsEmpty());
+
+    INFO("BoneAttachment is plain data too, its BoneName a fixed 256-byte buffer, empty by default");
+    STATIC_REQUIRE(std::is_trivially_copyable_v<Fenrir::BoneAttachment>);
+    STATIC_REQUIRE(sizeof(Fenrir::BoneName) == 256);
+    REQUIRE(Fenrir::BoneAttachment{}.bone.Get() == "");
 }

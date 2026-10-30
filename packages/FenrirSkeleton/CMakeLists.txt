@@ -1,17 +1,21 @@
-# FenrirSkeleton: skeleton instances, their reads, the pose pipeline and its stages, the skinning source and spawning
-# (ADR-0028, ADR-0031, ADR-0033, ADR-0041). It links no library and has no GPU code. Built with FENRIR_ENABLE_ASSETS,
-# with no option of its own; FenrirRenderer reaches it only through FenrirAssets' SkinningSource, and links nothing
+# FenrirSkeleton: skeleton instances, their reads, the pose pipeline and its stages, bone attachments, the skinning
+# source and spawning (ADR-0028, ADR-0031, ADR-0033, ADR-0037, ADR-0041). It links no library and has no GPU code. Built
+# with FENRIR_ENABLE_ASSETS, with no option of its own; FenrirRenderer reaches it only through FenrirAssets' SkinningSource, and links nothing
 # from it.
 add_library(FenrirSkeleton STATIC
     include/FenrirSkeleton/SkeletonPose.hpp
     include/FenrirSkeleton/PoseStages.hpp
     include/FenrirSkeleton/Skeletons.hpp
+    include/FenrirSkeleton/BoneAttachment.hpp
 
     src/SkeletonPoses.hpp
     src/SkeletonPoses.cpp
     src/PoseEdit.cpp
     src/SkeletonsState.hpp
     src/Skeletons.cpp
+    src/Attachments.hpp
+    src/Attachments.cpp
+    src/BoneName.cpp
 )
 
 target_link_libraries(FenrirSkeleton PUBLIC FenrirAssets FenrirECS FenrirScene FenrirApp FenrirMath FenrirTime)
@@ -35,3 +39,7 @@ cmake_language(DEFER DIRECTORY ${CMAKE_SOURCE_DIR} CALL fenrir_skeleton_check_un
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)
 endif()
+
+# Its shared types (ADR-0042): `cmake --build <dir> --target fenrir-describe-api` regenerates api/FenrirSkeleton.api.json,
+# which FenrirSkeletonScripting's binding binds.
+fenrir_describe_api(FenrirSkeleton api/FenrirSkeleton.api.toml)

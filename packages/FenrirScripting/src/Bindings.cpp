@@ -260,6 +260,43 @@ namespace Fenrir::ScriptingNatives
     }
 
     /**
+     * @brief How many structural changes are recorded and not yet played back: a mark for ChangesDiscardFrom. The
+     * system runner takes one before each stage system, whose changes wait for the stage's host.
+     */
+    std::int32_t ChangesMark(const CallContext&, Detail::EngineContext& engine)
+    {
+        return static_cast<std::int32_t>(engine.changes->Size());
+    }
+
+    /**
+     * @brief Drops the structural changes recorded after `mark` (from ChangesMark), and destroys the entities they
+     * created; the ones before it stay recorded. A negative mark drops nothing.
+     */
+    void ChangesDiscardFrom(const CallContext& context, Detail::EngineContext& engine, std::int32_t mark)
+    {
+        if (mark >= 0)
+        {
+            engine.changes->DiscardFrom(context.Entities(), static_cast<std::size_t>(mark));
+        }
+    }
+
+    /**
+     * @brief A generation's system host reports one stage system it defines, while its systems start: the system's
+     * full name, the stage it joins, its order, and the number of its (stage, order) group.
+     * @return False when nothing is starting.
+     */
+    bool RegisterStageSystem(const CallContext&, Detail::EngineContext& engine, std::string_view system,
+                             std::string_view stage, std::int32_t order, std::int32_t group)
+    {
+        if (engine.stageReporting == nullptr || system.empty())
+        {
+            return false;
+        }
+        engine.stageReporting->push_back({std::string(system), std::string(stage), order, group});
+        return true;
+    }
+
+    /**
      * @brief The id of the event registered under `name` for the C# type `typeName`. Each event is a queue the engine
      * owns: the queue C++ SendEvent and EventReader use for a native event.
      * @return The id, or a RegistryError as its value: NotRegistered when there is none, WrongType when it is

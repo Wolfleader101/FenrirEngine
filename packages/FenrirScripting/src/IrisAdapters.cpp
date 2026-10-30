@@ -113,16 +113,20 @@ namespace Fenrir::Detail
                               "The script's system host could not be read: " + type.diagnostic, false};
         }
         const auto mask = type.value->FindInstanceMethod<std::int32_t()>(GeneratedNames::PhaseMask);
+        const auto stages = type.value->FindInstanceMethod<void()>(GeneratedNames::ReportStages);
         const auto create = type.value->FindInstanceMethod<void()>(GeneratedNames::OnCreate);
         const auto run = type.value->FindInstanceMethod<void(std::int32_t)>(GeneratedNames::Run);
+        const auto runStage = type.value->FindInstanceMethod<void(std::int32_t)>(GeneratedNames::RunStage);
         const auto destroy = type.value->FindInstanceMethod<void()>(GeneratedNames::OnDestroy);
-        for (const auto* found : {&mask.status, &create.status, &run.status, &destroy.status})
+        for (const auto* found :
+             {&mask.status, &stages.status, &create.status, &run.status, &runStage.status, &destroy.status})
         {
             if (*found != Iris::CallStatus::Success)
             {
                 return FindResult{*found, std::nullopt,
                                   "The script's system host is missing a method: " + mask.diagnostic +
-                                      create.diagnostic + run.diagnostic + destroy.diagnostic,
+                                      stages.diagnostic + create.diagnostic + run.diagnostic + runStage.diagnostic +
+                                      destroy.diagnostic,
                                   false};
             }
         }
@@ -133,16 +137,35 @@ namespace Fenrir::Detail
                               "The script's systems could not be created: " + object.diagnostic,
                               object.diagnosticTruncated};
         }
-        return FindResult{
-            Iris::CallStatus::Success,
-            std::make_unique<Host>(std::move(*object.value), *mask.value, *create.value, *run.value, *destroy.value),
-            {},
-            false};
+        return FindResult{Iris::CallStatus::Success,
+                          std::make_unique<Host>(m_context, std::move(*object.value), *mask.value, *stages.value,
+                                                 *create.value, *run.value, *runStage.value, *destroy.value),
+                          {},
+                          false};
     }
 
     Iris::CallResult<std::int32_t> IrisSystemHostLoader::Host::PhaseMask()
     {
         return mask.Invoke(object);
+    }
+
+    Iris::CallResult<std::vector<StageSystemReport>> IrisSystemHostLoader::Host::StageSystems()
+    {
+        // The host's ReportStages calls the engine's native once per stage system, which puts it where the slot points.
+        std::vector<StageSystemReport> reports;
+        context.stageReporting = &reports;
+        const auto ran = stages.Invoke(object);
+        context.stageReporting = nullptr;
+        if (!ran.Succeeded())
+        {
+            return {ran.status, std::nullopt, ran.diagnostic, ran.diagnosticTruncated};
+        }
+        return {Iris::CallStatus::Success, std::move(reports), {}, false};
+    }
+
+    Iris::CallResult<void> IrisSystemHostLoader::Host::RunStage(std::int32_t group)
+    {
+        return runStage.Invoke(object, group);
     }
 
     Iris::CallResult<void> IrisSystemHostLoader::Host::OnCreate()

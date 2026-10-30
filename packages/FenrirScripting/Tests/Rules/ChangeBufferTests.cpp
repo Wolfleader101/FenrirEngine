@@ -589,3 +589,40 @@ TEST_CASE("discarding drops the changes native functions recorded", "[change-buf
     INFO("A discarded native change ran");
     REQUIRE((!ran && result.applied == 0));
 }
+
+TEST_CASE("discarding from a mark drops only what was recorded after it, its created entities with it",
+          "[change-buffer]")
+{
+    World world;
+    const auto entity = world.NewEntity();
+    const std::size_t before = world.EntityCount();
+    const Velocity kept{1, 0, 0};
+    world.Add(entity, &kept);
+    bool keptNativeRan = false;
+    world.buffer.RecordNative([&](App&) { return keptNativeRan = true; });
+    const std::size_t mark = world.buffer.Size();
+
+    const auto created = world.buffer.Create(world.Entities());
+    const Velocity dropped{9, 0, 0};
+    world.Add(entity, &dropped);
+    bool droppedNativeRan = false;
+    world.buffer.RecordNative([&](App&) { return droppedNativeRan = true; });
+    world.buffer.DiscardFrom(world.Entities(), mark);
+
+    INFO("The changes before the mark should stay recorded");
+    REQUIRE(world.buffer.Size() == mark);
+    INFO("The entity created after the mark should be gone");
+    REQUIRE(!world.Entities().HasEntity(created));
+
+    const auto result = world.Apply();
+
+    INFO("Only the changes before the mark should play back");
+    REQUIRE(result.applied == 2);
+    REQUIRE((world.VelocityOf(entity) != nullptr && world.VelocityOf(entity)->X == 1.0F));
+    REQUIRE((keptNativeRan && !droppedNativeRan));
+    REQUIRE(world.EntityCount() == before);
+
+    world.buffer.DiscardFrom(world.Entities(), 5);
+    INFO("A mark past the end should drop nothing");
+    REQUIRE(world.buffer.Empty());
+}

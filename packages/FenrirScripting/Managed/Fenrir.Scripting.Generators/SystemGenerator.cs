@@ -8,20 +8,22 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Fenrir.Scripting.Generators;
 
 /// <summary>
-/// Finds the systems a script assembly defines (classes marked <c>[System(Phase, Order = n)]</c> that implement
-/// <c>ISystem</c>) and writes <c>Fenrir.Scripting.Generated.SystemHost</c>, the one object the engine holds: it makes the
-/// systems and hands them to the runner. Without reflection, so a system is checked when the script is built and not when it
-/// loads.
+/// Finds the systems a script assembly defines (classes marked <c>[System(Phase, Order = n)]</c> or
+/// <c>[StageSystem(stage, Order = n)]</c> that implement <c>ISystem</c>) and writes
+/// <c>Fenrir.Scripting.Generated.SystemHost</c>, the one object the engine holds: it makes the systems and hands them to the
+/// runner. Without reflection, so a system is checked when the script is built and not when it loads; whether a stage is
+/// declared is checked when it loads, since the extensions are the engine's.
 /// </summary>
 [Generator]
 public sealed class SystemGenerator : IIncrementalGenerator
 {
     private const string SystemAttribute = "Fenrir.Scripting.SystemAttribute";
+    private const string StageSystemAttribute = "Fenrir.Scripting.StageSystemAttribute";
     private const string SystemInterface = "Fenrir.Scripting.ISystem";
 
     private static readonly DiagnosticDescriptor NotASystem = new(
         "FENRIR0010", "[System] is on a class that is not an ISystem",
-        "Class '{0}' has [System] but does not implement Fenrir.Scripting.ISystem, so it would never run",
+        "Class '{0}' has [System] or [StageSystem] but does not implement Fenrir.Scripting.ISystem, so it would never run",
         "Fenrir.Scripting", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor NotCreatable = new(
@@ -31,7 +33,7 @@ public sealed class SystemGenerator : IIncrementalGenerator
 
     private static readonly DiagnosticDescriptor NeverRuns = new(
         "FENRIR0012", "An ISystem without [System] never runs",
-        "Class '{0}' implements ISystem but has no [System(Phase)] attribute, so the engine will not run it",
+        "Class '{0}' implements ISystem but has no [System(Phase)] or [StageSystem(stage)] attribute, so the engine will not run it",
         "Fenrir.Scripting", DiagnosticSeverity.Warning, isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor BadPhase = new(
@@ -39,11 +41,22 @@ public sealed class SystemGenerator : IIncrementalGenerator
         "System '{0}' names a Phase value that is not PreUpdate, Tick, Update or PostUpdate",
         "Fenrir.Scripting", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor NoStage = new(
+        "FENRIR0015", "A stage system names no stage",
+        "Stage system '{0}' must name its stage by its full name, a constant string that is not empty",
+        "Fenrir.Scripting", DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor PhaseAndStage = new(
+        "FENRIR0016", "A system has both [System] and [StageSystem]",
+        "System '{0}' has both [System] and [StageSystem]: a system runs in a phase or in a stage, not both",
+        "Fenrir.Scripting", DiagnosticSeverity.Error, isEnabledByDefault: true);
+
     private sealed class Model
     {
         public string TypeName = "";      // global::Ns.Type, for the generated code
         public string DisplayName = "";   // Ns.Type, for logs
         public int Phase;
+        public string? Stage;             // A stage system's stage; null for a phase system
         public int Order;
         public Location Location = Location.None;
         public DiagnosticDescriptor? Problem;
@@ -84,13 +97,19 @@ public sealed class SystemGenerator : IIncrementalGenerator
             source.Append("        private readonly global::Fenrir.Scripting.SystemRunner runner = new(new global::Fenrir.Scripting.SystemRegistration[]\n        {\n");
             foreach (Model model in valid.OrderBy(static model => model.DisplayName, StringComparer.Ordinal))
             {
-                source.Append("            new(\"").Append(model.DisplayName).Append("\", (global::Fenrir.Scripting.Phase)").Append(model.Phase)
-                      .Append(", ").Append(model.Order).Append(", static () => new ").Append(model.TypeName).Append("()),\n");
+                source.Append("            new(\"").Append(model.DisplayName).Append("\", ");
+                if (model.Stage != null)
+                    source.Append(Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(model.Stage, quote: true));
+                else
+                    source.Append("(global::Fenrir.Scripting.Phase)").Append(model.Phase);
+                source.Append(", ").Append(model.Order).Append(", static () => new ").Append(model.TypeName).Append("()),\n");
             }
             source.Append("        });\n\n");
             source.Append("        public int ").Append(GeneratedNames.PhaseMask).Append("() => runner.PhaseMask();\n");
+            source.Append("        public void ").Append(GeneratedNames.ReportStages).Append("() => runner.ReportStages();\n");
             source.Append("        public void ").Append(GeneratedNames.OnCreate).Append("() => runner.OnCreate();\n");
             source.Append("        public void ").Append(GeneratedNames.Run).Append("(int phase) => runner.Run(phase);\n");
+            source.Append("        public void ").Append(GeneratedNames.RunStage).Append("(int group) => runner.RunStage(group);\n");
             source.Append("        public void ").Append(GeneratedNames.OnDestroy).Append("() => runner.OnDestroy();\n");
             source.Append("    }\n}\n");
             output.AddSource(GeneratedNames.HintName(GeneratedNames.SystemHost), source.ToString());
@@ -104,7 +123,9 @@ public sealed class SystemGenerator : IIncrementalGenerator
             return null;
 
         bool isSystem = symbol.AllInterfaces.Any(static i => i.ToDisplayString() == SystemInterface);
-        AttributeData? attribute = symbol.GetAttributes().FirstOrDefault(static a => a.AttributeClass?.ToDisplayString() == SystemAttribute);
+        AttributeData? phaseAttribute = symbol.GetAttributes().FirstOrDefault(static a => a.AttributeClass?.ToDisplayString() == SystemAttribute);
+        AttributeData? stageAttribute = symbol.GetAttributes().FirstOrDefault(static a => a.AttributeClass?.ToDisplayString() == StageSystemAttribute);
+        AttributeData? attribute = phaseAttribute ?? stageAttribute;
         if (!isSystem && attribute == null)
             return null;
 
@@ -130,7 +151,24 @@ public sealed class SystemGenerator : IIncrementalGenerator
             model.Problem = NotCreatable;
             return model;
         }
-        if (attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is int phase && phase >= 0 && phase <= 3)
+        if (phaseAttribute != null && stageAttribute != null)
+        {
+            model.Problem = PhaseAndStage;
+            return model;
+        }
+        if (stageAttribute != null)
+        {
+            if (stageAttribute.ConstructorArguments.Length == 1 && stageAttribute.ConstructorArguments[0].Value is string stage && stage.Length > 0)
+            {
+                model.Stage = stage;
+            }
+            else
+            {
+                model.Problem = NoStage;
+                return model;
+            }
+        }
+        else if (attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is int phase && phase >= 0 && phase <= 3)
         {
             model.Phase = phase;
         }

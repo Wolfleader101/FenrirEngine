@@ -533,6 +533,26 @@ namespace Fenrir
         return record != nullptr && record->data != nullptr ? record->revision : 0;
     }
 
+    bool AssetStore::SameFileOf(Detail::AssetKind kindA, Detail::AssetSlot a, Detail::AssetKind kindB,
+                                Detail::AssetSlot b) const
+    {
+        const Detail::AssetRecord* first = m_state->Find(kindA, a);
+        const Detail::AssetRecord* second = m_state->Find(kindB, b);
+        if (first == nullptr || second == nullptr || first->data == nullptr || second->data == nullptr)
+        {
+            return false;
+        }
+        // A loaded asset's key is its file, then `#` and its label for a sub-asset; an added one has none, and a
+        // built-in's is its name, not a file.
+        const auto fileOf = [](const std::string& key) { return std::string_view(key).substr(0, key.find('#')); };
+        if (first->key.empty() || second->key.empty() || first->key.starts_with(BuiltinPrefix) ||
+            second->key.starts_with(BuiltinPrefix))
+        {
+            return false;
+        }
+        return fileOf(first->key) == fileOf(second->key);
+    }
+
     void AssetStore::Refuse(std::string_view assetName, std::string_view action, const std::string& problem)
     {
         m_state->logger->Error("Could not {} a {}: {}", action, assetName, problem);

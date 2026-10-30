@@ -393,6 +393,70 @@
       "parameters": []
     },
     {
+      "name": "ChangesMark",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "How many structural changes are recorded and not yet played back: a mark for ChangesDiscardFrom. The system runner takes one before each stage system, whose changes wait for the stage's host.",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32"
+      },
+      "parameters": []
+    },
+    {
+      "name": "ChangesDiscardFrom",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Drops the structural changes recorded after `mark` (from ChangesMark), and destroys the entities they created; the ones before it stay recorded. A negative mark drops nothing.",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "mark",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "RegisterStageSystem",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "A generation's system host reports one stage system it defines, while its systems start: the system's full name, the stage it joins, its order, and the number of its (stage, order) group.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "False when nothing is starting."
+      },
+      "parameters": [
+        {
+          "name": "system",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "stage",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "order",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "group",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
       "name": "EventIdOf",
       "namespace": "Fenrir::ScriptingNatives",
       "source": "../src/Bindings.cpp",

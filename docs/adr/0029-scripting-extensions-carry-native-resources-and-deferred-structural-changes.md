@@ -18,6 +18,7 @@ ADR-0009 gave a scripting extension three things: native functions, native compo
 - **The call context gives an extension the change buffer** that the engine's own entity functions use. ADR-0009's "possible later addition" lands here. An extension's native function may create entities, destroy them, add or remove components, and insert or remove resources through it. A created entity is alive and usable at once. Everything else plays back, in order, when the native code that called the script gets control back.
 - **Direct structural changes stay forbidden.** The rule ADR-0009 set for the calling system's `Ref<T>`s is unchanged: a native function never touches the storage structurally, it records.
 - The first user is the renderer's `SpawnModel`, which builds a model's entity tree and returns its root.
+- *Amended by ADR-0039:* a C# system that runs inside an extension stage records into the same buffer, but the buffer plays back when the extension's hosting work returns (`StageChanges::PlayBack`), not when the system returns, so the C++ work and the stage systems after it never see entities or components appear or vanish halfway through. A stage system that throws has only what it recorded dropped (the runner marks the buffer before each one), and is disabled until the next reload.
 
 ## Engine math is its own contract
 

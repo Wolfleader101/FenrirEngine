@@ -7,12 +7,15 @@ fenrir_add_catch2()
 add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp CommandLists.cpp RenderGraph.cpp
                                    FrameRing.cpp Frames.cpp OpenGLStart.cpp Drawing.cpp Preparing.cpp RendererFrames.cpp
                                    Cameras.cpp Picking.cpp Materials.cpp SpawnModel.cpp Sky.cpp DebugFont.cpp
-                                   DebugDrawing.cpp Overlay.cpp Draw2D.cpp DeviceTest.hpp DrawLists2D.hpp
-                                   FakeSurface.hpp RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp)
+                                   DebugDrawing.cpp Overlay.cpp Draw2D.cpp Skinning.cpp SkinningMaths.cpp DeviceTest.hpp
+                                   DrawLists2D.hpp FakeSurface.hpp RecordingLogger.hpp RendererProbe.hpp
+                                   RendererTestApp.hpp SkinningTestApp.hpp)
 target_include_directories(FenrirRendererTests PRIVATE ../src)
 # The OpenGL backend too, for the cases where it cannot start: they need no GPU.
+# FenrirSkeleton as the skinning source the skinned tests draw from: the tests link it, the renderer never does
+# (ADR-0041).
 target_link_libraries(FenrirRendererTests PRIVATE FenrirRenderer FenrirRendererCore FenrirRendererOpenGL FenrirDebugDraw
-                                                  Catch2::Catch2WithMain)
+                                                  FenrirSkeleton Catch2::Catch2WithMain)
 # A shader whose frame set is not the renderer's, for the debug check of the fixed sets.
 fenrir_add_shaders(FenrirRendererTests PROGRAM WrongFrameSet VERTEX fixtures/wrong_frame.vert
                    FRAGMENT fixtures/plain.frag EMBED)
@@ -41,12 +44,13 @@ add_test(NAME FenrirRenderer COMMAND FenrirRendererTests)
 # tests only, and developers run these on their own GPU.
 add_executable(FenrirRendererGlTests OpenGL/Clears.cpp OpenGL/Draws.cpp OpenGL/Validation.cpp OpenGL/Resources.cpp
                                      OpenGL/Vsync.cpp OpenGL/Scenes.cpp OpenGL/Targets.cpp OpenGL/Materials.cpp
-                                     OpenGL/Sky.cpp OpenGL/Debug.cpp OpenGL/Overlay.cpp OpenGL/GlProbe.hpp
-                                     OpenGL/GlScene.hpp OpenGL/GlTestApp.hpp
-                                     DrawLists2D.hpp RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp)
+                                     OpenGL/Sky.cpp OpenGL/Debug.cpp OpenGL/Overlay.cpp OpenGL/Skinning.cpp
+                                     OpenGL/GlProbe.hpp OpenGL/GlScene.hpp OpenGL/GlTestApp.hpp
+                                     DrawLists2D.hpp RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp
+                                     SkinningTestApp.hpp)
 target_include_directories(FenrirRendererGlTests PRIVATE . ../src)
 target_link_libraries(FenrirRendererGlTests PRIVATE FenrirRenderer FenrirRendererCore FenrirRendererOpenGL FenrirWindow
-                                                    FenrirApp FenrirDebugDraw Catch2::Catch2WithMain)
+                                                    FenrirApp FenrirDebugDraw FenrirSkeleton Catch2::Catch2WithMain)
 fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlFullscreenFill VERTEX OpenGL/fixtures/fullscreen.vert
                    FRAGMENT OpenGL/fixtures/fill.frag EMBED)
 fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlPositionFill VERTEX OpenGL/fixtures/position.vert

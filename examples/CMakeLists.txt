@@ -5,6 +5,9 @@ project(FenrirExamples)
 if(FENRIR_BUILD_EXAMPLES AND FENRIR_ENABLE_RENDERER)
     add_subdirectory(DemoScaffold)
     add_subdirectory(RendererDemo)
+    # Skeletons, clips and skinning: FenrirSkeleton and FenrirAnimation come with FenrirAssets, as the renderer does.
+    # With physics it installs FenrirPhysics too, for scene 5's tick-posed shield.
+    add_subdirectory(AnimationDemo)
     # The scripting showcase is all scripting: without it there is nothing to show.
     if(FENRIR_ENABLE_SCRIPTING)
         add_subdirectory(ScriptingDemo)

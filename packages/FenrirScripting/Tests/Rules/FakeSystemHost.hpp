@@ -41,13 +41,17 @@ namespace RulesTest
 
         // What a case tells the fake to do.
         Answer answer = Answer::Host;
-        std::int32_t mask = 0; // What the host's PhaseMask answers.
+        std::int32_t mask = 0;                                       // What the host's PhaseMask answers.
+        std::vector<Fenrir::Detail::StageSystemReport> stageSystems; // What its StageSystems answers.
         bool failPhaseMask = false;
+        bool failStageSystems = false;
         bool failOnCreate = false;
         bool failRun = false;
+        bool failRunStage = false;
         bool failOnDestroy = false;
 
-        // What ScriptSystems asked of it, in order: "Find", "PhaseMask", "OnCreate", "Run <phase>", "OnDestroy".
+        // What ScriptSystems asked of it, in order: "Find", "PhaseMask", "StageSystems", "OnCreate", "Run <phase>",
+        // "RunStage <group>", "OnDestroy".
         struct Call
         {
             std::string name;
@@ -113,6 +117,23 @@ namespace RulesTest
                     return Refused<std::int32_t>("PhaseMask");
                 }
                 return {Iris::CallStatus::Success, owner.mask, {}, false};
+            }
+
+            Iris::CallResult<std::vector<Fenrir::Detail::StageSystemReport>> StageSystems() override
+            {
+                owner.Record("StageSystems");
+                if (owner.failStageSystems)
+                {
+                    return Refused<std::vector<Fenrir::Detail::StageSystemReport>>("StageSystems");
+                }
+                return {Iris::CallStatus::Success, owner.stageSystems, {}, false};
+            }
+
+            Iris::CallResult<void> RunStage(std::int32_t group) override
+            {
+                owner.Record("RunStage " + std::to_string(group));
+                return owner.failRunStage ? RefusedVoid("RunStage")
+                                          : Iris::CallResult<void>{Iris::CallStatus::Success, {}, false};
             }
 
             Iris::CallResult<void> OnCreate() override

@@ -4,12 +4,18 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirAssets/SkinningSource.hpp"
+#include "FenrirAssets/SpawnNodes.hpp"
 #include "FenrirAssetsScripting/AssetResolve.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
+#include "FenrirECS/EntityList.hpp"
 #include "FenrirRenderer/SpawnModel.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirScripting/NativeGuard.hpp"
@@ -42,23 +48,70 @@ namespace Fenrir
         }
 
         // Records `source`, an entity of a scratch scene, and its children, depth first, as new entities of the active
-        // scene with its Name, Transform and MeshRenderer, `source` a child of `parent` if there is one. Children are
-        // parented in the order `source` holds them, so the tree is the one the scratch scene holds.
-        std::uint32_t Record(const ChangeBuffer& changes, const Entity& source, std::optional<std::uint32_t> parent)
+        // scene with its Name, Transform, MeshRenderer and SkinnedMesh, `source` a child of `parent` if there is one,
+        // noting each new entity's id under its scratch id in `made`. Children are parented in the order `source` holds
+        // them, so the tree is the one the scratch scene holds. A SkinnedMesh names its skeleton entity by the new id:
+        // the skeleton's owner is the mesh's ancestor, so it was made first.
+        std::uint32_t Record(const ChangeBuffer& changes, EntityList& entities, const Entity& source,
+                             std::optional<std::uint32_t> parent,
+                             std::unordered_map<std::uint32_t, std::uint32_t>& made)
         {
             const std::uint32_t entity = changes.CreateEntity();
+            made[source.GetId()] = entity;
             (void)changes.AddComponent<Name>(entity, source.GetComponent<Name>());
             (void)changes.AddComponent<Transform>(entity, source.GetComponent<Transform>());
             if (source.HasComponent<MeshRenderer>())
             {
                 (void)changes.AddComponent<MeshRenderer>(entity, source.GetComponent<MeshRenderer>());
             }
+            if (source.HasComponent<SkinnedMesh>())
+            {
+                const auto skeleton = made.find(source.GetComponent<SkinnedMesh>().skeleton.GetId());
+                const Entity remapped = skeleton != made.end() ? entities.HandleOf(skeleton->second) : Entity{};
+                (void)changes.AddComponent<SkinnedMesh>(entity, SkinnedMesh{remapped});
+            }
             if (parent)
             {
                 (void)changes.AddChild(*parent, entity);
             }
-            source.ForEachChild([&](const Entity& child) { (void)Record(changes, child, entity); });
+            source.ForEachChild([&](const Entity& child) { (void)Record(changes, entities, child, entity, made); });
             return entity;
+        }
+
+        // Gives the recorded tree its skeletons at playback, through the skinning source as C++'s SpawnModel does
+        // (FenrirSkeleton's SpawnSkeletons: a SkeletonPose on each owner, bone attachments below bones), on the new
+        // entities: each spawned node's by the id `made` holds for its scratch entity. Nothing without a skinning
+        // source, whose absence the scratch spawn already logged.
+        void RecordSkeletons(const ChangeBuffer& changes, AssetHandle<Model> model, const SpawnedNodes& scratch,
+                             const std::unordered_map<std::uint32_t, std::uint32_t>& made)
+        {
+            std::vector<std::optional<std::uint32_t>> nodes;
+            nodes.reserve(scratch.nodes.size());
+            for (const Entity& node : scratch.nodes)
+            {
+                const auto entity = node.IsValid() ? made.find(node.GetId()) : made.end();
+                nodes.push_back(entity != made.end() ? std::optional(entity->second) : std::nullopt);
+            }
+            const std::uint32_t root = made.at(scratch.root.GetId());
+            changes.RecordCall([model, root, nodes = std::move(nodes)](App& app) {
+                const SkinningSourceRegistration* skinning = app.TryGetResource<SkinningSourceRegistration>();
+                if (skinning == nullptr)
+                {
+                    return;
+                }
+                Scene& scene = app.GetActiveScene();
+                EntityList& entities = scene.GetEntityList();
+                const auto handle = [&entities](std::uint32_t id) {
+                    return entities.HasEntity(id) ? entities.GetEntity(id) : Entity{};
+                };
+                SpawnedNodes spawned;
+                spawned.root = handle(root);
+                for (const std::optional<std::uint32_t>& node : nodes)
+                {
+                    spawned.nodes.push_back(node ? handle(*node) : Entity{});
+                }
+                skinning->source->SpawnSkeletons(scene, model, spawned);
+            });
         }
     } // namespace
 
@@ -158,7 +211,9 @@ namespace Fenrir
 
         /**
          * @brief Spawns `model` into the active scene as C++'s SpawnModel does, under `parent` unless it is no entity:
-         * a root named after the file holding one entity per node, each mesh a MeshRenderer. The root is usable at once
+         * a root named after the file holding one entity per node, each mesh a MeshRenderer, each skinned mesh with a
+         * SkinnedMesh naming its skeleton's owner, and with FenrirSkeleton installed a SkeletonPose on each owner and
+         * bone attachments below bones, given when the tree plays back. The root is usable at once
          * (alive, so it can be given components or parented in the same call); the tree is made, as every structural
          * change is, when the system returns. It needs no renderer in the app.
          * @param model The model's handle.
@@ -187,16 +242,19 @@ namespace Fenrir
             }
             // C++'s SpawnModel makes the tree, in a scene of its own, so that there is one place that says what a
             // spawned model is; the tree is then recorded into the active scene, which a native function may not change
-            // directly (ADR-0029).
+            // directly (ADR-0029), and its skeletons given to the recorded entities when it plays back.
             Scene scratch(std::string(context.Native()));
-            const Entity spawned = Fenrir::SpawnModel(*store, scratch, *model);
-            if (!spawned.IsValid())
+            const SpawnedNodes spawned = Fenrir::SpawnModelNodes(context.GetApp(), scratch, *model);
+            if (!spawned.root.IsValid())
             {
                 return false;
             }
+            const ChangeBuffer changes = context.Changes();
+            std::unordered_map<std::uint32_t, std::uint32_t> made;
             *root = context.Entities().HandleOf(
-                Record(context.Changes(), spawned,
-                       under ? std::optional<std::uint32_t>(under->GetId()) : std::optional<std::uint32_t>()));
+                Record(changes, context.Entities(), spawned.root,
+                       under ? std::optional<std::uint32_t>(under->GetId()) : std::optional<std::uint32_t>(), made));
+            RecordSkeletons(changes, *model, spawned, made);
             return true;
         }
     } // namespace RendererNatives

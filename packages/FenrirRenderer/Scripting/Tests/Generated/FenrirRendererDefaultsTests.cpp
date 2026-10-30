@@ -90,6 +90,12 @@ TEST_CASE("C#'s new RendererStats() has C++'s Fenrir::RendererStats{} defaults, 
     CheckDefaults<Fenrir::RendererStats>(Fenrir::ScriptingProbe::Component(app.scripting), "RendererStats");
 }
 
+TEST_CASE("C#'s new SkinnedMesh() has C++'s Fenrir::SkinnedMesh{} defaults, field by field", "[renderer][scripting][bindings]")
+{
+    Fenrir::Testing::RendererScriptingApp app;
+    CheckDefaults<Fenrir::SkinnedMesh>(Fenrir::ScriptingProbe::Component(app.scripting), "SkinnedMesh");
+}
+
 TEST_CASE("C#'s new Sky() has C++'s Fenrir::Sky{} defaults, field by field", "[renderer][scripting][bindings]")
 {
     Fenrir::Testing::RendererScriptingApp app;

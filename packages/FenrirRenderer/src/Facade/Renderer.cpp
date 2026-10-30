@@ -5,9 +5,12 @@
 #include <cmath>
 #include <format>
 #include <iterator>
+#include <map>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 #include "Backend/OpenGL/OpenGLDevice.hpp"
@@ -15,7 +18,10 @@
 #include "Facade/RendererState.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/ImageData.hpp"
+#include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/ShaderData.hpp"
+#include "FenrirAssets/SkeletonData.hpp"
+#include "FenrirAssets/SkinningSource.hpp"
 #include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirECS/ComponentType.hpp"
 #include "FenrirECS/Entity.hpp"
@@ -560,10 +566,224 @@ namespace Fenrir
             return views;
         }
 
-        /** @brief The active scene's visible MeshRenderers as draws, preparing what they name. */
-        std::vector<Render::DrawRequest> ReadDraws(Detail::RendererState& state, const AssetStore& store, Scene& scene)
+        /** @brief The registered skinning source (ADR-0041), or null with none. */
+        SkinningSource* SkinningSourceOf(App& app)
         {
-            std::vector<Render::DrawRequest> draws;
+            const SkinningSourceRegistration* registration = app.TryGetResource<SkinningSourceRegistration>();
+            return registration == nullptr ? nullptr : registration->source;
+        }
+
+        /** @brief The scene of `app` whose entity list holds `entity`, or null. */
+        Scene* FindSceneOf(App& app, const Entity& entity)
+        {
+            Scene* found = nullptr;
+            app.ForEachScene([&](Scene& scene) {
+                if (found == nullptr && scene.GetEntityList().GetEntity(entity.GetId()) == entity)
+                {
+                    found = &scene;
+                }
+            });
+            return found;
+        }
+
+        /** @brief Why a mesh entity's skinning was skipped or ignored, each logged once per entity. */
+        enum class SkinProblem : std::uint8_t
+        {
+            NoSkinnedMesh,
+            NoSkinData,
+            DeadSkeleton,
+            Missing,
+            Unavailable,
+            Incompatible,
+        };
+
+        /** @brief Logs `problem` for mesh entity `id` the first time it is met. */
+        template <typename... Args>
+        void LogSkin(Detail::RendererState& state, std::uint32_t id, SkinProblem problem, std::string_view format,
+                     Args&&... args)
+        {
+            if (state.loggedSkins.insert({id, static_cast<std::uint8_t>(problem)}).second)
+            {
+                state.app->Logger()->Warn(format, std::forward<Args>(args)...);
+            }
+        }
+
+        /** @brief `box` moved by `matrix`: the box around its eight corners, moved. */
+        Math::AABB Moved(const Math::AABB& box, const Math::Mat4& matrix)
+        {
+            Math::AABB moved;
+            for (int corner = 0; corner < 8; ++corner)
+            {
+                const Math::Vec3 local((corner & 1) != 0 ? box.max.x : box.min.x,
+                                       (corner & 2) != 0 ? box.max.y : box.min.y,
+                                       (corner & 4) != 0 ? box.max.z : box.min.z);
+                const Math::Vec3 point(matrix * Math::Vec4(local, 1.0f));
+                moved.min = corner == 0 ? point : glm::min(moved.min, point);
+                moved.max = corner == 0 ? point : glm::max(moved.max, point);
+            }
+            return moved;
+        }
+
+        /**
+         * @brief A skinned mesh's world bounds (ADR-0035): each bone's box moved by its palette matrix, and the box of
+         * unweighted vertices, all under the skeleton entity's `world`. Empty when the skin bounds nothing.
+         */
+        std::optional<Math::AABB> SkinnedBounds(const MeshSkin& skin, std::span<const Math::Mat4> palette,
+                                                const Math::Mat4& world)
+        {
+            std::optional<Math::AABB> bounds;
+            const auto add = [&](const Math::AABB& box) {
+                bounds = bounds ? Math::AABB{glm::min(bounds->min, box.min), glm::max(bounds->max, box.max)} : box;
+            };
+            for (std::size_t bone = 0; bone < skin.boneBounds.size() && bone < palette.size(); ++bone)
+            {
+                if (skin.boneBounds[bone].has_value())
+                {
+                    add(Moved(*skin.boneBounds[bone], world * palette[bone]));
+                }
+            }
+            if (skin.unweightedBounds.has_value())
+            {
+                add(Moved(*skin.unweightedBounds, world));
+            }
+            return bounds;
+        }
+
+        /** @brief Where each skeleton's palette starts in the frame's palette, by scene, skeleton entity and pose. */
+        using PaletteRanges = std::map<std::tuple<const Scene*, std::uint32_t, std::uint64_t>, std::uint32_t>;
+
+        /**
+         * @brief Makes `draw` skinned from the SkinnedMesh on mesh entity `entity` (ADR-0035, ADR-0041): its skeleton's
+         * world matrix and its palette range, the palette appended to `palette` the first time this frame its skeleton
+         * is met at this pose. False, logged once, when it may not be drawn.
+         */
+        bool ReadSkinned(Detail::RendererState& state, const AssetStore& store, Scene& scene, const Entity& entity,
+                         std::uint32_t id, AssetHandle<Mesh> mesh, const MeshSkin& skin,
+                         std::vector<Math::Mat4>& palette, PaletteRanges& ranges, Render::DrawRequest& draw)
+        {
+            if (!entity.HasComponent<SkinnedMesh>())
+            {
+                LogSkin(state, id, SkinProblem::NoSkinnedMesh,
+                        "FenrirRenderer: entity {} draws mesh {}, which has skin data, but has no SkinnedMesh naming "
+                        "its skeleton, so it is not drawn",
+                        id, mesh.index);
+                return false;
+            }
+            SkinningSource* source = SkinningSourceOf(*state.app);
+            if (source == nullptr)
+            {
+                if (!state.loggedNoSkinningSource)
+                {
+                    state.loggedNoSkinningSource = true;
+                    state.app->Logger()->Warn("FenrirRenderer: no skinning source is registered (install "
+                                              "FenrirSkeleton), so skinned meshes are not drawn");
+                }
+                return false;
+            }
+            const Entity skeleton = entity.GetComponent<SkinnedMesh>().skeleton;
+            if (!skeleton.IsValid())
+            {
+                LogSkin(state, id, SkinProblem::DeadSkeleton,
+                        "FenrirRenderer: entity {} is skinned by a skeleton entity that is not alive, so it is not "
+                        "drawn",
+                        id);
+                return false;
+            }
+            const PoseState pose = source->GetPoseState(scene, skeleton);
+            if (pose == PoseState::Missing)
+            {
+                LogSkin(state, id, SkinProblem::Missing,
+                        "FenrirRenderer: entity {} is skinned by entity {}, which has no SkeletonPose, so it is not "
+                        "drawn",
+                        id, skeleton.GetId());
+                return false;
+            }
+            if (pose != PoseState::Ready)
+            {
+                LogSkin(state, id, SkinProblem::Unavailable,
+                        "FenrirRenderer: entity {} is skinned by entity {}, whose skeleton is Unavailable, so it is "
+                        "not drawn",
+                        id, skeleton.GetId());
+                return false;
+            }
+
+            // Compatibility (ADR-0035), checked only when the pairing changes.
+            const AssetHandle<Skeleton> skeletonAsset = source->GetSkeleton(scene, skeleton);
+            const SkeletonData* skeletonData = store.TryGet(skeletonAsset);
+            if (skeletonData == nullptr)
+            {
+                return false;
+            }
+            Detail::RendererState::SkinPairing pairing{mesh, store.Revision(mesh), skeletonAsset,
+                                                       store.Revision(skeletonAsset)};
+            Detail::RendererState::SkinPairing& cached = state.skinPairings[id];
+            if (!cached.SameAs(pairing))
+            {
+                const bool fits = skin.boneCount <= skeletonData->BoneCount();
+                const bool signatureMatches =
+                    skin.expectedSignature == 0 || skin.expectedSignature == skeletonData->BindSignature();
+                pairing.compatible = fits && signatureMatches;
+                cached = pairing;
+                if (!pairing.compatible)
+                {
+                    // Logged for each pairing that fails, so a mesh given a second wrong skeleton says so again.
+                    state.loggedSkins.erase({id, static_cast<std::uint8_t>(SkinProblem::Incompatible)});
+                }
+            }
+            if (!cached.compatible)
+            {
+                if (skin.boneCount > skeletonData->BoneCount())
+                {
+                    LogSkin(state, id, SkinProblem::Incompatible,
+                            "FenrirRenderer: entity {}'s mesh {} needs {} bones, but the skeleton of entity {} has {}, "
+                            "so it is not drawn",
+                            id, mesh.index, skin.boneCount, skeleton.GetId(), skeletonData->BoneCount());
+                }
+                else
+                {
+                    LogSkin(state, id, SkinProblem::Incompatible,
+                            "FenrirRenderer: entity {}'s mesh {} was baked for another skeleton than entity {}'s (its "
+                            "bind signature differs), so it is not drawn",
+                            id, mesh.index, skeleton.GetId());
+                }
+                return false;
+            }
+
+            // One palette range per skeleton and pose this frame, shared by every mesh and view drawing it.
+            const auto [range, added] =
+                ranges.try_emplace({&scene, skeleton.GetId(), source->GetPoseGeneration(scene, skeleton)},
+                                   static_cast<std::uint32_t>(palette.size()));
+            if (added)
+            {
+                const std::span<const Math::Mat4> bones = source->GetPalette(scene, skeleton);
+                palette.insert(palette.end(), bones.begin(), bones.end());
+            }
+            draw.skinned = true;
+            draw.paletteOffset = range->second;
+            draw.world = GetWorldMatrix(skeleton);
+            const MaterialData* material =
+                store.TryGet(AssetHandle<Material>{draw.material.index, draw.material.generation});
+            if (material != nullptr &&
+                (material->blendMode == BlendMode::AlphaBlend || material->blendMode == BlendMode::Additive))
+            {
+                if (const auto bounds = SkinnedBounds(skin, source->GetPalette(scene, skeleton), draw.world))
+                {
+                    draw.sortPoint = (bounds->min + bounds->max) * 0.5f;
+                }
+            }
+            return true;
+        }
+
+        /**
+         * @brief The active scene's visible MeshRenderers as `frame`'s draws, preparing what they name, and the
+         * palettes their skinned draws read.
+         */
+        void ReadDraws(Detail::RendererState& state, const AssetStore& store, Scene& scene, Render::SceneFrame& frame)
+        {
+            std::vector<Render::DrawRequest>& draws = frame.draws;
+            std::vector<Math::Mat4>& palette = frame.palette;
+            PaletteRanges ranges;
+            std::set<std::uint32_t> drawn;
             EntityList& entities = scene.GetEntityList();
             const std::array<ComponentType, 1> renderers{ComponentType::Native<MeshRenderer>()};
             entities.ForEachWith(renderers, [&](std::uint32_t id) {
@@ -595,10 +815,31 @@ namespace Fenrir
                                               "fallback material",
                                               id, renderer.material.IsEmpty() ? "no" : "a stale");
                 }
-                draw.world = GetWorldMatrix(entity);
+                const MeshData& data = *store.TryGet(renderer.mesh);
+                if (data.skin.has_value())
+                {
+                    drawn.insert(id);
+                    if (!ReadSkinned(state, store, scene, entity, id, renderer.mesh, *data.skin, palette, ranges, draw))
+                    {
+                        return;
+                    }
+                }
+                else
+                {
+                    if (entity.HasComponent<SkinnedMesh>())
+                    {
+                        LogSkin(state, id, SkinProblem::NoSkinData,
+                                "FenrirRenderer: entity {} has a SkinnedMesh, but its mesh {} has no skin data, so it "
+                                "is drawn rigidly",
+                                id, renderer.mesh.index);
+                    }
+                    draw.world = GetWorldMatrix(entity);
+                }
                 draws.push_back(draw);
             });
-            return draws;
+            // The compatibility verdicts of mesh entities no longer drawn skinned go.
+            std::erase_if(state.skinPairings, [&](const auto& entry) { return !drawn.contains(entry.first); });
+            frame.palettes = static_cast<std::uint32_t>(ranges.size());
         }
 
         /** @brief The core's copy of a FenrirDebugDraw vertex. */
@@ -741,7 +982,7 @@ namespace Fenrir
                 ReleaseStale(*state.scene, *state.draw2D, *store);
                 frame.lighting = ReadLighting(state, scene);
                 frame.views = ReadViews(state, *store, scene, ReadSky(state, *store, scene));
-                frame.draws = ReadDraws(state, *store, scene);
+                ReadDraws(state, *store, scene, frame);
                 debug = ReadDebug(state, scene);
                 frame.time = static_cast<float>(state.time);
                 frame.deltaTime = static_cast<float>(app.GetTime().deltaTime);
@@ -770,6 +1011,9 @@ namespace Fenrir
                 state.stats.draws = scene.draws;
                 state.stats.passes = report.passesRun;
                 state.stats.uploads = scene.uploads;
+                state.stats.paletteBytesUploaded = scene.paletteBytes;
+                state.stats.distinctPalettesWritten = scene.palettes;
+                state.stats.skinnedDraws = scene.skinnedDraws;
             }
         }
 
@@ -998,19 +1242,23 @@ namespace Fenrir
         {
             return std::nullopt;
         }
-        // The box around the local box's eight corners, each moved to world space.
-        const Math::Mat4 world = GetWorldMatrix(entity);
-        Math::AABB bounds;
-        for (int corner = 0; corner < 8; ++corner)
+        if (!mesh->skin.has_value())
         {
-            const Math::Vec3 local((corner & 1) != 0 ? mesh->bounds.max.x : mesh->bounds.min.x,
-                                   (corner & 2) != 0 ? mesh->bounds.max.y : mesh->bounds.min.y,
-                                   (corner & 4) != 0 ? mesh->bounds.max.z : mesh->bounds.min.z);
-            const Math::Vec3 point(world * Math::Vec4(local, 1.0f));
-            bounds.min = corner == 0 ? point : glm::min(bounds.min, point);
-            bounds.max = corner == 0 ? point : glm::max(bounds.max, point);
+            return Moved(mesh->bounds, GetWorldMatrix(entity));
         }
-        return bounds;
+        // A skinned mesh (ADR-0035), from its skeleton's pose now; it is not drawn without a SkinnedMesh.
+        SkinningSource* source = SkinningSourceOf(*m_state->app);
+        if (source == nullptr || !entity.HasComponent<SkinnedMesh>())
+        {
+            return std::nullopt;
+        }
+        const Entity skeleton = entity.GetComponent<SkinnedMesh>().skeleton;
+        Scene* scene = skeleton.IsValid() ? FindSceneOf(*m_state->app, skeleton) : nullptr;
+        if (scene == nullptr || source->GetPoseState(*scene, skeleton) != PoseState::Ready)
+        {
+            return std::nullopt;
+        }
+        return SkinnedBounds(*mesh->skin, source->GetPalette(*scene, skeleton), GetWorldMatrix(skeleton));
     }
 
     RendererStats Renderer::Stats() const

@@ -12,9 +12,9 @@ namespace Fenrir
         /** @brief Once a frame, in the frame pass of the pose pipeline: the default. */
         Frame,
         /**
-         * @brief Once per fixed tick, at tick time: a tick-posed skeleton, for bodies that follow its bones. The tick
-         * pass is a later ticket's; until it lands, a tick-posed skeleton keeps its base pose, and frame `Animate` work
-         * may not write it.
+         * @brief Once per fixed tick, at tick time: a tick-posed skeleton, for bodies that follow its bones. Its base
+         * pose is evaluated by the tick pass of `Animate` in `PreTick`, giving the simulation pose, and the frame draws
+         * the last two ticks' blend at `Time::accumulator / Time::tickRate`, with modifiers on top: the render pose.
          */
         Tick,
     };
@@ -25,8 +25,9 @@ namespace Fenrir
         /** @brief The pose this frame draws, the render pose: the default. */
         Render,
         /**
-         * @brief The pose the last fixed tick evaluated, the simulation pose. On a frame-posed skeleton it is the
-         * render pose; so is it, for now, on a tick-posed one, until the tick pass lands.
+         * @brief The pose the last fixed tick evaluated, the simulation pose: the base pose at tick time, with no
+         * modifiers, so a world read of it is the bone's model matrix in that pose. On a frame-posed skeleton it is the
+         * render pose.
          */
         Simulation,
     };
@@ -36,7 +37,8 @@ namespace Fenrir
      * instances. One per entity. FenrirSkeleton keeps the pose itself (base and final locals, model matrices, the
      * palette) in a private scene resource, made for the component when the pose pipeline next reconciles, or at once
      * by `Skeletons::Ensure`. Changing `skeleton` rebuilds the instance at the rest pose; switching `timing` is a field
-     * edit.
+     * edit, taking effect at the next pass's reconcile. Switching to `Tick` seeds both tick poses with the current base
+     * pose, so nothing jumps; switching back to `Frame` resumes frame `Animate` from where the tick clock stopped.
      */
     struct SkeletonPose
     {

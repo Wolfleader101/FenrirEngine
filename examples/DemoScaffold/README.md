@@ -28,6 +28,9 @@ return demo.Run();
 `DemoScaffold::Install(App&, DemoConfig)` installs FenrirWindow (for the OpenGL backend), FenrirInput, FenrirAssets,
 FenrirDebugDraw and FenrirRenderer, and adds the scaffold's systems. With scripting built and
 `DemoConfig::scriptAssembly` set, it installs Scripting last (see "C# scenes").
+`DemoConfig::installPackages`, when set, runs after FenrirRenderer and before Scripting, for an app's own packages that
+need the scaffold's and must precede Scripting (AnimationDemo's FenrirSkeleton, whose pose stages a script's systems
+join as it loads); the scaffold keeps what it returns and destroys it after Scripting ends and before its own packages.
 `DemoConfig::msaa` sets the renderer's MSAA samples (`RendererConfig::msaa`; 1, off, by default).
 `DemoConfig::iconPath` names the window's icon, an RGBA8 PNG or JPEG under the asset root, which the scaffold loads
 through FenrirAssets and gives to `Window::SetIcon`; it is the shared `icons/fenrir.png` by default, and empty keeps
