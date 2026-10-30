@@ -168,6 +168,7 @@ namespace Fenrir::Detail
         instance.worldInverse.reset();
         instance.worldInverseFrame = 0;
         instance.generation = m_nextGeneration++;
+        instance.built = instance.generation;
     }
 
     void SkeletonPoses::MakeUnavailable(SkeletonInstance& instance, AssetHandle<Skeleton> handle)

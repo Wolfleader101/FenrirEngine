@@ -1,6 +1,6 @@
 # FenrirSkeleton
 
-Skeleton poses as arrays, with no animation, renderer or physics (ADR-0028, ADR-0031, ADR-0033, ADR-0041): skeleton instances and their reads in local, model and world space, the pose pipeline and its stages, pose modifiers through `PoseEdit`, the pose generation and the lazy skinning palette, the skinning source, and spawning. It depends on FenrirAssets, FenrirECS, FenrirScene, FenrirApp, FenrirMath and FenrirTime, links no library, and is built with `FENRIR_ENABLE_ASSETS`, with no option of its own. FenrirRenderer and FenrirPhysics link nothing from it: the renderer reaches poses only through FenrirAssets' `SkinningSource`.
+Skeleton poses as arrays, with no animation, renderer or physics (ADR-0028, ADR-0031, ADR-0033, ADR-0037, ADR-0041): skeleton instances and their reads in local, model and world space, the pose pipeline and its stages, pose modifiers through `PoseEdit`, bone attachments, the pose generation and the lazy skinning palette, the skinning source, and spawning. It depends on FenrirAssets, FenrirECS, FenrirScene, FenrirApp, FenrirMath and FenrirTime, links no library, and is built with `FENRIR_ENABLE_ASSETS`, with no option of its own. FenrirRenderer and FenrirPhysics link nothing from it: the renderer reaches poses only through FenrirAssets' `SkinningSource`.
 
 ## Install
 
@@ -21,7 +21,7 @@ Skeleton poses as arrays, with no animation, renderer or physics (ADR-0028, ADR-
 
 ## The pose pipeline
 
-One sequential `PostUpdate` system runs it on the active scene: reconcile, `Animate`, prepare (final pose from base pose), `Modify`, finalise (model matrices left, parents first), attach (bone attachments, a later ticket's) and `Late`. Inactive scenes pause, and resume without catching up.
+One sequential `PostUpdate` system runs it on the active scene: reconcile, `Animate`, prepare (final pose from base pose), `Modify`, finalise (model matrices left, parents first), attach (bone attachments placed) and `Late`. Inactive scenes pause, and resume without catching up.
 
 - **Stages:** `AddAnimate`, `AddModifier` and `AddLate` add work at an `int` order, ties in the order added, and return a `PoseStageHandle` that `Remove` takes outside the pipeline (inside it, `Remove` is refused with an error). FenrirSkeleton's own modifiers use constants: `ModifierOrder::Override` is 1000. Nothing is promised against other `PostUpdate` systems.
 - **`Animate`** items get an `AnimateContext`: the pass's `Timing()` (`Frame`; tick passes are a later ticket's), its `Step()` (`Time::deltaTime`), and the `Ready` `Instances()` of that timing, the only ones they may write.
@@ -39,9 +39,23 @@ One sequential `PostUpdate` system runs it on the active scene: reconcile, `Anim
 
 **The ragdoll handover contract**, for the physics map's ragdoll spec: bone names, indices and parents (`SkeletonData`, `FindBone`) and the subtree query (`GetSubtree`); glue writes world targets through `SetOverride` in `Update`; gameplay sets override weights; base-pose reads (`GetBaseLocal`, `GetBaseModel`) never see overrides and are valid from `Animate` to the next `Animate`, so on frame-posed skeletons glue reads them a frame late. Bones with no entry keep their animated locals, and unmapped children follow their nearest mapped ancestor because model matrices are built parents first. While bodies simulate, glue writes every mapped bone each frame; blending back, it writes the live poses or nothing (the held last pose); once the weight is 0 it clears its entries.
 
+## Bone attachments (ADR-0037)
+
+`BoneAttachment { Entity skeleton; BoneName bone; Transform offset; }` is plain data placing its entity at `GetBoneWorldMatrix(skeleton, bone) × offset` every frame, in the pipeline's attach step, under any ECS parent. The full bone transform is inherited.
+
+- **`BoneName`** is a fixed 256-byte UTF-8 buffer holding at most 255 bytes. `Set(name, logger)` refuses a longer name (or one holding a zero byte) with an error and leaves the field unchanged: it never truncates, since a truncated name could match another bone. A buffer written raw with no terminator is malformed: `Get` gives nothing, and the attachment is `BoneNotFound`, never resolved as a partial name.
+- **Resolution** is FenrirSkeleton's, cached per attached entity, never in the component: the bone index and what it was resolved against (the skeleton entity, the name, the instance's build). Any change resolves it again by engine name before the next placement; a name that did not resolve is tried again only when one of those changes.
+- **Placement:** under the skeleton entity, the entity's local `Transform` is `M_model[bone] × offset`. Under any other parent it is the target world matrix taken through the inverse of the parent's world matrix and decomposed into TRS, so shear is dropped: under non-uniform scale with rotation, the placed world matrix can differ from the target.
+- **Order:** an attachment comes after any attachment that is its skeleton entity or parent, or an ancestor of either, so a scope attached to a rifle attached to a hand, or a skeleton parented under an attached entity, is placed in one pass. Ties go by entity index. The order is cached and rebuilt when an attachment, its skeleton entity or the hierarchy above either changes. An attachment in a cycle (a skeleton parented under an entity attached to it) is `Unplaceable`; what depends on it is still placed.
+- **`Skeletons::GetAttachmentState(scene, entity)`**: `Attached`, `SkeletonMissing` (the skeleton entity is dead or has no `SkeletonPose`), `SkeletonUnavailable`, `BoneNotFound`, `TransformMissing` or `Unplaceable` (a cycle, or a parent whose world matrix has no inverse), and `NotAttached` for an entity with no `BoneAttachment` or none placed yet. It is never a component field.
+- **Failure:** the entity keeps its last `Transform`, the state says why, a warning is logged once per cause, and it recovers by itself. Attach makes no structural change.
+- **Ownership:** while attached, FenrirSkeleton owns the entity's local `Transform`, and gameplay moves the object through `offset`; a direct write to the `Transform` is overwritten at the next attach.
+- **`Skeletons::Detach(scene, entity, DetachMode, newParent = {})`:** `KeepLocal` removes the component only. `KeepWorld` reparents the entity under `newParent` (to the top of the scene when null) with the local `Transform` that keeps its world transform as it is now. It is transactional: it checks the new parent (alive, and not the entity or a descendant), that the parent's world matrix inverts and that the result is representable as TRS, and on any failure changes nothing and returns the failure. Detaching is structural, refused inside the pipeline.
+- **Physics:** a dynamic body on an attached entity is unsupported, since attach runs in `PostUpdate` and overwrites what the physics step wrote. A kinematic body on an entity attached to a frame-posed skeleton lags a frame: the next tick reads a `Transform` placed after the previous frame's ticks. Tick-posed skeletons, with glue writing the body's `Transform` in `Tick`, remove the lag (ADR-0040).
+
 ## Spawning
 
-`SpawnSkeletons(scene, model, spawned)` adds a `SkeletonPose` to each skeleton's owner (`Model::skeletonOwners`, an ordinary node or a synthetic owner) whose skeleton loaded, and `Ensure`s it. An owner that already has one keeps it, with a warning. `SpawnModel(scene, model, parent)` is `SpawnNodes` then `SpawnSkeletons`, for apps with no renderer. Giving ordinary nodes below bones a bone attachment is a later ticket's.
+`SpawnSkeletons(scene, model, spawned)` adds a `SkeletonPose` to each skeleton's owner (`Model::skeletonOwners`, an ordinary node or a synthetic owner) whose skeleton loaded, and `Ensure`s it. An owner that already has one keeps it, with a warning. `SpawnModel(scene, model, parent)` is `SpawnNodes` then `SpawnSkeletons`, for apps with no renderer. Then every ordinary node whose parent node is a bone gets a `BoneAttachment` to that bone, with its rest transform relative to the bone as the offset, so it follows the bone from the first frame. There is no socket concept: a named attachment point is such a node, and a sword hung on it is parented under its entity with no attachment of its own.
 
 ## The skinning source
 
@@ -49,4 +63,4 @@ FenrirSkeleton's `SkinningSource` answers the renderer per scene and entity: `Ge
 
 ## Tests
 
-`FenrirSkeletonTests` (with `FENRIR_BUILD_TESTS`) is the spec's seam 8: instances, generations and the palette, the pipeline, modifiers, the pose override and ADR-0038's ragdoll handover with plain entities as bodies (`PoseOverride.cpp`), spawning and install, on skeletons and models built in code, driven by `App::RunFrame`. `PublicHeaders.cpp` fails the build if a header reaches the renderer, physics, a window or a graphics API, and configuring fails if FenrirRenderer or FenrirPhysics links the package.
+`FenrirSkeletonTests` (with `FENRIR_BUILD_TESTS`) is the spec's seam 8: instances, generations and the palette, the pipeline, modifiers, the pose override and ADR-0038's ragdoll handover with plain entities as bodies (`PoseOverride.cpp`), bone attachments (`Attachments.cpp`), spawning and install, on skeletons and models built in code, driven by `App::RunFrame`. `PublicHeaders.cpp` fails the build if a header reaches the renderer, physics, a window or a graphics API, and configuring fails if FenrirRenderer or FenrirPhysics links the package.

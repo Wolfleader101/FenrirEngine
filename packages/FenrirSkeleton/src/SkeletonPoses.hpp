@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "Attachments.hpp"
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirAssets/SkinningSource.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
@@ -68,6 +69,9 @@ namespace Fenrir
             std::vector<Math::Mat4> palette;
             std::uint64_t paletteGeneration = 0;
             std::uint64_t generation = 0;
+            // The generation the instance was last rebuilt at, so bone attachments resolved against an older build
+            // resolve again.
+            std::uint64_t built = 0;
 
             // The base pose changed since the last finalise.
             bool poseDirty = false;
@@ -169,6 +173,8 @@ namespace Fenrir
             std::uint64_t modifierCall = 0;
             /** @brief The frame the pipeline last ran in, for rate-limited warnings. */
             std::uint64_t frame = 0;
+            /** @brief The scene's bone attachments: their resolutions, states and order. */
+            Attachments attachments;
 
           private:
             void Rebuild(SkeletonInstance& instance, const SkeletonData& data, AssetHandle<Skeleton> handle,

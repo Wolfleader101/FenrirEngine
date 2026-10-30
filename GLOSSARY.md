@@ -701,8 +701,12 @@ A deterministic hash of a skeleton's bones, parents, engine names and inverse bi
 *Avoid:* socket, mount point, parent bone.
 
 **Attachment state**
-Whether a bone attachment was placed this frame, and if not why: attached, skeleton missing, skeleton unavailable, bone not found, transform missing, or unplaceable. An attachment that is not placed keeps its last `Transform` (ADR-0037).
+Whether a bone attachment was placed this frame, and if not why: attached, skeleton missing, skeleton unavailable, bone not found, transform missing, or unplaceable; `NotAttached` for an entity with no bone attachment, or none placed yet. An attachment that is not placed keeps its last `Transform` (ADR-0037).
 *Avoid:* attachment status, resolved flag.
+
+**Detach**
+`Skeletons::Detach`: ending a bone attachment, keeping either the entity's local `Transform` and parent (`KeepLocal`, the component removed only) or its place in the world under a new parent (`KeepWorld`, transactional: on any failure nothing changes) (ADR-0037).
+*Avoid:* unattach, drop (for the call; a game may call its use dropping).
 
 **Pose timing**
 `PoseTiming`, a field of `SkeletonPose`: whether a skeleton's base pose is animated once a frame (`Frame`, the default) or once per fixed tick at tick time (`Tick`, a *tick-posed* skeleton), for bodies that must follow its bones during the physics step (ADR-0040).

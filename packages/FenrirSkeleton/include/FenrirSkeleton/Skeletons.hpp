@@ -16,6 +16,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirMath/Math.hpp"
+#include "FenrirSkeleton/BoneAttachment.hpp"
 #include "FenrirSkeleton/PoseStages.hpp"
 #include "FenrirSkeleton/SkeletonPose.hpp"
 
@@ -50,10 +51,10 @@ namespace Fenrir
      *
      * **The pose pipeline** runs once a frame in one sequential `PostUpdate` system, on the active scene only:
      * reconcile, `Animate` (base-pose writers), prepare (final pose from base pose), `Modify` (pose modifiers),
-     * finalise (model matrices left, parents first), attach (bone attachments, a later ticket's) and `Late` (read-only
-     * for poses). Inactive scenes pause, and resume without catching up. Work added to a stage runs by its `int` order,
-     * ties in the order it was added; nothing is promised against other `PostUpdate` systems. An instance whose pose is
-     * clean and that no modifier edited this frame or the last skips prepare and finalise.
+     * finalise (model matrices left, parents first), attach (bone attachments placed, in dependency order) and `Late`
+     * (read-only for poses). Inactive scenes pause, and resume without catching up. Work added to a stage runs by its
+     * `int` order, ties in the order it was added; nothing is promised against other `PostUpdate` systems. An instance
+     * whose pose is clean and that no modifier edited this frame or the last skips prepare and finalise.
      */
     class Skeletons
     {
@@ -108,7 +109,9 @@ namespace Fenrir
         /**
          * @brief Gives the nodes `SpawnNodes` spawned for `model` their skeletons: a `SkeletonPose` on each skeleton's
          * owner (an ordinary node or a synthetic owner) whose skeleton loaded, each made `Ready` with `Ensure`. An
-         * owner that already has a `SkeletonPose` keeps it, with a logged warning.
+         * owner that already has a `SkeletonPose` keeps it, with a logged warning. Then every ordinary node whose
+         * parent node is a bone of a skeleton that loaded gets a `BoneAttachment` to that bone, its rest transform
+         * relative to the bone as the offset: a named attachment point is such a node, already attached (ADR-0037).
          */
         void SpawnSkeletons(Scene& scene, AssetHandle<Model> model, const SpawnedNodes& spawned) const;
 
@@ -186,6 +189,30 @@ namespace Fenrir
          */
         [[nodiscard]] static std::span<Transform> EditBasePose(
             Scene& scene, Entity skeleton, std::source_location site = std::source_location::current());
+
+        /** @name Bone attachments (ADR-0037)
+         * A `BoneAttachment` places its entity in the pose pipeline's Attach step, after finalise and before `Late`,
+         * every frame, in a cached order of their dependencies (an attachment whose skeleton entity or parent, or an
+         * ancestor of either, is attached comes after that attachment; ties by entity index). Under the skeleton entity
+         * the entity's `Transform` is `M_model[bone] × offset`; under any other parent, the bone's world matrix ×
+         * `offset` taken into the parent's space, with shear dropped. An attachment that cannot be placed keeps its
+         * last `Transform`, reports why through `GetAttachmentState`, logs a warning once per cause, and recovers by
+         * itself.
+         * @{
+         */
+
+        /** @brief Whether the last Attach placed the entity, and why not. */
+        [[nodiscard]] static AttachmentState GetAttachmentState(Scene& scene, Entity entity);
+
+        /**
+         * @brief Detaches the entity from its bone. `KeepLocal` removes the `BoneAttachment` only. `KeepWorld` also
+         * reparents the entity under `newParent`, or to the top of the scene when it is null, with the local
+         * `Transform` that keeps its world transform as it is in the scene now (where the last Attach placed it).
+         * `KeepWorld` is transactional: it checks the new parent and the new transform first, and on any failure
+         * changes nothing. A structural change: refused inside the pose pipeline.
+         */
+        static DetachResult Detach(Scene& scene, Entity entity, DetachMode mode, Entity newParent = {});
+        /** @} */
 
         /** @name The pose override (ADR-0033, ADR-0038)
          * `PoseOverride`, FenrirSkeleton's own modifier at `ModifierOrder::Override` (1000): the first modifier, not

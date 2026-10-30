@@ -3,7 +3,7 @@
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 
 // AnimationDemo's scenes, in the order of its scene list (README.md). Each animation ticket adds its scene here, in the
-// spec's order: Bone attachments (ticket 10) goes between Blending and Going limp.
+// spec's order.
 namespace AnimationDemo
 {
     /**
@@ -33,6 +33,14 @@ namespace AnimationDemo
      * weight ramping to 0 and back with its clock running and its events silent at 0.
      */
     [[nodiscard]] FenrirDemo::DemoScene Blending();
+
+    /**
+     * @brief Bone attachments: the Quaternius human cycling its clips with a rifle in its right hand (a skeleton entity
+     * of its own), a scope attached to the rifle's rail (an attachment on an attachment) and a hat on its head, each
+     * labelled with its AttachmentState; beside it one labelled attachment per failure case. Keys detach the rifle
+     * keeping its world transform and the hat keeping its local one, and attach them again.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene BoneAttachments();
 
     /**
      * @brief Going limp: the Quaternius human walking while demo code, standing in for ragdoll glue, writes world

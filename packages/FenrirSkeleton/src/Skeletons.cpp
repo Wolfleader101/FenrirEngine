@@ -13,6 +13,7 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/Model.hpp"
+#include "FenrirAssets/SkeletonData.hpp"
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirScheduler/Scheduler.hpp"
@@ -159,8 +160,8 @@ namespace Fenrir
                 }
             });
 
-            // Bone attachments are placed here once they exist (a later ticket's).
             poses.step = PipelineStep::Attach;
+            poses.attachments.Place(scene, poses);
 
             poses.step = PipelineStep::Late;
             LateContext late(scene);
@@ -211,6 +212,41 @@ namespace Fenrir
                 }
                 Entity(owner).AddComponent<SkeletonPose>(SkeletonPose{skeleton});
                 poses.Reconcile(*store, owner);
+            }
+
+            // Every ordinary node hanging from a bone follows it: attached to that bone with its rest place relative to
+            // it, which SpawnNodes composed into its Transform through the bones above.
+            for (std::size_t i = 0; i < data->nodes.size() && i < spawned.nodes.size(); ++i)
+            {
+                const ModelNode& node = data->nodes[i];
+                const Entity& entity = spawned.nodes[i];
+                if (node.kind == ModelNodeKind::Bone || node.parent < 0 || !entity.IsValid())
+                {
+                    continue;
+                }
+                const ModelNode& above = data->nodes[static_cast<std::size_t>(node.parent)];
+                if (above.kind != ModelNodeKind::Bone || above.skeleton < 0 ||
+                    static_cast<std::size_t>(above.skeleton) >= data->skeletonOwners.size())
+                {
+                    continue;
+                }
+                const std::int32_t ownerNode = data->skeletonOwners[static_cast<std::size_t>(above.skeleton)];
+                const Entity owner = ownerNode >= 0 && static_cast<std::size_t>(ownerNode) < spawned.nodes.size()
+                                         ? spawned.nodes[static_cast<std::size_t>(ownerNode)]
+                                         : Entity();
+                const SkeletonData* bones = store->TryGet(data->skeletons[static_cast<std::size_t>(above.skeleton)]);
+                if (!owner.IsValid() || !owner.HasComponent<SkeletonPose>() || bones == nullptr)
+                {
+                    // Its skeleton did not load: the node stays where SpawnNodes put it.
+                    continue;
+                }
+                BoneAttachment attachment;
+                attachment.skeleton = owner;
+                attachment.offset = node.rest;
+                if (attachment.bone.Set(bones->EngineName(above.bone), logger))
+                {
+                    Entity(entity).AddComponent<BoneAttachment>(attachment);
+                }
             }
         }
 
@@ -611,6 +647,95 @@ namespace Fenrir
         instance->poseDirty = true;
         instance->baseModelValid = false;
         return instance->base;
+    }
+
+    AttachmentState Skeletons::GetAttachmentState(Scene& scene, Entity entity)
+    {
+        const SkeletonPoses* poses = scene.GetResource<SkeletonPoses>();
+        return poses == nullptr ? AttachmentState::NotAttached : poses->attachments.StateOf(entity);
+    }
+
+    DetachResult Skeletons::Detach(Scene& scene, Entity entity, DetachMode mode, Entity newParent)
+    {
+        SkeletonPoses* poses = scene.GetResource<SkeletonPoses>();
+        if (poses != nullptr && poses->step != PipelineStep::None)
+        {
+            poses->Logger().Error("{}", std::format("Skeletons::Detach on {} was refused: detaching is a structural "
+                                                    "change, made outside the pose pipeline",
+                                                    Detail::Describe(entity)));
+            return DetachResult::InsidePipeline;
+        }
+        if (!entity.IsValid() || !entity.HasComponent<BoneAttachment>())
+        {
+            return DetachResult::NotAttached;
+        }
+        if (mode == DetachMode::KeepWorld)
+        {
+            // Everything is checked before anything changes.
+            if (newParent.HasEntityList() && !newParent.IsValid())
+            {
+                return DetachResult::InvalidParent;
+            }
+            for (Entity at = newParent; at.IsValid(); at = at.GetComponent<Relationship>().parent)
+            {
+                if (at == entity)
+                {
+                    return DetachResult::InvalidParent;
+                }
+            }
+            const Math::Mat4 above = newParent.IsValid() ? GetWorldMatrix(newParent) : Math::Mat4(1.0f);
+            if (!Detail::Invertible(above))
+            {
+                return DetachResult::ParentNotInvertible;
+            }
+            const Math::Mat4 local = Math::Inverse(above) * GetWorldMatrix(entity);
+            Transform kept;
+            Math::Decompose(local, kept.pos, kept.rot, kept.scale);
+            kept.rot = glm::normalize(kept.rot);
+            const Math::Mat4 rebuilt = TransformToMat4(kept);
+            float size = 1.0f;
+            float error = 0.0f;
+            for (int column = 0; column < 4; ++column)
+            {
+                for (int row = 0; row < 4; ++row)
+                {
+                    size = std::max(size, std::abs(local[column][row]));
+                    error = std::max(error, std::abs(local[column][row] - rebuilt[column][row]));
+                }
+            }
+            if (!std::isfinite(error) || error > 1e-4f * size)
+            {
+                return DetachResult::NotRepresentable;
+            }
+
+            entity.RemoveComponent<BoneAttachment>();
+            const Entity oldParent = entity.GetComponent<Relationship>().parent;
+            if (oldParent.IsValid())
+            {
+                oldParent.RemoveChild(entity);
+            }
+            if (newParent.IsValid())
+            {
+                newParent.AddChild(entity);
+            }
+            if (entity.HasComponent<Transform>())
+            {
+                entity.GetComponent<Transform>() = kept;
+            }
+            else
+            {
+                entity.AddComponent<Transform>(kept);
+            }
+        }
+        else
+        {
+            entity.RemoveComponent<BoneAttachment>();
+        }
+        if (poses != nullptr)
+        {
+            poses->attachments.Forget(entity);
+        }
+        return DetachResult::Detached;
     }
 
     bool Skeletons::SetOverride(Scene& scene, Entity skeleton, std::int32_t bone, const Target& target)
