@@ -13,10 +13,25 @@
 
 **Touches:** `packages/FenrirSkeleton/`, `packages/FenrirAnimation/`, `examples/AnimationDemo/`, `examples/CMakeLists.txt`, `GLOSSARY.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Seam 8 tick-posed cases: one evaluation per tick, the clock by `tickRate`, none in a tickless frame; the render base pose as the blend at `accumulator / tickRate`; `Simulation` reads in `Tick` matching tick-time sampling and equal to render reads on frame-posed skeletons; modifiers changing the render pose only; switching timing without a jump; `Animate` items seeing the right timing, step and instances in each pass; `EditBasePose` on the other timing refused; a test glue placing a plain entity on the simulation bone each tick.
-- [ ] Seam 9: a tick-posed skeleton's clip advancing by `tickRate` with events per tick and a crossfade progressing per tick.
-- [ ] Scene 5's shield is in the README with keys and hand checks; smoke runs pass with physics on and off.
+- [x] Seam 8 tick-posed cases: one evaluation per tick, the clock by `tickRate`, none in a tickless frame; the render base pose as the blend at `accumulator / tickRate`; `Simulation` reads in `Tick` matching tick-time sampling and equal to render reads on frame-posed skeletons; modifiers changing the render pose only; switching timing without a jump; `Animate` items seeing the right timing, step and instances in each pass; `EditBasePose` on the other timing refused; a test glue placing a plain entity on the simulation bone each tick.
+- [x] Seam 9: a tick-posed skeleton's clip advancing by `tickRate` with events per tick and a crossfade progressing per tick.
+- [x] Scene 5's shield is in the README with keys and hand checks; smoke runs pass with physics on and off.
 - [ ] Hand check (left to the user as a `Hand check:` line on resolve): the shield pushes the boxes with no visible lag on `Tick` timing and a frame of lag on `Frame` timing, the character and its shield stay together on screen between ticks, and the override and attachments from scenes 5 and 6 still behave on a tick-posed character.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+Hand check: in scene Bone attachments (`FENRIR_DEMO_SCENE="Bone attachments"`, on OpenGL), the orange shield stays on the left-hand human's right forearm through every stride and knocks the blue boxes off the table with no visible lag while the screen says `Timing: Tick`; T (`Timing: Frame`) makes it trail the arm by a frame, and T again puts it back; the character and its shield move together between ticks, with no stepping at the tick rate; while tick-posed the rifle, scope and hat still follow the other human and W, K and R still work; and in Going limp, after T (`Tick-posed`), L, S and B behave as on frame timing.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+
+## Comments
+
+Built 2026-10-30 on `claude/animation-10-attachments` (ticket 10, PR #246, not merged yet), as a stacked PR. Decisions to review:
+
+- **Where the poses live:** a tick-posed instance keeps `tickBase` (the simulation pose), `previousTickBase` and the simulation pose's model matrices beside its arrays in `SkeletonPoses`; its `base` is the render base pose, the frame's blend of the two ticks. Both ticks are seeded from `base` in `Rebuild` and when reconcile sees `Frame` → `Tick`. A timing switch takes effect at the next pass's reconcile (the field is read there, as the handle is).
+- **`EditBasePose` on a tick-posed skeleton writes the simulation pose**, inside the tick pass and outside the pipeline alike, so a write before a `PreTick` is seen by that tick and one in `Tick` by the next. The frame draws it through the blend.
+- **The tick pass runs only while the active scene has a `SkeletonPose` with `timing == Tick`**, found by scanning the components before reconciling, so a scene with none pays one scan per tick and runs no `Animate` item.
+- **Dropped ticks:** the spec's "clocks advance by `tickRate`, including ticks that `maxTicksPerFrame` drops" is read as the ADR's "its clock moves with physics's": a clock steps once per tick that runs, so time dropped from the accumulator advances neither physics nor the clip. The seam 8 and 9 tests pin it (ten ticks owed, five run, five steps).
+- **The blend fraction** is `clamp(accumulator / tickRate, 0, 1)` read in `PostUpdate`, with physics's own blend (lerp for translation and scale, `Math::Slerp` for rotation). A frame whose ticks were capped has an accumulator of 0, so it draws the previous tick, as physics draws its bodies.
+- **FenrirAnimation** needed one change: in a tick pass it reads the retained base pose with `PoseKind::Simulation`. Clocks, fades, seeks and events already stepped by the context's step, and its event budget is per `Animate` call, so it is per tick on tick-posed skeletons. Events are sent from `PreTick`, so a `Tick` reader sees them in the tick that crossed them (the app's queues are cursor-based).
+- **Switching back to `Frame`** keeps FenrirAnimation's playback state, so frame `Animate` resumes from the tick clock. The switch frame shows up to a tick more motion than usual, since the render pose was a tick behind.
+- **Scene 5's shield** goes on a second human, the bearer, beside the table its boxes stand on. The sprint clip carries root motion, so it plays on an `AnimationLayer` masked to `pelvis`'s subtree and the bearer sprints in place. The glue is `FollowBone`, a `Tick` system that `BoneAttachments(app)` adds. It writes the shield's `Transform` from `GetBoneWorldMatrix(…, Simulation) × offset` and keeps the shield's own scale (its size) instead of the bone's. T switches both humans between timings, so the hand check sees the attachments on a tick-posed character. Going limp got a T key as well, for the override.
+- **Physics in AnimationDemo** is linked and installed (before the scaffold) only with `FENRIR_ENABLE_PHYSICS`, under `ANIMATION_DEMO_PHYSICS`. Without it the shield still follows the arm, and the boxes stand still, which the screen text says.

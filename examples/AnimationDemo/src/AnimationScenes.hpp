@@ -2,6 +2,11 @@
 
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 
+namespace Fenrir
+{
+    class App;
+} // namespace Fenrir
+
 // AnimationDemo's scenes, in the order of its scene list (README.md). Each animation ticket adds its scene here, in the
 // spec's order.
 namespace AnimationDemo
@@ -39,8 +44,13 @@ namespace AnimationDemo
      * of its own), a scope attached to the rifle's rail (an attachment on an attachment) and a hat on its head, each
      * labelled with its AttachmentState; beside it one labelled attachment per failure case. Keys detach the rifle
      * keeping its world transform and the hat keeping its local one, and attach them again.
+     *
+     * To the left, a second human sprints with a kinematic shield on its forearm, moved by demo glue in Tick from the
+     * simulation pose, pushing dynamic boxes off a table when the app is built with physics (ADR-0040). Both humans
+     * start tick-posed, and a key switches them to frame timing and back, so the shield's lag comes and goes. Adds the
+     * glue's Tick system to `app`.
      */
-    [[nodiscard]] FenrirDemo::DemoScene BoneAttachments();
+    [[nodiscard]] FenrirDemo::DemoScene BoneAttachments(Fenrir::App& app);
 
     /**
      * @brief Going limp: the Quaternius human walking while demo code, standing in for ragdoll glue, writes world

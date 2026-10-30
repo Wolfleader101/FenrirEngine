@@ -724,6 +724,10 @@ A skeleton's final pose for this frame, what is drawn and what attachments follo
 `PoseKind`, an argument of FenrirSkeleton's base-pose and world reads: `Render` (the default) for the render pose, or `Simulation` for the simulation pose. On a frame-posed skeleton both give the render pose (ADR-0040).
 *Avoid:* pose mode, pose source, pose timing (which says when a pose is evaluated, not which is read).
 
+**Tick pass**
+The pose pipeline's run in a fixed tick's `PreTick`, only while the active scene has a tick-posed skeleton: reconcile, `Animate` over the tick-posed instances stepping by `Time::tickRate`, then their base finalise, giving each its simulation pose. The pipeline's once-a-frame run in `PostUpdate` is the *frame pass*. Every `Animate` item runs in both, told which by its context (ADR-0040).
+*Avoid:* fixed update, physics pass, tick stage (a pass hosts stages; it is not one).
+
 **Animator**
 `Animator`: the plain component on a skeleton entity naming the clip to play, its speed, its loop mode (`Loop` or `Once`) and whether it plays. Game code writes it and FenrirAnimation never does; it holds no time. While it names a clip, FenrirAnimation owns the skeleton's whole base pose (ADR-0034). It is the skeleton's base animation layer, and crossfades on a clip change (ADR-0036).
 *Avoid:* animation player, animation component, FenrirAnimation (the package).

@@ -144,7 +144,8 @@ namespace Fenrir
 
     /**
      * @brief What an `Animate` item is given (ADR-0033, ADR-0040): the pass it runs in, the pass's step and the
-     * instances of that pass's timing, the only ones it may write. Only the frame pass runs for now.
+     * instances of that pass's timing, the only ones it may write. Every item runs in the frame pass, in `PostUpdate`,
+     * and in each tick pass, in `PreTick`, which runs only while the active scene has a tick-posed skeleton.
      */
     class AnimateContext
     {
@@ -155,7 +156,7 @@ namespace Fenrir
             return *m_scene;
         }
 
-        /** @brief The pass's timing: `Frame` in the frame pass. */
+        /** @brief The pass's timing: `Frame` in the frame pass, `Tick` in a tick pass. */
         [[nodiscard]] PoseTiming Timing() const noexcept
         {
             return m_timing;

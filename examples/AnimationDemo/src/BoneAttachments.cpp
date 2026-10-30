@@ -2,13 +2,16 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 
 #include "AnimationScenes.hpp"
+#include "FenrirAnimation/AnimationLayer.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
+#include "FenrirAssets/BoneMaskData.hpp"
 #include "FenrirAssets/SkeletonData.hpp"
 #include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
@@ -16,8 +19,13 @@
 #include "FenrirInput/Input.hpp"
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "FenrirScheduler/Scheduler.hpp"
 #include "FenrirSkeleton/Skeletons.hpp"
 #include "Rigs.hpp"
+
+#ifdef ANIMATION_DEMO_PHYSICS
+#include "FenrirPhysics/Components.hpp"
+#endif
 
 namespace AnimationDemo
 {
@@ -27,9 +35,28 @@ namespace AnimationDemo
         using Fenrir::BoneAttachment;
         using Fenrir::Colour;
         using Fenrir::Entity;
+        using Fenrir::PoseTiming;
         using Fenrir::Skeletons;
         using Fenrir::Math::Quat;
         using Fenrir::Math::Vec3;
+
+        /**
+         * @brief The shield bearer, a second human to the left, sprinting in place, and its shield: a kinematic board
+         * on its right forearm that demo glue moves in Tick. The forearm's X runs along it towards the hand and its Y
+         * faces forward, so the board lies along the forearm, facing forward; its size is the shield entity's scale.
+         */
+        const Vec3 BearerPlace{-2.6f, 0.0f, 0.0f};
+        constexpr std::string_view ShieldBone = "lowerarm_r";
+        const Vec3 ShieldOffset{0.13f, 0.03f, 0.0f};
+        const Vec3 ShieldSize{0.34f, 0.04f, 0.28f};
+        /** @brief The boxes the shield pushes: three rows of three on a tall table in front of the bearer's right arm,
+         * where the forearm swings forward and up, set out again every few seconds. */
+        const Vec3 TablePlace = BearerPlace + Vec3(-0.55f, 0.5f, 0.32f);
+        const Vec3 TableSize{0.4f, 1.0f, 0.4f};
+        constexpr std::size_t BoxesPerRow = 3;
+        constexpr std::size_t BoxCount = BoxesPerRow * 3;
+        constexpr float BoxSize = 0.12f;
+        constexpr double BoxResetSeconds = 5.0;
 
         /** @brief The clips C steps through, so the prop is seen following the hand through each. */
         constexpr std::array<QuaterniusClip, 5> Clips{QuaterniusClip::Idle, QuaterniusClip::Walk, QuaterniusClip::Run,
@@ -62,7 +89,97 @@ namespace AnimationDemo
             Entity hat;
             BoneAttachment hatAttachment;
             std::array<FailureCase, 5> failures{};
+
+            /** @brief Both humans' timing, which T switches: Tick to start with. */
+            PoseTiming timing = PoseTiming::Tick;
+            /** @brief The shield bearer, the bone its shield follows, and the shield, which has no BoneAttachment. */
+            Rig bearer;
+            std::int32_t shieldBone = Fenrir::NoBone;
+            Entity shield;
+            /** @brief The dynamic boxes, and how long since they were last set out. */
+            std::array<Entity, BoxCount> boxes{};
+            double sinceBoxes = 0.0;
+            Fenrir::AssetHandle<Fenrir::Mesh> cube;
+            Fenrir::AssetHandle<Fenrir::Material> boxMaterial;
         };
+
+        /** @brief Sets the humans' SkeletonPose timing to the scene's. */
+        void ApplyTiming(AttachState& state)
+        {
+            for (const Rig* rig : {&state.human, &state.bearer})
+            {
+                if (rig->IsValid())
+                {
+                    rig->skeleton.GetComponent<Fenrir::SkeletonPose>().timing = state.timing;
+                }
+            }
+        }
+
+        /** @brief Destroys the boxes and sets out a fresh row on the table: dynamic bodies when physics is built. */
+        void SetOutBoxes(Fenrir::Scene& scene, AttachState& state)
+        {
+            Fenrir::EntityList& entities = scene.GetEntityList();
+            for (Entity& box : state.boxes)
+            {
+                if (box.IsValid())
+                {
+                    entities.DestroyEntity(box);
+                }
+                box = {};
+            }
+            const float top = TablePlace.y + TableSize.y * 0.5f;
+            for (std::size_t i = 0; i < state.boxes.size(); ++i)
+            {
+                Entity box = entities.CreateEntity();
+                box.GetComponent<Fenrir::Name>().Set("Box");
+                auto& transform = box.GetComponent<Fenrir::Transform>();
+                // Along the table's near edge, the second row on the first.
+                const auto column = static_cast<float>(i % BoxesPerRow);
+                const auto row = static_cast<float>(i / BoxesPerRow);
+                const float along = (column - static_cast<float>(BoxesPerRow - 1) * 0.5f) * (BoxSize + 0.02f);
+                transform.pos = {TablePlace.x + along, top + BoxSize * (row + 0.5f) + 0.01f,
+                                 TablePlace.z - TableSize.z * 0.5f + BoxSize * 0.5f + 0.03f};
+                transform.scale = Vec3(BoxSize);
+                box.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{state.cube, state.boxMaterial, true});
+#ifdef ANIMATION_DEMO_PHYSICS
+                box.AddComponent<Fenrir::RigidBody>(Fenrir::RigidBody{.mass = 0.2f});
+                box.AddComponent<Fenrir::Collider>();
+#endif
+                state.boxes.at(i) = box;
+            }
+            state.sinceBoxes = 0.0;
+        }
+
+        /**
+         * @brief The demo's glue (ADR-0040), in Tick: the shield onto the bearer's forearm in the simulation pose, the
+         * pose of this very tick on a tick-posed skeleton, so physics's PostTick moves the kinematic body there with no
+         * lag. The bone's world matrix × the offset, decomposed; the shield has no parent, so that is its local
+         * Transform, its scale kept as the shield's size. On a frame-posed skeleton the same read is last frame's
+         * render pose, so the shield lags a frame.
+         */
+        void FollowBone(Fenrir::App& app)
+        {
+            Fenrir::Scene& scene = app.GetActiveScene();
+            AttachState* state = scene.GetResource<AttachState>();
+            if (state == nullptr || !state->shield.IsValid() || !state->bearer.IsValid())
+            {
+                return;
+            }
+            const std::optional<Fenrir::Math::Mat4> bone = Skeletons::GetBoneWorldMatrix(
+                scene, state->bearer.skeleton, state->shieldBone, Fenrir::PoseKind::Simulation);
+            if (!bone)
+            {
+                return;
+            }
+            Fenrir::Transform offset;
+            offset.pos = ShieldOffset;
+            const Fenrir::Math::Mat4 target = *bone * Fenrir::TransformToMat4(offset);
+            Fenrir::Transform& placed = state->shield.GetComponent<Fenrir::Transform>();
+            Vec3 scale;
+            Fenrir::Math::Decompose(target, placed.pos, placed.rot, scale);
+            placed.rot = Fenrir::Math::Normalized(placed.rot);
+            placed.scale = ShieldSize;
+        }
 
         std::string_view StateName(AttachmentState state)
         {
@@ -211,6 +328,53 @@ namespace AnimationDemo
             state.failures.at(4).entity.AddChild(knot);
             state.failures.at(4).label = "Skeleton under itself";
             state.failures.at(4).entity.AddComponent<BoneAttachment>(MakeAttachment(app, knot, "rail", Vec3(0.0f)));
+
+            // The shield bearer, sprinting in place, its shield moved by FollowBone in Tick.
+            state.bearer = SpawnRig(app, scene, QuaterniusFile, BearerPlace);
+            if (!state.bearer.IsValid())
+            {
+                return;
+            }
+            // The sprint clip moves its root bone forward (root motion is not extracted), so it plays on a layer
+            // masked to the pelvis's subtree: the bearer sprints in place.
+            const auto inPlace = store.CreateBoneMask(scene);
+            store.IncludeInBoneMask(inPlace, "pelvis", 1.0f, Fenrir::MaskScope::Subtree);
+            Fenrir::AnimationLayer sprint;
+            sprint.skeleton = state.bearer.skeleton;
+            sprint.clip = LoadClip(app, scene, QuaterniusClips.at(static_cast<std::size_t>(QuaterniusClip::Sprint)));
+            sprint.mask = inPlace;
+            entities.CreateEntity().AddComponent<Fenrir::AnimationLayer>(sprint);
+            state.shieldBone = Skeletons::FindBone(scene, state.bearer.skeleton, ShieldBone);
+            if (state.shieldBone == Fenrir::NoBone)
+            {
+                app.Logger()->Error("Bone attachments: the Quaternius human has no {}", ShieldBone);
+                return;
+            }
+            ApplyTiming(state);
+            state.shield = named("Shield");
+            state.shield.GetComponent<Fenrir::Transform>().scale = ShieldSize;
+            // The board drawn at the shield entity's own size: the mesh is a child at identity.
+            shape(state.shield, cube.handle, 0xD08020FF, Vec3(0.0f), Vec3(1.0f));
+            FollowBone(app);
+
+            // The table the boxes stand on, and the floor under them: static colliders when physics is built.
+            Entity table = named("Table");
+            table.GetComponent<Fenrir::Transform>().pos = TablePlace;
+            table.GetComponent<Fenrir::Transform>().scale = TableSize;
+            shape(table, cube.handle, 0x6B4A2EFF, Vec3(0.0f), Vec3(1.0f));
+            state.cube = cube.handle;
+            state.boxMaterial = paint(0x40A0E0FF);
+#ifdef ANIMATION_DEMO_PHYSICS
+            state.shield.AddComponent<Fenrir::RigidBody>(
+                Fenrir::RigidBody{.motionType = Fenrir::MotionType::Kinematic});
+            state.shield.AddComponent<Fenrir::Collider>();
+            table.AddComponent<Fenrir::Collider>();
+            Entity ground = named("Ground");
+            ground.GetComponent<Fenrir::Transform>().pos = {BearerPlace.x, -0.25f, 0.0f};
+            ground.GetComponent<Fenrir::Transform>().scale = {3.0f, 0.5f, 3.0f};
+            ground.AddComponent<Fenrir::Collider>();
+#endif
+            SetOutBoxes(scene, state);
         }
 
         void Update(Fenrir::App& app, Fenrir::Scene& scene)
@@ -250,6 +414,18 @@ namespace AnimationDemo
                 state->hat.AddComponent<BoneAttachment>(state->hatAttachment);
                 app.Logger()->Info("Bone attachments: R, the rifle and hat attached again");
             }
+            if (keyboard.JustPressed(Fenrir::Key::T))
+            {
+                state->timing = state->timing == PoseTiming::Tick ? PoseTiming::Frame : PoseTiming::Tick;
+                ApplyTiming(*state);
+                app.Logger()->Info("Bone attachments: T, both humans are {}-posed",
+                                   state->timing == PoseTiming::Tick ? "tick" : "frame");
+            }
+            state->sinceBoxes += app.GetTime().deltaTime;
+            if (keyboard.JustPressed(Fenrir::Key::B) || state->sinceBoxes >= BoxResetSeconds)
+            {
+                SetOutBoxes(scene, *state);
+            }
 
             const Colour green = Colour::FromSrgb(0x60E060FF);
             const Colour amber = Colour::FromSrgb(0xF0B040FF);
@@ -272,23 +448,41 @@ namespace AnimationDemo
                       Skeletons::GetAttachmentState(scene, failure.entity));
                 draw->Circle(Vec3(failure.slot.x, 0.01f, failure.slot.z), Vec3(0.0f, 1.0f, 0.0f), 0.2f, amber);
             }
+            const bool ticked = state->timing == PoseTiming::Tick;
+            if (state->bearer.IsValid())
+            {
+                draw->WorldText(BearerPlace + Vec3(-0.5f, 2.1f, 0.0f),
+                                ticked ? "Tick-posed: the shield is on this tick's arm"
+                                       : "Frame-posed: the shield lags a frame",
+                                ticked ? green : amber, {.size = 13.0f});
+            }
+#ifdef ANIMATION_DEMO_PHYSICS
+            constexpr std::string_view boxes = "the shield pushes the boxes";
+#else
+            constexpr std::string_view boxes = "built without physics, so the boxes stand still";
+#endif
             draw->ScreenText({16.0f, 120.0f},
-                             std::format("Clip: {}. Rifle {}, hat {}.", ClipNames.at(state->clip),
+                             std::format("Clip: {}. Rifle {}, hat {}. Timing: {}; {}.", ClipNames.at(state->clip),
                                          state->rifle.HasComponent<BoneAttachment>() ? "in the hand" : "dropped",
-                                         state->hat.HasComponent<BoneAttachment>() ? "on the head" : "left behind"),
+                                         state->hat.HasComponent<BoneAttachment>() ? "on the head" : "left behind",
+                                         ticked ? "Tick" : "Frame", boxes),
                              Colour::White);
         }
     } // namespace
 
-    FenrirDemo::DemoScene BoneAttachments()
+    FenrirDemo::DemoScene BoneAttachments(Fenrir::App& app)
     {
+        // The shield's glue runs in Tick, after FenrirSkeleton's tick pass in PreTick and before physics's step in
+        // PostTick; it does nothing unless this scene is active.
+        app.AddSequentialSystem(Fenrir::SchedulePriority::Tick, FollowBone);
+
         FenrirDemo::DemoScene scene;
         scene.name = "Bone attachments";
         scene.keyHelp = "C: the next clip. W: drop the rifle (KeepWorld). K: leave the hat (KeepLocal). R: attach both "
-                        "again.";
-        scene.keys = {Fenrir::Key::C, Fenrir::Key::C, Fenrir::Key::W, Fenrir::Key::K,
-                      Fenrir::Key::C, Fenrir::Key::R, Fenrir::Key::W, Fenrir::Key::R};
-        scene.camera = {{1.0f, 1.4f, 4.4f}, 0.0f, -0.12f};
+                        "again. T: switch both humans between tick and frame timing. B: set the boxes out again.";
+        scene.keys = {Fenrir::Key::C, Fenrir::Key::C, Fenrir::Key::W, Fenrir::Key::K, Fenrir::Key::C, Fenrir::Key::R,
+                      Fenrir::Key::W, Fenrir::Key::T, Fenrir::Key::B, Fenrir::Key::R, Fenrir::Key::T};
+        scene.camera = {{0.0f, 1.5f, 5.2f}, 0.0f, -0.12f};
         scene.spawn = Spawn;
         scene.update = Update;
         return scene;

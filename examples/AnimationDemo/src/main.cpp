@@ -8,14 +8,24 @@
 #include "FenrirLogger/ConsoleLogger.hpp"
 #include "FenrirSkeleton/Skeletons.hpp"
 
+#ifdef ANIMATION_DEMO_PHYSICS
+#include "FenrirPhysics/Physics.hpp"
+#endif
+
 int main()
 {
     Fenrir::App app(std::make_unique<Fenrir::ConsoleLogger>());
 
+#ifdef ANIMATION_DEMO_PHYSICS
+    // For scene 5's shield and boxes. Before the scaffold, so it ends after it: the scaffold destroys the active scene,
+    // its physics world with it, while physics is still there.
+    Fenrir::Physics physics = Fenrir::Physics::Install(app);
+#endif
+
     FenrirDemo::DemoConfig config;
     config.appName = "AnimationDemo";
-    config.scenes = {AnimationDemo::Playback(), AnimationDemo::SkeletonScene(),   AnimationDemo::SkinDiagnostics(),
-                     AnimationDemo::Blending(), AnimationDemo::BoneAttachments(), AnimationDemo::GoingLimp(),
+    config.scenes = {AnimationDemo::Playback(), AnimationDemo::SkeletonScene(),      AnimationDemo::SkinDiagnostics(),
+                     AnimationDemo::Blending(), AnimationDemo::BoneAttachments(app), AnimationDemo::GoingLimp(),
                      AnimationDemo::Crowd()};
     config.msaa = 4;
 

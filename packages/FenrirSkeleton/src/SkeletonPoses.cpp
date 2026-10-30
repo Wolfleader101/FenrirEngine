@@ -84,6 +84,7 @@ namespace Fenrir::Detail
             instance = SkeletonInstance{};
             instance.entity = entity;
         }
+        const bool toTick = instance.timing != PoseTiming::Tick && pose.timing == PoseTiming::Tick;
         instance.timing = pose.timing;
 
         const SkeletonData* data = store.TryGet(pose.skeleton);
@@ -96,6 +97,10 @@ namespace Fenrir::Detail
         if (!instance.ready || instance.skeleton != pose.skeleton || instance.revision != revision)
         {
             Rebuild(instance, *data, pose.skeleton, revision);
+        }
+        else if (toTick)
+        {
+            SeedTicks(instance);
         }
         return PoseState::Ready;
     }
@@ -159,6 +164,7 @@ namespace Fenrir::Detail
         AllModels(instance);
         instance.baseModel.clear();
         instance.baseModelValid = false;
+        SeedTicks(instance);
         instance.palette.clear();
         instance.paletteGeneration = 0;
         instance.poseDirty = false;
@@ -256,6 +262,54 @@ namespace Fenrir::Detail
             instance.baseModelValid = true;
         }
         return instance.baseModel;
+    }
+
+    std::span<const Math::Mat4> SkeletonPoses::AllTickModels(SkeletonInstance& instance)
+    {
+        if (!instance.tickModelValid)
+        {
+            instance.tickModel.resize(instance.tickBase.size());
+            for (std::size_t i = 0; i < instance.tickBase.size(); ++i)
+            {
+                const std::int32_t parent = instance.parents[i];
+                const Math::Mat4 local = TransformToMat4(instance.tickBase[i]);
+                instance.tickModel[i] = parent == NoBone ? local : instance.tickModel[Index(parent)] * local;
+            }
+            instance.tickModelValid = true;
+        }
+        return instance.tickModel;
+    }
+
+    void SkeletonPoses::SeedTicks(SkeletonInstance& instance)
+    {
+        instance.tickBase = instance.base;
+        instance.previousTickBase = instance.base;
+        instance.tickModelValid = false;
+    }
+
+    void SkeletonPoses::BlendTicks(SkeletonInstance& instance, float fraction)
+    {
+        bool changed = false;
+        for (std::size_t i = 0; i < instance.base.size(); ++i)
+        {
+            const Transform& previous = instance.previousTickBase[i];
+            const Transform& current = instance.tickBase[i];
+            Transform blended;
+            blended.pos = previous.pos + (current.pos - previous.pos) * fraction;
+            blended.rot = Math::Slerp(previous.rot, current.rot, fraction);
+            blended.scale = previous.scale + (current.scale - previous.scale) * fraction;
+            Transform& base = instance.base[i];
+            if (blended.pos != base.pos || blended.rot != base.rot || blended.scale != base.scale)
+            {
+                base = blended;
+                changed = true;
+            }
+        }
+        if (changed)
+        {
+            instance.poseDirty = true;
+            instance.baseModelValid = false;
+        }
     }
 
     std::span<const Math::Mat4> SkeletonPoses::PaletteOf(SkeletonInstance& instance)

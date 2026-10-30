@@ -5,7 +5,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
 add_executable(FenrirAnimationTests PublicHeaders.cpp Install.cpp Playback.cpp Blending.cpp Sampling.cpp Assets.cpp
-                                    BoneCheck.cpp AnimationTest.hpp)
+                                    BoneCheck.cpp TickPosed.cpp AnimationTest.hpp)
 target_link_libraries(FenrirAnimationTests PRIVATE FenrirAnimation Catch2::Catch2WithMain)
 target_compile_definitions(FenrirAnimationTests PRIVATE FENRIR_ANIMATION_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 add_test(NAME FenrirAnimation COMMAND FenrirAnimationTests)

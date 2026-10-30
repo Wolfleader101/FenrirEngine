@@ -441,6 +441,8 @@ namespace Fenrir::Detail
         const AssetStore& store;
         Scene& scene;
         double step;
+        // The retained base pose a pass evaluates over: a tick pass's is the simulation pose (ADR-0040).
+        PoseKind kind;
         std::vector<Stream> streams;
     };
 
@@ -643,7 +645,8 @@ namespace Fenrir::Detail
             }
         });
 
-        Pass pass{state, *state.app, *state.app->Logger(), *store, scene, context.Step(), {}};
+        const PoseKind kind = context.Timing() == PoseTiming::Tick ? PoseKind::Simulation : PoseKind::Render;
+        Pass pass{state, *state.app, *state.app->Logger(), *store, scene, context.Step(), kind, {}};
         const std::vector<Entity> none;
         for (const Entity& entity : context.Instances())
         {
@@ -678,7 +681,7 @@ namespace Fenrir::Detail
     {
         const AssetHandle<Skeleton> handle = skeleton.GetComponent<SkeletonPose>().skeleton;
         const SkeletonData* data = pass.store.TryGet(handle);
-        const std::span<const Transform> retained = Skeletons::GetBaseLocals(pass.scene, skeleton);
+        const std::span<const Transform> retained = Skeletons::GetBaseLocals(pass.scene, skeleton, pass.kind);
         if (data == nullptr || retained.size() != data->BoneCount())
         {
             return;

@@ -1,6 +1,7 @@
 #include "FenrirSkeleton/Skeletons.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <format>
@@ -14,6 +15,8 @@
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/Model.hpp"
 #include "FenrirAssets/SkeletonData.hpp"
+#include "FenrirECS/ComponentType.hpp"
+#include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirScheduler/Scheduler.hpp"
@@ -47,6 +50,25 @@ namespace Fenrir
         bool InRange(const SkeletonInstance& instance, std::int32_t bone)
         {
             return bone >= 0 && static_cast<std::size_t>(bone) < instance.base.size();
+        }
+
+        // Whether a read of `kind` gives the instance's simulation pose: the last tick's, on a tick-posed instance.
+        // On a frame-posed one both kinds read the render pose (ADR-0040).
+        bool ReadsTick(const SkeletonInstance& instance, PoseKind kind)
+        {
+            return kind == PoseKind::Simulation && instance.timing == PoseTiming::Tick;
+        }
+
+        // Whether the active scene has a tick-posed skeleton, so a tick pass has anything to do.
+        bool HasTickPosed(Scene& scene)
+        {
+            EntityList& entities = scene.GetEntityList();
+            bool found = false;
+            const std::array<ComponentType, 1> poses{ComponentType::Native<SkeletonPose>()};
+            entities.ForEachWith(poses, [&](std::uint32_t id) {
+                found = found || entities.GetEntity(id).GetComponent<SkeletonPose>().timing == PoseTiming::Tick;
+            });
+            return found;
         }
 
         std::string_view StepName(PipelineStep step)
@@ -106,9 +128,49 @@ namespace Fenrir
         }
     } // namespace
 
-    // The pose pipeline's one frame pass on the active scene; a friend of the stage contexts, which only it makes.
+    // The pose pipeline's passes on the active scene; a friend of the stage contexts, which only it makes.
     struct Detail::PosePipeline
     {
+        // A tick pass (ADR-0040), in PreTick: tick-posed instances evaluate their simulation pose, the base pose at
+        // tick time with no modifiers, keeping the last tick's beside it.
+        static void RunTick(Detail::SkeletonsState& state, App& app)
+        {
+            AssetStore* store = app.TryGetResource<AssetStore>();
+            Scene& scene = app.GetActiveScene();
+            if (store == nullptr || !HasTickPosed(scene))
+            {
+                return;
+            }
+            SkeletonPoses& poses = PosesOf(scene, *app.Logger());
+            const PipelineRun run(state, poses);
+
+            poses.step = PipelineStep::Reconcile;
+            poses.ReconcileAll(*store, scene);
+            const std::vector<Entity> instances = poses.ReadyEntities(PoseTiming::Tick);
+            // The last tick's pose becomes the previous one; Animate writes this tick's over a copy of it, so a
+            // tick-posed skeleton nothing animates keeps its pose.
+            poses.ForEach([](SkeletonInstance& instance) {
+                if (instance.ready && instance.timing == PoseTiming::Tick)
+                {
+                    instance.previousTickBase = instance.tickBase;
+                }
+            });
+
+            poses.step = PipelineStep::Animate;
+            poses.passTiming = PoseTiming::Tick;
+            AnimateContext animate(scene, PoseTiming::Tick, app.GetTime().tickRate, instances);
+            RunStage(state.animate, animate);
+
+            // The base finalise: the simulation pose's model matrices, parents first.
+            poses.step = PipelineStep::Finalise;
+            poses.ForEach([](SkeletonInstance& instance) {
+                if (instance.ready && instance.timing == PoseTiming::Tick)
+                {
+                    SkeletonPoses::AllTickModels(instance);
+                }
+            });
+        }
+
         static void Run(Detail::SkeletonsState& state, App& app)
         {
             AssetStore* store = app.TryGetResource<AssetStore>();
@@ -123,6 +185,18 @@ namespace Fenrir
 
             poses.step = PipelineStep::Reconcile;
             poses.ReconcileAll(*store, scene);
+
+            // A tick-posed instance skips Animate: its base pose for the frame is its last two ticks' blended at the
+            // fraction physics interpolates bodies by.
+            const Time& time = app.GetTime();
+            const auto fraction =
+                static_cast<float>(time.tickRate > 0.0 ? std::clamp(time.accumulator / time.tickRate, 0.0, 1.0) : 1.0);
+            poses.ForEach([fraction](SkeletonInstance& instance) {
+                if (instance.ready && instance.timing == PoseTiming::Tick)
+                {
+                    SkeletonPoses::BlendTicks(instance, fraction);
+                }
+            });
 
             poses.step = PipelineStep::Animate;
             poses.passTiming = PoseTiming::Frame;
@@ -381,6 +455,13 @@ namespace Fenrir
         // PoseOverride, the first modifier (ADR-0033, ADR-0038): each instance's entries in bone order, parents first.
         state->modify.Add({state->nextId++, "PoseOverride", ModifierOrder::Override,
                            std::make_shared<std::function<void(ModifierContext&)>>(RunPoseOverride)});
+        app.AddSequentialSystem(SchedulePriority::PreTick,
+                                [installed = std::weak_ptr<Detail::SkeletonsState>(state)](App& running) {
+                                    if (const std::shared_ptr<Detail::SkeletonsState> current = installed.lock())
+                                    {
+                                        Detail::PosePipeline::RunTick(*current, running);
+                                    }
+                                });
         app.AddSequentialSystem(SchedulePriority::PostUpdate,
                                 [installed = std::weak_ptr<Detail::SkeletonsState>(state)](App& running) {
                                     if (const std::shared_ptr<Detail::SkeletonsState> current = installed.lock())
@@ -543,10 +624,14 @@ namespace Fenrir
         return instance == nullptr ? std::span<const Transform>{} : instance->final;
     }
 
-    std::span<const Transform> Skeletons::GetBaseLocals(Scene& scene, Entity skeleton, PoseKind)
+    std::span<const Transform> Skeletons::GetBaseLocals(Scene& scene, Entity skeleton, PoseKind kind)
     {
         const SkeletonInstance* instance = ReadyIn(scene, skeleton);
-        return instance == nullptr ? std::span<const Transform>{} : instance->base;
+        if (instance == nullptr)
+        {
+            return {};
+        }
+        return ReadsTick(*instance, kind) ? instance->tickBase : instance->base;
     }
 
     std::span<const Math::Mat4> Skeletons::GetModelMatrices(Scene& scene, Entity skeleton)
@@ -575,34 +660,42 @@ namespace Fenrir
         return SkeletonPoses::ModelOf(*instance, bone);
     }
 
-    std::optional<Transform> Skeletons::GetBaseLocal(Scene& scene, Entity skeleton, std::int32_t bone, PoseKind)
+    std::optional<Transform> Skeletons::GetBaseLocal(Scene& scene, Entity skeleton, std::int32_t bone, PoseKind kind)
     {
         const SkeletonInstance* instance = ReadyIn(scene, skeleton);
         if (instance == nullptr || !InRange(*instance, bone))
         {
             return std::nullopt;
         }
-        return instance->base[static_cast<std::size_t>(bone)];
+        const std::vector<Transform>& locals = ReadsTick(*instance, kind) ? instance->tickBase : instance->base;
+        return locals[static_cast<std::size_t>(bone)];
     }
 
-    std::optional<Math::Mat4> Skeletons::GetBaseModel(Scene& scene, Entity skeleton, std::int32_t bone, PoseKind)
+    std::optional<Math::Mat4> Skeletons::GetBaseModel(Scene& scene, Entity skeleton, std::int32_t bone, PoseKind kind)
     {
         SkeletonInstance* instance = ReadyIn(scene, skeleton);
         if (instance == nullptr || !InRange(*instance, bone))
         {
             return std::nullopt;
         }
-        return SkeletonPoses::AllBaseModels(*instance)[static_cast<std::size_t>(bone)];
+        const std::span<const Math::Mat4> models = ReadsTick(*instance, kind) ? SkeletonPoses::AllTickModels(*instance)
+                                                                              : SkeletonPoses::AllBaseModels(*instance);
+        return models[static_cast<std::size_t>(bone)];
     }
 
-    std::optional<Math::Mat4> Skeletons::GetBoneWorldMatrix(Scene& scene, Entity skeleton, std::int32_t bone, PoseKind)
+    std::optional<Math::Mat4> Skeletons::GetBoneWorldMatrix(Scene& scene, Entity skeleton, std::int32_t bone,
+                                                            PoseKind kind)
     {
         SkeletonInstance* instance = ReadyIn(scene, skeleton);
         if (instance == nullptr || !InRange(*instance, bone))
         {
             return std::nullopt;
         }
-        return GetWorldMatrix(skeleton) * SkeletonPoses::ModelOf(*instance, bone);
+        // The simulation pose has no modifiers, so its model matrices are the tick base pose's.
+        const Math::Mat4& model = ReadsTick(*instance, kind)
+                                      ? SkeletonPoses::AllTickModels(*instance)[static_cast<std::size_t>(bone)]
+                                      : SkeletonPoses::ModelOf(*instance, bone);
+        return GetWorldMatrix(skeleton) * model;
     }
 
     std::uint64_t Skeletons::GetPoseGeneration(Scene& scene, Entity skeleton)
@@ -645,6 +738,13 @@ namespace Fenrir
             return {};
         }
         instance->poseDirty = true;
+        if (instance->timing == PoseTiming::Tick)
+        {
+            // A tick-posed instance's written base pose is its simulation pose: the next tick evaluates from it, and
+            // the frame draws it through the blend.
+            instance->tickModelValid = false;
+            return instance->tickBase;
+        }
         instance->baseModelValid = false;
         return instance->base;
     }

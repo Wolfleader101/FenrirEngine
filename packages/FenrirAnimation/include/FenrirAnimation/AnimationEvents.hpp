@@ -17,7 +17,9 @@ namespace Fenrir
      * playback order, every lap of a wrap included; when playback starts, the event at its starting boundary is
      * crossed too. Seeks, clip changes, pauses, a speed of 0 and recovery from an unavailable clip cross nothing.
      * Delivery is best-effort: at most `AnimationConfig::maxEventsPerInstancePerFrame` are sent per skeleton per
-     * frame, the earliest, and the rest are counted in one `AnimationEventsDropped`.
+     * frame, the earliest, and the rest are counted in one `AnimationEventsDropped`. A tick-posed skeleton's events
+     * (ADR-0040) are sent per tick, from that tick's `PreTick`, with the budget per tick: a `Tick` reader sees them
+     * in the tick that crossed them.
      */
     struct AnimationEvent
     {

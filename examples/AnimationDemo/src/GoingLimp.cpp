@@ -181,6 +181,14 @@ namespace AnimationDemo
                 state->sway = !state->sway;
                 app.Logger()->Info("Going limp: S, sway {}", state->sway ? "on" : "off");
             }
+            Fenrir::PoseTiming& timing = state->walker.skeleton.GetComponent<Fenrir::SkeletonPose>().timing;
+            if (keyboard.JustPressed(Fenrir::Key::T))
+            {
+                // The override applies to the render pose whatever the timing (ADR-0040).
+                timing = timing == Fenrir::PoseTiming::Frame ? Fenrir::PoseTiming::Tick : Fenrir::PoseTiming::Frame;
+                app.Logger()->Info("Going limp: T, the human is {}-posed",
+                                   timing == Fenrir::PoseTiming::Tick ? "tick" : "frame");
+            }
             if (state->blendBack >= 0.0)
             {
                 // Game code ramps the weight: FenrirSkeleton has no fades.
@@ -209,12 +217,13 @@ namespace AnimationDemo
             draw->WorldText(state->walker.root.GetComponent<Fenrir::Transform>().pos + Vec3(-0.4f, 2.3f, 0.0f),
                             "Walking, left arm overridden", Colour::White, {.size = 16.0f});
             draw->ScreenText({16.0f, 120.0f},
-                             std::format("Left arm ({} subtree): override weight {:.2f}, {}, {}, sway {}",
+                             std::format("Left arm ({} subtree): override weight {:.2f}, {}, {}, sway {}. {}-posed.",
                                          ArmBones.front(), state->weight, entries ? "targets written" : "no targets",
                                          state->blendBack >= 0.0 ? "blending back"
                                          : state->weight > 0.0f  ? "limp"
                                                                  : "animated",
-                                         state->sway ? "on" : "off"),
+                                         state->sway ? "on" : "off",
+                                         timing == Fenrir::PoseTiming::Tick ? "Tick" : "Frame"),
                              Colour::White);
         }
     } // namespace
@@ -223,8 +232,10 @@ namespace AnimationDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Going limp";
-        scene.keyHelp = "L: the left arm goes limp. B: blend it back into the walk. S: its sway on or off.";
-        scene.keys = {Fenrir::Key::L, Fenrir::Key::S, Fenrir::Key::S, Fenrir::Key::B, Fenrir::Key::L, Fenrir::Key::B};
+        scene.keyHelp = "L: the left arm goes limp. B: blend it back into the walk. S: its sway on or off. T: switch "
+                        "the human between frame and tick timing.";
+        scene.keys = {Fenrir::Key::L, Fenrir::Key::S, Fenrir::Key::S, Fenrir::Key::B,
+                      Fenrir::Key::T, Fenrir::Key::L, Fenrir::Key::B, Fenrir::Key::T};
         scene.camera = {{0.0f, 1.4f, 3.4f}, 0.0f, -0.12f};
         scene.spawn = Spawn;
         scene.update = Update;

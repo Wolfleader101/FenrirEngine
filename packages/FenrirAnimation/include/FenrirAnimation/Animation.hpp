@@ -96,6 +96,15 @@ namespace Fenrir
      * revision changes is rebound and its cursor clamped or wrapped the same way.
      *
      * **Root motion is not extracted**: a root bone's channel moves the bone relative to its skeleton entity.
+     *
+     * **Tick-posed skeletons** (`PoseTiming::Tick`, ADR-0040) are sampled in FenrirSkeleton's tick passes instead,
+     * one per fixed tick, over their simulation pose: their clocks, fades and seeks step by `Time::tickRate × speed`
+     * per tick that runs, so they keep step with physics (ticks `Time::maxTicksPerFrame` drops advance nothing, as
+     * they advance no body), and a frame with no tick advances nothing. Their events fire in the tick whose step
+     * crosses them and are sent from that tick's `PreTick`, so a `Tick` reader sees them in the same tick, and the
+     * event budget is per tick. A playback command written before a `PreTick` is seen by that tick, one written in
+     * `Tick` by the next, one written in `Update` by the next frame's first tick. Switching a skeleton between
+     * timings keeps its playback state: its clock resumes in the other pass from where it stopped.
      */
     class Animation
     {

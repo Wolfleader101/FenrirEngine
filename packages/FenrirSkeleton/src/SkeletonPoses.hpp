@@ -66,6 +66,13 @@ namespace Fenrir
             std::vector<std::uint8_t> modelValid;
             std::vector<Math::Mat4> baseModel;
             bool baseModelValid = false;
+            // A tick-posed instance's simulation pose (ADR-0040): the base locals the last tick evaluated and their
+            // model matrices, and the tick's before it. `base` is then the render base pose, the two ticks' blend.
+            // Both ticks are seeded from `base` when the instance is built and when it switches to Tick.
+            std::vector<Transform> tickBase;
+            std::vector<Transform> previousTickBase;
+            std::vector<Math::Mat4> tickModel;
+            bool tickModelValid = false;
             std::vector<Math::Mat4> palette;
             std::uint64_t paletteGeneration = 0;
             std::uint64_t generation = 0;
@@ -144,6 +151,18 @@ namespace Fenrir
 
             /** @brief Every base-pose model matrix, computed on first read after a base-pose change. */
             static std::span<const Math::Mat4> AllBaseModels(SkeletonInstance& instance);
+
+            /** @brief Every simulation-pose model matrix, computed on first read after a tick base-pose change. */
+            static std::span<const Math::Mat4> AllTickModels(SkeletonInstance& instance);
+
+            /** @brief Both tick base poses ← the base pose, so switching to Tick does not move the pose. */
+            static void SeedTicks(SkeletonInstance& instance);
+
+            /**
+             * @brief The base pose ← the previous and last tick base poses blended at `fraction` (translation and scale
+             * lerp, rotation slerps), marking the instance pose-dirty only when that changes it.
+             */
+            static void BlendTicks(SkeletonInstance& instance, float fraction);
 
             /** @brief The palette for the instance's current generation, built if it has none. */
             static std::span<const Math::Mat4> PaletteOf(SkeletonInstance& instance);

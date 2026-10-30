@@ -60,6 +60,15 @@ Across layers (ADR-0036) a clip's events fire only while its layer's weight is a
 
 Delivery is best-effort per frame.
 
+## Tick-posed skeletons (ADR-0040)
+
+A skeleton with `SkeletonPose::timing = PoseTiming::Tick` is sampled in FenrirSkeleton's tick passes, one per fixed tick, over its simulation pose, and not in the frame pass:
+
+- **Clocks**, fades and seeks step by `Time::tickRate × speed` per tick that runs, so they keep step with physics: the ticks `Time::maxTicksPerFrame` drops advance nothing, as they move no body. A frame with no tick advances nothing.
+- **Events** fire in the tick whose step crosses them, sent from that tick's `PreTick`, so a `Tick` reader sees them in the same tick. Delivery and the budget are per tick.
+- **Commands** written before a `PreTick` are seen by that tick, in `Tick` by the next, in `Update` by the next frame's first tick.
+- **Switching timing** keeps the playback state: the clock resumes in the other pass from where it stopped.
+
 ## Tests
 
-`FenrirAnimationTests` (with `FENRIR_BUILD_TESTS`) is the spec's seam 9: install, ADR-0034's interval table and the event budget, seeks, completion, sampling against glTF's formulas, unavailable assets and recovery, revision rebinding, binding diagnostics and the cache, and (`Blending.cpp`) ADR-0036's composition, masks, additive maths and reference modes, crossfades with snapshots and coverage, weight against the clock, events across layers and the shared budget, and the layer lifecycle, on skeletons and clips built in code, driven by `App::RunFrame`. The headless bone check plays `Tests/fixtures/rig.gltf` and compares bone world matrices with values worked by hand; `twins.gltf` checks binding by node identity. `Tests/fixtures/make_fixtures.py` wrote both. `PublicHeaders.cpp` fails the build if a header reaches the renderer, physics, a window, a graphics API or ozz, and configuring fails if FenrirRenderer or FenrirPhysics links the package.
+`FenrirAnimationTests` (with `FENRIR_BUILD_TESTS`) is the spec's seam 9: install, ADR-0034's interval table and the event budget, seeks, completion, sampling against glTF's formulas, unavailable assets and recovery, revision rebinding, binding diagnostics and the cache, and (`Blending.cpp`) ADR-0036's composition, masks, additive maths and reference modes, crossfades with snapshots and coverage, weight against the clock, events across layers and the shared budget, and the layer lifecycle, and (`TickPosed.cpp`) tick-posed playback by `tickRate` with events and crossfades per tick, on skeletons and clips built in code, driven by `App::RunFrame`. The headless bone check plays `Tests/fixtures/rig.gltf` and compares bone world matrices with values worked by hand; `twins.gltf` checks binding by node identity. `Tests/fixtures/make_fixtures.py` wrote both. `PublicHeaders.cpp` fails the build if a header reaches the renderer, physics, a window, a graphics API or ozz, and configuring fails if FenrirRenderer or FenrirPhysics links the package.

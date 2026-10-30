@@ -55,15 +55,26 @@ namespace Fenrir
      * (read-only for poses). Inactive scenes pause, and resume without catching up. Work added to a stage runs by its
      * `int` order, ties in the order it was added; nothing is promised against other `PostUpdate` systems. An instance
      * whose pose is clean and that no modifier edited this frame or the last skips prepare and finalise.
+     *
+     * **Tick-posed skeletons** (`PoseTiming::Tick`, ADR-0040) evaluate their base pose in a tick pass, in `PreTick` of
+     * each fixed tick, on the active scene, while it has one: reconcile, `Animate` over the tick-posed instances,
+     * stepping by `Time::tickRate`, then their base model matrices. That is the **simulation pose**, with no
+     * modifiers; the tick before it is kept beside it. A frame with no tick evaluates nothing. In the frame pass a
+     * tick-posed instance skips `Animate`: its base pose is the last two ticks' blended at `Time::accumulator /
+     * Time::tickRate` (translation and scale lerp, rotation slerps), the fraction physics interpolates bodies by, and
+     * the rest of the frame pass gives the **render pose**, which the palette and attachments use. Modifiers are
+     * render-only. A base-pose write made before a `PreTick` is seen by that tick, one made in `Tick` by the next.
+     * `PoseKind::Simulation` reads the simulation pose; on a frame-posed skeleton both kinds read the render pose.
      */
     class Skeletons
     {
       public:
         /**
          * @brief Turns FenrirSkeleton on for `app`: registers its skinning source as an app resource (a
-         * `SkinningSourceRegistration`) and adds the pose pipeline's system. It fails, with one logged diagnostic and
-         * an owner whose `IsValid()` is false that has added nothing, without FenrirAssets installed, or when a
-         * skinning source is already registered (a second install).
+         * `SkinningSourceRegistration`) and adds the pose pipeline's systems: the frame pass in `PostUpdate` and the
+         * tick pass in `PreTick`. It fails, with one logged diagnostic and an owner whose `IsValid()` is false that
+         * has added nothing, without FenrirAssets installed, or when a skinning source is already registered (a second
+         * install).
          */
         [[nodiscard]] static Skeletons Install(App& app);
 
@@ -71,7 +82,7 @@ namespace Fenrir
         Skeletons& operator=(Skeletons&& other) noexcept;
         Skeletons(const Skeletons&) = delete;
         Skeletons& operator=(const Skeletons&) = delete;
-        /** @brief Removes the skinning source and every scene's instances; the pipeline's system then does nothing. */
+        /** @brief Removes the skinning source and every scene's instances; the pipeline's systems then do nothing. */
         ~Skeletons();
 
         /** @brief Whether this owner holds an install: false when Install failed, and once moved from. */
@@ -133,7 +144,9 @@ namespace Fenrir
         /** @brief The final pose's local transforms, one per bone. */
         [[nodiscard]] static std::span<const Transform> GetLocals(Scene& scene, Entity skeleton);
 
-        /** @brief The base pose's local transforms, one per bone. */
+        /** @brief The base pose's local transforms, one per bone: the simulation pose's, for `Simulation` on a
+         * tick-posed skeleton.
+         */
         [[nodiscard]] static std::span<const Transform> GetBaseLocals(Scene& scene, Entity skeleton,
                                                                       PoseKind kind = PoseKind::Render);
 
@@ -157,8 +170,9 @@ namespace Fenrir
 
         /**
          * @brief The bone's world matrix: `GetWorldMatrix(skeleton) × M_model[bone]`, the one defined way to combine
-         * the skeleton entity's space with its pose. `nullopt` when the entity is not `Ready` or the bone is out of
-         * range.
+         * the skeleton entity's space with its pose. `M_model` is the final pose's for `Render`, and for `Simulation`
+         * on a tick-posed skeleton the simulation pose's; the skeleton entity's world matrix is read now. `nullopt`
+         * when the entity is not `Ready` or the bone is out of range.
          */
         [[nodiscard]] static std::optional<Math::Mat4> GetBoneWorldMatrix(Scene& scene, Entity skeleton,
                                                                           std::int32_t bone,
@@ -186,6 +200,10 @@ namespace Fenrir
          * Before the pipeline, the write is seen by this frame's pose; after it, by the next frame's. During `Animate`
          * it works only on instances of the running pass's timing; during `Modify` and `Late`, which may not write the
          * base pose, not at all. A refused call writes nothing, returns an empty span and logs once per call site.
+         *
+         * On a tick-posed skeleton the span is the simulation pose, the base pose the next tick evaluates from: a
+         * write before a `PreTick` is seen by that tick, one in `Tick` by the next, and the frame draws it through the
+         * blend.
          */
         [[nodiscard]] static std::span<Transform> EditBasePose(
             Scene& scene, Entity skeleton, std::source_location site = std::source_location::current());
