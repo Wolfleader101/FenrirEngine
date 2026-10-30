@@ -92,6 +92,7 @@ namespace Fenrir
     /** @brief What `Skeletons::Detach` did. Every result but `Detached` changed nothing. */
     enum class DetachResult : std::uint8_t
     {
+        /** @brief The `BoneAttachment` was removed, as the `DetachMode` asked. */
         Detached,
         /** @brief The entity is dead or has no `BoneAttachment`. */
         NotAttached,

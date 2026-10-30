@@ -9,15 +9,20 @@ namespace Fenrir
     /** @brief Whether a bone mask entry covers one bone or the bone and everything below it. */
     enum class MaskScope : std::uint8_t
     {
+        /** @brief The named bone only. */
         Bone,
+        /** @brief The named bone and every bone below it. */
         Subtree,
     };
 
     /** @brief One entry of a bone mask: a bone by engine name, the weight it gets, and how far down it reaches. */
     struct BoneMaskEntry
     {
+        /** @brief The bone's engine name, matched against each skeleton the mask is resolved for. */
         std::string boneName;
+        /** @brief The weight the covered bones get; finite. */
         float weight = 1.0f;
+        /** @brief Whether the entry covers the bone alone or its subtree. */
         MaskScope scope = MaskScope::Bone;
     };
 
@@ -31,6 +36,7 @@ namespace Fenrir
      */
     struct BoneMaskData
     {
+        /** @brief The entries in order; a later entry overrides an earlier one for the bones both cover. */
         std::vector<BoneMaskEntry> entries;
     };
 } // namespace Fenrir

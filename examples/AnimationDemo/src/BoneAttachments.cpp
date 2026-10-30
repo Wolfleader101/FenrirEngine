@@ -21,7 +21,7 @@
 #include "FenrirScene/Scene.hpp"
 #include "FenrirScheduler/Scheduler.hpp"
 #include "FenrirSkeleton/Skeletons.hpp"
-#include "Rigs.hpp"
+#include "SkinnedModels.hpp"
 
 #ifdef ANIMATION_DEMO_PHYSICS
 #include "FenrirPhysics/Components.hpp"
@@ -78,7 +78,7 @@ namespace AnimationDemo
         /** @brief Scene 5's state, a resource of its FenrirScene. */
         struct AttachState
         {
-            Rig human;
+            SkinnedModel human;
             std::size_t clip = 0;
             /** @brief The rifle: a skeleton entity of its own (stock and rail), attached to the human's right hand. */
             Entity rifle;
@@ -93,7 +93,7 @@ namespace AnimationDemo
             /** @brief Both humans' timing, which T switches: Tick to start with. */
             PoseTiming timing = PoseTiming::Tick;
             /** @brief The shield bearer, the bone its shield follows, and the shield, which has no BoneAttachment. */
-            Rig bearer;
+            SkinnedModel bearer;
             std::int32_t shieldBone = Fenrir::NoBone;
             Entity shield;
             /** @brief The dynamic boxes, and how long since they were last set out. */
@@ -106,11 +106,11 @@ namespace AnimationDemo
         /** @brief Sets the humans' SkeletonPose timing to the scene's. */
         void ApplyTiming(AttachState& state)
         {
-            for (const Rig* rig : {&state.human, &state.bearer})
+            for (const SkinnedModel* spawned : {&state.human, &state.bearer})
             {
-                if (rig->IsValid())
+                if (spawned->IsValid())
                 {
-                    rig->skeleton.GetComponent<Fenrir::SkeletonPose>().timing = state.timing;
+                    spawned->skeleton.GetComponent<Fenrir::SkeletonPose>().timing = state.timing;
                 }
             }
         }
@@ -263,7 +263,7 @@ namespace AnimationDemo
                 return made;
             };
 
-            state.human = SpawnRig(app, scene, QuaterniusFile, Vec3(-0.6f, 0.0f, 0.0f), 0.3f);
+            state.human = SpawnSkinnedModel(app, scene, QuaterniusFile, Vec3(-0.6f, 0.0f, 0.0f), 0.3f);
             if (!state.human.IsValid())
             {
                 return;
@@ -330,7 +330,7 @@ namespace AnimationDemo
             state.failures.at(4).entity.AddComponent<BoneAttachment>(MakeAttachment(app, knot, "rail", Vec3(0.0f)));
 
             // The shield bearer, sprinting in place, its shield moved by FollowBone in Tick.
-            state.bearer = SpawnRig(app, scene, QuaterniusFile, BearerPlace);
+            state.bearer = SpawnSkinnedModel(app, scene, QuaterniusFile, BearerPlace);
             if (!state.bearer.IsValid())
             {
                 return;

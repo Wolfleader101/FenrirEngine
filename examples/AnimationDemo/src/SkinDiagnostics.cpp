@@ -13,7 +13,7 @@
 #include "FenrirScene/Scene.hpp"
 #include "FenrirShaders/AnimationDemoFlat.hpp"
 #include "FenrirSkeleton/SkeletonPose.hpp"
-#include "Rigs.hpp"
+#include "SkinnedModels.hpp"
 
 namespace AnimationDemo
 {
@@ -57,7 +57,7 @@ namespace AnimationDemo
             Fenrir::EntityList& entities = scene.GetEntityList();
 
             // 0: drawn as it should be.
-            const Rig skinned = SpawnRig(app, scene, MannequinFile, At(0));
+            const SkinnedModel skinned = SpawnSkinnedModel(app, scene, MannequinFile, At(0));
             if (!skinned.IsValid())
             {
                 return;
@@ -65,22 +65,22 @@ namespace AnimationDemo
             Play(skinned.skeleton, skinned.Clip(app, static_cast<std::size_t>(MannequinClip::Idle)));
 
             // 1: skin data, but no SkinnedMesh naming its skeleton.
-            const Rig unlinked = SpawnRig(app, scene, MannequinFile, At(1));
+            const SkinnedModel unlinked = SpawnSkinnedModel(app, scene, MannequinFile, At(1));
             for (const Fenrir::Entity& mesh : unlinked.meshes)
             {
                 mesh.RemoveComponent<Fenrir::SkinnedMesh>();
             }
 
             // 2: a SkeletonPose naming no skeleton asset.
-            const Rig unavailable = SpawnRig(app, scene, MannequinFile, At(2));
+            const SkinnedModel unavailable = SpawnSkinnedModel(app, scene, MannequinFile, At(2));
             if (unavailable.IsValid())
             {
                 unavailable.skeleton.GetComponent<Fenrir::SkeletonPose>().skeleton = {};
             }
 
-            // 3: the critter's mesh, baked for its own rig, skinned by a skeleton entity posing the mannequin's: fewer
-            // bones than the mannequin's, but another bind signature.
-            const Rig critter = SpawnRig(app, scene, CritterFile, At(3));
+            // 3: the critter's mesh, baked for its own skeleton, skinned by a skeleton entity posing the mannequin's:
+            // fewer bones than the mannequin's, but another bind signature.
+            const SkinnedModel critter = SpawnSkinnedModel(app, scene, CritterFile, At(3));
             Fenrir::Entity imposter = entities.CreateEntity();
             imposter.GetComponent<Fenrir::Name>().Set("Mannequin skeleton for the critter's mesh");
             imposter.GetComponent<Fenrir::Transform>().pos = At(3);
@@ -96,7 +96,7 @@ namespace AnimationDemo
             const auto bytes = std::as_bytes(std::span(Fenrir::Shaders::AnimationDemoFlat));
             flat.bytes.assign(bytes.begin(), bytes.end());
             const auto material = store.CreateMaterial(store.Add<Fenrir::Shader>(std::move(flat), scene), scene);
-            const Rig unskinnable = SpawnRig(app, scene, MannequinFile, At(4));
+            const SkinnedModel unskinnable = SpawnSkinnedModel(app, scene, MannequinFile, At(4));
             for (const Fenrir::Entity& mesh : unskinnable.meshes)
             {
                 mesh.GetComponent<Fenrir::MeshRenderer>().material = material;

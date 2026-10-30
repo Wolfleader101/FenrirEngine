@@ -19,7 +19,7 @@
 #include "FenrirInput/Input.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirSkeleton/Skeletons.hpp"
-#include "Rigs.hpp"
+#include "SkinnedModels.hpp"
 
 namespace AnimationDemo
 {
@@ -42,7 +42,7 @@ namespace AnimationDemo
         /** @brief Scene 6's state, a resource of its FenrirScene. */
         struct LimpState
         {
-            Rig walker;
+            SkinnedModel walker;
             std::array<std::int32_t, ArmBones.size()> bones{};
             std::array<std::int32_t, ArmEnds.size()> ends{};
             /** @brief The override weight on the arm's subtree, which the keys step and ramp. */
@@ -132,7 +132,7 @@ namespace AnimationDemo
             AddStage(app, scene);
             LimpState& state = scene.AddResource<LimpState>();
             // Turned so its left arm faces the camera.
-            state.walker = SpawnRig(app, scene, QuaterniusFile, Vec3(0.0f), -0.6f);
+            state.walker = SpawnSkinnedModel(app, scene, QuaterniusFile, Vec3(0.0f), -0.6f);
             if (!state.walker.IsValid())
             {
                 return;

@@ -1,4 +1,4 @@
-#include "Rigs.hpp"
+#include "SkinnedModels.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -22,27 +22,28 @@ namespace AnimationDemo
         using Fenrir::Math::Vec3;
 
         /** @brief Collects the skeleton entity and the skinned mesh entities at and below `entity`. */
-        void Collect(const Fenrir::Entity& entity, Rig& rig)
+        void Collect(const Fenrir::Entity& entity, SkinnedModel& spawned)
         {
-            if (entity.HasComponent<Fenrir::SkeletonPose>() && !rig.skeleton.IsValid())
+            if (entity.HasComponent<Fenrir::SkeletonPose>() && !spawned.skeleton.IsValid())
             {
-                rig.skeleton = entity;
+                spawned.skeleton = entity;
             }
             if (entity.HasComponent<Fenrir::SkinnedMesh>())
             {
-                rig.meshes.push_back(entity);
+                spawned.meshes.push_back(entity);
             }
-            entity.ForEachChild([&](const Fenrir::Entity& child) { Collect(child, rig); });
+            entity.ForEachChild([&](const Fenrir::Entity& child) { Collect(child, spawned); });
         }
     } // namespace
 
-    Fenrir::AssetHandle<Fenrir::Clip> Rig::Clip(Fenrir::App& app, std::size_t index) const
+    Fenrir::AssetHandle<Fenrir::Clip> SkinnedModel::Clip(Fenrir::App& app, std::size_t index) const
     {
         const Fenrir::Model* data = app.GetResource<Fenrir::AssetStore>().TryGet(model);
         return data != nullptr && index < data->clips.size() ? data->clips[index] : Fenrir::AssetHandle<Fenrir::Clip>{};
     }
 
-    Rig SpawnRig(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file, Vec3 position, float yaw, float scale)
+    SkinnedModel SpawnSkinnedModel(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file, Vec3 position,
+                                   float yaw, float scale)
     {
         Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
         const auto model = store.Load<Fenrir::Model>(file, scene);
@@ -51,25 +52,25 @@ namespace AnimationDemo
             app.Logger()->Error("AnimationDemo: {} did not load from the asset root", file);
             return {};
         }
-        Rig rig;
-        rig.model = model.handle;
-        rig.root = Fenrir::SpawnModel(app, scene, model.handle);
-        if (!rig.root.IsValid())
+        SkinnedModel spawned;
+        spawned.model = model.handle;
+        spawned.root = Fenrir::SpawnModel(app, scene, model.handle);
+        if (!spawned.root.IsValid())
         {
             app.Logger()->Error("AnimationDemo: {} did not spawn", file);
             return {};
         }
-        auto& transform = rig.root.GetComponent<Fenrir::Transform>();
+        auto& transform = spawned.root.GetComponent<Fenrir::Transform>();
         transform.pos = position;
         transform.rot = Fenrir::Math::AngleAxis(yaw, Vec3(0.0f, 1.0f, 0.0f));
         transform.scale = Vec3(scale);
-        Collect(rig.root, rig);
-        if (!rig.skeleton.IsValid())
+        Collect(spawned.root, spawned);
+        if (!spawned.skeleton.IsValid())
         {
             app.Logger()->Error("AnimationDemo: {} spawned no skeleton entity", file);
             return {};
         }
-        return rig;
+        return spawned;
     }
 
     Fenrir::AssetHandle<Fenrir::Clip> LoadClip(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file,
@@ -86,7 +87,7 @@ namespace AnimationDemo
         return data->clips[index];
     }
 
-    void Paint(Fenrir::App& app, Fenrir::Scene& scene, const Rig& rig, std::string_view file)
+    void Paint(Fenrir::App& app, Fenrir::Scene& scene, const SkinnedModel& spawned, std::string_view file)
     {
         Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
         const auto image = store.Load<Fenrir::Image>(file, scene);
@@ -95,7 +96,7 @@ namespace AnimationDemo
             app.Logger()->Error("AnimationDemo: {} did not load from the asset root", file);
             return;
         }
-        for (const Fenrir::Entity& mesh : rig.meshes)
+        for (const Fenrir::Entity& mesh : spawned.meshes)
         {
             store.SetTexture(mesh.GetComponent<Fenrir::MeshRenderer>().material, "baseColourTexture", image.handle);
         }

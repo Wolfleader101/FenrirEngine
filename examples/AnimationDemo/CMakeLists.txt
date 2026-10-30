@@ -4,8 +4,8 @@ fenrir_add_demo_app(AnimationDemo
     SOURCES
         src/main.cpp
         src/AnimationScenes.hpp
-        src/Rigs.hpp
-        src/Rigs.cpp
+        src/SkinnedModels.hpp
+        src/SkinnedModels.cpp
         src/Playback.cpp
         src/SkeletonScene.cpp
         src/SkinDiagnostics.cpp

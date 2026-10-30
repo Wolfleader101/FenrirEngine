@@ -16,6 +16,7 @@ namespace Fenrir
      */
     struct ClipEventId
     {
+        /** @brief The hash; 0 is no name's id in particular, only the default. */
         std::uint32_t value = 0;
 
         /** @brief The id of `name`. C# computes the same number (`ClipEventId.Of`). */
@@ -36,8 +37,11 @@ namespace Fenrir
     /** @brief Which part of a bone's transform a clip channel keys. */
     enum class ClipPath : std::uint8_t
     {
+        /** @brief The bone's local translation: `xyz` of each value. */
         Translation,
+        /** @brief The bone's local rotation as a quaternion: `xyzw` of each value. */
         Rotation,
+        /** @brief The bone's local scale: `xyz` of each value. */
         Scale,
     };
 

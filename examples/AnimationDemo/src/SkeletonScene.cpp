@@ -10,7 +10,7 @@
 #include "FenrirInput/Input.hpp"
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirScene/Scene.hpp"
-#include "Rigs.hpp"
+#include "SkinnedModels.hpp"
 
 namespace AnimationDemo
 {
@@ -29,7 +29,7 @@ namespace AnimationDemo
             float scale;
             /** @brief The clip to play, by index in the model's file, or in clipFile when it is given. */
             std::size_t clip;
-            /** @brief A file holding the clip to play instead, for a rig whose clips are files of their own. */
+            /** @brief A file holding the clip to play instead, for a model whose clips are files of their own. */
             std::string_view clipFile;
             /** @brief How high above its root its label sits, in world units. */
             float labelHeight;
@@ -72,7 +72,7 @@ namespace AnimationDemo
         /** @brief Scene 2's state, a resource of its FenrirScene. */
         struct SkeletonState
         {
-            std::array<Rig, Models.size()> rigs;
+            std::array<SkinnedModel, Models.size()> spawned;
             bool meshes = true;
             bool bones = true;
             bool names = false;
@@ -85,15 +85,15 @@ namespace AnimationDemo
             for (std::size_t i = 0; i < Models.size(); ++i)
             {
                 const Model& model = Models.at(i);
-                state.rigs.at(i) = SpawnRig(app, scene, model.file, model.position, model.yaw, model.scale);
-                if (state.rigs.at(i).IsValid())
+                state.spawned.at(i) = SpawnSkinnedModel(app, scene, model.file, model.position, model.yaw, model.scale);
+                if (state.spawned.at(i).IsValid())
                 {
-                    Play(state.rigs.at(i).skeleton, model.clipFile.empty()
-                                                        ? state.rigs.at(i).Clip(app, model.clip)
-                                                        : LoadClip(app, scene, model.clipFile, model.clip));
+                    Play(state.spawned.at(i).skeleton, model.clipFile.empty()
+                                                           ? state.spawned.at(i).Clip(app, model.clip)
+                                                           : LoadClip(app, scene, model.clipFile, model.clip));
                     if (!model.skin.empty())
                     {
-                        Paint(app, scene, state.rigs.at(i), model.skin);
+                        Paint(app, scene, state.spawned.at(i), model.skin);
                     }
                 }
             }
@@ -111,9 +111,9 @@ namespace AnimationDemo
             if (keyboard.JustPressed(Fenrir::Key::M))
             {
                 state->meshes = !state->meshes;
-                for (const Rig& rig : state->rigs)
+                for (const SkinnedModel& spawned : state->spawned)
                 {
-                    for (const Fenrir::Entity& mesh : rig.meshes)
+                    for (const Fenrir::Entity& mesh : spawned.meshes)
                     {
                         mesh.GetComponent<Fenrir::MeshRenderer>().visible = state->meshes;
                     }
@@ -132,14 +132,14 @@ namespace AnimationDemo
             }
             for (std::size_t i = 0; i < Models.size(); ++i)
             {
-                const Rig& rig = state->rigs.at(i);
-                if (!rig.IsValid())
+                const SkinnedModel& spawned = state->spawned.at(i);
+                if (!spawned.IsValid())
                 {
                     continue;
                 }
-                DrawBones(app, scene, *draw, rig.skeleton, state->bones, state->names);
+                DrawBones(app, scene, *draw, spawned.skeleton, state->bones, state->names);
                 // In world units: the Fox's root is scaled, so text relative to it would be too.
-                const Vec3 at = rig.root.GetComponent<Fenrir::Transform>().pos;
+                const Vec3 at = spawned.root.GetComponent<Fenrir::Transform>().pos;
                 draw->WorldText(at + Vec3(-0.4f, Models.at(i).labelHeight, 0.0f), Models.at(i).label, Colour::White);
             }
             draw->ScreenText({16.0f, 120.0f},
