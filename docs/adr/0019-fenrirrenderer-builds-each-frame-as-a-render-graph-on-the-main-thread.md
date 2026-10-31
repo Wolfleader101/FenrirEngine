@@ -30,6 +30,7 @@ Each frame, FenrirRenderer reads the active scene into a draw list, builds a ren
 - `Opaque` (depth write) → `Background` (skybox or clear colour at the far plane, after opaque so covered pixels are skipped) → `Transparent` → `Debug` → `Output` → `Overlay`.
 - **Transparent:** depth tested, no depth write, sorted back to front by the view-space depth of each item's world origin. A material's blend mode (opaque, alpha-blended, additive) picks the pass; both foundation materials can blend. No order-independent transparency; intersecting or overlapping transparent meshes can sort wrongly, and that is documented rather than fixed.
 - **Targets:** each view draws into transient linear RGBA16F `SceneColor` and `SceneDepth`, multisampled by `RendererConfig`'s MSAA count. `Output` resolves, clamps and sRGB-encodes into the view's output: the placeholder tonemap a post-processing family replaces. `Overlay` draws on the backbuffer, in sRGB, after every view's `Output`.
+- *Amended by ADR-0049, ADR-0050 and ADR-0051:* a `DepthPrepass` stage follows `Shadow`; the frame stays forward, with clustered lights, GTAO, bloom in `PostProcess` and a tonemap with exposure in `Output`; `Shadow` draws cascades and atlases; matching opaque, masked and shadow items merge into instanced draws.
 
 ## Waiting for an explicit backend
 

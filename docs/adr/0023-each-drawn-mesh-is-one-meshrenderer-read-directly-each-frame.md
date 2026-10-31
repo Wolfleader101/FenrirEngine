@@ -27,3 +27,5 @@ Game code makes something visible with FenrirRenderer's ECS facade, over the ren
 ## When to revisit
 
 If the `Render` read shows in a profile (memo ancestors, or culling and instancing at scale), or if spawned hierarchies want hiding as one.
+
+*Amended by ADR-0051:* `InstancedMeshRenderer` draws an instance list, many copies of one mesh with no entity each, beside `MeshRenderer`.

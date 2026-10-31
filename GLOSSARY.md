@@ -513,9 +513,20 @@ Where a view's output goes: a window, or an image asset made with a size but no 
 *Avoid:* render texture (no separate type), framebuffer, scene targets (a view's own intermediate colour and depth).
 
 **Sky**
-The scene resource saying what is drawn behind everything: a solid colour or a skybox. A camera uses it, or overrides it with a colour.
-*Avoid:* environment, clear colour (one of its forms), skydome.
+The scene resource saying what is drawn behind everything and what light reaches every surface from all around: a solid colour, a skybox or a panorama. A camera can override what is drawn with a colour, but not the light.
+*Avoid:* environment, ambient light (the sky is the scene's ambient light), clear colour (one of its forms), skydome.
 
+**Panorama**
+An HDR image wrapping the whole sphere around the viewer, its width twice its height (equirectangular). A sky made from one is a *panorama sky*.
+*Avoid:* HDRI, environment map, light probe, equirect.
+
+**Light**
+A component that lights the scene from its entity: a *directional light* (the sun; one per scene, shining along its entity's -Z), a *point light* (from its position in every direction), a *spot light* (from its position along its -Z, within a cone) or a *rect light* (from a rectangle facing its -Z, one-sided or two-sided). A scene can hold any number of point, spot and rect lights.
+*Avoid:* lamp, punctual light (glTF's word for point and spot), area light (a rect light is one shape of it), light source.
+
+**Instance list**
+An asset holding the placements of many copies of one mesh, each a transform relative to the entity that draws them and an optional colour. An `InstancedMeshRenderer` draws one, with no entity per copy.
+*Avoid:* instance buffer, multimesh, batch.
 ## FenrirEngine debug drawing
 
 **FenrirDebugDraw**
