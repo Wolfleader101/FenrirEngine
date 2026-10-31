@@ -1,6 +1,6 @@
-// Playback through the Animator (ADR-0034): ADR-0034's interval table on a clip of duration 1, seeks and their
-// precedence over clip changes, completion and its resets, and playback state. The slide clip moves the tip's x from
-// 0 to 1, so its base-pose x is the playback cursor.
+// Playback through the Animator (ADR-0034): the wiring around the playback cursor, whose interval table is
+// PlaybackCursor.cpp's. Events and their budget as sent, seeks and their precedence over clip changes, a clip change's
+// events, and playback state. The slide clip moves the tip's x from 0 to 1, so its base-pose x is the playback cursor.
 #include <cstdint>
 #include <vector>
 
@@ -54,149 +54,6 @@ TEST_CASE("forward playback from 0 crosses the events up to the cursor, the one 
     REQUIRE(ReadTimes(test, reader) == std::vector<float>{0.75f});
 }
 
-TEST_CASE("a step across a wrap crosses the end of the lap, then the start of the next, in order",
-          "[animation][events]")
-{
-    AnimationApp test;
-    const Entity skeleton =
-        AnimationTest::Animated(test.level, AnimationTest::AddChain(test), AnimationTest::AddSlide(test, Quarters));
-    EventReader<AnimationEvent> reader;
-    test.RunFrame(0.75);
-    (void)ReadTimes(test, reader);
-
-    test.RunFrame(0.5);
-
-    std::vector<std::uint64_t> laps;
-    std::vector<float> times;
-    for (const AnimationEvent& event : reader.Read(test.app))
-    {
-        times.push_back(event.time);
-        laps.push_back(event.loop);
-    }
-    INFO("0.75 -> 1.25 crosses 1 in lap 0, then 0 and 0.25 in lap 1");
-    REQUIRE(times == std::vector<float>{1.0f, 0.0f, 0.25f});
-    REQUIRE(laps == std::vector<std::uint64_t>{0, 1, 1});
-    INFO("the cursor wraps to 0.25 with one completed loop");
-    const Fenrir::PlaybackInfo info = Animation::Playback(test.level, skeleton);
-    REQUIRE(Near(info.time, 0.25));
-    REQUIRE(info.completedLoops == 1);
-    REQUIRE(Near(TipX(test, skeleton), 0.25f));
-}
-
-TEST_CASE("reverse playback crosses events in reverse order, wrapping across 0", "[animation][events]")
-{
-    AnimationApp test;
-    const Entity skeleton = AnimationTest::Animated(test.level, AnimationTest::AddChain(test),
-                                                    AnimationTest::AddSlide(test, Quarters), ClipLoop::Loop, -1.0f);
-    EventReader<AnimationEvent> reader;
-
-    test.RunFrame(0.75);
-    INFO("starting in reverse at the duration crosses [0.25, 1], the event at 1 included, latest first");
-    REQUIRE(ReadTimes(test, reader) == std::vector<float>{1.0f, 0.75f, 0.5f, 0.25f});
-
-    test.RunFrame(0.5);
-    INFO("0.25 -> -0.25 crosses 0, then wraps and crosses 1 and 0.75");
-    REQUIRE(ReadTimes(test, reader) == std::vector<float>{0.0f, 1.0f, 0.75f});
-    const Fenrir::PlaybackInfo info = Animation::Playback(test.level, skeleton);
-    REQUIRE(Near(info.time, 0.75));
-    REQUIRE(info.completedLoops == 1);
-}
-
-TEST_CASE("a seek crosses nothing, and playback from it crosses only what follows", "[animation][events][seek]")
-{
-    AnimationApp test;
-    const Entity skeleton =
-        AnimationTest::Animated(test.level, AnimationTest::AddChain(test), AnimationTest::AddSlide(test, Quarters));
-    EventReader<AnimationEvent> reader;
-    test.RunFrame(0.125);
-    (void)ReadTimes(test, reader);
-
-    Animation::Seek(test.level, skeleton, 0.25);
-    test.RunFrame(0.25);
-
-    INFO("the seek to 0.25 skips the event at 0.25 and its jump crosses nothing; the step crosses (0.25, 0.5]");
-    REQUIRE(ReadTimes(test, reader) == std::vector<float>{0.5f});
-    REQUIRE(Near(Animation::Playback(test.level, skeleton).time, 0.5));
-}
-
-TEST_CASE("a pause crosses nothing and holds the pose", "[animation][events]")
-{
-    AnimationApp test;
-    const Entity skeleton =
-        AnimationTest::Animated(test.level, AnimationTest::AddChain(test), AnimationTest::AddSlide(test, Quarters));
-    EventReader<AnimationEvent> reader;
-    test.RunFrame(0.5);
-    (void)ReadTimes(test, reader);
-
-    skeleton.GetComponent<Animator>().playing = false;
-    test.RunFrame(0.5);
-    test.RunFrame(0.5);
-
-    INFO("paused at 0.5, nothing is crossed and the cursor and pose hold");
-    REQUIRE(ReadTimes(test, reader).empty());
-    REQUIRE(Near(Animation::Playback(test.level, skeleton).time, 0.5));
-    REQUIRE(Near(TipX(test, skeleton), 0.5f));
-
-    INFO("a speed of 0 holds just the same");
-    skeleton.GetComponent<Animator>().playing = true;
-    skeleton.GetComponent<Animator>().speed = 0.0f;
-    test.RunFrame(0.5);
-    REQUIRE(ReadTimes(test, reader).empty());
-    REQUIRE(Near(Animation::Playback(test.level, skeleton).time, 0.5));
-}
-
-TEST_CASE("a zero-duration clip holds a stable pose, never wraps, and its events fire once", "[animation][events]")
-{
-    AnimationApp test;
-    Fenrir::ClipData still;
-    still.channels = {AnimationTest::Channel("tip", Fenrir::ClipPath::Translation, Fenrir::ClipInterpolation::Linear,
-                                             {0.0f}, {{0.5f, 1.0f, 0.0f, 0.0f}})};
-    still.events = {{0.0f, "pose"}};
-    const auto clip = test.store.Add<Fenrir::Clip>(still, test.level);
-    const Entity skeleton = AnimationTest::Animated(test.level, AnimationTest::AddChain(test), clip);
-    EventReader<AnimationEvent> reader;
-
-    std::vector<float> times;
-    for (int frame = 0; frame < 4; ++frame)
-    {
-        test.RunFrame(0.5);
-        for (const float time : ReadTimes(test, reader))
-        {
-            times.push_back(time);
-        }
-    }
-
-    INFO("the event at 0 fired once, the cursor stays at 0 with no loops, and the pose is the first key's");
-    REQUIRE(times == std::vector<float>{0.0f});
-    const Fenrir::PlaybackInfo info = Animation::Playback(test.level, skeleton);
-    REQUIRE(info.time == 0.0);
-    REQUIRE(info.completedLoops == 0);
-    REQUIRE(Near(TipX(test, skeleton), 0.5f));
-}
-
-TEST_CASE("a zero-duration Once clip finishes once, on its first evaluation", "[animation][completion]")
-{
-    AnimationApp test;
-    Fenrir::ClipData still;
-    still.channels = {AnimationTest::Channel("tip", Fenrir::ClipPath::Translation, Fenrir::ClipInterpolation::Step,
-                                             {0.0f}, {{0.5f, 1.0f, 0.0f, 0.0f}})};
-    const auto clip = test.store.Add<Fenrir::Clip>(still, test.level);
-    const Entity skeleton = AnimationTest::Animated(test.level, AnimationTest::AddChain(test), clip, ClipLoop::Once);
-    EventReader<Fenrir::ClipFinished> finished;
-
-    test.RunFrame();
-    INFO("finished at once, with one ClipFinished");
-    REQUIRE(Animation::Playback(test.level, skeleton).finished);
-    REQUIRE(CountFinished(test, finished) == 1);
-
-    for (int frame = 0; frame < 2; ++frame)
-    {
-        test.RunFrame();
-        INFO("and never again until restarted");
-        REQUIRE(CountFinished(test, finished) == 0);
-    }
-}
-
 TEST_CASE("a step across 100 laps counts them exactly, sends the budget's earliest events and reports the rest",
           "[animation][events][budget]")
 {
@@ -220,7 +77,6 @@ TEST_CASE("a step across 100 laps counts them exactly, sends the budget's earlie
         REQUIRE(drop.skeleton == skeleton);
     }
     INFO("100 laps of 5 events is 500 crossings: the first 64 are sent, and 436 counted as dropped");
-    REQUIRE(Animation::Playback(test.level, skeleton).completedLoops == 100);
     REQUIRE(sent.size() == 64);
     REQUIRE(Near(sent.front().time, 0.1f));
     REQUIRE(sent.front().loop == 0);
@@ -323,46 +179,6 @@ TEST_CASE("a seek may come before the entity has an Animator or a skeleton insta
     REQUIRE(Near(TipX(test, skeleton), 0.5f));
 }
 
-TEST_CASE("a seek is clamped by Once and wrapped by Loop into the clip", "[animation][seek]")
-{
-    AnimationApp test;
-    const auto chain = AnimationTest::AddChain(test);
-    const auto slide = AnimationTest::AddSlide(test);
-    const Entity once = AnimationTest::Animated(test.level, chain, slide, ClipLoop::Once);
-    const Entity loop = AnimationTest::Animated(test.level, chain, slide, ClipLoop::Loop);
-    once.GetComponent<Animator>().playing = false;
-    loop.GetComponent<Animator>().playing = false;
-
-    Animation::Seek(test.level, once, 1.75);
-    Animation::Seek(test.level, loop, 1.75);
-    Animation::Seek(test.level, loop, -0.25);
-    test.RunFrame();
-
-    INFO("Once clamps 1.75 to 1; Loop wraps -0.25 to 0.75");
-    REQUIRE(Near(Animation::Playback(test.level, once).time, 1.0));
-    REQUIRE(Near(Animation::Playback(test.level, loop).time, 0.75));
-}
-
-TEST_CASE("a clip change restarts at 0, or at the duration in reverse", "[animation][playback]")
-{
-    AnimationApp test;
-    const auto chain = AnimationTest::AddChain(test);
-    const Entity forward = AnimationTest::Animated(test.level, chain, AnimationTest::AddSlide(test));
-    const Entity reverse =
-        AnimationTest::Animated(test.level, chain, AnimationTest::AddSlide(test), ClipLoop::Loop, -1.0f);
-    test.RunFrame(0.5);
-
-    const auto next = AnimationTest::AddSlide(test);
-    forward.GetComponent<Animator>().clip = next;
-    reverse.GetComponent<Animator>().clip = next;
-    test.RunFrame(0.125);
-
-    INFO("each restarts and takes this frame's step from there, with no loops counted");
-    REQUIRE(Near(Animation::Playback(test.level, forward).time, 0.125));
-    REQUIRE(Near(Animation::Playback(test.level, reverse).time, 0.875));
-    REQUIRE(Animation::Playback(test.level, reverse).completedLoops == 0);
-}
-
 TEST_CASE("a clip change crosses nothing, and the new clip's start crosses its starting boundary",
           "[animation][events]")
 {
@@ -387,77 +203,6 @@ TEST_CASE("a clip change crosses nothing, and the new clip's start crosses its s
     INFO("only the new clip's event at 0: nothing of the old clip, nothing for the jump");
     REQUIRE(times == std::vector<float>{0.0f});
     REQUIRE(clips == std::vector{next});
-}
-
-TEST_CASE("a Once clip finishes once at its end, and pausing keeps it finished", "[animation][completion]")
-{
-    AnimationApp test;
-    const Entity skeleton = AnimationTest::Animated(test.level, AnimationTest::AddChain(test),
-                                                    AnimationTest::AddSlide(test, Quarters), ClipLoop::Once);
-    EventReader<Fenrir::ClipFinished> finished;
-    EventReader<AnimationEvent> events;
-
-    std::size_t finishes = 0;
-    std::vector<float> times;
-    for (int frame = 0; frame < 3; ++frame)
-    {
-        test.RunFrame(0.75);
-        REQUIRE(Animation::Playback(test.level, skeleton).finished == (frame > 0));
-        finishes += CountFinished(test, finished);
-        for (const float time : ReadTimes(test, events))
-        {
-            times.push_back(time);
-        }
-    }
-
-    INFO("it clamps at 1 and holds, finished, with one ClipFinished; its boundary event is crossed once");
-    const Fenrir::PlaybackInfo info = Animation::Playback(test.level, skeleton);
-    REQUIRE(Near(info.time, 1.0));
-    REQUIRE(Near(TipX(test, skeleton), 1.0f));
-    REQUIRE(finishes == 1);
-    REQUIRE(times == std::vector<float>{0.0f, 0.25f, 0.5f, 0.75f, 1.0f});
-
-    skeleton.GetComponent<Animator>().playing = false;
-    test.RunFrame();
-    INFO("pausing keeps it finished");
-    REQUIRE(Animation::Playback(test.level, skeleton).finished);
-}
-
-TEST_CASE("finished resets on a clip change, a seek and a reversal away from the boundary", "[animation][completion]")
-{
-    AnimationApp test;
-    const Entity skeleton = AnimationTest::Animated(test.level, AnimationTest::AddChain(test),
-                                                    AnimationTest::AddSlide(test), ClipLoop::Once);
-    EventReader<Fenrir::ClipFinished> finished;
-    test.RunFrame(2.0);
-    REQUIRE(CountFinished(test, finished) == 1);
-
-    Animation::Seek(test.level, skeleton, 0.5);
-    test.RunFrame(0.125);
-    INFO("a seek resets it, and reaching the end again finishes again");
-    REQUIRE(!Animation::Playback(test.level, skeleton).finished);
-    test.RunFrame(2.0);
-    REQUIRE(CountFinished(test, finished) == 1);
-
-    skeleton.GetComponent<Animator>().speed = -1.0f;
-    test.RunFrame(0.125);
-    INFO("reversing away from the end resets it; reaching 0 finishes again");
-    REQUIRE(!Animation::Playback(test.level, skeleton).finished);
-    test.RunFrame(2.0);
-    REQUIRE(Animation::Playback(test.level, skeleton).finished);
-    REQUIRE(Near(Animation::Playback(test.level, skeleton).time, 0.0));
-    REQUIRE(CountFinished(test, finished) == 1);
-
-    INFO("speeding up towards the boundary it holds at keeps it finished, with no second event");
-    skeleton.GetComponent<Animator>().speed = -2.0f;
-    test.RunFrame(0.125);
-    REQUIRE(Animation::Playback(test.level, skeleton).finished);
-    REQUIRE(CountFinished(test, finished) == 0);
-
-    skeleton.GetComponent<Animator>().clip = AnimationTest::AddSlide(test);
-    test.RunFrame(0.125);
-    INFO("a clip change resets it");
-    REQUIRE(!Animation::Playback(test.level, skeleton).finished);
 }
 
 TEST_CASE("Playback reads Missing without an Animator, and Unavailable on a skeleton that is not Ready",

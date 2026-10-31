@@ -28,22 +28,10 @@ namespace Fenrir::Detail
     namespace
     {
         constexpr std::uint64_t MaxCount = std::numeric_limits<std::uint64_t>::max();
-        constexpr double Unlimited = std::numeric_limits<double>::infinity();
 
         std::uint64_t SaturatingAdd(std::uint64_t a, std::uint64_t b)
         {
             return a > MaxCount - b ? MaxCount : a + b;
-        }
-
-        std::uint64_t SaturatingMultiply(std::uint64_t a, std::uint64_t b)
-        {
-            return a != 0 && b > MaxCount / a ? MaxCount : a * b;
-        }
-
-        // A whole number of laps as a count, saturating: a large enough step covers more laps than a u64 holds.
-        std::uint64_t LapCount(double laps)
-        {
-            return laps >= 18446744073709551615.0 ? MaxCount : static_cast<std::uint64_t>(laps);
         }
 
         std::string Describe(Entity entity)
@@ -55,145 +43,6 @@ namespace Fenrir::Detail
             return std::format("entity {}", entity.GetId());
         }
 
-        // A time placed into the clip: clamped for Once, wrapped for Loop, 0 for a clip with no duration.
-        double Fit(double time, double duration, ClipLoop loop)
-        {
-            if (duration <= 0.0)
-            {
-                return 0.0;
-            }
-            if (loop == ClipLoop::Once)
-            {
-                return std::clamp(time, 0.0, duration);
-            }
-            const double wrapped = time - std::floor(time / duration) * duration;
-            return wrapped >= duration ? 0.0 : wrapped;
-        }
-
-        // One lap's share of a step's crossings: events [begin, end) of the clip's list, in playback order.
-        struct LapSpan
-        {
-            std::size_t begin = 0;
-            std::size_t end = 0;
-            bool reverse = false;
-            std::uint64_t loop = 0;
-
-            [[nodiscard]] std::size_t Size() const noexcept
-            {
-                return end - begin;
-            }
-
-            // The event index of the span's `n`th crossing, in playback order.
-            [[nodiscard]] std::size_t At(std::size_t n) const noexcept
-            {
-                return reverse ? end - 1 - n : begin + n;
-            }
-        };
-
-        // The events a lap crosses between `from` and `to` (from before to), each end included or not.
-        LapSpan Span(const std::vector<ClipEvent>& events, double from, bool includeFrom, double to, bool includeTo,
-                     bool reverse, std::uint64_t loop)
-        {
-            const auto timeOf = [](const ClipEvent& event) { return static_cast<double>(event.time); };
-            const auto first = includeFrom ? std::ranges::lower_bound(events, from, {}, timeOf)
-                                           : std::ranges::upper_bound(events, from, {}, timeOf);
-            const auto last = includeTo ? std::ranges::upper_bound(events, to, {}, timeOf)
-                                        : std::ranges::lower_bound(events, to, {}, timeOf);
-            const auto begin = static_cast<std::size_t>(first - events.begin());
-            const auto end = std::max(begin, static_cast<std::size_t>(last - events.begin()));
-            return {begin, end, reverse, loop};
-        }
-
-        // A step's crossings, in playback order: the rest of the lap it started in, any number of whole laps, then
-        // the part of the lap it ended in. `from` is where the step started and `length` how far it went (unclamped),
-        // so each crossing's distance along the step, and its fraction of the frame, can be worked out.
-        struct Crossings
-        {
-            LapSpan first;
-            std::uint64_t wholeLaps = 0;
-            std::optional<LapSpan> last;
-            bool reverse = false;
-            double from = 0.0;
-            double duration = 0.0;
-            double length = 0.0;
-        };
-
-        // How far along the step a crossing of `time` lies: in the first span (lap 0), whole lap `lap` (1-based) or
-        // the last span (lap wholeLaps + 1).
-        double Distance(const Crossings& crossings, std::uint64_t lap, float time)
-        {
-            const double t = time;
-            if (lap == 0)
-            {
-                return crossings.reverse ? crossings.from - t : t - crossings.from;
-            }
-            const double toEnd = crossings.reverse ? crossings.from : crossings.duration - crossings.from;
-            const double within = crossings.reverse ? crossings.duration - t : t;
-            return toEnd + static_cast<double>(lap - 1) * crossings.duration + within;
-        }
-
-        // How many of a span's crossings lie before `limit` along the step: they come in playback order, so their
-        // distances only grow.
-        std::size_t CountBelow(const Crossings& crossings, const LapSpan& span, std::uint64_t lap,
-                               const std::vector<ClipEvent>& events, double limit)
-        {
-            std::size_t low = 0;
-            std::size_t high = span.Size();
-            while (low < high)
-            {
-                const std::size_t mid = (low + high) / 2;
-                if (Distance(crossings, lap, events[span.At(mid)].time) < limit)
-                {
-                    low = mid + 1;
-                }
-                else
-                {
-                    high = mid;
-                }
-            }
-            return low;
-        }
-
-        // The crossings before `limit`, counted arithmetically: whole laps times events per lap, plus the partial
-        // laps, never enumerated (ADR-0034, ADR-0036).
-        std::uint64_t CountEligible(const Crossings& crossings, const std::vector<ClipEvent>& events, double limit)
-        {
-            const std::uint64_t perLap = events.size();
-            if (limit == Unlimited)
-            {
-                std::uint64_t total =
-                    SaturatingAdd(crossings.first.Size(), SaturatingMultiply(crossings.wholeLaps, perLap));
-                return SaturatingAdd(total, crossings.last ? crossings.last->Size() : 0);
-            }
-            std::uint64_t total = CountBelow(crossings, crossings.first, 0, events, limit);
-            if (total < crossings.first.Size() || perLap == 0)
-            {
-                return total;
-            }
-            std::uint64_t fullLaps = crossings.wholeLaps;
-            if (crossings.wholeLaps > 0)
-            {
-                // Whole lap k (from 1) lies wholly before the limit when its last crossing does.
-                const double toEnd = crossings.reverse ? crossings.from : crossings.duration - crossings.from;
-                const double lastWithin =
-                    crossings.reverse ? crossings.duration - events.front().time : events.back().time;
-                const double room = (limit - toEnd - lastWithin) / crossings.duration;
-                fullLaps = room <= 0.0 ? 0 : std::min(crossings.wholeLaps, LapCount(std::ceil(room)));
-                total = SaturatingAdd(total, SaturatingMultiply(fullLaps, perLap));
-                if (fullLaps < crossings.wholeLaps)
-                {
-                    const LapSpan whole{0, events.size(), crossings.reverse, 0};
-                    return SaturatingAdd(total, CountBelow(crossings, whole, fullLaps + 1, events, limit));
-                }
-            }
-            if (crossings.last)
-            {
-                total = SaturatingAdd(total,
-                                      CountBelow(crossings, *crossings.last, crossings.wholeLaps + 1, events, limit));
-            }
-            return total;
-        }
-
         void SearchKeys(ClipTrack& track)
         {
             for (KeyCursor& key : track.keys)
@@ -202,147 +51,29 @@ namespace Fenrir::Detail
             }
         }
 
-        // Restarts playback of a newly named clip: at 0, or at its duration in reverse (ADR-0034).
-        void Start(ClipTrack& track, const ClipData& data, std::uint32_t revision, float speed)
+        // Starts a newly named clip's track (ADR-0034): its cursor at the start, its key cursors fresh.
+        void StartTrack(ClipTrack& track, const ClipData& data, std::uint32_t revision, float speed)
         {
-            track.started = true;
-            track.clipRevision = revision;
-            track.duration = data.duration;
-            track.cursor = speed < 0.0f ? track.duration : 0.0;
-            track.completedLoops = 0;
-            track.finished = false;
-            track.atStart = true;
-            track.direction = 0;
+            track.cursor.Start(data, revision, speed);
             track.keys.assign(data.channels.size(), KeyCursor{});
         }
 
-        // A changed clip: the cursor is placed into its duration, crossing nothing (ADR-0034).
-        void Refit(ClipTrack& track, const ClipData& data, std::uint32_t revision, ClipLoop loop)
+        // A changed clip: the cursor is placed into its duration, crossing nothing, and the key cursors start fresh.
+        void RefitTrack(ClipTrack& track, const ClipData& data, std::uint32_t revision, ClipLoop loop)
         {
-            track.clipRevision = revision;
-            track.duration = data.duration;
-            track.cursor =
-                track.finished ? (track.finishedAtEnd ? track.duration : 0.0) : Fit(track.cursor, track.duration, loop);
+            track.cursor.Refit(data, revision, loop);
             track.keys.assign(data.channels.size(), KeyCursor{});
         }
 
-        // Moves the cursor by `delta` and works out what the move crossed; finishing is the caller's.
-        Crossings Move(ClipTrack& track, const ClipData& data, ClipLoop loop, double delta, bool& reached)
+        // Advances a track's cursor; a wrap or a reversal sends its key cursors searching.
+        CursorStep StepTrack(ClipTrack& track, const ClipData& data, ClipLoop loop, bool playing, double delta)
         {
-            const double duration = track.duration;
-            const double from = track.cursor;
-            const double to = from + delta;
-            const bool forward = delta > 0.0;
-            const bool start = track.atStart;
-            const std::uint64_t loops = track.completedLoops;
-            Crossings crossings;
-            crossings.reverse = !forward;
-            crossings.from = from;
-            crossings.duration = duration;
-            crossings.length = std::abs(delta);
-            reached = false;
-            if (loop == ClipLoop::Once)
-            {
-                const double clamped = std::clamp(to, 0.0, duration);
-                reached = forward ? clamped >= duration : clamped <= 0.0;
-                crossings.first = forward ? Span(data.events, from, start, clamped, true, false, loops)
-                                          : Span(data.events, clamped, true, from, start, true, loops);
-                track.cursor = clamped;
-                return crossings;
-            }
-            const double lapsCrossed = std::floor(to / duration);
-            double cursor = to - lapsCrossed * duration;
-            std::uint64_t laps = LapCount(std::abs(lapsCrossed));
-            if (cursor >= duration)
-            {
-                // Rounding can land a wrap on the boundary itself: that is the next lap's start.
-                cursor -= duration;
-                laps = forward ? SaturatingAdd(laps, 1) : laps - 1;
-            }
-            if (laps == 0)
-            {
-                crossings.first = forward ? Span(data.events, from, start, cursor, true, false, loops)
-                                          : Span(data.events, cursor, true, from, start, true, loops);
-            }
-            else if (forward)
-            {
-                crossings.first = Span(data.events, from, start, duration, true, false, loops);
-                crossings.wholeLaps = laps - 1;
-                crossings.last = Span(data.events, 0.0, true, cursor, true, false, SaturatingAdd(loops, laps));
-            }
-            else
-            {
-                crossings.first = Span(data.events, 0.0, true, from, start, true, loops);
-                crossings.wholeLaps = laps - 1;
-                crossings.last = Span(data.events, cursor, true, duration, true, true, SaturatingAdd(loops, laps));
-            }
-            track.cursor = cursor;
-            track.completedLoops = SaturatingAdd(loops, laps);
-            if (laps != 0)
+            CursorStep step = track.cursor.Step(data, loop, playing, delta);
+            if (step.jumped)
             {
                 SearchKeys(track);
             }
-            return crossings;
-        }
-
-        // What one frame's advance of a track did.
-        struct Advance
-        {
-            std::optional<Crossings> crossings;
-            bool finishedNow = false;
-        };
-
-        // Advances a track by `delta` (ADR-0034): the clock, its crossings and whether it became finished.
-        Advance Step(ClipTrack& track, const ClipData& data, ClipLoop loop, bool playing, double delta)
-        {
-            Advance advance;
-            if (loop == ClipLoop::Loop)
-            {
-                track.finished = false;
-            }
-            if (track.duration <= 0.0)
-            {
-                // A clip with no duration holds its first keys: it never wraps, and starting crosses its events once.
-                track.cursor = 0.0;
-                if (playing && track.atStart)
-                {
-                    track.atStart = false;
-                    Crossings crossings;
-                    crossings.first = Span(data.events, 0.0, true, 0.0, true, false, 0);
-                    advance.crossings = crossings;
-                    if (loop == ClipLoop::Once && !track.finished)
-                    {
-                        track.finished = true;
-                        advance.finishedNow = true;
-                    }
-                }
-                return advance;
-            }
-            if (delta == 0.0)
-            {
-                return advance;
-            }
-            const int direction = delta > 0.0 ? 1 : -1;
-            if (track.finished && (direction > 0) != track.finishedAtEnd)
-            {
-                // Playing away from the boundary it finished at.
-                track.finished = false;
-            }
-            if (track.direction != 0 && track.direction != direction)
-            {
-                SearchKeys(track);
-            }
-            track.direction = direction;
-            bool reached = false;
-            advance.crossings = Move(track, data, loop, delta, reached);
-            track.atStart = false;
-            if (reached && !track.finished)
-            {
-                track.finished = true;
-                track.finishedAtEnd = direction > 0;
-                advance.finishedNow = true;
-            }
-            return advance;
+            return step;
         }
 
         float CurveOf(FadeCurve curve, double progress)
@@ -396,38 +127,11 @@ namespace Fenrir::Detail
         // The stream's earliest eligible crossings, at most `budget`, in playback order.
         void Earliest(const Stream& stream, std::size_t streamIndex, std::uint64_t budget, std::vector<Pending>& out)
         {
-            const Crossings& crossings = stream.crossings;
-            const std::vector<ClipEvent>& events = stream.data->events;
-            std::uint64_t taken = 0;
-            const auto take = [&](const LapSpan& span, std::uint64_t lap) {
-                for (std::size_t n = 0; n < span.Size() && taken < budget; ++n)
-                {
-                    const std::size_t index = span.At(n);
-                    const double distance = Distance(crossings, lap, events[index].time);
-                    if (distance >= stream.limit)
-                    {
-                        return false;
-                    }
-                    out.push_back({crossings.length > 0.0 ? distance / crossings.length : 0.0, stream.rank, streamIndex,
-                                   static_cast<std::size_t>(taken), static_cast<std::uint32_t>(index), span.loop});
-                    ++taken;
-                }
-                return taken < budget;
-            };
-            if (!take(crossings.first, 0) || events.empty())
+            std::vector<Crossing> crossed;
+            stream.crossings.Earliest(stream.data->events, stream.limit, budget, crossed);
+            for (std::size_t n = 0; n < crossed.size(); ++n)
             {
-                return;
-            }
-            for (std::uint64_t lap = 0; lap < crossings.wholeLaps; ++lap)
-            {
-                if (!take({0, events.size(), crossings.reverse, SaturatingAdd(crossings.first.loop, lap + 1)}, lap + 1))
-                {
-                    return;
-                }
-            }
-            if (crossings.last)
-            {
-                take(*crossings.last, crossings.wholeLaps + 1);
+                out.push_back({crossed[n].fraction, stream.rank, streamIndex, n, crossed[n].index, crossed[n].loop});
             }
         }
     } // namespace
@@ -513,7 +217,7 @@ namespace Fenrir::Detail
                          const std::vector<float>* mask, LayerPose& pose)
         {
             pose.Reset(skeleton.data->BoneCount());
-            const ClipData* clip = track.started ? store.TryGet(track.clip) : nullptr;
+            const ClipData* clip = track.cursor.Started() ? store.TryGet(track.clip) : nullptr;
             if (clip == nullptr)
             {
                 return;
@@ -528,7 +232,7 @@ namespace Fenrir::Detail
             ReferencePose* reference = spec.mode == LayerMode::Additive
                                            ? &references.Get(key, spec.reference, *clip, binding, *skeleton.data)
                                            : nullptr;
-            const auto time = static_cast<float>(track.cursor);
+            const auto time = static_cast<float>(track.cursor.Time());
             for (std::size_t c = 0; c < clip->channels.size(); ++c)
             {
                 const std::int32_t bone = binding.bones[c];
@@ -813,7 +517,7 @@ namespace Fenrir::Detail
                         playback.snapshot = std::move(snapshot);
                         playback.outgoing.reset();
                     }
-                    else if (!playback.current.clip.IsEmpty() && playback.current.started)
+                    else if (!playback.current.clip.IsEmpty() && playback.current.cursor.Started())
                     {
                         playback.outgoing = playback.current;
                         playback.snapshot.reset();
@@ -874,13 +578,13 @@ namespace Fenrir::Detail
             if (clip != nullptr)
             {
                 revision = store.Revision(spec.clip);
-                if (!playback.current.started)
+                if (!playback.current.cursor.Started())
                 {
-                    Start(playback.current, *clip, revision, spec.speed);
+                    StartTrack(playback.current, *clip, revision, spec.speed);
                 }
-                else if (revision != playback.current.clipRevision)
+                else if (revision != playback.current.cursor.Revision())
                 {
-                    Refit(playback.current, *clip, revision, spec.loop);
+                    RefitTrack(playback.current, *clip, revision, spec.loop);
                 }
                 // A seek moves only the current clip's cursor; an Animator's wins on an entity with both.
                 const bool seeks = spec.base || !spec.entity.HasComponent<Animator>();
@@ -888,11 +592,8 @@ namespace Fenrir::Detail
                 {
                     if (std::isfinite(seek->second.second))
                     {
-                        ClipTrack& track = playback.current;
-                        track.cursor = Fit(seek->second.second, track.duration, spec.loop);
-                        track.finished = false;
-                        track.atStart = false;
-                        SearchKeys(track);
+                        playback.current.cursor.Seek(seek->second.second, spec.loop);
+                        SearchKeys(playback.current);
                     }
                     else
                     {
@@ -905,16 +606,16 @@ namespace Fenrir::Detail
 
             // The clocks: the current clip, the outgoing one on its own cursor, and the fade by unscaled time.
             const double delta = spec.playing ? pass.step * static_cast<double>(spec.speed) : 0.0;
-            Advance current;
+            CursorStep current;
             if (clip != nullptr)
             {
-                current = Step(playback.current, *clip, spec.loop, spec.playing, delta);
+                current = StepTrack(playback.current, *clip, spec.loop, spec.playing, delta);
                 if (current.finishedNow)
                 {
                     pass.app.SendEvent(ClipFinished{skeleton, spec.entity, spec.clip});
                 }
             }
-            Advance outgoing;
+            CursorStep outgoing;
             const ClipData* outgoingClip = nullptr;
             if (playback.outgoing)
             {
@@ -926,12 +627,12 @@ namespace Fenrir::Detail
                 else
                 {
                     const std::uint32_t outRevision = store.Revision(playback.outgoing->clip);
-                    if (outRevision != playback.outgoing->clipRevision)
+                    if (outRevision != playback.outgoing->cursor.Revision())
                     {
-                        Refit(*playback.outgoing, *outgoingClip, outRevision, spec.loop);
+                        RefitTrack(*playback.outgoing, *outgoingClip, outRevision, spec.loop);
                     }
                     // An outgoing Once clip that ends holds there and sends nothing.
-                    outgoing = Step(*playback.outgoing, *outgoingClip, spec.loop, spec.playing, delta);
+                    outgoing = StepTrack(*playback.outgoing, *outgoingClip, spec.loop, spec.playing, delta);
                 }
             }
             double limit = Unlimited;
@@ -943,7 +644,7 @@ namespace Fenrir::Detail
                 if (ends < 1.0 && outgoing.crossings)
                 {
                     // The outgoing clip may fire until the fade completes, at this fraction of the frame.
-                    limit = ends * outgoing.crossings->length;
+                    limit = ends * outgoing.crossings->Length();
                 }
                 playback.fadeProgress = std::min(1.0, from + rate);
             }
@@ -958,8 +659,9 @@ namespace Fenrir::Detail
                 }
                 if (outgoing.crossings && playback.outgoing)
                 {
-                    pass.streams.push_back({spec.entity, rank, playback.outgoing->clip, playback.outgoing->clipRevision,
-                                            outgoingClip, *outgoing.crossings, limit});
+                    pass.streams.push_back({spec.entity, rank, playback.outgoing->clip,
+                                            playback.outgoing->cursor.Revision(), outgoingClip, *outgoing.crossings,
+                                            limit});
                 }
             }
             if (playback.fading && playback.fadeProgress >= 1.0)
@@ -1090,7 +792,7 @@ namespace Fenrir::Detail
         std::uint64_t droppedTotal = 0;
         for (const Stream& stream : pass.streams)
         {
-            const std::uint64_t eligible = CountEligible(stream.crossings, stream.data->events, stream.limit);
+            const std::uint64_t eligible = stream.crossings.CountBefore(stream.data->events, stream.limit);
             const std::uint64_t dropped = eligible > stream.sent ? eligible - stream.sent : 0;
             if (dropped != 0)
             {
