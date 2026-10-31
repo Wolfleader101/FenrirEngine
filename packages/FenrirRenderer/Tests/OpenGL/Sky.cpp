@@ -87,41 +87,6 @@ namespace
         return test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::CubemapSky{cubemap});
     }
 
-    /**
-     * @brief The world direction a panorama's point (u, v) looks along, both in [0, 1]: its centre looks along -Z, u
-     * turns towards +X (to the right, seen from inside), and its top row looks up +Y.
-     */
-    Vec3 PanoramaDirection(float u, float v)
-    {
-        const float azimuth = (u - 0.5f) * 2.0f * std::numbers::pi_v<float>;
-        const float polar = v * std::numbers::pi_v<float>;
-        return {std::sin(polar) * std::sin(azimuth), std::cos(polar), -std::sin(polar) * std::cos(azimuth)};
-    }
-
-    /** @brief A flat RGBA32F panorama of `width` x `width / 2`, linear, each pixel `colour`'s of its direction. */
-    template <typename ColourOf>
-    Fenrir::ImageData Panorama(std::uint32_t width, ColourOf colour)
-    {
-        Fenrir::ImageData image;
-        image.width = width;
-        image.height = width / 2;
-        image.format = Fenrir::ImageFormat::RGBA32F;
-        image.colourSpace = Fenrir::ColourSpace::Linear;
-        std::vector<float> texels;
-        for (std::uint32_t row = 0; row < image.height; ++row)
-        {
-            for (std::uint32_t column = 0; column < image.width; ++column)
-            {
-                const Vec3 rgb = colour(PanoramaDirection((static_cast<float>(column) + 0.5f) / image.width,
-                                                          (static_cast<float>(row) + 0.5f) / image.height));
-                texels.insert(texels.end(), {rgb.r, rgb.g, rgb.b, 1.0f});
-            }
-        }
-        const auto bytes = std::as_bytes(std::span(texels));
-        image.pixels.assign(bytes.begin(), bytes.end());
-        return image;
-    }
-
     /** @brief FaceColours' colour of the cube face `direction` points at: its largest component's axis and sign. */
     Vec3 FaceColourOf(Vec3 direction)
     {
@@ -135,7 +100,7 @@ namespace
     Fenrir::Sky& AddPanoramaSky(GlScene& test, float intensity = 1.0f, float rotation = 0.0f)
     {
         const auto panorama =
-            test.assets.Store().Add<Fenrir::Image>(Panorama(64, FaceColourOf), Fenrir::AssetOwner::App());
+            test.assets.Store().Add<Fenrir::Image>(RendererTest::Panorama(64, FaceColourOf), Fenrir::AssetOwner::App());
         return test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::PanoramaSky{panorama, intensity, rotation});
     }
 
@@ -230,42 +195,50 @@ TEST_CASE("A PanoramaSky shows the part of its panorama the camera looks at", "[
         INFO("turned by yaw " << turn[0] << " and pitch " << turn[1] << ", the centre reads face " << face
                               << "'s colour, which the panorama holds in that direction");
         REQUIRE(GlProbe::Near(image.At(Centre, Centre), PixelOf(FaceColours.at(face))));
+        INFO("no GL error or other error was logged");
         REQUIRE(test.messages->errors.empty());
     }
 }
 
-TEST_CASE("A sky's rotation turns it about +Y and its intensity scales it", "[renderer][gl][sky][panorama]")
+TEST_CASE("A cubemap or panorama sky's rotation turns it about +Y", "[renderer][gl][sky][panorama]")
 {
     const float quarter = std::numbers::pi_v<float> / 2.0f;
-    SECTION("a panorama turned a quarter turn shows +X ahead, and -Z to the left")
-    {
-        for (const auto& [yaw, face] : {std::pair{0.0f, std::size_t{0}}, std::pair{90.0f, std::size_t{5}}})
-        {
-            GlScene test;
-            test.RequireOpenGL();
-            AddTurnedCamera(test, yaw, 0.0f);
-            AddPanoramaSky(test, 1.0f, quarter);
-            INFO("looking along yaw " << yaw);
-            REQUIRE(GlProbe::Near(test.Frame().At(Centre, Centre), PixelOf(FaceColours.at(face))));
-        }
-    }
-    SECTION("a cubemap turns the same way")
+    // A quarter turn brings what was ahead (-Z) round to the left (-X), and what was on the right (+X) ahead.
+    for (const auto& [yaw, face] : {std::pair{0.0f, std::size_t{0}}, std::pair{90.0f, std::size_t{5}}})
     {
         GlScene test;
         test.RequireOpenGL();
-        test.AddCamera();
-        AddCubemapSky(test).As<Fenrir::CubemapSky>().rotation = quarter;
-        REQUIRE(GlProbe::Near(test.Frame().At(Centre, Centre), PixelOf(FaceColours[0])));
+        AddTurnedCamera(test, yaw, 0.0f);
+        AddPanoramaSky(test, 1.0f, quarter);
+        const GlProbe::Image image = test.Frame();
+        INFO("a panorama turned a quarter turn, looking along yaw " << yaw << ", should show face " << face);
+        REQUIRE(GlProbe::Near(image.At(Centre, Centre), PixelOf(FaceColours.at(face))));
     }
-    SECTION("half the intensity draws half as bright")
-    {
-        GlScene test;
-        test.RequireOpenGL();
-        test.AddCamera();
-        AddPanoramaSky(test, 0.5f);
-        // -Z's yellow, halved.
-        REQUIRE(GlProbe::Near(test.Frame().At(Centre, Centre), {0.5f, 0.5f, 0.0f, 1.0f}));
-    }
+
+    GlScene test;
+    test.RequireOpenGL();
+    test.AddCamera();
+    AddCubemapSky(test).As<Fenrir::CubemapSky>().rotation = quarter;
+    const GlProbe::Image image = test.Frame();
+    INFO("a cubemap turned a quarter turn should show its +X face ahead");
+    REQUIRE(GlProbe::Near(image.At(Centre, Centre), PixelOf(FaceColours[0])));
+    INFO("no GL error or other error was logged");
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A sky's intensity scales what it draws", "[renderer][gl][sky][panorama]")
+{
+    GlScene test;
+    test.RequireOpenGL();
+    test.AddCamera();
+    AddPanoramaSky(test, 0.5f);
+
+    const GlProbe::Image image = test.Frame();
+
+    INFO("at half intensity the -Z face's yellow should read half as bright");
+    REQUIRE(GlProbe::Near(image.At(Centre, Centre), {0.5f, 0.5f, 0.0f, 1.0f}));
+    INFO("no GL error or other error was logged");
+    REQUIRE(test.messages->errors.empty());
 }
 
 TEST_CASE("A panorama sky behind a lit sphere matches its golden image", "[renderer][gl][golden][panorama]")
@@ -292,7 +265,7 @@ TEST_CASE("A panorama sky behind a lit sphere matches its golden image", "[rende
         }
         return glm::mix(Vec3(1.5f, 1.3f, 1.0f), Vec3(0.15f, 0.35f, 0.9f), std::sqrt(direction.y));
     };
-    const auto panorama = store.Add<Fenrir::Image>(Panorama(256, sky), Fenrir::AssetOwner::App());
+    const auto panorama = store.Add<Fenrir::Image>(RendererTest::Panorama(256, sky), Fenrir::AssetOwner::App());
     test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::PanoramaSky{panorama});
 
     // The light travels down, back and to the right, from over the camera's left shoulder, not from the panorama's sun

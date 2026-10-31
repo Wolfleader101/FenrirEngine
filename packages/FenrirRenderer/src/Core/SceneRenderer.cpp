@@ -1068,6 +1068,7 @@ namespace Fenrir::Render
                             encoder.SetPipeline(m_panoramaPipeline);
                             encoder.SetBindingGroup(MaterialSet, group);
                             encoder.Draw({.vertexCount = 3});
+                            // Recorded in this frame's graph, which runs before any Prepare or Release can come.
                             m_panoramas.at(key).converted = true;
                         });
                 }
@@ -1081,8 +1082,13 @@ namespace Fenrir::Render
         {
             return cubemap->second.group;
         }
+        // A panorama whose passes cannot run (builtin:panorama did not load) has nothing in its cube texture.
         const auto panorama = m_panoramas.find(key);
-        return panorama == m_panoramas.end() ? BindingGroupHandle{} : panorama->second.group;
+        if (panorama == m_panoramas.end() || (!panorama->second.converted && m_panoramaPipeline.IsEmpty()))
+        {
+            return {};
+        }
+        return panorama->second.group;
     }
 
     std::vector<AssetKey> SceneRenderer::CubemapKeys() const

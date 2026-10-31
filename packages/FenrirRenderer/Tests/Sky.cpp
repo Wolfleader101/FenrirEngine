@@ -213,17 +213,18 @@ TEST_CASE("A Sky cubemap replaced with new faces is uploaded again", "[renderer]
 
 namespace
 {
-    /** @brief A flat panorama of `width` x `height` RGBA32F pixels, linear, each channel `value`. */
-    Fenrir::ImageData Panorama(std::uint32_t width, std::uint32_t height, float value = 2.0f)
+    /** @brief A flat panorama `width` pixels wide and half as high, RGBA32F, one HDR grey. */
+    Fenrir::ImageData Panorama(std::uint32_t width)
     {
-        Fenrir::ImageData image;
-        image.width = width;
-        image.height = height;
-        image.format = Fenrir::ImageFormat::RGBA32F;
-        image.colourSpace = Fenrir::ColourSpace::Linear;
-        const std::vector<float> texels(std::size_t{width} * height * 4, value);
-        const auto bytes = std::as_bytes(std::span(texels));
-        image.pixels.assign(bytes.begin(), bytes.end());
+        return RendererTest::Panorama(width, [](Fenrir::Math::Vec3) { return Fenrir::Math::Vec3(2.0f); });
+    }
+
+    /** @brief Panorama(width) with every row repeated, so it is square: not a panorama. */
+    Fenrir::ImageData Square(std::uint32_t width)
+    {
+        Fenrir::ImageData image = Panorama(width);
+        image.height = width;
+        image.pixels.insert(image.pixels.end(), image.pixels.begin(), image.pixels.end());
         return image;
     }
 
@@ -246,12 +247,12 @@ namespace
     }
 } // namespace
 
-TEST_CASE("A PanoramaSky is drawn from a cube texture its passes make once per revision", "[renderer][sky][panorama]")
+TEST_CASE("A PanoramaSky's passes draw every face and mip of a cube texture that Background then samples",
+          "[renderer][sky][panorama]")
 {
     RendererTestApp test;
     test.AddCamera();
-    const auto panorama = test.Image(Panorama(8, 4));
-    Fenrir::Sky& sky = test.ActiveScene().AddResource<Fenrir::Sky>(Fenrir::PanoramaSky{panorama});
+    test.ActiveScene().AddResource<Fenrir::Sky>(Fenrir::PanoramaSky{test.Image(Panorama(8))});
 
     test.Frame();
     const std::vector<PassRecord> first = Conversions(test);
@@ -290,6 +291,22 @@ TEST_CASE("A PanoramaSky is drawn from a cube texture its passes make once per r
     const Fenrir::Graphics::TextureHandle source =
         RendererProbe::Entries(test.Device(), first[0].groups.at(2)).at(1).texture;
     REQUIRE(RendererProbe::Desc(test.Device(), source).width == 8);
+    INFO("nothing was logged");
+    REQUIRE(test.messages->errors.empty());
+    REQUIRE(test.messages->warnings.empty());
+}
+
+TEST_CASE("A PanoramaSky is converted once per image revision, and its image's texture freed after",
+          "[renderer][sky][panorama]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    const auto panorama = test.Image(Panorama(8));
+    Fenrir::Sky& sky = test.ActiveScene().AddResource<Fenrir::Sky>(Fenrir::PanoramaSky{panorama});
+    test.Frame();
+    const Fenrir::Graphics::TextureHandle cube = SkyTexture(test, Backgrounds(test).at(0));
+    const Fenrir::Graphics::TextureHandle source =
+        RendererProbe::Entries(test.Device(), Conversions(test).at(0).groups.at(2)).at(1).texture;
 
     test.Frame();
     INFO("the next frame draws the same cube texture without converting again, and frees the panorama's texture");
@@ -297,7 +314,7 @@ TEST_CASE("A PanoramaSky is drawn from a cube texture its passes make once per r
     REQUIRE(SkyTexture(test, Backgrounds(test).at(0)) == cube);
     REQUIRE_FALSE(test.Device().IsLive(source));
 
-    REQUIRE(test.Store().Replace(panorama, Panorama(16, 8)));
+    REQUIRE(test.Store().Replace(panorama, Panorama(16)));
     test.Frame();
     INFO("a new revision of the image converts again, into a cube texture of its own size");
     REQUIRE(Conversions(test).size() == 18);
@@ -305,12 +322,13 @@ TEST_CASE("A PanoramaSky is drawn from a cube texture its passes make once per r
     REQUIRE(replaced != cube);
     REQUIRE(RendererProbe::Desc(test.Device(), replaced).width == 4);
 
-    sky = Fenrir::PanoramaSky{test.Image(Panorama(4, 2))};
+    sky = Fenrir::PanoramaSky{test.Image(Panorama(4))};
     test.Frame();
-    INFO("another image converts too");
+    INFO("another image converts too, once");
     REQUIRE(Conversions(test).size() == 6);
     test.Frame();
     REQUIRE(Conversions(test).empty());
+    INFO("nothing was logged, and no command named a freed handle");
     REQUIRE(test.messages->errors.empty());
     REQUIRE(test.messages->warnings.empty());
     REQUIRE(RendererProbe::StaleUses(test.Device()).empty());
@@ -321,7 +339,7 @@ TEST_CASE("A panorama that is not flat and twice as wide as high draws dark grey
 {
     RendererTestApp test;
     test.AddCamera();
-    Fenrir::Sky& sky = test.ActiveScene().AddResource<Fenrir::Sky>(Fenrir::PanoramaSky{test.Image(Panorama(4, 4))});
+    Fenrir::Sky& sky = test.ActiveScene().AddResource<Fenrir::Sky>(Fenrir::PanoramaSky{test.Image(Square(4))});
 
     test.Frame();
     test.Frame();
@@ -362,12 +380,12 @@ TEST_CASE("A cubemap or panorama sky's intensity and rotation reach the frame bl
     sky.As<Fenrir::CubemapSky>().intensity = 3.0f;
     sky.As<Fenrir::CubemapSky>().rotation = quarter;
     test.Frame();
-    INFO("a CubemapSky's");
+    INFO("a CubemapSky's intensity 3 and quarter turn reach the frame block");
     REQUIRE(Near(FrameSky(test, Backgrounds(test).at(0)), 3.0f, std::cos(quarter), 1.0f));
 
-    sky = Fenrir::PanoramaSky{test.Image(Panorama(4, 2)), 0.5f, std::numbers::pi_v<float>};
+    sky = Fenrir::PanoramaSky{test.Image(Panorama(4)), 0.5f, std::numbers::pi_v<float>};
     test.Frame();
-    INFO("a PanoramaSky's");
+    INFO("a PanoramaSky's intensity 0.5 and half turn reach the frame block");
     REQUIRE(Near(FrameSky(test, Backgrounds(test).at(0)), 0.5f, -1.0f, std::sin(std::numbers::pi_v<float>)));
     REQUIRE(test.messages->errors.empty());
 }

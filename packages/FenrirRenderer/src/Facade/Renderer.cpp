@@ -264,7 +264,8 @@ namespace Fenrir
         struct SceneSky
         {
             Colour colour = ColourSky{}.colour;
-            AssetKey cubemap;
+            /** @brief The cubemap or panorama image; empty for a colour. */
+            AssetKey image;
             float intensity = 1.0f;
             float rotation = 0.0f;
         };
@@ -272,13 +273,14 @@ namespace Fenrir
         /** @brief Why a Sky's image cannot be drawn, for its warning; empty if it can. */
         std::string SkyImageProblem(AssetHandle<Image> handle, const ImageData* data, SkyType type)
         {
+            const std::string_view kind = type == SkyType::Cubemap ? "cubemap" : "panorama";
             if (handle.IsEmpty())
             {
-                return type == SkyType::Cubemap ? "no cubemap" : "no panorama";
+                return std::format("no {}", kind);
             }
             if (data == nullptr)
             {
-                return std::format("a stale {} ({})", type == SkyType::Cubemap ? "cubemap" : "panorama", handle.index);
+                return std::format("a stale {} ({})", kind, handle.index);
             }
             if (type == SkyType::Cubemap && (data->shape != ImageShape::Cubemap || data->pixels.empty()))
             {
@@ -312,6 +314,8 @@ namespace Fenrir
             }
             const bool cubemap = sky->Is<CubemapSky>();
             const AssetHandle<Image> handle = cubemap ? sky->As<CubemapSky>().cubemap : sky->As<PanoramaSky>().image;
+            const float intensity = cubemap ? sky->As<CubemapSky>().intensity : sky->As<PanoramaSky>().intensity;
+            const float rotation = cubemap ? sky->As<CubemapSky>().rotation : sky->As<PanoramaSky>().rotation;
             const ImageData* data = store.TryGet(handle);
             if (const std::string problem = SkyImageProblem(handle, data, sky->Type()); !problem.empty())
             {
@@ -323,21 +327,15 @@ namespace Fenrir
                 return {};
             }
             const std::uint32_t revision = store.Revision(handle);
-            if (cubemap)
+            if (cubemap && !state.scene->IsCubemapCurrent(KeyOf(handle), revision))
             {
-                if (!state.scene->IsCubemapCurrent(KeyOf(handle), revision))
-                {
-                    state.scene->PrepareCubemap(KeyOf(handle), revision, *data);
-                }
-                const CubemapSky& kind = sky->As<CubemapSky>();
-                return {ColourSky{}.colour, KeyOf(handle), kind.intensity, kind.rotation};
+                state.scene->PrepareCubemap(KeyOf(handle), revision, *data);
             }
-            if (!state.scene->IsPanoramaCurrent(KeyOf(handle), revision))
+            else if (!cubemap && !state.scene->IsPanoramaCurrent(KeyOf(handle), revision))
             {
                 state.scene->PreparePanorama(KeyOf(handle), revision, *data);
             }
-            const PanoramaSky& kind = sky->As<PanoramaSky>();
-            return {ColourSky{}.colour, KeyOf(handle), kind.intensity, kind.rotation};
+            return {ColourSky{}.colour, KeyOf(handle), intensity, rotation};
         }
 
         /** @brief The active scene's light: the first DirectionalLight, warned once if there are more, and ambient. */
@@ -587,7 +585,7 @@ namespace Fenrir
                 else
                 {
                     view.background = sky.colour;
-                    view.sky = sky.cubemap;
+                    view.sky = sky.image;
                 }
                 view.target = KeyOf(resolved.image);
                 view.viewport = resolved.pixels;
