@@ -10,6 +10,7 @@
 #include "FenrirAnimation/Animation.hpp"
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirECS/Entity.hpp"
+#include "PlaybackCursor.hpp"
 #include "Sampling.hpp"
 
 namespace Fenrir
@@ -21,25 +22,14 @@ namespace Fenrir
     {
         struct AnimationState;
 
-        /** @brief One clip's playback: its cursor and what ADR-0034 keeps beside it. A layer has one, or two in a fade.
+        /**
+         * @brief One clip's playback: the clip, its playback cursor, and its sampler's key cursors, which search again
+         * whenever the playback cursor jumps. A layer has one, or two in a fade.
          */
         struct ClipTrack
         {
-            // The clip this track plays; started once its data was first seen.
             AssetHandle<Clip> clip;
-            bool started = false;
-            std::uint32_t clipRevision = 0;
-            double duration = 0.0;
-            // The playback cursor, in seconds.
-            double cursor = 0.0;
-            std::uint64_t completedLoops = 0;
-            bool finished = false;
-            // Which boundary a finished clip holds at: its end (forward) or 0 (reverse).
-            bool finishedAtEnd = true;
-            // Whether playback has not moved since it started, so its first move crosses the starting boundary too.
-            bool atStart = true;
-            // The sign of the last move, so a reversal sends the key cursors searching.
-            int direction = 0;
+            PlaybackCursor cursor;
             std::vector<KeyCursor> keys;
         };
 

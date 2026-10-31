@@ -127,9 +127,9 @@ namespace Fenrir
         const Detail::LayerPlayback* playback = base ? animators->FindBase(entity) : animators->FindLayer(entity);
         if (playback != nullptr && playback->skeleton == skeleton)
         {
-            info.time = playback->current.cursor;
-            info.completedLoops = playback->current.completedLoops;
-            info.finished = playback->current.finished;
+            info.time = playback->current.cursor.Time();
+            info.completedLoops = playback->current.cursor.CompletedLoops();
+            info.finished = playback->current.cursor.Finished();
             info.fading = playback->fading;
             info.fadeProgress = playback->fading ? static_cast<float>(playback->fadeProgress) : 0.0f;
             if (pose == PoseState::Ready && playback->unavailable)

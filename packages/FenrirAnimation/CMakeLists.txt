@@ -13,6 +13,8 @@ add_library(FenrirAnimation STATIC
     src/Animators.cpp
     src/Bindings.hpp
     src/Bindings.cpp
+    src/PlaybackCursor.hpp
+    src/PlaybackCursor.cpp
     src/Blending.hpp
     src/Blending.cpp
     src/Sampling.hpp
