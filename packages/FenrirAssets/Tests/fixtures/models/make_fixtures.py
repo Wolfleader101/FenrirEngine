@@ -1,9 +1,9 @@
 """Writes FenrirAssets's model fixtures: one small scene as glTF, GLB, FBX (ASCII 7.4) and OBJ, plus the skinned,
 missing-texture, colour-space-conflict and corrupt glTF files, the skinned glTF fixtures of ADR-0031's list
 (armatures, shared-skins, incompatible-skin, owners and cubic-clip) and its FBX ones (armatures, shared-skins,
-incompatible-skin, units, baked-clip and clips-only .fbx); each function's docstring describes its file. Run by hand
-(`python make_fixtures.py`) from any directory; the files are written beside this script and checked in. The build never
-runs it.
+incompatible-skin, units, baked-clip and clips-only .fbx), and the tangents .gltf and .fbx; each function's docstring
+describes its file. Run by hand (`python make_fixtures.py`) from any directory; the files are written beside this script
+and checked in. The build never runs it.
 
 Everything here is written from scratch by this script, so the fixtures carry no third-party licence.
 
@@ -198,7 +198,7 @@ def fbx_model(uid, name, kind, translation=None, rotation=None, scale=None):
             '\t\tShading: T\n\t\tCulling: "CullingOff"\n\t}\n' % (uid, name, kind, "\n".join(props)))
 
 
-def fbx_geometry(uid, name, positions, polygon, normals=None, uvs=None):
+def fbx_geometry(uid, name, positions, polygon, normals=None, uvs=None, tangents=None, binormals=None):
     # A polygon's last index is written as -(index + 1).
     indices = list(polygon)
     flat = [c for p in positions for c in p]
@@ -214,6 +214,15 @@ def fbx_geometry(uid, name, positions, polygon, normals=None, uvs=None):
         out += fbx_array("Normals", [c for i in corners for c in normals[i]]).replace("\t\t", "\t\t\t", 1)
         out += "\t\t}\n"
         layers.append("LayerElementNormal")
+    for element, array, values in (("LayerElementTangent", "Tangents", tangents),
+                                   ("LayerElementBinormal", "Binormals", binormals)):
+        if values:
+            out += ('\t\t%s: 0 {\n\t\t\tVersion: 101\n\t\t\tName: ""\n'
+                    '\t\t\tMappingInformationType: "ByPolygonVertex"\n\t\t\tReferenceInformationType: "Direct"\n'
+                    % element)
+            out += fbx_array(array, [c for i in corners for c in values[i]]).replace("\t\t", "\t\t\t", 1)
+            out += "\t\t}\n"
+            layers.append(element)
     if uvs:
         out += ('\t\tLayerElementUV: 0 {\n\t\t\tVersion: 101\n\t\t\tName: "UVMap"\n'
                 '\t\t\tMappingInformationType: "ByPolygonVertex"\n\t\t\tReferenceInformationType: "IndexToDirect"\n')
@@ -734,13 +743,14 @@ class Fbx:
         parent = self.parents[uid]
         return self.locals[uid] if parent is None else mul(self.world(parent), self.locals[uid])
 
-    def mesh(self, name, parent, positions, triangles=None, t=None):
-        """A mesh model with its geometry, triangles over `positions` (one triangle when none are given)."""
+    def mesh(self, name, parent, positions, triangles=None, t=None, **streams):
+        """A mesh model with its geometry, triangles over `positions` (one triangle when none are given), and
+        fbx_geometry's per-vertex `streams` (normals, uvs, tangents, binormals)."""
         model = self.model(name, "Mesh", parent, t=t)
         triangles = triangles or [(0, 1, 2)]
         polygon = [i for a, b, c in triangles for i in (a, b, -c - 1)]
         geometry = self.uid()
-        self.objects.append(fbx_geometry(geometry, name, positions, polygon))
+        self.objects.append(fbx_geometry(geometry, name, positions, polygon, **streams))
         self.connect(geometry, model)
         return model, geometry
 
@@ -975,6 +985,47 @@ def write_fbx_clips_only():
     fbx.write("clips-only.fbx")
 
 
+# The tangents fixtures' quads: the panel's, U mirrored for "Mirrored" (whose tangent then runs along -X).
+MIRRORED_UVS = [(1 - u, v) for u, v in PANEL_UVS]
+PANEL_TRIANGLES = [(0, 1, 2), (0, 2, 3)]
+
+
+def write_tangents():
+    """Three quads in the XY plane facing +Z, as the scene's Panel, side by side, for the tangent stream (ADR-0048).
+
+    Plain     T(-3, 0, 0), the panel's UVs, tangent (1, 0, 0) and handedness +1: the bitangent N x T is +Y, up the image
+    Mirrored  T(0, 0, 0), U mirrored, tangent (-1, 0, 0) and handedness -1: the bitangent is still +Y
+    Bare      T(3, 0, 0), normals and UVs but no tangents
+    tangents.gltf writes glTF's TANGENT (xyz, the handedness in w); tangents.fbx writes FBX's tangent and binormal
+    layers, the binormal +Y for both, so the importer finds each handedness from them.
+    """
+    doc, buf = new_document()
+    rig = Rig(doc)
+    quads = (("Plain", -3, PANEL_UVS, (1, 0, 0, 1)), ("Mirrored", 0, MIRRORED_UVS, (-1, 0, 0, -1)),
+             ("Bare", 3, PANEL_UVS, None))
+    for name, x, uvs, tangent in quads:
+        attributes = {"POSITION": buf.floats(PANEL_POSITIONS, "VEC3"), "NORMAL": buf.floats(PANEL_NORMALS, "VEC3"),
+                      "TEXCOORD_0": buf.floats(uvs, "VEC2")}
+        if tangent:
+            attributes["TANGENT"] = buf.floats([tangent] * 4, "VEC4")
+        doc.setdefault("meshes", []).append(
+            {"name": name, "primitives": [{"attributes": attributes, "indices": buf.indices(PANEL_INDICES)}]})
+        rig.node(name, t=(x, 0, 0), mesh=len(doc["meshes"]) - 1)
+    rig.finish()
+    doc["scenes"] = [{"nodes": list(range(len(doc["nodes"])))}]
+    doc["scene"] = 0
+    write_gltf("tangents.gltf", doc, buf)
+
+    fbx = Fbx()
+    for name, x, uvs, tangent in quads:
+        streams = {"normals": PANEL_NORMALS, "uvs": uvs}
+        if tangent:
+            streams["tangents"] = [tangent[:3]] * 4
+            streams["binormals"] = [(0, 1, 0)] * 4
+        fbx.mesh(name, None, PANEL_POSITIONS, PANEL_TRIANGLES, t=(x, 0, 0), **streams)
+    fbx.write("tangents.fbx")
+
+
 def main():
     write("checker.png", CHECKER)
     write("normal.png", NORMAL)
@@ -998,6 +1049,7 @@ def main():
     write_fbx_clips_only()
     write_missing_texture()
     write_conflict()
+    write_tangents()
     # Not glTF at all: the importer's failure.
     write("corrupt.gltf", "{ this is not JSON\n")
 

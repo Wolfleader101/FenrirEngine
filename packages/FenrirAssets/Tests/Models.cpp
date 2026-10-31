@@ -244,6 +244,45 @@ TEST_CASE("Each format of the scene gives the same meshes", "[assets][models]")
     }
 }
 
+TEST_CASE("A model's tangents and their handedness are kept, and a mesh without them has no tangent stream",
+          "[assets][models]")
+{
+    // fixtures/models/make_fixtures.py's write_tangents: glTF writes the handedness in w, FBX a binormal it comes from.
+    const char* file = GENERATE("tangents.gltf", "tangents.fbx");
+    CAPTURE(file);
+    AssetsApp test;
+    const Fenrir::Model& model = LoadScene(test, file);
+    const auto meshOf = [&](const char* name) -> const Fenrir::MeshData& {
+        const Fenrir::ModelNode& node = FindNode(model, name);
+        REQUIRE(node.meshes.size() == 1);
+        const Fenrir::MeshData* mesh = test.store.TryGet(node.meshes[0].mesh);
+        REQUIRE(mesh != nullptr);
+        return *mesh;
+    };
+
+    const Fenrir::MeshData& plain = meshOf("Plain");
+    INFO("Plain's tangents run along +X with handedness +1, one per vertex");
+    REQUIRE(plain.tangents.size() == plain.positions.size());
+    for (const Fenrir::Math::Vec4& tangent : plain.tangents)
+    {
+        REQUIRE(Near(tangent, {1.0f, 0.0f, 0.0f, 1.0f}));
+    }
+
+    const Fenrir::MeshData& mirrored = meshOf("Mirrored");
+    INFO("Mirrored's U runs the other way: its tangents run along -X with handedness -1");
+    REQUIRE(mirrored.tangents.size() == mirrored.positions.size());
+    for (const Fenrir::Math::Vec4& tangent : mirrored.tangents)
+    {
+        REQUIRE(Near(tangent, {-1.0f, 0.0f, 0.0f, -1.0f}));
+    }
+
+    INFO("Bare has normals and UVs but no tangents in its file, and none are generated");
+    const Fenrir::MeshData& bare = meshOf("Bare");
+    REQUIRE(bare.normals.size() == bare.positions.size());
+    REQUIRE(bare.uv0.size() == bare.positions.size());
+    REQUIRE(bare.tangents.empty());
+}
+
 TEST_CASE("Each format of the scene maps its materials onto the built-ins", "[assets][models][materials]")
 {
     const Format format = GENERATE(gltf, glb, fbx, obj);

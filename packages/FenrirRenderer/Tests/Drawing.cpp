@@ -200,6 +200,23 @@ TEST_CASE("A vertex stream the shader reads but the mesh lacks binds a constant 
     REQUIRE(buffers.size() == 2);
 }
 
+TEST_CASE("A mesh without a tangent stream is drawn by builtin:lit unwarned, which then keeps the derivative frame",
+          "[renderer][facade]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    // Every stream builtin:lit reads but tangents.
+    Fenrir::MeshData mesh = RendererTest::TexturedQuad();
+    mesh.colours.assign(mesh.positions.size(), Fenrir::Colour::White);
+    test.AddMeshRenderer(test.Mesh(std::move(mesh)), test.Material("builtin:lit"));
+
+    test.Frame();
+
+    INFO("it is drawn, and nothing is logged about its tangents");
+    REQUIRE(test.Draws().size() == 1);
+    REQUIRE(RendererTest::CountContaining(test.messages->warnings, "tangents") == 0);
+}
+
 TEST_CASE("A shader whose frame set disagrees with the renderer's fails its pipeline in debug builds",
           "[renderer][facade]")
 {
