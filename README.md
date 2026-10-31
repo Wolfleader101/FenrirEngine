@@ -76,6 +76,11 @@ cmake --build out/build/clang-x64-debug
 ctest --test-dir out/build/clang-x64-debug
 ```
 
+The MSVC presets need Visual Studio's build environment: run their commands through `scripts\msvc.ps1` from PowerShell
+or `scripts\msvc.cmd` from cmd, as in `scripts\msvc.ps1 cmake --preset msvc-x64-debug`. In a deep path (a git worktree),
+MSVC passes Windows' 260-character limit: `scripts\short-path.ps1` prints a short junction to the checkout to configure
+and build through, as its header shows.
+
 CI (`.github/workflows/build-and-test.yml`) runs these steps with the demo apps on pull requests only, for `msvc-x64-release`; changes to docs and tickets alone build nothing. The `linux-debug` job is commented out in the workflow to spare the Actions budget; when on, it also runs the GL tests (CTest label `gl`: the renderer's GL tests and the demo apps' OpenGL smoke runs) on Mesa's llvmpipe, through SDL's offscreen video driver over EGL; the Windows jobs run the null tests only, the demo apps' null smoke runs among them.
 
 Before opening a PR, build and test `clang-x64-debug` (its CTest run includes each demo app's smoke runs, see
