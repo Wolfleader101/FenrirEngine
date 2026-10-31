@@ -1,7 +1,7 @@
 # From what description is a ragdoll built, and with which bodies, joints, motors and strengths?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 52
 
 ## Question
