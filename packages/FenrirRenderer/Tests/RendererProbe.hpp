@@ -234,24 +234,29 @@ namespace Fenrir
 
         /**
          * @brief The SceneColor texture of `width` by `height` pixels the last frame drew into, on any backend, for a
-         * frame with several views; any size when both are 0. Empty if there is none.
+         * frame with several views; the largest when both are 0, since a view's bloom levels (RGBA16F too) are at most
+         * half its size. Empty if there is none.
          */
         [[nodiscard]] static Graphics::TextureHandle SceneColour(const Renderer& renderer, std::uint32_t width,
                                                                  std::uint32_t height)
         {
             const Render::RendererCore& core = Core(renderer);
+            Graphics::TextureHandle found;
+            std::uint64_t foundArea = 0;
             // The set the last frame took from.
             for (const auto& entry : core.m_transients.m_sets.at(core.m_transients.m_current))
             {
                 const auto* desc = std::get_if<Graphics::TextureDesc>(&entry.desc);
+                const std::uint64_t area = desc == nullptr ? 0 : std::uint64_t{desc->width} * desc->height;
                 if (desc != nullptr && desc->format == Graphics::TextureFormat::Rgba16Float &&
-                    (width == 0 || (desc->width == width && desc->height == height)) &&
+                    (width == 0 || (desc->width == width && desc->height == height)) && area > foundArea &&
                     core.m_device->IsLive(entry.texture))
                 {
-                    return entry.texture;
+                    found = entry.texture;
+                    foundArea = area;
                 }
             }
-            return {};
+            return found;
         }
     };
 } // namespace Fenrir
