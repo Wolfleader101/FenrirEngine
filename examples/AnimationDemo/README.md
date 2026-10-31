@@ -14,7 +14,7 @@ Its models (`assets/ATTRIBUTION.md`): Quaternius's CC0 human from ActionForge's 
 whose clips are files of their own on the same skeleton (they bind to it by bone name); Khronos's `Fox`; Khronos's
 `CesiumMan`, untextured; Kenney's CC0 animated character, the FBX model (ticket 06), its run clip a file of its own
 and its skin painted on in code; and two procedural models, `mannequin.gltf` (a blocky humanoid with a short Flutter clip, used
-for the event budget and scene 3) and `critter.gltf` (a four-legged rig, scene 3's wrong-skeleton case).
+for the event budget and scene 3) and `critter.gltf` (a four-legged skinned model, scene 3's wrong-skeleton case).
 
 ## Scenes
 

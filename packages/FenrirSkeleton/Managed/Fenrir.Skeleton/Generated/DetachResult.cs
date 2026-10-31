@@ -6,6 +6,7 @@ namespace Fenrir.Skeleton;
 /// <summary>What `Skeletons::Detach` did. Every result but `Detached` changed nothing.</summary>
 public enum DetachResult : byte
 {
+    /// <summary>The `BoneAttachment` was removed, as the `DetachMode` asked.</summary>
     Detached = 0,
     /// <summary>The entity is dead or has no `BoneAttachment`.</summary>
     NotAttached = 1,

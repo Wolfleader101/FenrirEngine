@@ -11,6 +11,7 @@ namespace Fenrir.Animation;
 /// </summary>
 public readonly partial struct ClipEventId
 {
+    /// <summary>The hash; 0 is no name's id in particular, only the default.</summary>
     public readonly uint Value = 0;
 
     public ClipEventId()

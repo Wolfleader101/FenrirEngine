@@ -21,8 +21,9 @@ namespace AnimationDemo
     [[nodiscard]] FenrirDemo::DemoScene Playback();
 
     /**
-     * @brief Skeleton: the walking mannequin and the critter with their bones through FenrirDebugDraw (lines to their
-     * parents, axes, names as world text); keys toggle the meshes, the bones and the names.
+     * @brief Skeleton: the Quaternius human, the mannequin, CesiumMan, the Fox and the Kenney FBX character, each
+     * playing a clip with its bones through FenrirDebugDraw (lines to their parents, axes, names as world text); keys
+     * toggle the meshes, the bones and the names.
      */
     [[nodiscard]] FenrirDemo::DemoScene SkeletonScene();
 

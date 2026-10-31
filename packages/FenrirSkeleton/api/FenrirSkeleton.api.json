@@ -459,23 +459,28 @@
       "values": [
         {
           "name": "None",
-          "value": 0
+          "value": 0,
+          "doc": "No channel: the target writes nothing."
         },
         {
           "name": "Translation",
-          "value": 1
+          "value": 1,
+          "doc": "The local translation."
         },
         {
           "name": "Rotation",
-          "value": 2
+          "value": 2,
+          "doc": "The local rotation."
         },
         {
           "name": "Scale",
-          "value": 4
+          "value": 4,
+          "doc": "The local scale."
         },
         {
           "name": "All",
-          "value": 7
+          "value": 7,
+          "doc": "Every channel."
         }
       ]
     },
@@ -509,7 +514,8 @@
       "values": [
         {
           "name": "Detached",
-          "value": 0
+          "value": 0,
+          "doc": "The `BoneAttachment` was removed, as the `DetachMode` asked."
         },
         {
           "name": "NotAttached",

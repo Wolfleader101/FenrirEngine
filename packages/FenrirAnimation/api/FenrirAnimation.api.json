@@ -43,7 +43,8 @@
           "name": "value",
           "offset": 0,
           "kind": "u32",
-          "default": 0
+          "default": 0,
+          "doc": "The hash; 0 is no name's id in particular, only the default."
         }
       ]
     },
@@ -448,11 +449,13 @@
       "values": [
         {
           "name": "Bone",
-          "value": 0
+          "value": 0,
+          "doc": "The named bone only."
         },
         {
           "name": "Subtree",
-          "value": 1
+          "value": 1,
+          "doc": "The named bone and every bone below it."
         }
       ]
     },

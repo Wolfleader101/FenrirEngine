@@ -33,10 +33,15 @@ namespace Fenrir
     /** @brief Which parts of a bone's local transform a pose target writes: a mask, combined with `|`. */
     enum class Channels : std::uint8_t
     {
+        /** @brief No channel: the target writes nothing. */
         None = 0,
+        /** @brief The local translation. */
         Translation = 1,
+        /** @brief The local rotation. */
         Rotation = 2,
+        /** @brief The local scale. */
         Scale = 4,
+        /** @brief Every channel. */
         All = Translation | Rotation | Scale,
     };
 

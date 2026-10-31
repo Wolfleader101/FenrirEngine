@@ -6,6 +6,8 @@ namespace Fenrir.Animation;
 /// <summary>Whether a bone mask entry covers one bone or the bone and everything below it.</summary>
 public enum MaskScope : byte
 {
+    /// <summary>The named bone only.</summary>
     Bone = 0,
+    /// <summary>The named bone and every bone below it.</summary>
     Subtree = 1,
 }

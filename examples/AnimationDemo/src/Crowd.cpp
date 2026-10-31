@@ -18,7 +18,7 @@
 #include "FenrirRenderer/Renderer.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirSkeleton/Skeletons.hpp"
-#include "Rigs.hpp"
+#include "SkinnedModels.hpp"
 
 namespace AnimationDemo
 {
@@ -39,7 +39,7 @@ namespace AnimationDemo
         struct CrowdState
         {
             /** @brief Kenney's character, one per member, in spawn order: halving removes the last half. */
-            std::vector<Rig> members;
+            std::vector<SkinnedModel> members;
             /** @brief Its idle and run, which the members take in turn. */
             std::array<Fenrir::AssetHandle<Fenrir::Clip>, KenneyClips.size()> clips{};
             std::size_t bonesEach = 0;
@@ -101,26 +101,26 @@ namespace AnimationDemo
             while (state.members.size() < count)
             {
                 const std::size_t index = state.members.size();
-                Rig rig = SpawnRig(app, scene, KenneyFile, Vec3(0.0f), 0.0f, KenneyScale);
-                if (!rig.IsValid())
+                SkinnedModel spawned = SpawnSkinnedModel(app, scene, KenneyFile, Vec3(0.0f), 0.0f, KenneyScale);
+                if (!spawned.IsValid())
                 {
                     break;
                 }
-                Paint(app, scene, rig, KenneySkin);
+                Paint(app, scene, spawned, KenneySkin);
                 const auto clip = state.clips.at(index % state.clips.size());
-                Play(rig.skeleton, clip);
-                rig.skeleton.GetComponent<Fenrir::Animator>().playing = state.playing;
+                Play(spawned.skeleton, clip);
+                spawned.skeleton.GetComponent<Fenrir::Animator>().playing = state.playing;
                 // Spread over the clip by the golden ratio, so no two neighbours start together.
                 const Fenrir::ClipData* data = store.TryGet(clip);
                 const double fraction = std::fmod(static_cast<double>(index) * 0.6180339887, 1.0);
-                Fenrir::Animation::Seek(scene, rig.skeleton, fraction * (data != nullptr ? data->duration : 0.0));
+                Fenrir::Animation::Seek(scene, spawned.skeleton, fraction * (data != nullptr ? data->duration : 0.0));
                 if (state.bonesEach == 0)
                 {
                     const Fenrir::SkeletonData* skeleton =
-                        store.TryGet(rig.skeleton.GetComponent<Fenrir::SkeletonPose>().skeleton);
+                        store.TryGet(spawned.skeleton.GetComponent<Fenrir::SkeletonPose>().skeleton);
                     state.bonesEach = skeleton != nullptr ? skeleton->BoneCount() : 0;
                 }
-                state.members.push_back(rig);
+                state.members.push_back(spawned);
             }
             for (std::size_t i = 0; i < state.members.size(); ++i)
             {
@@ -158,9 +158,9 @@ namespace AnimationDemo
             if (keyboard.JustPressed(Fenrir::Key::Space))
             {
                 state.playing = !state.playing;
-                for (const Rig& rig : state.members)
+                for (const SkinnedModel& spawned : state.members)
                 {
-                    rig.skeleton.GetComponent<Fenrir::Animator>().playing = state.playing;
+                    spawned.skeleton.GetComponent<Fenrir::Animator>().playing = state.playing;
                 }
                 app.Logger()->Info("Crowd: Space, {}", state.playing ? "playing" : "paused");
             }

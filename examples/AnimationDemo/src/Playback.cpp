@@ -15,7 +15,7 @@
 #include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirScene/Scene.hpp"
-#include "Rigs.hpp"
+#include "SkinnedModels.hpp"
 
 namespace AnimationDemo
 {
@@ -39,10 +39,10 @@ namespace AnimationDemo
         struct PlaybackState
         {
             /** @brief Quaternius's human, playing the clips in `clips`. */
-            Rig walker;
+            SkinnedModel walker;
             std::array<Fenrir::AssetHandle<Fenrir::Clip>, QuaterniusClips.size()> clips{};
             /** @brief The procedural mannequin, playing its Flutter clip. */
-            Rig flutterer;
+            SkinnedModel flutterer;
             std::size_t clip = static_cast<std::size_t>(QuaterniusClip::Walk);
             float speed = 1.0f;
             Fenrir::ClipLoop loop = Fenrir::ClipLoop::Loop;
@@ -88,12 +88,12 @@ namespace AnimationDemo
         {
             AddStage(app, scene);
             PlaybackState& state = scene.AddResource<PlaybackState>();
-            state.walker = SpawnRig(app, scene, QuaterniusFile, Vec3(-1.5f, 0.0f, 0.0f), 0.4f);
+            state.walker = SpawnSkinnedModel(app, scene, QuaterniusFile, Vec3(-1.5f, 0.0f, 0.0f), 0.4f);
             for (std::size_t i = 0; i < QuaterniusClips.size(); ++i)
             {
                 state.clips.at(i) = LoadClip(app, scene, QuaterniusClips.at(i));
             }
-            state.flutterer = SpawnRig(app, scene, MannequinFile, Vec3(2.0f, 0.0f, -0.5f), -0.4f);
+            state.flutterer = SpawnSkinnedModel(app, scene, MannequinFile, Vec3(2.0f, 0.0f, -0.5f), -0.4f);
             if (!state.walker.IsValid() || !state.flutterer.IsValid())
             {
                 return;

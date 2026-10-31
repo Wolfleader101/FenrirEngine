@@ -4,7 +4,7 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirInput/InputTypes.hpp"
 #include "FenrirScene/Scene.hpp"
-#include "Rigs.hpp"
+#include "SkinnedModels.hpp"
 
 namespace AnimationDemo
 {

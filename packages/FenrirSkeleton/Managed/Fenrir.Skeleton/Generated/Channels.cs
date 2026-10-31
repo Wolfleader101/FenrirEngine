@@ -6,9 +6,14 @@ namespace Fenrir.Skeleton;
 /// <summary>Which parts of a bone's local transform a pose target writes: a mask, combined with `|`.</summary>
 public enum Channels : byte
 {
+    /// <summary>No channel: the target writes nothing.</summary>
     None = 0,
+    /// <summary>The local translation.</summary>
     Translation = 1,
+    /// <summary>The local rotation.</summary>
     Rotation = 2,
+    /// <summary>The local scale.</summary>
     Scale = 4,
+    /// <summary>Every channel.</summary>
     All = 7,
 }
