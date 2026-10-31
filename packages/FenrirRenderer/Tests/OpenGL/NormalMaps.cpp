@@ -1,7 +1,8 @@
 // builtin:lit's normal maps on OpenGL (ADR-0048): a quad with a tangent stream is lit as the same quad without one,
-// through Schueler's derivative frame, whether its UVs run as the image does, are mirrored in U (handedness -1), or the
-// quad is mirrored by its world matrix (the draw's determinant sign). Each frame is one quad filling the centre, lit by
-// one white light and no ambient, and reads back its SceneColor, linear.
+// through Schueler's derivative frame, whether its UVs run as the image does, are mirrored in U (handedness -1), the
+// quad is mirrored by its world matrix (the draw's determinant sign), or its back face is seen through a double-sided
+// material. Each frame is one quad filling the centre, lit by one white light and no ambient, and reads back its
+// SceneColor, linear.
 
 #include <cstdint>
 
@@ -19,24 +20,38 @@ namespace
 {
     constexpr std::uint32_t Size = GlScene::Size;
 
-    /** @brief How a test quad's tangent frame is made. */
-    enum class Mirror
+    /** @brief How a test quad is laid out and placed. Each faces the camera at distance 2. */
+    enum class Placement
     {
         /** @brief UV0 as RendererTest::TexturedQuad's: U along +X, the image's up along +Y. */
-        None,
+        Plain,
         /** @brief U mirrored, so it runs along -X: the tangent is -X with handedness -1. */
-        Uv,
+        MirroredUv,
         /** @brief TexturedQuad's UVs and tangents, wound clockwise and drawn through a world matrix scaled by -1 in X,
          * so it faces the camera counter-clockwise with U along -X. */
-        World,
+        MirroredWorld,
+        /** @brief Plain's quad turned half a turn about +Y, showing its back face through a double-sided material:
+         * U runs along -X. */
+        BackFacing,
     };
 
-    /** @brief A unit quad at distance 2 for `mirror`, with its tangent stream when `tangents`. */
-    Fenrir::MeshData TestQuad(Mirror mirror, bool tangents)
+    /** @brief How a test quad's normal is made. */
+    enum class Lighting
+    {
+        /** @brief No normal map: the interpolated normal. */
+        Flat,
+        /** @brief The normal map, in the derivative frame: the mesh has no tangents. */
+        DerivativeFrame,
+        /** @brief The normal map, in the frame of the mesh's tangent stream. */
+        TangentStream,
+    };
+
+    /** @brief A unit quad for `placement`, at distance 2 in its local space, with a tangent stream when `tangents`. */
+    Fenrir::MeshData TestQuad(Placement placement, bool tangents)
     {
         Fenrir::MeshData mesh = RendererTest::TexturedQuad(1.0f, -2.0f);
         Vec4 tangent(1.0f, 0.0f, 0.0f, 1.0f);
-        if (mirror == Mirror::Uv)
+        if (placement == Placement::MirroredUv)
         {
             for (Fenrir::Math::Vec2& uv : mesh.uv0)
             {
@@ -44,7 +59,7 @@ namespace
             }
             tangent = Vec4(-1.0f, 0.0f, 0.0f, -1.0f);
         }
-        if (mirror == Mirror::World)
+        if (placement == Placement::MirroredWorld)
         {
             mesh.indices = {0, 2, 1, 0, 3, 2};
         }
@@ -81,27 +96,37 @@ namespace
             // Fully rough, so GGX's specular adds little.
             m_flat = store.CreateMaterial(lit, Fenrir::AssetOwner::App());
             store.SetFloat(m_flat, "roughness", 1.0f);
-            m_mapped = store.CreateMaterial(lit, Fenrir::AssetOwner::App());
-            store.SetFloat(m_mapped, "roughness", 1.0f);
             // (204, 204, 195) / 255 x 2 - 1 = (0.6, 0.6, 0.53), within a byte of unit length.
             const auto normalMap =
                 store.Add<Fenrir::Image>(RendererTest::Picture(1, 1, {204, 204, 195, 255}, Fenrir::ColourSpace::Linear),
                                          Fenrir::AssetOwner::App());
-            REQUIRE(store.SetTexture(m_mapped, "normalTexture", normalMap));
+            for (Fenrir::AssetHandle<Fenrir::Material>* mapped : {&m_mapped, &m_twoSided})
+            {
+                *mapped = store.CreateMaterial(lit, Fenrir::AssetOwner::App());
+                store.SetFloat(*mapped, "roughness", 1.0f);
+                REQUIRE(store.SetTexture(*mapped, "normalTexture", normalMap));
+            }
+            store.SetDoubleSided(m_twoSided, true);
             m_quad = test.app.GetActiveScene().GetEntityList().CreateEntity();
             m_quad.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{
-                store.Add<Fenrir::Mesh>(TestQuad(Mirror::None, false), Fenrir::AssetOwner::App()), m_flat, true});
+                store.Add<Fenrir::Mesh>(TestQuad(Placement::Plain, false), Fenrir::AssetOwner::App()), m_flat, true});
         }
 
-        /** @brief The centre pixel of the quad for `mirror`, normal-mapped or flat, with or without its tangents. */
-        GlProbe::Pixel Centre(Mirror mirror, bool tangents, bool mapped = true)
+        /** @brief The centre pixel of the quad for `placement`, its normal made as `lighting` says. */
+        GlProbe::Pixel Centre(Placement placement, Lighting lighting)
         {
             Fenrir::MeshRenderer& renderer = m_quad.GetComponent<Fenrir::MeshRenderer>();
-            renderer.mesh =
-                test.assets.Store().Add<Fenrir::Mesh>(TestQuad(mirror, tangents), Fenrir::AssetOwner::App());
-            renderer.material = mapped ? m_mapped : m_flat;
-            m_quad.GetComponent<Fenrir::Transform>().scale =
-                mirror == Mirror::World ? Vec3(-1.0f, 1.0f, 1.0f) : Vec3(1.0f);
+            renderer.mesh = test.assets.Store().Add<Fenrir::Mesh>(
+                TestQuad(placement, lighting != Lighting::DerivativeFrame), Fenrir::AssetOwner::App());
+            renderer.material =
+                lighting == Lighting::Flat ? m_flat : (placement == Placement::BackFacing ? m_twoSided : m_mapped);
+            Fenrir::Transform& transform = m_quad.GetComponent<Fenrir::Transform>();
+            transform.scale = placement == Placement::MirroredWorld ? Vec3(-1.0f, 1.0f, 1.0f) : Vec3(1.0f);
+            // Half a turn takes the quad to z = +2, behind the camera, so it is moved back to z = -2.
+            const bool back = placement == Placement::BackFacing;
+            transform.rot =
+                Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(back ? 180.0f : 0.0f), Vec3(0.0f, 1.0f, 0.0f));
+            transform.pos = back ? Vec3(0.0f, 0.0f, -4.0f) : Vec3(0.0f);
             return test.Frame().At(Size / 2, Size / 2);
         }
 
@@ -110,6 +135,7 @@ namespace
       private:
         Fenrir::AssetHandle<Fenrir::Material> m_flat;
         Fenrir::AssetHandle<Fenrir::Material> m_mapped;
+        Fenrir::AssetHandle<Fenrir::Material> m_twoSided;
         Fenrir::Entity m_quad;
     };
 
@@ -121,34 +147,48 @@ TEST_CASE("A normal-mapped quad is lit the same through its tangent stream as th
           "[renderer][gl][normal-maps]")
 {
     NormalMapScene scene;
-    const GlProbe::Pixel flat = scene.Centre(Mirror::None, true, false);
-    const GlProbe::Pixel derivative = scene.Centre(Mirror::None, false);
-    const GlProbe::Pixel tangent = scene.Centre(Mirror::None, true);
+    const GlProbe::Pixel flat = scene.Centre(Placement::Plain, Lighting::Flat);
+    const GlProbe::Pixel derivative = scene.Centre(Placement::Plain, Lighting::DerivativeFrame);
+    const GlProbe::Pixel tangent = scene.Centre(Placement::Plain, Lighting::TangentStream);
 
     INFO("flat " << flat[0] << ", derivative frame " << derivative[0] << ", tangent stream " << tangent[0]);
-    INFO("the map turns the normal towards the light: N.L from 0.58 flat to nearly 1");
-    REQUIRE(derivative[0] > flat[0] + 0.25f);
-    INFO("and the tangent stream gives the derivative frame's colour");
-    REQUIRE(GlProbe::Near(tangent, derivative, Tolerance));
+    {
+        INFO("the map turns the normal towards the light: N.L from 0.58 flat to nearly 1");
+        REQUIRE(derivative[0] > flat[0] + 0.25f);
+    }
+    {
+        INFO("and the tangent stream gives the derivative frame's colour");
+        REQUIRE(GlProbe::Near(tangent, derivative, Tolerance));
+    }
+    INFO("GL reported no errors");
     REQUIRE(scene.test.messages->errors.empty());
 }
 
-TEST_CASE("A quad mirrored in U, or by its world matrix, keeps its tangent frame's handedness",
+TEST_CASE("A quad mirrored in U or by its world matrix, or seen from behind, keeps its tangent frame's handedness",
           "[renderer][gl][normal-maps]")
 {
     NormalMapScene scene;
-    // In both, +U runs along -X while the image's up stays +Y: the mapped normal is (-0.6, 0.6, 0.53), N.L about 0.3.
-    // Lost handedness would flip the bitangent to -Y and the normal to (-0.6, -0.6, 0.53), facing away: black.
-    const Mirror mirror = GENERATE(Mirror::Uv, Mirror::World);
-    CAPTURE(mirror == Mirror::Uv ? "mirrored in U" : "mirrored by its world matrix");
-    const GlProbe::Pixel derivative = scene.Centre(mirror, false);
-    const GlProbe::Pixel tangent = scene.Centre(mirror, true);
+    // Mirrored, +U runs along -X while the image's up stays +Y: the mapped normal is (-0.6, 0.6, 0.53), N.L about 0.3,
+    // and lost handedness would flip the bitangent to -Y and the normal to (-0.6, -0.6, 0.53), facing away: black.
+    // From behind, the front's frame (U along -X, up +Y, the normal -Z) is turned over whole: (0.6, -0.6, 0.53), N.L
+    // about 0.3 again, and lost handedness would give (0.6, 0.6, 0.53), N.L nearly 1.
+    const Placement placement = GENERATE(Placement::MirroredUv, Placement::MirroredWorld, Placement::BackFacing);
+    CAPTURE(placement == Placement::MirroredUv      ? "mirrored in U"
+            : placement == Placement::MirroredWorld ? "mirrored by its world matrix"
+                                                    : "seen from behind");
+    const GlProbe::Pixel derivative = scene.Centre(placement, Lighting::DerivativeFrame);
+    const GlProbe::Pixel tangent = scene.Centre(placement, Lighting::TangentStream);
 
     INFO("derivative frame " << derivative[0] << ", tangent stream " << tangent[0]);
-    INFO("the derivative frame lights it at N.L about 0.3");
-    REQUIRE(derivative[0] > 0.2f);
-    REQUIRE(derivative[0] < 0.4f);
-    INFO("and the tangent stream gives the same colour");
-    REQUIRE(GlProbe::Near(tangent, derivative, Tolerance));
+    {
+        INFO("the derivative frame lights it at N.L about 0.3");
+        REQUIRE(derivative[0] > 0.2f);
+        REQUIRE(derivative[0] < 0.4f);
+    }
+    {
+        INFO("and the tangent stream gives the same colour");
+        REQUIRE(GlProbe::Near(tangent, derivative, Tolerance));
+    }
+    INFO("GL reported no errors");
     REQUIRE(scene.test.messages->errors.empty());
 }

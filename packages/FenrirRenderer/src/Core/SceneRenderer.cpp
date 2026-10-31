@@ -105,7 +105,7 @@ namespace Fenrir::Render
             /** @brief Where its constant default sits in the default stream buffer. */
             std::size_t defaultOffset = 0;
             std::string_view defaultName;
-            /** @brief Whether a mesh lacking it is logged: not for one shaders tell apart by its default. */
+            /** @brief Whether a mesh lacking it is logged: not when its default itself tells a shader it is absent. */
             bool logMissing = true;
         };
 

@@ -8,8 +8,9 @@
 // channel and metallic by the blue channel of metallicRoughnessTexture, and emissive by emissiveTexture (white by
 // default, so an emissive colour shows with no texture). normalTexture is a tangent-space normal map whose green
 // points up the image, in the mesh's tangent frame when it has a tangent stream (ADR-0048: glTF's are MikkTSpace) and
-// otherwise in one from the screen-space derivatives of the position and UV0. Its ALPHA_MASK variant, drawn for a Masked material, discards a pixel whose alpha is below
-// the material's alpha cutoff, which the renderer writes into `alphaCutoff`.
+// otherwise in one from the screen-space derivatives of the position and UV0. Its ALPHA_MASK variant, drawn for a Masked
+// material, discards a pixel whose alpha is below the material's alpha cutoff, which the renderer writes into
+// `alphaCutoff`.
 #include "Fenrir/Frame.glsl"
 #include "Fenrir/View.glsl"
 

@@ -525,8 +525,12 @@ A small PNG committed beside the GL tests, the frame a test scene should draw, w
 *Avoid:* snapshot, reference image, screenshot test.
 
 **Tangent stream**
-A mesh's optional per-vertex tangents, each a unit direction along its UVs' U with the bitangent's sign in `w`, kept from a model file that has them (glTF's are MikkTSpace) and never generated. `builtin:lit` lays its normal map in their frame, and in one from screen-space derivatives (the *derivative frame*) for a mesh without them (ADR-0048).
+A mesh's optional per-vertex tangents, each a unit direction along its UVs' U with the bitangent's sign in `w`, kept from a model file that has them (glTF's are MikkTSpace) and never generated. `builtin:lit` lays its normal map in their frame, and in the derivative frame for a mesh without them (ADR-0048).
 *Avoid:* tangent space (the frame they make, not the data), binormals (FBX's word for what the sign stands in for), TBN.
+
+**Derivative frame**
+The tangent frame `builtin:lit` builds per pixel from the screen-space derivatives of the position and UV0 (Schueler's cotangent frame) for a mesh without a tangent stream; it needs no mesh data, but follows the triangles' UVs rather than an artist's baked tangents.
+*Avoid:* screen-space tangents, cotangent frame (alone), generated tangents (nothing is generated on the mesh).
 
 **Sky**
 The scene resource saying what is drawn behind everything and what light reaches every surface from all around: a solid colour, a skybox or a panorama. A camera can override what is drawn with a colour, but not the light.

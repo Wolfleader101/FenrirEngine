@@ -200,7 +200,7 @@ TEST_CASE("A vertex stream the shader reads but the mesh lacks binds a constant 
     REQUIRE(buffers.size() == 2);
 }
 
-TEST_CASE("A mesh without a tangent stream is drawn by builtin:lit unwarned, which then keeps the derivative frame",
+TEST_CASE("A mesh without a tangent stream is drawn by builtin:lit with nothing logged about its tangents",
           "[renderer][facade]")
 {
     RendererTestApp test;
