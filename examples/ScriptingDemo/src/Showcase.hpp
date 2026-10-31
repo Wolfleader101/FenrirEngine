@@ -43,15 +43,15 @@ namespace ScriptingDemo
     [[nodiscard]] Fenrir::ScriptingExtension Extension();
 
     /**
-     * @brief "Showcase": the two backpacks, drawn by MeshRenderer, which C# spins and bobs; R reverses the spin and
-     * Space makes sparks.
+     * @brief "Showcase": the two textured boxes, drawn by MeshRenderer, which C# spins and bobs; R reverses the spin
+     * and Space makes sparks.
      */
     [[nodiscard]] FenrirDemo::DemoScene Showcase();
 
     /**
      * @brief Adds the C++ systems, in Update: call it after DemoScaffold::Install, so they run after the C# systems and
      * see what C# just wrote. One shows Bob.Phase in the entity's Name, one logs each Burst once, and one draws the
-     * names of the backpacks and the sparks as world text, where the legacy editor's hierarchy showed them.
+     * names of the boxes and the sparks as world text, where the legacy editor's hierarchy showed them.
      */
     void AddSystems(Fenrir::App& app);
 } // namespace ScriptingDemo

@@ -18,8 +18,8 @@ namespace PhysicsDemo
 {
     /**
      * @brief Playground (C++), the legacy Default scene's physics: a box stack on a ground, a kinematic paddle game
-     * code sweeps through it in Tick, and a static backpack with a triangle-mesh collider cooked from its model, with
-     * boxes dropped onto it. Adds its Tick system to `app`.
+     * code sweeps through it in Tick, and a static textured box on its edge with a triangle-mesh collider cooked from
+     * its model, with boxes dropped onto it. Adds its Tick system to `app`.
      */
     [[nodiscard]] FenrirDemo::DemoScene Playground(Fenrir::App& app, Fenrir::Physics& physics);
 

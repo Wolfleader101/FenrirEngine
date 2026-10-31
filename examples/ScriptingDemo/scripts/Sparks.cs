@@ -46,7 +46,7 @@ public sealed class Spawner : ISystem
 }
 
 // Runs after the Spawner, so it sees the sparks the Spawner just made (changes land between systems). Names them and puts them in
-// a row above the backpacks, once.
+// a row above the boxes, once.
 [System(Phase.Update, Order = 31)]
 public sealed class Dresser : ISystem
 {

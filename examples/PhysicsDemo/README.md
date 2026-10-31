@@ -26,7 +26,7 @@ The port is faithful: each scene has the legacy scene's bodies, keys, autopilot 
 
 | Scene | What it shows | Keys |
 | --- | --- | --- |
-| Playground (C++) | The legacy Default scene's physics: a stack of eight boxes on a ground, a kinematic paddle game code sweeps through it in `Tick`, and a static backpack whose collider is a triangle mesh cooked from its model, with three boxes dropped onto it. | None of its own. |
+| Playground (C++) | The legacy Default scene's physics: a stack of eight boxes on a ground, a kinematic paddle game code sweeps through it in `Tick`, and a static textured box (Khronos's BoxTextured) standing on an edge, whose collider is a triangle mesh cooked from its model, with three boxes dropped onto it. | None of its own. |
 | Playground (C#) | The legacy Physics (C#) scene, built and run entirely by `scripts/Playground.cs`: a pyramid of ten boxes, five bouncy spheres (their hard `ContactBegin`s logged), a paddle and a green trigger zone (`TriggerEnter`/`TriggerExit` logged, and a body in it pale). | J kicks every box and sphere into the air. A left click casts a ray (`PhysicsWorld.Raycast`), logs what it hit and pokes it. |
 | Joints (C++) | A door hinged to a static post (limits, friction, a motor, and a trigger child overlapping the post), and a chain of eight links from a world point (`src/Joints.cpp`, whose header describes it). | 1 pushes the door, 2 cycles its motor, L its limits. 9 toggles `collideConnected` on the chain. 0 logs every joint's state. B toggles a 15 N break force on chain joint 1, R repairs broken joints. 4 teleports the door, 5 the door and its frame. 6 scales link 5, 7 adds or removes a lump on link 6, 8 moves it. 3 destroys chain link 3. |
 | Joints (C#) | A breakable bridge, a lift on a slider, a spring rope and a swing-twist limb, built and run by `scripts/Joints.cs` over two frames (frames from `Joint.FrameFromWorld`). | B drops a weight on the bridge (its middle hinge breaks over 250 N), R repairs, K swaps the middle joint between hinge and fixed, 1 cycles the lift's motor, 2 raises and lowers the limb, 0 logs every joint's state. |
@@ -70,8 +70,8 @@ have scenes of their own, so there is no Tab, and the driver gets in only the ca
     through their autopilots) with no errors, in Debug and Release. In Vehicles (C++) the only warnings are physics's
     one for each of 8 and 9.
   - Without scripting, the scene list has only the C++ scenes.
-- **Playground (C++):** the paddle sweeps the stack, and the boxes dropped on the backpack come to rest on its shape, not
-  on its bounding box.
+- **Playground (C++):** the paddle sweeps the stack, and the boxes dropped on the ridge of the brown box standing on its
+  edge land on its sloping faces and slide off them, never stopping on top of its bounding box.
 - **Playground (C#):** a box or sphere on the green pad turns pale while it is there and logs `TriggerEnter` and
   `TriggerExit`; J throws the bodies; a left click logs `Raycast: hit ...` and pokes what it hit.
 - **Joints (C++):**

@@ -1,7 +1,8 @@
 // Playground (C++), the legacy DemoApp's Default scene's physics demo: a static ground, a stack of dynamic boxes and a
 // kinematic paddle that game code sweeps back and forth in Tick, pushing the boxes. Each body is the unit cube in its
-// own flat colour, so they are easy to tell apart. Beside them, a static backpack whose collider is a triangle mesh
-// made from the backpack model's vertices, with boxes dropped onto it. F2 cycles the physics debug lines.
+// own flat colour, so they are easy to tell apart. Beside them, a static textured box (Khronos's BoxTextured) turned on
+// its edge, whose collider is a triangle mesh made from the model's vertices, with boxes dropped onto it. F2 cycles the
+// physics debug lines.
 //
 // Playground (C#), its twin in the scene list, is the legacy Physics (C#) scene: C++ gives it only its entry here, and
 // scripts/Playground.cs builds and runs it.
@@ -50,20 +51,18 @@ namespace PhysicsDemo
             Vec3(0.95f, 0.95f, 0.95f), // white
         };
 
-        /** @brief The backpack model's vertices and triangles in its space, and the box around them. */
-        struct BackpackShape
+        /** @brief A model's vertices and triangles in its space. */
+        struct ModelShape
         {
             std::vector<Vec3> vertices;
             std::vector<std::uint32_t> indices;
-            Vec3 min{std::numeric_limits<float>::max()};
-            Vec3 max{std::numeric_limits<float>::lowest()};
         };
 
         // Every mesh of every node, placed by the nodes' rest transforms: FenrirPhysics takes plain vertices and
         // indices, so it never sees the model.
-        BackpackShape ShapeOf(const Fenrir::AssetStore& store, const Fenrir::Model& model)
+        ModelShape ShapeOf(const Fenrir::AssetStore& store, const Fenrir::Model& model)
         {
-            BackpackShape shape;
+            ModelShape shape;
             std::vector<Fenrir::Transform> placed;
             placed.reserve(model.nodes.size());
             for (const Fenrir::ModelNode& node : model.nodes)
@@ -82,12 +81,7 @@ namespace PhysicsDemo
                     const auto first = static_cast<std::uint32_t>(shape.vertices.size());
                     for (const Vec3& position : mesh->positions)
                     {
-                        const Vec3 vertex = at.pos + at.rot * (at.scale * position);
-                        shape.vertices.push_back(vertex);
-                        shape.min = Vec3(std::min(shape.min.x, vertex.x), std::min(shape.min.y, vertex.y),
-                                         std::min(shape.min.z, vertex.z));
-                        shape.max = Vec3(std::max(shape.max.x, vertex.x), std::max(shape.max.y, vertex.y),
-                                         std::max(shape.max.z, vertex.z));
+                        shape.vertices.push_back(at.pos + at.rot * (at.scale * position));
                     }
                     for (const std::uint32_t index : mesh->indices)
                     {
@@ -160,7 +154,7 @@ namespace PhysicsDemo
                 looks.Cube(m_paddle, Vec3(1.0f, 0.55f, 0.0f));
                 physicsRoot.AddChild(m_paddle);
 
-                AddBackpack(app, scene, looks, physicsRoot);
+                AddMeshCollider(app, scene, looks, physicsRoot);
             }
 
             // Game code in Tick: sweeps the paddle from x = -6 to 6 and back, once every 12.6 seconds.
@@ -175,39 +169,52 @@ namespace PhysicsDemo
             }
 
           private:
-            // A static backpack, its collider a triangle mesh cooked from the model's vertex data. Brown, standing on
-            // the ground in front of the stack, with three boxes dropped onto it that come to rest on its shape, not on
-            // its bounding box.
-            void AddBackpack(Fenrir::App& app, Fenrir::Scene& scene, SceneLooks& looks, Fenrir::Entity& physicsRoot)
+            // A static textured box, its collider a triangle mesh cooked from the model's vertex data (the entity's
+            // scale is baked into it). Brown, standing on one edge on the ground in front of the stack, with three
+            // boxes dropped onto it that land on its sloping faces and slide off them, never resting on top of its
+            // bounding box.
+            void AddMeshCollider(Fenrir::App& app, Fenrir::Scene& scene, SceneLooks& looks, Fenrir::Entity& physicsRoot)
             {
                 Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
-                const auto model = store.Load<Fenrir::Model>("backpack/backpack.obj", scene);
-                const Fenrir::Model* backpack = model.Ok() ? store.TryGet(model.handle) : nullptr;
-                if (backpack == nullptr)
+                const auto model = store.Load<Fenrir::Model>("BoxTextured/BoxTextured.gltf", scene);
+                const Fenrir::Model* data = model.Ok() ? store.TryGet(model.handle) : nullptr;
+                if (data == nullptr)
                 {
-                    app.Logger()->Error("Playground (C++): the backpack did not load from the asset root");
+                    app.Logger()->Error("Playground (C++): the textured box did not load from the asset root");
                     return;
                 }
-                const BackpackShape shape = ShapeOf(store, *backpack);
+                const ModelShape shape = ShapeOf(store, *data);
                 const Fenrir::CollisionMesh collisionMesh =
                     m_physics->CreateCollisionMesh(shape.vertices, shape.indices);
 
+                // Turned 45 degrees about Z, so it stands on an edge with a ridge on top, and scaled up.
+                const Fenrir::Math::Quat onEdge = Fenrir::Math::AngleAxis(0.785398f, Vec3(0.0f, 0.0f, 1.0f));
+                const Vec3 scale(2.5f);
+                float lowest = std::numeric_limits<float>::max();
+                float highest = std::numeric_limits<float>::lowest();
+                for (const Vec3& vertex : shape.vertices)
+                {
+                    const float y = (onEdge * (scale * vertex)).y;
+                    lowest = std::min(lowest, y);
+                    highest = std::max(highest, y);
+                }
+
                 Fenrir::EntityList& entityList = scene.GetEntityList();
                 const Fenrir::Math::Quat identity(1.0f, 0.0f, 0.0f, 0.0f);
-                const Vec3 base(5.0f, -3.75f - shape.min.y, -7.0f);
-                Fenrir::Entity bag = Fenrir::SpawnModel(app, scene, model.handle);
-                bag.GetComponent<Fenrir::Name>().Set("Mesh collider (backpack)");
-                bag.GetComponent<Fenrir::Transform>() = Fenrir::Transform(base, identity, Vec3(1.0f));
-                bag.AddComponent<Fenrir::Collider>(Fenrir::Collider{Fenrir::MeshShape{collisionMesh}});
-                Recolour(bag, looks.Material(Vec3(0.55f, 0.35f, 0.2f)));
-                physicsRoot.AddChild(bag);
+                const Vec3 base(5.0f, -3.75f - lowest, -7.0f);
+                Fenrir::Entity ridge = Fenrir::SpawnModel(app, scene, model.handle);
+                ridge.GetComponent<Fenrir::Name>().Set("Mesh collider (textured box)");
+                ridge.GetComponent<Fenrir::Transform>() = Fenrir::Transform(base, onEdge, scale);
+                ridge.AddComponent<Fenrir::Collider>(Fenrir::Collider{Fenrir::MeshShape{collisionMesh}});
+                Recolour(ridge, looks.Material(Vec3(0.55f, 0.35f, 0.2f)));
+                physicsRoot.AddChild(ridge);
 
-                const float top = base.y + shape.max.y;
+                const float top = base.y + highest;
                 for (int i = 0; i < 3; ++i)
                 {
                     const float step = static_cast<float>(i);
                     Fenrir::Entity box = entityList.CreateEntity();
-                    box.GetComponent<Fenrir::Name>().Set(("Backpack box " + std::to_string(i)).c_str());
+                    box.GetComponent<Fenrir::Name>().Set(("Ridge box " + std::to_string(i)).c_str());
                     box.GetComponent<Fenrir::Transform>() = Fenrir::Transform(
                         base + Vec3(0.6f * step - 0.6f, top - base.y + 2.0f + 1.5f * step, 0.0f), identity, Vec3(0.5f));
                     box.AddComponent<Fenrir::RigidBody>();

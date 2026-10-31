@@ -11,9 +11,9 @@ namespace RendererDemo.Scripts;
 /// <summary>
 /// "Meshes and materials (C#)": scene 1, "Meshes and materials", built and run entirely from C# on the scripting
 /// extensions (examples/RendererDemo/src/MeshesAndMaterials.cpp is its C++ twin, and the two must look the same). The
-/// imported backpack, primitives in builtin:unlit and builtin:lit, a metallic/roughness grid, the four blend modes and a
-/// double-sided quad, a user shader, the magenta fallback and an empty and a stale mesh; L turns the light, M changes the
-/// ambient, V hides the backpack and C edits a shared material.
+/// imported textured box, primitives in builtin:unlit and builtin:lit, a metallic/roughness grid, the four blend modes
+/// and a double-sided quad, a user shader, the magenta fallback and an empty and a stale mesh; L turns the light, M
+/// changes the ambient, V hides the textured box and C edits a shared material.
 /// </summary>
 [System(Phase.Update)]
 public sealed class MeshesAndMaterials : ISystem
@@ -30,13 +30,13 @@ public sealed class MeshesAndMaterials : ISystem
     // The entry spawned, and what the keys change in it.
     private uint spawnedEntry;
     private Entity light = Entity.None;
-    private Entity backpack = Entity.None;
+    private Entity box = Entity.None;
     private Entity[] turning = [Entity.None, Entity.None];
     private AssetHandle<Material> shared;
     private float lightYaw;
     private int ambient;
     private int colour;
-    private bool backpackVisible;
+    private bool boxVisible;
     private float seconds;
 
     public void OnUpdate(in SystemContext context)
@@ -69,9 +69,9 @@ public sealed class MeshesAndMaterials : ISystem
         }
         if (Keyboard.JustPressed(Key.V))
         {
-            backpackVisible = !backpackVisible;
-            SetVisible(backpack, backpackVisible);
-            context.Log.Info($"V: the backpack's MeshRenderers are {(backpackVisible ? "visible" : "hidden")}");
+            boxVisible = !boxVisible;
+            SetVisible(box, boxVisible);
+            context.Log.Info($"V: the textured box's MeshRenderers are {(boxVisible ? "visible" : "hidden")}");
         }
         if (Keyboard.JustPressed(Key.C))
         {
@@ -86,16 +86,16 @@ public sealed class MeshesAndMaterials : ISystem
         lightYaw = 0.5f;
         ambient = 0;
         colour = 0;
-        backpackVisible = true;
+        boxVisible = true;
         seconds = 0.0f;
 
         // The scene owns what it loads and makes, so its assets go when it is left.
         AssetHandle<Mesh> cube = Assets.Load<Mesh>("cube.obj#Mesh0");
         AssetHandle<Mesh> sphere = Assets.Load<Mesh>("sphere.obj#Mesh0");
-        AssetHandle<Model> model = Assets.Load<Model>("backpack/backpack.obj");
+        AssetHandle<Model> model = Assets.Load<Model>("BoxTextured/BoxTextured.gltf");
         if (!Assets.IsValid(cube) || !Assets.IsValid(sphere) || !Assets.IsValid(model))
         {
-            context.Log.Error("Meshes and materials (C#): the cube, sphere or backpack did not load from the asset root");
+            context.Log.Error("Meshes and materials (C#): the cube, sphere or textured box did not load from the asset root");
             return;
         }
         AssetHandle<Shader> lit = Assets.Load<Shader>("builtin:lit");
@@ -104,13 +104,14 @@ public sealed class MeshesAndMaterials : ISystem
         // The ground.
         Place(cube, Make(lit, 0x606060FF), new Vector3(0.0f, -0.1f, 0.0f), new Vector3(22.0f, 0.2f, 14.0f));
 
-        // The imported backpack, spawned as a node tree of MeshRenderers; its root is usable at once.
-        backpack = Renderer.SpawnModel(model);
-        backpack.Add(new Transform
+        // The imported textured box (Khronos's BoxTextured), spawned as a node tree of MeshRenderers; its root is
+        // usable at once.
+        box = Renderer.SpawnModel(model);
+        box.Add(new Transform
         {
-            Position = new Vector3(-7.6f, 0.9f, -0.5f),
+            Position = new Vector3(-7.6f, 0.75f, -0.5f),
             Rotation = YawPitch(0.6f, 0.0f),
-            Scale = Vector3.One,
+            Scale = new Vector3(1.5f, 1.5f, 1.5f),
         });
 
         // Primitives in builtin:unlit, then in builtin:lit.

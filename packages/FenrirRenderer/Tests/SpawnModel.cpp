@@ -6,9 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <set>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -55,51 +53,50 @@ namespace
     }
 } // namespace
 
-TEST_CASE("SpawnModel on the backpack gives one MeshRenderer per mesh under the root, each drawn",
+TEST_CASE("SpawnModel on BoxTextured puts its mesh on its node's entity, below the turned node above it, and draws it",
           "[renderer][spawn-model]")
 {
     RendererTestApp test;
     test.AddCamera({0.0f, 0.0f, 3.0f});
     const Fenrir::LoadResult<Fenrir::Model> model =
-        test.Store().Load<Fenrir::Model>(FENRIR_TEST_BACKPACK, Fenrir::AssetOwner::App());
-    INFO("the backpack loads");
+        test.Store().Load<Fenrir::Model>(FENRIR_TEST_BOX_TEXTURED, Fenrir::AssetOwner::App());
+    INFO("BoxTextured loads");
     REQUIRE(model.Ok());
+    // Khronos's file: an unnamed node turned -90 degrees about X (COLLADA's Z up to glTF's Y up), and below it an
+    // unnamed node with the textured cube's one mesh.
     const Fenrir::Model& data = *test.Store().TryGet(model.handle);
-    std::multiset<std::pair<std::uint32_t, std::uint32_t>> expected;
-    for (const Fenrir::ModelNode& node : data.nodes)
-    {
-        for (const Fenrir::ModelMesh& mesh : node.meshes)
-        {
-            expected.insert({mesh.mesh.index, mesh.material.index});
-        }
-    }
-    INFO("the backpack has meshes to spawn");
-    REQUIRE(expected.size() > 1);
+    INFO("the importer gives two nodes, the second a child of the first holding the one mesh");
+    REQUIRE(data.nodes.size() == 2);
+    REQUIRE(data.nodes[0].parent < 0);
+    REQUIRE(data.nodes[0].meshes.empty());
+    REQUIRE(data.nodes[1].parent == 0);
+    REQUIRE(data.nodes[1].meshes.size() == 1);
+    const Fenrir::ModelMesh& cube = data.nodes[1].meshes[0];
 
     const Entity root = Fenrir::SpawnModel(test.app, test.ActiveScene(), model.handle);
     test.Frame();
 
     INFO("the root is named after the file");
     REQUIRE(root.IsValid());
-    REQUIRE(std::string(root.GetComponent<Fenrir::Name>().Get()) == "backpack");
+    REQUIRE(std::string(root.GetComponent<Fenrir::Name>().Get()) == "BoxTextured");
     const std::vector<Entity> renderers = MeshRenderers(test);
-    std::multiset<std::pair<std::uint32_t, std::uint32_t>> spawned;
-    for (const Entity& entity : renderers)
-    {
-        const Fenrir::MeshRenderer& renderer = entity.GetComponent<Fenrir::MeshRenderer>();
-        spawned.insert({renderer.mesh.index, renderer.material.index});
-        INFO("every MeshRenderer is under the returned root");
-        REQUIRE(IsUnder(entity, root));
-    }
-    INFO("one MeshRenderer per mesh of each node, with its material");
-    REQUIRE(spawned == expected);
-    INFO("the renderer draws each of them, with builtin:lit, and logs no error");
+    INFO("one MeshRenderer, the mesh's, with its material");
+    REQUIRE(renderers.size() == 1);
+    const Entity& renderer = renderers[0];
+    REQUIRE(renderer.GetComponent<Fenrir::MeshRenderer>().mesh == cube.mesh);
+    REQUIRE(renderer.GetComponent<Fenrir::MeshRenderer>().material == cube.material);
+    INFO("it is on the second node's entity, whose parent is the first node's, a child of the root at its rest");
+    const Entity turned = ParentOf(renderer);
+    REQUIRE(ParentOf(turned) == root);
+    REQUIRE_FALSE(turned.HasComponent<Fenrir::MeshRenderer>());
+    const Fenrir::Transform& rest = turned.GetComponent<Fenrir::Transform>();
+    REQUIRE(rest.pos == data.nodes[0].rest.pos);
+    REQUIRE(rest.rot == data.nodes[0].rest.rot);
+    REQUIRE(rest.scale == data.nodes[0].rest.scale);
+    INFO("the renderer draws it, with builtin:lit, and logs no error");
     const std::vector<RendererTest::RecordedDraw> draws = test.Draws();
-    REQUIRE(draws.size() == expected.size());
-    for (const RendererTest::RecordedDraw& draw : draws)
-    {
-        REQUIRE(Fenrir::RendererProbe::Label(test.Device(), draw.pipeline) == "BuiltinLit");
-    }
+    REQUIRE(draws.size() == 1);
+    REQUIRE(Fenrir::RendererProbe::Label(test.Device(), draws[0].pipeline) == "BuiltinLit");
     REQUIRE(test.messages->errors.empty());
 }
 

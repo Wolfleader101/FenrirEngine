@@ -8,9 +8,10 @@
 namespace RendererDemo
 {
     /**
-     * @brief Meshes and materials: the imported backpack, primitives in builtin:unlit and builtin:lit, a
+     * @brief Meshes and materials: the imported textured box, primitives in builtin:unlit and builtin:lit, a
      * metallic/roughness grid, the four blend modes and a double-sided quad, a user shader, the magenta fallback and an
-     * empty and a stale mesh; keys turn the light, change the ambient, hide the backpack and edit a shared material.
+     * empty and a stale mesh; keys turn the light, change the ambient, hide the textured box and edit a shared
+     * material.
      */
     [[nodiscard]] FenrirDemo::DemoScene MeshesAndMaterials();
 

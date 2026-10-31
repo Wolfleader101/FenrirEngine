@@ -1,0 +1,11 @@
+Box Textured, from the Khronos glTF Sample Assets
+https://github.com/KhronosGroup/glTF-Sample-Assets/tree/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/BoxTextured
+
+(c) 2017, Cesium. Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/legalcode
+
+Its texture, CesiumLogoFlat.png, shows the Cesium logo, (c) 2015 Cesium, a trademark the licence above does not cover
+(LicenseRef-LegalMark-Cesium in the source's LICENSE.md). It is used here only as the sample model's texture.
+
+Changes: none. BoxTextured.gltf, BoxTextured0.bin and CesiumLogoFlat.png are the glTF variant's files exactly as at the
+commit above.
