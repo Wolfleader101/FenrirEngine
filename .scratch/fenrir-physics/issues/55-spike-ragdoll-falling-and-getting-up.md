@@ -1,7 +1,7 @@
 # Spike: a character that falls as a ragdoll and gets up, through the proposed model
 
 Type: prototype
-Status: open
+Status: claimed
 Blocked by: 51, 52, 53, 54
 
 ## Question
