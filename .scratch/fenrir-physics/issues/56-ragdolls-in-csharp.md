@@ -1,7 +1,7 @@
 # What does C# get for ragdolls?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 51, 52, 53, 54
 
 ## Question
