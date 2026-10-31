@@ -9,6 +9,7 @@
 #include <format>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -209,27 +210,24 @@ namespace Fenrir
         return false;
     }
 
+    BoneNameMatch SkeletonData::MatchBoneName(std::string_view name) const
+    {
+        const std::int32_t bone = FindBone(name);
+        if (bone == NoBone)
+        {
+            return {BoneNameMatch::Outcome::NoMatch, NoBone};
+        }
+        if (m_sharesSourceName[static_cast<std::size_t>(bone)] != 0)
+        {
+            return {BoneNameMatch::Outcome::Ambiguous, NoBone};
+        }
+        return {BoneNameMatch::Outcome::Matched, bone};
+    }
+
     std::vector<std::int32_t> SkeletonData::Subtree(std::int32_t bone) const
     {
-        const std::size_t count = m_parents.size();
-        if (bone < 0 || static_cast<std::size_t>(bone) >= count)
-        {
-            return {};
-        }
-        // Parents come first, so one pass from the bone onwards finds every bone below it.
-        std::vector<bool> inside(count, false);
-        inside[static_cast<std::size_t>(bone)] = true;
-        std::vector<std::int32_t> subtree{bone};
-        for (std::size_t i = static_cast<std::size_t>(bone) + 1; i < count; ++i)
-        {
-            const std::uint16_t parent = m_parents[i];
-            if (parent != NoBoneStored && inside[parent])
-            {
-                inside[i] = true;
-                subtree.push_back(static_cast<std::int32_t>(i));
-            }
-        }
-        return subtree;
+        return SubtreeOf(m_parents.size(), bone,
+                         [this](std::size_t i) { return Parent(static_cast<std::int32_t>(i)); });
     }
 
     std::vector<std::uint32_t> ClipData::FindEvents(std::string_view name) const
@@ -323,6 +321,16 @@ namespace Fenrir
                 skeleton.m_engineNames.push_back(std::move(engineName));
                 skeleton.m_parents.push_back(bones[i].parent == NoBone ? NoBoneStored
                                                                        : static_cast<std::uint16_t>(bones[i].parent));
+            }
+            std::unordered_map<std::string_view, std::size_t> sourceNameCounts;
+            for (const SkeletonBone& bone : bones)
+            {
+                ++sourceNameCounts[bone.sourceName];
+            }
+            skeleton.m_sharesSourceName.clear();
+            for (const SkeletonBone& bone : bones)
+            {
+                skeleton.m_sharesSourceName.push_back(sourceNameCounts[bone.sourceName] > 1 ? 1 : 0);
             }
             skeleton.m_bindSignature = ComputeBindSignature(bones, skeleton.m_engineNames);
             return {};

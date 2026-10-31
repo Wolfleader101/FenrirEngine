@@ -203,6 +203,34 @@ TEST_CASE("a mask reaches a subtree, a later entry overrides an earlier one, and
     REQUIRE(Near(Local(test, skeleton, Root).pos.x, 1.0f));
 }
 
+TEST_CASE("a mask name whose bone's source name repeats is ambiguous and selects nothing, as a clip's is",
+          "[animation][blending][mask]")
+{
+    AnimationApp test;
+    // Twin and Twin#2 share a source name; the tip below them is unique, so the clip binds to it alone.
+    Fenrir::SkeletonData twins;
+    twins.bones = {AnimationTest::Bone("Twin", -1, {0.0f, 1.0f, 0.0f}),
+                   AnimationTest::Bone("Twin", 0, {0.0f, 1.0f, 0.0f}),
+                   AnimationTest::Bone("tip", 1, {0.0f, 1.0f, 0.0f})};
+    Entity skeleton = test.level.GetEntityList().CreateEntity();
+    skeleton.AddComponent<Fenrir::SkeletonPose>(
+        Fenrir::SkeletonPose{test.store.Add<Fenrir::Skeleton>(std::move(twins), test.level)});
+    const auto mask = test.store.CreateBoneMask(test.level);
+    test.store.IncludeInBoneMask(mask, "Twin", 1.0f, MaskScope::Subtree);
+    test.store.IncludeInBoneMask(mask, "Twin#2", 1.0f, MaskScope::Subtree);
+    AnimationLayer layer = Playing(HoldTip(test, 1.0f));
+    layer.mask = mask;
+    Layer(test, skeleton, layer);
+
+    test.RunFrame();
+    test.RunFrame();
+
+    INFO("neither name selects the subtree holding the tip, so the layer moves nothing");
+    REQUIRE(Near(Local(test, skeleton, Tip).pos.x, 0.0f));
+    INFO("each name is logged once for the binding as ambiguous");
+    REQUIRE(test.Warnings("ambiguous") == 2);
+}
+
 TEST_CASE("a layer with no base Animator layers over a hand-authored base pose without compounding",
           "[animation][blending]")
 {

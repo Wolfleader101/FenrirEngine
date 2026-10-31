@@ -16,18 +16,6 @@ namespace Fenrir::Detail
     namespace
     {
         const Math::Quat Identity(1.0f, 0.0f, 0.0f, 0.0f);
-
-        // How many bones have `name` as their source name: a mask name that is no engine name but several source
-        // names is ambiguous.
-        std::size_t SourceNameCount(const SkeletonData& skeleton, const std::string& name)
-        {
-            std::size_t count = 0;
-            for (const SkeletonBone& bone : skeleton.bones)
-            {
-                count += bone.sourceName == name ? 1 : 0;
-            }
-            return count;
-        }
     } // namespace
 
     std::uint8_t CoverOf(ClipPath path) noexcept
@@ -126,11 +114,12 @@ namespace Fenrir::Detail
         binding.weights.assign(bones.BoneCount(), 0.0f);
         for (const BoneMaskEntry& entry : data.entries)
         {
-            const std::int32_t bone = bones.FindBone(entry.boneName);
+            const BoneNameMatch match = bones.MatchBoneName(entry.boneName);
+            const std::int32_t bone = match.bone;
             if (bone == NoBone)
             {
-                const char* reason = SourceNameCount(bones, entry.boneName) > 1
-                                         ? "it matches several bones' source names, so it is ambiguous"
+                const char* reason = match.outcome == BoneNameMatch::Outcome::Ambiguous
+                                         ? "the match is ambiguous: the skeleton repeats that bone's name"
                                          : "no bone has that engine name";
                 logger.Warn("{}",
                             std::format("FenrirAnimation: bone mask {}.{} (revision {}) names '{}', which selects "
