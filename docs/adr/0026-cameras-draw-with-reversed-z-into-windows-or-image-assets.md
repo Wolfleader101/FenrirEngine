@@ -29,3 +29,5 @@ Game code makes a view with a `Camera` component on an entity, oriented by the e
 ## When to revisit
 
 If a backend or a target platform lacks [0,1] clip control or floating-point depth, or if keeping GPU-only images in FenrirAssets starts to complicate its loading and ownership rules.
+
+*Amended by ADR-0047:* a camera's `ColourBackground` replaces only the backdrop; every view is lit by the scene's `Sky`. `Camera` gains `exposure`, `tonemapper`, ambient occlusion and bloom settings (ADR-0049).

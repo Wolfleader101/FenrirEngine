@@ -125,3 +125,4 @@ The rule throughout is that a wrong configuration is visible and skipped, never 
 - ADR-0024's set 3 gains the palette buffer at binding 1, and its per-item record gains `paletteOffset` and the world determinant sign. `Fenrir/Skinning.glsl` joins the engine includes.
 - FenrirSkeleton gains `PoseGeneration` and the lazily built palette (ticket 27's finalisation).
 - Not yet specified: compute skinning into per-frame skinned vertex buffers, for when shadows, motion vectors, ray tracing or repeated passes draw a skinned mesh several times; it reads the same palette buffer. Also a bind-pose preview debug view.
+- *Amended by ADR-0050:* compute skinning is specified: each skinned mesh is skinned once a frame into a per-frame vertex buffer, and `SKINNED` stays for user shaders and as the fallback.
