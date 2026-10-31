@@ -1,7 +1,7 @@
 # How do general collision groups work?
 
 Type: grilling
-Status: claimed
+Status: resolved
 Blocked by: 49, 50
 
 ## Question
@@ -20,3 +20,17 @@ How does game code make any set of bodies ignore each other? The foundation left
 Probably no ADR, unless the pair-list model is chosen (hard to reverse into a component).
 
 Facts from the joints spec: Jolt gives each body at most one `CollisionGroup` (a `GroupFilter`, a `GroupID` and a `SubGroupID`); two bodies collide when their filters agree, and FenrirPhysics's private `JoinedPairs` filter sets every jointed body's `GroupID` to its body index and keeps a hash set of excluded pairs patched before the step. Queries ignore collision groups.
+
+## Answer
+
+No ADR. Vocabulary is in `GLOSSARY.md`: *collision group* (already reserved) now names the `CollisionGroup` component.
+
+- **The model:** a `CollisionGroup` component on a body entity holding one `std::uint32_t group`. Two bodies whose groups are equal and non-zero never touch; `0`, and no component, is no group. One group per body (Jolt allows one `CollisionGroup` per body). A pair list (`IgnoreCollision(a, b)`) was rejected: a call, not state, so it does not survive a body rebuild or a scene save; a group plus sub-group mask was deferred (below).
+- **Who picks the id:** game code, as plain integers compared only within one physics world (a ragdoll builder can use its skeleton entity's id). Physics hands out nothing: no `NewCollisionGroup()` native, nothing to mirror.
+- **Inside a group:** a group means only "ignore each other". No "collide within, except these pairs" mode now. A ragdoll's default is every part and its character body in one group (stable, no self-jamming); a self-colliding ragdoll (arms stopped by the torso) is listed as later work, reached by leaving the parts ungrouped and relying on the joints' parent–child exclusions, or by a later within-group field backed by Jolt's `GroupFilterTable`, which needs a pose-based overlap pass at build time (the ragdoll spec's problem).
+- **Characters and triggers:** a `CollisionGroup` on a `CharacterBody` entity applies to its move and its inner body, so a character and its own ragdoll ignore each other. A trigger reads the `CollisionGroup` of its own entity, as it reads its own `CollisionFilter`, so a character's trigger can skip its group-mates.
+- **Queries:** ignore groups, as they ignore `collideConnected` (Jolt's groups never filter queries); `QueryFilter::ignoreBody` and layers skip a body. A group-aware query filter is addable if a need appears.
+- **Live edits and events:** changing or removing a group is a field edit applied next tick, no rebuild; a pair that stops colliding gets a normal `ContactEnd`, and a pair that resumes wakes both bodies and gets a `ContactBegin`, the rules `collideConnected` toggles follow.
+- **Behind the seam:** one combined private `GroupFilter` (the joints spec's `JoinedPairs`, which already sets every jointed body's Jolt `GroupID` to its body index, grows a body-to-group table consulted beside its pair set); every body with a group or a joint carries that filter. A second backend needs a per-pair "can collide" hook, which every candidate has.
+- **C#:** `CollisionGroup` mirrored writable with C++'s default; no natives.
+- **Words to avoid:** ignore list, exclusion, sub-group, collision exception (Godot's).
