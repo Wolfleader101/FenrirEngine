@@ -15,7 +15,7 @@ public struct Spin : IComponent
     public float Angle;
 }
 
-// Gives the demo's backpacks a Spin. The entities are made when the scene is entered, after scripts load, so this looks for
+// Gives the demo's boxes a Spin. The entities are made when the scene is entered, after scripts load, so this looks for
 // them every frame instead of in OnCreate, and spins them each time the scene is entered again (PageDown) and spawns new ones.
 [System(Phase.Update, Order = 0)]
 public sealed class SpinSetup : ISystem
@@ -26,8 +26,8 @@ public sealed class SpinSetup : ISystem
         int added = 0;
         foreach (var (entity, name) in context.Query<Name>())
         {
-            // "Backpack 1" and "Backpack 2", not their parent "Backpacks".
-            if (!name.Text.StartsWith("Backpack ", StringComparison.Ordinal))
+            // "Box 1" and "Box 2", not their parent "Boxes".
+            if (!name.Text.StartsWith("Box ", StringComparison.Ordinal))
                 continue;
 
             if (!entity.Has<Spin>())

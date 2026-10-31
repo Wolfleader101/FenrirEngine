@@ -35,7 +35,7 @@ namespace RendererDemo
         struct MaterialsState
         {
             Fenrir::Entity light;
-            Fenrir::Entity backpack;
+            Fenrir::Entity box;
             /** @brief The two quads turning about +Y: double-sided, and single-sided beside it. */
             std::array<Fenrir::Entity, 2> turning;
             /** @brief The material the row of three cubes shares. */
@@ -43,7 +43,7 @@ namespace RendererDemo
             float lightYaw = 0.5f;
             std::size_t ambient = 0;
             std::size_t colour = 0;
-            bool backpackVisible = true;
+            bool boxVisible = true;
             float seconds = 0.0f;
         };
 
@@ -141,11 +141,12 @@ namespace RendererDemo
             // The scene owns what it loads and makes, so its assets go when it is left.
             const auto cube = store.Load<Fenrir::Mesh>("cube.obj#Mesh0", scene);
             const auto sphere = store.Load<Fenrir::Mesh>("sphere.obj#Mesh0", scene);
-            const auto backpack = store.Load<Fenrir::Model>("backpack/backpack.obj", scene);
-            if (!cube.Ok() || !sphere.Ok() || !backpack.Ok())
+            const auto box = store.Load<Fenrir::Model>("BoxTextured/BoxTextured.gltf", scene);
+            if (!cube.Ok() || !sphere.Ok() || !box.Ok())
             {
-                app.Logger()->Error("Meshes and materials: the cube, sphere or backpack did not load from the asset "
-                                    "root");
+                app.Logger()->Error(
+                    "Meshes and materials: the cube, sphere or textured box did not load from the asset "
+                    "root");
                 return;
             }
             const auto lit = store.Load<Fenrir::Shader>("builtin:lit", scene).handle;
@@ -171,11 +172,12 @@ namespace RendererDemo
             // The ground.
             place(cube.handle, make(lit, 0x606060FF), {0.0f, -0.1f, 0.0f}, {22.0f, 0.2f, 14.0f});
 
-            // The imported backpack, spawned as a node tree of MeshRenderers.
-            state.backpack = Fenrir::SpawnModel(app, scene, backpack.handle);
-            auto& backpackTransform = state.backpack.GetComponent<Fenrir::Transform>();
-            backpackTransform.pos = {-7.6f, 0.9f, -0.5f};
-            backpackTransform.rot = YawPitch(0.6f, 0.0f);
+            // The imported textured box (Khronos's BoxTextured), spawned as a node tree of MeshRenderers.
+            state.box = Fenrir::SpawnModel(app, scene, box.handle);
+            auto& boxTransform = state.box.GetComponent<Fenrir::Transform>();
+            boxTransform.pos = {-7.6f, 0.75f, -0.5f};
+            boxTransform.scale = Vec3(1.5f);
+            boxTransform.rot = YawPitch(0.6f, 0.0f);
 
             // Primitives in builtin:unlit, then in builtin:lit.
             place(cube.handle, make(unlit, 0x3070E0FF), {-4.2f, 0.5f, 0.0f});
@@ -290,10 +292,10 @@ namespace RendererDemo
             }
             if (keyboard.JustPressed(Fenrir::Key::V))
             {
-                state->backpackVisible = !state->backpackVisible;
-                SetVisible(state->backpack, state->backpackVisible);
-                app.Logger()->Info("V: the backpack's MeshRenderers are {}",
-                                   state->backpackVisible ? "visible" : "hidden");
+                state->boxVisible = !state->boxVisible;
+                SetVisible(state->box, state->boxVisible);
+                app.Logger()->Info("V: the textured box's MeshRenderers are {}",
+                                   state->boxVisible ? "visible" : "hidden");
             }
             if (keyboard.JustPressed(Fenrir::Key::C))
             {
@@ -309,8 +311,9 @@ namespace RendererDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Meshes and materials";
-        scene.keyHelp = "L: turn the light. M: the ambient light (dim, bright, off). V: show or hide the backpack. C: "
-                        "the colour of the three cubes' shared material.";
+        scene.keyHelp =
+            "L: turn the light. M: the ambient light (dim, bright, off). V: show or hide the textured box. C: "
+            "the colour of the three cubes' shared material.";
         scene.keys = {Fenrir::Key::L, Fenrir::Key::M, Fenrir::Key::V, Fenrir::Key::C,
                       Fenrir::Key::L, Fenrir::Key::M, Fenrir::Key::V, Fenrir::Key::C};
         scene.camera.position = {0.0f, 3.0f, 11.0f};

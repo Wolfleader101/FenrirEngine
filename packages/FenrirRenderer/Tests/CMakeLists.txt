@@ -28,11 +28,11 @@ fenrir_add_shaders(FenrirRendererTests PROGRAM Tinted2D VERTEX ../Shaders/Builti
 # A user's own material shader (ADR-0024), built as any user's is and loaded from the container file it writes, with its
 # own variant key FANCY, which the renderer leaves off.
 fenrir_add_shaders(FenrirRendererTests PROGRAM UserTint VERTEX fixtures/user.vert FRAGMENT fixtures/user.frag KEYS FANCY)
-# The backpack from the demo apps' shared assets, for SpawnModel on a real model, a glTF node with two meshes, and
-# FenrirAssets's skinned armatures fixture.
+# Khronos's BoxTextured from the demo apps' shared assets, for SpawnModel on a real model, a glTF node with two meshes,
+# and FenrirAssets's skinned armatures fixture.
 target_compile_definitions(FenrirRendererTests PRIVATE
     FENRIR_TEST_USER_SHADER="${CMAKE_CURRENT_BINARY_DIR}/shaders/UserTint.fshader"
-    FENRIR_TEST_BACKPACK="${CMAKE_CURRENT_SOURCE_DIR}/../../../examples/assets/backpack/backpack.obj"
+    FENRIR_TEST_BOX_TEXTURED="${CMAKE_CURRENT_SOURCE_DIR}/../../../examples/assets/BoxTextured/BoxTextured.gltf"
     FENRIR_TEST_TWO_PARTS="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/two_parts.gltf"
     FENRIR_TEST_ARMATURES="${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirAssets/tests/fixtures/models/armatures.gltf")
 add_test(NAME FenrirRenderer COMMAND FenrirRendererTests)

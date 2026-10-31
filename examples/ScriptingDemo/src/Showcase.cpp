@@ -53,31 +53,32 @@ namespace ScriptingDemo
             entity.AddComponent<Bob>(bob);
         }
 
-        // As the legacy DemoApp's: a parent "Backpacks" holding "Backpack 1" at the origin and "Backpack 2" five units
-        // above it, which bobs. C# finds them by name (scripts/Spin.cs) and spins them.
+        // As the legacy DemoApp's, with Khronos's BoxTextured for its backpack: a parent "Boxes" holding "Box 1" at
+        // the origin and "Box 2" five units above it, which bobs. C# finds them by name (scripts/Spin.cs) and spins
+        // them.
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
         {
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
-            const auto backpack = store.Load<Fenrir::Model>("backpack/backpack.obj", scene);
-            if (!backpack.Ok())
+            const auto model = store.Load<Fenrir::Model>("BoxTextured/BoxTextured.gltf", scene);
+            if (!model.Ok())
             {
-                app.Logger()->Error("Showcase: the backpack did not load from the asset root");
+                app.Logger()->Error("Showcase: the textured box did not load from the asset root");
                 return;
             }
 
             Fenrir::EntityList& entities = scene.GetEntityList();
-            Fenrir::Entity backpacks = entities.CreateEntity();
-            backpacks.GetComponent<Fenrir::Name>().Set("Backpacks");
+            Fenrir::Entity boxes = entities.CreateEntity();
+            boxes.GetComponent<Fenrir::Name>().Set("Boxes");
 
-            Fenrir::Entity backpack1 = Fenrir::SpawnModel(app, scene, backpack.handle, backpacks);
-            backpack1.GetComponent<Fenrir::Name>().Set("Backpack 1");
+            Fenrir::Entity box1 = Fenrir::SpawnModel(app, scene, model.handle, boxes);
+            box1.GetComponent<Fenrir::Name>().Set("Box 1");
 
-            Fenrir::Entity backpack2 = Fenrir::SpawnModel(app, scene, backpack.handle, backpacks);
-            backpack2.GetComponent<Fenrir::Name>().Set("Backpack 2");
-            constexpr float backpack2Y = 5.0f;
-            backpack2.GetComponent<Fenrir::Transform>().pos = Vec3(0.0f, backpack2Y, 0.0f);
-            // Backpack 2 bobs up and down: C++ sets how, a C# system does it (scripts/Bobbing.cs).
-            AttachBob(backpack2, backpack2Y);
+            Fenrir::Entity box2 = Fenrir::SpawnModel(app, scene, model.handle, boxes);
+            box2.GetComponent<Fenrir::Name>().Set("Box 2");
+            constexpr float box2Y = 5.0f;
+            box2.GetComponent<Fenrir::Transform>().pos = Vec3(0.0f, box2Y, 0.0f);
+            // Box 2 bobs up and down: C++ sets how, a C# system does it (scripts/Bobbing.cs).
+            AttachBob(box2, box2Y);
 
             // The legacy demo's directional light, which shone along (-0.2, -1, -0.3); this one shines along its -Z.
             Fenrir::Entity light = entities.CreateEntity();
@@ -101,7 +102,7 @@ namespace ScriptingDemo
                     app.Logger()->Info("C++ read Bob.Phase = {:.2f}, which C# wrote into the same component.",
                                        bob.Phase);
                 }
-                name.Set(std::format("Backpack 2 (bob phase {:.2f})", bob.Phase).c_str());
+                name.Set(std::format("Box 2 (bob phase {:.2f})", bob.Phase).c_str());
             });
         }
 
@@ -117,7 +118,7 @@ namespace ScriptingDemo
         }
 
         /**
-         * @brief The legacy editor's hierarchy, where the showcase's changing names were seen: each backpack's and
+         * @brief The legacy editor's hierarchy, where the showcase's changing names were seen: each box's and
          * spark's Name in world text above it, this frame.
          */
         void ShowNames(Fenrir::App& app)
@@ -131,14 +132,14 @@ namespace ScriptingDemo
             Fenrir::EntityList& entities = scene.GetEntityList();
             entities.ForEach<Fenrir::Name>([&](auto handle, Fenrir::Name& name) {
                 const std::string_view text = name.Get();
-                const bool backpack = text.starts_with("Backpack ");
-                if (!backpack && !text.starts_with("Spark "))
+                const bool box = text.starts_with("Box ");
+                if (!box && !text.starts_with("Spark "))
                 {
                     return;
                 }
                 Fenrir::TextOptions options;
                 options.relativeTo = entities.GetEntity(static_cast<std::uint32_t>(handle));
-                draw->WorldText(Vec3(0.0f, backpack ? 1.6f : 0.0f, 0.0f), text, Fenrir::Colour::White, options);
+                draw->WorldText(Vec3(0.0f, box ? 1.0f : 0.0f, 0.0f), text, Fenrir::Colour::White, options);
             });
         }
     } // namespace
@@ -156,7 +157,7 @@ namespace ScriptingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Showcase";
-        scene.keyHelp = "R: reverse the backpacks' spin. Space: a burst of sparks.";
+        scene.keyHelp = "R: reverse the boxes' spin. Space: a burst of sparks.";
         scene.keys = {Fenrir::Key::R, Fenrir::Key::Space};
         scene.camera.position = {0.0f, 4.0f, 16.0f};
         scene.spawn = Spawn;

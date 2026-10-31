@@ -13,7 +13,7 @@ if(NOT result EQUAL 0)
 endif()
 
 set(expected
-    # Spin.cs: the C#-defined component, given to both backpacks.
+    # Spin.cs: the C#-defined component, given to both boxes.
     "Spinning 2 entities from C#\\. Press R to reverse them, Space for sparks\\."
     # Bobbing.cs and Showcase.cpp: the component C++ declares, which C# writes and C++ reads back.
     "C\\+\\+ read Bob\\.Phase = [0-9.]+, which C# wrote into the same component\\."

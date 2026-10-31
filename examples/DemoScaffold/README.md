@@ -133,8 +133,9 @@ Shared demo assets live in `examples/assets/`, and an app's own in `examples/<Ap
 
 - `cube.obj`: a cube of side 1 centred on the origin, with normals and UVs (`cube.obj#Mesh0`).
 - `sphere.obj`: a UV sphere of radius 0.5, 32 segments by 16 rings, with normals and UVs (`sphere.obj#Mesh0`).
-- `backpack/backpack.obj`: Berk Gedik's "Survival Guitar Backpack (Low Poly)", CC BY 4.0, with its diffuse, normal and
-  specular textures; `backpack/attribution.txt` holds the attribution and the changes made to it.
+- `BoxTextured/BoxTextured.gltf`: Khronos's glTF sample "Box Textured" by Cesium, CC BY 4.0, a cube of side 1 with one
+  base colour texture, the Cesium logo (a trademark the licence does not cover); `BoxTextured/attribution.txt` holds
+  the attribution and the upstream commit.
 - `skybox/skybox.cubemap`: a cubemap of six 512-pixel PNG faces, a procedural sky with hills and a sun, made for the
   engine by `skybox/make_skybox.py` (MIT, as the repository; `skybox/attribution.txt`).
 - `skybox-darcy/skybox.cubemap`: the legacy DemoApp's skybox, six 256-pixel PNG faces by Darcy Wilson, CC0
