@@ -48,3 +48,6 @@ CMakeLists.txt text eol=lf
 
 # Git hooks run under sh, which cannot read CRLF.
 .githooks/* text eol=lf
+
+# Radiance HDR panoramas start with a text header, so Git could take one for text and convert its line endings.
+*.hdr binary
