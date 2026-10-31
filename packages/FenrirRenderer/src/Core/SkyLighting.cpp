@@ -87,11 +87,6 @@ namespace Fenrir::Render
             return std::move(*read.container);
         }
 
-        /** @brief Set 2 of a pass program: its block at binding 0 and the sky cube at binding 1. */
-        BindingGroupLayoutDesc PassLayout()
-        {
-            return {{{0, ShaderBindingKind::UniformBuffer}, {1, ShaderBindingKind::Texture}}};
-        }
     } // namespace
 
     SkyLighting::SkyLighting(GraphicsDevice& device, ILogger& logger) : m_device(device), m_logger(logger)
@@ -99,10 +94,10 @@ namespace Fenrir::Render
         m_irradianceProgram = ReadProgram(BuiltinProgram::SkyIrradiance, m_logger);
         m_specularProgram = ReadProgram(BuiltinProgram::SkySpecular, m_logger);
         m_brdfProgram = ReadProgram(BuiltinProgram::BrdfLut, m_logger);
-        m_irradianceLayout = m_device.CreateBindingGroupLayout(PassLayout(), "Sky irradiance");
-        m_specularLayout = m_device.CreateBindingGroupLayout(PassLayout(), "Sky specular");
-        m_irradiancePipeline = MakePipeline(m_irradianceProgram, m_irradianceLayout, TextureFormat::Rgba16Float);
-        m_specularPipeline = MakePipeline(m_specularProgram, m_specularLayout, TextureFormat::Rgba16Float);
+        m_passLayout = m_device.CreateBindingGroupLayout(
+            {{{0, ShaderBindingKind::UniformBuffer}, {1, ShaderBindingKind::Texture}}}, "Sky filtering");
+        m_irradiancePipeline = MakePipeline(m_irradianceProgram, m_passLayout, TextureFormat::Rgba16Float);
+        m_specularPipeline = MakePipeline(m_specularProgram, m_passLayout, TextureFormat::Rgba16Float);
         m_brdfPipeline = MakePipeline(m_brdfProgram, {}, TextureFormat::Rg16Float);
 
         SamplerDesc sampler;
@@ -129,8 +124,7 @@ namespace Fenrir::Render
         m_device.Destroy(m_irradiancePipeline);
         m_device.Destroy(m_specularPipeline);
         m_device.Destroy(m_brdfPipeline);
-        m_device.Destroy(m_irradianceLayout);
-        m_device.Destroy(m_specularLayout);
+        m_device.Destroy(m_passLayout);
     }
 
     PipelineHandle SkyLighting::MakePipeline(const ShaderContainer& container, BindingGroupLayoutHandle layout,
@@ -170,8 +164,9 @@ namespace Fenrir::Render
         Filtered& filtered = m_current;
         filtered.source = sky;
         filtered.textures.brdfLut = m_brdfLut;
+        filtered.textures.sampler = m_sampler;
 
-        TextureDesc irradiance;
+        TextureDesc& irradiance = filtered.irradianceDesc;
         irradiance.format = TextureFormat::Rgba16Float;
         irradiance.width = 9;
         irradiance.height = 1;
@@ -182,6 +177,12 @@ namespace Fenrir::Render
         // A colour, or a cube whose passes cannot run: its coefficients and a 1 x 1 cube of it, written at once.
         if (sky.cube.IsEmpty() || m_irradiancePipeline.IsEmpty() || m_specularPipeline.IsEmpty())
         {
+            if (!sky.cube.IsEmpty() && !m_loggedFallback)
+            {
+                m_loggedFallback = true;
+                m_logger.Warn("FenrirRenderer: the sky's filtering programs did not load, so a cubemap or panorama sky "
+                              "lights the scene with its fallback colour");
+            }
             irradiance.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
             specular.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
             filtered.textures.irradiance = m_device.CreateTexture(irradiance, "Sky irradiance");
@@ -243,8 +244,7 @@ namespace Fenrir::Render
             params.buffer = filtered.params;
             params.offset = Slot * pass;
             params.size = pass == 0 ? sizeof(IrradianceBlock) : sizeof(SpecularBlock);
-            filtered.groups.push_back(m_device.CreateBindingGroup(
-                {pass == 0 ? m_irradianceLayout : m_specularLayout, {params, cube}}, "Sky filtering"));
+            filtered.groups.push_back(m_device.CreateBindingGroup({m_passLayout, {params, cube}}, "Sky filtering"));
         }
     }
 
@@ -283,13 +283,8 @@ namespace Fenrir::Render
     {
         const SkySource& sky = m_current.source;
         const GraphResource source = graph.ImportTexture("Sky cube", sky.cube, sky.cubeDesc);
-        TextureDesc irradianceDesc;
-        irradianceDesc.format = TextureFormat::Rgba16Float;
-        irradianceDesc.width = 9;
-        irradianceDesc.height = 1;
-        irradianceDesc.usage = TextureUsage::Sampled | TextureUsage::ColourAttachment;
         const GraphResource irradiance =
-            graph.ImportTexture("Sky irradiance", m_current.textures.irradiance, irradianceDesc);
+            graph.ImportTexture("Sky irradiance", m_current.textures.irradiance, m_current.irradianceDesc);
         const GraphResource specular =
             graph.ImportTexture("Sky specular", m_current.textures.specular, m_current.specularDesc);
         const TextureHandle current = m_current.textures.irradiance;

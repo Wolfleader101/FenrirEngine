@@ -5,6 +5,7 @@
 // mip level of the cube, at its centre, weighted by its solid angle. The CPU mirror is Core/SphericalHarmonics.cpp's
 // ProjectSkyIrradiance, kept step for step with this.
 #include "Fenrir/CubeFaces.glsl"
+#include "Fenrir/SphericalHarmonics.glsl"
 
 layout(set = 2, binding = 0, std140) uniform SkyIrradianceParams
 {
@@ -25,32 +26,6 @@ float CornerArea(float x, float y)
     return atan(x * y, sqrt(x * x + y * y + 1.0));
 }
 
-// The real L2 basis function `index` at the unit direction d.
-float Basis(int index, vec3 d)
-{
-    switch (index)
-    {
-    case 0:
-        return 0.282095;
-    case 1:
-        return 0.488603 * d.y;
-    case 2:
-        return 0.488603 * d.z;
-    case 3:
-        return 0.488603 * d.x;
-    case 4:
-        return 1.092548 * d.x * d.y;
-    case 5:
-        return 1.092548 * d.y * d.z;
-    case 6:
-        return 0.315392 * (3.0 * d.z * d.z - 1.0);
-    case 7:
-        return 1.092548 * d.x * d.z;
-    default:
-        return 0.546274 * (d.x * d.x - d.y * d.y);
-    }
-}
-
 void main()
 {
     int index = int(gl_FragCoord.x);
@@ -68,7 +43,7 @@ void main()
                 float y1 = y0 + texel;
                 float solidAngle = CornerArea(x0, y0) - CornerArea(x0, y1) - CornerArea(x1, y0) + CornerArea(x1, y1);
                 vec3 direction = normalize(FenrirFaceDirection(face, vec2(x0 + x1, y0 + y1) * 0.5));
-                sum += textureLod(sky, direction, params.lod).rgb * solidAngle * Basis(index, direction);
+                sum += textureLod(sky, direction, params.lod).rgb * solidAngle * FenrirShBasis(direction)[index];
             }
         }
     }

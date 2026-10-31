@@ -151,34 +151,49 @@ TEST_CASE("A cubemap sky is filtered once, into every face and mip, before any v
     INFO("every filtering pass runs before the Opaque pass");
     REQUIRE(LastIndex(passes, "SkySpecular") < FirstIndex(passes, "Opaque"));
     REQUIRE(LastIndex(passes, "SkyIrradiance") < FirstIndex(passes, "Opaque"));
-
-    test.Frame();
-    INFO("the next frame filters nothing and binds the same textures");
-    REQUIRE(Filterings(test) == 0);
-    REQUIRE(FrameSet(test)[1].texture == set[1].texture);
-    REQUIRE(FrameSet(test)[2].texture == set[2].texture);
     REQUIRE(test.messages->errors.empty());
 }
 
-TEST_CASE("A sky's intensity and rotation never refilter it; a new image revision does", "[renderer][sky][lighting]")
+TEST_CASE("A filtered sky is kept: later frames filter nothing and bind the same textures", "[renderer][sky][lighting]")
 {
     RendererTestApp test;
     AddLitCube(test);
-    const auto image = test.Image(Cubemap());
-    Fenrir::Sky& sky = test.ActiveScene().AddResource<Fenrir::Sky>(Fenrir::CubemapSky{image});
+    test.ActiveScene().AddResource<Fenrir::Sky>(Fenrir::CubemapSky{test.Image(Cubemap())});
+    test.Frame();
+    const std::vector<BindingGroupEntry> set = FrameSet(test);
+
+    test.Frame();
+
+    REQUIRE(Filterings(test) == 0);
+    REQUIRE(FrameSet(test)[1].texture == set[1].texture);
+    REQUIRE(FrameSet(test)[2].texture == set[2].texture);
+}
+
+TEST_CASE("A sky's intensity and rotation never refilter it", "[renderer][sky][lighting]")
+{
+    RendererTestApp test;
+    AddLitCube(test);
+    Fenrir::Sky& sky = test.ActiveScene().AddResource<Fenrir::Sky>(Fenrir::CubemapSky{test.Image(Cubemap())});
     test.Frame();
     const TextureHandle first = FrameSet(test)[2].texture;
 
     sky.As<Fenrir::CubemapSky>().intensity = 4.0f;
-    test.Frame();
-    INFO("a new intensity filters nothing");
-    REQUIRE(Filterings(test) == 0);
-
     sky.As<Fenrir::CubemapSky>().rotation = 1.0f;
     test.Frame();
-    INFO("a new rotation filters nothing: the lighting include turns its lookups");
+
+    INFO("the lighting include scales by the intensity and turns its lookups by the rotation");
     REQUIRE(Filterings(test) == 0);
     REQUIRE(FrameSet(test)[2].texture == first);
+}
+
+TEST_CASE("A new revision of a sky's image filters it again", "[renderer][sky][lighting]")
+{
+    RendererTestApp test;
+    AddLitCube(test);
+    const auto image = test.Image(Cubemap());
+    test.ActiveScene().AddResource<Fenrir::Sky>(Fenrir::CubemapSky{image});
+    test.Frame();
+    const TextureHandle first = FrameSet(test)[2].texture;
 
     REQUIRE(test.Store().Replace(image, Cubemap(8)));
     test.Frame();

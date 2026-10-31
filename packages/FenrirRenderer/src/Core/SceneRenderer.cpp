@@ -1779,15 +1779,15 @@ namespace Fenrir::Render
             BindingGroupEntry irradiance;
             irradiance.binding = 1;
             irradiance.texture = sky.irradiance;
-            irradiance.sampler = m_outputSampler;
+            irradiance.sampler = sky.sampler;
             BindingGroupEntry specular;
             specular.binding = 2;
             specular.texture = sky.specular;
-            specular.sampler = m_skySampler;
+            specular.sampler = sky.sampler;
             BindingGroupEntry brdf;
             brdf.binding = 3;
             brdf.texture = sky.brdfLut;
-            brdf.sampler = m_outputSampler;
+            brdf.sampler = sky.sampler;
             group = {block, sky.irradiance, sky.specular,
                      m_device.CreateBindingGroup({m_frameLayout, {blockEntry, irradiance, specular, brdf}}, "Frame")};
         }

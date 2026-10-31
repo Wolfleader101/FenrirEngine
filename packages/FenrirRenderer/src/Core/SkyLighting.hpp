@@ -43,6 +43,8 @@ namespace Fenrir::Render
         Graphics::TextureHandle brdfLut;
         /** @brief The specular cube's highest mip level, which holds roughness 1 (frame.sky.w). */
         float specularMaxLevel = 0.0f;
+        /** @brief What all three are sampled with: clamped at the edges (a cube's at its faces), trilinear. */
+        Graphics::SamplerHandle sampler;
     };
 
     /**
@@ -91,6 +93,7 @@ namespace Fenrir::Render
         {
             SkySource source;
             SkyLightingTextures textures;
+            Graphics::TextureDesc irradianceDesc;
             Graphics::TextureDesc specularDesc;
             Graphics::BufferHandle params;
             /** @brief The SkyIrradiance pass's group, then each SkySpecular pass's, face by face within each level. */
@@ -113,13 +116,15 @@ namespace Fenrir::Render
         ShaderContainer m_irradianceProgram;
         ShaderContainer m_specularProgram;
         ShaderContainer m_brdfProgram;
-        Graphics::BindingGroupLayoutHandle m_irradianceLayout;
-        Graphics::BindingGroupLayoutHandle m_specularLayout;
+        /** @brief Set 2 of both filtering programs: their block at binding 0 and the sky's cube at binding 1. */
+        Graphics::BindingGroupLayoutHandle m_passLayout;
         Graphics::PipelineHandle m_irradiancePipeline;
         Graphics::PipelineHandle m_specularPipeline;
         Graphics::PipelineHandle m_brdfPipeline;
-        /** @brief Clamped at the cube's face edges, trilinear across its mips. */
+        /** @brief Clamped at the edges (a cube's at its faces), trilinear across the mips. */
         Graphics::SamplerHandle m_sampler;
+        /** @brief Whether a cube sky lit as its fallback colour because a filtering pipeline is missing was logged. */
+        bool m_loggedFallback = false;
 
         Graphics::TextureHandle m_brdfLut;
         Graphics::TextureDesc m_brdfDesc;

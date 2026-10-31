@@ -10,6 +10,7 @@
 #define FENRIR_LIGHTING_GLSL
 
 #include "Fenrir/Frame.glsl"
+#include "Fenrir/SphericalHarmonics.glsl"
 #include "Fenrir/View.glsl"
 
 // What a pixel of a surface is, for FenrirLitColour.
@@ -54,10 +55,7 @@ float FenrirGeometry(float nDotV, float nDotL, float roughness)
 // frame, unscaled by its intensity.
 vec3 FenrirSkyIrradiance(vec3 normal)
 {
-    vec3 d = FenrirSkyDirection(normal);
-    float basis[9] = float[9](0.282095, 0.488603 * d.y, 0.488603 * d.z, 0.488603 * d.x, 1.092548 * d.x * d.y,
-                              1.092548 * d.y * d.z, 0.315392 * (3.0 * d.z * d.z - 1.0), 1.092548 * d.x * d.z,
-                              0.546274 * (d.x * d.x - d.y * d.y));
+    float basis[9] = FenrirShBasis(FenrirSkyDirection(normal));
     vec3 sum = vec3(0.0);
     for (int i = 0; i < 9; ++i)
     {
@@ -96,11 +94,11 @@ vec4 FenrirLitColour(FenrirSurface surface)
     vec3 r = reflect(-v, n);
     vec3 skySpecular = textureLod(fenrirSkySpecular, FenrirSkyDirection(r), roughness * frame.sky.w).rgb;
     vec3 skyDiffuse = FenrirSkyIrradiance(n) * (1.0 - skySpecularColour) * (1.0 - metallic) * base;
-    // Specular occlusion from the ambient occlusion (Lagarde and de Rousiers 2014): rough surfaces take all of it,
-    // smooth ones less at grazing angles.
+    // Specular occlusion from the ambient occlusion (Lagarde and de Rousiers 2014, with a = roughness squared as they
+    // and Filament use it): rough surfaces take all of it, smooth ones less at grazing angles.
     float occlusion = clamp(surface.occlusion, 0.0, 1.0);
-    float specularOcclusion =
-        clamp(pow(nDotV + occlusion, exp2(-16.0 * roughness - 1.0)) - 1.0 + occlusion, 0.0, 1.0);
+    float a = roughness * roughness;
+    float specularOcclusion = clamp(pow(nDotV + occlusion, exp2(-16.0 * a - 1.0)) - 1.0 + occlusion, 0.0, 1.0);
     colour += (skyDiffuse * occlusion + skySpecular * skySpecularColour * specularOcclusion) * frame.sky.x;
 
     colour += surface.emissive;
