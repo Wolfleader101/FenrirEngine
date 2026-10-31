@@ -1,7 +1,7 @@
 # How do general collision groups work?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 49, 50
 
 ## Question
