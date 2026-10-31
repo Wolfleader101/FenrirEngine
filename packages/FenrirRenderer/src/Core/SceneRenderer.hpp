@@ -374,12 +374,10 @@ namespace Fenrir::Render
                          const std::vector<Graphics::BindingGroupHandle>& groups, const std::vector<std::size_t>& order,
                          Graphics::BindingGroupHandle frameGroup, Graphics::BindingGroupHandle viewGroup,
                          Graphics::BindingGroupHandle drawGroup, Graphics::PixelRect viewport) const;
-        [[nodiscard]] Graphics::PipelineHandle MakeInternalPipeline(const ShaderContainer& container,
-                                                                    const ShaderVariant* variant,
-                                                                    Graphics::BindingGroupLayoutHandle layout,
-                                                                    Graphics::TextureFormat colour, bool depthTested,
-                                                                    std::uint32_t samples,
-                                                                    Graphics::BindingGroupLayoutHandle viewLayout = {});
+        [[nodiscard]] Graphics::PipelineHandle MakeInternalPipeline(
+            const ShaderContainer& container, const ShaderVariant* variant, Graphics::BindingGroupLayoutHandle layout,
+            Graphics::TextureFormat colour, bool depthTested, std::uint32_t samples,
+            Graphics::BindingGroupLayoutHandle setOneLayout = {});
         /** @brief The material's group with the sampled targets in `replaced` bound to their defaults instead. */
         [[nodiscard]] Graphics::BindingGroupHandle GroupWithout(MaterialEntry& material,
                                                                 const std::vector<AssetKey>& replaced);
@@ -423,6 +421,8 @@ namespace Fenrir::Render
         /** @brief Set 2 of the Background pass's CUBEMAP variant: the Sky cubemap. */
         Graphics::BindingGroupLayoutHandle m_skyLayout;
         Graphics::BindingGroupLayoutHandle m_outputLayout;
+        /** @brief Set 1 of the Output pass: its block of the view's exposure and tonemapper. */
+        Graphics::BindingGroupLayoutHandle m_outputBlockLayout;
         Graphics::PipelineHandle m_backgroundPipeline;
         Graphics::PipelineHandle m_skyPipeline;
         Graphics::PipelineHandle m_outputPipeline;
@@ -438,6 +438,7 @@ namespace Fenrir::Render
         std::unique_ptr<BlockRing> m_frameBlocks;
         std::unique_ptr<BlockRing> m_viewBlocks;
         std::unique_ptr<BlockRing> m_backgroundBlocks;
+        std::unique_ptr<BlockRing> m_outputBlocks;
         std::unique_ptr<BlockRing> m_drawBlocks;
         /** @brief The palette buffer, one GpuBone a slot. */
         std::unique_ptr<BlockRing> m_paletteBlocks;

@@ -22,6 +22,11 @@ namespace RendererDemo
         // The colour sky B switches to, and the colour O gives the camera's own background, both linear.
         constexpr Fenrir::Colour DuskColour{0.22f, 0.12f, 0.30f, 1.0f};
         constexpr Fenrir::Colour OverrideColour{0.05f, 0.35f, 0.32f, 1.0f};
+        // What T and E step the camera through: its tonemapper, from the default, and its exposure in EV stops.
+        constexpr std::array<Fenrir::Tonemapper, 4> Tonemappers{Fenrir::Tonemapper::AgX, Fenrir::Tonemapper::PbrNeutral,
+                                                                Fenrir::Tonemapper::Aces, Fenrir::Tonemapper::None};
+        constexpr std::array<const char*, 4> TonemapperNames{"AgX", "PBR Neutral", "ACES", "None (clamped)"};
+        constexpr std::array<float, 4> Exposures{0.0f, 1.0f, 2.0f, -1.0f};
 
         /** @brief The scene's sky and camera, and what the keys have set, kept as a scene resource. */
         struct SkyState
@@ -31,12 +36,14 @@ namespace RendererDemo
             /** @brief Darcy Wilson's skybox, the legacy DemoApp's (examples/assets/skybox-darcy), which C switches to.
              */
             Fenrir::AssetHandle<Fenrir::Image> darcyCubemap;
-            /** @brief The free-fly camera, whose background O overrides. */
+            /** @brief The free-fly camera: O overrides its background, T and E set its tonemapper and exposure. */
             Fenrir::Entity camera;
             Fenrir::Entity spinner;
             bool cubemapSky = true;
             bool darcySky = false;
             bool overridden = false;
+            std::size_t tonemapper = 0;
+            std::size_t exposure = 0;
             float seconds = 0.0f;
         };
 
@@ -170,6 +177,18 @@ namespace RendererDemo
                 app.Logger()->Info("O: the camera's background is {}",
                                    state->overridden ? "its own teal colour" : "the scene's Sky");
             }
+            if (keyboard.JustPressed(Fenrir::Key::T) && state->camera.IsValid())
+            {
+                state->tonemapper = (state->tonemapper + 1) % Tonemappers.size();
+                state->camera.GetComponent<Fenrir::Camera>().tonemapper = Tonemappers.at(state->tonemapper);
+                app.Logger()->Info("T: the camera's tonemapper is {}", TonemapperNames.at(state->tonemapper));
+            }
+            if (keyboard.JustPressed(Fenrir::Key::E) && state->camera.IsValid())
+            {
+                state->exposure = (state->exposure + 1) % Exposures.size();
+                state->camera.GetComponent<Fenrir::Camera>().exposure = Exposures.at(state->exposure);
+                app.Logger()->Info("E: the camera's exposure is {:+.0f} EV", Exposures.at(state->exposure));
+            }
         }
     } // namespace
 
@@ -179,8 +198,11 @@ namespace RendererDemo
         scene.name = "Sky";
         scene.keyHelp =
             "B: the scene's Sky, the skybox cubemap or a dusk colour. C: the skybox, generated or Darcy Wilson's. O: "
-            "the camera's own background, a teal colour overriding the Sky, on or off.";
-        scene.keys = {Fenrir::Key::B, Fenrir::Key::O, Fenrir::Key::B, Fenrir::Key::O, Fenrir::Key::C, Fenrir::Key::C};
+            "the camera's own background, a teal colour overriding the Sky, on or off. T: the camera's tonemapper "
+            "(AgX, PBR Neutral, ACES, None). E: the camera's exposure (0, +1, +2, -1 EV).";
+        scene.keys = {Fenrir::Key::B, Fenrir::Key::O, Fenrir::Key::B, Fenrir::Key::O, Fenrir::Key::C,
+                      Fenrir::Key::C, Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::T, Fenrir::Key::E,
+                      Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::T, Fenrir::Key::E};
         scene.camera.position = {0.0f, 1.5f, 7.0f};
         scene.spawn = Spawn;
         scene.update = Update;

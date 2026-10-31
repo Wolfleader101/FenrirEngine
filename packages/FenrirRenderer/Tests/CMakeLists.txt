@@ -4,18 +4,24 @@
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
+# Golden images (ADR-0049): PNGs read and written through FenrirAssets's stb, and frames compared with them by
+# CIEDE2000. The null tests check the comparison; the GL tests compare whole frames with OpenGL/goldens.
+add_library(FenrirRendererGoldenImages STATIC GoldenImages.cpp GoldenImages.hpp)
+target_include_directories(FenrirRendererGoldenImages PUBLIC .)
+target_link_libraries(FenrirRendererGoldenImages PUBLIC Catch2::Catch2 PRIVATE FenrirStbImage)
+
 add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp CommandLists.cpp RenderGraph.cpp
                                    FrameRing.cpp Frames.cpp OpenGLStart.cpp Drawing.cpp Preparing.cpp RendererFrames.cpp
                                    Cameras.cpp Picking.cpp Materials.cpp SpawnModel.cpp Sky.cpp DebugFont.cpp
-                                   DebugDrawing.cpp Overlay.cpp Draw2D.cpp Skinning.cpp SkinningMaths.cpp DeviceTest.hpp
-                                   DrawLists2D.hpp FakeSurface.hpp RecordingLogger.hpp RendererProbe.hpp
-                                   RendererTestApp.hpp SkinningTestApp.hpp)
+                                   DebugDrawing.cpp Overlay.cpp Draw2D.cpp Skinning.cpp SkinningMaths.cpp Tonemapping.cpp
+                                   GoldenComparison.cpp DeviceTest.hpp DrawLists2D.hpp FakeSurface.hpp RecordingLogger.hpp
+                                   RendererProbe.hpp RendererTestApp.hpp SkinningTestApp.hpp)
 target_include_directories(FenrirRendererTests PRIVATE ../src)
 # The OpenGL backend too, for the cases where it cannot start: they need no GPU.
 # FenrirSkeleton as the skinning source the skinned tests draw from: the tests link it, the renderer never does
 # (ADR-0041).
 target_link_libraries(FenrirRendererTests PRIVATE FenrirRenderer FenrirRendererCore FenrirRendererOpenGL FenrirDebugDraw
-                                                  FenrirSkeleton Catch2::Catch2WithMain)
+                                                  FenrirSkeleton FenrirRendererGoldenImages Catch2::Catch2WithMain)
 # A shader whose frame set is not the renderer's, for the debug check of the fixed sets.
 fenrir_add_shaders(FenrirRendererTests PROGRAM WrongFrameSet VERTEX fixtures/wrong_frame.vert
                    FRAGMENT fixtures/plain.frag EMBED)
@@ -45,12 +51,18 @@ add_test(NAME FenrirRenderer COMMAND FenrirRendererTests)
 add_executable(FenrirRendererGlTests OpenGL/Clears.cpp OpenGL/Draws.cpp OpenGL/Validation.cpp OpenGL/Resources.cpp
                                      OpenGL/Vsync.cpp OpenGL/Scenes.cpp OpenGL/Targets.cpp OpenGL/Materials.cpp
                                      OpenGL/Sky.cpp OpenGL/Debug.cpp OpenGL/Overlay.cpp OpenGL/Skinning.cpp
+                                     OpenGL/Tonemapping.cpp
                                      OpenGL/GlProbe.hpp OpenGL/GlScene.hpp OpenGL/GlTestApp.hpp
                                      DrawLists2D.hpp RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp
                                      SkinningTestApp.hpp)
 target_include_directories(FenrirRendererGlTests PRIVATE . ../src)
 target_link_libraries(FenrirRendererGlTests PRIVATE FenrirRenderer FenrirRendererCore FenrirRendererOpenGL FenrirWindow
-                                                    FenrirApp FenrirDebugDraw FenrirSkeleton Catch2::Catch2WithMain)
+                                                    FenrirApp FenrirDebugDraw FenrirSkeleton FenrirRendererGoldenImages
+                                                    Catch2::Catch2WithMain)
+# The golden images, committed; a failing frame and its difference image are written into the build tree.
+target_compile_definitions(FenrirRendererGlTests PRIVATE
+    FENRIR_TEST_GOLDENS="${CMAKE_CURRENT_SOURCE_DIR}/OpenGL/goldens"
+    FENRIR_TEST_GOLDEN_FAILURES="${CMAKE_CURRENT_BINARY_DIR}/golden-failures")
 fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlFullscreenFill VERTEX OpenGL/fixtures/fullscreen.vert
                    FRAGMENT OpenGL/fixtures/fill.frag EMBED)
 fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlPositionFill VERTEX OpenGL/fixtures/position.vert

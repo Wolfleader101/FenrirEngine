@@ -177,6 +177,15 @@ static_assert(sizeof(Fenrir::RenderTarget) == 12 && alignof(Fenrir::RenderTarget
               "regenerate the description, then this binding");
 
 template <>
+struct Iris::EnumMapping<Fenrir::Tonemapper>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.Tonemapper";
+};
+static_assert(sizeof(Fenrir::Tonemapper) == 1 && alignof(Fenrir::Tonemapper) == 1,
+              "Fenrir::Tonemapper is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
 struct Iris::StructMapping<Fenrir::Viewport>
 {
     static constexpr std::string_view typeName = "Fenrir.Renderer.Viewport";
@@ -201,9 +210,11 @@ struct Iris::StructMapping<Fenrir::Camera>
         Iris::Field<Fenrir::Viewport>("Viewport", 24),
         Iris::Field<Fenrir::RenderTarget>("Target", 40),
         Iris::Field<Fenrir::CameraBackground>("Background", 52),
-        Iris::Field<bool>("DrawDebug", 72));
+        Iris::Field<bool>("DrawDebug", 72),
+        Iris::Field<float>("Exposure", 76),
+        Iris::Field<Fenrir::Tonemapper>("Tonemapper", 80));
 };
-static_assert(sizeof(Fenrir::Camera) == 76 && alignof(Fenrir::Camera) == 4,
+static_assert(sizeof(Fenrir::Camera) == 84 && alignof(Fenrir::Camera) == 4,
               "Fenrir::Camera is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
