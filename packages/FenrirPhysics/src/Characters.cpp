@@ -113,6 +113,7 @@ namespace Fenrir::Detail
                                                    .scale = world.scale,
                                                    .material = MaterialOf(entity),
                                                    .filter = FilterOf(entity),
+                                                   .group = GroupOf(entity),
                                                    .position = world.pos,
                                                    .rotation = world.rot,
                                                    .entity = id});
@@ -128,7 +129,8 @@ namespace Fenrir::Detail
                                                                   .shape = descs[i].shape,
                                                                   .scale = descs[i].scale,
                                                                   .material = descs[i].material,
-                                                                  .filter = descs[i].filter});
+                                                                  .filter = descs[i].filter,
+                                                                  .group = descs[i].group});
                 m_poses->Made(entities[i], GetWorldTransform(m_entities->GetEntity(entities[i])));
             }
         }
@@ -150,6 +152,12 @@ namespace Fenrir::Detail
             {
                 m_backend->SetCharacterFilter(record.id, filter);
                 record.filter = filter;
+            }
+            const std::uint32_t group = GroupOf(entity);
+            if (group != record.group)
+            {
+                m_backend->SetCharacterGroup(record.id, group);
+                record.group = group;
             }
 
             const Transform world = GetWorldTransform(entity);

@@ -158,6 +158,7 @@ namespace Fenrir::Detail
             CollisionFilter filter;
             Math::Vec3 linearVelocity;
             Math::Vec3 angularVelocity;
+            std::uint32_t group;
         };
 
         /**

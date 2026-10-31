@@ -388,6 +388,7 @@ namespace Fenrir::Detail
             desc.parts = UsableParts(parts);
             desc.material = MaterialOf(*m_entities, entity, parts);
             desc.filter = EffectiveFilterOf(entity);
+            desc.group = GroupOf(entity);
             desc.position = world.pos;
             desc.rotation = world.rot;
             if (rigidBody != nullptr)
@@ -402,7 +403,8 @@ namespace Fenrir::Detail
                                         desc.material,
                                         desc.filter,
                                         desc.linearVelocity,
-                                        desc.angularVelocity});
+                                        desc.angularVelocity,
+                                        desc.group});
             m_poses->Made(id, world);
             if (desc.parts.empty())
             {
@@ -473,6 +475,13 @@ namespace Fenrir::Detail
             {
                 m_backend->SetFilter(record.id, filter);
                 record.filter = filter;
+            }
+
+            const std::uint32_t group = GroupOf(entity);
+            if (group != record.group)
+            {
+                m_backend->SetGroup(record.id, group);
+                record.group = group;
             }
 
             const Poses::Edit edit = m_poses->Push(id, PoseKindOf(motion.motionType), world);

@@ -314,6 +314,20 @@ namespace Fenrir
     };
 
     /**
+     * @brief Puts the body in a collision group (the physics map's ticket 51): bodies whose `group` is equal and not 0
+     * never touch each other, whatever their layers allow. Optional: a body without one, or with `group` 0, is in no
+     * group. One group per body; game code picks the id, compared only within one physics world (a ragdoll builder
+     * uses its skeleton entity's id). On a CharacterBody's entity it applies to the character's body and its moves.
+     * Read from the body's entity, like CollisionFilter. A field edit, applied on the next tick: a pair that stops
+     * colliding gets a ContactEnd, one that resumes wakes both bodies. Queries ignore groups, as they ignore
+     * Joint::collideConnected.
+     */
+    struct CollisionGroup
+    {
+        std::uint32_t group = 0;
+    };
+
+    /**
      * @brief Makes the entity's collider a trigger: it reports what overlaps it (TriggerEnter, TriggerExit) and never
      * pushes anything.
      *

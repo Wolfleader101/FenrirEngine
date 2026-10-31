@@ -86,6 +86,11 @@ if(FENRIR_ENABLE_PHYSICS)
     add_subdirectory(packages/FenrirPhysics)
 endif()
 
+# FenrirRagdoll (ADR-0053): ragdoll glue over FenrirPhysics and FenrirSkeleton, with both on. SPIKE (ticket 55).
+if(FENRIR_ENABLE_PHYSICS AND FENRIR_ENABLE_ASSETS)
+    add_subdirectory(packages/FenrirRagdoll)
+endif()
+
 if(FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirScripting)
 endif()

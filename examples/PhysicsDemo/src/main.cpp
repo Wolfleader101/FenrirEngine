@@ -1,16 +1,37 @@
 #include <memory>
 #include <utility>
 
+#include "FenrirAnimation/Animation.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 #include "FenrirLogger/ConsoleLogger.hpp"
 #include "FenrirPhysics/Physics.hpp"
+#include "FenrirRagdoll/Ragdolls.hpp"
+#include "FenrirSkeleton/Skeletons.hpp"
 #include "PhysicsScenes.hpp"
 #include "SceneLooks.hpp"
 
 #ifdef FENRIR_DEMO_SCRIPT_ASSEMBLY
 #include "FenrirPhysicsScripting/PhysicsScripting.hpp"
 #endif
+
+namespace
+{
+    // SPIKE (ticket 55): FenrirSkeleton, FenrirAnimation and the ragdoll glue for the Ragdolls (spike) scene, which
+    // need the scaffold's FenrirAssets. They end in reverse: the glue, then Animation, then the Skeletons owner.
+    struct RagdollPackages
+    {
+        explicit RagdollPackages(Fenrir::App& app)
+            : skeletons(Fenrir::Skeletons::Install(app)), animation(Fenrir::Animation::Install(app, skeletons)),
+              ragdolls(Fenrir::Ragdolls::Install(app))
+        {
+        }
+
+        Fenrir::Skeletons skeletons;
+        Fenrir::Animation animation;
+        Fenrir::Ragdolls ragdolls;
+    };
+} // namespace
 
 int main()
 {
@@ -39,6 +60,10 @@ int main()
     config.scenes.push_back(PhysicsDemo::Vehicles(app));
     config.scenes.push_back(PhysicsDemo::Motorcycle(app));
     config.scenes.push_back(PhysicsDemo::Tank(app));
+    config.scenes.push_back(PhysicsDemo::Ragdolls(app));
+    config.installPackages = [](Fenrir::App& installing) -> std::shared_ptr<void> {
+        return std::make_shared<RagdollPackages>(installing);
+    };
 #ifdef FENRIR_DEMO_SCRIPT_ASSEMBLY
     config.scenes.push_back(PhysicsDemo::VehiclesCSharp());
     config.scriptAssembly = FENRIR_DEMO_SCRIPT_ASSEMBLY;

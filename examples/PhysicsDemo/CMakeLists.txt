@@ -13,9 +13,13 @@ fenrir_add_demo_app(PhysicsDemo
         src/Vehicles.cpp
         src/Motorcycle.cpp
         src/Tank.cpp
+        src/Ragdolls.cpp
+    # SPIKE (ticket 55): the Quaternius human and its clips, AnimationDemo's assets, for Ragdolls (spike).
+    ASSETS ../AnimationDemo/assets
     SCRIPTS scripts
 )
-target_link_libraries(PhysicsDemo PRIVATE FenrirPhysics FenrirAssets FenrirDebugDraw)
+target_link_libraries(PhysicsDemo PRIVATE FenrirPhysics FenrirAssets FenrirDebugDraw FenrirSkeleton FenrirAnimation
+                                          FenrirRagdoll)
 # Physics's scripting extension, which the C# scenes use, and its contract beside the executable.
 if(FENRIR_ENABLE_SCRIPTING)
     target_link_libraries(PhysicsDemo PRIVATE FenrirPhysicsScripting)

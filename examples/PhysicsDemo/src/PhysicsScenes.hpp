@@ -82,6 +82,14 @@ namespace PhysicsDemo
      */
     [[nodiscard]] FenrirDemo::DemoScene Tank(Fenrir::App& app);
 
+    /**
+     * @brief Ragdolls (spike): the physics map's ticket 55, thrown away once the ragdoll spec is written. A tick-posed
+     * Quaternius human walking a lane on a character body, its ragdoll following as hit boxes; keys drop it, make an
+     * arm limp, power it and get it up; a second human in another group; crates to fall onto. Adds its Tick and Update
+     * systems to `app`. Needs FenrirSkeleton, FenrirAnimation and FenrirRagdoll installed (main.cpp).
+     */
+    [[nodiscard]] FenrirDemo::DemoScene Ragdolls(Fenrir::App& app);
+
     /** @brief Vehicles (C#)'s number, which its C# systems know it by (scripts/Vehicles.cs). */
     inline constexpr std::uint32_t VehiclesCSharpScene = 4;
 

@@ -246,6 +246,8 @@ namespace Fenrir::Backend
         PhysicsMaterial material;
         /** @brief Its body's filter, which also filters its moves. */
         CollisionFilter filter;
+        /** @brief Its body's collision group, which its moves also ignore. 0 is no group. */
+        std::uint32_t group = 0;
         /** @brief The shape's centre, as a collider's Transform is. */
         Math::Vec3 position = Math::Vec3(0.0f);
         Math::Quat rotation = Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
@@ -381,6 +383,8 @@ namespace Fenrir::Backend
         std::vector<ColliderPart> parts;
         PhysicsMaterial material;
         CollisionFilter filter;
+        /** @brief Its collision group: bodies with the same non-zero group never touch. 0 is no group. */
+        std::uint32_t group = 0;
         Math::Vec3 position = Math::Vec3(0.0f);
         Math::Quat rotation = Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
         Math::Vec3 linearVelocity = Math::Vec3(0.0f);
@@ -638,6 +642,9 @@ namespace Fenrir::Backend
          * the bodies near it. */
         void SetCharacterFilter(CharacterId id, const CollisionFilter& filter);
 
+        /** @brief Changes a character's body's collision group (0 is none), which its moves ignore too. */
+        void SetCharacterGroup(CharacterId id, std::uint32_t group);
+
         /** @brief Turns a character's shape where it stands, with no sweep: its next move pushes it out of anything
          * it now overlaps. Up stays world +Y. */
         void TurnCharacter(CharacterId id, const Math::Quat& rotation);
@@ -710,6 +717,9 @@ namespace Fenrir::Backend
 
         /** @brief Changes which layers a body is in and collides with, waking it and the bodies near it. */
         void SetFilter(BodyId id, const CollisionFilter& filter);
+
+        /** @brief Changes a body's collision group (0 is none), waking it and the bodies near it. */
+        void SetGroup(BodyId id, std::uint32_t group);
 
         /** @brief Changes how a body moves. The body must have been made with `canMove`. */
         void SetMotion(BodyId id, const Motion& motion);

@@ -88,6 +88,7 @@ namespace Fenrir::Detail
             // Its entity's PhysicsMaterial and CollisionFilter as last applied to its body.
             PhysicsMaterial material;
             CollisionFilter filter;
+            std::uint32_t group = 0;
             // The Collider's shape or scale does not fit yet: the character keeps `shape` and tries again each move.
             bool shapeBlocked = false;
         };
