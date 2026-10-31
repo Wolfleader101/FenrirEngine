@@ -7,9 +7,10 @@
 // Each factor is multiplied by its texture, as glTF does: base colour by baseColourTexture, roughness by its green
 // channel and metallic by the blue channel of metallicRoughnessTexture, and emissive by emissiveTexture (white by
 // default, so an emissive colour shows with no texture). normalTexture is a tangent-space normal map whose green
-// points up the image; the tangent frame comes from the screen-space derivatives of the position and UV0, so meshes
-// need no tangent stream. Its ALPHA_MASK variant, drawn for a Masked material, discards a pixel whose alpha is below
-// the material's alpha cutoff, which the renderer writes into `alphaCutoff`.
+// points up the image, in the mesh's tangent frame when it has a tangent stream (ADR-0048: glTF's are MikkTSpace) and
+// otherwise in one from the screen-space derivatives of the position and UV0. Its ALPHA_MASK variant, drawn for a Masked
+// material, discards a pixel whose alpha is below the material's alpha cutoff, which the renderer writes into
+// `alphaCutoff`.
 #include "Fenrir/Frame.glsl"
 #include "Fenrir/View.glsl"
 
@@ -46,6 +47,8 @@ layout(location = 0) in vec3 vWorldPosition;
 layout(location = 1) in vec3 vNormal;
 layout(location = 2) in vec4 vColour;
 layout(location = 3) in vec2 vUv;
+// mesh.vert's: the world tangent, and the bitangent's sign, or 0 for a mesh without tangents.
+layout(location = 4) in vec4 vTangent;
 layout(location = 0) out vec4 outColour;
 
 const float Pi = 3.14159265;
@@ -65,10 +68,26 @@ float Geometry(float nDotV, float nDotL, float roughness)
     return (nDotV / (nDotV * (1.0 - k) + k)) * (nDotL / (nDotL * (1.0 - k) + k));
 }
 
-// The surface normal with normalTexture applied, in a tangent frame from the derivatives of the position and UV0
-// (Schueler's cotangent frame). With no UV variation (a mesh without UV0 reads UV 0 everywhere) the frame is
-// degenerate, and the interpolated normal is used as it is.
-vec3 MappedNormal(vec3 n)
+// The tangent frame of the mesh's tangent stream at this pixel: the interpolated tangent Gram-Schmidt'd against n, and
+// the bitangent cross(n, t) times its sign, as glTF gives it. False when the mesh has no tangents (a sign of 0), or the
+// tangent is degenerate.
+bool StreamFrame(vec3 n, out mat3 frame)
+{
+    vec3 t = vTangent.xyz - n * dot(n, vTangent.xyz);
+    if (abs(vTangent.w) < 0.5 || dot(t, t) < 1e-12)
+    {
+        return false;
+    }
+    t = normalize(t);
+    frame = mat3(t, cross(n, t) * (vTangent.w < 0.0 ? -1.0 : 1.0), n);
+    return true;
+}
+
+// A tangent frame from the derivatives of the position and UV0 (Schueler's cotangent frame), keeping the sign of its
+// determinant, which Schueler drops: it is negative when screen y runs down, as it does in the renderer's offscreen
+// targets, and dropping it would turn the map half a turn. False with no UV variation (a mesh without UV0 reads UV 0
+// everywhere).
+bool DerivativeFrame(vec3 n, out mat3 frame)
 {
     vec3 dpx = dFdx(vWorldPosition);
     vec3 dpy = dFdy(vWorldPosition);
@@ -82,11 +101,24 @@ vec3 MappedNormal(vec3 n)
     float scale = max(dot(t, t), dot(b, b));
     if (scale < 1e-20)
     {
+        return false;
+    }
+    float inverse = (dot(dpx, dpyPerp) < 0.0 ? -1.0 : 1.0) * inversesqrt(scale);
+    frame = mat3(t * inverse, b * inverse, n);
+    return true;
+}
+
+// The surface normal n, facing the triangle's front, with normalTexture applied in the mesh's tangent frame, or the
+// derivative frame when the mesh has no tangents. With neither frame, n is used as it is.
+vec3 MappedNormal(vec3 n)
+{
+    mat3 frame;
+    if (!StreamFrame(n, frame) && !DerivativeFrame(n, frame))
+    {
         return n;
     }
     vec3 mapped = texture(normalTexture, vUv).xyz * 2.0 - 1.0;
-    float inverse = inversesqrt(scale);
-    return normalize(mat3(t * inverse, b * inverse, n) * mapped);
+    return normalize(frame * mapped);
 }
 
 void main()
@@ -99,13 +131,12 @@ void main()
     }
 #endif
     vec4 metallicRoughness = texture(metallicRoughnessTexture, vUv);
-    vec3 n = normalize(vNormal);
-    // A double-sided material's back faces are lit as their own side.
+    vec3 n = MappedNormal(normalize(vNormal));
+    // A double-sided material's back faces are lit as their own side: the whole frame turned over.
     if (!gl_FrontFacing)
     {
         n = -n;
     }
-    n = MappedNormal(n);
     vec3 v = normalize(view.cameraPosition.xyz - vWorldPosition);
     // lightDirection is the way the light travels; l points back at it.
     vec3 l = -frame.lightDirection.xyz;

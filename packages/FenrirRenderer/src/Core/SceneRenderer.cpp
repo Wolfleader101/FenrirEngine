@@ -105,13 +105,16 @@ namespace Fenrir::Render
             /** @brief Where its constant default sits in the default stream buffer. */
             std::size_t defaultOffset = 0;
             std::string_view defaultName;
+            /** @brief Whether a mesh lacking it is logged: not when its default itself tells a shader it is absent. */
+            bool logMissing = true;
         };
 
-        // Joints and weights (ADR-0035) are a skinned mesh's; their zero defaults weigh nothing, the identity.
+        // Joints and weights (ADR-0035) are a skinned mesh's; their zero defaults weigh nothing, the identity. Tangents
+        // are optional (ADR-0048): the zero tangent's handedness 0 tells a shader there are none, so they go unlogged.
         constexpr std::array<StreamFormat, 8> Streams{{
             {"positions", VertexFormat::Float3, 12, 0, "the origin"},
             {"normals", VertexFormat::Float3, 12, 12, "normal +Y"},
-            {"tangents", VertexFormat::Float4, 16, 24, "tangent +X"},
+            {"tangents", VertexFormat::Float4, 16, 24, "the zero tangent", false},
             {"uv0", VertexFormat::Float2, 8, 40, "UV 0"},
             {"uv1", VertexFormat::Float2, 8, 48, "UV 0"},
             {"colours", VertexFormat::Float4, 16, 56, "white"},
@@ -121,8 +124,8 @@ namespace Fenrir::Render
 
         // The constants above, back to back: position, normal, tangent, UV0, UV1, colour, then the joints' and weights'
         // zero bits.
-        constexpr std::array<float, 22> DefaultStreams{0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
-                                                       0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+        constexpr std::array<float, 22> DefaultStreams{0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+                                                       0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f,
                                                        1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 
         constexpr std::uint8_t OpaqueStage = static_cast<std::uint8_t>(RenderStage::Opaque);
@@ -1446,7 +1449,8 @@ namespace Fenrir::Render
 
             for (const ShaderVertexInput& input : variant->variant->vertexInputs)
             {
-                if (input.location < Streams.size() && !mesh->second.streams.at(input.location).has_value() &&
+                if (input.location < Streams.size() && Streams.at(input.location).logMissing &&
+                    !mesh->second.streams.at(input.location).has_value() &&
                     m_loggedStreams.insert({request.mesh, input.location}).second)
                 {
                     const StreamFormat& stream = Streams.at(input.location);

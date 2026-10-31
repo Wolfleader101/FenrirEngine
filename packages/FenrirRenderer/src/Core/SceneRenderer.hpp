@@ -102,7 +102,8 @@ namespace Fenrir::Render
      * diagnostic. Set 2, the material, is laid out from the shader container's reflection: its `MaterialParams` block
      * is the default block image with the material's parameter overrides written over it, and each texture binds the
      * renderer's default texture its parameter default names. A vertex stream the shader reads but the mesh lacks binds
-     * a constant default (normal +Y, UV 0, colour white, tangent +X), logged once per mesh and stream.
+     * a constant default (normal +Y, UV 0, colour white), logged once per mesh and stream; tangents, which are
+     * optional (ADR-0048), bind the zero tangent unlogged, its handedness 0 telling the shader there are none.
      */
     class SceneRenderer final : public RenderFeature
     {
