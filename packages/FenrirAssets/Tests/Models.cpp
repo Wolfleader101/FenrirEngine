@@ -403,6 +403,36 @@ TEST_CASE("A glTF material's occlusion texture and emissive strength reach its m
     REQUIRE(test.warnings->empty());
 }
 
+TEST_CASE("A glTF's KHR_lights_punctual point and spot lights reach their nodes, and a directional one is left out",
+          "[assets][models][lights]")
+{
+    AssetsApp test;
+    // lights.gltf, hand-written: three nodes, each carrying one light and nothing else.
+    const Fenrir::Model& model = LoadScene(test, "lights.gltf");
+
+    INFO("the point light keeps its colour, intensity and range");
+    const Fenrir::ModelNode& lamp = FindNode(model, "Lamp");
+    REQUIRE(lamp.light.has_value());
+    REQUIRE(lamp.light->kind == Fenrir::ModelLightKind::Point);
+    REQUIRE(Near(lamp.light->colour, {1.0f, 0.5f, 0.25f}));
+    REQUIRE(Near(lamp.light->intensity, 3.0f));
+    REQUIRE(Near(lamp.light->range, 7.0f));
+
+    INFO("the spot light keeps its cone, and its range is 0: the file gives none");
+    const Fenrir::ModelNode& torch = FindNode(model, "Torch");
+    REQUIRE(torch.light.has_value());
+    REQUIRE(torch.light->kind == Fenrir::ModelLightKind::Spot);
+    REQUIRE(Near(torch.light->colour, {1.0f, 1.0f, 1.0f}));
+    REQUIRE(Near(torch.light->intensity, 20.0f));
+    REQUIRE(Near(torch.light->range, 0.0f));
+    REQUIRE(Near(torch.light->innerAngle, 0.2f));
+    REQUIRE(Near(torch.light->outerAngle, 0.6f));
+
+    INFO("the directional light's node is kept, without a light, and the load says why");
+    REQUIRE_FALSE(FindNode(model, "Sun").light.has_value());
+    REQUIRE(Contains(*test.warnings, "directional light"));
+}
+
 TEST_CASE("Imported materials name the built-ins before the renderer registers them", "[assets][models][materials]")
 {
     AssetsApp test;

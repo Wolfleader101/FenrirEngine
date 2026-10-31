@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,33 @@ namespace Fenrir
         std::int32_t skeleton = -1;
     };
 
+    /** @brief Which kind of light a ModelLight is. */
+    enum class ModelLightKind : std::uint8_t
+    {
+        /** @brief Shines from the node in every direction. */
+        Point,
+        /** @brief Shines from the node along its -Z in a cone. */
+        Spot,
+    };
+
+    /**
+     * @brief A light a model node carries: a glTF `KHR_lights_punctual` point or spot light, as the file gives it.
+     * SpawnModel makes it the renderer's PointLight or SpotLight. A spot light shines along its node's -Z.
+     */
+    struct ModelLight
+    {
+        ModelLightKind kind = ModelLightKind::Point;
+        /** @brief Linear RGB. */
+        Math::Vec3 colour{1.0f};
+        /** @brief The file's intensity: candela in glTF, which the renderer takes as a plain multiplier. */
+        float intensity = 1.0f;
+        /** @brief The distance at which the light reaches zero; 0 when the file leaves it out (no limit in glTF). */
+        float range = 0.0f;
+        /** @brief A spot light's cone, in radians off its axis: glTF's 0 and 45 degrees by default. */
+        float innerAngle = 0.0f;
+        float outerAngle = 0.785398163f;
+    };
+
     /** @brief One node of a model file, as the file has it. */
     struct ModelNode
     {
@@ -60,6 +88,8 @@ namespace Fenrir
         std::int32_t bone = -1;
         /** @brief The meshes the node draws, each with its material. */
         std::vector<ModelMesh> meshes;
+        /** @brief The point or spot light the node carries, if any (glTF's `KHR_lights_punctual`). */
+        std::optional<ModelLight> light;
     };
 
     /**

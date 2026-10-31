@@ -104,8 +104,9 @@ namespace
     }
 } // namespace
 
-TEST_CASE("Set 0 binds the frame block, the sky's spherical harmonics, its specular cube and the BRDF table",
-          "[renderer][sky][lighting]")
+TEST_CASE(
+    "Set 0 binds the frame block, the sky's spherical harmonics, its specular cube, the BRDF table and the lights",
+    "[renderer][sky][lighting]")
 {
     RendererTestApp test;
     AddLitCube(test);
@@ -114,7 +115,7 @@ TEST_CASE("Set 0 binds the frame block, the sky's spherical harmonics, its specu
     test.Frame();
     const std::vector<BindingGroupEntry> set = FrameSet(test);
 
-    REQUIRE(set.size() == 4);
+    REQUIRE(set.size() == 5);
     INFO("binding 0 is the frame block");
     REQUIRE_FALSE(set[0].buffer.IsEmpty());
     INFO("binding 1 is nine RGBA16F coefficients in a row");
@@ -135,6 +136,9 @@ TEST_CASE("Set 0 binds the frame block, the sky's spherical harmonics, its specu
     REQUIRE(brdf.format == TextureFormat::Rg16Float);
     REQUIRE(brdf.width == 128);
     REQUIRE(brdf.height == 128);
+    INFO("binding 4 is the point and spot lights' buffer (Lights.cpp)");
+    REQUIRE(set[4].binding == 4);
+    REQUIRE_FALSE(set[4].buffer.IsEmpty());
     REQUIRE(test.messages->errors.empty());
 }
 

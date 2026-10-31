@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -131,6 +132,8 @@ namespace Fenrir::Detail
         std::int32_t parent = -1;
         /** @brief Its meshes, by index into ModelImport::meshes. */
         std::vector<std::uint32_t> meshes;
+        /** @brief Its point or spot light, if it has one. */
+        std::optional<ModelLight> light;
         /** @brief Whether the file gives it a mesh, camera or light, so that an animation cannot make it a bone. */
         bool carriesContent = false;
         /** @brief Whether the format marks it as a bone: an FBX skeleton node (`LimbNode`, `Limb` or `Root`). */

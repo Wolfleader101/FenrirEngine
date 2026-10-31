@@ -49,10 +49,10 @@ namespace Fenrir
         }
 
         // Records `source`, an entity of a scratch scene, and its children, depth first, as new entities of the active
-        // scene with its Name, Transform, MeshRenderer and SkinnedMesh, `source` a child of `parent` if there is one,
-        // noting each new entity's id under its scratch id in `made`. Children are parented in the order `source` holds
-        // them, so the tree is the one the scratch scene holds. A SkinnedMesh names its skeleton entity by the new id:
-        // the skeleton's owner is the mesh's ancestor, so it was made first.
+        // scene with its Name, Transform, MeshRenderer, SkinnedMesh, PointLight and SpotLight, `source` a child of
+        // `parent` if there is one, noting each new entity's id under its scratch id in `made`. Children are parented
+        // in the order `source` holds them, so the tree is the one the scratch scene holds. A SkinnedMesh names its
+        // skeleton entity by the new id: the skeleton's owner is the mesh's ancestor, so it was made first.
         std::uint32_t Record(const ChangeBuffer& changes, EntityList& entities, const Entity& source,
                              std::optional<std::uint32_t> parent,
                              std::unordered_map<std::uint32_t, std::uint32_t>& made)
@@ -70,6 +70,14 @@ namespace Fenrir
                 const auto skeleton = made.find(source.GetComponent<SkinnedMesh>().skeleton.GetId());
                 const Entity remapped = skeleton != made.end() ? entities.HandleOf(skeleton->second) : Entity{};
                 (void)changes.AddComponent<SkinnedMesh>(entity, SkinnedMesh{remapped});
+            }
+            if (source.HasComponent<PointLight>())
+            {
+                (void)changes.AddComponent<PointLight>(entity, source.GetComponent<PointLight>());
+            }
+            if (source.HasComponent<SpotLight>())
+            {
+                (void)changes.AddComponent<SpotLight>(entity, source.GetComponent<SpotLight>());
             }
             if (parent)
             {

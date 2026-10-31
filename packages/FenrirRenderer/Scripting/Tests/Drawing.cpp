@@ -145,7 +145,7 @@ TEST_CASE("C#'s deprecated AmbientLight can still be inserted and written, and l
     INFO("the frame set binds the same sky light as before: the default ColourSky's");
     const std::vector<Fenrir::Graphics::BindingGroupEntry> after =
         Fenrir::RendererProbe::Entries(test.Device(), OnlyOpaqueDraw(test).groups.at(0));
-    REQUIRE(after.size() == 4);
+    REQUIRE(after.size() == 5);
     REQUIRE(after[1].texture == before[1].texture);
     REQUIRE(after[2].texture == before[2].texture);
 }
