@@ -1,5 +1,5 @@
 #version 460
-// A material with a MaterialParams block and four textures in set 2, as builtin:lit has: each output channel is one
+// A material with a MaterialParams block and four textures in set 2, as builtin:lit had: each output channel is one
 // texture's red at the centre times the block's scale, so a texture bound at the wrong GL unit shows in its channel.
 
 #pragma fenrir default(scale, 1.0, 1.0, 1.0, 1.0)

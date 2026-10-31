@@ -8,8 +8,10 @@
 // channel and metallic by the blue channel of metallicRoughnessTexture, and emissive by emissiveTexture (white by
 // default, so an emissive colour shows with no texture). normalTexture is a tangent-space normal map whose green
 // points up the image, in the mesh's tangent frame when it has a tangent stream (ADR-0048: glTF's are MikkTSpace) and
-// otherwise in one from the screen-space derivatives of the position and UV0. Its ALPHA_MASK variant, drawn for a Masked
-// material, discards a pixel whose alpha is below the material's alpha cutoff, which the renderer writes into
+// otherwise in one from the screen-space derivatives of the position and UV0. occlusionTexture's red channel (glTF's)
+// is how much of the sky reaches the pixel, white by default; it darkens the sky's light only. emissiveStrength
+// multiplies the emissive colour past 1 (glTF's KHR_materials_emissive_strength). Its ALPHA_MASK variant, drawn for a
+// Masked material, discards a pixel whose alpha is below the material's alpha cutoff, which the renderer writes into
 // `alphaCutoff`.
 #include "Fenrir/Lighting.glsl"
 
@@ -17,6 +19,7 @@
 #pragma fenrir default(emissive, 0.0, 0.0, 0.0, 1.0)
 #pragma fenrir default(metallic, 0.0)
 #pragma fenrir default(roughness, 0.5)
+#pragma fenrir default(emissiveStrength, 1.0)
 #ifdef ALPHA_MASK
 #pragma fenrir default(alphaCutoff, 0.5)
 #endif
@@ -28,6 +31,8 @@ layout(set = 2, binding = 0, std140) uniform MaterialParams
     vec4 emissive;
     float metallic;
     float roughness;
+    // Multiplies emissive, so it can pass 1.
+    float emissiveStrength;
 #ifdef ALPHA_MASK
     // MaterialData::alphaCutoff, written by the renderer over any override.
     float alphaCutoff;
@@ -41,6 +46,8 @@ layout(set = 2, binding = 2) uniform sampler2D metallicRoughnessTexture;
 layout(set = 2, binding = 3) uniform sampler2D normalTexture;
 #pragma fenrir default(emissiveTexture, white)
 layout(set = 2, binding = 4) uniform sampler2D emissiveTexture;
+#pragma fenrir default(occlusionTexture, white)
+layout(set = 2, binding = 5) uniform sampler2D occlusionTexture;
 
 layout(location = 0) in vec3 vWorldPosition;
 layout(location = 1) in vec3 vNormal;
@@ -127,7 +134,7 @@ void main()
     surface.position = vWorldPosition;
     surface.metallic = material.metallic * metallicRoughness.b;
     surface.roughness = material.roughness * metallicRoughness.g;
-    surface.occlusion = 1.0;
-    surface.emissive = material.emissive.rgb * texture(emissiveTexture, vUv).rgb;
+    surface.occlusion = texture(occlusionTexture, vUv).r;
+    surface.emissive = material.emissive.rgb * material.emissiveStrength * texture(emissiveTexture, vUv).rgb;
     outColour = FenrirLitColour(surface);
 }

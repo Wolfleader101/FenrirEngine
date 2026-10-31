@@ -43,14 +43,14 @@ namespace
     }
 } // namespace
 
-TEST_CASE("The flattening formula is set times four plus the index within the kind", "[shader-compiler][flattening]")
+TEST_CASE("The flattening formula is set times eight plus the index within the kind", "[shader-compiler][flattening]")
 {
     INFO("the first binding of a kind in set 0 is GL binding 0");
     REQUIRE(Fenrir::GlBindingOf(0, 0) == 0);
-    INFO("the third binding of a kind in set 1 is GL binding 6");
-    REQUIRE(Fenrir::GlBindingOf(1, 2) == 6);
-    INFO("the fourth binding of a kind in set 3, the last a set may hold, is GL binding 15");
-    REQUIRE(Fenrir::GlBindingOf(3, 3) == 15);
+    INFO("the third binding of a kind in set 1 is GL binding 10");
+    REQUIRE(Fenrir::GlBindingOf(1, 2) == 10);
+    INFO("the eighth binding of a kind in set 3, the last a set may hold, is GL binding 31");
+    REQUIRE(Fenrir::GlBindingOf(3, 7) == 31);
 }
 
 TEST_CASE("The GL copy flattens every resource kind's bindings and zeroes the sets", "[shader-compiler][flattening]")
@@ -66,19 +66,19 @@ TEST_CASE("The GL copy flattens every resource kind's bindings and zeroes the se
     }
     INFO("uniform blocks: frame (set 0 binding 0), extra (1, 2) and material (2, 0), each its set's first");
     REQUIRE(gl.at("frame").binding == 0u);
-    REQUIRE(gl.at("extra").binding == 4u);
-    REQUIRE(gl.at("material").binding == 8u);
+    REQUIRE(gl.at("extra").binding == 8u);
+    REQUIRE(gl.at("material").binding == 16u);
     INFO("textures: Frame.glsl's sky textures (set 0 bindings 1, 2 and 3) are set 0's textures 0, 1 and 2");
     REQUIRE(gl.at("fenrirSkyIrradiance").binding == 0u);
     REQUIRE(gl.at("fenrirSkySpecular").binding == 1u);
     REQUIRE(gl.at("fenrirBrdfLut").binding == 2u);
     INFO("textures: first, middle and second (set 2 bindings 1, 2 and 3) are set 2's textures 0, 1 and 2");
-    REQUIRE(gl.at("first").binding == 8u);
-    REQUIRE(gl.at("middle").binding == 9u);
-    REQUIRE(gl.at("second").binding == 10u);
+    REQUIRE(gl.at("first").binding == 16u);
+    REQUIRE(gl.at("middle").binding == 17u);
+    REQUIRE(gl.at("second").binding == 18u);
     INFO("storage blocks: draws (set 3 binding 0) and lights (3, 2) are set 3's storage blocks 0 and 1");
-    REQUIRE(gl.at("draws").binding == 12u);
-    REQUIRE(gl.at("lights").binding == 13u);
+    REQUIRE(gl.at("draws").binding == 24u);
+    REQUIRE(gl.at("lights").binding == 25u);
 }
 
 TEST_CASE("The SPIR-V kept for Vulkan has the sets and bindings as written", "[shader-compiler][flattening]")

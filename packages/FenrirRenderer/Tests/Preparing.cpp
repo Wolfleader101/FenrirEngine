@@ -133,16 +133,21 @@ TEST_CASE("The built-in shaders are registered under builtin: names at install",
     {
         parameters.emplace(parameter.name, parameter);
     }
-    // The spec's eight, and the ALPHA_MASK variant's alphaCutoff, which the renderer writes for a Masked material.
-    REQUIRE(parameters.size() == 9);
-    for (const char* name : {"baseColour", "emissive", "metallic", "roughness", "alphaCutoff"})
+    // The foundation spec's eight, the lighting spec's emissiveStrength and occlusionTexture (ADR-0048), and the
+    // ALPHA_MASK variant's alphaCutoff, which the renderer writes for a Masked material.
+    REQUIRE(parameters.size() == 11);
+    for (const char* name : {"baseColour", "emissive", "metallic", "roughness", "emissiveStrength", "alphaCutoff"})
     {
         INFO(name << " is a parameter");
         REQUIRE(parameters.contains(name));
     }
-    INFO("the textures default to white, white, the flat normal and white (emissive multiplies its texture)");
+    INFO("emissiveStrength defaults to 1, leaving the emissive colour as it is");
+    REQUIRE(test.Store().TryGetFloat(test.Material("builtin:lit"), "emissiveStrength").value_or(0.0f) == 1.0f);
+    INFO("the textures default to white, white, the flat normal, white (emissive multiplies its texture) and white (no "
+         "occlusion)");
     REQUIRE(parameters.at("baseColourTexture").texture == Fenrir::DefaultTexture::White);
     REQUIRE(parameters.at("metallicRoughnessTexture").texture == Fenrir::DefaultTexture::White);
     REQUIRE(parameters.at("normalTexture").texture == Fenrir::DefaultTexture::Normal);
     REQUIRE(parameters.at("emissiveTexture").texture == Fenrir::DefaultTexture::White);
+    REQUIRE(parameters.at("occlusionTexture").texture == Fenrir::DefaultTexture::White);
 }

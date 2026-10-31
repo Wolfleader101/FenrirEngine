@@ -1,9 +1,9 @@
 """Writes FenrirAssets's model fixtures: one small scene as glTF, GLB, FBX (ASCII 7.4) and OBJ, plus the skinned,
-missing-texture, colour-space-conflict and corrupt glTF files, the skinned glTF fixtures of ADR-0031's list
-(armatures, shared-skins, incompatible-skin, owners and cubic-clip) and its FBX ones (armatures, shared-skins,
-incompatible-skin, units, baked-clip and clips-only .fbx), and the tangents .gltf and .fbx; each function's docstring
-describes its file. Run by hand (`python make_fixtures.py`) from any directory; the files are written beside this script
-and checked in. The build never runs it.
+missing-texture, occlusion-emissive, colour-space-conflict and corrupt glTF files, the skinned glTF fixtures of
+ADR-0031's list (armatures, shared-skins, incompatible-skin, owners and cubic-clip) and its FBX ones (armatures,
+shared-skins, incompatible-skin, units, baked-clip and clips-only .fbx), and the tangents .gltf and .fbx; each
+function's docstring describes its file. Run by hand (`python make_fixtures.py`) from any directory; the files are
+written beside this script and checked in. The build never runs it.
 
 Everything here is written from scratch by this script, so the fixtures carry no third-party licence.
 
@@ -646,6 +646,25 @@ def write_missing_texture():
     write_gltf("missing-texture.gltf", doc, buf)
 
 
+def write_occlusion_emissive():
+    """One triangle whose material has an occlusion texture (the checker, embedded) and an emissive strength of 4."""
+    doc = {"asset": {"version": "2.0", "generator": "FenrirEngine make_fixtures.py"},
+           "extensionsUsed": ["KHR_materials_emissive_strength"]}
+    buf = Buffer(doc)
+    uv = buf.floats([(0, 0), (1, 0), (0, 1)], "VEC2")
+    tri = {"attributes": {"POSITION": buf.floats(MARKER_POSITIONS, "VEC3"), "TEXCOORD_0": uv},
+           "indices": buf.indices(MARKER_INDICES), "material": 0}
+    doc["meshes"] = [{"name": "Triangle", "primitives": [tri]}]
+    doc["images"] = [{"uri": "data:image/png;base64," + base64.b64encode(CHECKER).decode("ascii")}]
+    doc["textures"] = [{"source": 0}]
+    doc["materials"] = [{"name": "Shaded", "occlusionTexture": {"index": 0}, "emissiveFactor": [0.5, 0.25, 1.0],
+                         "extensions": {"KHR_materials_emissive_strength": {"emissiveStrength": 4.0}}}]
+    doc["nodes"] = [{"name": "Triangle", "mesh": 0}]
+    doc["scenes"] = [{"nodes": [0]}]
+    doc["scene"] = 0
+    write_gltf("occlusion-emissive.gltf", doc, buf)
+
+
 def write_conflict():
     """One mesh with two primitives: one image is the first material's base colour and the second's normal map."""
     doc = {"asset": {"version": "2.0", "generator": "FenrirEngine make_fixtures.py"}}
@@ -1048,6 +1067,7 @@ def main():
     write_fbx_baked_clip()
     write_fbx_clips_only()
     write_missing_texture()
+    write_occlusion_emissive()
     write_conflict()
     write_tangents()
     # Not glTF at all: the importer's failure.

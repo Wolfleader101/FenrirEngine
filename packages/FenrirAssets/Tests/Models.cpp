@@ -116,6 +116,8 @@ namespace
             parameters.push_back({"metallicRoughnessTexture", Type::Texture, {}, Fenrir::DefaultTexture::White});
             parameters.push_back({"normalTexture", Type::Texture, {}, Fenrir::DefaultTexture::Normal});
             parameters.push_back({"emissiveTexture", Type::Texture, {}, Fenrir::DefaultTexture::Black});
+            parameters.push_back({"emissiveStrength", Type::Float, {1.0f}});
+            parameters.push_back({"occlusionTexture", Type::Texture, {}, Fenrir::DefaultTexture::White});
         }
         Fenrir::ShaderContainer container;
         container.name = name;
@@ -376,6 +378,29 @@ TEST_CASE("glTF's own defaults are written for factors a file leaves out", "[ass
     REQUIRE(Near(test.store.TryGetOverrideFloat(lost, "metallic").value(), 1.0f));
     REQUIRE(Near(test.store.TryGetOverrideFloat(lost, "roughness").value(), 1.0f));
     REQUIRE(Near(test.store.TryGetOverrideVector4(lost, "emissive").value(), {0.0f, 0.0f, 0.0f, 1.0f}));
+    INFO("and without KHR_materials_emissive_strength, an emissive strength of 1");
+    REQUIRE(Near(test.store.TryGetOverrideFloat(lost, "emissiveStrength").value(), 1.0f));
+}
+
+TEST_CASE("A glTF material's occlusion texture and emissive strength reach its material", "[assets][models][materials]")
+{
+    AssetsApp test;
+    RegisterStandIn(test, "builtin:lit", true);
+    const Fenrir::Model& model = LoadScene(test, "occlusion-emissive.gltf");
+    const AssetHandle<Fenrir::Material> shaded = model.materials.at(0);
+
+    INFO("the occlusion texture is the embedded 2x2 checker, read as linear data");
+    const std::optional<Fenrir::MaterialTexture> occlusion = test.store.TryGetTexture(shaded, "occlusionTexture");
+    REQUIRE(occlusion.has_value());
+    const Fenrir::ImageData* checker = test.store.TryGet(occlusion->image);
+    REQUIRE(checker != nullptr);
+    REQUIRE(checker->width == 2);
+    REQUIRE(checker->colourSpace == Fenrir::ColourSpace::Linear);
+    INFO("KHR_materials_emissive_strength's 4 is the emissive strength, and the emissive colour is the file's own");
+    REQUIRE(Near(test.store.TryGetFloat(shaded, "emissiveStrength").value(), 4.0f));
+    REQUIRE(Near(test.store.TryGetVector4(shaded, "emissive").value(), {0.5f, 0.25f, 1.0f, 1.0f}));
+    INFO("nothing was warned: both are built-in parameters");
+    REQUIRE(test.warnings->empty());
 }
 
 TEST_CASE("Imported materials name the built-ins before the renderer registers them", "[assets][models][materials]")
