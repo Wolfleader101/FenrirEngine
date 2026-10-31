@@ -1,29 +1,16 @@
 #version 460
+#extension GL_GOOGLE_include_directive : require
 // The BrdfLut pass (ADR-0047): the split sum's BRDF lookup table, made once at start-up. Each texel integrates GGX with
 // height-correlated Smith visibility (Heitz 2014, as Filament) over the hemisphere by importance sampling, for N.V
 // across (0 to 1, left to right) and perceptual roughness down (0 to 1, top to bottom), into the scale (red) and bias
-// (green) the reflected f0 takes: f0 * red + green.
+// (green) the reflected f0 takes: f0 * red + green. Red plus green is what a white metal's single-scattering lobe
+// reflects, from which Fenrir/Lighting.glsl compensates for the light it loses (ADR-0048).
+#include "Fenrir/Brdf.glsl"
 
 layout(location = 0) in vec2 vNdc;
 layout(location = 0) out vec2 outScaleBias;
 
-const float Pi = 3.14159265358979;
 const uint SampleCount = 512u;
-
-// The i-th of `count` points of the Hammersley set in [0, 1)^2.
-vec2 Hammersley(uint i, uint count)
-{
-    return vec2(float(i) / float(count), float(bitfieldReverse(i)) * 2.3283064365386963e-10);
-}
-
-// Height-correlated Smith visibility, G / (4 N.V N.L), with a = roughness squared.
-float Visibility(float nDotV, float nDotL, float a)
-{
-    float a2 = a * a;
-    float lambdaV = nDotL * sqrt((nDotV - nDotV * a2) * nDotV + a2);
-    float lambdaL = nDotV * sqrt((nDotL - nDotL * a2) * nDotL + a2);
-    return 0.5 / (lambdaV + lambdaL);
-}
 
 void main()
 {
@@ -36,11 +23,7 @@ void main()
     vec2 sum = vec2(0.0);
     for (uint i = 0u; i < SampleCount; ++i)
     {
-        vec2 xi = Hammersley(i, SampleCount);
-        float phi = 2.0 * Pi * xi.x;
-        float cosTheta = sqrt((1.0 - xi.y) / (1.0 + (a * a - 1.0) * xi.y));
-        float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
-        vec3 h = vec3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+        vec3 h = FenrirSampleGgx(FenrirHammersley(i, SampleCount), a);
         vec3 l = 2.0 * dot(v, h) * h - v;
         float nDotL = l.z;
         float nDotH = h.z;
@@ -48,7 +31,7 @@ void main()
         if (nDotL > 0.0)
         {
             // The sample's weight over the GGX pdf D(h) (h.n) / (4 v.h).
-            float g = Visibility(nDotV, nDotL, a) * 4.0 * nDotL * vDotH / max(nDotH, 1e-4);
+            float g = FenrirVisibility(nDotV, nDotL, a) * 4.0 * nDotL * vDotH / max(nDotH, 1e-4);
             float fresnel = pow(1.0 - vDotH, 5.0);
             sum += vec2((1.0 - fresnel) * g, fresnel * g);
         }

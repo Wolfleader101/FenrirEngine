@@ -66,11 +66,12 @@ TEST_CASE("A masked material draws with its shader's ALPHA_MASK variant and its 
     INFO("one draws with the ALPHA_MASK variant, the other with the base variant");
     REQUIRE(maskedDraw != keys.end());
     REQUIRE(std::count(keys.begin(), keys.end(), std::vector<std::string>{}) == 1);
-    // builtin:lit's ALPHA_MASK block, std140: baseColour 0, emissive 16, metallic 32, roughness 36, alphaCutoff 40.
+    // builtin:lit's ALPHA_MASK block, std140: baseColour 0, emissive 16, metallic 32, roughness 36, emissiveStrength
+    // 40, alphaCutoff 44.
     const std::vector<std::byte> block =
         test.MaterialBlock(draws.at(static_cast<std::size_t>(maskedDraw - keys.begin())));
     INFO("the masked material's block holds its alpha cutoff, 0.3");
-    REQUIRE(std::abs(RendererTest::FloatAt(block, 40) - 0.3f) < 1e-6f);
+    REQUIRE(std::abs(RendererTest::FloatAt(block, 44) - 0.3f) < 1e-6f);
 }
 
 TEST_CASE("Opaque and masked items write depth; alpha-blended and additive ones do not, and blend",
@@ -190,12 +191,14 @@ TEST_CASE("A texture parameter left unset binds its default texture, and a set o
     const std::vector<RecordedDraw> draws = test.Draws();
 
     REQUIRE(draws.size() == 1);
-    // builtin:lit's set 2: MaterialParams at 0, then baseColourTexture, metallicRoughnessTexture, normalTexture and
-    // emissiveTexture at 1 to 4, each defaulting by pragma to white, white, normal and white.
-    INFO("the unset textures bind their defaults: white, the flat normal and white");
+    // builtin:lit's set 2: MaterialParams at 0, then baseColourTexture, metallicRoughnessTexture, normalTexture,
+    // emissiveTexture and occlusionTexture at 1 to 5, each defaulting by pragma to white, white, normal, white and
+    // white.
+    INFO("the unset textures bind their defaults: white, the flat normal, white and white");
     REQUIRE(TextureLabel(test, draws[0], 2) == "Default white");
     REQUIRE(TextureLabel(test, draws[0], 3) == "Default normal");
     REQUIRE(TextureLabel(test, draws[0], 4) == "Default white");
+    REQUIRE(TextureLabel(test, draws[0], 5) == "Default white");
     INFO("and no variant key is added for them");
     REQUIRE(RendererProbe::Keys(test.Device(), draws[0].pipeline).empty());
     const Fenrir::Graphics::TextureHandle uploaded = test.MaterialBinding(draws[0], 1).texture;

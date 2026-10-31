@@ -14,7 +14,7 @@ add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp 
                                    FrameRing.cpp Frames.cpp OpenGLStart.cpp Drawing.cpp Preparing.cpp RendererFrames.cpp
                                    Cameras.cpp Picking.cpp Materials.cpp SpawnModel.cpp Sky.cpp DebugFont.cpp
                                    DebugDrawing.cpp Overlay.cpp Draw2D.cpp Skinning.cpp SkinningMaths.cpp
-                                   SphericalHarmonics.cpp SkyLighting.cpp Tonemapping.cpp
+                                   SphericalHarmonics.cpp SkyLighting.cpp Tonemapping.cpp Brdf.cpp
                                    GoldenComparison.cpp DeviceTest.hpp DrawLists2D.hpp FakeSurface.hpp RecordingLogger.hpp
                                    RendererProbe.hpp RendererTestApp.hpp SkinningTestApp.hpp)
 target_include_directories(FenrirRendererTests PRIVATE ../src)
@@ -70,7 +70,7 @@ fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlPositionFill VERTEX OpenGL/fi
                    FRAGMENT OpenGL/fixtures/fill.frag EMBED)
 fenrir_add_shaders(FenrirRendererGlTests PROGRAM SampledPicture VERTEX ../Shaders/Builtin/mesh.vert
                    FRAGMENT fixtures/sampled.frag EMBED)
-# A material set of a block and four textures, as builtin:lit has, for the flattening formula's texture units.
+# A material set of a block and four textures, for the flattening formula's texture units.
 fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlFourTextures VERTEX ../Shaders/Builtin/mesh.vert
                    FRAGMENT OpenGL/fixtures/four_textures.frag EMBED)
 add_test(NAME FenrirRenderer-GL COMMAND FenrirRendererGlTests)

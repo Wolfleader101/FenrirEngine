@@ -56,6 +56,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/RenderGraph.cpp
     src/Core/RendererCore.hpp
     src/Core/RendererCore.cpp
+    src/Core/Brdf.hpp
+    src/Core/Brdf.cpp
     src/Core/SceneFrame.hpp
     src/Core/SceneRenderer.hpp
     src/Core/SceneRenderer.cpp

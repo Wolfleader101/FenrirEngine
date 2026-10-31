@@ -1,6 +1,7 @@
 // Materials on OpenGL (the spec's seam 2, ADR-0024): masked cut-outs, alpha blending and additive blending over opaque
-// items, in one view and in several, an emissive colour with no emissive texture, and a material set of a block and
-// four textures bound at the GL units the flattening formula gives. Each test reads back a view's SceneColor, linear.
+// items, in one view and in several, an emissive colour with no emissive texture and scaled by its emissive strength,
+// and a material set of a block and four textures bound at the GL units the flattening formula gives. Each test reads
+// back a view's SceneColor, linear.
 
 #include <cstdint>
 #include <span>
@@ -168,6 +169,26 @@ TEST_CASE("A lit material's emissive colour shows with no emissive texture", "[r
 
     INFO("emissive x the default white emissive texture");
     REQUIRE(GlProbe::Near(frame.At(Size / 2, Size / 2), {1.0f, 0.5f, 0.25f, 1.0f}, 0.01f));
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A lit material's emissive strength scales its emissive colour linearly", "[renderer][gl][materials]")
+{
+    GlScene test;
+    test.RequireOpenGL();
+    test.AddCamera();
+    const auto material = test.AddQuad(1.0f, 2.0f, "builtin:lit", Fenrir::Colour::Black);
+    Fenrir::AssetStore& store = test.assets.Store();
+    store.SetColour(material, "emissive", {0.25f, 0.125f, 0.0625f, 1.0f});
+
+    INFO("emissiveStrength defaults to 1: the emissive colour as it is");
+    REQUIRE(GlProbe::Near(test.Frame().At(Size / 2, Size / 2), {0.25f, 0.125f, 0.0625f, 1.0f}, 0.01f));
+    store.SetFloat(material, "emissiveStrength", 4.0f);
+    INFO("at 4, four times it");
+    REQUIRE(GlProbe::Near(test.Frame().At(Size / 2, Size / 2), {1.0f, 0.5f, 0.25f, 1.0f}, 0.01f));
+    store.SetFloat(material, "emissiveStrength", 16.0f);
+    INFO("at 16, sixteen times it, past 1 into HDR");
+    REQUIRE(GlProbe::Near(test.Frame().At(Size / 2, Size / 2), {4.0f, 2.0f, 1.0f, 1.0f}, 0.02f));
     REQUIRE(test.messages->errors.empty());
 }
 

@@ -1,7 +1,8 @@
-// The scene's Sky lighting builtin:lit through Fenrir/Lighting.glsl on OpenGL (the spec's seam 2; ADR-0047): a white
-// rough sphere under a constant white sky reflects about 1 everywhere, a mirror sphere reflects the sky's faces, read
-// back from the view's SceneColor, and a golden image of a grid of spheres under one panorama (compared as in
-// Tonemapping.cpp; FENRIR_UPDATE_GOLDENS=1 writes it again).
+// The scene's Sky lighting builtin:lit through Fenrir/Lighting.glsl on OpenGL (the spec's seam 2; ADR-0047, ADR-0048):
+// a white rough sphere, dielectric or metal, under a constant white sky reflects about 1 everywhere, a mirror sphere
+// reflects the sky's faces, an occlusion texture darkens the sky's light but not the sun's, read back from the view's
+// SceneColor, and a golden image of a grid of spheres under one panorama (compared as in Tonemapping.cpp;
+// FENRIR_UPDATE_GOLDENS=1 writes it again).
 
 #include <array>
 #include <cmath>
@@ -24,8 +25,12 @@ namespace
     constexpr std::uint32_t Size = GlScene::Size;
     constexpr std::uint32_t Centre = Size / 2;
 
-    /** @brief A sphere of radius `radius` at `centre` in builtin:lit, of `colour`, `metallic` and `roughness`. */
-    void AddSphere(GlScene& test, Vec3 centre, float radius, Fenrir::Colour colour, float metallic, float roughness)
+    /**
+     * @brief A sphere of radius `radius` at `centre` in builtin:lit, of `colour`, `metallic` and `roughness`, and its
+     * material.
+     */
+    Fenrir::AssetHandle<Fenrir::Material> AddSphere(GlScene& test, Vec3 centre, float radius, Fenrir::Colour colour,
+                                                    float metallic, float roughness)
     {
         Fenrir::AssetStore& store = test.assets.Store();
         const auto material = store.CreateMaterial(
@@ -38,6 +43,7 @@ namespace
         sphere.GetComponent<Fenrir::Transform>().scale = Vec3(radius * 2.0f);
         sphere.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{
             store.Add<Fenrir::Mesh>(RendererTest::Sphere(), Fenrir::AssetOwner::App()), material, true});
+        return material;
     }
 
     /**
@@ -175,6 +181,89 @@ TEST_CASE("A white SkyLight lights a white rough sphere about 1 while a coloured
     REQUIRE(GlProbe::Near(image.At(Centre, Centre), {1.0f, 1.0f, 1.0f, 1.0f}, 0.05f));
     INFO("a corner, looking mostly along -Z, still shows the skybox's -Z face, yellow");
     REQUIRE(GlProbe::Near(image.At(0, 0), ColourOf(FaceColours[5]), 0.02f));
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A white rough metal sphere under a white sky reflects about 1, losing nothing to its microfacets",
+          "[renderer][gl][sky][lighting][furnace]")
+{
+    GlScene test;
+    test.RequireOpenGL();
+    test.AddCamera();
+    test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour::White});
+    const Vec3 centre(0.0f, 0.0f, -3.0f);
+    AddSphere(test, centre, 1.0f, Fenrir::Colour::White, 1.0f, 1.0f);
+
+    const GlProbe::Image image = test.Frame();
+
+    // Single scattering alone reflects about 0.6 of the sky at roughness 1; multiple scattering gives back the rest.
+    for (const Vec3 normal : {Vec3(0.0f, 0.0f, 1.0f), glm::normalize(Vec3(0.7f, 0.0f, 1.0f))})
+    {
+        const auto [x, y] = PixelOf(centre + normal);
+        INFO("the sphere where its normal is (" << normal.x << ", " << normal.y << ", " << normal.z
+                                                << ") reads about 1");
+        REQUIRE(GlProbe::Near(image.At(x, y), {1.0f, 1.0f, 1.0f, 1.0f}, 0.05f));
+    }
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("An occlusion texture darkens a sphere lit by the sky to its own value", "[renderer][gl][sky][lighting]")
+{
+    GlScene test;
+    test.RequireOpenGL();
+    test.AddCamera();
+    test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour::White});
+    const Vec3 left(-1.2f, 0.0f, -4.0f);
+    const Vec3 right(1.2f, 0.0f, -4.0f);
+    const auto occluded = AddSphere(test, left, 1.0f, Fenrir::Colour::White, 0.0f, 1.0f);
+    AddSphere(test, right, 1.0f, Fenrir::Colour::White, 0.0f, 1.0f);
+    // Red 64 is a quarter; the other channels, 255, would read 1 if the wrong one were used.
+    INFO("the occlusion texture is set");
+    REQUIRE(test.assets.Store().SetTexture(
+        occluded, "occlusionTexture",
+        test.assets.Store().Add<Fenrir::Image>(
+            RendererTest::Picture(1, 1, {64, 255, 255, 255}, Fenrir::ColourSpace::Linear), Fenrir::AssetOwner::App())));
+
+    const GlProbe::Image image = test.Frame();
+
+    const auto [leftX, leftY] = PixelOf(left + Vec3(0.0f, 0.0f, 1.0f));
+    const auto [rightX, rightY] = PixelOf(right + Vec3(0.0f, 0.0f, 1.0f));
+    INFO("the sphere without an occlusion texture reads about 1, as white under a white sky");
+    REQUIRE(GlProbe::Near(image.At(rightX, rightY), {1.0f, 1.0f, 1.0f, 1.0f}, 0.05f));
+    INFO("the one whose occlusion texture's red is a quarter reads about a quarter");
+    REQUIRE(GlProbe::Near(image.At(leftX, leftY), {0.25f, 0.25f, 0.25f, 1.0f}, 0.03f));
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("An occlusion texture leaves a sphere lit by the sun alone as it is", "[renderer][gl][sky][lighting]")
+{
+    GlScene test;
+    test.RequireOpenGL();
+    test.AddCamera();
+    test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour::Black});
+    // Shining along -Z, from behind the camera.
+    Fenrir::Entity sun = test.app.GetActiveScene().GetEntityList().CreateEntity();
+    sun.AddComponent<Fenrir::DirectionalLight>(Fenrir::DirectionalLight{Fenrir::Colour::White, 1.0f});
+    const Vec3 left(-1.2f, 0.0f, -4.0f);
+    const Vec3 right(1.2f, 0.0f, -4.0f);
+    const auto occluded = AddSphere(test, left, 1.0f, Fenrir::Colour::White, 0.0f, 0.5f);
+    AddSphere(test, right, 1.0f, Fenrir::Colour::White, 0.0f, 0.5f);
+    INFO("the occlusion texture is set");
+    REQUIRE(test.assets.Store().SetTexture(
+        occluded, "occlusionTexture",
+        test.assets.Store().Add<Fenrir::Image>(
+            RendererTest::Picture(1, 1, {64, 64, 64, 255}, Fenrir::ColourSpace::Linear), Fenrir::AssetOwner::App())));
+
+    const GlProbe::Image image = test.Frame();
+
+    // The two points mirror each other across the view's centre, so they are lit and seen alike.
+    const auto [leftX, leftY] = PixelOf(left + Vec3(0.0f, 0.0f, 1.0f));
+    const auto [rightX, rightY] = PixelOf(right + Vec3(0.0f, 0.0f, 1.0f));
+    const GlProbe::Pixel unoccluded = image.At(rightX, rightY);
+    INFO("the sun lights the sphere without an occlusion texture: its red is " << unoccluded[0]);
+    REQUIRE(unoccluded[0] > 0.5f);
+    INFO("and the one with a dark occlusion texture just the same");
+    REQUIRE(GlProbe::Near(image.At(leftX, leftY), unoccluded, 0.01f));
     REQUIRE(test.messages->errors.empty());
 }
 

@@ -296,15 +296,18 @@ namespace Fenrir::Detail
                 {
                     return material;
                 }
-                const float strength = source.has_emissive_strength ? source.emissive_strength.emissive_strength : 1.0f;
                 const std::array<cgltf_float, 3> emissive = std::to_array(source.emissive_factor);
                 material.factors.emplace_back("metallic", pbr.metallic_factor);
                 material.factors.emplace_back("roughness", pbr.roughness_factor);
-                material.factors.emplace_back("emissive", Math::Vec4(emissive[0] * strength, emissive[1] * strength,
-                                                                     emissive[2] * strength, 1.0f));
+                material.factors.emplace_back("emissive", Math::Vec4(emissive[0], emissive[1], emissive[2], 1.0f));
+                // KHR_materials_emissive_strength's, 1 without it, as glTF's other defaults are written.
+                material.factors.emplace_back("emissiveStrength", source.has_emissive_strength
+                                                                      ? source.emissive_strength.emissive_strength
+                                                                      : 1.0f);
                 AddTexture(material, "metallicRoughnessTexture", pbr.metallic_roughness_texture);
                 AddTexture(material, "normalTexture", source.normal_texture);
                 AddTexture(material, "emissiveTexture", source.emissive_texture);
+                AddTexture(material, "occlusionTexture", source.occlusion_texture);
                 return material;
             }
 
