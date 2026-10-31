@@ -731,6 +731,10 @@ A per-bone scale, default 1, that gameplay sets on a skeleton instance to say ho
 How hard a powered ragdoll's motors drive towards the base pose: one value in [0, 1] on the ragdoll, scaled per part, that the glue turns into each motor's maximum torque, frequency and damping, so it means the same on every rig.
 *Avoid:* stiffness, blend weight (an *override weight* is how much the simulated pose shows, not how hard it is driven).
 
+**Ragdoll mode**
+`RagdollMode`: whether a ragdoll's bodies are *following* (kinematic, moved each tick to the simulation pose), *simulating* (dynamic, writing pose overrides) or *powered* (dynamic, motors driving towards the base pose); set on the ragdoll and overridable per body, and applied by the glue to motion types and motors (ADR-0054). A *partial ragdoll* is a simulating subtree under a following parent.
+*Avoid:* kinematic ragdoll, active ragdoll, blend in/out, physics blend weight.
+
 **Ragdoll glue**
 FenrirRagdoll's systems, which join a ragdoll's bodies to its skeleton: each tick they move following bodies to the simulation pose, and each frame they write simulating bodies' poses in as pose overrides and read the base pose for motor targets, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038, ADR-0040, ADR-0053).
 *Avoid:* ragdoll system, physics animation.

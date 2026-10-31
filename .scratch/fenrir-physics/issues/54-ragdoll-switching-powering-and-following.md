@@ -1,7 +1,7 @@
 # How does a ragdoll switch between following and simulating, and how is it powered?
 
 Type: grilling
-Status: claimed
+Status: resolved
 Blocked by: 52, 53
 
 ## Question
@@ -21,3 +21,17 @@ How does a ragdoll move through its life each tick and frame, given ADR-0038 (ov
 - **Vocabulary:** *following*, *simulating*, *powered*, *partial ragdoll*, *strength*; words to avoid (kinematic ragdoll, active ragdoll, blend in/out).
 
 Probably an ADR (mode as a field the glue applies, or motion types game code owns, is hard to reverse).
+
+## Answer
+
+ADR-0054, "A ragdoll's mode is a field its glue applies to motion types and motors" (`docs/adr/0054-a-ragdolls-mode-is-a-field-its-glue-applies-to-motion-types-and-motors.md`). Vocabulary is in `GLOSSARY.md`: following, simulating, powered, partial ragdoll.
+
+- **Mode is a field:** `Ragdoll::mode` (`Following`, `Simulating`, `Powered`) and `RagdollBody::mode` (`Inherit` or one of the three); each tick the glue turns the effective mode per body into `RigidBody::motionType` and each joint's motor mode, and game code writes nothing else (a write to those fields is overwritten next tick, documented).
+- **The switch:** nothing repositioned; the kinematic move's velocity carries over; a shove is `AddImpulse`; override weights stay gameplay's, set to 1 by game code at the switch.
+- **Partial ragdolls:** a `Simulating` subtree under a `Following` parent hangs from its joint to the kinematic parent; the glue writes overrides for simulating bodies' bones only.
+- **Powered:** per joint with a powered child, the child bone's base-pose rotation relative to the parent (`GetBaseLocal`/`GetBaseModel`, `PoseKind::Simulation`) re-expressed in the joint's frames as `targetRotation`/`targetPosition`, torque and springs from `strength`; no target velocity, no root drive (both listed).
+- **Tick-posed required:** a frame-posed skeleton makes the ragdoll inactive with one warning; the glue never sets `timing`.
+- **Follow root:** while any body simulates, `Update` moves the skeleton entity (position and yaw only) so the hips land on the root body; `Ragdoll::followRoot` turns it off; the character body is game code's.
+- **Getting up:** set `Following`; the next tick snaps bodies to the pose; overrides hold while gameplay ramps weights down; the glue clears entries once every weight is 0, or on a clear call.
+- **Order and state:** `Tick` systems after FenrirSkeleton's `PreTick` pass and before physics's `PostTick`; `Update` systems after `AfterTicks`; no new phases. `RagdollState state { bool anyAwake; }`.
+- **Words to avoid:** kinematic ragdoll, active ragdoll, blend in/out, physics blend weight.
