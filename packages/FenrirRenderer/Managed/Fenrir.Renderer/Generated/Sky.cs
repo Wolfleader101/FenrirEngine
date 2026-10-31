@@ -15,7 +15,8 @@ namespace Fenrir.Renderer;
 /// </summary>
 /// <remarks>
 /// The renderer filters a cubemap or panorama sky on the GPU into image-based lighting, once per image revision: its
-/// intensity scales the light, and its rotation turns it, without filtering again.
+/// intensity scales the light, and its rotation turns it, without filtering again. A SkyLight lights the scene in its
+/// place, leaving it drawn.
 /// <para/>
 /// A cubemap that is empty, stale or not a cubemap with pixels, or a panorama that is empty, stale, or not a flat image
 /// with pixels twice as wide as high, draws the default ColourSky instead, logged once. Assign a kind to change it

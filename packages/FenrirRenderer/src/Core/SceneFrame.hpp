@@ -101,13 +101,14 @@ namespace Fenrir::Render
         /** @brief The directional light's colour times its intensity, linear; black with no light. */
         Math::Vec3 lightColour{0.0f};
         /**
-         * @brief The Sky cubemap or panorama the scene is lit by (ADR-0047), prepared with PrepareCubemap or
-         * PreparePanorama; empty for a colour, or one not prepared, which lights with `skyColour`.
+         * @brief The cubemap or panorama of the sky the scene is lit by (ADR-0047): its SkyLight's, else its Sky's,
+         * prepared with PrepareCubemap or PreparePanorama; empty for a colour, or one not prepared, which lights with
+         * `skyColour`.
          */
         AssetKey sky;
-        /** @brief The ColourSky's colour, linear: the light from every side when `sky` is empty or not prepared. */
+        /** @brief Its colour, linear: the light from every side when `sky` is empty or not prepared. */
         Math::Vec3 skyColour{0.0f};
-        /** @brief The Sky's intensity and its rotation about +Y in radians: 1 and 0 for a ColourSky. */
+        /** @brief Its intensity and its rotation about +Y in radians: 1 and 0 for a ColourSky. */
         float skyIntensity = 1.0f;
         float skyRotation = 0.0f;
     };
@@ -134,6 +135,12 @@ namespace Fenrir::Render
          */
         std::vector<ViewRequest> views;
         SceneLighting lighting;
+        /**
+         * @brief The intensity and rotation about +Y in radians of the Sky the views draw behind everything: 1 and 0
+         * for a ColourSky. The same as the lighting's unless the scene has a SkyLight.
+         */
+        float backgroundIntensity = 1.0f;
+        float backgroundRotation = 0.0f;
         /** @brief Seconds since the app started, and this frame's delta. */
         float time = 0.0f;
         float deltaTime = 0.0f;

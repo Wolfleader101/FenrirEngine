@@ -26,10 +26,12 @@ namespace Fenrir::Render
             Math::Vec4 lightDirection;
             Math::Vec4 lightColour;
             Math::Vec4 time;
-            /** @brief The Sky's intensity, the cosine and sine of its rotation, and its specular cube's highest mip. */
+            /** @brief The Sky drawn: its intensity, and the cosine and sine of its rotation. */
             Math::Vec4 sky;
+            /** @brief The sky the scene is lit by: as `sky`, and its specular cube's highest mip. */
+            Math::Vec4 skyLight;
         };
-        static_assert(sizeof(FrameBlock) == 64);
+        static_assert(sizeof(FrameBlock) == 80);
 
         /** @brief The view block, as `Fenrir/View.glsl` declares it (std140). */
         struct ViewBlock
@@ -1873,6 +1875,8 @@ namespace Fenrir::Render
         const SceneLighting& lighting = m_frame.lighting;
         const FrameBlock frameBlock{Math::Vec4(lighting.lightDirection, 0.0f), Math::Vec4(lighting.lightColour, 0.0f),
                                     Math::Vec4(m_frame.time, m_frame.deltaTime, 0.0f, 0.0f),
+                                    Math::Vec4(m_frame.backgroundIntensity, std::cos(m_frame.backgroundRotation),
+                                               std::sin(m_frame.backgroundRotation), 0.0f),
                                     Math::Vec4(lighting.skyIntensity, std::cos(lighting.skyRotation),
                                                std::sin(lighting.skyRotation),
                                                m_skyLighting->Textures().specularMaxLevel)};

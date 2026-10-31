@@ -14,4 +14,5 @@ public static class Defaults
     public static global::Fenrir.Renderer.RendererStats RendererStats() => new();
     public static global::Fenrir.Renderer.SkinnedMesh SkinnedMesh() => new();
     public static global::Fenrir.Renderer.Sky Sky() => new();
+    public static global::Fenrir.Renderer.SkyLight SkyLight() => new();
 }

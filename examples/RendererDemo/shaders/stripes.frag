@@ -29,6 +29,6 @@ void main()
     vec4 base = fract(phase) < 0.5 ? material.first : material.second;
     vec3 n = normalize(vNormal);
     float wrap = dot(n, -frame.lightDirection.xyz) * 0.5 + 0.5;
-    vec3 sky = FenrirSkyIrradiance(n) * frame.sky.x;
+    vec3 sky = FenrirSkyIrradiance(n) * frame.skyLight.x;
     outColour = vec4(base.rgb * (frame.lightColour.rgb * wrap + sky), 1.0);
 }

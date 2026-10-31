@@ -523,7 +523,8 @@ namespace Fenrir
      * the scene, and every view is lit by the scene's Sky.
      *
      * The renderer filters a cubemap or panorama sky on the GPU into image-based lighting, once per image revision:
-     * its intensity scales the light, and its rotation turns it, without filtering again.
+     * its intensity scales the light, and its rotation turns it, without filtering again. A SkyLight lights the scene
+     * in its place, leaving it drawn.
      *
      * A cubemap that is empty, stale or not a cubemap with pixels, or a panorama that is empty, stale, or not a flat
      * image with pixels twice as wide as high, draws the default ColourSky instead, logged once. Assign a kind to
@@ -624,5 +625,21 @@ namespace Fenrir
             CubemapSky m_cubemap;
             PanoramaSky m_panorama;
         };
+    };
+
+    /**
+     * @brief What lights the scene from all round, when it is not the Sky drawn behind it, a scene resource (ADR-0047):
+     * a sky of any kind, used only for its light. A scene without one is lit by its Sky. A skybox chosen for how it
+     * looks can light the scene with a neutral ColourSky or a softer panorama instead of its own colours, as a
+     * camera's ColourBackground changes what is drawn and not the light. One sky lights the scene either way, so
+     * nothing is lit twice.
+     *
+     * Its sky is read as the Sky is: a cubemap or panorama that cannot be drawn lights with the default ColourSky,
+     * logged once, and its intensity and rotation scale and turn the light without filtering it again.
+     */
+    struct SkyLight
+    {
+        /** @brief The sky the scene is lit by: the default ColourSky, a dark grey, unless set. */
+        Sky sky;
     };
 } // namespace Fenrir

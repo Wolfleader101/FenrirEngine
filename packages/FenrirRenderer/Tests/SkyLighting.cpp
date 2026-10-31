@@ -2,8 +2,10 @@
 // seam 1): which passes run in which frames, and what set 0 binds for the lighting include to read.
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <numbers>
 #include <string>
 #include <vector>
 
@@ -52,12 +54,30 @@ namespace
         return RendererProbe::Entries(test.Device(), draws[index].groups.at(0));
     }
 
-    /** @brief The frame block's sky vec4's w: the specular cube's highest mip level. */
-    float SpecularMaxLevel(const RendererTestApp& test)
+    /** @brief The frame block's `skyLight` vec4 (after the light, the time and the drawn sky): x, y, z and w. */
+    std::vector<float> FrameSkyLight(const RendererTestApp& test)
     {
         const std::vector<BindingGroupEntry> entries = FrameSet(test);
         const auto bytes = RendererProbe::Bytes(test.Device(), entries.at(0).buffer);
-        return RendererTest::FloatAt(bytes, entries.at(0).offset + 60);
+        const std::size_t at = entries.at(0).offset + 64;
+        return {RendererTest::FloatAt(bytes, at), RendererTest::FloatAt(bytes, at + 4),
+                RendererTest::FloatAt(bytes, at + 8), RendererTest::FloatAt(bytes, at + 12)};
+    }
+
+    /** @brief The frame block's `sky` vec4, the drawn sky's: its intensity, and the cosine and sine of its rotation. */
+    std::vector<float> FrameSky(const RendererTestApp& test)
+    {
+        const std::vector<BindingGroupEntry> entries = FrameSet(test);
+        const auto bytes = RendererProbe::Bytes(test.Device(), entries.at(0).buffer);
+        const std::size_t at = entries.at(0).offset + 48;
+        return {RendererTest::FloatAt(bytes, at), RendererTest::FloatAt(bytes, at + 4),
+                RendererTest::FloatAt(bytes, at + 8)};
+    }
+
+    /** @brief The frame block's `skyLight.w`: the specular cube's highest mip level. */
+    float SpecularMaxLevel(const RendererTestApp& test)
+    {
+        return FrameSkyLight(test).at(3);
     }
 
     /** @brief A scene with a camera and one lit cube in front of it. */
@@ -280,4 +300,89 @@ TEST_CASE("A ColourSky runs no filtering pass and lights with its colour from a 
     INFO("a new colour gives new textures");
     REQUIRE(FrameSet(test)[1].texture != set[1].texture);
     REQUIRE(test.messages->errors.empty());
+}
+
+namespace
+{
+    /** @brief The cube texture the last frame's first Background pass draws: its group's binding 0, set 2. */
+    TextureHandle DrawnCube(const RendererTestApp& test)
+    {
+        const std::vector<PassRecord> backgrounds = RendererTest::Labelled(test.Passes(), "Background");
+        REQUIRE_FALSE(backgrounds.empty());
+        return RendererProbe::Entries(test.Device(), backgrounds[0].groups.at(2)).at(0).texture;
+    }
+} // namespace
+
+TEST_CASE("A SkyLight's colour lights the scene while its Sky's cubemap is still drawn", "[renderer][sky][lighting]")
+{
+    RendererTestApp test;
+    AddLitCube(test);
+    test.ActiveScene().AddResource<Fenrir::Sky>(Fenrir::CubemapSky{test.Image(Cubemap())});
+    test.ActiveScene().AddResource<Fenrir::SkyLight>(
+        Fenrir::SkyLight{Fenrir::ColourSky{Fenrir::Colour{0.3f, 0.3f, 0.3f, 1.0f}}});
+
+    test.Frame();
+
+    INFO("the Background pass still draws the Sky's cubemap");
+    REQUIRE(RendererProbe::Label(test.Device(), DrawnCube(test)) == "Sky cubemap");
+    INFO("nothing filters it: set 0 binds the SkyLight colour's one-texel cube");
+    REQUIRE(Filterings(test) == 0);
+    const auto specular = RendererProbe::Desc(test.Device(), FrameSet(test)[2].texture);
+    REQUIRE(specular.kind == TextureKind::Cube);
+    REQUIRE(specular.width == 1);
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A SkyLight's cubemap is filtered for the light while its ColourSky is drawn", "[renderer][sky][lighting]")
+{
+    RendererTestApp test;
+    AddLitCube(test);
+    test.ActiveScene().AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour::White});
+    test.ActiveScene().AddResource<Fenrir::SkyLight>(Fenrir::SkyLight{Fenrir::CubemapSky{test.Image(Cubemap(8))}});
+
+    test.Frame();
+
+    INFO("the SkyLight's cubemap is filtered, into a specular cube as wide as its faces");
+    REQUIRE(Count(test, "SkyIrradiance") == 1);
+    REQUIRE(RendererProbe::Desc(test.Device(), FrameSet(test)[2].texture).width == 8);
+    INFO("the Background pass draws the colour, with no cube");
+    const std::vector<PassRecord> backgrounds = RendererTest::Labelled(test.Passes(), "Background");
+    REQUIRE(RendererProbe::Keys(test.Device(), backgrounds.at(0).pipeline).empty());
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("The frame block holds the drawn Sky's and the SkyLight's intensity and rotation apart",
+          "[renderer][sky][lighting]")
+{
+    RendererTestApp test;
+    AddLitCube(test);
+    test.ActiveScene().AddResource<Fenrir::Sky>(Fenrir::CubemapSky{test.Image(Cubemap()), 3.0f, 0.0f});
+    test.ActiveScene().AddResource<Fenrir::SkyLight>(
+        Fenrir::SkyLight{Fenrir::CubemapSky{test.Image(Cubemap()), 0.5f, std::numbers::pi_v<float>}});
+
+    test.Frame();
+
+    INFO("sky: the drawn Sky's intensity 3 and no turn");
+    const std::vector<float> drawn = FrameSky(test);
+    REQUIRE(drawn[0] == 3.0f);
+    REQUIRE(drawn[1] == 1.0f);
+    INFO("skyLight: the SkyLight's intensity 0.5 and half turn");
+    const std::vector<float> light = FrameSkyLight(test);
+    REQUIRE(light[0] == 0.5f);
+    REQUIRE(std::abs(light[1] + 1.0f) < 1e-6f);
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("With no SkyLight the scene is lit by its Sky, with the Sky's intensity and rotation",
+          "[renderer][sky][lighting]")
+{
+    RendererTestApp test;
+    AddLitCube(test);
+    test.ActiveScene().AddResource<Fenrir::Sky>(Fenrir::CubemapSky{test.Image(Cubemap()), 2.0f, 0.0f});
+
+    test.Frame();
+
+    REQUIRE(Count(test, "SkyIrradiance") == 1);
+    REQUIRE(FrameSky(test)[0] == 2.0f);
+    REQUIRE(FrameSkyLight(test)[0] == 2.0f);
 }

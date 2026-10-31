@@ -326,4 +326,15 @@ static_assert(sizeof(Fenrir::Sky) == 20 && alignof(Fenrir::Sky) == 4,
               "Fenrir::Sky is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
+template <>
+struct Iris::StructMapping<Fenrir::SkyLight>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.SkyLight";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<Fenrir::Sky>("Sky", 0));
+};
+static_assert(sizeof(Fenrir::SkyLight) == 20 && alignof(Fenrir::SkyLight) == 4,
+              "Fenrir::SkyLight is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
 // clang-format on

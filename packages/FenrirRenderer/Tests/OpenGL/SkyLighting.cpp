@@ -158,6 +158,26 @@ TEST_CASE("A mirror sphere reflects the sky's faces", "[renderer][gl][sky][light
     REQUIRE(test.messages->errors.empty());
 }
 
+TEST_CASE("A white SkyLight lights a white rough sphere about 1 while a coloured skybox is drawn behind it",
+          "[renderer][gl][sky][lighting][cubemap]")
+{
+    GlScene test;
+    test.RequireOpenGL();
+    test.AddCamera();
+    const auto cubemap = test.assets.Store().Add<Fenrir::Image>(FacesCubemap(), Fenrir::AssetOwner::App());
+    test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::CubemapSky{cubemap});
+    test.app.GetActiveScene().AddResource<Fenrir::SkyLight>(Fenrir::SkyLight{Fenrir::ColourSky{Fenrir::Colour::White}});
+    AddSphere(test, Vec3(0.0f, 0.0f, -3.0f), 1.0f, Fenrir::Colour::White, 0.0f, 1.0f);
+
+    const GlProbe::Image image = test.Frame();
+
+    INFO("the sphere's centre reads about 1, white, not the faces' colours");
+    REQUIRE(GlProbe::Near(image.At(Centre, Centre), {1.0f, 1.0f, 1.0f, 1.0f}, 0.05f));
+    INFO("a corner, looking mostly along -Z, still shows the skybox's -Z face, yellow");
+    REQUIRE(GlProbe::Near(image.At(0, 0), ColourOf(FaceColours[5]), 0.02f));
+    REQUIRE(test.messages->errors.empty());
+}
+
 TEST_CASE("Rows of dielectric and metal spheres from smooth to rough under a panorama match their golden image",
           "[renderer][gl][golden][lighting]")
 {

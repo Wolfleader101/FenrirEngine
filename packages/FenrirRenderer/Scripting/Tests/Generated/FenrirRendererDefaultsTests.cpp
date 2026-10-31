@@ -96,4 +96,10 @@ TEST_CASE("C#'s new Sky() has C++'s Fenrir::Sky{} defaults, field by field", "[r
     CheckDefaults<Fenrir::Sky>(Fenrir::ScriptingProbe::Component(app.scripting), "Sky");
 }
 
+TEST_CASE("C#'s new SkyLight() has C++'s Fenrir::SkyLight{} defaults, field by field", "[renderer][scripting][bindings]")
+{
+    Fenrir::Testing::RendererScriptingApp app;
+    CheckDefaults<Fenrir::SkyLight>(Fenrir::ScriptingProbe::Component(app.scripting), "SkyLight");
+}
+
 // clang-format on
