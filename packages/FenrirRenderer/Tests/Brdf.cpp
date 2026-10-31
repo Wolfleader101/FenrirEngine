@@ -116,29 +116,35 @@ TEST_CASE("A rough metal's direct specular loses energy in a white furnace, and 
     }
 }
 
-TEST_CASE("A rough metal lit by a white sky reflects all of it once multiple scattering is added",
+TEST_CASE("A rough metal's single scattering falls short of a white sky, and multiple scattering makes up the rest",
           "[renderer][lighting][brdf][furnace]")
 {
-    // A white sky's prefiltered cube and irradiance are both 1 everywhere, so what is reflected is the two shares.
+    // A white sky's prefiltered cube and irradiance are both 1 everywhere, so what is reflected is the two shares. For
+    // a white metal Fdez-Aguera's series sums to 1 whatever the table holds; the table's own share is what is checked
+    // first, and the GL furnace test checks the whole on the GPU's table.
     for (const float roughness : {0.75f, 1.0f})
     {
         const Vec2 scaleBias = BrdfScaleBias(0.5f, roughness);
         const SkyReflectance reflectance = SkySpecularReflectance(Vec3(1.0f), scaleBias);
-        INFO("at roughness " << roughness << " single scattering alone reflects " << reflectance.singleScatter.x);
+        INFO("at roughness " << roughness << " single scattering alone reflects " << reflectance.singleScatter.x
+                             << ", well short of all of it");
         REQUIRE(reflectance.singleScatter.x < 0.92f);
         const Vec3 total = reflectance.singleScatter + reflectance.multiScatter;
         INFO("with multiple scattering it reflects " << total.x << ", all of it");
         REQUIRE(std::abs(total.x - 1.0f) < 1e-3f);
     }
+}
 
-    INFO("a coloured metal (gold) reflects more with multiple scattering, but never more than it is lit by");
+TEST_CASE("A coloured metal reflects more of a white sky with multiple scattering, but never more than it is lit by",
+          "[renderer][lighting][brdf][furnace]")
+{
     const Vec3 gold(1.0f, 0.78f, 0.34f);
     const SkyReflectance reflectance = SkySpecularReflectance(gold, BrdfScaleBias(0.5f, 1.0f));
     const Vec3 total = reflectance.singleScatter + reflectance.multiScatter;
     for (int channel = 0; channel < 3; ++channel)
     {
-        INFO("channel " << channel << ": single " << reflectance.singleScatter[channel] << ", total "
-                        << total[channel]);
+        INFO("channel " << channel << " of gold reflects " << reflectance.singleScatter[channel]
+                        << " by single scattering and " << total[channel] << " in all: more, but no more than 1");
         REQUIRE(total[channel] > reflectance.singleScatter[channel]);
         REQUIRE(total[channel] <= 1.0f + 1e-4f);
     }

@@ -70,7 +70,7 @@ fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlPositionFill VERTEX OpenGL/fi
                    FRAGMENT OpenGL/fixtures/fill.frag EMBED)
 fenrir_add_shaders(FenrirRendererGlTests PROGRAM SampledPicture VERTEX ../Shaders/Builtin/mesh.vert
                    FRAGMENT fixtures/sampled.frag EMBED)
-# A material set of a block and four textures, as builtin:lit had, for the flattening formula's texture units.
+# A material set of a block and four textures, for the flattening formula's texture units.
 fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlFourTextures VERTEX ../Shaders/Builtin/mesh.vert
                    FRAGMENT OpenGL/fixtures/four_textures.frag EMBED)
 add_test(NAME FenrirRenderer-GL COMMAND FenrirRendererGlTests)

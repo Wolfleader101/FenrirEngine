@@ -77,8 +77,8 @@ namespace Fenrir::Render
     {
         const Math::Vec3 singleScatter = f0 * scaleBias.x + scaleBias.y;
         // What a white metal's single-scattering lobe does not reflect leaves after further bounces, each reflecting
-        // the hemisphere's average Fresnel: a geometric series.
-        const float lost = 1.0f - (scaleBias.x + scaleBias.y);
+        // the hemisphere's average Fresnel (Schlick's, averaged): a geometric series.
+        const float lost = 1.0f - std::max(scaleBias.x + scaleBias.y, 1e-4f);
         const Math::Vec3 averageFresnel = f0 + (Math::Vec3(1.0f) - f0) / 21.0f;
         const Math::Vec3 multiScatter = singleScatter * averageFresnel / (Math::Vec3(1.0f) - lost * averageFresnel);
         return {singleScatter, multiScatter * lost};

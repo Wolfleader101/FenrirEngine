@@ -9,7 +9,7 @@
 // compensation (Fdez-Aguera 2019) read from the lookup table, so a rough metal keeps the light it is lit by, and
 // specular anti-aliasing (Tokuyoshi and Kaplanyan 2019), which widens the roughness by how much the normal turns
 // across the pixel. That takes the normal's screen-space derivatives, so FenrirLitColour must be called where they are
-// defined: in uniform control flow, as main's own code is.
+// defined: not inside a branch that neighbouring pixels may take differently.
 //
 // The shader still owns main, its inputs and its outputs; this is not a surface-function model.
 #ifndef FENRIR_LIGHTING_GLSL
@@ -44,13 +44,16 @@ struct FenrirSurface
 
 // Specular anti-aliasing (Tokuyoshi and Kaplanyan 2019, with Filament's constants): perceptual `roughness` widened by
 // the variance of `normal` across the pixel's quad, so a highlight thinner than a pixel spreads over it rather than
-// flickering in and out as the surface or the camera moves. The kernel added to a^2 is capped at 0.2.
+// flickering in and out as the surface or the camera moves. It takes the shading normal, normal map included, as the
+// paper does, so a bumpy map's highlights are filtered too (Filament takes the geometric normal).
+const float FenrirAntiAliasingVariance = 0.15;
+const float FenrirAntiAliasingThreshold = 0.2;
 float FenrirAntiAliasedRoughness(vec3 normal, float roughness)
 {
     vec3 dNdx = dFdx(normal);
     vec3 dNdy = dFdy(normal);
-    float variance = 0.15 * (dot(dNdx, dNdx) + dot(dNdy, dNdy));
-    float kernel = min(2.0 * variance, 0.2);
+    float variance = FenrirAntiAliasingVariance * (dot(dNdx, dNdx) + dot(dNdy, dNdy));
+    float kernel = min(2.0 * variance, FenrirAntiAliasingThreshold);
     float a = roughness * roughness;
     return sqrt(sqrt(clamp(a * a + kernel, 0.0, 1.0)));
 }
@@ -103,6 +106,7 @@ vec4 FenrirLitColour(FenrirSurface surface)
     // average Fresnel, and leaves spread wide enough to take the sky's irradiance. The diffuse takes what neither does.
     vec3 skySingleScatter = f0 * brdf.x + brdf.y;
     float lost = 1.0 - singleScatter;
+    // The hemispherical average of Schlick's Fresnel.
     vec3 averageFresnel = f0 + (1.0 - f0) / 21.0;
     vec3 skyMultiScatter = skySingleScatter * averageFresnel / (1.0 - lost * averageFresnel) * lost;
     vec3 r = reflect(-v, n);

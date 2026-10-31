@@ -12,12 +12,6 @@ layout(location = 0) out vec2 outScaleBias;
 
 const uint SampleCount = 512u;
 
-// The i-th of `count` points of the Hammersley set in [0, 1)^2.
-vec2 Hammersley(uint i, uint count)
-{
-    return vec2(float(i) / float(count), float(bitfieldReverse(i)) * 2.3283064365386963e-10);
-}
-
 void main()
 {
     // Offscreen passes put row 0 at the top (NDC +y); texel centres sample the table where its texels are.
@@ -29,11 +23,7 @@ void main()
     vec2 sum = vec2(0.0);
     for (uint i = 0u; i < SampleCount; ++i)
     {
-        vec2 xi = Hammersley(i, SampleCount);
-        float phi = 2.0 * FenrirPi * xi.x;
-        float cosTheta = sqrt((1.0 - xi.y) / (1.0 + (a * a - 1.0) * xi.y));
-        float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
-        vec3 h = vec3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+        vec3 h = FenrirSampleGgx(FenrirHammersley(i, SampleCount), a);
         vec3 l = 2.0 * dot(v, h) * h - v;
         float nDotL = l.z;
         float nDotH = h.z;

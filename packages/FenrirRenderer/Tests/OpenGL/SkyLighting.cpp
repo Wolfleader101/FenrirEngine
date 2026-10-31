@@ -218,6 +218,7 @@ TEST_CASE("An occlusion texture darkens a sphere lit by the sky to its own value
     const auto occluded = AddSphere(test, left, 1.0f, Fenrir::Colour::White, 0.0f, 1.0f);
     AddSphere(test, right, 1.0f, Fenrir::Colour::White, 0.0f, 1.0f);
     // Red 64 is a quarter; the other channels, 255, would read 1 if the wrong one were used.
+    INFO("the occlusion texture is set");
     REQUIRE(test.assets.Store().SetTexture(
         occluded, "occlusionTexture",
         test.assets.Store().Add<Fenrir::Image>(
@@ -247,6 +248,7 @@ TEST_CASE("An occlusion texture leaves a sphere lit by the sun alone as it is", 
     const Vec3 right(1.2f, 0.0f, -4.0f);
     const auto occluded = AddSphere(test, left, 1.0f, Fenrir::Colour::White, 0.0f, 0.5f);
     AddSphere(test, right, 1.0f, Fenrir::Colour::White, 0.0f, 0.5f);
+    INFO("the occlusion texture is set");
     REQUIRE(test.assets.Store().SetTexture(
         occluded, "occlusionTexture",
         test.assets.Store().Add<Fenrir::Image>(

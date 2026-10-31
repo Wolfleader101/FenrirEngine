@@ -1,7 +1,7 @@
 // Materials on OpenGL (the spec's seam 2, ADR-0024): masked cut-outs, alpha blending and additive blending over opaque
 // items, in one view and in several, an emissive colour with no emissive texture and scaled by its emissive strength,
-// and a material set of a block and
-// four textures bound at the GL units the flattening formula gives. Each test reads back a view's SceneColor, linear.
+// and a material set of a block and four textures bound at the GL units the flattening formula gives. Each test reads
+// back a view's SceneColor, linear.
 
 #include <cstdint>
 #include <span>
