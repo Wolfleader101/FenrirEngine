@@ -23,9 +23,15 @@ namespace RendererDemo
         constexpr Fenrir::Colour DuskColour{0.22f, 0.12f, 0.30f, 1.0f};
         constexpr Fenrir::Colour OverrideColour{0.05f, 0.35f, 0.32f, 1.0f};
         // What T and E step the camera through: its tonemapper, from the default, and its exposure in EV stops.
-        constexpr std::array<Fenrir::Tonemapper, 4> Tonemappers{Fenrir::Tonemapper::AgX, Fenrir::Tonemapper::PbrNeutral,
-                                                                Fenrir::Tonemapper::Aces, Fenrir::Tonemapper::None};
-        constexpr std::array<const char*, 4> TonemapperNames{"AgX", "PBR Neutral", "ACES", "None (clamped)"};
+        struct NamedTonemapper
+        {
+            Fenrir::Tonemapper tonemapper;
+            const char* name;
+        };
+        constexpr std::array<NamedTonemapper, 4> Tonemappers{{{Fenrir::Tonemapper::AgX, "AgX"},
+                                                              {Fenrir::Tonemapper::PbrNeutral, "PBR Neutral"},
+                                                              {Fenrir::Tonemapper::Aces, "ACES"},
+                                                              {Fenrir::Tonemapper::None, "None (clamped)"}}};
         constexpr std::array<float, 4> Exposures{0.0f, 1.0f, 2.0f, -1.0f};
 
         /** @brief The scene's sky and camera, and what the keys have set, kept as a scene resource. */
@@ -180,8 +186,8 @@ namespace RendererDemo
             if (keyboard.JustPressed(Fenrir::Key::T) && state->camera.IsValid())
             {
                 state->tonemapper = (state->tonemapper + 1) % Tonemappers.size();
-                state->camera.GetComponent<Fenrir::Camera>().tonemapper = Tonemappers.at(state->tonemapper);
-                app.Logger()->Info("T: the camera's tonemapper is {}", TonemapperNames.at(state->tonemapper));
+                state->camera.GetComponent<Fenrir::Camera>().tonemapper = Tonemappers.at(state->tonemapper).tonemapper;
+                app.Logger()->Info("T: the camera's tonemapper is {}", Tonemappers.at(state->tonemapper).name);
             }
             if (keyboard.JustPressed(Fenrir::Key::E) && state->camera.IsValid())
             {

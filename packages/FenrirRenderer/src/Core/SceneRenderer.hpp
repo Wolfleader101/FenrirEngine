@@ -420,8 +420,9 @@ namespace Fenrir::Render
         Graphics::BindingGroupLayoutHandle m_backgroundLayout;
         /** @brief Set 2 of the Background pass's CUBEMAP variant: the Sky cubemap. */
         Graphics::BindingGroupLayoutHandle m_skyLayout;
+        /** @brief Set 2 of the Output pass: the view's SceneColor and its sampler. */
         Graphics::BindingGroupLayoutHandle m_outputLayout;
-        /** @brief Set 1 of the Output pass: its block of the view's exposure and tonemapper. */
+        /** @brief Set 1 of the Output pass: the Output block, the view's exposure and tonemapper. */
         Graphics::BindingGroupLayoutHandle m_outputBlockLayout;
         Graphics::PipelineHandle m_backgroundPipeline;
         Graphics::PipelineHandle m_skyPipeline;

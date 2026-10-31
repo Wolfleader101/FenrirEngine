@@ -1,5 +1,5 @@
 // The CPU mirror of builtin:output's tonemappers (ADR-0049): kept step for step with Shaders/Builtin/output.frag,
-// which the golden images hold to it, so a change to one is a change to both. Matrices are written as GLSL writes them,
+// which the GL tests hold to it, so a change to one is a change to both. Matrices are written as GLSL writes them,
 // column by column.
 #include "Core/Tonemapping.hpp"
 

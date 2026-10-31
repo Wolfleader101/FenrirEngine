@@ -581,8 +581,7 @@ namespace Fenrir::Render
     {
         m_frameLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Frame");
         m_viewLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "View");
-        m_outputBlockLayout =
-            m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Output block");
+        m_outputBlockLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Output");
         m_drawLayout = m_device.CreateBindingGroupLayout(
             {{{0, ShaderBindingKind::StorageBuffer}, {1, ShaderBindingKind::StorageBuffer}}}, "Draw");
 

@@ -28,7 +28,7 @@ namespace Fenrir::Render
     /**
      * @brief The CPU mirror of builtin:output's tonemappers: `linear` (already scaled by the exposure) mapped by
      * `tonemapper` into [0, 1], still linear; the target's sRGB encoding comes after. Kept step for step with the
-     * shader, which the golden images hold to it, so a change to one is a change to both.
+     * shader, which the GL tests hold to it, so a change to one is a change to both.
      */
     [[nodiscard]] Math::Vec3 Tonemap(Tonemapper tonemapper, Math::Vec3 linear) noexcept;
 } // namespace Fenrir::Render

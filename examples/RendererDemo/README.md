@@ -83,7 +83,7 @@ scene; only Overlay makes an ImGui window.
     over it, whichever sky B has set; O again brings the `Sky` back.
   - T steps the camera's tonemapper from AgX through PBR Neutral, ACES and None (each logged as `T: the camera's
     tonemapper is …`), and E steps its exposure through 0, +1, +2 and -1 EV (`E: the camera's exposure is +1 EV`), each
-    step doubling or halving the brightness before the tonemap. At +2 EV the sky and the lit faces go over 1, and the
+    step doubling or halving the colour before the tonemap. At +2 EV the sky and the lit faces go over 1, and the
     tonemappers part as the golden images in `packages/FenrirRenderer/Tests/OpenGL/goldens/` do: None flattens them
     into white and shifts saturated colours' hue as one channel clips first; AgX keeps detail in them and fades their
     colours towards white; PBR Neutral keeps the hues longest; ACES is the most contrasty and saturated.

@@ -1,8 +1,11 @@
-// The Output pass's exposure and tonemappers on OpenGL, as golden images (ADR-0049): one lit scene with highlights
-// well over 1, drawn into an image target through each tonemapper and at three exposures, and compared with the
-// committed PNG in OpenGL/goldens under RendererTest::GoldenTolerance. Run the GL tests with FENRIR_UPDATE_GOLDENS=1 to
-// write the goldens again, after a change meant to alter them; look at each before committing it.
+// The Output pass's exposure and tonemappers on OpenGL (ADR-0049): flat colours through each tonemapper held to the C++
+// mirror in Core/Tonemapping.hpp, and golden images: one lit scene with highlights well over 1, drawn into an image
+// target through each tonemapper and at three exposures, and compared with the committed PNG in OpenGL/goldens under
+// RendererTest::GoldenTolerance. Run the GL tests with FENRIR_UPDATE_GOLDENS=1 to write the goldens again, after a
+// change meant to alter them; look at each before committing it.
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -11,6 +14,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "Core/Tonemapping.hpp"
 #include "GlScene.hpp"
 #include "GoldenImages.hpp"
 
@@ -181,6 +185,53 @@ TEST_CASE("The lit scene through AgX two stops under matches its golden image", 
 TEST_CASE("The lit scene through AgX two stops over matches its golden image", "[renderer][gl][golden]")
 {
     RequireGolden("tonemap-agx-plus-2ev", DrawGoldenScene(Fenrir::Tonemapper::AgX, 2.0f));
+}
+
+TEST_CASE("Output's tonemappers and exposure match their C++ mirror", "[renderer][gl][tonemapping]")
+{
+    // A view of nothing but its background: one flat linear colour through Output, read back as the sRGB image
+    // stores it, against the mirror's colour encoded the same way.
+    constexpr std::array<Fenrir::Tonemapper, 4> tonemappers{Fenrir::Tonemapper::None, Fenrir::Tonemapper::AgX,
+                                                            Fenrir::Tonemapper::PbrNeutral, Fenrir::Tonemapper::Aces};
+    const std::array<Vec3, 4> colours{Vec3(0.18f), Vec3(1.0f), Vec3(4.0f, 1.0f, 0.25f), Vec3(0.05f, 0.4f, 1.5f)};
+    constexpr std::array<float, 3> exposures{0.0f, -1.5f, 2.0f};
+    const auto encode = [](float linear) {
+        return linear <= 0.0031308f ? linear * 12.92f : 1.055f * std::pow(linear, 1.0f / 2.4f) - 0.055f;
+    };
+    for (const Fenrir::Tonemapper tonemapper : tonemappers)
+    {
+        for (const Vec3 colour : colours)
+        {
+            for (const float exposure : exposures)
+            {
+                GlScene test;
+                test.RequireOpenGL();
+                Fenrir::ImageData data;
+                data.width = 4;
+                data.height = 4;
+                const auto image = test.assets.Store().Add<Fenrir::Image>(std::move(data), Fenrir::AssetOwner::App());
+                Fenrir::Camera& camera = test.AddCamera();
+                camera.target = Fenrir::ImageTarget{image};
+                camera.background = Fenrir::ColourBackground{Fenrir::Colour{colour.r, colour.g, colour.b, 1.0f}};
+                camera.tonemapper = tonemapper;
+                camera.exposure = exposure;
+
+                test.RunFrame();
+                const GlProbe::Image pixels = GlProbe::Read(RendererProbe::Device(test.renderer),
+                                                            RendererProbe::ImageTexture(test.renderer, image));
+
+                const Vec3 expected = Fenrir::Render::Tonemap(static_cast<Fenrir::Render::Tonemapper>(tonemapper),
+                                                              colour * Fenrir::Render::ExposureScale(exposure));
+                const GlProbe::Pixel actual = pixels.At(2, 2);
+                INFO("tonemapper " << static_cast<int>(tonemapper) << ", colour (" << colour.r << ", " << colour.g
+                                   << ", " << colour.b << ") at " << exposure << " EV: the GPU stored (" << actual[0]
+                                   << ", " << actual[1] << ", " << actual[2] << "), the mirror encodes to ("
+                                   << encode(expected.r) << ", " << encode(expected.g) << ", " << encode(expected.b)
+                                   << ")");
+                REQUIRE(GlProbe::Near(actual, {encode(expected.r), encode(expected.g), encode(expected.b), 1.0f}));
+            }
+        }
+    }
 }
 
 TEST_CASE("Each tonemapper draws the lit scene differently", "[renderer][gl][golden]")

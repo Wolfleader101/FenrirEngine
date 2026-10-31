@@ -60,7 +60,7 @@ TEST_CASE("None clamps each channel to [0, 1], the old Output", "[renderer][tone
                                    }});
 }
 
-TEST_CASE("AgX follows its reference curve", "[renderer][tonemapping]")
+TEST_CASE("AgX matches its reference values", "[renderer][tonemapping]")
 {
     RequireCurve(Tonemapper::AgX, {{
                                       {Black, Black},

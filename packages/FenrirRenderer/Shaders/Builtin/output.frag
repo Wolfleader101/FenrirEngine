@@ -3,8 +3,8 @@
 // its tonemapper into [0, 1], drawn into the view's viewport of its render target. The window's backbuffer and image
 // targets are sRGB, so the write encodes it. With the MSAA key, SceneColor is multisampled and this resolves it: each
 // pixel is the mean of its samples, before the tonemap. The tonemappers are mirrored step for step in C++
-// (src/Core/Tonemapping.cpp), which the CPU tests check; a change to one is a change to both. Matrices are written
-// column by column.
+// (src/Core/Tonemapping.cpp), which the CPU tests check against published values and the GL tests hold this to; a
+// change to one is a change to both. Matrices are written column by column.
 
 #ifdef MSAA
 layout(set = 2, binding = 0) uniform sampler2DMS sceneColour;

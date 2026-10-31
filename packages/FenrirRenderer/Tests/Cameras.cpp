@@ -5,8 +5,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
-#include <span>
 #include <string>
 #include <vector>
 
@@ -89,8 +87,7 @@ namespace
         const std::size_t at = entries[0].offset;
         OutputSettings settings;
         settings.scale = RendererTest::FloatAt(bytes, at);
-        REQUIRE(at + 8 <= bytes.size());
-        std::memcpy(&settings.tonemapper, std::span(bytes).subspan(at + 4).data(), sizeof(settings.tonemapper));
+        settings.tonemapper = RendererTest::UintAt(bytes, at + 4);
         return settings;
     }
 } // namespace

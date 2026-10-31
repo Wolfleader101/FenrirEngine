@@ -122,7 +122,7 @@ TEST_CASE("A deliberately changed image fails its golden image", "[renderer][gol
         REQUIRE(comparison.difference.rgba.at((std::size_t{5} * 32 + 9) * 4 + 1) == 0);
         REQUIRE(comparison.difference.rgba.at(0) == 30);
     }
-    SECTION("the whole frame a little darker, as a changed curve would make it")
+    SECTION("the whole frame a little darker, as a changed tonemapper would make it")
     {
         Rgba8Image actual = golden;
         for (std::size_t i = 0; i < actual.rgba.size(); ++i)
