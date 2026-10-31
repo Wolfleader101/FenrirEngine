@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <iterator>
 #include <memory>
+#include <numbers>
 #include <span>
 #include <string>
 #include <string_view>
@@ -70,6 +72,79 @@ namespace RendererTest
         mesh.normals = {Vec3(0, 0, 1), Vec3(0, 0, 1), Vec3(0, 0, 1), Vec3(0, 0, 1)};
         mesh.indices = {0, 1, 2, 0, 2, 3};
         return mesh;
+    }
+
+    /** @brief A sphere of radius 0.5 about the origin, 24 segments round and 16 pole to pole, counter-clockwise. */
+    inline Fenrir::MeshData Sphere()
+    {
+        using Fenrir::Math::Vec3;
+        constexpr std::uint32_t segments = 24;
+        constexpr std::uint32_t rings = 16;
+        Fenrir::MeshData mesh;
+        for (std::uint32_t ring = 0; ring <= rings; ++ring)
+        {
+            const float polar = std::numbers::pi_v<float> * static_cast<float>(ring) / rings;
+            for (std::uint32_t segment = 0; segment <= segments; ++segment)
+            {
+                const float azimuth = 2.0f * std::numbers::pi_v<float> * static_cast<float>(segment) / segments;
+                const Vec3 normal(std::sin(polar) * std::cos(azimuth), std::cos(polar),
+                                  -std::sin(polar) * std::sin(azimuth));
+                mesh.positions.push_back(normal * 0.5f);
+                mesh.normals.push_back(normal);
+            }
+        }
+        for (std::uint32_t ring = 0; ring < rings; ++ring)
+        {
+            for (std::uint32_t segment = 0; segment < segments; ++segment)
+            {
+                const std::uint32_t a = ring * (segments + 1) + segment;
+                const std::uint32_t b = a + segments + 1;
+                for (const std::uint32_t index : {a, b, a + 1, a + 1, b, b + 1})
+                {
+                    mesh.indices.push_back(index);
+                }
+            }
+        }
+        return mesh;
+    }
+
+    /**
+     * @brief The world direction a panorama's point (u, v) looks along, both in [0, 1]: its centre looks along -Z, u
+     * turns towards +X (to the right, seen from inside), and its top row looks up +Y.
+     */
+    inline Fenrir::Math::Vec3 PanoramaDirection(float u, float v)
+    {
+        const float azimuth = (u - 0.5f) * 2.0f * std::numbers::pi_v<float>;
+        const float polar = v * std::numbers::pi_v<float>;
+        return {std::sin(polar) * std::sin(azimuth), std::cos(polar), -std::sin(polar) * std::cos(azimuth)};
+    }
+
+    /**
+     * @brief A flat RGBA32F panorama of `width` x `width / 2`, linear, each pixel the RGB `colour` gives its direction
+     * (a `Vec3(Vec3)`).
+     */
+    template <typename ColourOf>
+    Fenrir::ImageData Panorama(std::uint32_t width, ColourOf colour)
+    {
+        Fenrir::ImageData image;
+        image.width = width;
+        image.height = width / 2;
+        image.format = Fenrir::ImageFormat::RGBA32F;
+        image.colourSpace = Fenrir::ColourSpace::Linear;
+        std::vector<float> texels;
+        for (std::uint32_t row = 0; row < image.height; ++row)
+        {
+            for (std::uint32_t column = 0; column < image.width; ++column)
+            {
+                const Fenrir::Math::Vec3 rgb =
+                    colour(PanoramaDirection((static_cast<float>(column) + 0.5f) / static_cast<float>(image.width),
+                                             (static_cast<float>(row) + 0.5f) / static_cast<float>(image.height)));
+                texels.insert(texels.end(), {rgb.r, rgb.g, rgb.b, 1.0f});
+            }
+        }
+        const auto bytes = std::as_bytes(std::span(texels));
+        image.pixels.assign(bytes.begin(), bytes.end());
+        return image;
     }
 
     /** @brief Quad(size, z) with UV0 too: (0, 0) at its top-left corner and (1, 1) at its bottom-right. */

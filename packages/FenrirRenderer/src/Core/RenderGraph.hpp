@@ -23,6 +23,8 @@ namespace Fenrir::Render
      */
     enum class RenderStage : std::uint8_t
     {
+        /** @brief Work whose result is kept across frames, such as a panorama sky's cube texture, made when needed. */
+        Prepare,
         Shadow,
         Opaque,
         Background,
@@ -62,6 +64,11 @@ namespace Fenrir::Render
          */
         void ColourAttachment(GraphResource texture, Graphics::LoadOp load = Graphics::LoadOp::Clear,
                               std::array<float, 4> clear = {0.0f, 0.0f, 0.0f, 1.0f});
+        /**
+         * @brief Draws into one mip level of one layer (a cube texture's face) of `texture` as the next colour
+         * attachment, covering all of it: what it held is not loaded.
+         */
+        void ColourAttachmentLevel(GraphResource texture, std::uint32_t mipLevel, std::uint32_t layer = 0);
         /** @brief Tests and writes depth in `texture`; loading it also reads it. Clears to `clear` (0 is far). */
         void DepthAttachment(GraphResource texture, Graphics::LoadOp load = Graphics::LoadOp::Clear,
                              float clear = 0.0f);
@@ -249,6 +256,9 @@ namespace Fenrir::Render
             Graphics::LoadOp load = Graphics::LoadOp::Clear;
             std::array<float, 4> clearColour{};
             float clearDepth = 0.0f;
+            /** @brief A colour attachment's mip level and layer. */
+            std::uint32_t mipLevel = 0;
+            std::uint32_t layer = 0;
         };
 
         struct Pass

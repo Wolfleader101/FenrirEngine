@@ -711,7 +711,8 @@ namespace Fenrir::Graphics
                     m_replay.skipping = true;
                     return;
                 }
-                size = {texture->desc.width, texture->desc.height};
+                size = {std::max(texture->desc.width >> colour.mipLevel, 1u),
+                        std::max(texture->desc.height >> colour.mipLevel, 1u)};
             }
             if (pass.depth)
             {
@@ -985,12 +986,12 @@ namespace Fenrir::Graphics
 
     std::uint32_t OpenGLDevice::FramebufferFor(const PassDesc& pass)
     {
-        std::vector<std::uint32_t> names;
+        std::vector<FramebufferAttachment> names;
         for (const ColourAttachment& colour : pass.colour)
         {
-            names.push_back(m_textures.Find(colour.texture)->name);
+            names.push_back({m_textures.Find(colour.texture)->name, colour.mipLevel, colour.layer});
         }
-        names.push_back(pass.depth ? m_textures.Find(pass.depth->texture)->name : 0);
+        names.push_back({pass.depth ? m_textures.Find(pass.depth->texture)->name : 0, 0, 0});
         if (const auto found = m_framebuffers.find(names); found != m_framebuffers.end())
         {
             return found->second;
@@ -1003,12 +1004,23 @@ namespace Fenrir::Graphics
         for (std::size_t i = 0; i + 1 < names.size(); ++i)
         {
             const auto attachment = static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i);
-            gl.NamedFramebufferTexture(framebuffer, attachment, names[i], 0);
+            const FramebufferAttachment& colour = names[i];
+            const auto level = static_cast<GLint>(colour.mipLevel);
+            // A cube texture's face is a layer of it; a 2D texture is attached whole.
+            if (m_textures.Find(pass.colour[i].texture)->desc.kind == TextureKind::Cube)
+            {
+                gl.NamedFramebufferTextureLayer(framebuffer, attachment, colour.name, level,
+                                                static_cast<GLint>(colour.layer));
+            }
+            else
+            {
+                gl.NamedFramebufferTexture(framebuffer, attachment, colour.name, level);
+            }
             drawBuffers.push_back(attachment);
         }
-        if (names.back() != 0)
+        if (names.back().name != 0)
         {
-            gl.NamedFramebufferTexture(framebuffer, GL_DEPTH_ATTACHMENT, names.back(), 0);
+            gl.NamedFramebufferTexture(framebuffer, GL_DEPTH_ATTACHMENT, names.back().name, 0);
         }
         if (drawBuffers.empty())
         {
@@ -1031,7 +1043,7 @@ namespace Fenrir::Graphics
     {
         for (auto it = m_framebuffers.begin(); it != m_framebuffers.end();)
         {
-            if (std::ranges::find(it->first, name) != it->first.end())
+            if (std::ranges::find(it->first, name, &FramebufferAttachment::name) != it->first.end())
             {
                 m_gl->DeleteFramebuffers(1, &it->second);
                 it = m_framebuffers.erase(it);

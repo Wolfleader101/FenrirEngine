@@ -7,15 +7,15 @@ using Fenrir.Scripting;
 namespace Fenrir.Renderer;
 
 /// <summary>
-/// What a scene shows where nothing was drawn, a scene resource beside AmbientLight (ADR-0026): exactly one of
-/// ColourSky and CubemapSky, by value, as FenrirPhysics' CollisionShape holds a shape. A scene without one has the
-/// default ColourSky, a dark grey. Each camera whose background is SceneBackground draws it; a ColourBackground
-/// overrides it for that camera's view.
+/// What a scene shows where nothing was drawn, a scene resource beside AmbientLight (ADR-0026, ADR-0047): exactly one
+/// of ColourSky, CubemapSky and PanoramaSky, by value, as FenrirPhysics' CollisionShape holds a shape. A scene without
+/// one has the default ColourSky, a dark grey. Each camera whose background is SceneBackground draws it; a
+/// ColourBackground overrides it for that camera's view.
 /// </summary>
 /// <remarks>
-/// A cubemap that is empty, stale or not a cubemap with pixels draws the default ColourSky instead, logged once. Assign
-/// a kind to change it (`sky = CubemapSky{cubemap}`); read it through the checked view. Reading it as a kind it does
-/// not hold asserts.
+/// A cubemap that is empty, stale or not a cubemap with pixels, or a panorama that is empty, stale, or not a flat image
+/// with pixels twice as wide as high, draws the default ColourSky instead, logged once. Assign a kind to change it
+/// (`sky = PanoramaSky{image}`); read it through the checked view. Reading it as a kind it does not hold asserts.
 /// </remarks>
 [NativeResource("Fenrir.Renderer.Sky")]
 [TaggedUnion(Noun = "sky")]
@@ -25,4 +25,5 @@ public partial struct Sky : IResource
     [FieldOffset(0)] private SkyType _type;
     [FieldOffset(4)] private ColourSky _colour;
     [FieldOffset(4)] private CubemapSky _cubemap;
+    [FieldOffset(4)] private PanoramaSky _panorama;
 }

@@ -115,8 +115,8 @@ namespace Fenrir::Detail
         std::set<std::pair<std::uint32_t, std::uint32_t>> loggedTies;
         /** @brief Images materials name that cannot be sampled as a 2D texture, by index and generation. */
         std::set<std::pair<std::uint32_t, std::uint32_t>> loggedImages;
-        /** @brief Sky cubemaps that are empty, stale or not cubemaps with pixels. */
-        StaleHandleLog skyCubemaps;
+        /** @brief Sky cubemaps and panoramas that cannot be drawn: empty, stale, or the wrong shape. */
+        StaleHandleLog skyImages;
         /** @brief Windows the renderer does not draw that overlay submissions named, by id. */
         std::set<std::uint32_t> loggedOverlayWindows;
         /** @brief Whether a skinned draw found no skinning source registered. */

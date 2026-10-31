@@ -12,6 +12,7 @@
 #include "FenrirShaders/BuiltinFallback.hpp"
 #include "FenrirShaders/BuiltinLit.hpp"
 #include "FenrirShaders/BuiltinOutput.hpp"
+#include "FenrirShaders/BuiltinPanorama.hpp"
 #include "FenrirShaders/BuiltinUnlit.hpp"
 
 namespace Fenrir::Render
@@ -24,9 +25,9 @@ namespace Fenrir::Render
             return std::as_bytes(std::span<const std::uint8_t, N>(embedded));
         }
 
-        const std::array<BuiltinShader, 9>& Table()
+        const std::array<BuiltinShader, 10>& Table()
         {
-            static const std::array<BuiltinShader, 9> table{{
+            static const std::array<BuiltinShader, 10> table{{
                 {BuiltinProgram::Unlit, "builtin:unlit", BytesOf(Shaders::BuiltinUnlit)},
                 {BuiltinProgram::Lit, "builtin:lit", BytesOf(Shaders::BuiltinLit)},
                 {BuiltinProgram::Fallback, "builtin:fallback", BytesOf(Shaders::BuiltinFallback)},
@@ -36,6 +37,7 @@ namespace Fenrir::Render
                 {BuiltinProgram::DebugTriangles, "builtin:debug-triangles", BytesOf(Shaders::BuiltinDebugTriangles)},
                 {BuiltinProgram::DebugText, "builtin:debug-text", BytesOf(Shaders::BuiltinDebugText)},
                 {BuiltinProgram::Draw2D, "builtin:2d", BytesOf(Shaders::Builtin2D)},
+                {BuiltinProgram::Panorama, "builtin:panorama", BytesOf(Shaders::BuiltinPanorama)},
             }};
             return table;
         }

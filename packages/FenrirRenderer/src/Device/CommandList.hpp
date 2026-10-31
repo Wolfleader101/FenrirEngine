@@ -65,6 +65,10 @@ namespace Fenrir::Graphics
         LoadOp load = LoadOp::Clear;
         /** @brief The linear RGBA it is cleared to when `load` is `Clear`. */
         std::array<float, 4> clear{0.0f, 0.0f, 0.0f, 1.0f};
+        /** @brief The mip level drawn into; the pass's viewport is that level's size. */
+        std::uint32_t mipLevel = 0;
+        /** @brief The layer drawn into: a cube texture's face, in its face order (+X, -X, +Y, -Y, +Z, -Z); else 0. */
+        std::uint32_t layer = 0;
 
         friend bool operator==(const ColourAttachment&, const ColourAttachment&) = default;
     };

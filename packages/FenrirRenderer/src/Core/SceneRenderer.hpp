@@ -69,9 +69,11 @@ namespace Fenrir::Render
      * shader variant, render state (blend mode and culling), vertex layout and sample count while the shader lives,
      * and sorted by a 64-bit key (render stage in the high bits; then pipeline, material and mesh). One render graph
      * holds every view (ADR-0019). Each view gets transient `SceneColor` (linear RGBA16F) and `SceneDepth` (32-bit
-     * float, reversed-Z, cleared to 0) at its viewport's size with the configured MSAA samples, and its passes:
+     * float, reversed-Z, cleared to 0) at its viewport's size with the configured MSAA samples, and its passes, after
+     * the `Prepare` stage's `Panorama` passes for any panorama prepared since the last frame:
      * `Opaque`, one draw per `Opaque` or `Masked` item, writing depth; `Background` at depth 0, the view's colour or
-     * its Sky cubemap (sampled by the direction each pixel looks along); `Transparent`, when there are `AlphaBlend` or
+     * its Sky cubemap or panorama's cube texture (sampled by the direction each pixel looks along, turned by the
+     * sky's rotation and scaled by its intensity, from the frame block); `Transparent`, when there are `AlphaBlend` or
      * `Additive` items, depth tested without writing, drawn back to front by the view-space depth of each item's world
      * origin (no order-independent transparency, so intersecting or nested transparent items can sort wrongly); and
      * `Output`, which resolves SceneColor and clamps it into its viewport of its render target, the window's backbuffer
@@ -154,6 +156,16 @@ namespace Fenrir::Render
         void PrepareCubemap(AssetKey key, std::uint32_t revision, const ImageData& image);
         void ReleaseCubemap(AssetKey key);
 
+        [[nodiscard]] bool IsPanoramaCurrent(AssetKey key, std::uint32_t revision) const;
+        /**
+         * @brief A panorama for a Sky (ADR-0047), a flat image with pixels twice as wide as high: uploaded with every
+         * mip level, then drawn by the next AddPasses' `Panorama` passes into an RGBA16F cube texture with faces half
+         * as wide as the image is high and every mip level, which the Background pass's CUBEMAP variant samples as it
+         * does a Sky cubemap. The image's own texture is freed once the passes have run.
+         */
+        void PreparePanorama(AssetKey key, std::uint32_t revision, const ImageData& image);
+        void ReleasePanorama(AssetKey key);
+
         [[nodiscard]] bool IsTargetCurrent(AssetKey key, std::uint32_t revision) const;
         /** @brief A render target image: an RGBA8 sRGB texture of `size` that views draw into and materials sample. */
         void PrepareTarget(AssetKey key, std::uint32_t revision, Graphics::PixelSize size);
@@ -163,6 +175,7 @@ namespace Fenrir::Render
         [[nodiscard]] std::vector<AssetKey> TargetKeys() const;
         [[nodiscard]] std::vector<AssetKey> ImageKeys() const;
         [[nodiscard]] std::vector<AssetKey> CubemapKeys() const;
+        [[nodiscard]] std::vector<AssetKey> PanoramaKeys() const;
         [[nodiscard]] std::vector<AssetKey> ShaderKeys() const;
         [[nodiscard]] std::vector<AssetKey> MeshKeys() const;
         [[nodiscard]] std::vector<AssetKey> MaterialKeys() const;
@@ -250,6 +263,26 @@ namespace Fenrir::Render
             std::uint32_t revision = 0;
             Graphics::TextureHandle texture;
             Graphics::BindingGroupHandle group;
+        };
+
+        /**
+         * @brief A prepared Sky panorama: its cube texture and the Background pass's group sampling it, and until its
+         * `Panorama` passes have run, the image's own texture and those passes' blocks and groups.
+         */
+        struct PanoramaEntry
+        {
+            std::uint32_t revision = 0;
+            Graphics::TextureHandle cube;
+            /** @brief The cube texture's description: its faces' side and mip levels. */
+            Graphics::TextureDesc cubeDesc;
+            Graphics::BindingGroupHandle group;
+            Graphics::TextureHandle source;
+            /** @brief Each pass's block (face, half a texel, the panorama's mip), one uniform slot a pass. */
+            Graphics::BufferHandle params;
+            /** @brief Each pass's group, face by face within each mip level, from mip 0. */
+            std::vector<Graphics::BindingGroupHandle> passGroups;
+            /** @brief Whether its passes have been recorded, so its source can go. */
+            bool converted = false;
         };
 
         /** @brief A prepared mesh: its streams back to back in one buffer, and its indices. */
@@ -378,7 +411,14 @@ namespace Fenrir::Render
         [[nodiscard]] Graphics::PipelineHandle MakeInternalPipeline(
             const ShaderContainer& container, const ShaderVariant* variant, Graphics::BindingGroupLayoutHandle layout,
             Graphics::TextureFormat colour, bool depthTested, std::uint32_t samples,
-            Graphics::BindingGroupLayoutHandle setOneLayout = {});
+            Graphics::BindingGroupLayoutHandle setOneLayout = {},
+            Graphics::BindingGroupLayoutHandle setZeroLayout = {});
+        /** @brief Adds the `Panorama` passes of each panorama not yet drawn into its cube texture. */
+        void AddPanoramaPasses(RenderGraph& graph);
+        /** @brief Frees a panorama's image texture and its passes' blocks and groups, if it still has them. */
+        void FreePanoramaPasses(PanoramaEntry& entry);
+        /** @brief The Background pass's group for the Sky cubemap or panorama `key`; empty if neither is prepared. */
+        [[nodiscard]] Graphics::BindingGroupHandle SkyGroup(AssetKey key) const;
         /** @brief The material's group with the sampled targets in `replaced` bound to their defaults instead. */
         [[nodiscard]] Graphics::BindingGroupHandle GroupWithout(MaterialEntry& material,
                                                                 const std::vector<AssetKey>& replaced);
@@ -405,6 +445,7 @@ namespace Fenrir::Render
         std::map<AssetKey, TargetEntry> m_targets;
         std::map<AssetKey, ImageEntry> m_images;
         std::map<AssetKey, CubemapEntry> m_cubemaps;
+        std::map<AssetKey, PanoramaEntry> m_panoramas;
         /** @brief The samplers made for material parameters, by description. */
         std::vector<std::pair<SamplerDescription, Graphics::SamplerHandle>> m_samplers;
         std::map<PipelineKey, PipelineEntry> m_pipelines;
@@ -414,6 +455,7 @@ namespace Fenrir::Render
         ShaderEntry m_fallback;
         ShaderContainer m_background;
         ShaderContainer m_output;
+        ShaderContainer m_panorama;
 
         Graphics::BindingGroupLayoutHandle m_frameLayout;
         Graphics::BindingGroupLayoutHandle m_viewLayout;
@@ -421,6 +463,8 @@ namespace Fenrir::Render
         Graphics::BindingGroupLayoutHandle m_backgroundLayout;
         /** @brief Set 2 of the Background pass's CUBEMAP variant: the Sky cubemap. */
         Graphics::BindingGroupLayoutHandle m_skyLayout;
+        /** @brief Set 2 of the Panorama passes: their block and the panorama. */
+        Graphics::BindingGroupLayoutHandle m_panoramaLayout;
         /** @brief Set 2 of the Output pass: the view's SceneColor and its sampler. */
         Graphics::BindingGroupLayoutHandle m_outputLayout;
         /** @brief Set 1 of the Output pass: the Output block, the view's exposure and tonemapper. */
@@ -428,12 +472,15 @@ namespace Fenrir::Render
         Graphics::PipelineHandle m_backgroundPipeline;
         Graphics::PipelineHandle m_skyPipeline;
         Graphics::PipelineHandle m_outputPipeline;
+        Graphics::PipelineHandle m_panoramaPipeline;
 
         /** @brief The default textures, by DefaultTexture: white, black and the flat normal. */
         std::array<Graphics::TextureHandle, 3> m_defaultTextures{};
         Graphics::SamplerHandle m_defaultSampler;
         Graphics::SamplerHandle m_outputSampler;
         Graphics::SamplerHandle m_skySampler;
+        /** @brief Wraps round a panorama's sides and clamps at its top and bottom. */
+        Graphics::SamplerHandle m_panoramaSampler;
         /** @brief The constant every vertex stream a mesh lacks reads, at stride 0. */
         Graphics::BufferHandle m_defaultStreams;
 

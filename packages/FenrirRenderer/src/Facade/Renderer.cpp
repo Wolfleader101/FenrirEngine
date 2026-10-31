@@ -248,18 +248,58 @@ namespace Fenrir
                     scene.ReleaseCubemap(key);
                 }
             }
+            for (const AssetKey key : scene.PanoramaKeys())
+            {
+                if (!store.IsValid(HandleOf<Image>(key)))
+                {
+                    scene.ReleasePanorama(key);
+                }
+            }
         }
 
-        /** @brief What a view on the scene's background draws: the Sky's colour, or its prepared cubemap. */
+        /**
+         * @brief What a view on the scene's background draws: the Sky's colour, or its prepared cubemap or panorama,
+         * with the sky's intensity and rotation.
+         */
         struct SceneSky
         {
             Colour colour = ColourSky{}.colour;
-            AssetKey cubemap;
+            /** @brief The cubemap or panorama image; empty for a colour. */
+            AssetKey image;
+            float intensity = 1.0f;
+            float rotation = 0.0f;
         };
 
+        /** @brief Why a Sky's image cannot be drawn, for its warning; empty if it can. */
+        std::string SkyImageProblem(AssetHandle<Image> handle, const ImageData* data, SkyType type)
+        {
+            const std::string_view kind = type == SkyType::Cubemap ? "cubemap" : "panorama";
+            if (handle.IsEmpty())
+            {
+                return std::format("no {}", kind);
+            }
+            if (data == nullptr)
+            {
+                return std::format("a stale {} ({})", kind, handle.index);
+            }
+            if (type == SkyType::Cubemap && (data->shape != ImageShape::Cubemap || data->pixels.empty()))
+            {
+                return std::format("image {}, which is not a cubemap with pixels", handle.index);
+            }
+            if (type == SkyType::Panorama &&
+                (data->shape != ImageShape::Flat || data->pixels.empty() || data->width != 2 * data->height))
+            {
+                return std::format("image {} ({} x {}) as a panorama, which must be a flat image with pixels twice as "
+                                   "wide as high",
+                                   handle.index, data->width, data->height);
+            }
+            return {};
+        }
+
         /**
-         * @brief The active scene's Sky, its cubemap prepared if it is new or changed. A cubemap that is empty, stale
-         * or not a cubemap with pixels gives the default ColourSky, logged once per handle.
+         * @brief The active scene's Sky, its cubemap or panorama prepared if it is new or changed. A cubemap that is
+         * empty, stale or not a cubemap with pixels, or a panorama that is empty, stale or not a flat image with pixels
+         * twice as wide as high, gives the default ColourSky, logged once per handle.
          */
         SceneSky ReadSky(Detail::RendererState& state, const AssetStore& store, Scene& scene)
         {
@@ -272,26 +312,30 @@ namespace Fenrir
             {
                 return {sky->As<ColourSky>().colour, {}};
             }
-            const AssetHandle<Image> handle = sky->As<CubemapSky>().cubemap;
+            const bool cubemap = sky->Is<CubemapSky>();
+            const AssetHandle<Image> handle = cubemap ? sky->As<CubemapSky>().cubemap : sky->As<PanoramaSky>().image;
+            const float intensity = cubemap ? sky->As<CubemapSky>().intensity : sky->As<PanoramaSky>().intensity;
+            const float rotation = cubemap ? sky->As<CubemapSky>().rotation : sky->As<PanoramaSky>().rotation;
             const ImageData* data = store.TryGet(handle);
-            if (data == nullptr || data->shape != ImageShape::Cubemap || data->pixels.empty())
+            if (const std::string problem = SkyImageProblem(handle, data, sky->Type()); !problem.empty())
             {
-                if (state.skyCubemaps.ShouldLog(handle))
+                if (state.skyImages.ShouldLog(handle))
                 {
                     state.app->Logger()->Warn(
-                        "FenrirRenderer: the active scene's Sky names {}, so it is drawn dark grey",
-                        handle.IsEmpty()  ? std::string("no cubemap")
-                        : data == nullptr ? std::format("a stale cubemap ({})", handle.index)
-                                          : std::format("image {}, which is not a cubemap with pixels", handle.index));
+                        "FenrirRenderer: the active scene's Sky names {}, so it is drawn dark grey", problem);
                 }
                 return {};
             }
             const std::uint32_t revision = store.Revision(handle);
-            if (!state.scene->IsCubemapCurrent(KeyOf(handle), revision))
+            if (cubemap && !state.scene->IsCubemapCurrent(KeyOf(handle), revision))
             {
                 state.scene->PrepareCubemap(KeyOf(handle), revision, *data);
             }
-            return {ColourSky{}.colour, KeyOf(handle)};
+            else if (!cubemap && !state.scene->IsPanoramaCurrent(KeyOf(handle), revision))
+            {
+                state.scene->PreparePanorama(KeyOf(handle), revision, *data);
+            }
+            return {ColourSky{}.colour, KeyOf(handle), intensity, rotation};
         }
 
         /** @brief The active scene's light: the first DirectionalLight, warned once if there are more, and ambient. */
@@ -541,7 +585,7 @@ namespace Fenrir
                 else
                 {
                     view.background = sky.colour;
-                    view.sky = sky.cubemap;
+                    view.sky = sky.image;
                 }
                 view.target = KeyOf(resolved.image);
                 view.viewport = resolved.pixels;
@@ -993,7 +1037,10 @@ namespace Fenrir
                 Scene& scene = app.GetActiveScene();
                 ReleaseStale(*state.scene, *state.draw2D, *store);
                 frame.lighting = ReadLighting(state, scene);
-                frame.views = ReadViews(state, *store, scene, ReadSky(state, *store, scene));
+                const SceneSky sky = ReadSky(state, *store, scene);
+                frame.lighting.skyIntensity = sky.intensity;
+                frame.lighting.skyRotation = sky.rotation;
+                frame.views = ReadViews(state, *store, scene, sky);
                 ReadDraws(state, *store, scene, frame);
                 debug = ReadDebug(state, scene);
                 frame.time = static_cast<float>(state.time);

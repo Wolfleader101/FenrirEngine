@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -11,6 +13,7 @@
 #include "FenrirRenderer/Renderer.hpp"
 #include "FenrirWindow/Window.hpp"
 #include "GlProbe.hpp"
+#include "GoldenImages.hpp"
 #include "RecordingLogger.hpp"
 #include "RendererProbe.hpp"
 #include "RendererTestApp.hpp"
@@ -90,6 +93,27 @@ namespace GlTest
                 Fenrir::RendererProbe::SceneColour(renderer, width, height);
             REQUIRE_FALSE(sceneColour.IsEmpty());
             return Fenrir::GlProbe::Read(device, sceneColour);
+        }
+
+        /**
+         * @brief Reads back the render target image `image` as it stores it, 8 bits a channel, for a golden image.
+         * Requires that the renderer prepared it.
+         */
+        RendererTest::Rgba8Image ReadTarget(Fenrir::AssetHandle<Fenrir::Image> image)
+        {
+            const Fenrir::Graphics::TextureHandle texture = Fenrir::RendererProbe::ImageTexture(renderer, image);
+            REQUIRE_FALSE(texture.IsEmpty());
+            const Fenrir::GlProbe::Image pixels =
+                Fenrir::GlProbe::Read(Fenrir::RendererProbe::Device(renderer), texture);
+            RendererTest::Rgba8Image frame;
+            frame.width = pixels.width;
+            frame.height = pixels.height;
+            frame.rgba.reserve(pixels.rgba.size());
+            for (const float value : pixels.rgba)
+            {
+                frame.rgba.push_back(static_cast<std::uint8_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f)));
+            }
+            return frame;
         }
 
       private:

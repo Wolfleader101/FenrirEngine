@@ -8,7 +8,7 @@ The lighting family could have moved opaque drawing to deferred shading, as Lear
 
 ## Stages and passes
 
-- **The stage list becomes** `Shadow, DepthPrepass, Opaque, Background, Transparent, Debug, PostProcess, Output, Overlay`.
+- **The stage list becomes** `Prepare, Shadow, DepthPrepass, Opaque, Background, Transparent, Debug, PostProcess, Output, Overlay`. `Prepare` (added with the panorama sky, ADR-0047) holds work kept across frames and redone only when its input changes, such as a panorama's cube texture and, later, the sky's filtering.
 - **`DepthPrepass`** draws every `Opaque` and `Masked` item (alpha-tested) into `SceneDepth` and a view-space normal target, at the view's MSAA count. `Opaque` then tests depth for equality and writes none, so no pixel is shaded twice. This is the depth prepass ADR-0019 deferred.
 - **Ambient occlusion is GTAO** (Jimenez et al. 2016, after Intel's MIT-licensed XeGTAO), not LearnOpenGL's hemisphere-kernel SSAO, which is noisier and over-darkens. It reads the prepass's depth and normals (sample 0 under MSAA), denoises, and writes a per-view occlusion texture that `Opaque` samples for indirect light only. `Camera` turns it on and sets its radius and intensity.
 - **Light clustering** is a compute pass per view: point, spot and rect lights are assigned to 16×9×24 view-space clusters with exponentially spaced depth slices, and `Fenrir/Lighting.glsl` loops over its pixel's cluster. Until it lands, the loop runs over the whole light buffer, which is laid out the same way, so materials never change.

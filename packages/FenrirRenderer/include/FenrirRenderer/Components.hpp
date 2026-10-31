@@ -495,6 +495,28 @@ namespace Fenrir
     struct CubemapSky
     {
         AssetHandle<Image> cubemap;
+        /** @brief A plain multiplier on what the sky draws. */
+        float intensity = 1.0f;
+        /**
+         * @brief How far the sky is turned about world +Y, in radians, counter-clockwise seen from above: a quarter
+         * turn brings what was ahead (-Z) round to the left (-X).
+         */
+        float rotation = 0.0f;
+    };
+
+    /**
+     * @brief A sky drawn from a panorama (ADR-0047): a flat image twice as wide as it is high wrapping the whole
+     * sphere, usually a linear HDR one such as an `.hdr` file. Its centre is ahead (-Z), its right half turns towards
+     * +X and its top row is straight up (+Y). The renderer turns it into a cube texture on the GPU once per image
+     * revision, then draws it as a CubemapSky.
+     */
+    struct PanoramaSky
+    {
+        AssetHandle<Image> image;
+        /** @brief A plain multiplier on what the sky draws. */
+        float intensity = 1.0f;
+        /** @brief How far the sky is turned about world +Y, in radians, as CubemapSky::rotation. */
+        float rotation = 0.0f;
     };
 
     /** @brief Which kind of sky a Sky holds. */
@@ -502,17 +524,19 @@ namespace Fenrir
     {
         Colour,
         Cubemap,
+        Panorama,
     };
 
     /**
-     * @brief What a scene shows where nothing was drawn, a scene resource beside AmbientLight (ADR-0026): exactly one
-     * of ColourSky and CubemapSky, by value, as FenrirPhysics' CollisionShape holds a shape. A scene without one has
-     * the default ColourSky, a dark grey. Each camera whose background is SceneBackground draws it; a ColourBackground
-     * overrides it for that camera's view.
+     * @brief What a scene shows where nothing was drawn, a scene resource beside AmbientLight (ADR-0026, ADR-0047):
+     * exactly one of ColourSky, CubemapSky and PanoramaSky, by value, as FenrirPhysics' CollisionShape holds a shape. A
+     * scene without one has the default ColourSky, a dark grey. Each camera whose background is SceneBackground draws
+     * it; a ColourBackground overrides it for that camera's view.
      *
-     * A cubemap that is empty, stale or not a cubemap with pixels draws the default ColourSky instead, logged once.
-     * Assign a kind to change it (`sky = CubemapSky{cubemap}`); read it through the checked view. Reading it as a kind
-     * it does not hold asserts.
+     * A cubemap that is empty, stale or not a cubemap with pixels, or a panorama that is empty, stale, or not a flat
+     * image with pixels twice as wide as high, draws the default ColourSky instead, logged once. Assign a kind to
+     * change it (`sky = PanoramaSky{image}`); read it through the checked view. Reading it as a kind it does not hold
+     * asserts.
      */
     class Sky
     {
@@ -532,13 +556,18 @@ namespace Fenrir
         {
         }
 
+        /** @brief A panorama. Implicit, so it can be assigned where a sky is wanted. */
+        Sky(PanoramaSky panorama) : m_type(SkyType::Panorama), m_panorama(panorama)
+        {
+        }
+
         /** @brief The kind held. */
         [[nodiscard]] SkyType Type() const
         {
             return m_type;
         }
 
-        /** @brief Whether the sky is a `T` (ColourSky or CubemapSky). */
+        /** @brief Whether the sky is a `T` (ColourSky, CubemapSky or PanoramaSky). */
         template <typename T>
         [[nodiscard]] bool Is() const
         {
@@ -569,10 +598,14 @@ namespace Fenrir
             {
                 return SkyType::Colour;
             }
+            else if constexpr (std::is_same_v<T, CubemapSky>)
+            {
+                return SkyType::Cubemap;
+            }
             else
             {
-                static_assert(std::is_same_v<T, CubemapSky>, "a Sky holds ColourSky or CubemapSky");
-                return SkyType::Cubemap;
+                static_assert(std::is_same_v<T, PanoramaSky>, "a Sky holds ColourSky, CubemapSky or PanoramaSky");
+                return SkyType::Panorama;
             }
         }
 
@@ -583,9 +616,13 @@ namespace Fenrir
             {
                 return self.m_colour;
             }
-            else
+            else if constexpr (TypeOf<T>() == SkyType::Cubemap)
             {
                 return self.m_cubemap;
+            }
+            else
+            {
+                return self.m_panorama;
             }
         }
 
@@ -593,6 +630,7 @@ namespace Fenrir
         union {
             ColourSky m_colour;
             CubemapSky m_cubemap;
+            PanoramaSky m_panorama;
         };
     };
 } // namespace Fenrir

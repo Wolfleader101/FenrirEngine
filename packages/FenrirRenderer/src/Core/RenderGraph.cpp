@@ -62,6 +62,15 @@ namespace Fenrir::Render
         access.clearColour = clear;
     }
 
+    void PassBuilder::ColourAttachmentLevel(GraphResource texture, std::uint32_t mipLevel, std::uint32_t layer)
+    {
+        Use(texture, ResourceUsage::ColourAttachment, false, true);
+        RenderGraph::Access& access = m_graph.m_passes[m_pass].accesses.back();
+        access.load = LoadOp::DontCare;
+        access.mipLevel = mipLevel;
+        access.layer = layer;
+    }
+
     void PassBuilder::DepthAttachment(GraphResource texture, LoadOp load, float clear)
     {
         Use(texture, ResourceUsage::DepthWrite, load == LoadOp::Load, true);
@@ -402,7 +411,7 @@ namespace Fenrir::Render
             const Graphics::TextureHandle texture = textures[access.resource];
             if (access.usage == ResourceUsage::ColourAttachment)
             {
-                desc.colour.push_back({texture, access.load, access.clearColour});
+                desc.colour.push_back({texture, access.load, access.clearColour, access.mipLevel, access.layer});
             }
             else if (access.usage == ResourceUsage::DepthWrite || access.usage == ResourceUsage::DepthRead)
             {
