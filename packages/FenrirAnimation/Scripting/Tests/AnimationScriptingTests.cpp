@@ -1,6 +1,6 @@
 // Animation from C# (spec seam 7), through the fixture's Animating and Recorded classes: ClipEventId.Of matching C++,
 // clip events authored and read by handle, events read in C# through EventReader, playback started, sought and read
-// from C# agreeing with C++, and bone masks made and edited. The rig is the animation tests' fixture, rig.gltf: one
+// from C# agreeing with C++, and bone masks made and edited. The model is the animation tests' fixture, rig.gltf: one
 // skeleton (Shoulder, Elbow) and two clips.
 
 #include <catch2/catch_approx.hpp>
@@ -28,34 +28,34 @@ namespace
     constexpr const char* AnimatingType = "Fenrir.AnimationScriptFixture.Animating";
     constexpr const char* RecordedType = "Fenrir.AnimationScriptFixture.Recorded";
 
-    // The rig spawned into the active scene: its skeleton entity and its first clip.
-    struct Rig
+    // The fixture model spawned into the active scene: its skeleton entity and its first clip.
+    struct SpawnedFixture
     {
         Entity skeleton;
         AssetHandle<Clip> clip;
     };
 
-    Rig SpawnRig(AnimationScriptingApp& test)
+    SpawnedFixture SpawnFixture(AnimationScriptingApp& test)
     {
         AssetStore& store = test.assets.Store();
         Scene& scene = test.Get().GetActiveScene();
         const auto model = store.Load<Model>(FENRIR_ANIMATION_SCRIPTING_RIG, scene);
         REQUIRE(model.Ok());
         const SpawnedNodes spawned = test.skeletons.SpawnModel(scene, model.handle);
-        Rig rig;
+        SpawnedFixture fixture;
         for (const Entity& node : spawned.nodes)
         {
             if (node.IsValid() && node.HasComponent<SkeletonPose>())
             {
-                rig.skeleton = node;
+                fixture.skeleton = node;
             }
         }
-        REQUIRE(rig.skeleton.IsValid());
+        REQUIRE(fixture.skeleton.IsValid());
         const Model* data = store.TryGet(model.handle);
         REQUIRE(data != nullptr);
         REQUIRE_FALSE(data->clips.empty());
-        rig.clip = data->clips[0];
-        return rig;
+        fixture.clip = data->clips[0];
+        return fixture;
     }
 } // namespace
 
@@ -76,19 +76,19 @@ TEST_CASE("ClipEventId.Of in C# matches C++'s FNV-1a", "[animation][scripting][e
 TEST_CASE("Clip events authored from C# are the clip's, and C# reads them back by handle", "[animation][scripting]")
 {
     AnimationScriptingApp test;
-    const Rig rig = SpawnRig(test);
+    const SpawnedFixture fixture = SpawnFixture(test);
     AssetStore& store = test.assets.Store();
-    const std::uint32_t index = rig.clip.index;
-    const std::uint32_t generation = rig.clip.generation;
-    const float duration = store.TryGet(rig.clip)->duration;
+    const std::uint32_t index = fixture.clip.index;
+    const std::uint32_t generation = fixture.clip.generation;
+    const float duration = store.TryGet(fixture.clip)->duration;
 
     CHECK(test.Call<float>(AnimatingType, "Duration", index, generation) == Catch::Approx(duration));
     const int before = test.Call<int>(AnimatingType, "EventCount", index, generation);
     const auto added = test.Call<std::uint32_t>(AnimatingType, "AddEvent", index, generation, duration * 0.5f, 0);
     REQUIRE(added != 0xFFFFFFFFu);
     CHECK(test.Call<int>(AnimatingType, "EventCount", index, generation) == before + 1);
-    REQUIRE(store.TryGet(rig.clip)->events.size() == static_cast<std::size_t>(before + 1));
-    CHECK(store.TryGet(rig.clip)->events[added].name == "step");
+    REQUIRE(store.TryGet(fixture.clip)->events.size() == static_cast<std::size_t>(before + 1));
+    CHECK(store.TryGet(fixture.clip)->events[added].name == "step");
     CHECK(test.Call<float>(AnimatingType, "EventTime", index, generation, added) == Catch::Approx(duration * 0.5f));
     CHECK(test.Call<std::optional<std::string>>(AnimatingType, "EventName", index, generation, added) ==
           std::optional<std::string>("step"));
@@ -103,31 +103,32 @@ TEST_CASE("Playback started from C# plays, its events are read in C#, and Seek a
           "[animation][scripting][playback]")
 {
     AnimationScriptingApp test;
-    const Rig rig = SpawnRig(test);
+    const SpawnedFixture fixture = SpawnFixture(test);
     AssetStore& store = test.assets.Store();
-    const float duration = store.TryGet(rig.clip)->duration;
-    REQUIRE(store.AddClipEvent(rig.clip, duration * 0.25f, "step").has_value());
+    const float duration = store.TryGet(fixture.clip)->duration;
+    REQUIRE(store.AddClipEvent(fixture.clip, duration * 0.25f, "step").has_value());
 
-    test.Call<void>(AnimatingType, "Play", rig.skeleton.GetId(), rig.clip.index, rig.clip.generation, 0.0f);
+    test.Call<void>(AnimatingType, "Play", fixture.skeleton.GetId(), fixture.clip.index, fixture.clip.generation, 0.0f);
     test.ApplyChanges();
-    REQUIRE(rig.skeleton.HasComponent<Animator>());
+    REQUIRE(fixture.skeleton.HasComponent<Animator>());
     const int frames = static_cast<int>(duration * 0.5f / oneTick) + 2;
     test.Run(frames);
 
-    CHECK(test.Call<int>(AnimatingType, "PlaybackState", rig.skeleton.GetId()) == static_cast<int>(PoseState::Ready));
-    CHECK(test.Call<double>(AnimatingType, "PlaybackTime", rig.skeleton.GetId()) ==
-          Catch::Approx(Animation::Playback(test.Get().GetActiveScene(), rig.skeleton).time));
+    CHECK(test.Call<int>(AnimatingType, "PlaybackState", fixture.skeleton.GetId()) ==
+          static_cast<int>(PoseState::Ready));
+    CHECK(test.Call<double>(AnimatingType, "PlaybackTime", fixture.skeleton.GetId()) ==
+          Catch::Approx(Animation::Playback(test.Get().GetActiveScene(), fixture.skeleton).time));
     REQUIRE(test.Call<int>(RecordedType, "EventCount") >= 1);
     CHECK(test.Call<std::uint32_t>(RecordedType, "EventNameId", 0) == ClipEventId::Of("step").value);
-    CHECK(test.Call<std::uint32_t>(RecordedType, "EventSkeleton", 0) == rig.skeleton.GetId());
+    CHECK(test.Call<std::uint32_t>(RecordedType, "EventSkeleton", 0) == fixture.skeleton.GetId());
     CHECK(test.Call<float>(RecordedType, "EventTime", 0) == Catch::Approx(duration * 0.25f));
 
-    CHECK(test.Call<bool>(AnimatingType, "Seek", rig.skeleton.GetId(), static_cast<double>(duration) * 0.1));
+    CHECK(test.Call<bool>(AnimatingType, "Seek", fixture.skeleton.GetId(), static_cast<double>(duration) * 0.1));
     test.Frame();
-    const double time = Animation::Playback(test.Get().GetActiveScene(), rig.skeleton).time;
+    const double time = Animation::Playback(test.Get().GetActiveScene(), fixture.skeleton).time;
     INFO("A seek moves the cursor at the next evaluation, which then advances by the frame");
     CHECK(time == Catch::Approx(duration * 0.1 + oneTick).margin(1e-4));
-    CHECK(test.Call<double>(AnimatingType, "PlaybackTime", rig.skeleton.GetId()) == Catch::Approx(time));
+    CHECK(test.Call<double>(AnimatingType, "PlaybackTime", fixture.skeleton.GetId()) == Catch::Approx(time));
 }
 
 TEST_CASE("Bone masks made and edited from C# are the store's", "[animation][scripting][masks]")

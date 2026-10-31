@@ -40,14 +40,15 @@ namespace AnimationDemo
     inline constexpr std::string_view FoxFile = "fox/Fox.gltf";
     inline constexpr float FoxScale = 0.01f;
     /**
-     * @brief Quaternius's human (assets/ATTRIBUTION.md): a 71-bone skinned rig with no clips of its own, and its clips,
-     * one file each on the same skeleton, bound to it by bone name. Clips: idle, walk, jog, sprint, and a call (the
-     * library has no wave), in QuaterniusClip's order.
+     * @brief Quaternius's human (assets/ATTRIBUTION.md): a 71-bone skinned model with no clips of its own, and its
+     * clips, one file each on the same skeleton, bound to it by bone name. Clips: idle, walk, jog, sprint, and a call
+     * (the library has no wave), in QuaterniusClip's order.
      */
     inline constexpr std::string_view QuaterniusFile = "quaternius/rig-human.glb";
     inline constexpr std::array<std::string_view, 5> QuaterniusClips{
         "quaternius/idle_loop.glb", "quaternius/walk_loop.glb", "quaternius/jog_fwd_loop.glb",
         "quaternius/sprint_loop.glb", "quaternius/idle_rail_call.glb"};
+    /** @brief The index into QuaterniusClips of each of the human's clips. */
     enum class QuaterniusClip : std::size_t
     {
         Idle,
@@ -71,7 +72,7 @@ namespace AnimationDemo
     inline constexpr float KenneyScale = 0.48f;
 
     /** @brief A model spawned through the renderer's SpawnModel, with its skeleton entity and skinned mesh entities. */
-    struct Rig
+    struct SkinnedModel
     {
         Fenrir::AssetHandle<Fenrir::Model> model;
         Fenrir::Entity root;
@@ -80,6 +81,7 @@ namespace AnimationDemo
         /** @brief The entities with a SkinnedMesh, under the skeleton entity. */
         std::vector<Fenrir::Entity> meshes;
 
+        /** @brief Whether the model spawned with a skeleton entity. */
         [[nodiscard]] bool IsValid() const
         {
             return root.IsValid() && skeleton.IsValid();
@@ -91,17 +93,17 @@ namespace AnimationDemo
 
     /**
      * @brief Loads `file` for `scene` (owned by it) and spawns it at `position`, turned `yaw` radians about +Y and
-     * scaled by `scale`. An invalid Rig, logged as an error, when the file does not load or has no skeleton.
+     * scaled by `scale`. An invalid SkinnedModel, logged as an error, when the file does not load or has no skeleton.
      */
-    Rig SpawnRig(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file, Fenrir::Math::Vec3 position,
-                 float yaw = 0.0f, float scale = 1.0f);
+    SkinnedModel SpawnSkinnedModel(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file,
+                                   Fenrir::Math::Vec3 position, float yaw = 0.0f, float scale = 1.0f);
 
     /** @brief Clip `index` of the model in `file`, loaded for `scene`; an empty handle, logged, if there is none. */
     Fenrir::AssetHandle<Fenrir::Clip> LoadClip(Fenrir::App& app, Fenrir::Scene& scene, std::string_view file,
                                                std::size_t index = 0);
 
-    /** @brief Loads the image `file` for `scene` and makes it the base colour texture of each of the rig's meshes. */
-    void Paint(Fenrir::App& app, Fenrir::Scene& scene, const Rig& rig, std::string_view file);
+    /** @brief Loads the image `file` for `scene` and makes it the base colour texture of each of the model's meshes. */
+    void Paint(Fenrir::App& app, Fenrir::Scene& scene, const SkinnedModel& spawned, std::string_view file);
 
     /** @brief Gives the skeleton entity an Animator playing `clip`. */
     void Play(Fenrir::Entity skeleton, Fenrir::AssetHandle<Fenrir::Clip> clip,

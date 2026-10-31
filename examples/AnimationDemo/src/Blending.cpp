@@ -23,7 +23,7 @@
 #include "FenrirInput/Input.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirSkeleton/Skeletons.hpp"
-#include "Rigs.hpp"
+#include "SkinnedModels.hpp"
 
 namespace AnimationDemo
 {
@@ -54,16 +54,16 @@ namespace AnimationDemo
         struct BlendingState
         {
             /** @brief Left: the base Animator crossfading through Cycle. */
-            Rig fader;
+            SkinnedModel fader;
             std::size_t clip = 0;
             Fenrir::FadeCurve curve = Fenrir::FadeCurve::Smooth;
             /** @brief Seconds until an interrupting second change, or below 0 when none is due. */
             double interruptIn = -1.0;
             /** @brief Middle: walking, the call played on the upper body by an override layer. */
-            Rig walker;
+            SkinnedModel walker;
             Fenrir::Entity upperBody;
             /** @brief Right: idling, the lean added by an additive layer whose weight ramps. */
-            Rig leaner;
+            SkinnedModel leaner;
             Fenrir::Entity lean;
             /** @brief Seconds into the weight ramp, or below 0 when none runs. */
             double ramp = -1.0;
@@ -77,11 +77,11 @@ namespace AnimationDemo
          * on top of its rest rotation, with a "Sway" event at the far end. Measured from its start it sways from
          * upright; measured from rest it leans LeanFrom further throughout.
          */
-        Fenrir::AssetHandle<Fenrir::Clip> MakeLean(Fenrir::App& app, Fenrir::Scene& scene, const Rig& rig)
+        Fenrir::AssetHandle<Fenrir::Clip> MakeLean(Fenrir::App& app, Fenrir::Scene& scene, const SkinnedModel& spawned)
         {
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
             const Fenrir::SkeletonData* skeleton =
-                store.TryGet(rig.skeleton.GetComponent<Fenrir::SkeletonPose>().skeleton);
+                store.TryGet(spawned.skeleton.GetComponent<Fenrir::SkeletonPose>().skeleton);
             const std::int32_t bone = skeleton != nullptr ? skeleton->FindBone(LeanBone) : Fenrir::NoBone;
             if (bone == Fenrir::NoBone)
             {
@@ -106,9 +106,9 @@ namespace AnimationDemo
             return store.Add<Fenrir::Clip>(std::move(clip), scene);
         }
 
-        Fenrir::Entity AddLayer(Fenrir::Scene& scene, const Rig& rig, Fenrir::AnimationLayer layer)
+        Fenrir::Entity AddLayer(Fenrir::Scene& scene, const SkinnedModel& spawned, Fenrir::AnimationLayer layer)
         {
-            layer.skeleton = rig.skeleton;
+            layer.skeleton = spawned.skeleton;
             Fenrir::Entity entity = scene.GetEntityList().CreateEntity();
             entity.AddComponent<Fenrir::AnimationLayer>(layer);
             return entity;
@@ -122,9 +122,9 @@ namespace AnimationDemo
             {
                 state.clips.at(i) = LoadClip(app, scene, QuaterniusClips.at(i));
             }
-            state.fader = SpawnRig(app, scene, QuaterniusFile, Vec3(-2.2f, 0.0f, 0.0f), 0.3f);
-            state.walker = SpawnRig(app, scene, QuaterniusFile, Vec3(0.0f, 0.0f, 0.0f));
-            state.leaner = SpawnRig(app, scene, QuaterniusFile, Vec3(2.2f, 0.0f, 0.0f), -0.3f);
+            state.fader = SpawnSkinnedModel(app, scene, QuaterniusFile, Vec3(-2.2f, 0.0f, 0.0f), 0.3f);
+            state.walker = SpawnSkinnedModel(app, scene, QuaterniusFile, Vec3(0.0f, 0.0f, 0.0f));
+            state.leaner = SpawnSkinnedModel(app, scene, QuaterniusFile, Vec3(2.2f, 0.0f, 0.0f), -0.3f);
             if (!state.fader.IsValid() || !state.walker.IsValid() || !state.leaner.IsValid())
             {
                 return;
@@ -249,8 +249,8 @@ namespace AnimationDemo
             }
 
             const Fenrir::TextOptions label{.size = 16.0f};
-            const auto labelAt = [&](const Rig& rig, std::string_view text) {
-                draw->WorldText(rig.root.GetComponent<Fenrir::Transform>().pos + Vec3(-0.5f, 2.35f, 0.0f), text,
+            const auto labelAt = [&](const SkinnedModel& spawned, std::string_view text) {
+                draw->WorldText(spawned.root.GetComponent<Fenrir::Transform>().pos + Vec3(-0.5f, 2.35f, 0.0f), text,
                                 Colour::White, label);
             };
             labelAt(state->fader, "Crossfades");
