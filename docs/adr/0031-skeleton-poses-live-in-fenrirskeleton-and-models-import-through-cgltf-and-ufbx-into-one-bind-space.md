@@ -116,6 +116,8 @@ Per format:
 
 Each clip channel keeps its target's source node identity and engine name. A clip binds to skeletons from its own file by identity, which is exact even when names repeat. It binds to any other skeleton by engine name, as ADR-0028 says, with a diagnostic for a missing or ambiguous match. *Refines ADR-0028's name rule.* Retargeting across proportions, rest poses or orientations is future work.
 
+- *Amended after building the animation spec (2026-10-31):* a match by name is ambiguous when the bone with that engine name shares its source name with another bone, suffixed or not, since a `#2` comes from one file's import order. Bone masks (ADR-0036) match by the same rule, and `SkeletonData::MatchBoneName` owns it for both; `FindBone` stays exact.
+
 ## Importers
 
 The model-import seam (ADR-0021) gets two private backends: **cgltf** for glTF and GLB, and **ufbx** for FBX and OBJ, each linked `PRIVATE`. **assimp is dropped.** New formats join behind the same seam without changing the asset model. *Amends ADR-0021's importer line* (assimp for models) and ticket 21's submodule list.

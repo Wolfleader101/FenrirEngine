@@ -1,4 +1,5 @@
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <string>
@@ -110,6 +111,48 @@ TEST_CASE("Repeated bone names get suffixed engine names, each with a warning", 
 
     INFO("one warning per renamed bone");
     REQUIRE(test.warnings->size() == 4);
+}
+
+TEST_CASE("A name from elsewhere matches a bone only when its source name is unique", "[assets][skeletons]")
+{
+    AssetsApp test;
+    Fenrir::SkeletonData repeated;
+    repeated.bones = {Bone("Bone", -1), Bone("Bone", 0), Bone("Bone#2", 1), Bone("hand", 2)};
+    const Fenrir::SkeletonData& skeleton = Added(test, std::move(repeated));
+    using Outcome = Fenrir::BoneNameMatch::Outcome;
+
+    INFO("a unique source name matches its bone, under its engine name");
+    REQUIRE(skeleton.MatchBoneName("hand").outcome == Outcome::Matched);
+    REQUIRE(skeleton.MatchBoneName("hand").bone == 3);
+    REQUIRE(skeleton.MatchBoneName("Bone#2#2").outcome == Outcome::Matched);
+    REQUIRE(skeleton.MatchBoneName("Bone#2#2").bone == 2);
+
+    INFO("every bone of a repeated source name is ambiguous, suffixed or not, and gives no bone");
+    REQUIRE(skeleton.MatchBoneName("Bone").outcome == Outcome::Ambiguous);
+    REQUIRE(skeleton.MatchBoneName("Bone#2").outcome == Outcome::Ambiguous);
+    REQUIRE(skeleton.MatchBoneName("Bone#2").bone == Fenrir::NoBone);
+
+    INFO("a name no engine name has matches nothing");
+    REQUIRE(skeleton.MatchBoneName("tail").outcome == Outcome::NoMatch);
+    REQUIRE(skeleton.MatchBoneName("tail").bone == Fenrir::NoBone);
+
+    INFO("FindBone stays exact");
+    REQUIRE(skeleton.FindBone("Bone") == 0);
+    REQUIRE(skeleton.FindBone("Bone#2") == 1);
+}
+
+TEST_CASE("SubtreeOf walks any parents-first list of parents, as Subtree does", "[assets][skeletons]")
+{
+    // root -> spine -> (head, arm -> hand), and a second root, prop.
+    const std::vector<std::int32_t> parents{-1, 0, 1, 1, 3, -1};
+    const auto parentOf = [&parents](std::size_t i) { return parents[i]; };
+
+    REQUIRE(Fenrir::SubtreeOf(parents.size(), 1, parentOf) == std::vector<std::int32_t>{1, 2, 3, 4});
+    REQUIRE(Fenrir::SubtreeOf(parents.size(), 3, parentOf) == std::vector<std::int32_t>{3, 4});
+    REQUIRE(Fenrir::SubtreeOf(parents.size(), 5, parentOf) == std::vector<std::int32_t>{5});
+    INFO("out of range either way is empty");
+    REQUIRE(Fenrir::SubtreeOf(parents.size(), 6, parentOf).empty());
+    REQUIRE(Fenrir::SubtreeOf(parents.size(), Fenrir::NoBone, parentOf).empty());
 }
 
 TEST_CASE("An over-long bone name is cut at a UTF-8 boundary and suffixed", "[assets][skeletons]")

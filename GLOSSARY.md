@@ -600,6 +600,18 @@ The engine's animation package: plays and blends clips into a skeleton's base po
 One node of a skeleton, named by its stable index in the skeleton's parents-first order and found by name. Bones are entries in arrays, not entities.
 *Avoid:* joint (a *joint* is a physics constraint between two bodies), node (a model's), socket.
 
+**Engine name**
+A bone's unique name in its skeleton: its source name, suffixed `#2`, `#3`… on a repeat (ADR-0031). `FindBone` looks it up exactly; gameplay code, which can see the suffixes, names bones by it.
+*Avoid:* bone ID, unique name.
+
+**Source name**
+A bone's name as its file gives it, which may repeat or be empty. Lookups use the engine name; the source name only says whether a name is ambiguous.
+*Avoid:* original name, file name.
+
+**Bone name match**
+How a clip channel or a bone mask entry, written against some other file, finds a bone by name: the bone with that engine name, unless its source name repeats in the skeleton, when the match is ambiguous and finds nothing (`SkeletonData::MatchBoneName`, ADR-0031).
+*Avoid:* bone lookup (that is `FindBone`'s exact one), fuzzy match.
+
 **Bone weight**
 How much one bone moves one vertex of a skinned mesh; each vertex has at most four.
 *Avoid:* joint weight, influence (alone), skin weight.

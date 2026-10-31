@@ -29,6 +29,57 @@ namespace Fenrir
     /** @brief The longest engine name a bone gets, in UTF-8 bytes, so it fits a `BoneName` (ADR-0037). */
     inline constexpr std::size_t MaxBoneNameBytes = 255;
 
+    /**
+     * @brief `bone` and every bone below it, in index order (so each after its parent), over `count` bones in a
+     * parents-first order whose parents `parentOf(i)` gives (`NoBone` for a root). Empty when `bone` is out of range.
+     * `SkeletonData::Subtree` walks its own parents with it; a skeleton instance walks its copy of them.
+     */
+    template <typename ParentOf>
+    [[nodiscard]] std::vector<std::int32_t> SubtreeOf(std::size_t count, std::int32_t bone, ParentOf parentOf)
+    {
+        if (bone < 0 || static_cast<std::size_t>(bone) >= count)
+        {
+            return {};
+        }
+        // Parents come first, so one pass from the bone onwards finds every bone below it.
+        std::vector<bool> inside(count, false);
+        inside[static_cast<std::size_t>(bone)] = true;
+        std::vector<std::int32_t> subtree{bone};
+        for (std::size_t i = static_cast<std::size_t>(bone) + 1; i < count; ++i)
+        {
+            const std::int32_t parent = parentOf(i);
+            if (parent != NoBone && inside[static_cast<std::size_t>(parent)])
+            {
+                inside[i] = true;
+                subtree.push_back(static_cast<std::int32_t>(i));
+            }
+        }
+        return subtree;
+    }
+
+    /**
+     * @brief What matching a bone by a name from elsewhere found (`SkeletonData::MatchBoneName`): a bone, no bone with
+     * that engine name, or a bone whose source name the skeleton repeats, so the name may mean another bone.
+     */
+    struct BoneNameMatch
+    {
+        /** @brief How the match ended. */
+        enum class Outcome : std::uint8_t
+        {
+            /** @brief `bone` is the one bone the name means. */
+            Matched,
+            /** @brief No bone has that engine name. */
+            NoMatch,
+            /** @brief The bone with that engine name shares its source name with another bone. */
+            Ambiguous,
+        };
+
+        /** @brief How the match ended. */
+        Outcome outcome = Outcome::NoMatch;
+        /** @brief The bone when `outcome` is `Matched`, else `NoBone`. */
+        std::int32_t bone = NoBone;
+    };
+
     /** @brief One bone of a skeleton, as its file (or the code building it) gives it. */
     struct SkeletonBone
     {
@@ -86,6 +137,14 @@ namespace Fenrir
         /** @brief The bone whose engine name is exactly `name`, or `NoBone`. */
         [[nodiscard]] std::int32_t FindBone(std::string_view name) const;
 
+        /**
+         * @brief Matches a bone by a name from elsewhere, a clip channel's or a bone mask entry's (ADR-0031, ADR-0036):
+         * the bone whose engine name is `name`, unless its source name is another bone's too. A `#2` suffix comes from
+         * this skeleton's own import order, so a name from another file cannot be trusted to mean the same repeat:
+         * every bone of a repeated source name is `Ambiguous`, suffixed or not. `FindBone` stays exact.
+         */
+        [[nodiscard]] BoneNameMatch MatchBoneName(std::string_view name) const;
+
         /** @brief The first bone, in index order, whose source name is `name`, or `NoBone`. */
         [[nodiscard]] std::int32_t FindBoneBySourceName(std::string_view name) const;
 
@@ -115,6 +174,8 @@ namespace Fenrir
         std::vector<std::uint16_t> m_parents;
         std::unordered_map<std::string, std::uint16_t> m_byEngineName;
         std::unordered_map<std::string, std::uint16_t> m_bySourceName;
+        // Per bone: 1 when another bone has the same source name, so a match by name is ambiguous.
+        std::vector<std::uint8_t> m_sharesSourceName;
         std::uint64_t m_bindSignature = 0;
     };
 

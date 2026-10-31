@@ -27,18 +27,6 @@ namespace Fenrir::Detail
             return "?";
         }
 
-        // How many of the skeleton's bones share `bone`'s source name: more than one makes a match by name ambiguous.
-        std::size_t SourceNameCount(const SkeletonData& skeleton, std::int32_t bone)
-        {
-            const std::string& name = skeleton.bones[static_cast<std::size_t>(bone)].sourceName;
-            std::size_t count = 0;
-            for (const SkeletonBone& other : skeleton.bones)
-            {
-                count += other.sourceName == name ? 1 : 0;
-            }
-            return count;
-        }
-
         // The channel's bone, or NoBone with why not.
         std::int32_t Bind(const ClipChannel& channel, const SkeletonData& skeleton, bool sameFile,
                           std::string_view& reason)
@@ -61,18 +49,19 @@ namespace Fenrir::Detail
                 reason = "no bone of the skeleton has its node identity";
                 return NoBone;
             }
-            const std::int32_t bone = skeleton.FindBone(channel.targetName);
-            if (bone == NoBone)
+            const BoneNameMatch match = skeleton.MatchBoneName(channel.targetName);
+            switch (match.outcome)
             {
+            case BoneNameMatch::Outcome::NoMatch:
                 reason = "no bone has that engine name";
-                return NoBone;
-            }
-            if (SourceNameCount(skeleton, bone) > 1)
-            {
+                break;
+            case BoneNameMatch::Outcome::Ambiguous:
                 reason = "the match is ambiguous: the skeleton repeats that bone's name";
-                return NoBone;
+                break;
+            case BoneNameMatch::Outcome::Matched:
+                break;
             }
-            return bone;
+            return match.bone;
         }
     } // namespace
 
