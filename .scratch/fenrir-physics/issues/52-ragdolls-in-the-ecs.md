@@ -1,7 +1,7 @@
 # How is a ragdoll modelled in the ECS, and where does the glue live?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 49, 50, 51
 
 ## Question
