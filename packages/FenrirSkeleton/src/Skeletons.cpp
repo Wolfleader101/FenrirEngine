@@ -418,20 +418,7 @@ namespace Fenrir
             {
                 return {bone};
             }
-            // Parents come before their children, so one pass in index order finds the subtree.
-            std::vector<std::uint8_t> inside(instance.parents.size(), 0);
-            std::vector<std::int32_t> reached;
-            for (std::size_t i = static_cast<std::size_t>(bone); i < instance.parents.size(); ++i)
-            {
-                const std::int32_t parent = instance.parents[i];
-                if (static_cast<std::int32_t>(i) == bone ||
-                    (parent >= 0 && inside[static_cast<std::size_t>(parent)] != 0))
-                {
-                    inside[i] = 1;
-                    reached.push_back(static_cast<std::int32_t>(i));
-                }
-            }
-            return reached;
+            return SubtreeOf(instance.parents.size(), bone, [&instance](std::size_t i) { return instance.parents[i]; });
         }
     } // namespace
 
