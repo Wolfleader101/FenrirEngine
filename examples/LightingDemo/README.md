@@ -115,7 +115,8 @@ Hand checks, on OpenGL:
 A dark room, twelve metres wide and ten deep, lit by rect lights (ADR-0048) alone: a magenta neon strip low along the
 back wall, a warm white panel high on it to the left, and a cyan two-sided sign hung side on from the ceiling to the
 right, lighting both halves of the room. Each shows as a thin glowing slab of its size and radiance. The floor is one
-dark polished slab whose roughness runs smoothly from a near mirror (0.02) at its left edge to satin (0.6) at its right.
+dark polished slab whose roughness rises smoothly from a near mirror (0.02) at its left edge to satin (0.5) at its
+right, slowly at first: 0.05 a quarter of the way across, 0.14 in the middle.
 Khronos's DamagedHelmet, FlightHelmet and SciFiHelmet stand on white plinths across the middle, fetched (ADR-0052);
 without them the plinths are bare and the scene says so on screen. The window's Scene part has each light's width,
 height, intensity and sidedness.

@@ -72,24 +72,30 @@ namespace
 TEST_CASE("A rect light's record faces its entity's -Z and holds its half extents", "[renderer][lights][rect]")
 {
     const GpuLight gpu = Rect({1.0f, 2.0f, 3.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, 4.0f, 2.0f, true);
+    INFO("its kind is Rect, at its centre, with its range");
     REQUIRE(gpu.kind == static_cast<std::uint32_t>(LightKind::Rect));
     REQUIRE(gpu.position == Vec3(1.0f, 2.0f, 3.0f));
+    REQUIRE(gpu.range == 100.0f);
+    INFO("it faces -(right x up): -Z for the entity's own X and Y");
     REQUIRE(glm::length(gpu.direction - Vec3(0.0f, 0.0f, -1.0f)) < 1e-6f);
+    INFO("its half extents are half its width along right and half its height along up");
     REQUIRE(gpu.halfWidth == Vec3(2.0f, 0.0f, 0.0f));
     REQUIRE(gpu.halfHeight == Vec3(0.0f, 1.0f, 0.0f));
+    INFO("two-sided is 1");
     REQUIRE(gpu.twoSided == 1u);
-    REQUIRE(gpu.range == 100.0f);
 }
 
-TEST_CASE("The LTC tables are 64 x 64 RGBA texels, sampled at a texel's centre as that texel",
-          "[renderer][lights][rect]")
+TEST_CASE("The LTC tables are 64 x 64 RGBA texels each", "[renderer][lights][rect]")
 {
     using Fenrir::Render::LtcSide;
+    INFO("the matrix table and the amplitude table");
     REQUIRE(Fenrir::Render::LtcMatrixTexels().size() == std::size_t{LtcSide} * LtcSide * 4);
     REQUIRE(Fenrir::Render::LtcAmplitudeTexels().size() == std::size_t{LtcSide} * LtcSide * 4);
+}
 
-    INFO("seen straight on, GGX is round about the normal: the transform only squashes it along the normal, the more "
-         "the smoother");
+TEST_CASE("Seen straight on, the LTC transform only squashes GGX along the normal, the more the smoother",
+          "[renderer][lights][rect]")
+{
     const auto matrix = [](float roughness) {
         return Fenrir::Render::SampleLtcTable(Fenrir::Render::LtcMatrixTexels(),
                                               Fenrir::Render::LtcUv({roughness, 0.0f}));
@@ -97,16 +103,21 @@ TEST_CASE("The LTC tables are 64 x 64 RGBA texels, sampled at a texel's centre a
     for (const float roughness : {0.25f, 0.5f, 1.0f})
     {
         const auto m = matrix(roughness);
+        INFO("at roughness " << roughness << ", GGX is round about the normal: m00 1, no shear");
         REQUIRE(m.x == 1.0f);
         REQUIRE(m.y == 0.0f);
         REQUIRE(m.z == 0.0f);
     }
+    INFO("m22 grows with the roughness");
     REQUIRE(matrix(0.25f).w < matrix(0.5f).w);
     REQUIRE(matrix(0.5f).w < matrix(1.0f).w);
+}
 
-    INFO("a sphere straight overhead is not clipped by the horizon at all");
+TEST_CASE("A sphere straight overhead is not clipped by the horizon", "[renderer][lights][rect]")
+{
     const auto overhead =
         Fenrir::Render::SampleLtcTable(Fenrir::Render::LtcAmplitudeTexels(), Fenrir::Render::LtcUv({1.0f, 0.5f}));
+    INFO("the amplitude table's alpha straight up, at a form factor of 0.5, is " << overhead.w);
     REQUIRE(std::abs(overhead.w - 1.0f) < 0.01f);
 }
 
@@ -154,27 +165,35 @@ TEST_CASE("A rect light straddling a surface's horizon lights it within the sphe
     const double numerical = NumericalDiffuse(Vec3(0.0f), normal, light);
     INFO("LTC " << ltc << ", numerical " << numerical);
     REQUIRE(std::abs(ltc - numerical) < 0.005);
-
-    INFO("and wholly below the horizon, nothing");
-    const GpuLight below = Rect({2.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, -1.0f, 0.0f}, 1.2f, 1.2f);
-    REQUIRE(Fenrir::Render::RectDiffuse(Vec3(0.0f), normal, below) < 1e-3f);
 }
 
-TEST_CASE("A one-sided rect light lights nothing behind it; a two-sided one lights both sides alike",
+TEST_CASE("A rect light wholly below a surface's horizon lights it with nothing", "[renderer][lights][rect]")
+{
+    const GpuLight below = Rect({2.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, -1.0f, 0.0f}, 1.2f, 1.2f);
+    const float lit = Fenrir::Render::RectDiffuse(Vec3(0.0f), {0.0f, 1.0f, 0.0f}, below);
+    INFO("facing the point but under its horizon: " << lit);
+    REQUIRE(lit < 1e-3f);
+}
+
+TEST_CASE("A one-sided rect light lights nothing behind it", "[renderer][lights][rect]")
+{
+    // Overhead, facing up, away from the point below it.
+    const GpuLight away = Rect({0.0f, 1.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 2.0f, 1.0f);
+    INFO("exactly 0, not merely dim");
+    REQUIRE(Fenrir::Render::RectDiffuse(Vec3(0.0f), {0.0f, 1.0f, 0.0f}, away) == 0.0f);
+}
+
+TEST_CASE("A two-sided rect light lights what is behind it as its front lights what is in front",
           "[renderer][lights][rect]")
 {
     const Vec3 up(0.0f, 1.0f, 0.0f);
-    // Overhead, facing up, away from the point below it.
-    const GpuLight away = Rect({0.0f, 1.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 2.0f, 1.0f);
-    REQUIRE(Fenrir::Render::RectDiffuse(Vec3(0.0f), up, away) == 0.0f);
-
-    GpuLight twoSided = away;
-    twoSided.twoSided = 1;
-    GpuLight facing = Rect({0.0f, 1.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f}, 2.0f, 1.0f);
+    GpuLight back = Rect({0.0f, 1.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 2.0f, 1.0f, true);
+    const GpuLight facing = Rect({0.0f, 1.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f}, 2.0f, 1.0f);
     const float front = Fenrir::Render::RectDiffuse(Vec3(0.0f), up, facing);
-    INFO("the front's light is " << front);
+    const float behind = Fenrir::Render::RectDiffuse(Vec3(0.0f), up, back);
+    INFO("the front's light is " << front << ", the back's " << behind);
     REQUIRE(front > 0.1f);
-    REQUIRE(std::abs(Fenrir::Render::RectDiffuse(Vec3(0.0f), up, twoSided) - front) < 1e-4f);
+    REQUIRE(std::abs(behind - front) < 1e-4f);
 }
 
 TEST_CASE("A rect light's window is 1 near it and falls to 0 at its range from the rect's nearest point",

@@ -238,7 +238,7 @@ vec4 FenrirLitColour(FenrirSurface surface)
     for (uint i = 0u; i < frame.lights.x; ++i)
     {
         FenrirLight light = fenrirLights.items[i];
-        if (light.kind == 2u)
+        if (light.kind == FenrirLightRect)
         {
             colour += FenrirRectLight(light, surface.position, n, v, nDotV, roughness, rectDiffuse, rectSpecular);
             continue;

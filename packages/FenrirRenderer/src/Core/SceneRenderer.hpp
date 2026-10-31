@@ -497,9 +497,9 @@ namespace Fenrir::Render
 
         /** @brief The default textures, by DefaultTexture: white, black and the flat normal. */
         std::array<Graphics::TextureHandle, 3> m_defaultTextures{};
-        /** @brief The rect lights' LTC tables (ADR-0048), set 0 bindings 5 and 6: the matrix's, then the amplitude's.
-         */
-        std::array<Graphics::TextureHandle, 2> m_ltcTables{};
+        /** @brief The rect lights' LTC tables (ADR-0048): the matrix's at set 0 binding 5, the amplitude's at 6. */
+        Graphics::TextureHandle m_ltcMatrix;
+        Graphics::TextureHandle m_ltcAmplitude;
         Graphics::SamplerHandle m_defaultSampler;
         Graphics::SamplerHandle m_outputSampler;
         Graphics::SamplerHandle m_skySampler;

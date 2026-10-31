@@ -30,6 +30,11 @@ layout(set = 0, binding = 2) uniform samplerCube fenrirSkySpecular;
 // The split sum's BRDF lookup table: red the scale and green the bias of f0, by N.V across and roughness down.
 layout(set = 0, binding = 3) uniform sampler2D fenrirBrdfLut;
 
+// The kinds of light a FenrirLight record is, as Core/PunctualLights' LightKind numbers them.
+const uint FenrirLightPoint = 0u;
+const uint FenrirLightSpot = 1u;
+const uint FenrirLightRect = 2u;
+
 // One point, spot or rect light (ADR-0048), in world space. Ticket 19's clusters index these records unchanged.
 struct FenrirLight
 {
@@ -39,7 +44,7 @@ struct FenrirLight
     float range;
     // Its colour times its intensity, linear: a rect light's radiance.
     vec3 colour;
-    // 0 a point light, 1 a spot light, 2 a rect light.
+    // FenrirLightPoint, FenrirLightSpot or FenrirLightRect.
     uint kind;
     // The way a spot light points, or a rect light faces, unit length.
     vec3 direction;

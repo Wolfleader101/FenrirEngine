@@ -59,15 +59,34 @@ TEST_CASE("A white rect light of intensity 1 filling a white rough wall's view l
     AddRectLight(test, 0.5f, Fenrir::RectLight{Fenrir::Colour::White, 1.0f, 100.0f, 100.0f, false, 1000.0f});
 
     const GlProbe::Image image = test.Frame();
-    INFO("its diffuse 1 less what the specular lobe takes, which the specular gives back: as a white sky all round");
     const float lit = Red(image, Centre, Centre);
-    INFO("the wall's centre reads " << lit);
+    INFO("its diffuse 1 less what the specular lobe takes, which the specular gives back, as a white sky all round: "
+         "the wall's centre reads "
+         << lit);
     REQUIRE(lit > 0.95f);
     REQUIRE(lit < 1.05f);
+    INFO("no GL error or other error was logged");
     REQUIRE(test.messages->errors.empty());
 }
 
-TEST_CASE("A one-sided rect light lights nothing behind it; a two-sided one lights it as its front does",
+TEST_CASE("A one-sided rect light lights nothing behind it", "[renderer][gl][lights][rect]")
+{
+    GlScene test;
+    test.RequireOpenGL();
+    AddWall(test);
+    // One unit in front of the wall, a unit square, turned to face the camera: the wall is behind it.
+    Fenrir::Entity light =
+        AddRectLight(test, 1.0f, Fenrir::RectLight{Fenrir::Colour::White, 4.0f, 1.0f, 1.0f, false, 100.0f});
+    light.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(HalfTurn, Vec3(0.0f, 1.0f, 0.0f));
+    const GlProbe::Image behind = test.Frame();
+    INFO("the wall is black everywhere");
+    REQUIRE(behind.At(Centre, Centre) == GlProbe::Pixel{0.0f, 0.0f, 0.0f, 1.0f});
+    REQUIRE(behind.At(Centre / 2, Centre / 2) == GlProbe::Pixel{0.0f, 0.0f, 0.0f, 1.0f});
+    INFO("no GL error or other error was logged");
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A two-sided rect light lights what is behind it as its front lights what is in front",
           "[renderer][gl][lights][rect]")
 {
     GlScene test;
@@ -75,22 +94,16 @@ TEST_CASE("A one-sided rect light lights nothing behind it; a two-sided one ligh
     AddWall(test);
     // One unit in front of the wall, a unit square, facing it.
     Fenrir::Entity light =
-        AddRectLight(test, 1.0f, Fenrir::RectLight{Fenrir::Colour::White, 4.0f, 1.0f, 1.0f, false, 100.0f});
+        AddRectLight(test, 1.0f, Fenrir::RectLight{Fenrir::Colour::White, 4.0f, 1.0f, 1.0f, true, 100.0f});
     const float front = Red(test.Frame(), Centre, Centre);
     INFO("facing the wall, it lights its centre: " << front);
     REQUIRE(front > 0.2f);
 
-    INFO("turned to face the camera, the wall is behind it and black everywhere");
     light.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(HalfTurn, Vec3(0.0f, 1.0f, 0.0f));
-    const GlProbe::Image behind = test.Frame();
-    REQUIRE(behind.At(Centre, Centre) == GlProbe::Pixel{0.0f, 0.0f, 0.0f, 1.0f});
-    REQUIRE(behind.At(Centre / 2, Centre / 2) == GlProbe::Pixel{0.0f, 0.0f, 0.0f, 1.0f});
-
-    INFO("two-sided, its back lights the wall as its front did");
-    light.GetComponent<Fenrir::RectLight>().twoSided = true;
     const float back = Red(test.Frame(), Centre, Centre);
-    INFO("front " << front << ", back " << back);
+    INFO("turned round, its back lights the wall as its front did: front " << front << ", back " << back);
     REQUIRE(std::abs(back - front) < 0.01f * front);
+    INFO("no GL error or other error was logged");
     REQUIRE(test.messages->errors.empty());
 }
 
@@ -102,8 +115,11 @@ TEST_CASE("Nothing past a rect light's range from the rectangle is lit", "[rende
     // One unit from the wall, reaching 1.5: the wall's centre is lit, the view's corners are not.
     AddRectLight(test, 1.0f, Fenrir::RectLight{Fenrir::Colour::White, 4.0f, 1.0f, 1.0f, false, 1.5f});
     const GlProbe::Image image = test.Frame();
+    INFO("the wall's centre, one unit from it, is lit");
     REQUIRE(Red(image, Centre, Centre) > 0.1f);
+    INFO("the view's corner, two units from the rectangle's nearest point, is black");
     REQUIRE(image.At(0, 0) == GlProbe::Pixel{0.0f, 0.0f, 0.0f, 1.0f});
+    INFO("no GL error or other error was logged");
     REQUIRE(test.messages->errors.empty());
 }
 

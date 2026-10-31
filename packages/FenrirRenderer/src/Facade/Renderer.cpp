@@ -409,6 +409,12 @@ namespace Fenrir
                 // Square to the right, so a sheared parent leaves it a rectangle.
                 const Math::Vec3 up = Math::Vec3(world[1]);
                 out.up = glm::normalize(up - out.right * glm::dot(up, out.right));
+                // It faces -(right x up). Under a mirroring parent that is its world +Z, so turn its width round: the
+                // rectangle is the same, and it faces its world -Z.
+                if (glm::dot(glm::cross(out.up, out.right), Math::Vec3(world[2])) > 0.0f)
+                {
+                    out.right = -out.right;
+                }
                 out.colour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
                 out.width = light.width;
                 out.height = light.height;

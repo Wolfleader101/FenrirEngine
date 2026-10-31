@@ -637,18 +637,18 @@ namespace Fenrir::Render
             m_device.WriteTexture(m_defaultTextures.at(i), 0, 0, std::as_bytes(std::span(texels.at(i))));
         }
         // The rect lights' linearly transformed cosines (ADR-0048): two 64 x 64 RGBA16F tables, written once.
-        const std::array<std::span<const std::uint16_t>, 2> ltcTexels{LtcMatrixTexels(), LtcAmplitudeTexels()};
-        constexpr std::array<std::string_view, 2> ltcNames{"LTC matrix", "LTC amplitude"};
-        for (std::size_t i = 0; i < ltcTexels.size(); ++i)
-        {
+        const auto makeLtcTable = [&](std::span<const std::uint16_t> texels, std::string_view name) {
             TextureDesc desc;
             desc.format = TextureFormat::Rgba16Float;
             desc.width = LtcSide;
             desc.height = LtcSide;
             desc.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
-            m_ltcTables.at(i) = m_device.CreateTexture(desc, ltcNames.at(i));
-            m_device.WriteTexture(m_ltcTables.at(i), 0, 0, std::as_bytes(ltcTexels.at(i)));
-        }
+            const TextureHandle texture = m_device.CreateTexture(desc, name);
+            m_device.WriteTexture(texture, 0, 0, std::as_bytes(texels));
+            return texture;
+        };
+        m_ltcMatrix = makeLtcTable(LtcMatrixTexels(), "LTC matrix");
+        m_ltcAmplitude = makeLtcTable(LtcAmplitudeTexels(), "LTC amplitude");
         // SamplerDescription's default: repeat, trilinear, anisotropy 8.
         SamplerDesc sampler;
         sampler.maxAnisotropy = 8.0f;
@@ -813,10 +813,8 @@ namespace Fenrir::Render
         {
             m_device.Destroy(texture);
         }
-        for (const TextureHandle texture : m_ltcTables)
-        {
-            m_device.Destroy(texture);
-        }
+        m_device.Destroy(m_ltcMatrix);
+        m_device.Destroy(m_ltcAmplitude);
         m_device.Destroy(m_defaultSampler);
         m_device.Destroy(m_outputSampler);
         m_device.Destroy(m_skySampler);
@@ -1828,11 +1826,11 @@ namespace Fenrir::Render
             lightEntry.buffer = lights;
             BindingGroupEntry ltcMatrix;
             ltcMatrix.binding = 5;
-            ltcMatrix.texture = m_ltcTables.at(0);
+            ltcMatrix.texture = m_ltcMatrix;
             ltcMatrix.sampler = m_skySampler;
             BindingGroupEntry ltcAmplitude;
             ltcAmplitude.binding = 6;
-            ltcAmplitude.texture = m_ltcTables.at(1);
+            ltcAmplitude.texture = m_ltcAmplitude;
             ltcAmplitude.sampler = m_skySampler;
             group = {block, lights, sky.irradiance, sky.specular,
                      m_device.CreateBindingGroup(

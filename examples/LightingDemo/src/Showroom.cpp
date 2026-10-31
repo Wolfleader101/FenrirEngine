@@ -33,9 +33,13 @@ namespace LightingDemo
         constexpr float HalfWidth = 6.0f;
         constexpr float HalfDepth = 5.0f;
         constexpr float RoomHeight = 4.0f;
-        /** @brief The floor's roughness from its left edge to its right. */
+        /**
+         * @brief The floor's roughness at its left edge and its right; between them it rises with the square of the
+         * distance across, so most of the floor in view is glossy: about 0.05 a quarter of the way, 0.14 at the
+         * middle, 0.29 three quarters of the way.
+         */
         constexpr float SmoothestFloor = 0.02f;
-        constexpr float RoughestFloor = 0.6f;
+        constexpr float RoughestFloor = 0.5f;
         /** @brief The plinths' side and height. */
         constexpr float PlinthSide = 0.8f;
         constexpr float PlinthHeight = 1.0f;
@@ -99,8 +103,9 @@ namespace LightingDemo
         }
 
         /**
-         * @brief A linear metallic-roughness texture whose green, the roughness, runs smoothly from SmoothestFloor at
-         * its left edge to RoughestFloor at its right, and whose blue, the metal, is 0.
+         * @brief A linear metallic-roughness texture whose green, the roughness, rises smoothly from SmoothestFloor at
+         * its left edge to RoughestFloor at its right, with the square of the distance across, and whose blue, the
+         * metal, is 0.
          */
         Fenrir::ImageData RoughnessRamp()
         {
@@ -115,7 +120,7 @@ namespace LightingDemo
                 for (std::uint32_t x = 0; x < Width; ++x)
                 {
                     const float t = static_cast<float>(x) / static_cast<float>(Width - 1);
-                    const float roughness = SmoothestFloor + (RoughestFloor - SmoothestFloor) * t;
+                    const float roughness = SmoothestFloor + (RoughestFloor - SmoothestFloor) * t * t;
                     const auto green = static_cast<std::uint8_t>(roughness * 255.0f + 0.5f);
                     for (const std::uint8_t channel : {std::uint8_t{0}, green, std::uint8_t{0}, std::uint8_t{255}})
                     {

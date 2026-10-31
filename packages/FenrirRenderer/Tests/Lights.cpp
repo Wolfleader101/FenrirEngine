@@ -118,14 +118,18 @@ TEST_CASE("Set 0 binds the light buffer at binding 4 and the LTC tables at 5 and
     test.Frame();
 
     const std::vector<BindingGroupEntry> set = FrameSet(test);
+    INFO("set 0's seven entries: the frame block, three sky textures, the light buffer and two LTC tables");
     REQUIRE(set.size() == 7);
+    INFO("binding 4 is the light buffer");
     REQUIRE(set[4].binding == 4);
     REQUIRE_FALSE(set[4].buffer.IsEmpty());
+    INFO("bindings 5 and 6 are the LTC matrix and amplitude tables, two textures");
     REQUIRE(set[5].binding == 5);
     REQUIRE(set[6].binding == 6);
     REQUIRE_FALSE(set[5].texture.IsEmpty());
     REQUIRE_FALSE(set[6].texture.IsEmpty());
     REQUIRE(set[5].texture != set[6].texture);
+    INFO("no lights, so a count of 0");
     REQUIRE(LightCount(test) == 0);
     REQUIRE(RendererProbe::StaleUses(test.Device()).empty());
 }
@@ -233,18 +237,42 @@ TEST_CASE("A rect light reaches the light buffer after the point and spot lights
     AddPointLight(test, {5.0f, 0.0f, 0.0f});
     test.Frame();
 
+    INFO("both lights are in the buffer");
     REQUIRE(LightCount(test) == 2);
     const std::vector<LightRecordRead> records = LightRecords(test, 2);
+    INFO("the point light (kind 0) first, then the rect light (kind 2)");
     REQUIRE(records[0].kind == 0);
     REQUIRE(records[1].kind == 2);
+    INFO("at its world position, with its colour times its intensity and its range");
     REQUIRE(Near(records[1].position, {1.0f, 2.0f, 0.0f}));
     REQUIRE(Near(records[1].colour, {2.0f, 1.0f, 0.5f}));
     REQUIRE(records[1].range == 6.0f);
+    INFO("facing its world -Z, its width along its world X and its height along its world Y, unscaled");
     REQUIRE(Near(records[1].direction, {-1.0f, 0.0f, 0.0f}));
     REQUIRE(Near(records[1].halfWidth, {0.0f, 0.0f, -2.0f}));
     REQUIRE(Near(records[1].halfHeight, {0.0f, 0.5f, 0.0f}));
+    INFO("two-sided");
     REQUIRE(records[1].twoSided == 1);
     REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A rect light under a mirroring parent still faces its world -Z", "[renderer][lights][rect]")
+{
+    RendererTestApp test;
+    AddLitCube(test);
+    Entity parent = test.ActiveScene().GetEntityList().CreateEntity();
+    parent.GetComponent<Fenrir::Transform>().scale = {-1.0f, 1.0f, 1.0f};
+    Entity rect = test.ActiveScene().GetEntityList().CreateEntity();
+    parent.AddChild(rect);
+    rect.AddComponent<Fenrir::RectLight>();
+    test.Frame();
+
+    const LightRecordRead record = LightRecords(test, 1)[0];
+    INFO("its world X is mirrored, its world -Z is not: it faces -Z, the way its entity's -Z points");
+    REQUIRE(Near(record.direction, {0.0f, 0.0f, -1.0f}));
+    INFO("and is still a unit square");
+    REQUIRE(std::abs(glm::length(record.halfWidth) - 0.5f) < 1e-5f);
+    REQUIRE(std::abs(glm::length(record.halfHeight) - 0.5f) < 1e-5f);
 }
 
 TEST_CASE("A rect light with no width or height does not reach the light buffer", "[renderer][lights][rect]")
@@ -259,6 +287,7 @@ TEST_CASE("A rect light with no width or height does not reach the light buffer"
     lit.AddComponent<Fenrir::RectLight>();
     test.Frame();
 
+    INFO("only the rect light with a size is in the buffer");
     REQUIRE(LightCount(test) == 1);
     REQUIRE(LightRecords(test, 1)[0].kind == 2);
 }
