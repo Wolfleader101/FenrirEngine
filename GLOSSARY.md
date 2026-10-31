@@ -711,8 +711,16 @@ A number FenrirSkeleton advances whenever a skeleton instance's final pose chang
 A per-bone scale, default 1, that gameplay sets on a skeleton instance to say how much its pose override entries count, apart from the entries themselves; set per bone or over a subtree, latest assignment winning (ADR-0038).
 *Avoid:* blend weight (pose blending's), physics weight, influence.
 
+**Ragdoll**
+`Ragdoll`: a component on a skeleton entity (one per skeleton) naming the collision group, root body and state of the ragdoll bodies that follow and drive its bones. The bodies and the joints between them are ordinary rigid bodies and joints (ADR-0053).
+*Avoid:* rig, physics asset, physical skeleton.
+
+**Ragdoll body**
+`RagdollBody`: a component on a rigid body entity naming its ragdoll, the bone it follows and drives by name, and the body's offset from that bone. Kinematic while the ragdoll follows its skeleton, it is the character's hit box: a hit names the body entity, and game code reads the bone name from it (ADR-0053).
+*Avoid:* part (Jolt's), physical bone (Godot's), hitbox component.
+
 **Ragdoll glue**
-App code, or a package the physics map's ragdoll spec defines, that joins a ragdoll's bodies to a skeleton: it writes body poses in as pose overrides and reads the base pose for motor targets, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038).
+FenrirRagdoll's systems, which join a ragdoll's bodies to its skeleton: each tick they move following bodies to the simulation pose, and each frame they write simulating bodies' poses in as pose overrides and read the base pose for motor targets, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038, ADR-0040, ADR-0053).
 *Avoid:* ragdoll system, physics animation.
 
 **Skinned mesh**

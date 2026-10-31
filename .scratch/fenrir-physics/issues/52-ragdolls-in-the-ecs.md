@@ -1,7 +1,7 @@
 # How is a ragdoll modelled in the ECS, and where does the glue live?
 
 Type: grilling
-Status: claimed
+Status: resolved
 Blocked by: 49, 50, 51
 
 ## Question
@@ -21,3 +21,16 @@ How does game code make a ragdoll and tie it to a skeleton, given ADR-0011 (plai
 Probably an ADR (where the mapping lives and where the glue lives are hard to reverse).
 
 Facts from ADR-0038: glue writes `SetOverride(entity, bone, Target { World, trs, all channels, weight })` in `Update` from each mapped body's interpolated world transform × the body-to-bone offset, parents first; owns and clears its entries; reads `GetBaseLocal`/`GetBaseModel` for motor targets. From ADR-0040: in `Tick`, glue writes `GetBoneWorldMatrix(skeleton, bone, PoseKind::Simulation) × offset` into a kinematic body entity's `Transform`, and the body entity carries no `BoneAttachment`. From `SkeletonData`: bones are a parents-first array with names, found by `FindBone`, with `GetSubtree`.
+
+## Answer
+
+ADR-0053, "Ragdolls are ordinary bodies and joints mapped to bones by name, glued by FenrirRagdoll" (`docs/adr/0053-ragdolls-are-ordinary-bodies-and-joints-mapped-to-bones-by-name-glued-by-fenrirragdoll.md`). Vocabulary is in `GLOSSARY.md`: ragdoll, ragdoll body, ragdoll glue (updated).
+
+- **Where the glue lives:** a new package **FenrirRagdoll** (FenrirPhysics, FenrirSkeleton and the core; built only with physics on) owning the components, the builder, the glue systems and a `Fenrir.Ragdoll` scripting extension. Not a FenrirPhysics module (physics depends only on the core), not app code (every app would rewrite it).
+- **Bodies and joints are ordinary:** `RigidBody` plus `Collider` entities and `Joint` entities (hinge or swing-twist); nothing is a private Jolt `Ragdoll`, which is made from its own settings and cannot wrap existing bodies; its helpers are loops the glue writes.
+- **The mapping:** `RagdollBody { Entity ragdoll; BoneName bone; Transform offset; }` on each body entity, the ragdoll link explicit, the bone by name resolved per instance through `Skeletons::FindBone`; a table on one component rejected (no growable arrays in blittable components).
+- **The offset:** stored once on `RagdollBody`, computed by the builder from the rest pose (`offset = bone⁻¹ × body`), editable, never recalibrated by the glue; following writes `bone × offset`, simulating writes `body × offset⁻¹` as the override target; stale after a rest-pose change until rebuilt, documented.
+- **The ragdoll component:** `Ragdoll` on the skeleton entity (one per skeleton) holding the collision group, the root body and state (mode fields from ticket 54); inactive with one warning without a ready `SkeletonPose`; a `RagdollBody` with no `RigidBody` or an unknown bone is skipped with one warning.
+- **Hit boxes:** the ragdoll's bodies, kinematic while following; hits name the body entity and game code reads `RagdollBody::bone`; a character that never falls keeps a following `Ragdoll`; no separate component.
+- **Lifetime:** bodies in the skeleton's scene; removing the ragdoll leaves the body entities (a builder destroy helper removes them); a body destroyed mid-simulation keeps its bone's last override.
+- **Words to avoid:** physical bone, physics asset, rig, part.
