@@ -406,6 +406,10 @@ How much a tyre is sliding over the ground rather than rolling. Along the wheel,
 One of 32 groups a body belongs to (it may belong to several). With its *collision mask*, the layers it collides with, it decides which bodies can touch: two touch only when each one's mask includes a layer of the other.
 *Avoid:* channel, group (a *collision group*, bodies that ignore each other, is a separate idea).
 
+**Collision group**
+`CollisionGroup`: an optional component on a body entity holding one plain integer game code picks; bodies with the same non-zero group never touch each other, whatever their layers allow, and 0 is no group. A character body's applies to its move; a trigger's is its own entity's. Queries ignore it (physics map ticket "How do general collision groups work?").
+*Avoid:* ignore list, exclusion, sub-group, collision exception (Godot's), layer (a *collision layer* decides who may touch; a group removes contact the layers allow).
+
 ## FenrirEngine rendering
 
 **Graphics API**
@@ -707,8 +711,32 @@ A number FenrirSkeleton advances whenever a skeleton instance's final pose chang
 A per-bone scale, default 1, that gameplay sets on a skeleton instance to say how much its pose override entries count, apart from the entries themselves; set per bone or over a subtree, latest assignment winning (ADR-0038).
 *Avoid:* blend weight (pose blending's), physics weight, influence.
 
+**Ragdoll**
+`Ragdoll`: a component on a skeleton entity (one per skeleton) naming the collision group, root body and state of the ragdoll bodies that follow and drive its bones. The bodies and the joints between them are ordinary rigid bodies and joints (ADR-0053).
+*Avoid:* rig, physics asset, physical skeleton.
+
+**Ragdoll body**
+`RagdollBody`: a component on a rigid body entity naming its ragdoll, the bone it follows and drives by name, and the body's offset from that bone. Kinematic while the ragdoll follows its skeleton, it is the character's hit box: a hit names the body entity, and game code reads the bone name from it (ADR-0053).
+*Avoid:* part (Jolt's), physical bone (Godot's), hitbox component.
+
+**Ragdoll description**
+`RagdollDescription`: the plain-data value a ragdoll is built from: its *ragdoll parts* (each a bone name, a parent, a collision shape, an offset, a mass, a joint kind and a strength scale) and the ragdoll's defaults. Derived from a skeleton and a *humanoid bone map* by `DescribeHumanoid`, or filled by hand, then spawned by `BuildRagdoll` (physics map ticket "From what description is a ragdoll built, and with which bodies, joints, motors and strengths?").
+*Avoid:* physics asset, rig definition, wizard.
+
+**Humanoid bone map**
+`HumanoidBones`: named slots (hips, spine, chest, head, and each side's upper arm, lower arm, hand, upper leg, lower leg, foot) that game code fills with a rig's bone names, any of them empty. The ragdoll derivation never guesses a slot from a name.
+*Avoid:* avatar (Unity's), retarget map.
+
+**Strength**
+How hard a powered ragdoll's motors drive towards the base pose: one value in [0, 1] on the ragdoll, scaled per part, that the glue turns into each motor's maximum torque, frequency and damping, so it means the same on every rig.
+*Avoid:* stiffness, blend weight (an *override weight* is how much the simulated pose shows, not how hard it is driven).
+
+**Ragdoll mode**
+`RagdollMode`: whether a ragdoll's bodies are *following* (kinematic, moved each tick to the simulation pose), *simulating* (dynamic, writing pose overrides) or *powered* (dynamic, motors driving towards the base pose); set on the ragdoll and overridable per body, and applied by the glue to motion types and motors (ADR-0054). A *partial ragdoll* is a simulating subtree under a following parent.
+*Avoid:* kinematic ragdoll, active ragdoll, blend in/out, physics blend weight.
+
 **Ragdoll glue**
-App code, or a package the physics map's ragdoll spec defines, that joins a ragdoll's bodies to a skeleton: it writes body poses in as pose overrides and reads the base pose for motor targets, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038).
+FenrirRagdoll's systems, which join a ragdoll's bodies to its skeleton: each tick they move following bodies to the simulation pose, and each frame they write simulating bodies' poses in as pose overrides and read the base pose for motor targets, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038, ADR-0040, ADR-0053).
 *Avoid:* ragdoll system, physics animation.
 
 **Skinned mesh**
