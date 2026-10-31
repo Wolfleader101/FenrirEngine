@@ -1,7 +1,7 @@
 # How does a ragdoll switch between following and simulating, and how is it powered?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 52, 53
 
 ## Question

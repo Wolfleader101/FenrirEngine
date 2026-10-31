@@ -1,7 +1,7 @@
 # From what description is a ragdoll built, and with which bodies, joints, motors and strengths?
 
 Type: grilling
-Status: claimed
+Status: resolved
 Blocked by: 52
 
 ## Question
@@ -18,3 +18,17 @@ Given the model from [How is a ragdoll modelled in the ECS, and where does the g
 - **Vocabulary:** *ragdoll description*, *part*, *humanoid bone map*, *strength*; words to avoid.
 
 Probably no ADR (a description format is a spec detail), unless the description becomes an asset kind.
+
+## Answer
+
+No ADR. Vocabulary is in `GLOSSARY.md`: ragdoll description, ragdoll part, humanoid bone map, strength.
+
+- **Both a description and a derivation:** `RagdollDescription` is a plain-data value: a list of `RagdollPart { BoneName bone; BoneName parent; CollisionShape shape; Transform offset; float mass; JointKind joint; float strengthScale = 1; }` plus the ragdoll's defaults. `DescribeHumanoid(SkeletonData, HumanoidBones)` derives one from a skeleton, game code may edit it, and `BuildRagdoll` spawns it; hand authoring fills the same struct. Not an asset kind now (FenrirAssets's kinds are file-backed; addable when a file format exists).
+- **The humanoid bone map:** `HumanoidBones`, a struct of named slots (hips, spine, chest, head; per side upper arm, lower arm, hand, upper leg, lower leg, foot), each a `BoneName` that may be empty. Game code fills it per rig; the derivation never guesses by substring.
+- **The derivation:** a capsule per filled slot from the bone to its child in the map (leaf slots along the bone's rest direction with a default length), radius a fraction of the length (own ratios for head, hands, feet), offset from the rest pose, mass from a total (default 70 kg) split by fixed per-part fractions, joints parent-to-child at the child bone's origin with frames from the rest pose through `FrameFromWorld`, hinges for elbows and knees, swing-twist elsewhere, each with its slot's default limits. It refuses (an error, nothing built) a map whose filled slots do not form one tree rooted at the hips, or a name no bone has.
+- **The builder:** `BuildRagdoll(scene, skeletonEntity, description)` in FenrirRagdoll spawns one body entity per part (`RigidBody`, `Collider`, `RagdollBody`, `CollisionGroup` set to the skeleton entity's id) and one `Joint` entity per non-root part, root first, under a parent entity it makes; puts `Ragdoll` on the skeleton entity; starts every body kinematic in following mode; returns the spawned entities. `DestroyRagdoll` removes what it spawned. Physics adds or removes nothing (ADR-0011).
+- **Default bodies:** fifteen parts when every slot is filled, hands and feet included; an empty slot drops its part and skips the chain below it; capsules by default, any `CollisionShape` allowed; a body spans one bone, and spanning several is done by leaving the middle slots empty (ADR-0038's unmapped-bone rule).
+- **Default numbers:** the spec takes its starting limits, radius ratios, mass fractions and motor springs from the research findings ("What does Jolt offer for ragdolls?": the samples' human; "How do other engines build and drive ragdolls?": Unity's wizard and Unreal's defaults) and the spike tunes them; they are spec details, not decisions here.
+- **Strength:** one `strength` in [0, 1] on `Ragdoll` and `strengthScale` per part; the glue turns them into each motor's maximum torque (scaled from the part's mass) and the spring's frequency and damping from fixed curves tuned in the spike, so a value means the same on every rig. The raw `JointMotor` and `SwingTwistMotor` fields stay reachable on the joint entities. Motors are off until the ragdoll is powered (ticket 54).
+- **Private tuning:** `collideConnected = false` and a little joint friction as resting stiffness; nothing from Jolt's `Stabilize` or constraint priorities (the joints spec refused solver tuning; solve order follows joint entity order, and the builder spawns joints root first).
+- **Words to avoid:** physics asset, wizard, profile.

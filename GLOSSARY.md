@@ -719,6 +719,18 @@ A per-bone scale, default 1, that gameplay sets on a skeleton instance to say ho
 `RagdollBody`: a component on a rigid body entity naming its ragdoll, the bone it follows and drives by name, and the body's offset from that bone. Kinematic while the ragdoll follows its skeleton, it is the character's hit box: a hit names the body entity, and game code reads the bone name from it (ADR-0053).
 *Avoid:* part (Jolt's), physical bone (Godot's), hitbox component.
 
+**Ragdoll description**
+`RagdollDescription`: the plain-data value a ragdoll is built from: its *ragdoll parts* (each a bone name, a parent, a collision shape, an offset, a mass, a joint kind and a strength scale) and the ragdoll's defaults. Derived from a skeleton and a *humanoid bone map* by `DescribeHumanoid`, or filled by hand, then spawned by `BuildRagdoll` (physics map ticket "From what description is a ragdoll built, and with which bodies, joints, motors and strengths?").
+*Avoid:* physics asset, rig definition, wizard.
+
+**Humanoid bone map**
+`HumanoidBones`: named slots (hips, spine, chest, head, and each side's upper arm, lower arm, hand, upper leg, lower leg, foot) that game code fills with a rig's bone names, any of them empty. The ragdoll derivation never guesses a slot from a name.
+*Avoid:* avatar (Unity's), retarget map.
+
+**Strength**
+How hard a powered ragdoll's motors drive towards the base pose: one value in [0, 1] on the ragdoll, scaled per part, that the glue turns into each motor's maximum torque, frequency and damping, so it means the same on every rig.
+*Avoid:* stiffness, blend weight (an *override weight* is how much the simulated pose shows, not how hard it is driven).
+
 **Ragdoll glue**
 FenrirRagdoll's systems, which join a ragdoll's bodies to its skeleton: each tick they move following bodies to the simulation pose, and each frame they write simulating bodies' poses in as pose overrides and read the base pose for motor targets, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038, ADR-0040, ADR-0053).
 *Avoid:* ragdoll system, physics animation.
