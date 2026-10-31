@@ -1,7 +1,7 @@
 # What does C# get for ragdolls?
 
 Type: grilling
-Status: claimed
+Status: resolved
 Blocked by: 51, 52, 53, 54
 
 ## Question
@@ -18,3 +18,15 @@ What does the scripting side get for ragdolls and collision groups, given ADR-00
 - **The C# scene's list** handed to "What do the ragdoll demo scenes show?".
 
 Probably no ADR.
+
+## Answer
+
+No ADR.
+
+- **Collision groups:** `CollisionGroup` mirrored writable in `Fenrir.Physics`; no native.
+- **The extension:** FenrirRagdoll ships its own scripting extension and `Fenrir.Ragdoll` contract in ADR-0046's generated shape, built only with physics and scripting on.
+- **Mirrors:** `Ragdoll` (mode, strength, followRoot, group, root body) writable, its `RagdollState` read-only through `ref readonly`; `RagdollBody` writable, reusing `Fenrir.Skeleton`'s `BoneName` mirror (ADR-0044); `RagdollMode` as an enum; `HumanoidBones` as a plain struct of `BoneName` slots.
+- **Building from C#:** a description with a variable number of parts cannot cross as a blittable struct, so two natives: `Ragdoll.DescribeHumanoid(skeleton, HumanoidBones, totalMass)` returning a native description handle, and `Ragdoll.Build(skeleton, handle)` spawning the entities and returning them; `Ragdoll.Destroy(skeleton)` removes what was built. Editing a derived description before building is C++-only in the first version (C# edits the spawned entities), listed as later work.
+- **No-op rules:** the foundation's silent no-ops without a world or body, ADR-0039's for a skeleton that is not ready; a described-but-not-built handle is dropped at scene end.
+- **Doc notes:** switching and weights (the glue never sets weights), partial ragdolls, strength, getting up, tick-posed required.
+- **The C# scene's list** (to ticket 57): a derived ragdoll on the same character built only from C#; a drop with `AddImpulse` and a get-up with a weight ramp; a partial ragdoll on one arm; a powered ragdoll with strength on a key; two ragdolls in different groups colliding while each ignores its own character.
