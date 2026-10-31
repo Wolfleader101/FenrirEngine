@@ -83,6 +83,8 @@ public static class ResourceCalls
             Resources.Insert(sky);
     }
 
+    // Inserts, or writes, the deprecated AmbientLight, which lights nothing.
+#pragma warning disable CS0618
     public static void Ambient(float r, float g, float b, float intensity)
     {
         var ambient = new AmbientLight { Colour = new Colour(r, g, b, 1.0f), Intensity = intensity };
@@ -91,6 +93,7 @@ public static class ResourceCalls
         else
             Resources.Insert(ambient);
     }
+#pragma warning restore CS0618
 
     // Reads the sky as C++ wrote it: 0 for a colour sky (keeping its colour), 1 for a cubemap (keeping its handle).
     public static int ReadSky()
@@ -141,10 +144,9 @@ public static class NewCalls
         }
     }
 
-    // A new AmbientLight, and a new Sky or (with `cubemap` not 0) a new CubemapSky, inserted into the active scene.
+    // A new Sky or (with `cubemap` not 0) a new CubemapSky, inserted into the active scene.
     public static void InsertResources(int cubemap)
     {
-        Resources.Insert(new AmbientLight());
         Resources.Insert(cubemap != 0 ? (Sky)new CubemapSky() : new Sky());
     }
 }

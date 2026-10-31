@@ -59,7 +59,11 @@ add_library(FenrirRendererCore STATIC
     src/Core/SceneFrame.hpp
     src/Core/SceneRenderer.hpp
     src/Core/SceneRenderer.cpp
+    src/Core/SkyLighting.hpp
+    src/Core/SkyLighting.cpp
     src/Core/Skinning.hpp
+    src/Core/SphericalHarmonics.hpp
+    src/Core/SphericalHarmonics.cpp
     src/Core/Skinning.cpp
     src/Core/Tonemapping.hpp
     src/Core/Tonemapping.cpp
@@ -100,6 +104,14 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBackground VERTEX Shaders/B
 # A panorama sky's image drawn into its cube texture, one face and mip level a pass (ADR-0047).
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinPanorama VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/panorama.frag EMBED)
+# The sky's filtering into image-based lighting (ADR-0047): its spherical harmonics, its prefiltered specular cube, and
+# the split sum's BRDF lookup table made at start-up.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinSkyIrradiance VERTEX Shaders/Builtin/fullscreen.vert
+                   FRAGMENT Shaders/Builtin/sky_irradiance.frag EMBED)
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinSkySpecular VERTEX Shaders/Builtin/fullscreen.vert
+                   FRAGMENT Shaders/Builtin/sky_specular.frag EMBED)
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBrdfLut VERTEX Shaders/Builtin/fullscreen.vert
+                   FRAGMENT Shaders/Builtin/brdf_lut.frag EMBED)
 # MSAA: the variant that resolves a multisampled SceneColor.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinOutput VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/output.frag KEYS MSAA EMBED)

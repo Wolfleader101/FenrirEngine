@@ -22,6 +22,9 @@ namespace RendererDemo
         // The colour sky B switches to, and the colour O gives the camera's own background, both linear.
         constexpr Fenrir::Colour DuskColour{0.22f, 0.12f, 0.30f, 1.0f};
         constexpr Fenrir::Colour OverrideColour{0.05f, 0.35f, 0.32f, 1.0f};
+        // The neutral grey Darcy Wilson's skybox is lit by (its SkyLight), linear: its teal sea and blue sky would tint
+        // everything otherwise.
+        constexpr Fenrir::Colour DarcyLight{0.35f, 0.35f, 0.35f, 1.0f};
         // What T and E step the camera through: its tonemapper, from the default, and its exposure in EV stops.
         struct NamedTonemapper
         {
@@ -62,6 +65,27 @@ namespace RendererDemo
                 return Fenrir::CubemapSky{state.darcySky ? state.darcyCubemap : state.cubemap};
             }
             return Fenrir::ColourSky{DuskColour};
+        }
+
+        /**
+         * @brief Gives the scene the Sky B and C have set, and lights it with a neutral grey SkyLight while Darcy
+         * Wilson's skybox is shown, else with the Sky itself (ADR-0047).
+         */
+        void ApplySky(Fenrir::Scene& scene, const SkyState& state)
+        {
+            if (Fenrir::Sky* sky = scene.GetResource<Fenrir::Sky>())
+            {
+                *sky = SkyOf(state);
+            }
+            else
+            {
+                scene.AddResource<Fenrir::Sky>(SkyOf(state));
+            }
+            scene.RemoveResource<Fenrir::SkyLight>();
+            if (state.cubemapSky && state.darcySky)
+            {
+                scene.AddResource<Fenrir::SkyLight>(Fenrir::SkyLight{Fenrir::ColourSky{DarcyLight}});
+            }
         }
 
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
@@ -131,17 +155,15 @@ namespace RendererDemo
             light.AddComponent<Fenrir::Transform>().rot =
                 glm::quatLookAt(glm::normalize(Vec3(-0.35f, -0.35f, 1.0f)), Vec3(0.0f, 1.0f, 0.0f));
             light.AddComponent<Fenrir::DirectionalLight>();
-            scene.AddResource<Fenrir::AmbientLight>(Fenrir::AmbientLight{Fenrir::Colour{0.25f, 0.28f, 0.32f, 1.0f}});
-
-            scene.AddResource<Fenrir::Sky>(SkyOf(state));
+            // The sky lights the plinth as well as filling the background (ADR-0047), except Darcy Wilson's.
+            ApplySky(scene, state);
             scene.AddResource<SkyState>(state);
         }
 
         void Update(Fenrir::App& app, Fenrir::Scene& scene)
         {
             SkyState* state = scene.GetResource<SkyState>();
-            Fenrir::Sky* sky = scene.GetResource<Fenrir::Sky>();
-            if (state == nullptr || sky == nullptr)
+            if (state == nullptr)
             {
                 return;
             }
@@ -156,16 +178,17 @@ namespace RendererDemo
             if (keyboard.JustPressed(Fenrir::Key::B))
             {
                 state->cubemapSky = !state->cubemapSky;
-                *sky = SkyOf(*state);
+                ApplySky(scene, *state);
                 app.Logger()->Info("B: the scene's Sky is {}",
                                    state->cubemapSky ? "the skybox cubemap" : "one dusk colour");
             }
             if (keyboard.JustPressed(Fenrir::Key::C))
             {
                 state->darcySky = !state->darcySky;
-                *sky = SkyOf(*state);
+                ApplySky(scene, *state);
                 app.Logger()->Info("C: the skybox cubemap is {}{}",
-                                   state->darcySky ? "Darcy Wilson's" : "the generated one",
+                                   state->darcySky ? "Darcy Wilson's, lit by a neutral grey SkyLight"
+                                                   : "the generated one, which lights the scene itself",
                                    state->cubemapSky ? "" : " (shown once B brings the cubemap back)");
             }
             if (keyboard.JustPressed(Fenrir::Key::O) && state->camera.IsValid())
@@ -203,7 +226,8 @@ namespace RendererDemo
         FenrirDemo::DemoScene scene;
         scene.name = "Sky";
         scene.keyHelp =
-            "B: the scene's Sky, the skybox cubemap or a dusk colour. C: the skybox, generated or Darcy Wilson's. O: "
+            "B: the scene's Sky, the skybox cubemap or a dusk colour. C: the skybox, generated or Darcy Wilson's (lit "
+            "by a neutral grey SkyLight). O: "
             "the camera's own background, a teal colour overriding the Sky, on or off. T: the camera's tonemapper "
             "(AgX, PBR Neutral, ACES, None). E: the camera's exposure (0, +1, +2, -1 EV).";
         scene.keys = {Fenrir::Key::B, Fenrir::Key::O, Fenrir::Key::B, Fenrir::Key::O, Fenrir::Key::C,

@@ -25,10 +25,11 @@ namespace Fenrir::Render
         {
             Math::Vec4 lightDirection;
             Math::Vec4 lightColour;
-            Math::Vec4 ambient;
             Math::Vec4 time;
-            /** @brief The Sky's intensity, and the cosine and sine of its rotation. */
+            /** @brief The Sky drawn: its intensity, and the cosine and sine of its rotation. */
             Math::Vec4 sky;
+            /** @brief The sky the scene is lit by: as `sky`, and its specular cube's highest mip. */
+            Math::Vec4 skyLight;
         };
         static_assert(sizeof(FrameBlock) == 80);
 
@@ -99,10 +100,14 @@ namespace Fenrir::Render
             std::uint32_t size = 0;
         };
 
-        // Sets 0, 1 and 3, declared in C++ (ADR-0024, ADR-0035). The draw and palette buffers hold as many records as
-        // they need; reflection sizes such a block by one record, so their record layouts are checked.
-        [[maybe_unused]] constexpr std::array<FixedBinding, 4> FixedBindings{{
+        // Sets 0, 1 and 3, declared in C++ (ADR-0024, ADR-0035, ADR-0048). The draw and palette buffers hold as many
+        // records as they need; reflection sizes such a block by one record, so their record layouts are checked. Set
+        // 0's textures are the sky's light (ADR-0047): its spherical harmonics, its specular cube and the BRDF table.
+        [[maybe_unused]] constexpr std::array<FixedBinding, 7> FixedBindings{{
             {0, 0, ShaderBindingKind::UniformBuffer, sizeof(FrameBlock)},
+            {0, 1, ShaderBindingKind::Texture, 0},
+            {0, 2, ShaderBindingKind::Texture, 0},
+            {0, 3, ShaderBindingKind::Texture, 0},
             {1, 0, ShaderBindingKind::UniformBuffer, sizeof(ViewBlock)},
             {3, 0, ShaderBindingKind::StorageBuffer, sizeof(DrawBlock)},
             {3, 1, ShaderBindingKind::StorageBuffer, sizeof(GpuBone)},
@@ -597,7 +602,11 @@ namespace Fenrir::Render
     SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
         : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1))
     {
-        m_frameLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Frame");
+        m_frameLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer},
+                                                            {1, ShaderBindingKind::Texture},
+                                                            {2, ShaderBindingKind::Texture},
+                                                            {3, ShaderBindingKind::Texture}}},
+                                                          "Frame");
         m_viewLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "View");
         m_outputBlockLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Output");
         m_drawLayout = m_device.CreateBindingGroupLayout(
@@ -681,7 +690,10 @@ namespace Fenrir::Render
         m_outputPipeline = MakeInternalPipeline(m_output, output, m_outputLayout, TextureFormat::Rgba8Srgb, false, 1,
                                                 m_outputBlockLayout);
 
-        m_frameBlocks = std::make_unique<BlockRing>(m_device, m_frameLayout, false, sizeof(FrameBlock), "Frame");
+        // The frame set's groups bind the frame block with the sky's textures, so the ring makes none of its own.
+        m_frameBlocks =
+            std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, false, sizeof(FrameBlock), "Frame");
+        m_skyLighting = std::make_unique<SkyLighting>(m_device, m_logger);
         m_viewBlocks = std::make_unique<BlockRing>(m_device, m_viewLayout, false, sizeof(ViewBlock), "View");
         m_backgroundBlocks =
             std::make_unique<BlockRing>(m_device, m_backgroundLayout, false, sizeof(BackgroundBlock), "Background");
@@ -745,6 +757,11 @@ namespace Fenrir::Render
         {
             m_device.Destroy(group.group);
         }
+        for (const FrameGroup& group : m_frameGroups)
+        {
+            m_device.Destroy(group.group);
+        }
+        m_skyLighting.reset();
         m_frameBlocks.reset();
         m_viewBlocks.reset();
         m_backgroundBlocks.reset();
@@ -904,6 +921,7 @@ namespace Fenrir::Render
         desc.mipLevels = MipCount(image.width, image.height);
         desc.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
         entry.texture = m_device.CreateTexture(desc, "Sky cubemap");
+        entry.desc = desc;
         const TexelCodec codec = CodecOf(image);
         const std::size_t faceBytes = std::size_t{image.width} * image.height * codec.bytes;
         for (std::uint32_t face = 0; face < 6; ++face)
@@ -1744,6 +1762,59 @@ namespace Fenrir::Render
         return group.group;
     }
 
+    BindingGroupHandle SceneRenderer::FrameGroupFor(std::uint64_t frameIndex)
+    {
+        const BufferHandle block = m_frameBlocks->Buffer(frameIndex);
+        const SkyLightingTextures& sky = m_skyLighting->Textures();
+        // One group per copy, made again when the ring remade its buffer or the sky's textures changed.
+        const std::size_t copies = std::max<std::size_t>(m_device.FramesInFlight(), 1);
+        m_frameGroups.resize(copies);
+        FrameGroup& group = m_frameGroups[static_cast<std::size_t>(frameIndex % copies)];
+        if (group.group.IsEmpty() || group.block != block || group.irradiance != sky.irradiance ||
+            group.specular != sky.specular)
+        {
+            m_device.Destroy(group.group);
+            BindingGroupEntry blockEntry;
+            blockEntry.binding = 0;
+            blockEntry.buffer = block;
+            blockEntry.size = sizeof(FrameBlock);
+            BindingGroupEntry irradiance;
+            irradiance.binding = 1;
+            irradiance.texture = sky.irradiance;
+            irradiance.sampler = sky.sampler;
+            BindingGroupEntry specular;
+            specular.binding = 2;
+            specular.texture = sky.specular;
+            specular.sampler = sky.sampler;
+            BindingGroupEntry brdf;
+            brdf.binding = 3;
+            brdf.texture = sky.brdfLut;
+            brdf.sampler = sky.sampler;
+            group = {block, sky.irradiance, sky.specular,
+                     m_device.CreateBindingGroup({m_frameLayout, {blockEntry, irradiance, specular, brdf}}, "Frame")};
+        }
+        return group.group;
+    }
+
+    SkySource SceneRenderer::SkySourceOf(const SceneLighting& lighting) const
+    {
+        SkySource source;
+        source.colour = lighting.skyColour;
+        if (const auto cubemap = m_cubemaps.find(lighting.sky); cubemap != m_cubemaps.end())
+        {
+            source.cube = cubemap->second.texture;
+            source.cubeDesc = cubemap->second.desc;
+        }
+        else if (const auto panorama = m_panoramas.find(lighting.sky);
+                 panorama != m_panoramas.end() && (panorama->second.converted || !m_panoramaPipeline.IsEmpty()))
+        {
+            // Converted in an earlier frame, or by this frame's Panorama passes, which run first in Prepare.
+            source.cube = panorama->second.cube;
+            source.cubeDesc = panorama->second.cubeDesc;
+        }
+        return source;
+    }
+
     BindingGroupHandle SceneRenderer::OutputGroup(TextureHandle sceneColour)
     {
         const std::pair<std::uint32_t, std::uint32_t> key{sceneColour.index, sceneColour.generation};
@@ -1792,6 +1863,7 @@ namespace Fenrir::Render
         m_stats.skinnedDraws = 0;
         m_drawnViews.clear();
         AddPanoramaPasses(graph);
+        m_skyLighting->AddPasses(graph, SkySourceOf(m_frame.lighting));
         if (m_frame.views.empty())
         {
             AddWindowClear(graph, frame);
@@ -1801,10 +1873,13 @@ namespace Fenrir::Render
         const auto draws = std::make_shared<const std::vector<ResolvedDraw>>(ResolveDraws());
         const std::uint64_t frameIndex = frame.frameIndex;
         const SceneLighting& lighting = m_frame.lighting;
-        const FrameBlock frameBlock{
-            Math::Vec4(lighting.lightDirection, 0.0f), Math::Vec4(lighting.lightColour, 0.0f),
-            Math::Vec4(lighting.ambient, 0.0f), Math::Vec4(m_frame.time, m_frame.deltaTime, 0.0f, 0.0f),
-            Math::Vec4(lighting.skyIntensity, std::cos(lighting.skyRotation), std::sin(lighting.skyRotation), 0.0f)};
+        const FrameBlock frameBlock{Math::Vec4(lighting.lightDirection, 0.0f), Math::Vec4(lighting.lightColour, 0.0f),
+                                    Math::Vec4(m_frame.time, m_frame.deltaTime, 0.0f, 0.0f),
+                                    Math::Vec4(m_frame.backgroundIntensity, std::cos(m_frame.backgroundRotation),
+                                               std::sin(m_frame.backgroundRotation), 0.0f),
+                                    Math::Vec4(lighting.skyIntensity, std::cos(lighting.skyRotation),
+                                               std::sin(lighting.skyRotation),
+                                               m_skyLighting->Textures().specularMaxLevel)};
         m_frameBlocks->Write(frameIndex, 0, BytesOf(frameBlock));
         m_drawBlocks->Reserve(draws->size());
         for (std::size_t i = 0; i < draws->size(); ++i)
@@ -1905,7 +1980,7 @@ namespace Fenrir::Render
             }
         }
 
-        const BindingGroupHandle frameGroup = m_frameBlocks->Group(frameIndex, 0);
+        const BindingGroupHandle frameGroup = FrameGroupFor(frameIndex);
         const BindingGroupHandle drawGroup = DrawGroupFor(frameIndex);
         // The targets drawn into so far: the first view into each clears it. The window's key is empty.
         std::set<AssetKey> cleared;

@@ -55,7 +55,7 @@ TEST_CASE("A MeshRenderer that is not visible is not drawn", "[renderer][facade]
     REQUIRE(test.Draws().empty());
     INFO("the frame still ran its passes");
     REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)) ==
-            std::vector<std::string>{"Opaque", "Background", "Output"});
+            std::vector<std::string>{"BrdfLut", "Opaque", "Background", "Output"});
 }
 
 TEST_CASE("A MeshRenderer naming a stale mesh is skipped, logged once", "[renderer][facade]")

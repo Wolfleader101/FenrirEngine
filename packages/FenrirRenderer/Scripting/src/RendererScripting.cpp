@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "DeprecatedAmbientLight.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/SkinningSource.hpp"
@@ -261,6 +262,9 @@ namespace Fenrir
 
     Fenrir::ScriptingExtension Renderer::ScriptingExtension()
     {
-        return Generated::MakeRendererExtension(std::make_shared<RendererScripting>());
+        Fenrir::ScriptingExtension extension = Generated::MakeRendererExtension(std::make_shared<RendererScripting>());
+        // C#'s deprecated AmbientLight, a no-op until the lighting spec's C# ticket removes it.
+        extension.resources.push_back(Detail::DeprecatedAmbientLightResource());
+        return extension;
     }
 } // namespace Fenrir

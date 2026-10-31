@@ -7,12 +7,17 @@ using Fenrir.Scripting;
 namespace Fenrir.Renderer;
 
 /// <summary>
-/// What a scene shows where nothing was drawn, a scene resource beside AmbientLight (ADR-0026, ADR-0047): exactly one
-/// of ColourSky, CubemapSky and PanoramaSky, by value, as FenrirPhysics' CollisionShape holds a shape. A scene without
-/// one has the default ColourSky, a dark grey. Each camera whose background is SceneBackground draws it; a
-/// ColourBackground overrides it for that camera's view.
+/// What a scene shows where nothing was drawn, and the light every surface takes from all round it, a scene resource
+/// (ADR-0026, ADR-0047): exactly one of ColourSky, CubemapSky and PanoramaSky, by value, as FenrirPhysics'
+/// CollisionShape holds a shape. A scene without one has the default ColourSky, a dark grey. Each camera whose
+/// background is SceneBackground draws it; a ColourBackground replaces only what that camera's view draws behind the
+/// scene, and every view is lit by the scene's Sky.
 /// </summary>
 /// <remarks>
+/// The renderer filters a cubemap or panorama sky on the GPU into image-based lighting, once per image revision: its
+/// intensity scales the light, and its rotation turns it, without filtering again. A SkyLight lights the scene in its
+/// place, leaving it drawn.
+/// <para/>
 /// A cubemap that is empty, stale or not a cubemap with pixels, or a panorama that is empty, stale, or not a flat image
 /// with pixels twice as wide as high, draws the default ColourSky instead, logged once. Assign a kind to change it
 /// (`sky = PanoramaSky{image}`); read it through the checked view. Reading it as a kind it does not hold asserts.

@@ -60,12 +60,6 @@ namespace
     }
 } // namespace
 
-TEST_CASE("C#'s new AmbientLight() has C++'s Fenrir::AmbientLight{} defaults, field by field", "[renderer][scripting][bindings]")
-{
-    Fenrir::Testing::RendererScriptingApp app;
-    CheckDefaults<Fenrir::AmbientLight>(Fenrir::ScriptingProbe::Component(app.scripting), "AmbientLight");
-}
-
 TEST_CASE("C#'s new Camera() has C++'s Fenrir::Camera{} defaults, field by field", "[renderer][scripting][bindings]")
 {
     Fenrir::Testing::RendererScriptingApp app;
@@ -100,6 +94,12 @@ TEST_CASE("C#'s new Sky() has C++'s Fenrir::Sky{} defaults, field by field", "[r
 {
     Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::Sky>(Fenrir::ScriptingProbe::Component(app.scripting), "Sky");
+}
+
+TEST_CASE("C#'s new SkyLight() has C++'s Fenrir::SkyLight{} defaults, field by field", "[renderer][scripting][bindings]")
+{
+    Fenrir::Testing::RendererScriptingApp app;
+    CheckDefaults<Fenrir::SkyLight>(Fenrir::ScriptingProbe::Component(app.scripting), "SkyLight");
 }
 
 // clang-format on

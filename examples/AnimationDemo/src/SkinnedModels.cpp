@@ -187,6 +187,7 @@ namespace AnimationDemo
         light.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(-0.9f, Vec3(1.0f, 0.0f, 0.0f)) *
                                                       Fenrir::Math::AngleAxis(0.5f, Vec3(0.0f, 1.0f, 0.0f));
         light.AddComponent<Fenrir::DirectionalLight>();
-        scene.AddResource<Fenrir::AmbientLight>(Fenrir::AmbientLight{Fenrir::Colour{0.35f, 0.38f, 0.45f, 1.0f}, 1.0f});
+        // A pale blue-grey sky, drawn behind the stage and lighting it from every side (ADR-0047).
+        scene.AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour{0.35f, 0.38f, 0.45f, 1.0f}});
     }
 } // namespace AnimationDemo

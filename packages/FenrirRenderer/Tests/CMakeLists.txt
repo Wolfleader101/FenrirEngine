@@ -13,7 +13,8 @@ target_link_libraries(FenrirRendererGoldenImages PUBLIC Catch2::Catch2 PRIVATE F
 add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp CommandLists.cpp RenderGraph.cpp
                                    FrameRing.cpp Frames.cpp OpenGLStart.cpp Drawing.cpp Preparing.cpp RendererFrames.cpp
                                    Cameras.cpp Picking.cpp Materials.cpp SpawnModel.cpp Sky.cpp DebugFont.cpp
-                                   DebugDrawing.cpp Overlay.cpp Draw2D.cpp Skinning.cpp SkinningMaths.cpp Tonemapping.cpp
+                                   DebugDrawing.cpp Overlay.cpp Draw2D.cpp Skinning.cpp SkinningMaths.cpp
+                                   SphericalHarmonics.cpp SkyLighting.cpp Tonemapping.cpp
                                    GoldenComparison.cpp DeviceTest.hpp DrawLists2D.hpp FakeSurface.hpp RecordingLogger.hpp
                                    RendererProbe.hpp RendererTestApp.hpp SkinningTestApp.hpp)
 target_include_directories(FenrirRendererTests PRIVATE ../src)
@@ -51,7 +52,7 @@ add_test(NAME FenrirRenderer COMMAND FenrirRendererTests)
 add_executable(FenrirRendererGlTests OpenGL/Clears.cpp OpenGL/Draws.cpp OpenGL/Validation.cpp OpenGL/Resources.cpp
                                      OpenGL/Vsync.cpp OpenGL/Scenes.cpp OpenGL/Targets.cpp OpenGL/Materials.cpp
                                      OpenGL/Sky.cpp OpenGL/Debug.cpp OpenGL/Overlay.cpp OpenGL/Skinning.cpp
-                                     OpenGL/Tonemapping.cpp OpenGL/NormalMaps.cpp
+                                     OpenGL/Tonemapping.cpp OpenGL/NormalMaps.cpp OpenGL/SkyLighting.cpp
                                      OpenGL/GlProbe.hpp OpenGL/GlScene.hpp OpenGL/GlTestApp.hpp
                                      DrawLists2D.hpp RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp
                                      SkinningTestApp.hpp)

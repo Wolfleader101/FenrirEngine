@@ -8,11 +8,11 @@ namespace RendererScriptFixture;
 /// </summary>
 public static class Defaults
 {
-    public static global::Fenrir.Renderer.AmbientLight AmbientLight() => new();
     public static global::Fenrir.Renderer.Camera Camera() => new();
     public static global::Fenrir.Renderer.DirectionalLight DirectionalLight() => new();
     public static global::Fenrir.Renderer.MeshRenderer MeshRenderer() => new();
     public static global::Fenrir.Renderer.RendererStats RendererStats() => new();
     public static global::Fenrir.Renderer.SkinnedMesh SkinnedMesh() => new();
     public static global::Fenrir.Renderer.Sky Sky() => new();
+    public static global::Fenrir.Renderer.SkyLight SkyLight() => new();
 }

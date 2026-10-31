@@ -159,7 +159,8 @@ TEST_CASE("A lit material's emissive colour shows with no emissive texture", "[r
     GlScene test;
     test.RequireOpenGL();
     test.AddCamera();
-    // Black, so neither the default ambient nor a light adds anything: only the emissive colour is left.
+    // Black, so neither a light nor the default sky's dark grey adds more than its Fresnel's 4% of that grey: only the
+    // emissive colour is left.
     const auto material = test.AddQuad(1.0f, 2.0f, "builtin:lit", Fenrir::Colour::Black);
     test.assets.Store().SetColour(material, "emissive", {1.0f, 0.5f, 0.25f, 1.0f});
 

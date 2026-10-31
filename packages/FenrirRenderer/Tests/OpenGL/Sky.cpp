@@ -269,7 +269,7 @@ TEST_CASE("A panorama sky behind a lit sphere matches its golden image", "[rende
     test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::PanoramaSky{panorama});
 
     // The light travels down, back and to the right, from over the camera's left shoulder, not from the panorama's sun
-    // ahead, which would light only the sphere's far side; the sky itself lights nothing until image-based lighting.
+    // ahead, which would light only the sphere's far side; the sky lights it from all round as well (ADR-0047).
     Fenrir::Entity light = test.app.GetActiveScene().GetEntityList().CreateEntity();
     light.GetComponent<Fenrir::Transform>().rot =
         Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(-30.0f), Vec3(0.0f, 1.0f, 0.0f)) *

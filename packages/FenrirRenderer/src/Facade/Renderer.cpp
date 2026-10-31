@@ -297,13 +297,14 @@ namespace Fenrir
         }
 
         /**
-         * @brief The active scene's Sky, its cubemap or panorama prepared if it is new or changed. A cubemap that is
-         * empty, stale or not a cubemap with pixels, or a panorama that is empty, stale or not a flat image with pixels
-         * twice as wide as high, gives the default ColourSky, logged once per handle.
+         * @brief `sky`, the active scene's Sky or its SkyLight's (`resource` names which, for the log), its cubemap or
+         * panorama prepared if it is new or changed. A cubemap that is empty, stale or not a cubemap with pixels, or a
+         * panorama that is empty, stale or not a flat image with pixels twice as wide as high, gives the default
+         * ColourSky, logged once per handle. No sky gives the default ColourSky.
          */
-        SceneSky ReadSky(Detail::RendererState& state, const AssetStore& store, Scene& scene)
+        SceneSky ReadSky(Detail::RendererState& state, const AssetStore& store, const Sky* sky,
+                         std::string_view resource)
         {
-            const Sky* sky = scene.GetResource<Sky>();
             if (sky == nullptr)
             {
                 return {};
@@ -321,8 +322,8 @@ namespace Fenrir
             {
                 if (state.skyImages.ShouldLog(handle))
                 {
-                    state.app->Logger()->Warn(
-                        "FenrirRenderer: the active scene's Sky names {}, so it is drawn dark grey", problem);
+                    state.app->Logger()->Warn("FenrirRenderer: the active scene's {} names {}, so it is dark grey",
+                                              resource, problem);
                 }
                 return {};
             }
@@ -338,13 +339,17 @@ namespace Fenrir
             return {ColourSky{}.colour, KeyOf(handle), intensity, rotation};
         }
 
-        /** @brief The active scene's light: the first DirectionalLight, warned once if there are more, and ambient. */
-        Render::SceneLighting ReadLighting(Detail::RendererState& state, Scene& scene)
+        /**
+         * @brief The active scene's light: the first DirectionalLight, warned once if there are more, and `sky`, the
+         * sky it is lit by (ADR-0047): its SkyLight's, else its Sky, whatever each camera's background.
+         */
+        Render::SceneLighting ReadLighting(Detail::RendererState& state, Scene& scene, const SceneSky& sky)
         {
             Render::SceneLighting lighting;
-            const AmbientLight ambient =
-                scene.GetResource<AmbientLight>() != nullptr ? *scene.GetResource<AmbientLight>() : AmbientLight{};
-            lighting.ambient = Math::Vec3(ambient.colour.r, ambient.colour.g, ambient.colour.b) * ambient.intensity;
+            lighting.sky = sky.image;
+            lighting.skyColour = Math::Vec3(sky.colour.r, sky.colour.g, sky.colour.b);
+            lighting.skyIntensity = sky.intensity;
+            lighting.skyRotation = sky.rotation;
 
             EntityList& entities = scene.GetEntityList();
             const std::array<ComponentType, 1> lights{ComponentType::Native<DirectionalLight>()};
@@ -1036,10 +1041,12 @@ namespace Fenrir
             {
                 Scene& scene = app.GetActiveScene();
                 ReleaseStale(*state.scene, *state.draw2D, *store);
-                frame.lighting = ReadLighting(state, scene);
-                const SceneSky sky = ReadSky(state, *store, scene);
-                frame.lighting.skyIntensity = sky.intensity;
-                frame.lighting.skyRotation = sky.rotation;
+                const SceneSky sky = ReadSky(state, *store, scene.GetResource<Sky>(), "Sky");
+                const SkyLight* skyLight = scene.GetResource<SkyLight>();
+                const SceneSky light = skyLight != nullptr ? ReadSky(state, *store, &skyLight->sky, "SkyLight") : sky;
+                frame.lighting = ReadLighting(state, scene, light);
+                frame.backgroundIntensity = sky.intensity;
+                frame.backgroundRotation = sky.rotation;
                 frame.views = ReadViews(state, *store, scene, sky);
                 ReadDraws(state, *store, scene, frame);
                 debug = ReadDebug(state, scene);

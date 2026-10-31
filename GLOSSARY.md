@@ -536,6 +536,10 @@ The tangent frame `builtin:lit` builds per pixel from the screen-space derivativ
 The scene resource saying what is drawn behind everything and what light reaches every surface from all around: a solid colour, a skybox or a panorama. A camera can override what is drawn with a colour, but not the light.
 *Avoid:* environment, ambient light (the sky is the scene's ambient light), clear colour (one of its forms), skydome.
 
+**Sky light**
+The optional scene resource (`SkyLight`) that lights the scene with a sky other than the one drawn behind it: a neutral colour, say, under a skybox chosen for its look. Without one the scene is lit by its Sky. One sky lights the scene either way.
+*Avoid:* ambient light, ambient override, environment lighting.
+
 **Panorama**
 An HDR image wrapping the whole sphere around the viewer, its width twice its height (equirectangular). A sky made from one is a *panorama sky*.
 *Avoid:* HDRI, environment map, light probe, equirect.

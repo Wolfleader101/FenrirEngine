@@ -1,7 +1,7 @@
 // builtin:lit's normal maps on OpenGL (ADR-0048): a quad with a tangent stream is lit as the same quad without one,
 // through Schueler's derivative frame, whether its UVs run as the image does, are mirrored in U (handedness -1), the
 // quad is mirrored by its world matrix (the draw's determinant sign), or its back face is seen through a double-sided
-// material. Each frame is one quad filling the centre, lit by one white light and no ambient, and reads back its
+// material. Each frame is one quad filling the centre, lit by one white light under a black sky, and reads back its
 // SceneColor, linear.
 
 #include <cstdint>
@@ -71,8 +71,8 @@ namespace
     }
 
     /**
-     * @brief A scene lit by one white light from (1, 1, 1), with no ambient, and an entity whose quad and material are
-     * swapped between frames. Its normal map tilts the normal to (0.6, 0.6, 0.53): towards +U and up the image.
+     * @brief A scene lit by one white light from (1, 1, 1), under a black sky, and an entity whose quad and material
+     * are swapped between frames. Its normal map tilts the normal to (0.6, 0.6, 0.53): towards +U and up the image.
      */
     class NormalMapScene
     {
@@ -88,8 +88,7 @@ namespace
                 Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(45.0f), Vec3(0.0f, 1.0f, 0.0f)) *
                 Fenrir::Math::AngleAxis(-0.6154797f, Vec3(1.0f, 0.0f, 0.0f));
             light.AddComponent<Fenrir::DirectionalLight>();
-            test.app.GetActiveScene().AddResource<Fenrir::AmbientLight>(
-                Fenrir::AmbientLight{Fenrir::Colour::Black, 0.0f});
+            test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour::Black});
 
             Fenrir::AssetStore& store = test.assets.Store();
             const auto lit = store.Load<Fenrir::Shader>("builtin:lit", Fenrir::AssetOwner::App()).handle;

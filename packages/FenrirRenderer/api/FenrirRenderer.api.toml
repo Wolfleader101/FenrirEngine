@@ -12,8 +12,8 @@ private-members = ["Fenrir::Entity"]
 "Fenrir::Camera" = "component"
 "Fenrir::DirectionalLight" = "component"
 "Fenrir::SkinnedMesh" = "component"
-"Fenrir::AmbientLight" = "scene-resource"
 "Fenrir::Sky" = "scene-resource"
+"Fenrir::SkyLight" = "scene-resource"
 "Fenrir::RendererStats" = "shared-struct"
 
 # FenrirMath's ray and box, which the natives fill through pointers: selected with the math description's role, so this

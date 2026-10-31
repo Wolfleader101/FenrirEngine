@@ -52,7 +52,7 @@ TEST_CASE("The nearer of two quads wins under reversed-Z", "[renderer][gl]")
     REQUIRE(test.messages->errors.empty());
 }
 
-TEST_CASE("A lit face is its base colour times N.L of the light, plus ambient", "[renderer][gl]")
+TEST_CASE("A lit face is its base colour times N.L of the light, plus its ColourSky's colour", "[renderer][gl]")
 {
     GlScene test;
     test.RequireOpenGL();
@@ -66,14 +66,13 @@ TEST_CASE("A lit face is its base colour times N.L of the light, plus ambient", 
     light.GetComponent<Fenrir::Transform>().rot =
         glm::angleAxis(Fenrir::Math::DegToRad(60.0f), Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f));
     light.AddComponent<Fenrir::DirectionalLight>();
-    test.app.GetActiveScene().AddResource<Fenrir::AmbientLight>(
-        Fenrir::AmbientLight{Fenrir::Colour{0.1f, 0.1f, 0.1f, 1.0f}, 1.0f});
+    test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour{0.1f, 0.1f, 0.1f, 1.0f}});
 
     const GlProbe::Image image = test.Frame();
 
-    // 0.8 x 0.5 from the light, plus 0.8 x 0.1 from ambient: 0.48. Fresnel at 30 degrees takes about 4% of the
-    // diffuse and specular gives back about 1%, inside the tolerance.
-    INFO("the face is 0.8 x N.L + 0.8 x ambient = 0.48 in each colour channel");
+    // 0.8 x 0.5 from the light, plus 0.8 x 0.1 from the sky all round: 0.48. Fresnel at 30 degrees takes about 4% of
+    // the diffuse and specular gives back about 1%, inside the tolerance; so does the sky's own Fresnel.
+    INFO("the face is 0.8 x N.L + 0.8 x the sky = 0.48 in each colour channel");
     REQUIRE(GlProbe::Near(image.At(Size / 2, Size / 2), {0.48f, 0.48f, 0.48f, 1.0f}, 0.02f));
     REQUIRE(test.messages->errors.empty());
 }

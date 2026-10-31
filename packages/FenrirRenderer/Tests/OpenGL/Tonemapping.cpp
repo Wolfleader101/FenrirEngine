@@ -74,8 +74,7 @@ namespace
             Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(-30.0f), Vec3(0.0f, 1.0f, 0.0f)) *
             Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(-40.0f), Vec3(1.0f, 0.0f, 0.0f));
         sun.AddComponent<Fenrir::DirectionalLight>(Fenrir::DirectionalLight{Fenrir::Colour::White, 4.0f});
-        test.app.GetActiveScene().AddResource<Fenrir::AmbientLight>(
-            Fenrir::AmbientLight{Fenrir::Colour{0.1f, 0.1f, 0.1f, 1.0f}, 1.0f});
+        test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour{0.1f, 0.1f, 0.1f, 1.0f}});
 
         const auto sphere = store.Add<Fenrir::Mesh>(RendererTest::Sphere(), Fenrir::AssetOwner::App());
         const auto red = Material(test, "builtin:lit", Fenrir::Colour{0.8f, 0.05f, 0.05f, 1.0f});

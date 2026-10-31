@@ -114,7 +114,7 @@ TEST_CASE("Opaque and masked items write depth; alpha-blended and additive ones 
     REQUIRE(std::count(blends.begin(), blends.end(), BlendMode::Additive) == 1);
     INFO("Transparent runs after Background, before Output");
     REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)) ==
-            std::vector<std::string>{"Opaque", "Background", "Transparent", "Output"});
+            std::vector<std::string>{"BrdfLut", "Opaque", "Background", "Transparent", "Output"});
     INFO("nothing was logged as an error");
     REQUIRE(test.messages->errors.empty());
 }
