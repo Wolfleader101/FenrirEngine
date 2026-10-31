@@ -671,6 +671,37 @@ namespace Fenrir::Detail
                 }
             }
 
+            /**
+             * @brief A `KHR_lights_punctual` point or spot light as a ModelLight; none for a directional one, which a
+             * scene's own DirectionalLight stands for, warned about.
+             */
+            std::optional<ModelLight> LightOf(const cgltf_light& light, const std::string& nodeName)
+            {
+                ModelLight made;
+                if (light.type == cgltf_light_type_point)
+                {
+                    made.kind = ModelLightKind::Point;
+                }
+                else if (light.type == cgltf_light_type_spot)
+                {
+                    made.kind = ModelLightKind::Spot;
+                    made.innerAngle = light.spot_inner_cone_angle;
+                    made.outerAngle = light.spot_outer_cone_angle;
+                }
+                else
+                {
+                    m_out.warnings.push_back(std::format("node '{}' carries a directional light, which is not "
+                                                         "imported: a scene has one DirectionalLight of its own",
+                                                         nodeName));
+                    return std::nullopt;
+                }
+                const std::array<cgltf_float, 3> colour = std::to_array(light.color);
+                made.colour = {colour[0], colour[1], colour[2]};
+                made.intensity = light.intensity;
+                made.range = std::max(light.range, 0.0f);
+                return made;
+            }
+
             void Visit(const cgltf_node& node, std::int32_t parent, std::vector<bool>& visited)
             {
                 const cgltf_size index = cgltf_node_index(&m_data, &node);
@@ -713,6 +744,10 @@ namespace Fenrir::Detail
                     const std::int32_t skin =
                         node.skin != nullptr ? static_cast<std::int32_t>(cgltf_skin_index(&m_data, node.skin)) : -1;
                     imported.meshes = m_meshIndices[{cgltf_mesh_index(&m_data, node.mesh), skin}];
+                }
+                if (node.light != nullptr)
+                {
+                    imported.light = LightOf(*node.light, imported.name);
                 }
                 imported.carriesContent = node.mesh != nullptr || node.camera != nullptr || node.light != nullptr;
                 const auto self = static_cast<std::int32_t>(m_out.nodes.size());

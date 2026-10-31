@@ -237,6 +237,7 @@ namespace Fenrir
             node.kind = source.kind;
             node.skeleton = source.skeleton;
             node.bone = source.bone;
+            node.light = source.light;
             for (const std::uint32_t mesh : source.meshes)
             {
                 if (meshes[mesh])

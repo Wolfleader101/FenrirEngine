@@ -85,6 +85,31 @@ Hand checks, on OpenGL with the assets fetched:
 - Without the fetched assets: an empty scene with an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, and no error in
   the log.
 
+### Many lights
+
+A dark room, twenty metres square, of PBR surfaces: a floor of five by five grey tiles, rough to smooth from left to
+right and dielectric to metal from back to front, four pale walls, a ring of eight columns (polished metal and blue
+plastic) and spheres of gold and white plastic between them. Up to 256 coloured lights circle it, each marked by a small
+glowing sphere of its colour: point lights bobbing at waist height, and every fourth a spot light up high, pointing
+down and leaning out as it goes, its cone lighting a moving pool. A hundred are on at first. The window's Scene part has
+the count (0 to 256), whether they move, the point and spot intensities and the range.
+
+| Keys | |
+| --- | --- |
+| T, E, B | The Lighting window's: tonemapper, exposure, bloom. |
+| M | 16, 64, 100 or 256 lights. |
+| P | The lights moving or still. |
+
+Hand checks, on OpenGL:
+
+- With a hundred lights the room reads as lit by many small coloured lights: each makes a soft pool on the floor that
+  fades to nothing before its range, with no hard edge where the range ends; spots light round pools with soft rims.
+- The smooth floor tiles and the metal columns show sharp coloured highlights that slide as the lights move; the rough
+  tiles show broad soft ones. The markers glow and bloom softly.
+- The frame rate stays usable with a hundred lights, and with 256 (the loop runs over every light until clustering,
+  ADR-0049).
+- Range shrinks and grows every pool; 0 lights leaves the room almost black.
+
 | Key | What it does |
 | --- | --- |
 | F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |

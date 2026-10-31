@@ -19,7 +19,9 @@ namespace Fenrir::Generated
                 Fenrir::MakeComponent<Fenrir::Camera>("Fenrir.Renderer.Camera"),
                 Fenrir::MakeComponent<Fenrir::DirectionalLight>("Fenrir.Renderer.DirectionalLight"),
                 Fenrir::MakeComponent<Fenrir::MeshRenderer>("Fenrir.Renderer.MeshRenderer"),
+                Fenrir::MakeComponent<Fenrir::PointLight>("Fenrir.Renderer.PointLight"),
                 Fenrir::MakeComponent<Fenrir::SkinnedMesh>("Fenrir.Renderer.SkinnedMesh"),
+                Fenrir::MakeComponent<Fenrir::SpotLight>("Fenrir.Renderer.SpotLight"),
             };
             extension.events = {};
             extension.sharedStructs = {
