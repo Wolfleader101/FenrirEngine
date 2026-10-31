@@ -234,9 +234,11 @@ struct Iris::StructMapping<Fenrir::CubemapSky>
 {
     static constexpr std::string_view typeName = "Fenrir.Renderer.CubemapSky";
     static constexpr auto fields = Iris::StructFields(
-        Iris::Field<Fenrir::AssetHandle<Fenrir::Image>>("Cubemap", 0));
+        Iris::Field<Fenrir::AssetHandle<Fenrir::Image>>("Cubemap", 0),
+        Iris::Field<float>("Intensity", 8),
+        Iris::Field<float>("Rotation", 12));
 };
-static_assert(sizeof(Fenrir::CubemapSky) == 8 && alignof(Fenrir::CubemapSky) == 4,
+static_assert(sizeof(Fenrir::CubemapSky) == 16 && alignof(Fenrir::CubemapSky) == 4,
               "Fenrir::CubemapSky is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
@@ -271,6 +273,19 @@ struct Iris::StructMapping<Fenrir::MeshRenderer>
 };
 static_assert(sizeof(Fenrir::MeshRenderer) == 20 && alignof(Fenrir::MeshRenderer) == 4,
               "Fenrir::MeshRenderer is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fenrir::PanoramaSky>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.PanoramaSky";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<Fenrir::AssetHandle<Fenrir::Image>>("Image", 0),
+        Iris::Field<float>("Intensity", 8),
+        Iris::Field<float>("Rotation", 12));
+};
+static_assert(sizeof(Fenrir::PanoramaSky) == 16 && alignof(Fenrir::PanoramaSky) == 4,
+              "Fenrir::PanoramaSky is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
 template <>
@@ -316,7 +331,8 @@ struct Iris::StructMapping<Fenrir::Sky>
     static constexpr auto fields = Iris::StructFields(
         Iris::Field<Fenrir::SkyType>("_type", 0),
         Iris::Field<Fenrir::ColourSky>("_colour", 4),
-        Iris::Field<Fenrir::CubemapSky>("_cubemap", 4));
+        Iris::Field<Fenrir::CubemapSky>("_cubemap", 4),
+        Iris::Field<Fenrir::PanoramaSky>("_panorama", 4));
 };
 static_assert(sizeof(Fenrir::Sky) == 20 && alignof(Fenrir::Sky) == 4,
               "Fenrir::Sky is not the layout FenrirRenderer.api.json describes: "

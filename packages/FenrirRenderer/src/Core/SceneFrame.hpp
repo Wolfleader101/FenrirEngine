@@ -77,8 +77,8 @@ namespace Fenrir::Render
         /** @brief What the Background pass draws where nothing opaque was drawn, linear, when `sky` is empty. */
         Colour background = Colour::Black;
         /**
-         * @brief The Sky cubemap the Background pass draws instead, prepared with PrepareCubemap; empty for the colour.
-         * One not prepared draws `background`.
+         * @brief The Sky cubemap or panorama the Background pass draws instead, prepared with PrepareCubemap or
+         * PreparePanorama; empty for the colour. One not prepared draws `background`.
          */
         AssetKey sky;
         /** @brief The render target image it draws into, prepared with PrepareTarget; empty for the window. */
@@ -102,6 +102,9 @@ namespace Fenrir::Render
         Math::Vec3 lightColour{0.0f};
         /** @brief The ambient light's colour times its intensity, linear. */
         Math::Vec3 ambient{0.0f};
+        /** @brief The Sky's intensity and its rotation about +Y in radians: 1 and 0 for a ColourSky. */
+        float skyIntensity = 1.0f;
+        float skyRotation = 0.0f;
     };
 
     /**

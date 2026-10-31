@@ -23,7 +23,7 @@ namespace
         {"Fenrir.Renderer.CameraBackground", {{0u, 1}, {1u, 2}}},
         {"Fenrir.Renderer.CameraProjection", {{0u, 1}, {1u, 2}}},
         {"Fenrir.Renderer.RenderTarget", {{0u, 1}, {1u, 2}}},
-        {"Fenrir.Renderer.Sky", {{0u, 1}, {1u, 2}}},
+        {"Fenrir.Renderer.Sky", {{0u, 1}, {1u, 2}, {2u, 3}}},
     };
 
     // Calls the C# class's method for T and compares what it returns with T{}, naming every field that differs.

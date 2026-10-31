@@ -97,6 +97,9 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinFallback VERTEX Shaders/Bui
 # CUBEMAP: the variant that draws a Sky cubemap.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBackground VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/background.frag KEYS CUBEMAP EMBED)
+# A panorama sky's image drawn into its cube texture, one face and mip level a pass (ADR-0047).
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinPanorama VERTEX Shaders/Builtin/fullscreen.vert
+                   FRAGMENT Shaders/Builtin/panorama.frag EMBED)
 # MSAA: the variant that resolves a multisampled SceneColor.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinOutput VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/output.frag KEYS MSAA EMBED)

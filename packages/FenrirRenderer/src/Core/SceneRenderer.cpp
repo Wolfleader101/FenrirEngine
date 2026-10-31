@@ -27,8 +27,10 @@ namespace Fenrir::Render
             Math::Vec4 lightColour;
             Math::Vec4 ambient;
             Math::Vec4 time;
+            /** @brief The Sky's intensity, and the cosine and sine of its rotation. */
+            Math::Vec4 sky;
         };
-        static_assert(sizeof(FrameBlock) == 64);
+        static_assert(sizeof(FrameBlock) == 80);
 
         /** @brief The view block, as `Fenrir/View.glsl` declares it (std140). */
         struct ViewBlock
@@ -62,6 +64,19 @@ namespace Fenrir::Render
         {
             Math::Vec4 colour;
         };
+
+        /** @brief A Panorama pass's block, as `builtin:panorama` declares it (std140). */
+        struct PanoramaBlock
+        {
+            std::uint32_t face = 0;
+            float halfTexel = 1.0f;
+            float lod = 0.0f;
+            std::uint32_t padding0 = 0;
+        };
+
+        /** @brief Panorama passes' blocks sit at multiples of this, the largest uniform offset alignment GL asks for.
+         */
+        constexpr std::size_t PanoramaSlot = 256;
 
         /** @brief The Output block, as `builtin:output` declares it at set 1 (std140). */
         struct OutputBlock
@@ -613,6 +628,10 @@ namespace Fenrir::Render
         m_outputSampler = m_device.CreateSampler(clamp, "Output sampler");
         // Clamped, so a face's edge does not wrap round to its opposite edge, and trilinear across the mips.
         m_skySampler = m_device.CreateSampler(clamp, "Sky sampler");
+        // Round a panorama's sides, clamped at its top and bottom.
+        SamplerDesc panorama = clamp;
+        panorama.addressU = AddressMode::Repeat;
+        m_panoramaSampler = m_device.CreateSampler(panorama, "Panorama sampler");
         m_defaultStreams = m_device.CreateBuffer({sizeof(DefaultStreams), BufferUsage::Vertex},
                                                  std::as_bytes(std::span(DefaultStreams)), "Default vertex streams");
 
@@ -632,6 +651,13 @@ namespace Fenrir::Render
 
         m_background = ReadBuiltin(BuiltinProgram::Background, m_logger);
         m_output = ReadBuiltin(BuiltinProgram::Output, m_logger);
+        m_panorama = ReadBuiltin(BuiltinProgram::Panorama, m_logger);
+        if (const ShaderVariant* variant = BaseVariant(m_panorama))
+        {
+            m_panoramaLayout = MaterialLayoutOf(*variant);
+        }
+        m_panoramaPipeline = MakeInternalPipeline(m_panorama, BaseVariant(m_panorama), m_panoramaLayout,
+                                                  TextureFormat::Rgba16Float, false, 1);
         if (const ShaderVariant* variant = BaseVariant(m_background))
         {
             m_backgroundLayout = MaterialLayoutOf(*variant);
@@ -647,7 +673,7 @@ namespace Fenrir::Render
         {
             m_skyLayout = MaterialLayoutOf(*variant);
             m_skyPipeline = MakeInternalPipeline(m_background, variant, m_skyLayout, TextureFormat::Rgba16Float, true,
-                                                 m_samples, m_viewLayout);
+                                                 m_samples, m_viewLayout, m_frameLayout);
         }
         // With MSAA, Output reads every sample of SceneColor and averages them: the resolve.
         constexpr std::array<std::string_view, 1> msaa{"MSAA"};
@@ -692,6 +718,10 @@ namespace Fenrir::Render
             m_device.Destroy(cubemap.group);
             m_device.Destroy(cubemap.texture);
         }
+        while (!m_panoramas.empty())
+        {
+            ReleasePanorama(m_panoramas.begin()->first);
+        }
         for (auto& [desc, sampler] : m_samplers)
         {
             m_device.Destroy(sampler);
@@ -725,6 +755,8 @@ namespace Fenrir::Render
         m_device.Destroy(m_backgroundPipeline);
         m_device.Destroy(m_skyPipeline);
         m_device.Destroy(m_outputPipeline);
+        m_device.Destroy(m_panoramaPipeline);
+        m_device.Destroy(m_panoramaLayout);
         m_device.Destroy(m_backgroundLayout);
         m_device.Destroy(m_skyLayout);
         m_device.Destroy(m_outputLayout);
@@ -739,6 +771,7 @@ namespace Fenrir::Render
         m_device.Destroy(m_defaultSampler);
         m_device.Destroy(m_outputSampler);
         m_device.Destroy(m_skySampler);
+        m_device.Destroy(m_panoramaSampler);
         m_device.Destroy(m_defaultStreams);
     }
 
@@ -767,11 +800,13 @@ namespace Fenrir::Render
     PipelineHandle SceneRenderer::MakeInternalPipeline(const ShaderContainer& container, const ShaderVariant* variant,
                                                        BindingGroupLayoutHandle layout, TextureFormat colour,
                                                        bool depthTested, std::uint32_t samples,
-                                                       BindingGroupLayoutHandle setOneLayout)
+                                                       BindingGroupLayoutHandle setOneLayout,
+                                                       BindingGroupLayoutHandle setZeroLayout)
     {
         PipelineDesc desc;
         desc.shader = variant;
         desc.samples = samples;
+        desc.sets.at(0) = setZeroLayout;
         desc.sets.at(1) = setOneLayout;
         desc.sets.at(MaterialSet) = layout;
         desc.cull = CullMode::None;
@@ -894,6 +929,160 @@ namespace Fenrir::Render
             m_device.Destroy(found->second.texture);
             m_cubemaps.erase(found);
         }
+    }
+
+    bool SceneRenderer::IsPanoramaCurrent(AssetKey key, std::uint32_t revision) const
+    {
+        const auto found = m_panoramas.find(key);
+        return found != m_panoramas.end() && found->second.revision == revision;
+    }
+
+    void SceneRenderer::PreparePanorama(AssetKey key, std::uint32_t revision, const ImageData& image)
+    {
+        ReleasePanorama(key);
+        PanoramaEntry& entry = m_panoramas[key];
+        entry.revision = revision;
+
+        TextureDesc source;
+        source.format = TextureFormatOf(image);
+        source.width = image.width;
+        source.height = image.height;
+        source.mipLevels = MipCount(image.width, image.height);
+        source.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
+        entry.source = m_device.CreateTexture(source, "Panorama");
+        WriteWithMips(m_device, entry.source, 0, source.mipLevels, image.pixels, image.width, image.height,
+                      CodecOf(image));
+
+        // Faces half as wide as the panorama is high, so as many texels go round the cube's horizon as round the
+        // panorama's: four faces across its width. RGBA16F holds an HDR sky in half the memory of RGBA32F.
+        const std::uint32_t side = std::max(image.height / 2, 1u);
+        TextureDesc& cube = entry.cubeDesc;
+        cube.kind = TextureKind::Cube;
+        cube.format = TextureFormat::Rgba16Float;
+        cube.width = side;
+        cube.height = side;
+        cube.mipLevels = MipCount(side, side);
+        cube.usage = TextureUsage::Sampled | TextureUsage::ColourAttachment;
+        entry.cube = m_device.CreateTexture(cube, "Sky panorama cube");
+
+        // Each pass's block: its face, half its level's texel, and the panorama's mip whose texels are as tall as the
+        // level's (a face spans half the panorama's height).
+        std::vector<std::byte> blocks(PanoramaSlot * 6 * cube.mipLevels);
+        for (std::uint32_t level = 0; level < cube.mipLevels; ++level)
+        {
+            const std::uint32_t levelSide = std::max(side >> level, 1u);
+            const float lod = std::max(std::log2(static_cast<float>(image.height) / (2.0f * levelSide)), 0.0f);
+            for (std::uint32_t face = 0; face < 6; ++face)
+            {
+                const PanoramaBlock block{face, 1.0f / static_cast<float>(levelSide), lod};
+                std::memcpy(blocks.data() + PanoramaSlot * (std::size_t{level} * 6 + face), &block, sizeof(block));
+            }
+        }
+        entry.params = m_device.CreateBuffer({blocks.size(), BufferUsage::Uniform}, blocks, "Panorama passes");
+        for (std::size_t pass = 0; pass < std::size_t{6} * cube.mipLevels; ++pass)
+        {
+            BindingGroupEntry params;
+            params.binding = 0;
+            params.buffer = entry.params;
+            params.offset = PanoramaSlot * pass;
+            params.size = sizeof(PanoramaBlock);
+            BindingGroupEntry panorama;
+            panorama.binding = 1;
+            panorama.texture = entry.source;
+            panorama.sampler = m_panoramaSampler;
+            entry.passGroups.push_back(m_device.CreateBindingGroup({m_panoramaLayout, {params, panorama}}, "Panorama"));
+        }
+
+        BindingGroupEntry binding;
+        binding.binding = 0;
+        binding.texture = entry.cube;
+        binding.sampler = m_skySampler;
+        entry.group = m_device.CreateBindingGroup({m_skyLayout, {binding}}, "Sky");
+        ++m_stats.uploads;
+    }
+
+    void SceneRenderer::ReleasePanorama(AssetKey key)
+    {
+        const auto found = m_panoramas.find(key);
+        if (found == m_panoramas.end())
+        {
+            return;
+        }
+        PanoramaEntry& entry = found->second;
+        FreePanoramaPasses(entry);
+        m_device.Destroy(entry.group);
+        m_device.Destroy(entry.cube);
+        m_panoramas.erase(found);
+    }
+
+    std::vector<AssetKey> SceneRenderer::PanoramaKeys() const
+    {
+        std::vector<AssetKey> keys;
+        for (const auto& [key, entry] : m_panoramas)
+        {
+            keys.push_back(key);
+        }
+        return keys;
+    }
+
+    void SceneRenderer::FreePanoramaPasses(PanoramaEntry& entry)
+    {
+        for (const BindingGroupHandle group : entry.passGroups)
+        {
+            m_device.Destroy(group);
+        }
+        entry.passGroups.clear();
+        m_device.Destroy(entry.params);
+        m_device.Destroy(entry.source);
+        entry.params = {};
+        entry.source = {};
+    }
+
+    void SceneRenderer::AddPanoramaPasses(RenderGraph& graph)
+    {
+        for (auto& [key, entry] : m_panoramas)
+        {
+            if (entry.converted)
+            {
+                // Its passes ran in an earlier frame, so the image's texture can go.
+                FreePanoramaPasses(entry);
+                continue;
+            }
+            if (m_panoramaPipeline.IsEmpty())
+            {
+                continue;
+            }
+            const GraphResource cube = graph.ImportTexture("Sky panorama cube", entry.cube, entry.cubeDesc);
+            for (std::uint32_t level = 0; level < entry.cubeDesc.mipLevels; ++level)
+            {
+                const std::uint32_t side = std::max(entry.cubeDesc.width >> level, 1u);
+                for (std::uint32_t face = 0; face < 6; ++face)
+                {
+                    const BindingGroupHandle group = entry.passGroups.at(std::size_t{level} * 6 + face);
+                    graph.AddPass(
+                        "Panorama", RenderStage::Prepare, QueueKind::Graphics,
+                        [=](PassBuilder& pass) { pass.ColourAttachmentLevel(cube, level, face); },
+                        [this, key, group, side](PassContext& context) {
+                            PassEncoder& encoder = context.Encoder();
+                            encoder.SetViewport({0, 0, side, side});
+                            encoder.SetPipeline(m_panoramaPipeline);
+                            encoder.SetBindingGroup(MaterialSet, group);
+                            encoder.Draw({.vertexCount = 3});
+                            m_panoramas.at(key).converted = true;
+                        });
+                }
+            }
+        }
+    }
+
+    BindingGroupHandle SceneRenderer::SkyGroup(AssetKey key) const
+    {
+        if (const auto cubemap = m_cubemaps.find(key); cubemap != m_cubemaps.end())
+        {
+            return cubemap->second.group;
+        }
+        const auto panorama = m_panoramas.find(key);
+        return panorama == m_panoramas.end() ? BindingGroupHandle{} : panorama->second.group;
     }
 
     std::vector<AssetKey> SceneRenderer::CubemapKeys() const
@@ -1596,6 +1785,7 @@ namespace Fenrir::Render
         m_stats.palettes = 0;
         m_stats.skinnedDraws = 0;
         m_drawnViews.clear();
+        AddPanoramaPasses(graph);
         if (m_frame.views.empty())
         {
             AddWindowClear(graph, frame);
@@ -1605,9 +1795,10 @@ namespace Fenrir::Render
         const auto draws = std::make_shared<const std::vector<ResolvedDraw>>(ResolveDraws());
         const std::uint64_t frameIndex = frame.frameIndex;
         const SceneLighting& lighting = m_frame.lighting;
-        const FrameBlock frameBlock{Math::Vec4(lighting.lightDirection, 0.0f), Math::Vec4(lighting.lightColour, 0.0f),
-                                    Math::Vec4(lighting.ambient, 0.0f),
-                                    Math::Vec4(m_frame.time, m_frame.deltaTime, 0.0f, 0.0f)};
+        const FrameBlock frameBlock{
+            Math::Vec4(lighting.lightDirection, 0.0f), Math::Vec4(lighting.lightColour, 0.0f),
+            Math::Vec4(lighting.ambient, 0.0f), Math::Vec4(m_frame.time, m_frame.deltaTime, 0.0f, 0.0f),
+            Math::Vec4(lighting.skyIntensity, std::cos(lighting.skyRotation), std::sin(lighting.skyRotation), 0.0f)};
         m_frameBlocks->Write(frameIndex, 0, BytesOf(frameBlock));
         m_drawBlocks->Reserve(draws->size());
         for (std::size_t i = 0; i < draws->size(); ++i)
@@ -1742,13 +1933,16 @@ namespace Fenrir::Render
             m_outputBlocks->Write(frameIndex, v, BytesOf(outputBlock));
             const BindingGroupHandle outputBlockGroup = m_outputBlocks->Group(frameIndex, v);
             const BindingGroupHandle viewGroup = m_viewBlocks->Group(frameIndex, v);
-            // The Sky cubemap's pipeline and group, when the view draws one that is prepared; else its colour's.
+            // The Sky cube texture's pipeline and group, when the view draws one that is prepared; else its colour's,
+            // which reads no frame block.
             BindingGroupHandle backgroundGroup = m_backgroundBlocks->Group(frameIndex, v);
             PipelineHandle backgroundPipeline = m_backgroundPipeline;
-            if (const auto sky = m_cubemaps.find(request.sky); sky != m_cubemaps.end() && !m_skyPipeline.IsEmpty())
+            BindingGroupHandle backgroundFrame;
+            if (const BindingGroupHandle sky = SkyGroup(request.sky); !sky.IsEmpty() && !m_skyPipeline.IsEmpty())
             {
-                backgroundGroup = sky->second.group;
+                backgroundGroup = sky;
                 backgroundPipeline = m_skyPipeline;
+                backgroundFrame = frameGroup;
             }
 
             // Each draw's material group in this view, with the images it may not sample replaced.
@@ -1834,10 +2028,14 @@ namespace Fenrir::Render
                     pass.ColourAttachment(sceneColour, LoadOp::Load);
                     pass.DepthReadOnly(sceneDepth);
                 },
-                [backgroundPipeline, backgroundGroup, viewGroup, viewport](PassContext& context) {
+                [backgroundPipeline, backgroundGroup, backgroundFrame, viewGroup, viewport](PassContext& context) {
                     PassEncoder& encoder = context.Encoder();
                     encoder.SetViewport(viewport);
                     encoder.SetPipeline(backgroundPipeline);
+                    if (!backgroundFrame.IsEmpty())
+                    {
+                        encoder.SetBindingGroup(0, backgroundFrame);
+                    }
                     encoder.SetBindingGroup(1, viewGroup);
                     encoder.SetBindingGroup(MaterialSet, backgroundGroup);
                     encoder.Draw({.vertexCount = 3});

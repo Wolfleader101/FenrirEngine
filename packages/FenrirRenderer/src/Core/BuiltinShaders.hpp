@@ -28,6 +28,8 @@ namespace Fenrir::Render
         DebugText,
         /** @brief `builtin:2d`: 2D draw lists on the ImGui vertex layout, textured and vertex-coloured (ADR-0027). */
         Draw2D,
+        /** @brief `builtin:panorama`: a panorama sky's image drawn into one face and mip of its cube texture. */
+        Panorama,
     };
 
     /** @brief A built-in program's `builtin:` name and its embedded container's bytes. */

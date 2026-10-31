@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <iterator>
 #include <memory>
+#include <numbers>
 #include <span>
 #include <string>
 #include <string_view>
@@ -69,6 +71,40 @@ namespace RendererTest
         mesh.positions = {Vec3(-h, -h, z), Vec3(h, -h, z), Vec3(h, h, z), Vec3(-h, h, z)};
         mesh.normals = {Vec3(0, 0, 1), Vec3(0, 0, 1), Vec3(0, 0, 1), Vec3(0, 0, 1)};
         mesh.indices = {0, 1, 2, 0, 2, 3};
+        return mesh;
+    }
+
+    /** @brief A sphere of radius 0.5 about the origin, 24 segments round and 16 pole to pole, counter-clockwise. */
+    inline Fenrir::MeshData Sphere()
+    {
+        using Fenrir::Math::Vec3;
+        constexpr std::uint32_t segments = 24;
+        constexpr std::uint32_t rings = 16;
+        Fenrir::MeshData mesh;
+        for (std::uint32_t ring = 0; ring <= rings; ++ring)
+        {
+            const float polar = std::numbers::pi_v<float> * static_cast<float>(ring) / rings;
+            for (std::uint32_t segment = 0; segment <= segments; ++segment)
+            {
+                const float azimuth = 2.0f * std::numbers::pi_v<float> * static_cast<float>(segment) / segments;
+                const Vec3 normal(std::sin(polar) * std::cos(azimuth), std::cos(polar),
+                                  -std::sin(polar) * std::sin(azimuth));
+                mesh.positions.push_back(normal * 0.5f);
+                mesh.normals.push_back(normal);
+            }
+        }
+        for (std::uint32_t ring = 0; ring < rings; ++ring)
+        {
+            for (std::uint32_t segment = 0; segment < segments; ++segment)
+            {
+                const std::uint32_t a = ring * (segments + 1) + segment;
+                const std::uint32_t b = a + segments + 1;
+                for (const std::uint32_t index : {a, b, a + 1, a + 1, b, b + 1})
+                {
+                    mesh.indices.push_back(index);
+                }
+            }
+        }
         return mesh;
     }
 

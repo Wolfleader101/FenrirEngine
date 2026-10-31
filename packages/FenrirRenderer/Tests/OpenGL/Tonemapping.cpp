@@ -4,12 +4,10 @@
 // RendererTest::GoldenTolerance. Run the GL tests with FENRIR_UPDATE_GOLDENS=1 to write the goldens again, after a
 // change meant to alter them; look at each before committing it.
 
-#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <numbers>
 #include <string_view>
 
 #include <catch2/catch_test_macros.hpp>
@@ -27,39 +25,6 @@ namespace
 {
     constexpr std::uint32_t Width = 96;
     constexpr std::uint32_t Height = 64;
-
-    /** @brief A sphere of radius 0.5 about the origin, 24 segments round and 16 pole to pole, counter-clockwise. */
-    Fenrir::MeshData Sphere()
-    {
-        constexpr std::uint32_t segments = 24;
-        constexpr std::uint32_t rings = 16;
-        Fenrir::MeshData mesh;
-        for (std::uint32_t ring = 0; ring <= rings; ++ring)
-        {
-            const float polar = std::numbers::pi_v<float> * static_cast<float>(ring) / rings;
-            for (std::uint32_t segment = 0; segment <= segments; ++segment)
-            {
-                const float azimuth = 2.0f * std::numbers::pi_v<float> * static_cast<float>(segment) / segments;
-                const Vec3 normal(std::sin(polar) * std::cos(azimuth), std::cos(polar),
-                                  -std::sin(polar) * std::sin(azimuth));
-                mesh.positions.push_back(normal * 0.5f);
-                mesh.normals.push_back(normal);
-            }
-        }
-        for (std::uint32_t ring = 0; ring < rings; ++ring)
-        {
-            for (std::uint32_t segment = 0; segment < segments; ++segment)
-            {
-                const std::uint32_t a = ring * (segments + 1) + segment;
-                const std::uint32_t b = a + segments + 1;
-                for (const std::uint32_t index : {a, b, a + 1, a + 1, b, b + 1})
-                {
-                    mesh.indices.push_back(index);
-                }
-            }
-        }
-        return mesh;
-    }
 
     /** @brief An entity at `position`, scaled by `scale`, drawing `mesh` with `material`. */
     void Place(GlScene& test, Fenrir::AssetHandle<Fenrir::Mesh> mesh, Fenrir::AssetHandle<Fenrir::Material> material,
@@ -112,7 +77,7 @@ namespace
         test.app.GetActiveScene().AddResource<Fenrir::AmbientLight>(
             Fenrir::AmbientLight{Fenrir::Colour{0.1f, 0.1f, 0.1f, 1.0f}, 1.0f});
 
-        const auto sphere = store.Add<Fenrir::Mesh>(Sphere(), Fenrir::AssetOwner::App());
+        const auto sphere = store.Add<Fenrir::Mesh>(RendererTest::Sphere(), Fenrir::AssetOwner::App());
         const auto red = Material(test, "builtin:lit", Fenrir::Colour{0.8f, 0.05f, 0.05f, 1.0f});
         store.SetFloat(red, "roughness", 0.3f);
         const auto white = Material(test, "builtin:lit", Fenrir::Colour{0.9f, 0.9f, 0.9f, 1.0f});
@@ -134,21 +99,9 @@ namespace
         }
 
         test.RunFrame();
-        const Fenrir::Graphics::TextureHandle texture = RendererProbe::ImageTexture(test.renderer, image);
-        REQUIRE_FALSE(texture.IsEmpty());
-        const GlProbe::Image pixels = GlProbe::Read(RendererProbe::Device(test.renderer), texture);
         INFO("no GL error or other error was logged");
         REQUIRE(test.messages->errors.empty());
-
-        RendererTest::Rgba8Image frame;
-        frame.width = pixels.width;
-        frame.height = pixels.height;
-        frame.rgba.reserve(pixels.rgba.size());
-        for (const float value : pixels.rgba)
-        {
-            frame.rgba.push_back(static_cast<std::uint8_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f)));
-        }
-        return frame;
+        return test.ReadTarget(image);
     }
 
     void RequireGolden(std::string_view name, const RendererTest::Rgba8Image& frame)

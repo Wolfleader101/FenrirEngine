@@ -2,9 +2,11 @@
 #extension GL_GOOGLE_include_directive : require
 // The Background pass (ADR-0019, ADR-0026): the view's background drawn at depth 0 after the opaque items, depth
 // tested, so only pixels nothing covered take it. The base variant fills them with one colour: the scene's Sky colour,
-// or the camera's own. The CUBEMAP variant samples the scene's Sky cubemap by the direction each pixel looks along.
+// or the camera's own. The CUBEMAP variant samples the scene's Sky cubemap (its own, or one made from its panorama) by
+// the direction each pixel looks along, turned by the sky's rotation and scaled by its intensity.
 
 #ifdef CUBEMAP
+#include "Fenrir/Frame.glsl"
 #include "Fenrir/View.glsl"
 
 layout(set = 2, binding = 0) uniform samplerCube sky;
@@ -29,7 +31,7 @@ void main()
     vec4 far = view.inverseViewProjection * vec4(vNdc, 0.5, 1.0);
     vec3 direction = far.xyz / far.w - near.xyz / near.w;
     // Sampled by world direction, with the faces laid out as GL and D3D lay out a cubemap's.
-    outColour = vec4(texture(sky, direction).rgb, 1.0);
+    outColour = vec4(texture(sky, FenrirSkyDirection(direction)).rgb * frame.sky.x, 1.0);
 #else
     outColour = background.colour;
 #endif

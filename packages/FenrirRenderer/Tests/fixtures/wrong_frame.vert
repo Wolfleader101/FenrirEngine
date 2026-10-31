@@ -1,5 +1,5 @@
 #version 460
-// A vertex stage whose set 0 binding 0 is not the renderer's frame block: 16 bytes where FrameData is 64.
+// A vertex stage whose set 0 binding 0 is not the renderer's frame block: 16 bytes where FrameData is 80.
 
 layout(set = 0, binding = 0, std140) uniform FrameData
 {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <compare>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -122,6 +123,16 @@ namespace Fenrir::Graphics
         {
             std::uint32_t name = 0;
             TextureDesc desc;
+        };
+
+        /** @brief One attachment of a framebuffer: a texture's GL name, and the mip level and layer drawn into. */
+        struct FramebufferAttachment
+        {
+            std::uint32_t name = 0;
+            std::uint32_t mipLevel = 0;
+            std::uint32_t layer = 0;
+
+            friend auto operator<=>(const FramebufferAttachment&, const FramebufferAttachment&) = default;
         };
 
         /** @brief A binding group with each entry's resource kind, read from its layout when it was made. */
@@ -254,8 +265,8 @@ namespace Fenrir::Graphics
         TextureHandle m_backbuffer;
 
         std::map<ProgramKey, GlProgram> m_programs;
-        /** @brief Framebuffers by the GL names of their colour attachments then depth (0 for none). */
-        std::map<std::vector<std::uint32_t>, std::uint32_t> m_framebuffers;
+        /** @brief Framebuffers by their colour attachments then depth (name 0 for none). */
+        std::map<std::vector<FramebufferAttachment>, std::uint32_t> m_framebuffers;
         ReplayState m_replay;
     };
 } // namespace Fenrir::Graphics
