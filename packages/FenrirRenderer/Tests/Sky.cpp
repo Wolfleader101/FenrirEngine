@@ -238,10 +238,10 @@ namespace
     std::vector<float> FrameSky(const RendererTestApp& test, const PassRecord& background)
     {
         const std::vector<BindingGroupEntry> entries = RendererProbe::Entries(test.Device(), background.groups.at(0));
-        REQUIRE(entries.size() == 1);
+        REQUIRE(entries.size() == 4);
         const auto bytes = RendererProbe::Bytes(test.Device(), entries[0].buffer);
-        // The frame block's fifth vec4, after the light, the ambient light and the time.
-        const std::size_t at = entries[0].offset + 64;
+        // The frame block's fourth vec4, after the light and the time.
+        const std::size_t at = entries[0].offset + 48;
         return {RendererTest::FloatAt(bytes, at), RendererTest::FloatAt(bytes, at + 4),
                 RendererTest::FloatAt(bytes, at + 8)};
     }

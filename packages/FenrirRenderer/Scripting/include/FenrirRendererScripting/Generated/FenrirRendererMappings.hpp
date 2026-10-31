@@ -18,18 +18,6 @@
 #include <cstdint>
 #include <string_view>
 
-template <>
-struct Iris::StructMapping<Fenrir::AmbientLight>
-{
-    static constexpr std::string_view typeName = "Fenrir.Renderer.AmbientLight";
-    static constexpr auto fields = Iris::StructFields(
-        Iris::Field<Fenrir::Colour>("Colour", 0),
-        Iris::Field<float>("Intensity", 16));
-};
-static_assert(sizeof(Fenrir::AmbientLight) == 20 && alignof(Fenrir::AmbientLight) == 4,
-              "Fenrir::AmbientLight is not the layout FenrirRenderer.api.json describes: "
-              "regenerate the description, then this binding");
-
 static_assert(sizeof(Fenrir::AssetHandle<Fenrir::Image>) == 8 && alignof(Fenrir::AssetHandle<Fenrir::Image>) == 4,
               "Fenrir::AssetHandle<Fenrir::Image> is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");

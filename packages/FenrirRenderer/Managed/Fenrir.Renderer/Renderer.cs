@@ -5,7 +5,7 @@ using Fenrir.Scripting;
 
 namespace Fenrir.Renderer;
 
-// The renderer's components (MeshRenderer, Camera and its unions, DirectionalLight), its scene resources (AmbientLight, Sky),
+// The renderer's components (MeshRenderer, Camera and its unions, DirectionalLight), its scene resource (Sky),
 // RendererStats and RendererNative are generated from FenrirRenderer's headers and Scripting/src/RendererScripting.cpp
 // (Generated/), and so are Renderer's pass-throughs (Generated/Renderer.cs, from the natives' @facade marks: picking,
 // bounds, stats, CameraAt and SpawnModel, the last two returning the native's output as their value). This part of the

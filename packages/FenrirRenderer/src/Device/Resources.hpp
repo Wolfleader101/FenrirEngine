@@ -81,6 +81,8 @@ namespace Fenrir::Graphics
         Rgba32Float,
         /** @brief One linear channel, read by shaders as red; the debug font's signed-distance-field atlas. */
         R8Unorm,
+        /** @brief Two linear half floats, read by shaders as red and green; the BRDF lookup table (ADR-0047). */
+        Rg16Float,
     };
 
     /** @brief Whether a texture is one image or six cube faces. */

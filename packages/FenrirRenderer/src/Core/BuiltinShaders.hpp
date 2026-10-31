@@ -12,7 +12,7 @@ namespace Fenrir::Render
     {
         /** @brief `builtin:unlit`: base colour times vertex colour. */
         Unlit,
-        /** @brief `builtin:lit`: metallic-roughness GGX, one directional light and ambient. */
+        /** @brief `builtin:lit`: metallic-roughness GGX through `Fenrir/Lighting.glsl`. */
         Lit,
         /** @brief `builtin:fallback`: the fallback material's flat magenta. */
         Fallback,
@@ -30,6 +30,13 @@ namespace Fenrir::Render
         Draw2D,
         /** @brief `builtin:panorama`: a panorama sky's image drawn into one face and mip of its cube texture. */
         Panorama,
+        /** @brief `builtin:sky-irradiance`: the Sky cube projected onto L2 spherical harmonics. */
+        SkyIrradiance,
+        /** @brief `builtin:sky-specular`: the Sky cube prefiltered with GGX into one face and mip of its specular cube.
+         */
+        SkySpecular,
+        /** @brief `builtin:brdf-lut`: the split sum's BRDF lookup table. */
+        BrdfLut,
     };
 
     /** @brief A built-in program's `builtin:` name and its embedded container's bytes. */

@@ -60,12 +60,6 @@ namespace
     }
 } // namespace
 
-TEST_CASE("C#'s new AmbientLight() has C++'s Fenrir::AmbientLight{} defaults, field by field", "[renderer][scripting][bindings]")
-{
-    Fenrir::Testing::RendererScriptingApp app;
-    CheckDefaults<Fenrir::AmbientLight>(Fenrir::ScriptingProbe::Component(app.scripting), "AmbientLight");
-}
-
 TEST_CASE("C#'s new Camera() has C++'s Fenrir::Camera{} defaults, field by field", "[renderer][scripting][bindings]")
 {
     Fenrir::Testing::RendererScriptingApp app;

@@ -148,7 +148,7 @@ TEST_CASE("The overlay draws over a window no camera draws into", "[renderer][ov
 
     INFO("the window is cleared to black, and the overlay still drawn over it");
     REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)) ==
-            std::vector<std::string>{"Clear", "Overlay 2D"});
+            std::vector<std::string>{"BrdfLut", "Clear", "Overlay 2D"});
     REQUIRE(test.Draws("Overlay 2D").size() == 1);
 }
 

@@ -60,8 +60,9 @@ TEST_CASE("A disabled camera draws no view", "[renderer][facade]")
 
     test.Frame();
 
-    INFO("the window is cleared, and nothing drawn");
-    REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)) == std::vector<std::string>{"Clear"});
+    INFO("the window is cleared, and nothing drawn, after the first frame's BRDF lookup table");
+    REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)) ==
+            std::vector<std::string>{"BrdfLut", "Clear"});
 }
 
 TEST_CASE("GetWorldBounds is the mesh's local box moved by the entity's world transform", "[renderer][facade]")
@@ -98,8 +99,8 @@ TEST_CASE("Stats report the last frame's draws, passes and uploads", "[renderer]
 
     INFO("two MeshRenderers are two draws");
     REQUIRE(stats.draws == 2);
-    INFO("one view runs Opaque, Background and Output");
-    REQUIRE(stats.passes == 3);
+    INFO("one view runs Opaque, Background and Output, after the first frame's BRDF lookup table");
+    REQUIRE(stats.passes == 4);
     INFO("the shared mesh and material were each uploaded once");
     REQUIRE(stats.uploads == 2);
 }

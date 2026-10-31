@@ -57,8 +57,8 @@ TEST_CASE("The GL copy flattens every resource kind's bindings and zeroes the se
 {
     const auto gl = Resources(true);
 
-    INFO("the fixture's eight resources are all decorated");
-    REQUIRE(gl.size() == 8);
+    INFO("the fixture's eleven resources are all decorated: its own eight, and Frame.glsl's three sky textures");
+    REQUIRE(gl.size() == 11);
     for (const auto& [name, decoration] : gl)
     {
         INFO(name << "'s descriptor set is zeroed");
@@ -68,6 +68,10 @@ TEST_CASE("The GL copy flattens every resource kind's bindings and zeroes the se
     REQUIRE(gl.at("frame").binding == 0u);
     REQUIRE(gl.at("extra").binding == 4u);
     REQUIRE(gl.at("material").binding == 8u);
+    INFO("textures: Frame.glsl's sky textures (set 0 bindings 1, 2 and 3) are set 0's textures 0, 1 and 2");
+    REQUIRE(gl.at("fenrirSkyIrradiance").binding == 0u);
+    REQUIRE(gl.at("fenrirSkySpecular").binding == 1u);
+    REQUIRE(gl.at("fenrirBrdfLut").binding == 2u);
     INFO("textures: first, middle and second (set 2 bindings 1, 2 and 3) are set 2's textures 0, 1 and 2");
     REQUIRE(gl.at("first").binding == 8u);
     REQUIRE(gl.at("middle").binding == 9u);
@@ -111,8 +115,8 @@ TEST_CASE("Each binding is reflected with its set, kind and name", "[shader-comp
             variant.bindings, [&](const Fenrir::ShaderBinding& b) { return b.set == set && b.binding == binding; });
     };
 
-    INFO("eight bindings across both stages");
-    REQUIRE(variant.bindings.size() == 8);
+    INFO("eleven bindings across both stages, three of them Frame.glsl's sky textures");
+    REQUIRE(variant.bindings.size() == 11);
     INFO("set 0 binding 0 is the FrameData uniform block from Fenrir/Frame.glsl");
     REQUIRE(find(0, 0)->kind == Fenrir::ShaderBindingKind::UniformBuffer);
     REQUIRE(find(0, 0)->name == "FrameData");

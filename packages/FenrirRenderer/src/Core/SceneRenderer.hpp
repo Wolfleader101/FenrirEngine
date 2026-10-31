@@ -15,6 +15,7 @@
 #include "Core/BlockRing.hpp"
 #include "Core/RenderFeature.hpp"
 #include "Core/SceneFrame.hpp"
+#include "Core/SkyLighting.hpp"
 #include "Device/GraphicsDevice.hpp"
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
@@ -262,6 +263,7 @@ namespace Fenrir::Render
         {
             std::uint32_t revision = 0;
             Graphics::TextureHandle texture;
+            Graphics::TextureDesc desc;
             Graphics::BindingGroupHandle group;
         };
 
@@ -393,6 +395,15 @@ namespace Fenrir::Render
             Math::Vec3 sortPoint{0.0f};
         };
 
+        /** @brief One copy's frame set binding group (set 0), for the frame block and sky textures it was made with. */
+        struct FrameGroup
+        {
+            Graphics::BufferHandle block;
+            Graphics::TextureHandle irradiance;
+            Graphics::TextureHandle specular;
+            Graphics::BindingGroupHandle group;
+        };
+
         /** @brief One copy's draw set binding group (set 3), for the draw and palette buffers it was made with. */
         struct DrawGroup
         {
@@ -430,6 +441,10 @@ namespace Fenrir::Render
         void DestroyMaterial(MaterialEntry& material);
         void DestroyMesh(MeshEntry& mesh);
         [[nodiscard]] std::vector<ResolvedDraw> ResolveDraws();
+        /** @brief The frame set's group for frame `frameIndex`: its copy of the frame block, and the sky's light. */
+        [[nodiscard]] Graphics::BindingGroupHandle FrameGroupFor(std::uint64_t frameIndex);
+        /** @brief What the scene's Sky lights with: its prepared cube texture, else its colour. */
+        [[nodiscard]] SkySource SkySourceOf(const SceneLighting& lighting) const;
         /** @brief The draw set's group for frame `frameIndex`: its copies of the draw and palette buffers. */
         [[nodiscard]] Graphics::BindingGroupHandle DrawGroupFor(std::uint64_t frameIndex);
         [[nodiscard]] std::uint32_t NextId();
@@ -491,6 +506,10 @@ namespace Fenrir::Render
         std::unique_ptr<BlockRing> m_drawBlocks;
         /** @brief The palette buffer, one GpuBone a slot. */
         std::unique_ptr<BlockRing> m_paletteBlocks;
+        /** @brief The sky filtered into image-based lighting, which set 0 binds. */
+        std::unique_ptr<SkyLighting> m_skyLighting;
+        /** @brief Each copy's frame set group, by frame index modulo the copies. */
+        std::vector<FrameGroup> m_frameGroups;
         /** @brief Each copy's draw set group, by frame index modulo the copies. */
         std::vector<DrawGroup> m_drawGroups;
         /** @brief The Output pass's binding group for each SceneColor texture, while the texture lives. */

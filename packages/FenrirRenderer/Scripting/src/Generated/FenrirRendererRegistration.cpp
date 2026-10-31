@@ -26,7 +26,6 @@ namespace Fenrir::Generated
                 Fenrir::MakeSharedStruct<Fenrir::RendererStats>("Fenrir.Renderer.RendererStats"),
             };
             extension.resources = {
-                Fenrir::MakeSceneResource<Fenrir::AmbientLight>("Fenrir.Renderer.AmbientLight"),
                 Fenrir::MakeSceneResource<Fenrir::Sky>("Fenrir.Renderer.Sky"),
             };
             extension.functions = {

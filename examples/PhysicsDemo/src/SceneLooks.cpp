@@ -75,9 +75,7 @@ namespace PhysicsDemo
         sun.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(0.6f, Vec3(0.0f, 1.0f, 0.0f)) *
                                                     Fenrir::Math::AngleAxis(-1.1f, Vec3(1.0f, 0.0f, 0.0f));
         sun.AddComponent<Fenrir::DirectionalLight>();
-        Fenrir::AmbientLight ambient;
-        ambient.colour = Fenrir::Colour{0.2f, 0.2f, 0.2f, 1.0f};
-        scene.AddResource<Fenrir::AmbientLight>(ambient);
+        // The skybox is drawn behind the scene and lights it (ADR-0047).
         scene.AddResource<Fenrir::Sky>(Fenrir::CubemapSky{skybox.handle});
     }
 

@@ -338,13 +338,17 @@ namespace Fenrir
             return {ColourSky{}.colour, KeyOf(handle), intensity, rotation};
         }
 
-        /** @brief The active scene's light: the first DirectionalLight, warned once if there are more, and ambient. */
-        Render::SceneLighting ReadLighting(Detail::RendererState& state, Scene& scene)
+        /**
+         * @brief The active scene's light: the first DirectionalLight, warned once if there are more, and its Sky
+         * (ADR-0047), which every view is lit by whatever its camera's background.
+         */
+        Render::SceneLighting ReadLighting(Detail::RendererState& state, Scene& scene, const SceneSky& sky)
         {
             Render::SceneLighting lighting;
-            const AmbientLight ambient =
-                scene.GetResource<AmbientLight>() != nullptr ? *scene.GetResource<AmbientLight>() : AmbientLight{};
-            lighting.ambient = Math::Vec3(ambient.colour.r, ambient.colour.g, ambient.colour.b) * ambient.intensity;
+            lighting.sky = sky.image;
+            lighting.skyColour = Math::Vec3(sky.colour.r, sky.colour.g, sky.colour.b);
+            lighting.skyIntensity = sky.intensity;
+            lighting.skyRotation = sky.rotation;
 
             EntityList& entities = scene.GetEntityList();
             const std::array<ComponentType, 1> lights{ComponentType::Native<DirectionalLight>()};
@@ -1036,10 +1040,8 @@ namespace Fenrir
             {
                 Scene& scene = app.GetActiveScene();
                 ReleaseStale(*state.scene, *state.draw2D, *store);
-                frame.lighting = ReadLighting(state, scene);
                 const SceneSky sky = ReadSky(state, *store, scene);
-                frame.lighting.skyIntensity = sky.intensity;
-                frame.lighting.skyRotation = sky.rotation;
+                frame.lighting = ReadLighting(state, scene, sky);
                 frame.views = ReadViews(state, *store, scene, sky);
                 ReadDraws(state, *store, scene, frame);
                 debug = ReadDebug(state, scene);

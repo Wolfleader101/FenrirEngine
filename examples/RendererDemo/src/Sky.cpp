@@ -131,8 +131,7 @@ namespace RendererDemo
             light.AddComponent<Fenrir::Transform>().rot =
                 glm::quatLookAt(glm::normalize(Vec3(-0.35f, -0.35f, 1.0f)), Vec3(0.0f, 1.0f, 0.0f));
             light.AddComponent<Fenrir::DirectionalLight>();
-            scene.AddResource<Fenrir::AmbientLight>(Fenrir::AmbientLight{Fenrir::Colour{0.25f, 0.28f, 0.32f, 1.0f}});
-
+            // The sky lights the plinth as well as filling the background (ADR-0047).
             scene.AddResource<Fenrir::Sky>(SkyOf(state));
             scene.AddResource<SkyState>(state);
         }

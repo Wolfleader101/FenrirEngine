@@ -1,5 +1,5 @@
-// Fenrir/Frame.glsl: binding set 0 of every material shader, the frame (ADR-0024). Written once per frame by the
-// renderer, which declares the same layout in C++ and checks it against a shader's reflection in debug builds.
+// Fenrir/Frame.glsl: binding set 0 of every material shader, the frame (ADR-0024, ADR-0048). Written once per frame by
+// the renderer, which declares the same layout in C++ and checks it against a shader's reflection in debug builds.
 #ifndef FENRIR_FRAME_GLSL
 #define FENRIR_FRAME_GLSL
 
@@ -9,13 +9,21 @@ layout(set = 0, binding = 0, std140) uniform FrameData
     vec4 lightDirection;
     // rgb: the directional light's colour times its intensity, linear; black with no light. a unused.
     vec4 lightColour;
-    // rgb: the ambient light's colour times its intensity, linear. a unused.
-    vec4 ambient;
     // x: seconds since the app started; y: this frame's delta in seconds. zw unused.
     vec4 time;
-    // The scene's Sky (ADR-0047). x: its intensity; y and z: the cosine and sine of its rotation about +Y. w unused.
+    // The scene's Sky (ADR-0047). x: its intensity; y and z: the cosine and sine of its rotation about +Y; w: the
+    // highest mip level of fenrirSkySpecular, which holds roughness 1.
     vec4 sky;
 } frame;
+
+// The sky's diffuse light (ADR-0047): L2 spherical harmonics of its irradiance divided by pi, one coefficient a texel
+// along the only row (rgb), in the cube's frame. FenrirSkyIrradiance evaluates them.
+layout(set = 0, binding = 1) uniform sampler2D fenrirSkyIrradiance;
+// The sky's specular light: its cube prefiltered with GGX, one roughness step a mip level, from 0 at mip 0 to 1 at the
+// highest (frame.sky.w), in the cube's frame.
+layout(set = 0, binding = 2) uniform samplerCube fenrirSkySpecular;
+// The split sum's BRDF lookup table: red the scale and green the bias of f0, by N.V across and roughness down.
+layout(set = 0, binding = 3) uniform sampler2D fenrirBrdfLut;
 
 // The direction to sample the scene's Sky cubemap along for the world direction `direction`: the sky is turned by its
 // rotation, so this turns the other way.

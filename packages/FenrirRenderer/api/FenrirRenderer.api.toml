@@ -12,7 +12,6 @@ private-members = ["Fenrir::Entity"]
 "Fenrir::Camera" = "component"
 "Fenrir::DirectionalLight" = "component"
 "Fenrir::SkinnedMesh" = "component"
-"Fenrir::AmbientLight" = "scene-resource"
 "Fenrir::Sky" = "scene-resource"
 "Fenrir::RendererStats" = "shared-struct"
 

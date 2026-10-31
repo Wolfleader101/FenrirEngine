@@ -1,8 +1,10 @@
 #version 460
+#extension GL_GOOGLE_include_directive : require
 // The Panorama passes (ADR-0047): a panorama sky's flat image drawn into one face of its cube texture at one mip level,
 // one pass per face and level, once per image revision. Each texel takes the average of four points across it, each
 // sampled from the panorama's mip whose texels are as tall as the cube's at this level, so every level is filtered from
 // the panorama itself and no level is drawn from another.
+#include "Fenrir/CubeFaces.glsl"
 
 layout(set = 2, binding = 0, std140) uniform PanoramaParams
 {
@@ -23,29 +25,6 @@ const float Pi = 3.14159265358979;
 // The largest finite half float: brighter texels (a sun's core, in some panoramas) are clamped, not made infinite.
 const float HalfMax = 65504.0;
 
-// The world direction through the point `ndc` of face `face`, as GL and D3D lay a cubemap's faces out. Offscreen passes
-// put row 0 at the top (NDC +y), which is a face's first row.
-vec3 FaceDirection(uint face, vec2 ndc)
-{
-    float x = ndc.x;
-    float y = ndc.y;
-    switch (face)
-    {
-    case 0u:
-        return vec3(1.0, y, -x);
-    case 1u:
-        return vec3(-1.0, y, x);
-    case 2u:
-        return vec3(x, 1.0, -y);
-    case 3u:
-        return vec3(x, -1.0, y);
-    case 4u:
-        return vec3(x, y, 1.0);
-    default:
-        return vec3(-x, y, -1.0);
-    }
-}
-
 // Where the panorama holds the direction `direction`: its centre looks along -Z, u turns towards +X, and v = 0 (the top
 // row) looks up +Y.
 vec2 PanoramaPoint(vec3 direction)
@@ -60,7 +39,7 @@ void main()
     for (int i = 0; i < 4; ++i)
     {
         vec2 offset = vec2((i & 1) == 0 ? -0.5 : 0.5, (i & 2) == 0 ? -0.5 : 0.5) * params.halfTexel;
-        sum += textureLod(panorama, PanoramaPoint(FaceDirection(params.face, vNdc + offset)), params.lod).rgb;
+        sum += textureLod(panorama, PanoramaPoint(FenrirFaceDirection(params.face, vNdc + offset)), params.lod).rgb;
     }
     outColour = vec4(min(sum * 0.25, vec3(HalfMax)), 1.0);
 }

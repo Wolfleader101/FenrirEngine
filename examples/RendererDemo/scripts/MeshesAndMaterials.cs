@@ -13,7 +13,7 @@ namespace RendererDemo.Scripts;
 /// extensions (examples/RendererDemo/src/MeshesAndMaterials.cpp is its C++ twin, and the two must look the same). The
 /// imported textured box, primitives in builtin:unlit and builtin:lit, a metallic/roughness grid, the four blend modes
 /// and a double-sided quad, a user shader, the magenta fallback and an empty and a stale mesh; L turns the light, M
-/// changes the ambient, V hides the textured box and C edits a shared material.
+/// changes the sky's grey, V hides the textured box and C edits a shared material.
 /// </summary>
 [System(Phase.Update)]
 public sealed class MeshesAndMaterials : ISystem
@@ -22,8 +22,8 @@ public sealed class MeshesAndMaterials : ISystem
     public const uint Scene = 1;
 
     private const float Pi = 3.14159265f;
-    // The ambient light's intensities M cycles through: the default dim grey, bright, and off.
-    private static readonly float[] AmbientSteps = [1.0f, 4.0f, 0.0f];
+    // The greys of the scene's ColourSky, which lights it from every side, that M cycles through: dim, bright and black.
+    private static readonly float[] SkyGreys = [0.1f, 0.4f, 0.0f];
     // The shared material's colours C cycles through, sRGB.
     private static readonly uint[] SharedColours = [0xD4A017FF, 0x20B2AAFF, 0xC0203AFF];
 
@@ -34,7 +34,7 @@ public sealed class MeshesAndMaterials : ISystem
     private Entity[] turning = [Entity.None, Entity.None];
     private AssetHandle<Material> shared;
     private float lightYaw;
-    private int ambient;
+    private int sky;
     private int colour;
     private bool boxVisible;
     private float seconds;
@@ -63,9 +63,10 @@ public sealed class MeshesAndMaterials : ISystem
         }
         if (Keyboard.JustPressed(Key.M))
         {
-            ambient = (ambient + 1) % AmbientSteps.Length;
-            Resources.Get<AmbientLight>().Value.Intensity = AmbientSteps[ambient];
-            context.Log.Info($"M: the ambient light's intensity is {AmbientSteps[ambient]}");
+            sky = (sky + 1) % SkyGreys.Length;
+            float grey = SkyGreys[sky];
+            Resources.Get<Sky>().Value = new ColourSky { Colour = new Colour(grey, grey, grey) };
+            context.Log.Info($"M: the sky is a grey of {grey}");
         }
         if (Keyboard.JustPressed(Key.V))
         {
@@ -84,7 +85,7 @@ public sealed class MeshesAndMaterials : ISystem
     private void Spawn(in SystemContext context)
     {
         lightYaw = 0.5f;
-        ambient = 0;
+        sky = 0;
         colour = 0;
         boxVisible = true;
         seconds = 0.0f;
@@ -186,7 +187,7 @@ public sealed class MeshesAndMaterials : ISystem
         light = Entity.Create();
         light.Add(new Transform { Position = Vector3.Zero, Rotation = YawPitch(lightYaw, -0.8f), Scale = Vector3.One });
         light.Add(new DirectionalLight());
-        Resources.Insert(new AmbientLight());
+        Resources.Insert((Sky)new ColourSky { Colour = new Colour(SkyGreys[0], SkyGreys[0], SkyGreys[0]) });
     }
 
     // A new material on `shader` with its baseColour the sRGB colour `srgb`.

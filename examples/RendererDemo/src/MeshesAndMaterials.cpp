@@ -26,8 +26,9 @@ namespace RendererDemo
         using Material = Fenrir::AssetHandle<Fenrir::Material>;
 
         constexpr float Pi = 3.14159265f;
-        // The ambient light's intensities M cycles through: the default dim grey, bright, and off.
-        constexpr std::array<float, 3> AmbientSteps{1.0f, 4.0f, 0.0f};
+        // The greys of the scene's ColourSky, which lights it from every side, that M cycles through: dim, bright and
+        // black.
+        constexpr std::array<float, 3> SkyGreys{0.1f, 0.4f, 0.0f};
         // The shared material's colours C cycles through, sRGB.
         constexpr std::array<std::uint32_t, 3> SharedColours{0xD4A017FF, 0x20B2AAFF, 0xC0203AFF};
 
@@ -41,7 +42,7 @@ namespace RendererDemo
             /** @brief The material the row of three cubes shares. */
             Material shared;
             float lightYaw = 0.5f;
-            std::size_t ambient = 0;
+            std::size_t sky = 0;
             std::size_t colour = 0;
             bool boxVisible = true;
             float seconds = 0.0f;
@@ -260,7 +261,7 @@ namespace RendererDemo
             state.light = entities.CreateEntity();
             state.light.AddComponent<Fenrir::Transform>().rot = YawPitch(state.lightYaw, -0.8f);
             state.light.AddComponent<Fenrir::DirectionalLight>();
-            scene.AddResource<Fenrir::AmbientLight>();
+            scene.AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour{SkyGreys[0], SkyGreys[0], SkyGreys[0], 1.0f}});
             scene.AddResource<MaterialsState>(state);
         }
 
@@ -286,9 +287,10 @@ namespace RendererDemo
             }
             if (keyboard.JustPressed(Fenrir::Key::M))
             {
-                state->ambient = (state->ambient + 1) % AmbientSteps.size();
-                scene.GetResource<Fenrir::AmbientLight>()->intensity = AmbientSteps.at(state->ambient);
-                app.Logger()->Info("M: the ambient light's intensity is {}", AmbientSteps.at(state->ambient));
+                state->sky = (state->sky + 1) % SkyGreys.size();
+                const float grey = SkyGreys.at(state->sky);
+                *scene.GetResource<Fenrir::Sky>() = Fenrir::ColourSky{Fenrir::Colour{grey, grey, grey, 1.0f}};
+                app.Logger()->Info("M: the sky is a grey of {}", grey);
             }
             if (keyboard.JustPressed(Fenrir::Key::V))
             {
@@ -312,7 +314,7 @@ namespace RendererDemo
         FenrirDemo::DemoScene scene;
         scene.name = "Meshes and materials";
         scene.keyHelp =
-            "L: turn the light. M: the ambient light (dim, bright, off). V: show or hide the textured box. C: "
+            "L: turn the light. M: the sky (dim, bright, black). V: show or hide the textured box. C: "
             "the colour of the three cubes' shared material.";
         scene.keys = {Fenrir::Key::L, Fenrir::Key::M, Fenrir::Key::V, Fenrir::Key::C,
                       Fenrir::Key::L, Fenrir::Key::M, Fenrir::Key::V, Fenrir::Key::C};

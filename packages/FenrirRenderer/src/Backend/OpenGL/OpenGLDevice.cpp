@@ -29,8 +29,8 @@ namespace Fenrir::Graphics
         }
 
         /** @brief GL's internal format for each TextureFormat. */
-        constexpr std::array<GLenum, 6> internalFormats{
-            GL_RGBA8, GL_SRGB8_ALPHA8, GL_RGBA16F, GL_DEPTH_COMPONENT32F, GL_RGBA32F, GL_R8};
+        constexpr std::array<GLenum, 7> internalFormats{GL_RGBA8,   GL_SRGB8_ALPHA8, GL_RGBA16F, GL_DEPTH_COMPONENT32F,
+                                                        GL_RGBA32F, GL_R8,           GL_RG16F};
 
         /** @brief How WriteTexture's tightly packed texels of a format are laid out for GL. */
         struct UploadFormat
@@ -41,13 +41,14 @@ namespace Fenrir::Graphics
         };
 
         /** @brief The upload layout of each TextureFormat. */
-        constexpr std::array<UploadFormat, 6> uploadFormats{{
+        constexpr std::array<UploadFormat, 7> uploadFormats{{
             {GL_RGBA, GL_UNSIGNED_BYTE, 4},
             {GL_RGBA, GL_UNSIGNED_BYTE, 4},
             {GL_RGBA, GL_HALF_FLOAT, 8},
             {GL_DEPTH_COMPONENT, GL_FLOAT, 4},
             {GL_RGBA, GL_FLOAT, 16},
             {GL_RED, GL_UNSIGNED_BYTE, 1},
+            {GL_RG, GL_HALF_FLOAT, 4},
         }};
 
         /** @brief GL's wrap mode for each AddressMode. */
