@@ -37,6 +37,10 @@ namespace Fenrir::Render
         SkySpecular,
         /** @brief `builtin:brdf-lut`: the split sum's BRDF lookup table. */
         BrdfLut,
+        /** @brief `builtin:bloom-downsample`: a bloom level from the one above, Jimenez's 13-tap filter. */
+        BloomDownsample,
+        /** @brief `builtin:bloom-upsample`: a bloom level tent-filtered up over the one above, or over SceneColor. */
+        BloomUpsample,
     };
 
     /** @brief A built-in program's `builtin:` name and its embedded container's bytes. */

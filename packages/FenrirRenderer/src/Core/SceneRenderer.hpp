@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "Core/BlockRing.hpp"
+#include "Core/Bloom.hpp"
 #include "Core/RenderFeature.hpp"
 #include "Core/SceneFrame.hpp"
 #include "Core/SkyLighting.hpp"
@@ -76,8 +77,9 @@ namespace Fenrir::Render
      * its Sky cubemap or panorama's cube texture (sampled by the direction each pixel looks along, turned by the
      * sky's rotation and scaled by its intensity, from the frame block); `Transparent`, when there are `AlphaBlend` or
      * `Additive` items, depth tested without writing, drawn back to front by the view-space depth of each item's world
-     * origin (no order-independent transparency, so intersecting or nested transparent items can sort wrongly); and
-     * `Output`, which resolves SceneColor and clamps it into its viewport of its render target, the window's backbuffer
+     * origin (no order-independent transparency, so intersecting or nested transparent items can sort wrongly); the
+     * view's bloom in `PostProcess` (BloomChain), unless its intensity is 0; and `Output`, which resolves SceneColor,
+     * scales it by the view's exposure and tonemaps it into its viewport of its render target, the window's backbuffer
      * or an image. The first view into a target clears it to black. With no view the backbuffer is cleared to black.
      *
      * **Variants** (ADR-0024): the renderer picks the keys. A `Masked` material draws with its shader's `ALPHA_MASK`
@@ -508,6 +510,8 @@ namespace Fenrir::Render
         std::unique_ptr<BlockRing> m_paletteBlocks;
         /** @brief The sky filtered into image-based lighting, which set 0 binds. */
         std::unique_ptr<SkyLighting> m_skyLighting;
+        /** @brief Each view's bloom passes, in `PostProcess`. */
+        std::unique_ptr<BloomChain> m_bloom;
         /** @brief Each copy's frame set group, by frame index modulo the copies. */
         std::vector<FrameGroup> m_frameGroups;
         /** @brief Each copy's draw set group, by frame index modulo the copies. */

@@ -25,14 +25,17 @@ namespace
     constexpr GlProbe::Pixel Background{0.015f, 0.015f, 0.015f, 1.0f};
     constexpr GlProbe::Pixel White{1.0f, 1.0f, 1.0f, 1.0f};
 
-    /** @brief GlScene with FenrirSkeleton installed, and a camera entity at the origin looking along -Z. */
+    /**
+     * @brief GlScene with FenrirSkeleton installed, and a camera entity at the origin looking along -Z, its bloom off
+     * as GlScene::AddCamera's is.
+     */
     class GlSkinScene : public GlTest::GlScene
     {
       public:
         GlSkinScene()
         {
             camera = app.GetActiveScene().GetEntityList().CreateEntity();
-            camera.AddComponent<Fenrir::Camera>();
+            camera.AddComponent<Fenrir::Camera>().bloom.intensity = 0.0f;
         }
 
         Fenrir::Skeletons skeletons{Fenrir::Skeletons::Install(app)};

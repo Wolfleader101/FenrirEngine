@@ -62,6 +62,15 @@ namespace Fenrir::Render
         std::optional<Math::Vec3> sortPoint;
     };
 
+    /** @brief A view's bloom (ADR-0049), the core's copy of Camera::bloom. */
+    struct BloomSettings
+    {
+        /** @brief How much of the bloom SceneColor is mixed with, in [0, 1]; 0 or less adds no pass. */
+        float intensity = 0.04f;
+        /** @brief How far the bloom spreads, in [0, 1]: how much each wider level adds against the one above it. */
+        float radius = 0.7f;
+    };
+
     /**
      * @brief One camera's view of the scene (ADR-0026): drawn into its own scene targets at its viewport's size, then
      * written by Output into its viewport of its render target.
@@ -91,6 +100,8 @@ namespace Fenrir::Render
         float exposure = 0.0f;
         /** @brief How Output maps the exposed colour into its target (Camera::tonemapper). */
         Tonemapper tonemapper = Tonemapper::AgX;
+        /** @brief How its `PostProcess` bloom mixes into SceneColor (Camera::bloom). */
+        BloomSettings bloom;
     };
 
     /** @brief The light every view of the scene is lit by, in the frame set (`Fenrir/Frame.glsl`). */
