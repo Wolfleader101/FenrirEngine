@@ -1,6 +1,7 @@
-// Point and spot lights on the null backend through RendererProbe (the spec's seam 1; ADR-0048): every light that can
-// light anything reaches the frame's light buffer at set 0 binding 4, with its count in the frame block, a hundred of
-// them draw, and SpawnModel turns a glTF's KHR_lights_punctual lights into the components.
+// Point, spot and rect lights on the null backend through RendererProbe (the spec's seam 1; ADR-0048): every light that
+// can light anything reaches the frame's light buffer at set 0 binding 4, with its count in the frame block, a hundred
+// of them draw, the rect lights' LTC tables are bound at bindings 5 and 6, and SpawnModel turns a glTF's
+// KHR_lights_punctual lights into the components.
 
 #include <array>
 #include <cmath>
@@ -28,7 +29,7 @@ using RendererTest::UintAt;
 namespace
 {
     /** @brief A light buffer record's size, as `Fenrir/Frame.glsl` declares FenrirLight (std430). */
-    constexpr std::size_t LightRecord = 64;
+    constexpr std::size_t LightRecord = 80;
     /** @brief Where the frame block's `lights` uvec4 sits, after five vec4s. */
     constexpr std::size_t LightCountOffset = 80;
 
@@ -40,6 +41,9 @@ namespace
         Vec3 colour{0.0f};
         std::uint32_t kind = 0;
         Vec3 direction{0.0f};
+        Vec3 halfWidth{0.0f};
+        Vec3 halfHeight{0.0f};
+        std::uint32_t twoSided = 0;
     };
 
     /** @brief What the first Opaque draw of the last frame binds at set 0. */
@@ -62,7 +66,7 @@ namespace
     std::vector<LightRecordRead> LightRecords(const RendererTestApp& test, std::size_t count)
     {
         const std::vector<BindingGroupEntry> set = FrameSet(test);
-        REQUIRE(set.size() == 5);
+        REQUIRE(set.size() == 7);
         REQUIRE(set[4].binding == 4);
         const auto bytes = RendererProbe::Bytes(test.Device(), set[4].buffer);
         REQUIRE(bytes.size() >= count * LightRecord);
@@ -76,6 +80,9 @@ namespace
             record.colour = {FloatAt(bytes, at + 16), FloatAt(bytes, at + 20), FloatAt(bytes, at + 24)};
             record.kind = UintAt(bytes, at + 28);
             record.direction = {FloatAt(bytes, at + 32), FloatAt(bytes, at + 36), FloatAt(bytes, at + 40)};
+            record.halfWidth = {FloatAt(bytes, at + 48), FloatAt(bytes, at + 52), FloatAt(bytes, at + 56)};
+            record.halfHeight = {FloatAt(bytes, at + 64), FloatAt(bytes, at + 68), FloatAt(bytes, at + 72)};
+            record.twoSided = UintAt(bytes, at + 76);
             records.push_back(record);
         }
         return records;
@@ -102,7 +109,8 @@ namespace
     }
 } // namespace
 
-TEST_CASE("Set 0 binds the light buffer at binding 4, and a scene without lights has a count of 0",
+TEST_CASE("Set 0 binds the light buffer at binding 4 and the LTC tables at 5 and 6, and a scene without lights has a "
+          "count of 0",
           "[renderer][lights]")
 {
     RendererTestApp test;
@@ -110,9 +118,14 @@ TEST_CASE("Set 0 binds the light buffer at binding 4, and a scene without lights
     test.Frame();
 
     const std::vector<BindingGroupEntry> set = FrameSet(test);
-    REQUIRE(set.size() == 5);
+    REQUIRE(set.size() == 7);
     REQUIRE(set[4].binding == 4);
     REQUIRE_FALSE(set[4].buffer.IsEmpty());
+    REQUIRE(set[5].binding == 5);
+    REQUIRE(set[6].binding == 6);
+    REQUIRE_FALSE(set[5].texture.IsEmpty());
+    REQUIRE_FALSE(set[6].texture.IsEmpty());
+    REQUIRE(set[5].texture != set[6].texture);
     REQUIRE(LightCount(test) == 0);
     REQUIRE(RendererProbe::StaleUses(test.Device()).empty());
 }
@@ -199,6 +212,55 @@ TEST_CASE("A hundred lights all reach the light buffer and the scene draws, grow
     REQUIRE(test.Draws().size() == 1);
     REQUIRE(RendererProbe::StaleUses(test.Device()).empty());
     REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A rect light reaches the light buffer after the point and spot lights, spanning its world X and Y and "
+          "facing its world -Z",
+          "[renderer][lights][rect]")
+{
+    RendererTestApp test;
+    AddLitCube(test);
+    // Turned a quarter about +Y and scaled, under a moved parent: its width lies along world -Z, its height along +Y,
+    // it faces world -X, and the scale stretches nothing.
+    Entity parent = test.ActiveScene().GetEntityList().CreateEntity();
+    parent.GetComponent<Fenrir::Transform>().pos = {0.0f, 2.0f, 0.0f};
+    Entity rect = test.ActiveScene().GetEntityList().CreateEntity();
+    parent.AddChild(rect);
+    rect.GetComponent<Fenrir::Transform>().pos = {1.0f, 0.0f, 0.0f};
+    rect.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(1.5707964f, Vec3(0.0f, 1.0f, 0.0f));
+    rect.GetComponent<Fenrir::Transform>().scale = Vec3(3.0f);
+    rect.AddComponent<Fenrir::RectLight>(Fenrir::RectLight{{1.0f, 0.5f, 0.25f, 1.0f}, 2.0f, 4.0f, 1.0f, true, 6.0f});
+    AddPointLight(test, {5.0f, 0.0f, 0.0f});
+    test.Frame();
+
+    REQUIRE(LightCount(test) == 2);
+    const std::vector<LightRecordRead> records = LightRecords(test, 2);
+    REQUIRE(records[0].kind == 0);
+    REQUIRE(records[1].kind == 2);
+    REQUIRE(Near(records[1].position, {1.0f, 2.0f, 0.0f}));
+    REQUIRE(Near(records[1].colour, {2.0f, 1.0f, 0.5f}));
+    REQUIRE(records[1].range == 6.0f);
+    REQUIRE(Near(records[1].direction, {-1.0f, 0.0f, 0.0f}));
+    REQUIRE(Near(records[1].halfWidth, {0.0f, 0.0f, -2.0f}));
+    REQUIRE(Near(records[1].halfHeight, {0.0f, 0.5f, 0.0f}));
+    REQUIRE(records[1].twoSided == 1);
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A rect light with no width or height does not reach the light buffer", "[renderer][lights][rect]")
+{
+    RendererTestApp test;
+    AddLitCube(test);
+    Entity flat = test.ActiveScene().GetEntityList().CreateEntity();
+    flat.AddComponent<Fenrir::RectLight>(Fenrir::RectLight{Fenrir::Colour::White, 1.0f, 0.0f, 1.0f, false, 5.0f});
+    Entity thin = test.ActiveScene().GetEntityList().CreateEntity();
+    thin.AddComponent<Fenrir::RectLight>(Fenrir::RectLight{Fenrir::Colour::White, 1.0f, 1.0f, 0.0f, false, 5.0f});
+    Entity lit = test.ActiveScene().GetEntityList().CreateEntity();
+    lit.AddComponent<Fenrir::RectLight>();
+    test.Frame();
+
+    REQUIRE(LightCount(test) == 1);
+    REQUIRE(LightRecords(test, 1)[0].kind == 2);
 }
 
 TEST_CASE("Moving a light moves its record the next frame", "[renderer][lights]")

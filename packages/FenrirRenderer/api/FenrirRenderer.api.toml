@@ -13,6 +13,7 @@ private-members = ["Fenrir::Entity"]
 "Fenrir::DirectionalLight" = "component"
 "Fenrir::PointLight" = "component"
 "Fenrir::SpotLight" = "component"
+"Fenrir::RectLight" = "component"
 "Fenrir::SkinnedMesh" = "component"
 "Fenrir::Sky" = "scene-resource"
 "Fenrir::SkyLight" = "scene-resource"

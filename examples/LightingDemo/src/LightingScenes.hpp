@@ -23,4 +23,11 @@ namespace LightingDemo
      * intensities and range.
      */
     [[nodiscard]] FenrirDemo::DemoScene ManyLights();
+
+    /**
+     * @brief Showroom: a dark room whose polished floor turns rougher from left to right, lit by rect lights (a neon
+     * strip, a panel and a two-sided sign), with the fetched helmets on plinths; the panel sizes, dims and turns each
+     * light one- or two-sided.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene Showroom();
 } // namespace LightingDemo

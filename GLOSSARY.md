@@ -528,6 +528,10 @@ Bright pixels bleeding light into their surroundings: a view's SceneColor blurre
 A `PointLight` or `SpotLight`: light from one point, falling with the square of the distance and windowed to zero at its `range`, any number per scene, written each frame into set 0's light buffer that `Fenrir/Lighting.glsl` loops over (ADR-0048). The name is glTF's (`KHR_lights_punctual`).
 *Avoid:* local light, dynamic light (the sun moves too), area light (a rect light, which has a size).
 
+**Rect light**
+A `RectLight`: a glowing rectangle centred on its entity, one- or two-sided, whose light is its radiance over its area, shaded with linearly transformed cosines so its highlights take its shape and blur with roughness, unshadowed, any number per scene, written into the same light buffer after the punctual lights (ADR-0048).
+*Avoid:* area light (the general term: discs, tubes and spheres are left for later), quad light, emissive light (an emissive material lights nothing).
+
 **Golden image**
 A small PNG committed beside the GL tests, the frame a test scene should draw, which the test's frame is compared with under a perceptual tolerance. It changes only when the tests are run with `FENRIR_UPDATE_GOLDENS=1` (ADR-0049).
 *Avoid:* snapshot, reference image, screenshot test.

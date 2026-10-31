@@ -531,6 +531,32 @@ namespace Fenrir
         bool castShadows = false;
     };
 
+    /**
+     * @brief A glowing rectangle centred on its entity, `width` along its world +X and `height` along its world +Y,
+     * shining from its face towards its world -Z (and from its back too when `twoSided`), any number per scene
+     * (ADR-0048). Its highlights take its shape, blurring with the surface's roughness: it is shaded with linearly
+     * transformed cosines, and casts no shadows. Its intensity is its radiance: a white rect light of intensity 1
+     * filling the view of a white rough face lights it about 1, and one subtending less lights it less, as the sky
+     * does. Its light is windowed smoothly to zero at `range` from the rectangle. The rectangle itself is not drawn:
+     * give it an emissive mesh to see it. A light that can light nothing (range, intensity, width or height 0, or
+     * black) is skipped.
+     */
+    struct RectLight
+    {
+        /** @brief Linear. White by default (Colour::White). */
+        Colour colour{1.0f, 1.0f, 1.0f, 1.0f};
+        /** @brief A plain multiplier on the colour. */
+        float intensity = 1.0f;
+        /** @brief Its size along its entity's world +X, in world units; the entity's scale does not stretch it. */
+        float width = 1.0f;
+        /** @brief Its size along its entity's world +Y, in world units. */
+        float height = 1.0f;
+        /** @brief Whether it shines from its back face as well as its front. */
+        bool twoSided = false;
+        /** @brief The distance from the rectangle, in world units, at which its light has fallen to zero. */
+        float range = 10.0f;
+    };
+
     /** @brief A sky of one colour, which lights every surface with that colour from every side (ADR-0047). */
     struct ColourSky
     {

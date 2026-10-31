@@ -84,6 +84,12 @@ TEST_CASE("C#'s new PointLight() has C++'s Fenrir::PointLight{} defaults, field 
     CheckDefaults<Fenrir::PointLight>(Fenrir::ScriptingProbe::Component(app.scripting), "PointLight");
 }
 
+TEST_CASE("C#'s new RectLight() has C++'s Fenrir::RectLight{} defaults, field by field", "[renderer][scripting][bindings]")
+{
+    Fenrir::Testing::RendererScriptingApp app;
+    CheckDefaults<Fenrir::RectLight>(Fenrir::ScriptingProbe::Component(app.scripting), "RectLight");
+}
+
 TEST_CASE("C#'s new RendererStats() has C++'s Fenrir::RendererStats{} defaults, field by field", "[renderer][scripting][bindings]")
 {
     Fenrir::Testing::RendererScriptingApp app;

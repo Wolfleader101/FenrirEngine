@@ -20,6 +20,7 @@ namespace Fenrir::Generated
                 Fenrir::MakeComponent<Fenrir::DirectionalLight>("Fenrir.Renderer.DirectionalLight"),
                 Fenrir::MakeComponent<Fenrir::MeshRenderer>("Fenrir.Renderer.MeshRenderer"),
                 Fenrir::MakeComponent<Fenrir::PointLight>("Fenrir.Renderer.PointLight"),
+                Fenrir::MakeComponent<Fenrir::RectLight>("Fenrir.Renderer.RectLight"),
                 Fenrir::MakeComponent<Fenrir::SkinnedMesh>("Fenrir.Renderer.SkinnedMesh"),
                 Fenrir::MakeComponent<Fenrir::SpotLight>("Fenrir.Renderer.SpotLight"),
             };
