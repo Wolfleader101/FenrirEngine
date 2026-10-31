@@ -32,6 +32,13 @@ public partial struct Camera : IComponent
     /// the window, not the view, and draw either way.
     /// </summary>
     public bool DrawDebug = true;
+    /// <summary>
+    /// The view's exposure in EV stops: its Output pass multiplies the linear colour by 2^exposure before the
+    /// tonemapper, so each +1 doubles it. 0 by default.
+    /// </summary>
+    public float Exposure = 0;
+    /// <summary>How the view's Output pass maps its HDR colour into what its target stores (ADR-0049).</summary>
+    public Tonemapper Tonemapper = Tonemapper.AgX;
 
     public Camera()
     {

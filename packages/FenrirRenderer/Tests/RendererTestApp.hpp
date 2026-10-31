@@ -245,6 +245,15 @@ namespace RendererTest
         return value;
     }
 
+    /** @brief The 32-bit unsigned integer at byte `offset` of `bytes`. */
+    inline std::uint32_t UintAt(const std::vector<std::byte>& bytes, std::size_t offset)
+    {
+        std::uint32_t value = 0;
+        REQUIRE(offset + sizeof(value) <= bytes.size());
+        std::memcpy(&value, std::span(bytes).subspan(offset).data(), sizeof(value));
+        return value;
+    }
+
     /** @brief The renderer on the null backend in an App with FenrirAssets and no window (the spec's seam 1). */
     inline Fenrir::RendererConfig NullBackend()
     {

@@ -44,6 +44,10 @@ FENRIR_DEMO_KEYS=1` runs one scene through its keys.
 
 ## Hand checks
 
+Every scene draws through the camera's default tonemapper, AgX (ADR-0049), checked by hand in Playback on 2026-10-31:
+the human, the floor and the world text read as before, a little softer and less saturated, as AgX keeps colours of 1
+short of white.
+
 Run each scene on OpenGL (`FENRIR_DEMO_SCENE=<scene>`, or PageDown through the list) and check:
 
 - **Playback:** the Quaternius human walks forward a step or two and starts again at each wrap, with `Step.A` and

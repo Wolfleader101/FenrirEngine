@@ -402,6 +402,28 @@ namespace Fenrir
     };
 
     /**
+     * @brief How a view's Output pass maps its linear HDR colour, after the exposure, into the [0, 1] its render target
+     * stores, which the target then encodes as sRGB (ADR-0049).
+     */
+    enum class Tonemapper : std::uint8_t
+    {
+        /** @brief Each channel clamped to [0, 1]: what is over 1 is lost. For tests and exact colours. */
+        None,
+        /**
+         * @brief AgX, as Blender and Filament fit it: bright colours desaturate towards white as they would on film,
+         * and mid grey shows a little brighter than with None. The default.
+         */
+        AgX,
+        /**
+         * @brief Khronos PBR Neutral: colours up to about 0.76 shown as they are (less a small offset in the darks),
+         * only the highlights compressed, so a material's base colour reads true.
+         */
+        PbrNeutral,
+        /** @brief ACES, through Stephen Hill's fit of its reference rendering and sRGB output: contrasty, saturated. */
+        Aces,
+    };
+
+    /**
      * @brief Makes a view of the active scene from its entity, looking along the entity's local -Z with +Y up
      * (ADR-0026). Plain data. Every enabled camera in the active scene draws one view a frame, into its viewport of its
      * render target. Views into one target draw by `order`, lowest first, and ties by entity id, logged once. Each view
@@ -426,6 +448,13 @@ namespace Fenrir
          * belong to the window, not the view, and draw either way.
          */
         bool drawDebug = true;
+        /**
+         * @brief The view's exposure in EV stops: its Output pass multiplies the linear colour by 2^exposure before
+         * the tonemapper, so each +1 doubles it. 0 by default.
+         */
+        float exposure = 0.0f;
+        /** @brief How the view's Output pass maps its HDR colour into what its target stores (ADR-0049). */
+        Tonemapper tonemapper = Tonemapper::AgX;
     };
 
     /**

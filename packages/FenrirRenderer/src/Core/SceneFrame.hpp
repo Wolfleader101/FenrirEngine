@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 
+#include "Core/Tonemapping.hpp"
 #include "Device/CommandList.hpp"
 #include "Device/GraphicsSurface.hpp"
 #include "FenrirAssets/AssetHandle.hpp"
@@ -86,6 +87,10 @@ namespace Fenrir::Render
         Graphics::PixelRect viewport;
         /** @brief Whether the view draws the scene's debug drawing in its `Debug` stage (Camera::drawDebug). */
         bool drawDebug = true;
+        /** @brief The view's exposure in EV stops (Camera::exposure): Output scales by 2^exposure. */
+        float exposure = 0.0f;
+        /** @brief How Output maps the exposed colour into its target (Camera::tonemapper). */
+        Tonemapper tonemapper = Tonemapper::AgX;
     };
 
     /** @brief The light every view of the scene is lit by, in the frame block (`Fenrir/Frame.glsl`). */

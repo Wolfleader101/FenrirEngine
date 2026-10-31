@@ -1,9 +1,10 @@
 // Cameras on the null backend (the spec's seam 1): several views in order with their viewport rectangles, image
-// targets ordered before the views that sample them, self-sampling replaced, skipped cameras and MSAA (ADR-0026,
-// ADR-0019).
+// targets ordered before the views that sample them, self-sampling replaced, skipped cameras, MSAA, and each camera's
+// exposure and tonemapper reaching its Output pass (ADR-0026, ADR-0019, ADR-0049).
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -69,6 +70,25 @@ namespace
             }
         }
         return textures;
+    }
+    /** @brief What an Output pass's block at set 1 holds: the exposure's scale, 2^EV, and the tonemapper's number. */
+    struct OutputSettings
+    {
+        float scale = 0.0f;
+        std::uint32_t tonemapper = 0;
+    };
+
+    /** @brief The block an Output pass binds at set 1, as builtin:output declares it. */
+    OutputSettings SettingsOf(const RendererTestApp& test, const PassRecord& output)
+    {
+        const auto entries = RendererProbe::Entries(test.Device(), output.groups.at(1));
+        REQUIRE(entries.size() == 1);
+        const auto bytes = RendererProbe::Bytes(test.Device(), entries[0].buffer);
+        const std::size_t at = entries[0].offset;
+        OutputSettings settings;
+        settings.scale = RendererTest::FloatAt(bytes, at);
+        settings.tonemapper = RendererTest::UintAt(bytes, at + 4);
+        return settings;
     }
 } // namespace
 
@@ -311,6 +331,49 @@ TEST_CASE("A camera's colour background is what its Background pass draws", "[re
     REQUIRE(std::abs(RendererTest::FloatAt(bytes, at) - 0.1f) < 1e-6f);
     REQUIRE(std::abs(RendererTest::FloatAt(bytes, at + 4) - 0.2f) < 1e-6f);
     REQUIRE(std::abs(RendererTest::FloatAt(bytes, at + 8) - 0.3f) < 1e-6f);
+}
+
+TEST_CASE("Each camera's exposure and tonemapper reach its view's Output pass", "[renderer][cameras][tonemapping]")
+{
+    RendererTestApp test;
+    // Left: the defaults. Right: two stops over, through PBR Neutral.
+    AddCamera(test, 0, {0.0f, 0.0f, 0.5f, 1.0f});
+    Fenrir::Camera& right = AddCamera(test, 1, {0.5f, 0.0f, 0.5f, 1.0f}).GetComponent<Fenrir::Camera>();
+    right.exposure = 2.0f;
+    right.tonemapper = Fenrir::Tonemapper::PbrNeutral;
+
+    test.Frame();
+    const std::vector<PassRecord> outputs = RendererTest::Labelled(test.Passes(), "Output");
+
+    // The tonemapper's number is builtin:output's: 0 None, 1 AgX, 2 PbrNeutral, 3 Aces.
+    REQUIRE(outputs.size() == 2);
+    const OutputSettings left = SettingsOf(test, outputs[0]);
+    const OutputSettings rightSettings = SettingsOf(test, outputs[1]);
+    INFO("the default camera's Output scales by 1 (0 EV) and tonemaps with AgX");
+    REQUIRE(left.scale == 1.0f);
+    REQUIRE(left.tonemapper == 1);
+    INFO("the other camera's Output scales by 4 (+2 EV) and tonemaps with PBR Neutral");
+    REQUIRE(std::abs(rightSettings.scale - 4.0f) < 1e-6f);
+    REQUIRE(rightSettings.tonemapper == 2);
+}
+
+TEST_CASE("Changing a camera's tonemapper changes its Output pass's from the next frame",
+          "[renderer][cameras][tonemapping]")
+{
+    RendererTestApp test;
+    Fenrir::Entity entity = AddCamera(test, 0);
+    test.Frame();
+    entity.GetComponent<Fenrir::Camera>().tonemapper = Fenrir::Tonemapper::Aces;
+    entity.GetComponent<Fenrir::Camera>().exposure = -1.0f;
+
+    test.Frame();
+    const std::vector<PassRecord> outputs = RendererTest::Labelled(test.Passes(), "Output");
+
+    REQUIRE(outputs.size() == 1);
+    const OutputSettings settings = SettingsOf(test, outputs[0]);
+    INFO("the Output pass scales by 0.5 (-1 EV) and tonemaps with ACES (3)");
+    REQUIRE(std::abs(settings.scale - 0.5f) < 1e-6f);
+    REQUIRE(settings.tonemapper == 3);
 }
 
 TEST_CASE("With msaa 4 the scene targets have 4 samples and Output resolves them", "[renderer][cameras][msaa]")

@@ -63,6 +63,18 @@ namespace Fenrir::Render
             Math::Vec4 colour;
         };
 
+        /** @brief The Output block, as `builtin:output` declares it at set 1 (std140). */
+        struct OutputBlock
+        {
+            /** @brief 2^exposure (ADR-0049). */
+            float exposureScale = 1.0f;
+            /** @brief The Tonemapper's value, which the shader switches on. */
+            std::uint32_t tonemapper = 0;
+            std::uint32_t padding0 = 0;
+            std::uint32_t padding1 = 0;
+        };
+        static_assert(sizeof(OutputBlock) == 16);
+
         /** @brief One binding of a fixed set as the renderer declares it: a block's kind and size (0: any size). */
         struct FixedBinding
         {
@@ -569,6 +581,7 @@ namespace Fenrir::Render
     {
         m_frameLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Frame");
         m_viewLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "View");
+        m_outputBlockLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Output");
         m_drawLayout = m_device.CreateBindingGroupLayout(
             {{{0, ShaderBindingKind::StorageBuffer}, {1, ShaderBindingKind::StorageBuffer}}}, "Draw");
 
@@ -636,12 +649,15 @@ namespace Fenrir::Render
         // With MSAA, Output reads every sample of SceneColor and averages them: the resolve.
         constexpr std::array<std::string_view, 1> msaa{"MSAA"};
         const ShaderVariant* output = m_samples > 1 ? m_output.FindVariant(msaa) : BaseVariant(m_output);
-        m_outputPipeline = MakeInternalPipeline(m_output, output, m_outputLayout, TextureFormat::Rgba8Srgb, false, 1);
+        m_outputPipeline = MakeInternalPipeline(m_output, output, m_outputLayout, TextureFormat::Rgba8Srgb, false, 1,
+                                                m_outputBlockLayout);
 
         m_frameBlocks = std::make_unique<BlockRing>(m_device, m_frameLayout, false, sizeof(FrameBlock), "Frame");
         m_viewBlocks = std::make_unique<BlockRing>(m_device, m_viewLayout, false, sizeof(ViewBlock), "View");
         m_backgroundBlocks =
             std::make_unique<BlockRing>(m_device, m_backgroundLayout, false, sizeof(BackgroundBlock), "Background");
+        m_outputBlocks =
+            std::make_unique<BlockRing>(m_device, m_outputBlockLayout, false, sizeof(OutputBlock), "Output");
         // The draw set's groups bind both of these rings, so the rings make none of their own.
         m_drawBlocks =
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true, sizeof(DrawBlock), "Draw");
@@ -699,6 +715,7 @@ namespace Fenrir::Render
         m_frameBlocks.reset();
         m_viewBlocks.reset();
         m_backgroundBlocks.reset();
+        m_outputBlocks.reset();
         m_drawBlocks.reset();
         m_paletteBlocks.reset();
         m_device.Destroy(m_fallback.materialLayout);
@@ -708,6 +725,7 @@ namespace Fenrir::Render
         m_device.Destroy(m_backgroundLayout);
         m_device.Destroy(m_skyLayout);
         m_device.Destroy(m_outputLayout);
+        m_device.Destroy(m_outputBlockLayout);
         m_device.Destroy(m_frameLayout);
         m_device.Destroy(m_viewLayout);
         m_device.Destroy(m_drawLayout);
@@ -746,12 +764,12 @@ namespace Fenrir::Render
     PipelineHandle SceneRenderer::MakeInternalPipeline(const ShaderContainer& container, const ShaderVariant* variant,
                                                        BindingGroupLayoutHandle layout, TextureFormat colour,
                                                        bool depthTested, std::uint32_t samples,
-                                                       BindingGroupLayoutHandle viewLayout)
+                                                       BindingGroupLayoutHandle setOneLayout)
     {
         PipelineDesc desc;
         desc.shader = variant;
         desc.samples = samples;
-        desc.sets.at(1) = viewLayout;
+        desc.sets.at(1) = setOneLayout;
         desc.sets.at(MaterialSet) = layout;
         desc.cull = CullMode::None;
         desc.colourFormats = {colour};
@@ -1611,6 +1629,7 @@ namespace Fenrir::Render
         const std::vector<ViewRequest>& views = m_frame.views;
         m_viewBlocks->Reserve(views.size());
         m_backgroundBlocks->Reserve(views.size());
+        m_outputBlocks->Reserve(views.size());
 
         // The render target images this frame's draws sample, each imported into the graph once.
         std::set<AssetKey> sampled;
@@ -1713,6 +1732,11 @@ namespace Fenrir::Render
             const BackgroundBlock backgroundBlock{
                 Math::Vec4(request.background.r, request.background.g, request.background.b, request.background.a)};
             m_backgroundBlocks->Write(frameIndex, v, BytesOf(backgroundBlock));
+            OutputBlock outputBlock;
+            outputBlock.exposureScale = ExposureScale(request.exposure);
+            outputBlock.tonemapper = static_cast<std::uint32_t>(request.tonemapper);
+            m_outputBlocks->Write(frameIndex, v, BytesOf(outputBlock));
+            const BindingGroupHandle outputBlockGroup = m_outputBlocks->Group(frameIndex, v);
             const BindingGroupHandle viewGroup = m_viewBlocks->Group(frameIndex, v);
             // The Sky cubemap's pipeline and group, when the view draws one that is prepared; else its colour's.
             BindingGroupHandle backgroundGroup = m_backgroundBlocks->Group(frameIndex, v);
@@ -1823,10 +1847,11 @@ namespace Fenrir::Render
                     pass.Sample(sceneColour);
                     pass.ColourAttachment(target, load, {0.0f, 0.0f, 0.0f, 1.0f});
                 },
-                [this, sceneColour, rect](PassContext& context) {
+                [this, sceneColour, rect, outputBlockGroup](PassContext& context) {
                     PassEncoder& encoder = context.Encoder();
                     encoder.SetViewport(rect);
                     encoder.SetPipeline(m_outputPipeline);
+                    encoder.SetBindingGroup(1, outputBlockGroup);
                     encoder.SetBindingGroup(MaterialSet, OutputGroup(context.Texture(sceneColour)));
                     encoder.Draw({.vertexCount = 3});
                 });

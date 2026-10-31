@@ -61,6 +61,16 @@ namespace Fenrir
             return static_cast<Vsync>(mode);
         }
 
+        static_assert(static_cast<int>(Tonemapper::None) == static_cast<int>(Render::Tonemapper::None) &&
+                      static_cast<int>(Tonemapper::AgX) == static_cast<int>(Render::Tonemapper::AgX) &&
+                      static_cast<int>(Tonemapper::PbrNeutral) == static_cast<int>(Render::Tonemapper::PbrNeutral) &&
+                      static_cast<int>(Tonemapper::Aces) == static_cast<int>(Render::Tonemapper::Aces));
+
+        Render::Tonemapper ToCore(Tonemapper tonemapper)
+        {
+            return static_cast<Render::Tonemapper>(tonemapper);
+        }
+
         /** @brief Whether the shader's GPU side is ready: prepared now if it is new or changed. False if stale. */
         bool PrepareShader(Render::SceneRenderer& scene, const AssetStore& store, AssetHandle<Shader> handle)
         {
@@ -536,6 +546,8 @@ namespace Fenrir
                 view.target = KeyOf(resolved.image);
                 view.viewport = resolved.pixels;
                 view.drawDebug = camera.drawDebug;
+                view.exposure = camera.exposure;
+                view.tonemapper = ToCore(camera.tonemapper);
                 candidates.push_back(candidate);
             });
 

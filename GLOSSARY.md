@@ -512,6 +512,18 @@ The rectangle of its render target a view draws into, given as fractions of the 
 Where a view's output goes: a window, or an image asset made with a size but no pixels, which materials and the overlay sample like any image (ADR-0026).
 *Avoid:* render texture (no separate type), framebuffer, scene targets (a view's own intermediate colour and depth).
 
+**Exposure**
+A camera's brightness setting in EV stops, applied in its view's `Output` before the tonemapper: the linear colour times 2^exposure, so each +1 doubles it (ADR-0049).
+*Avoid:* gain, brightness, EV (alone, as the setting's name).
+
+**Tonemapper**
+How a view's `Output` maps its exposed HDR colour into the [0, 1] its render target stores: `AgX` (the default), `PbrNeutral`, `Aces`, or `None`, which clamps (ADR-0049).
+*Avoid:* tone curve, colour grading (a look applied on top, which FenrirRenderer does not have), tonemapping operator.
+
+**Golden image**
+A small PNG committed beside the GL tests, the frame a test scene should draw, which the test's frame is compared with under a perceptual tolerance. It changes only when the tests are run with `FENRIR_UPDATE_GOLDENS=1` (ADR-0049).
+*Avoid:* snapshot, reference image, screenshot test.
+
 **Sky**
 The scene resource saying what is drawn behind everything and what light reaches every surface from all around: a solid colour, a skybox or a panorama. A camera can override what is drawn with a colour, but not the light.
 *Avoid:* environment, ambient light (the sky is the scene's ambient light), clear colour (one of its forms), skydome.

@@ -61,6 +61,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/SceneRenderer.cpp
     src/Core/Skinning.hpp
     src/Core/Skinning.cpp
+    src/Core/Tonemapping.hpp
+    src/Core/Tonemapping.cpp
     src/Core/TransientPool.hpp
     src/Core/TransientPool.cpp
 )

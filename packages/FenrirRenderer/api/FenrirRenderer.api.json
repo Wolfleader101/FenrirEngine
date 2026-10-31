@@ -379,6 +379,36 @@
       "defaultKind": "m_window"
     },
     {
+      "name": "Fenrir::Tonemapper",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How a view's Output pass maps its linear HDR colour, after the exposure, into the [0, 1] its render target stores, which the target then encodes as sRGB (ADR-0049).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "None",
+          "value": 0,
+          "doc": "Each channel clamped to [0, 1]: what is over 1 is lost. For tests and exact colours."
+        },
+        {
+          "name": "AgX",
+          "value": 1,
+          "doc": "AgX, as Blender and Filament fit it: bright colours desaturate towards white as they would on film, and mid grey shows a little brighter than with None. The default."
+        },
+        {
+          "name": "PbrNeutral",
+          "value": 2,
+          "doc": "Khronos PBR Neutral: colours up to about 0.76 shown as they are (less a small offset in the darks), only the highlights compressed, so a material's base colour reads true."
+        },
+        {
+          "name": "Aces",
+          "value": 3,
+          "doc": "ACES, through Stephen Hill's fit of its reference rendering and sRGB output: contrasty, saturated."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::Viewport",
       "category": "struct",
       "role": "nested",
@@ -416,7 +446,7 @@
       "name": "Fenrir::Camera",
       "category": "struct",
       "role": "component",
-      "size": 76,
+      "size": 84,
       "alignment": 4,
       "doc": "Makes a view of the active scene from its entity, looking along the entity's local -Z with +Y up (ADR-0026). Plain data. Every enabled camera in the active scene draws one view a frame, into its viewport of its render target. Views into one target draw by `order`, lowest first, and ties by entity id, logged once. Each view has its own scene targets, and writes only its viewport.\n\nNot drawn, logged once: a camera targeting a window other than the main window, a viewport under one pixel, or a target image that is stale, empty or not a render target. A minimised window draws nothing. A window no camera draws into is cleared to black, logged once.",
       "fields": [
@@ -468,6 +498,21 @@
           "kind": "bool",
           "default": true,
           "doc": "Whether the view draws the scene's debug shapes and world text (ADR-0025). Screen text and messages belong to the window, not the view, and draw either way."
+        },
+        {
+          "name": "exposure",
+          "offset": 76,
+          "kind": "f32",
+          "default": 0,
+          "doc": "The view's exposure in EV stops: its Output pass multiplies the linear colour by 2^exposure before the tonemapper, so each +1 doubles it. 0 by default."
+        },
+        {
+          "name": "tonemapper",
+          "offset": 80,
+          "kind": "enum",
+          "type": "Fenrir::Tonemapper",
+          "default": "AgX",
+          "doc": "How the view's Output pass maps its HDR colour into what its target stores (ADR-0049)."
         }
       ]
     },
