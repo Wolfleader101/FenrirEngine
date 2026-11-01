@@ -43,6 +43,7 @@ Built 2026-11-01, stacked on ticket 10's branch (#265 to #269 not yet merged). D
   views can add values to it. Beyond the spec's Camera list; the user chose to keep it (2026-11-01).
 - **The golden** is `sphere-grid-gtao.png`: the ticket-04 sphere grid resting on a floor against a wall, built in the GL
   test, since tests never use the demo's assets and the demo's floating material grid shows almost no occlusion.
-- **Hand check** (helmets' contact shadows, no haloing) is not done in the demo: Showcase models needs the fetched
-  assets and a person at the screen. The golden scene was checked by eye at 960 x 540 (lit and raw): contact shadows
-  under the spheres and along the wall's foot, no halo at the spheres' silhouettes, some noise grain.
+- **Hand check**, done from LightingDemo captures (`screenshots/11-gtao/`): Showcase models' helmet creases occlude with
+  no halo against the sea, though the helmets float, so their contact shadows were checked on Showroom's plinths, which
+  show them, as do the room's corners. Showroom's lit frame does not change, as it has no sky light. The golden scene was
+  also checked at 960 x 540: some noise grain remains.
