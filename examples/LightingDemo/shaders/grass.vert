@@ -5,11 +5,11 @@
 // so the blades' depth, their shadows and their lit pixels all sway together; it writes what builtin:depth-prepass reads
 // (the world normal at location 1).
 //
-// The grass mesh's blades stand on y 0 of their patch, so a vertex's own height is how far up its blade it is: the
-// wind moves it by the square of that height, the root not at all and the tip most, and lowers it a little so the
-// blade keeps its length as it bends. The wind is a slow gust travelling along the wind's direction with a faster
-// flutter across it, both read at the vertex's world position on the ground, so neighbouring blades sway alike and
-// distant ones out of step, and frame.time drives it.
+// Each blade's vertices carry how far up the blade they are, UV0's u (the blade's height in metres) times v (0 at the
+// root to 1 at the tip): the wind moves a vertex by the square of that height, the root not at all and the tip most,
+// and lowers it a little so the blade keeps its length as it bends. The wind is a slow gust travelling along the wind's
+// direction with a faster flutter across it, both read at the vertex's world position on the ground, so neighbouring
+// blades sway alike and distant ones out of step, and frame.time drives it.
 #include "Fenrir/Draw.glsl"
 #include "Fenrir/Frame.glsl"
 #include "Fenrir/Vertex.glsl"
@@ -43,8 +43,8 @@ void main()
 {
     DrawItem item = CurrentDraw();
     vec4 world = item.world * vec4(inPosition, 1.0);
-    // The vertex's height up its blade, in the patch's metres before the copy's scale.
-    float height = max(inPosition.y, 0.0);
+    // The vertex's height up its blade, in metres.
+    float height = inUv0.x * inUv0.y;
     vec2 sway = Wind(world.xz, frame.time.x) * height * height;
     world.xz += sway;
     world.y -= 0.5 * dot(sway, sway) / max(height, 0.05);

@@ -4,9 +4,9 @@
 // its cascaded shadows, the sky's light and GTAO like everything else in the forest clearing.
 //
 // A blade's colour runs from rootColour at its foot to tipColour at its tip (UV0's v, 0 to 1), times its vertex colour
-// (each blade's own tint) and the instance's (each patch's). The foot is darker to the sky's light too, standing among
-// its neighbours. The grass is double-sided: a back face turns its normal round across the ground but keeps it leaning
-// up, so both faces of a blade light alike from the sky instead of one facing the ground.
+// (each blade's own tint). The foot is darker to the sky's light too, standing among its neighbours. Each blade has a
+// face each way in the mesh, both normals leaning up, so the material is single-sided and every pass, the depth
+// prepass's normals among them, sees the normal the mesh gives.
 #include "Fenrir/Lighting.glsl"
 
 #pragma fenrir default(rootColour, 0.05, 0.09, 0.02, 1.0)
@@ -29,10 +29,6 @@ layout(location = 0) out vec4 outColour;
 void main()
 {
     vec3 n = normalize(vNormal);
-    if (!gl_FrontFacing)
-    {
-        n.xz = -n.xz;
-    }
 
     FenrirSurface surface;
     surface.baseColour = mix(material.rootColour.rgb, material.tipColour.rgb, vUv.y) * vColour.rgb;

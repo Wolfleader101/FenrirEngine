@@ -3,11 +3,13 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <numbers>
 #include <optional>
 #include <random>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <imgui.h>
@@ -16,6 +18,7 @@
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/InstanceListData.hpp"
+#include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/Model.hpp"
 #include "FenrirAssets/ShaderData.hpp"
@@ -25,10 +28,12 @@
 #include "FenrirRenderer/Renderer.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirShaders/LightingDemoGrass.hpp"
+#include "FenrirShaders/LightingDemoGround.hpp"
 #include "FetchedAssets.hpp"
+#include "ForestGround.hpp"
 #include "LightingPanel.hpp"
 #include "LightingScenes.hpp"
-#include "SimplifiedMesh.hpp"
+#include "MeshTools.hpp"
 
 namespace LightingDemo
 {
@@ -39,88 +44,242 @@ namespace LightingDemo
 
         constexpr const char* SceneName = "Forest clearing";
         constexpr float Pi = std::numbers::pi_v<float>;
+        const Vec3 Up{0.0f, 1.0f, 0.0f};
 
-        /** @brief The open grass in the middle, and the forest round it out to its edge, in metres from the centre. */
-        constexpr float ClearingRadius = 13.0f;
-        constexpr float ForestOuter = 55.0f;
-        /** @brief The ground's half size: past the forest's edge, so the panorama meets it beyond the trees. */
-        constexpr float GroundHalf = 90.0f;
-        /** @brief How many metres one repeat of the ground's textures covers. */
-        constexpr float GroundTile = 3.0f;
-
-        /** @brief The grass: square patches of one generated mesh, on a grid out to this radius. */
-        constexpr float GrassRadius = 23.0f;
-        constexpr float PatchSize = 4.0f;
-        constexpr int BladesPerPatch = 1800;
+        /** @brief How many grass blades grow in the clearing. */
+        constexpr std::size_t GrassBlades = 200000;
 
         /**
-         * @brief The way the sunlight travels: from the bearing of Autumn Forest 04's sun (its brightest texel), so the
-         * shadows fall the way the panorama's light does, but 15 degrees up rather than its 8, where the ground's
-         * N.L of 0.14 left the shadows hard to see. The demo's own golden-hour sky puts its sun here.
+         * @brief The way the sunlight travels: from Qwantani Late Afternoon's sun (its brightest texel), 19 degrees up
+         * ahead and to the right of where the camera starts, so the clearing is lit from behind its far trees. The
+         * demo's own sky puts its sun here too.
          */
-        const Vec3 SunTravel = glm::normalize(Vec3(-0.570f, -0.259f, 0.780f));
-        const Fenrir::Colour SunColour{1.0f, 0.62f, 0.36f, 1.0f};
-        constexpr float SunIntensity = 4.0f;
-        /** @brief The trees leave a gap this many radians either side of the sun, so it reaches the clearing. */
-        constexpr float SunGap = 0.4f;
+        const Vec3 SunTravel = glm::normalize(Vec3(-0.557f, -0.327f, 0.763f));
+        const Fenrir::Colour SunColour{1.0f, 0.8f, 0.58f, 1.0f};
+        constexpr float SunIntensity = 5.0f;
+        /** @brief The tall trees leave a gap this many radians either side of the sun, so it lights the clearing. */
+        constexpr float SunGap = 0.3f;
 
         /** @brief The fraction of the forest's copies drawn, which N steps through. */
         constexpr std::array<int, 3> DensitySteps{25, 50, 100};
 
-        /** @brief Where a species grows. */
-        enum class Ground : std::uint8_t
+        constexpr const char* Panorama = "panoramas/qwantani_late_afternoon_puresky_2k.hdr";
+        /**
+         * @brief Each ground layer's base colour, GL normal map and ARM map: soil, litter, path. The soil has no ARM
+         * map (ground.frag's eight textures).
+         */
+        constexpr std::array<std::array<const char*, 3>, 3> GroundSets{{
+            {"forest_ground_04/forest_ground_04_diff_2k.jpg", "forest_ground_04/forest_ground_04_nor_gl_2k.jpg",
+             nullptr},
+            {"forest_leaves_04/forest_leaves_04_diff_2k.jpg", "forest_leaves_04/forest_leaves_04_nor_gl_2k.jpg",
+             "forest_leaves_04/forest_leaves_04_arm_2k.jpg"},
+            {"stony_dirt_path/stony_dirt_path_diff_2k.jpg", "stony_dirt_path/stony_dirt_path_nor_gl_2k.jpg",
+             "stony_dirt_path/stony_dirt_path_arm_2k.jpg"},
+        }};
+        /** @brief The ground shader's names for its layers, as GroundSets orders them. */
+        constexpr std::array<const char*, 3> GroundLayers{"soil", "litter", "path"};
+
+        /** @brief Where on the ground a species grows, by how far past the clearing's edge (Forest::PastEdge). */
+        enum class Habitat : std::uint8_t
         {
-            /** @brief In the forest round the clearing, leaving the gap towards the sun. */
+            /** @brief Among the trees, out to Forest::ForestReach. */
             Forest,
-            /** @brief Anywhere from the clearing's middle to the forest's edge, thinning into the clearing. */
-            Anywhere,
+            /** @brief Along the clearing's edge, a few metres either side of it. */
+            Edge,
+            /** @brief Anywhere from the clearing's middle to the forest's reach. */
+            Everywhere,
         };
 
         /**
-         * @brief One fetched Poly Haven species (ADR-0052): its glTF, how many copies of it grow, their sizes and
-         * where, and whether its meshes are simplified (solid rocks only) and cast shadows. Each of the model's nodes
-         * is a variant with one instance list; each of a variant's meshes one InstancedMeshRenderer drawing it.
+         * @brief A tree's level of detail, for trees standing up to `pastEdge` metres past the clearing's edge: one
+         * card in `keepEvery` of its foliage kept and grown by `grow` (ThinnedCards), its trunk and branches simplified
+         * on `trunkCells` cells a side, whether it casts the sun's shadow, and how dark it is drawn. The nearest trees
+         * are a few metres from the camera, the farthest forty. Every cascade draws every caster (there is no culling
+         * yet), so the deep forest casts nothing and is darkened instead, for the shade of the trees in front of it.
+         */
+        struct TreeDetail
+        {
+            float pastEdge;
+            int keepEvery;
+            float grow;
+            int trunkCells;
+            bool castShadows;
+            float tone;
+        };
+        // Each kept card grows by a little less than the square root of how many it stands for, so a crown keeps most
+        // of its cover: the fir's twigs are 800k sprig cards of four triangles each.
+        constexpr std::array<TreeDetail, 3> TreeDetails{{
+            {7.0f, 16, 3.4f, 48, true, 1.0f},
+            {16.0f, 48, 5.8f, 32, true, 0.7f},
+            {std::numeric_limits<float>::max(), 128, 9.0f, 20, false, 0.4f},
+        }};
+
+        /**
+         * @brief One fetched Poly Haven species (ADR-0052) and how it grows: each of its model's nodes that draws is a
+         * variant, with one instance list per level of detail; each of a variant's meshes one InstancedMeshRenderer.
+         * Its foliage material is drawn Masked, cut out by its alpha map: Poly Haven's JPEG glTFs leave the alpha out
+         * of the base colour (their leaf and twig cards are BLEND or OPAQUE and solid), so the demo fetches each one's
+         * alpha map and puts it back (MergeAlpha). It then cuts out in the depth prepass and the shadow cascades too.
          */
         struct Species
         {
             const char* model;
             int count;
-            float minScale;
-            float maxScale;
-            Ground ground;
-            /** @brief Cells a side its meshes are simplified on; 0 keeps them whole. */
-            int simplifyCells;
-            bool castShadows;
+            float minScale = 1.0f;
+            float maxScale = 1.0f;
+            Habitat habitat = Habitat::Forest;
+            /** @brief Its copies stand this far apart at least, in metres; 0 for no limit. */
+            float spacing = 0.0f;
+            /**
+             * @brief How far past the clearing's edge it grows, and casts the sun's shadow, in metres. Every cascade
+             * draws every caster, so the understory deep in the trees, which nobody sees, is left out, and only what
+             * stands near the clearing casts.
+             */
+            float reach = std::numeric_limits<float>::max();
+            float shadowReach = std::numeric_limits<float>::max();
+            /** @brief Cells a side its meshes are simplified on (solid rocks); 0 keeps them whole. */
+            int simplifyCells = 0;
+            bool castShadows = true;
             /** @brief Turned every way (pebbles), else only about +Y. */
-            bool tumbled;
-            /** @brief How close two copies may stand, in metres; 0 for no limit. */
-            float spacing;
+            bool tumbled = false;
+            /** @brief Thinned with distance by TreeDetails, and kept out of the gap towards the sun. */
+            bool tree = false;
+            /** @brief Its copies are darkened as the forest deepens, for the canopy's shade. */
+            bool understory = true;
+            /** @brief Its leaf or twig material, by index in its model, and that material's alpha map; -1 for none. */
+            int foliage = -1;
+            const char* alpha = nullptr;
         };
-        // About 20k copies, budgeted by triangles: the saplings' twigs have 120k to 160k each, so there are few trees
-        // and the panorama's autumn forest stands behind them. Rocks are simplified; leaves, twigs and branches cannot
-        // be (vertex clustering would melt the leaves' cards).
-        constexpr std::array<Species, 10> ForestSpecies{{
-            {"fir_sapling/fir_sapling_1k.gltf", 45, 3.5f, 6.0f, Ground::Forest, 0, true, false, 4.0f},
-            {"pine_sapling_small/pine_sapling_small_1k.gltf", 40, 3.5f, 6.0f, Ground::Forest, 0, true, false, 4.0f},
-            {"fern_02/fern_02_1k.gltf", 5000, 0.8f, 1.6f, Ground::Anywhere, 0, true, false, 0.0f},
-            {"shrub_03/shrub_03_1k.gltf", 3000, 1.5f, 3.0f, Ground::Anywhere, 0, true, false, 0.0f},
-            {"shrub_04/shrub_04_1k.gltf", 250, 1.0f, 2.0f, Ground::Forest, 0, true, false, 0.0f},
-            {"rock_07/rock_07_1k.gltf", 900, 1.5f, 5.0f, Ground::Anywhere, 24, true, false, 0.0f},
-            {"rock_09/rock_09_1k.gltf", 8500, 1.5f, 5.0f, Ground::Anywhere, 8, false, true, 0.0f},
-            {"dead_tree_trunk/dead_tree_trunk_1k.gltf", 18, 0.9f, 1.4f, Ground::Anywhere, 0, true, false, 5.0f},
-            {"tree_stump_01/tree_stump_01_1k.gltf", 40, 0.6f, 1.2f, Ground::Forest, 0, true, false, 2.0f},
-            {"dry_branches_medium_01/dry_branches_medium_01_1k.gltf", 1000, 0.8f, 1.5f, Ground::Forest, 0, true, false,
-             0.0f},
+        // About 20k copies. The trees are Poly Haven's Fir Tree 01 (three trees of 11 to 17 metres, 0.4 to 4 million
+        // twig triangles each), Tree Small 02, a broadleaf grown to 8 to 11 metres, and Fir Sapling, young firs of 2 to
+        // 4 metres filling below the crowns, all thinned with distance. Rocks are simplified; ferns and shrubs whole.
+        const std::array<Species, 13> ForestSpecies{{
+            {.model = "fir_tree_01/fir_tree_01_1k.gltf",
+             .count = 900,
+             .minScale = 0.85f,
+             .maxScale = 1.15f,
+             .spacing = 3.0f,
+             .tree = true,
+             .understory = false,
+             .foliage = 2,
+             .alpha = "fir_tree_01/textures/fir_tree_01_twig_alpha_1k.jpg"},
+            {.model = "tree_small_02/tree_small_02_1k.gltf",
+             .count = 110,
+             .minScale = 2.2f,
+             .maxScale = 3.0f,
+             .spacing = 4.5f,
+             .tree = true,
+             .understory = false,
+             .foliage = 1,
+             .alpha = "tree_small_02/textures/tree_small_02_leaves_alpha_1k.jpg"},
+            {.model = "fir_sapling/fir_sapling_1k.gltf",
+             .count = 160,
+             .minScale = 1.8f,
+             .maxScale = 3.5f,
+             .spacing = 2.5f,
+             .tree = true,
+             .understory = false,
+             .foliage = 1,
+             .alpha = "fir_sapling/textures/fir_sapling_twigs_alpha_1k.jpg"},
+            {.model = "fern_02/fern_02_1k.gltf",
+             .count = 5000,
+             .minScale = 0.8f,
+             .maxScale = 1.6f,
+             .habitat = Habitat::Everywhere,
+             .reach = 14.0f,
+             .shadowReach = 3.0f,
+             .foliage = 0,
+             .alpha = "fern_02/textures/fern_02_alpha_1k.jpg"},
+            {.model = "shrub_03/shrub_03_1k.gltf",
+             .count = 2000,
+             .minScale = 1.5f,
+             .maxScale = 3.0f,
+             .habitat = Habitat::Edge,
+             .shadowReach = 3.0f,
+             .foliage = 0,
+             .alpha = "shrub_03/textures/shrub_03_alpha_1k.jpg"},
+            {.model = "shrub_04/shrub_04_1k.gltf",
+             .count = 150,
+             .minScale = 1.0f,
+             .maxScale = 2.0f,
+             .habitat = Habitat::Edge,
+             .shadowReach = 3.0f,
+             .foliage = 0,
+             .alpha = "shrub_04/textures/shrub_04_alpha_1k.jpg"},
+            {.model = "rock_moss_set_01/rock_moss_set_01_1k.gltf",
+             .count = 60,
+             .minScale = 0.3f,
+             .maxScale = 0.9f,
+             .habitat = Habitat::Everywhere,
+             .reach = 25.0f,
+             .simplifyCells = 20},
+            {.model = "rock_moss_set_02/rock_moss_set_02_1k.gltf",
+             .count = 120,
+             .minScale = 0.3f,
+             .maxScale = 0.8f,
+             .habitat = Habitat::Everywhere,
+             .reach = 25.0f,
+             .simplifyCells = 16},
+            {.model = "rock_09/rock_09_1k.gltf",
+             .count = 7500,
+             .minScale = 1.5f,
+             .maxScale = 5.0f,
+             .habitat = Habitat::Everywhere,
+             .reach = 12.0f,
+             .simplifyCells = 8,
+             .castShadows = false,
+             .tumbled = true},
+            {.model = "dead_tree_trunk/dead_tree_trunk_1k.gltf",
+             .count = 10,
+             .minScale = 0.9f,
+             .maxScale = 1.4f,
+             .spacing = 5.0f},
+            {.model = "tree_stump_01/tree_stump_01_1k.gltf",
+             .count = 24,
+             .minScale = 0.6f,
+             .maxScale = 1.2f,
+             .spacing = 2.0f},
+            {.model = "root_cluster_01/root_cluster_01_1k.gltf",
+             .count = 8,
+             .minScale = 0.6f,
+             .maxScale = 1.0f,
+             .habitat = Habitat::Edge,
+             .spacing = 6.0f},
+            {.model = "dry_branches_medium_01/dry_branches_medium_01_1k.gltf",
+             .count = 1200,
+             .minScale = 0.8f,
+             .maxScale = 1.5f,
+             .reach = 20.0f,
+             .shadowReach = 6.0f},
         }};
-        constexpr const char* Panorama = "panoramas/autumn_forest_04_2k.hdr";
-        constexpr std::array<const char*, 3> GroundTextures{"forest_ground_04/forest_ground_04_diff_2k.jpg",
-                                                            "forest_ground_04/forest_ground_04_nor_gl_2k.jpg",
-                                                            "forest_ground_04/forest_ground_04_arm_2k.jpg"};
 
-        /** @brief One variant's copies: its full list, the handle the renderers draw, and the renderers' entities. */
-        struct Variant
+        /**
+         * @brief A model placed by hand: the foreground's mossy boulder and its neighbour, and the fallen log beside
+         * the path. `node` is the model's node; it stands at `at`, turned by `yaw`, sunk `sink` metres, and the grass
+         * and plants keep `clear` metres from it (the log's row of circles is HeroClearings').
+         */
+        struct Hero
         {
-            Fenrir::InstanceListData list;
+            const char* model;
+            std::size_t node;
+            Vec2 at;
+            float yaw;
+            float scale;
+            float sink;
+            float clear;
+        };
+        const std::array<Hero, 3> Heroes{{
+            {"rock_moss_set_01/rock_moss_set_01_1k.gltf", 0, {1.8f, 12.2f}, 0.9f, 1.6f, 0.35f, 3.0f},
+            {"rock_moss_set_01/rock_moss_set_01_1k.gltf", 3, {4.3f, 14.3f}, 2.1f, 0.8f, 0.2f, 1.4f},
+            {"dead_tree_trunk_02/dead_tree_trunk_02_1k.gltf", 0, {-6.2f, 6.0f}, 0.35f, 1.3f, 0.1f, 0.0f},
+        }};
+        /** @brief The fallen log's length: its model's 4.1 metres at its scale. */
+        constexpr float LogLength = 4.1f * 1.3f;
+
+        /** @brief One instance list the scene draws: its full copies, and the handle its renderers draw. */
+        struct CopyList
+        {
+            Fenrir::InstanceListData copies;
             Fenrir::AssetHandle<Fenrir::InstanceList> handle;
         };
 
@@ -128,156 +287,39 @@ namespace LightingDemo
         struct ForestState
         {
             LightingSettings lighting;
-            std::vector<Variant> variants;
-            /** @brief The grass patches' entity, whose InstancedMeshRenderer M hides and shows. */
-            Fenrir::Entity grass;
+            std::vector<CopyList> lists;
+            /** @brief The grass's entities, whose MeshRenderers M hides and shows. */
+            std::vector<Fenrir::Entity> grass;
             std::size_t blades = 0;
-            std::size_t patches = 0;
             std::size_t copies = 0;
+            std::size_t trees = 0;
             int density = 100;
             /** @brief The density the lists were last cut to. */
             int listedDensity = 100;
             bool fetched = false;
             bool grassVisible = true;
+            /** @brief The frame time, smoothed over about a second, in seconds. */
+            float frameTime = 0.0f;
         };
 
-        /** @brief A transform from a position, a turn and a uniform scale. */
-        Fenrir::Math::Mat4 Placed(Vec3 position, Fenrir::Math::Quat rotation, float scale)
+        /** @brief A material drawing with the embedded shader container `bytes`; empty if it does not load. */
+        Fenrir::AssetHandle<Fenrir::Material> EmbeddedMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene,
+                                                               std::span<const std::uint8_t> bytes)
         {
-            return glm::scale(Fenrir::Math::Translate(Fenrir::Math::Mat4(1.0f), position) * glm::mat4_cast(rotation),
-                              Vec3(scale));
+            Fenrir::ShaderData shader;
+            const auto raw = std::as_bytes(bytes);
+            shader.bytes.assign(raw.begin(), raw.end());
+            return store.CreateMaterial(store.Add<Fenrir::Shader>(std::move(shader), scene), scene);
         }
 
-        /**
-         * @brief One square patch of `BladesPerPatch` grass blades standing on y 0, `PatchSize` metres a side round its
-         * centre. Each blade is a tapering strip of three segments and a tip, five triangles, leaning a little one way
-         * and curving as it rises, with its own height, width, turn and tint; UV0's u runs across it and v from its
-         * root (0) to its tip (1), which grass.frag shades along and grass.vert sways by. Its normal faces across the
-         * blade leaning up, so blades light softly from the sky; the material is double-sided.
-         */
-        Fenrir::MeshData GrassPatch(std::uint32_t seed)
+        /** @brief A builtin:lit material of `colour` and `roughness`. */
+        Fenrir::AssetHandle<Fenrir::Material> LitMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene,
+                                                          Fenrir::Colour colour, float roughness)
         {
-            std::mt19937 random(seed);
-            std::uniform_real_distribution<float> unit(0.0f, 1.0f);
-            constexpr int Segments = 3;
-            Fenrir::MeshData mesh;
-            mesh.positions.reserve(std::size_t{BladesPerPatch} * (2 * Segments + 1));
-            for (int blade = 0; blade < BladesPerPatch; ++blade)
-            {
-                const Vec3 root{(unit(random) - 0.5f) * PatchSize, 0.0f, (unit(random) - 0.5f) * PatchSize};
-                // Mostly knee-low, a few taller stems.
-                const float height = 0.22f + 0.5f * std::pow(unit(random), 1.6f);
-                const float width = 0.02f + 0.025f * unit(random);
-                const float turn = 2.0f * Pi * unit(random);
-                const Vec3 side{std::cos(turn), 0.0f, std::sin(turn)};
-                const float leanTurn = 2.0f * Pi * unit(random);
-                const Vec3 lean = Vec3(std::cos(leanTurn), 0.0f, std::sin(leanTurn)) * (0.08f + 0.3f * unit(random));
-                const Vec3 facing = glm::cross(side, Vec3(0.0f, 1.0f, 0.0f));
-                const Vec3 normal = glm::normalize(facing + Vec3(0.0f, 0.6f, 0.0f));
-                // Mostly green in a range of shades, one in seven dry and straw-coloured.
-                const float shade = 0.65f + 0.35f * unit(random);
-                const Fenrir::Colour tint = unit(random) < 0.14f
-                                                ? Fenrir::Colour{shade, shade * 0.82f, shade * 0.45f, 1.0f}
-                                                : Fenrir::Colour{shade * 0.9f, shade, shade * 0.8f, 1.0f};
-                const auto first = static_cast<std::uint32_t>(mesh.positions.size());
-                const auto add = [&](Vec3 position, float u, float v) {
-                    mesh.positions.push_back(position);
-                    mesh.normals.push_back(normal);
-                    mesh.uv0.emplace_back(u, v);
-                    mesh.colours.push_back(tint);
-                };
-                for (int s = 0; s <= Segments; ++s)
-                {
-                    const float t = static_cast<float>(s) / Segments;
-                    // Curving over as it rises, lean by the square of the way up.
-                    const Vec3 centre = root + lean * height * t * t + Vec3(0.0f, height * t, 0.0f);
-                    if (s == Segments)
-                    {
-                        add(centre, 0.5f, 1.0f);
-                        break;
-                    }
-                    const float half = 0.5f * width * (1.0f - 0.7f * t);
-                    add(centre - side * half, 0.0f, t);
-                    add(centre + side * half, 1.0f, t);
-                }
-                // Counter-clockwise seen from `facing`, so its front faces the way its normal leans.
-                for (std::uint32_t s = 0; s < Segments - 1; ++s)
-                {
-                    const std::uint32_t left = first + 2 * s;
-                    mesh.indices.insert(mesh.indices.end(), {left, left + 1, left + 2, left + 1, left + 3, left + 2});
-                }
-                const std::uint32_t last = first + 2 * (Segments - 1);
-                mesh.indices.insert(mesh.indices.end(), {last, last + 1, last + 2});
-            }
-            return mesh;
-        }
-
-        /** @brief A flat square of ground `GroundHalf` metres each way round the origin, its UVs repeating. */
-        Fenrir::MeshData GroundPlane()
-        {
-            Fenrir::MeshData mesh;
-            const float repeats = 2.0f * GroundHalf / GroundTile;
-            for (const Vec2 corner : {Vec2(-1.0f, -1.0f), Vec2(-1.0f, 1.0f), Vec2(1.0f, 1.0f), Vec2(1.0f, -1.0f)})
-            {
-                mesh.positions.emplace_back(corner.x * GroundHalf, 0.0f, corner.y * GroundHalf);
-                mesh.normals.emplace_back(0.0f, 1.0f, 0.0f);
-                // u along +X, v along +Z: the map's green (up the image, towards -v) is -Z, as cross(N, T) gives.
-                mesh.tangents.emplace_back(1.0f, 0.0f, 0.0f, 1.0f);
-                mesh.uv0.emplace_back((corner.x * 0.5f + 0.5f) * repeats, (corner.y * 0.5f + 0.5f) * repeats);
-            }
-            mesh.indices = {0, 1, 2, 0, 2, 3};
-            return mesh;
-        }
-
-        /**
-         * @brief A golden-hour sky made here, linear RGBA32F in the renderer's panorama mapping: deep blue overhead
-         * warming to orange at the horizon, brightest towards the sun, with the sun's disc and glow where the
-         * DirectionalLight comes from, and a dark ground below. The scene's sky without the fetched panorama.
-         */
-        Fenrir::ImageData GoldenHourSky(std::uint32_t width)
-        {
-            const std::uint32_t height = width / 2;
-            std::vector<float> texels(std::size_t{width} * height * 4, 0.0f);
-            const Vec3 toSun = -SunTravel;
-            for (std::uint32_t row = 0; row < height; ++row)
-            {
-                const float theta = Pi * (static_cast<float>(row) + 0.5f) / static_cast<float>(height);
-                for (std::uint32_t column = 0; column < width; ++column)
-                {
-                    // panorama.frag's inverse: u = 0.5 + atan(x, -z) / 2pi, v = acos(y) / pi.
-                    const float phi =
-                        2.0f * Pi * ((static_cast<float>(column) + 0.5f) / static_cast<float>(width) - 0.5f);
-                    const Vec3 direction{std::sin(theta) * std::sin(phi), std::cos(theta),
-                                         -std::sin(theta) * std::cos(phi)};
-                    const float sun = std::max(glm::dot(direction, toSun), 0.0f);
-                    Vec3 colour;
-                    if (direction.y >= 0.0f)
-                    {
-                        const float up = std::pow(direction.y, 0.45f);
-                        colour = glm::mix(Vec3(1.1f, 0.55f, 0.25f), Vec3(0.12f, 0.22f, 0.5f), up);
-                        colour += Vec3(1.2f, 0.6f, 0.25f) * std::pow(sun, 6.0f) * (1.0f - up * 0.6f);
-                        colour += Vec3(60.0f, 42.0f, 25.0f) * std::pow(sun, 2000.0f);
-                    }
-                    else
-                    {
-                        colour = glm::mix(Vec3(0.12f, 0.08f, 0.05f), Vec3(0.03f, 0.03f, 0.02f),
-                                          std::min(-direction.y * 4.0f, 1.0f));
-                    }
-                    float* texel = &texels[(std::size_t{row} * width + column) * 4];
-                    texel[0] = colour.r;
-                    texel[1] = colour.g;
-                    texel[2] = colour.b;
-                    texel[3] = 1.0f;
-                }
-            }
-            Fenrir::ImageData image;
-            image.width = width;
-            image.height = height;
-            image.format = Fenrir::ImageFormat::RGBA32F;
-            image.colourSpace = Fenrir::ColourSpace::Linear;
-            const auto bytes = std::as_bytes(std::span(texels));
-            image.pixels.assign(bytes.begin(), bytes.end());
-            return image;
+            const auto material = store.CreateMaterial(store.Load<Fenrir::Shader>("builtin:lit", scene).handle, scene);
+            store.SetColour(material, "baseColour", colour);
+            store.SetFloat(material, "roughness", roughness);
+            return material;
         }
 
         /**
@@ -297,208 +339,466 @@ namespace LightingDemo
             return store.Add<Fenrir::Image>(std::move(linear), scene);
         }
 
-        /** @brief A builtin:lit material of `colour` and `roughness`. */
-        Fenrir::AssetHandle<Fenrir::Material> LitMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene,
-                                                          Fenrir::Colour colour, float roughness)
+        /** @brief The forest floor's material, and whether its fetched textures loaded. */
+        struct GroundMaterial
         {
-            const auto material = store.CreateMaterial(store.Load<Fenrir::Shader>("builtin:lit", scene).handle, scene);
-            store.SetColour(material, "baseColour", colour);
-            store.SetFloat(material, "roughness", roughness);
-            return material;
+            Fenrir::AssetHandle<Fenrir::Material> material;
+            bool fetched = false;
+        };
+
+        /**
+         * @brief The forest floor: the demo's ground shader with Poly Haven's Forest Ground 04 (soil), Forest Leaves 04
+         * (litter) and Stony Dirt Path (path) when they were fetched, else plain earth colours for its three layers.
+         */
+        GroundMaterial MakeGroundMaterial(Fenrir::App& app, Fenrir::Scene& scene)
+        {
+            Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
+            GroundMaterial ground{EmbeddedMaterial(store, scene, Fenrir::Shaders::LightingDemoGround)};
+            if (ground.material.IsEmpty())
+            {
+                app.Logger()->Error("{}: the ground shader did not load", SceneName);
+                return ground;
+            }
+            std::array<std::array<Fenrir::AssetHandle<Fenrir::Image>, 3>, 3> images;
+            ground.fetched = true;
+            for (std::size_t layer = 0; layer < GroundSets.size() && ground.fetched; ++layer)
+            {
+                for (std::size_t map = 0; map < 3 && ground.fetched; ++map)
+                {
+                    if (GroundSets.at(layer).at(map) == nullptr)
+                    {
+                        continue;
+                    }
+                    const std::optional<std::string> path = FetchedAsset(GroundSets.at(layer).at(map));
+                    const auto image =
+                        path ? store.Load<Fenrir::Image>(*path, scene) : Fenrir::LoadResult<Fenrir::Image>{};
+                    ground.fetched = path.has_value() && image.Ok();
+                    images.at(layer).at(map) = image.handle;
+                }
+            }
+            if (!ground.fetched)
+            {
+                store.SetColour(ground.material, "soilTint", {0.2f, 0.16f, 0.09f, 1.0f});
+                store.SetColour(ground.material, "litterTint", {0.11f, 0.08f, 0.05f, 1.0f});
+                store.SetColour(ground.material, "pathTint", {0.3f, 0.25f, 0.17f, 1.0f});
+                return ground;
+            }
+            // The fetched path and soil are pale under a low sun beside the dark litter: toned down to sit with it.
+            store.SetColour(ground.material, "soilTint", {0.7f, 0.68f, 0.62f, 1.0f});
+            store.SetColour(ground.material, "pathTint", {0.62f, 0.58f, 0.52f, 1.0f});
+            for (std::size_t layer = 0; layer < GroundSets.size(); ++layer)
+            {
+                const std::string name = GroundLayers.at(layer);
+                store.SetTexture(ground.material, name + "Colour", images.at(layer)[0]);
+                store.SetTexture(ground.material, name + "Normal", AsLinear(store, scene, images.at(layer)[1]));
+                if (GroundSets.at(layer)[2] != nullptr)
+                {
+                    store.SetTexture(ground.material, name + "Arm", AsLinear(store, scene, images.at(layer)[2]));
+                }
+            }
+            return ground;
         }
 
         /**
-         * @brief The ground's material: Poly Haven's Forest Ground 04 when it was fetched (base colour, GL normal map,
-         * and its ARM map as occlusion, roughness and metal), else a plain earth colour.
+         * @brief A late-afternoon sky made here, linear RGBA32F in the renderer's panorama mapping: blue overhead
+         * paling to a warm haze at the horizon, brightest towards the sun, with the sun's disc and glow where the
+         * DirectionalLight comes from, and a dark ground below. The scene's sky without the fetched panorama.
          */
-        Fenrir::AssetHandle<Fenrir::Material> GroundMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene,
-                                                             bool& fetched)
+        Fenrir::ImageData AfternoonSky(std::uint32_t width)
         {
-            const auto material = LitMaterial(store, scene, {0.16f, 0.12f, 0.07f, 1.0f}, 0.95f);
-            std::array<Fenrir::AssetHandle<Fenrir::Image>, GroundTextures.size()> images;
-            for (std::size_t i = 0; i < GroundTextures.size(); ++i)
+            const std::uint32_t height = width / 2;
+            std::vector<float> texels(std::size_t{width} * height * 4, 0.0f);
+            const Vec3 toSun = -SunTravel;
+            for (std::uint32_t row = 0; row < height; ++row)
             {
-                const std::optional<std::string> path = FetchedAsset(GroundTextures.at(i));
-                const auto image = path ? store.Load<Fenrir::Image>(*path, scene) : Fenrir::LoadResult<Fenrir::Image>{};
-                if (!path || !image.Ok())
+                const float theta = Pi * (static_cast<float>(row) + 0.5f) / static_cast<float>(height);
+                for (std::uint32_t column = 0; column < width; ++column)
                 {
-                    fetched = false;
-                    return material;
+                    // panorama.frag's inverse: u = 0.5 + atan(x, -z) / 2pi, v = acos(y) / pi.
+                    const float u = (static_cast<float>(column) + 0.5f) / static_cast<float>(width);
+                    const float phi = 2.0f * Pi * (u - 0.5f);
+                    const Vec3 direction{std::sin(theta) * std::sin(phi), std::cos(theta),
+                                         -std::sin(theta) * std::cos(phi)};
+                    const float sun = std::max(glm::dot(direction, toSun), 0.0f);
+                    Vec3 colour;
+                    if (direction.y >= 0.0f)
+                    {
+                        const float up = std::pow(direction.y, 0.5f);
+                        colour = glm::mix(Vec3(1.3f, 1.0f, 0.75f), Vec3(0.25f, 0.42f, 0.8f), up);
+                        colour += Vec3(1.5f, 1.0f, 0.55f) * std::pow(sun, 8.0f);
+                        colour += Vec3(60.0f, 48.0f, 34.0f) * std::pow(sun, 2000.0f);
+                    }
+                    else
+                    {
+                        colour = glm::mix(Vec3(0.12f, 0.1f, 0.07f), Vec3(0.03f, 0.03f, 0.02f),
+                                          std::min(-direction.y * 4.0f, 1.0f));
+                    }
+                    float* texel = &texels[(std::size_t{row} * width + column) * 4];
+                    texel[0] = colour.r;
+                    texel[1] = colour.g;
+                    texel[2] = colour.b;
+                    texel[3] = 1.0f;
                 }
-                images.at(i) = image.handle;
             }
-            const auto arm = AsLinear(store, scene, images[2]);
-            store.SetColour(material, "baseColour", Fenrir::Colour::White);
-            store.SetFloat(material, "roughness", 1.0f);
-            store.SetTexture(material, "baseColourTexture", images[0]);
-            store.SetTexture(material, "normalTexture", AsLinear(store, scene, images[1]));
-            store.SetTexture(material, "metallicRoughnessTexture", arm);
-            store.SetTexture(material, "occlusionTexture", arm);
-            return material;
+            Fenrir::ImageData image;
+            image.width = width;
+            image.height = height;
+            image.format = Fenrir::ImageFormat::RGBA32F;
+            image.colourSpace = Fenrir::ColourSpace::Linear;
+            const auto bytes = std::as_bytes(std::span(texels));
+            image.pixels.assign(bytes.begin(), bytes.end());
+            return image;
         }
 
-        /** @brief Where on the ground a copy of a species growing on `ground` stands, or none to skip this one. */
-        std::optional<Vec2> GroundSpot(std::mt19937& random, Ground ground)
+        /** @brief Whether `ground` lies in the bearing the tall trees leave open towards the sun. */
+        bool InSunGap(Vec2 ground)
         {
+            const Vec2 toSun = glm::normalize(Vec2(-SunTravel.x, -SunTravel.z));
+            return std::acos(std::clamp(glm::dot(glm::normalize(ground), toSun), -1.0f, 1.0f)) < SunGap;
+        }
+
+        /** @brief Where a copy of `species` stands, or none to skip this try. */
+        std::optional<Vec2> GroundSpot(std::mt19937& random, const Species& species)
+        {
+            const Habitat habitat = species.habitat;
             std::uniform_real_distribution<float> unit(0.0f, 1.0f);
             const float angle = 2.0f * Pi * unit(random);
-            const Vec2 out{std::cos(angle), std::sin(angle)};
-            if (ground == Ground::Forest)
-            {
-                const Vec2 toSun = glm::normalize(Vec2(-SunTravel.x, -SunTravel.z));
-                if (std::acos(std::clamp(glm::dot(out, toSun), -1.0f, 1.0f)) < SunGap)
-                {
-                    return std::nullopt;
-                }
-                // Evenly over the ring's area from the clearing's edge to the forest's.
-                const float inner = ClearingRadius + 2.0f;
-                const float radius =
-                    std::sqrt(inner * inner + (ForestOuter * ForestOuter - inner * inner) * unit(random));
-                return out * radius;
-            }
-            // Over the whole disc, but a copy inside the clearing survives only with the chance of how far out it is.
-            const float radius = ForestOuter * std::sqrt(unit(random));
-            if (radius < ClearingRadius && unit(random) > 0.15f + 0.85f * std::pow(radius / ClearingRadius, 3.0f))
+            // Evenly over the disc out to the forest's reach, then kept by habitat.
+            const Vec2 ground = Vec2(std::cos(angle), std::sin(angle)) * Forest::ForestReach * std::sqrt(unit(random));
+            const float past = Forest::PastEdge(ground);
+            const bool fits = habitat == Habitat::Forest ? past > 1.0f
+                              : habitat == Habitat::Edge ? past > -3.0f && past < 6.0f
+                                                         : true;
+            if (!fits || past > species.reach || Forest::PathWeight(ground) > 0.05f ||
+                (species.tree && InSunGap(ground)))
             {
                 return std::nullopt;
             }
-            return out * radius;
+            return ground;
         }
 
+        /** @brief One copy of a species: where it stands, its transform (without its node's own) and its tint. */
+        struct Copy
+        {
+            Vec2 ground;
+            Fenrir::Math::Mat4 transform;
+            Fenrir::Colour colour;
+        };
+
         /**
-         * @brief Each variant's list for `species` with `variants` variants: its copies placed on its ground, split
-         * round-robin between the variants, each turned and scaled at random and tinted slightly, `rest` (each
-         * variant's node rotation and scale) applied under the placement.
+         * @brief Every copy of `species`, each placed in its habitat and out of `clear`, turned and scaled at random
+         * and tinted.
          */
-        std::vector<Fenrir::InstanceListData> Plant(const Species& species, std::uint32_t seed,
-                                                    const std::vector<Fenrir::Math::Mat4>& rests)
+        std::vector<Copy> Plant(const Species& species, std::span<const Forest::Clear> clear, std::uint32_t seed)
         {
             std::mt19937 random(seed);
             std::uniform_real_distribution<float> unit(0.0f, 1.0f);
             std::uniform_real_distribution<float> symmetric(-1.0f, 1.0f);
-            std::vector<Fenrir::InstanceListData> lists(rests.size());
-            std::vector<Vec2> placed;
+            std::vector<Copy> copies;
             // Rejection gives up on a copy after a few misses, so a crowded species simply grows fewer.
-            for (int i = 0, tries = 0; i < species.count && tries < species.count * 8; ++tries)
+            for (int tries = 0; static_cast<int>(copies.size()) < species.count && tries < species.count * 12; ++tries)
             {
-                const std::optional<Vec2> spot = GroundSpot(random, species.ground);
-                if (!spot)
-                {
-                    continue;
-                }
-                if (species.spacing > 0.0f && std::ranges::any_of(placed, [&](Vec2 other) {
-                        return glm::distance(other, *spot) < species.spacing;
+                const std::optional<Vec2> spot = GroundSpot(random, species);
+                if (!spot || std::ranges::any_of(clear, [&](const Forest::Clear& circle) {
+                        return glm::distance(*spot, circle.centre) < circle.radius;
                     }))
                 {
                     continue;
                 }
-                placed.push_back(*spot);
-                const std::size_t variant = static_cast<std::size_t>(i) % rests.size();
+                if (species.spacing > 0.0f && std::ranges::any_of(copies, [&](const Copy& other) {
+                        return glm::distance(other.ground, *spot) < species.spacing;
+                    }))
+                {
+                    continue;
+                }
                 // Small more often than large.
                 const float scale =
                     species.minScale + (species.maxScale - species.minScale) * std::pow(unit(random), 2.0f);
-                Fenrir::Math::Quat rotation = Fenrir::Math::AngleAxis(2.0f * Pi * unit(random), Vec3(0.0f, 1.0f, 0.0f));
+                Fenrir::Math::Quat rotation = Fenrir::Math::AngleAxis(2.0f * Pi * unit(random), Up);
                 if (species.tumbled)
                 {
                     Vec3 axis{symmetric(random), symmetric(random), symmetric(random)};
-                    axis = glm::length(axis) > 0.01f ? glm::normalize(axis) : Vec3(0.0f, 1.0f, 0.0f);
+                    axis = glm::length(axis) > 0.01f ? glm::normalize(axis) : Up;
                     rotation = Fenrir::Math::AngleAxis(2.0f * Pi * unit(random), axis);
                 }
-                // Sunk a little, so tumbled and leaning copies do not float.
-                const Vec3 position{spot->x, species.tumbled ? -0.02f * scale : -0.01f, spot->y};
-                lists[variant].transforms.push_back(Placed(position, rotation, scale) * rests[variant]);
+                // Sunk a little, so tumbled and leaning copies do not float on the slope.
+                const Vec3 position = Forest::OnGround(*spot) - Up * (species.tumbled ? 0.02f * scale : 0.05f);
                 const float light = 0.85f + 0.15f * unit(random);
-                lists[variant].colours.push_back({light, light, light * (0.92f + 0.08f * unit(random)), 1.0f});
-                ++i;
+                // The canopy's shade on what grows under it: the sky's light, which GTAO's short reach misses.
+                const float shade =
+                    species.understory ? 1.0f - 0.45f * std::clamp(Forest::PastEdge(*spot) / 15.0f, 0.0f, 1.0f) : 1.0f;
+                const float tone = light * shade;
+                copies.push_back({*spot,
+                                  Placement(position, rotation, Vec3(scale)),
+                                  {tone, tone, tone * (0.92f + 0.08f * unit(random)), 1.0f}});
             }
-            return lists;
+            return copies;
         }
 
-        /** @brief `list`'s first `percent` percent of copies, at least one if it has any. */
-        Fenrir::InstanceListData Thinned(const Fenrir::InstanceListData& list, int percent)
-        {
-            const std::size_t total = list.transforms.size();
-            const std::size_t count = std::min(
-                total, std::max<std::size_t>(total > 0 ? 1 : 0, total * static_cast<std::size_t>(percent) / 100));
-            Fenrir::InstanceListData cut;
-            cut.transforms.assign(list.transforms.begin(),
-                                  list.transforms.begin() + static_cast<std::ptrdiff_t>(count));
-            cut.colours.assign(list.colours.begin(), list.colours.begin() + static_cast<std::ptrdiff_t>(count));
-            return cut;
-        }
-
-        /** @brief One part a variant draws: a mesh with its material. */
+        /** @brief One mesh a variant draws, with its material, and whether it is its species' foliage. */
         struct Part
         {
             Fenrir::AssetHandle<Fenrir::Mesh> mesh;
             Fenrir::AssetHandle<Fenrir::Material> material;
+            bool foliage = false;
         };
 
-        /**
-         * @brief Plants `species` as children of `forest`: one list per variant (its model's nodes that draw), one
-         * InstancedMeshRenderer per mesh of the variant, drawing that list. False if the model did not load.
-         */
-        bool SpawnSpecies(Fenrir::AssetStore& store, Fenrir::Scene& scene, Fenrir::Entity forest, ForestState& state,
-                          const Species& species, const std::string& path, std::uint32_t seed)
+        /** @brief A model node that draws: its parts, and its own turn and scale (its position is dropped). */
+        struct Variant
         {
-            const auto loaded = store.Load<Fenrir::Model>(path, scene);
-            const Fenrir::Model* model = loaded.Ok() ? store.TryGet(loaded.handle) : nullptr;
-            if (model == nullptr)
+            std::vector<Part> parts;
+            Fenrir::Math::Quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+            Vec3 scale{1.0f};
+
+            [[nodiscard]] Fenrir::Math::Mat4 Rest() const
+            {
+                return Placement(Vec3(0.0f), rotation, scale);
+            }
+        };
+
+        /** @brief The foliage's alpha cutoff, and how much its alpha map is strengthened (MergeAlpha). */
+        constexpr float FoliageCutoff = 0.3f;
+        constexpr float FoliageAlphaGain = 1.6f;
+
+        /**
+         * @brief Gives `material` the alpha of the fetched map `alphaPath` (its red channel) in a copy of its base
+         * colour texture, and makes it Masked. The alpha is strengthened by FoliageAlphaGain and cut at FoliageCutoff,
+         * because thin needles and leaves average towards transparent in the texture's smaller mips and would vanish
+         * with distance at the usual 0.5. False, changing nothing, if either image is missing or not RGBA8.
+         */
+        bool MergeAlpha(Fenrir::AssetStore& store, Fenrir::Scene& scene, Fenrir::AssetHandle<Fenrir::Material> material,
+                        const char* alphaPath)
+        {
+            const std::optional<std::string> path = FetchedAsset(alphaPath);
+            const auto alphaImage =
+                path ? store.Load<Fenrir::Image>(*path, scene) : Fenrir::LoadResult<Fenrir::Image>{};
+            const std::optional<Fenrir::MaterialTexture> base = store.TryGetTexture(material, "baseColourTexture");
+            const Fenrir::ImageData* colour = base ? store.TryGet(base->image) : nullptr;
+            const Fenrir::ImageData* alpha = path && alphaImage.Ok() ? store.TryGet(alphaImage.handle) : nullptr;
+            if (colour == nullptr || alpha == nullptr || colour->format != Fenrir::ImageFormat::RGBA8 ||
+                alpha->format != Fenrir::ImageFormat::RGBA8 || alpha->width == 0 || alpha->height == 0)
             {
                 return false;
             }
-            std::vector<std::vector<Part>> variants;
-            std::vector<Fenrir::Math::Mat4> rests;
+            Fenrir::ImageData cut = *colour;
+            for (std::uint32_t y = 0; y < cut.height; ++y)
+            {
+                // The nearest texel of the alpha map, which is usually the same size.
+                const std::uint32_t ay = y * alpha->height / cut.height;
+                for (std::uint32_t x = 0; x < cut.width; ++x)
+                {
+                    const std::uint32_t ax = x * alpha->width / cut.width;
+                    const auto value = static_cast<float>(alpha->pixels[(std::size_t{ay} * alpha->width + ax) * 4]);
+                    cut.pixels[(std::size_t{y} * cut.width + x) * 4 + 3] =
+                        static_cast<std::byte>(std::min(value * FoliageAlphaGain, 255.0f));
+                }
+            }
+            store.SetTexture(material, "baseColourTexture", store.Add<Fenrir::Image>(std::move(cut), scene),
+                             base->sampler);
+            store.SetBlendMode(material, Fenrir::BlendMode::Masked);
+            store.SetAlphaCutoff(material, FoliageCutoff);
+            return true;
+        }
+
+        /**
+         * @brief The model at `path`'s drawing nodes, each a variant. Its material number `foliage` takes the alpha map
+         * `alpha` and is drawn Masked (MergeAlpha). Empty if the model or the alpha map did not load.
+         */
+        std::vector<Variant> LoadVariants(Fenrir::AssetStore& store, Fenrir::Scene& scene, const std::string& path,
+                                          int foliage = -1, const char* alpha = nullptr)
+        {
+            const auto loaded = store.Load<Fenrir::Model>(path, scene);
+            const Fenrir::Model* model = loaded.Ok() ? store.TryGet(loaded.handle) : nullptr;
+            std::vector<Variant> variants;
+            if (model == nullptr)
+            {
+                return variants;
+            }
+            const auto foliageMaterial = foliage >= 0 && static_cast<std::size_t>(foliage) < model->materials.size()
+                                             ? model->materials[static_cast<std::size_t>(foliage)]
+                                             : Fenrir::AssetHandle<Fenrir::Material>{};
+            if (!foliageMaterial.IsEmpty() && alpha != nullptr && !MergeAlpha(store, scene, foliageMaterial, alpha))
+            {
+                return variants;
+            }
             for (const Fenrir::ModelNode& node : model->nodes)
             {
                 if (node.meshes.empty())
                 {
                     continue;
                 }
-                std::vector<Part>& parts = variants.emplace_back();
-                for (const Fenrir::ModelMesh& part : node.meshes)
+                Variant& variant = variants.emplace_back();
+                for (const Fenrir::ModelMesh& mesh : node.meshes)
                 {
-                    auto mesh = part.mesh;
-                    if (species.simplifyCells > 0)
-                    {
-                        if (const Fenrir::MeshData* full = store.TryGet(part.mesh))
-                        {
-                            mesh = store.Add<Fenrir::Mesh>(Simplified(*full, species.simplifyCells), scene);
-                        }
-                    }
-                    parts.push_back({mesh, part.material});
+                    variant.parts.push_back({mesh.mesh, mesh.material, mesh.material == foliageMaterial});
                 }
-                // The node's own turn and scale; its position only lays the variants out side by side in the file.
-                rests.push_back(glm::scale(glm::mat4_cast(node.rest.rot), node.rest.scale));
+                // The node's position only lays the file's variants out side by side.
+                variant.rotation = node.rest.rot;
+                variant.scale = node.rest.scale;
             }
+            return variants;
+        }
+
+        /** @brief Adds `copies` as a list drawn by one InstancedMeshRenderer per part, children of `forest`. */
+        void AddList(Fenrir::AssetStore& store, Fenrir::Scene& scene, Fenrir::Entity forest, ForestState& state,
+                     Fenrir::InstanceListData copies, std::span<const Part> parts, bool castShadows)
+        {
+            if (copies.transforms.empty())
+            {
+                return;
+            }
+            state.copies += copies.transforms.size();
+            const auto handle = store.Add<Fenrir::InstanceList>(copies, scene);
+            Fenrir::EntityList& entities = scene.GetEntityList();
+            for (const Part& part : parts)
+            {
+                Fenrir::Entity entity = entities.CreateEntity();
+                entity.AddComponent<Fenrir::Transform>();
+                entity.AddComponent<Fenrir::InstancedMeshRenderer>(
+                    Fenrir::InstancedMeshRenderer{part.mesh, part.material, handle, castShadows});
+                forest.AddChild(entity);
+            }
+            state.lists.push_back({std::move(copies), handle});
+        }
+
+        /**
+         * @brief `part` at a species' level of detail `level`: a tree's foliage thinned and its wood simplified by
+         * TreeDetails, a rock simplified, anything else whole (its two levels differ only in casting).
+         */
+        Part AtDetail(Fenrir::AssetStore& store, Fenrir::Scene& scene, const Species& species, const Part& part,
+                      std::size_t level)
+        {
+            const Fenrir::MeshData* full = store.TryGet(part.mesh);
+            Part made = part;
+            if (full == nullptr)
+            {
+                return made;
+            }
+            if (species.tree)
+            {
+                const TreeDetail& detail = TreeDetails.at(level);
+                if (part.foliage)
+                {
+                    made.mesh = store.Add<Fenrir::Mesh>(ThinnedCards(*full, detail.keepEvery, detail.grow), scene);
+                }
+                else if (detail.trunkCells > 0)
+                {
+                    made.mesh = store.Add<Fenrir::Mesh>(Simplified(*full, detail.trunkCells), scene);
+                }
+            }
+            else if (species.simplifyCells > 0)
+            {
+                made.mesh = store.Add<Fenrir::Mesh>(Simplified(*full, species.simplifyCells), scene);
+            }
+            return made;
+        }
+
+        /**
+         * @brief Plants `species` under `forest`: its copies split round-robin between its variants and, for a tree, by
+         * TreeDetails, one list each. False if the model did not load.
+         */
+        bool SpawnSpecies(Fenrir::AssetStore& store, Fenrir::Scene& scene, Fenrir::Entity forest, ForestState& state,
+                          const Species& species, const std::string& path, std::span<const Forest::Clear> clear,
+                          std::uint32_t seed)
+        {
+            const std::vector<Variant> variants = LoadVariants(store, scene, path, species.foliage, species.alpha);
             if (variants.empty())
             {
                 return false;
             }
-            std::vector<Fenrir::InstanceListData> lists = Plant(species, seed, rests);
-            Fenrir::EntityList& entities = scene.GetEntityList();
+            // A tree's levels are TreeDetails'; anything else's are two, casting within its shadow reach and not past
+            // it.
+            const std::size_t levels = species.tree ? TreeDetails.size() : 2;
+            std::vector<std::vector<Fenrir::InstanceListData>> lists(variants.size(),
+                                                                     std::vector<Fenrir::InstanceListData>(levels));
+            const std::vector<Copy> copies = Plant(species, clear, seed);
+            for (std::size_t i = 0; i < copies.size(); ++i)
+            {
+                const std::size_t v = i % variants.size();
+                std::size_t level = 0;
+                const float past = Forest::PastEdge(copies[i].ground);
+                if (!species.tree)
+                {
+                    level = past > species.shadowReach ? 1 : 0;
+                }
+                while (species.tree && level + 1 < levels && past > TreeDetails.at(level).pastEdge)
+                {
+                    ++level;
+                }
+                lists[v][level].transforms.push_back(copies[i].transform * variants[v].Rest());
+                Fenrir::Colour colour = copies[i].colour;
+                if (species.tree)
+                {
+                    const float tone = TreeDetails.at(level).tone;
+                    colour = {colour.r * tone, colour.g * tone, colour.b * tone, 1.0f};
+                }
+                lists[v][level].colours.push_back(colour);
+            }
+            if (species.tree)
+            {
+                state.trees += copies.size();
+            }
             for (std::size_t v = 0; v < variants.size(); ++v)
             {
-                state.copies += lists[v].transforms.size();
-                const auto handle = store.Add<Fenrir::InstanceList>(lists[v], scene);
-                for (const Part& part : variants[v])
+                for (std::size_t level = 0; level < levels; ++level)
+                {
+                    if (lists[v][level].transforms.empty())
+                    {
+                        continue;
+                    }
+                    std::vector<Part> parts;
+                    for (const Part& part : variants[v].parts)
+                    {
+                        parts.push_back(AtDetail(store, scene, species, part, level));
+                    }
+                    const bool casts =
+                        species.castShadows && (species.tree ? TreeDetails.at(level).castShadows : level == 0);
+                    AddList(store, scene, forest, state, std::move(lists[v][level]), parts, casts);
+                }
+            }
+            return true;
+        }
+
+        /** @brief Where `hero` stands, as an entity's transform, with a node turned and scaled by `rest`. */
+        Fenrir::Transform HeroTransform(const Hero& hero, Fenrir::Math::Quat restRotation, Vec3 restScale)
+        {
+            return {Forest::OnGround(hero.at) - Up * hero.sink, Fenrir::Math::AngleAxis(hero.yaw, Up) * restRotation,
+                    restScale * hero.scale};
+        }
+
+        /**
+         * @brief The foreground's boulders and the log beside the path, each a MeshRenderer per mesh of its node, set
+         * into the ground. False if a model did not load.
+         */
+        bool SpawnHeroes(Fenrir::AssetStore& store, Fenrir::Scene& scene)
+        {
+            Fenrir::EntityList& entities = scene.GetEntityList();
+            for (const Hero& hero : Heroes)
+            {
+                const std::optional<std::string> path = FetchedAsset(hero.model);
+                const std::vector<Variant> variants = path ? LoadVariants(store, scene, *path) : std::vector<Variant>{};
+                if (hero.node >= variants.size())
+                {
+                    return false;
+                }
+                const Variant& variant = variants[hero.node];
+                for (const Part& part : variant.parts)
                 {
                     Fenrir::Entity entity = entities.CreateEntity();
-                    entity.AddComponent<Fenrir::Transform>();
-                    entity.AddComponent<Fenrir::InstancedMeshRenderer>(
-                        Fenrir::InstancedMeshRenderer{part.mesh, part.material, handle, species.castShadows});
-                    forest.AddChild(entity);
+                    entity.AddComponent<Fenrir::Transform>(HeroTransform(hero, variant.rotation, variant.scale));
+                    entity.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{part.mesh, part.material});
                 }
-                state.variants.push_back({std::move(lists[v]), handle});
             }
             return true;
         }
 
         /**
-         * @brief Stand-ins for the fetched plants, from the committed cube and sphere: grey boulders over the ground
-         * and tall dark trunks in the forest, two instance lists, so the scene still has shadows to cast on the grass.
+         * @brief Stand-ins for the fetched models, from the committed cube and sphere: tall dark trunks in the forest
+         * and grey boulders over the ground, two instance lists, and the foreground boulders and the log in their
+         * places, so the scene still casts shadows on the grass and the path.
          */
-        void SpawnStandIns(Fenrir::AssetStore& store, Fenrir::Scene& scene, Fenrir::Entity forest, ForestState& state)
+        void SpawnStandIns(Fenrir::AssetStore& store, Fenrir::Scene& scene, Fenrir::Entity forest, ForestState& state,
+                           std::span<const Forest::Clear> clear)
         {
             const auto cube = store.Load<Fenrir::Mesh>("cube.obj#Mesh0", scene);
             const auto sphere = store.Load<Fenrir::Mesh>("sphere.obj#Mesh0", scene);
@@ -506,113 +806,128 @@ namespace LightingDemo
             {
                 return;
             }
-            const Species boulders{"", 300, 0.3f, 1.5f, Ground::Anywhere, 0, true, false, 0.0f};
-            const Species trunks{"", 80, 1.0f, 1.0f, Ground::Forest, 0, true, false, 4.0f};
-            const std::array<Part, 2> parts{
-                {{sphere.handle, LitMaterial(store, scene, {0.4f, 0.38f, 0.35f, 1.0f}, 0.9f)},
-                 {cube.handle, LitMaterial(store, scene, {0.2f, 0.13f, 0.08f, 1.0f}, 0.9f)}}};
-            // Both meshes are a unit across round their middle: a trunk is 0.5 by 7 metres, standing on the ground.
-            const std::array<Fenrir::Math::Mat4, 2> rests{
-                glm::scale(Fenrir::Math::Mat4(1.0f), Vec3(1.0f)),
-                glm::scale(Fenrir::Math::Translate(Fenrir::Math::Mat4(1.0f), Vec3(0.0f, 3.5f, 0.0f)),
-                           Vec3(0.5f, 7.0f, 0.5f))};
-            Fenrir::EntityList& entities = scene.GetEntityList();
-            for (std::size_t i = 0; i < parts.size(); ++i)
+            const Part rock{sphere.handle, LitMaterial(store, scene, {0.35f, 0.36f, 0.3f, 1.0f}, 0.9f)};
+            const Part bark{cube.handle, LitMaterial(store, scene, {0.18f, 0.12f, 0.08f, 1.0f}, 0.9f)};
+            // Both meshes are a unit across round their middle: a trunk is 0.6 by 14 metres, standing on the ground.
+            const Fenrir::Math::Mat4 trunk =
+                Placement(Vec3(0.0f, 7.0f, 0.0f), {1.0f, 0.0f, 0.0f, 0.0f}, Vec3(0.6f, 14.0f, 0.6f));
+            const Species trees{.model = "", .count = 150, .spacing = 4.2f, .tree = true, .understory = false};
+            const Species boulders{
+                .model = "", .count = 300, .minScale = 0.3f, .maxScale = 1.5f, .habitat = Habitat::Everywhere};
+            Fenrir::InstanceListData trunks;
+            for (const Copy& copy : Plant(trees, clear, 101))
             {
-                std::vector<Fenrir::InstanceListData> lists =
-                    Plant(i == 0 ? boulders : trunks, static_cast<std::uint32_t>(101 + i), {rests.at(i)});
-                state.copies += lists[0].transforms.size();
-                const auto handle = store.Add<Fenrir::InstanceList>(lists[0], scene);
+                trunks.transforms.push_back(copy.transform * trunk);
+                trunks.colours.push_back(copy.colour);
+            }
+            state.trees = trunks.transforms.size();
+            AddList(store, scene, forest, state, std::move(trunks), std::span(&bark, 1), true);
+            Fenrir::InstanceListData rocks;
+            for (const Copy& copy : Plant(boulders, clear, 102))
+            {
+                rocks.transforms.push_back(copy.transform);
+                rocks.colours.push_back(copy.colour);
+            }
+            AddList(store, scene, forest, state, std::move(rocks), std::span(&rock, 1), true);
+            // The heroes' places: a big boulder, a smaller one, and a log lying along its yaw.
+            Fenrir::EntityList& entities = scene.GetEntityList();
+            const std::array<std::pair<Part, Vec3>, 3> shapes{
+                {{rock, {4.0f, 2.4f, 5.0f}}, {rock, {1.8f, 1.4f, 1.8f}}, {bark, {LogLength, 0.9f, 0.9f}}}};
+            for (std::size_t i = 0; i < Heroes.size(); ++i)
+            {
+                const Hero hero = Heroes.at(i);
                 Fenrir::Entity entity = entities.CreateEntity();
-                entity.AddComponent<Fenrir::Transform>();
-                entity.AddComponent<Fenrir::InstancedMeshRenderer>(
-                    Fenrir::InstancedMeshRenderer{parts.at(i).mesh, parts.at(i).material, handle, true});
-                forest.AddChild(entity);
-                state.variants.push_back({std::move(lists[0]), handle});
+                Fenrir::Transform transform = HeroTransform(hero, {1.0f, 0.0f, 0.0f, 0.0f}, Vec3(1.0f));
+                transform.scale = shapes.at(i).second;
+                entity.AddComponent<Fenrir::Transform>(transform);
+                entity.AddComponent<Fenrir::MeshRenderer>(
+                    Fenrir::MeshRenderer{shapes.at(i).first.mesh, shapes.at(i).first.material});
             }
         }
 
         /**
-         * @brief The grass: one generated patch mesh drawn by one InstancedMeshRenderer at every grid cell within
-         * `GrassRadius`, each copy turned a quarter-turn at random so the repeat does not show, through the demo's wind
-         * shader. Logs an error and spawns nothing if the shader or material cannot be made.
+         * @brief The grass: Forest::GrassChunks' meshes, one MeshRenderer each, through the demo's wind shader. Logs an
+         * error and spawns nothing if the shader cannot be made.
          */
-        void SpawnGrass(Fenrir::App& app, Fenrir::Scene& scene, ForestState& state)
+        void SpawnGrass(Fenrir::App& app, Fenrir::Scene& scene, ForestState& state,
+                        std::span<const Forest::Clear> clear)
         {
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
-            Fenrir::ShaderData shader;
-            const auto bytes = std::as_bytes(std::span(Fenrir::Shaders::LightingDemoGrass));
-            shader.bytes.assign(bytes.begin(), bytes.end());
-            const auto material = store.CreateMaterial(store.Add<Fenrir::Shader>(std::move(shader), scene), scene);
+            const auto material = EmbeddedMaterial(store, scene, Fenrir::Shaders::LightingDemoGrass);
             if (material.IsEmpty())
             {
                 app.Logger()->Error("{}: the grass shader did not load", SceneName);
                 return;
             }
-            store.SetDoubleSided(material, true);
-            const Fenrir::MeshData patch = GrassPatch(17);
-            const auto mesh = store.Add<Fenrir::Mesh>(patch, scene);
-
-            std::mt19937 random(23);
-            std::uniform_int_distribution<int> quarter(0, 3);
-            std::uniform_real_distribution<float> unit(0.0f, 1.0f);
-            Fenrir::InstanceListData patches;
-            const int cells = static_cast<int>(std::ceil(GrassRadius / PatchSize));
-            for (int x = -cells; x < cells; ++x)
+            Fenrir::EntityList& entities = scene.GetEntityList();
+            for (Fenrir::MeshData& chunk : Forest::GrassChunks(GrassBlades, clear, 17))
             {
-                for (int z = -cells; z < cells; ++z)
+                // Two faces of seven vertices a blade.
+                state.blades += chunk.positions.size() / 14;
+                Fenrir::Entity entity = entities.CreateEntity();
+                entity.AddComponent<Fenrir::Transform>();
+                entity.AddComponent<Fenrir::MeshRenderer>(
+                    Fenrir::MeshRenderer{store.Add<Fenrir::Mesh>(std::move(chunk), scene), material});
+                state.grass.push_back(entity);
+            }
+        }
+
+        /** @brief The circles the grass and the plants keep out of: under the boulders and along the log. */
+        std::vector<Forest::Clear> HeroClearings()
+        {
+            std::vector<Forest::Clear> clear;
+            for (const Hero& hero : Heroes)
+            {
+                if (hero.clear > 0.0f)
                 {
-                    const Vec3 centre{(static_cast<float>(x) + 0.5f) * PatchSize, 0.0f,
-                                      (static_cast<float>(z) + 0.5f) * PatchSize};
-                    if (glm::length(Vec2(centre.x, centre.z)) > GrassRadius)
-                    {
-                        continue;
-                    }
-                    const auto turn = Fenrir::Math::AngleAxis(0.5f * Pi * static_cast<float>(quarter(random)),
-                                                              Vec3(0.0f, 1.0f, 0.0f));
-                    patches.transforms.push_back(Placed(centre, turn, 1.0f));
-                    const float lush = 0.85f + 0.15f * unit(random);
-                    patches.colours.push_back({lush, lush, lush * 0.9f, 1.0f});
+                    clear.push_back({hero.at, hero.clear});
                 }
             }
-            state.patches = patches.transforms.size();
-            state.blades = state.patches * BladesPerPatch;
-            const auto list = store.Add<Fenrir::InstanceList>(std::move(patches), scene);
-            state.grass = scene.GetEntityList().CreateEntity();
-            state.grass.AddComponent<Fenrir::Transform>();
-            state.grass.AddComponent<Fenrir::InstancedMeshRenderer>(
-                Fenrir::InstancedMeshRenderer{mesh, material, list});
+            // The log, as a row of circles along its length: its model lies along X, turned by its yaw about +Y.
+            const Hero& log = Heroes.back();
+            const Vec2 along{std::cos(log.yaw), -std::sin(log.yaw)};
+            for (float t = -0.5f; t <= 0.5f; t += 0.125f)
+            {
+                clear.push_back({log.at + along * (t * LogLength), 0.7f});
+            }
+            return clear;
         }
 
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
         {
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
             ForestState state;
-            // Shadows across the clearing and into the trees round it; the forest beyond is in the far cascade's dusk.
+            // Shadows across the clearing and into the trees round it, whose 17-metre crowns throw them far.
             state.lighting.sunShadows.shadowDistance = 70.0f;
+            state.lighting.ambientOcclusion.radius = 1.0f;
+            state.lighting.bloom.intensity = 0.06f;
+            state.lighting.exposure = -0.5f;
             bool fetched = true;
             if (const std::optional<std::string> path = FetchedAsset(Panorama))
             {
                 if (const auto image = store.Load<Fenrir::Image>(*path, scene); image.Ok())
                 {
-                    state.lighting.panoramas.push_back({"Autumn Forest 04 (2k)", image.handle});
+                    state.lighting.panoramas.push_back({"Qwantani Late Afternoon (2k)", image.handle});
                 }
             }
             fetched = fetched && !state.lighting.panoramas.empty();
             state.lighting.panoramas.push_back(
-                {"Procedural golden hour", store.Add<Fenrir::Image>(GoldenHourSky(1024), scene)});
+                {"Procedural late afternoon", store.Add<Fenrir::Image>(AfternoonSky(1024), scene)});
 
             Fenrir::EntityList& entities = scene.GetEntityList();
             Fenrir::Entity sun = entities.CreateEntity();
-            sun.AddComponent<Fenrir::Transform>().rot = glm::quatLookAt(SunTravel, Vec3(0.0f, 1.0f, 0.0f));
+            sun.AddComponent<Fenrir::Transform>().rot = glm::quatLookAt(SunTravel, Up);
             sun.AddComponent<Fenrir::DirectionalLight>(Fenrir::DirectionalLight{SunColour, SunIntensity});
 
-            Fenrir::Entity ground = entities.CreateEntity();
-            ground.AddComponent<Fenrir::Transform>();
-            ground.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{
-                store.Add<Fenrir::Mesh>(GroundPlane(), scene), GroundMaterial(store, scene, fetched)});
+            const GroundMaterial ground = MakeGroundMaterial(app, scene);
+            fetched = fetched && ground.fetched;
+            Fenrir::Entity floor = entities.CreateEntity();
+            floor.AddComponent<Fenrir::Transform>();
+            floor.AddComponent<Fenrir::MeshRenderer>(
+                Fenrir::MeshRenderer{store.Add<Fenrir::Mesh>(Forest::GroundMesh(), scene), ground.material});
 
-            SpawnGrass(app, scene, state);
+            const std::vector<Forest::Clear> clear = HeroClearings();
+            SpawnGrass(app, scene, state, clear);
 
             // Every species or none: configure fetches every file of the manifest or fails.
             Fenrir::Entity forest = entities.CreateEntity();
@@ -625,12 +940,12 @@ namespace LightingDemo
                     paths.push_back(*path);
                 }
             }
-            fetched = fetched && paths.size() == ForestSpecies.size();
+            fetched = fetched && paths.size() == ForestSpecies.size() && SpawnHeroes(store, scene);
             if (fetched)
             {
                 for (std::size_t i = 0; i < ForestSpecies.size(); ++i)
                 {
-                    if (!SpawnSpecies(store, scene, forest, state, ForestSpecies.at(i), paths.at(i),
+                    if (!SpawnSpecies(store, scene, forest, state, ForestSpecies.at(i), paths.at(i), clear,
                                       static_cast<std::uint32_t>(41 + i)))
                     {
                         app.Logger()->Error("{}: {} did not load from the cache", SceneName, ForestSpecies.at(i).model);
@@ -639,9 +954,9 @@ namespace LightingDemo
             }
             else
             {
-                SpawnStandIns(store, scene, forest, state);
-                app.Logger()->Info("{}: the plants, rocks, ground and panorama are fetched assets "
-                                   "(FENRIR_FETCH_DEMO_ASSETS); the grass grows, and boulders and trunks stand in",
+                SpawnStandIns(store, scene, forest, state, clear);
+                app.Logger()->Info("{}: the trees, plants, rocks, ground textures and panorama are fetched assets "
+                                   "(FENRIR_FETCH_DEMO_ASSETS); the grass grows, and trunks and boulders stand in",
                                    SceneName);
             }
             state.fetched = fetched;
@@ -672,28 +987,35 @@ namespace LightingDemo
             }
 
             const Fenrir::RendererStats stats = Fenrir::Renderer::Stats(app);
+            const auto delta = static_cast<float>(app.GetTime().deltaTime);
+            state->frameTime = state->frameTime == 0.0f ? delta : glm::mix(state->frameTime, delta, 0.05f);
             RunLightingPanel(app, scene, state->lighting, [&] {
                 ImGui::SliderInt("Forest density % (N)", &state->density, 5, 100);
                 ImGui::Checkbox("Grass (M)", &state->grassVisible);
-                ImGui::Text("Forest: %zu copies in %zu lists", state->copies, state->variants.size());
-                ImGui::Text("Grass: %zu blades in %zu patches", state->blades, state->patches);
+                ImGui::Text("Forest: %zu copies in %zu lists, %zu of them trees", state->copies, state->lists.size(),
+                            state->trees);
+                ImGui::Text("Grass: %zu blades in %zu chunks", state->blades, state->grass.size());
                 ImGui::Text("Draws: %u  Instances: %u  Shadow draws: %u", stats.draws, stats.instances,
                             stats.shadowDraws);
+                ImGui::Text("Frame: %.2f ms (%.0f fps)", state->frameTime * 1000.0f,
+                            state->frameTime > 0.0f ? 1.0f / state->frameTime : 0.0f);
             });
 
             // A new density cuts each list again: Replace bumps its revision, so the renderer uploads it once more.
             if (state->density != state->listedDensity)
             {
                 Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
-                for (const Variant& variant : state->variants)
+                for (const CopyList& list : state->lists)
                 {
-                    store.Replace(variant.handle, Thinned(variant.list, state->density));
+                    const std::size_t total = list.copies.transforms.size();
+                    const std::size_t share = (total * static_cast<std::size_t>(state->density) + 99) / 100;
+                    store.Replace(list.handle, FirstCopies(list.copies, share));
                 }
                 state->listedDensity = state->density;
             }
-            if (state->grass.IsValid())
+            for (const Fenrir::Entity& chunk : state->grass)
             {
-                state->grass.GetComponent<Fenrir::InstancedMeshRenderer>().visible = state->grassVisible;
+                chunk.GetComponent<Fenrir::MeshRenderer>().visible = state->grassVisible;
             }
         }
     } // namespace
@@ -707,10 +1029,10 @@ namespace LightingDemo
         // other sky.
         scene.keys = {Fenrir::Key::N, Fenrir::Key::M, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::M, Fenrir::Key::G,
                       Fenrir::Key::H, Fenrir::Key::G, Fenrir::Key::H, Fenrir::Key::S, Fenrir::Key::N, Fenrir::Key::N};
-        // At the clearing's edge, standing in the grass, looking across it with the low sun ahead and to the right.
-        scene.camera.position = {-2.0f, 1.6f, 15.0f};
-        scene.camera.yaw = 0.16f;
-        scene.camera.pitch = -0.08f;
+        // On the path at the clearing's south edge, looking north along it towards the low sun beyond the trees.
+        scene.camera.position = Forest::OnGround({-3.2f, 17.5f}) + Vec3(0.0f, 1.7f, 0.0f);
+        scene.camera.yaw = -0.3f;
+        scene.camera.pitch = 0.04f;
         scene.spawn = Spawn;
         scene.update = Update;
         return scene;

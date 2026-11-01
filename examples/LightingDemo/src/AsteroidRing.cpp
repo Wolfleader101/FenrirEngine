@@ -25,7 +25,7 @@
 #include "FetchedAssets.hpp"
 #include "LightingPanel.hpp"
 #include "LightingScenes.hpp"
-#include "SimplifiedMesh.hpp"
+#include "MeshTools.hpp"
 
 namespace LightingDemo
 {
@@ -174,8 +174,7 @@ namespace LightingDemo
 
             [[nodiscard]] Fenrir::Math::Mat4 Matrix() const
             {
-                return glm::scale(
-                    Fenrir::Math::Translate(Fenrir::Math::Mat4(1.0f), position) * glm::mat4_cast(rotation), scale);
+                return Placement(position, rotation, scale);
             }
         };
 
@@ -222,17 +221,6 @@ namespace LightingDemo
                 lists[kind].colours.push_back(RockTint(random));
             }
             return lists;
-        }
-
-        /** @brief `list`'s first `count` copies. */
-        Fenrir::InstanceListData FirstCopies(const Fenrir::InstanceListData& list, std::size_t count)
-        {
-            Fenrir::InstanceListData cut;
-            count = std::min(count, list.transforms.size());
-            cut.transforms.assign(list.transforms.begin(),
-                                  list.transforms.begin() + static_cast<std::ptrdiff_t>(count));
-            cut.colours.assign(list.colours.begin(), list.colours.begin() + static_cast<std::ptrdiff_t>(count));
-            return cut;
         }
 
         /** @brief About `FieldRocks` rock entities in a ball beside the ring, which automatic instancing merges. */
