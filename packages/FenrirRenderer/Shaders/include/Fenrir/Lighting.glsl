@@ -1,7 +1,8 @@
 // Fenrir/Lighting.glsl: the lighting every material shares (ADR-0048). A shader fills a FenrirSurface its own way and
 // calls FenrirLitColour, which returns the surface's lit colour as linear HDR: the frame's directional light, its point,
 // spot and rect lights, and the scene's Sky as image-based lighting (ADR-0047), diffuse from its spherical harmonics and
-// specular from its prefiltered cube through the split sum's BRDF lookup table. Intensities are plain multipliers, so
+// specular from its prefiltered cube through the split sum's BRDF lookup table, darkened by the surface's occlusion and
+// the view's ambient occlusion (ADR-0049), which never touch the direct lights. Intensities are plain multipliers, so
 // the BRDF is scaled by pi: a white light of intensity 1 falling straight onto a white rough face gives about 1, not
 // 1 / pi, as does a point light of intensity 1 one unit away (well inside its range), and a white sky of intensity 1
 // all round it. A rect light's intensity is its radiance: a white one of intensity 1 filling a white rough face's view
@@ -205,6 +206,13 @@ vec3 FenrirRectLight(FenrirLight light, vec3 position, vec3 n, vec3 v, float nDo
             specular * FenrirLtcIntegral(light, position, toLobe));
 }
 
+// The view's ambient occlusion (Fenrir/View.glsl) at this fragment's pixel; 1 where the view has none.
+float FenrirViewOcclusion()
+{
+    ivec2 last = textureSize(fenrirAmbientOcclusion, 0) - 1;
+    return texelFetch(fenrirAmbientOcclusion, min(ivec2(gl_FragCoord.xy), last), 0).r;
+}
+
 // The lit colour of `surface` seen from the view's camera, linear HDR, with its alpha.
 vec4 FenrirLitColour(FenrirSurface surface)
 {
@@ -267,10 +275,11 @@ vec4 FenrirLitColour(FenrirSurface surface)
     vec3 skySpecular = textureLod(fenrirSkySpecular, FenrirSkyLightDirection(r), roughness * frame.skyLight.w).rgb;
     vec3 skyIrradiance = FenrirSkyIrradiance(n);
     vec3 skyDiffuse = (1.0 - skySingleScatter - skyMultiScatter) * (1.0 - metallic) * base;
-    // Specular occlusion from the ambient occlusion (Lagarde and de Rousiers 2014, with a = roughness squared as they
-    // and Filament use it): rough surfaces take all of it, smooth ones less at grazing angles. The multiple-scattering
-    // share is diffuse-like, so it takes the ambient occlusion.
-    float occlusion = clamp(surface.occlusion, 0.0, 1.0);
+    // The ambient occlusion: the lesser of the surface's own and the view's GTAO at this pixel (Filament's choice, so
+    // occlusion a texture bakes and GTAO also finds does not darken twice). Specular occlusion from it (Lagarde and de
+    // Rousiers 2014, with a = roughness squared as they and Filament use it): rough surfaces take all of it, smooth
+    // ones less at grazing angles. The multiple-scattering share is diffuse-like, so it takes the ambient occlusion.
+    float occlusion = min(clamp(surface.occlusion, 0.0, 1.0), FenrirViewOcclusion());
     float specularOcclusion = clamp(pow(nDotV + occlusion, exp2(-16.0 * a - 1.0)) - 1.0 + occlusion, 0.0, 1.0);
     colour += (skyIrradiance * (skyDiffuse + skyMultiScatter) * occlusion +
                skySpecular * skySingleScatter * specularOcclusion) *

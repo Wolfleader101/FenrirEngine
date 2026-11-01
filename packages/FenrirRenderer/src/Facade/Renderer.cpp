@@ -685,6 +685,9 @@ namespace Fenrir
                 view.exposure = camera.exposure;
                 view.tonemapper = ToCore(camera.tonemapper);
                 view.bloom = {camera.bloom.intensity, camera.bloom.radius};
+                view.ambientOcclusion = {camera.ambientOcclusion.enabled, camera.ambientOcclusion.radius,
+                                         camera.ambientOcclusion.intensity};
+                view.showOcclusion = camera.debugView == CameraDebugView::AmbientOcclusion;
                 candidates.push_back(candidate);
             });
 

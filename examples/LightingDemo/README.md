@@ -9,10 +9,15 @@ section of its own: what it shows, its keys and its hand checks. Later lighting 
 ## The Lighting window
 
 Every scene shows the same ImGui window, Lighting (`src/LightingPanel.cpp`): the cameras' exposure (EV stops),
-tonemapper (AgX, PBR Neutral, ACES, None) and bloom (intensity and radius), and the sky: which panorama, its intensity
-and its rotation. It writes them to every camera in the scene each frame, the free-fly camera among them. Keys do the
-same, for the smoke runs and by hand: T the next tonemapper, E the next exposure (0, +1, +2, -1 EV), B bloom off or back
-on at its default, S the next panorama where the scene has more than one.
+tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius) and ambient occlusion (GTAO: on, which it is
+by default here, its radius and strength, and a view of the raw occlusion as grey), and the sky: which panorama, its
+intensity and its rotation. It writes them to every camera in the scene each frame, the free-fly camera among them.
+Keys do the same, for the smoke runs and by hand: T the next tonemapper, E the next exposure (0, +1, +2, -1 EV), B bloom
+off or back on at its default, O ambient occlusion off or back on, G the raw occlusion view or back, S the next
+panorama where the scene has more than one.
+
+Hand check for ambient occlusion: in Showcase models, contact shadows under the helmets where they meet the ground, and
+with G, dark creases and corners on white, no dark halo round a model's silhouette against what is far behind it.
 
 ## Assets
 
@@ -42,7 +47,7 @@ committed 1k panorama) alone; a sun can be added. The window's Scene part has th
 
 | Keys | |
 | --- | --- |
-| T, E, B | The Lighting window's: tonemapper, exposure, bloom. |
+| T, E, B, O, G | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the raw occlusion view. |
 | L | The sun (a DirectionalLight of intensity 3) on or off. |
 
 Hand checks, on OpenGL:
@@ -69,7 +74,7 @@ large textures at once: about 15 seconds in a Debug build on an RTX 5080 machine
 
 | Keys | |
 | --- | --- |
-| T, E, B | The Lighting window's: tonemapper, exposure, bloom. |
+| T, E, B, O, G | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the raw occlusion view. |
 | S | The next panorama. |
 | R | The turntable on or off. |
 
@@ -96,7 +101,7 @@ the count (0 to 256), whether they move, the point and spot intensities and the 
 
 | Keys | |
 | --- | --- |
-| T, E, B | The Lighting window's: tonemapper, exposure, bloom. |
+| T, E, B, O, G | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the raw occlusion view. |
 | M | 16, 64, 100 or 256 lights. |
 | P | The lights moving or still. |
 
@@ -123,7 +128,7 @@ height, intensity and sidedness.
 
 | Keys | |
 | --- | --- |
-| T, E, B | The Lighting window's: tonemapper, exposure, bloom. |
+| T, E, B, O, G | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the raw occlusion view. |
 | Z | Every light at half, as set, or twice its size. |
 | V | Every light's sidedness flipped. |
 

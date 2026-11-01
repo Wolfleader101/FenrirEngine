@@ -14,6 +14,7 @@
 #include "FenrirShaders/BuiltinDebugTriangles.hpp"
 #include "FenrirShaders/BuiltinDepthPrepass.hpp"
 #include "FenrirShaders/BuiltinFallback.hpp"
+#include "FenrirShaders/BuiltinGtao.hpp"
 #include "FenrirShaders/BuiltinLit.hpp"
 #include "FenrirShaders/BuiltinOutput.hpp"
 #include "FenrirShaders/BuiltinPanorama.hpp"
@@ -31,9 +32,9 @@ namespace Fenrir::Render
             return std::as_bytes(std::span<const std::uint8_t, N>(embedded));
         }
 
-        const std::array<BuiltinShader, 16>& Table()
+        const std::array<BuiltinShader, 17>& Table()
         {
-            static const std::array<BuiltinShader, 16> table{{
+            static const std::array<BuiltinShader, 17> table{{
                 {BuiltinProgram::Unlit, "builtin:unlit", BytesOf(Shaders::BuiltinUnlit)},
                 {BuiltinProgram::Lit, "builtin:lit", BytesOf(Shaders::BuiltinLit)},
                 {BuiltinProgram::Fallback, "builtin:fallback", BytesOf(Shaders::BuiltinFallback)},
@@ -50,6 +51,7 @@ namespace Fenrir::Render
                 {BuiltinProgram::BloomDownsample, "builtin:bloom-downsample", BytesOf(Shaders::BuiltinBloomDownsample)},
                 {BuiltinProgram::BloomUpsample, "builtin:bloom-upsample", BytesOf(Shaders::BuiltinBloomUpsample)},
                 {BuiltinProgram::DepthPrepass, "builtin:depth-prepass", BytesOf(Shaders::BuiltinDepthPrepass)},
+                {BuiltinProgram::Gtao, "builtin:gtao", BytesOf(Shaders::BuiltinGtao)},
             }};
             return table;
         }

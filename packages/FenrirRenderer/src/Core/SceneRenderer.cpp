@@ -122,8 +122,8 @@ namespace Fenrir::Render
         // records as they need; reflection sizes such a block by one record, so their record layouts are checked. Set
         // 0's textures are the sky's light (ADR-0047): its spherical harmonics, its specular cube and the BRDF table,
         // then the rect lights' two LTC tables; its storage block is the point, spot and rect lights (ADR-0048), as
-        // many as the frame has.
-        [[maybe_unused]] constexpr std::array<FixedBinding, 10> FixedBindings{{
+        // many as the frame has. Set 1's texture is the view's ambient occlusion (ADR-0049).
+        [[maybe_unused]] constexpr std::array<FixedBinding, 11> FixedBindings{{
             {0, 0, ShaderBindingKind::UniformBuffer, sizeof(FrameBlock)},
             {0, 1, ShaderBindingKind::Texture, 0},
             {0, 2, ShaderBindingKind::Texture, 0},
@@ -132,6 +132,7 @@ namespace Fenrir::Render
             {0, 5, ShaderBindingKind::Texture, 0},
             {0, 6, ShaderBindingKind::Texture, 0},
             {1, 0, ShaderBindingKind::UniformBuffer, sizeof(ViewBlock)},
+            {1, 1, ShaderBindingKind::Texture, 0},
             {3, 0, ShaderBindingKind::StorageBuffer, sizeof(DrawBlock)},
             {3, 1, ShaderBindingKind::StorageBuffer, sizeof(GpuBone)},
         }};
@@ -671,7 +672,8 @@ namespace Fenrir::Render
                                                             {5, ShaderBindingKind::Texture},
                                                             {6, ShaderBindingKind::Texture}}},
                                                           "Frame");
-        m_viewLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "View");
+        m_viewLayout = m_device.CreateBindingGroupLayout(
+            {{{0, ShaderBindingKind::UniformBuffer}, {1, ShaderBindingKind::Texture}}}, "View");
         m_outputBlockLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Output");
         m_drawLayout = m_device.CreateBindingGroupLayout(
             {{{0, ShaderBindingKind::StorageBuffer}, {1, ShaderBindingKind::StorageBuffer}}}, "Draw");
@@ -769,6 +771,9 @@ namespace Fenrir::Render
         const ShaderVariant* output = m_samples > 1 ? m_output.FindVariant(msaa) : BaseVariant(m_output);
         m_outputPipeline = MakeInternalPipeline(m_output, output, m_outputLayout, TextureFormat::Rgba8Srgb, false, 1,
                                                 m_outputBlockLayout);
+        constexpr std::array<std::string_view, 1> occlusion{"OCCLUSION"};
+        m_occlusionOutputPipeline = MakeInternalPipeline(m_output, m_output.FindVariant(occlusion), m_outputLayout,
+                                                         TextureFormat::Rgba8Srgb, false, 1, m_outputBlockLayout);
 
         // The frame set's groups bind the frame block with the sky's textures, so the ring makes none of its own.
         m_frameBlocks =
@@ -777,7 +782,10 @@ namespace Fenrir::Render
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true, sizeof(GpuLight), "Lights");
         m_skyLighting = std::make_unique<SkyLighting>(m_device, m_logger);
         m_bloom = std::make_unique<BloomChain>(m_device, m_logger, m_samples);
-        m_viewBlocks = std::make_unique<BlockRing>(m_device, m_viewLayout, false, sizeof(ViewBlock), "View");
+        m_gtao = std::make_unique<Gtao>(m_device, m_logger, m_samples);
+        // The view set's groups bind a view block with its ambient occlusion, so the ring makes none of its own.
+        m_viewBlocks =
+            std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, false, sizeof(ViewBlock), "View");
         m_backgroundBlocks =
             std::make_unique<BlockRing>(m_device, m_backgroundLayout, false, sizeof(BackgroundBlock), "Background");
         m_outputBlocks =
@@ -841,6 +849,10 @@ namespace Fenrir::Render
         {
             m_device.Destroy(group);
         }
+        for (auto& [key, group] : m_viewGroups)
+        {
+            m_device.Destroy(group);
+        }
         for (const DrawGroup& group : m_drawGroups)
         {
             m_device.Destroy(group.group);
@@ -850,6 +862,7 @@ namespace Fenrir::Render
             m_device.Destroy(group.group);
         }
         m_skyLighting.reset();
+        m_gtao.reset();
         m_frameBlocks.reset();
         m_lightBlocks.reset();
         m_viewBlocks.reset();
@@ -861,6 +874,7 @@ namespace Fenrir::Render
         m_device.Destroy(m_backgroundPipeline);
         m_device.Destroy(m_skyPipeline);
         m_device.Destroy(m_outputPipeline);
+        m_device.Destroy(m_occlusionOutputPipeline);
         m_device.Destroy(m_panoramaPipeline);
         m_device.Destroy(m_panoramaLayout);
         m_device.Destroy(m_prepassMaskLayout);
@@ -2103,6 +2117,29 @@ namespace Fenrir::Render
         return source;
     }
 
+    BindingGroupHandle SceneRenderer::ViewGroupFor(std::uint64_t frameIndex, std::size_t slot, TextureHandle occlusion)
+    {
+        const BufferHandle buffer = m_viewBlocks->Buffer(frameIndex);
+        const std::array<std::uint32_t, 5> key{buffer.index, buffer.generation, static_cast<std::uint32_t>(slot),
+                                               occlusion.index, occlusion.generation};
+        if (const auto found = m_viewGroups.find(key); found != m_viewGroups.end())
+        {
+            return found->second;
+        }
+        BindingGroupEntry block;
+        block.binding = 0;
+        block.buffer = buffer;
+        block.offset = slot * m_viewBlocks->SlotSize();
+        block.size = m_viewBlocks->SlotSize();
+        BindingGroupEntry texture;
+        texture.binding = 1;
+        texture.texture = occlusion;
+        texture.sampler = m_outputSampler;
+        const BindingGroupHandle group = m_device.CreateBindingGroup({m_viewLayout, {block, texture}}, "View");
+        m_viewGroups.emplace(key, group);
+        return group;
+    }
+
     BindingGroupHandle SceneRenderer::OutputGroup(TextureHandle sceneColour)
     {
         const std::pair<std::uint32_t, std::uint32_t> key{sceneColour.index, sceneColour.generation};
@@ -2138,6 +2175,20 @@ namespace Fenrir::Render
             {
                 m_device.Destroy(it->second);
                 it = m_outputGroups.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+        // And the view groups of view rings remade since, or of occlusion textures it has let go of.
+        for (auto it = m_viewGroups.begin(); it != m_viewGroups.end();)
+        {
+            const std::array<std::uint32_t, 5>& key = it->first;
+            if (!m_device.IsLive(BufferHandle{key[0], key[1]}) || !m_device.IsLive(TextureHandle{key[3], key[4]}))
+            {
+                m_device.Destroy(it->second);
+                it = m_viewGroups.erase(it);
             }
             else
             {
@@ -2205,6 +2256,7 @@ namespace Fenrir::Render
             std::count_if(draws->begin(), draws->end(), [](const ResolvedDraw& draw) { return draw.skinned; }));
         const std::vector<ViewRequest>& views = m_frame.views;
         m_viewBlocks->Reserve(views.size());
+        m_gtao->BeginFrame(views.size());
         m_backgroundBlocks->Reserve(views.size());
         m_outputBlocks->Reserve(views.size());
 
@@ -2315,7 +2367,8 @@ namespace Fenrir::Render
             outputBlock.tonemapper = static_cast<std::uint32_t>(request.tonemapper);
             m_outputBlocks->Write(frameIndex, v, BytesOf(outputBlock));
             const BindingGroupHandle outputBlockGroup = m_outputBlocks->Group(frameIndex, v);
-            const BindingGroupHandle viewGroup = m_viewBlocks->Group(frameIndex, v);
+            // The white texture as its ambient occlusion, for every pass but Opaque.
+            const BindingGroupHandle viewGroup = ViewGroupFor(frameIndex, v, GetDefaultTexture(DefaultTexture::White));
             // The Sky cube texture's pipeline and group, when the view draws one that is prepared; else its colour's,
             // which reads no frame block.
             BindingGroupHandle backgroundGroup = m_backgroundBlocks->Group(frameIndex, v);
@@ -2399,6 +2452,10 @@ namespace Fenrir::Render
                     RecordDraws(context.Encoder(), *draws, *prepassGroups, *prepassed, frameGroup, viewGroup, drawGroup,
                                 viewport, true);
                 });
+            // GTAO from the prepass's depth and normals, when the camera has it; Opaque samples what it makes.
+            const GraphResource occlusion = m_gtao->AddPasses(
+                graph, frameIndex, v,
+                {sceneDepth, sceneNormals, {rect.width, rect.height}, request.projection, request.ambientOcclusion});
             graph.AddPass(
                 "Opaque", RenderStage::Opaque, QueueKind::Graphics,
                 [=](PassBuilder& pass) {
@@ -2409,10 +2466,18 @@ namespace Fenrir::Render
                     {
                         pass.Sample(image);
                     }
+                    if (!occlusion.IsEmpty())
+                    {
+                        pass.Sample(occlusion);
+                    }
                 },
-                [this, draws, groups, opaque, frameGroup, viewGroup, drawGroup, viewport](PassContext& context) {
-                    RecordDraws(context.Encoder(), *draws, *groups, *opaque, frameGroup, viewGroup, drawGroup, viewport,
-                                false);
+                [this, draws, groups, opaque, frameGroup, viewGroup, drawGroup, viewport, occlusion,
+                 v](PassContext& context) {
+                    const BindingGroupHandle occludedView =
+                        occlusion.IsEmpty() ? viewGroup
+                                            : ViewGroupFor(context.FrameIndex(), v, context.Texture(occlusion));
+                    RecordDraws(context.Encoder(), *draws, *groups, *opaque, frameGroup, occludedView, drawGroup,
+                                viewport, false);
                 });
             if (!transparent->empty())
             {
@@ -2459,18 +2524,27 @@ namespace Fenrir::Render
 
             // The first view into a target clears all of it; each later one draws over it, in its viewport only.
             const LoadOp load = cleared.insert(request.target).second ? LoadOp::Clear : LoadOp::Load;
+            // A view showing its ambient occlusion draws that instead, black when it has none.
+            const bool showOcclusion = request.showOcclusion && !m_occlusionOutputPipeline.IsEmpty();
+            const GraphResource shown = showOcclusion && !occlusion.IsEmpty() ? occlusion : sceneColour;
+            const PipelineHandle outputPipeline = showOcclusion ? m_occlusionOutputPipeline : m_outputPipeline;
+            const TextureHandle black = GetDefaultTexture(DefaultTexture::Black);
+            const bool shownBlack = showOcclusion && occlusion.IsEmpty();
             graph.AddPass(
                 "Output", RenderStage::Output, QueueKind::Graphics,
                 [=](PassBuilder& pass) {
-                    pass.Sample(sceneColour);
+                    if (!shownBlack)
+                    {
+                        pass.Sample(shown);
+                    }
                     pass.ColourAttachment(target, load, {0.0f, 0.0f, 0.0f, 1.0f});
                 },
-                [this, sceneColour, rect, outputBlockGroup](PassContext& context) {
+                [this, shown, shownBlack, black, outputPipeline, rect, outputBlockGroup](PassContext& context) {
                     PassEncoder& encoder = context.Encoder();
                     encoder.SetViewport(rect);
-                    encoder.SetPipeline(m_outputPipeline);
+                    encoder.SetPipeline(outputPipeline);
                     encoder.SetBindingGroup(1, outputBlockGroup);
-                    encoder.SetBindingGroup(MaterialSet, OutputGroup(context.Texture(sceneColour)));
+                    encoder.SetBindingGroup(MaterialSet, OutputGroup(shownBlack ? black : context.Texture(shown)));
                     encoder.Draw({.vertexCount = 3});
                 });
         }

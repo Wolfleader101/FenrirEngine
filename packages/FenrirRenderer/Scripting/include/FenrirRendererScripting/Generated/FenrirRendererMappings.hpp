@@ -18,6 +18,19 @@
 #include <cstdint>
 #include <string_view>
 
+template <>
+struct Iris::StructMapping<Fenrir::AmbientOcclusion>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.AmbientOcclusion";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<bool>("Enabled", 0),
+        Iris::Field<float>("Radius", 4),
+        Iris::Field<float>("Intensity", 8));
+};
+static_assert(sizeof(Fenrir::AmbientOcclusion) == 12 && alignof(Fenrir::AmbientOcclusion) == 4,
+              "Fenrir::AmbientOcclusion is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
 static_assert(sizeof(Fenrir::AssetHandle<Fenrir::Image>) == 8 && alignof(Fenrir::AssetHandle<Fenrir::Image>) == 4,
               "Fenrir::AssetHandle<Fenrir::Image> is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
@@ -83,6 +96,15 @@ struct Iris::StructMapping<Fenrir::CameraBackground>
 };
 static_assert(sizeof(Fenrir::CameraBackground) == 20 && alignof(Fenrir::CameraBackground) == 4,
               "Fenrir::CameraBackground is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::EnumMapping<Fenrir::CameraDebugView>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.CameraDebugView";
+};
+static_assert(sizeof(Fenrir::CameraDebugView) == 1 && alignof(Fenrir::CameraDebugView) == 1,
+              "Fenrir::CameraDebugView is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
 template <>
@@ -213,9 +235,11 @@ struct Iris::StructMapping<Fenrir::Camera>
         Iris::Field<bool>("DrawDebug", 72),
         Iris::Field<float>("Exposure", 76),
         Iris::Field<Fenrir::Tonemapper>("Tonemapper", 80),
-        Iris::Field<Fenrir::Bloom>("Bloom", 84));
+        Iris::Field<Fenrir::Bloom>("Bloom", 84),
+        Iris::Field<Fenrir::AmbientOcclusion>("AmbientOcclusion", 92),
+        Iris::Field<Fenrir::CameraDebugView>("DebugView", 104));
 };
-static_assert(sizeof(Fenrir::Camera) == 92 && alignof(Fenrir::Camera) == 4,
+static_assert(sizeof(Fenrir::Camera) == 108 && alignof(Fenrir::Camera) == 4,
               "Fenrir::Camera is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 

@@ -161,8 +161,8 @@ namespace LightingDemo
         FenrirDemo::DemoScene scene;
         scene.name = "Material grid";
         scene.keyHelp = LightingKeyHelp(false) + " L: the sun on or off.";
-        scene.keys = {Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::B, Fenrir::Key::L,
-                      Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::B, Fenrir::Key::L};
+        scene.keys = {Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::B, Fenrir::Key::L, Fenrir::Key::T, Fenrir::Key::E,
+                      Fenrir::Key::B, Fenrir::Key::L, Fenrir::Key::G, Fenrir::Key::O, Fenrir::Key::G, Fenrir::Key::O};
         scene.camera.position = {0.0f, 0.0f, 10.0f};
         scene.spawn = Spawn;
         scene.update = Update;

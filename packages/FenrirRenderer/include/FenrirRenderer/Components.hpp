@@ -443,6 +443,40 @@ namespace Fenrir
     };
 
     /**
+     * @brief A view's ambient occlusion (ADR-0049): ground-truth ambient occlusion (GTAO, after Intel's XeGTAO) from
+     * its depth prepass, darkening the sky's light where nearby geometry hides the sky from a surface, as in creases,
+     * corners and under objects resting on the ground. It darkens the sky's diffuse light, and its specular light by a
+     * specular occlusion made from it, never the directional, point, spot or rect lights. Transparent items take none.
+     */
+    struct AmbientOcclusion
+    {
+        /** @brief Whether the view has it: off by default, and off costs nothing. */
+        bool enabled = false;
+        /**
+         * @brief How far round a surface other surfaces occlude it, in world units (in the camera's own, if its entity
+         * is scaled): 0.5 by default. 0 or less turns it off.
+         */
+        float radius = 0.5f;
+        /**
+         * @brief How dark the occlusion is: 1 by default, 0 none (and no cost), and above 1 darker. It raises the
+         * occlusion to a power, so an unoccluded surface stays unoccluded however strong it is.
+         */
+        float intensity = 1.0f;
+    };
+
+    /** @brief What a view shows instead of its lit colour, to look at one of its inputs. */
+    enum class CameraDebugView : std::uint8_t
+    {
+        /** @brief The lit scene, tonemapped: the default. */
+        None,
+        /**
+         * @brief Its ambient occlusion as grey, white unoccluded, with no exposure or tonemap; black where the camera's
+         * ambient occlusion is off.
+         */
+        AmbientOcclusion,
+    };
+
+    /**
      * @brief Makes a view of the active scene from its entity, looking along the entity's local -Z with +Y up
      * (ADR-0026). Plain data. Every enabled camera in the active scene draws one view a frame, into its viewport of its
      * render target. Views into one target draw by `order`, lowest first, and ties by entity id, logged once. Each view
@@ -476,6 +510,10 @@ namespace Fenrir
         Tonemapper tonemapper = Tonemapper::AgX;
         /** @brief How the view's bright pixels bleed into their surroundings before the tonemap. */
         Bloom bloom;
+        /** @brief How nearby geometry darkens the sky's light in the view. */
+        AmbientOcclusion ambientOcclusion;
+        /** @brief What the view shows: its lit colour, or one of its inputs. */
+        CameraDebugView debugView = CameraDebugView::None;
     };
 
     /**

@@ -68,6 +68,18 @@ namespace LightingDemo
                 settings.bloom.intensity = settings.bloom.intensity > 0.0f ? 0.0f : Fenrir::Bloom{}.intensity;
                 app.Logger()->Info("B: bloom is {}", settings.bloom.intensity > 0.0f ? "on" : "off");
             }
+            if (keyboard.JustPressed(Fenrir::Key::O))
+            {
+                settings.ambientOcclusion.enabled = !settings.ambientOcclusion.enabled;
+                app.Logger()->Info("O: ambient occlusion is {}", settings.ambientOcclusion.enabled ? "on" : "off");
+            }
+            if (keyboard.JustPressed(Fenrir::Key::G))
+            {
+                settings.showOcclusion = !settings.showOcclusion;
+                app.Logger()->Info("G: the view shows {}", settings.showOcclusion ? "its raw ambient occlusion"
+                                                                                  : "the "
+                                                                                    "lit scene");
+            }
             if (keyboard.JustPressed(Fenrir::Key::S) && settings.panoramas.size() > 1)
             {
                 settings.panorama = (settings.panorama + 1) % settings.panoramas.size();
@@ -97,6 +109,13 @@ namespace LightingDemo
             ImGui::SliderFloat("Bloom intensity", &settings.bloom.intensity, 0.0f, 1.0f, "%.3f",
                                ImGuiSliderFlags_Logarithmic);
             ImGui::SliderFloat("Bloom radius", &settings.bloom.radius, 0.0f, 1.0f);
+
+            ImGui::SeparatorText("Ambient occlusion (GTAO)");
+            ImGui::Checkbox("AO on", &settings.ambientOcclusion.enabled);
+            ImGui::SliderFloat("AO radius", &settings.ambientOcclusion.radius, 0.05f, 3.0f, "%.2f",
+                               ImGuiSliderFlags_Logarithmic);
+            ImGui::SliderFloat("AO intensity", &settings.ambientOcclusion.intensity, 0.0f, 3.0f);
+            ImGui::Checkbox("Show the raw occlusion", &settings.showOcclusion);
 
             ImGui::SeparatorText("Sky");
             if (settings.panoramas.empty())
@@ -137,6 +156,9 @@ namespace LightingDemo
                 camera.exposure = settings.exposure;
                 camera.tonemapper = settings.tonemapper;
                 camera.bloom = settings.bloom;
+                camera.ambientOcclusion = settings.ambientOcclusion;
+                camera.debugView =
+                    settings.showOcclusion ? Fenrir::CameraDebugView::AmbientOcclusion : Fenrir::CameraDebugView::None;
             });
 
             if (settings.panoramas.empty())
@@ -160,7 +182,7 @@ namespace LightingDemo
     std::string LightingKeyHelp(bool panoramaSwitch)
     {
         std::string help = "T: the tonemapper (AgX, PBR Neutral, ACES, None). E: the exposure (0, +1, +2, -1 EV). B: "
-                           "bloom off or on.";
+                           "bloom off or on. O: ambient occlusion off or on. G: the raw occlusion.";
         if (panoramaSwitch)
         {
             help += " S: the next sky.";

@@ -73,6 +73,18 @@ namespace Fenrir::Render
         float radius = 0.7f;
     };
 
+    /** @brief A view's ambient occlusion (ADR-0049), the core's copy of Camera::ambientOcclusion. */
+    struct AmbientOcclusionSettings
+    {
+        /** @brief Whether the view has GTAO passes: only with a radius and an intensity above 0 too. */
+        bool enabled = false;
+        /** @brief How far round a surface others occlude it, in view-space units: the world's for an unscaled camera.
+         */
+        float radius = 0.5f;
+        /** @brief The power the occlusion is raised to is XeGTAO's 2.2 times this. */
+        float intensity = 1.0f;
+    };
+
     /**
      * @brief One camera's view of the scene (ADR-0026): drawn into its own scene targets at its viewport's size, then
      * written by Output into its viewport of its render target.
@@ -104,6 +116,10 @@ namespace Fenrir::Render
         Tonemapper tonemapper = Tonemapper::AgX;
         /** @brief How its `PostProcess` bloom mixes into SceneColor (Camera::bloom). */
         BloomSettings bloom;
+        /** @brief Its GTAO, which builtin:lit's sky light is darkened by in `Opaque` (Camera::ambientOcclusion). */
+        AmbientOcclusionSettings ambientOcclusion;
+        /** @brief Whether Output draws its ambient occlusion, as grey, instead of SceneColor. */
+        bool showOcclusion = false;
     };
 
     /** @brief The light every view of the scene is lit by, in the frame set (`Fenrir/Frame.glsl`). */

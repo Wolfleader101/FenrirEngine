@@ -16,4 +16,9 @@ layout(set = 1, binding = 0, std140) uniform ViewData
     vec4 viewport;
 } view;
 
+// The view's ambient occlusion (ADR-0049) at its pixels, as its GTAO passes make it from the depth prepass: in red, how
+// much of the sky reaches each pixel's nearest opaque surface, 0 to 1. The 1 x 1 white texture when the view's camera
+// has ambient occlusion off, and in every pass but Opaque, so transparent items are not darkened by what is behind them.
+layout(set = 1, binding = 1) uniform sampler2D fenrirAmbientOcclusion;
+
 #endif

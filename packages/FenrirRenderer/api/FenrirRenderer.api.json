@@ -4,6 +4,37 @@
   "alignment": "natural",
   "types": [
     {
+      "name": "Fenrir::AmbientOcclusion",
+      "category": "struct",
+      "role": "nested",
+      "size": 12,
+      "alignment": 4,
+      "doc": "A view's ambient occlusion (ADR-0049): ground-truth ambient occlusion (GTAO, after Intel's XeGTAO) from its depth prepass, darkening the sky's light where nearby geometry hides the sky from a surface, as in creases, corners and under objects resting on the ground. It darkens the sky's diffuse light, and its specular light by a specular occlusion made from it, never the directional, point, spot or rect lights. Transparent items take none.",
+      "fields": [
+        {
+          "name": "enabled",
+          "offset": 0,
+          "kind": "bool",
+          "default": false,
+          "doc": "Whether the view has it: off by default, and off costs nothing."
+        },
+        {
+          "name": "radius",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0.5,
+          "doc": "How far round a surface other surfaces occlude it, in world units (in the camera's own, if its entity is scaled): 0.5 by default. 0 or less turns it off."
+        },
+        {
+          "name": "intensity",
+          "offset": 8,
+          "kind": "f32",
+          "default": 1,
+          "doc": "How dark the occlusion is: 1 by default, 0 none (and no cost), and above 1 darker. It raises the occlusion to a power, so an unoccluded surface stays unoccluded however strong it is."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::AssetHandle<Fenrir::Image>",
       "category": "bound-type",
       "role": "bound-type",
@@ -165,6 +196,26 @@
         }
       ],
       "defaultKind": "m_scene"
+    },
+    {
+      "name": "Fenrir::CameraDebugView",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "What a view shows instead of its lit colour, to look at one of its inputs.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "None",
+          "value": 0,
+          "doc": "The lit scene, tonemapped: the default."
+        },
+        {
+          "name": "AmbientOcclusion",
+          "value": 1,
+          "doc": "Its ambient occlusion as grey, white unoccluded, with no exposure or tonemap; black where the camera's ambient occlusion is off."
+        }
+      ]
     },
     {
       "name": "Fenrir::Orthographic",
@@ -440,7 +491,7 @@
       "name": "Fenrir::Camera",
       "category": "struct",
       "role": "component",
-      "size": 92,
+      "size": 108,
       "alignment": 4,
       "doc": "Makes a view of the active scene from its entity, looking along the entity's local -Z with +Y up (ADR-0026). Plain data. Every enabled camera in the active scene draws one view a frame, into its viewport of its render target. Views into one target draw by `order`, lowest first, and ties by entity id, logged once. Each view has its own scene targets, and writes only its viewport.\n\nNot drawn, logged once: a camera targeting a window other than the main window, a viewport under one pixel, or a target image that is stale, empty or not a render target. A minimised window draws nothing. A window no camera draws into is cleared to black, logged once.",
       "fields": [
@@ -515,6 +566,22 @@
           "type": "Fenrir::Bloom",
           "default": {},
           "doc": "How the view's bright pixels bleed into their surroundings before the tonemap."
+        },
+        {
+          "name": "ambientOcclusion",
+          "offset": 92,
+          "kind": "struct",
+          "type": "Fenrir::AmbientOcclusion",
+          "default": {},
+          "doc": "How nearby geometry darkens the sky's light in the view."
+        },
+        {
+          "name": "debugView",
+          "offset": 104,
+          "kind": "enum",
+          "type": "Fenrir::CameraDebugView",
+          "default": "None",
+          "doc": "What the view shows: its lit colour, or one of its inputs."
         }
       ]
     },

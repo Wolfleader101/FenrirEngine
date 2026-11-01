@@ -41,6 +41,10 @@ public partial struct Camera : IComponent
     public Tonemapper Tonemapper = Tonemapper.AgX;
     /// <summary>How the view's bright pixels bleed into their surroundings before the tonemap.</summary>
     public Bloom Bloom = new();
+    /// <summary>How nearby geometry darkens the sky's light in the view.</summary>
+    public AmbientOcclusion AmbientOcclusion = new();
+    /// <summary>What the view shows: its lit colour, or one of its inputs.</summary>
+    public CameraDebugView DebugView = CameraDebugView.None;
 
     public Camera()
     {

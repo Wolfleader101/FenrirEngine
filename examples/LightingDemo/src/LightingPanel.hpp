@@ -14,8 +14,8 @@ namespace Fenrir
     class Scene;
 } // namespace Fenrir
 
-// The lighting panel every LightingDemo scene shows: an ImGui window for the cameras' exposure, tonemapper and bloom
-// and the scene's sky, with keys for the same, which the smoke runs press.
+// The lighting panel every LightingDemo scene shows: an ImGui window for the cameras' exposure, tonemapper, bloom and
+// ambient occlusion and the scene's sky, with keys for the same, which the smoke runs press.
 namespace LightingDemo
 {
     /** @brief A panorama the panel can switch the scene's sky to, and the name it shows. */
@@ -33,6 +33,10 @@ namespace LightingDemo
         Fenrir::Tonemapper tonemapper = Fenrir::Tonemapper::AgX;
         /** @brief Every camera's bloom; B sets its intensity to 0 and back. */
         Fenrir::Bloom bloom;
+        /** @brief Every camera's ambient occlusion, on in the demo; O turns it off and back on. */
+        Fenrir::AmbientOcclusion ambientOcclusion{true};
+        /** @brief Whether the cameras show their raw ambient occlusion instead of the lit scene; G toggles it. */
+        bool showOcclusion = false;
         /** @brief The panoramas the sky can be; empty leaves the scene's Sky alone. */
         std::vector<NamedPanorama> panoramas;
         /** @brief Which of `panoramas` the sky is. */
@@ -43,16 +47,17 @@ namespace LightingDemo
     };
 
     /**
-     * @brief The keys the panel answers, one line for a scene's help panel: T, E, B and, with more than one panorama,
-     * S.
+     * @brief The keys the panel answers, one line for a scene's help panel: T, E, B, O, G and, with more than one
+     * panorama, S.
      */
     [[nodiscard]] std::string LightingKeyHelp(bool panoramaSwitch);
 
     /**
      * @brief Runs the panel for one frame, from a scene's `update`: applies its keys (T the next tonemapper, E the next
-     * exposure, B bloom off or back on, S the next panorama), draws the "Lighting" ImGui window, with `sceneControls`
-     * drawn in it under the panel's own, then gives every Camera in `scene` the exposure, tonemapper and bloom, and the
-     * scene's Sky the chosen panorama, its intensity and its rotation.
+     * exposure, B bloom off or back on, O ambient occlusion off or back on, G the raw occlusion view, S the next
+     * panorama), draws the "Lighting" ImGui window, with `sceneControls` drawn in it under the panel's own, then gives
+     * every Camera in `scene` the exposure, tonemapper, bloom, ambient occlusion and debug view, and the scene's Sky
+     * the chosen panorama, its intensity and its rotation.
      */
     void RunLightingPanel(Fenrir::App& app, Fenrir::Scene& scene, LightingSettings& settings,
                           const std::function<void()>& sceneControls = {});

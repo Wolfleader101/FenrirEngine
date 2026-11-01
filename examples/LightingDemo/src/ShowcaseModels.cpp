@@ -157,8 +157,8 @@ namespace LightingDemo
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
         scene.keyHelp = LightingKeyHelp(true) + " R: the turntable on or off.";
-        scene.keys = {Fenrir::Key::S, Fenrir::Key::T, Fenrir::Key::B, Fenrir::Key::R,
-                      Fenrir::Key::S, Fenrir::Key::E, Fenrir::Key::B, Fenrir::Key::R};
+        scene.keys = {Fenrir::Key::S, Fenrir::Key::T, Fenrir::Key::B, Fenrir::Key::R, Fenrir::Key::S, Fenrir::Key::E,
+                      Fenrir::Key::B, Fenrir::Key::R, Fenrir::Key::G, Fenrir::Key::O, Fenrir::Key::G, Fenrir::Key::O};
         scene.camera.position = {0.0f, 1.5f, 7.0f};
         scene.spawn = Spawn;
         scene.update = Update;

@@ -43,6 +43,8 @@ namespace Fenrir::Render
         BloomUpsample,
         /** @brief `builtin:depth-prepass`: the depth prepass's fragment stage, an item's view-space normal. */
         DepthPrepass,
+        /** @brief `builtin:gtao`: a view's GTAO from its depth prepass, the horizon search and, DENOISE, the blur. */
+        Gtao,
     };
 
     /** @brief A built-in program's `builtin:` name and its embedded container's bytes. */

@@ -53,6 +53,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/Draw2DFeature.cpp
     src/Core/FrameRingBuffer.hpp
     src/Core/FrameRingBuffer.cpp
+    src/Core/Gtao.hpp
+    src/Core/Gtao.cpp
     src/Core/RenderFeature.hpp
     src/Core/RenderGraph.hpp
     src/Core/RenderGraph.cpp
@@ -132,9 +134,12 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBloomDownsample VERTEX Shad
                    FRAGMENT Shaders/Builtin/bloom_downsample.frag KEYS MSAA EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBloomUpsample VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/bloom_upsample.frag EMBED)
-# MSAA: the variant that resolves a multisampled SceneColor.
+# GTAO (ADR-0049): the horizon search, whose MSAA variant reads sample 0 of the prepass's targets, and the DENOISE blur.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinGtao VERTEX Shaders/Builtin/fullscreen.vert
+                   FRAGMENT Shaders/Builtin/gtao.frag KEYS DENOISE MSAA EMBED)
+# MSAA: the variant that resolves a multisampled SceneColor. OCCLUSION: the one that shows a view's ambient occlusion.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinOutput VERTEX Shaders/Builtin/fullscreen.vert
-                   FRAGMENT Shaders/Builtin/output.frag KEYS MSAA EMBED)
+                   FRAGMENT Shaders/Builtin/output.frag KEYS MSAA OCCLUSION EMBED)
 # Debug drawing (ADR-0025): lines expanded to screen-space quads, solid triangles, and text from the SDF font atlas.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDebugLines VERTEX Shaders/Builtin/debug_lines.vert
                    FRAGMENT Shaders/Builtin/debug.frag EMBED)

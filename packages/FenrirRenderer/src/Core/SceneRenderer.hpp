@@ -14,6 +14,7 @@
 
 #include "Core/BlockRing.hpp"
 #include "Core/Bloom.hpp"
+#include "Core/Gtao.hpp"
 #include "Core/RenderFeature.hpp"
 #include "Core/SceneFrame.hpp"
 #include "Core/SkyLighting.hpp"
@@ -57,7 +58,10 @@ namespace Fenrir::Render
         GraphResource sceneDepth;
         /** @brief Its view-space normals (RG16F, octahedral), which its DepthPrepass pass writes (ADR-0049). */
         GraphResource sceneNormals;
-        /** @brief Its view block's binding group this frame: binding set 1, as `Fenrir/View.glsl` declares it. */
+        /**
+         * @brief Its view block's binding group this frame: binding set 1, as `Fenrir/View.glsl` declares it, with the
+         * white texture as its ambient occlusion.
+         */
         Graphics::BindingGroupHandle viewGroup;
     };
 
@@ -91,6 +95,12 @@ namespace Fenrir::Render
      * view's bloom in `PostProcess` (BloomChain), unless its intensity is 0; and `Output`, which resolves SceneColor,
      * scales it by the view's exposure and tonemaps it into its viewport of its render target, the window's backbuffer
      * or an image. The first view into a target clears it to black. With no view the backbuffer is cleared to black.
+     *
+     * **Ambient occlusion** (ADR-0049): a view whose camera has it gets Gtao's passes after its DepthPrepass pass, and
+     * its `Opaque` pass binds their occlusion texture at set 1 binding 1 (`Fenrir/View.glsl`), which
+     * `Fenrir/Lighting.glsl` darkens the sky's light by. Every other pass, and every view without it, binds the white
+     * texture there. A view showing its occlusion (`ViewRequest::showOcclusion`) has Output draw that texture as grey
+     * instead of SceneColor, so the passes only SceneColor needs are culled; it shows black without the passes.
      *
      * **Variants** (ADR-0024): the renderer picks the keys. A `Masked` material draws with its shader's `ALPHA_MASK`
      * variant if the shader has the key, its `MaterialData::alphaCutoff` written into the variant's `alphaCutoff` block
@@ -516,6 +526,12 @@ namespace Fenrir::Render
         [[nodiscard]] Graphics::BindingGroupHandle FrameGroupFor(std::uint64_t frameIndex);
         /** @brief What the scene's Sky lights with: its prepared cube texture, else its colour. */
         [[nodiscard]] SkySource SkySourceOf(const SceneLighting& lighting) const;
+        /**
+         * @brief The view set's group for slot `slot` of frame `frameIndex`'s view blocks, with `occlusion` as its
+         * ambient occlusion, made once while both live.
+         */
+        [[nodiscard]] Graphics::BindingGroupHandle ViewGroupFor(std::uint64_t frameIndex, std::size_t slot,
+                                                                Graphics::TextureHandle occlusion);
         /** @brief The draw set's group for frame `frameIndex`: its copies of the draw and palette buffers. */
         [[nodiscard]] Graphics::BindingGroupHandle DrawGroupFor(std::uint64_t frameIndex);
         [[nodiscard]] std::uint32_t NextId();
@@ -563,6 +579,8 @@ namespace Fenrir::Render
         Graphics::PipelineHandle m_backgroundPipeline;
         Graphics::PipelineHandle m_skyPipeline;
         Graphics::PipelineHandle m_outputPipeline;
+        /** @brief Output's OCCLUSION variant, which draws a view's ambient occlusion as grey. */
+        Graphics::PipelineHandle m_occlusionOutputPipeline;
         Graphics::PipelineHandle m_panoramaPipeline;
 
         /** @brief The default textures, by DefaultTexture: white, black and the flat normal. */
@@ -591,10 +609,17 @@ namespace Fenrir::Render
         std::unique_ptr<SkyLighting> m_skyLighting;
         /** @brief Each view's bloom passes, in `PostProcess`. */
         std::unique_ptr<BloomChain> m_bloom;
+        /** @brief The GTAO passes of each view that has ambient occlusion, after its prepass. */
+        std::unique_ptr<Gtao> m_gtao;
         /** @brief Each copy's frame set group, by frame index modulo the copies. */
         std::vector<FrameGroup> m_frameGroups;
         /** @brief Each copy's draw set group, by frame index modulo the copies. */
         std::vector<DrawGroup> m_drawGroups;
+        /**
+         * @brief The view set's groups, by the view ring's buffer (index, generation), slot and the occlusion texture
+         * (index, generation), while both live.
+         */
+        std::map<std::array<std::uint32_t, 5>, Graphics::BindingGroupHandle> m_viewGroups;
         /** @brief The Output pass's binding group for each SceneColor texture, while the texture lives. */
         std::map<std::pair<std::uint32_t, std::uint32_t>, Graphics::BindingGroupHandle> m_outputGroups;
 
