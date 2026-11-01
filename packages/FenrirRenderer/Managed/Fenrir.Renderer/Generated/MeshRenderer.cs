@@ -22,6 +22,11 @@ public partial struct MeshRenderer : IComponent
     public AssetHandle<Material> Material = new();
     /// <summary>False hides this entity only; its children are drawn as their own MeshRenderers say.</summary>
     public bool Visible = true;
+    /// <summary>
+    /// Whether it is drawn into the sun's shadow (ADR-0050). Only an `Opaque` or `Masked` material casts, a Masked one
+    /// cut out by its alpha cutoff; `AlphaBlend` and `Additive` ones never do.
+    /// </summary>
+    public bool CastShadows = true;
 
     public MeshRenderer()
     {

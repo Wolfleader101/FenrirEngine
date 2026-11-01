@@ -45,6 +45,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/BlockRing.cpp
     src/Core/BuiltinShaders.hpp
     src/Core/BuiltinShaders.cpp
+    src/Core/Cascades.hpp
+    src/Core/Cascades.cpp
     src/Core/DebugFeature.hpp
     src/Core/DebugFeature.cpp
     src/Core/DebugFont.hpp
@@ -115,6 +117,9 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinFallback VERTEX Shaders/Bui
 # program builds. ALPHA_MASK: the variant masked items draw with.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDepthPrepass VERTEX Shaders/Builtin/mesh.vert
                    FRAGMENT Shaders/Builtin/prepass.frag KEYS ALPHA_MASK EMBED)
+# builtin:shadow (ADR-0050), the shadow passes' depth-only fragment stage behind each casting item's own vertex stage.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinShadow VERTEX Shaders/Builtin/mesh.vert
+                   FRAGMENT Shaders/Builtin/shadow.frag KEYS ALPHA_MASK EMBED)
 # CUBEMAP: the variant that draws a Sky cubemap.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBackground VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/background.frag KEYS CUBEMAP EMBED)

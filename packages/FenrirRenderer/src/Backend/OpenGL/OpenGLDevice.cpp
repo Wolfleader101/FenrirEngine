@@ -371,6 +371,12 @@ namespace Fenrir::Graphics
             gl.GetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &most);
             gl.SamplerParameterf(sampler, GL_TEXTURE_MAX_ANISOTROPY, std::min(desc.maxAnisotropy, most));
         }
+        if (desc.compare.has_value())
+        {
+            gl.SamplerParameteri(sampler, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+            gl.SamplerParameteri(sampler, GL_TEXTURE_COMPARE_FUNC,
+                                 static_cast<GLint>(compareFunctions.at(IndexOf(*desc.compare))));
+        }
         if (!label.empty())
         {
             gl.ObjectLabel(GL_SAMPLER, sampler, static_cast<GLsizei>(label.size()), label.data());

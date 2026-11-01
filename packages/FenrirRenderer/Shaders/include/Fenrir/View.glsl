@@ -14,11 +14,29 @@ layout(set = 1, binding = 0, std140) uniform ViewData
     vec4 cameraPosition;
     // The viewport in pixels of its target: x, y (top left), width, height.
     vec4 viewport;
+    // The sun's cascaded shadow (ADR-0050), which Fenrir/Shadows.glsl reads. Cascade i takes world positions to u and
+    // v (from the top) in fenrirShadowMap and their reversed-Z depth in its light's view.
+    mat4 shadowMatrices[4];
+    // The view depth each cascade reaches to, nearest first.
+    vec4 shadowSplits;
+    // The world size of each cascade's texels.
+    vec4 shadowTexels;
+    // x: the normal-offset bias and y: the slope-scaled bias, both in the cascade's texels; z: the filter's radius in
+    // texels; w: the share of a cascade's depth range, at its far end, that blends into the next.
+    vec4 shadowBias;
+    // x: how many cascades there are, 0 for no shadow; y: 1 to tint each pixel by its cascade (a camera's
+    // CameraDebugView::ShadowCascades). zw unused.
+    uvec4 shadowInfo;
 } view;
 
 // The view's ambient occlusion (ADR-0049) at its pixels, as its GTAO passes make it from the depth prepass: in red, how
 // much of the sky reaches each pixel's nearest opaque surface, 0 to 1. The 1 x 1 white texture when the view's camera
 // has ambient occlusion off, and in every pass but Opaque, so transparent items are not darkened by what is behind them.
 layout(set = 1, binding = 1) uniform sampler2D fenrirAmbientOcclusion;
+
+// The sun's shadow atlas (ADR-0050): each cascade's reversed-Z depths, side by side, compared by the sampler (lit where
+// the reference is at least the stored depth) and filtered bilinearly. A 1 x 1 map of depth 0, which lights
+// everything, where the view has no shadow and in the shadow passes themselves.
+layout(set = 1, binding = 2) uniform sampler2DShadow fenrirShadowMap;
 
 #endif

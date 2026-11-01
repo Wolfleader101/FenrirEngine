@@ -216,7 +216,10 @@ TEST_CASE("The sphere grid on a floor against a wall with GTAO matches its golde
     Fenrir::Entity sun = test.app.GetActiveScene().GetEntityList().CreateEntity();
     sun.GetComponent<Fenrir::Transform>().rot =
         Fenrir::Math::AngleAxis(-0.6f, Vec3(0.0f, 1.0f, 0.0f)) * Fenrir::Math::AngleAxis(-0.9f, Vec3(1.0f, 0.0f, 0.0f));
-    sun.AddComponent<Fenrir::DirectionalLight>().intensity = 0.8f;
+    // Its shadows off: the golden is GTAO's contact shadows, not the sun's (Shadows.cpp's goldens).
+    Fenrir::DirectionalLight& light = sun.AddComponent<Fenrir::DirectionalLight>();
+    light.intensity = 0.8f;
+    light.castShadows = false;
     const auto grey = Lit(test, Fenrir::Colour{0.6f, 0.6f, 0.6f, 1.0f});
     AddPlane(test, 12.0f, {0.0f, -1.03f, -4.0f},
              Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(-90.0f), Vec3(1.0f, 0.0f, 0.0f)), grey);

@@ -277,9 +277,13 @@ struct Iris::StructMapping<Fenrir::DirectionalLight>
     static constexpr std::string_view typeName = "Fenrir.Renderer.DirectionalLight";
     static constexpr auto fields = Iris::StructFields(
         Iris::Field<Fenrir::Colour>("Colour", 0),
-        Iris::Field<float>("Intensity", 16));
+        Iris::Field<float>("Intensity", 16),
+        Iris::Field<bool>("CastShadows", 20),
+        Iris::Field<float>("ShadowDistance", 24),
+        Iris::Field<float>("ShadowNormalBias", 28),
+        Iris::Field<float>("ShadowSlopeBias", 32));
 };
-static_assert(sizeof(Fenrir::DirectionalLight) == 20 && alignof(Fenrir::DirectionalLight) == 4,
+static_assert(sizeof(Fenrir::DirectionalLight) == 36 && alignof(Fenrir::DirectionalLight) == 4,
               "Fenrir::DirectionalLight is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
@@ -313,7 +317,8 @@ struct Iris::StructMapping<Fenrir::MeshRenderer>
     static constexpr auto fields = Iris::StructFields(
         Iris::Field<Fenrir::AssetHandle<Fenrir::Mesh>>("Mesh", 0),
         Iris::Field<Fenrir::AssetHandle<Fenrir::Material>>("Material", 8),
-        Iris::Field<bool>("Visible", 16));
+        Iris::Field<bool>("Visible", 16),
+        Iris::Field<bool>("CastShadows", 17));
 };
 static_assert(sizeof(Fenrir::MeshRenderer) == 20 && alignof(Fenrir::MeshRenderer) == 4,
               "Fenrir::MeshRenderer is not the layout FenrirRenderer.api.json describes: "
@@ -373,9 +378,10 @@ struct Iris::StructMapping<Fenrir::RendererStats>
         Iris::Field<std::uint32_t>("Uploads", 12),
         Iris::Field<std::uint32_t>("PaletteBytesUploaded", 16),
         Iris::Field<std::uint32_t>("DistinctPalettesWritten", 20),
-        Iris::Field<std::uint32_t>("SkinnedDraws", 24));
+        Iris::Field<std::uint32_t>("SkinnedDraws", 24),
+        Iris::Field<std::uint32_t>("ShadowDraws", 28));
 };
-static_assert(sizeof(Fenrir::RendererStats) == 28 && alignof(Fenrir::RendererStats) == 4,
+static_assert(sizeof(Fenrir::RendererStats) == 32 && alignof(Fenrir::RendererStats) == 4,
               "Fenrir::RendererStats is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 

@@ -2,7 +2,8 @@
 // calls FenrirLitColour, which returns the surface's lit colour as linear HDR: the frame's directional light, its point,
 // spot and rect lights, and the scene's Sky as image-based lighting (ADR-0047), diffuse from its spherical harmonics and
 // specular from its prefiltered cube through the split sum's BRDF lookup table, darkened by the surface's occlusion and
-// the view's ambient occlusion (ADR-0049), which never touch the direct lights. Intensities are plain multipliers, so
+// the view's ambient occlusion (ADR-0049), which never touch the direct lights. The directional light is shadowed by the
+// view's cascades (Fenrir/Shadows.glsl, ADR-0050). Intensities are plain multipliers, so
 // the BRDF is scaled by pi: a white light of intensity 1 falling straight onto a white rough face gives about 1, not
 // 1 / pi, as does a point light of intensity 1 one unit away (well inside its range), and a white sky of intensity 1
 // all round it. A rect light's intensity is its radiance: a white one of intensity 1 filling a white rough face's view
@@ -14,12 +15,15 @@
 // across the pixel. That takes the normal's screen-space derivatives, so FenrirLitColour must be called where they are
 // defined: not inside a branch that neighbouring pixels may take differently.
 //
+// The shadow's biases take the face's own normal from the position's screen-space derivatives too.
+//
 // The shader still owns main, its inputs and its outputs; this is not a surface-function model.
 #ifndef FENRIR_LIGHTING_GLSL
 #define FENRIR_LIGHTING_GLSL
 
 #include "Fenrir/Brdf.glsl"
 #include "Fenrir/Frame.glsl"
+#include "Fenrir/Shadows.glsl"
 #include "Fenrir/SphericalHarmonics.glsl"
 #include "Fenrir/View.glsl"
 
@@ -230,10 +234,19 @@ vec4 FenrirLitColour(FenrirSurface surface)
     vec2 brdf = texture(fenrirBrdfLut, vec2(nDotV, roughness)).rg;
     float singleScatter = max(brdf.x + brdf.y, 1e-4);
 
-    // The directional light. lightDirection is the way the light travels; l points back at it.
+    // The directional light, shadowed by the view's cascades. lightDirection is the way the light travels; l points
+    // back at it.
     vec3 energyCompensation = 1.0 + f0 * (1.0 / singleScatter - 1.0);
-    vec3 colour = FenrirDirectLight(n, v, -frame.lightDirection.xyz, nDotV, a, f0, energyCompensation, metallic, base) *
-                  frame.lightColour.rgb;
+    vec3 sunward = -frame.lightDirection.xyz;
+    // The shadow's biases follow the face itself, not a normal map's turn of it: its normal from the position's
+    // derivatives, on the viewer's side as the shading normal is.
+    vec3 face = cross(dFdx(surface.position), dFdy(surface.position));
+    face = dot(face, face) > 1e-20 ? normalize(face) : n;
+    face = dot(face, n) < 0.0 ? -face : face;
+    int cascade;
+    float sunShadow = FenrirSunShadow(surface.position, face, sunward, cascade);
+    vec3 colour = FenrirDirectLight(n, v, sunward, nDotV, a, f0, energyCompensation, metallic, base) *
+                  frame.lightColour.rgb * sunShadow;
 
     // What the specular lobe reflects of light from all round, by the split sum: f0 scaled and biased by the table. A
     // rect light's specular takes it, compensated; its diffuse what is left.
@@ -286,6 +299,10 @@ vec4 FenrirLitColour(FenrirSurface surface)
               frame.skyLight.x;
 
     colour += surface.emissive;
+    if (view.shadowInfo.y != 0u)
+    {
+        colour *= FenrirCascadeTint(cascade);
+    }
     // SceneColor is RGBA16F: a glint past its largest finite value would be written as infinity, which the bloom
     // chain turns to NaN and spreads over its coarsest levels' texels, a flickering black box.
     return vec4(min(colour, vec3(65504.0)), surface.alpha);

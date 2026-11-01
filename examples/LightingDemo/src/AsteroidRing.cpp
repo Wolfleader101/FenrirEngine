@@ -393,6 +393,8 @@ namespace LightingDemo
             state.lighting.panoramas.push_back(
                 {"Procedural starfield", store.Add<Fenrir::Image>(Starfield(2048), scene)});
             state.lighting.bloom.intensity = 0.06f;
+            // The whole ring, from where the camera starts, so the planet's shadow falls across it (ADR-0050).
+            state.lighting.sunShadows.shadowDistance = 200.0f;
 
             const auto cube = store.Load<Fenrir::Mesh>("cube.obj#Mesh0", scene);
             const auto sphere = store.Load<Fenrir::Mesh>("sphere.obj#Mesh0", scene);
@@ -469,8 +471,10 @@ namespace LightingDemo
                 state.handles.push_back(list);
                 Fenrir::Entity layer = entities.CreateEntity();
                 layer.AddComponent<Fenrir::Transform>();
+                // The ring takes the planet's shadow but casts none: 100k rocks in four cascades would cost four
+                // times the ring again for specks of shadow on each other.
                 layer.AddComponent<Fenrir::InstancedMeshRenderer>(
-                    Fenrir::InstancedMeshRenderer{kinds[kind].ringMesh, kinds[kind].material, list});
+                    Fenrir::InstancedMeshRenderer{kinds[kind].ringMesh, kinds[kind].material, list, false});
                 state.ring.AddChild(layer);
             }
 
@@ -564,8 +568,11 @@ namespace LightingDemo
         scene.name = SceneName;
         scene.keyHelp = LightingKeyHelp(false) +
                         " N: 10k, 50k or 100k ring rocks. I: automatic instancing on or off. R: the ring turning.";
-        scene.keys = {Fenrir::Key::T, Fenrir::Key::B, Fenrir::Key::I, Fenrir::Key::N,
-                      Fenrir::Key::I, Fenrir::Key::R, Fenrir::Key::N, Fenrir::Key::N};
+        // G through every debug view (the occlusion, the cascades, the shadow map, back), with the sun's shadows off
+        // and on again (H) between.
+        scene.keys = {Fenrir::Key::T, Fenrir::Key::B, Fenrir::Key::I, Fenrir::Key::N, Fenrir::Key::I,
+                      Fenrir::Key::R, Fenrir::Key::N, Fenrir::Key::N, Fenrir::Key::G, Fenrir::Key::G,
+                      Fenrir::Key::G, Fenrir::Key::H, Fenrir::Key::G, Fenrir::Key::H};
         // Beyond the station, looking past it and the field across the ring to the planet.
         scene.camera.position = {74.0f, 9.0f, 34.0f};
         scene.camera.yaw = 1.08f;

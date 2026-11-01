@@ -44,8 +44,19 @@ namespace Fenrir::Render
             Math::Mat4 inverseViewProjection;
             Math::Vec4 cameraPosition;
             Math::Vec4 viewport;
+            /** @brief The sun's cascades (ADR-0050): world to each one's tile of the shadow atlas. */
+            std::array<Math::Mat4, MaxCascades> shadowMatrices{};
+            /** @brief The view depth each cascade reaches to. */
+            Math::Vec4 shadowSplits{0.0f};
+            /** @brief The world size of each cascade's texels. */
+            Math::Vec4 shadowTexels{0.0f};
+            /** @brief Normal-offset and slope-scaled biases in texels, the filter's radius in texels, the blend share.
+             */
+            Math::Vec4 shadowBias{0.0f};
+            /** @brief x: how many cascades (0: no shadow); y: 1 to tint pixels by their cascade. */
+            std::array<std::uint32_t, 4> shadowInfo{};
         };
-        static_assert(sizeof(ViewBlock) == 288);
+        static_assert(sizeof(ViewBlock) == 608);
 
         /** @brief One draw record, as `Fenrir/Draw.glsl` declares it (std430). */
         struct DrawBlock
@@ -181,8 +192,9 @@ namespace Fenrir::Render
         // records as they need; reflection sizes such a block by one record, so their record layouts are checked. Set
         // 0's textures are the sky's light (ADR-0047): its spherical harmonics, its specular cube and the BRDF table,
         // then the rect lights' two LTC tables; its storage block is the point, spot and rect lights (ADR-0048), as
-        // many as the frame has. Set 1's texture is the view's ambient occlusion (ADR-0049).
-        [[maybe_unused]] constexpr std::array<FixedBinding, 12> FixedBindings{{
+        // many as the frame has. Set 1's textures are the view's ambient occlusion (ADR-0049) and its sun's shadow
+        // atlas (ADR-0050).
+        [[maybe_unused]] constexpr std::array<FixedBinding, 13> FixedBindings{{
             {0, 0, ShaderBindingKind::UniformBuffer, sizeof(FrameBlock)},
             {0, 1, ShaderBindingKind::Texture, 0},
             {0, 2, ShaderBindingKind::Texture, 0},
@@ -192,6 +204,7 @@ namespace Fenrir::Render
             {0, 6, ShaderBindingKind::Texture, 0},
             {1, 0, ShaderBindingKind::UniformBuffer, sizeof(ViewBlock)},
             {1, 1, ShaderBindingKind::Texture, 0},
+            {1, 2, ShaderBindingKind::Texture, 0},
             {3, 0, ShaderBindingKind::StorageBuffer, sizeof(DrawBlock)},
             {3, 1, ShaderBindingKind::StorageBuffer, sizeof(InstanceBlock)},
             {3, 2, ShaderBindingKind::StorageBuffer, sizeof(GpuBone)},
@@ -231,6 +244,10 @@ namespace Fenrir::Render
         constexpr std::array<float, 22> DefaultStreams{0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
                                                        0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f,
                                                        1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+
+        /** @brief The tiles of a shadow atlas start at multiples of this in a view's view block slots, one a cascade.
+         */
+        constexpr std::size_t CascadeSlots = MaxCascades;
 
         constexpr std::uint8_t OpaqueStage = static_cast<std::uint8_t>(RenderStage::Opaque);
         constexpr std::uint8_t TransparentStage = static_cast<std::uint8_t>(RenderStage::Transparent);
@@ -722,10 +739,12 @@ namespace Fenrir::Render
     // ---- SceneRenderer ----
 
     SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples,
-                                 bool automaticInstancing, bool computeSkinning)
+                                 bool automaticInstancing, bool computeSkinning, CascadeConfig cascades)
         : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1)),
-          m_automaticInstancing(automaticInstancing), m_computeSkinning(computeSkinning)
+          m_automaticInstancing(automaticInstancing), m_computeSkinning(computeSkinning), m_cascades(cascades)
     {
+        m_cascades.count = std::clamp(m_cascades.count, 1u, MaxCascades);
+        m_cascades.mapSize = std::max(m_cascades.mapSize, 1u);
         m_frameLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer},
                                                             {1, ShaderBindingKind::Texture},
                                                             {2, ShaderBindingKind::Texture},
@@ -735,7 +754,8 @@ namespace Fenrir::Render
                                                             {6, ShaderBindingKind::Texture}}},
                                                           "Frame");
         m_viewLayout = m_device.CreateBindingGroupLayout(
-            {{{0, ShaderBindingKind::UniformBuffer}, {1, ShaderBindingKind::Texture}}}, "View");
+            {{{0, ShaderBindingKind::UniformBuffer}, {1, ShaderBindingKind::Texture}, {2, ShaderBindingKind::Texture}}},
+            "View");
         m_outputBlockLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Output");
         m_drawLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::StorageBuffer},
                                                            {1, ShaderBindingKind::StorageBuffer},
@@ -784,6 +804,18 @@ namespace Fenrir::Render
         SamplerDesc panorama = clamp;
         panorama.addressU = AddressMode::Repeat;
         m_panoramaSampler = m_device.CreateSampler(panorama, "Panorama sampler");
+        // Lit where the reference is at least the stored depth: nearer the light under reversed-Z. Bilinear, so each
+        // read is itself a 2 x 2 filter.
+        SamplerDesc shadow = clamp;
+        shadow.mipFilter = Filter::Nearest;
+        shadow.compare = CompareOp::GreaterEqual;
+        m_shadowSampler = m_device.CreateSampler(shadow, "Shadow sampler");
+        TextureDesc noShadow;
+        noShadow.format = TextureFormat::Depth32Float;
+        noShadow.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
+        m_noShadow = m_device.CreateTexture(noShadow, "No shadow");
+        constexpr float farthest = 0.0f;
+        m_device.WriteTexture(m_noShadow, 0, 0, BytesOf(farthest));
         m_defaultStreams = m_device.CreateBuffer({sizeof(DefaultStreams), BufferUsage::Vertex},
                                                  std::as_bytes(std::span(DefaultStreams)), "Default vertex streams");
 
@@ -806,6 +838,7 @@ namespace Fenrir::Render
         m_output = ReadBuiltin(BuiltinProgram::Output, m_logger);
         m_panorama = ReadBuiltin(BuiltinProgram::Panorama, m_logger);
         m_prepass = ReadBuiltin(BuiltinProgram::DepthPrepass, m_logger);
+        m_shadow = ReadBuiltin(BuiltinProgram::Shadow, m_logger);
         m_prepassMaskLayout = m_device.CreateBindingGroupLayout(
             {{{0, ShaderBindingKind::UniformBuffer}, {1, ShaderBindingKind::Texture}}}, "Prepass mask");
         if (const ShaderVariant* variant = BaseVariant(m_panorama))
@@ -924,6 +957,10 @@ namespace Fenrir::Render
         {
             m_device.Destroy(prepass.pipeline.pipeline);
         }
+        for (auto& [key, shadow] : m_shadowPipelines)
+        {
+            m_device.Destroy(shadow.pipeline.pipeline);
+        }
         for (auto& [key, shader] : m_shaders)
         {
             for (const VariantEntry& variant : shader.variants)
@@ -992,6 +1029,8 @@ namespace Fenrir::Render
         m_device.Destroy(m_outputSampler);
         m_device.Destroy(m_skySampler);
         m_device.Destroy(m_panoramaSampler);
+        m_device.Destroy(m_shadowSampler);
+        m_device.Destroy(m_noShadow);
         m_device.Destroy(m_defaultStreams);
     }
 
@@ -1467,6 +1506,18 @@ namespace Fenrir::Render
             {
                 m_device.Destroy(it->second.pipeline.pipeline);
                 it = m_prepassPipelines.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+        for (auto it = m_shadowPipelines.begin(); it != m_shadowPipelines.end();)
+        {
+            if (it->first.shader == &shader)
+            {
+                m_device.Destroy(it->second.pipeline.pipeline);
+                it = m_shadowPipelines.erase(it);
             }
             else
             {
@@ -2056,6 +2107,77 @@ namespace Fenrir::Render
         return entry;
     }
 
+    const SceneRenderer::PipelineEntry& SceneRenderer::ShadowPipeline(const ShaderEntry& shader,
+                                                                      const VariantEntry& variant,
+                                                                      std::uint32_t streams, bool masked)
+    {
+        const std::uint32_t read = variant.variant != nullptr ? ReadMask(*variant.variant) : 0;
+        const ShadowKey key{&shader, variant.variant, read & streams, masked};
+        if (const auto found = m_shadowPipelines.find(key); found != m_shadowPipelines.end())
+        {
+            return found->second.pipeline;
+        }
+
+        PrepassEntry& made = m_shadowPipelines[key];
+        PipelineEntry& entry = made.pipeline;
+        entry.id = NextId();
+        const std::array<std::string_view, 1> maskKeys{AlphaMaskKey};
+        const ShaderVariant* shadow = m_shadow.FindVariant(masked ? std::span<const std::string_view>(maskKeys)
+                                                                  : std::span<const std::string_view>());
+        const auto stageOf = [](const ShaderVariant* of, ShaderStage stage) -> const ShaderStageCode* {
+            if (of == nullptr)
+            {
+                return nullptr;
+            }
+            const auto found = std::ranges::find(of->stages, stage, &ShaderStageCode::stage);
+            return found == of->stages.end() ? nullptr : &*found;
+        };
+        const ShaderStageCode* vertex = stageOf(variant.variant, ShaderStage::Vertex);
+        const ShaderStageCode* fragment = stageOf(shadow, ShaderStage::Fragment);
+        if (vertex == nullptr || fragment == nullptr)
+        {
+            entry.failure = vertex == nullptr ? "it has no vertex stage" : "builtin:shadow did not read";
+        }
+        else
+        {
+            // The item's vertex stage, which places it by the view block's matrix: the cascade's light matrix.
+            made.variant = std::make_unique<ShaderVariant>();
+            made.variant->keys = variant.variant->keys;
+            made.variant->stages = {*vertex, *fragment};
+            made.variant->vertexInputs = variant.variant->vertexInputs;
+            made.variant->bindings = variant.variant->bindings;
+            entry.failure = CheckFixedSets(*variant.variant);
+            PipelineDesc desc;
+            desc.shader = made.variant.get();
+            // A Masked item's set 2 is its prepass mask group, as in the prepass.
+            desc.sets = {m_frameLayout, m_viewLayout, masked ? m_prepassMaskLayout : variant.materialLayout,
+                         m_drawLayout};
+            if (std::string streams =
+                    VertexBuffersOf(*variant.variant, key.streams, desc.vertexBuffers, entry.locations);
+                !streams.empty())
+            {
+                entry.failure = std::move(streams);
+            }
+            // Both faces cast, so an open mesh or a plane shadows from either side; depth only, reversed-Z.
+            desc.cull = CullMode::None;
+            desc.blend = Graphics::BlendMode::None;
+            desc.colourFormats = {};
+            desc.samples = 1;
+            if (entry.failure.empty())
+            {
+                PipelineResult result = m_device.CreatePipeline(desc, "ShadowCascades");
+                entry.pipeline = result.pipeline;
+                entry.failure = std::move(result.diagnostic);
+            }
+        }
+        if (!entry.failure.empty())
+        {
+            m_logger.Warn("FenrirRenderer: no shadow pipeline for shader '{}', so its items cast no shadow: {}",
+                          shader.container.name, entry.failure);
+        }
+        return entry;
+    }
+
     std::vector<SceneRenderer::ResolvedDraw> SceneRenderer::ResolveDraws(std::vector<SkinDispatch>& skins)
     {
         // Each skinned mesh and palette range skinned once, however many draws read it (ADR-0050).
@@ -2137,6 +2259,17 @@ namespace Fenrir::Render
             }
             const PipelineEntry* prepass = nullptr;
             const bool masked = blend == Fenrir::BlendMode::Masked;
+            // Opaque and Masked items cast (ADR-0050), a Masked one cut out by its prepass mask group if it has one.
+            const PipelineEntry* shadow = nullptr;
+            const bool shadowMasked = masked && shader != &m_fallback && found->prepassed;
+            if (m_frame.lighting.shadows.enabled && request.castShadows && !IsTransparent(blend))
+            {
+                shadow = &ShadowPipeline(*shader, *variant, streams, shadowMasked);
+                if (shadow->pipeline.IsEmpty())
+                {
+                    shadow = nullptr;
+                }
+            }
             if (prepassed())
             {
                 prepass = &PrepassPipeline(*shader, *variant, streams, masked, doubleSided);
@@ -2176,6 +2309,8 @@ namespace Fenrir::Render
             draw.sortPoint = request.sortPoint.value_or(Math::Vec3(request.world[3]));
             draw.prepass = prepass;
             draw.prepassMasked = prepass != nullptr && masked;
+            draw.shadow = shadow;
+            draw.shadowMasked = shadow != nullptr && shadowMasked;
             draw.instances = list == nullptr ? InstanceRange{} : list->range;
             if (computeSkinned)
             {
@@ -2201,9 +2336,13 @@ namespace Fenrir::Render
 
     std::vector<SceneRenderer::DrawRun> SceneRenderer::RunsOf(const std::vector<ResolvedDraw>& draws,
                                                               const std::vector<BindingGroupHandle>& groups,
-                                                              const std::vector<std::size_t>& order, bool prepass) const
+                                                              const std::vector<std::size_t>& order,
+                                                              DrawPass pass) const
     {
-        const auto pipelineOf = [&](std::size_t i) { return prepass ? draws[i].prepass : draws[i].pipeline; };
+        const auto pipelineOf = [&](std::size_t i) {
+            return pass == DrawPass::Prepass ? draws[i].prepass
+                                             : (pass == DrawPass::Shadow ? draws[i].shadow : draws[i].pipeline);
+        };
         std::vector<DrawRun> runs;
         for (const std::size_t i : order)
         {
@@ -2231,7 +2370,7 @@ namespace Fenrir::Render
                                     const std::vector<BindingGroupHandle>& groups, const std::vector<DrawRun>& runs,
                                     BindingGroupHandle frameGroup, BindingGroupHandle viewGroup,
                                     BindingGroupHandle drawGroup, BufferHandle skinned, PixelRect viewport,
-                                    bool prepass) const
+                                    DrawPass pass) const
     {
         encoder.SetViewport(viewport);
         const PipelineEntry* current = nullptr;
@@ -2241,7 +2380,8 @@ namespace Fenrir::Render
             const std::size_t i = run.first;
             const ResolvedDraw& draw = draws[i];
             const BindingGroupHandle group = groups[i];
-            const PipelineEntry* pipeline = prepass ? draw.prepass : draw.pipeline;
+            const PipelineEntry* pipeline =
+                pass == DrawPass::Prepass ? draw.prepass : (pass == DrawPass::Shadow ? draw.shadow : draw.pipeline);
             const bool newPipeline = pipeline != current;
             if (newPipeline)
             {
@@ -2465,11 +2605,17 @@ namespace Fenrir::Render
         return source;
     }
 
-    BindingGroupHandle SceneRenderer::ViewGroupFor(std::uint64_t frameIndex, std::size_t slot, TextureHandle occlusion)
+    BindingGroupHandle SceneRenderer::ViewGroupFor(std::uint64_t frameIndex, std::size_t slot, TextureHandle occlusion,
+                                                   TextureHandle shadow)
     {
+        if (shadow.IsEmpty())
+        {
+            shadow = m_noShadow;
+        }
         const BufferHandle buffer = m_viewBlocks->Buffer(frameIndex);
-        const std::array<std::uint32_t, 5> key{buffer.index, buffer.generation, static_cast<std::uint32_t>(slot),
-                                               occlusion.index, occlusion.generation};
+        const std::array<std::uint32_t, 7> key{buffer.index,     buffer.generation,    static_cast<std::uint32_t>(slot),
+                                               occlusion.index,  occlusion.generation, shadow.index,
+                                               shadow.generation};
         if (const auto found = m_viewGroups.find(key); found != m_viewGroups.end())
         {
             return found->second;
@@ -2483,7 +2629,12 @@ namespace Fenrir::Render
         texture.binding = 1;
         texture.texture = occlusion;
         texture.sampler = m_outputSampler;
-        const BindingGroupHandle group = m_device.CreateBindingGroup({m_viewLayout, {block, texture}}, "View");
+        BindingGroupEntry shadowMap;
+        shadowMap.binding = 2;
+        shadowMap.texture = shadow;
+        shadowMap.sampler = m_shadowSampler;
+        const BindingGroupHandle group =
+            m_device.CreateBindingGroup({m_viewLayout, {block, texture, shadowMap}}, "View");
         m_viewGroups.emplace(key, group);
         return group;
     }
@@ -2529,11 +2680,12 @@ namespace Fenrir::Render
                 ++it;
             }
         }
-        // And the view groups of view rings remade since, or of occlusion textures it has let go of.
+        // And the view groups of view rings remade since, or of occlusion or shadow textures it has let go of.
         for (auto it = m_viewGroups.begin(); it != m_viewGroups.end();)
         {
-            const std::array<std::uint32_t, 5>& key = it->first;
-            if (!m_device.IsLive(BufferHandle{key[0], key[1]}) || !m_device.IsLive(TextureHandle{key[3], key[4]}))
+            const std::array<std::uint32_t, 7>& key = it->first;
+            if (!m_device.IsLive(BufferHandle{key[0], key[1]}) || !m_device.IsLive(TextureHandle{key[3], key[4]}) ||
+                !m_device.IsLive(TextureHandle{key[5], key[6]}))
             {
                 m_device.Destroy(it->second);
                 it = m_viewGroups.erase(it);
@@ -2549,6 +2701,7 @@ namespace Fenrir::Render
         m_stats.paletteBytes = 0;
         m_stats.palettes = 0;
         m_stats.skinnedDraws = 0;
+        m_stats.shadowDraws = 0;
         m_drawnViews.clear();
         PackInstanceLists();
         AddPanoramaPasses(graph);
@@ -2622,7 +2775,17 @@ namespace Fenrir::Render
             instances += std::max<std::uint32_t>(draw.instances.count, 1);
         }
         const std::vector<ViewRequest>& views = m_frame.views;
-        m_viewBlocks->Reserve(views.size());
+        // Each view's block, then each view's cascades' (ADR-0050), CascadeSlots a view.
+        m_viewBlocks->Reserve(views.size() * (1 + CascadeSlots));
+        // The items that cast the sun's shadow, in draw-list order.
+        std::vector<std::size_t> casters;
+        for (std::size_t i = 0; i < draws->size(); ++i)
+        {
+            if ((*draws)[i].shadow != nullptr)
+            {
+                casters.push_back(i);
+            }
+        }
         m_gtao->BeginFrame(views.size());
         m_backgroundBlocks->Reserve(views.size());
         m_outputBlocks->Reserve(views.size());
@@ -2717,15 +2880,47 @@ namespace Fenrir::Render
             const PixelRect rect = request.viewport;
             const PixelRect viewport{0, 0, rect.width, rect.height};
 
+            // The sun's cascades for this camera, when it casts and something casts (ADR-0050).
+            const SunShadowSettings& sun = lighting.shadows;
+            const std::vector<Cascade> cascades =
+                sun.enabled && !casters.empty()
+                    ? FitCascades(request.view, request.projection, lighting.lightDirection, sun.distance, m_cascades)
+                    : std::vector<Cascade>{};
+            const auto cascadeCount = static_cast<std::uint32_t>(cascades.size());
+
             const Math::Mat4 viewProjection = request.projection * request.view;
-            const ViewBlock viewBlock{request.view,
-                                      request.projection,
-                                      viewProjection,
-                                      glm::inverse(viewProjection),
-                                      Math::Vec4(request.position, 1.0f),
-                                      Math::Vec4(static_cast<float>(rect.x), static_cast<float>(rect.y),
-                                                 static_cast<float>(rect.width), static_cast<float>(rect.height))};
+            ViewBlock viewBlock{request.view,
+                                request.projection,
+                                viewProjection,
+                                glm::inverse(viewProjection),
+                                Math::Vec4(request.position, 1.0f),
+                                Math::Vec4(static_cast<float>(rect.x), static_cast<float>(rect.y),
+                                           static_cast<float>(rect.width), static_cast<float>(rect.height))};
+            for (std::uint32_t c = 0; c < cascadeCount; ++c)
+            {
+                viewBlock.shadowMatrices.at(c) = AtlasMatrix(cascades[c], c, cascadeCount);
+                viewBlock.shadowSplits[static_cast<int>(c)] = cascades[c].split;
+                viewBlock.shadowTexels[static_cast<int>(c)] = cascades[c].texelSize;
+            }
+            viewBlock.shadowBias = Math::Vec4(sun.normalBias, sun.slopeBias, ShadowFilterRadius, CascadeBlendShare);
+            viewBlock.shadowInfo = {cascadeCount, request.debugView == ViewDebug::ShadowCascades ? 1u : 0u, 0, 0};
             m_viewBlocks->Write(frameIndex, v, BytesOf(viewBlock));
+            // Each cascade's own view block, which the casting items' vertex stages place them by.
+            std::vector<BindingGroupHandle> cascadeGroups;
+            for (std::uint32_t c = 0; c < cascadeCount; ++c)
+            {
+                const Cascade& cascade = cascades[c];
+                const std::size_t slot = views.size() + v * CascadeSlots + c;
+                const auto size = static_cast<float>(m_cascades.mapSize);
+                const ViewBlock cascadeBlock{cascade.view,
+                                             cascade.projection,
+                                             cascade.viewProjection,
+                                             glm::inverse(cascade.viewProjection),
+                                             Math::Vec4(cascade.centre, 1.0f),
+                                             Math::Vec4(static_cast<float>(c) * size, 0.0f, size, size)};
+                m_viewBlocks->Write(frameIndex, slot, BytesOf(cascadeBlock));
+                cascadeGroups.push_back(ViewGroupFor(frameIndex, slot, GetDefaultTexture(DefaultTexture::White)));
+            }
             const BackgroundBlock backgroundBlock{
                 Math::Vec4(request.background.r, request.background.g, request.background.b, request.background.a)};
             m_backgroundBlocks->Write(frameIndex, v, BytesOf(backgroundBlock));
@@ -2776,7 +2971,17 @@ namespace Fenrir::Render
             const GraphResource sceneColour = graph.CreateTexture("SceneColor", colourDesc);
             const GraphResource sceneDepth = graph.CreateTexture("SceneDepth", depthDesc);
             const GraphResource sceneNormals = graph.CreateTexture("SceneNormals", normalDesc);
-            m_drawnViews.push_back({v, sceneColour, sceneDepth, sceneNormals, viewGroup});
+            GraphResource shadowMap;
+            if (cascadeCount > 0)
+            {
+                TextureDesc shadowDesc;
+                shadowDesc.format = TextureFormat::Depth32Float;
+                shadowDesc.width = m_cascades.mapSize * cascadeCount;
+                shadowDesc.height = m_cascades.mapSize;
+                shadowDesc.usage = TextureUsage::DepthAttachment | TextureUsage::Sampled;
+                shadowMap = graph.CreateTexture("ShadowMap", shadowDesc);
+            }
+            m_drawnViews.push_back({v, sceneColour, sceneDepth, sceneNormals, shadowMap, viewGroup});
 
             // Opaque items in draw-list order, and those of them in the depth prepass; transparent ones back to front
             // by the view-space depth of their world origins, the farthest (most negative view z) first.
@@ -2804,8 +3009,47 @@ namespace Fenrir::Render
                              [&](std::size_t a, std::size_t b) { return depth[a] < depth[b]; });
             // Matching opaque and masked items merge into instanced draws (ADR-0051); transparent ones stay single,
             // in their depth order.
-            auto prepassRuns = std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *prepassGroups, *prepassed, true));
-            auto opaqueRuns = std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *groups, *opaque, false));
+            auto prepassRuns =
+                std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *prepassGroups, *prepassed, DrawPass::Prepass));
+            auto opaqueRuns = std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *groups, *opaque, DrawPass::Main));
+
+            if (!shadowMap.IsEmpty())
+            {
+                // Each casting item's set 2 in the shadow passes: a cut-out Masked item's prepass group, else its
+                // material group, which its own vertex stage may read.
+                auto shadowGroups = std::make_shared<std::vector<BindingGroupHandle>>(*groups);
+                for (const std::size_t i : casters)
+                {
+                    if ((*draws)[i].shadowMasked)
+                    {
+                        (*shadowGroups)[i] = PrepassGroup(*(*draws)[i].material, replaced[v]);
+                    }
+                }
+                auto shadowRuns =
+                    std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *shadowGroups, casters, DrawPass::Shadow));
+                const std::uint32_t mapSize = m_cascades.mapSize;
+                // Every cascade into its tile of the atlas, in one pass.
+                graph.AddPass(
+                    "ShadowCascades", RenderStage::Shadow, QueueKind::Graphics,
+                    [=](PassBuilder& pass) {
+                        pass.DepthAttachment(shadowMap, LoadOp::Clear, 0.0f);
+                        for (const GraphResource image : samples)
+                        {
+                            pass.Sample(image);
+                        }
+                        readSkinned(pass);
+                    },
+                    [this, draws, shadowGroups, shadowRuns, frameGroup, cascadeGroups, drawGroup, skinned,
+                     mapSize](PassContext& context) {
+                        for (std::size_t c = 0; c < cascadeGroups.size(); ++c)
+                        {
+                            const PixelRect tile{static_cast<std::int32_t>(c * mapSize), 0, mapSize, mapSize};
+                            RecordDraws(context.Encoder(), *draws, *shadowGroups, *shadowRuns, frameGroup,
+                                        cascadeGroups[c], drawGroup, skinned, tile, DrawPass::Shadow);
+                        }
+                    });
+                m_stats.shadowDraws += static_cast<std::uint32_t>(shadowRuns->size() * cascadeGroups.size());
+            }
             auto transparentRuns = std::make_shared<std::vector<DrawRun>>();
             for (const std::size_t i : *transparent)
             {
@@ -2827,7 +3071,7 @@ namespace Fenrir::Render
                 [this, draws, prepassGroups, prepassRuns, frameGroup, viewGroup, drawGroup, skinned,
                  viewport](PassContext& context) {
                     RecordDraws(context.Encoder(), *draws, *prepassGroups, *prepassRuns, frameGroup, viewGroup,
-                                drawGroup, skinned, viewport, true);
+                                drawGroup, skinned, viewport, DrawPass::Prepass);
                 });
             // GTAO from the prepass's depth and normals, when the camera has it; Opaque samples what it makes.
             const GraphResource occlusion = m_gtao->AddPasses(
@@ -2847,15 +3091,21 @@ namespace Fenrir::Render
                     {
                         pass.Sample(occlusion);
                     }
+                    if (!shadowMap.IsEmpty())
+                    {
+                        pass.Sample(shadowMap);
+                    }
                     readSkinned(pass);
                 },
-                [this, draws, groups, opaqueRuns, frameGroup, viewGroup, drawGroup, skinned, viewport, occlusion,
+                [this, draws, groups, opaqueRuns, frameGroup, drawGroup, skinned, viewport, occlusion, shadowMap,
                  v](PassContext& context) {
-                    const BindingGroupHandle occludedView =
-                        occlusion.IsEmpty() ? viewGroup
-                                            : ViewGroupFor(context.FrameIndex(), v, context.Texture(occlusion));
-                    RecordDraws(context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup, occludedView, drawGroup,
-                                skinned, viewport, false);
+                    const TextureHandle occlusionTexture =
+                        occlusion.IsEmpty() ? GetDefaultTexture(DefaultTexture::White) : context.Texture(occlusion);
+                    const TextureHandle shadowTexture =
+                        shadowMap.IsEmpty() ? TextureHandle{} : context.Texture(shadowMap);
+                    RecordDraws(context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup,
+                                ViewGroupFor(context.FrameIndex(), v, occlusionTexture, shadowTexture), drawGroup,
+                                skinned, viewport, DrawPass::Main);
                 });
             if (!transparent->empty())
             {
@@ -2869,12 +3119,22 @@ namespace Fenrir::Render
                         {
                             pass.Sample(image);
                         }
+                        if (!shadowMap.IsEmpty())
+                        {
+                            pass.Sample(shadowMap);
+                        }
                         readSkinned(pass);
                     },
-                    [this, draws, groups, transparentRuns, frameGroup, viewGroup, drawGroup, skinned,
-                     viewport](PassContext& context) {
-                        RecordDraws(context.Encoder(), *draws, *groups, *transparentRuns, frameGroup, viewGroup,
-                                    drawGroup, skinned, viewport, false);
+                    [this, draws, groups, transparentRuns, frameGroup, viewGroup, drawGroup, skinned, viewport,
+                     shadowMap, v](PassContext& context) {
+                        // Shadowed, but never darkened by the occlusion of what is behind it.
+                        const BindingGroupHandle shadowedView =
+                            shadowMap.IsEmpty()
+                                ? viewGroup
+                                : ViewGroupFor(context.FrameIndex(), v, GetDefaultTexture(DefaultTexture::White),
+                                               context.Texture(shadowMap));
+                        RecordDraws(context.Encoder(), *draws, *groups, *transparentRuns, frameGroup, shadowedView,
+                                    drawGroup, skinned, viewport, DrawPass::Main);
                     });
             }
             m_stats.draws += static_cast<std::uint32_t>(opaqueRuns->size() + transparentRuns->size());
@@ -2904,12 +3164,16 @@ namespace Fenrir::Render
 
             // The first view into a target clears all of it; each later one draws over it, in its viewport only.
             const LoadOp load = cleared.insert(request.target).second ? LoadOp::Clear : LoadOp::Load;
-            // A view showing its ambient occlusion draws that instead, black when it has none.
-            const bool showOcclusion = request.showOcclusion && !m_occlusionOutputPipeline.IsEmpty();
-            const GraphResource shown = showOcclusion && !occlusion.IsEmpty() ? occlusion : sceneColour;
-            const PipelineHandle outputPipeline = showOcclusion ? m_occlusionOutputPipeline : m_outputPipeline;
+            // A view showing its ambient occlusion or its shadow atlas draws that instead, as grey, black when it has
+            // none.
+            const bool showGrey =
+                (request.debugView == ViewDebug::AmbientOcclusion || request.debugView == ViewDebug::ShadowMap) &&
+                !m_occlusionOutputPipeline.IsEmpty();
+            const GraphResource grey = request.debugView == ViewDebug::ShadowMap ? shadowMap : occlusion;
+            const GraphResource shown = showGrey && !grey.IsEmpty() ? grey : sceneColour;
+            const PipelineHandle outputPipeline = showGrey ? m_occlusionOutputPipeline : m_outputPipeline;
             const TextureHandle black = GetDefaultTexture(DefaultTexture::Black);
-            const bool shownBlack = showOcclusion && occlusion.IsEmpty();
+            const bool shownBlack = showGrey && grey.IsEmpty();
             graph.AddPass(
                 "Output", RenderStage::Output, QueueKind::Graphics,
                 [=](PassBuilder& pass) {

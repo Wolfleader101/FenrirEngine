@@ -563,6 +563,14 @@ A component that lights the scene from its entity: a *directional light* (the su
 **Instance list**
 An asset holding the placements of many copies of one mesh, each a transform relative to the entity that draws them and an optional colour. An `InstancedMeshRenderer` draws one, with no entity per copy.
 *Avoid:* instance buffer, multimesh, batch.
+
+**Shadow cascade**
+One of the directional light's shadow maps for one camera: an orthographic view along the light round a slice of the camera's view, nearer slices smaller and so sharper, out to the light's shadow distance. Each is a sphere snapped to whole texels, so its shadows hold still as the camera moves and turns (ADR-0050).
+*Avoid:* split (the depth where one cascade gives way to the next), CSM level, shadow LOD.
+
+**Shadow atlas**
+One depth texture holding several shadow maps side by side, each drawn into its own tile: a camera's cascades, or every shadowed spot light's (ADR-0050).
+*Avoid:* shadow texture array, shadow page.
 ## FenrirEngine debug drawing
 
 **FenrirDebugDraw**

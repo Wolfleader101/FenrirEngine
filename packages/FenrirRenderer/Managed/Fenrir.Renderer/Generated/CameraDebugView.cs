@@ -13,4 +13,14 @@ public enum CameraDebugView : byte
     /// occlusion is off.
     /// </summary>
     AmbientOcclusion = 1,
+    /// <summary>
+    /// Its lit colour, each pixel tinted by the sun's shadow cascade it reads (ADR-0050): red, green, blue and yellow
+    /// from the nearest, untinted past the last or without shadows.
+    /// </summary>
+    ShadowCascades = 2,
+    /// <summary>
+    /// The sun's shadow map for this view as grey, its cascades side by side from the nearest, white nearest the sun,
+    /// with no exposure or tonemap; black where nothing casts.
+    /// </summary>
+    ShadowMap = 3,
 }
