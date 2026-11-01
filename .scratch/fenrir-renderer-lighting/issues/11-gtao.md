@@ -40,7 +40,7 @@ Built 2026-11-01, stacked on ticket 10's branch (#265 to #269 not yet merged). D
   existing golden or pass-list test changes. Intensity scales XeGTAO's final power 2.2.
 - **The raw view needed an API addition:** `Camera::debugView` (`CameraDebugView::None`, `AmbientOcclusion`), which has
   Output draw the occlusion as grey (Output's new OCCLUSION variant) and so culls the lit passes. Ticket 15's shadow debug
-  views can add values to it. This is beyond the spec's Camera list: confirm or replace.
+  views can add values to it. Beyond the spec's Camera list; the user chose to keep it (2026-11-01).
 - **The golden** is `sphere-grid-gtao.png`: the ticket-04 sphere grid resting on a floor against a wall, built in the GL
   test, since tests never use the demo's assets and the demo's floating material grid shows almost no occlusion.
 - **Hand check** (helmets' contact shadows, no haloing) is not done in the demo: Showcase models needs the fetched
