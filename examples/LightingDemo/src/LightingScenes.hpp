@@ -38,4 +38,12 @@ namespace LightingDemo
      * draws and instances. Without fetched assets, spheres and cubes stand in.
      */
     [[nodiscard]] FenrirDemo::DemoScene AsteroidRing();
+
+    /**
+     * @brief Forest clearing at golden hour: about 20k copies of ten fetched Poly Haven species (saplings, ferns,
+     * shrubs, rocks, logs and branches) over a fetched forest floor, one instance list per variant, round a clearing of
+     * about 200k generated grass blades swaying through the demo's wind shader, under a low sun's cascaded shadows. The
+     * panel thins the forest and hides the grass. Without fetched assets, the grass grows among boulders and trunks.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene ForestClearing();
 } // namespace LightingDemo

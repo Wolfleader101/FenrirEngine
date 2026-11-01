@@ -13,10 +13,15 @@ fenrir_add_demo_app(LightingDemo
         src/ManyLights.cpp
         src/Showroom.cpp
         src/AsteroidRing.cpp
+        src/ForestClearing.cpp
+        src/SimplifiedMesh.hpp
+        src/SimplifiedMesh.cpp
     ASSETS assets
 )
 # The grid's labels and the missing-assets message are drawn through the scene's DebugDraw.
 target_link_libraries(LightingDemo PRIVATE FenrirDebugDraw FenrirAssets)
+# The forest clearing's grass: a user material shader whose vertex stage sways the blades, embedded in the app.
+fenrir_add_shaders(LightingDemo PROGRAM LightingDemoGrass VERTEX shaders/grass.vert FRAGMENT shaders/grass.frag EMBED)
 
 # With FENRIR_FETCH_DEMO_ASSETS, configure downloads every file of the manifest into the cache, and the app loads them
 # from there: they are never copied into the build.

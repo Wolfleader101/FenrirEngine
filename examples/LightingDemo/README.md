@@ -30,7 +30,7 @@ detaches the shadows from the helmets' bases, lowering them to 0 brings acne bac
 ## Assets
 
 Committed ones are in `assets/` (`assets/ATTRIBUTION.md`); the large ones are fetched (ADR-0052). Configure with
-`-DFENRIR_FETCH_DEMO_ASSETS=ON` and CMake downloads every file `fetched-assets.json` lists, about 110 MB, into
+`-DFENRIR_FETCH_DEMO_ASSETS=ON` and CMake downloads every file `fetched-assets.json` lists, about 190 MB, into
 `FENRIR_DEMO_ASSET_CACHE` (by default `%LOCALAPPDATA%/FenrirEngine/demo-assets` on Windows, else
 `$XDG_CACHE_HOME/FenrirEngine/demo-assets` or `~/.cache/FenrirEngine/demo-assets`), outside the build directory, and
 checks each one's SHA-256: a file whose hash is not the manifest's fails configure, naming it. A file already cached with
@@ -197,6 +197,49 @@ Hand checks, on OpenGL:
 - The planet's shadow darkens the ring's far side behind it, its edge sliding over the rocks as the ring turns, and the
   field's rocks shadow one another.
 
+### Forest clearing
+
+The dense, alpha-tested, animated instancing case: a clearing at golden hour, its grass swaying in the wind under a low
+warm sun's cascaded shadows, the forest round it of about 20,000 copies of ten Poly Haven species (ADR-0051): fir and pine
+saplings grown to trees, ferns, two shrubs, two rocks, a fallen trunk, stumps and dry branches. Each of a model's glTF
+nodes is a variant with one instance list of its copies, turned, scaled and tinted at random, and each mesh of a variant
+one InstancedMeshRenderer drawing that list (the saplings' bark and twigs share one): 22 lists, 30 draws a pass with
+the ground and the grass.
+The pine twigs, ferns and shrubs are `Masked` glTF materials, cut out by their alpha in the depth prepass, the shadow
+cascades and the lit pass alike. The rocks are simplified at spawn by vertex clustering as the asteroid ring's are (the
+pebbles cast no shadow); the leaves and twigs cannot be, so the forest is triangle-heavy (the saplings' twigs have
+120,000 to 160,000 triangles each) and there are few trees, with the panorama's autumn forest standing beyond them. The
+trees leave a gap towards the sun, so it reaches the clearing; the forest floor is Poly Haven's Forest Ground 04, the sky
+its Autumn Forest 04 panorama or a golden-hour sky the demo makes, whose sun sits where the DirectionalLight comes from.
+
+The grass is about 200,000 blades, no asset: one patch mesh of 1,800 generated blades, each a tapering, curving strip of
+five triangles with its own height, lean and tint, drawn by one InstancedMeshRenderer at every four-metre cell of the
+clearing, each copy turned a quarter-turn at random. Its material is the demo's own shader (`shaders/grass.vert`,
+`shaders/grass.frag`, built by `fenrir_add_shaders` and embedded): the vertex stage sways each vertex by the square of its
+height in a gust rolling along the wind with a flutter across it, driven by the frame's time, and the fragment stage
+lights the blade through `Fenrir/Lighting.glsl`. The renderer runs that vertex stage in the depth prepass and the shadow
+cascades too, so the blades' depth, shadows and pixels sway together. GTAO darkens the ground among the plants.
+
+The window's Scene part has the forest's density (cutting each list to its share, which uploads it again), the grass
+shown or hidden, the counts, and the last frame's draws, instances and shadow draws. Without the fetched assets the grass
+still grows, on a plain earth ground among sphere boulders and box trunks (two instance lists), under the golden-hour
+sky, and the scene says so on screen.
+
+| Keys | |
+| --- | --- |
+| T, E, B, O, G, H, S | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows, the next panorama. |
+| N | 25%, 50% or all of the forest. |
+| M | The grass hidden or shown. |
+
+Hand checks, on OpenGL:
+
+- The grass sways in rolling gusts, and its shadows on the ground and on its neighbours sway with it.
+- The ferns', shrubs' and pine twigs' leaves cut out cleanly in light and in their shadows: no box-shaped shadows of
+  their cards, and no holes or halos in the lit leaves where the prepass and the lit pass disagree.
+- G to the occlusion view shows the plants grounded by dark contact shading at their feet.
+- Without the fetched assets: grass, boulders and trunks, and an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, no
+  error in the log.
+
 | Key | What it does |
 | --- | --- |
 | F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
@@ -205,4 +248,4 @@ Hand checks, on OpenGL:
 
 The scaffold's `LightingDemo-Smoke-null` (everywhere) and `LightingDemo-Smoke-opengl` (label `gl`) run every scene for
 60 frames with its keys pressed, and fail on any error. Neither uses the fetched assets, so Showcase models runs empty
-Showroom's plinths bare and the asteroid ring of spheres and cubes, each with its message shown. `FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.
+Showroom's plinths bare, the asteroid ring of spheres and cubes and the forest clearing of grass, boulders and trunks, each with its message shown. `FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.
