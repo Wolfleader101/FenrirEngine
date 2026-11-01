@@ -36,8 +36,11 @@ Built 2026-11-01, stacked on ticket 11's branch (#265 to #270 not yet merged). D
   Transparent items are always runs of one.
 - **Stats:** `RendererStats::draws` now counts draws in each view's `Opaque` and `Transparent` passes (a merged run is
   one), and the new `instances` counts items, which is what `draws` used to count. `skinnedDraws` is now documented as
-  a part of `instances`; I kept its name. The prepass draws are not counted.
+  a part of `instances`; I kept its name, which it had while counting items before, rather than rename a C# field
+  the ticket did not ask about. The prepass draws are not counted.
 - **`RendererConfig::automaticInstancing = true`**, set at install only. Ticket 13's panel switch will need a runtime
   setter.
 - AnimationDemo's Crowd text now shows draws, instances and skinned.
-- No shadow passes exist yet: tickets 15, 17 and 18 should build their passes' runs with `RunsOf` too.
+- No shadow passes exist yet: tickets 15, 17 and 18 should build their passes' runs with `RunsOf` too. A shadow pass
+  with its own pipelines will need `RunsOf` to take its pipeline per draw rather than the `prepass` flag.
+- The `gl_InstanceIndex` exemption matches any include whose path ends in `/Fenrir/Draw.glsl`.

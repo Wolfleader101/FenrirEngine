@@ -159,7 +159,7 @@ TEST_CASE("Merged skinned items each skin from their own palette", "[renderer][g
 
     const GlProbe::Image image = test.Frame();
 
-    INFO("they were two skinned draws of two instances each");
+    INFO("they were two draws of two skinned instances each");
     REQUIRE(test.renderer.Stats().draws == 2);
     REQUIRE(test.renderer.Stats().instances == 4);
     REQUIRE(test.renderer.Stats().skinnedDraws == 4);

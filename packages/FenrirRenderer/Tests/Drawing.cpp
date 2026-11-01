@@ -114,7 +114,10 @@ TEST_CASE("A MeshRenderer whose material went stale draws with the fallback mate
 
 TEST_CASE("Opaque items are drawn grouped by pipeline, then material, then mesh", "[renderer][facade]")
 {
-    RendererTestApp test;
+    // With automatic instancing off, so each item is its own draw and the order of all eight shows.
+    Fenrir::RendererConfig config = RendererTest::NullBackend();
+    config.automaticInstancing = false;
+    RendererTestApp test(config);
     test.AddCamera();
     const auto cube = test.Mesh(RendererTest::Cube());
     const auto quad = test.Mesh(RendererTest::Quad());

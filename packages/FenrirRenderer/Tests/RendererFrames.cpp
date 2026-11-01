@@ -97,8 +97,9 @@ TEST_CASE("Stats report the last frame's draws, passes and uploads", "[renderer]
     test.Frame();
     const Fenrir::RendererStats stats = test.renderer.Stats();
 
-    INFO("two MeshRenderers are two draws");
-    REQUIRE(stats.draws == 2);
+    INFO("two MeshRenderers of one mesh and material are one draw of two instances (ADR-0051)");
+    REQUIRE(stats.draws == 1);
+    REQUIRE(stats.instances == 2);
     INFO("one view runs DepthPrepass, Opaque, Background, its bloom's six downsamples, five upsamples and composite, "
          "and Output, after the first frame's BRDF lookup table");
     REQUIRE(stats.passes == 17);

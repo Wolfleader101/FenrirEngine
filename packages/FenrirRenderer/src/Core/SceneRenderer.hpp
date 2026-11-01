@@ -140,11 +140,11 @@ namespace Fenrir::Render
       public:
         /**
          * @brief Makes the default textures, the fixed sets' layouts and the internal pipelines on `device`, for scene
-         * targets of `samples` samples per pixel (1: no MSAA). With `mergeInstances`, consecutive matching items draw
-         * as one instanced draw (ADR-0051).
+         * targets of `samples` samples per pixel (1: no MSAA). With `automaticInstancing`, consecutive matching items
+         * draw as one instanced draw (ADR-0051).
          */
         SceneRenderer(Graphics::GraphicsDevice& device, ILogger& logger, std::uint32_t samples = 1,
-                      bool mergeInstances = true);
+                      bool automaticInstancing = true);
         ~SceneRenderer() override;
 
         SceneRenderer(const SceneRenderer&) = delete;
@@ -500,10 +500,6 @@ namespace Fenrir::Render
         [[nodiscard]] Graphics::BindingGroupHandle PrepassGroup(MaterialEntry& material,
                                                                 const std::vector<AssetKey>& replaced);
         /**
-         * @brief Records `order`'s draws of `draws` into a pass, binding each one's pipeline (its prepass pipeline
-         * when `prepass`), groups and streams.
-         */
-        /**
          * @brief Consecutive draws of a pass, one instance each: `first` is the record of the first, and the rest
          * follow it in the draw buffer.
          */
@@ -514,14 +510,17 @@ namespace Fenrir::Render
         };
 
         /**
-         * @brief `order`'s draws as the runs a pass draws (ADR-0051): with merging on, each run of consecutive records
-         * with the same pipeline (the prepass's when `prepass`), set 2 group and mesh is one instanced draw; with it
-         * off, or when `single`, as for transparent items, each draw is its own.
+         * @brief `order`'s opaque or masked draws as the runs a pass draws (ADR-0051): with automatic instancing on,
+         * each run of consecutive records with the same pipeline (the prepass's when `prepass`), material, set 2 group
+         * and mesh is one instanced draw; with it off, each draw is its own.
          */
         [[nodiscard]] std::vector<DrawRun> RunsOf(const std::vector<ResolvedDraw>& draws,
                                                   const std::vector<Graphics::BindingGroupHandle>& groups,
-                                                  const std::vector<std::size_t>& order, bool prepass,
-                                                  bool single) const;
+                                                  const std::vector<std::size_t>& order, bool prepass) const;
+        /**
+         * @brief Records `runs` of `draws` into a pass, binding each one's pipeline (its prepass pipeline when
+         * `prepass`), groups and streams, and drawing each run's instances.
+         */
         void RecordDraws(Graphics::PassEncoder& encoder, const std::vector<ResolvedDraw>& draws,
                          const std::vector<Graphics::BindingGroupHandle>& groups, const std::vector<DrawRun>& runs,
                          Graphics::BindingGroupHandle frameGroup, Graphics::BindingGroupHandle viewGroup,
@@ -566,7 +565,8 @@ namespace Fenrir::Render
         ILogger& m_logger;
         /** @brief The scene targets' samples per pixel. */
         std::uint32_t m_samples;
-        bool m_mergeInstances;
+        /** @brief RendererConfig::automaticInstancing: whether RunsOf merges matching draws. */
+        bool m_automaticInstancing;
 
         std::map<AssetKey, ShaderEntry> m_shaders;
         std::map<AssetKey, MeshEntry> m_meshes;

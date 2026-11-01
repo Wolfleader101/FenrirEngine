@@ -661,9 +661,10 @@ namespace Fenrir::Render
 
     // ---- SceneRenderer ----
 
-    SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples, bool mergeInstances)
+    SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples,
+                                 bool automaticInstancing)
         : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1)),
-          m_mergeInstances(mergeInstances)
+          m_automaticInstancing(automaticInstancing)
     {
         m_frameLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer},
                                                             {1, ShaderBindingKind::Texture},
@@ -1983,8 +1984,7 @@ namespace Fenrir::Render
 
     std::vector<SceneRenderer::DrawRun> SceneRenderer::RunsOf(const std::vector<ResolvedDraw>& draws,
                                                               const std::vector<BindingGroupHandle>& groups,
-                                                              const std::vector<std::size_t>& order, bool prepass,
-                                                              bool single) const
+                                                              const std::vector<std::size_t>& order, bool prepass) const
     {
         const auto pipelineOf = [&](std::size_t i) { return prepass ? draws[i].prepass : draws[i].pipeline; };
         std::vector<DrawRun> runs;
@@ -1992,7 +1992,7 @@ namespace Fenrir::Render
         {
             // The sort key keeps matching items together, so a run is the next record of the same kind; each
             // instance then finds its own record, at the run's first plus its instance index (Fenrir/Draw.glsl).
-            if (!single && m_mergeInstances && !runs.empty())
+            if (m_automaticInstancing && !runs.empty())
             {
                 DrawRun& run = runs.back();
                 const std::size_t last = run.first + run.count - 1;
@@ -2468,11 +2468,13 @@ namespace Fenrir::Render
                              [&](std::size_t a, std::size_t b) { return depth[a] < depth[b]; });
             // Matching opaque and masked items merge into instanced draws (ADR-0051); transparent ones stay single,
             // in their depth order.
-            auto prepassRuns =
-                std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *prepassGroups, *prepassed, true, false));
-            auto opaqueRuns = std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *groups, *opaque, false, false));
-            auto transparentRuns =
-                std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *groups, *transparent, false, true));
+            auto prepassRuns = std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *prepassGroups, *prepassed, true));
+            auto opaqueRuns = std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *groups, *opaque, false));
+            auto transparentRuns = std::make_shared<std::vector<DrawRun>>();
+            for (const std::size_t i : *transparent)
+            {
+                transparentRuns->push_back({i, 1});
+            }
 
             // Depth and normals first (ADR-0049), so Opaque shades each pixel once, by equal depth.
             graph.AddPass(
