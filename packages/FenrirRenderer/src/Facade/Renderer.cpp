@@ -76,7 +76,9 @@ namespace Fenrir
         Render::ViewDebug ToCore(CameraDebugView debugView)
         {
             static_assert(static_cast<int>(CameraDebugView::ShadowAtlas) ==
-                          static_cast<int>(Render::ViewDebug::ShadowAtlas));
+                              static_cast<int>(Render::ViewDebug::ShadowAtlas) &&
+                          static_cast<int>(CameraDebugView::SpotShadowAtlas) ==
+                              static_cast<int>(Render::ViewDebug::SpotShadowAtlas));
             return static_cast<Render::ViewDebug>(debugView);
         }
 
@@ -399,6 +401,9 @@ namespace Fenrir
                 out.range = light.range;
                 out.innerAngle = light.innerAngle;
                 out.outerAngle = light.outerAngle;
+                out.castShadows = light.castShadows;
+                out.shadowNormalBias = std::max(light.shadowNormalBias, 0.0f);
+                out.shadowSlopeBias = std::max(light.shadowSlopeBias, 0.0f);
             });
         }
 
@@ -1447,9 +1452,10 @@ namespace Fenrir
         const Render::CascadeConfig cascades{std::clamp(config.shadowCascades, 1u, Render::MaxCascades),
                                              std::max(config.shadowMapSize, 1u),
                                              std::clamp(config.shadowSplitLambda, 0.0f, 1.0f)};
-        auto scene =
-            std::make_unique<Render::SceneRenderer>(state->core->Device(), *app.Logger(), SupportedMsaa(app, config),
-                                                    config.automaticInstancing, config.computeSkinning, cascades);
+        const Render::SpotShadowConfig spotShadows{config.spotShadowBudget, std::max(config.spotShadowMapSize, 16u)};
+        auto scene = std::make_unique<Render::SceneRenderer>(state->core->Device(), *app.Logger(),
+                                                             SupportedMsaa(app, config), config.automaticInstancing,
+                                                             config.computeSkinning, cascades, spotShadows);
         state->scene = scene.get();
         // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
         // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).
@@ -1508,6 +1514,14 @@ namespace Fenrir
         if (m_state != nullptr)
         {
             m_state->scene->SetComputeSkinning(on);
+        }
+    }
+
+    void Renderer::SetSpotShadowBudget(std::uint32_t budget)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetSpotShadowBudget(budget);
         }
     }
 
@@ -1695,6 +1709,11 @@ namespace Fenrir
     void Renderer::SetComputeSkinning(App& app, bool on)
     {
         Renderer(InstalledState(app)).SetComputeSkinning(on);
+    }
+
+    void Renderer::SetSpotShadowBudget(App& app, std::uint32_t budget)
+    {
+        Renderer(InstalledState(app)).SetSpotShadowBudget(budget);
     }
 
     RendererStats Renderer::Stats(App& app)

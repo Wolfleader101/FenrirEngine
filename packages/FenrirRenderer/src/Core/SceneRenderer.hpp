@@ -19,6 +19,7 @@
 #include "Core/RenderFeature.hpp"
 #include "Core/SceneFrame.hpp"
 #include "Core/SkyLighting.hpp"
+#include "Core/SpotShadows.hpp"
 #include "Device/GraphicsDevice.hpp"
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/InstanceListData.hpp"
@@ -58,7 +59,7 @@ namespace Fenrir::Render
         std::uint32_t skinnedDraws = 0;
         /**
          * @brief Draws in the last frame's shadow passes (ADR-0050): one per merged run of casting items, per cascade
-         * of each view.
+         * of each view and per shadowed spot light.
          */
         std::uint32_t shadowDraws = 0;
     };
@@ -124,6 +125,17 @@ namespace Fenrir::Render
      * every view without them, binds a 1 x 1 map that lights everything, with no cascades. A view showing its cascades
      * tints its lit colour by them; one showing its shadow atlas has Output draw the atlas as grey.
      *
+     * **Spot shadows** (ADR-0050): each frame the spot lights with castShadows nearest to any view's camera, up to
+     * the budget, keep their shadows (ChooseSpotShadows), the rest light unshadowed, warned about once. With items
+     * that cast, one `SpotShadows` pass in the `Shadow` stage, before every view's, draws them as ShadowCascades does
+     * into each light's tile of the spot shadow atlas: a Depth32Float texture the renderer keeps, a grid of the
+     * budget's tiles (SpotAtlasGridOf), each `mapSize` square, made again when the budget changes, through a view
+     * block with the light's perspective (FitSpotShadow). Materials sampling render target images sample their
+     * defaults there, so the pass waits on no view. The light buffer holds those lights first, frame block
+     * `lights.y` counting them, and set 0 binds their records (GpuSpotShadow) at binding 7 and the atlas at binding 8
+     * (`Fenrir/Frame.glsl`), which `Fenrir/Shadows.glsl` reads; with none, and in the SpotShadows pass itself,
+     * binding 8 is the map that lights everything. A view showing the spot shadow atlas has Output draw it as grey.
+     *
      * **Ambient occlusion** (ADR-0049): a view whose camera has it gets Gtao's passes after its DepthPrepass pass, and
      * its `Opaque` pass binds their occlusion texture at set 1 binding 1 (`Fenrir/View.glsl`), which
      * `Fenrir/Lighting.glsl` darkens the sky's light by. Every other pass, and every view without it, binds the white
@@ -182,10 +194,12 @@ namespace Fenrir::Render
          * @brief Makes the default textures, the fixed sets' layouts and the internal pipelines on `device`, for scene
          * targets of `samples` samples per pixel (1: no MSAA). With `automaticInstancing`, consecutive matching items
          * draw as one instanced draw (ADR-0051); with `computeSkinning`, skinned meshes skin once a frame in compute;
-         * `cascades` says how each view's sun cascades are made (ADR-0050), its count held to 1 to MaxCascades.
+         * `cascades` says how each view's sun cascades are made (ADR-0050), its count held to 1 to MaxCascades;
+         * `spotShadows` the spot shadow budget and the side of each light's tile.
          */
         SceneRenderer(Graphics::GraphicsDevice& device, ILogger& logger, std::uint32_t samples = 1,
-                      bool automaticInstancing = true, bool computeSkinning = true, CascadeConfig cascades = {});
+                      bool automaticInstancing = true, bool computeSkinning = true, CascadeConfig cascades = {},
+                      SpotShadowConfig spotShadows = {});
         ~SceneRenderer() override;
 
         SceneRenderer(const SceneRenderer&) = delete;
@@ -269,6 +283,12 @@ namespace Fenrir::Render
         {
             m_computeSkinning = on;
         }
+
+        /**
+         * @brief How many spot lights may cast shadows from the next frame (ADR-0050); the spot shadow atlas is made
+         * again at its new size when next needed.
+         */
+        void SetSpotShadowBudget(std::uint32_t budget);
 
         /** @brief What the next frame draws. */
         void SetFrame(SceneFrame frame);
@@ -588,8 +608,8 @@ namespace Fenrir::Render
         };
 
         /**
-         * @brief One copy's frame set binding group (set 0), for the frame block, light buffer and sky textures it was
-         * made with.
+         * @brief One copy's frame set binding groups (set 0), for the frame block, light buffer, sky textures, spot
+         * shadow records and spot shadow atlas they were made with.
          */
         struct FrameGroup
         {
@@ -597,7 +617,15 @@ namespace Fenrir::Render
             Graphics::BufferHandle lights;
             Graphics::TextureHandle irradiance;
             Graphics::TextureHandle specular;
+            Graphics::BufferHandle spotShadows;
+            /** @brief The spot shadow atlas `group` binds; empty for none. */
+            Graphics::TextureHandle spotAtlas;
             Graphics::BindingGroupHandle group;
+            /**
+             * @brief The same, but binding the map that lights everything for the atlas, for the SpotShadows pass that
+             * draws it; `group` itself when it binds no atlas.
+             */
+            Graphics::BindingGroupHandle unshadowed;
         };
 
         /**
@@ -706,17 +734,20 @@ namespace Fenrir::Render
         void PackInstanceLists();
         /**
          * @brief The frame's draws, sorted; with compute skinning, each skinned mesh and palette range they draw is one
-         * of `skins`, whose skinned vertices its draws read.
+         * of `skins`, whose skinned vertices its draws read. Casting items have shadow pipelines when `shadowed`.
          */
-        [[nodiscard]] std::vector<ResolvedDraw> ResolveDraws(std::vector<SkinDispatch>& skins);
+        [[nodiscard]] std::vector<ResolvedDraw> ResolveDraws(std::vector<SkinDispatch>& skins, bool shadowed);
         /**
          * @brief Adds the Skinning pass running `skins` into the frame's skinned vertex buffer, imported into `graph`
          * as the returned resource; empty, with no pass, when there are none.
          */
         [[nodiscard]] GraphResource AddSkinningPass(RenderGraph& graph, std::uint64_t frameIndex,
                                                     const std::vector<SkinDispatch>& skins);
-        /** @brief The frame set's group for frame `frameIndex`: its copy of the frame block, and the sky's light. */
-        [[nodiscard]] Graphics::BindingGroupHandle FrameGroupFor(std::uint64_t frameIndex);
+        /**
+         * @brief The frame set's groups for frame `frameIndex`: its copy of the frame block, the sky's light, and its
+         * spot shadow records with `spotAtlas` (the map that lights everything when empty).
+         */
+        [[nodiscard]] const FrameGroup& FrameGroupFor(std::uint64_t frameIndex, Graphics::TextureHandle spotAtlas);
         /** @brief What the scene's Sky lights with: its prepared cube texture, else its colour. */
         [[nodiscard]] SkySource SkySourceOf(const SceneLighting& lighting) const;
         /**
@@ -744,6 +775,8 @@ namespace Fenrir::Render
         bool m_computeSkinning;
         /** @brief How each view's sun cascades are made (RendererConfig's shadow members). */
         CascadeConfig m_cascades;
+        /** @brief The spot shadow budget and tile size (RendererConfig's spot shadow members). */
+        SpotShadowConfig m_spotShadowConfig;
 
         std::map<AssetKey, ShaderEntry> m_shaders;
         std::map<AssetKey, MeshEntry> m_meshes;
@@ -820,6 +853,12 @@ namespace Fenrir::Render
         Graphics::SamplerHandle m_shadowSampler;
         /** @brief The 1 x 1 shadow map of depth 0 that lights everything, bound where a view has no shadow. */
         Graphics::TextureHandle m_noShadow;
+        /** @brief The spot shadow atlas, made when a spot light first casts at the budget's size, and its description.
+         */
+        Graphics::TextureHandle m_spotAtlas;
+        Graphics::TextureDesc m_spotAtlasDesc;
+        /** @brief The shadowed spot lights' records (GpuSpotShadow), bound at set 0 binding 7 by the frame's groups. */
+        std::unique_ptr<BlockRing> m_spotShadowBlocks;
         /** @brief The constant every vertex stream a mesh lacks reads, at stride 0. */
         Graphics::BufferHandle m_defaultStreams;
 
@@ -867,5 +906,7 @@ namespace Fenrir::Render
         std::set<std::pair<AssetKey, AssetKey>> m_loggedSampling;
         /** @brief Shaders without `SKINNED` that skinned draws fell back from, already logged. */
         std::set<AssetKey> m_loggedUnskinned;
+        /** @brief Whether more spot lights asked to cast than the budget allows, already logged. */
+        bool m_loggedSpotBudget = false;
     };
 } // namespace Fenrir::Render

@@ -1,5 +1,6 @@
-// Fenrir/Shadows.glsl: the sun's cascaded shadow (ADR-0050), from the view block's cascades and shadow atlas
-// (Fenrir/View.glsl). Fenrir/Lighting.glsl darkens the directional light by it; a shader may call it itself.
+// Fenrir/Shadows.glsl: the sun's cascaded shadow and the spot lights' shadows (ADR-0050), from the view block's cascades
+// and shadow atlas (Fenrir/View.glsl) and the frame's spot shadows (Fenrir/Frame.glsl). Fenrir/Lighting.glsl darkens
+// the directional light and each shadowed spot light by them; a shader may call them itself.
 //
 // Each cascade is a texel-snapped orthographic view of the sun, so its texels stay on the world's grid as the camera
 // moves. A pixel reads the first cascade whose depth range holds it, and in the last share of that range (the view
@@ -8,9 +9,13 @@
 // softer than a grid at the same cost, the noise breaking the banding a fixed pattern leaves. The pixel is moved before
 // the read along its normal by the normal-offset bias and towards the sun by the slope-scaled bias, both in the
 // cascade's own texels, so neither grows or shrinks with the cascades.
+//
+// A spot light's shadow is a perspective tile of the frame's spot shadow atlas, read the same way: the same filter, and
+// the same biases in its own texels, whose world size grows with the distance along the light.
 #ifndef FENRIR_SHADOWS_GLSL
 #define FENRIR_SHADOWS_GLSL
 
+#include "Fenrir/Frame.glsl"
 #include "Fenrir/View.glsl"
 
 // Taps of the Vogel disk per cascade read.
@@ -34,13 +39,36 @@ vec2 FenrirVogelDisk(int i, int count, float angle)
     return radius * vec2(cos(theta), sin(theta));
 }
 
+// The shaded point moved by a light's biases before its shadow is read: `normalBias` texels of `texel` world size along
+// the world normal `normal`, and `slopeBias` of them per unit of slope towards the light along `l`, for N.L `nDotL`.
+vec3 FenrirShadowBiased(vec3 position, vec3 normal, vec3 l, float nDotL, float texel, float normalBias,
+                        float slopeBias)
+{
+    float slope = min(sqrt(max(1.0 - nDotL * nDotL, 0.0)) / max(nDotL, 1e-4), FenrirShadowMaxSlope);
+    return position + normal * (normalBias * texel) + l * (slopeBias * texel * max(slope, 0.1));
+}
+
+// The lit share of the Vogel-disk taps round `atlas.xy` in `shadowAtlas`, compared against depth `atlas.z`: `radius`
+// texels of `texelUv` across, turned by `angle`, each read held between `low` and `high` (its tile, less the reach).
+float FenrirFilteredShadow(sampler2DShadow shadowAtlas, vec3 atlas, vec2 low, vec2 high, vec2 texelUv, float radius,
+                           float angle)
+{
+    float lit = 0.0;
+    for (int i = 0; i < FenrirShadowTaps; ++i)
+    {
+        vec2 offset = FenrirVogelDisk(i, FenrirShadowTaps, angle) * radius * texelUv;
+        // Level 0 explicitly: the caller may be in non-uniform control flow.
+        lit += textureLod(shadowAtlas, vec3(clamp(atlas.xy + offset, low, high), atlas.z), 0.0);
+    }
+    return lit / float(FenrirShadowTaps);
+}
+
 // How much of the sun reaches `position` through cascade `cascade`, 0 to 1, for the world normal `normal` facing the
 // sun at N.L `nDotL` along `l` (towards the sun), the disk turned by `angle`.
 float FenrirCascadeShadow(int cascade, vec3 position, vec3 normal, vec3 l, float nDotL, float angle)
 {
-    float texel = view.shadowTexels[cascade];
-    float slope = min(sqrt(max(1.0 - nDotL * nDotL, 0.0)) / max(nDotL, 1e-4), FenrirShadowMaxSlope);
-    vec3 biased = position + normal * (view.shadowBias.x * texel) + l * (view.shadowBias.y * texel * max(slope, 0.1));
+    vec3 biased = FenrirShadowBiased(position, normal, l, nDotL, view.shadowTexels[cascade], view.shadowBias.x,
+                                     view.shadowBias.y);
     vec3 atlas = (view.shadowMatrices[cascade] * vec4(biased, 1.0)).xyz;
 
     // Read only inside the cascade's own tile of the atlas, the filter's reach in from its edges.
@@ -50,15 +78,7 @@ float FenrirCascadeShadow(int cascade, vec3 position, vec3 normal, vec3 l, float
     float reach = view.shadowBias.z + 1.0;
     vec2 low = vec2(float(cascade) / tiles, 0.0) + reach * texelUv;
     vec2 high = vec2(float(cascade + 1) / tiles, 1.0) - reach * texelUv;
-
-    float lit = 0.0;
-    for (int i = 0; i < FenrirShadowTaps; ++i)
-    {
-        vec2 offset = FenrirVogelDisk(i, FenrirShadowTaps, angle) * view.shadowBias.z * texelUv;
-        // Level 0 explicitly: the caller may be in non-uniform control flow.
-        lit += textureLod(fenrirShadowAtlas, vec3(clamp(atlas.xy + offset, low, high), atlas.z), 0.0);
-    }
-    return lit / float(FenrirShadowTaps);
+    return FenrirFilteredShadow(fenrirShadowAtlas, atlas, low, high, texelUv, view.shadowBias.z, angle);
 }
 
 // The cascade a point `viewDepth` along the camera's axis reads, -1 past the last.
@@ -103,6 +123,32 @@ float FenrirSunShadow(vec3 position, vec3 normal, vec3 l, out int cascade)
         shadow = mix(shadow, next, blend);
     }
     return shadow;
+}
+
+// How much of spot light `index` of the light buffer reaches `position`, 0 to 1, for the face's world normal `normal`
+// and `l` towards the light: 1 for a light without a shadow (index frame.lights.y or past it), and on a face turned
+// from the light, which its N.L darkens.
+float FenrirSpotLightShadow(uint index, vec3 position, vec3 normal, vec3 l)
+{
+    float nDotL = dot(normal, l);
+    if (index >= frame.lights.y || nDotL <= 0.0)
+    {
+        return 1.0;
+    }
+    FenrirSpotShadow shadow = fenrirSpotShadows.items[index];
+    // Clip w is the distance along the light's axis, which a texel's world size grows with.
+    float along = (shadow.atlas * vec4(position, 1.0)).w;
+    vec3 biased = FenrirShadowBiased(position, normal, l, nDotL, shadow.bias.z * max(along, 0.0), shadow.bias.x,
+                                     shadow.bias.y);
+    vec4 atlas = shadow.atlas * vec4(biased, 1.0);
+    if (atlas.w <= 0.0)
+    {
+        return 1.0;
+    }
+    vec2 texelUv = 1.0 / vec2(textureSize(fenrirSpotShadowAtlas, 0));
+    float angle = 6.28318531 * FenrirInterleavedGradientNoise(gl_FragCoord.xy);
+    return FenrirFilteredShadow(fenrirSpotShadowAtlas, atlas.xyz / atlas.w, shadow.bounds.xy, shadow.bounds.zw,
+                                texelUv, shadow.bias.w, angle);
 }
 
 // A tint per cascade for CameraDebugView::ShadowCascades: red, green, blue and yellow, white for none.

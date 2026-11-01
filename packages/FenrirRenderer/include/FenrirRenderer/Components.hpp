@@ -511,6 +511,12 @@ namespace Fenrir
          * nearest the sun, with no exposure or tonemap; black where nothing casts.
          */
         ShadowAtlas,
+        /**
+         * @brief The frame's spot shadow atlas as grey (ADR-0050), each shadowed spot light's tile along the rows from
+         * the top left, nearest the view first, white nearest its light, with no exposure or tonemap; black where no
+         * spot light casts.
+         */
+        SpotShadowAtlas,
     };
 
     /**
@@ -612,6 +618,12 @@ namespace Fenrir
      * scene. It falls off with distance as a PointLight does, and across its cone smoothly from full inside
      * `innerAngle` to none outside `outerAngle`, both measured from its axis. A light that can light nothing is
      * skipped.
+     *
+     * With `castShadows` on it casts shadows (ADR-0050) while it is within RendererConfig::spotShadowBudget: each
+     * frame the shadowed spot lights nearest to any camera keep them, each drawn into a tile of one shared atlas
+     * through a perspective along its cone (held to 80 degrees off its axis), and the rest light unshadowed, warned
+     * about once. Edges are filtered and biased as the DirectionalLight's are. A mesh round the light's position, such
+     * as a glowing bulb, shadows all of its cone: turn that mesh's castShadows off.
      */
     struct SpotLight
     {
@@ -626,8 +638,21 @@ namespace Fenrir
         /** @brief The angle off its axis, in radians, outside which nothing is lit: 45 degrees by default, as glTF's.
          */
         float outerAngle = 0.785398163f;
-        /** @brief Whether the light casts shadows. Off by default; not drawn yet. */
+        /**
+         * @brief Whether the light casts shadows: off by default. Only RendererConfig::spotShadowBudget of them do in
+         * a frame, the nearest to the cameras.
+         */
         bool castShadows = false;
+        /**
+         * @brief How far a lit point moves out along its normal before its shadow is looked up, in shadow-map texels
+         * (whose size grows with the distance from the light): 1 by default.
+         */
+        float shadowNormalBias = 1.0f;
+        /**
+         * @brief How far it moves towards the light, in texels per unit of slope (the tangent of the angle between its
+         * normal and the light, held between 0.1 and 8): 2 by default.
+         */
+        float shadowSlopeBias = 2.0f;
     };
 
     /**

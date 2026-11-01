@@ -79,6 +79,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/Skinning.hpp
     src/Core/SphericalHarmonics.hpp
     src/Core/SphericalHarmonics.cpp
+    src/Core/SpotShadows.hpp
+    src/Core/SpotShadows.cpp
     src/Core/Skinning.cpp
     src/Core/Tonemapping.hpp
     src/Core/Tonemapping.cpp
