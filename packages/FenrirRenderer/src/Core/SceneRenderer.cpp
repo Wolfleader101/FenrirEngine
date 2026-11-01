@@ -661,8 +661,9 @@ namespace Fenrir::Render
 
     // ---- SceneRenderer ----
 
-    SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
-        : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1))
+    SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples, bool mergeInstances)
+        : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1)),
+          m_mergeInstances(mergeInstances)
     {
         m_frameLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer},
                                                             {1, ShaderBindingKind::Texture},
@@ -1980,17 +1981,44 @@ namespace Fenrir::Render
         return draws;
     }
 
+    std::vector<SceneRenderer::DrawRun> SceneRenderer::RunsOf(const std::vector<ResolvedDraw>& draws,
+                                                              const std::vector<BindingGroupHandle>& groups,
+                                                              const std::vector<std::size_t>& order, bool prepass,
+                                                              bool single) const
+    {
+        const auto pipelineOf = [&](std::size_t i) { return prepass ? draws[i].prepass : draws[i].pipeline; };
+        std::vector<DrawRun> runs;
+        for (const std::size_t i : order)
+        {
+            // The sort key keeps matching items together, so a run is the next record of the same kind; each
+            // instance then finds its own record, at the run's first plus its instance index (Fenrir/Draw.glsl).
+            if (!single && m_mergeInstances && !runs.empty())
+            {
+                DrawRun& run = runs.back();
+                const std::size_t last = run.first + run.count - 1;
+                if (i == last + 1 && pipelineOf(i) == pipelineOf(last) && draws[i].material == draws[last].material &&
+                    groups[i] == groups[last] && draws[i].mesh == draws[last].mesh)
+                {
+                    ++run.count;
+                    continue;
+                }
+            }
+            runs.push_back({i, 1});
+        }
+        return runs;
+    }
+
     void SceneRenderer::RecordDraws(PassEncoder& encoder, const std::vector<ResolvedDraw>& draws,
-                                    const std::vector<BindingGroupHandle>& groups,
-                                    const std::vector<std::size_t>& order, BindingGroupHandle frameGroup,
-                                    BindingGroupHandle viewGroup, BindingGroupHandle drawGroup, PixelRect viewport,
-                                    bool prepass) const
+                                    const std::vector<BindingGroupHandle>& groups, const std::vector<DrawRun>& runs,
+                                    BindingGroupHandle frameGroup, BindingGroupHandle viewGroup,
+                                    BindingGroupHandle drawGroup, PixelRect viewport, bool prepass) const
     {
         encoder.SetViewport(viewport);
         const PipelineEntry* current = nullptr;
         BindingGroupHandle material;
-        for (const std::size_t i : order)
+        for (const DrawRun& run : runs)
         {
+            const std::size_t i = run.first;
             const ResolvedDraw& draw = draws[i];
             const BindingGroupHandle group = groups[i];
             const PipelineEntry* pipeline = prepass ? draw.prepass : draw.pipeline;
@@ -2024,7 +2052,9 @@ namespace Fenrir::Render
             }
             encoder.SetIndexBuffer(draw.mesh->indices, IndexFormat::UInt32);
             // Each item reads its own record of the draw buffer, by its place in the draw list.
-            encoder.DrawIndexed({.indexCount = draw.mesh->indexCount, .firstInstance = static_cast<std::uint32_t>(i)});
+            encoder.DrawIndexed({.indexCount = draw.mesh->indexCount,
+                                 .instanceCount = run.count,
+                                 .firstInstance = static_cast<std::uint32_t>(i)});
         }
     }
 
@@ -2197,6 +2227,7 @@ namespace Fenrir::Render
         }
 
         m_stats.draws = 0;
+        m_stats.instances = 0;
         m_stats.paletteBytes = 0;
         m_stats.palettes = 0;
         m_stats.skinnedDraws = 0;
@@ -2435,6 +2466,13 @@ namespace Fenrir::Render
             }
             std::stable_sort(transparent->begin(), transparent->end(),
                              [&](std::size_t a, std::size_t b) { return depth[a] < depth[b]; });
+            // Matching opaque and masked items merge into instanced draws (ADR-0051); transparent ones stay single,
+            // in their depth order.
+            auto prepassRuns =
+                std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *prepassGroups, *prepassed, true, false));
+            auto opaqueRuns = std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *groups, *opaque, false, false));
+            auto transparentRuns =
+                std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *groups, *transparent, false, true));
 
             // Depth and normals first (ADR-0049), so Opaque shades each pixel once, by equal depth.
             graph.AddPass(
@@ -2447,10 +2485,10 @@ namespace Fenrir::Render
                         pass.Sample(image);
                     }
                 },
-                [this, draws, prepassGroups, prepassed, frameGroup, viewGroup, drawGroup,
+                [this, draws, prepassGroups, prepassRuns, frameGroup, viewGroup, drawGroup,
                  viewport](PassContext& context) {
-                    RecordDraws(context.Encoder(), *draws, *prepassGroups, *prepassed, frameGroup, viewGroup, drawGroup,
-                                viewport, true);
+                    RecordDraws(context.Encoder(), *draws, *prepassGroups, *prepassRuns, frameGroup, viewGroup,
+                                drawGroup, viewport, true);
                 });
             // GTAO from the prepass's depth and normals, when the camera has it; Opaque samples what it makes.
             const GraphResource occlusion = m_gtao->AddPasses(
@@ -2471,12 +2509,12 @@ namespace Fenrir::Render
                         pass.Sample(occlusion);
                     }
                 },
-                [this, draws, groups, opaque, frameGroup, viewGroup, drawGroup, viewport, occlusion,
+                [this, draws, groups, opaqueRuns, frameGroup, viewGroup, drawGroup, viewport, occlusion,
                  v](PassContext& context) {
                     const BindingGroupHandle occludedView =
                         occlusion.IsEmpty() ? viewGroup
                                             : ViewGroupFor(context.FrameIndex(), v, context.Texture(occlusion));
-                    RecordDraws(context.Encoder(), *draws, *groups, *opaque, frameGroup, occludedView, drawGroup,
+                    RecordDraws(context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup, occludedView, drawGroup,
                                 viewport, false);
                 });
             if (!transparent->empty())
@@ -2492,13 +2530,14 @@ namespace Fenrir::Render
                             pass.Sample(image);
                         }
                     },
-                    [this, draws, groups, transparent, frameGroup, viewGroup, drawGroup,
+                    [this, draws, groups, transparentRuns, frameGroup, viewGroup, drawGroup,
                      viewport](PassContext& context) {
-                        RecordDraws(context.Encoder(), *draws, *groups, *transparent, frameGroup, viewGroup, drawGroup,
-                                    viewport, false);
+                        RecordDraws(context.Encoder(), *draws, *groups, *transparentRuns, frameGroup, viewGroup,
+                                    drawGroup, viewport, false);
                     });
             }
-            m_stats.draws += static_cast<std::uint32_t>(draws->size());
+            m_stats.draws += static_cast<std::uint32_t>(opaqueRuns->size() + transparentRuns->size());
+            m_stats.instances += static_cast<std::uint32_t>(draws->size());
             m_stats.skinnedDraws += skinnedDraws;
 
             graph.AddPass(

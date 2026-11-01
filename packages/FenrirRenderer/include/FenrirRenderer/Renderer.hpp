@@ -65,13 +65,23 @@ namespace Fenrir
         bool debugValidation = DebugValidationByDefault;
         /** @brief How many frames the GPU may still be drawing while the next is recorded (ADR-0019). */
         std::uint32_t framesInFlight = 2;
+        /**
+         * @brief Whether consecutive opaque and masked MeshRenderers with the same pipeline, material and mesh draw as
+         * one instanced draw (ADR-0051); off draws each on its own, for comparison.
+         */
+        bool automaticInstancing = true;
     };
 
     /** @brief What the renderer did in its last drawn frame (ADR-0023). */
     struct RendererStats
     {
-        /** @brief Draws of MeshRenderers, one per item per view. */
+        /**
+         * @brief Draws of MeshRenderers in each view's Opaque and Transparent passes: one per run of matching opaque or
+         * masked items merged into an instanced draw (ADR-0051), and one per transparent item.
+         */
         std::uint32_t draws = 0;
+        /** @brief MeshRenderers drawn, one per item per view, however many draws they took. */
+        std::uint32_t instances = 0;
         /** @brief Render passes run. */
         std::uint32_t passes = 0;
         /** @brief Assets uploaded to the GPU by the prepare step: a mesh, or a material's parameter block. */
@@ -83,7 +93,7 @@ namespace Fenrir
          * (ADR-0035).
          */
         std::uint32_t distinctPalettesWritten = 0;
-        /** @brief Draws of skinned MeshRenderers, one per item per view; part of `draws`. */
+        /** @brief Skinned MeshRenderers drawn, one per item per view; part of `instances`. */
         std::uint32_t skinnedDraws = 0;
     };
 

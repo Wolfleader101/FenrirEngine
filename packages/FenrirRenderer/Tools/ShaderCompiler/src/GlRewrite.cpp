@@ -11,12 +11,17 @@ namespace Fenrir::ShaderCompiler
     {
         // From the SPIR-V specification.
         constexpr std::size_t HeaderWords = 5;
+        constexpr std::uint32_t OpSpecConstantTrue = 48;
+        constexpr std::uint32_t OpSpecConstantFalse = 49;
         constexpr std::uint32_t OpDecorate = 71;
+        constexpr std::uint32_t DecorationSpecId = 1;
         constexpr std::uint32_t DecorationBuiltIn = 11;
         constexpr std::uint32_t DecorationBinding = 33;
         constexpr std::uint32_t DecorationDescriptorSet = 34;
         constexpr std::uint32_t BuiltInVertexId = 5;
+        constexpr std::uint32_t BuiltInInstanceId = 6;
         constexpr std::uint32_t BuiltInVertexIndex = 42;
+        constexpr std::uint32_t BuiltInInstanceIndex = 43;
 
         // Calls `visit(at)` with the index of each OpDecorate instruction.
         template <typename Visit>
@@ -60,6 +65,8 @@ namespace Fenrir::ShaderCompiler
             }
         });
 
+        // The id of Fenrir/Draw.glsl's fenrirInstanceIndexExcludesBase, if the stage has it; 0 is never an id.
+        std::uint32_t excludesBase = 0;
         ForEachDecoration(words, [&](std::size_t at) {
             const std::uint32_t target = words[at + 1];
             const std::uint32_t decoration = words[at + 2];
@@ -82,7 +89,26 @@ namespace Fenrir::ShaderCompiler
             {
                 value = BuiltInVertexId;
             }
+            else if (decoration == DecorationBuiltIn && value == BuiltInInstanceIndex)
+            {
+                value = BuiltInInstanceId;
+            }
+            else if (decoration == DecorationSpecId && value == InstanceIndexExcludesBaseSpecId)
+            {
+                excludesBase = target;
+            }
         });
+
+        // GL's InstanceId counts from 0, not the base instance, so Fenrir/Draw.glsl adds the base.
+        for (std::size_t at = HeaderWords; at < words.size();)
+        {
+            const std::uint32_t count = words[at] >> 16u;
+            if ((words[at] & 0xffffu) == OpSpecConstantFalse && at + 2 < words.size() && words[at + 2] == excludesBase)
+            {
+                words[at] = (words[at] & 0xffff0000u) | OpSpecConstantTrue;
+            }
+            at += count == 0 ? 1 : count;
+        }
         return words;
     }
 } // namespace Fenrir::ShaderCompiler

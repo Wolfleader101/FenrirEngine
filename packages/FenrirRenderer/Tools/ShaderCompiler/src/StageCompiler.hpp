@@ -37,8 +37,9 @@ namespace Fenrir::ShaderCompiler
     /**
      * @brief Compiles the stage in `path` as GLSL 460 with Vulkan semantics to SPIR-V 1.0, with each of `defines`
      * defined, resolving `#include` against the stage's own directory and then `includeDirs`. Enforces the engine's
-     * rules glslang does not: an explicit `layout(set, binding)` on every resource, and no `gl_InstanceIndex`. Every
-     * file it reads goes into `read`. Empty, with the errors reported, if the stage does not compile.
+     * rules glslang does not: an explicit `layout(set, binding)` on every resource, and no `gl_InstanceIndex` outside
+     * Fenrir/Draw.glsl. Every file it reads goes into `read`. Empty, with the errors reported, if the stage does not
+     * compile.
      */
     std::optional<CompiledStage> CompileStage(ShaderStage stage, const std::filesystem::path& path,
                                               const std::vector<std::string>& defines,

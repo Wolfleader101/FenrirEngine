@@ -36,15 +36,20 @@ namespace Fenrir::Render
     /** @brief What the scene renderer did since it was last asked. */
     struct SceneStats
     {
-        /** @brief Draws of draw-list items in the last frame, one per item per view. */
+        /**
+         * @brief Draws of draw-list items in the last frame's Opaque and Transparent passes: one per merged run of
+         * matching items (ADR-0051), and one per transparent item, per view.
+         */
         std::uint32_t draws = 0;
+        /** @brief Draw-list items drawn in the last frame, one per item per view, merged or not. */
+        std::uint32_t instances = 0;
         /** @brief Meshes, images and material blocks uploaded since the last call. */
         std::uint32_t uploads = 0;
         /** @brief Bytes written into the last frame's palette buffer. */
         std::uint32_t paletteBytes = 0;
         /** @brief Skeleton palettes the last frame's palette buffer held (SceneFrame::palettes). */
         std::uint32_t palettes = 0;
-        /** @brief Skinned draws in the last frame, one per item per view. */
+        /** @brief Skinned items drawn in the last frame, one per item per view; part of `instances`. */
         std::uint32_t skinnedDraws = 0;
     };
 
@@ -135,9 +140,11 @@ namespace Fenrir::Render
       public:
         /**
          * @brief Makes the default textures, the fixed sets' layouts and the internal pipelines on `device`, for scene
-         * targets of `samples` samples per pixel (1: no MSAA).
+         * targets of `samples` samples per pixel (1: no MSAA). With `mergeInstances`, consecutive matching items draw
+         * as one instanced draw (ADR-0051).
          */
-        SceneRenderer(Graphics::GraphicsDevice& device, ILogger& logger, std::uint32_t samples = 1);
+        SceneRenderer(Graphics::GraphicsDevice& device, ILogger& logger, std::uint32_t samples = 1,
+                      bool mergeInstances = true);
         ~SceneRenderer() override;
 
         SceneRenderer(const SceneRenderer&) = delete;
@@ -496,8 +503,27 @@ namespace Fenrir::Render
          * @brief Records `order`'s draws of `draws` into a pass, binding each one's pipeline (its prepass pipeline
          * when `prepass`), groups and streams.
          */
+        /**
+         * @brief Consecutive draws of a pass, one instance each: `first` is the record of the first, and the rest
+         * follow it in the draw buffer.
+         */
+        struct DrawRun
+        {
+            std::size_t first = 0;
+            std::uint32_t count = 1;
+        };
+
+        /**
+         * @brief `order`'s draws as the runs a pass draws (ADR-0051): with merging on, each run of consecutive records
+         * with the same pipeline (the prepass's when `prepass`), set 2 group and mesh is one instanced draw; with it
+         * off, or when `single`, as for transparent items, each draw is its own.
+         */
+        [[nodiscard]] std::vector<DrawRun> RunsOf(const std::vector<ResolvedDraw>& draws,
+                                                  const std::vector<Graphics::BindingGroupHandle>& groups,
+                                                  const std::vector<std::size_t>& order, bool prepass,
+                                                  bool single) const;
         void RecordDraws(Graphics::PassEncoder& encoder, const std::vector<ResolvedDraw>& draws,
-                         const std::vector<Graphics::BindingGroupHandle>& groups, const std::vector<std::size_t>& order,
+                         const std::vector<Graphics::BindingGroupHandle>& groups, const std::vector<DrawRun>& runs,
                          Graphics::BindingGroupHandle frameGroup, Graphics::BindingGroupHandle viewGroup,
                          Graphics::BindingGroupHandle drawGroup, Graphics::PixelRect viewport, bool prepass) const;
         [[nodiscard]] Graphics::PipelineHandle MakeInternalPipeline(
@@ -540,6 +566,7 @@ namespace Fenrir::Render
         ILogger& m_logger;
         /** @brief The scene targets' samples per pixel. */
         std::uint32_t m_samples;
+        bool m_mergeInstances;
 
         std::map<AssetKey, ShaderEntry> m_shaders;
         std::map<AssetKey, MeshEntry> m_meshes;

@@ -8,8 +8,13 @@ namespace Fenrir.Renderer;
 /// <summary>What the renderer did in its last drawn frame (ADR-0023).</summary>
 public partial struct RendererStats
 {
-    /// <summary>Draws of MeshRenderers, one per item per view.</summary>
+    /// <summary>
+    /// Draws of MeshRenderers in each view's Opaque and Transparent passes: one per run of matching opaque or masked
+    /// items merged into an instanced draw (ADR-0051), and one per transparent item.
+    /// </summary>
     public uint Draws;
+    /// <summary>MeshRenderers drawn, one per item per view, however many draws they took.</summary>
+    public uint Instances;
     /// <summary>Render passes run.</summary>
     public uint Passes;
     /// <summary>Assets uploaded to the GPU by the prepare step: a mesh, or a material's parameter block.</summary>
@@ -20,6 +25,6 @@ public partial struct RendererStats
     /// Skeleton palettes written, one per skeleton and pose however many meshes and views draw it (ADR-0035).
     /// </summary>
     public uint DistinctPalettesWritten;
-    /// <summary>Draws of skinned MeshRenderers, one per item per view; part of `draws`.</summary>
+    /// <summary>Skinned MeshRenderers drawn, one per item per view; part of `instances`.</summary>
     public uint SkinnedDraws;
 }
