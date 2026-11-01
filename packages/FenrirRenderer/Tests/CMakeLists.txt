@@ -37,6 +37,9 @@ fenrir_add_shaders(FenrirRendererTests PROGRAM Tinted2D VERTEX ../Shaders/Builti
 # A user's own material shader (ADR-0024), built as any user's is and loaded from the container file it writes, with its
 # own variant key FANCY, which the renderer leaves off.
 fenrir_add_shaders(FenrirRendererTests PROGRAM UserTint VERTEX fixtures/user.vert FRAGMENT fixtures/user.frag KEYS FANCY)
+# A user's material shader with a SKINNED key, which compute skinning leaves to its SKINNED variant (ADR-0050).
+fenrir_add_shaders(FenrirRendererTests PROGRAM UserSkinned VERTEX ../Shaders/Builtin/mesh.vert
+                   FRAGMENT fixtures/plain.frag KEYS SKINNED EMBED)
 # Khronos's BoxTextured from the demo apps' shared assets, for SpawnModel on a real model, a glTF node with two meshes,
 # and FenrirAssets's skinned armatures fixture.
 target_compile_definitions(FenrirRendererTests PRIVATE

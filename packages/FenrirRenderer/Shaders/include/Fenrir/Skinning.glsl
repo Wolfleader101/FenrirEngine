@@ -5,8 +5,8 @@
 // (Fenrir/SkinMaths.glsl), then apply the item's world matrix W (its skeleton entity's), its normal matrix and its sign,
 // as rigid draws do.
 //
-// With compute skinning on (ADR-0050), the renderer draws skinned meshes rigidly from what builtin:skinning made of
-// them, and SKINNED variants are drawn only with it off.
+// With compute skinning on (ADR-0050), the renderer draws the built-in programs' skinned meshes rigidly from what
+// builtin:skinning made of them; a user shader's SKINNED variant is drawn either way.
 //
 // The renderer's C++ mirrors these functions (src/Core/Skinning.hpp), and the tests hold the two to each other.
 #ifndef FENRIR_SKINNING_GLSL

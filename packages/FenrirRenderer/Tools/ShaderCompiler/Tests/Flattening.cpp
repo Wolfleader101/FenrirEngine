@@ -188,8 +188,10 @@ TEST_CASE("A compute program has one compute stage, whose GL copy is flattened a
           "[shader-compiler][flattening][compute]")
 {
     const Fenrir::ShaderContainer container = Read(Fenrir::Shaders::Compute);
+    INFO("one variant, with no keys");
     REQUIRE(container.variants.size() == 1);
     const Fenrir::ShaderVariant& variant = container.variants.front();
+    INFO("one stage, a compute stage");
     REQUIRE(variant.stages.size() == 1);
     REQUIRE(variant.stages.front().stage == Fenrir::ShaderStage::Compute);
     INFO("it has no vertex inputs, and its three bindings are reflected");

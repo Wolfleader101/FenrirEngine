@@ -9,7 +9,7 @@ ADR-0019 made each draw-list item one draw, with "no automatic instancing", and 
 ## Automatic
 
 - **Consecutive items with the same pipeline, material and mesh merge into one instanced draw**, in `DepthPrepass`, `Opaque` and every shadow pass. The sort key already orders them together. Transparent items stay one draw each, sorted by depth.
-- **The draw record is unchanged.** `Fenrir/Draw.glsl` finds an instance's record at the draw's base instance plus its instance index, written per backend (GL's SPIR-V instance index excludes the base). Skinned items merge too, since each record carries its own palette offset.
+- **The draw record is unchanged.** `Fenrir/Draw.glsl` finds an instance's record at the draw's base instance plus its instance index, written per backend (GL's SPIR-V instance index excludes the base). Skinned items merge too, since each record carries its own palette offset. *Amended by ADR-0050 (lighting ticket 14, 2026-11-01):* a compute-skinned item's streams are its own skinned vertices, so it merges only with items drawing the same ones, one mesh on one skeleton; vertex-skinned items still merge as here.
 - **`RendererStats` counts draws and instances apart**, and `RendererConfig` can turn merging off, for comparison.
 
 ## Explicit

@@ -19,6 +19,7 @@
 #include "FenrirAssets/ShaderContainer.hpp"
 #include "FenrirAssets/ShaderData.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirShaders/UserSkinned.hpp"
 #include "SkinningTestApp.hpp"
 
 using Fenrir::RendererProbe;
@@ -128,6 +129,7 @@ TEST_CASE("Each skinned mesh is skinned by one dispatch a frame however many ite
         REQUIRE(dispatches.size() == 3);
         INFO("while the two views' DepthPrepass, Opaque and Transparent passes draw them far more often");
         REQUIRE(SkinnedVertexDraws(test) > 3 * dispatches.size());
+        INFO("five skinned items in each of two views");
         REQUIRE(test.renderer.Stats().skinnedDraws == 10);
 
         const std::vector<std::string> passes = RendererTest::PassesIn(RendererProbe::Submitted(test.renderer));
@@ -381,6 +383,38 @@ TEST_CASE("With compute skinning, a shader without SKINNED still draws a skinned
     REQUIRE(RendererProbe::Label(test.Device(), draws.front().vertexBuffers.at(0)) == "Skinned vertices");
     REQUIRE(Dispatches(test).size() == 1);
     REQUIRE(RendererTest::CountContaining(test.messages->warnings, "has no SKINNED variant") == 1);
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A user shader with SKINNED draws its skinned meshes with its own SKINNED variant, with compute skinning on",
+          "[renderer][skinning][compute-skinning]")
+{
+    SkinningTestApp test;
+    test.AddCamera({0.0f, 1.0f, 10.0f});
+    Fenrir::ShaderData data;
+    const auto bytes = std::as_bytes(std::span(Fenrir::Shaders::UserSkinned));
+    data.bytes.assign(bytes.begin(), bytes.end());
+    const auto shader = test.Store().Add<Fenrir::Shader>(std::move(data), Fenrir::AssetOwner::App());
+    const Fenrir::Entity owner = test.AddSkeleton({-2.0f, 0.0f, 0.0f});
+    test.AddSkinned(owner, test.StripMesh(), test.Store().CreateMaterial(shader, Fenrir::AssetOwner::App()));
+    // The same mesh on another skeleton in builtin:lit, which is compute-skinned.
+    test.AddRig({2.0f, 0.0f, 0.0f});
+
+    test.Frame();
+
+    const std::vector<RecordedDraw> draws = test.Draws();
+    REQUIRE(draws.size() == 2);
+    for (const RecordedDraw& draw : draws)
+    {
+        const bool user = RendererProbe::Label(test.Device(), draw.pipeline) == "UserSkinned";
+        CAPTURE(user);
+        INFO("the user shader's draw skins in its SKINNED vertex stage from the mesh; builtin:lit's reads the compute "
+             "pass's vertices");
+        REQUIRE(RendererProbe::Keys(test.Device(), draw.pipeline).empty() != user);
+        REQUIRE((RendererProbe::Label(test.Device(), draw.vertexBuffers.at(0)) == "Skinned vertices") != user);
+    }
+    INFO("one dispatch, for builtin:lit's strip only");
+    REQUIRE(Dispatches(test).size() == 1);
     REQUIRE(test.messages->errors.empty());
 }
 

@@ -125,20 +125,13 @@ namespace Fenrir::Render
      * **Compute skinning** (ADR-0050), on unless turned off: a `Skinning` pass, in its stage before any view's, runs
      * `builtin:skinning` once per skinned mesh and palette range drawn this frame, however many items, views and passes
      * draw it, into the frame's skinned vertex buffer (ring-buffered per frame in flight, grown by doubling): the
-     * model- space positions, normals and tangents the `SKINNED` variant would make. Its draws then use the shader's
-     * variant without `SKINNED`, reading those three streams from that buffer and the rest from the mesh, rigidly under
-     * the skeleton entity's world matrix; they merge only with draws of the same skinned vertices. A shader without the
-     * key still draws skinned meshes as the fallback material, and with compute skinning off, or without the compute
-     * pipeline, every skinned draw skins in its vertex stage as before.
-     *
-     * **Compute skinning** (ADR-0050), on unless turned off: a `Skinning` pass, in its stage before any view's, runs
-     * `builtin:skinning` once per skinned mesh and palette range drawn this frame, however many items, views and passes
-     * draw it, into the frame's skinned vertex buffer (ring-buffered per frame in flight, grown by doubling): the
-     * model- space positions, normals and tangents the `SKINNED` variant would make. Its draws then use the shader's
-     * variant without `SKINNED`, reading those three streams from that buffer and the rest from the mesh, rigidly under
-     * the skeleton entity's world matrix; they merge only with draws of the same skinned vertices. A shader without the
-     * key still draws skinned meshes as the fallback material, and with compute skinning off, or without the compute
-     * pipeline, every skinned draw skins in its vertex stage as before.
+     * model-space positions, normals and tangents the `SKINNED` variant would make, for the skinned draws of the
+     * built-in mesh programs (`builtin:lit`, `builtin:unlit` and the fallback). Those draws then use the variant
+     * without `SKINNED`, reading those three streams from that buffer and the rest from the mesh, rigidly under the
+     * skeleton entity's world matrix; they merge only with draws of the same skinned vertices. A user shader's skinned
+     * draws keep its own `SKINNED` variant, a shader without the key still draws skinned meshes as the fallback
+     * material (whose draws are compute-skinned), and with compute skinning off, or without the compute pipeline, every
+     * skinned draw skins in its vertex stage as before.
      *
      * **Instance lists** (ADR-0051) are prepared like assets: each copy's transform, normal matrix and colour, kept
      * packed back to back with every other list's in one storage buffer, set 3 binding 1, made again whenever a list
@@ -324,6 +317,11 @@ namespace Fenrir::Render
             std::vector<VariantEntry> variants;
             /** @brief The number in sort keys, unique among live shaders. */
             std::uint32_t id = 0;
+            /**
+             * @brief Whether its skinned draws are compute-skinned: a built-in mesh program's. A user shader's are
+             * drawn with its own `SKINNED` variant, which may do more than skin (ADR-0050).
+             */
+            bool computeSkinned = false;
         };
 
         /** @brief A prepared image: its texture with every mip level. */
@@ -653,7 +651,7 @@ namespace Fenrir::Render
          * as the returned resource; empty, with no pass, when there are none.
          */
         [[nodiscard]] GraphResource AddSkinningPass(RenderGraph& graph, std::uint64_t frameIndex,
-                                                    const std::vector<SkinDispatch>& skins, std::size_t bytes);
+                                                    const std::vector<SkinDispatch>& skins);
         /** @brief The frame set's group for frame `frameIndex`: its copy of the frame block, and the sky's light. */
         [[nodiscard]] Graphics::BindingGroupHandle FrameGroupFor(std::uint64_t frameIndex);
         /** @brief What the scene's Sky lights with: its prepared cube texture, else its colour. */
