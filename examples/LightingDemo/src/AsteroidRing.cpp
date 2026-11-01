@@ -568,7 +568,7 @@ namespace LightingDemo
         scene.name = SceneName;
         scene.keyHelp = LightingKeyHelp(false) +
                         " N: 10k, 50k or 100k ring rocks. I: automatic instancing on or off. R: the ring turning.";
-        // G through every debug view (the occlusion, the cascades, the shadow map, back), with the sun's shadows off
+        // G through every debug view (the occlusion, the cascades, the shadow atlas, back), with the sun's shadows off
         // and on again (H) between.
         scene.keys = {Fenrir::Key::T, Fenrir::Key::B, Fenrir::Key::I, Fenrir::Key::N, Fenrir::Key::I,
                       Fenrir::Key::R, Fenrir::Key::N, Fenrir::Key::N, Fenrir::Key::G, Fenrir::Key::G,

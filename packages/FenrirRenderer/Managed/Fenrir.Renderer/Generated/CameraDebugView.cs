@@ -19,8 +19,8 @@ public enum CameraDebugView : byte
     /// </summary>
     ShadowCascades = 2,
     /// <summary>
-    /// The sun's shadow map for this view as grey, its cascades side by side from the nearest, white nearest the sun,
+    /// The sun's shadow atlas for this view as grey, its cascades side by side from the nearest, white nearest the sun,
     /// with no exposure or tonemap; black where nothing casts.
     /// </summary>
-    ShadowMap = 3,
+    ShadowAtlas = 3,
 }

@@ -37,7 +37,7 @@ namespace LightingDemo
             {{Fenrir::CameraDebugView::None, "the lit scene"},
              {Fenrir::CameraDebugView::AmbientOcclusion, "the raw ambient occlusion"},
              {Fenrir::CameraDebugView::ShadowCascades, "the shadow cascades as colours"},
-             {Fenrir::CameraDebugView::ShadowMap, "the shadow map"}}};
+             {Fenrir::CameraDebugView::ShadowAtlas, "the shadow atlas"}}};
 
         std::size_t DebugViewIndex(Fenrir::CameraDebugView view)
         {

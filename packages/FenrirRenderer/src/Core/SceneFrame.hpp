@@ -105,7 +105,7 @@ namespace Fenrir::Render
         /** @brief Its lit colour with each pixel tinted by the sun's cascade it reads, white for none. */
         ShadowCascades,
         /** @brief Its sun's shadow atlas, the cascades side by side, as grey depths; black without shadows. */
-        ShadowMap,
+        ShadowAtlas,
     };
 
     /**

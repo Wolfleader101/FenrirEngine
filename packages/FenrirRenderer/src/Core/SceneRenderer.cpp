@@ -245,10 +245,6 @@ namespace Fenrir::Render
                                                        0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f,
                                                        1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 
-        /** @brief The tiles of a shadow atlas start at multiples of this in a view's view block slots, one a cascade.
-         */
-        constexpr std::size_t CascadeSlots = MaxCascades;
-
         constexpr std::uint8_t OpaqueStage = static_cast<std::uint8_t>(RenderStage::Opaque);
         constexpr std::uint8_t TransparentStage = static_cast<std::uint8_t>(RenderStage::Transparent);
 
@@ -1500,30 +1496,19 @@ namespace Fenrir::Render
                 ++it;
             }
         }
-        for (auto it = m_prepassPipelines.begin(); it != m_prepassPipelines.end();)
-        {
-            if (it->first.shader == &shader)
-            {
-                m_device.Destroy(it->second.pipeline.pipeline);
-                it = m_prepassPipelines.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
-        for (auto it = m_shadowPipelines.begin(); it != m_shadowPipelines.end();)
-        {
-            if (it->first.shader == &shader)
-            {
-                m_device.Destroy(it->second.pipeline.pipeline);
-                it = m_shadowPipelines.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
+        // The depth prepass's and the shadow passes' pipelines, which run its vertex stages.
+        const auto destroyOf = [&](auto& pipelines) {
+            std::erase_if(pipelines, [&](auto& made) {
+                if (made.first.shader != &shader)
+                {
+                    return false;
+                }
+                m_device.Destroy(made.second.pipeline.pipeline);
+                return true;
+            });
+        };
+        destroyOf(m_prepassPipelines);
+        destroyOf(m_shadowPipelines);
     }
 
     bool SceneRenderer::IsMeshCurrent(AssetKey key, std::uint32_t revision) const
@@ -2034,6 +2019,55 @@ namespace Fenrir::Render
         return entry;
     }
 
+    void SceneRenderer::MakeBehindVertexStage(PrepassEntry& made, const VariantEntry& variant, std::uint32_t streams,
+                                              const ShaderContainer& program, bool masked, PipelineDesc desc,
+                                              std::string_view label)
+    {
+        PipelineEntry& entry = made.pipeline;
+        entry.id = NextId();
+        const std::array<std::string_view, 1> maskKeys{AlphaMaskKey};
+        const ShaderVariant* ours = program.FindVariant(masked ? std::span<const std::string_view>(maskKeys)
+                                                               : std::span<const std::string_view>());
+        const auto stageOf = [](const ShaderVariant* of, ShaderStage stage) -> const ShaderStageCode* {
+            if (of == nullptr)
+            {
+                return nullptr;
+            }
+            const auto found = std::ranges::find(of->stages, stage, &ShaderStageCode::stage);
+            return found == of->stages.end() ? nullptr : &*found;
+        };
+        const ShaderStageCode* vertex = stageOf(variant.variant, ShaderStage::Vertex);
+        const ShaderStageCode* fragment = stageOf(ours, ShaderStage::Fragment);
+        if (vertex == nullptr || fragment == nullptr)
+        {
+            entry.failure = vertex == nullptr ? "it has no vertex stage" : std::format("{} did not read", program.name);
+            return;
+        }
+        // The item's vertex stage, so it lands where its other passes' do (Fenrir/Vertex.glsl's gl_Position is
+        // invariant), placed by whatever view block the pass binds; then ours. Its keys, as the probes read them, are
+        // the item's.
+        made.variant = std::make_unique<ShaderVariant>();
+        made.variant->keys = variant.variant->keys;
+        made.variant->stages = {*vertex, *fragment};
+        made.variant->vertexInputs = variant.variant->vertexInputs;
+        made.variant->bindings = variant.variant->bindings;
+        entry.failure = CheckFixedSets(*variant.variant);
+        desc.shader = made.variant.get();
+        // A Masked item's set 2 is its prepass mask group, not its material's.
+        desc.sets = {m_frameLayout, m_viewLayout, masked ? m_prepassMaskLayout : variant.materialLayout, m_drawLayout};
+        if (std::string missing = VertexBuffersOf(*variant.variant, streams, desc.vertexBuffers, entry.locations);
+            !missing.empty())
+        {
+            entry.failure = std::move(missing);
+        }
+        if (entry.failure.empty())
+        {
+            PipelineResult result = m_device.CreatePipeline(desc, label);
+            entry.pipeline = result.pipeline;
+            entry.failure = std::move(result.diagnostic);
+        }
+    }
+
     const SceneRenderer::PipelineEntry& SceneRenderer::PrepassPipeline(const ShaderEntry& shader,
                                                                        const VariantEntry& variant,
                                                                        std::uint32_t streams, bool masked,
@@ -2045,66 +2079,19 @@ namespace Fenrir::Render
         {
             return found->second.pipeline;
         }
-
         PrepassEntry& made = m_prepassPipelines[key];
-        PipelineEntry& entry = made.pipeline;
-        entry.id = NextId();
-        const std::array<std::string_view, 1> maskKeys{AlphaMaskKey};
-        const ShaderVariant* prepass = m_prepass.FindVariant(masked ? std::span<const std::string_view>(maskKeys)
-                                                                    : std::span<const std::string_view>());
-        const auto stageOf = [](const ShaderVariant* of, ShaderStage stage) -> const ShaderStageCode* {
-            if (of == nullptr)
-            {
-                return nullptr;
-            }
-            const auto found = std::ranges::find(of->stages, stage, &ShaderStageCode::stage);
-            return found == of->stages.end() ? nullptr : &*found;
-        };
-        const ShaderStageCode* vertex = stageOf(variant.variant, ShaderStage::Vertex);
-        const ShaderStageCode* fragment = stageOf(prepass, ShaderStage::Fragment);
-        if (vertex == nullptr || fragment == nullptr)
-        {
-            entry.failure = vertex == nullptr ? "it has no vertex stage" : "builtin:depth-prepass did not read";
-        }
-        else
-        {
-            // The item's vertex stage, so it lands where Opaque's does (Fenrir/Vertex.glsl's gl_Position is
-            // invariant), then ours; its keys, as the probes read them, are the item's.
-            made.variant = std::make_unique<ShaderVariant>();
-            made.variant->keys = variant.variant->keys;
-            made.variant->stages = {*vertex, *fragment};
-            made.variant->vertexInputs = variant.variant->vertexInputs;
-            made.variant->bindings = variant.variant->bindings;
-            entry.failure = CheckFixedSets(*variant.variant);
-            PipelineDesc desc;
-            desc.shader = made.variant.get();
-            // A Masked item's set 2 is its prepass group, not its material's.
-            desc.sets = {m_frameLayout, m_viewLayout, masked ? m_prepassMaskLayout : variant.materialLayout,
-                         m_drawLayout};
-            if (std::string streams =
-                    VertexBuffersOf(*variant.variant, key.streams, desc.vertexBuffers, entry.locations);
-                !streams.empty())
-            {
-                entry.failure = std::move(streams);
-            }
-            desc.cull = doubleSided ? CullMode::None : CullMode::Back;
-            desc.blend = Graphics::BlendMode::None;
-            desc.colourFormats = {TextureFormat::Rg16Float};
-            desc.samples = m_samples;
-            if (entry.failure.empty())
-            {
-                PipelineResult result = m_device.CreatePipeline(desc, "DepthPrepass");
-                entry.pipeline = result.pipeline;
-                entry.failure = std::move(result.diagnostic);
-            }
-        }
-        if (!entry.failure.empty())
+        PipelineDesc desc;
+        desc.cull = doubleSided ? CullMode::None : CullMode::Back;
+        desc.colourFormats = {TextureFormat::Rg16Float};
+        desc.samples = m_samples;
+        MakeBehindVertexStage(made, variant, key.streams, m_prepass, masked, desc, "DepthPrepass");
+        if (!made.pipeline.failure.empty())
         {
             m_logger.Warn("FenrirRenderer: no depth prepass pipeline for shader '{}', so Opaque writes its items' "
                           "depth and they are missing from the view's normals: {}",
-                          shader.container.name, entry.failure);
+                          shader.container.name, made.pipeline.failure);
         }
-        return entry;
+        return made.pipeline;
     }
 
     const SceneRenderer::PipelineEntry& SceneRenderer::ShadowPipeline(const ShaderEntry& shader,
@@ -2117,65 +2104,18 @@ namespace Fenrir::Render
         {
             return found->second.pipeline;
         }
-
         PrepassEntry& made = m_shadowPipelines[key];
-        PipelineEntry& entry = made.pipeline;
-        entry.id = NextId();
-        const std::array<std::string_view, 1> maskKeys{AlphaMaskKey};
-        const ShaderVariant* shadow = m_shadow.FindVariant(masked ? std::span<const std::string_view>(maskKeys)
-                                                                  : std::span<const std::string_view>());
-        const auto stageOf = [](const ShaderVariant* of, ShaderStage stage) -> const ShaderStageCode* {
-            if (of == nullptr)
-            {
-                return nullptr;
-            }
-            const auto found = std::ranges::find(of->stages, stage, &ShaderStageCode::stage);
-            return found == of->stages.end() ? nullptr : &*found;
-        };
-        const ShaderStageCode* vertex = stageOf(variant.variant, ShaderStage::Vertex);
-        const ShaderStageCode* fragment = stageOf(shadow, ShaderStage::Fragment);
-        if (vertex == nullptr || fragment == nullptr)
-        {
-            entry.failure = vertex == nullptr ? "it has no vertex stage" : "builtin:shadow did not read";
-        }
-        else
-        {
-            // The item's vertex stage, which places it by the view block's matrix: the cascade's light matrix.
-            made.variant = std::make_unique<ShaderVariant>();
-            made.variant->keys = variant.variant->keys;
-            made.variant->stages = {*vertex, *fragment};
-            made.variant->vertexInputs = variant.variant->vertexInputs;
-            made.variant->bindings = variant.variant->bindings;
-            entry.failure = CheckFixedSets(*variant.variant);
-            PipelineDesc desc;
-            desc.shader = made.variant.get();
-            // A Masked item's set 2 is its prepass mask group, as in the prepass.
-            desc.sets = {m_frameLayout, m_viewLayout, masked ? m_prepassMaskLayout : variant.materialLayout,
-                         m_drawLayout};
-            if (std::string streams =
-                    VertexBuffersOf(*variant.variant, key.streams, desc.vertexBuffers, entry.locations);
-                !streams.empty())
-            {
-                entry.failure = std::move(streams);
-            }
-            // Both faces cast, so an open mesh or a plane shadows from either side; depth only, reversed-Z.
-            desc.cull = CullMode::None;
-            desc.blend = Graphics::BlendMode::None;
-            desc.colourFormats = {};
-            desc.samples = 1;
-            if (entry.failure.empty())
-            {
-                PipelineResult result = m_device.CreatePipeline(desc, "ShadowCascades");
-                entry.pipeline = result.pipeline;
-                entry.failure = std::move(result.diagnostic);
-            }
-        }
-        if (!entry.failure.empty())
+        // Both faces cast, so an open mesh or a plane shadows from either side; depth only, reversed-Z.
+        PipelineDesc desc;
+        desc.cull = CullMode::None;
+        desc.samples = 1;
+        MakeBehindVertexStage(made, variant, key.streams, m_shadow, masked, desc, "ShadowCascades");
+        if (!made.pipeline.failure.empty())
         {
             m_logger.Warn("FenrirRenderer: no shadow pipeline for shader '{}', so its items cast no shadow: {}",
-                          shader.container.name, entry.failure);
+                          shader.container.name, made.pipeline.failure);
         }
-        return entry;
+        return made.pipeline;
     }
 
     std::vector<SceneRenderer::ResolvedDraw> SceneRenderer::ResolveDraws(std::vector<SkinDispatch>& skins)
@@ -2334,15 +2274,25 @@ namespace Fenrir::Render
         return draws;
     }
 
+    const SceneRenderer::PipelineEntry* SceneRenderer::PipelineOf(const ResolvedDraw& draw, DrawPass pass) noexcept
+    {
+        switch (pass)
+        {
+        case DrawPass::Prepass:
+            return draw.prepass;
+        case DrawPass::Shadow:
+            return draw.shadow;
+        default:
+            return draw.pipeline;
+        }
+    }
+
     std::vector<SceneRenderer::DrawRun> SceneRenderer::RunsOf(const std::vector<ResolvedDraw>& draws,
                                                               const std::vector<BindingGroupHandle>& groups,
                                                               const std::vector<std::size_t>& order,
                                                               DrawPass pass) const
     {
-        const auto pipelineOf = [&](std::size_t i) {
-            return pass == DrawPass::Prepass ? draws[i].prepass
-                                             : (pass == DrawPass::Shadow ? draws[i].shadow : draws[i].pipeline);
-        };
+        const auto pipelineOf = [&](std::size_t i) { return PipelineOf(draws[i], pass); };
         std::vector<DrawRun> runs;
         for (const std::size_t i : order)
         {
@@ -2380,8 +2330,7 @@ namespace Fenrir::Render
             const std::size_t i = run.first;
             const ResolvedDraw& draw = draws[i];
             const BindingGroupHandle group = groups[i];
-            const PipelineEntry* pipeline =
-                pass == DrawPass::Prepass ? draw.prepass : (pass == DrawPass::Shadow ? draw.shadow : draw.pipeline);
+            const PipelineEntry* pipeline = PipelineOf(draw, pass);
             const bool newPipeline = pipeline != current;
             if (newPipeline)
             {
@@ -2629,12 +2578,12 @@ namespace Fenrir::Render
         texture.binding = 1;
         texture.texture = occlusion;
         texture.sampler = m_outputSampler;
-        BindingGroupEntry shadowMap;
-        shadowMap.binding = 2;
-        shadowMap.texture = shadow;
-        shadowMap.sampler = m_shadowSampler;
+        BindingGroupEntry shadowAtlas;
+        shadowAtlas.binding = 2;
+        shadowAtlas.texture = shadow;
+        shadowAtlas.sampler = m_shadowSampler;
         const BindingGroupHandle group =
-            m_device.CreateBindingGroup({m_viewLayout, {block, texture, shadowMap}}, "View");
+            m_device.CreateBindingGroup({m_viewLayout, {block, texture, shadowAtlas}}, "View");
         m_viewGroups.emplace(key, group);
         return group;
     }
@@ -2775,8 +2724,8 @@ namespace Fenrir::Render
             instances += std::max<std::uint32_t>(draw.instances.count, 1);
         }
         const std::vector<ViewRequest>& views = m_frame.views;
-        // Each view's block, then each view's cascades' (ADR-0050), CascadeSlots a view.
-        m_viewBlocks->Reserve(views.size() * (1 + CascadeSlots));
+        // Each view's block, then each view's cascades' (ADR-0050), MaxCascades slots a view.
+        m_viewBlocks->Reserve(views.size() * (1 + MaxCascades));
         // The items that cast the sun's shadow, in draw-list order.
         std::vector<std::size_t> casters;
         for (std::size_t i = 0; i < draws->size(); ++i)
@@ -2910,7 +2859,7 @@ namespace Fenrir::Render
             for (std::uint32_t c = 0; c < cascadeCount; ++c)
             {
                 const Cascade& cascade = cascades[c];
-                const std::size_t slot = views.size() + v * CascadeSlots + c;
+                const std::size_t slot = views.size() + v * MaxCascades + c;
                 const auto size = static_cast<float>(m_cascades.mapSize);
                 const ViewBlock cascadeBlock{cascade.view,
                                              cascade.projection,
@@ -2971,7 +2920,7 @@ namespace Fenrir::Render
             const GraphResource sceneColour = graph.CreateTexture("SceneColor", colourDesc);
             const GraphResource sceneDepth = graph.CreateTexture("SceneDepth", depthDesc);
             const GraphResource sceneNormals = graph.CreateTexture("SceneNormals", normalDesc);
-            GraphResource shadowMap;
+            GraphResource shadowAtlas;
             if (cascadeCount > 0)
             {
                 TextureDesc shadowDesc;
@@ -2979,9 +2928,9 @@ namespace Fenrir::Render
                 shadowDesc.width = m_cascades.mapSize * cascadeCount;
                 shadowDesc.height = m_cascades.mapSize;
                 shadowDesc.usage = TextureUsage::DepthAttachment | TextureUsage::Sampled;
-                shadowMap = graph.CreateTexture("ShadowMap", shadowDesc);
+                shadowAtlas = graph.CreateTexture("ShadowAtlas", shadowDesc);
             }
-            m_drawnViews.push_back({v, sceneColour, sceneDepth, sceneNormals, shadowMap, viewGroup});
+            m_drawnViews.push_back({v, sceneColour, sceneDepth, sceneNormals, shadowAtlas, viewGroup});
 
             // Opaque items in draw-list order, and those of them in the depth prepass; transparent ones back to front
             // by the view-space depth of their world origins, the farthest (most negative view z) first.
@@ -3013,7 +2962,7 @@ namespace Fenrir::Render
                 std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *prepassGroups, *prepassed, DrawPass::Prepass));
             auto opaqueRuns = std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *groups, *opaque, DrawPass::Main));
 
-            if (!shadowMap.IsEmpty())
+            if (!shadowAtlas.IsEmpty())
             {
                 // Each casting item's set 2 in the shadow passes: a cut-out Masked item's prepass group, else its
                 // material group, which its own vertex stage may read.
@@ -3032,7 +2981,7 @@ namespace Fenrir::Render
                 graph.AddPass(
                     "ShadowCascades", RenderStage::Shadow, QueueKind::Graphics,
                     [=](PassBuilder& pass) {
-                        pass.DepthAttachment(shadowMap, LoadOp::Clear, 0.0f);
+                        pass.DepthAttachment(shadowAtlas, LoadOp::Clear, 0.0f);
                         for (const GraphResource image : samples)
                         {
                             pass.Sample(image);
@@ -3091,18 +3040,18 @@ namespace Fenrir::Render
                     {
                         pass.Sample(occlusion);
                     }
-                    if (!shadowMap.IsEmpty())
+                    if (!shadowAtlas.IsEmpty())
                     {
-                        pass.Sample(shadowMap);
+                        pass.Sample(shadowAtlas);
                     }
                     readSkinned(pass);
                 },
-                [this, draws, groups, opaqueRuns, frameGroup, drawGroup, skinned, viewport, occlusion, shadowMap,
+                [this, draws, groups, opaqueRuns, frameGroup, drawGroup, skinned, viewport, occlusion, shadowAtlas,
                  v](PassContext& context) {
                     const TextureHandle occlusionTexture =
                         occlusion.IsEmpty() ? GetDefaultTexture(DefaultTexture::White) : context.Texture(occlusion);
                     const TextureHandle shadowTexture =
-                        shadowMap.IsEmpty() ? TextureHandle{} : context.Texture(shadowMap);
+                        shadowAtlas.IsEmpty() ? TextureHandle{} : context.Texture(shadowAtlas);
                     RecordDraws(context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup,
                                 ViewGroupFor(context.FrameIndex(), v, occlusionTexture, shadowTexture), drawGroup,
                                 skinned, viewport, DrawPass::Main);
@@ -3119,20 +3068,20 @@ namespace Fenrir::Render
                         {
                             pass.Sample(image);
                         }
-                        if (!shadowMap.IsEmpty())
+                        if (!shadowAtlas.IsEmpty())
                         {
-                            pass.Sample(shadowMap);
+                            pass.Sample(shadowAtlas);
                         }
                         readSkinned(pass);
                     },
                     [this, draws, groups, transparentRuns, frameGroup, viewGroup, drawGroup, skinned, viewport,
-                     shadowMap, v](PassContext& context) {
+                     shadowAtlas, v](PassContext& context) {
                         // Shadowed, but never darkened by the occlusion of what is behind it.
                         const BindingGroupHandle shadowedView =
-                            shadowMap.IsEmpty()
+                            shadowAtlas.IsEmpty()
                                 ? viewGroup
                                 : ViewGroupFor(context.FrameIndex(), v, GetDefaultTexture(DefaultTexture::White),
-                                               context.Texture(shadowMap));
+                                               context.Texture(shadowAtlas));
                         RecordDraws(context.Encoder(), *draws, *groups, *transparentRuns, frameGroup, shadowedView,
                                     drawGroup, skinned, viewport, DrawPass::Main);
                     });
@@ -3167,9 +3116,9 @@ namespace Fenrir::Render
             // A view showing its ambient occlusion or its shadow atlas draws that instead, as grey, black when it has
             // none.
             const bool showGrey =
-                (request.debugView == ViewDebug::AmbientOcclusion || request.debugView == ViewDebug::ShadowMap) &&
+                (request.debugView == ViewDebug::AmbientOcclusion || request.debugView == ViewDebug::ShadowAtlas) &&
                 !m_occlusionOutputPipeline.IsEmpty();
-            const GraphResource grey = request.debugView == ViewDebug::ShadowMap ? shadowMap : occlusion;
+            const GraphResource grey = request.debugView == ViewDebug::ShadowAtlas ? shadowAtlas : occlusion;
             const GraphResource shown = showGrey && !grey.IsEmpty() ? grey : sceneColour;
             const PipelineHandle outputPipeline = showGrey ? m_occlusionOutputPipeline : m_outputPipeline;
             const TextureHandle black = GetDefaultTexture(DefaultTexture::Black);

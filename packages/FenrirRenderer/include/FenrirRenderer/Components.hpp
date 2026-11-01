@@ -507,10 +507,10 @@ namespace Fenrir
          */
         ShadowCascades,
         /**
-         * @brief The sun's shadow map for this view as grey, its cascades side by side from the nearest, white nearest
-         * the sun, with no exposure or tonemap; black where nothing casts.
+         * @brief The sun's shadow atlas for this view as grey, its cascades side by side from the nearest, white
+         * nearest the sun, with no exposure or tonemap; black where nothing casts.
          */
-        ShadowMap,
+        ShadowAtlas,
     };
 
     /**

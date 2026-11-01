@@ -229,9 +229,9 @@
           "doc": "Its lit colour, each pixel tinted by the sun's shadow cascade it reads (ADR-0050): red, green, blue and yellow from the nearest, untinted past the last or without shadows."
         },
         {
-          "name": "ShadowMap",
+          "name": "ShadowAtlas",
           "value": 3,
-          "doc": "The sun's shadow map for this view as grey, its cascades side by side from the nearest, white nearest the sun, with no exposure or tonemap; black where nothing casts."
+          "doc": "The sun's shadow atlas for this view as grey, its cascades side by side from the nearest, white nearest the sun, with no exposure or tonemap; black where nothing casts."
         }
       ]
     },

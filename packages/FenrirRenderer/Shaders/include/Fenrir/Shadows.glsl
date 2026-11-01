@@ -44,7 +44,7 @@ float FenrirCascadeShadow(int cascade, vec3 position, vec3 normal, vec3 l, float
     vec3 atlas = (view.shadowMatrices[cascade] * vec4(biased, 1.0)).xyz;
 
     // Read only inside the cascade's own tile of the atlas, the filter's reach in from its edges.
-    vec2 size = vec2(textureSize(fenrirShadowMap, 0));
+    vec2 size = vec2(textureSize(fenrirShadowAtlas, 0));
     float tiles = float(view.shadowInfo.x);
     vec2 texelUv = 1.0 / size;
     float reach = view.shadowBias.z + 1.0;
@@ -56,12 +56,12 @@ float FenrirCascadeShadow(int cascade, vec3 position, vec3 normal, vec3 l, float
     {
         vec2 offset = FenrirVogelDisk(i, FenrirShadowTaps, angle) * view.shadowBias.z * texelUv;
         // Level 0 explicitly: the caller may be in non-uniform control flow.
-        lit += textureLod(fenrirShadowMap, vec3(clamp(atlas.xy + offset, low, high), atlas.z), 0.0);
+        lit += textureLod(fenrirShadowAtlas, vec3(clamp(atlas.xy + offset, low, high), atlas.z), 0.0);
     }
     return lit / float(FenrirShadowTaps);
 }
 
-// The cascade `position` reads, -1 past the last; `viewDepth` is its distance along the camera's axis.
+// The cascade a point `viewDepth` along the camera's axis reads, -1 past the last.
 int FenrirShadowCascade(float viewDepth)
 {
     int count = int(view.shadowInfo.x);

@@ -17,8 +17,8 @@ namespace Fenrir::Render
         {
             const float share = static_cast<float>(i) / static_cast<float>(count);
             const float logarithmic = near * std::pow(ratio, share);
-            const float uniform = near + (far - near) * share;
-            splits.push_back(lambda * logarithmic + (1.0f - lambda) * uniform);
+            const float even = near + (far - near) * share;
+            splits.push_back(lambda * logarithmic + (1.0f - lambda) * even);
         }
         // Exactly the ends, whatever pow rounds them to.
         splits.front() = near;

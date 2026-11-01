@@ -74,7 +74,7 @@ namespace Fenrir::Render
         /** @brief Its view-space normals (RG16F, octahedral), which its DepthPrepass pass writes (ADR-0049). */
         GraphResource sceneNormals;
         /** @brief Its sun's shadow atlas (ADR-0050), which its ShadowCascades pass writes; empty without one. */
-        GraphResource shadowMap;
+        GraphResource shadowAtlas;
         /**
          * @brief Its view block's binding group this frame: binding set 1, as `Fenrir/View.glsl` declares it, with the
          * white texture as its ambient occlusion and no shadow.
@@ -122,7 +122,7 @@ namespace Fenrir::Render
      * merge as they do in Opaque. Opaque and Transparent bind the atlas at set 1 binding 2 with a comparison sampler,
      * and the cascades in the view block (`Fenrir/View.glsl`), which `Fenrir/Shadows.glsl` reads; every other pass, and
      * every view without them, binds a 1 x 1 map that lights everything, with no cascades. A view showing its cascades
-     * tints its lit colour by them; one showing its shadow map has Output draw the atlas as grey.
+     * tints its lit colour by them; one showing its shadow atlas has Output draw the atlas as grey.
      *
      * **Ambient occlusion** (ADR-0049): a view whose camera has it gets Gtao's passes after its DepthPrepass pass, and
      * its `Opaque` pass binds their occlusion texture at set 1 binding 1 (`Fenrir/View.glsl`), which
@@ -181,7 +181,8 @@ namespace Fenrir::Render
         /**
          * @brief Makes the default textures, the fixed sets' layouts and the internal pipelines on `device`, for scene
          * targets of `samples` samples per pixel (1: no MSAA). With `automaticInstancing`, consecutive matching items
-         * draw as one instanced draw (ADR-0051).
+         * draw as one instanced draw (ADR-0051); with `computeSkinning`, skinned meshes skin once a frame in compute;
+         * `cascades` says how each view's sun cascades are made (ADR-0050), its count held to 1 to MaxCascades.
          */
         SceneRenderer(Graphics::GraphicsDevice& device, ILogger& logger, std::uint32_t samples = 1,
                       bool automaticInstancing = true, bool computeSkinning = true, CascadeConfig cascades = {});
@@ -621,6 +622,14 @@ namespace Fenrir::Render
          */
         [[nodiscard]] const PipelineEntry& ShadowPipeline(const ShaderEntry& shader, const VariantEntry& variant,
                                                           std::uint32_t streams, bool masked);
+        /**
+         * @brief Makes `made`'s pipeline: `variant`'s vertex stage behind `program`'s fragment stage (its ALPHA_MASK
+         * variant when `masked`, binding the prepass mask group at set 2), with `desc`'s render state and the streams
+         * `streams` the mesh has; why it could not, in its failure.
+         */
+        void MakeBehindVertexStage(PrepassEntry& made, const VariantEntry& variant, std::uint32_t streams,
+                                   const ShaderContainer& program, bool masked, Graphics::PipelineDesc desc,
+                                   std::string_view label);
         /** @brief The depth prepass pipeline running `variant`'s vertex stage; why it failed is logged as a warning. */
         [[nodiscard]] const PipelineEntry& PrepassPipeline(const ShaderEntry& shader, const VariantEntry& variant,
                                                            std::uint32_t streams, bool masked, bool doubleSided);
@@ -641,6 +650,9 @@ namespace Fenrir::Render
             Prepass,
             Shadow,
         };
+
+        /** @brief The pipeline `pass` draws `draw` with: null when it has none there. */
+        [[nodiscard]] static const PipelineEntry* PipelineOf(const ResolvedDraw& draw, DrawPass pass) noexcept;
 
         /**
          * @brief Consecutive draws of a pass, one instance each: `first` is the record of the first, and the rest

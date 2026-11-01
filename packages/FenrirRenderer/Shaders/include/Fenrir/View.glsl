@@ -15,7 +15,7 @@ layout(set = 1, binding = 0, std140) uniform ViewData
     // The viewport in pixels of its target: x, y (top left), width, height.
     vec4 viewport;
     // The sun's cascaded shadow (ADR-0050), which Fenrir/Shadows.glsl reads. Cascade i takes world positions to u and
-    // v (from the top) in fenrirShadowMap and their reversed-Z depth in its light's view.
+    // v (from the top) in fenrirShadowAtlas and their reversed-Z depth in its light's view.
     mat4 shadowMatrices[4];
     // The view depth each cascade reaches to, nearest first.
     vec4 shadowSplits;
@@ -37,6 +37,6 @@ layout(set = 1, binding = 1) uniform sampler2D fenrirAmbientOcclusion;
 // The sun's shadow atlas (ADR-0050): each cascade's reversed-Z depths, side by side, compared by the sampler (lit where
 // the reference is at least the stored depth) and filtered bilinearly. A 1 x 1 map of depth 0, which lights
 // everything, where the view has no shadow and in the shadow passes themselves.
-layout(set = 1, binding = 2) uniform sampler2DShadow fenrirShadowMap;
+layout(set = 1, binding = 2) uniform sampler2DShadow fenrirShadowAtlas;
 
 #endif

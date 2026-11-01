@@ -12,7 +12,7 @@ Every scene shows the same ImGui window, Lighting (`src/LightingPanel.cpp`): the
 tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius) and ambient occlusion (GTAO: on, which it is
 by default here, its radius and strength), the sun's shadows (on, their distance and their normal and slope biases,
 given to every DirectionalLight in the scene), a debug view (the lit scene, the raw occlusion as grey, the shadow
-cascades tinted red, green, blue and yellow from the nearest, or the shadow map), and the sky: which panorama, its
+cascades tinted red, green, blue and yellow from the nearest, or the shadow atlas), and the sky: which panorama, its
 intensity and its rotation. It writes them to every camera in the scene each frame, the free-fly camera among them.
 Keys do the same, for the smoke runs and by hand: T the next tonemapper, E the next exposure (0, +1, +2, -1 EV), B bloom
 off or back on at its default, O ambient occlusion off or back on, G the next debug view, H the sun's shadows off or

@@ -38,7 +38,7 @@ namespace LightingDemo
         Fenrir::AmbientOcclusion ambientOcclusion{true};
         /**
          * @brief What the cameras show: the lit scene, their raw ambient occlusion, the sun's cascades as colours or
-         * its shadow map; G steps through them.
+         * its shadow atlas; G steps through them.
          */
         Fenrir::CameraDebugView debugView = Fenrir::CameraDebugView::None;
         /**

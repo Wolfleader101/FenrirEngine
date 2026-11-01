@@ -81,20 +81,30 @@ namespace
         return {};
     }
 
+    /** @name The view block's shadow members, as `Fenrir/View.glsl` lays them out (std140): byte offsets.
+     * @{
+     */
+    constexpr std::size_t ViewBlockBytes = 608;
+    constexpr std::size_t ShadowSplitsAt = 544;
+    constexpr std::size_t ShadowBiasAt = 576;
+    constexpr std::size_t ShadowInfoAt = 592;
+    /** @} */
+
     /** @brief The bytes of the view block a draw's set 1 binds, from its slot's offset. */
     std::vector<std::byte> ViewBlock(const RendererTestApp& test, const RecordedDraw& draw)
     {
         const BindingGroupEntry block = EntryAt(test, draw.groups.at(1), 0);
         const std::vector<std::byte> bytes = RendererProbe::Bytes(test.Device(), block.buffer);
-        REQUIRE(block.offset + 608 <= bytes.size());
+        INFO("the view block's slot lies inside its buffer");
+        REQUIRE(block.offset + ViewBlockBytes <= bytes.size());
         return {bytes.begin() + static_cast<std::ptrdiff_t>(block.offset),
-                bytes.begin() + static_cast<std::ptrdiff_t>(block.offset + 608)};
+                bytes.begin() + static_cast<std::ptrdiff_t>(block.offset + ViewBlockBytes)};
     }
 
-    /** @brief A view block's shadowInfo.x: how many cascades it reads (`Fenrir/View.glsl`, byte 592). */
+    /** @brief A view block's shadowInfo.x: how many cascades it reads. */
     std::uint32_t CascadesIn(const std::vector<std::byte>& block)
     {
-        return RendererTest::UintAt(block, 592);
+        return RendererTest::UintAt(block, ShadowInfoAt);
     }
 
     /** @brief The ShadowCascades passes of the last frame. */
@@ -102,42 +112,69 @@ namespace
     {
         return RendererTest::Labelled(test.Passes(), "ShadowCascades");
     }
+
+    /** @brief A camera and a sun over an opaque cube, a masked sphere, two blended cubes and an unlit sphere. */
+    void AddMixedScene(RendererTestApp& test)
+    {
+        test.AddCamera();
+        AddSun(test);
+        const auto cube = test.Mesh();
+        AddCubeAt(test, -2.0f, cube, Blended(test, Fenrir::BlendMode::Opaque));
+        AddCubeAt(test, -1.0f, test.Mesh(RendererTest::Sphere()), Blended(test, Fenrir::BlendMode::Masked));
+        AddCubeAt(test, 0.0f, cube, Blended(test, Fenrir::BlendMode::AlphaBlend));
+        AddCubeAt(test, 1.0f, cube, Blended(test, Fenrir::BlendMode::Additive));
+        AddCubeAt(test, 2.0f, test.Mesh(RendererTest::Sphere()),
+                  Blended(test, Fenrir::BlendMode::Opaque, "builtin:unlit"));
+    }
 } // namespace
 
-TEST_CASE("The sun's ShadowCascades pass draws every opaque and masked item into each cascade's tile of one atlas",
+TEST_CASE("The sun's ShadowCascades pass runs before the DepthPrepass", "[renderer][shadows]")
+{
+    RendererTestApp test;
+    AddMixedScene(test);
+
+    test.Frame();
+    INFO("one pass for the one view");
+    REQUIRE(ShadowPasses(test).size() == 1);
+    const std::vector<std::string> labels = RendererTest::PassesIn(RendererProbe::Submitted(test.renderer));
+    INFO("in the Shadow stage, ahead of the view's DepthPrepass");
+    REQUIRE(std::ranges::find(labels, "ShadowCascades") < std::ranges::find(labels, "DepthPrepass"));
+    INFO("nothing was logged as an error, nor a warning about shadows");
+    REQUIRE(test.messages->errors.empty());
+    REQUIRE(RendererTest::CountContaining(test.messages->warnings, "shadow") == 0);
+}
+
+TEST_CASE("The ShadowCascades pass draws into a depth atlas of the cascades side by side, cleared to far",
           "[renderer][shadows]")
 {
     RendererTestApp test;
-    test.AddCamera();
-    AddSun(test);
-    const auto cube = test.Mesh();
-    AddCubeAt(test, -2.0f, cube, Blended(test, Fenrir::BlendMode::Opaque));
-    AddCubeAt(test, -1.0f, test.Mesh(RendererTest::Sphere()), Blended(test, Fenrir::BlendMode::Masked));
-    AddCubeAt(test, 0.0f, cube, Blended(test, Fenrir::BlendMode::AlphaBlend));
-    AddCubeAt(test, 1.0f, cube, Blended(test, Fenrir::BlendMode::Additive));
-    AddCubeAt(test, 2.0f, test.Mesh(RendererTest::Sphere()), Blended(test, Fenrir::BlendMode::Opaque, "builtin:unlit"));
+    AddMixedScene(test);
 
     test.Frame();
     const std::vector<PassRecord> passes = ShadowPasses(test);
+    INFO("one pass");
     REQUIRE(passes.size() == 1);
-    INFO("it runs first in the frame's views' passes, before the DepthPrepass");
-    const std::vector<std::string> labels = RendererTest::PassesIn(RendererProbe::Submitted(test.renderer));
-    const auto shadow = std::ranges::find(labels, "ShadowCascades");
-    const auto prepass = std::ranges::find(labels, "DepthPrepass");
-    REQUIRE(shadow < prepass);
-
-    INFO("into a depth atlas of the four 2048-texel cascades side by side, cleared to 0 (far, reversed-Z), no colour");
     const Fenrir::Graphics::PassDesc& pass = passes.front().pass;
+    INFO("no colour, and depth cleared to 0, the far plane under reversed-Z");
     REQUIRE(pass.colour.empty());
     REQUIRE(pass.depth.has_value());
     REQUIRE(pass.depth->load == LoadOp::Clear);
     REQUIRE(pass.depth->clear == 0.0f);
     const Fenrir::Graphics::TextureDesc atlas = RendererProbe::Desc(test.Device(), pass.depth->texture);
+    INFO("Depth32Float, the four 2048-texel cascades side by side, single-sampled");
     REQUIRE(atlas.format == TextureFormat::Depth32Float);
     REQUIRE(atlas.width == 4 * 2048);
     REQUIRE(atlas.height == 2048);
     REQUIRE(atlas.samples == 1);
+}
 
+TEST_CASE("Each cascade draws Opaque's opaque and masked items, and no blended one, into its own tile",
+          "[renderer][shadows]")
+{
+    RendererTestApp test;
+    AddMixedScene(test);
+
+    test.Frame();
     const std::vector<RecordedDraw> draws = test.Draws("ShadowCascades");
     const std::vector<RecordedDraw> opaque = test.Draws("Opaque");
     INFO("the three opaque and masked items, once per cascade, and neither blended one");
@@ -157,16 +194,13 @@ TEST_CASE("The sun's ShadowCascades pass draws every opaque and masked item into
             REQUIRE(draw.viewport.y == 0);
             REQUIRE(draw.viewport.width == 2048);
             REQUIRE(draw.viewport.height == 2048);
-            INFO("through a view block of its own, not the camera's");
+            INFO("through a view block of its own, not the camera's, which reads no shadow itself");
             REQUIRE(draw.groups.at(1) != opaque.front().groups.at(1));
-            INFO("which reads no shadow itself");
             REQUIRE(CascadesIn(ViewBlock(test, draw)) == 0);
         }
     }
+    INFO("RendererStats counts the twelve shadow draws");
     REQUIRE(test.renderer.Stats().shadowDraws == 12);
-    INFO("nothing was logged as an error, nor a warning about shadows");
-    REQUIRE(test.messages->errors.empty());
-    REQUIRE(RendererTest::CountContaining(test.messages->warnings, "shadow") == 0);
 }
 
 TEST_CASE("Shadow pipelines are depth only, uncull both faces, and cut Masked items out by their prepass mask",
@@ -180,29 +214,24 @@ TEST_CASE("Shadow pipelines are depth only, uncull both faces, and cut Masked it
 
     test.Frame();
     const std::vector<RecordedDraw> draws = test.Draws("ShadowCascades");
+    INFO("two items in four cascades");
     REQUIRE(draws.size() == 8);
     std::size_t masked = 0;
     for (const RecordedDraw& draw : draws)
     {
         const RendererProbe::PipelineState state = RendererProbe::State(test.Device(), draw.pipeline);
+        INFO("a ShadowCascades pipeline, single-sampled; both faces cast; depth tested and written greater-or-equal");
         REQUIRE(RendererProbe::Label(test.Device(), draw.pipeline) == "ShadowCascades");
-        INFO("both faces cast; depth is tested and written greater-or-equal, reversed-Z");
+        REQUIRE(RendererProbe::Samples(test.Device(), draw.pipeline) == 1);
         REQUIRE(state.cull == Fenrir::Graphics::CullMode::None);
         REQUIRE(state.depth.test);
         REQUIRE(state.depth.write);
         REQUIRE(state.depth.compare == CompareOp::GreaterEqual);
-        REQUIRE(RendererProbe::Samples(test.Device(), draw.pipeline) == 1);
         const std::vector<std::string> keys = RendererProbe::Keys(test.Device(), draw.pipeline);
-        if (std::ranges::find(keys, "ALPHA_MASK") != keys.end())
-        {
-            ++masked;
-            INFO("a Masked item binds its prepass mask group at set 2");
-            REQUIRE(test.GroupLabel(draw, 2) == "Prepass mask");
-        }
-        else
-        {
-            REQUIRE(test.GroupLabel(draw, 2) != "Prepass mask");
-        }
+        const bool cutOut = std::ranges::find(keys, "ALPHA_MASK") != keys.end();
+        masked += cutOut ? 1 : 0;
+        INFO("a Masked item, and only a Masked one, binds its prepass mask group at set 2");
+        REQUIRE((test.GroupLabel(draw, 2) == "Prepass mask") == cutOut);
     }
     INFO("the masked item in each of four cascades");
     REQUIRE(masked == 4);
@@ -219,32 +248,34 @@ TEST_CASE("Opaque and Transparent read the atlas at set 1 binding 2 by compariso
 
     test.Frame();
     const std::vector<PassRecord> passes = ShadowPasses(test);
+    INFO("one shadow pass");
     REQUIRE(passes.size() == 1);
     const Fenrir::Graphics::TextureHandle atlas = passes.front().pass.depth->texture;
     for (const char* name : {"Opaque", "Transparent"})
     {
         CAPTURE(name);
         const std::vector<RecordedDraw> draws = test.Draws(name);
+        INFO("one draw in the pass");
         REQUIRE(draws.size() == 1);
-        const BindingGroupEntry shadowMap = EntryAt(test, draws.front().groups.at(1), 2);
-        REQUIRE(shadowMap.texture == atlas);
-        INFO("with a sampler of its own, the comparison one, not the occlusion's");
-        REQUIRE_FALSE(shadowMap.sampler.IsEmpty());
-        REQUIRE(shadowMap.sampler != EntryAt(test, draws.front().groups.at(1), 1).sampler);
+        const BindingGroupEntry shadowAtlas = EntryAt(test, draws.front().groups.at(1), 2);
+        INFO("the atlas at set 1 binding 2, with a sampler of its own (the comparison one), not the occlusion's");
+        REQUIRE(shadowAtlas.texture == atlas);
+        REQUIRE_FALSE(shadowAtlas.sampler.IsEmpty());
+        REQUIRE(shadowAtlas.sampler != EntryAt(test, draws.front().groups.at(1), 1).sampler);
         const std::vector<std::byte> block = ViewBlock(test, draws.front());
         INFO("four cascades, their splits rising to the light's 100-unit shadow distance");
         REQUIRE(CascadesIn(block) == 4);
         float previous = 0.0f;
         for (std::size_t c = 0; c < 4; ++c)
         {
-            const float split = RendererTest::FloatAt(block, 544 + c * 4);
+            const float split = RendererTest::FloatAt(block, ShadowSplitsAt + c * 4);
             REQUIRE(split > previous);
             previous = split;
         }
         REQUIRE(previous == 100.0f);
-        INFO("the light's biases in texels, the filter's radius and the blend share");
-        REQUIRE(RendererTest::FloatAt(block, 576) == 1.0f);
-        REQUIRE(RendererTest::FloatAt(block, 580) == 2.0f);
+        INFO("the light's default normal and slope biases, in texels");
+        REQUIRE(RendererTest::FloatAt(block, ShadowBiasAt) == 1.0f);
+        REQUIRE(RendererTest::FloatAt(block, ShadowBiasAt + 4) == 2.0f);
     }
     INFO("the prepass, which shades nothing, binds the map that lights everything");
     const std::vector<RecordedDraw> prepass = test.Draws("DepthPrepass");
@@ -258,6 +289,7 @@ TEST_CASE("No sun, a sun with castShadows off or no light, or nothing that casts
 {
     const auto expectNoShadow = [](RendererTestApp& test) {
         test.Frame();
+        INFO("no shadow pass, and Opaque still draws");
         REQUIRE(ShadowPasses(test).empty());
         const std::vector<RecordedDraw> opaque = test.Draws("Opaque");
         REQUIRE_FALSE(opaque.empty());
@@ -357,14 +389,17 @@ TEST_CASE("Matching casting items merge into one instanced shadow draw a cascade
     }
 
     test.Frame();
+    INFO("Opaque merges the five cubes into one draw");
     REQUIRE(test.Draws("Opaque").size() == 1);
     const std::vector<RecordedDraw> draws = test.Draws("ShadowCascades");
+    INFO("and each cascade draws them as one draw of five instances, from the same first record");
     REQUIRE(draws.size() == 4);
     for (const RecordedDraw& draw : draws)
     {
         REQUIRE(draw.draw.instanceCount == 5);
         REQUIRE(draw.draw.firstInstance == test.Draws("Opaque").front().draw.firstInstance);
     }
+    INFO("RendererStats counts four shadow draws");
     REQUIRE(test.renderer.Stats().shadowDraws == 4);
 }
 
@@ -388,12 +423,15 @@ TEST_CASE("RendererConfig sets the cascades per view and their maps' size, and e
     for (const PassRecord& pass : passes)
     {
         const Fenrir::Graphics::TextureDesc atlas = RendererProbe::Desc(test.Device(), pass.pass.depth->texture);
+        INFO("two 512-texel cascades side by side");
         REQUIRE(atlas.width == 2 * 512);
         REQUIRE(atlas.height == 512);
     }
+    INFO("the cube once in each of two cascades of two views");
     REQUIRE(test.Draws("ShadowCascades").size() == 4);
     for (const RecordedDraw& draw : test.Draws("Opaque"))
     {
+        INFO("each view reads two cascades");
         REQUIRE(CascadesIn(ViewBlock(test, draw)) == 2);
     }
 }
@@ -409,6 +447,7 @@ TEST_CASE("Compute-skinned items cast from the skinned vertex buffer, which the 
 
     test.Frame();
     const std::vector<RecordedDraw> draws = test.Draws("ShadowCascades");
+    INFO("the skinned strip in each of four cascades");
     REQUIRE(draws.size() == 4);
     for (const RecordedDraw& draw : draws)
     {
@@ -418,10 +457,12 @@ TEST_CASE("Compute-skinned items cast from the skinned vertex buffer, which the 
         REQUIRE(std::ranges::find(keys, "SKINNED") == keys.end());
     }
     const std::vector<PassRecord> passes = ShadowPasses(test);
+    INFO("the one shadow pass declares the skinned vertices as vertex input, so it runs after the Skinning pass");
     REQUIRE(passes.size() == 1);
     const auto& uses = passes.front().pass.uses;
     REQUIRE(std::ranges::any_of(uses, [](const Fenrir::Graphics::PassResourceUse& use) {
         return use.usage == Fenrir::Graphics::ResourceUsage::VertexInput;
     }));
+    INFO("nothing was logged as an error");
     REQUIRE(test.messages->errors.empty());
 }

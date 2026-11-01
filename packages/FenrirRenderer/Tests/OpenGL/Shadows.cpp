@@ -133,6 +133,7 @@ TEST_CASE("A box's shadow on a floor lies where the sun's direction puts it, and
                 Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(-90.0f), Vec3(1.0f, 0.0f, 0.0f)), target);
 
     test.RunFrame();
+    INFO("no GL error or other error was logged");
     REQUIRE(test.messages->errors.empty());
     const RendererTest::Rgba8Image frame = test.ReadTarget(target);
 
@@ -176,11 +177,13 @@ TEST_CASE("A lit floor shows no shadow acne from the sun at angles up to grazing
         // Above the floor, looking down across it into the distance: every cascade's range is on it.
         AddCameraAt(test, {0.0f, 1.5f, 0.0f}, Fenrir::Math::AngleAxis(-0.35f, Vec3(1.0f, 0.0f, 0.0f)), target);
         test.RunFrame();
+        INFO("no GL error or other error was logged");
         REQUIRE(test.messages->errors.empty());
         return test.ReadTarget(target);
     };
     const RendererTest::Rgba8Image shadowed = render(true);
     const RendererTest::Rgba8Image unshadowed = render(false);
+    INFO("both frames are the same size");
     REQUIRE(shadowed.width == unshadowed.width);
 
     // Every floor pixel, from a few rows below the horizon down: lit as it is without shadows.
@@ -248,7 +251,7 @@ TEST_CASE("Posts' shadows across every cascade boundary match their golden image
                                 FENRIR_TEST_GOLDENS, FENRIR_TEST_GOLDEN_FAILURES);
 }
 
-TEST_CASE("A camera showing its shadow map draws the atlas as grey, and black where nothing casts",
+TEST_CASE("A camera showing its shadow atlas draws the atlas as grey, and black where nothing casts",
           "[renderer][gl][shadows]")
 {
     const bool casters = GENERATE(true, false);
@@ -260,9 +263,10 @@ TEST_CASE("A camera showing its shadow map draws the atlas as grey, and black wh
     AddSun(test, {0.0f, -1.0f, -0.2f}).castShadows = casters;
     const auto target = Target(test, 64, 16);
     Fenrir::Camera& camera = AddCameraAt(test, {0.0f, 0.5f, 0.0f}, Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), target);
-    camera.debugView = Fenrir::CameraDebugView::ShadowMap;
+    camera.debugView = Fenrir::CameraDebugView::ShadowAtlas;
 
     test.RunFrame();
+    INFO("no GL error or other error was logged");
     REQUIRE(test.messages->errors.empty());
     const RendererTest::Rgba8Image frame = test.ReadTarget(target);
     float brightest = 0.0f;
@@ -281,6 +285,7 @@ TEST_CASE("A camera showing its shadow map draws the atlas as grey, and black wh
     }
     else
     {
+        INFO("with nothing casting there is no atlas, and the view is black");
         REQUIRE(brightest == 0.0f);
     }
 }
