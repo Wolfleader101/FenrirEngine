@@ -126,8 +126,8 @@ float FenrirSunShadow(vec3 position, vec3 normal, vec3 l, out int cascade)
 }
 
 // How much of spot light `index` of the light buffer reaches `position`, 0 to 1, for the face's world normal `normal`
-// and `l` towards the light: 1 for a light without a shadow (index frame.lights.y or past it), and on a face turned
-// from the light, which its N.L darkens.
+// and `l` towards the light: 1 for a light without a shadow (index frame.lights.y or past it), on a face turned from the
+// light, which its N.L darkens, and outside its tile (a cone wider than its shadow's 80 degrees).
 float FenrirSpotLightShadow(uint index, vec3 position, vec3 normal, vec3 l)
 {
     float nDotL = dot(normal, l);
@@ -145,10 +145,15 @@ float FenrirSpotLightShadow(uint index, vec3 position, vec3 normal, vec3 l)
     {
         return 1.0;
     }
+    vec3 coords = atlas.xyz / atlas.w;
+    if (any(lessThan(coords.xy, shadow.bounds.xy)) || any(greaterThan(coords.xy, shadow.bounds.zw)))
+    {
+        return 1.0;
+    }
     vec2 texelUv = 1.0 / vec2(textureSize(fenrirSpotShadowAtlas, 0));
     float angle = 6.28318531 * FenrirInterleavedGradientNoise(gl_FragCoord.xy);
-    return FenrirFilteredShadow(fenrirSpotShadowAtlas, atlas.xyz / atlas.w, shadow.bounds.xy, shadow.bounds.zw,
-                                texelUv, shadow.bias.w, angle);
+    return FenrirFilteredShadow(fenrirSpotShadowAtlas, coords, shadow.bounds.xy, shadow.bounds.zw, texelUv,
+                                shadow.bias.w, angle);
 }
 
 // A tint per cascade for CameraDebugView::ShadowCascades: red, green, blue and yellow, white for none.

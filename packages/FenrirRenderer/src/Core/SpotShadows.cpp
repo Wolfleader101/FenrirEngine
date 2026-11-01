@@ -24,6 +24,12 @@ namespace Fenrir::Render
         return {columns, (budget + columns - 1) / columns};
     }
 
+    SpotAtlasTile SpotAtlasTileOf(std::uint32_t tile, SpotAtlasGrid grid) noexcept
+    {
+        const std::uint32_t across = std::max(grid.columns, 1u);
+        return {tile % across, tile / across};
+    }
+
     SpotShadowChoice ChooseSpotShadows(std::span<const PunctualLight> lights, std::span<const Math::Vec3> cameras,
                                        std::uint32_t budget)
     {
@@ -74,26 +80,26 @@ namespace Fenrir::Render
     {
         // Clip x in [-w, w] across its tile, and clip +y up to v 0 at the tile's top (ADR-0016); z and w as drawn. The
         // tile's offset multiplies w, so it survives the shader's divide by it.
-        const std::uint32_t across = std::max(grid.columns, 1u);
-        const auto columns = static_cast<float>(across);
+        const auto columns = static_cast<float>(std::max(grid.columns, 1u));
         const auto rows = static_cast<float>(std::max(grid.rows, 1u));
+        const SpotAtlasTile at = SpotAtlasTileOf(tile, grid);
         Math::Mat4 atlas(1.0f);
         atlas[0][0] = 0.5f / columns;
         atlas[1][1] = -0.5f / rows;
-        atlas[3][0] = (0.5f + static_cast<float>(tile % across)) / columns;
-        atlas[3][1] = (0.5f + static_cast<float>(tile / across)) / rows;
+        atlas[3][0] = (0.5f + static_cast<float>(at.column)) / columns;
+        atlas[3][1] = (0.5f + static_cast<float>(at.row)) / rows;
         return atlas * shadow.viewProjection;
     }
 
     GpuSpotShadow ToGpuSpotShadow(const PunctualLight& light, const SpotShadow& shadow, std::uint32_t tile,
                                   SpotAtlasGrid grid, std::uint32_t mapSize)
     {
-        const std::uint32_t across = std::max(grid.columns, 1u);
-        const auto columns = static_cast<float>(across);
+        const auto columns = static_cast<float>(std::max(grid.columns, 1u));
         const auto rows = static_cast<float>(std::max(grid.rows, 1u));
         const auto size = static_cast<float>(std::max(mapSize, 1u));
-        const auto column = static_cast<float>(tile % across);
-        const auto row = static_cast<float>(tile / across);
+        const SpotAtlasTile at = SpotAtlasTileOf(tile, grid);
+        const auto column = static_cast<float>(at.column);
+        const auto row = static_cast<float>(at.row);
         const Math::Vec2 texel(1.0f / (columns * size), 1.0f / (rows * size));
         const Math::Vec2 reach = (ShadowFilterRadius + 1.0f) * texel;
         const Math::Vec2 low = Math::Vec2(column / columns, row / rows) + reach;
@@ -101,8 +107,7 @@ namespace Fenrir::Render
 
         GpuSpotShadow gpu;
         gpu.atlas = SpotAtlasMatrix(shadow, tile, grid);
-        gpu.bias = Math::Vec4(std::max(light.shadowNormalBias, 0.0f), std::max(light.shadowSlopeBias, 0.0f),
-                              shadow.texelScale, ShadowFilterRadius);
+        gpu.bias = Math::Vec4(light.shadowNormalBias, light.shadowSlopeBias, shadow.texelScale, ShadowFilterRadius);
         gpu.bounds = Math::Vec4(low, high);
         return gpu;
     }

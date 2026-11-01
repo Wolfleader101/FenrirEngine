@@ -26,12 +26,24 @@ namespace Fenrir::Render
     /** @brief The atlas's tiles across and down: as square as the budget allows, `columns` x `rows` >= budget. */
     struct SpotAtlasGrid
     {
+        /** @brief Tiles across. */
         std::uint32_t columns = 0;
+        /** @brief Tiles down. */
         std::uint32_t rows = 0;
     };
 
     /** @brief The grid of `budget` tiles: ceil(sqrt(budget)) across, as many rows as that needs; 0 x 0 for none. */
     [[nodiscard]] SpotAtlasGrid SpotAtlasGridOf(std::uint32_t budget) noexcept;
+
+    /** @brief Where a tile sits in its grid, counted from the top left. */
+    struct SpotAtlasTile
+    {
+        std::uint32_t column = 0;
+        std::uint32_t row = 0;
+    };
+
+    /** @brief Tile `tile` of `grid`, in order along the rows from the top left. */
+    [[nodiscard]] SpotAtlasTile SpotAtlasTileOf(std::uint32_t tile, SpotAtlasGrid grid) noexcept;
 
     /** @brief Which spot lights cast this frame: their places in the frame's light list, nearest first. */
     struct SpotShadowChoice
@@ -53,12 +65,15 @@ namespace Fenrir::Render
     /** @brief A spot light's shadow: what its tile's shadow pass draws with. */
     struct SpotShadow
     {
-        /** @brief World to the light's clip space: a reversed-Z perspective along the light, its near plane `near`. */
+        /** @brief World to the light's view, looking along the light from its position. */
         Math::Mat4 view{1.0f};
+        /** @brief The light's view to its clip space: a square reversed-Z perspective, its near plane `near`. */
         Math::Mat4 projection{1.0f};
+        /** @brief World to the light's clip space: what its tile's shadow pass's view block holds. */
         Math::Mat4 viewProjection{1.0f};
         /** @brief The world size of one of its texels one unit along the light's axis: it grows with the distance. */
         float texelScale = 0.0f;
+        /** @brief Its near plane's distance from the light. */
         float near = 0.0f;
     };
 

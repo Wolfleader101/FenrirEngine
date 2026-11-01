@@ -1975,7 +1975,14 @@ namespace Fenrir::Render
 
     void SceneRenderer::SetSpotShadowBudget(std::uint32_t budget)
     {
+        if (budget == m_spotShadowConfig.budget)
+        {
+            return;
+        }
         m_spotShadowConfig.budget = budget;
+        // Made again at the new size when a spot light next casts, and not kept meanwhile; its frame groups go with it.
+        m_device.Destroy(m_spotAtlas);
+        m_spotAtlas = {};
     }
 
     SceneStats SceneRenderer::TakeStats()
@@ -2945,8 +2952,9 @@ namespace Fenrir::Render
             for (std::uint32_t t = 0; t < spotCount; ++t)
             {
                 const SpotShadow& shadow = spotShadows[t];
-                const PixelRect tile{static_cast<std::int32_t>((t % grid.columns) * tileSize),
-                                     static_cast<std::int32_t>((t / grid.columns) * tileSize), tileSize, tileSize};
+                const SpotAtlasTile at = SpotAtlasTileOf(t, grid);
+                const PixelRect tile{static_cast<std::int32_t>(at.column * tileSize),
+                                     static_cast<std::int32_t>(at.row * tileSize), tileSize, tileSize};
                 const ViewBlock tileBlock{shadow.view,
                                           shadow.projection,
                                           shadow.viewProjection,

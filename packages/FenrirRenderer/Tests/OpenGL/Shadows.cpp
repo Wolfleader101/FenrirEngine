@@ -296,8 +296,12 @@ TEST_CASE("A spot light's shadow on a floor lies where its cone puts it, with no
 {
     // A spot light 5 above the floor at (0, -6), pointing straight down, and a unit box from y 0 to 1 over (1, -6). The
     // light's rays through the box's top (3 below it) reach the floor 5 below at 5/3 of their offset, and through its
-    // bottom at 5/4: the shadow spans x 0.625 to 2.5 along z = -6, out to z -6.83 and -5.17 at x 2.1.
-    const auto render = [](bool castShadows) {
+    // bottom at 5/4: the shadow spans x 0.625 to 2.5 along z = -6, out to z -6.83 and -5.17 at x 2.1. With four more
+    // casting spot lights nearer the camera, pointing up and lighting nothing seen, it takes tile 4 of the three by
+    // three atlas, in its second row, not tile 0.
+    const int nearer = GENERATE(0, 4);
+    CAPTURE(nearer);
+    const auto render = [nearer](bool castShadows) {
         GlScene test;
         test.RequireOpenGL();
         test.app.GetActiveScene().AddResource<Fenrir::Sky>(
@@ -317,6 +321,18 @@ TEST_CASE("A spot light's shadow on a floor lies where its cone puts it, with no
         light.outerAngle = Fenrir::Math::DegToRad(50.0f);
         light.castShadows = castShadows;
         entity.AddComponent<Fenrir::SpotLight>(light);
+        for (int i = 0; i < nearer; ++i)
+        {
+            Fenrir::Entity above = test.app.GetActiveScene().GetEntityList().CreateEntity();
+            above.GetComponent<Fenrir::Transform>().pos = {CameraX + (i % 2 == 0 ? -0.3f : 0.3f), 5.5f,
+                                                           CameraZ + (i < 2 ? -0.3f : 0.3f)};
+            above.GetComponent<Fenrir::Transform>().rot =
+                Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(90.0f), Vec3(1.0f, 0.0f, 0.0f));
+            Fenrir::SpotLight up;
+            up.range = 1.0f;
+            up.castShadows = true;
+            above.AddComponent<Fenrir::SpotLight>(up);
+        }
         const auto target = Target(test, Side, Side);
         AddCameraAt(test, {CameraX, 5.0f, CameraZ},
                     Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(-90.0f), Vec3(1.0f, 0.0f, 0.0f)), target);
