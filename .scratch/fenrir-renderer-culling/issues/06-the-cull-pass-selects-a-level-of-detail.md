@@ -4,9 +4,9 @@
 
 - **Upload:** a mesh's index buffer holds level 0 then each of ticket 05's levels back to back; its entry keeps each level's first index, count and error. A mesh without levels has one.
 - **Templates:** each run writes one command per level of its mesh, contiguous, each with that level's first index and count and its own base instance; each level's region of the indirection is sized for the whole run, as any copy may land in any level.
-- **Selection** in the cull shader, for each survivor: its distance `d` from the camera's position to the sphere's nearest point (zero inside it), and the coarsest level `i` with `error[i] * scale * projection / max(d, near) < RendererConfig::lodErrorPixels`, where `scale` is the copy's largest axis scale and `projection` is the camera's pixels per unit at distance 1 (`height / (2 tan(fov / 2))`, or the orthographic equivalent). The survivor is counted into level `i`'s command.
+- **Selection** in the cull shader, for each survivor: its distance `d` from the camera's position to the sphere's nearest point (zero inside it), and the coarsest level `i` with `error[i] * scale * projection / max(d, near) < RendererConfig::lodErrorPixels`, where `scale` is the copy's largest axis scale and `projection` is the camera's pixels per unit at distance 1 (`height / (2 tan(fov / 2))`, or the orthographic equivalent). The survivor is counted into level `i`'s command. A survivor whose radius projects under `RendererConfig::minProjectedPixels` (0, off) is dropped instead, as if it had failed the frustum.
 - **Draws:** each run's `DrawIndexedIndirect` has `drawCount` equal to its mesh's level count, one multi-draw; `DepthPrepass` and `Opaque` share the choice.
-- **`RendererConfig::lodErrorPixels`** (1.0), with `gpuCulling` off forcing level 0 for comparison; `RendererStats` gains `drawnByLod`, counts per level from ticket 04's readback. The API description gains them (generated output only).
+- **`RendererConfig::lodErrorPixels`** (1.0) **and `minProjectedPixels`** (0), with `gpuCulling` off forcing level 0 and dropping nothing, for comparison; `RendererStats` gains `drawnByLod`, counts per level from ticket 04's readback. The API description gains them (generated output only).
 - A CPU `SelectLod` with the same formula, for tests and the docs.
 
 **Blocked by:** 03, 05
@@ -15,7 +15,7 @@
 
 **Status:** ready-for-agent
 
-- [ ] CPU unit tests: `SelectLod` picks level 0 inside the sphere, coarser levels further out, never past the last, and a scaled copy switches further away than an unscaled one.
+- [ ] CPU unit tests: `SelectLod` picks level 0 inside the sphere, coarser levels further out, never past the last, and a scaled copy switches further away than an unscaled one; with `minProjectedPixels` set, a far copy is dropped and the same copy is kept with it 0.
 - [ ] `RendererProbe` on null: a mesh of three levels uploads one index buffer of all three, writes three templates per run with their first indices, and records multi-draws of three commands in both the prepass and `Opaque`.
 - [ ] GL readback: copies of a three-level mesh in a line away from the camera land in the levels `SelectLod` gives, exactly.
 - [ ] GL pixel probes: a hand-made mesh whose level 1 is a different shape (a box whose coarse level is a smaller box) draws its level 1 when far and level 0 when near; with `gpuCulling` off it draws level 0 at both.
