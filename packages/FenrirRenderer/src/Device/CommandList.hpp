@@ -35,6 +35,8 @@ namespace Fenrir::Graphics
         StorageWrite,
         CopySource,
         CopyDestination,
+        /** @brief Read as vertex input, as the skinned vertex buffer a compute pass wrote is (ADR-0050). */
+        VertexInput,
     };
 
     /** @brief One declared use of a texture or a buffer by a pass: exactly one of the two handles is set. */
@@ -86,7 +88,10 @@ namespace Fenrir::Graphics
         friend bool operator==(const DepthAttachment&, const DepthAttachment&) = default;
     };
 
-    /** @brief A graphics device pass: its queue, the targets it draws into and every resource use it declares. */
+    /**
+     * @brief A graphics device pass: its queue, the targets it draws into and every resource use it declares. A
+     * `Compute` pass has no targets: it records dispatches only.
+     */
     struct PassDesc
     {
         /** @brief The render pass's name, for tools and the backend's debug labels. */
@@ -134,7 +139,7 @@ namespace Fenrir::Graphics
     {
         friend bool operator==(const CmdEndPass&, const CmdEndPass&) = default;
     };
-    /** @brief Draws with a pipeline from here on. */
+    /** @brief Draws, or in a compute pass dispatches, with a pipeline from here on. */
     struct CmdSetPipeline
     {
         PipelineHandle pipeline;
@@ -264,7 +269,7 @@ namespace Fenrir::Graphics
             }
         }
 
-        /** @brief Draws with `pipeline` from here on. */
+        /** @brief Draws, or in a compute pass dispatches, with `pipeline` from here on. */
         void SetPipeline(PipelineHandle pipeline)
         {
             Record(CmdSetPipeline{pipeline});

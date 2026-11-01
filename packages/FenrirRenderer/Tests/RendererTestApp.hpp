@@ -176,6 +176,8 @@ namespace RendererTest
         Fenrir::Graphics::PipelineHandle pipeline;
         std::array<Fenrir::Graphics::BindingGroupHandle, 4> groups{};
         std::vector<Fenrir::Graphics::BufferHandle> vertexBuffers;
+        /** @brief Where each vertex buffer slot's stream starts in its buffer, in bytes. */
+        std::vector<std::size_t> vertexOffsets;
         Fenrir::Graphics::BufferHandle indexBuffer;
         Fenrir::Graphics::CmdDrawIndexed draw;
     };
@@ -210,8 +212,10 @@ namespace RendererTest
                     if (bound.vertexBuffers.size() <= vertices->slot)
                     {
                         bound.vertexBuffers.resize(vertices->slot + 1);
+                        bound.vertexOffsets.resize(vertices->slot + 1);
                     }
                     bound.vertexBuffers.at(vertices->slot) = vertices->buffer;
+                    bound.vertexOffsets.at(vertices->slot) = vertices->offset;
                 }
                 else if (const auto* indices = std::get_if<CmdSetIndexBuffer>(&command))
                 {

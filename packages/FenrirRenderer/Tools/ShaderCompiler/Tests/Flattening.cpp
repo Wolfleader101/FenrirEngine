@@ -5,6 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "FenrirAssets/ShaderGlBindings.hpp"
+#include "FenrirShaders/Compute.hpp"
 #include "FenrirShaders/Flatten.hpp"
 #include "ShaderCompilerTest.hpp"
 
@@ -181,4 +182,32 @@ TEST_CASE("The vertex stage's inputs are reflected by location", "[shader-compil
     INFO("no built-in (gl_VertexIndex) is listed as an input");
     REQUIRE(std::ranges::none_of(variant.vertexInputs,
                                  [](const Fenrir::ShaderVertexInput& i) { return i.name.starts_with("gl_"); }));
+}
+
+TEST_CASE("A compute program has one compute stage, whose GL copy is flattened as a graphics program's",
+          "[shader-compiler][flattening][compute]")
+{
+    const Fenrir::ShaderContainer container = Read(Fenrir::Shaders::Compute);
+    REQUIRE(container.variants.size() == 1);
+    const Fenrir::ShaderVariant& variant = container.variants.front();
+    REQUIRE(variant.stages.size() == 1);
+    REQUIRE(variant.stages.front().stage == Fenrir::ShaderStage::Compute);
+    INFO("it has no vertex inputs, and its three bindings are reflected");
+    REQUIRE(variant.vertexInputs.empty());
+    REQUIRE(variant.bindings.size() == 3);
+
+    const SpirvDecorations original = Decorate(variant.stages.front().spirv);
+    const SpirvDecorations gl = Decorate(variant.stages.front().glSpirv);
+    INFO("as written: the target at set 2 binding 1");
+    REQUIRE(original.byName.at("target").set == 2u);
+    REQUIRE(original.byName.at("target").binding == 1u);
+    INFO("the GL copy: every set 0, the job block at 0, the storage blocks at 8 and 16, each first of its kind in its "
+         "set");
+    for (const char* name : {"job", "source", "target"})
+    {
+        REQUIRE(gl.byName.at(name).set == 0u);
+    }
+    REQUIRE(gl.byName.at("job").binding == Fenrir::GlBindingOf(0, 0));
+    REQUIRE(gl.byName.at("source").binding == Fenrir::GlBindingOf(1, 0));
+    REQUIRE(gl.byName.at("target").binding == Fenrir::GlBindingOf(2, 0));
 }

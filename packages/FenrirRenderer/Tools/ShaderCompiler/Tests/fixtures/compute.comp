@@ -1,0 +1,28 @@
+#version 460
+// A compute program: a block in set 0, and storage blocks in sets 1 and 2, the second at binding 1, so its GL copy's
+// bindings are flattened as a graphics program's are.
+layout(local_size_x = 8) in;
+
+layout(set = 0, binding = 0, std140) uniform Job
+{
+    uint count;
+} job;
+
+layout(set = 1, binding = 0, std430) readonly buffer Source
+{
+    float values[];
+} source;
+
+layout(set = 2, binding = 1, std430) writeonly buffer Target
+{
+    float values[];
+} target;
+
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    if (i < job.count)
+    {
+        target.values[i] = source.values[i] * 2.0;
+    }
+}

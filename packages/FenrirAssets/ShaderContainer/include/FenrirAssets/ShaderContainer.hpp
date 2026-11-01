@@ -16,6 +16,8 @@ namespace Fenrir
     {
         Vertex,
         Fragment,
+        /** @brief A compute program's one stage (ADR-0050's skinning), run by dispatches, never by draws. */
+        Compute,
     };
 
     /** @brief What kind of resource a binding holds. Each kind is counted separately when bindings are flattened. */
@@ -156,7 +158,7 @@ namespace Fenrir
     {
         /** @brief The keys this variant defines, in the order the program lists them. Empty for the base variant. */
         std::vector<std::string> keys;
-        /** @brief Its stages, vertex first. */
+        /** @brief Its stages: vertex then fragment, or a compute program's one compute stage. */
         std::vector<ShaderStageCode> stages;
         /** @brief The vertex stage's inputs, by location. */
         std::vector<ShaderVertexInput> vertexInputs;

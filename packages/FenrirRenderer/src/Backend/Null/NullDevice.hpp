@@ -39,6 +39,8 @@ namespace Fenrir::Graphics
         [[nodiscard]] BindingGroupHandle CreateBindingGroup(const BindingGroupDesc& desc,
                                                             std::string_view label) override;
         [[nodiscard]] PipelineResult CreatePipeline(const PipelineDesc& desc, std::string_view label) override;
+        [[nodiscard]] PipelineResult CreateComputePipeline(const ComputePipelineDesc& desc,
+                                                           std::string_view label) override;
 
         bool WriteBuffer(BufferHandle buffer, std::size_t offset, std::span<const std::byte> bytes) override;
         bool WriteTexture(TextureHandle texture, std::uint32_t mipLevel, std::uint32_t layer,

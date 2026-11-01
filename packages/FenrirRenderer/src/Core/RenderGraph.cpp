@@ -18,11 +18,16 @@ namespace Fenrir::Render
         Graphics::TextureUsage TextureUsageOf(ResourceUsage usage)
         {
             // Indexed by ResourceUsage, in its order.
-            constexpr std::array<Graphics::TextureUsage, 8> byUsage{
-                Graphics::TextureUsage::ColourAttachment, Graphics::TextureUsage::DepthAttachment,
-                Graphics::TextureUsage::DepthAttachment,  Graphics::TextureUsage::Sampled,
-                Graphics::TextureUsage::Storage,          Graphics::TextureUsage::Storage,
-                Graphics::TextureUsage::CopySource,       Graphics::TextureUsage::CopyDestination,
+            constexpr std::array<Graphics::TextureUsage, 9> byUsage{
+                Graphics::TextureUsage::ColourAttachment,
+                Graphics::TextureUsage::DepthAttachment,
+                Graphics::TextureUsage::DepthAttachment,
+                Graphics::TextureUsage::Sampled,
+                Graphics::TextureUsage::Storage,
+                Graphics::TextureUsage::Storage,
+                Graphics::TextureUsage::CopySource,
+                Graphics::TextureUsage::CopyDestination,
+                Graphics::TextureUsage::None,
             };
             return byUsage.at(static_cast<std::size_t>(usage));
         }
@@ -38,6 +43,8 @@ namespace Fenrir::Render
                 return Graphics::BufferUsage::CopySource;
             case ResourceUsage::CopyDestination:
                 return Graphics::BufferUsage::CopyDestination;
+            case ResourceUsage::VertexInput:
+                return Graphics::BufferUsage::Vertex;
             default:
                 return Graphics::BufferUsage::None;
             }
@@ -98,6 +105,11 @@ namespace Fenrir::Render
     void PassBuilder::StorageWrite(GraphResource resource)
     {
         Use(resource, ResourceUsage::StorageWrite, false, true);
+    }
+
+    void PassBuilder::VertexInput(GraphResource buffer)
+    {
+        Use(buffer, ResourceUsage::VertexInput, true, false);
     }
 
     void PassBuilder::CopySource(GraphResource resource)

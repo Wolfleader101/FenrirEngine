@@ -44,6 +44,9 @@ namespace AnimationDemo
             std::array<Fenrir::AssetHandle<Fenrir::Clip>, KenneyClips.size()> clips{};
             std::size_t bonesEach = 0;
             bool playing = true;
+            /** @brief The renderer's compute skinning (ADR-0050), on by default: off, every draw skins in its vertex
+             * stage. */
+            bool computeSkinning = true;
             double frameTime = 0.0;
         };
 
@@ -164,6 +167,13 @@ namespace AnimationDemo
                 }
                 app.Logger()->Info("Crowd: Space, {}", state.playing ? "playing" : "paused");
             }
+            if (keyboard.JustPressed(Fenrir::Key::C))
+            {
+                // The renderer's, so the other scenes keep it as it was left.
+                state.computeSkinning = !state.computeSkinning;
+                Fenrir::Renderer::SetComputeSkinning(app, state.computeSkinning);
+                app.Logger()->Info("Crowd: C, compute skinning {}", state.computeSkinning ? "on" : "off");
+            }
             if (keyboard.JustPressed(Fenrir::Key::R))
             {
                 // Back to the start: every member respawned, playing from its staggered start.
@@ -204,6 +214,9 @@ namespace AnimationDemo
                                          stats.distinctPalettesWritten, stats.paletteBytesUploaded, stats.draws,
                                          stats.instances, stats.skinnedDraws),
                              Colour::FromSrgb(0x80FF80FF));
+            draw->ScreenText({16.0f, 192.0f},
+                             std::format("Compute skinning: {} (C)", state->computeSkinning ? "on" : "off"),
+                             Colour::FromSrgb(0x80FF80FF));
         }
     } // namespace
 
@@ -211,12 +224,13 @@ namespace AnimationDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Crowd";
-        scene.keyHelp = "Up/Down: double or halve the crowd (1 to 1024). Space: pause. R: reset to 64.";
-        // Up to 1024, paused and played, down to 1, then reset.
+        scene.keyHelp = "Up/Down: double or halve the crowd (1 to 1024). Space: pause. C: compute skinning on or off. "
+                        "R: reset to 64.";
+        // Up to 1024, paused and played, compute skinning off and on, down to 1, then reset.
         scene.keys = {Fenrir::Key::Up,    Fenrir::Key::Up,   Fenrir::Key::Up,   Fenrir::Key::Up,   Fenrir::Key::Space,
-                      Fenrir::Key::Space, Fenrir::Key::Down, Fenrir::Key::Down, Fenrir::Key::Down, Fenrir::Key::Down,
+                      Fenrir::Key::Space, Fenrir::Key::C,    Fenrir::Key::C,    Fenrir::Key::Down, Fenrir::Key::Down,
                       Fenrir::Key::Down,  Fenrir::Key::Down, Fenrir::Key::Down, Fenrir::Key::Down, Fenrir::Key::Down,
-                      Fenrir::Key::Down,  Fenrir::Key::R};
+                      Fenrir::Key::Down,  Fenrir::Key::Down, Fenrir::Key::Down, Fenrir::Key::R};
         scene.camera = {{0.0f, 6.0f, 11.0f}, 0.0f, -0.45f};
         scene.spawn = Spawn;
         scene.update = Update;

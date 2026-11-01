@@ -10,6 +10,7 @@
 #include <utility>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include "FenrirSkeleton/Skeletons.hpp"
 #include "GlScene.hpp"
@@ -142,10 +143,17 @@ TEST_CASE("Merged squares each land where their own record puts them", "[rendere
     REQUIRE(test.messages->errors.empty());
 }
 
-TEST_CASE("Merged skinned items each skin from their own palette", "[renderer][gl][instancing][skinning]")
+TEST_CASE(
+    "Skinned items each skin from their own palette, merged with compute skinning off and drawn each from its own "
+    "skinned vertices with it on",
+    "[renderer][gl][instancing][skinning]")
 {
     GlInstanceScene test;
     test.RequireOpenGL();
+    // With compute skinning (ADR-0050) each item's skinned vertices are its own, so it draws on its own; off, matching
+    // items merge and each instance skins from its own palette range.
+    const bool compute = GENERATE(false, true);
+    test.renderer.SetComputeSkinning(compute);
     // Pairs of skeletons, one pair a row, whose one bone rests 0.8 to either side of the pair's place: the row's
     // square lands on the bone, so each instance lands to its own side only through its own palette. Two meshes make
     // two runs, so one starts past record 0.
@@ -159,8 +167,8 @@ TEST_CASE("Merged skinned items each skin from their own palette", "[renderer][g
 
     const GlProbe::Image image = test.Frame();
 
-    INFO("they were two draws of two skinned instances each");
-    REQUIRE(test.renderer.Stats().draws == 2);
+    INFO("compute skinning " << (compute ? "on: four draws" : "off: two draws of two skinned instances each"));
+    REQUIRE(test.renderer.Stats().draws == (compute ? 4 : 2));
     REQUIRE(test.renderer.Stats().instances == 4);
     REQUIRE(test.renderer.Stats().skinnedDraws == 4);
     for (const float row : rows)

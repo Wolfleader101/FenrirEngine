@@ -79,6 +79,8 @@ namespace Fenrir::Graphics
         [[nodiscard]] BindingGroupHandle CreateBindingGroup(const BindingGroupDesc& desc,
                                                             std::string_view label) override;
         [[nodiscard]] PipelineResult CreatePipeline(const PipelineDesc& desc, std::string_view label) override;
+        [[nodiscard]] PipelineResult CreateComputePipeline(const ComputePipelineDesc& desc,
+                                                           std::string_view label) override;
 
         bool WriteBuffer(BufferHandle buffer, std::size_t offset, std::span<const std::byte> bytes) override;
         /** @copydoc GraphicsDevice::WriteTexture Texels of the wrong size for that level are refused, logged. */
@@ -144,11 +146,15 @@ namespace Fenrir::Graphics
             std::vector<std::uint32_t> indicesInKind;
         };
 
-        /** @brief The code of one program: the GL SPIR-V of its vertex and fragment stages. */
+        /**
+         * @brief The code of one program: the GL SPIR-V of its vertex and fragment stages, or of a compute program's
+         * one stage.
+         */
         struct ProgramKey
         {
             std::vector<std::uint32_t> vertex;
             std::vector<std::uint32_t> fragment;
+            std::vector<std::uint32_t> compute;
 
             friend auto operator<=>(const ProgramKey&, const ProgramKey&) = default;
         };
@@ -160,11 +166,15 @@ namespace Fenrir::Graphics
             std::uint32_t users = 0;
         };
 
-        /** @brief A pipeline: its program's code, the vertex array of its vertex input, and its fixed state. */
+        /**
+         * @brief A pipeline: its program's code, the vertex array of its vertex input, and its fixed state; a compute
+         * pipeline has only its program.
+         */
         struct GlPipeline
         {
             const ProgramKey* program = nullptr;
             std::uint32_t programName = 0;
+            bool compute = false;
             std::uint32_t vertexArray = 0;
             std::vector<std::uint32_t> strides;
             Topology topology = Topology::Triangles;
@@ -190,6 +200,9 @@ namespace Fenrir::Graphics
         {
             /** @brief Whether the pass is skipped, every command up to its end ignored: its targets are stale. */
             bool skipping = false;
+            /** @brief Whether the pass is a compute pass, and whether it declares storage writes. */
+            bool computing = false;
+            bool storageWrites = false;
             bool drawingToBackbuffer = false;
             std::uint32_t targetHeight = 0;
             const GlPipeline* pipeline = nullptr;
@@ -229,6 +242,12 @@ namespace Fenrir::Graphics
         std::uint32_t FramebufferFor(const PassDesc& pass);
         /** @brief Deletes the framebuffers that draw into the texture named `name`, as it is deleted. */
         void ForgetFramebuffers(std::uint32_t name);
+        /**
+         * @brief The linked program for `key`, counting one more user, made the first time; the map's end, with
+         * `diagnostic` saying why, when a stage cannot be specialised or the program not linked.
+         */
+        std::map<ProgramKey, GlProgram>::iterator ProgramFor(ProgramKey key, std::string_view label,
+                                                             std::string& diagnostic);
         /** @brief Lets go of a destroyed pipeline's GL objects, deleting its program once no pipeline uses it. */
         void ReleasePipeline(GlPipeline& pipeline);
         /** @brief `rect` from the target's top-left corner, in GL's window coordinates for the current pass. */

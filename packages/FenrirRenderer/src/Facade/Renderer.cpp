@@ -1427,8 +1427,9 @@ namespace Fenrir
             return Renderer(nullptr);
         }
         state->core = std::make_unique<Render::RendererCore>(std::move(made), *state->surface);
-        auto scene = std::make_unique<Render::SceneRenderer>(state->core->Device(), *app.Logger(),
-                                                             SupportedMsaa(app, config), config.automaticInstancing);
+        auto scene =
+            std::make_unique<Render::SceneRenderer>(state->core->Device(), *app.Logger(), SupportedMsaa(app, config),
+                                                    config.automaticInstancing, config.computeSkinning);
         state->scene = scene.get();
         // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
         // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).
@@ -1479,6 +1480,14 @@ namespace Fenrir
         if (m_state != nullptr)
         {
             m_state->scene->SetAutomaticInstancing(on);
+        }
+    }
+
+    void Renderer::SetComputeSkinning(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetComputeSkinning(on);
         }
     }
 
@@ -1661,6 +1670,11 @@ namespace Fenrir
     void Renderer::SetAutomaticInstancing(App& app, bool on)
     {
         Renderer(InstalledState(app)).SetAutomaticInstancing(on);
+    }
+
+    void Renderer::SetComputeSkinning(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetComputeSkinning(on);
     }
 
     RendererStats Renderer::Stats(App& app)

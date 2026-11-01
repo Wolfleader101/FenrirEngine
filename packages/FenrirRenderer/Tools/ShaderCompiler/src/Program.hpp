@@ -17,6 +17,8 @@ namespace Fenrir::ShaderCompiler
         std::string name;
         std::filesystem::path vertex;
         std::filesystem::path fragment;
+        /** @brief A compute program's one stage, instead of `vertex` and `fragment`. */
+        std::filesystem::path compute;
         /** @brief Its variant keys: every combination is built. */
         std::vector<std::string> keys;
         /** @brief Searched for `#include`, in order, after the including file's own directory. */

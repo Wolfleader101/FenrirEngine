@@ -727,6 +727,10 @@ One of the pose pipeline's public steps that others add work to, `Animate`, `Mod
 One matrix per bone (model-space × inverse bind) that skinned vertices are moved by; one per skeleton instance, shared by every mesh skinned to it, built lazily for the current pose generation. The renderer uploads it as rows of 3×4 affine matrices (ADR-0035).
 *Avoid:* bone-matrix buffer (the renderer's upload of it), joint matrices.
 
+**Compute skinning**
+The renderer skinning each skinned mesh once a frame, in a compute pass before any view's, into a skinned vertex buffer that every pass then draws rigidly; with it off, each draw skins its mesh again in its vertex stage, under the shader's `SKINNED` variant (ADR-0050).
+*Avoid:* GPU skinning (both kinds are), pre-skinning.
+
 **Skinning source**
 `SkinningSource`: the interface, declared in FenrirAssets, through which the renderer reads a skeleton instance's state, pose generation, skinning palette and model matrices, and spawns a model's skeletons. FenrirSkeleton registers its implementation at install; with none registered, rigid meshes still draw and skinned draws are skipped (ADR-0041).
 *Avoid:* skeleton service, pose provider, animation backend.

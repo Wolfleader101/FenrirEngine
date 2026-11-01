@@ -45,6 +45,11 @@ namespace Fenrir::Render
         DepthPrepass,
         /** @brief `builtin:gtao`: a view's GTAO from its depth prepass, the horizon search and, DENOISE, the blur. */
         Gtao,
+        /**
+         * @brief `builtin:skinning`: a compute program, each skinned mesh's vertices skinned once a frame for every
+         * pass to draw rigidly (ADR-0050).
+         */
+        Skinning,
     };
 
     /** @brief A built-in program's `builtin:` name and its embedded container's bytes. */
