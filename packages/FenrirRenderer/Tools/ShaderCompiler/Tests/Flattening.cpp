@@ -61,9 +61,9 @@ TEST_CASE("The GL copy flattens every resource kind's bindings and zeroes the se
 {
     const auto gl = Resources(true);
 
-    INFO("the fixture's fourteen resources are all decorated: its own eight, and Frame.glsl's three sky textures, "
-         "light buffer and two LTC tables");
-    REQUIRE(gl.size() == 14);
+    INFO("the fixture's fifteen resources are all decorated: its own eight, Frame.glsl's three sky textures, light "
+         "buffer and two LTC tables, and Draw.glsl's instance-list buffer");
+    REQUIRE(gl.size() == 15);
     for (const auto& [name, decoration] : gl)
     {
         INFO(name << "'s descriptor set is zeroed");
@@ -81,9 +81,11 @@ TEST_CASE("The GL copy flattens every resource kind's bindings and zeroes the se
     REQUIRE(gl.at("first").binding == 16u);
     REQUIRE(gl.at("middle").binding == 17u);
     REQUIRE(gl.at("second").binding == 18u);
-    INFO("storage blocks: draws (set 3 binding 0) and lights (3, 2) are set 3's storage blocks 0 and 1");
+    INFO("storage blocks: draws (set 3 binding 0), fenrirInstances (3, 1) and lights (3, 3) are set 3's storage "
+         "blocks 0, 1 and 2");
     REQUIRE(gl.at("draws").binding == 24u);
-    REQUIRE(gl.at("lights").binding == 25u);
+    REQUIRE(gl.at("fenrirInstances").binding == 25u);
+    REQUIRE(gl.at("lights").binding == 26u);
 }
 
 TEST_CASE("The SPIR-V kept for Vulkan has the sets and bindings as written", "[shader-compiler][flattening]")
@@ -93,9 +95,9 @@ TEST_CASE("The SPIR-V kept for Vulkan has the sets and bindings as written", "[s
     INFO("extra is still set 1 binding 2");
     REQUIRE(spirv.at("extra").set == 1u);
     REQUIRE(spirv.at("extra").binding == 2u);
-    INFO("lights is still set 3 binding 2");
+    INFO("lights is still set 3 binding 3");
     REQUIRE(spirv.at("lights").set == 3u);
-    REQUIRE(spirv.at("lights").binding == 2u);
+    REQUIRE(spirv.at("lights").binding == 3u);
 }
 
 TEST_CASE("The GL copy reads VertexId where the shader read gl_VertexIndex", "[shader-compiler][flattening]")
@@ -136,8 +138,9 @@ TEST_CASE("Each binding is reflected with its set, kind and name", "[shader-comp
             variant.bindings, [&](const Fenrir::ShaderBinding& b) { return b.set == set && b.binding == binding; });
     };
 
-    INFO("fourteen bindings across both stages, six of them Frame.glsl's sky textures, light buffer and LTC tables");
-    REQUIRE(variant.bindings.size() == 14);
+    INFO("fifteen bindings across both stages, six of them Frame.glsl's sky textures, light buffer and LTC tables, and "
+         "one Draw.glsl's instance-list buffer");
+    REQUIRE(variant.bindings.size() == 15);
     INFO("set 0 binding 0 is the FrameData uniform block from Fenrir/Frame.glsl");
     REQUIRE(find(0, 0)->kind == Fenrir::ShaderBindingKind::UniformBuffer);
     REQUIRE(find(0, 0)->name == "FrameData");
@@ -156,8 +159,8 @@ TEST_CASE("A storage block ending in a runtime array is reflected one record lon
         variant.bindings, [](const Fenrir::ShaderBinding& b) { return b.set == 3 && b.binding == 0; });
     REQUIRE(draws != variant.bindings.end());
 
-    INFO("DrawData holds DrawItem items[]: two mat4s, a uint and a float, padded to 144 bytes in std430");
-    REQUIRE(draws->size == 144);
+    INFO("DrawData holds DrawItem items[]: two mat4s, a uint, a float, two uints and a vec4, 160 bytes in std430");
+    REQUIRE(draws->size == 160);
 }
 
 TEST_CASE("The vertex stage's inputs are reflected by location", "[shader-compiler][reflection]")

@@ -18,6 +18,7 @@
 #include "Facade/RendererState.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/ImageData.hpp"
+#include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/ShaderData.hpp"
 #include "FenrirAssets/SkeletonData.hpp"
@@ -218,6 +219,13 @@ namespace Fenrir
                 if (!store.IsValid(HandleOf<Shader>(key)))
                 {
                     scene.ReleaseShader(key);
+                }
+            }
+            for (const AssetKey key : scene.InstanceListKeys())
+            {
+                if (!store.IsValid(HandleOf<InstanceList>(key)))
+                {
+                    scene.ReleaseInstanceList(key);
                 }
             }
             for (const AssetKey key : draw2D.ShaderKeys())
@@ -927,8 +935,100 @@ namespace Fenrir
         }
 
         /**
-         * @brief The active scene's visible MeshRenderers as `frame`'s draws, preparing what they name, and the
-         * palettes their skinned draws read.
+         * @brief The material entity `id`'s renderer draws with, prepared: empty for the fallback material, logged once
+         * per handle.
+         */
+        AssetKey DrawnMaterial(Detail::RendererState& state, const AssetStore& store, std::uint32_t id,
+                               AssetHandle<Material> material)
+        {
+            if (PrepareMaterial(state, store, material))
+            {
+                return KeyOf(material);
+            }
+            if (state.fallbackMaterials.ShouldLog(material))
+            {
+                state.app->Logger()->Warn("FenrirRenderer: entity {} names {} material, so it is drawn with the "
+                                          "fallback material",
+                                          id, material.IsEmpty() ? "no" : "a stale");
+            }
+            return {};
+        }
+
+        /**
+         * @brief Prepares entity `id`'s mesh to draw, saying whether it could: false, logged once per handle, for a
+         * stale one.
+         */
+        bool PrepareDrawnMesh(Detail::RendererState& state, const AssetStore& store, std::uint32_t id,
+                              AssetHandle<Mesh> mesh)
+        {
+            if (PrepareMesh(*state.scene, store, mesh))
+            {
+                return true;
+            }
+            if (state.staleMeshes.ShouldLog(mesh))
+            {
+                state.app->Logger()->Warn("FenrirRenderer: entity {} names a stale mesh ({}), so it is not drawn", id,
+                                          mesh.index);
+            }
+            return false;
+        }
+
+        /**
+         * @brief The active scene's visible InstancedMeshRenderers as draws of their instance lists (ADR-0051),
+         * preparing what they name: each list uploaded when it is new or its revision has moved on.
+         */
+        void ReadInstancedDraws(Detail::RendererState& state, const AssetStore& store, Scene& scene,
+                                std::vector<Render::DrawRequest>& draws)
+        {
+            EntityList& entities = scene.GetEntityList();
+            const std::array<ComponentType, 1> renderers{ComponentType::Native<InstancedMeshRenderer>()};
+            entities.ForEachWith(renderers, [&](std::uint32_t id) {
+                const Entity entity = entities.GetEntity(id);
+                const InstancedMeshRenderer& renderer = entity.GetComponent<InstancedMeshRenderer>();
+                if (!renderer.visible || renderer.mesh.IsEmpty() || renderer.instances.IsEmpty() ||
+                    !PrepareDrawnMesh(state, store, id, renderer.mesh))
+                {
+                    return;
+                }
+                const InstanceListData* list = store.TryGet(renderer.instances);
+                if (list == nullptr)
+                {
+                    if (state.staleInstanceLists.ShouldLog(renderer.instances))
+                    {
+                        state.app->Logger()->Warn("FenrirRenderer: entity {} names a stale instance list ({}), so it "
+                                                  "is not drawn",
+                                                  id, renderer.instances.index);
+                    }
+                    return;
+                }
+                if (store.TryGet(renderer.mesh)->skin.has_value())
+                {
+                    if (state.skinnedListMeshes.ShouldLog(renderer.mesh))
+                    {
+                        state.app->Logger()->Warn("FenrirRenderer: entity {}'s InstancedMeshRenderer names mesh {}, "
+                                                  "which has skin data, so it is not drawn: instance lists draw rigid "
+                                                  "meshes only",
+                                                  id, renderer.mesh.index);
+                    }
+                    return;
+                }
+                const std::uint32_t revision = store.Revision(renderer.instances);
+                if (!state.scene->IsInstanceListCurrent(KeyOf(renderer.instances), revision))
+                {
+                    state.scene->PrepareInstanceList(KeyOf(renderer.instances), revision, *list);
+                }
+                Render::DrawRequest draw;
+                draw.mesh = KeyOf(renderer.mesh);
+                draw.material = DrawnMaterial(state, store, id, renderer.material);
+                draw.world = GetWorldMatrix(entity);
+                draw.instances = KeyOf(renderer.instances);
+                draws.push_back(draw);
+            });
+        }
+
+        /**
+         * @brief The active scene's visible MeshRenderers and InstancedMeshRenderers as `frame`'s draws, preparing what
+         * they name, and the palettes their skinned draws read.
          */
         void ReadDraws(Detail::RendererState& state, const AssetStore& store, Scene& scene, Render::SceneFrame& frame)
         {
@@ -945,28 +1045,13 @@ namespace Fenrir
                 {
                     return;
                 }
-                if (!PrepareMesh(*state.scene, store, renderer.mesh))
+                if (!PrepareDrawnMesh(state, store, id, renderer.mesh))
                 {
-                    if (state.staleMeshes.ShouldLog(renderer.mesh))
-                    {
-                        state.app->Logger()->Warn("FenrirRenderer: entity {} names a stale mesh ({}), so it is not "
-                                                  "drawn",
-                                                  id, renderer.mesh.index);
-                    }
                     return;
                 }
                 Render::DrawRequest draw;
                 draw.mesh = KeyOf(renderer.mesh);
-                if (PrepareMaterial(state, store, renderer.material))
-                {
-                    draw.material = KeyOf(renderer.material);
-                }
-                else if (state.fallbackMaterials.ShouldLog(renderer.material))
-                {
-                    state.app->Logger()->Warn("FenrirRenderer: entity {} names {} material, so it is drawn with the "
-                                              "fallback material",
-                                              id, renderer.material.IsEmpty() ? "no" : "a stale");
-                }
+                draw.material = DrawnMaterial(state, store, id, renderer.material);
                 const MeshData& data = *store.TryGet(renderer.mesh);
                 if (data.skin.has_value())
                 {
@@ -989,6 +1074,7 @@ namespace Fenrir
                 }
                 draws.push_back(draw);
             });
+            ReadInstancedDraws(state, store, scene, draws);
             // The compatibility verdicts of mesh entities no longer drawn skinned go.
             std::erase_if(state.skinPairings, [&](const auto& entry) { return !drawn.contains(entry.first); });
             frame.palettes = static_cast<std::uint32_t>(ranges.size());
@@ -1388,6 +1474,14 @@ namespace Fenrir
         return FromDevice(m_state->core->Device().SetVsync(ToDevice(mode)));
     }
 
+    void Renderer::SetAutomaticInstancing(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetAutomaticInstancing(on);
+        }
+    }
+
     std::optional<Math::AABB> Renderer::GetWorldBounds(const Entity& entity) const
     {
         if (m_state == nullptr || !entity.IsValid() || !entity.HasComponent<MeshRenderer>())
@@ -1562,6 +1656,11 @@ namespace Fenrir
     std::optional<Math::AABB> Renderer::GetWorldBounds(App& app, const Entity& entity)
     {
         return Renderer(InstalledState(app)).GetWorldBounds(entity);
+    }
+
+    void Renderer::SetAutomaticInstancing(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetAutomaticInstancing(on);
     }
 
     RendererStats Renderer::Stats(App& app)

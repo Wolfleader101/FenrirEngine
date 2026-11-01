@@ -64,10 +64,18 @@ public sealed class BoneMask
     }
 }
 
+/// <summary>An instance list asset: transforms and colours of many copies of one mesh, drawn by one entity. Never made.</summary>
+public sealed class InstanceList
+{
+    private InstanceList()
+    {
+    }
+}
+
 /// <summary>
 /// Names one asset of kind <typeparamref name="T"/> (<see cref="Mesh"/>, <see cref="Image"/>, <see cref="Material"/>,
-/// <see cref="Shader"/>, <see cref="Model"/>, <see cref="Skeleton"/>, <see cref="Clip"/> or <see cref="BoneMask"/>) in
-/// the asset store, laid out exactly like FenrirAssets' <c>AssetHandle&lt;T&gt;</c>: a slot index and the slot's
+/// <see cref="Shader"/>, <see cref="Model"/>, <see cref="Skeleton"/>, <see cref="Clip"/>, <see cref="BoneMask"/> or
+/// <see cref="InstanceList"/>) in the asset store, laid out exactly like FenrirAssets' <c>AssetHandle&lt;T&gt;</c>: a slot index and the slot's
 /// generation when the asset was made (ADR-0021). Plain data that keeps nothing alive. Once the asset is freed the
 /// handle is stale: it no longer resolves, and everything that takes it does nothing. <c>default</c> is the empty
 /// handle, which names no asset.
@@ -129,5 +137,6 @@ internal static class AssetKind<T> where T : class
         typeof(T) == typeof(Skeleton) ? AssetKind.Skeleton :
         typeof(T) == typeof(Clip) ? AssetKind.Clip :
         typeof(T) == typeof(BoneMask) ? AssetKind.BoneMask :
+        typeof(T) == typeof(InstanceList) ? AssetKind.InstanceList :
         Unknown;
 }

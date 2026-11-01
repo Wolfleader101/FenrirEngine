@@ -18,6 +18,7 @@ namespace Fenrir::Generated
             extension.components = {
                 Fenrir::MakeComponent<Fenrir::Camera>("Fenrir.Renderer.Camera"),
                 Fenrir::MakeComponent<Fenrir::DirectionalLight>("Fenrir.Renderer.DirectionalLight"),
+                Fenrir::MakeComponent<Fenrir::InstancedMeshRenderer>("Fenrir.Renderer.InstancedMeshRenderer"),
                 Fenrir::MakeComponent<Fenrir::MeshRenderer>("Fenrir.Renderer.MeshRenderer"),
                 Fenrir::MakeComponent<Fenrir::PointLight>("Fenrir.Renderer.PointLight"),
                 Fenrir::MakeComponent<Fenrir::RectLight>("Fenrir.Renderer.RectLight"),

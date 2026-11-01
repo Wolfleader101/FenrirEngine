@@ -72,6 +72,12 @@ TEST_CASE("C#'s new DirectionalLight() has C++'s Fenrir::DirectionalLight{} defa
     CheckDefaults<Fenrir::DirectionalLight>(Fenrir::ScriptingProbe::Component(app.scripting), "DirectionalLight");
 }
 
+TEST_CASE("C#'s new InstancedMeshRenderer() has C++'s Fenrir::InstancedMeshRenderer{} defaults, field by field", "[renderer][scripting][bindings]")
+{
+    Fenrir::Testing::RendererScriptingApp app;
+    CheckDefaults<Fenrir::InstancedMeshRenderer>(Fenrir::ScriptingProbe::Component(app.scripting), "InstancedMeshRenderer");
+}
+
 TEST_CASE("C#'s new MeshRenderer() has C++'s Fenrir::MeshRenderer{} defaults, field by field", "[renderer][scripting][bindings]")
 {
     Fenrir::Testing::RendererScriptingApp app;

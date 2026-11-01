@@ -12,6 +12,7 @@ fenrir_add_demo_app(LightingDemo
         src/ShowcaseModels.cpp
         src/ManyLights.cpp
         src/Showroom.cpp
+        src/AsteroidRing.cpp
     ASSETS assets
 )
 # The grid's labels and the missing-assets message are drawn through the scene's DebugDraw.

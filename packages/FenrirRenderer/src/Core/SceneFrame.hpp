@@ -51,6 +51,12 @@ namespace Fenrir::Render
         /** @brief Local to world; for a skinned item, its skeleton entity's world matrix. */
         Math::Mat4 world{1.0f};
         /**
+         * @brief An InstancedMeshRenderer's instance list (ADR-0051), prepared with PrepareInstanceList: drawn once per
+         * copy, at `world` times the copy's transform, in one draw never merged with others. Empty for one item at
+         * `world`; a list not prepared, or with no copies, draws nothing.
+         */
+        AssetKey instances;
+        /**
          * @brief Whether it is skinned (ADR-0035): drawn with its shader's `SKINNED` variant from the palette entries
          * starting at `paletteOffset` in SceneFrame::palette. Only a mesh with skin data is drawn skinned.
          */

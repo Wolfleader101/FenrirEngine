@@ -10,6 +10,7 @@ public static class Defaults
 {
     public static global::Fenrir.Renderer.Camera Camera() => new();
     public static global::Fenrir.Renderer.DirectionalLight DirectionalLight() => new();
+    public static global::Fenrir.Renderer.InstancedMeshRenderer InstancedMeshRenderer() => new();
     public static global::Fenrir.Renderer.MeshRenderer MeshRenderer() => new();
     public static global::Fenrir.Renderer.PointLight PointLight() => new();
     public static global::Fenrir.Renderer.RectLight RectLight() => new();

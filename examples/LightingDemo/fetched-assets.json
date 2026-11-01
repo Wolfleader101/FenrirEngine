@@ -181,6 +181,96 @@
       "licence": "CC0-1.0"
     },
     {
+      "path": "moon_rock_02/moon_rock_02.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/moon_rock_02/moon_rock_02.bin",
+      "sha256": "3ba6af10eebb46347e4e0c9d3e2a836d1328525d9d47e82b798a13d9ca2b216f",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_02/moon_rock_02_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/moon_rock_02/moon_rock_02_1k.gltf",
+      "sha256": "fada2419ab6de440c24081bf06545f37c41c3d4f8bb57fc4d1ba45bdb35baf5d",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_02/textures/moon_rock_02_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_02/moon_rock_02_arm_1k.jpg",
+      "sha256": "4b87eaca9c57ecb145b26033cfb9fbb03191b67777458e4e699eaca823cca0e2",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_02/textures/moon_rock_02_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_02/moon_rock_02_diff_1k.jpg",
+      "sha256": "2df7bedcd0f169d76f37af52768c2a674019b6c6b812492a47c230726cff96ad",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_02/textures/moon_rock_02_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_02/moon_rock_02_nor_gl_1k.jpg",
+      "sha256": "6c7a4c51e89ee1b66b243a8341e8491bcc5a9151c30feee5b35e19742106f872",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_03/moon_rock_03.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/moon_rock_03/moon_rock_03.bin",
+      "sha256": "b9e79d1c12719515f48b8e27ddf692f9e2076ad4eafd1cf4a4d12d1bcc6d85df",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_03/moon_rock_03_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/moon_rock_03/moon_rock_03_1k.gltf",
+      "sha256": "aee7860497473cba4d06038abaa37e6da675cc97a4e7fa2fdee28ebf8844eea1",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_03/textures/moon_rock_03_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_03/moon_rock_03_arm_1k.jpg",
+      "sha256": "748403657a81b7c38c2cf8ddce22d8f41212a33a41520a92df79ba31c9b229dc",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_03/textures/moon_rock_03_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_03/moon_rock_03_diff_1k.jpg",
+      "sha256": "ab94cec085c5e6c5db832f7c69c504bfefcffce0a0c2215f592ebcbbaa12862b",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_03/textures/moon_rock_03_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_03/moon_rock_03_nor_gl_1k.jpg",
+      "sha256": "b5ace21b213a3c76ba6e0fabd37a9150ef4b525214fb5eba17546ec480f14bf7",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_07/moon_rock_07.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/moon_rock_07/moon_rock_07.bin",
+      "sha256": "86d82068bc2d7f65cf653e9e591cd14b40e3ef893924dba46a8c9747269f1e14",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_07/moon_rock_07_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/moon_rock_07/moon_rock_07_1k.gltf",
+      "sha256": "5aec6881f1c76cfd57a9c58c356bf2bf69c5acb80705246fc5df63dde9fc906e",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_07/textures/moon_rock_07_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_07/moon_rock_07_arm_1k.jpg",
+      "sha256": "b3e39d8b88a181960c6b950c9f7642addbec3793aeda319e577d5154d9ec4be3",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_07/textures/moon_rock_07_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_07/moon_rock_07_diff_1k.jpg",
+      "sha256": "ea0228898a9ee7cbca4392aa385d5998f6769adcc70b3d778ccde4b944029617",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_07/textures/moon_rock_07_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_07/moon_rock_07_nor_gl_1k.jpg",
+      "sha256": "c5c40bd39c605ac2128bfa17d869868c73dad9af830fcda5be0f84ea83cebea6",
+      "licence": "CC0-1.0"
+    },
+    {
       "path": "panoramas/studio_small_09_2k.hdr",
       "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/studio_small_09_2k.hdr",
       "sha256": "36724313c0fc66dab126ff90f081b85a0b1ef47be65eda1417bd20b033f0573f",
@@ -197,6 +287,12 @@
       "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/venice_sunset_2k.hdr",
       "sha256": "cbfac020ee17ab36016ccc7fbe9020b828587b9864af6ecda0a93089914889a6",
       "licence": "CC0-1.0"
+    },
+    {
+      "path": "planets/2k_jupiter.jpg",
+      "url": "https://www.solarsystemscope.com/textures/download/2k_jupiter.jpg",
+      "sha256": "b0f04d005350252636b0e3396fc592548cbd9e9126b269d32d5c6abd4b0e4f2b",
+      "licence": "CC-BY-4.0"
     }
   ]
 }

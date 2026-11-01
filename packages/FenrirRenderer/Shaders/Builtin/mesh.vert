@@ -34,7 +34,8 @@ void main()
     vTangent = vec4(mat3(item.world) * inTangent.xyz, inTangent.w * item.worldSign);
 #endif
     vWorldPosition = world.xyz;
-    vColour = inColour;
+    // White but for an instance list's copies, whose colours tint them (ADR-0051).
+    vColour = inColour * item.colour;
     vUv = inUv0;
     gl_Position = view.viewProjection * world;
 }

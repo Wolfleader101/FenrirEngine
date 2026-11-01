@@ -286,7 +286,9 @@ vec4 FenrirLitColour(FenrirSurface surface)
               frame.skyLight.x;
 
     colour += surface.emissive;
-    return vec4(colour, surface.alpha);
+    // SceneColor is RGBA16F: a glint past its largest finite value would be written as infinity, which the bloom
+    // chain turns to NaN and spreads over its coarsest levels' texels, a flickering black box.
+    return vec4(min(colour, vec3(65504.0)), surface.alpha);
 }
 
 #endif

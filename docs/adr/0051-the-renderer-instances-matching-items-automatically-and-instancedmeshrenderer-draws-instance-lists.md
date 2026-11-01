@@ -17,3 +17,9 @@ ADR-0019 made each draw-list item one draw, with "no automatic instancing", and 
 - **`InstancedMeshRenderer { mesh, material, instances, castShadows, visible }`** draws an **instance list**: a FenrirAssets asset holding many transforms relative to the entity, each with an optional colour, read in shaders through `Fenrir/Draw.glsl`. There is no entity per copy.
 - **An asset, not a vector in the component**, so the renderer can tell when it changed: a static field uploads once, and an edit bumps the asset's revision. A component vector would upload every frame.
 - **No per-instance culling yet.** Revisit with GPU culling, through indirect draws, when reading the scene or drawing off-screen copies shows up in a frame.
+- *Built in lighting ticket 13 (2026-11-01):* every instance list's copies (transform, normal matrix, colour) are packed
+  into one storage buffer at set 3 binding 1, made again whenever a list is prepared or released; the palette moved to
+  binding 2 (ADR-0035 amended). A list's draw has one record, at its base instance, carrying its first copy and count;
+  `CurrentDraw()` composes the entity's matrices with the copy's. Every record gains a colour, white but for a copy's,
+  which the built-in programs multiply the vertex colour by. `Renderer::SetAutomaticInstancing` turns merging off and on
+  at run time.

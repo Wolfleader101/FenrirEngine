@@ -22,7 +22,7 @@ with G, dark creases and corners on white, no dark halo round a model's silhouet
 ## Assets
 
 Committed ones are in `assets/` (`assets/ATTRIBUTION.md`); the large ones are fetched (ADR-0052). Configure with
-`-DFENRIR_FETCH_DEMO_ASSETS=ON` and CMake downloads every file `fetched-assets.json` lists, about 100 MB, into
+`-DFENRIR_FETCH_DEMO_ASSETS=ON` and CMake downloads every file `fetched-assets.json` lists, about 110 MB, into
 `FENRIR_DEMO_ASSET_CACHE` (by default `%LOCALAPPDATA%/FenrirEngine/demo-assets` on Windows, else
 `$XDG_CACHE_HOME/FenrirEngine/demo-assets` or `~/.cache/FenrirEngine/demo-assets`), outside the build directory, and
 checks each one's SHA-256: a file whose hash is not the manifest's fails configure, naming it. A file already cached with
@@ -30,7 +30,8 @@ the right hash is not downloaded again, so a clean build reuses the cache. The a
 by absolute path; nothing is copied into the build.
 
 `fetched-assets.json` holds `{"assets": [{"path", "url", "sha256", "licence"}]}`: the file's place in the cache, its
-pinned upstream URL (Khronos glTF-Sample-Assets at a commit, or Poly Haven), its SHA-256 and its SPDX licence. A file is
+pinned upstream URL (Khronos glTF-Sample-Assets at a commit, Poly Haven, or Solar System Scope), its SHA-256 and its
+SPDX licence. A file is
 added only after its licence has been checked and written into `assets/ATTRIBUTION.md`.
 
 A scene whose fetched assets are missing is empty, with an on-screen message naming `FENRIR_FETCH_DEMO_ASSETS`. Smoke runs
@@ -144,6 +145,45 @@ Hand checks, on OpenGL:
 - The helmets' metal shows the lights' shapes in its highlights; the room stays dark beyond the lights' ranges.
 - Without the fetched assets: bare plinths and an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
 
+### Asteroid ring
+
+A planet forty metres across, in Solar System Scope's Jupiter texture, ringed from 30 to 55 metres out by 100,000 rocks
+of three Poly Haven moon-rock kinds (ADR-0051): one InstancedMeshRenderer each, on children of one ring entity, so the
+ring is three draws a pass however many rocks it holds, its copies each turned, scaled, squashed and tinted at random.
+Poly Haven's rocks have 3,300 to 6,800 triangles each and the renderer has no LODs, so the demo simplifies each mesh at
+spawn by vertex clustering: on 5 cells a side for the ring, whose rocks are a few pixels across, and 16 for the field.
+At full detail the ring took 136 ms a frame in Release on an RTX 5080, shading micro-triangles; simplified, 9 ms.
+The ring entity turns slowly about the planet; its lists were uploaded once and are not uploaded again as it turns.
+Beside the ring's outer edge floats a field of 5,000 rock entities, each its own MeshRenderer in one of nine tinted
+materials, which automatic instancing merges into a handful of draws, and beside the field a station: a hull and six
+modules on spokes, glowing windows (emissive, strength 6) and on each module a coloured beacon with a point light that
+lights the field's nearest rocks. The sky is a starfield panorama the demo makes at spawn: faint blue-black, a soft milky
+band round a tilted great circle and stars, a few bright enough to bloom. A sun lights everything from one side. The
+rocks and the planet's texture are fetched; without them the ring is spheres and cubes and the planet plain, and the
+scene says so on screen.
+
+The window's Scene part has the ring's count (cutting each list to its share, which bumps its revision and uploads it
+again), the merging switch (Renderer::SetAutomaticInstancing: the renderer's, so the other scenes keep it as it was left), the
+ring turning, and the last frame's draws, instances
+and uploads.
+
+| Keys | |
+| --- | --- |
+| T, E, B, O, G | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the raw occlusion view. |
+| N | 10k, 50k or 100k ring rocks. |
+| I | Automatic instancing off or back on: the field's 5,000 rocks become 5,000 draws, and back to a handful. |
+| R | The ring turning or still. |
+
+Hand checks, on OpenGL:
+
+- The ring holds a smooth frame rate at 100k rocks, and the panel shows a few dozen draws and over 100,000 instances.
+- The station's beacons light the nearest rocks of the field in their colours; the rocks far from it are lit by the sun
+  and the sky alone.
+- Switching merging off multiplies the draws by thousands and costs frame time; the ring stays three draws either way.
+- Uploads stay 0 while the ring turns; moving the count slider shows 3 uploads in that frame.
+- Without the fetched assets: spheres and cubes in the ring and field, a plain planet, and an amber message naming
+  `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
+
 | Key | What it does |
 | --- | --- |
 | F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
@@ -152,4 +192,4 @@ Hand checks, on OpenGL:
 
 The scaffold's `LightingDemo-Smoke-null` (everywhere) and `LightingDemo-Smoke-opengl` (label `gl`) run every scene for
 60 frames with its keys pressed, and fail on any error. Neither uses the fetched assets, so Showcase models runs empty
-and Showroom's plinths bare, each with its message shown. `FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.
+Showroom's plinths bare and the asteroid ring of spheres and cubes, each with its message shown. `FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.

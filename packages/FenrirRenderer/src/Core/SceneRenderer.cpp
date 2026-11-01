@@ -56,11 +56,26 @@ namespace Fenrir::Render
             std::uint32_t paletteOffset = 0;
             /** @brief The sign of the world matrix's determinant: -1 when it mirrors, else 1. */
             float worldSign = 1.0f;
-            std::uint32_t padding0 = 0;
-            std::uint32_t padding1 = 0;
+            /** @brief An instance list's first copy in the instance-list buffer, and its copies; 0 for one item. */
+            std::uint32_t instanceFirst = 0;
+            std::uint32_t instanceCount = 0;
+            /** @brief Linear, multiplying the vertex colour: white for every record the CPU writes. */
+            Math::Vec4 colour{1.0f};
         };
-        static_assert(sizeof(DrawBlock) == 144);
-        static_assert(offsetof(DrawBlock, paletteOffset) == 128 && offsetof(DrawBlock, worldSign) == 132);
+        static_assert(sizeof(DrawBlock) == 160);
+        static_assert(offsetof(DrawBlock, paletteOffset) == 128 && offsetof(DrawBlock, worldSign) == 132 &&
+                      offsetof(DrawBlock, instanceCount) == 140 && offsetof(DrawBlock, colour) == 144);
+
+        /** @brief One copy of an instance list, as `Fenrir/Draw.glsl`'s FenrirInstance declares it (std430). */
+        struct InstanceBlock
+        {
+            /** @brief Relative to the drawing entity. */
+            Math::Mat4 transform;
+            /** @brief The inverse transpose of the transform's 3x3, a column a vec4 as std430 lays out a mat3. */
+            std::array<Math::Vec4, 3> normal;
+            Math::Vec4 colour{1.0f};
+        };
+        static_assert(sizeof(InstanceBlock) == 128);
 
         /** @brief The background block, as `builtin:background` declares it (std140). */
         struct BackgroundBlock
@@ -123,7 +138,7 @@ namespace Fenrir::Render
         // 0's textures are the sky's light (ADR-0047): its spherical harmonics, its specular cube and the BRDF table,
         // then the rect lights' two LTC tables; its storage block is the point, spot and rect lights (ADR-0048), as
         // many as the frame has. Set 1's texture is the view's ambient occlusion (ADR-0049).
-        [[maybe_unused]] constexpr std::array<FixedBinding, 11> FixedBindings{{
+        [[maybe_unused]] constexpr std::array<FixedBinding, 12> FixedBindings{{
             {0, 0, ShaderBindingKind::UniformBuffer, sizeof(FrameBlock)},
             {0, 1, ShaderBindingKind::Texture, 0},
             {0, 2, ShaderBindingKind::Texture, 0},
@@ -134,7 +149,8 @@ namespace Fenrir::Render
             {1, 0, ShaderBindingKind::UniformBuffer, sizeof(ViewBlock)},
             {1, 1, ShaderBindingKind::Texture, 0},
             {3, 0, ShaderBindingKind::StorageBuffer, sizeof(DrawBlock)},
-            {3, 1, ShaderBindingKind::StorageBuffer, sizeof(GpuBone)},
+            {3, 1, ShaderBindingKind::StorageBuffer, sizeof(InstanceBlock)},
+            {3, 2, ShaderBindingKind::StorageBuffer, sizeof(GpuBone)},
         }};
 
         /** @brief The binding set of the material. */
@@ -677,8 +693,10 @@ namespace Fenrir::Render
         m_viewLayout = m_device.CreateBindingGroupLayout(
             {{{0, ShaderBindingKind::UniformBuffer}, {1, ShaderBindingKind::Texture}}}, "View");
         m_outputBlockLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Output");
-        m_drawLayout = m_device.CreateBindingGroupLayout(
-            {{{0, ShaderBindingKind::StorageBuffer}, {1, ShaderBindingKind::StorageBuffer}}}, "Draw");
+        m_drawLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::StorageBuffer},
+                                                           {1, ShaderBindingKind::StorageBuffer},
+                                                           {2, ShaderBindingKind::StorageBuffer}}},
+                                                         "Draw");
 
         // The default textures (ADR-0024): 1x1 white, black and the flat tangent-space normal, linear.
         constexpr std::array<std::array<std::uint8_t, 4>, 3> texels{{
@@ -872,6 +890,7 @@ namespace Fenrir::Render
         m_outputBlocks.reset();
         m_drawBlocks.reset();
         m_paletteBlocks.reset();
+        m_device.Destroy(m_instanceListBuffer);
         m_device.Destroy(m_fallback.materialLayout);
         m_device.Destroy(m_backgroundPipeline);
         m_device.Destroy(m_skyPipeline);
@@ -1709,6 +1728,79 @@ namespace Fenrir::Render
         return keys;
     }
 
+    bool SceneRenderer::IsInstanceListCurrent(AssetKey key, std::uint32_t revision) const
+    {
+        const auto found = m_instanceLists.find(key);
+        return found != m_instanceLists.end() && found->second.revision == revision;
+    }
+
+    void SceneRenderer::PrepareInstanceList(AssetKey key, std::uint32_t revision, const InstanceListData& list)
+    {
+        InstanceListEntry& entry = m_instanceLists[key];
+        entry.revision = revision;
+        entry.range.count = static_cast<std::uint32_t>(list.transforms.size());
+        entry.records.resize(list.transforms.size() * sizeof(InstanceBlock));
+        for (std::size_t i = 0; i < list.transforms.size(); ++i)
+        {
+            const Math::Mat4& transform = list.transforms[i];
+            const Math::Mat3 normal = glm::transpose(glm::inverse(Math::Mat3(transform)));
+            InstanceBlock block;
+            block.transform = transform;
+            block.normal = {Math::Vec4(normal[0], 0.0f), Math::Vec4(normal[1], 0.0f), Math::Vec4(normal[2], 0.0f)};
+            if (!list.colours.empty())
+            {
+                const Colour& colour = list.colours[i];
+                block.colour = {colour.r, colour.g, colour.b, colour.a};
+            }
+            std::memcpy(entry.records.data() + (i * sizeof(InstanceBlock)), &block, sizeof(InstanceBlock));
+        }
+        m_instancesChanged = true;
+        ++m_stats.uploads;
+    }
+
+    void SceneRenderer::ReleaseInstanceList(AssetKey key)
+    {
+        if (m_instanceLists.erase(key) > 0)
+        {
+            m_instancesChanged = true;
+        }
+    }
+
+    std::vector<AssetKey> SceneRenderer::InstanceListKeys() const
+    {
+        std::vector<AssetKey> keys;
+        for (const auto& [key, entry] : m_instanceLists)
+        {
+            keys.push_back(key);
+        }
+        return keys;
+    }
+
+    void SceneRenderer::PackInstanceLists()
+    {
+        if (!m_instancesChanged)
+        {
+            return;
+        }
+        // Every list again, into a new buffer: the old one is freed once the frames drawing from it are done, so no
+        // frame in flight reads a list half rewritten. Lists change rarely; a static field packs once.
+        std::size_t total = 0;
+        for (auto& [key, entry] : m_instanceLists)
+        {
+            entry.range.first = static_cast<std::uint32_t>(total / sizeof(InstanceBlock));
+            total += entry.records.size();
+        }
+        std::vector<std::byte> packed(std::max(total, sizeof(InstanceBlock)));
+        for (const auto& [key, entry] : m_instanceLists)
+        {
+            std::ranges::copy(entry.records, packed.begin() + static_cast<std::ptrdiff_t>(entry.range.first) *
+                                                                  static_cast<std::ptrdiff_t>(sizeof(InstanceBlock)));
+        }
+        m_device.Destroy(m_instanceListBuffer);
+        m_instanceListBuffer = m_device.CreateBuffer({packed.size(), BufferUsage::Storage}, packed, "Instance lists");
+        m_instancesChanged = false;
+    }
+
     std::vector<AssetKey> SceneRenderer::MeshKeys() const
     {
         std::vector<AssetKey> keys;
@@ -1883,6 +1975,16 @@ namespace Fenrir::Render
             {
                 continue;
             }
+            const InstanceListEntry* list = nullptr;
+            if (!request.instances.IsEmpty())
+            {
+                const auto found = m_instanceLists.find(request.instances);
+                if (found == m_instanceLists.end() || found->second.range.count == 0)
+                {
+                    continue;
+                }
+                list = &found->second;
+            }
             // Only a mesh with skin data draws skinned; the facade asks for it only then.
             const bool skinned = request.skinned && mesh->second.skinned;
             if (skinned && std::uint64_t{request.paletteOffset} + mesh->second.boneCount > m_frame.palette.size())
@@ -1971,6 +2073,7 @@ namespace Fenrir::Render
             draw.sortPoint = request.sortPoint.value_or(Math::Vec3(request.world[3]));
             draw.prepass = prepass;
             draw.prepassMasked = prepass != nullptr && masked;
+            draw.instances = list == nullptr ? InstanceRange{} : list->range;
             const std::uint64_t stage = draw.transparent ? TransparentStage : OpaqueStage;
             const std::uint64_t materialId = fallback ? 0 : found->id;
             draw.sortKey = (stage << 56u) | ((std::uint64_t{pipeline->id} & 0xFFFFu) << 40u) |
@@ -1997,7 +2100,8 @@ namespace Fenrir::Render
                 DrawRun& run = runs.back();
                 const std::size_t last = run.first + run.count - 1;
                 if (i == last + 1 && pipelineOf(i) == pipelineOf(last) && draws[i].material == draws[last].material &&
-                    groups[i] == groups[last] && draws[i].mesh == draws[last].mesh)
+                    groups[i] == groups[last] && draws[i].mesh == draws[last].mesh && draws[i].instances.count == 0 &&
+                    draws[last].instances.count == 0)
                 {
                     ++run.count;
                     continue;
@@ -2051,9 +2155,10 @@ namespace Fenrir::Render
                 }
             }
             encoder.SetIndexBuffer(draw.mesh->indices, IndexFormat::UInt32);
-            // Each item reads its own record of the draw buffer, by its place in the draw list.
+            // Each item reads its own record of the draw buffer, by its place in the draw list; an instance list's
+            // copies all read its one record, which Fenrir/Draw.glsl composes with each copy's.
             encoder.DrawIndexed({.indexCount = draw.mesh->indexCount,
-                                 .instanceCount = run.count,
+                                 .instanceCount = draw.instances.count == 0 ? run.count : draw.instances.count,
                                  .firstInstance = static_cast<std::uint32_t>(i)});
         }
     }
@@ -2062,20 +2167,25 @@ namespace Fenrir::Render
     {
         const BufferHandle draws = m_drawBlocks->Buffer(frameIndex);
         const BufferHandle palette = m_paletteBlocks->Buffer(frameIndex);
-        // One group per copy, made again when either ring has remade its buffers.
+        // One group per copy, made again when either ring has remade its buffers, or the instance lists were packed.
         const std::size_t copies = std::max<std::size_t>(m_device.FramesInFlight(), 1);
         m_drawGroups.resize(copies);
         DrawGroup& group = m_drawGroups[static_cast<std::size_t>(frameIndex % copies)];
-        if (group.group.IsEmpty() || group.draws != draws || group.palette != palette)
+        if (group.group.IsEmpty() || group.draws != draws || group.palette != palette ||
+            group.instanceLists != m_instanceListBuffer)
         {
             m_device.Destroy(group.group);
             BindingGroupEntry drawEntry;
             drawEntry.binding = 0;
             drawEntry.buffer = draws;
             BindingGroupEntry paletteEntry;
-            paletteEntry.binding = 1;
+            paletteEntry.binding = 2;
             paletteEntry.buffer = palette;
-            group = {draws, palette, m_device.CreateBindingGroup({m_drawLayout, {drawEntry, paletteEntry}}, "Draw")};
+            BindingGroupEntry instanceEntry;
+            instanceEntry.binding = 1;
+            instanceEntry.buffer = m_instanceListBuffer;
+            group = {draws, palette, m_instanceListBuffer,
+                     m_device.CreateBindingGroup({m_drawLayout, {drawEntry, paletteEntry, instanceEntry}}, "Draw")};
         }
         return group.group;
     }
@@ -2232,6 +2342,7 @@ namespace Fenrir::Render
         m_stats.palettes = 0;
         m_stats.skinnedDraws = 0;
         m_drawnViews.clear();
+        PackInstanceLists();
         AddPanoramaPasses(graph);
         m_skyLighting->AddPasses(graph, SkySourceOf(m_frame.lighting));
         if (m_frame.views.empty())
@@ -2273,6 +2384,8 @@ namespace Fenrir::Render
             block.normal = glm::transpose(glm::inverse(draw.world));
             block.paletteOffset = draw.paletteOffset;
             block.worldSign = WorldSign(draw.world);
+            block.instanceFirst = draw.instances.first;
+            block.instanceCount = draw.instances.count;
             m_drawBlocks->Write(frameIndex, i, BytesOf(block));
         }
         // Every palette written again each frame (ADR-0035): nothing is kept across frames.
@@ -2285,6 +2398,11 @@ namespace Fenrir::Render
         m_stats.palettes = m_frame.palettes;
         const auto skinnedDraws = static_cast<std::uint32_t>(
             std::count_if(draws->begin(), draws->end(), [](const ResolvedDraw& draw) { return draw.skinned; }));
+        std::uint32_t instances = 0;
+        for (const ResolvedDraw& draw : *draws)
+        {
+            instances += std::max<std::uint32_t>(draw.instances.count, 1);
+        }
         const std::vector<ViewRequest>& views = m_frame.views;
         m_viewBlocks->Reserve(views.size());
         m_gtao->BeginFrame(views.size());
@@ -2539,7 +2657,7 @@ namespace Fenrir::Render
                     });
             }
             m_stats.draws += static_cast<std::uint32_t>(opaqueRuns->size() + transparentRuns->size());
-            m_stats.instances += static_cast<std::uint32_t>(draws->size());
+            m_stats.instances += instances;
             m_stats.skinnedDraws += skinnedDraws;
 
             graph.AddPass(

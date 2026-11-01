@@ -1,5 +1,5 @@
 // Fenrir/Skinning.glsl: linear blend skinning for vertex stages (ADR-0035), under the SKINNED variant key. It declares
-// the palette (set 3, binding 1) and the joints and weights at vertex locations 6 and 7, and gives
+// the palette (set 3, binding 2) and the joints and weights at vertex locations 6 and 7, and gives
 // FenrirSkinPosition, FenrirSkinNormal and FenrirSkinTangent, each taking the current draw's record and returning world
 // space. They blend the four palette entries the vertex names by its weights into one affine M, with upper 3x3 A, then
 // apply the item's world matrix W (its skeleton entity's), its normal matrix and its sign, as rigid draws do.
@@ -18,7 +18,7 @@ struct FenrirBone
     vec4 r2;
 };
 
-layout(set = 3, binding = 1, std430) readonly buffer FenrirPalette
+layout(set = 3, binding = 2, std430) readonly buffer FenrirPalette
 {
     FenrirBone bones[];
 } fenrirPalette;

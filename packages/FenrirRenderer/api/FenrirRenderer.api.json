@@ -40,7 +40,15 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip` or `BoneMask`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+    },
+    {
+      "name": "Fenrir::AssetHandle<Fenrir::InstanceList>",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4,
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Material>",
@@ -48,7 +56,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip` or `BoneMask`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Mesh>",
@@ -56,7 +64,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip` or `BoneMask`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::BackgroundType",
@@ -692,6 +700,51 @@
       ]
     },
     {
+      "name": "Fenrir::InstancedMeshRenderer",
+      "category": "struct",
+      "role": "component",
+      "size": 28,
+      "alignment": 4,
+      "doc": "Draws one mesh with one material many times, once per transform of an instance list, with no entity per copy (ADR-0051). Each copy is drawn at the entity's world matrix times its own transform, its colour multiplying the material's base colour in builtin:lit and builtin:unlit. The renderer uploads the list when it is new or its revision has moved on, so a list that never changes uploads once, however far the entity moves.\n\nOne draw a pass, whatever the count: never merged with other items, and never culled, copy by copy or whole. A transparent material sorts the whole list by the entity's world position. An empty or stale mesh or list is skipped (a stale one logged once per handle), as is a mesh with skin data; an empty or stale material draws with the fallback material, as a MeshRenderer's does.",
+      "fields": [
+        {
+          "name": "mesh",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::AssetHandle<Fenrir::Mesh>",
+          "default": {}
+        },
+        {
+          "name": "material",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::AssetHandle<Fenrir::Material>",
+          "default": {}
+        },
+        {
+          "name": "instances",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fenrir::AssetHandle<Fenrir::InstanceList>",
+          "default": {}
+        },
+        {
+          "name": "castShadows",
+          "offset": 24,
+          "kind": "bool",
+          "default": true,
+          "doc": "Whether the copies are drawn into shadow maps. Nothing reads it yet: the renderer has no shadows."
+        },
+        {
+          "name": "visible",
+          "offset": 25,
+          "kind": "bool",
+          "default": true,
+          "doc": "False hides every copy; the entity's children are drawn as their own renderers say."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::Math::Vec3",
       "category": "bound-type",
       "role": "bound-type",
@@ -942,7 +995,7 @@
           "offset": 4,
           "kind": "u32",
           "default": 0,
-          "doc": "MeshRenderers drawn, one per item per view, however many draws they took."
+          "doc": "MeshRenderers drawn, one per item per view, however many draws they took, and the copies of each InstancedMeshRenderer's instance list, one per copy per view."
         },
         {
           "name": "passes",
@@ -956,7 +1009,7 @@
           "offset": 12,
           "kind": "u32",
           "default": 0,
-          "doc": "Assets uploaded to the GPU by the prepare step: a mesh, or a material's parameter block."
+          "doc": "Assets uploaded to the GPU by the prepare step: a mesh, a material's parameter block, or an instance list."
         },
         {
           "name": "paletteBytesUploaded",

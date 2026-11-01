@@ -193,7 +193,7 @@ TEST_CASE("Every skinned draw's palette range lies within the palette buffer", "
     REQUIRE(draws.size() == 9);
     for (const auto& draw : draws)
     {
-        const std::size_t entries = test.BindingBytes(draw, 1).size() / sizeof(RendererTest::PaletteRows);
+        const std::size_t entries = test.BindingBytes(draw, 2).size() / sizeof(RendererTest::PaletteRows);
         INFO("the offset plus the strip's two bones stays inside the buffer");
         REQUIRE(test.Record(draw).paletteOffset + 2 <= entries);
     }
@@ -416,7 +416,7 @@ TEST_CASE("A transparent skinned item is sorted by the centre of its skinned bou
     REQUIRE(test.Record(draws[1]).world[3].z == -10.0f);
 }
 
-TEST_CASE("The built-in programs' SKINNED variants read the palette at set 3, binding 1, in GpuBone's 48-byte layout",
+TEST_CASE("The built-in programs' SKINNED variants read the palette at set 3, binding 2, in GpuBone's 48-byte layout",
           "[renderer][skinning]")
 {
     SkinningTestApp test;
@@ -432,7 +432,7 @@ TEST_CASE("The built-in programs' SKINNED variants read the palette at set 3, bi
         REQUIRE(HasKey(read.container->keys, "SKINNED"));
         REQUIRE(variant != nullptr);
         const auto palette = std::find_if(variant->bindings.begin(), variant->bindings.end(),
-                                          [](const Fenrir::ShaderBinding& b) { return b.set == 3 && b.binding == 1; });
+                                          [](const Fenrir::ShaderBinding& b) { return b.set == 3 && b.binding == 2; });
         REQUIRE(palette != variant->bindings.end());
         INFO("a storage block whose reflected size is " << palette->size);
         REQUIRE(palette->kind == Fenrir::ShaderBindingKind::StorageBuffer);

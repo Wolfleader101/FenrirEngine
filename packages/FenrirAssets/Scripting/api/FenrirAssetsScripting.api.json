@@ -129,6 +129,10 @@
         {
           "name": "BoneMask",
           "value": 7
+        },
+        {
+          "name": "InstanceList",
+          "value": 8
         }
       ]
     },
