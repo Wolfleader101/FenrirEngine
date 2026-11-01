@@ -26,6 +26,8 @@ namespace Fenrir::Render
         /** @brief Work whose result is kept across frames, such as a panorama sky's cube texture, made when needed. */
         Prepare,
         Shadow,
+        /** @brief Opaque and masked items' depth and view-space normals, which `Opaque` then shades (ADR-0049). */
+        DepthPrepass,
         Opaque,
         Background,
         Transparent,

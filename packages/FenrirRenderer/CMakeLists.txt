@@ -63,6 +63,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/PunctualLights.hpp
     src/Core/PunctualLights.cpp
     src/Core/LtcTables.hpp
+    src/Core/OctahedralNormals.hpp
+    src/Core/OctahedralNormals.cpp
     src/Core/RectLights.hpp
     src/Core/RectLights.cpp
     src/Core/SceneFrame.hpp
@@ -107,6 +109,10 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinLit VERTEX Shaders/Builtin/
                    FRAGMENT Shaders/Builtin/lit.frag KEYS ALPHA_MASK SKINNED EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinFallback VERTEX Shaders/Builtin/mesh.vert
                    FRAGMENT Shaders/Builtin/fallback.frag KEYS SKINNED EMBED)
+# The depth prepass's fragment stage (ADR-0049), run behind each item's own vertex stage: mesh.vert here only so the
+# program builds. ALPHA_MASK: the variant masked items draw with.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDepthPrepass VERTEX Shaders/Builtin/mesh.vert
+                   FRAGMENT Shaders/Builtin/prepass.frag KEYS ALPHA_MASK EMBED)
 # CUBEMAP: the variant that draws a Sky cubemap.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBackground VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/background.frag KEYS CUBEMAP EMBED)

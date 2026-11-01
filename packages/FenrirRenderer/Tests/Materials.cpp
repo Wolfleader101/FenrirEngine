@@ -74,7 +74,7 @@ TEST_CASE("A masked material draws with its shader's ALPHA_MASK variant and its 
     REQUIRE(std::abs(RendererTest::FloatAt(block, 44) - 0.3f) < 1e-6f);
 }
 
-TEST_CASE("Opaque and masked items write depth; alpha-blended and additive ones do not, and blend",
+TEST_CASE("Opaque and masked items test the prepass's depth for equality; alpha-blended and additive ones blend",
           "[renderer][materials]")
 {
     RendererTestApp test;
@@ -95,10 +95,10 @@ TEST_CASE("Opaque and masked items write depth; alpha-blended and additive ones 
     for (const RecordedDraw& draw : opaque)
     {
         const RendererProbe::PipelineState state = RendererProbe::State(test.Device(), draw.pipeline);
-        INFO("an Opaque item tests and writes depth, greater-or-equal, without blending");
+        INFO("an Opaque item tests the depth the prepass laid down for equality, without writing it or blending");
         REQUIRE(state.depth.test);
-        REQUIRE(state.depth.write);
-        REQUIRE(state.depth.compare == Fenrir::Graphics::CompareOp::GreaterEqual);
+        REQUIRE_FALSE(state.depth.write);
+        REQUIRE(state.depth.compare == Fenrir::Graphics::CompareOp::Equal);
         REQUIRE(state.blend == BlendMode::None);
     }
     std::vector<BlendMode> blends;
@@ -116,7 +116,7 @@ TEST_CASE("Opaque and masked items write depth; alpha-blended and additive ones 
     REQUIRE(std::count(blends.begin(), blends.end(), BlendMode::Additive) == 1);
     INFO("Transparent runs after Background, before Output");
     REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)) ==
-            std::vector<std::string>{"BrdfLut", "Opaque", "Background", "Transparent", "Output"});
+            std::vector<std::string>{"BrdfLut", "DepthPrepass", "Opaque", "Background", "Transparent", "Output"});
     INFO("nothing was logged as an error");
     REQUIRE(test.messages->errors.empty());
 }

@@ -41,6 +41,8 @@ namespace Fenrir::Render
         BloomDownsample,
         /** @brief `builtin:bloom-upsample`: a bloom level tent-filtered up over the one above, or over SceneColor. */
         BloomUpsample,
+        /** @brief `builtin:depth-prepass`: the depth prepass's fragment stage, an item's view-space normal. */
+        DepthPrepass,
     };
 
     /** @brief A built-in program's `builtin:` name and its embedded container's bytes. */

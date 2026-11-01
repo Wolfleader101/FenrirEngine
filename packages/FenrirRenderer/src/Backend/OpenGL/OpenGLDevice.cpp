@@ -65,7 +65,8 @@ namespace Fenrir::Graphics
         }
 
         /** @brief GL's depth function for each CompareOp. */
-        constexpr std::array<GLenum, 5> compareFunctions{GL_ALWAYS, GL_LESS, GL_LEQUAL, GL_GREATER, GL_GEQUAL};
+        constexpr std::array<GLenum, 6> compareFunctions{GL_ALWAYS,  GL_LESS,   GL_LEQUAL,
+                                                         GL_GREATER, GL_GEQUAL, GL_EQUAL};
 
         /** @brief A vertex attribute format as GL's component count, type and normalisation. */
         struct AttributeFormat
