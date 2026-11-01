@@ -18,7 +18,10 @@ namespace LightingDemo::Forest
         constexpr float Pi = std::numbers::pi_v<float>;
         /** @brief The ground grid's spacing, in metres. */
         constexpr float GroundStep = 0.5f;
-        /** @brief The grass's chunks: their size, and how far out from the middle they reach. */
+        /**
+         * @brief The grass's chunks: their size, and how far out from the middle they must reach, rounded up to whole
+         * chunks (to 32 metres): past the clearing's edge, where the grass has thinned to nothing.
+         */
         constexpr float ChunkSize = 8.0f;
         constexpr float GrassReach = 26.0f;
 
@@ -36,12 +39,6 @@ namespace LightingDemo::Forest
         /** @brief The path's half-width, in metres, and the width of its soft edge. */
         constexpr float PathHalfWidth = 0.75f;
         constexpr float PathEdge = 0.6f;
-
-        float Smoothstep(float edge0, float edge1, float x)
-        {
-            const float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-            return t * t * (3.0f - 2.0f * t);
-        }
 
         /** @brief The path's curve as a polyline of short straight pieces, made once. */
         const std::vector<Vec2>& PathPolyline()
@@ -119,12 +116,12 @@ namespace LightingDemo::Forest
 
     float ForestWeight(Vec2 ground)
     {
-        return Smoothstep(-2.5f, 3.5f, PastEdge(ground) + 1.2f * Wobble(ground, 0.4f));
+        return glm::smoothstep(-2.5f, 3.5f, PastEdge(ground) + 1.2f * Wobble(ground, 0.4f));
     }
 
     float CanopyDepth(Vec2 ground)
     {
-        return Smoothstep(0.0f, 20.0f, PastEdge(ground));
+        return glm::smoothstep(0.0f, 20.0f, PastEdge(ground));
     }
 
     float PathWeight(Vec2 ground)
@@ -132,7 +129,7 @@ namespace LightingDemo::Forest
         const float distance = DistanceToPath(ground) + 0.18f * Wobble(ground, 1.5f);
         // The path fades as it enters the forest, a trodden line among the trees.
         const float width = PathHalfWidth * (1.0f - 0.35f * ForestWeight(ground));
-        return 1.0f - Smoothstep(width, width + PathEdge, distance);
+        return 1.0f - glm::smoothstep(width, width + PathEdge, distance);
     }
 
     float Height(Vec2 ground)
@@ -140,7 +137,7 @@ namespace LightingDemo::Forest
         const float rolling = 0.35f * std::sin(0.11f * ground.x + 0.4f) * std::cos(0.09f * ground.y) +
                               0.2f * std::sin(0.23f * ground.x - 0.17f * ground.y);
         // The clearing lies in a shallow hollow, the ground rising into the forest.
-        const float rise = 1.2f * Smoothstep(0.0f, 25.0f, PastEdge(ground));
+        const float rise = 1.2f * glm::smoothstep(0.0f, 25.0f, PastEdge(ground));
         return rolling + rise - 0.06f * PathWeight(ground);
     }
 
@@ -206,10 +203,11 @@ namespace LightingDemo::Forest
         // Candidates spread evenly over the chunks, each kept with the chance of its density; their number is chosen
         // from a coarse survey of the density so that about `blades` are kept.
         const int chunks = static_cast<int>(std::ceil(GrassReach / ChunkSize));
+        const float reach = static_cast<float>(chunks) * ChunkSize;
         float total = 0.0f;
-        for (float x = -GrassReach; x < GrassReach; x += 1.0f)
+        for (float x = -reach; x < reach; x += 1.0f)
         {
-            for (float z = -GrassReach; z < GrassReach; z += 1.0f)
+            for (float z = -reach; z < reach; z += 1.0f)
             {
                 total += density({x + 0.5f, z + 0.5f});
             }

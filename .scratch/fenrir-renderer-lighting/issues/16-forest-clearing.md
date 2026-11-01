@@ -30,13 +30,15 @@ with what is fetchable (CC0, Poly Haven); the rest deferred, at the user's choic
 - **Trees.** Poly Haven's only tall CC0 conifer is Fir Tree 01 (487 MB, 2 to 4 million twig triangles a tree); Pine Tree
   01 (958 MB) is left out. The renderer has no LODs, so the demo makes them at spawn: `ThinnedCards` keeps one card in
   16, 48 or 128 of a tree's foliage by distance past the clearing's edge, each grown by about the square root of what it
-  stands for, and simplifies trunks by vertex clustering (`Simplified`, moved from the asteroid ring into
-  `src/MeshTools.cpp` with `FirstCopies` and `Placement`). About 1,170 trees.
+  stands for, and simplifies the farther trunks by vertex clustering (`Simplified`, moved from the asteroid ring into
+  `src/MeshTools.cpp` with `FirstCopies` and `Placement`; it smears bark across UV seams, so the nearest stay whole).
+  About 1,170 trees.
 - **Shadow budget.** Every cascade draws every caster, so the deepest trees, the far understory and pebbles cast
   nothing (deep trees darker instead, the floor under them too, through the ground mesh's canopy channel), and the
   understory grows only near the clearing. 30 ms a frame in Release on an RTX 5080 (1280 x 720, 4x MSAA); the first
   layout's 7,000 ferns through the whole forest cost 45. GPU culling and LODs are ticket-planned elsewhere (PR #273).
-- **Alpha.** Poly Haven's JPEG glTFs drop the leaves' and twigs' alpha (materials BLEND or OPAQUE on solid cards): the
+- **Alpha.** Poly Haven's JPEG glTFs drop the leaves' and twigs' alpha, so the cards draw solid whatever the material
+  says (MASK for the ferns and shrubs, BLEND for the trees, OPAQUE for the saplings): the
   demo fetches each species' alpha map and merges it into its base colour, drawn `Masked` at cutoff 0.3 with the alpha
   strengthened 1.6x, since thin needles average away in the smaller mips. This is what makes the ticket's "alpha-tested
   leaves" true; the first version drew solid cards.
@@ -47,7 +49,12 @@ with what is fetchable (CC0, Poly Haven); the rest deferred, at the user's choic
   the first version found back faces disagreeing).
 - **Sun** from the panorama's brightest texel (Qwantani Late Afternoon, 19 degrees up); the tall trees leave a gap
   towards it; the demo's own sky puts its sun there too.
-- **Not asked for:** the density (N) and grass (M) controls, the frame time, the stand-ins without fetched assets.
+- **Not asked for:** the density (N) and grass (M) controls, the frame time, the stand-ins without fetched assets, and
+  the demo's own late-afternoon sky (the scene's sky without the fetched panorama, S to switch).
+- **Known gap, an engine one:** the glTF importer reads neither `KHR_texture_transform` nor a texture's `texCoord`, so
+  Fir Tree 01's bark and `trunk_c` and Tree Small 02's branches sample their textures at the wrong scale. Worth a
+  ticket of its own for the asset importer.
+- **About 20k copies**, half of them unshadowed pebbles; ADR-0052 amended for the fetched assets' size.
 
 Tests: the scene's smoke runs on null and OpenGL with no fetched assets (the grass and ground from their generated
 meshes, both user shaders through prepass and shadows). Hand checks by the user: the grass and its shadows sway; leaves

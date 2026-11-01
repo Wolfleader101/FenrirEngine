@@ -93,9 +93,10 @@ namespace LightingDemo
         /**
          * @brief A tree's level of detail, for trees standing up to `pastEdge` metres past the clearing's edge: one
          * card in `keepEvery` of its foliage kept and grown by `grow` (ThinnedCards), its trunk and branches simplified
-         * on `trunkCells` cells a side, whether it casts the sun's shadow, and how dark it is drawn. The nearest trees
-         * are a few metres from the camera, the farthest forty. Every cascade draws every caster (there is no culling
-         * yet), so the deep forest casts nothing and is darkened instead, for the shade of the trees in front of it.
+         * on `trunkCells` cells a side or whole at 0 (clustering smears their bark across its UV seams, which shows
+         * near), whether it casts the sun's shadow, and how dark it is drawn. The nearest trees are a few metres from
+         * the camera, the farthest about ninety. Every cascade draws every caster (there is no culling yet), so the
+         * deep forest casts nothing and is darkened instead, for the shade of the trees in front of it.
          */
         struct TreeDetail
         {
@@ -109,17 +110,18 @@ namespace LightingDemo
         // Each kept card grows by a little less than the square root of how many it stands for, so a crown keeps most
         // of its cover: the fir's twigs are 800k sprig cards of four triangles each.
         constexpr std::array<TreeDetail, 3> TreeDetails{{
-            {7.0f, 16, 3.4f, 48, true, 1.0f},
+            {7.0f, 16, 3.4f, 0, true, 1.0f},
             {16.0f, 48, 5.8f, 32, true, 0.7f},
             {std::numeric_limits<float>::max(), 128, 9.0f, 20, false, 0.4f},
         }};
 
         /**
          * @brief One fetched Poly Haven species (ADR-0052) and how it grows: each of its model's nodes that draws is a
-         * variant, with one instance list per level of detail; each of a variant's meshes one InstancedMeshRenderer.
+         * kind, with one instance list per level of detail; each of a kind's meshes one InstancedMeshRenderer.
          * Its foliage material is drawn Masked, cut out by its alpha map: Poly Haven's JPEG glTFs leave the alpha out
-         * of the base colour (their leaf and twig cards are BLEND or OPAQUE and solid), so the demo fetches each one's
-         * alpha map and puts it back (MergeAlpha). It then cuts out in the depth prepass and the shadow cascades too.
+         * of the base colour, so their leaf and twig cards draw solid whether the material is MASK (the ferns and
+         * shrubs), BLEND (the trees) or OPAQUE (the saplings); the demo fetches each one's alpha map and puts it back
+         * (MergeAlpha). It then cuts out in the depth prepass and the shadow cascades too.
          */
         struct Species
         {
@@ -150,9 +152,10 @@ namespace LightingDemo
             int foliage = -1;
             const char* alpha = nullptr;
         };
-        // About 20k copies. The trees are Poly Haven's Fir Tree 01 (three trees of 11 to 17 metres, 0.4 to 4 million
-        // twig triangles each), Tree Small 02, a broadleaf grown to 8 to 11 metres, and Fir Sapling, young firs of 2 to
-        // 4 metres filling below the crowns, all thinned with distance. Rocks are simplified; ferns and shrubs whole.
+        // About 20k copies, half of them pebbles. The trees are Poly Haven's Fir Tree 01 (three trees of 11 to 17
+        // metres, 0.4 to 4 million twig triangles each), Tree Small 02, a broadleaf grown to 8 to 11 metres, and Fir
+        // Sapling, young firs of 2 to 4 metres filling below the crowns, all thinned with distance. Rocks are
+        // simplified; ferns and shrubs whole.
         const std::array<Species, 13> ForestSpecies{{
             {.model = "fir_tree_01/fir_tree_01_1k.gltf",
              .count = 900,
@@ -221,7 +224,7 @@ namespace LightingDemo
              .reach = 25.0f,
              .simplifyCells = 16},
             {.model = "rock_09/rock_09_1k.gltf",
-             .count = 7500,
+             .count = 10000,
              .minScale = 1.5f,
              .maxScale = 5.0f,
              .habitat = Habitat::Everywhere,
@@ -495,7 +498,7 @@ namespace LightingDemo
             std::uniform_real_distribution<float> unit(0.0f, 1.0f);
             std::uniform_real_distribution<float> symmetric(-1.0f, 1.0f);
             std::vector<Copy> copies;
-            // Rejection gives up on a copy after a few misses, so a crowded species simply grows fewer.
+            // Rejection stops after twelve tries a copy in all, so a crowded species simply grows fewer.
             for (int tries = 0; static_cast<int>(copies.size()) < species.count && tries < species.count * 12; ++tries)
             {
                 const std::optional<Vec2> spot = GroundSpot(random, species);
@@ -535,7 +538,7 @@ namespace LightingDemo
             return copies;
         }
 
-        /** @brief One mesh a variant draws, with its material, and whether it is its species' foliage. */
+        /** @brief One mesh a kind draws, with its material, and whether it is its species' foliage. */
         struct Part
         {
             Fenrir::AssetHandle<Fenrir::Mesh> mesh;
@@ -543,8 +546,11 @@ namespace LightingDemo
             bool foliage = false;
         };
 
-        /** @brief A model node that draws: its parts, and its own turn and scale (its position is dropped). */
-        struct Variant
+        /**
+         * @brief A kind of a species, one model node that draws: its parts, and its own turn and scale (its position
+         * is dropped).
+         */
+        struct Kind
         {
             std::vector<Part> parts;
             Fenrir::Math::Quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
@@ -601,25 +607,25 @@ namespace LightingDemo
         }
 
         /**
-         * @brief The model at `path`'s drawing nodes, each a variant. Its material number `foliage` takes the alpha map
+         * @brief The model at `path`'s drawing nodes, each a kind. Its material number `foliage` takes the alpha map
          * `alpha` and is drawn Masked (MergeAlpha). Empty if the model or the alpha map did not load.
          */
-        std::vector<Variant> LoadVariants(Fenrir::AssetStore& store, Fenrir::Scene& scene, const std::string& path,
-                                          int foliage = -1, const char* alpha = nullptr)
+        std::vector<Kind> LoadKinds(Fenrir::AssetStore& store, Fenrir::Scene& scene, const std::string& path,
+                                    int foliage = -1, const char* alpha = nullptr)
         {
             const auto loaded = store.Load<Fenrir::Model>(path, scene);
             const Fenrir::Model* model = loaded.Ok() ? store.TryGet(loaded.handle) : nullptr;
-            std::vector<Variant> variants;
+            std::vector<Kind> kinds;
             if (model == nullptr)
             {
-                return variants;
+                return kinds;
             }
             const auto foliageMaterial = foliage >= 0 && static_cast<std::size_t>(foliage) < model->materials.size()
                                              ? model->materials[static_cast<std::size_t>(foliage)]
                                              : Fenrir::AssetHandle<Fenrir::Material>{};
             if (!foliageMaterial.IsEmpty() && alpha != nullptr && !MergeAlpha(store, scene, foliageMaterial, alpha))
             {
-                return variants;
+                return kinds;
             }
             for (const Fenrir::ModelNode& node : model->nodes)
             {
@@ -627,16 +633,16 @@ namespace LightingDemo
                 {
                     continue;
                 }
-                Variant& variant = variants.emplace_back();
+                Kind& kind = kinds.emplace_back();
                 for (const Fenrir::ModelMesh& mesh : node.meshes)
                 {
-                    variant.parts.push_back({mesh.mesh, mesh.material, mesh.material == foliageMaterial});
+                    kind.parts.push_back({mesh.mesh, mesh.material, mesh.material == foliageMaterial});
                 }
-                // The node's position only lays the file's variants out side by side.
-                variant.rotation = node.rest.rot;
-                variant.scale = node.rest.scale;
+                // The node's position only lays the file's kinds out side by side.
+                kind.rotation = node.rest.rot;
+                kind.scale = node.rest.scale;
             }
-            return variants;
+            return kinds;
         }
 
         /** @brief Adds `copies` as a list drawn by one InstancedMeshRenderer per part, children of `forest`. */
@@ -694,27 +700,27 @@ namespace LightingDemo
         }
 
         /**
-         * @brief Plants `species` under `forest`: its copies split round-robin between its variants and, for a tree, by
+         * @brief Plants `species` under `forest`: its copies split round-robin between its kinds and, for a tree, by
          * TreeDetails, one list each. False if the model did not load.
          */
         bool SpawnSpecies(Fenrir::AssetStore& store, Fenrir::Scene& scene, Fenrir::Entity forest, ForestState& state,
                           const Species& species, const std::string& path, std::span<const Forest::Clear> clear,
                           std::uint32_t seed)
         {
-            const std::vector<Variant> variants = LoadVariants(store, scene, path, species.foliage, species.alpha);
-            if (variants.empty())
+            const std::vector<Kind> kinds = LoadKinds(store, scene, path, species.foliage, species.alpha);
+            if (kinds.empty())
             {
                 return false;
             }
             // A tree's levels are TreeDetails'; anything else's are two, casting within its shadow reach and not past
             // it.
             const std::size_t levels = species.tree ? TreeDetails.size() : 2;
-            std::vector<std::vector<Fenrir::InstanceListData>> lists(variants.size(),
+            std::vector<std::vector<Fenrir::InstanceListData>> lists(kinds.size(),
                                                                      std::vector<Fenrir::InstanceListData>(levels));
             const std::vector<Copy> copies = Plant(species, clear, seed);
             for (std::size_t i = 0; i < copies.size(); ++i)
             {
-                const std::size_t v = i % variants.size();
+                const std::size_t v = i % kinds.size();
                 std::size_t level = 0;
                 const float past = Forest::PastEdge(copies[i].ground);
                 if (!species.tree)
@@ -725,7 +731,7 @@ namespace LightingDemo
                 {
                     ++level;
                 }
-                lists[v][level].transforms.push_back(copies[i].transform * variants[v].Rest());
+                lists[v][level].transforms.push_back(copies[i].transform * kinds[v].Rest());
                 Fenrir::Colour colour = copies[i].colour;
                 if (species.tree)
                 {
@@ -738,7 +744,7 @@ namespace LightingDemo
             {
                 state.trees += copies.size();
             }
-            for (std::size_t v = 0; v < variants.size(); ++v)
+            for (std::size_t v = 0; v < kinds.size(); ++v)
             {
                 for (std::size_t level = 0; level < levels; ++level)
                 {
@@ -747,7 +753,7 @@ namespace LightingDemo
                         continue;
                     }
                     std::vector<Part> parts;
-                    for (const Part& part : variants[v].parts)
+                    for (const Part& part : kinds[v].parts)
                     {
                         parts.push_back(AtDetail(store, scene, species, part, level));
                     }
@@ -759,7 +765,10 @@ namespace LightingDemo
             return true;
         }
 
-        /** @brief Where `hero` stands, as an entity's transform, with a node turned and scaled by `rest`. */
+        /**
+         * @brief Where `hero` stands, as an entity's transform, for a model node turned by `restRotation` and scaled by
+         * `restScale`.
+         */
         Fenrir::Transform HeroTransform(const Hero& hero, Fenrir::Math::Quat restRotation, Vec3 restScale)
         {
             return {Forest::OnGround(hero.at) - Up * hero.sink, Fenrir::Math::AngleAxis(hero.yaw, Up) * restRotation,
@@ -776,16 +785,16 @@ namespace LightingDemo
             for (const Hero& hero : Heroes)
             {
                 const std::optional<std::string> path = FetchedAsset(hero.model);
-                const std::vector<Variant> variants = path ? LoadVariants(store, scene, *path) : std::vector<Variant>{};
-                if (hero.node >= variants.size())
+                const std::vector<Kind> kinds = path ? LoadKinds(store, scene, *path) : std::vector<Kind>{};
+                if (hero.node >= kinds.size())
                 {
                     return false;
                 }
-                const Variant& variant = variants[hero.node];
-                for (const Part& part : variant.parts)
+                const Kind& kind = kinds[hero.node];
+                for (const Part& part : kind.parts)
                 {
                     Fenrir::Entity entity = entities.CreateEntity();
-                    entity.AddComponent<Fenrir::Transform>(HeroTransform(hero, variant.rotation, variant.scale));
+                    entity.AddComponent<Fenrir::Transform>(HeroTransform(hero, kind.rotation, kind.scale));
                     entity.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{part.mesh, part.material});
                 }
             }
@@ -902,7 +911,6 @@ namespace LightingDemo
             state.lighting.ambientOcclusion.radius = 1.0f;
             state.lighting.bloom.intensity = 0.06f;
             state.lighting.exposure = -0.5f;
-            bool fetched = true;
             if (const std::optional<std::string> path = FetchedAsset(Panorama))
             {
                 if (const auto image = store.Load<Fenrir::Image>(*path, scene); image.Ok())
@@ -910,7 +918,7 @@ namespace LightingDemo
                     state.lighting.panoramas.push_back({"Qwantani Late Afternoon (2k)", image.handle});
                 }
             }
-            fetched = fetched && !state.lighting.panoramas.empty();
+            bool fetched = !state.lighting.panoramas.empty();
             state.lighting.panoramas.push_back(
                 {"Procedural late afternoon", store.Add<Fenrir::Image>(AfternoonSky(1024), scene)});
 

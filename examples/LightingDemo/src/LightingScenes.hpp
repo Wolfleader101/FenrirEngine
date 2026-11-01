@@ -42,7 +42,7 @@ namespace LightingDemo
     /**
      * @brief Forest clearing: a 40-metre clearing in late-afternoon sun, a winding path, a mossy boulder and a fallen
      * log, ringed by a dense forest of fetched Poly Haven firs and broadleaves thinned with distance, with ferns,
-     * shrubs, rocks and deadwood, about 17k copies in instance lists; about 200k generated grass blades sway through
+     * shrubs, rocks and deadwood, about 20k copies in instance lists; about 200k generated grass blades sway through
      * the demo's wind shader over its blended forest-floor shader, under the sun's cascaded shadows. The panel thins
      * the forest and hides the grass. Without fetched assets, the grass grows among box trunks and sphere boulders.
      */

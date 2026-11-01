@@ -204,21 +204,21 @@ A temperate forest clearing in late-afternoon sun: the dense, alpha-tested, anim
 (firs of 11 to 17 metres) with broadleaf Tree Small 02 and Fir Sapling below the crowns, out to 75 metres. A winding dirt
 path crosses it from where the camera starts towards the sun, low beyond the trees ahead, whose gap in the crowns
 lets it light the clearing's middle; a large mossy boulder (Rock Moss Set 01) stands in the foreground beside the path,
-a fallen log (Dead Tree Trunk 02) across it to the left. Ferns, shrubs, mossy rocks, pebbles, stumps, roots and dry
-branches grow along the edge and under the trees, about 16,700 copies of thirteen species in all (ADR-0051): each of a
-model's glTF nodes is a variant, with one instance list per level of detail, and each mesh one InstancedMeshRenderer
-drawing that list.
+a fallen log (Dead Tree Trunk 02) beside it to the left. Ferns, shrubs, mossy rocks, pebbles, stumps, roots and dry
+branches grow along the edge and under the trees, about 20,000 copies of thirteen species in all, half of them pebbles
+(ADR-0051): each of a model's glTF nodes is a kind, with one instance list per level of detail, and each mesh one
+InstancedMeshRenderer drawing that list.
 
 The renderer has no LODs and its shadow cascades draw every caster, so the demo budgets the forest itself:
 
 - **Trees thin with distance** (`ThinnedCards`, `src/MeshTools.cpp`): a tree's leaf and twig cards (the fir's
   4 million twig triangles are 800,000 cards) are split into their connected pieces, one in 16, 48 or 128 kept as the
-  tree stands farther past the clearing's edge, each grown so the crown keeps its cover; trunks are simplified by
-  vertex clustering. The deepest trees cast no shadow and are drawn darker instead, as the floor under them is.
-- **The understory stays near the clearing**: ferns, pebbles and branches grow only within a few metres of its edge,
-  and only the nearest cast shadows.
-- **Foliage is cut out by its alpha**: Poly Haven's JPEG glTFs leave the alpha out of the leaf and twig textures
-  (their materials are BLEND or OPAQUE on solid cards), so each species' alpha map is fetched and put back into its
+  tree stands farther past the clearing's edge, each grown so the crown keeps its cover; the farther trunks are
+  simplified by vertex clustering, the nearest kept whole. The deepest trees cast no shadow and are drawn darker instead, as the floor under them is.
+- **The understory stays near the clearing**: ferns, pebbles and branches grow only within 12 to 20 metres of its
+  edge, and only the nearest cast shadows.
+- **Foliage is cut out by its alpha**: Poly Haven's JPEG glTFs leave the alpha out of the leaf and twig textures,
+  so their cards draw solid whether the material is MASK, BLEND or OPAQUE, and each species' alpha map is fetched and put back into its
   base colour, which is drawn `Masked` with a cutoff of 0.3 (thin needles fade in the smaller mips): the cut-outs show
   in the depth prepass, the shadow cascades and the lit pass alike.
 
@@ -255,9 +255,11 @@ Hand checks, on OpenGL (Release for a usable frame rate):
 - Without the fetched assets: grass, trunks and boulders, and an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, no
   error in the log.
 
-Not yet here, each its own ticket: haze and sun shafts through the trees (`24`), debug views of the albedo, normals,
-roughness, metallic, direct and indirect light and wireframe (`23`); and higher-quality trees and ground vegetation from
-Fab (Megascans), which need a login and so cannot be fetched by the manifest.
+Not yet here: haze and sun shafts through the trees (ticket 24), debug views of the albedo, normals, roughness,
+metallic, direct and indirect light and wireframe (ticket 23); higher-quality trees and ground vegetation from Fab
+(Megascans), which need a login and so cannot be fetched by the manifest; and the bark's texture transforms: the glTF
+importer reads neither `KHR_texture_transform` nor a texture's `texCoord`, so Fir Tree 01's bark and one trunk and Tree
+Small 02's branches sample their textures at the wrong scale.
 
 | Key | What it does |
 | --- | --- |

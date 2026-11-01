@@ -16,8 +16,9 @@ namespace LightingDemo::Forest
 {
     /** @brief The clearing's mean radius, in metres: about 40 metres across. */
     inline constexpr float ClearingRadius = 19.0f;
-    /** @brief How far the trees reach from the middle, and the ground beyond them. */
+    /** @brief How far the trees reach from the middle, in metres. */
     inline constexpr float ForestReach = 75.0f;
+    /** @brief How far the ground reaches each way from the middle, past the trees, in metres. */
     inline constexpr float GroundHalf = 95.0f;
 
     /** @brief The clearing's edge, in metres from the middle, at the bearing `angle` (radians about +Y): ragged. */
@@ -59,7 +60,7 @@ namespace LightingDemo::Forest
     /**
      * @brief The grass: about `blades` blades over the clearing in square chunks of 8 metres, one mesh a chunk, thick
      * in the open, thinning to nothing under the trees and on the path, and out of `clear`. Each blade stands on the
-     * ground, a tapering, curving strip of three segments and a tip with a face each way (ten triangles), so the
+     * ground, a tapering, curving strip of two quads and a tip with a face each way (ten triangles), so the
      * material is single-sided and both faces' normals lean up; its height, lean, turn and tint are its own, shorter
      * and drier by the path. UV0's u is the blade's height in metres and v the way up it, 0 to 1, which grass.vert
      * sways by and grass.frag shades along.
