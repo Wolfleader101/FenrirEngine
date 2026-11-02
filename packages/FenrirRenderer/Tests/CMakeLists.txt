@@ -16,6 +16,8 @@ add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp 
                                    DebugDrawing.cpp Overlay.cpp Draw2D.cpp Skinning.cpp SkinningMaths.cpp
                                    SphericalHarmonics.cpp SkyLighting.cpp Tonemapping.cpp Brdf.cpp Bloom.cpp
                                    PunctualLights.cpp Lights.cpp RectLights.cpp DepthPrepass.cpp OctahedralNormals.cpp
+                                   AmbientOcclusion.cpp Instancing.cpp InstanceLists.cpp ComputeSkinning.cpp
+                                   Cascades.cpp Shadows.cpp SpotShadows.cpp PointShadows.cpp LightClusters.cpp
                                    GoldenComparison.cpp DeviceTest.hpp DrawLists2D.hpp FakeSurface.hpp RecordingLogger.hpp
                                    RendererProbe.hpp RendererTestApp.hpp SkinningTestApp.hpp)
 target_include_directories(FenrirRendererTests PRIVATE ../src)
@@ -36,6 +38,9 @@ fenrir_add_shaders(FenrirRendererTests PROGRAM Tinted2D VERTEX ../Shaders/Builti
 # A user's own material shader (ADR-0024), built as any user's is and loaded from the container file it writes, with its
 # own variant key FANCY, which the renderer leaves off.
 fenrir_add_shaders(FenrirRendererTests PROGRAM UserTint VERTEX fixtures/user.vert FRAGMENT fixtures/user.frag KEYS FANCY)
+# A user's material shader with a SKINNED key, which compute skinning leaves to its SKINNED variant (ADR-0050).
+fenrir_add_shaders(FenrirRendererTests PROGRAM UserSkinned VERTEX ../Shaders/Builtin/mesh.vert
+                   FRAGMENT fixtures/plain.frag KEYS SKINNED EMBED)
 # Khronos's BoxTextured from the demo apps' shared assets, for SpawnModel on a real model, a glTF node with two meshes,
 # and FenrirAssets's skinned armatures fixture.
 target_compile_definitions(FenrirRendererTests PRIVATE
@@ -56,6 +61,8 @@ add_executable(FenrirRendererGlTests OpenGL/Clears.cpp OpenGL/Draws.cpp OpenGL/V
                                      OpenGL/Sky.cpp OpenGL/Debug.cpp OpenGL/Overlay.cpp OpenGL/Skinning.cpp
                                      OpenGL/Tonemapping.cpp OpenGL/NormalMaps.cpp OpenGL/SkyLighting.cpp OpenGL/Bloom.cpp
                                      OpenGL/Lights.cpp OpenGL/RectLights.cpp OpenGL/DepthPrepass.cpp
+                                     OpenGL/AmbientOcclusion.cpp OpenGL/Instancing.cpp OpenGL/InstanceLists.cpp
+                                     OpenGL/Shadows.cpp OpenGL/LightClusters.cpp
                                      OpenGL/GlProbe.hpp OpenGL/GlScene.hpp OpenGL/GlTestApp.hpp
                                      DrawLists2D.hpp RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp
                                      SkinningTestApp.hpp)

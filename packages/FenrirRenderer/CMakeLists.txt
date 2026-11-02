@@ -45,6 +45,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/BlockRing.cpp
     src/Core/BuiltinShaders.hpp
     src/Core/BuiltinShaders.cpp
+    src/Core/Cascades.hpp
+    src/Core/Cascades.cpp
     src/Core/DebugFeature.hpp
     src/Core/DebugFeature.cpp
     src/Core/DebugFont.hpp
@@ -53,6 +55,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/Draw2DFeature.cpp
     src/Core/FrameRingBuffer.hpp
     src/Core/FrameRingBuffer.cpp
+    src/Core/Gtao.hpp
+    src/Core/Gtao.cpp
     src/Core/RenderFeature.hpp
     src/Core/RenderGraph.hpp
     src/Core/RenderGraph.cpp
@@ -62,6 +66,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/Brdf.cpp
     src/Core/PunctualLights.hpp
     src/Core/PunctualLights.cpp
+    src/Core/LightClusters.hpp
+    src/Core/LightClusters.cpp
     src/Core/LtcTables.hpp
     src/Core/OctahedralNormals.hpp
     src/Core/OctahedralNormals.cpp
@@ -75,6 +81,10 @@ add_library(FenrirRendererCore STATIC
     src/Core/Skinning.hpp
     src/Core/SphericalHarmonics.hpp
     src/Core/SphericalHarmonics.cpp
+    src/Core/PointShadows.hpp
+    src/Core/PointShadows.cpp
+    src/Core/SpotShadows.hpp
+    src/Core/SpotShadows.cpp
     src/Core/Skinning.cpp
     src/Core/Tonemapping.hpp
     src/Core/Tonemapping.cpp
@@ -102,17 +112,22 @@ target_include_directories(FenrirRendererCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR
                                                      "${CMAKE_CURRENT_SOURCE_DIR}/../FenrirDraw2D/include")
 # The built-in shader programs, embedded, so the renderer runs with no files beside it.
 # ALPHA_MASK: the variant a Masked material draws with (ADR-0024). SKINNED: the variant skinned draws use (ADR-0035);
-# the fallback has it too, so a skinned draw falling back to it is never drawn unskinned.
+# the fallback has it too, so a skinned draw falling back to it is never drawn unskinned. POINT_SHADOW: the variant whose
+# vertex stage draws a point light's six cube faces as instances (ADR-0050).
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinUnlit VERTEX Shaders/Builtin/mesh.vert
-                   FRAGMENT Shaders/Builtin/unlit.frag KEYS ALPHA_MASK SKINNED EMBED)
+                   FRAGMENT Shaders/Builtin/unlit.frag KEYS ALPHA_MASK SKINNED POINT_SHADOW EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinLit VERTEX Shaders/Builtin/mesh.vert
-                   FRAGMENT Shaders/Builtin/lit.frag KEYS ALPHA_MASK SKINNED EMBED)
+                   FRAGMENT Shaders/Builtin/lit.frag KEYS ALPHA_MASK SKINNED POINT_SHADOW EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinFallback VERTEX Shaders/Builtin/mesh.vert
-                   FRAGMENT Shaders/Builtin/fallback.frag KEYS SKINNED EMBED)
+                   FRAGMENT Shaders/Builtin/fallback.frag KEYS SKINNED POINT_SHADOW EMBED)
 # The depth prepass's fragment stage (ADR-0049), run behind each item's own vertex stage: mesh.vert here only so the
 # program builds. ALPHA_MASK: the variant masked items draw with.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDepthPrepass VERTEX Shaders/Builtin/mesh.vert
                    FRAGMENT Shaders/Builtin/prepass.frag KEYS ALPHA_MASK EMBED)
+# builtin:shadow (ADR-0050), the shadow passes' depth-only fragment stage behind each casting item's own vertex stage.
+# POINT_SHADOW: the variant a point light's cube faces are drawn with, writing the distance from the light.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinShadow VERTEX Shaders/Builtin/mesh.vert
+                   FRAGMENT Shaders/Builtin/shadow.frag KEYS ALPHA_MASK POINT_SHADOW EMBED)
 # CUBEMAP: the variant that draws a Sky cubemap.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBackground VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/background.frag KEYS CUBEMAP EMBED)
@@ -132,9 +147,16 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBloomDownsample VERTEX Shad
                    FRAGMENT Shaders/Builtin/bloom_downsample.frag KEYS MSAA EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBloomUpsample VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/bloom_upsample.frag EMBED)
-# MSAA: the variant that resolves a multisampled SceneColor.
+# GTAO (ADR-0049): the horizon search, whose MSAA variant reads sample 0 of the prepass's targets, and the DENOISE blur.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinGtao VERTEX Shaders/Builtin/fullscreen.vert
+                   FRAGMENT Shaders/Builtin/gtao.frag KEYS DENOISE MSAA EMBED)
+# Compute skinning (ADR-0050): each skinned mesh's vertices skinned once a frame, which every pass then draws rigidly.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinSkinning COMPUTE Shaders/Builtin/skinning.comp EMBED)
+# Light clustering (ADR-0049): each view's point, spot and rect lights listed in its clusters.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinLightClusters COMPUTE Shaders/Builtin/light_clusters.comp EMBED)
+# MSAA: the variant that resolves a multisampled SceneColor. OCCLUSION: the one that shows a view's ambient occlusion.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinOutput VERTEX Shaders/Builtin/fullscreen.vert
-                   FRAGMENT Shaders/Builtin/output.frag KEYS MSAA EMBED)
+                   FRAGMENT Shaders/Builtin/output.frag KEYS MSAA OCCLUSION EMBED)
 # Debug drawing (ADR-0025): lines expanded to screen-space quads, solid triangles, and text from the SDF font atlas.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDebugLines VERTEX Shaders/Builtin/debug_lines.vert
                    FRAGMENT Shaders/Builtin/debug.frag EMBED)

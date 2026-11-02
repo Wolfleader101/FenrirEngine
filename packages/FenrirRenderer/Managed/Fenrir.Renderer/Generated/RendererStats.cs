@@ -8,11 +8,21 @@ namespace Fenrir.Renderer;
 /// <summary>What the renderer did in its last drawn frame (ADR-0023).</summary>
 public partial struct RendererStats
 {
-    /// <summary>Draws of MeshRenderers, one per item per view.</summary>
+    /// <summary>
+    /// Draws of MeshRenderers in each view's Opaque and Transparent passes: one per run of matching opaque or masked
+    /// items merged into an instanced draw (ADR-0051), and one per transparent item.
+    /// </summary>
     public uint Draws;
+    /// <summary>
+    /// MeshRenderers drawn, one per item per view, however many draws they took, and the copies of each
+    /// InstancedMeshRenderer's instance list, one per copy per view.
+    /// </summary>
+    public uint Instances;
     /// <summary>Render passes run.</summary>
     public uint Passes;
-    /// <summary>Assets uploaded to the GPU by the prepare step: a mesh, or a material's parameter block.</summary>
+    /// <summary>
+    /// Assets uploaded to the GPU by the prepare step: a mesh, a material's parameter block, or an instance list.
+    /// </summary>
     public uint Uploads;
     /// <summary>Bytes copied into the frame's palette buffer: every skeleton palette the frame's draws read.</summary>
     public uint PaletteBytesUploaded;
@@ -20,6 +30,12 @@ public partial struct RendererStats
     /// Skeleton palettes written, one per skeleton and pose however many meshes and views draw it (ADR-0035).
     /// </summary>
     public uint DistinctPalettesWritten;
-    /// <summary>Draws of skinned MeshRenderers, one per item per view; part of `draws`.</summary>
+    /// <summary>Skinned MeshRenderers drawn, one per item per view; part of `instances`.</summary>
     public uint SkinnedDraws;
+    /// <summary>
+    /// Draws into the sun's shadow cascades and the spot lights' shadow tiles (ADR-0050): one per run of matching
+    /// casting items, merged as in `draws`, per cascade of each view, per shadowed spot light, and per shadowed point
+    /// light (six times over for items whose shader draws its six faces one at a time).
+    /// </summary>
+    public uint ShadowDraws;
 }

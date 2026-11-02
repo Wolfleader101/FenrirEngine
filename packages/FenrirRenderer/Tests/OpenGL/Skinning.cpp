@@ -1,7 +1,11 @@
-// Skinned drawing on OpenGL (the spec's seam 2; ADR-0035): the SKINNED variants of the built-in programs reading the
-// palette buffer, read back from the view's SceneColor, with FenrirSkeleton as the skinning source. Where a pixel is
-// predicted, the prediction comes from the CPU mirror of Fenrir/Skinning.glsl or from the rigid path.
+// Skinned drawing on OpenGL (the spec's seam 2; ADR-0035, ADR-0050): skinned meshes skinned once a frame by
+// builtin:skinning and drawn rigidly, or with compute skinning off by the built-in programs' SKINNED variants reading
+// the palette buffer, read back from the view's SceneColor, with FenrirSkeleton as the skinning source. Where a pixel
+// is predicted, the prediction comes from the CPU mirror of Fenrir/Skinning.glsl or from the rigid path; the two kinds
+// of skinning are held to each other pixel by pixel over ADR-0035's scenes.
 
+#include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -113,6 +117,68 @@ namespace
         skeleton.bones[0].sourceName = "bone";
         skeleton.bones[0].rest = rest;
         return skeleton;
+    }
+
+    /** @brief A white light travelling along (-sin 60, 0, -cos 60), as the foundation's lit test has it. */
+    void AddLight(GlSkinScene& test)
+    {
+        Fenrir::Entity light = test.app.GetActiveScene().GetEntityList().CreateEntity();
+        light.GetComponent<Fenrir::Transform>().rot =
+            Fenrir::Math::AngleAxis(glm::radians(60.0f), Vec3(0.0f, 1.0f, 0.0f));
+        light.AddComponent<Fenrir::DirectionalLight>();
+    }
+
+    /** @brief The frame with compute skinning on and off, and how many passes each ran. */
+    struct SkinnedFrames
+    {
+        GlProbe::Image compute;
+        GlProbe::Image vertex;
+        std::uint32_t computePasses = 0;
+        std::uint32_t vertexPasses = 0;
+    };
+
+    /** @brief Draws the scene once to build its poses, then once with compute skinning and once with it off. */
+    SkinnedFrames DrawBothWays(GlSkinScene& test)
+    {
+        test.RunFrame();
+        SkinnedFrames frames;
+        test.renderer.SetComputeSkinning(true);
+        frames.compute = test.Frame();
+        frames.computePasses = test.renderer.Stats().passes;
+        test.renderer.SetComputeSkinning(false);
+        frames.vertex = test.Frame();
+        frames.vertexPasses = test.renderer.Stats().passes;
+        return frames;
+    }
+
+    /** @brief How many pixels of `a` differ from `b`'s by more than `tolerance` in a channel. */
+    std::size_t Differing(const GlProbe::Image& a, const GlProbe::Image& b, float tolerance)
+    {
+        REQUIRE(a.width == b.width);
+        REQUIRE(a.height == b.height);
+        std::size_t differing = 0;
+        for (std::uint32_t y = 0; y < a.height; ++y)
+        {
+            for (std::uint32_t x = 0; x < a.width; ++x)
+            {
+                differing += GlProbe::Near(a.At(x, y), b.At(x, y), tolerance) ? 0 : 1;
+            }
+        }
+        return differing;
+    }
+
+    /** @brief How many pixels of `image` are not the background. */
+    std::size_t Drawn(const GlProbe::Image& image)
+    {
+        std::size_t drawn = 0;
+        for (std::uint32_t y = 0; y < image.height; ++y)
+        {
+            for (std::uint32_t x = 0; x < image.width; ++x)
+            {
+                drawn += GlProbe::Near(image.At(x, y), Background) ? 0 : 1;
+            }
+        }
+        return drawn;
     }
 } // namespace
 
@@ -242,5 +308,93 @@ TEST_CASE("A skinned mesh follows its skeleton entity's world transform, rotatio
     INFO("drawn where the owner's world matrix puts it, and not where the unmoved owner would");
     REQUIRE(GlProbe::Near(GlSkinScene::At(image, test.PixelOf(moved)), White));
     REQUIRE(GlProbe::Near(GlSkinScene::At(image, test.PixelOf({0.5f, 1.3f, -4.0f})), Background));
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("Compute skinning draws ADR-0035's scenes as vertex skinning does, pixel for pixel",
+          "[renderer][gl][skinning][compute-skinning]")
+{
+    GlSkinScene test;
+    test.RequireOpenGL();
+    // Within a byte, but for builtin:lit's sums in another order.
+    float tolerance = 2.0f / 255.0f;
+
+    SECTION("a two-bone strip with its upper bone turned 90 degrees")
+    {
+        const Fenrir::Entity owner =
+            test.AddRig(RendererTest::TwoBones(), RendererTest::Strip(),
+                        test.Material("builtin:unlit", Fenrir::Colour::White), At({0, -1, -4}));
+        test.RunFrame();
+        test.skeletons.EditBasePose(test.app.GetActiveScene(), owner)[1].rot =
+            Fenrir::Math::AngleAxis(glm::radians(90.0f), Vec3(0.0f, 0.0f, 1.0f));
+    }
+    SECTION("a bone with translation, rotation and non-uniform scale")
+    {
+        Fenrir::Transform rest;
+        rest.pos = {0.4f, -0.3f, 0.2f};
+        rest.rot = Fenrir::Math::AngleAxis(glm::radians(35.0f), glm::normalize(Vec3(0.3f, 0.2f, 1.0f)));
+        rest.scale = {2.0f, 0.5f, 1.5f};
+        test.AddRig(OneBone(rest), BoneSquare(Vec3(-0.5f, 0.6f, 0.0f), 0.4f),
+                    test.Material("builtin:unlit", Fenrir::Colour::White), At({0, 0, -4}));
+    }
+    SECTION("a non-uniformly scaled bone's normal, lit by builtin:lit")
+    {
+        Fenrir::MeshData square = BoneSquare(Vec3(0.0f), 0.8f);
+        const Fenrir::Math::Quat turn = Fenrir::Math::AngleAxis(glm::radians(45.0f), Vec3(0.0f, 1.0f, 0.0f));
+        for (std::size_t v = 0; v < square.positions.size(); ++v)
+        {
+            square.positions[v] = Fenrir::Math::Rotate(turn, square.positions[v]);
+            square.normals[v] = Fenrir::Math::Rotate(turn, square.normals[v]);
+        }
+        Fenrir::Transform stretch;
+        stretch.scale = {1.0f, 1.0f, 3.0f};
+        const auto material = test.Material("builtin:lit", Fenrir::Colour{0.8f, 0.8f, 0.8f, 1.0f});
+        test.assets.Store().SetFloat(material, "roughness", 1.0f);
+        test.AddRig(OneBone(stretch), square, material, At({0.0f, 0.0f, -3.0f}));
+        AddLight(test);
+        tolerance = 0.01f;
+    }
+    SECTION("a skinned mesh under its owner's rotation and scale")
+    {
+        const Fenrir::Transform owner({0.5f, -0.2f, -4.0f}, Fenrir::Math::AngleAxis(glm::radians(90.0f), Vec3(0, 0, 1)),
+                                      Vec3(0.5f));
+        test.AddRig(RendererTest::TwoBones(), RendererTest::Strip(),
+                    test.Material("builtin:unlit", Fenrir::Colour::White), owner);
+    }
+    SECTION("a normal-mapped square with a tangent stream, on a turned and non-uniformly scaled bone")
+    {
+        // The tangents go through A and are made perpendicular to the skinned normal again; the map tilts the normal
+        // towards +U, so a wrong tangent or handedness lights it differently.
+        Fenrir::MeshData square = RendererTest::TexturedQuad(0.8f, 0.0f);
+        Fenrir::MeshSkin skin;
+        for (std::size_t v = 0; v < square.positions.size(); ++v)
+        {
+            skin.joints.push_back({0, 0, 0, 0});
+            skin.weights.push_back({65535, 0, 0, 0});
+        }
+        square.skin = std::move(skin);
+        square.tangents.assign(square.positions.size(), Fenrir::Math::Vec4(1.0f, 0.0f, 0.0f, 1.0f));
+        Fenrir::Transform rest;
+        rest.rot = Fenrir::Math::AngleAxis(glm::radians(30.0f), glm::normalize(Vec3(0.2f, 1.0f, 0.4f)));
+        rest.scale = {1.5f, 0.7f, 1.0f};
+        Fenrir::AssetStore& store = test.assets.Store();
+        const auto material = test.Material("builtin:lit", Fenrir::Colour{0.8f, 0.8f, 0.8f, 1.0f});
+        store.SetFloat(material, "roughness", 1.0f);
+        const auto normalMap = store.Add<Fenrir::Image>(
+            RendererTest::Picture(1, 1, {204, 204, 195, 255}, Fenrir::ColourSpace::Linear), Fenrir::AssetOwner::App());
+        REQUIRE(store.SetTexture(material, "normalTexture", normalMap));
+        test.AddRig(OneBone(rest), std::move(square), material, At({0.0f, 0.0f, -3.0f}));
+        AddLight(test);
+        tolerance = 0.01f;
+    }
+
+    const SkinnedFrames frames = DrawBothWays(test);
+
+    INFO("compute skinning ran its Skinning pass, which vertex skinning does not");
+    REQUIRE(frames.computePasses == frames.vertexPasses + 1);
+    INFO("the scene covers " << Drawn(frames.compute) << " pixels");
+    REQUIRE(Drawn(frames.compute) > 20);
+    INFO("and every pixel is drawn alike both ways");
+    REQUIRE(Differing(frames.compute, frames.vertex, tolerance) == 0);
     REQUIRE(test.messages->errors.empty());
 }

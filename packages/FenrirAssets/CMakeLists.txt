@@ -13,6 +13,7 @@ add_library(FenrirAssets STATIC
     include/FenrirAssets/BoneMaskData.hpp
     include/FenrirAssets/ClipData.hpp
     include/FenrirAssets/ImageData.hpp
+    include/FenrirAssets/InstanceListData.hpp
     include/FenrirAssets/MaterialData.hpp
     include/FenrirAssets/MeshData.hpp
     include/FenrirAssets/Model.hpp

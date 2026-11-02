@@ -177,6 +177,46 @@
       ]
     },
     {
+      "name": "SetSpotShadowBudget",
+      "namespace": "Fenrir::RendererNatives",
+      "source": "../src/RendererScripting.cpp",
+      "state": "Fenrir::RendererScripting",
+      "doc": "Sets how many SpotLights may cast shadows from the next frame (RendererConfig::spotShadowBudget, ADR-0050): the nearest to any camera each frame; the rest light unshadowed. 0 shadows none.",
+      "facade": "Renderer.SetSpotShadowBudget",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the app has a renderer."
+      },
+      "parameters": [
+        {
+          "name": "budget",
+          "type": "std::uint32_t",
+          "kind": "u32"
+        }
+      ]
+    },
+    {
+      "name": "SetPointShadowBudget",
+      "namespace": "Fenrir::RendererNatives",
+      "source": "../src/RendererScripting.cpp",
+      "state": "Fenrir::RendererScripting",
+      "doc": "Sets how many PointLights may cast shadows from the next frame (RendererConfig::pointShadowBudget, ADR-0050): the nearest to any camera each frame; the rest light unshadowed. 0 shadows none.",
+      "facade": "Renderer.SetPointShadowBudget",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the app has a renderer."
+      },
+      "parameters": [
+        {
+          "name": "budget",
+          "type": "std::uint32_t",
+          "kind": "u32"
+        }
+      ]
+    },
+    {
       "name": "SpawnModel",
       "namespace": "Fenrir::RendererNatives",
       "source": "../src/RendererScripting.cpp",

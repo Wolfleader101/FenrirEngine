@@ -107,6 +107,9 @@ namespace Fenrir::Detail
          */
         StaleHandleLog staleMeshes;
         StaleHandleLog fallbackMaterials;
+        StaleHandleLog staleInstanceLists;
+        /** @brief Meshes with skin data that InstancedMeshRenderers named, which are not drawn. */
+        StaleHandleLog skinnedListMeshes;
         bool loggedNoCamera = false;
         bool loggedLights = false;
         /** @brief Cameras that draw nothing, by entity id and why. */

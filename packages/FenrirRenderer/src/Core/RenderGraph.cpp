@@ -18,11 +18,16 @@ namespace Fenrir::Render
         Graphics::TextureUsage TextureUsageOf(ResourceUsage usage)
         {
             // Indexed by ResourceUsage, in its order.
-            constexpr std::array<Graphics::TextureUsage, 8> byUsage{
-                Graphics::TextureUsage::ColourAttachment, Graphics::TextureUsage::DepthAttachment,
-                Graphics::TextureUsage::DepthAttachment,  Graphics::TextureUsage::Sampled,
-                Graphics::TextureUsage::Storage,          Graphics::TextureUsage::Storage,
-                Graphics::TextureUsage::CopySource,       Graphics::TextureUsage::CopyDestination,
+            constexpr std::array<Graphics::TextureUsage, 9> byUsage{
+                Graphics::TextureUsage::ColourAttachment,
+                Graphics::TextureUsage::DepthAttachment,
+                Graphics::TextureUsage::DepthAttachment,
+                Graphics::TextureUsage::Sampled,
+                Graphics::TextureUsage::Storage,
+                Graphics::TextureUsage::Storage,
+                Graphics::TextureUsage::CopySource,
+                Graphics::TextureUsage::CopyDestination,
+                Graphics::TextureUsage::None,
             };
             return byUsage.at(static_cast<std::size_t>(usage));
         }
@@ -38,6 +43,8 @@ namespace Fenrir::Render
                 return Graphics::BufferUsage::CopySource;
             case ResourceUsage::CopyDestination:
                 return Graphics::BufferUsage::CopyDestination;
+            case ResourceUsage::VertexInput:
+                return Graphics::BufferUsage::Vertex;
             default:
                 return Graphics::BufferUsage::None;
             }
@@ -79,6 +86,18 @@ namespace Fenrir::Render
         access.clearDepth = clear;
     }
 
+    void PassBuilder::DepthAttachmentLayer(GraphResource texture, std::uint32_t layer, LoadOp load, float clear)
+    {
+        DepthAttachment(texture, load, clear);
+        m_graph.m_passes[m_pass].accesses.back().layer = layer;
+    }
+
+    void PassBuilder::LayeredDepthAttachment(GraphResource texture, LoadOp load, float clear)
+    {
+        DepthAttachment(texture, load, clear);
+        m_graph.m_passes[m_pass].accesses.back().layered = true;
+    }
+
     void PassBuilder::DepthReadOnly(GraphResource texture)
     {
         Use(texture, ResourceUsage::DepthRead, true, false);
@@ -98,6 +117,11 @@ namespace Fenrir::Render
     void PassBuilder::StorageWrite(GraphResource resource)
     {
         Use(resource, ResourceUsage::StorageWrite, false, true);
+    }
+
+    void PassBuilder::VertexInput(GraphResource buffer)
+    {
+        Use(buffer, ResourceUsage::VertexInput, true, false);
     }
 
     void PassBuilder::CopySource(GraphResource resource)
@@ -415,8 +439,9 @@ namespace Fenrir::Render
             }
             else if (access.usage == ResourceUsage::DepthWrite || access.usage == ResourceUsage::DepthRead)
             {
-                desc.depth = Graphics::DepthAttachment{texture, access.load, access.clearDepth,
-                                                       access.usage == ResourceUsage::DepthRead};
+                desc.depth = Graphics::DepthAttachment{texture,           access.load,
+                                                       access.clearDepth, access.usage == ResourceUsage::DepthRead,
+                                                       access.layer,      access.layered};
             }
             desc.uses.push_back({texture, buffers[access.resource], access.usage});
         }

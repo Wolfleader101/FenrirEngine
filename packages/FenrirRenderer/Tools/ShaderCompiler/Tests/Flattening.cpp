@@ -5,6 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "FenrirAssets/ShaderGlBindings.hpp"
+#include "FenrirShaders/Compute.hpp"
 #include "FenrirShaders/Flatten.hpp"
 #include "ShaderCompilerTest.hpp"
 
@@ -15,7 +16,11 @@ using ShaderCompilerTest::SpirvDecorations;
 namespace
 {
     constexpr std::uint32_t BuiltInVertexId = 5;
+    constexpr std::uint32_t BuiltInInstanceId = 6;
     constexpr std::uint32_t BuiltInVertexIndex = 42;
+    constexpr std::uint32_t BuiltInInstanceIndex = 43;
+    // Fenrir/Draw.glsl's fenrirInstanceIndexExcludesBase.
+    constexpr std::uint32_t ExcludesBaseSpecId = 61440;
 
     // The fixture's stages: [0] vertex, [1] fragment.
     const Fenrir::ShaderVariant& FlattenVariant()
@@ -57,9 +62,10 @@ TEST_CASE("The GL copy flattens every resource kind's bindings and zeroes the se
 {
     const auto gl = Resources(true);
 
-    INFO("the fixture's fourteen resources are all decorated: its own eight, and Frame.glsl's three sky textures, "
-         "light buffer and two LTC tables");
-    REQUIRE(gl.size() == 14);
+    INFO("the fixture's nineteen resources are all decorated: its own eight, Frame.glsl's three sky textures, light "
+         "buffer, two LTC tables, spot shadow records and atlas and point shadow records and cubes, and Draw.glsl's "
+         "instance-list buffer");
+    REQUIRE(gl.size() == 19);
     for (const auto& [name, decoration] : gl)
     {
         INFO(name << "'s descriptor set is zeroed");
@@ -77,9 +83,11 @@ TEST_CASE("The GL copy flattens every resource kind's bindings and zeroes the se
     REQUIRE(gl.at("first").binding == 16u);
     REQUIRE(gl.at("middle").binding == 17u);
     REQUIRE(gl.at("second").binding == 18u);
-    INFO("storage blocks: draws (set 3 binding 0) and lights (3, 2) are set 3's storage blocks 0 and 1");
+    INFO("storage blocks: draws (set 3 binding 0), fenrirInstances (3, 1) and lights (3, 3) are set 3's storage "
+         "blocks 0, 1 and 2");
     REQUIRE(gl.at("draws").binding == 24u);
-    REQUIRE(gl.at("lights").binding == 25u);
+    REQUIRE(gl.at("fenrirInstances").binding == 25u);
+    REQUIRE(gl.at("lights").binding == 26u);
 }
 
 TEST_CASE("The SPIR-V kept for Vulkan has the sets and bindings as written", "[shader-compiler][flattening]")
@@ -89,9 +97,9 @@ TEST_CASE("The SPIR-V kept for Vulkan has the sets and bindings as written", "[s
     INFO("extra is still set 1 binding 2");
     REQUIRE(spirv.at("extra").set == 1u);
     REQUIRE(spirv.at("extra").binding == 2u);
-    INFO("lights is still set 3 binding 2");
+    INFO("lights is still set 3 binding 3");
     REQUIRE(spirv.at("lights").set == 3u);
-    REQUIRE(spirv.at("lights").binding == 2u);
+    REQUIRE(spirv.at("lights").binding == 3u);
 }
 
 TEST_CASE("The GL copy reads VertexId where the shader read gl_VertexIndex", "[shader-compiler][flattening]")
@@ -108,6 +116,22 @@ TEST_CASE("The GL copy reads VertexId where the shader read gl_VertexIndex", "[s
     REQUIRE(std::ranges::count(gl.builtIns, BuiltInVertexIndex) == 0);
 }
 
+TEST_CASE("Fenrir/Draw.glsl's record index adds the base instance in the GL copy only", "[shader-compiler][flattening]")
+{
+    const Fenrir::ShaderStageCode& vertex = FlattenVariant().stages.at(0);
+    REQUIRE(vertex.stage == Fenrir::ShaderStage::Vertex);
+    const SpirvDecorations gl = Decorate(vertex.glSpirv);
+    const SpirvDecorations original = Decorate(vertex.spirv);
+
+    INFO("the original reads InstanceIndex, which on Vulkan counts from the base instance, and adds nothing");
+    REQUIRE(std::ranges::count(original.builtIns, BuiltInInstanceIndex) == 1);
+    REQUIRE(original.specBools.at(ExcludesBaseSpecId) == false);
+    INFO("the GL copy reads InstanceId, which counts from 0, and adds the base instance");
+    REQUIRE(std::ranges::count(gl.builtIns, BuiltInInstanceId) == 1);
+    REQUIRE(std::ranges::count(gl.builtIns, BuiltInInstanceIndex) == 0);
+    REQUIRE(gl.specBools.at(ExcludesBaseSpecId) == true);
+}
+
 TEST_CASE("Each binding is reflected with its set, kind and name", "[shader-compiler][reflection]")
 {
     const Fenrir::ShaderVariant& variant = FlattenVariant();
@@ -116,8 +140,9 @@ TEST_CASE("Each binding is reflected with its set, kind and name", "[shader-comp
             variant.bindings, [&](const Fenrir::ShaderBinding& b) { return b.set == set && b.binding == binding; });
     };
 
-    INFO("fourteen bindings across both stages, six of them Frame.glsl's sky textures, light buffer and LTC tables");
-    REQUIRE(variant.bindings.size() == 14);
+    INFO("nineteen bindings across both stages, ten of them Frame.glsl's sky textures, light buffer, LTC tables, spot "
+         "shadow records and atlas and point shadow records and cubes, and one Draw.glsl's instance-list buffer");
+    REQUIRE(variant.bindings.size() == 19);
     INFO("set 0 binding 0 is the FrameData uniform block from Fenrir/Frame.glsl");
     REQUIRE(find(0, 0)->kind == Fenrir::ShaderBindingKind::UniformBuffer);
     REQUIRE(find(0, 0)->name == "FrameData");
@@ -136,8 +161,8 @@ TEST_CASE("A storage block ending in a runtime array is reflected one record lon
         variant.bindings, [](const Fenrir::ShaderBinding& b) { return b.set == 3 && b.binding == 0; });
     REQUIRE(draws != variant.bindings.end());
 
-    INFO("DrawData holds DrawItem items[]: two mat4s, a uint and a float, padded to 144 bytes in std430");
-    REQUIRE(draws->size == 144);
+    INFO("DrawData holds DrawItem items[]: two mat4s, a uint, a float, two uints and a vec4, 160 bytes in std430");
+    REQUIRE(draws->size == 160);
 }
 
 TEST_CASE("The vertex stage's inputs are reflected by location", "[shader-compiler][reflection]")
@@ -158,4 +183,34 @@ TEST_CASE("The vertex stage's inputs are reflected by location", "[shader-compil
     INFO("no built-in (gl_VertexIndex) is listed as an input");
     REQUIRE(std::ranges::none_of(variant.vertexInputs,
                                  [](const Fenrir::ShaderVertexInput& i) { return i.name.starts_with("gl_"); }));
+}
+
+TEST_CASE("A compute program has one compute stage, whose GL copy is flattened as a graphics program's",
+          "[shader-compiler][flattening][compute]")
+{
+    const Fenrir::ShaderContainer container = Read(Fenrir::Shaders::Compute);
+    INFO("one variant, with no keys");
+    REQUIRE(container.variants.size() == 1);
+    const Fenrir::ShaderVariant& variant = container.variants.front();
+    INFO("one stage, a compute stage");
+    REQUIRE(variant.stages.size() == 1);
+    REQUIRE(variant.stages.front().stage == Fenrir::ShaderStage::Compute);
+    INFO("it has no vertex inputs, and its three bindings are reflected");
+    REQUIRE(variant.vertexInputs.empty());
+    REQUIRE(variant.bindings.size() == 3);
+
+    const SpirvDecorations original = Decorate(variant.stages.front().spirv);
+    const SpirvDecorations gl = Decorate(variant.stages.front().glSpirv);
+    INFO("as written: the target at set 2 binding 1");
+    REQUIRE(original.byName.at("target").set == 2u);
+    REQUIRE(original.byName.at("target").binding == 1u);
+    INFO("the GL copy: every set 0, the job block at 0, the storage blocks at 8 and 16, each first of its kind in its "
+         "set");
+    for (const char* name : {"job", "source", "target"})
+    {
+        REQUIRE(gl.byName.at(name).set == 0u);
+    }
+    REQUIRE(gl.byName.at("job").binding == Fenrir::GlBindingOf(0, 0));
+    REQUIRE(gl.byName.at("source").binding == Fenrir::GlBindingOf(1, 0));
+    REQUIRE(gl.byName.at("target").binding == Fenrir::GlBindingOf(2, 0));
 }

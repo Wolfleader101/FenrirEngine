@@ -43,6 +43,20 @@ namespace Fenrir::Render
         BloomUpsample,
         /** @brief `builtin:depth-prepass`: the depth prepass's fragment stage, an item's view-space normal. */
         DepthPrepass,
+        /** @brief `builtin:gtao`: a view's GTAO from its depth prepass, the horizon search and, DENOISE, the blur. */
+        Gtao,
+        /**
+         * @brief `builtin:skinning`: a compute program, each skinned mesh's vertices skinned once a frame for every
+         * pass to draw rigidly (ADR-0050).
+         */
+        Skinning,
+        /** @brief `builtin:shadow`: the shadow passes' fragment stage, depth only, cutting Masked items out. */
+        Shadow,
+        /**
+         * @brief `builtin:light-clusters`: a compute program, each view's point, spot and rect lights listed in its
+         * clusters (ADR-0049).
+         */
+        LightClusters,
     };
 
     /** @brief A built-in program's `builtin:` name and its embedded container's bytes. */

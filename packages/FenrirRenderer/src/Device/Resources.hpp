@@ -85,11 +85,13 @@ namespace Fenrir::Graphics
         Rg16Float,
     };
 
-    /** @brief Whether a texture is one image or six cube faces. */
+    /** @brief Whether a texture is one image, six cube faces, or an array of cubes. */
     enum class TextureKind : std::uint8_t
     {
         Texture2D,
         Cube,
+        /** @brief `layers` cubes, six faces each: face f of cube c is layer 6c + f, in a cube's face order. */
+        CubeArray,
     };
 
     /** @brief A texture's shape, format and uses. Rows are stored top row first on every backend (ADR-0016). */
@@ -103,6 +105,8 @@ namespace Fenrir::Graphics
         /** @brief Samples per texel: 1 unless it is a multisampled attachment. */
         std::uint32_t samples = 1;
         TextureUsage usage = TextureUsage::Sampled;
+        /** @brief A CubeArray's cubes; 1 for every other kind. */
+        std::uint32_t layers = 1;
 
         friend bool operator==(const TextureDesc&, const TextureDesc&) = default;
     };
@@ -122,6 +126,20 @@ namespace Fenrir::Graphics
         ClampToEdge,
     };
 
+    /**
+     * @brief How a fragment's depth is compared with the stored one. Reversed-Z draws with `GreaterEqual`; what the
+     * depth prepass laid down is shaded with `Equal` (ADR-0049).
+     */
+    enum class CompareOp : std::uint8_t
+    {
+        Always,
+        Less,
+        LessEqual,
+        Greater,
+        GreaterEqual,
+        Equal,
+    };
+
     /** @brief How textures bound with a sampler are filtered and addressed. */
     struct SamplerDesc
     {
@@ -133,6 +151,11 @@ namespace Fenrir::Graphics
         AddressMode addressW = AddressMode::Repeat;
         /** @brief The maximum anisotropy; 1 turns it off. */
         float maxAnisotropy = 1.0f;
+        /**
+         * @brief For a depth texture read as a shadow sampler: the reference compared with each texel (passing gives
+         * 1), the results filtered as texels are. Empty reads depths as values.
+         */
+        std::optional<CompareOp> compare;
 
         friend bool operator==(const SamplerDesc&, const SamplerDesc&) = default;
     };
@@ -228,20 +251,6 @@ namespace Fenrir::Graphics
         Back,
     };
 
-    /**
-     * @brief How a fragment's depth is compared with the stored one. Reversed-Z draws with `GreaterEqual`; what the
-     * depth prepass laid down is shaded with `Equal` (ADR-0049).
-     */
-    enum class CompareOp : std::uint8_t
-    {
-        Always,
-        Less,
-        LessEqual,
-        Greater,
-        GreaterEqual,
-        Equal,
-    };
-
     /** @brief How a fragment's colour combines with the target's. */
     enum class BlendMode : std::uint8_t
     {
@@ -291,5 +300,17 @@ namespace Fenrir::Graphics
         /** @brief The depth attachment's format; empty when the pipeline draws with none. */
         std::optional<TextureFormat> depthFormat = TextureFormat::Depth32Float;
         std::uint32_t samples = 1;
+    };
+
+    /**
+     * @brief A compute pipeline, made once as the explicit APIs require: the compute program's variant and the layouts
+     * of its binding sets. Compute pass dispatches run it (ADR-0050).
+     */
+    struct ComputePipelineDesc
+    {
+        /** @brief The shader variant, with one compute stage. It must outlive the call only. */
+        const ShaderVariant* shader = nullptr;
+        /** @brief Each binding set's layout; an empty handle for a set the shader does not use. */
+        std::array<BindingGroupLayoutHandle, BindingSetCount> sets{};
     };
 } // namespace Fenrir::Graphics

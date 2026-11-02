@@ -23,8 +23,9 @@ namespace Fenrir::ShaderCompiler
 
     /** @brief How the tool is run, for an error message. */
     inline constexpr const char* Usage =
-        "usage: FenrirShaderCompiler --name <program> --vertex <file> --fragment <file> --output <file.fshader>\n"
-        "           [--key <define>]... [--include <dir>]... [--depfile <file>] [--header <file.hpp>]\n";
+        "usage: FenrirShaderCompiler --name <program> (--vertex <file> --fragment <file> | --compute <file>)\n"
+        "           --output <file.fshader> [--key <define>]... [--include <dir>]... [--depfile <file>]\n"
+        "           [--header <file.hpp>]\n";
 
     /** @brief The run `arguments` (without the program name) asks for, or empty, with the problem printed. */
     std::optional<Arguments> ParseArguments(std::span<const std::string> arguments);

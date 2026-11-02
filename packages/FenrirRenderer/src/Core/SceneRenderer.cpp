@@ -30,7 +30,10 @@ namespace Fenrir::Render
             Math::Vec4 sky;
             /** @brief The sky the scene is lit by: as `sky`, and its specular cube's highest mip. */
             Math::Vec4 skyLight;
-            /** @brief x: how many records the light buffer holds this frame. */
+            /**
+             * @brief x: how many records the light buffer holds this frame; y: how many cast spot shadows, first; z:
+             * how many cast point shadows, after them.
+             */
             std::array<std::uint32_t, 4> lights{};
         };
         static_assert(sizeof(FrameBlock) == 96);
@@ -44,8 +47,29 @@ namespace Fenrir::Render
             Math::Mat4 inverseViewProjection;
             Math::Vec4 cameraPosition;
             Math::Vec4 viewport;
+            /** @brief The sun's cascades (ADR-0050): world to each one's tile of the shadow atlas. */
+            std::array<Math::Mat4, MaxCascades> shadowMatrices{};
+            /** @brief The view depth each cascade reaches to. */
+            Math::Vec4 shadowSplits{0.0f};
+            /** @brief The world size of each cascade's texels. */
+            Math::Vec4 shadowTexels{0.0f};
+            /** @brief Normal-offset and slope-scaled biases in texels, the filter's radius in texels, the blend share.
+             */
+            Math::Vec4 shadowBias{0.0f};
+            /**
+             * @brief x: how many cascades (0: no shadow); y: 1 to tint pixels by their cascade; z: in a point light's
+             * shadow pass, its cube of the point shadow cubes.
+             */
+            std::array<std::uint32_t, 4> shadowInfo{};
+            /** @brief Its light clusters (ADR-0049): the first slice's view depth and 24 / ln(far / near). */
+            Math::Vec4 clusterSlices{0.0f};
+            /**
+             * @brief x: 1 when set 1 binding 3 holds its clusters; y: 1 to show their heat; z: each cluster's room for
+             * light indices.
+             */
+            std::array<std::uint32_t, 4> clusterInfo{};
         };
-        static_assert(sizeof(ViewBlock) == 288);
+        static_assert(sizeof(ViewBlock) == 640);
 
         /** @brief One draw record, as `Fenrir/Draw.glsl` declares it (std430). */
         struct DrawBlock
@@ -56,11 +80,84 @@ namespace Fenrir::Render
             std::uint32_t paletteOffset = 0;
             /** @brief The sign of the world matrix's determinant: -1 when it mirrors, else 1. */
             float worldSign = 1.0f;
-            std::uint32_t padding0 = 0;
-            std::uint32_t padding1 = 0;
+            /** @brief An instance list's first copy in the instance-list buffer, and its copies; 0 for one item. */
+            std::uint32_t instanceFirst = 0;
+            std::uint32_t instanceCount = 0;
+            /** @brief Linear, multiplying the vertex colour: white for every record the CPU writes. */
+            Math::Vec4 colour{1.0f};
         };
-        static_assert(sizeof(DrawBlock) == 144);
-        static_assert(offsetof(DrawBlock, paletteOffset) == 128 && offsetof(DrawBlock, worldSign) == 132);
+        static_assert(sizeof(DrawBlock) == 160);
+        static_assert(offsetof(DrawBlock, paletteOffset) == 128 && offsetof(DrawBlock, worldSign) == 132 &&
+                      offsetof(DrawBlock, instanceCount) == 140 && offsetof(DrawBlock, colour) == 144);
+
+        /** @brief One copy of an instance list, as `Fenrir/Draw.glsl`'s FenrirInstance declares it (std430). */
+        struct InstanceBlock
+        {
+            /** @brief Relative to the drawing entity. */
+            Math::Mat4 transform;
+            /** @brief The inverse transpose of the transform's 3x3, a column a vec4 as std430 lays out a mat3. */
+            std::array<Math::Vec4, 3> normal;
+            Math::Vec4 colour{1.0f};
+        };
+        static_assert(sizeof(InstanceBlock) == 128);
+
+        /**
+         * @brief A Skinning dispatch's job block, as `builtin:skinning` declares it (std140): where its mesh's streams
+         * start in the mesh's vertex buffer and its skinned vertices in the frame's skinned vertex buffer, in 32-bit
+         * words, and its palette range's first entry, in bones.
+         */
+        struct SkinJobBlock
+        {
+            std::uint32_t vertexCount = 0;
+            std::uint32_t paletteOffset = 0;
+            std::uint32_t skinnedFirst = 0;
+            /** @brief Bit 0: the mesh has normals; bit 1: it has tangents. */
+            std::uint32_t flags = 0;
+            std::uint32_t positions = 0;
+            std::uint32_t normals = 0;
+            std::uint32_t tangents = 0;
+            std::uint32_t joints = 0;
+            std::uint32_t weights = 0;
+            std::array<std::uint32_t, 3> padding{};
+        };
+        static_assert(sizeof(SkinJobBlock) == 48);
+
+        /** @name The standard vertex locations (`Fenrir/Vertex.glsl`, `Fenrir/Skinning.glsl`) compute skinning names.
+         * @{
+         */
+        constexpr std::uint32_t PositionLocation = 0;
+        constexpr std::uint32_t NormalLocation = 1;
+        constexpr std::uint32_t TangentLocation = 2;
+        constexpr std::uint32_t JointLocation = 6;
+        constexpr std::uint32_t WeightLocation = 7;
+        /** @} */
+
+        /** @brief The standard streams a compute-skinned draw reads from the skinned vertex buffer, as bits. */
+        constexpr std::uint32_t SkinnedStreams =
+            (1u << PositionLocation) | (1u << NormalLocation) | (1u << TangentLocation);
+        /**
+         * @brief Where each skinned stream starts within a mesh's skinned vertices, in bytes a vertex: its positions,
+         * then its normals, then its tangents, by location.
+         */
+        constexpr std::array<std::size_t, 3> SkinnedStreamStarts{0, 12, 24};
+        /** @brief The bytes of one skinned vertex: its position, normal and tangent, each in a stream of its own. */
+        constexpr std::size_t SkinnedVertexBytes = SkinnedStreamStarts.back() + 16;
+        /** @brief builtin:skinning's work group size, one invocation a vertex. */
+        constexpr std::uint32_t SkinningGroupSize = 64;
+
+        /** @brief A LightClusters pass's job block, as `builtin:light-clusters` declares it (std140). */
+        struct ClusterJobBlock
+        {
+            Math::Mat4 view{1.0f};
+            Math::Mat4 inverseProjection{1.0f};
+            /** @brief The first slice's near depth and the last's far one. */
+            Math::Vec4 depths{0.0f};
+            /** @brief How many lights the light buffer holds, and each cluster's room for light indices. */
+            std::array<std::uint32_t, 4> counts{};
+        };
+        static_assert(sizeof(ClusterJobBlock) == 160);
+        /** @brief builtin:light-clusters' work group size, one invocation a cluster. */
+        constexpr std::uint32_t LightClustersGroupSize = 64;
 
         /** @brief The background block, as `builtin:background` declares it (std140). */
         struct BackgroundBlock
@@ -121,9 +218,11 @@ namespace Fenrir::Render
         // Sets 0, 1 and 3, declared in C++ (ADR-0024, ADR-0035, ADR-0048). The draw and palette buffers hold as many
         // records as they need; reflection sizes such a block by one record, so their record layouts are checked. Set
         // 0's textures are the sky's light (ADR-0047): its spherical harmonics, its specular cube and the BRDF table,
-        // then the rect lights' two LTC tables; its storage block is the point, spot and rect lights (ADR-0048), as
-        // many as the frame has.
-        [[maybe_unused]] constexpr std::array<FixedBinding, 10> FixedBindings{{
+        // then the rect lights' two LTC tables; its storage blocks are the point, spot and rect lights (ADR-0048), as
+        // many as the frame has, and the shadowed spot lights' records, with their atlas, then the shadowed point
+        // lights' records, with the point shadow cubes (ADR-0050). Set 1's textures are the view's ambient occlusion
+        // (ADR-0049) and its sun's shadow atlas (ADR-0050); its storage block the view's light clusters (ADR-0049).
+        [[maybe_unused]] constexpr std::array<FixedBinding, 18> FixedBindings{{
             {0, 0, ShaderBindingKind::UniformBuffer, sizeof(FrameBlock)},
             {0, 1, ShaderBindingKind::Texture, 0},
             {0, 2, ShaderBindingKind::Texture, 0},
@@ -131,9 +230,17 @@ namespace Fenrir::Render
             {0, 4, ShaderBindingKind::StorageBuffer, sizeof(GpuLight)},
             {0, 5, ShaderBindingKind::Texture, 0},
             {0, 6, ShaderBindingKind::Texture, 0},
+            {0, 7, ShaderBindingKind::StorageBuffer, sizeof(GpuSpotShadow)},
+            {0, 8, ShaderBindingKind::Texture, 0},
+            {0, 9, ShaderBindingKind::StorageBuffer, sizeof(GpuPointShadow)},
+            {0, 10, ShaderBindingKind::Texture, 0},
             {1, 0, ShaderBindingKind::UniformBuffer, sizeof(ViewBlock)},
+            {1, 1, ShaderBindingKind::Texture, 0},
+            {1, 2, ShaderBindingKind::Texture, 0},
+            {1, 3, ShaderBindingKind::StorageBuffer, sizeof(std::uint32_t)},
             {3, 0, ShaderBindingKind::StorageBuffer, sizeof(DrawBlock)},
-            {3, 1, ShaderBindingKind::StorageBuffer, sizeof(GpuBone)},
+            {3, 1, ShaderBindingKind::StorageBuffer, sizeof(InstanceBlock)},
+            {3, 2, ShaderBindingKind::StorageBuffer, sizeof(GpuBone)},
         }};
 
         /** @brief The binding set of the material. */
@@ -178,6 +285,9 @@ namespace Fenrir::Render
         constexpr std::string_view AlphaMaskKey = "ALPHA_MASK";
         /** @brief The variant key the renderer sets for a skinned draw (ADR-0035). */
         constexpr std::string_view SkinnedKey = "SKINNED";
+        /** @brief The variant key of a point light's shadow: six cube faces as instances, or its distance (ADR-0050).
+         */
+        constexpr std::string_view PointShadowKey = "POINT_SHADOW";
         /** @brief The block member a `Masked` material's alpha cutoff is written into. */
         constexpr std::string_view AlphaCutoffMember = "alphaCutoff";
 
@@ -604,6 +714,18 @@ namespace Fenrir::Render
             return container.FindVariant(wanted);
         }
 
+        /** @brief `of`'s keys with POINT_SHADOW too, in `container`; null if the container has no such key. */
+        const ShaderVariant* PointShadowVariant(const ShaderContainer& container, const ShaderVariant& of)
+        {
+            if (std::ranges::find(container.keys, PointShadowKey) == container.keys.end())
+            {
+                return nullptr;
+            }
+            std::vector<std::string_view> wanted(of.keys.begin(), of.keys.end());
+            wanted.push_back(PointShadowKey);
+            return container.FindVariant(wanted);
+        }
+
         /** @brief -1 when `world` mirrors (a negative determinant of its 3x3), else 1. */
         float WorldSign(const Math::Mat4& world)
         {
@@ -660,21 +782,39 @@ namespace Fenrir::Render
 
     // ---- SceneRenderer ----
 
-    SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
-        : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1))
+    SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples,
+                                 bool automaticInstancing, bool computeSkinning, CascadeConfig cascades,
+                                 SpotShadowConfig spotShadows, PointShadowConfig pointShadows)
+        : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1)),
+          m_automaticInstancing(automaticInstancing), m_computeSkinning(computeSkinning), m_cascades(cascades),
+          m_spotShadowConfig(spotShadows), m_pointShadowConfig(pointShadows)
     {
+        m_cascades.count = std::clamp(m_cascades.count, 1u, MaxCascades);
+        m_cascades.mapSize = std::max(m_cascades.mapSize, 1u);
+        m_spotShadowConfig.mapSize = std::max(m_spotShadowConfig.mapSize, 16u);
+        m_pointShadowConfig.mapSize = std::max(m_pointShadowConfig.mapSize, 1u);
         m_frameLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer},
                                                             {1, ShaderBindingKind::Texture},
                                                             {2, ShaderBindingKind::Texture},
                                                             {3, ShaderBindingKind::Texture},
                                                             {4, ShaderBindingKind::StorageBuffer},
                                                             {5, ShaderBindingKind::Texture},
-                                                            {6, ShaderBindingKind::Texture}}},
+                                                            {6, ShaderBindingKind::Texture},
+                                                            {7, ShaderBindingKind::StorageBuffer},
+                                                            {8, ShaderBindingKind::Texture},
+                                                            {9, ShaderBindingKind::StorageBuffer},
+                                                            {10, ShaderBindingKind::Texture}}},
                                                           "Frame");
-        m_viewLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "View");
+        m_viewLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer},
+                                                           {1, ShaderBindingKind::Texture},
+                                                           {2, ShaderBindingKind::Texture},
+                                                           {3, ShaderBindingKind::StorageBuffer}}},
+                                                         "View");
         m_outputBlockLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Output");
-        m_drawLayout = m_device.CreateBindingGroupLayout(
-            {{{0, ShaderBindingKind::StorageBuffer}, {1, ShaderBindingKind::StorageBuffer}}}, "Draw");
+        m_drawLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::StorageBuffer},
+                                                           {1, ShaderBindingKind::StorageBuffer},
+                                                           {2, ShaderBindingKind::StorageBuffer}}},
+                                                         "Draw");
 
         // The default textures (ADR-0024): 1x1 white, black and the flat tangent-space normal, linear.
         constexpr std::array<std::array<std::uint8_t, 4>, 3> texels{{
@@ -718,6 +858,26 @@ namespace Fenrir::Render
         SamplerDesc panorama = clamp;
         panorama.addressU = AddressMode::Repeat;
         m_panoramaSampler = m_device.CreateSampler(panorama, "Panorama sampler");
+        // Lit where the reference is at least the stored depth: nearer the light under reversed-Z. Bilinear, so each
+        // read is itself a 2 x 2 filter.
+        SamplerDesc shadow = clamp;
+        shadow.mipFilter = Filter::Nearest;
+        shadow.compare = CompareOp::GreaterEqual;
+        m_shadowSampler = m_device.CreateSampler(shadow, "Shadow sampler");
+        TextureDesc noShadow;
+        noShadow.format = TextureFormat::Depth32Float;
+        noShadow.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
+        m_noShadow = m_device.CreateTexture(noShadow, "No shadow");
+        constexpr float farthest = 0.0f;
+        m_device.WriteTexture(m_noShadow, 0, 0, BytesOf(farthest));
+        // The same for point shadows: one cube of 0.
+        TextureDesc noPointShadow = noShadow;
+        noPointShadow.kind = TextureKind::CubeArray;
+        m_noPointShadow = m_device.CreateTexture(noPointShadow, "No point shadow");
+        for (std::uint32_t face = 0; face < CubeFaceCount; ++face)
+        {
+            m_device.WriteTexture(m_noPointShadow, 0, face, BytesOf(farthest));
+        }
         m_defaultStreams = m_device.CreateBuffer({sizeof(DefaultStreams), BufferUsage::Vertex},
                                                  std::as_bytes(std::span(DefaultStreams)), "Default vertex streams");
 
@@ -734,11 +894,13 @@ namespace Fenrir::Render
             }
         }
         m_fallback.id = 0;
+        m_fallback.computeSkinned = true;
 
         m_background = ReadBuiltin(BuiltinProgram::Background, m_logger);
         m_output = ReadBuiltin(BuiltinProgram::Output, m_logger);
         m_panorama = ReadBuiltin(BuiltinProgram::Panorama, m_logger);
         m_prepass = ReadBuiltin(BuiltinProgram::DepthPrepass, m_logger);
+        m_shadow = ReadBuiltin(BuiltinProgram::Shadow, m_logger);
         m_prepassMaskLayout = m_device.CreateBindingGroupLayout(
             {{{0, ShaderBindingKind::UniformBuffer}, {1, ShaderBindingKind::Texture}}}, "Prepass mask");
         if (const ShaderVariant* variant = BaseVariant(m_panorama))
@@ -769,15 +931,25 @@ namespace Fenrir::Render
         const ShaderVariant* output = m_samples > 1 ? m_output.FindVariant(msaa) : BaseVariant(m_output);
         m_outputPipeline = MakeInternalPipeline(m_output, output, m_outputLayout, TextureFormat::Rgba8Srgb, false, 1,
                                                 m_outputBlockLayout);
+        constexpr std::array<std::string_view, 1> occlusion{"OCCLUSION"};
+        m_occlusionOutputPipeline = MakeInternalPipeline(m_output, m_output.FindVariant(occlusion), m_outputLayout,
+                                                         TextureFormat::Rgba8Srgb, false, 1, m_outputBlockLayout);
 
         // The frame set's groups bind the frame block with the sky's textures, so the ring makes none of its own.
         m_frameBlocks =
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, false, sizeof(FrameBlock), "Frame");
         m_lightBlocks =
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true, sizeof(GpuLight), "Lights");
+        m_spotShadowBlocks = std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true,
+                                                         sizeof(GpuSpotShadow), "Spot shadows");
+        m_pointShadowBlocks = std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true,
+                                                          sizeof(GpuPointShadow), "Point shadows");
         m_skyLighting = std::make_unique<SkyLighting>(m_device, m_logger);
         m_bloom = std::make_unique<BloomChain>(m_device, m_logger, m_samples);
-        m_viewBlocks = std::make_unique<BlockRing>(m_device, m_viewLayout, false, sizeof(ViewBlock), "View");
+        m_gtao = std::make_unique<Gtao>(m_device, m_logger, m_samples);
+        // The view set's groups bind a view block with its ambient occlusion, so the ring makes none of its own.
+        m_viewBlocks =
+            std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, false, sizeof(ViewBlock), "View");
         m_backgroundBlocks =
             std::make_unique<BlockRing>(m_device, m_backgroundLayout, false, sizeof(BackgroundBlock), "Background");
         m_outputBlocks =
@@ -787,8 +959,54 @@ namespace Fenrir::Render
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true, sizeof(DrawBlock), "Draw");
         m_paletteBlocks =
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true, sizeof(GpuBone), "Palette");
+
+        // Compute skinning (ADR-0050): without its pipeline, skinned draws skin in their vertex stages.
+        m_skinJobLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Skin job");
+        m_skinSourceLayout =
+            m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::StorageBuffer}}}, "Skin source");
+        m_skinTargetLayout = m_device.CreateBindingGroupLayout(
+            {{{0, ShaderBindingKind::StorageBuffer}, {1, ShaderBindingKind::StorageBuffer}}}, "Skin target");
+        m_skinJobs = std::make_unique<BlockRing>(m_device, m_skinJobLayout, false, sizeof(SkinJobBlock), "Skin jobs");
+        m_skinning = ReadBuiltin(BuiltinProgram::Skinning, m_logger);
+        if (const ShaderVariant* variant = BaseVariant(m_skinning))
+        {
+            PipelineResult made = m_device.CreateComputePipeline(
+                {variant, {m_skinJobLayout, m_skinSourceLayout, m_skinTargetLayout, {}}}, "Skinning");
+            m_skinningPipeline = made.pipeline;
+            if (m_skinningPipeline.IsEmpty())
+            {
+                m_logger.Error("FenrirRenderer: no compute skinning pipeline, so skinned meshes skin in their vertex "
+                               "stages: {}",
+                               made.diagnostic);
+            }
+        }
+        // Light clustering (ADR-0049): without its pipeline, every pixel loops over the whole light buffer.
+        m_clusterJobLayout =
+            m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Cluster job");
+        m_clusterTargetLayout = m_device.CreateBindingGroupLayout(
+            {{{0, ShaderBindingKind::StorageBuffer}, {1, ShaderBindingKind::StorageBuffer}}}, "Cluster target");
+        m_clusterJobs =
+            std::make_unique<BlockRing>(m_device, m_clusterJobLayout, false, sizeof(ClusterJobBlock), "Cluster jobs");
+        m_lightClusters = ReadBuiltin(BuiltinProgram::LightClusters, m_logger);
+        if (const ShaderVariant* variant = BaseVariant(m_lightClusters))
+        {
+            PipelineResult made = m_device.CreateComputePipeline(
+                {variant, {m_clusterJobLayout, m_clusterTargetLayout, {}, {}}}, "LightClusters");
+            m_lightClustersPipeline = made.pipeline;
+            if (m_lightClustersPipeline.IsEmpty())
+            {
+                m_logger.Error(
+                    "FenrirRenderer: no light clustering pipeline, so every pixel loops over every light: {}",
+                    made.diagnostic);
+            }
+        }
+        constexpr std::array<std::uint32_t, 4> noClusters{};
+        m_noClusters = m_device.CreateBuffer({sizeof(noClusters), BufferUsage::Storage},
+                                             std::as_bytes(std::span(noClusters)), "No light clusters");
         m_frameBlocks->Reserve(1);
         m_lightBlocks->Reserve(1);
+        m_spotShadowBlocks->Reserve(1);
+        m_pointShadowBlocks->Reserve(1);
     }
 
     SceneRenderer::~SceneRenderer()
@@ -830,6 +1048,10 @@ namespace Fenrir::Render
         {
             m_device.Destroy(prepass.pipeline.pipeline);
         }
+        for (auto& [key, shadow] : m_shadowPipelines)
+        {
+            m_device.Destroy(shadow.pipeline.pipeline);
+        }
         for (auto& [key, shader] : m_shaders)
         {
             for (const VariantEntry& variant : shader.variants)
@@ -841,26 +1063,62 @@ namespace Fenrir::Render
         {
             m_device.Destroy(group);
         }
+        for (auto& [key, group] : m_viewGroups)
+        {
+            m_device.Destroy(group);
+        }
         for (const DrawGroup& group : m_drawGroups)
         {
             m_device.Destroy(group.group);
         }
         for (const FrameGroup& group : m_frameGroups)
         {
+            if (group.unshadowed != group.group)
+            {
+                m_device.Destroy(group.unshadowed);
+            }
             m_device.Destroy(group.group);
         }
         m_skyLighting.reset();
+        m_gtao.reset();
         m_frameBlocks.reset();
         m_lightBlocks.reset();
+        m_spotShadowBlocks.reset();
+        m_device.Destroy(m_spotAtlas);
+        m_pointShadowBlocks.reset();
+        m_device.Destroy(m_pointShadowCubes);
+        m_device.Destroy(m_noPointShadow);
         m_viewBlocks.reset();
         m_backgroundBlocks.reset();
         m_outputBlocks.reset();
         m_drawBlocks.reset();
         m_paletteBlocks.reset();
+        m_skinJobs.reset();
+        m_skinnedVertices.reset();
+        for (const SkinTargetGroup& group : m_skinTargetGroups)
+        {
+            m_device.Destroy(group.group);
+        }
+        m_device.Destroy(m_skinningPipeline);
+        m_device.Destroy(m_skinJobLayout);
+        m_device.Destroy(m_skinSourceLayout);
+        m_device.Destroy(m_skinTargetLayout);
+        for (auto& [key, group] : m_clusterTargetGroups)
+        {
+            m_device.Destroy(group);
+        }
+        m_clusterJobs.reset();
+        m_clusterBuffers.clear();
+        m_device.Destroy(m_noClusters);
+        m_device.Destroy(m_lightClustersPipeline);
+        m_device.Destroy(m_clusterJobLayout);
+        m_device.Destroy(m_clusterTargetLayout);
+        m_device.Destroy(m_instanceListBuffer);
         m_device.Destroy(m_fallback.materialLayout);
         m_device.Destroy(m_backgroundPipeline);
         m_device.Destroy(m_skyPipeline);
         m_device.Destroy(m_outputPipeline);
+        m_device.Destroy(m_occlusionOutputPipeline);
         m_device.Destroy(m_panoramaPipeline);
         m_device.Destroy(m_panoramaLayout);
         m_device.Destroy(m_prepassMaskLayout);
@@ -881,6 +1139,8 @@ namespace Fenrir::Render
         m_device.Destroy(m_outputSampler);
         m_device.Destroy(m_skySampler);
         m_device.Destroy(m_panoramaSampler);
+        m_device.Destroy(m_shadowSampler);
+        m_device.Destroy(m_noShadow);
         m_device.Destroy(m_defaultStreams);
     }
 
@@ -1288,6 +1548,12 @@ namespace Fenrir::Render
         entry.id = NextId();
         if (read.Ok() && read.container->materialSet == MaterialSet)
         {
+            // The built-in mesh programs have a compute path; a user's SKINNED variant may do more than skin, so it is
+            // drawn as it is (ADR-0050). Told by the embedded bytes, which a user shader cannot share by name.
+            const std::span<const std::byte> bytes(shader.bytes);
+            entry.computeSkinned = std::ranges::any_of(
+                std::array{BuiltinProgram::Lit, BuiltinProgram::Unlit, BuiltinProgram::Fallback},
+                [&](BuiltinProgram program) { return std::ranges::equal(GetBuiltinShader(program).bytes, bytes); });
             entry.container = std::move(*read.container);
             entry.variant = BaseVariant(entry.container);
             for (const ShaderVariant& variant : entry.container.variants)
@@ -1344,18 +1610,19 @@ namespace Fenrir::Render
                 ++it;
             }
         }
-        for (auto it = m_prepassPipelines.begin(); it != m_prepassPipelines.end();)
-        {
-            if (it->first.shader == &shader)
-            {
-                m_device.Destroy(it->second.pipeline.pipeline);
-                it = m_prepassPipelines.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
+        // The depth prepass's and the shadow passes' pipelines, which run its vertex stages.
+        const auto destroyOf = [&](auto& pipelines) {
+            std::erase_if(pipelines, [&](auto& made) {
+                if (made.first.shader != &shader)
+                {
+                    return false;
+                }
+                m_device.Destroy(made.second.pipeline.pipeline);
+                return true;
+            });
+        };
+        destroyOf(m_prepassPipelines);
+        destroyOf(m_shadowPipelines);
     }
 
     bool SceneRenderer::IsMeshCurrent(AssetKey key, std::uint32_t revision) const
@@ -1395,9 +1662,19 @@ namespace Fenrir::Render
             entry.skinned = true;
             entry.boneCount = mesh.skin->boneCount;
         }
+        entry.vertexCount = static_cast<std::uint32_t>(mesh.positions.size());
         if (!vertices.empty())
         {
-            entry.vertices = m_device.CreateBuffer({vertices.size(), BufferUsage::Vertex}, vertices, "Mesh vertices");
+            // A skinned mesh's is also builtin:skinning's source, read as storage (ADR-0050).
+            const BufferUsage usage = entry.skinned ? BufferUsage::Vertex | BufferUsage::Storage : BufferUsage::Vertex;
+            entry.vertices = m_device.CreateBuffer({vertices.size(), usage}, vertices, "Mesh vertices");
+            if (entry.skinned)
+            {
+                BindingGroupEntry source;
+                source.binding = 0;
+                source.buffer = entry.vertices;
+                entry.skinSource = m_device.CreateBindingGroup({m_skinSourceLayout, {source}}, "Skin source");
+            }
         }
         if (!mesh.indices.empty())
         {
@@ -1410,6 +1687,7 @@ namespace Fenrir::Render
 
     void SceneRenderer::DestroyMesh(MeshEntry& mesh)
     {
+        m_device.Destroy(mesh.skinSource);
         m_device.Destroy(mesh.vertices);
         m_device.Destroy(mesh.indices);
     }
@@ -1693,6 +1971,79 @@ namespace Fenrir::Render
         return keys;
     }
 
+    bool SceneRenderer::IsInstanceListCurrent(AssetKey key, std::uint32_t revision) const
+    {
+        const auto found = m_instanceLists.find(key);
+        return found != m_instanceLists.end() && found->second.revision == revision;
+    }
+
+    void SceneRenderer::PrepareInstanceList(AssetKey key, std::uint32_t revision, const InstanceListData& list)
+    {
+        InstanceListEntry& entry = m_instanceLists[key];
+        entry.revision = revision;
+        entry.range.count = static_cast<std::uint32_t>(list.transforms.size());
+        entry.records.resize(list.transforms.size() * sizeof(InstanceBlock));
+        for (std::size_t i = 0; i < list.transforms.size(); ++i)
+        {
+            const Math::Mat4& transform = list.transforms[i];
+            const Math::Mat3 normal = glm::transpose(glm::inverse(Math::Mat3(transform)));
+            InstanceBlock block;
+            block.transform = transform;
+            block.normal = {Math::Vec4(normal[0], 0.0f), Math::Vec4(normal[1], 0.0f), Math::Vec4(normal[2], 0.0f)};
+            if (!list.colours.empty())
+            {
+                const Colour& colour = list.colours[i];
+                block.colour = {colour.r, colour.g, colour.b, colour.a};
+            }
+            std::memcpy(entry.records.data() + (i * sizeof(InstanceBlock)), &block, sizeof(InstanceBlock));
+        }
+        m_instancesChanged = true;
+        ++m_stats.uploads;
+    }
+
+    void SceneRenderer::ReleaseInstanceList(AssetKey key)
+    {
+        if (m_instanceLists.erase(key) > 0)
+        {
+            m_instancesChanged = true;
+        }
+    }
+
+    std::vector<AssetKey> SceneRenderer::InstanceListKeys() const
+    {
+        std::vector<AssetKey> keys;
+        for (const auto& [key, entry] : m_instanceLists)
+        {
+            keys.push_back(key);
+        }
+        return keys;
+    }
+
+    void SceneRenderer::PackInstanceLists()
+    {
+        if (!m_instancesChanged)
+        {
+            return;
+        }
+        // Every list again, into a new buffer: the old one is freed once the frames drawing from it are done, so no
+        // frame in flight reads a list half rewritten. Lists change rarely; a static field packs once.
+        std::size_t total = 0;
+        for (auto& [key, entry] : m_instanceLists)
+        {
+            entry.range.first = static_cast<std::uint32_t>(total / sizeof(InstanceBlock));
+            total += entry.records.size();
+        }
+        std::vector<std::byte> packed(std::max(total, sizeof(InstanceBlock)));
+        for (const auto& [key, entry] : m_instanceLists)
+        {
+            std::ranges::copy(entry.records, packed.begin() + static_cast<std::ptrdiff_t>(entry.range.first) *
+                                                                  static_cast<std::ptrdiff_t>(sizeof(InstanceBlock)));
+        }
+        m_device.Destroy(m_instanceListBuffer);
+        m_instanceListBuffer = m_device.CreateBuffer({packed.size(), BufferUsage::Storage}, packed, "Instance lists");
+        m_instancesChanged = false;
+    }
+
     std::vector<AssetKey> SceneRenderer::MeshKeys() const
     {
         std::vector<AssetKey> keys;
@@ -1720,6 +2071,30 @@ namespace Fenrir::Render
         m_frame = std::move(frame);
     }
 
+    void SceneRenderer::SetSpotShadowBudget(std::uint32_t budget)
+    {
+        if (budget == m_spotShadowConfig.budget)
+        {
+            return;
+        }
+        m_spotShadowConfig.budget = budget;
+        // Made again at the new size when a spot light next casts, and not kept meanwhile; its frame groups go with it.
+        m_device.Destroy(m_spotAtlas);
+        m_spotAtlas = {};
+    }
+
+    void SceneRenderer::SetPointShadowBudget(std::uint32_t budget)
+    {
+        if (budget == m_pointShadowConfig.budget)
+        {
+            return;
+        }
+        m_pointShadowConfig.budget = budget;
+        // As the spot shadow atlas: made again at the new size when a point light next casts.
+        m_device.Destroy(m_pointShadowCubes);
+        m_pointShadowCubes = {};
+    }
+
     SceneStats SceneRenderer::TakeStats()
     {
         const SceneStats stats = m_stats;
@@ -1728,13 +2103,12 @@ namespace Fenrir::Render
     }
 
     const SceneRenderer::PipelineEntry& SceneRenderer::MeshPipeline(const ShaderEntry& shader,
-                                                                    const VariantEntry& variant, const MeshEntry& mesh,
+                                                                    const VariantEntry& variant, std::uint32_t streams,
                                                                     Fenrir::BlendMode blend, bool doubleSided,
                                                                     bool prepassed)
     {
         const std::uint32_t read = variant.variant != nullptr ? ReadMask(*variant.variant) : 0;
-        const PipelineKey key{&shader,   variant.variant, read & StreamsOf(mesh.streams), blend, doubleSided,
-                              m_samples, prepassed};
+        const PipelineKey key{&shader, variant.variant, read & streams, blend, doubleSided, m_samples, prepassed};
         if (const auto found = m_pipelines.find(key); found != m_pipelines.end())
         {
             return found->second;
@@ -1783,24 +2157,22 @@ namespace Fenrir::Render
         return entry;
     }
 
-    const SceneRenderer::PipelineEntry& SceneRenderer::PrepassPipeline(const ShaderEntry& shader,
-                                                                       const VariantEntry& variant,
-                                                                       const MeshEntry& mesh, bool masked,
-                                                                       bool doubleSided)
+    void SceneRenderer::MakeBehindVertexStage(PrepassEntry& made, const VariantEntry& variant, std::uint32_t streams,
+                                              const ShaderContainer& program, bool masked, PipelineDesc desc,
+                                              std::string_view label, bool point)
     {
-        const std::uint32_t read = variant.variant != nullptr ? ReadMask(*variant.variant) : 0;
-        const PrepassKey key{&shader, variant.variant, read & StreamsOf(mesh.streams), masked, doubleSided};
-        if (const auto found = m_prepassPipelines.find(key); found != m_prepassPipelines.end())
-        {
-            return found->second.pipeline;
-        }
-
-        PrepassEntry& made = m_prepassPipelines[key];
         PipelineEntry& entry = made.pipeline;
         entry.id = NextId();
-        const std::array<std::string_view, 1> maskKeys{AlphaMaskKey};
-        const ShaderVariant* prepass = m_prepass.FindVariant(masked ? std::span<const std::string_view>(maskKeys)
-                                                                    : std::span<const std::string_view>());
+        std::vector<std::string_view> ourKeys;
+        if (masked)
+        {
+            ourKeys.push_back(AlphaMaskKey);
+        }
+        if (point)
+        {
+            ourKeys.push_back(PointShadowKey);
+        }
+        const ShaderVariant* ours = program.FindVariant(ourKeys);
         const auto stageOf = [](const ShaderVariant* of, ShaderStage stage) -> const ShaderStageCode* {
             if (of == nullptr)
             {
@@ -1810,54 +2182,112 @@ namespace Fenrir::Render
             return found == of->stages.end() ? nullptr : &*found;
         };
         const ShaderStageCode* vertex = stageOf(variant.variant, ShaderStage::Vertex);
-        const ShaderStageCode* fragment = stageOf(prepass, ShaderStage::Fragment);
+        const ShaderStageCode* fragment = stageOf(ours, ShaderStage::Fragment);
         if (vertex == nullptr || fragment == nullptr)
         {
-            entry.failure = vertex == nullptr ? "it has no vertex stage" : "builtin:depth-prepass did not read";
+            entry.failure = vertex == nullptr ? "it has no vertex stage" : std::format("{} did not read", program.name);
+            return;
         }
-        else
+        // The item's vertex stage, so it lands where its other passes' do (Fenrir/Vertex.glsl's gl_Position is
+        // invariant), placed by whatever view block the pass binds; then ours. Its keys, as the probes read them, are
+        // the item's.
+        made.variant = std::make_unique<ShaderVariant>();
+        made.variant->keys = variant.variant->keys;
+        made.variant->stages = {*vertex, *fragment};
+        made.variant->vertexInputs = variant.variant->vertexInputs;
+        made.variant->bindings = variant.variant->bindings;
+        entry.failure = CheckFixedSets(*variant.variant);
+        desc.shader = made.variant.get();
+        // A Masked item's set 2 is its prepass mask group, not its material's.
+        desc.sets = {m_frameLayout, m_viewLayout, masked ? m_prepassMaskLayout : variant.materialLayout, m_drawLayout};
+        if (std::string missing = VertexBuffersOf(*variant.variant, streams, desc.vertexBuffers, entry.locations);
+            !missing.empty())
         {
-            // The item's vertex stage, so it lands where Opaque's does (Fenrir/Vertex.glsl's gl_Position is
-            // invariant), then ours; its keys, as the probes read them, are the item's.
-            made.variant = std::make_unique<ShaderVariant>();
-            made.variant->keys = variant.variant->keys;
-            made.variant->stages = {*vertex, *fragment};
-            made.variant->vertexInputs = variant.variant->vertexInputs;
-            made.variant->bindings = variant.variant->bindings;
-            entry.failure = CheckFixedSets(*variant.variant);
-            PipelineDesc desc;
-            desc.shader = made.variant.get();
-            // A Masked item's set 2 is its prepass group, not its material's.
-            desc.sets = {m_frameLayout, m_viewLayout, masked ? m_prepassMaskLayout : variant.materialLayout,
-                         m_drawLayout};
-            if (std::string streams =
-                    VertexBuffersOf(*variant.variant, key.streams, desc.vertexBuffers, entry.locations);
-                !streams.empty())
-            {
-                entry.failure = std::move(streams);
-            }
-            desc.cull = doubleSided ? CullMode::None : CullMode::Back;
-            desc.blend = Graphics::BlendMode::None;
-            desc.colourFormats = {TextureFormat::Rg16Float};
-            desc.samples = m_samples;
-            if (entry.failure.empty())
-            {
-                PipelineResult result = m_device.CreatePipeline(desc, "DepthPrepass");
-                entry.pipeline = result.pipeline;
-                entry.failure = std::move(result.diagnostic);
-            }
+            entry.failure = std::move(missing);
         }
-        if (!entry.failure.empty())
+        if (entry.failure.empty())
+        {
+            PipelineResult result = m_device.CreatePipeline(desc, label);
+            entry.pipeline = result.pipeline;
+            entry.failure = std::move(result.diagnostic);
+        }
+    }
+
+    const SceneRenderer::PipelineEntry& SceneRenderer::PrepassPipeline(const ShaderEntry& shader,
+                                                                       const VariantEntry& variant,
+                                                                       std::uint32_t streams, bool masked,
+                                                                       bool doubleSided)
+    {
+        const std::uint32_t read = variant.variant != nullptr ? ReadMask(*variant.variant) : 0;
+        const PrepassKey key{&shader, variant.variant, read & streams, masked, doubleSided};
+        if (const auto found = m_prepassPipelines.find(key); found != m_prepassPipelines.end())
+        {
+            return found->second.pipeline;
+        }
+        PrepassEntry& made = m_prepassPipelines[key];
+        PipelineDesc desc;
+        desc.cull = doubleSided ? CullMode::None : CullMode::Back;
+        desc.colourFormats = {TextureFormat::Rg16Float};
+        desc.samples = m_samples;
+        MakeBehindVertexStage(made, variant, key.streams, m_prepass, masked, desc, "DepthPrepass");
+        if (!made.pipeline.failure.empty())
         {
             m_logger.Warn("FenrirRenderer: no depth prepass pipeline for shader '{}', so Opaque writes its items' "
                           "depth and they are missing from the view's normals: {}",
-                          shader.container.name, entry.failure);
+                          shader.container.name, made.pipeline.failure);
         }
-        return entry;
+        return made.pipeline;
     }
 
-    std::vector<SceneRenderer::ResolvedDraw> SceneRenderer::ResolveDraws()
+    const SceneRenderer::PipelineEntry& SceneRenderer::ShadowPipeline(const ShaderEntry& shader,
+                                                                      const VariantEntry& variant,
+                                                                      std::uint32_t streams, bool masked, bool point)
     {
+        const std::uint32_t read = variant.variant != nullptr ? ReadMask(*variant.variant) : 0;
+        const ShadowKey key{&shader, variant.variant, read & streams, masked, point};
+        if (const auto found = m_shadowPipelines.find(key); found != m_shadowPipelines.end())
+        {
+            return found->second.pipeline;
+        }
+        PrepassEntry& made = m_shadowPipelines[key];
+        // Both faces cast, so an open mesh or a plane shadows from either side; depth only, reversed-Z.
+        PipelineDesc desc;
+        desc.cull = CullMode::None;
+        desc.samples = 1;
+        MakeBehindVertexStage(made, variant, key.streams, m_shadow, masked, desc, point ? "PointShadow" : "Shadow",
+                              point);
+        if (!made.pipeline.failure.empty())
+        {
+            m_logger.Warn("FenrirRenderer: no shadow pipeline for shader '{}', so its items cast no shadow: {}",
+                          shader.container.name, made.pipeline.failure);
+        }
+        return made.pipeline;
+    }
+
+    const SceneRenderer::PipelineEntry* SceneRenderer::LayeredShadowPipeline(const ShaderEntry& shader,
+                                                                             const VariantEntry& variant,
+                                                                             std::uint32_t streams, bool masked)
+    {
+        if (!m_device.Features().vertexLayer || variant.variant == nullptr)
+        {
+            return nullptr;
+        }
+        const ShaderVariant* layered = PointShadowVariant(shader.container, *variant.variant);
+        if (layered == nullptr)
+        {
+            return nullptr;
+        }
+        // The POINT_SHADOW variant's vertex stage, keyed as its own variant; its set 2 is the item's.
+        const PipelineEntry& entry = ShadowPipeline(shader, {layered, variant.materialLayout}, streams, masked, true);
+        return entry.pipeline.IsEmpty() ? nullptr : &entry;
+    }
+
+    std::vector<SceneRenderer::ResolvedDraw> SceneRenderer::ResolveDraws(std::vector<SkinDispatch>& skins,
+                                                                         bool shadowed, bool pointShadowed)
+    {
+        // Each skinned mesh and palette range skinned once, however many draws read it (ADR-0050).
+        std::map<std::pair<const MeshEntry*, std::uint32_t>, std::size_t> skinIndex;
+        std::size_t skinnedBytes = 0;
         std::vector<ResolvedDraw> draws;
         draws.reserve(m_frame.draws.size());
         for (const DrawRequest& request : m_frame.draws)
@@ -1866,6 +2296,16 @@ namespace Fenrir::Render
             if (mesh == m_meshes.end() || mesh->second.indexCount == 0)
             {
                 continue;
+            }
+            const InstanceListEntry* list = nullptr;
+            if (!request.instances.IsEmpty())
+            {
+                const auto found = m_instanceLists.find(request.instances);
+                if (found == m_instanceLists.end() || found->second.range.count == 0)
+                {
+                    continue;
+                }
+                list = &found->second;
             }
             // Only a mesh with skin data draws skinned; the facade asks for it only then.
             const bool skinned = request.skinned && mesh->second.skinned;
@@ -1891,24 +2331,32 @@ namespace Fenrir::Render
                 }
                 usable = false;
             }
+            // Compute-skinned (ADR-0050), it draws its shader's variant without SKINNED, rigidly from the skinned
+            // vertex buffer's positions, normals and tangents; else its SKINNED variant skins it.
+            const ShaderEntry* drawnBy = usable ? found->shader : &m_fallback;
+            const bool computeSkinned = skinned && drawnBy->computeSkinned && m_computeSkinning &&
+                                        !m_skinningPipeline.IsEmpty() &&
+                                        mesh->second.streams.at(JointLocation).has_value() &&
+                                        mesh->second.streams.at(WeightLocation).has_value();
+            const bool vertexSkinned = skinned && !computeSkinned;
+            const std::uint32_t streams = StreamsOf(mesh->second.streams) | (computeSkinned ? SkinnedStreams : 0u);
             const VariantEntry& fallbackVariant =
-                skinned && m_fallback.variants.size() > 1 ? m_fallback.variants[1] : m_fallback.variants.front();
+                vertexSkinned && m_fallback.variants.size() > 1 ? m_fallback.variants[1] : m_fallback.variants.front();
             const ShaderEntry* shader = usable ? found->shader : &m_fallback;
             const VariantEntry* variant =
-                usable ? (skinned ? found->skinnedVariant : found->variant) : &fallbackVariant;
+                usable ? (vertexSkinned ? found->skinnedVariant : found->variant) : &fallbackVariant;
             Fenrir::BlendMode blend = usable ? found->blendMode : Fenrir::BlendMode::Opaque;
             bool doubleSided = usable && found->doubleSided;
             // Opaque and Masked items draw in the depth prepass (ADR-0049), but for Masked ones it cannot cut out.
             const auto prepassed = [&] { return !IsTransparent(blend) && (shader == &m_fallback || found->prepassed); };
-            const PipelineEntry* pipeline =
-                &MeshPipeline(*shader, *variant, mesh->second, blend, doubleSided, prepassed());
+            const PipelineEntry* pipeline = &MeshPipeline(*shader, *variant, streams, blend, doubleSided, prepassed());
             if (pipeline->pipeline.IsEmpty() && shader != &m_fallback)
             {
                 shader = &m_fallback;
                 variant = &fallbackVariant;
                 blend = Fenrir::BlendMode::Opaque;
                 doubleSided = false;
-                pipeline = &MeshPipeline(m_fallback, *variant, mesh->second, blend, doubleSided, true);
+                pipeline = &MeshPipeline(m_fallback, *variant, streams, blend, doubleSided, true);
             }
             if (pipeline->pipeline.IsEmpty())
             {
@@ -1916,14 +2364,39 @@ namespace Fenrir::Render
             }
             const PipelineEntry* prepass = nullptr;
             const bool masked = blend == Fenrir::BlendMode::Masked;
+            // Opaque and Masked items cast (ADR-0050), a Masked one cut out by its prepass mask group if it has one.
+            const PipelineEntry* shadow = nullptr;
+            const bool shadowMasked = masked && shader != &m_fallback && found->prepassed;
+            const PipelineEntry* pointShadow = nullptr;
+            const PipelineEntry* pointShadowLayered = nullptr;
+            if (shadowed && request.castShadows && !IsTransparent(blend))
+            {
+                shadow = &ShadowPipeline(*shader, *variant, streams, shadowMasked);
+                if (shadow->pipeline.IsEmpty())
+                {
+                    shadow = nullptr;
+                }
+            }
+            if (pointShadowed && request.castShadows && !IsTransparent(blend))
+            {
+                pointShadow = &ShadowPipeline(*shader, *variant, streams, shadowMasked, true);
+                if (pointShadow->pipeline.IsEmpty())
+                {
+                    pointShadow = nullptr;
+                }
+                else
+                {
+                    pointShadowLayered = LayeredShadowPipeline(*shader, *variant, streams, shadowMasked);
+                }
+            }
             if (prepassed())
             {
-                prepass = &PrepassPipeline(*shader, *variant, mesh->second, masked, doubleSided);
+                prepass = &PrepassPipeline(*shader, *variant, streams, masked, doubleSided);
                 if (prepass->pipeline.IsEmpty())
                 {
                     // Not in the prepass after all: Opaque writes its depth.
                     prepass = nullptr;
-                    pipeline = &MeshPipeline(*shader, *variant, mesh->second, blend, doubleSided, false);
+                    pipeline = &MeshPipeline(*shader, *variant, streams, blend, doubleSided, false);
                     if (pipeline->pipeline.IsEmpty())
                     {
                         continue;
@@ -1955,6 +2428,22 @@ namespace Fenrir::Render
             draw.sortPoint = request.sortPoint.value_or(Math::Vec3(request.world[3]));
             draw.prepass = prepass;
             draw.prepassMasked = prepass != nullptr && masked;
+            draw.shadow = shadow;
+            draw.shadowMasked = (shadow != nullptr || pointShadow != nullptr) && shadowMasked;
+            draw.pointShadow = pointShadow;
+            draw.pointShadowLayered = pointShadowLayered;
+            draw.instances = list == nullptr ? InstanceRange{} : list->range;
+            if (computeSkinned)
+            {
+                const auto [skin, added] = skinIndex.try_emplace({&mesh->second, request.paletteOffset}, skins.size());
+                if (added)
+                {
+                    skins.push_back({&mesh->second, request.paletteOffset, skinnedBytes});
+                    // Each mesh's skinned vertices start on a 16-byte boundary.
+                    skinnedBytes += (std::size_t{mesh->second.vertexCount} * SkinnedVertexBytes + 15) / 16 * 16;
+                }
+                draw.skinnedVertices = skins[skin->second].skinnedVertices;
+            }
             const std::uint64_t stage = draw.transparent ? TransparentStage : OpaqueStage;
             const std::uint64_t materialId = fallback ? 0 : found->id;
             draw.sortKey = (stage << 56u) | ((std::uint64_t{pipeline->id} & 0xFFFFu) << 40u) |
@@ -1966,20 +2455,67 @@ namespace Fenrir::Render
         return draws;
     }
 
+    const SceneRenderer::PipelineEntry* SceneRenderer::PipelineOf(const ResolvedDraw& draw, DrawPass pass) noexcept
+    {
+        switch (pass)
+        {
+        case DrawPass::Prepass:
+            return draw.prepass;
+        case DrawPass::Shadow:
+            return draw.shadow;
+        case DrawPass::PointShadow:
+            return draw.pointShadow;
+        case DrawPass::PointShadowLayered:
+            return draw.pointShadowLayered;
+        default:
+            return draw.pipeline;
+        }
+    }
+
+    std::vector<SceneRenderer::DrawRun> SceneRenderer::RunsOf(const std::vector<ResolvedDraw>& draws,
+                                                              const std::vector<BindingGroupHandle>& groups,
+                                                              const std::vector<std::size_t>& order,
+                                                              DrawPass pass) const
+    {
+        const auto pipelineOf = [&](std::size_t i) { return PipelineOf(draws[i], pass); };
+        std::vector<DrawRun> runs;
+        for (const std::size_t i : order)
+        {
+            // The sort key keeps matching items together, so a run is the next record of the same kind; each
+            // instance then finds its own record, at the run's first plus its instance index (Fenrir/Draw.glsl).
+            if (m_automaticInstancing && !runs.empty())
+            {
+                DrawRun& run = runs.back();
+                const std::size_t last = run.first + run.count - 1;
+                if (i == last + 1 && pipelineOf(i) == pipelineOf(last) && draws[i].material == draws[last].material &&
+                    groups[i] == groups[last] && draws[i].mesh == draws[last].mesh &&
+                    draws[i].skinnedVertices == draws[last].skinnedVertices && draws[i].instances.count == 0 &&
+                    draws[last].instances.count == 0)
+                {
+                    ++run.count;
+                    continue;
+                }
+            }
+            runs.push_back({i, 1});
+        }
+        return runs;
+    }
+
     void SceneRenderer::RecordDraws(PassEncoder& encoder, const std::vector<ResolvedDraw>& draws,
-                                    const std::vector<BindingGroupHandle>& groups,
-                                    const std::vector<std::size_t>& order, BindingGroupHandle frameGroup,
-                                    BindingGroupHandle viewGroup, BindingGroupHandle drawGroup, PixelRect viewport,
-                                    bool prepass) const
+                                    const std::vector<BindingGroupHandle>& groups, const std::vector<DrawRun>& runs,
+                                    BindingGroupHandle frameGroup, BindingGroupHandle viewGroup,
+                                    BindingGroupHandle drawGroup, BufferHandle skinned, PixelRect viewport,
+                                    DrawPass pass) const
     {
         encoder.SetViewport(viewport);
         const PipelineEntry* current = nullptr;
         BindingGroupHandle material;
-        for (const std::size_t i : order)
+        for (const DrawRun& run : runs)
         {
+            const std::size_t i = run.first;
             const ResolvedDraw& draw = draws[i];
             const BindingGroupHandle group = groups[i];
-            const PipelineEntry* pipeline = prepass ? draw.prepass : draw.pipeline;
+            const PipelineEntry* pipeline = PipelineOf(draw, pass);
             const bool newPipeline = pipeline != current;
             if (newPipeline)
             {
@@ -1998,7 +2534,13 @@ namespace Fenrir::Render
             {
                 const std::uint32_t location = current->locations[slot];
                 const std::optional<std::size_t>& offset = draw.mesh->streams.at(location);
-                if (offset.has_value())
+                if (draw.skinnedVertices.has_value() && (SkinnedStreams & (1u << location)) != 0)
+                {
+                    // Its skinned positions, normals or tangents (ADR-0050).
+                    const std::size_t stream = std::size_t{draw.mesh->vertexCount} * SkinnedStreamStarts.at(location);
+                    encoder.SetVertexBuffer(static_cast<std::uint32_t>(slot), skinned, *draw.skinnedVertices + stream);
+                }
+                else if (offset.has_value())
                 {
                     encoder.SetVertexBuffer(static_cast<std::uint32_t>(slot), draw.mesh->vertices, *offset);
                 }
@@ -2009,45 +2551,215 @@ namespace Fenrir::Render
                 }
             }
             encoder.SetIndexBuffer(draw.mesh->indices, IndexFormat::UInt32);
-            // Each item reads its own record of the draw buffer, by its place in the draw list.
-            encoder.DrawIndexed({.indexCount = draw.mesh->indexCount, .firstInstance = static_cast<std::uint32_t>(i)});
+            // Each item reads its own record of the draw buffer, by its place in the draw list; an instance list's
+            // copies all read its one record, which Fenrir/Draw.glsl composes with each copy's. Drawing a point light's
+            // cube faces as instances, each is six, one a face.
+            const std::uint32_t instances = draw.instances.count == 0 ? run.count : draw.instances.count;
+            encoder.DrawIndexed(
+                {.indexCount = draw.mesh->indexCount,
+                 .instanceCount = pass == DrawPass::PointShadowLayered ? instances * CubeFaceCount : instances,
+                 .firstInstance = static_cast<std::uint32_t>(i)});
         }
+    }
+
+    GraphResource SceneRenderer::AddSkinningPass(RenderGraph& graph, std::uint64_t frameIndex,
+                                                 const std::vector<SkinDispatch>& skins)
+    {
+        if (skins.empty())
+        {
+            return {};
+        }
+        const std::size_t bytes =
+            skins.back().skinnedVertices + std::size_t{skins.back().mesh->vertexCount} * SkinnedVertexBytes;
+        // The skinned vertex buffer, grown by doubling; frames in flight keep their copies (ADR-0019).
+        const BufferUsage usage = BufferUsage::Vertex | BufferUsage::Storage;
+        if (m_skinnedVertices == nullptr || bytes > m_skinnedCapacity)
+        {
+            m_skinnedCapacity = std::max(bytes, m_skinnedCapacity * 2);
+            m_skinnedVertices =
+                std::make_unique<FrameRingBuffer>(m_device, BufferDesc{m_skinnedCapacity, usage}, "Skinned vertices");
+        }
+        const BufferHandle skinned = m_skinnedVertices->Current(frameIndex);
+        const BufferHandle palette = m_paletteBlocks->Buffer(frameIndex);
+        // A copy's group outlives the frame, but either buffer may be remade by growing.
+        const std::size_t copies = std::max<std::size_t>(m_device.FramesInFlight(), 1);
+        m_skinTargetGroups.resize(copies);
+        SkinTargetGroup& target = m_skinTargetGroups[static_cast<std::size_t>(frameIndex % copies)];
+        if (target.group.IsEmpty() || target.palette != palette || target.skinned != skinned)
+        {
+            m_device.Destroy(target.group);
+            BindingGroupEntry paletteEntry;
+            paletteEntry.binding = 0;
+            paletteEntry.buffer = palette;
+            BindingGroupEntry skinnedEntry;
+            skinnedEntry.binding = 1;
+            skinnedEntry.buffer = skinned;
+            target = {palette, skinned,
+                      m_device.CreateBindingGroup({m_skinTargetLayout, {paletteEntry, skinnedEntry}}, "Skin target")};
+        }
+
+        // The shader reads the mesh's buffer as words and has no push constants, so each dispatch's offsets go in a
+        // uniform slot of its own.
+        struct SkinPassJob
+        {
+            BindingGroupHandle job;
+            BindingGroupHandle source;
+            std::uint32_t groups = 0;
+        };
+        std::vector<SkinPassJob> dispatches;
+        m_skinJobs->Reserve(skins.size());
+        for (std::size_t i = 0; i < skins.size(); ++i)
+        {
+            const MeshEntry& mesh = *skins[i].mesh;
+            const auto word = [&](std::uint32_t location) {
+                return static_cast<std::uint32_t>(mesh.streams.at(location).value_or(0) / sizeof(std::uint32_t));
+            };
+            SkinJobBlock block;
+            block.vertexCount = mesh.vertexCount;
+            block.paletteOffset = skins[i].paletteOffset;
+            block.skinnedFirst = static_cast<std::uint32_t>(skins[i].skinnedVertices / sizeof(std::uint32_t));
+            block.flags = (mesh.streams.at(NormalLocation).has_value() ? 1u : 0u) |
+                          (mesh.streams.at(TangentLocation).has_value() ? 2u : 0u);
+            block.positions = word(PositionLocation);
+            block.normals = word(NormalLocation);
+            block.tangents = word(TangentLocation);
+            block.joints = word(JointLocation);
+            block.weights = word(WeightLocation);
+            m_skinJobs->Write(frameIndex, i, BytesOf(block));
+            dispatches.push_back({m_skinJobs->Group(frameIndex, i), mesh.skinSource,
+                                  (mesh.vertexCount + SkinningGroupSize - 1) / SkinningGroupSize});
+        }
+
+        const GraphResource resource = graph.ImportBuffer("SkinnedVertices", skinned, {m_skinnedCapacity, usage});
+        graph.AddPass(
+            "Skinning", RenderStage::Skinning, QueueKind::Compute,
+            [=](PassBuilder& pass) { pass.StorageWrite(resource); },
+            [pipeline = m_skinningPipeline, group = target.group, dispatches](PassContext& context) {
+                PassEncoder& encoder = context.Encoder();
+                encoder.SetPipeline(pipeline);
+                encoder.SetBindingGroup(2, group);
+                for (const SkinPassJob& dispatch : dispatches)
+                {
+                    encoder.SetBindingGroup(0, dispatch.job);
+                    encoder.SetBindingGroup(1, dispatch.source);
+                    encoder.Dispatch({.groupsX = dispatch.groups});
+                }
+            });
+        return resource;
+    }
+
+    std::pair<BufferHandle, GraphResource> SceneRenderer::AddLightClustersPass(
+        RenderGraph& graph, std::uint64_t frameIndex, std::size_t view, const ViewRequest& request,
+        std::uint32_t lightCount, ClusterDepths depths)
+    {
+        if (!m_clusteredLights || m_lightClustersPipeline.IsEmpty() || lightCount == 0)
+        {
+            return {};
+        }
+        // Each cluster's count, then its list, with room for every light up to MaxClusterLights. The buffers grow, a
+        // copy per frame in flight, so this frame's pass never writes what an earlier frame's passes may still read.
+        const std::uint32_t room = std::min(lightCount, MaxClusterLights);
+        const std::size_t bytes = std::size_t{ClusterCount} * (1 + room) * sizeof(std::uint32_t);
+        if (m_clusterBuffers.size() <= view)
+        {
+            m_clusterBuffers.resize(view + 1);
+        }
+        ClusterBuffers& ring = m_clusterBuffers[view];
+        if (ring.copies == nullptr || bytes > ring.capacity)
+        {
+            ring.capacity = bytes;
+            ring.copies = std::make_unique<FrameRingBuffer>(m_device, BufferDesc{ring.capacity, BufferUsage::Storage},
+                                                            "Light clusters");
+        }
+        const BufferHandle buffer = ring.copies->Current(frameIndex);
+        const std::size_t capacity = ring.capacity;
+        const BufferHandle lights = m_lightBlocks->Buffer(frameIndex);
+        const std::array<std::uint32_t, 4> key{lights.index, lights.generation, buffer.index, buffer.generation};
+        auto target = m_clusterTargetGroups.find(key);
+        if (target == m_clusterTargetGroups.end())
+        {
+            BindingGroupEntry lightEntry;
+            lightEntry.binding = 0;
+            lightEntry.buffer = lights;
+            BindingGroupEntry clusterEntry;
+            clusterEntry.binding = 1;
+            clusterEntry.buffer = buffer;
+            target = m_clusterTargetGroups
+                         .emplace(key, m_device.CreateBindingGroup({m_clusterTargetLayout, {lightEntry, clusterEntry}},
+                                                                   "Cluster target"))
+                         .first;
+        }
+        ClusterJobBlock job;
+        job.view = request.view;
+        job.inverseProjection = glm::inverse(request.projection);
+        job.depths = Math::Vec4(depths.near, depths.far, 0.0f, 0.0f);
+        job.counts = {lightCount, room, 0, 0};
+        m_clusterJobs->Write(frameIndex, view, BytesOf(job));
+
+        const GraphResource resource = graph.ImportBuffer("LightClusters", buffer, {capacity, BufferUsage::Storage});
+        graph.AddPass(
+            "LightClusters", RenderStage::DepthPrepass, QueueKind::Compute,
+            [=](PassBuilder& pass) { pass.StorageWrite(resource); },
+            [pipeline = m_lightClustersPipeline, jobGroup = m_clusterJobs->Group(frameIndex, view),
+             targetGroup = target->second](PassContext& context) {
+                PassEncoder& encoder = context.Encoder();
+                encoder.SetPipeline(pipeline);
+                encoder.SetBindingGroup(0, jobGroup);
+                encoder.SetBindingGroup(1, targetGroup);
+                encoder.Dispatch({.groupsX = (ClusterCount + LightClustersGroupSize - 1) / LightClustersGroupSize});
+            });
+        return {buffer, resource};
     }
 
     BindingGroupHandle SceneRenderer::DrawGroupFor(std::uint64_t frameIndex)
     {
         const BufferHandle draws = m_drawBlocks->Buffer(frameIndex);
         const BufferHandle palette = m_paletteBlocks->Buffer(frameIndex);
-        // One group per copy, made again when either ring has remade its buffers.
+        // One group per copy, made again when either ring has remade its buffers, or the instance lists were packed.
         const std::size_t copies = std::max<std::size_t>(m_device.FramesInFlight(), 1);
         m_drawGroups.resize(copies);
         DrawGroup& group = m_drawGroups[static_cast<std::size_t>(frameIndex % copies)];
-        if (group.group.IsEmpty() || group.draws != draws || group.palette != palette)
+        if (group.group.IsEmpty() || group.draws != draws || group.palette != palette ||
+            group.instanceLists != m_instanceListBuffer)
         {
             m_device.Destroy(group.group);
             BindingGroupEntry drawEntry;
             drawEntry.binding = 0;
             drawEntry.buffer = draws;
             BindingGroupEntry paletteEntry;
-            paletteEntry.binding = 1;
+            paletteEntry.binding = 2;
             paletteEntry.buffer = palette;
-            group = {draws, palette, m_device.CreateBindingGroup({m_drawLayout, {drawEntry, paletteEntry}}, "Draw")};
+            BindingGroupEntry instanceEntry;
+            instanceEntry.binding = 1;
+            instanceEntry.buffer = m_instanceListBuffer;
+            group = {draws, palette, m_instanceListBuffer,
+                     m_device.CreateBindingGroup({m_drawLayout, {drawEntry, paletteEntry, instanceEntry}}, "Draw")};
         }
         return group.group;
     }
 
-    BindingGroupHandle SceneRenderer::FrameGroupFor(std::uint64_t frameIndex)
+    const SceneRenderer::FrameGroup& SceneRenderer::FrameGroupFor(std::uint64_t frameIndex, TextureHandle spotAtlas,
+                                                                  TextureHandle pointShadowCubes)
     {
         const BufferHandle block = m_frameBlocks->Buffer(frameIndex);
         const BufferHandle lights = m_lightBlocks->Buffer(frameIndex);
+        const BufferHandle spotShadows = m_spotShadowBlocks->Buffer(frameIndex);
+        const BufferHandle pointShadows = m_pointShadowBlocks->Buffer(frameIndex);
         const SkyLightingTextures& sky = m_skyLighting->Textures();
-        // One group per copy, made again when a ring remade its buffer or the sky's textures changed.
+        // One pair of groups per copy, made again when a ring remade its buffer, the sky's textures changed, or the
+        // spot shadow atlas or point shadow cubes came, went or was made again.
         const std::size_t copies = std::max<std::size_t>(m_device.FramesInFlight(), 1);
         m_frameGroups.resize(copies);
         FrameGroup& group = m_frameGroups[static_cast<std::size_t>(frameIndex % copies)];
         if (group.group.IsEmpty() || group.block != block || group.lights != lights ||
-            group.irradiance != sky.irradiance || group.specular != sky.specular)
+            group.irradiance != sky.irradiance || group.specular != sky.specular || group.spotShadows != spotShadows ||
+            group.spotAtlas != spotAtlas || group.pointShadows != pointShadows ||
+            group.pointShadowCubes != pointShadowCubes)
         {
+            if (group.unshadowed != group.group)
+            {
+                m_device.Destroy(group.unshadowed);
+            }
             m_device.Destroy(group.group);
             BindingGroupEntry blockEntry;
             blockEntry.binding = 0;
@@ -2076,12 +2788,35 @@ namespace Fenrir::Render
             ltcAmplitude.binding = 6;
             ltcAmplitude.texture = m_ltcAmplitude;
             ltcAmplitude.sampler = m_skySampler;
-            group = {block, lights, sky.irradiance, sky.specular,
-                     m_device.CreateBindingGroup(
-                         {m_frameLayout, {blockEntry, irradiance, specular, brdf, lightEntry, ltcMatrix, ltcAmplitude}},
-                         "Frame")};
+            BindingGroupEntry spotEntry;
+            spotEntry.binding = 7;
+            spotEntry.buffer = spotShadows;
+            BindingGroupEntry atlasEntry;
+            atlasEntry.binding = 8;
+            atlasEntry.texture = spotAtlas.IsEmpty() ? m_noShadow : spotAtlas;
+            atlasEntry.sampler = m_shadowSampler;
+            BindingGroupEntry pointEntry;
+            pointEntry.binding = 9;
+            pointEntry.buffer = pointShadows;
+            BindingGroupEntry cubesEntry;
+            cubesEntry.binding = 10;
+            cubesEntry.texture = pointShadowCubes.IsEmpty() ? m_noPointShadow : pointShadowCubes;
+            cubesEntry.sampler = m_shadowSampler;
+            std::vector<BindingGroupEntry> entries{blockEntry, irradiance, specular,     brdf,
+                                                   lightEntry, ltcMatrix,  ltcAmplitude, spotEntry,
+                                                   atlasEntry, pointEntry, cubesEntry};
+            group = {block,       lights,    sky.irradiance, sky.specular,
+                     spotShadows, spotAtlas, pointShadows,   pointShadowCubes};
+            group.group = m_device.CreateBindingGroup({m_frameLayout, entries}, "Frame");
+            group.unshadowed = group.group;
+            if (!spotAtlas.IsEmpty() || !pointShadowCubes.IsEmpty())
+            {
+                entries.at(8).texture = m_noShadow;
+                entries.at(10).texture = m_noPointShadow;
+                group.unshadowed = m_device.CreateBindingGroup({m_frameLayout, entries}, "Frame unshadowed");
+            }
         }
-        return group.group;
+        return group;
     }
 
     SkySource SceneRenderer::SkySourceOf(const SceneLighting& lighting) const
@@ -2101,6 +2836,48 @@ namespace Fenrir::Render
             source.cubeDesc = panorama->second.cubeDesc;
         }
         return source;
+    }
+
+    BindingGroupHandle SceneRenderer::ViewGroupFor(std::uint64_t frameIndex, std::size_t slot, TextureHandle occlusion,
+                                                   TextureHandle shadow, BufferHandle clusters)
+    {
+        if (shadow.IsEmpty())
+        {
+            shadow = m_noShadow;
+        }
+        if (clusters.IsEmpty())
+        {
+            clusters = m_noClusters;
+        }
+        const BufferHandle buffer = m_viewBlocks->Buffer(frameIndex);
+        const std::array<std::uint32_t, 9> key{
+            buffer.index,      buffer.generation,    static_cast<std::uint32_t>(slot),
+            occlusion.index,   occlusion.generation, shadow.index,
+            shadow.generation, clusters.index,       clusters.generation};
+        if (const auto found = m_viewGroups.find(key); found != m_viewGroups.end())
+        {
+            return found->second;
+        }
+        BindingGroupEntry block;
+        block.binding = 0;
+        block.buffer = buffer;
+        block.offset = slot * m_viewBlocks->SlotSize();
+        block.size = m_viewBlocks->SlotSize();
+        BindingGroupEntry texture;
+        texture.binding = 1;
+        texture.texture = occlusion;
+        texture.sampler = m_outputSampler;
+        BindingGroupEntry shadowAtlas;
+        shadowAtlas.binding = 2;
+        shadowAtlas.texture = shadow;
+        shadowAtlas.sampler = m_shadowSampler;
+        BindingGroupEntry clusterLights;
+        clusterLights.binding = 3;
+        clusterLights.buffer = clusters;
+        const BindingGroupHandle group =
+            m_device.CreateBindingGroup({m_viewLayout, {block, texture, shadowAtlas, clusterLights}}, "View");
+        m_viewGroups.emplace(key, group);
+        return group;
     }
 
     BindingGroupHandle SceneRenderer::OutputGroup(TextureHandle sceneColour)
@@ -2144,12 +2921,46 @@ namespace Fenrir::Render
                 ++it;
             }
         }
+        // And the view groups of view rings remade since, of occlusion or shadow textures it has let go of, or of
+        // cluster buffers grown since.
+        for (auto it = m_viewGroups.begin(); it != m_viewGroups.end();)
+        {
+            const std::array<std::uint32_t, 9>& key = it->first;
+            if (!m_device.IsLive(BufferHandle{key[0], key[1]}) || !m_device.IsLive(TextureHandle{key[3], key[4]}) ||
+                !m_device.IsLive(TextureHandle{key[5], key[6]}) || !m_device.IsLive(BufferHandle{key[7], key[8]}))
+            {
+                m_device.Destroy(it->second);
+                it = m_viewGroups.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
+        // And the LightClusters passes' groups of light buffers or cluster buffers remade since.
+        for (auto it = m_clusterTargetGroups.begin(); it != m_clusterTargetGroups.end();)
+        {
+            const std::array<std::uint32_t, 4>& key = it->first;
+            if (!m_device.IsLive(BufferHandle{key[0], key[1]}) || !m_device.IsLive(BufferHandle{key[2], key[3]}))
+            {
+                m_device.Destroy(it->second);
+                it = m_clusterTargetGroups.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
 
         m_stats.draws = 0;
+        m_stats.instances = 0;
         m_stats.paletteBytes = 0;
         m_stats.palettes = 0;
         m_stats.skinnedDraws = 0;
+        m_stats.shadowDraws = 0;
         m_drawnViews.clear();
+        PackInstanceLists();
         AddPanoramaPasses(graph);
         m_skyLighting->AddPasses(graph, SkySourceOf(m_frame.lighting));
         if (m_frame.views.empty())
@@ -2158,30 +2969,101 @@ namespace Fenrir::Render
             return;
         }
 
-        const auto draws = std::make_shared<const std::vector<ResolvedDraw>>(ResolveDraws());
-        const std::uint64_t frameIndex = frame.frameIndex;
         const SceneLighting& lighting = m_frame.lighting;
-        const FrameBlock frameBlock{
-            Math::Vec4(lighting.lightDirection, 0.0f),
-            Math::Vec4(lighting.lightColour, 0.0f),
-            Math::Vec4(m_frame.time, m_frame.deltaTime, 0.0f, 0.0f),
-            Math::Vec4(m_frame.backgroundIntensity, std::cos(m_frame.backgroundRotation),
-                       std::sin(m_frame.backgroundRotation), 0.0f),
-            Math::Vec4(lighting.skyIntensity, std::cos(lighting.skyRotation), std::sin(lighting.skyRotation),
-                       m_skyLighting->Textures().specularMaxLevel),
-            {static_cast<std::uint32_t>(lighting.lights.size() + lighting.rectLights.size()), 0, 0, 0}};
+        // The spot lights that keep their shadows this frame (ADR-0050): the nearest to any camera, within the budget.
+        std::vector<Math::Vec3> cameras;
+        for (const ViewRequest& view : m_frame.views)
+        {
+            cameras.push_back(view.position);
+        }
+        ShadowChoice spotChoice = ChooseSpotShadows(lighting.lights, cameras, m_spotShadowConfig.budget);
+        if (spotChoice.wanted > spotChoice.lights.size() && !m_loggedSpotBudget)
+        {
+            m_loggedSpotBudget = true;
+            m_logger.Warn("FenrirRenderer: {} spot lights cast shadows, past the spot shadow budget of {}, so those "
+                          "farthest from the cameras light unshadowed",
+                          spotChoice.wanted, m_spotShadowConfig.budget);
+        }
+        // And the point lights, within theirs.
+        ShadowChoice pointChoice = ChoosePointShadows(lighting.lights, cameras, m_pointShadowConfig.budget);
+        if (pointChoice.wanted > pointChoice.lights.size() && !m_loggedPointBudget)
+        {
+            m_loggedPointBudget = true;
+            m_logger.Warn("FenrirRenderer: {} point lights cast shadows, past the point shadow budget of {}, so those "
+                          "farthest from the cameras light unshadowed",
+                          pointChoice.wanted, m_pointShadowConfig.budget);
+        }
+
+        std::vector<SkinDispatch> skins;
+        const auto draws = std::make_shared<const std::vector<ResolvedDraw>>(
+            ResolveDraws(skins, lighting.shadows.enabled || !spotChoice.lights.empty(), !pointChoice.lights.empty()));
+        const std::uint64_t frameIndex = frame.frameIndex;
+        // The items that cast the sun's and the spot lights' shadows, and those that cast the point lights', in
+        // draw-list order.
+        std::vector<std::size_t> casters;
+        std::vector<std::size_t> pointCasters;
+        for (std::size_t i = 0; i < draws->size(); ++i)
+        {
+            if ((*draws)[i].shadow != nullptr)
+            {
+                casters.push_back(i);
+            }
+            if ((*draws)[i].pointShadow != nullptr)
+            {
+                pointCasters.push_back(i);
+            }
+        }
+        if (casters.empty())
+        {
+            spotChoice.lights.clear();
+        }
+        if (pointCasters.empty())
+        {
+            pointChoice.lights.clear();
+        }
+        const auto spotCount = static_cast<std::uint32_t>(spotChoice.lights.size());
+        const auto pointCount = static_cast<std::uint32_t>(pointChoice.lights.size());
+        const FrameBlock frameBlock{Math::Vec4(lighting.lightDirection, 0.0f),
+                                    Math::Vec4(lighting.lightColour, 0.0f),
+                                    Math::Vec4(m_frame.time, m_frame.deltaTime, 0.0f, 0.0f),
+                                    Math::Vec4(m_frame.backgroundIntensity, std::cos(m_frame.backgroundRotation),
+                                               std::sin(m_frame.backgroundRotation), 0.0f),
+                                    Math::Vec4(lighting.skyIntensity, std::cos(lighting.skyRotation),
+                                               std::sin(lighting.skyRotation),
+                                               m_skyLighting->Textures().specularMaxLevel),
+                                    {static_cast<std::uint32_t>(lighting.lights.size() + lighting.rectLights.size()),
+                                     spotCount, pointCount, 0}};
         m_frameBlocks->Write(frameIndex, 0, BytesOf(frameBlock));
-        // The point and spot lights, then the rect lights, written again each frame into a buffer that grows by
-        // doubling.
-        m_lightBlocks->Reserve(lighting.lights.size() + lighting.rectLights.size());
+        // The shadowed spot lights in their tiles' order, the shadowed point lights in their cubes' order, the other
+        // point and spot lights, then the rect lights, written again each frame into a buffer that grows by doubling.
+        std::vector<GpuLight> lightRecords;
+        lightRecords.reserve(lighting.lights.size() + lighting.rectLights.size());
+        std::vector<bool> shadowedLight(lighting.lights.size(), false);
+        for (const std::vector<std::size_t>* chosen : {&spotChoice.lights, &pointChoice.lights})
+        {
+            for (const std::size_t i : *chosen)
+            {
+                shadowedLight[i] = true;
+                lightRecords.push_back(ToGpuLight(lighting.lights[i]));
+            }
+        }
         for (std::size_t i = 0; i < lighting.lights.size(); ++i)
         {
-            m_lightBlocks->Write(frameIndex, i, BytesOf(ToGpuLight(lighting.lights[i])));
+            if (!shadowedLight[i])
+            {
+                lightRecords.push_back(ToGpuLight(lighting.lights[i]));
+            }
         }
-        for (std::size_t i = 0; i < lighting.rectLights.size(); ++i)
+        for (const RectLight& light : lighting.rectLights)
         {
-            m_lightBlocks->Write(frameIndex, lighting.lights.size() + i, BytesOf(ToGpuLight(lighting.rectLights[i])));
+            lightRecords.push_back(ToGpuLight(light));
         }
+        m_lightBlocks->Reserve(lightRecords.size());
+        for (std::size_t i = 0; i < lightRecords.size(); ++i)
+        {
+            m_lightBlocks->Write(frameIndex, i, BytesOf(lightRecords[i]));
+        }
+        const auto lightCount = static_cast<std::uint32_t>(lightRecords.size());
         m_drawBlocks->Reserve(draws->size());
         for (std::size_t i = 0; i < draws->size(); ++i)
         {
@@ -2191,6 +3073,8 @@ namespace Fenrir::Render
             block.normal = glm::transpose(glm::inverse(draw.world));
             block.paletteOffset = draw.paletteOffset;
             block.worldSign = WorldSign(draw.world);
+            block.instanceFirst = draw.instances.first;
+            block.instanceCount = draw.instances.count;
             m_drawBlocks->Write(frameIndex, i, BytesOf(block));
         }
         // Every palette written again each frame (ADR-0035): nothing is kept across frames.
@@ -2199,12 +3083,92 @@ namespace Fenrir::Render
         {
             m_paletteBlocks->Write(frameIndex, bone, BytesOf(GpuBone::FromMatrix(m_frame.palette[bone])));
         }
+        // Every skinned mesh skinned once, for every pass of every view (ADR-0050), which declare reading it.
+        const GraphResource skinnedResource = AddSkinningPass(graph, frameIndex, skins);
+        const BufferHandle skinned = skins.empty() ? BufferHandle{} : m_skinnedVertices->Current(frameIndex);
+        const auto readSkinned = [skinnedResource](PassBuilder& pass) {
+            if (!skinnedResource.IsEmpty())
+            {
+                pass.VertexInput(skinnedResource);
+            }
+        };
         m_stats.paletteBytes = static_cast<std::uint32_t>(m_frame.palette.size() * sizeof(GpuBone));
         m_stats.palettes = m_frame.palettes;
         const auto skinnedDraws = static_cast<std::uint32_t>(
             std::count_if(draws->begin(), draws->end(), [](const ResolvedDraw& draw) { return draw.skinned; }));
+        std::uint32_t instances = 0;
+        for (const ResolvedDraw& draw : *draws)
+        {
+            instances += std::max<std::uint32_t>(draw.instances.count, 1);
+        }
         const std::vector<ViewRequest>& views = m_frame.views;
-        m_viewBlocks->Reserve(views.size());
+        // Each view's block, then each view's cascades' (ADR-0050), MaxCascades slots a view, then each spot light
+        // tile's, then each point light's: its cube's, then its faces'.
+        const std::size_t firstTileSlot = views.size() * (1 + MaxCascades);
+        const std::size_t firstCubeSlot = firstTileSlot + spotCount;
+        constexpr std::size_t CubeSlots = 1 + CubeFaceCount;
+        m_viewBlocks->Reserve(firstCubeSlot + pointCount * CubeSlots);
+
+        // Each shadowed spot light's perspective and record, and the atlas its tile is in, kept across frames.
+        const SpotAtlasGrid grid = SpotAtlasGridOf(m_spotShadowConfig.budget);
+        const std::uint32_t tileSize = m_spotShadowConfig.mapSize;
+        std::vector<SpotShadow> spotShadows;
+        m_spotShadowBlocks->Reserve(std::max<std::size_t>(spotCount, 1));
+        for (std::uint32_t t = 0; t < spotCount; ++t)
+        {
+            const PunctualLight& light = lighting.lights[spotChoice.lights[t]];
+            spotShadows.push_back(FitSpotShadow(light, tileSize));
+            m_spotShadowBlocks->Write(frameIndex, t,
+                                      BytesOf(ToGpuSpotShadow(light, spotShadows.back(), t, grid, tileSize)));
+        }
+        GraphResource spotAtlas;
+        if (spotCount > 0)
+        {
+            TextureDesc desc;
+            desc.format = TextureFormat::Depth32Float;
+            desc.width = grid.columns * tileSize;
+            desc.height = grid.rows * tileSize;
+            desc.usage = TextureUsage::DepthAttachment | TextureUsage::Sampled;
+            if (m_spotAtlas.IsEmpty() || m_spotAtlasDesc.width != desc.width || m_spotAtlasDesc.height != desc.height)
+            {
+                m_device.Destroy(m_spotAtlas);
+                m_spotAtlas = m_device.CreateTexture(desc, "Spot shadow atlas");
+                m_spotAtlasDesc = desc;
+            }
+            spotAtlas = graph.ImportTexture("SpotShadowAtlas", m_spotAtlas, desc);
+        }
+
+        // Each shadowed point light's faces and record, and the point shadow cubes its cube is in, a cube per budget,
+        // kept across frames.
+        const std::uint32_t faceSize = m_pointShadowConfig.mapSize;
+        std::vector<PointShadow> pointShadows;
+        m_pointShadowBlocks->Reserve(std::max<std::size_t>(pointCount, 1));
+        for (std::uint32_t c = 0; c < pointCount; ++c)
+        {
+            const PunctualLight& light = lighting.lights[pointChoice.lights[c]];
+            pointShadows.push_back(FitPointShadow(light, faceSize));
+            m_pointShadowBlocks->Write(frameIndex, c, BytesOf(ToGpuPointShadow(light, pointShadows.back())));
+        }
+        GraphResource pointShadowCubes;
+        if (pointCount > 0)
+        {
+            TextureDesc desc;
+            desc.kind = TextureKind::CubeArray;
+            desc.format = TextureFormat::Depth32Float;
+            desc.width = faceSize;
+            desc.height = faceSize;
+            desc.layers = m_pointShadowConfig.budget;
+            desc.usage = TextureUsage::DepthAttachment | TextureUsage::Sampled;
+            if (m_pointShadowCubes.IsEmpty() || m_pointShadowCubesDesc != desc)
+            {
+                m_device.Destroy(m_pointShadowCubes);
+                m_pointShadowCubes = m_device.CreateTexture(desc, "Point shadow cubes");
+                m_pointShadowCubesDesc = desc;
+            }
+            pointShadowCubes = graph.ImportTexture("PointShadowCubes", m_pointShadowCubes, desc);
+        }
+        m_gtao->BeginFrame(views.size());
+        m_clusterJobs->Reserve(views.size());
         m_backgroundBlocks->Reserve(views.size());
         m_outputBlocks->Reserve(views.size());
 
@@ -2281,8 +3245,165 @@ namespace Fenrir::Render
             }
         }
 
-        const BindingGroupHandle frameGroup = FrameGroupFor(frameIndex);
+        const FrameGroup& frameGroups = FrameGroupFor(frameIndex, spotCount > 0 ? m_spotAtlas : TextureHandle{},
+                                                      pointCount > 0 ? m_pointShadowCubes : TextureHandle{});
+        const BindingGroupHandle frameGroup = frameGroups.group;
+        const BindingGroupHandle unshadowedFrame = frameGroups.unshadowed;
         const BindingGroupHandle drawGroup = DrawGroupFor(frameIndex);
+
+        if (spotCount > 0)
+        {
+            // Each casting item's set 2, as in ShadowCascades, but with every render target image a material samples
+            // replaced by its default, so the pass waits on no view.
+            const std::vector<AssetKey> allSampled(sampled.begin(), sampled.end());
+            auto spotGroups = std::make_shared<std::vector<BindingGroupHandle>>(draws->size());
+            for (const std::size_t i : casters)
+            {
+                const ResolvedDraw& draw = (*draws)[i];
+                if (draw.material != nullptr)
+                {
+                    (*spotGroups)[i] = draw.shadowMasked ? PrepassGroup(*draw.material, allSampled)
+                                                         : GroupWithout(*draw.material, allSampled);
+                }
+            }
+            auto spotRuns =
+                std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *spotGroups, casters, DrawPass::Shadow));
+            // Each tile's own view block, the light's perspective, which the casting items' vertex stages place them
+            // by.
+            std::vector<BindingGroupHandle> tileGroups;
+            std::vector<PixelRect> tiles;
+            for (std::uint32_t t = 0; t < spotCount; ++t)
+            {
+                const SpotShadow& shadow = spotShadows[t];
+                const SpotAtlasTile at = SpotAtlasTileOf(t, grid);
+                const PixelRect tile{static_cast<std::int32_t>(at.column * tileSize),
+                                     static_cast<std::int32_t>(at.row * tileSize), tileSize, tileSize};
+                const ViewBlock tileBlock{shadow.view,
+                                          shadow.projection,
+                                          shadow.viewProjection,
+                                          glm::inverse(shadow.viewProjection),
+                                          Math::Vec4(lighting.lights[spotChoice.lights[t]].position, 1.0f),
+                                          Math::Vec4(static_cast<float>(tile.x), static_cast<float>(tile.y),
+                                                     static_cast<float>(tileSize), static_cast<float>(tileSize))};
+                m_viewBlocks->Write(frameIndex, firstTileSlot + t, BytesOf(tileBlock));
+                tileGroups.push_back(
+                    ViewGroupFor(frameIndex, firstTileSlot + t, GetDefaultTexture(DefaultTexture::White)));
+                tiles.push_back(tile);
+            }
+            // Every shadowed spot light into its tile of the atlas, in one pass, binding the frame group that does not
+            // read the atlas it draws.
+            graph.AddPass(
+                "SpotShadows", RenderStage::Shadow, QueueKind::Graphics,
+                [=](PassBuilder& pass) {
+                    pass.DepthAttachment(spotAtlas, LoadOp::Clear, 0.0f);
+                    readSkinned(pass);
+                },
+                [this, draws, spotGroups, spotRuns, unshadowedFrame, tileGroups, tiles, drawGroup,
+                 skinned](PassContext& context) {
+                    for (std::size_t t = 0; t < tiles.size(); ++t)
+                    {
+                        RecordDraws(context.Encoder(), *draws, *spotGroups, *spotRuns, unshadowedFrame, tileGroups[t],
+                                    drawGroup, skinned, tiles[t], DrawPass::Shadow);
+                    }
+                });
+            m_stats.shadowDraws += static_cast<std::uint32_t>(spotRuns->size() * tiles.size());
+        }
+
+        if (pointCount > 0)
+        {
+            // Each casting item's set 2, as in SpotShadows. Those whose shader has a POINT_SHADOW variant the device
+            // can draw are drawn into all six faces at once, the rest a face at a time.
+            const std::vector<AssetKey> allSampled(sampled.begin(), sampled.end());
+            auto pointGroups = std::make_shared<std::vector<BindingGroupHandle>>(draws->size());
+            std::vector<std::size_t> layered;
+            std::vector<std::size_t> faced;
+            for (const std::size_t i : pointCasters)
+            {
+                const ResolvedDraw& draw = (*draws)[i];
+                if (draw.material != nullptr)
+                {
+                    (*pointGroups)[i] = draw.shadowMasked ? PrepassGroup(*draw.material, allSampled)
+                                                          : GroupWithout(*draw.material, allSampled);
+                }
+                (draw.pointShadowLayered != nullptr ? layered : faced).push_back(i);
+            }
+            auto layeredRuns = std::make_shared<std::vector<DrawRun>>(
+                RunsOf(*draws, *pointGroups, layered, DrawPass::PointShadowLayered));
+            auto facedRuns =
+                std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *pointGroups, faced, DrawPass::PointShadow));
+            // Each light's view blocks: one from the light, not turned, naming its cube for the instanced faces, and
+            // one per face. The camera is the light, its range in w, which builtin:shadow's POINT_SHADOW variant reads.
+            const PixelRect face{0, 0, faceSize, faceSize};
+            const Math::Vec4 viewport(0.0f, 0.0f, static_cast<float>(faceSize), static_cast<float>(faceSize));
+            const TextureHandle white = GetDefaultTexture(DefaultTexture::White);
+            std::vector<BindingGroupHandle> cubeGroups;
+            std::vector<BindingGroupHandle> faceGroups;
+            for (std::uint32_t c = 0; c < pointCount; ++c)
+            {
+                const PointShadow& shadow = pointShadows[c];
+                const PunctualLight& light = lighting.lights[pointChoice.lights[c]];
+                const std::size_t slot = firstCubeSlot + c * CubeSlots;
+                const auto blockFor = [&](const Math::Mat4& view) {
+                    const Math::Mat4 viewProjection = shadow.projection * view;
+                    ViewBlock block{view,
+                                    shadow.projection,
+                                    viewProjection,
+                                    glm::inverse(viewProjection),
+                                    Math::Vec4(light.position, light.range),
+                                    viewport};
+                    block.shadowInfo = {0, 0, c, 0};
+                    return block;
+                };
+                m_viewBlocks->Write(frameIndex, slot, BytesOf(blockFor(shadow.view)));
+                cubeGroups.push_back(ViewGroupFor(frameIndex, slot, white));
+                for (std::uint32_t f = 0; f < CubeFaceCount; ++f)
+                {
+                    m_viewBlocks->Write(frameIndex, slot + 1 + f, BytesOf(blockFor(shadow.faceViews.at(f))));
+                    faceGroups.push_back(ViewGroupFor(frameIndex, slot + 1 + f, white));
+                }
+            }
+            // The instanced faces of every shadowed point light, in one pass attaching every layer, binding the frame
+            // group that does not read the cubes it draws.
+            if (!layered.empty())
+            {
+                graph.AddPass(
+                    "PointShadows", RenderStage::Shadow, QueueKind::Graphics,
+                    [=](PassBuilder& pass) {
+                        pass.LayeredDepthAttachment(pointShadowCubes, LoadOp::Clear, 0.0f);
+                        readSkinned(pass);
+                    },
+                    [this, draws, pointGroups, layeredRuns, unshadowedFrame, cubeGroups, face, drawGroup,
+                     skinned](PassContext& context) {
+                        for (const BindingGroupHandle cube : cubeGroups)
+                        {
+                            RecordDraws(context.Encoder(), *draws, *pointGroups, *layeredRuns, unshadowedFrame, cube,
+                                        drawGroup, skinned, face, DrawPass::PointShadowLayered);
+                        }
+                    });
+                m_stats.shadowDraws += static_cast<std::uint32_t>(layeredRuns->size() * pointCount);
+            }
+            // The rest a face at a time, a pass a face, clearing it unless the instanced pass cleared every layer.
+            if (!faced.empty())
+            {
+                const LoadOp load = layered.empty() ? LoadOp::Clear : LoadOp::Load;
+                for (std::uint32_t layer = 0; layer < pointCount * CubeFaceCount; ++layer)
+                {
+                    const BindingGroupHandle faceGroup = faceGroups[layer];
+                    graph.AddPass(
+                        "PointShadowFaces", RenderStage::Shadow, QueueKind::Graphics,
+                        [=](PassBuilder& pass) {
+                            pass.DepthAttachmentLayer(pointShadowCubes, layer, load, 0.0f);
+                            readSkinned(pass);
+                        },
+                        [this, draws, pointGroups, facedRuns, unshadowedFrame, faceGroup, face, drawGroup,
+                         skinned](PassContext& context) {
+                            RecordDraws(context.Encoder(), *draws, *pointGroups, *facedRuns, unshadowedFrame, faceGroup,
+                                        drawGroup, skinned, face, DrawPass::PointShadow);
+                        });
+                }
+                m_stats.shadowDraws += static_cast<std::uint32_t>(facedRuns->size() * pointCount * CubeFaceCount);
+            }
+        }
         // The targets drawn into so far: the first view into each clears it. The window's key is empty.
         std::set<AssetKey> cleared;
         std::vector<BloomView> blooms;
@@ -2298,15 +3419,67 @@ namespace Fenrir::Render
             const PixelRect rect = request.viewport;
             const PixelRect viewport{0, 0, rect.width, rect.height};
 
+            // The sun's cascades for this camera, when it casts and something casts (ADR-0050).
+            const SunShadowSettings& sun = lighting.shadows;
+            const std::vector<Cascade> cascades =
+                sun.enabled && !casters.empty()
+                    ? FitCascades(request.view, request.projection, lighting.lightDirection, sun.distance, m_cascades)
+                    : std::vector<Cascade>{};
+            const auto cascadeCount = static_cast<std::uint32_t>(cascades.size());
+
             const Math::Mat4 viewProjection = request.projection * request.view;
-            const ViewBlock viewBlock{request.view,
-                                      request.projection,
-                                      viewProjection,
-                                      glm::inverse(viewProjection),
-                                      Math::Vec4(request.position, 1.0f),
-                                      Math::Vec4(static_cast<float>(rect.x), static_cast<float>(rect.y),
-                                                 static_cast<float>(rect.width), static_cast<float>(rect.height))};
+            ViewBlock viewBlock{request.view,
+                                request.projection,
+                                viewProjection,
+                                glm::inverse(viewProjection),
+                                Math::Vec4(request.position, 1.0f),
+                                Math::Vec4(static_cast<float>(rect.x), static_cast<float>(rect.y),
+                                           static_cast<float>(rect.width), static_cast<float>(rect.height))};
+            for (std::uint32_t c = 0; c < cascadeCount; ++c)
+            {
+                viewBlock.shadowMatrices.at(c) = AtlasMatrix(cascades[c], c, cascadeCount);
+                viewBlock.shadowSplits[static_cast<int>(c)] = cascades[c].split;
+                viewBlock.shadowTexels[static_cast<int>(c)] = cascades[c].texelSize;
+            }
+            viewBlock.shadowBias = Math::Vec4(sun.normalBias, sun.slopeBias, ShadowFilterRadius, CascadeBlendShare);
+            viewBlock.shadowInfo = {cascadeCount, request.debugView == ViewDebug::ShadowCascades ? 1u : 0u, 0, 0};
+            // Its lights listed in its clusters (ADR-0049), the slices running as far as any light reaches.
+            ClusterDepths clusterDepths;
+            if (m_clusteredLights && lightCount > 0)
+            {
+                std::vector<LightSphere> spheres;
+                spheres.reserve(lightRecords.size());
+                for (const GpuLight& light : lightRecords)
+                {
+                    spheres.push_back(LightSphereOf(light, request.view));
+                }
+                clusterDepths = ClusterDepthsOf(request.projection, spheres);
+            }
+            const std::pair<BufferHandle, GraphResource> clustered =
+                AddLightClustersPass(graph, frameIndex, v, request, lightCount, clusterDepths);
+            const BufferHandle clusterBuffer = clustered.first;
+            const GraphResource clusters = clustered.second;
+            viewBlock.clusterSlices = Math::Vec4(clusterDepths.near, ClusterSliceScale(clusterDepths), 0.0f, 0.0f);
+            viewBlock.clusterInfo = {clusterBuffer.IsEmpty() ? 0u : 1u,
+                                     request.debugView == ViewDebug::LightClusters ? 1u : 0u,
+                                     std::min(lightCount, MaxClusterLights), 0};
             m_viewBlocks->Write(frameIndex, v, BytesOf(viewBlock));
+            // Each cascade's own view block, which the casting items' vertex stages place them by.
+            std::vector<BindingGroupHandle> cascadeGroups;
+            for (std::uint32_t c = 0; c < cascadeCount; ++c)
+            {
+                const Cascade& cascade = cascades[c];
+                const std::size_t slot = views.size() + v * MaxCascades + c;
+                const auto size = static_cast<float>(m_cascades.mapSize);
+                const ViewBlock cascadeBlock{cascade.view,
+                                             cascade.projection,
+                                             cascade.viewProjection,
+                                             glm::inverse(cascade.viewProjection),
+                                             Math::Vec4(cascade.centre, 1.0f),
+                                             Math::Vec4(static_cast<float>(c) * size, 0.0f, size, size)};
+                m_viewBlocks->Write(frameIndex, slot, BytesOf(cascadeBlock));
+                cascadeGroups.push_back(ViewGroupFor(frameIndex, slot, GetDefaultTexture(DefaultTexture::White)));
+            }
             const BackgroundBlock backgroundBlock{
                 Math::Vec4(request.background.r, request.background.g, request.background.b, request.background.a)};
             m_backgroundBlocks->Write(frameIndex, v, BytesOf(backgroundBlock));
@@ -2315,7 +3488,9 @@ namespace Fenrir::Render
             outputBlock.tonemapper = static_cast<std::uint32_t>(request.tonemapper);
             m_outputBlocks->Write(frameIndex, v, BytesOf(outputBlock));
             const BindingGroupHandle outputBlockGroup = m_outputBlocks->Group(frameIndex, v);
-            const BindingGroupHandle viewGroup = m_viewBlocks->Group(frameIndex, v);
+            // The white texture as its ambient occlusion, for every pass but Opaque.
+            const BindingGroupHandle viewGroup =
+                ViewGroupFor(frameIndex, v, GetDefaultTexture(DefaultTexture::White), {}, clusterBuffer);
             // The Sky cube texture's pipeline and group, when the view draws one that is prepared; else its colour's,
             // which reads no frame block.
             BindingGroupHandle backgroundGroup = m_backgroundBlocks->Group(frameIndex, v);
@@ -2356,7 +3531,17 @@ namespace Fenrir::Render
             const GraphResource sceneColour = graph.CreateTexture("SceneColor", colourDesc);
             const GraphResource sceneDepth = graph.CreateTexture("SceneDepth", depthDesc);
             const GraphResource sceneNormals = graph.CreateTexture("SceneNormals", normalDesc);
-            m_drawnViews.push_back({v, sceneColour, sceneDepth, sceneNormals, viewGroup});
+            GraphResource shadowAtlas;
+            if (cascadeCount > 0)
+            {
+                TextureDesc shadowDesc;
+                shadowDesc.format = TextureFormat::Depth32Float;
+                shadowDesc.width = m_cascades.mapSize * cascadeCount;
+                shadowDesc.height = m_cascades.mapSize;
+                shadowDesc.usage = TextureUsage::DepthAttachment | TextureUsage::Sampled;
+                shadowAtlas = graph.CreateTexture("ShadowAtlas", shadowDesc);
+            }
+            m_drawnViews.push_back({v, sceneColour, sceneDepth, sceneNormals, shadowAtlas, viewGroup});
 
             // Opaque items in draw-list order, and those of them in the depth prepass; transparent ones back to front
             // by the view-space depth of their world origins, the farthest (most negative view z) first.
@@ -2382,6 +3567,54 @@ namespace Fenrir::Render
             }
             std::stable_sort(transparent->begin(), transparent->end(),
                              [&](std::size_t a, std::size_t b) { return depth[a] < depth[b]; });
+            // Matching opaque and masked items merge into instanced draws (ADR-0051); transparent ones stay single,
+            // in their depth order.
+            auto prepassRuns =
+                std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *prepassGroups, *prepassed, DrawPass::Prepass));
+            auto opaqueRuns = std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *groups, *opaque, DrawPass::Main));
+
+            if (!shadowAtlas.IsEmpty())
+            {
+                // Each casting item's set 2 in the shadow passes: a cut-out Masked item's prepass group, else its
+                // material group, which its own vertex stage may read.
+                auto shadowGroups = std::make_shared<std::vector<BindingGroupHandle>>(*groups);
+                for (const std::size_t i : casters)
+                {
+                    if ((*draws)[i].shadowMasked)
+                    {
+                        (*shadowGroups)[i] = PrepassGroup(*(*draws)[i].material, replaced[v]);
+                    }
+                }
+                auto shadowRuns =
+                    std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *shadowGroups, casters, DrawPass::Shadow));
+                const std::uint32_t mapSize = m_cascades.mapSize;
+                // Every cascade into its tile of the atlas, in one pass.
+                graph.AddPass(
+                    "ShadowCascades", RenderStage::Shadow, QueueKind::Graphics,
+                    [=](PassBuilder& pass) {
+                        pass.DepthAttachment(shadowAtlas, LoadOp::Clear, 0.0f);
+                        for (const GraphResource image : samples)
+                        {
+                            pass.Sample(image);
+                        }
+                        readSkinned(pass);
+                    },
+                    [this, draws, shadowGroups, shadowRuns, frameGroup, cascadeGroups, drawGroup, skinned,
+                     mapSize](PassContext& context) {
+                        for (std::size_t c = 0; c < cascadeGroups.size(); ++c)
+                        {
+                            const PixelRect tile{static_cast<std::int32_t>(c * mapSize), 0, mapSize, mapSize};
+                            RecordDraws(context.Encoder(), *draws, *shadowGroups, *shadowRuns, frameGroup,
+                                        cascadeGroups[c], drawGroup, skinned, tile, DrawPass::Shadow);
+                        }
+                    });
+                m_stats.shadowDraws += static_cast<std::uint32_t>(shadowRuns->size() * cascadeGroups.size());
+            }
+            auto transparentRuns = std::make_shared<std::vector<DrawRun>>();
+            for (const std::size_t i : *transparent)
+            {
+                transparentRuns->push_back({i, 1});
+            }
 
             // Depth and normals first (ADR-0049), so Opaque shades each pixel once, by equal depth.
             graph.AddPass(
@@ -2393,12 +3626,17 @@ namespace Fenrir::Render
                     {
                         pass.Sample(image);
                     }
+                    readSkinned(pass);
                 },
-                [this, draws, prepassGroups, prepassed, frameGroup, viewGroup, drawGroup,
+                [this, draws, prepassGroups, prepassRuns, frameGroup, viewGroup, drawGroup, skinned,
                  viewport](PassContext& context) {
-                    RecordDraws(context.Encoder(), *draws, *prepassGroups, *prepassed, frameGroup, viewGroup, drawGroup,
-                                viewport, true);
+                    RecordDraws(context.Encoder(), *draws, *prepassGroups, *prepassRuns, frameGroup, viewGroup,
+                                drawGroup, skinned, viewport, DrawPass::Prepass);
                 });
+            // GTAO from the prepass's depth and normals, when the camera has it; Opaque samples what it makes.
+            const GraphResource occlusion = m_gtao->AddPasses(
+                graph, frameIndex, v,
+                {sceneDepth, sceneNormals, {rect.width, rect.height}, request.projection, request.ambientOcclusion});
             graph.AddPass(
                 "Opaque", RenderStage::Opaque, QueueKind::Graphics,
                 [=](PassBuilder& pass) {
@@ -2409,10 +3647,37 @@ namespace Fenrir::Render
                     {
                         pass.Sample(image);
                     }
+                    if (!occlusion.IsEmpty())
+                    {
+                        pass.Sample(occlusion);
+                    }
+                    if (!shadowAtlas.IsEmpty())
+                    {
+                        pass.Sample(shadowAtlas);
+                    }
+                    if (!spotAtlas.IsEmpty())
+                    {
+                        pass.Sample(spotAtlas);
+                    }
+                    if (!pointShadowCubes.IsEmpty())
+                    {
+                        pass.Sample(pointShadowCubes);
+                    }
+                    if (!clusters.IsEmpty())
+                    {
+                        pass.StorageRead(clusters);
+                    }
+                    readSkinned(pass);
                 },
-                [this, draws, groups, opaque, frameGroup, viewGroup, drawGroup, viewport](PassContext& context) {
-                    RecordDraws(context.Encoder(), *draws, *groups, *opaque, frameGroup, viewGroup, drawGroup, viewport,
-                                false);
+                [this, draws, groups, opaqueRuns, frameGroup, drawGroup, skinned, viewport, occlusion, shadowAtlas,
+                 clusterBuffer, v](PassContext& context) {
+                    const TextureHandle occlusionTexture =
+                        occlusion.IsEmpty() ? GetDefaultTexture(DefaultTexture::White) : context.Texture(occlusion);
+                    const TextureHandle shadowTexture =
+                        shadowAtlas.IsEmpty() ? TextureHandle{} : context.Texture(shadowAtlas);
+                    RecordDraws(context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup,
+                                ViewGroupFor(context.FrameIndex(), v, occlusionTexture, shadowTexture, clusterBuffer),
+                                drawGroup, skinned, viewport, DrawPass::Main);
                 });
             if (!transparent->empty())
             {
@@ -2426,14 +3691,38 @@ namespace Fenrir::Render
                         {
                             pass.Sample(image);
                         }
+                        if (!shadowAtlas.IsEmpty())
+                        {
+                            pass.Sample(shadowAtlas);
+                        }
+                        if (!spotAtlas.IsEmpty())
+                        {
+                            pass.Sample(spotAtlas);
+                        }
+                        if (!pointShadowCubes.IsEmpty())
+                        {
+                            pass.Sample(pointShadowCubes);
+                        }
+                        if (!clusters.IsEmpty())
+                        {
+                            pass.StorageRead(clusters);
+                        }
+                        readSkinned(pass);
                     },
-                    [this, draws, groups, transparent, frameGroup, viewGroup, drawGroup,
-                     viewport](PassContext& context) {
-                        RecordDraws(context.Encoder(), *draws, *groups, *transparent, frameGroup, viewGroup, drawGroup,
-                                    viewport, false);
+                    [this, draws, groups, transparentRuns, frameGroup, viewGroup, drawGroup, skinned, viewport,
+                     shadowAtlas, clusterBuffer, v](PassContext& context) {
+                        // Shadowed, but never darkened by the occlusion of what is behind it.
+                        const BindingGroupHandle shadowedView =
+                            shadowAtlas.IsEmpty()
+                                ? viewGroup
+                                : ViewGroupFor(context.FrameIndex(), v, GetDefaultTexture(DefaultTexture::White),
+                                               context.Texture(shadowAtlas), clusterBuffer);
+                        RecordDraws(context.Encoder(), *draws, *groups, *transparentRuns, frameGroup, shadowedView,
+                                    drawGroup, skinned, viewport, DrawPass::Main);
                     });
             }
-            m_stats.draws += static_cast<std::uint32_t>(draws->size());
+            m_stats.draws += static_cast<std::uint32_t>(opaqueRuns->size() + transparentRuns->size());
+            m_stats.instances += instances;
             m_stats.skinnedDraws += skinnedDraws;
 
             graph.AddPass(
@@ -2459,18 +3748,34 @@ namespace Fenrir::Render
 
             // The first view into a target clears all of it; each later one draws over it, in its viewport only.
             const LoadOp load = cleared.insert(request.target).second ? LoadOp::Clear : LoadOp::Load;
+            // A view showing its ambient occlusion, its shadow atlas or the spot shadow atlas draws that instead, as
+            // grey, black when it has none.
+            const bool showGrey =
+                (request.debugView == ViewDebug::AmbientOcclusion || request.debugView == ViewDebug::ShadowAtlas ||
+                 request.debugView == ViewDebug::SpotShadowAtlas) &&
+                !m_occlusionOutputPipeline.IsEmpty();
+            const GraphResource grey = request.debugView == ViewDebug::ShadowAtlas       ? shadowAtlas
+                                       : request.debugView == ViewDebug::SpotShadowAtlas ? spotAtlas
+                                                                                         : occlusion;
+            const GraphResource shown = showGrey && !grey.IsEmpty() ? grey : sceneColour;
+            const PipelineHandle outputPipeline = showGrey ? m_occlusionOutputPipeline : m_outputPipeline;
+            const TextureHandle black = GetDefaultTexture(DefaultTexture::Black);
+            const bool shownBlack = showGrey && grey.IsEmpty();
             graph.AddPass(
                 "Output", RenderStage::Output, QueueKind::Graphics,
                 [=](PassBuilder& pass) {
-                    pass.Sample(sceneColour);
+                    if (!shownBlack)
+                    {
+                        pass.Sample(shown);
+                    }
                     pass.ColourAttachment(target, load, {0.0f, 0.0f, 0.0f, 1.0f});
                 },
-                [this, sceneColour, rect, outputBlockGroup](PassContext& context) {
+                [this, shown, shownBlack, black, outputPipeline, rect, outputBlockGroup](PassContext& context) {
                     PassEncoder& encoder = context.Encoder();
                     encoder.SetViewport(rect);
-                    encoder.SetPipeline(m_outputPipeline);
+                    encoder.SetPipeline(outputPipeline);
                     encoder.SetBindingGroup(1, outputBlockGroup);
-                    encoder.SetBindingGroup(MaterialSet, OutputGroup(context.Texture(sceneColour)));
+                    encoder.SetBindingGroup(MaterialSet, OutputGroup(shownBlack ? black : context.Texture(shown)));
                     encoder.Draw({.vertexCount = 3});
                 });
         }

@@ -18,6 +18,7 @@
 #include "Facade/RendererState.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/ImageData.hpp"
+#include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/ShaderData.hpp"
 #include "FenrirAssets/SkeletonData.hpp"
@@ -69,6 +70,17 @@ namespace Fenrir
         Render::Tonemapper ToCore(Tonemapper tonemapper)
         {
             return static_cast<Render::Tonemapper>(tonemapper);
+        }
+
+        /** @brief The core's copy of a camera's debug view: the same values in the same order. */
+        Render::ViewDebug ToCore(CameraDebugView debugView)
+        {
+            static_assert(
+                static_cast<int>(CameraDebugView::ShadowAtlas) == static_cast<int>(Render::ViewDebug::ShadowAtlas) &&
+                static_cast<int>(CameraDebugView::SpotShadowAtlas) ==
+                    static_cast<int>(Render::ViewDebug::SpotShadowAtlas) &&
+                static_cast<int>(CameraDebugView::LightClusters) == static_cast<int>(Render::ViewDebug::LightClusters));
+            return static_cast<Render::ViewDebug>(debugView);
         }
 
         /** @brief Whether the shader's GPU side is ready: prepared now if it is new or changed. False if stale. */
@@ -220,6 +232,13 @@ namespace Fenrir
                     scene.ReleaseShader(key);
                 }
             }
+            for (const AssetKey key : scene.InstanceListKeys())
+            {
+                if (!store.IsValid(HandleOf<InstanceList>(key)))
+                {
+                    scene.ReleaseInstanceList(key);
+                }
+            }
             for (const AssetKey key : draw2D.ShaderKeys())
             {
                 if (!store.IsValid(HandleOf<Shader>(key)))
@@ -365,6 +384,9 @@ namespace Fenrir
                 out.position = Math::Vec3(GetWorldMatrix(entity)[3]);
                 out.colour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
                 out.range = light.range;
+                out.castShadows = light.castShadows;
+                out.shadowNormalBias = std::max(light.shadowNormalBias, 0.0f);
+                out.shadowSlopeBias = std::max(light.shadowSlopeBias, 0.0f);
             });
             const std::array<ComponentType, 1> spots{ComponentType::Native<SpotLight>()};
             entities.ForEachWith(spots, [&](std::uint32_t id) {
@@ -383,6 +405,9 @@ namespace Fenrir
                 out.range = light.range;
                 out.innerAngle = light.innerAngle;
                 out.outerAngle = light.outerAngle;
+                out.castShadows = light.castShadows;
+                out.shadowNormalBias = std::max(light.shadowNormalBias, 0.0f);
+                out.shadowSlopeBias = std::max(light.shadowSlopeBias, 0.0f);
             });
         }
 
@@ -450,6 +475,12 @@ namespace Fenrir
                 const Math::Mat4 world = GetWorldMatrix(entity);
                 lighting.lightDirection = glm::normalize(-Math::Vec3(world[2]));
                 lighting.lightColour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                // A light that lights nothing casts nothing (ADR-0050).
+                lighting.shadows.enabled = light.castShadows && light.shadowDistance > 0.0f &&
+                                           glm::dot(lighting.lightColour, lighting.lightColour) > 0.0f;
+                lighting.shadows.distance = light.shadowDistance;
+                lighting.shadows.normalBias = std::max(light.shadowNormalBias, 0.0f);
+                lighting.shadows.slopeBias = std::max(light.shadowSlopeBias, 0.0f);
             });
             if (found > 1 && !state.loggedLights)
             {
@@ -685,6 +716,9 @@ namespace Fenrir
                 view.exposure = camera.exposure;
                 view.tonemapper = ToCore(camera.tonemapper);
                 view.bloom = {camera.bloom.intensity, camera.bloom.radius};
+                view.ambientOcclusion = {camera.ambientOcclusion.enabled, camera.ambientOcclusion.radius,
+                                         camera.ambientOcclusion.intensity};
+                view.debugView = ToCore(camera.debugView);
                 candidates.push_back(candidate);
             });
 
@@ -924,8 +958,101 @@ namespace Fenrir
         }
 
         /**
-         * @brief The active scene's visible MeshRenderers as `frame`'s draws, preparing what they name, and the
-         * palettes their skinned draws read.
+         * @brief The material entity `id`'s renderer draws with, prepared: empty for the fallback material, logged once
+         * per handle.
+         */
+        AssetKey DrawnMaterial(Detail::RendererState& state, const AssetStore& store, std::uint32_t id,
+                               AssetHandle<Material> material)
+        {
+            if (PrepareMaterial(state, store, material))
+            {
+                return KeyOf(material);
+            }
+            if (state.fallbackMaterials.ShouldLog(material))
+            {
+                state.app->Logger()->Warn("FenrirRenderer: entity {} names {} material, so it is drawn with the "
+                                          "fallback material",
+                                          id, material.IsEmpty() ? "no" : "a stale");
+            }
+            return {};
+        }
+
+        /**
+         * @brief Prepares entity `id`'s mesh to draw, saying whether it could: false, logged once per handle, for a
+         * stale one.
+         */
+        bool PrepareDrawnMesh(Detail::RendererState& state, const AssetStore& store, std::uint32_t id,
+                              AssetHandle<Mesh> mesh)
+        {
+            if (PrepareMesh(*state.scene, store, mesh))
+            {
+                return true;
+            }
+            if (state.staleMeshes.ShouldLog(mesh))
+            {
+                state.app->Logger()->Warn("FenrirRenderer: entity {} names a stale mesh ({}), so it is not drawn", id,
+                                          mesh.index);
+            }
+            return false;
+        }
+
+        /**
+         * @brief The active scene's visible InstancedMeshRenderers as draws of their instance lists (ADR-0051),
+         * preparing what they name: each list uploaded when it is new or its revision has moved on.
+         */
+        void ReadInstancedDraws(Detail::RendererState& state, const AssetStore& store, Scene& scene,
+                                std::vector<Render::DrawRequest>& draws)
+        {
+            EntityList& entities = scene.GetEntityList();
+            const std::array<ComponentType, 1> renderers{ComponentType::Native<InstancedMeshRenderer>()};
+            entities.ForEachWith(renderers, [&](std::uint32_t id) {
+                const Entity entity = entities.GetEntity(id);
+                const InstancedMeshRenderer& renderer = entity.GetComponent<InstancedMeshRenderer>();
+                if (!renderer.visible || renderer.mesh.IsEmpty() || renderer.instances.IsEmpty() ||
+                    !PrepareDrawnMesh(state, store, id, renderer.mesh))
+                {
+                    return;
+                }
+                const InstanceListData* list = store.TryGet(renderer.instances);
+                if (list == nullptr)
+                {
+                    if (state.staleInstanceLists.ShouldLog(renderer.instances))
+                    {
+                        state.app->Logger()->Warn("FenrirRenderer: entity {} names a stale instance list ({}), so it "
+                                                  "is not drawn",
+                                                  id, renderer.instances.index);
+                    }
+                    return;
+                }
+                if (store.TryGet(renderer.mesh)->skin.has_value())
+                {
+                    if (state.skinnedListMeshes.ShouldLog(renderer.mesh))
+                    {
+                        state.app->Logger()->Warn("FenrirRenderer: entity {}'s InstancedMeshRenderer names mesh {}, "
+                                                  "which has skin data, so it is not drawn: instance lists draw rigid "
+                                                  "meshes only",
+                                                  id, renderer.mesh.index);
+                    }
+                    return;
+                }
+                const std::uint32_t revision = store.Revision(renderer.instances);
+                if (!state.scene->IsInstanceListCurrent(KeyOf(renderer.instances), revision))
+                {
+                    state.scene->PrepareInstanceList(KeyOf(renderer.instances), revision, *list);
+                }
+                Render::DrawRequest draw;
+                draw.mesh = KeyOf(renderer.mesh);
+                draw.material = DrawnMaterial(state, store, id, renderer.material);
+                draw.world = GetWorldMatrix(entity);
+                draw.instances = KeyOf(renderer.instances);
+                draw.castShadows = renderer.castShadows;
+                draws.push_back(draw);
+            });
+        }
+
+        /**
+         * @brief The active scene's visible MeshRenderers and InstancedMeshRenderers as `frame`'s draws, preparing what
+         * they name, and the palettes their skinned draws read.
          */
         void ReadDraws(Detail::RendererState& state, const AssetStore& store, Scene& scene, Render::SceneFrame& frame)
         {
@@ -942,28 +1069,14 @@ namespace Fenrir
                 {
                     return;
                 }
-                if (!PrepareMesh(*state.scene, store, renderer.mesh))
+                if (!PrepareDrawnMesh(state, store, id, renderer.mesh))
                 {
-                    if (state.staleMeshes.ShouldLog(renderer.mesh))
-                    {
-                        state.app->Logger()->Warn("FenrirRenderer: entity {} names a stale mesh ({}), so it is not "
-                                                  "drawn",
-                                                  id, renderer.mesh.index);
-                    }
                     return;
                 }
                 Render::DrawRequest draw;
                 draw.mesh = KeyOf(renderer.mesh);
-                if (PrepareMaterial(state, store, renderer.material))
-                {
-                    draw.material = KeyOf(renderer.material);
-                }
-                else if (state.fallbackMaterials.ShouldLog(renderer.material))
-                {
-                    state.app->Logger()->Warn("FenrirRenderer: entity {} names {} material, so it is drawn with the "
-                                              "fallback material",
-                                              id, renderer.material.IsEmpty() ? "no" : "a stale");
-                }
+                draw.material = DrawnMaterial(state, store, id, renderer.material);
+                draw.castShadows = renderer.castShadows;
                 const MeshData& data = *store.TryGet(renderer.mesh);
                 if (data.skin.has_value())
                 {
@@ -986,6 +1099,7 @@ namespace Fenrir
                 }
                 draws.push_back(draw);
             });
+            ReadInstancedDraws(state, store, scene, draws);
             // The compatibility verdicts of mesh entities no longer drawn skinned go.
             std::erase_if(state.skinPairings, [&](const auto& entry) { return !drawn.contains(entry.first); });
             frame.palettes = static_cast<std::uint32_t>(ranges.size());
@@ -1163,11 +1277,13 @@ namespace Fenrir
             {
                 const Render::SceneStats scene = state.scene->TakeStats();
                 state.stats.draws = scene.draws;
+                state.stats.instances = scene.instances;
                 state.stats.passes = report.passesRun;
                 state.stats.uploads = scene.uploads;
                 state.stats.paletteBytesUploaded = scene.paletteBytes;
                 state.stats.distinctPalettesWritten = scene.palettes;
                 state.stats.skinnedDraws = scene.skinnedDraws;
+                state.stats.shadowDraws = scene.shadowDraws;
             }
         }
 
@@ -1337,8 +1453,15 @@ namespace Fenrir
             return Renderer(nullptr);
         }
         state->core = std::make_unique<Render::RendererCore>(std::move(made), *state->surface);
-        auto scene =
-            std::make_unique<Render::SceneRenderer>(state->core->Device(), *app.Logger(), SupportedMsaa(app, config));
+        const Render::CascadeConfig cascades{std::clamp(config.shadowCascades, 1u, Render::MaxCascades),
+                                             std::max(config.shadowMapSize, 1u),
+                                             std::clamp(config.shadowSplitLambda, 0.0f, 1.0f)};
+        const Render::SpotShadowConfig spotShadows{config.spotShadowBudget, std::max(config.spotShadowMapSize, 16u)};
+        const Render::PointShadowConfig pointShadows{config.pointShadowBudget, std::max(config.pointShadowMapSize, 1u)};
+        auto scene = std::make_unique<Render::SceneRenderer>(
+            state->core->Device(), *app.Logger(), SupportedMsaa(app, config), config.automaticInstancing,
+            config.computeSkinning, cascades, spotShadows, pointShadows);
+        scene->SetClusteredLights(config.clusteredLights);
         state->scene = scene.get();
         // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
         // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).
@@ -1382,6 +1505,46 @@ namespace Fenrir
             return Vsync::Off;
         }
         return FromDevice(m_state->core->Device().SetVsync(ToDevice(mode)));
+    }
+
+    void Renderer::SetAutomaticInstancing(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetAutomaticInstancing(on);
+        }
+    }
+
+    void Renderer::SetComputeSkinning(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetComputeSkinning(on);
+        }
+    }
+
+    void Renderer::SetClusteredLights(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetClusteredLights(on);
+        }
+    }
+
+    void Renderer::SetSpotShadowBudget(std::uint32_t budget)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetSpotShadowBudget(budget);
+        }
+    }
+
+    void Renderer::SetPointShadowBudget(std::uint32_t budget)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetPointShadowBudget(budget);
+        }
     }
 
     std::optional<Math::AABB> Renderer::GetWorldBounds(const Entity& entity) const
@@ -1558,6 +1721,31 @@ namespace Fenrir
     std::optional<Math::AABB> Renderer::GetWorldBounds(App& app, const Entity& entity)
     {
         return Renderer(InstalledState(app)).GetWorldBounds(entity);
+    }
+
+    void Renderer::SetAutomaticInstancing(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetAutomaticInstancing(on);
+    }
+
+    void Renderer::SetComputeSkinning(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetComputeSkinning(on);
+    }
+
+    void Renderer::SetClusteredLights(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetClusteredLights(on);
+    }
+
+    void Renderer::SetSpotShadowBudget(App& app, std::uint32_t budget)
+    {
+        Renderer(InstalledState(app)).SetSpotShadowBudget(budget);
+    }
+
+    void Renderer::SetPointShadowBudget(App& app, std::uint32_t budget)
+    {
+        Renderer(InstalledState(app)).SetPointShadowBudget(budget);
     }
 
     RendererStats Renderer::Stats(App& app)

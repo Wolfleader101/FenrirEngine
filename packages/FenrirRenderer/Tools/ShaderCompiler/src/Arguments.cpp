@@ -46,6 +46,10 @@ namespace Fenrir::ShaderCompiler
             {
                 parsed.program.fragment = value;
             }
+            else if (flag == "--compute")
+            {
+                parsed.program.compute = value;
+            }
             else if (flag == "--key")
             {
                 if (!IsIdentifier(value) || std::ranges::find(parsed.program.keys, value) != parsed.program.keys.end())
@@ -77,10 +81,16 @@ namespace Fenrir::ShaderCompiler
                 return std::nullopt;
             }
         }
-        if (parsed.program.name.empty() || parsed.program.vertex.empty() || parsed.program.fragment.empty() ||
-            parsed.output.empty())
+        const bool graphics = !parsed.program.vertex.empty() || !parsed.program.fragment.empty();
+        if (parsed.program.name.empty() || parsed.output.empty() ||
+            (parsed.program.compute.empty() && (parsed.program.vertex.empty() || parsed.program.fragment.empty())))
         {
-            Fail("--name, --vertex, --fragment and --output are required");
+            Fail("--name, --output, and either --vertex and --fragment or --compute are required");
+            return std::nullopt;
+        }
+        if (graphics && !parsed.program.compute.empty())
+        {
+            Fail("--compute makes a compute program, which has no --vertex or --fragment stage");
             return std::nullopt;
         }
         if (!parsed.header.empty() && !IsIdentifier(parsed.program.name))

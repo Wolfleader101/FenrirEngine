@@ -247,16 +247,33 @@ TEST_CASE("A masked user shader with no base colour draws in Opaque writing its 
     REQUIRE(writing == 1);
 }
 
-TEST_CASE("A skinned item's prepass draw runs its SKINNED vertex stage", "[renderer][prepass]")
+TEST_CASE("A skinned item's prepass draw reads the compute-skinned vertices, or with compute skinning off runs its "
+          "SKINNED vertex stage",
+          "[renderer][prepass]")
 {
     RendererTest::SkinningTestApp test;
     test.AddCamera();
     test.AddRig();
 
-    test.Frame();
-    const std::vector<RecordedDraw> prepass = test.Draws("DepthPrepass");
+    SECTION("compute skinning on (ADR-0050)")
+    {
+        test.Frame();
+        const std::vector<RecordedDraw> prepass = test.Draws("DepthPrepass");
 
-    REQUIRE(prepass.size() == 1);
-    REQUIRE(RendererProbe::Keys(test.Device(), prepass[0].pipeline) == std::vector<std::string>{"SKINNED"});
-    REQUIRE(test.GroupLabel(prepass[0], 3) == "Draw");
+        REQUIRE(prepass.size() == 1);
+        INFO("drawn rigidly, its positions from the skinned vertex buffer");
+        REQUIRE(RendererProbe::Keys(test.Device(), prepass[0].pipeline).empty());
+        REQUIRE(RendererProbe::Label(test.Device(), prepass[0].vertexBuffers.at(0)) == "Skinned vertices");
+        REQUIRE(test.GroupLabel(prepass[0], 3) == "Draw");
+    }
+    SECTION("compute skinning off")
+    {
+        test.renderer.SetComputeSkinning(false);
+        test.Frame();
+        const std::vector<RecordedDraw> prepass = test.Draws("DepthPrepass");
+
+        REQUIRE(prepass.size() == 1);
+        REQUIRE(RendererProbe::Keys(test.Device(), prepass[0].pipeline) == std::vector<std::string>{"SKINNED"});
+        REQUIRE(test.GroupLabel(prepass[0], 3) == "Draw");
+    }
 }

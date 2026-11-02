@@ -4,9 +4,11 @@
 // source's texels; thirteen bilinear taps there and one and two texels out make five overlapping 2 x 2 boxes, the
 // middle one weighted 1/2 and the four corner ones 1/8 each, so the weights sum to 1 and the level keeps the energy.
 // The first pass takes the Karis average, each box weighted by 1 / (1 + its luma), so a lone very bright pixel cannot
-// make the bloom flicker. The source is mirrored at its edges, which keeps its energy. With the MSAA key it is a
-// multisampled SceneColor: the 6 x 6 texels under the taps are each the mean of their samples, read with texelFetch and
-// mirrored at the edges as the sampler mirrors, and the taps averaged from them as bilinear taps would be.
+// make the bloom flicker; it also clamps infinities to RGBA16F's largest value and leaves out NaN, so one bad pixel of
+// SceneColor, from any shader, cannot spread through every level as a black box. The source is mirrored at its edges,
+// which keeps its energy. With the MSAA key it is a multisampled SceneColor: the 6 x 6 texels under the taps are each
+// the mean of their samples, read with texelFetch and mirrored at the edges as the sampler mirrors, and the taps
+// averaged from them as bilinear taps would be.
 
 #ifdef MSAA
 layout(set = 2, binding = 0) uniform sampler2DMS source;
@@ -100,6 +102,10 @@ void main()
     float total = 0.0;
     for (int box = 0; box < 5; ++box)
     {
+        if (bloom.karis != 0u)
+        {
+            boxes[box] = any(isnan(boxes[box])) ? vec3(0.0) : min(boxes[box], vec3(65504.0));
+        }
         float weight = bloom.karis != 0u ? weights[box] / (1.0 + Luma(boxes[box])) : weights[box];
         sum += boxes[box] * weight;
         total += weight;

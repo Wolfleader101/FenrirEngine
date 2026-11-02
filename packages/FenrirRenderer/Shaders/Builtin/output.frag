@@ -4,9 +4,11 @@
 // targets are sRGB, so the write encodes it. With the MSAA key, SceneColor is multisampled and this resolves it: each
 // pixel is the mean of its samples, before the tonemap. The tonemappers are mirrored step for step in C++
 // (src/Core/Tonemapping.cpp), which the CPU tests check against published values and the GL tests hold this to; a
-// change to one is a change to both. Matrices are written column by column.
+// change to one is a change to both. Matrices are written column by column. With the OCCLUSION key (a camera's
+// CameraDebugView::AmbientOcclusion), the texture is the view's ambient occlusion instead, single-sampled, drawn as
+// grey as it is: no exposure, no tonemap.
 
-#ifdef MSAA
+#if defined(MSAA) && !defined(OCCLUSION)
 layout(set = 2, binding = 0) uniform sampler2DMS sceneColour;
 #else
 layout(set = 2, binding = 0) uniform sampler2D sceneColour;
@@ -107,6 +109,9 @@ void main()
 {
     // NDC +y is up and a texture's row 0 is its top row, on every backend (ADR-0016).
     vec2 uv = vec2(vNdc.x * 0.5 + 0.5, 0.5 - vNdc.y * 0.5);
+#ifdef OCCLUSION
+    outColour = vec4(vec3(texture(sceneColour, uv).r), 1.0);
+#else
 #ifdef MSAA
     ivec2 size = textureSize(sceneColour);
     ivec2 texel = clamp(ivec2(uv * vec2(size)), ivec2(0), size - 1);
@@ -121,4 +126,5 @@ void main()
     vec3 colour = texture(sceneColour, uv).rgb;
 #endif
     outColour = vec4(Tonemap(colour * settings.exposureScale), 1.0);
+#endif
 }

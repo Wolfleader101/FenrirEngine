@@ -52,6 +52,12 @@ namespace Fenrir
             return Null(device).m_staleUses;
         }
 
+        /** @brief Sets what the null device behind `device` reports it can do, from the next frame's use of it. */
+        static void SetFeatures(Graphics::GraphicsDevice& device, Graphics::DeviceFeatures features)
+        {
+            dynamic_cast<Graphics::NullDevice&>(device).m_features = features;
+        }
+
         /** @brief How many times the device presented. */
         [[nodiscard]] static std::uint64_t Presents(const Graphics::GraphicsDevice& device)
         {
@@ -142,6 +148,12 @@ namespace Fenrir
             return found == nullptr ? std::string() : found->label;
         }
 
+        /** @brief The label a buffer was made with. */
+        [[nodiscard]] static std::string Label(const Graphics::GraphicsDevice& device, Graphics::BufferHandle buffer)
+        {
+            const auto* found = const_cast<Graphics::NullDevice&>(Null(device)).m_buffers.Find(buffer);
+            return found == nullptr ? std::string() : found->label;
+        }
         /** @brief The label a texture was made with. */
         [[nodiscard]] static std::string Label(const Graphics::GraphicsDevice& device, Graphics::TextureHandle texture)
         {

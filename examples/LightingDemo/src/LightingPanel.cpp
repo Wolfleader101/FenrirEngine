@@ -27,6 +27,32 @@ namespace LightingDemo
         // What E steps the exposure through, in EV stops.
         constexpr std::array<float, 4> Exposures{0.0f, 1.0f, 2.0f, -1.0f};
 
+        struct NamedDebugView
+        {
+            Fenrir::CameraDebugView view;
+            const char* name;
+        };
+        // In the order G steps through them, from the lit scene.
+        constexpr std::array<NamedDebugView, 6> DebugViews{
+            {{Fenrir::CameraDebugView::None, "the lit scene"},
+             {Fenrir::CameraDebugView::AmbientOcclusion, "the raw ambient occlusion"},
+             {Fenrir::CameraDebugView::ShadowCascades, "the shadow cascades as colours"},
+             {Fenrir::CameraDebugView::ShadowAtlas, "the shadow atlas"},
+             {Fenrir::CameraDebugView::SpotShadowAtlas, "the spot shadow atlas"},
+             {Fenrir::CameraDebugView::LightClusters, "the light clusters' heat"}}};
+
+        std::size_t DebugViewIndex(Fenrir::CameraDebugView view)
+        {
+            for (std::size_t i = 0; i < DebugViews.size(); ++i)
+            {
+                if (DebugViews.at(i).view == view)
+                {
+                    return i;
+                }
+            }
+            return 0;
+        }
+
         std::size_t TonemapperIndex(Fenrir::Tonemapper tonemapper)
         {
             for (std::size_t i = 0; i < Tonemappers.size(); ++i)
@@ -68,6 +94,23 @@ namespace LightingDemo
                 settings.bloom.intensity = settings.bloom.intensity > 0.0f ? 0.0f : Fenrir::Bloom{}.intensity;
                 app.Logger()->Info("B: bloom is {}", settings.bloom.intensity > 0.0f ? "on" : "off");
             }
+            if (keyboard.JustPressed(Fenrir::Key::O))
+            {
+                settings.ambientOcclusion.enabled = !settings.ambientOcclusion.enabled;
+                app.Logger()->Info("O: ambient occlusion is {}", settings.ambientOcclusion.enabled ? "on" : "off");
+            }
+            if (keyboard.JustPressed(Fenrir::Key::G))
+            {
+                const NamedDebugView& next =
+                    DebugViews.at((DebugViewIndex(settings.debugView) + 1) % DebugViews.size());
+                settings.debugView = next.view;
+                app.Logger()->Info("G: the view shows {}", next.name);
+            }
+            if (keyboard.JustPressed(Fenrir::Key::H))
+            {
+                settings.sunShadows.castShadows = !settings.sunShadows.castShadows;
+                app.Logger()->Info("H: the sun's shadows are {}", settings.sunShadows.castShadows ? "on" : "off");
+            }
             if (keyboard.JustPressed(Fenrir::Key::S) && settings.panoramas.size() > 1)
             {
                 settings.panorama = (settings.panorama + 1) % settings.panoramas.size();
@@ -97,6 +140,37 @@ namespace LightingDemo
             ImGui::SliderFloat("Bloom intensity", &settings.bloom.intensity, 0.0f, 1.0f, "%.3f",
                                ImGuiSliderFlags_Logarithmic);
             ImGui::SliderFloat("Bloom radius", &settings.bloom.radius, 0.0f, 1.0f);
+
+            ImGui::SeparatorText("Ambient occlusion (GTAO)");
+            ImGui::Checkbox("AO on", &settings.ambientOcclusion.enabled);
+            ImGui::SliderFloat("AO radius", &settings.ambientOcclusion.radius, 0.05f, 3.0f, "%.2f",
+                               ImGuiSliderFlags_Logarithmic);
+            ImGui::SliderFloat("AO intensity", &settings.ambientOcclusion.intensity, 0.0f, 3.0f);
+
+            ImGui::SeparatorText("Sun shadows");
+            ImGui::Checkbox("Shadows on", &settings.sunShadows.castShadows);
+            ImGui::SliderFloat("Distance", &settings.sunShadows.shadowDistance, 5.0f, 2000.0f, "%.0f",
+                               ImGuiSliderFlags_Logarithmic);
+            ImGui::SliderFloat("Normal bias", &settings.sunShadows.shadowNormalBias, 0.0f, 4.0f, "%.2f texels");
+            ImGui::SliderFloat("Slope bias", &settings.sunShadows.shadowSlopeBias, 0.0f, 8.0f, "%.2f texels");
+
+            ImGui::SeparatorText("Debug view");
+            if (ImGui::BeginCombo("Shows", DebugViews.at(DebugViewIndex(settings.debugView)).name))
+            {
+                for (const NamedDebugView& choice : DebugViews)
+                {
+                    if (ImGui::Selectable(choice.name, choice.view == settings.debugView))
+                    {
+                        settings.debugView = choice.view;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            if (settings.debugView == Fenrir::CameraDebugView::LightClusters)
+            {
+                ImGui::TextUnformatted(
+                    "Lights a pixel loops over: none black, 1 blue, 4 cyan, 16 green, 64 yellow, 256 red.");
+            }
 
             ImGui::SeparatorText("Sky");
             if (settings.panoramas.empty())
@@ -137,6 +211,16 @@ namespace LightingDemo
                 camera.exposure = settings.exposure;
                 camera.tonemapper = settings.tonemapper;
                 camera.bloom = settings.bloom;
+                camera.ambientOcclusion = settings.ambientOcclusion;
+                camera.debugView = settings.debugView;
+            });
+            const std::array<Fenrir::ComponentType, 1> suns{Fenrir::ComponentType::Native<Fenrir::DirectionalLight>()};
+            entities.ForEachWith(suns, [&](std::uint32_t id) {
+                auto& sun = entities.GetEntity(id).GetComponent<Fenrir::DirectionalLight>();
+                sun.castShadows = settings.sunShadows.castShadows;
+                sun.shadowDistance = settings.sunShadows.shadowDistance;
+                sun.shadowNormalBias = settings.sunShadows.shadowNormalBias;
+                sun.shadowSlopeBias = settings.sunShadows.shadowSlopeBias;
             });
 
             if (settings.panoramas.empty())
@@ -159,8 +243,10 @@ namespace LightingDemo
 
     std::string LightingKeyHelp(bool panoramaSwitch)
     {
-        std::string help = "T: the tonemapper (AgX, PBR Neutral, ACES, None). E: the exposure (0, +1, +2, -1 EV). B: "
-                           "bloom off or on.";
+        std::string help =
+            "T: the tonemapper (AgX, PBR Neutral, ACES, None). E: the exposure (0, +1, +2, -1 EV). B: "
+            "bloom off or on. O: ambient occlusion off or on. G: the next debug view (occlusion, cascades, shadow "
+            "map, spot shadow atlas, light clusters). H: the sun's shadows off or on.";
         if (panoramaSwitch)
         {
             help += " S: the next sky.";

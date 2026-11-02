@@ -8,7 +8,6 @@
 #include <utility>
 #include <vector>
 
-#include "DeprecatedAmbientLight.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/SkinningSource.hpp"
@@ -219,6 +218,38 @@ namespace Fenrir
         }
 
         /**
+         * @brief Sets how many SpotLights may cast shadows from the next frame (RendererConfig::spotShadowBudget,
+         * ADR-0050): the nearest to any camera each frame; the rest light unshadowed. 0 shadows none.
+         * @return Whether the app has a renderer.
+         * @facade Renderer.SetSpotShadowBudget
+         */
+        bool SetSpotShadowBudget(const CallContext& context, RendererScripting& renderer, std::uint32_t budget)
+        {
+            if (!renderer.HasRenderer(context))
+            {
+                return false;
+            }
+            Renderer::SetSpotShadowBudget(context.GetApp(), budget);
+            return true;
+        }
+
+        /**
+         * @brief Sets how many PointLights may cast shadows from the next frame (RendererConfig::pointShadowBudget,
+         * ADR-0050): the nearest to any camera each frame; the rest light unshadowed. 0 shadows none.
+         * @return Whether the app has a renderer.
+         * @facade Renderer.SetPointShadowBudget
+         */
+        bool SetPointShadowBudget(const CallContext& context, RendererScripting& renderer, std::uint32_t budget)
+        {
+            if (!renderer.HasRenderer(context))
+            {
+                return false;
+            }
+            Renderer::SetPointShadowBudget(context.GetApp(), budget);
+            return true;
+        }
+
+        /**
          * @brief Spawns `model` into the active scene as C++'s SpawnModel does, under `parent` unless it is no entity:
          * a root named after the file holding one entity per node, each mesh a MeshRenderer, each skinned mesh with a
          * SkinnedMesh naming its skeleton's owner, and with FenrirSkeleton installed a SkeletonPose on each owner and
@@ -270,9 +301,6 @@ namespace Fenrir
 
     Fenrir::ScriptingExtension Renderer::ScriptingExtension()
     {
-        Fenrir::ScriptingExtension extension = Generated::MakeRendererExtension(std::make_shared<RendererScripting>());
-        // C#'s deprecated AmbientLight, a no-op until the lighting spec's C# ticket removes it.
-        extension.resources.push_back(Detail::DeprecatedAmbientLightResource());
-        return extension;
+        return Generated::MakeRendererExtension(std::make_shared<RendererScripting>());
     }
 } // namespace Fenrir

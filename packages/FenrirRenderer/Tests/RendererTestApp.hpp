@@ -176,7 +176,11 @@ namespace RendererTest
         Fenrir::Graphics::PipelineHandle pipeline;
         std::array<Fenrir::Graphics::BindingGroupHandle, 4> groups{};
         std::vector<Fenrir::Graphics::BufferHandle> vertexBuffers;
+        /** @brief Where each vertex buffer slot's stream starts in its buffer, in bytes. */
+        std::vector<std::size_t> vertexOffsets;
         Fenrir::Graphics::BufferHandle indexBuffer;
+        /** @brief The viewport last set in its pass before it. */
+        Fenrir::Graphics::PixelRect viewport;
         Fenrir::Graphics::CmdDrawIndexed draw;
     };
 
@@ -210,12 +214,18 @@ namespace RendererTest
                     if (bound.vertexBuffers.size() <= vertices->slot)
                     {
                         bound.vertexBuffers.resize(vertices->slot + 1);
+                        bound.vertexOffsets.resize(vertices->slot + 1);
                     }
                     bound.vertexBuffers.at(vertices->slot) = vertices->buffer;
+                    bound.vertexOffsets.at(vertices->slot) = vertices->offset;
                 }
                 else if (const auto* indices = std::get_if<CmdSetIndexBuffer>(&command))
                 {
                     bound.indexBuffer = indices->buffer;
+                }
+                else if (const auto* viewport = std::get_if<CmdSetViewport>(&command))
+                {
+                    bound.viewport = viewport->rect;
                 }
                 else if (const auto* draw = std::get_if<CmdDrawIndexed>(&command))
                 {
@@ -475,7 +485,7 @@ namespace RendererTest
 
         /**
          * @brief The world position of the item a draw drew: column 3 of the world matrix in its record of the draw
-         * buffer (set 3, binding 0; 144 bytes a record, `Fenrir/Draw.glsl`).
+         * buffer (set 3, binding 0; 160 bytes a record, `Fenrir/Draw.glsl`).
          */
         [[nodiscard]] Fenrir::Math::Vec3 DrawPosition(const RecordedDraw& draw) const
         {
@@ -485,7 +495,7 @@ namespace RendererTest
                 if (entry.binding == 0)
                 {
                     const std::vector<std::byte> bytes = Fenrir::RendererProbe::Bytes(Device(), entry.buffer);
-                    const std::size_t at = std::size_t{draw.draw.firstInstance} * 144 + 48;
+                    const std::size_t at = std::size_t{draw.draw.firstInstance} * 160 + 48;
                     return {FloatAt(bytes, at), FloatAt(bytes, at + 4), FloatAt(bytes, at + 8)};
                 }
             }

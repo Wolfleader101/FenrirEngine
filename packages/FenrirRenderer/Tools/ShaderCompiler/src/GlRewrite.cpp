@@ -11,26 +11,40 @@ namespace Fenrir::ShaderCompiler
     {
         // From the SPIR-V specification.
         constexpr std::size_t HeaderWords = 5;
+        constexpr std::uint32_t OpSpecConstantTrue = 48;
+        constexpr std::uint32_t OpSpecConstantFalse = 49;
         constexpr std::uint32_t OpDecorate = 71;
+        constexpr std::uint32_t DecorationSpecId = 1;
         constexpr std::uint32_t DecorationBuiltIn = 11;
         constexpr std::uint32_t DecorationBinding = 33;
         constexpr std::uint32_t DecorationDescriptorSet = 34;
         constexpr std::uint32_t BuiltInVertexId = 5;
+        constexpr std::uint32_t BuiltInInstanceId = 6;
         constexpr std::uint32_t BuiltInVertexIndex = 42;
+        constexpr std::uint32_t BuiltInInstanceIndex = 43;
+
+        // Calls `visit(at, opcode)` with the index and opcode of each instruction.
+        template <typename Visit>
+        void ForEachInstruction(const std::vector<std::uint32_t>& words, Visit&& visit)
+        {
+            for (std::size_t at = HeaderWords; at < words.size();)
+            {
+                const std::uint32_t count = words[at] >> 16u;
+                visit(at, words[at] & 0xffffu);
+                at += count == 0 ? 1 : count;
+            }
+        }
 
         // Calls `visit(at)` with the index of each OpDecorate instruction.
         template <typename Visit>
         void ForEachDecoration(const std::vector<std::uint32_t>& words, Visit&& visit)
         {
-            for (std::size_t at = HeaderWords; at < words.size();)
-            {
-                const std::uint32_t count = words[at] >> 16u;
-                if ((words[at] & 0xffffu) == OpDecorate && at + 3 < words.size())
+            ForEachInstruction(words, [&](std::size_t at, std::uint32_t opcode) {
+                if (opcode == OpDecorate && at + 3 < words.size())
                 {
                     visit(at);
                 }
-                at += count == 0 ? 1 : count;
-            }
+            });
         }
     } // namespace
 
@@ -60,6 +74,8 @@ namespace Fenrir::ShaderCompiler
             }
         });
 
+        // The id of Fenrir/Draw.glsl's fenrirInstanceIndexExcludesBase, if the stage has it; 0 is never an id.
+        std::uint32_t excludesBaseId = 0;
         ForEachDecoration(words, [&](std::size_t at) {
             const std::uint32_t target = words[at + 1];
             const std::uint32_t decoration = words[at + 2];
@@ -81,6 +97,22 @@ namespace Fenrir::ShaderCompiler
             else if (decoration == DecorationBuiltIn && value == BuiltInVertexIndex)
             {
                 value = BuiltInVertexId;
+            }
+            else if (decoration == DecorationBuiltIn && value == BuiltInInstanceIndex)
+            {
+                value = BuiltInInstanceId;
+            }
+            else if (decoration == DecorationSpecId && value == InstanceIndexExcludesBaseSpecId)
+            {
+                excludesBaseId = target;
+            }
+        });
+
+        // GL's InstanceId counts from 0, not the base instance, so Fenrir/Draw.glsl adds the base.
+        ForEachInstruction(words, [&](std::size_t at, std::uint32_t opcode) {
+            if (opcode == OpSpecConstantFalse && at + 2 < words.size() && words[at + 2] == excludesBaseId)
+            {
+                words[at] = (words[at] & 0xffff0000u) | OpSpecConstantTrue;
             }
         });
         return words;

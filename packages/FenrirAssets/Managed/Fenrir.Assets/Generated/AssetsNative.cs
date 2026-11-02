@@ -103,6 +103,47 @@ internal static unsafe partial class AssetsNative
                                             ReadOnlySpan<byte> rgba8);
 
     /// <summary>
+    /// Adds an instance list for `owner` (ADR-0051): one copy per transform, each relative to the entity whose
+    /// InstancedMeshRenderer draws it, coloured by `colours`, which is empty (every copy white) or holds one colour per
+    /// transform, linear. The data is copied.
+    /// </summary>
+    /// <param name="list">
+    /// The list; the empty handle (and an error logged) if there are colours but not one per transform.
+    /// </param>
+    /// <returns>Whether the store accepted it.</returns>
+    [NativeFunction]
+    public static partial bool AddInstanceList(ReadOnlySpan<Matrix4x4> transforms, ReadOnlySpan<Colour> colours,
+                                               AssetOwner owner, out AssetHandle<InstanceList> list);
+
+    /// <summary>
+    /// Swaps `list`'s copies for these transforms and colours, as AddInstanceList takes them, and bumps its revision,
+    /// so the renderer uploads it again before its next draw.
+    /// </summary>
+    /// <returns>
+    /// Whether it was replaced: false for a stale handle, or colours but not one per transform, which leave it
+    /// unchanged.
+    /// </returns>
+    [NativeFunction]
+    public static partial bool ReplaceInstanceList(in AssetHandle<InstanceList> list,
+                                                   ReadOnlySpan<Matrix4x4> transforms, ReadOnlySpan<Colour> colours);
+
+    /// <summary>Copies `list`'s transforms into `transforms`, as many as fit.</summary>
+    /// <returns>
+    /// How many copies the list holds, so a result larger than the span says how large a span would hold them all; zero
+    /// for a stale handle.
+    /// </returns>
+    [NativeFunction]
+    public static partial int GetInstanceTransforms(in AssetHandle<InstanceList> list, Span<Matrix4x4> transforms);
+
+    /// <summary>Copies `list`'s colours into `colours`, as many as fit.</summary>
+    /// <returns>
+    /// How many colours the list holds: as many as its transforms, or zero when every copy is white; zero for a stale
+    /// handle.
+    /// </returns>
+    [NativeFunction]
+    public static partial int GetInstanceColours(in AssetHandle<InstanceList> list, Span<Colour> colours);
+
+    /// <summary>
     /// A new material drawing with `shader`, for `owner` (AssetStore::CreateMaterial): opaque, single-sided, with no
     /// overrides.
     /// </summary>

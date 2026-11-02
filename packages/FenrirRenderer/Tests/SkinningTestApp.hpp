@@ -64,7 +64,7 @@ namespace RendererTest
         float worldSign = 1.0f;
     };
 
-    /** @brief One palette entry (set 3, binding 1): rows 0-2 of a skinning matrix. */
+    /** @brief One palette entry (set 3, binding 2): rows 0-2 of a skinning matrix. */
     struct PaletteRows
     {
         Fenrir::Math::Vec4 r0{0.0f};
@@ -81,12 +81,14 @@ namespace RendererTest
 
     /**
      * @brief RendererTestApp with FenrirSkeleton installed too, so the renderer finds a skinning source, unless
-     * `withSkeletons` is false. Its skeleton owner is destroyed before the renderer's.
+     * `withSkeletons` is false, and the renderer installed with `config`. Its skeleton owner is destroyed before the
+     * renderer's.
      */
     class SkinningTestApp : public RendererTestApp
     {
       public:
-        explicit SkinningTestApp(bool withSkeletons = true)
+        explicit SkinningTestApp(bool withSkeletons = true, Fenrir::RendererConfig config = NullBackend())
+            : RendererTestApp(config)
         {
             if (withSkeletons)
             {
@@ -155,7 +157,7 @@ namespace RendererTest
         /** @brief Palette entry `bone` of the palette buffer a draw bound. */
         [[nodiscard]] PaletteRows Palette(const RecordedDraw& draw, std::size_t bone) const
         {
-            const std::vector<std::byte> bytes = BindingBytes(draw, 1);
+            const std::vector<std::byte> bytes = BindingBytes(draw, 2);
             PaletteRows rows;
             REQUIRE((bone + 1) * sizeof(PaletteRows) <= bytes.size());
             std::memcpy(&rows, std::span(bytes).subspan(bone * sizeof(PaletteRows)).data(), sizeof(PaletteRows));
@@ -177,7 +179,7 @@ namespace RendererTest
         }
 
         /** @brief The bytes of one record of the draw buffer (`Fenrir/Draw.glsl`'s `DrawItem`). */
-        static constexpr std::size_t RecordSize = 144;
+        static constexpr std::size_t RecordSize = 160;
 
       private:
         Fenrir::AssetHandle<Fenrir::Skeleton> m_skeleton;

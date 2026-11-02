@@ -26,6 +26,33 @@ namespace Fenrir
         AssetHandle<Material> material;
         /** @brief False hides this entity only; its children are drawn as their own MeshRenderers say. */
         bool visible = true;
+        /**
+         * @brief Whether it is drawn into the sun's shadow (ADR-0050). Only an `Opaque` or `Masked` material casts, a
+         * Masked one cut out by its alpha cutoff; `AlphaBlend` and `Additive` ones never do.
+         */
+        bool castShadows = true;
+    };
+
+    /**
+     * @brief Draws one mesh with one material many times, once per transform of an instance list, with no entity per
+     * copy (ADR-0051). Each copy is drawn at the entity's world matrix times its own transform, its colour multiplying
+     * the material's base colour in builtin:lit and builtin:unlit. The renderer uploads the list when it is new or its
+     * revision has moved on, so a list that never changes uploads once, however far the entity moves.
+     *
+     * One draw a pass, whatever the count: never merged with other items, and never culled, copy by copy or whole. A
+     * transparent material sorts the whole list by the entity's world position. An empty or stale mesh or list is
+     * skipped (a stale one logged once per handle), as is a mesh with skin data; an empty or stale material draws with
+     * the fallback material, as a MeshRenderer's does.
+     */
+    struct InstancedMeshRenderer
+    {
+        AssetHandle<Mesh> mesh;
+        AssetHandle<Material> material;
+        AssetHandle<InstanceList> instances;
+        /** @brief Whether the copies are drawn into the sun's shadow, as a MeshRenderer's castShadows says. */
+        bool castShadows = true;
+        /** @brief False hides every copy; the entity's children are drawn as their own renderers say. */
+        bool visible = true;
     };
 
     /**
@@ -443,6 +470,62 @@ namespace Fenrir
     };
 
     /**
+     * @brief A view's ambient occlusion (ADR-0049): ground-truth ambient occlusion (GTAO, after Intel's XeGTAO) from
+     * its depth prepass, darkening the sky's light where nearby geometry hides the sky from a surface, as in creases,
+     * corners and under objects resting on the ground. It darkens the sky's diffuse light, and its specular light by a
+     * specular occlusion made from it, never the directional, point, spot or rect lights. Transparent items take none.
+     */
+    struct AmbientOcclusion
+    {
+        /** @brief Whether the view has it: off by default, and off costs nothing. */
+        bool enabled = false;
+        /**
+         * @brief How far round a surface other surfaces occlude it, in world units (in the camera's own, if its entity
+         * is scaled): 0.5 by default. 0 or less turns it off.
+         */
+        float radius = 0.5f;
+        /**
+         * @brief How dark the occlusion is: 1 by default, 0 none (and no cost), and above 1 darker. It raises the
+         * occlusion to a power, so an unoccluded surface stays unoccluded however strong it is.
+         */
+        float intensity = 1.0f;
+    };
+
+    /** @brief What a view shows instead of its lit colour, to look at one of its inputs. */
+    enum class CameraDebugView : std::uint8_t
+    {
+        /** @brief The lit scene, tonemapped: the default. */
+        None,
+        /**
+         * @brief Its ambient occlusion as grey, white unoccluded, with no exposure or tonemap; black where the camera's
+         * ambient occlusion is off.
+         */
+        AmbientOcclusion,
+        /**
+         * @brief Its lit colour, each pixel tinted by the sun's shadow cascade it reads (ADR-0050): red, green, blue
+         * and yellow from the nearest, untinted past the last or without shadows.
+         */
+        ShadowCascades,
+        /**
+         * @brief The sun's shadow atlas for this view as grey, its cascades side by side from the nearest, white
+         * nearest the sun, with no exposure or tonemap; black where nothing casts.
+         */
+        ShadowAtlas,
+        /**
+         * @brief The frame's spot shadow atlas as grey (ADR-0050), each shadowed spot light's tile along the rows from
+         * the top left, nearest the view first, white nearest its light, with no exposure or tonemap; black where no
+         * spot light casts.
+         */
+        SpotShadowAtlas,
+        /**
+         * @brief Each lit pixel as the heat of how many lights it loops over (ADR-0049), its cluster's or, unclustered,
+         * every light: black for none, then blue at 1, cyan at 4, green at 16, yellow at 64 and red at 256, the most a
+         * cluster lists, on a log scale, exposed and tonemapped.
+         */
+        LightClusters,
+    };
+
+    /**
      * @brief Makes a view of the active scene from its entity, looking along the entity's local -Z with +Y up
      * (ADR-0026). Plain data. Every enabled camera in the active scene draws one view a frame, into its viewport of its
      * render target. Views into one target draw by `order`, lowest first, and ties by entity id, logged once. Each view
@@ -476,11 +559,22 @@ namespace Fenrir
         Tonemapper tonemapper = Tonemapper::AgX;
         /** @brief How the view's bright pixels bleed into their surroundings before the tonemap. */
         Bloom bloom;
+        /** @brief How nearby geometry darkens the sky's light in the view. */
+        AmbientOcclusion ambientOcclusion;
+        /** @brief What the view shows: its lit colour, or one of its inputs. */
+        CameraDebugView debugView = CameraDebugView::None;
     };
 
     /**
      * @brief The light shining along its entity's world -Z (ADR-0024). The renderer uses the first one in the active
      * scene and warns once if there are more.
+     *
+     * It casts shadows unless `castShadows` is off (ADR-0050): each camera gets cascaded shadow maps out to
+     * `shadowDistance`, up to RendererConfig::shadowCascades of them, split by RendererConfig::shadowSplitLambda,
+     * blended across their boundaries and fading out at the last. Each cascade is snapped to whole texels of its map,
+     * so its shadows hold still as the camera moves and turns. Edges are filtered by 16 rotated taps of hardware
+     * depth comparison. The biases trade shadow acne (speckled self-shadowing on lit faces) against peter-panning
+     * (shadows coming loose from their casters): raise them for acne, lower them for gaps.
      */
     struct DirectionalLight
     {
@@ -488,6 +582,23 @@ namespace Fenrir
         Colour colour{1.0f, 1.0f, 1.0f, 1.0f};
         /** @brief A plain multiplier on the colour. */
         float intensity = 1.0f;
+        /** @brief Whether it casts shadows: on by default. */
+        bool castShadows = true;
+        /**
+         * @brief How far from each camera, along its view, its shadows reach, in world units: 100 by default. Past
+         * it, everything is lit. The nearer it is, the sharper the shadows within it.
+         */
+        float shadowDistance = 100.0f;
+        /**
+         * @brief How far a lit point moves out along its normal before its shadow is looked up, in shadow-map texels
+         * (each cascade's own size): 1 by default.
+         */
+        float shadowNormalBias = 1.0f;
+        /**
+         * @brief How far it moves towards the light, in texels per unit of slope (the tangent of the angle between its
+         * normal and the light, held between 0.1 and 8): 2 by default.
+         */
+        float shadowSlopeBias = 2.0f;
     };
 
     /**
@@ -495,6 +606,12 @@ namespace Fenrir
      * light falls with the square of the distance, windowed smoothly to zero at `range`: a white light of intensity 1
      * one unit straight above a white rough face lights it about as a DirectionalLight of intensity 1 does, when its
      * range is well past one unit. A light that can light nothing (range or intensity 0, or black) is skipped.
+     *
+     * With `castShadows` on it casts shadows (ADR-0050) while it is within RendererConfig::pointShadowBudget: each
+     * frame the shadowed point lights nearest to any camera keep them, each drawn into a cube of one shared cube array,
+     * as far as its range, and the rest light unshadowed, warned about once. Edges are filtered and biased as the
+     * DirectionalLight's are. A mesh round the light's position, such as a glowing bulb, shadows everything: turn that
+     * mesh's castShadows off.
      */
     struct PointLight
     {
@@ -504,8 +621,21 @@ namespace Fenrir
         float intensity = 1.0f;
         /** @brief The distance, in world units, at which the light has fallen to zero; nothing past it is lit. */
         float range = 10.0f;
-        /** @brief Whether the light casts shadows. Off by default; not drawn yet. */
+        /**
+         * @brief Whether the light casts shadows: off by default. Only RendererConfig::pointShadowBudget of them do in
+         * a frame, the nearest to the cameras.
+         */
         bool castShadows = false;
+        /**
+         * @brief How far a lit point moves out along its normal before its shadow is looked up, in shadow-map texels
+         * (whose size grows with the distance from the light): 1 by default.
+         */
+        float shadowNormalBias = 1.0f;
+        /**
+         * @brief How far it moves towards the light, in texels per unit of slope (the tangent of the angle between its
+         * normal and the light, held between 0.1 and 8): 2 by default.
+         */
+        float shadowSlopeBias = 2.0f;
     };
 
     /**
@@ -513,6 +643,12 @@ namespace Fenrir
      * scene. It falls off with distance as a PointLight does, and across its cone smoothly from full inside
      * `innerAngle` to none outside `outerAngle`, both measured from its axis. A light that can light nothing is
      * skipped.
+     *
+     * With `castShadows` on it casts shadows (ADR-0050) while it is within RendererConfig::spotShadowBudget: each
+     * frame the shadowed spot lights nearest to any camera keep them, each drawn into a tile of one shared atlas
+     * through a perspective along its cone (held to 80 degrees off its axis), and the rest light unshadowed, warned
+     * about once. Edges are filtered and biased as the DirectionalLight's are. A mesh round the light's position, such
+     * as a glowing bulb, shadows all of its cone: turn that mesh's castShadows off.
      */
     struct SpotLight
     {
@@ -527,8 +663,21 @@ namespace Fenrir
         /** @brief The angle off its axis, in radians, outside which nothing is lit: 45 degrees by default, as glTF's.
          */
         float outerAngle = 0.785398163f;
-        /** @brief Whether the light casts shadows. Off by default; not drawn yet. */
+        /**
+         * @brief Whether the light casts shadows: off by default. Only RendererConfig::spotShadowBudget of them do in
+         * a frame, the nearest to the cameras.
+         */
         bool castShadows = false;
+        /**
+         * @brief How far a lit point moves out along its normal before its shadow is looked up, in shadow-map texels
+         * (whose size grows with the distance from the light): 1 by default.
+         */
+        float shadowNormalBias = 1.0f;
+        /**
+         * @brief How far it moves towards the light, in texels per unit of slope (the tangent of the angle between its
+         * normal and the light, held between 0.1 and 8): 2 by default.
+         */
+        float shadowSlopeBias = 2.0f;
     };
 
     /**

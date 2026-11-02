@@ -45,6 +45,11 @@ namespace Fenrir::Render
         [[nodiscard]] Graphics::BindingGroupHandle Group(std::uint64_t frameIndex, std::size_t slot) const;
         /** @brief Frame `frameIndex`'s copy of the buffer; empty before the first Reserve. */
         [[nodiscard]] Graphics::BufferHandle Buffer(std::uint64_t frameIndex) const;
+        /** @brief The bytes from one slot to the next: a uniform slot's offset in `Buffer` is its index times this. */
+        [[nodiscard]] std::size_t SlotSize() const noexcept
+        {
+            return m_slotSize;
+        }
         /** @brief How many slots each copy holds now. */
         [[nodiscard]] std::size_t Capacity() const noexcept
         {

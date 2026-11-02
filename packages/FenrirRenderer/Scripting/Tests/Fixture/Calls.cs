@@ -83,18 +83,6 @@ public static class ResourceCalls
             Resources.Insert(sky);
     }
 
-    // Inserts, or writes, the deprecated AmbientLight, which lights nothing.
-#pragma warning disable CS0618
-    public static void Ambient(float r, float g, float b, float intensity)
-    {
-        var ambient = new AmbientLight { Colour = new Colour(r, g, b, 1.0f), Intensity = intensity };
-        if (Resources.TryGet(out Ref<AmbientLight> held))
-            held.Value = ambient;
-        else
-            Resources.Insert(ambient);
-    }
-#pragma warning restore CS0618
-
     // Reads the sky as C++ wrote it: 0 for a colour sky (keeping its colour), 1 for a cubemap (keeping its handle).
     public static int ReadSky()
     {

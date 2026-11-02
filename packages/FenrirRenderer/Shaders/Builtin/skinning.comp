@@ -1,0 +1,93 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+// builtin:skinning (ADR-0050): skins one skinned mesh's vertices once a frame, one invocation a vertex, into the frame's
+// skinned vertex buffer, which every pass then draws rigidly with the skeleton entity's world matrix. It reads the
+// mesh's own vertex buffer as words, where the renderer packs its streams back to back, and the frame's palette (the
+// one Fenrir/Skinning.glsl reads, ADR-0035), and writes model-space positions, unit normals and tangents as three
+// streams of the vertex formats Fenrir/Vertex.glsl reads: the position, normal and tangent a SKINNED vertex stage would
+// compute before applying the world matrix, by the same Fenrir/SkinMaths.glsl.
+//
+// A mesh without normals is skinned from normal +Y, and one without tangents from the zero tangent, as the vertex
+// stage's defaults are, so a tangent's handedness of 0 still says the mesh has none.
+#include "Fenrir/SkinMaths.glsl"
+
+layout(local_size_x = 64) in;
+
+// One skinned mesh's dispatch. Stream offsets are in 32-bit words of the mesh's vertex buffer.
+layout(set = 0, binding = 0, std140) uniform SkinJob
+{
+    uint vertexCount;
+    // Its palette range's first entry, in bones.
+    uint paletteOffset;
+    // The first word of its skinned vertices: vertexCount positions, then as many normals, then as many tangents.
+    uint skinnedFirst;
+    // Bit 0: the mesh has normals; bit 1: it has tangents.
+    uint flags;
+    uint positions;
+    uint normals;
+    uint tangents;
+    uint joints;
+    uint weights;
+} job;
+
+layout(set = 1, binding = 0, std430) readonly buffer MeshVertices
+{
+    uint words[];
+} mesh;
+
+layout(set = 2, binding = 0, std430) readonly buffer FenrirPalette
+{
+    FenrirBone bones[];
+} fenrirPalette;
+
+layout(set = 2, binding = 1, std430) writeonly buffer SkinnedVertices
+{
+    float words[];
+} skinned;
+
+vec3 ReadVec3(uint first)
+{
+    return uintBitsToFloat(uvec3(mesh.words[first], mesh.words[first + 1u], mesh.words[first + 2u]));
+}
+
+void WriteVec3(uint first, vec3 v)
+{
+    skinned.words[first] = v.x;
+    skinned.words[first + 1u] = v.y;
+    skinned.words[first + 2u] = v.z;
+}
+
+void main()
+{
+    uint v = gl_GlobalInvocationID.x;
+    if (v >= job.vertexCount)
+    {
+        return;
+    }
+    vec3 position = ReadVec3(job.positions + 3u * v);
+    vec3 normal = (job.flags & 1u) != 0u ? ReadVec3(job.normals + 3u * v) : vec3(0.0, 1.0, 0.0);
+    vec4 tangent = vec4(0.0);
+    if ((job.flags & 2u) != 0u)
+    {
+        tangent = vec4(ReadVec3(job.tangents + 4u * v), uintBitsToFloat(mesh.words[job.tangents + 4u * v + 3u]));
+    }
+    // Four u16 joints and four unorm16 weights, two to a word, the first in its low half.
+    uint j01 = mesh.words[job.joints + 2u * v];
+    uint j23 = mesh.words[job.joints + 2u * v + 1u];
+    uvec4 joints = uvec4(j01 & 0xFFFFu, j01 >> 16u, j23 & 0xFFFFu, j23 >> 16u) + job.paletteOffset;
+    vec4 weights = vec4(unpackUnorm2x16(mesh.words[job.weights + 2u * v]),
+                        unpackUnorm2x16(mesh.words[job.weights + 2u * v + 1u]));
+
+    FenrirBone m = FenrirBlendBones(fenrirPalette.bones[joints.x], fenrirPalette.bones[joints.y],
+                                    fenrirPalette.bones[joints.z], fenrirPalette.bones[joints.w], weights);
+    mat3 a = FenrirSkinLinear(m);
+    vec3 n = FenrirSkinModelNormal(a, normal);
+    vec3 t = FenrirPerpendicularTangent(a * tangent.xyz, n);
+
+    uint count = job.vertexCount;
+    WriteVec3(job.skinnedFirst + 3u * v, FenrirSkinPoint(m, position));
+    WriteVec3(job.skinnedFirst + 3u * count + 3u * v, n);
+    uint tangentFirst = job.skinnedFirst + 6u * count + 4u * v;
+    WriteVec3(tangentFirst, t);
+    skinned.words[tangentFirst + 3u] = tangent.w * FenrirSkinSign(a);
+}

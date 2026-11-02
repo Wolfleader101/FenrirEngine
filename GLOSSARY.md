@@ -525,12 +525,16 @@ Bright pixels bleeding light into their surroundings: a view's SceneColor blurre
 *Avoid:* glow (what bloom looks like, not the effect), bright pass or threshold (there is none), lens flare (a different effect).
 
 **Punctual light**
-A `PointLight` or `SpotLight`: light from one point, falling with the square of the distance and windowed to zero at its `range`, any number per scene, written each frame into set 0's light buffer that `Fenrir/Lighting.glsl` loops over (ADR-0048). The name is glTF's (`KHR_lights_punctual`).
+A `PointLight` or `SpotLight`: light from one point, falling with the square of the distance and windowed to zero at its `range`, any number per scene, written each frame into set 0's light buffer that `Fenrir/Lighting.glsl` loops over, by its pixel's light cluster (ADR-0048). The name is glTF's (`KHR_lights_punctual`).
 *Avoid:* local light, dynamic light (the sun moves too), area light (a rect light, which has a size).
 
 **Rect light**
 A `RectLight`: a glowing rectangle centred on its entity, one- or two-sided, whose light is its radiance over its area, shaded with linearly transformed cosines so its highlights take its shape and blur with roughness, unshadowed, any number per scene, written into the same light buffer after the punctual lights (ADR-0048).
 *Avoid:* area light (the general term: discs, tubes and spheres are left for later), quad light, emissive light (an emissive material lights nothing).
+
+**Light cluster**
+One cell of a view's frustum, a tile of its viewport (16 x 9 across it) by a slice of depth (24, spaced exponentially), and the list of punctual and rect lights whose range reaches it, which a compute pass makes each frame and each pixel in it lights by (ADR-0049).
+*Avoid:* froxel (the volumetric term), tile (the 2D cell alone, as in tiled forward), light grid.
 
 **Golden image**
 A small PNG committed beside the GL tests, the frame a test scene should draw, which the test's frame is compared with under a perceptual tolerance. It changes only when the tests are run with `FENRIR_UPDATE_GOLDENS=1` (ADR-0049).
@@ -563,6 +567,18 @@ A component that lights the scene from its entity: a *directional light* (the su
 **Instance list**
 An asset holding the placements of many copies of one mesh, each a transform relative to the entity that draws them and an optional colour. An `InstancedMeshRenderer` draws one, with no entity per copy.
 *Avoid:* instance buffer, multimesh, batch.
+
+**Shadow cascade**
+One of the directional light's shadow maps for one camera: an orthographic view along the light round a slice of the camera's view, nearer slices smaller and so sharper, out to the light's shadow distance. Each is a sphere snapped to whole texels, so its shadows hold still as the camera moves and turns (ADR-0050).
+*Avoid:* split (the depth where one cascade gives way to the next), CSM level, shadow LOD.
+
+**Shadow atlas**
+One depth texture holding several shadow maps side by side, each drawn into its own tile: a camera's cascades, or every shadowed spot light's (ADR-0050).
+*Avoid:* shadow texture array, shadow page.
+
+**Point shadow cubes**
+One cube array of depth, a cube for each point light the budget lets cast, each face holding the distance from its light to the nearest caster over the light's range (ADR-0050).
+*Avoid:* point shadow maps, omni shadow map, shadow cubemap atlas.
 ## FenrirEngine debug drawing
 
 **FenrirDebugDraw**
@@ -726,6 +742,10 @@ One of the pose pipeline's public steps that others add work to, `Animate`, `Mod
 **Skinning palette**
 One matrix per bone (model-space × inverse bind) that skinned vertices are moved by; one per skeleton instance, shared by every mesh skinned to it, built lazily for the current pose generation. The renderer uploads it as rows of 3×4 affine matrices (ADR-0035).
 *Avoid:* bone-matrix buffer (the renderer's upload of it), joint matrices.
+
+**Compute skinning**
+The renderer skinning each skinned mesh once a frame, in a compute pass before any view's, into a skinned vertex buffer that every pass then draws rigidly; with it off, each draw skins its mesh again in its vertex stage, under the shader's `SKINNED` variant (ADR-0050).
+*Avoid:* GPU skinning (both kinds are), pre-skinning.
 
 **Skinning source**
 `SkinningSource`: the interface, declared in FenrirAssets, through which the renderer reads a skeleton instance's state, pose generation, skinning palette and model matrices, and spawns a model's skeletons. FenrirSkeleton registers its implementation at install; with none registered, rigid meshes still draw and skinned draws are skipped (ADR-0041).

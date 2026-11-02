@@ -35,6 +35,8 @@ namespace Fenrir::Graphics
         StorageWrite,
         CopySource,
         CopyDestination,
+        /** @brief Read as vertex input, as the skinned vertex buffer a compute pass wrote is (ADR-0050). */
+        VertexInput,
     };
 
     /** @brief One declared use of a texture or a buffer by a pass: exactly one of the two handles is set. */
@@ -82,11 +84,22 @@ namespace Fenrir::Graphics
         float clear = 0.0f;
         /** @brief Whether the pass only tests against it. */
         bool readOnly = false;
+        /** @brief The layer drawn into, for a cube or cube array texture (in TextureKind::CubeArray's order); else 0.
+         */
+        std::uint32_t layer = 0;
+        /**
+         * @brief Whether every layer is attached at once, each draw's vertex stage choosing a primitive's by writing
+         * gl_Layer (DeviceFeatures::vertexLayer); `layer` is then unused. Clearing clears them all.
+         */
+        bool layered = false;
 
         friend bool operator==(const DepthAttachment&, const DepthAttachment&) = default;
     };
 
-    /** @brief A graphics device pass: its queue, the targets it draws into and every resource use it declares. */
+    /**
+     * @brief A graphics device pass: its queue, the targets it draws into and every resource use it declares. A
+     * `Compute` pass has no targets: it records dispatches only.
+     */
     struct PassDesc
     {
         /** @brief The render pass's name, for tools and the backend's debug labels. */
@@ -134,7 +147,7 @@ namespace Fenrir::Graphics
     {
         friend bool operator==(const CmdEndPass&, const CmdEndPass&) = default;
     };
-    /** @brief Draws with a pipeline from here on. */
+    /** @brief Draws, or in a compute pass dispatches, with a pipeline from here on. */
     struct CmdSetPipeline
     {
         PipelineHandle pipeline;
@@ -181,7 +194,7 @@ namespace Fenrir::Graphics
         std::uint32_t vertexCount = 0;
         std::uint32_t instanceCount = 1;
         std::uint32_t firstVertex = 0;
-        /** @brief Read by shaders as `gl_BaseInstance`, which indexes the draw (ADR-0018). */
+        /** @brief The first instance's record, which Fenrir/Draw.glsl adds each instance's index to (ADR-0051). */
         std::uint32_t firstInstance = 0;
         friend bool operator==(const CmdDraw&, const CmdDraw&) = default;
     };
@@ -192,7 +205,7 @@ namespace Fenrir::Graphics
         std::uint32_t instanceCount = 1;
         std::uint32_t firstIndex = 0;
         std::int32_t baseVertex = 0;
-        /** @brief Read by shaders as `gl_BaseInstance`, which indexes the draw (ADR-0018). */
+        /** @brief The first instance's record, which Fenrir/Draw.glsl adds each instance's index to (ADR-0051). */
         std::uint32_t firstInstance = 0;
         friend bool operator==(const CmdDrawIndexed&, const CmdDrawIndexed&) = default;
     };
@@ -264,7 +277,7 @@ namespace Fenrir::Graphics
             }
         }
 
-        /** @brief Draws with `pipeline` from here on. */
+        /** @brief Draws, or in a compute pass dispatches, with `pipeline` from here on. */
         void SetPipeline(PipelineHandle pipeline)
         {
             Record(CmdSetPipeline{pipeline});

@@ -58,6 +58,7 @@ tags = "[assets][scripting][bindings]"
 "Fenrir::AssetHandle<Fenrir::Skeleton>" = { type = "AssetHandle<global::Fenrir.Assets.Skeleton>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
 "Fenrir::AssetHandle<Fenrir::Clip>" = { type = "AssetHandle<Clip>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
 "Fenrir::AssetHandle<Fenrir::BoneMask>" = { type = "AssetHandle<BoneMask>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
+"Fenrir::AssetHandle<Fenrir::InstanceList>" = { type = "AssetHandle<InstanceList>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
 
 [names]
 "Fenrir::ScriptShaderParameter" = "ShaderParameter"

@@ -115,7 +115,7 @@ TEST_CASE(
     test.Frame();
     const std::vector<BindingGroupEntry> set = FrameSet(test);
 
-    REQUIRE(set.size() == 7);
+    REQUIRE(set.size() == 11);
     INFO("binding 0 is the frame block");
     REQUIRE_FALSE(set[0].buffer.IsEmpty());
     INFO("binding 1 is nine RGBA16F coefficients in a row");
