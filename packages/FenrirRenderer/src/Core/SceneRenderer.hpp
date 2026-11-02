@@ -18,6 +18,7 @@
 #include "Core/Cascades.hpp"
 #include "Core/Gtao.hpp"
 #include "Core/LightClusters.hpp"
+#include "Core/LightShadows.hpp"
 #include "Core/PointShadows.hpp"
 #include "Core/RenderFeature.hpp"
 #include "Core/SceneFrame.hpp"
@@ -225,7 +226,8 @@ namespace Fenrir::Render
          */
         SceneRenderer(Graphics::GraphicsDevice& device, ILogger& logger, std::uint32_t samples = 1,
                       bool automaticInstancing = true, bool computeSkinning = true, CascadeConfig cascades = {},
-                      ShadowBudgetConfig spotShadows = {8, 1024}, ShadowBudgetConfig pointShadows = {4, 512});
+                      ShadowBudgetConfig spotShadows = DefaultSpotShadows,
+                      ShadowBudgetConfig pointShadows = DefaultPointShadows);
         ~SceneRenderer() override;
 
         SceneRenderer(const SceneRenderer&) = delete;
@@ -320,10 +322,16 @@ namespace Fenrir::Render
         }
 
         /**
-         * @brief How many lights of `kind`, LightKind::Spot or LightKind::Point, may cast shadows from the next frame
-         * (ADR-0050); the spot shadow atlas or the point shadow cubes is made again at its new size when next needed.
+         * @brief How many spot lights may cast shadows from the next frame (ADR-0050); the spot shadow atlas is made
+         * again at its new size when next needed.
          */
-        void SetShadowBudget(LightKind kind, std::uint32_t budget);
+        void SetSpotShadowBudget(std::uint32_t budget);
+
+        /**
+         * @brief How many point lights may cast shadows from the next frame (ADR-0050); the point shadow cubes is
+         * made again at its new size when next needed.
+         */
+        void SetPointShadowBudget(std::uint32_t budget);
 
         /** @brief What the next frame draws. */
         void SetFrame(SceneFrame frame);
@@ -823,6 +831,11 @@ namespace Fenrir::Render
                                                                 Graphics::TextureHandle occlusion,
                                                                 Graphics::TextureHandle shadow = {},
                                                                 Graphics::BufferHandle clusters = {});
+        /**
+         * @brief Sets `config`'s budget to `budget`, destroying `maps`, the kind's shadow maps, when it changes; the
+         * frame makes them again at the new size when a light of the kind next casts.
+         */
+        void SetShadowBudget(ShadowBudgetConfig& config, Graphics::TextureHandle& maps, std::uint32_t budget);
         /**
          * @brief Adds view `view`'s LightClusters pass over the frame's `lightCount` lights into its cluster buffer,
          * imported into `graph`, which the view's lit passes then read; returns that buffer and its resource, or empty

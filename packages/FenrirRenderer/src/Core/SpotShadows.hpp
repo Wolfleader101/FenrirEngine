@@ -13,6 +13,9 @@ namespace Fenrir::Render
     // one depth atlas pooled by the budget, with its own perspective projection; read as the sun's cascades are, by
     // `Fenrir/Shadows.glsl`.
 
+    /** @brief RendererConfig's default spot shadow budget and tile side. */
+    inline constexpr ShadowBudgetConfig DefaultSpotShadows{8, 1024};
+
     /** @brief The atlas's tiles across and down: as square as the budget allows, `columns` x `rows` >= budget. */
     struct SpotAtlasGrid
     {

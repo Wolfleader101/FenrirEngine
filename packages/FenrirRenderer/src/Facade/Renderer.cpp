@@ -1536,7 +1536,7 @@ namespace Fenrir
     {
         if (m_state != nullptr)
         {
-            m_state->scene->SetShadowBudget(Render::LightKind::Spot, budget);
+            m_state->scene->SetSpotShadowBudget(budget);
         }
     }
 
@@ -1544,7 +1544,7 @@ namespace Fenrir
     {
         if (m_state != nullptr)
         {
-            m_state->scene->SetShadowBudget(Render::LightKind::Point, budget);
+            m_state->scene->SetPointShadowBudget(budget);
         }
     }
 

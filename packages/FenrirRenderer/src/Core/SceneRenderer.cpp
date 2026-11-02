@@ -2048,10 +2048,18 @@ namespace Fenrir::Render
         m_frame = std::move(frame);
     }
 
-    void SceneRenderer::SetShadowBudget(LightKind kind, std::uint32_t budget)
+    void SceneRenderer::SetSpotShadowBudget(std::uint32_t budget)
     {
-        const bool spot = kind == LightKind::Spot;
-        ShadowBudgetConfig& config = spot ? m_spotShadowConfig : m_pointShadowConfig;
+        SetShadowBudget(m_spotShadowConfig, m_spotAtlas, budget);
+    }
+
+    void SceneRenderer::SetPointShadowBudget(std::uint32_t budget)
+    {
+        SetShadowBudget(m_pointShadowConfig, m_pointShadowCubes, budget);
+    }
+
+    void SceneRenderer::SetShadowBudget(ShadowBudgetConfig& config, TextureHandle& maps, std::uint32_t budget)
+    {
         if (budget == config.budget)
         {
             return;
@@ -2059,7 +2067,6 @@ namespace Fenrir::Render
         config.budget = budget;
         // Made again at the new size when a light of the kind next casts, and not kept meanwhile; its frame groups go
         // with it.
-        TextureHandle& maps = spot ? m_spotAtlas : m_pointShadowCubes;
         m_device.Destroy(maps);
         maps = {};
     }

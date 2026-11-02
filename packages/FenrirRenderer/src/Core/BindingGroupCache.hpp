@@ -56,8 +56,10 @@ namespace Fenrir::Render
     class BindingGroupCache
     {
       public:
+        /** @brief What tells one group from another: the resources it binds and any plain values, in a fixed order. */
         using Key = std::array<BindingGroupKeyPart, Parts>;
 
+        /** @brief An empty cache of groups made on `device`, which it destroys when pruned, cleared or destroyed. */
         explicit BindingGroupCache(Graphics::GraphicsDevice& device) : m_device(device)
         {
         }
