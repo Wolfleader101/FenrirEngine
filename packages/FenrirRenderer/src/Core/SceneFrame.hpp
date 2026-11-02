@@ -69,8 +69,8 @@ namespace Fenrir::Render
          */
         std::optional<Math::Vec3> sortPoint;
         /**
-         * @brief Whether it is drawn into the sun's shadow cascades (ADR-0050): an `Opaque` or `Masked` one only, a
-         * Masked one cut out by its alpha cutoff as the depth prepass cuts it.
+         * @brief Whether it is drawn into the sun's shadow cascades and the spot lights' shadow tiles (ADR-0050): an
+         * `Opaque` or `Masked` one only, a Masked one cut out by its alpha cutoff as the depth prepass cuts it.
          */
         bool castShadows = true;
     };
@@ -106,6 +106,8 @@ namespace Fenrir::Render
         ShadowCascades,
         /** @brief Its sun's shadow atlas, the cascades side by side, as grey depths; black without shadows. */
         ShadowAtlas,
+        /** @brief The frame's spot shadow atlas, its tiles as grey depths; black when no spot light casts. */
+        SpotShadowAtlas,
     };
 
     /**
@@ -182,8 +184,9 @@ namespace Fenrir::Render
         float skyIntensity = 1.0f;
         float skyRotation = 0.0f;
         /**
-         * @brief The point and spot lights (ADR-0048), in the order the light buffer holds them: every one in the
-         * scene that can light anything.
+         * @brief The point and spot lights (ADR-0048): every one in the scene that can light anything. The light
+         * buffer holds them in this order, but for the spot lights that keep their shadows this frame (ADR-0050),
+         * which it holds first.
          */
         std::vector<PunctualLight> lights;
         /** @brief The rect lights (ADR-0048), written into the light buffer after `lights`. */

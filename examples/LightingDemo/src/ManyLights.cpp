@@ -12,6 +12,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirRenderer/Components.hpp"
+#include "FenrirRenderer/Renderer.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "LightingPanel.hpp"
 #include "LightingScenes.hpp"
@@ -58,6 +59,9 @@ namespace LightingDemo
             float pointIntensity = 2.0f;
             float spotIntensity = 8.0f;
             float range = 5.0f;
+            /** @brief Whether the spot lights cast shadows, and how many may (RendererConfig::spotShadowBudget). */
+            bool spotShadows = true;
+            int shadowBudget = 8;
         };
 
         /** @brief Hue `hue` (0 to 1 round the wheel) at full saturation and value, linear. */
@@ -179,8 +183,8 @@ namespace LightingDemo
                 light.entity.AddComponent<Fenrir::Transform>();
                 if (light.spot)
                 {
-                    light.entity.AddComponent<Fenrir::SpotLight>(
-                        Fenrir::SpotLight{light.colour, state.spotIntensity, state.range + 2.0f, 0.25f, 0.5f, false});
+                    light.entity.AddComponent<Fenrir::SpotLight>(Fenrir::SpotLight{
+                        light.colour, state.spotIntensity, state.range + 2.0f, 0.25f, 0.5f, state.spotShadows});
                 }
                 else
                 {
@@ -188,13 +192,14 @@ namespace LightingDemo
                         Fenrir::PointLight{light.colour, state.pointIntensity, state.range, false});
                 }
 
-                // A small sphere of the light's colour, bright enough to bloom.
+                // A small sphere of the light's colour, bright enough to bloom. It casts no shadow: round the light, it
+                // would shadow all of a spot light's cone.
                 const auto glow = store.CreateMaterial(unlit, scene);
                 store.SetColour(glow, "baseColour",
                                 {light.colour.r * 4.0f, light.colour.g * 4.0f, light.colour.b * 4.0f, 1.0f});
                 light.marker = entities.CreateEntity();
                 light.marker.AddComponent<Fenrir::Transform>().scale = Vec3(MarkerSize);
-                light.marker.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{sphere.handle, glow});
+                light.marker.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{sphere.handle, glow, true, false});
                 state.lights.push_back(light);
             }
             scene.AddResource<ManyLightsState>(state);
@@ -234,6 +239,11 @@ namespace LightingDemo
                 state->moving = !state->moving;
                 app.Logger()->Info("P: the lights are {}", state->moving ? "moving" : "still");
             }
+            if (keyboard.JustPressed(Fenrir::Key::K))
+            {
+                state->spotShadows = !state->spotShadows;
+                app.Logger()->Info("K: spot shadows {}", state->spotShadows ? "on" : "off");
+            }
 
             RunLightingPanel(app, scene, state->lighting, [&] {
                 ImGui::SliderInt("Lights", &state->count, 0, MaxLights);
@@ -241,6 +251,13 @@ namespace LightingDemo
                 ImGui::SliderFloat("Point intensity", &state->pointIntensity, 0.0f, 10.0f);
                 ImGui::SliderFloat("Spot intensity", &state->spotIntensity, 0.0f, 30.0f);
                 ImGui::SliderFloat("Range", &state->range, 0.5f, 15.0f);
+                ImGui::SeparatorText("Spot shadows");
+                ImGui::Checkbox("Cast (K)", &state->spotShadows);
+                if (ImGui::SliderInt("Budget", &state->shadowBudget, 0, 16))
+                {
+                    Fenrir::Renderer::SetSpotShadowBudget(app, static_cast<std::uint32_t>(state->shadowBudget));
+                }
+                ImGui::TextUnformatted("The nearest spot lights cast; the rest light unshadowed.");
             });
 
             if (state->moving)
@@ -264,6 +281,7 @@ namespace LightingDemo
                     Fenrir::SpotLight& spot = light.entity.GetComponent<Fenrir::SpotLight>();
                     spot.intensity = on ? state->spotIntensity : 0.0f;
                     spot.range = state->range + 2.0f;
+                    spot.castShadows = state->spotShadows;
                 }
                 else
                 {
@@ -279,9 +297,12 @@ namespace LightingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Many lights";
-        scene.keyHelp = LightingKeyHelp(false) + " M: 16, 64, 100 or 256 lights. P: the lights moving or still.";
-        scene.keys = {Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::B, Fenrir::Key::M,
-                      Fenrir::Key::P, Fenrir::Key::M, Fenrir::Key::P, Fenrir::Key::M};
+        scene.keyHelp = LightingKeyHelp(false) +
+                        " M: 16, 64, 100 or 256 lights. P: the lights moving or still. K: spot shadows off or on.";
+        scene.keys = {Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::B, Fenrir::Key::M, Fenrir::Key::P, Fenrir::Key::M,
+                      Fenrir::Key::P, Fenrir::Key::M, Fenrir::Key::K, Fenrir::Key::K,
+                      // Through the debug views to the spot shadow atlas.
+                      Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G};
         // Inside the room, by its front wall, looking down across it.
         scene.camera.position = {0.0f, 4.5f, 9.0f};
         scene.camera.pitch = -0.45f;

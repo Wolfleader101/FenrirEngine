@@ -220,8 +220,8 @@ TEST_CASE("Shadow pipelines are depth only, uncull both faces, and cut Masked it
     for (const RecordedDraw& draw : draws)
     {
         const RendererProbe::PipelineState state = RendererProbe::State(test.Device(), draw.pipeline);
-        INFO("a ShadowCascades pipeline, single-sampled; both faces cast; depth tested and written greater-or-equal");
-        REQUIRE(RendererProbe::Label(test.Device(), draw.pipeline) == "ShadowCascades");
+        INFO("a Shadow pipeline, single-sampled; both faces cast; depth tested and written greater-or-equal");
+        REQUIRE(RendererProbe::Label(test.Device(), draw.pipeline) == "Shadow");
         REQUIRE(RendererProbe::Samples(test.Device(), draw.pipeline) == 1);
         REQUIRE(state.cull == Fenrir::Graphics::CullMode::None);
         REQUIRE(state.depth.test);

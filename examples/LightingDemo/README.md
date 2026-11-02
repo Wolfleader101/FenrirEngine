@@ -12,7 +12,8 @@ Every scene shows the same ImGui window, Lighting (`src/LightingPanel.cpp`): the
 tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius) and ambient occlusion (GTAO: on, which it is
 by default here, its radius and strength), the sun's shadows (on, their distance and their normal and slope biases,
 given to every DirectionalLight in the scene), a debug view (the lit scene, the raw occlusion as grey, the shadow
-cascades tinted red, green, blue and yellow from the nearest, or the shadow atlas), and the sky: which panorama, its
+cascades tinted red, green, blue and yellow from the nearest, the shadow atlas, or the spot shadow atlas), and the
+sky: which panorama, its
 intensity and its rotation. It writes them to every camera in the scene each frame, the free-fly camera among them.
 Keys do the same, for the smoke runs and by hand: T the next tonemapper, E the next exposure (0, +1, +2, -1 EV), B bloom
 off or back on at its default, O ambient occlusion off or back on, G the next debug view, H the sun's shadows off or
@@ -106,14 +107,17 @@ A dark room, twenty metres square, of PBR surfaces: a floor of five by five grey
 right and dielectric to metal from back to front, four pale walls, a ring of eight columns (polished metal and blue
 plastic) and spheres of gold and white plastic between them. Up to 256 coloured lights circle it, each marked by a small
 glowing sphere of its colour: point lights bobbing at waist height, and every fourth a spot light up high, pointing
-down and leaning out as it goes, its cone lighting a moving pool. A hundred are on at first. The window's Scene part has
-the count (0 to 256), whether they move, the point and spot intensities and the range.
+down and leaning out as it goes, its cone lighting a moving pool. A hundred are on at first, and the spot lights cast
+shadows: the eight nearest the camera each frame, RendererConfig's default spot shadow budget. The window's Scene part
+has the count (0 to 256), whether they move, the point and spot intensities, the range, whether the spot lights cast,
+and the budget (0 to 16, Renderer::SetSpotShadowBudget: the renderer's, so other scenes keep it as it was left).
 
 | Keys | |
 | --- | --- |
 | T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | M | 16, 64, 100 or 256 lights. |
 | P | The lights moving or still. |
+| K | Spot shadows off or on. |
 
 Hand checks, on OpenGL:
 
@@ -124,6 +128,11 @@ Hand checks, on OpenGL:
 - The frame rate stays usable with a hundred lights, and with 256 (the loop runs over every light until clustering,
   ADR-0049).
 - Range shrinks and grows every pool; 0 lights leaves the room almost black.
+- The spot lights nearest the camera cast shadows of the columns and spheres across the floor, soft-edged and attached
+  to their casters, with no acne on the lit floor or walls. As the lights circle, lights move in and out of the budget
+  without popping badly: a light leaving it is far from the camera, its pool small on screen. K turns them off and on.
+- G to the spot shadow atlas shows a three by three grid of grey tiles, eight of them each one spot light's view down
+  onto the floor and the columns; the budget slider makes it a grid of the new size.
 
 ### Showroom
 

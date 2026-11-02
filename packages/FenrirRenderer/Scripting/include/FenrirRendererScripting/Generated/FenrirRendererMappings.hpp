@@ -440,9 +440,11 @@ struct Iris::StructMapping<Fenrir::SpotLight>
         Iris::Field<float>("Range", 20),
         Iris::Field<float>("InnerAngle", 24),
         Iris::Field<float>("OuterAngle", 28),
-        Iris::Field<bool>("CastShadows", 32));
+        Iris::Field<bool>("CastShadows", 32),
+        Iris::Field<float>("ShadowNormalBias", 36),
+        Iris::Field<float>("ShadowSlopeBias", 40));
 };
-static_assert(sizeof(Fenrir::SpotLight) == 36 && alignof(Fenrir::SpotLight) == 4,
+static_assert(sizeof(Fenrir::SpotLight) == 44 && alignof(Fenrir::SpotLight) == 4,
               "Fenrir::SpotLight is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 

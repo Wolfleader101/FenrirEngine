@@ -23,4 +23,10 @@ public enum CameraDebugView : byte
     /// with no exposure or tonemap; black where nothing casts.
     /// </summary>
     ShadowAtlas = 3,
+    /// <summary>
+    /// The frame's spot shadow atlas as grey (ADR-0050), each shadowed spot light's tile along the rows from the top
+    /// left, nearest the view first, white nearest its light, with no exposure or tonemap; black where no spot light
+    /// casts.
+    /// </summary>
+    SpotShadowAtlas = 4,
 }

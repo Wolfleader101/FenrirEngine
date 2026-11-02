@@ -1,6 +1,7 @@
 // The sun's cascaded shadow on OpenGL (the spec's seam 2, ADR-0050): a box's shadow on a floor falls where the light's
 // direction puts it; a lit floor shows no acne at angles up to grazing within the biases' limits; and posts' shadows
-// across every cascade boundary match their golden images, lit and with the cascades tinted.
+// across every cascade boundary match their golden images, lit and with the cascades tinted. A spot light's shadow
+// falls where its cone puts it, leaving no acne.
 
 #include <algorithm>
 #include <cmath>
@@ -288,4 +289,107 @@ TEST_CASE("A camera showing its shadow atlas draws the atlas as grey, and black 
         INFO("with nothing casting there is no atlas, and the view is black");
         REQUIRE(brightest == 0.0f);
     }
+}
+
+TEST_CASE("A spot light's shadow on a floor lies where its cone puts it, with no acne on the rest of the floor",
+          "[renderer][gl][shadows][spot-shadows]")
+{
+    // A spot light 5 above the floor at (0, -6), pointing straight down, and a unit box from y 0 to 1 over (1, -6). The
+    // light's rays through the box's top (3 below it) reach the floor 5 below at 5/3 of their offset, and through its
+    // bottom at 5/4: the shadow spans x 0.625 to 2.5 along z = -6, out to z -6.83 and -5.17 at x 2.1. With four more
+    // casting spot lights nearer the camera, pointing up and lighting nothing seen, it takes tile 4 of the three by
+    // three atlas, in its second row, not tile 0.
+    const int nearer = GENERATE(0, 4);
+    CAPTURE(nearer);
+    const auto render = [nearer](bool castShadows) {
+        GlScene test;
+        test.RequireOpenGL();
+        test.app.GetActiveScene().AddResource<Fenrir::Sky>(
+            Fenrir::ColourSky{Fenrir::Colour{0.02f, 0.02f, 0.02f, 1.0f}});
+        const auto white = Lit(test, Fenrir::Colour::White);
+        AddFloor(test, 30.0f, 0.0f, -6.0f, white);
+        AddBox(test, {1.0f, 0.5f, -6.0f}, Vec3(1.0f), white);
+        Fenrir::Entity entity = test.app.GetActiveScene().GetEntityList().CreateEntity();
+        entity.GetComponent<Fenrir::Transform>().pos = {0.0f, 4.0f, -6.0f};
+        entity.GetComponent<Fenrir::Transform>().rot =
+            Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(-90.0f), Vec3(1.0f, 0.0f, 0.0f));
+        Fenrir::SpotLight light;
+        // Evenly lit across the probe: full out to 40 degrees, about 4.2 units on the floor.
+        light.intensity = 25.0f;
+        light.range = 30.0f;
+        light.innerAngle = Fenrir::Math::DegToRad(40.0f);
+        light.outerAngle = Fenrir::Math::DegToRad(50.0f);
+        light.castShadows = castShadows;
+        entity.AddComponent<Fenrir::SpotLight>(light);
+        for (int i = 0; i < nearer; ++i)
+        {
+            Fenrir::Entity above = test.app.GetActiveScene().GetEntityList().CreateEntity();
+            above.GetComponent<Fenrir::Transform>().pos = {CameraX + (i % 2 == 0 ? -0.3f : 0.3f), 5.5f,
+                                                           CameraZ + (i < 2 ? -0.3f : 0.3f)};
+            above.GetComponent<Fenrir::Transform>().rot =
+                Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(90.0f), Vec3(1.0f, 0.0f, 0.0f));
+            Fenrir::SpotLight up;
+            up.range = 1.0f;
+            up.castShadows = true;
+            above.AddComponent<Fenrir::SpotLight>(up);
+        }
+        const auto target = Target(test, Side, Side);
+        AddCameraAt(test, {CameraX, 5.0f, CameraZ},
+                    Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(-90.0f), Vec3(1.0f, 0.0f, 0.0f)), target);
+        test.RunFrame();
+        INFO("no GL error or other error was logged");
+        REQUIRE(test.messages->errors.empty());
+        return test.ReadTarget(target);
+    };
+    const RendererTest::Rgba8Image shadowed = render(true);
+    const RendererTest::Rgba8Image unshadowed = render(false);
+    const auto at = [](const RendererTest::Rgba8Image& frame, float x, float z) {
+        const std::array<std::uint32_t, 2> pixel = FloorPixel(x, z);
+        return GreenAt(frame, pixel[0], pixel[1]);
+    };
+
+    // Points the top-down camera sees past the box's side, inside the shadow.
+    for (const auto& [x, z] : {std::array<float, 2>{1.9f, -6.0f}, std::array<float, 2>{2.3f, -6.0f},
+                               std::array<float, 2>{2.1f, -6.5f}, std::array<float, 2>{2.1f, -5.5f}})
+    {
+        CAPTURE(x, z);
+        INFO("lit without shadows: " << at(unshadowed, x, z));
+        REQUIRE(at(unshadowed, x, z) > 0.3f);
+        INFO("inside the shadow the floor has only the sky's light: " << at(shadowed, x, z));
+        REQUIRE(at(shadowed, x, z) < 0.05f);
+    }
+    // Inside the cone but outside the shadow: on the light's other side, beyond the shadow's far end, and beside it.
+    for (const auto& [x, z] :
+         {std::array<float, 2>{-1.5f, -6.0f}, std::array<float, 2>{2.9f, -6.0f}, std::array<float, 2>{2.1f, -7.3f},
+          std::array<float, 2>{2.1f, -4.7f}, std::array<float, 2>{0.0f, -4.0f}})
+    {
+        CAPTURE(x, z);
+        INFO("the spot lights the floor as it does without shadows: " << at(shadowed, x, z) << " against "
+                                                                      << at(unshadowed, x, z));
+        REQUIRE(at(unshadowed, x, z) > 0.3f);
+        REQUIRE(at(shadowed, x, z) > 0.97f * at(unshadowed, x, z));
+    }
+
+    // No acne: every floor pixel lit well without shadows, more than half a unit from the shadow's box, is lit as
+    // brightly with them.
+    float worst = 1.0f;
+    for (std::uint32_t y = 0; y < Side; ++y)
+    {
+        for (std::uint32_t x = 0; x < Side; ++x)
+        {
+            const float floorX =
+                CameraX + ((static_cast<float>(x) + 0.5f) / (static_cast<float>(Side) * 0.5f) - 1.0f) * HalfSpan;
+            const float floorZ =
+                CameraZ + ((static_cast<float>(y) + 0.5f) / (static_cast<float>(Side) * 0.5f) - 1.0f) * HalfSpan;
+            const bool nearShadow = floorX > 0.0f && floorX < 3.1f && floorZ > -7.4f && floorZ < -4.6f;
+            const float without = GreenAt(unshadowed, x, y);
+            if (nearShadow || without < 0.3f)
+            {
+                continue;
+            }
+            worst = std::min(worst, GreenAt(shadowed, x, y) / without);
+        }
+    }
+    INFO("the darkest lit floor pixel against the unshadowed frame: " << worst);
+    REQUIRE(worst > 0.97f);
 }

@@ -232,6 +232,11 @@
           "name": "ShadowAtlas",
           "value": 3,
           "doc": "The sun's shadow atlas for this view as grey, its cascades side by side from the nearest, white nearest the sun, with no exposure or tonemap; black where nothing casts."
+        },
+        {
+          "name": "SpotShadowAtlas",
+          "value": 4,
+          "doc": "The frame's spot shadow atlas as grey (ADR-0050), each shadowed spot light's tile along the rows from the top left, nearest the view first, white nearest its light, with no exposure or tonemap; black where no spot light casts."
         }
       ]
     },
@@ -1082,7 +1087,7 @@
           "offset": 28,
           "kind": "u32",
           "default": 0,
-          "doc": "Draws into the sun's shadow cascades (ADR-0050): one per run of matching casting items, merged as in `draws`, per cascade of each view."
+          "doc": "Draws into the sun's shadow cascades and the spot lights' shadow tiles (ADR-0050): one per run of matching casting items, merged as in `draws`, per cascade of each view and per shadowed spot light."
         }
       ]
     },
@@ -1185,9 +1190,9 @@
       "name": "Fenrir::SpotLight",
       "category": "struct",
       "role": "component",
-      "size": 36,
+      "size": 44,
       "alignment": 4,
-      "doc": "A light shining from its entity's world position along its world -Z in a cone (ADR-0048), any number per scene. It falls off with distance as a PointLight does, and across its cone smoothly from full inside `innerAngle` to none outside `outerAngle`, both measured from its axis. A light that can light nothing is skipped.",
+      "doc": "A light shining from its entity's world position along its world -Z in a cone (ADR-0048), any number per scene. It falls off with distance as a PointLight does, and across its cone smoothly from full inside `innerAngle` to none outside `outerAngle`, both measured from its axis. A light that can light nothing is skipped.\n\nWith `castShadows` on it casts shadows (ADR-0050) while it is within RendererConfig::spotShadowBudget: each frame the shadowed spot lights nearest to any camera keep them, each drawn into a tile of one shared atlas through a perspective along its cone (held to 80 degrees off its axis), and the rest light unshadowed, warned about once. Edges are filtered and biased as the DirectionalLight's are. A mesh round the light's position, such as a glowing bulb, shadows all of its cone: turn that mesh's castShadows off.",
       "fields": [
         {
           "name": "colour",
@@ -1235,7 +1240,21 @@
           "offset": 32,
           "kind": "bool",
           "default": false,
-          "doc": "Whether the light casts shadows. Off by default; not drawn yet."
+          "doc": "Whether the light casts shadows: off by default. Only RendererConfig::spotShadowBudget of them do in a frame, the nearest to the cameras."
+        },
+        {
+          "name": "shadowNormalBias",
+          "offset": 36,
+          "kind": "f32",
+          "default": 1,
+          "doc": "How far a lit point moves out along its normal before its shadow is looked up, in shadow-map texels (whose size grows with the distance from the light): 1 by default."
+        },
+        {
+          "name": "shadowSlopeBias",
+          "offset": 40,
+          "kind": "f32",
+          "default": 2,
+          "doc": "How far it moves towards the light, in texels per unit of slope (the tangent of the angle between its normal and the light, held between 0.1 and 8): 2 by default."
         }
       ]
     }

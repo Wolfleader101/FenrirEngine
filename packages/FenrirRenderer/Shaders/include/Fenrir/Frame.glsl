@@ -17,7 +17,8 @@ layout(set = 0, binding = 0, std140) uniform FrameData
     // The sky the scene is lit by: its SkyLight's, else its Sky. x: its intensity; y and z: the cosine and sine of its
     // rotation about +Y; w: the highest mip level of fenrirSkySpecular, which holds roughness 1.
     vec4 skyLight;
-    // x: how many records fenrirLights.items holds this frame. yzw unused.
+    // x: how many records fenrirLights.items holds this frame; y: how many of them, from the first, are spot lights
+    // casting shadows (ADR-0050), record i reading fenrirSpotShadows.items[i]. zw unused.
     uvec4 lights;
 } frame;
 
@@ -60,8 +61,9 @@ struct FenrirLight
     uint twoSided;
 };
 
-// Every point, spot and rect light of the scene that can light anything, frame.lights.x of them, in that order; the
-// buffer may be longer.
+// Every point, spot and rect light of the scene that can light anything, frame.lights.x of them: the spot lights that
+// cast shadows first (frame.lights.y of them), then the rest, points, spots and rects in that order; the buffer may be
+// longer.
 layout(set = 0, binding = 4, std430) readonly buffer FenrirLights
 {
     FenrirLight items[];
@@ -73,6 +75,30 @@ layout(set = 0, binding = 4, std430) readonly buffer FenrirLights
 // (mapped to [0, 1]) across and its unclipped form factor down. Read with FenrirLtcUv.
 layout(set = 0, binding = 5) uniform sampler2D fenrirLtcMatrix;
 layout(set = 0, binding = 6) uniform sampler2D fenrirLtcAmplitude;
+
+// How a shadowed spot light's tile of fenrirSpotShadowAtlas is read (ADR-0050); Fenrir/Shadows.glsl reads it.
+struct FenrirSpotShadow
+{
+    // World to the atlas: x and y over w are u and v (from the top), z over w the reversed-Z depth in the light's view.
+    mat4 atlas;
+    // x: the normal-offset bias and y: the slope-scaled bias, in texels; z: a texel's world size one unit along the
+    // light; w: the filter's radius in texels.
+    vec4 bias;
+    // The u and v its filter may read between: its tile, less the filter's reach. xy low, zw high.
+    vec4 bounds;
+};
+
+// One record per spot light casting shadows this frame, frame.lights.y of them, in the light buffer's order; the
+// buffer may be longer.
+layout(set = 0, binding = 7, std430) readonly buffer FenrirSpotShadows
+{
+    FenrirSpotShadow items[];
+} fenrirSpotShadows;
+
+// The spot lights' shadow atlas (ADR-0050): each shadowed light's reversed-Z depths in a tile of its own, compared by
+// the sampler as the sun's atlas is. A 1 x 1 map of depth 0, which lights everything, when no spot light casts and in
+// the pass drawing the atlas.
+layout(set = 0, binding = 8) uniform sampler2DShadow fenrirSpotShadowAtlas;
 
 // The world direction `direction` turned back by a sky's rotation about +Y, whose cosine is `c` and sine `s`: the
 // direction to sample that sky's cube along.

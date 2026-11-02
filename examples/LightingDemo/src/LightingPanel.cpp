@@ -33,11 +33,12 @@ namespace LightingDemo
             const char* name;
         };
         // In the order G steps through them, from the lit scene.
-        constexpr std::array<NamedDebugView, 4> DebugViews{
+        constexpr std::array<NamedDebugView, 5> DebugViews{
             {{Fenrir::CameraDebugView::None, "the lit scene"},
              {Fenrir::CameraDebugView::AmbientOcclusion, "the raw ambient occlusion"},
              {Fenrir::CameraDebugView::ShadowCascades, "the shadow cascades as colours"},
-             {Fenrir::CameraDebugView::ShadowAtlas, "the shadow atlas"}}};
+             {Fenrir::CameraDebugView::ShadowAtlas, "the shadow atlas"},
+             {Fenrir::CameraDebugView::SpotShadowAtlas, "the spot shadow atlas"}}};
 
         std::size_t DebugViewIndex(Fenrir::CameraDebugView view)
         {
@@ -239,7 +240,7 @@ namespace LightingDemo
         std::string help =
             "T: the tonemapper (AgX, PBR Neutral, ACES, None). E: the exposure (0, +1, +2, -1 EV). B: "
             "bloom off or on. O: ambient occlusion off or on. G: the next debug view (occlusion, cascades, shadow "
-            "map). H: the sun's shadows off or on.";
+            "map, spot shadow atlas). H: the sun's shadows off or on.";
         if (panoramaSwitch)
         {
             help += " S: the next sky.";
