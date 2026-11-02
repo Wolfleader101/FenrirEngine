@@ -51,9 +51,11 @@ Built 2026-11-02, stacked on ticket 19's branch (#265 to #279 not yet merged). D
 - **The sky is the demo's own city glow by default**, a magenta and orange light-pollution glow from the horizon,
   with Poly Haven's Kloppenheim 07 (Pure Sky) on S. Modern Buildings Night was tried first: its bright plaza floor,
   below the horizon, made the city read as a model on a table.
-- **Exposure -1 EV, sky 0.03, windows 0.12.** AgX lifts the lamps' dim spill on the upper walls to dusk at 0 EV, and its
-  log curve turns window emission of even 0.3 to cream. The bright neon's pale cores with coloured bloom and spill are
-  what photographs of neon show, so the signs stay bright (5).
+- **PBR Neutral, not AgX, by the user's choice after the second rework** (against cyberpunk reference renders): AgX
+  turned the neon pastel and lifted the lamps' dim spill on the upper walls towards dusk. Four looks were compared
+  with the existing post effects only; the city now starts with PBR Neutral at -0.5 EV, bloom 0.3 at radius 0.85, signs
+  at 8, puddles over 0.75 of the street and the damp asphalt at 0.15 of its roughness, so the signs' colours streak
+  down the road. Wetter (0.9, damp 0.08) turned the road to a mirror. T still steps to AgX. Sky 0.03, windows 0.12.
 - **Not asked for:** `src/DemoMaterials.*` (`EmbeddedMaterial` and `AsLinear` moved out of the forest for both scenes),
   keys N (traffic), M (wet or dry) and C (clustering), and the panel's intensity sliders.
 - **Timing (RTX 5080, 1280 x 720, 4x MSAA, 1092 lights, street level; the panel's frame time, wall clock smoothed

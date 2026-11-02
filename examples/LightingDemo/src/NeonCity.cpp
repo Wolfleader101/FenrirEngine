@@ -239,14 +239,14 @@ namespace LightingDemo
             /** @brief The neon panels on the walls, which light nothing. */
             std::size_t panels = 0;
             float lampIntensity = 40.0f;
-            float signIntensity = 5.0f;
+            float signIntensity = 8.0f;
             float headlightIntensity = 60.0f;
             /** @brief A 40-metre uplight's; longer ones are brighter by the square of their reach. */
             float uplightIntensity = 1500.0f;
             /** @brief The street material's puddles: the share of the street under water. */
-            float puddles = 0.5f;
+            float puddles = 0.75f;
             /** @brief What M brings the puddles back to. */
-            float wetPuddles = 0.5f;
+            float wetPuddles = 0.75f;
             bool moving = true;
             bool clustered = true;
             /** @brief Whether presents wait for the display; off, the frame time is the frame's own. */
@@ -892,9 +892,11 @@ namespace LightingDemo
         {
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
             CityState state;
-            // A night scene: the lamps' and the signs' spill is dim beside their sources, which AgX lifts at 0 EV.
-            state.lighting.exposure = -1.0f;
-            state.lighting.bloom.intensity = 0.12f;
+            // PBR Neutral keeps the neon saturated where AgX turns it pastel; T still steps to AgX. A strong, wide
+            // bloom spreads each sign's colour round it, and -0.5 EV keeps the dim spill on the upper walls at night.
+            state.lighting.tonemapper = Fenrir::Tonemapper::PbrNeutral;
+            state.lighting.exposure = -0.5f;
+            state.lighting.bloom = {0.3f, 0.85f};
             state.lighting.ambientOcclusion.radius = 1.5f;
             // Every light here is small against the dark: the sky is dim, so the neon and the lamps carry the scene.
             state.lighting.skyIntensity = 0.03f;

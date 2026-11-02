@@ -356,8 +356,9 @@ The streets are Poly Haven's Asphalt 01, drawn by the demo's street shader (`sha
 
 The sky is the demo's own city glow (a dark blue zenith over a magenta and orange light-pollution glow from the
 horizon), or with S, Poly Haven's Kloppenheim 07 (Pure Sky), an overcast night lit from below by distant towns. Both
-are drawn at 0.03 intensity, and there is no sun. Bloom (0.12), GTAO (1.5 m) and AgX finish it, at -1 EV: at 0 EV, AgX
-lifts the dim spill on the upper walls to dusk.
+are drawn at 0.03 intensity, and there is no sun. A strong, wide bloom (0.3 at radius 0.85), GTAO (1.5 m) and PBR
+Neutral finish it, at -0.5 EV. PBR Neutral keeps the neon saturated, where AgX (T) turns it pastel and lifts the dim
+spill on the upper walls towards dusk.
 
 The window's Scene part has:
 

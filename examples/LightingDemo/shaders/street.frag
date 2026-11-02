@@ -15,9 +15,9 @@
 
 #pragma fenrir default(tint, 1.0, 1.0, 1.0, 1.0)
 #pragma fenrir default(tile, 3.0)
-#pragma fenrir default(puddles, 0.5)
+#pragma fenrir default(puddles, 0.75)
 #pragma fenrir default(puddleRoughness, 0.03)
-#pragma fenrir default(damp, 0.3)
+#pragma fenrir default(damp, 0.15)
 layout(set = 2, binding = 0, std140) uniform MaterialParams
 {
     // Linear RGBA, times the base colour texture.
