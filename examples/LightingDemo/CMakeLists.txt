@@ -1,5 +1,6 @@
 # LightingDemo (examples/LightingDemo/README.md): the lighting spec's demo app, one scene per lighting showcase. Its
-# committed assets are in assets/; the large ones are fetched (fetched-assets.json, ADR-0052).
+# committed assets are in assets/; the large ones are fetched (fetched-assets.json, ADR-0052). With scripting, its C#
+# scene (scripts/) follows the C++ ones.
 fenrir_add_demo_app(LightingDemo
     SOURCES
         src/main.cpp
@@ -22,6 +23,7 @@ fenrir_add_demo_app(LightingDemo
         src/DemoMaterials.cpp
         src/NeonCity.cpp
         src/Sponza.cpp
+    SCRIPTS scripts
     ASSETS assets
 )
 # The grid's labels and the missing-assets message are drawn through the scene's DebugDraw; the neon city's vsync switch

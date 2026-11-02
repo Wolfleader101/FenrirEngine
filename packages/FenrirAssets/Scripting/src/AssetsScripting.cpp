@@ -52,6 +52,28 @@ namespace Fenrir
             return mesh;
         }
 
+        // An instance list from C#'s spans (each empty when C# passed none). Whether the colours fit the transforms is
+        // the store's check.
+        InstanceListData InstanceListFrom(const Math::Mat4* transforms, std::int32_t transformCount,
+                                          const Colour* colours, std::int32_t colourCount)
+        {
+            const std::span<const Math::Mat4> transformValues = SpanOf(transforms, transformCount);
+            const std::span<const Colour> colourValues = SpanOf(colours, colourCount);
+            InstanceListData list;
+            list.transforms.assign(transformValues.begin(), transformValues.end());
+            list.colours.assign(colourValues.begin(), colourValues.end());
+            return list;
+        }
+
+        // Copies as many of `values` as fit into C#'s span of `capacity`, and gives how many there are.
+        template <typename T>
+        std::int32_t CopyInto(const std::vector<T>& values, T* out, std::int32_t capacity)
+        {
+            const std::span<T> room = SpanOf(out, capacity);
+            std::copy_n(values.begin(), std::min(room.size(), values.size()), room.begin());
+            return static_cast<std::int32_t>(values.size());
+        }
+
         // An RGBA8 sRGB image of this size with `rgba8`'s bytes, or none as a render target; nothing (with a warning)
         // for a side under one pixel. Whether the bytes fit the size is the store's check.
         std::optional<ImageData> ImageFrom(const NativeGuard& guard, std::int32_t width, std::int32_t height,
@@ -354,6 +376,76 @@ namespace Fenrir
             }
             std::optional<ImageData> data = ImageFrom(guard, width, height, rgba8, byteCount);
             return data && store->Replace(*image, std::move(*data));
+        }
+
+        /**
+         * @brief Adds an instance list for `owner` (ADR-0051): one copy per transform, each relative to the entity
+         * whose InstancedMeshRenderer draws it, coloured by `colours`, which is empty (every copy white) or holds one
+         * colour per transform, linear. The data is copied.
+         * @param[out] list The list; the empty handle (and an error logged) if there are colours but not one per
+         * transform.
+         * @return Whether the store accepted it.
+         * @facade Assets.AddInstanceList returns list
+         */
+        bool AddInstanceList(const CallContext& context, AssetsScripting& assets, const Math::Mat4* transforms,
+                             std::int32_t transformCount, const Colour* colours, std::int32_t colourCount,
+                             ScriptAssetOwner owner, AssetHandle<InstanceList>* list)
+        {
+            const NativeGuard guard(context, assets.warnings);
+            const std::optional<AssetsScripting::StoreAndOwner> placed = assets.StoreAndOwnerFor(guard, owner);
+            if (!placed)
+            {
+                return false;
+            }
+            return Give(placed->store.Add<InstanceList>(
+                            InstanceListFrom(transforms, transformCount, colours, colourCount), placed->owner),
+                        list);
+        }
+
+        /**
+         * @brief Swaps `list`'s copies for these transforms and colours, as AddInstanceList takes them, and bumps its
+         * revision, so the renderer uploads it again before its next draw.
+         * @return Whether it was replaced: false for a stale handle, or colours but not one per transform, which leave
+         * it unchanged.
+         * @facade Assets.ReplaceInstanceList
+         */
+        bool ReplaceInstanceList(const CallContext& context, AssetsScripting& assets,
+                                 const AssetHandle<InstanceList>* list, const Math::Mat4* transforms,
+                                 std::int32_t transformCount, const Colour* colours, std::int32_t colourCount)
+        {
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<InstanceList>(guard, *list);
+            return store != nullptr &&
+                   store->Replace(*list, InstanceListFrom(transforms, transformCount, colours, colourCount));
+        }
+
+        /**
+         * @brief Copies `list`'s transforms into `transforms`, as many as fit.
+         * @return How many copies the list holds, so a result larger than the span says how large a span would hold
+         * them all; zero for a stale handle.
+         * @facade Assets.GetInstanceTransforms
+         */
+        std::int32_t GetInstanceTransforms(const CallContext& context, AssetsScripting& assets,
+                                           const AssetHandle<InstanceList>* list, Math::Mat4* transforms,
+                                           std::int32_t capacity)
+        {
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<InstanceList>(guard, *list);
+            return store == nullptr ? 0 : CopyInto(store->TryGet(*list)->transforms, transforms, capacity);
+        }
+
+        /**
+         * @brief Copies `list`'s colours into `colours`, as many as fit.
+         * @return How many colours the list holds: as many as its transforms, or zero when every copy is white; zero
+         * for a stale handle.
+         * @facade Assets.GetInstanceColours
+         */
+        std::int32_t GetInstanceColours(const CallContext& context, AssetsScripting& assets,
+                                        const AssetHandle<InstanceList>* list, Colour* colours, std::int32_t capacity)
+        {
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<InstanceList>(guard, *list);
+            return store == nullptr ? 0 : CopyInto(store->TryGet(*list)->colours, colours, capacity);
         }
 
         /**

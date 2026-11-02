@@ -429,6 +429,181 @@
       ]
     },
     {
+      "name": "AddInstanceList",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Adds an instance list for `owner` (ADR-0051): one copy per transform, each relative to the entity whose InstancedMeshRenderer draws it, coloured by `colours`, which is empty (every copy white) or holds one colour per transform, linear. The data is copied.",
+      "facade": "Assets.AddInstanceList",
+      "facadeReturns": "list",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the store accepted it."
+      },
+      "parameters": [
+        {
+          "name": "transforms",
+          "type": "const Fenrir::Math::Mat4*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Mat4",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "transformCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "colours",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "colourCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "owner",
+          "type": "Fenrir::ScriptAssetOwner",
+          "kind": "enum"
+        },
+        {
+          "name": "list",
+          "type": "Fenrir::AssetHandle<Fenrir::InstanceList>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::InstanceList>",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The list; the empty handle (and an error logged) if there are colours but not one per transform."
+        }
+      ]
+    },
+    {
+      "name": "ReplaceInstanceList",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Swaps `list`'s copies for these transforms and colours, as AddInstanceList takes them, and bumps its revision, so the renderer uploads it again before its next draw.",
+      "facade": "Assets.ReplaceInstanceList",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was replaced: false for a stale handle, or colours but not one per transform, which leave it unchanged."
+      },
+      "parameters": [
+        {
+          "name": "list",
+          "type": "const Fenrir::AssetHandle<Fenrir::InstanceList>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::InstanceList>",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "transforms",
+          "type": "const Fenrir::Math::Mat4*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Mat4",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "transformCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "colours",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "colourCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "GetInstanceTransforms",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Copies `list`'s transforms into `transforms`, as many as fit.",
+      "facade": "Assets.GetInstanceTransforms",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many copies the list holds, so a result larger than the span says how large a span would hold them all; zero for a stale handle."
+      },
+      "parameters": [
+        {
+          "name": "list",
+          "type": "const Fenrir::AssetHandle<Fenrir::InstanceList>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::InstanceList>",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "transforms",
+          "type": "Fenrir::Math::Mat4*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Mat4",
+          "pointeeKind": "struct"
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "GetInstanceColours",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Copies `list`'s colours into `colours`, as many as fit.",
+      "facade": "Assets.GetInstanceColours",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many colours the list holds: as many as its transforms, or zero when every copy is white; zero for a stale handle."
+      },
+      "parameters": [
+        {
+          "name": "list",
+          "type": "const Fenrir::AssetHandle<Fenrir::InstanceList>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::InstanceList>",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "colours",
+          "type": "Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct"
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
       "name": "CreateMaterial",
       "namespace": "Fenrir::AssetsNatives",
       "source": "../src/AssetsScripting.cpp",
