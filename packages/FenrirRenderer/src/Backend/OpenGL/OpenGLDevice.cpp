@@ -30,6 +30,55 @@ namespace Fenrir::Graphics
         }
 
         /** @brief GL's internal format for each TextureFormat. */
+        /** @brief The SPIR-V extension glslang names for a vertex stage writing gl_Layer. */
+        constexpr std::string_view LayerExtension = "SPV_EXT_shader_viewport_index_layer";
+        /** @brief NVIDIA's name for the same capability, all its GL drivers list. */
+        constexpr std::string_view NvLayerExtension = "SPV_NV_viewport_array2";
+
+        /** @brief A SPIR-V literal string: its bytes, nul-terminated, packed four to a word, little end first. */
+        std::vector<std::uint32_t> LiteralWords(std::string_view text)
+        {
+            std::vector<std::uint32_t> words(text.size() / 4 + 1, 0u);
+            for (std::size_t i = 0; i < text.size(); ++i)
+            {
+                words[i / 4] |= std::uint32_t{static_cast<unsigned char>(text[i])} << (8 * (i % 4));
+            }
+            return words;
+        }
+
+        /**
+         * @brief `spirv` with its OpExtension `from` naming `to` instead; empty when it has no such instruction. The
+         * instruction's word count follows the new name's length.
+         */
+        std::vector<std::uint32_t> WithExtensionRenamed(const std::vector<std::uint32_t>& spirv, std::string_view from,
+                                                        std::string_view to)
+        {
+            constexpr std::uint32_t OpExtension = 10;
+            constexpr std::size_t HeaderWords = 5;
+            const std::vector<std::uint32_t> wanted = LiteralWords(from);
+            std::size_t at = HeaderWords;
+            while (at < spirv.size())
+            {
+                const std::uint32_t count = spirv[at] >> 16;
+                if (count == 0 || at + count > spirv.size())
+                {
+                    return {};
+                }
+                if ((spirv[at] & 0xFFFFu) == OpExtension && count - 1 == wanted.size() &&
+                    std::equal(wanted.begin(), wanted.end(), spirv.begin() + static_cast<std::ptrdiff_t>(at) + 1))
+                {
+                    const std::vector<std::uint32_t> name = LiteralWords(to);
+                    std::vector<std::uint32_t> renamed(spirv.begin(), spirv.begin() + static_cast<std::ptrdiff_t>(at));
+                    renamed.push_back((static_cast<std::uint32_t>(name.size() + 1) << 16) | OpExtension);
+                    renamed.insert(renamed.end(), name.begin(), name.end());
+                    renamed.insert(renamed.end(), spirv.begin() + static_cast<std::ptrdiff_t>(at + count), spirv.end());
+                    return renamed;
+                }
+                at += count;
+            }
+            return {};
+        }
+
         /** @brief A texture's layers: a cube's six faces, six for each of a cube array's cubes, else one. */
         std::uint32_t LayersOf(const TextureDesc& desc) noexcept
         {
@@ -284,18 +333,26 @@ namespace Fenrir::Graphics
         gl.Enable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
         gl.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
         gl.PixelStorei(GL_PACK_ALIGNMENT, 1);
-        // A vertex stage writing gl_Layer, as point shadows' instanced faces do, needs the driver to take it in SPIR-V.
+        // A vertex stage writing gl_Layer, as point shadows' instanced faces do, needs the driver to take it in SPIR-V:
+        // glslang names SPV_EXT_shader_viewport_index_layer, and NVIDIA's drivers list only SPV_NV_viewport_array2,
+        // whose capability is the same one, so a stage naming the first is renamed to the second for them.
         GLint spirvExtensions = 0;
         gl.GetIntegerv(GL_NUM_SPIR_V_EXTENSIONS, &spirvExtensions);
         for (GLint i = 0; i < spirvExtensions; ++i)
         {
             const auto* name =
                 reinterpret_cast<const char*>(gl.GetStringi(GL_SPIR_V_EXTENSIONS, static_cast<GLuint>(i)));
-            if (name != nullptr && std::string_view(name) == "SPV_EXT_shader_viewport_index_layer")
+            const std::string_view extension = name != nullptr ? name : "";
+            if (extension == LayerExtension)
             {
-                m_features.vertexLayer = true;
+                m_layerExtension = LayerExtension;
+            }
+            else if (extension == NvLayerExtension && m_layerExtension.empty())
+            {
+                m_layerExtension = NvLayerExtension;
             }
         }
+        m_features.vertexLayer = !m_layerExtension.empty();
 
         const PixelSize size = m_surface->GetPixelSize();
         TextureDesc backbuffer;
@@ -563,8 +620,15 @@ namespace Fenrir::Graphics
             stages = {{GL_COMPUTE_SHADER, &key.compute, "the compute"}};
         }
         std::vector<GLuint> shaders;
-        for (const auto& [type, spirv, name] : stages)
+        for (const auto& [type, written, name] : stages)
         {
+            // The vertex-layer extension under the name the driver knows, where that is not glslang's.
+            std::vector<std::uint32_t> renamed;
+            if (!m_layerExtension.empty() && m_layerExtension != LayerExtension)
+            {
+                renamed = WithExtensionRenamed(*written, LayerExtension, m_layerExtension);
+            }
+            const std::vector<std::uint32_t>* spirv = renamed.empty() ? written : &renamed;
             const GLuint shader = shaders.emplace_back(gl.CreateShader(type));
             gl.ShaderBinary(1, &shader, GL_SHADER_BINARY_FORMAT_SPIR_V, spirv->data(),
                             static_cast<GLsizei>(spirv->size() * sizeof(std::uint32_t)));

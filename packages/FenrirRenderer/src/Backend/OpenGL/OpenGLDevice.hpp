@@ -6,6 +6,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "Device/GraphicsDevice.hpp"
@@ -282,6 +283,11 @@ namespace Fenrir::Graphics
         /** @brief Whether Start succeeded, so the GL functions are loaded and there are GL objects to delete. */
         bool m_started = false;
         DeviceFeatures m_features;
+        /**
+         * @brief The name under which the driver takes a vertex stage writing gl_Layer in SPIR-V: glslang's
+         * SPV_EXT_shader_viewport_index_layer, or NVIDIA's SPV_NV_viewport_array2; empty when it takes neither.
+         */
+        std::string_view m_layerExtension;
         std::uint64_t m_frameIndex = 0;
 
         ResourceTable<BufferHandle, GlBuffer> m_buffers;

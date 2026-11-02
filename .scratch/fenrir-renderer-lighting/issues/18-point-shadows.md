@@ -26,8 +26,10 @@ Built 2026-11-02, stacked on ticket 17's branch (#265 to #277 not yet merged). D
   of one layer or of every layer at once (`DepthAttachment::layer` and `layered`; the graph's
   `DepthAttachmentLayer` and `LayeredDepthAttachment`), and `GraphicsDevice::Features()` with
   `DeviceFeatures::vertexLayer`. The GL backend sets it when the driver lists `SPV_EXT_shader_viewport_index_layer`
-  among its SPIR-V extensions (it ingests SPIR-V, so the GLSL extension alone is not enough) and logs it at start; the
-  null device reports it on, and `RendererProbe::SetFeatures` turns it off.
+  among its SPIR-V extensions (it ingests SPIR-V, so the GLSL extension alone is not enough), or NVIDIA's
+  `SPV_NV_viewport_array2`, the same capability under another name: NVIDIA's 621 driver lists only that, so the
+  backend renames a stage's `OpExtension` to it when loading. It logs the feature at start; the null device reports it
+  on, and `RendererProbe::SetFeatures` turns it off.
 - **Instanced faces through the item's own vertex stage.** A `POINT_SHADOW` variant key: under it `Fenrir/Draw.glsl`
   reads instance i as item i / 6 and face i % 6, turns the item's world matrix about the light (the view block's camera
   position) into that face's view and writes `gl_Layer` (cube from `shadowInfo.z`). The shared view block looks down

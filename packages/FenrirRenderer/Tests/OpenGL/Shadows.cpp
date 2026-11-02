@@ -453,6 +453,8 @@ TEST_CASE("A point light's caster shadows each of its six sides, where the way f
         test.RunFrame();
         INFO("no GL error or other error was logged");
         REQUIRE(test.messages->errors.empty());
+        INFO("and the driver took every shadow pipeline, the instanced faces' too");
+        REQUIRE(RendererTest::CountContaining(test.messages->warnings, "shadow pipeline") == 0);
         return test.ReadTarget(target);
     };
     const RendererTest::Rgba8Image shadowed = render(true);
