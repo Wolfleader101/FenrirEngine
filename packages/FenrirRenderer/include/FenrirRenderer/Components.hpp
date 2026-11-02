@@ -26,6 +26,11 @@ namespace Fenrir
         AssetHandle<Material> material;
         /** @brief False hides this entity only; its children are drawn as their own MeshRenderers say. */
         bool visible = true;
+        /**
+         * @brief Whether it is drawn into the sun's shadow (ADR-0050). Only an `Opaque` or `Masked` material casts, a
+         * Masked one cut out by its alpha cutoff; `AlphaBlend` and `Additive` ones never do.
+         */
+        bool castShadows = true;
     };
 
     /**
@@ -44,7 +49,7 @@ namespace Fenrir
         AssetHandle<Mesh> mesh;
         AssetHandle<Material> material;
         AssetHandle<InstanceList> instances;
-        /** @brief Whether the copies are drawn into shadow maps. Nothing reads it yet: the renderer has no shadows. */
+        /** @brief Whether the copies are drawn into the sun's shadow, as a MeshRenderer's castShadows says. */
         bool castShadows = true;
         /** @brief False hides every copy; the entity's children are drawn as their own renderers say. */
         bool visible = true;
@@ -496,6 +501,16 @@ namespace Fenrir
          * ambient occlusion is off.
          */
         AmbientOcclusion,
+        /**
+         * @brief Its lit colour, each pixel tinted by the sun's shadow cascade it reads (ADR-0050): red, green, blue
+         * and yellow from the nearest, untinted past the last or without shadows.
+         */
+        ShadowCascades,
+        /**
+         * @brief The sun's shadow atlas for this view as grey, its cascades side by side from the nearest, white
+         * nearest the sun, with no exposure or tonemap; black where nothing casts.
+         */
+        ShadowAtlas,
     };
 
     /**
@@ -541,6 +556,13 @@ namespace Fenrir
     /**
      * @brief The light shining along its entity's world -Z (ADR-0024). The renderer uses the first one in the active
      * scene and warns once if there are more.
+     *
+     * It casts shadows unless `castShadows` is off (ADR-0050): each camera gets cascaded shadow maps out to
+     * `shadowDistance`, up to RendererConfig::shadowCascades of them, split by RendererConfig::shadowSplitLambda,
+     * blended across their boundaries and fading out at the last. Each cascade is snapped to whole texels of its map,
+     * so its shadows hold still as the camera moves and turns. Edges are filtered by 16 rotated taps of hardware
+     * depth comparison. The biases trade shadow acne (speckled self-shadowing on lit faces) against peter-panning
+     * (shadows coming loose from their casters): raise them for acne, lower them for gaps.
      */
     struct DirectionalLight
     {
@@ -548,6 +570,23 @@ namespace Fenrir
         Colour colour{1.0f, 1.0f, 1.0f, 1.0f};
         /** @brief A plain multiplier on the colour. */
         float intensity = 1.0f;
+        /** @brief Whether it casts shadows: on by default. */
+        bool castShadows = true;
+        /**
+         * @brief How far from each camera, along its view, its shadows reach, in world units: 100 by default. Past
+         * it, everything is lit. The nearer it is, the sharper the shadows within it.
+         */
+        float shadowDistance = 100.0f;
+        /**
+         * @brief How far a lit point moves out along its normal before its shadow is looked up, in shadow-map texels
+         * (each cascade's own size): 1 by default.
+         */
+        float shadowNormalBias = 1.0f;
+        /**
+         * @brief How far it moves towards the light, in texels per unit of slope (the tangent of the angle between its
+         * normal and the light, held between 0.1 and 8): 2 by default.
+         */
+        float shadowSlopeBias = 2.0f;
     };
 
     /**

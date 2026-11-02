@@ -14,6 +14,7 @@
 
 #include "Core/BlockRing.hpp"
 #include "Core/Bloom.hpp"
+#include "Core/Cascades.hpp"
 #include "Core/Gtao.hpp"
 #include "Core/RenderFeature.hpp"
 #include "Core/SceneFrame.hpp"
@@ -55,6 +56,11 @@ namespace Fenrir::Render
         std::uint32_t palettes = 0;
         /** @brief Skinned items drawn in the last frame, one per item per view; part of `instances`. */
         std::uint32_t skinnedDraws = 0;
+        /**
+         * @brief Draws in the last frame's shadow passes (ADR-0050): one per merged run of casting items, per cascade
+         * of each view.
+         */
+        std::uint32_t shadowDraws = 0;
     };
 
     /** @brief A view the scene renderer added passes for this frame, for render features that draw into it. */
@@ -67,9 +73,11 @@ namespace Fenrir::Render
         GraphResource sceneDepth;
         /** @brief Its view-space normals (RG16F, octahedral), which its DepthPrepass pass writes (ADR-0049). */
         GraphResource sceneNormals;
+        /** @brief Its sun's shadow atlas (ADR-0050), which its ShadowCascades pass writes; empty without one. */
+        GraphResource shadowAtlas;
         /**
          * @brief Its view block's binding group this frame: binding set 1, as `Fenrir/View.glsl` declares it, with the
-         * white texture as its ambient occlusion.
+         * white texture as its ambient occlusion and no shadow.
          */
         Graphics::BindingGroupHandle viewGroup;
     };
@@ -104,6 +112,17 @@ namespace Fenrir::Render
      * view's bloom in `PostProcess` (BloomChain), unless its intensity is 0; and `Output`, which resolves SceneColor,
      * scales it by the view's exposure and tonemaps it into its viewport of its render target, the window's backbuffer
      * or an image. The first view into a target clears it to black. With no view the backbuffer is cleared to black.
+     *
+     * **The sun's shadow** (ADR-0050): with SceneLighting::shadows on and items that cast, each view gets FitCascades'
+     * cascades out to the shadow distance and a `ShadowCascades` pass, in the `Shadow` stage, drawing every casting
+     * `Opaque` and `Masked` item into each cascade's tile of a transient Depth32Float atlas (the cascades side by side,
+     * each `mapSize` square, reversed-Z, cleared to 0), through the item's own vertex stage with the cascade's light
+     * matrix as its view block, and `builtin:shadow`'s fragment stage, whose ALPHA_MASK variant cuts a Masked item out
+     * from its prepass mask group (one whose shader has no base colour casts whole); culling is off, and matching items
+     * merge as they do in Opaque. Opaque and Transparent bind the atlas at set 1 binding 2 with a comparison sampler,
+     * and the cascades in the view block (`Fenrir/View.glsl`), which `Fenrir/Shadows.glsl` reads; every other pass, and
+     * every view without them, binds a 1 x 1 map that lights everything, with no cascades. A view showing its cascades
+     * tints its lit colour by them; one showing its shadow atlas has Output draw the atlas as grey.
      *
      * **Ambient occlusion** (ADR-0049): a view whose camera has it gets Gtao's passes after its DepthPrepass pass, and
      * its `Opaque` pass binds their occlusion texture at set 1 binding 1 (`Fenrir/View.glsl`), which
@@ -162,10 +181,11 @@ namespace Fenrir::Render
         /**
          * @brief Makes the default textures, the fixed sets' layouts and the internal pipelines on `device`, for scene
          * targets of `samples` samples per pixel (1: no MSAA). With `automaticInstancing`, consecutive matching items
-         * draw as one instanced draw (ADR-0051).
+         * draw as one instanced draw (ADR-0051); with `computeSkinning`, skinned meshes skin once a frame in compute;
+         * `cascades` says how each view's sun cascades are made (ADR-0050), its count held to 1 to MaxCascades.
          */
         SceneRenderer(Graphics::GraphicsDevice& device, ILogger& logger, std::uint32_t samples = 1,
-                      bool automaticInstancing = true, bool computeSkinning = true);
+                      bool automaticInstancing = true, bool computeSkinning = true, CascadeConfig cascades = {});
         ~SceneRenderer() override;
 
         SceneRenderer(const SceneRenderer&) = delete;
@@ -484,6 +504,20 @@ namespace Fenrir::Render
             friend auto operator<=>(const PrepassKey&, const PrepassKey&) = default;
         };
 
+        /**
+         * @brief What a shadow pipeline is made for: the item's shader and variant, whose vertex stage it runs, the
+         * streams it reads that the mesh has, and whether it cuts a Masked item out.
+         */
+        struct ShadowKey
+        {
+            const ShaderEntry* shader = nullptr;
+            const ShaderVariant* variant = nullptr;
+            std::uint32_t streams = 0;
+            bool masked = false;
+
+            friend auto operator<=>(const ShadowKey&, const ShadowKey&) = default;
+        };
+
         /** @brief A made pipeline, or why it could not be made. */
         struct PipelineEntry
         {
@@ -523,6 +557,10 @@ namespace Fenrir::Render
             const PipelineEntry* prepass = nullptr;
             /** @brief Cut out in the prepass, which binds its material's prepass group at set 2. */
             bool prepassMasked = false;
+            /** @brief Its shadow pipeline (ADR-0050); null when it casts no shadow. */
+            const PipelineEntry* shadow = nullptr;
+            /** @brief Cut out in the shadow passes, which bind its material's prepass group at set 2 too. */
+            bool shadowMasked = false;
             /** @brief An instance list's copies; none for one item. */
             InstanceRange instances;
             /**
@@ -578,6 +616,20 @@ namespace Fenrir::Render
         [[nodiscard]] const PipelineEntry& MeshPipeline(const ShaderEntry& shader, const VariantEntry& variant,
                                                         std::uint32_t streams, BlendMode blend, bool doubleSided,
                                                         bool prepassed);
+        /**
+         * @brief The shadow pipeline running `variant`'s vertex stage behind builtin:shadow's fragment stage; why it
+         * failed is logged as a warning, and the item casts no shadow.
+         */
+        [[nodiscard]] const PipelineEntry& ShadowPipeline(const ShaderEntry& shader, const VariantEntry& variant,
+                                                          std::uint32_t streams, bool masked);
+        /**
+         * @brief Makes `made`'s pipeline: `variant`'s vertex stage behind `program`'s fragment stage (its ALPHA_MASK
+         * variant when `masked`, binding the prepass mask group at set 2), with `desc`'s render state and the streams
+         * `streams` the mesh has; why it could not, in its failure.
+         */
+        void MakeBehindVertexStage(PrepassEntry& made, const VariantEntry& variant, std::uint32_t streams,
+                                   const ShaderContainer& program, bool masked, Graphics::PipelineDesc desc,
+                                   std::string_view label);
         /** @brief The depth prepass pipeline running `variant`'s vertex stage; why it failed is logged as a warning. */
         [[nodiscard]] const PipelineEntry& PrepassPipeline(const ShaderEntry& shader, const VariantEntry& variant,
                                                            std::uint32_t streams, bool masked, bool doubleSided);
@@ -590,6 +642,18 @@ namespace Fenrir::Render
         /** @brief A Masked material's prepass group, with its base colour texture replaced if it is in `replaced`. */
         [[nodiscard]] Graphics::BindingGroupHandle PrepassGroup(MaterialEntry& material,
                                                                 const std::vector<AssetKey>& replaced);
+        /** @brief Which of a draw's pipelines a pass draws it with. */
+        enum class DrawPass : std::uint8_t
+        {
+            /** @brief Opaque's or Transparent's. */
+            Main,
+            Prepass,
+            Shadow,
+        };
+
+        /** @brief The pipeline `pass` draws `draw` with: null when it has none there. */
+        [[nodiscard]] static const PipelineEntry* PipelineOf(const ResolvedDraw& draw, DrawPass pass) noexcept;
+
         /**
          * @brief Consecutive draws of a pass, one instance each: `first` is the record of the first, and the rest
          * follow it in the draw buffer.
@@ -602,22 +666,21 @@ namespace Fenrir::Render
 
         /**
          * @brief `order`'s opaque or masked draws as the runs a pass draws (ADR-0051): with automatic instancing on,
-         * each run of consecutive records with the same pipeline (the prepass's when `prepass`), material, set 2 group
-         * and mesh is one instanced draw; with it off, each draw is its own. An instance list's draw is always its own.
+         * each run of consecutive records with the same pipeline (`pass`'s), material, set 2 group and mesh is one
+         * instanced draw; with it off, each draw is its own. An instance list's draw is always its own.
          */
         [[nodiscard]] std::vector<DrawRun> RunsOf(const std::vector<ResolvedDraw>& draws,
                                                   const std::vector<Graphics::BindingGroupHandle>& groups,
-                                                  const std::vector<std::size_t>& order, bool prepass) const;
+                                                  const std::vector<std::size_t>& order, DrawPass pass) const;
         /**
-         * @brief Records `runs` of `draws` into a pass, binding each one's pipeline (its prepass pipeline when
-         * `prepass`), groups and streams, a compute-skinned draw's first three from `skinned`, and drawing each run's
-         * instances.
+         * @brief Records `runs` of `draws` into a pass, binding each one's pipeline (`pass`'s), groups and streams, a
+         * compute-skinned draw's first three from `skinned`, and drawing each run's instances.
          */
         void RecordDraws(Graphics::PassEncoder& encoder, const std::vector<ResolvedDraw>& draws,
                          const std::vector<Graphics::BindingGroupHandle>& groups, const std::vector<DrawRun>& runs,
                          Graphics::BindingGroupHandle frameGroup, Graphics::BindingGroupHandle viewGroup,
                          Graphics::BindingGroupHandle drawGroup, Graphics::BufferHandle skinned,
-                         Graphics::PixelRect viewport, bool prepass) const;
+                         Graphics::PixelRect viewport, DrawPass pass) const;
         [[nodiscard]] Graphics::PipelineHandle MakeInternalPipeline(
             const ShaderContainer& container, const ShaderVariant* variant, Graphics::BindingGroupLayoutHandle layout,
             Graphics::TextureFormat colour, bool depthTested, std::uint32_t samples,
@@ -658,10 +721,12 @@ namespace Fenrir::Render
         [[nodiscard]] SkySource SkySourceOf(const SceneLighting& lighting) const;
         /**
          * @brief The view set's group for slot `slot` of frame `frameIndex`'s view blocks, with `occlusion` as its
-         * ambient occlusion, made once while both live.
+         * ambient occlusion and `shadow` as its shadow atlas (the map that lights everything when empty), made once
+         * while all three live.
          */
         [[nodiscard]] Graphics::BindingGroupHandle ViewGroupFor(std::uint64_t frameIndex, std::size_t slot,
-                                                                Graphics::TextureHandle occlusion);
+                                                                Graphics::TextureHandle occlusion,
+                                                                Graphics::TextureHandle shadow = {});
         /**
          * @brief The draw set's group for frame `frameIndex`: its copies of the draw and palette buffers, and the
          * instance-list buffer.
@@ -677,6 +742,8 @@ namespace Fenrir::Render
         bool m_automaticInstancing;
         /** @brief RendererConfig::computeSkinning: whether skinned draws read the Skinning pass's vertices. */
         bool m_computeSkinning;
+        /** @brief How each view's sun cascades are made (RendererConfig's shadow members). */
+        CascadeConfig m_cascades;
 
         std::map<AssetKey, ShaderEntry> m_shaders;
         std::map<AssetKey, MeshEntry> m_meshes;
@@ -697,6 +764,8 @@ namespace Fenrir::Render
         std::vector<std::pair<SamplerDescription, Graphics::SamplerHandle>> m_samplers;
         std::map<PipelineKey, PipelineEntry> m_pipelines;
         std::map<PrepassKey, PrepassEntry> m_prepassPipelines;
+        /** @brief The shadow pipelines, made as the prepass's are: the item's vertex stage, then builtin:shadow's. */
+        std::map<ShadowKey, PrepassEntry> m_shadowPipelines;
         std::uint32_t m_nextId = 1;
 
         /** @brief The fallback material: its program, laid out as any shader, and drawn with no material group. */
@@ -706,6 +775,8 @@ namespace Fenrir::Render
         ShaderContainer m_panorama;
         /** @brief `builtin:depth-prepass`, whose fragment stages the prepass pipelines run. */
         ShaderContainer m_prepass;
+        /** @brief `builtin:shadow`, whose fragment stages the shadow pipelines run. */
+        ShaderContainer m_shadow;
         /** @brief `builtin:skinning`, the Skinning pass's compute program, and its pipeline; empty if it failed. */
         ShaderContainer m_skinning;
         Graphics::PipelineHandle m_skinningPipeline;
@@ -745,6 +816,10 @@ namespace Fenrir::Render
         Graphics::SamplerHandle m_skySampler;
         /** @brief Wraps round a panorama's sides and clamps at its top and bottom. */
         Graphics::SamplerHandle m_panoramaSampler;
+        /** @brief Reads a shadow atlas by hardware comparison, bilinearly, clamped (ADR-0050). */
+        Graphics::SamplerHandle m_shadowSampler;
+        /** @brief The 1 x 1 shadow map of depth 0 that lights everything, bound where a view has no shadow. */
+        Graphics::TextureHandle m_noShadow;
         /** @brief The constant every vertex stream a mesh lacks reads, at stride 0. */
         Graphics::BufferHandle m_defaultStreams;
 
@@ -776,10 +851,10 @@ namespace Fenrir::Render
         /** @brief Each copy's draw set group, by frame index modulo the copies. */
         std::vector<DrawGroup> m_drawGroups;
         /**
-         * @brief The view set's groups, by the view ring's buffer (index, generation), slot and the occlusion texture
-         * (index, generation), while both live.
+         * @brief The view set's groups, by the view ring's buffer (index, generation), slot, and the occlusion and
+         * shadow textures (index, generation), while all three live.
          */
-        std::map<std::array<std::uint32_t, 5>, Graphics::BindingGroupHandle> m_viewGroups;
+        std::map<std::array<std::uint32_t, 7>, Graphics::BindingGroupHandle> m_viewGroups;
         /** @brief The Output pass's binding group for each SceneColor texture, while the texture lives. */
         std::map<std::pair<std::uint32_t, std::uint32_t>, Graphics::BindingGroupHandle> m_outputGroups;
 

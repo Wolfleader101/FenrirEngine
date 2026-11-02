@@ -1,4 +1,5 @@
 #include <array>
+#include <cmath>
 #include <optional>
 #include <string>
 #include <vector>
@@ -46,6 +47,11 @@ namespace LightingDemo
              {"panoramas/studio_small_09_2k.hdr", "Studio Small 09 (2k)"},
              {"panoramas/symmetrical_garden_02_2k.hdr", "Symmetrical Garden 02 (2k)"}}};
 
+        /** @brief The sun's intensity: low and warm, so the helmets' shadows reach across the floor (ADR-0050). */
+        constexpr float SunIntensity = 3.0f;
+        /** @brief The floor's top, at y 0, and its size: wide enough to catch every helmet's shadow. */
+        const Vec3 FloorSize{16.0f, 0.2f, 10.0f};
+
         /** @brief The helmets and what the panel and keys have set, kept as a scene resource. */
         struct ShowcaseState
         {
@@ -88,6 +94,25 @@ namespace LightingDemo
             }
 
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
+            Fenrir::EntityList& entities = scene.GetEntityList();
+            // A floor to catch the sun's shadows, and the sun low over it, from behind the helmets on the left.
+            if (const auto cube = store.Load<Fenrir::Mesh>("cube.obj#Mesh0", scene); cube.Ok())
+            {
+                const auto lit = store.Load<Fenrir::Shader>("builtin:lit", scene).handle;
+                const auto floorMaterial = store.CreateMaterial(lit, scene);
+                store.SetColour(floorMaterial, "baseColour", {0.55f, 0.55f, 0.55f, 1.0f});
+                store.SetFloat(floorMaterial, "roughness", 0.7f);
+                Fenrir::Entity floor = entities.CreateEntity();
+                auto& transform = floor.AddComponent<Fenrir::Transform>();
+                transform.pos = {0.0f, -0.5f * FloorSize.y, 0.0f};
+                transform.scale = FloorSize;
+                floor.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{cube.handle, floorMaterial});
+            }
+            Fenrir::Entity sun = entities.CreateEntity();
+            sun.AddComponent<Fenrir::Transform>().rot =
+                glm::quatLookAt(glm::normalize(Vec3(0.6f, -0.55f, 0.6f)), Vec3(0.0f, 1.0f, 0.0f));
+            sun.AddComponent<Fenrir::DirectionalLight>(
+                Fenrir::DirectionalLight{{1.0f, 0.9f, 0.78f, 1.0f}, SunIntensity});
             for (std::size_t i = 0; i < Panoramas.size(); ++i)
             {
                 const auto image = store.Load<Fenrir::Image>(panoramas.at(i), scene);

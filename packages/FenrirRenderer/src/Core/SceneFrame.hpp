@@ -68,6 +68,11 @@ namespace Fenrir::Render
          * centre of its skinned bounds.
          */
         std::optional<Math::Vec3> sortPoint;
+        /**
+         * @brief Whether it is drawn into the sun's shadow cascades (ADR-0050): an `Opaque` or `Masked` one only, a
+         * Masked one cut out by its alpha cutoff as the depth prepass cuts it.
+         */
+        bool castShadows = true;
     };
 
     /** @brief A view's bloom (ADR-0049), the core's copy of Camera::bloom. */
@@ -89,6 +94,18 @@ namespace Fenrir::Render
         float radius = 0.5f;
         /** @brief The power the occlusion is raised to is XeGTAO's 2.2 times this. */
         float intensity = 1.0f;
+    };
+
+    /** @brief What a view's Output pass shows instead of its lit colour (Camera::debugView). */
+    enum class ViewDebug : std::uint8_t
+    {
+        None,
+        /** @brief Its ambient occlusion as grey, black without GTAO passes. */
+        AmbientOcclusion,
+        /** @brief Its lit colour with each pixel tinted by the sun's cascade it reads, white for none. */
+        ShadowCascades,
+        /** @brief Its sun's shadow atlas, the cascades side by side, as grey depths; black without shadows. */
+        ShadowAtlas,
     };
 
     /**
@@ -124,8 +141,24 @@ namespace Fenrir::Render
         BloomSettings bloom;
         /** @brief Its GTAO, which builtin:lit's sky light is darkened by in `Opaque` (Camera::ambientOcclusion). */
         AmbientOcclusionSettings ambientOcclusion;
-        /** @brief Whether Output draws its ambient occlusion, as grey, instead of SceneColor. */
-        bool showOcclusion = false;
+        /** @brief What Output draws instead of SceneColor, or how its lit colour is tinted. */
+        ViewDebug debugView = ViewDebug::None;
+    };
+
+    /** @brief The sun's shadow (ADR-0050), the core's copy of DirectionalLight's shadow members. */
+    struct SunShadowSettings
+    {
+        /** @brief Whether it casts: the light's castShadows, and a light with colour. */
+        bool enabled = false;
+        /** @brief How far from each camera, along its axis, the cascades reach, in world units. */
+        float distance = 100.0f;
+        /** @brief How far a pixel moves along its normal before reading its cascade, in that cascade's texels. */
+        float normalBias = 1.0f;
+        /**
+         * @brief How far it moves towards the light, in texels per unit of the slope (tan of the angle between its
+         * normal and the light), at least a tenth of a unit of slope.
+         */
+        float slopeBias = 2.0f;
     };
 
     /** @brief The light every view of the scene is lit by, in the frame set (`Fenrir/Frame.glsl`). */
@@ -135,6 +168,8 @@ namespace Fenrir::Render
         Math::Vec3 lightDirection{0.0f, 0.0f, -1.0f};
         /** @brief The directional light's colour times its intensity, linear; black with no light. */
         Math::Vec3 lightColour{0.0f};
+        /** @brief Its shadow, drawn into cascades for every view. */
+        SunShadowSettings shadows;
         /**
          * @brief The cubemap or panorama of the sky the scene is lit by (ADR-0047): its SkyLight's, else its Sky's,
          * prepared with PrepareCubemap or PreparePanorama; empty for a colour, or one not prepared, which lights with

@@ -122,6 +122,20 @@ namespace Fenrir::Graphics
         ClampToEdge,
     };
 
+    /**
+     * @brief How a fragment's depth is compared with the stored one. Reversed-Z draws with `GreaterEqual`; what the
+     * depth prepass laid down is shaded with `Equal` (ADR-0049).
+     */
+    enum class CompareOp : std::uint8_t
+    {
+        Always,
+        Less,
+        LessEqual,
+        Greater,
+        GreaterEqual,
+        Equal,
+    };
+
     /** @brief How textures bound with a sampler are filtered and addressed. */
     struct SamplerDesc
     {
@@ -133,6 +147,11 @@ namespace Fenrir::Graphics
         AddressMode addressW = AddressMode::Repeat;
         /** @brief The maximum anisotropy; 1 turns it off. */
         float maxAnisotropy = 1.0f;
+        /**
+         * @brief For a depth texture read as a shadow sampler: the reference compared with each texel (passing gives
+         * 1), the results filtered as texels are. Empty reads depths as values.
+         */
+        std::optional<CompareOp> compare;
 
         friend bool operator==(const SamplerDesc&, const SamplerDesc&) = default;
     };
@@ -226,20 +245,6 @@ namespace Fenrir::Graphics
     {
         None,
         Back,
-    };
-
-    /**
-     * @brief How a fragment's depth is compared with the stored one. Reversed-Z draws with `GreaterEqual`; what the
-     * depth prepass laid down is shaded with `Equal` (ADR-0049).
-     */
-    enum class CompareOp : std::uint8_t
-    {
-        Always,
-        Less,
-        LessEqual,
-        Greater,
-        GreaterEqual,
-        Equal,
     };
 
     /** @brief How a fragment's colour combines with the target's. */

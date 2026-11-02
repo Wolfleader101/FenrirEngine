@@ -222,6 +222,16 @@
           "name": "AmbientOcclusion",
           "value": 1,
           "doc": "Its ambient occlusion as grey, white unoccluded, with no exposure or tonemap; black where the camera's ambient occlusion is off."
+        },
+        {
+          "name": "ShadowCascades",
+          "value": 2,
+          "doc": "Its lit colour, each pixel tinted by the sun's shadow cascade it reads (ADR-0050): red, green, blue and yellow from the nearest, untinted past the last or without shadows."
+        },
+        {
+          "name": "ShadowAtlas",
+          "value": 3,
+          "doc": "The sun's shadow atlas for this view as grey, its cascades side by side from the nearest, white nearest the sun, with no exposure or tonemap; black where nothing casts."
         }
       ]
     },
@@ -651,9 +661,9 @@
       "name": "Fenrir::DirectionalLight",
       "category": "struct",
       "role": "component",
-      "size": 20,
+      "size": 36,
       "alignment": 4,
-      "doc": "The light shining along its entity's world -Z (ADR-0024). The renderer uses the first one in the active scene and warns once if there are more.",
+      "doc": "The light shining along its entity's world -Z (ADR-0024). The renderer uses the first one in the active scene and warns once if there are more.\n\nIt casts shadows unless `castShadows` is off (ADR-0050): each camera gets cascaded shadow maps out to `shadowDistance`, up to RendererConfig::shadowCascades of them, split by RendererConfig::shadowSplitLambda, blended across their boundaries and fading out at the last. Each cascade is snapped to whole texels of its map, so its shadows hold still as the camera moves and turns. Edges are filtered by 16 rotated taps of hardware depth comparison. The biases trade shadow acne (speckled self-shadowing on lit faces) against peter-panning (shadows coming loose from their casters): raise them for acne, lower them for gaps.",
       "fields": [
         {
           "name": "colour",
@@ -674,6 +684,34 @@
           "kind": "f32",
           "default": 1,
           "doc": "A plain multiplier on the colour."
+        },
+        {
+          "name": "castShadows",
+          "offset": 20,
+          "kind": "bool",
+          "default": true,
+          "doc": "Whether it casts shadows: on by default."
+        },
+        {
+          "name": "shadowDistance",
+          "offset": 24,
+          "kind": "f32",
+          "default": 100,
+          "doc": "How far from each camera, along its view, its shadows reach, in world units: 100 by default. Past it, everything is lit. The nearer it is, the sharper the shadows within it."
+        },
+        {
+          "name": "shadowNormalBias",
+          "offset": 28,
+          "kind": "f32",
+          "default": 1,
+          "doc": "How far a lit point moves out along its normal before its shadow is looked up, in shadow-map texels (each cascade's own size): 1 by default."
+        },
+        {
+          "name": "shadowSlopeBias",
+          "offset": 32,
+          "kind": "f32",
+          "default": 2,
+          "doc": "How far it moves towards the light, in texels per unit of slope (the tangent of the angle between its normal and the light, held between 0.1 and 8): 2 by default."
         }
       ]
     },
@@ -733,7 +771,7 @@
           "offset": 24,
           "kind": "bool",
           "default": true,
-          "doc": "Whether the copies are drawn into shadow maps. Nothing reads it yet: the renderer has no shadows."
+          "doc": "Whether the copies are drawn into the sun's shadow, as a MeshRenderer's castShadows says."
         },
         {
           "name": "visible",
@@ -839,6 +877,13 @@
           "kind": "bool",
           "default": true,
           "doc": "False hides this entity only; its children are drawn as their own MeshRenderers say."
+        },
+        {
+          "name": "castShadows",
+          "offset": 17,
+          "kind": "bool",
+          "default": true,
+          "doc": "Whether it is drawn into the sun's shadow (ADR-0050). Only an `Opaque` or `Masked` material casts, a Masked one cut out by its alpha cutoff; `AlphaBlend` and `Additive` ones never do."
         }
       ]
     },
@@ -979,7 +1024,7 @@
       "name": "Fenrir::RendererStats",
       "category": "struct",
       "role": "shared-struct",
-      "size": 28,
+      "size": 32,
       "alignment": 4,
       "doc": "What the renderer did in its last drawn frame (ADR-0023).",
       "fields": [
@@ -1031,6 +1076,13 @@
           "kind": "u32",
           "default": 0,
           "doc": "Skinned MeshRenderers drawn, one per item per view; part of `instances`."
+        },
+        {
+          "name": "shadowDraws",
+          "offset": 28,
+          "kind": "u32",
+          "default": 0,
+          "doc": "Draws into the sun's shadow cascades (ADR-0050): one per run of matching casting items, merged as in `draws`, per cascade of each view."
         }
       ]
     },

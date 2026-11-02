@@ -10,14 +10,22 @@ section of its own: what it shows, its keys and its hand checks. Later lighting 
 
 Every scene shows the same ImGui window, Lighting (`src/LightingPanel.cpp`): the cameras' exposure (EV stops),
 tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius) and ambient occlusion (GTAO: on, which it is
-by default here, its radius and strength, and a view of the raw occlusion as grey), and the sky: which panorama, its
+by default here, its radius and strength), the sun's shadows (on, their distance and their normal and slope biases,
+given to every DirectionalLight in the scene), a debug view (the lit scene, the raw occlusion as grey, the shadow
+cascades tinted red, green, blue and yellow from the nearest, or the shadow atlas), and the sky: which panorama, its
 intensity and its rotation. It writes them to every camera in the scene each frame, the free-fly camera among them.
 Keys do the same, for the smoke runs and by hand: T the next tonemapper, E the next exposure (0, +1, +2, -1 EV), B bloom
-off or back on at its default, O ambient occlusion off or back on, G the raw occlusion view or back, S the next
-panorama where the scene has more than one.
+off or back on at its default, O ambient occlusion off or back on, G the next debug view, H the sun's shadows off or
+back on, S the next panorama where the scene has more than one.
 
 Hand check for ambient occlusion: in Showcase models, contact shadows under the helmets where they meet the ground, and
 with G, dark creases and corners on white, no dark halo round a model's silhouette against what is far behind it.
+
+Hand check for the sun's shadows (ADR-0050): flying round Showcase models with the free-fly camera, the helmets'
+shadows on the floor hold still, neither shimmering as the camera turns nor swimming as it moves; G to the cascade
+colours shows four bands on the floor, their boundaries following the camera, and no seam in a shadow that crosses one.
+The lit floor shows no speckled acne at any sun angle the sky's rotation leaves it; raising the biases in the window
+detaches the shadows from the helmets' bases, lowering them to 0 brings acne back.
 
 ## Assets
 
@@ -48,7 +56,7 @@ committed 1k panorama) alone; a sun can be added. The window's Scene part has th
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the raw occlusion view. |
+| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | L | The sun (a DirectionalLight of intensity 3) on or off. |
 
 Hand checks, on OpenGL:
@@ -67,15 +75,16 @@ Hand checks, on OpenGL:
 
 ### Showcase models
 
-Khronos's DamagedHelmet, FlightHelmet and SciFiHelmet in a row, each about two metres high, under one of three Poly
-Haven panoramas, Venice Sunset, Studio Small 09 and Symmetrical Garden 02, all fetched. The window's Scene part has a
+Khronos's DamagedHelmet, FlightHelmet and SciFiHelmet in a row, each about two metres high, on a grey floor under one
+of three Poly Haven panoramas, Venice Sunset, Studio Small 09 and Symmetrical Garden 02, all fetched, with a low warm sun
+behind them on the left casting their shadows towards the camera. The window's Scene part has a
 turntable that turns the helmets slowly. Without the fetched assets (or in a smoke run) the scene is empty, and says on
 screen to configure with `-DFENRIR_FETCH_DEMO_ASSETS=ON`. Entering it loads all three 2k panoramas and the helmets'
 large textures at once: about 15 seconds in a Debug build on an RTX 5080 machine, the window not responding meanwhile.
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the raw occlusion view. |
+| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | S | The next panorama. |
 | R | The turntable on or off. |
 
@@ -102,7 +111,7 @@ the count (0 to 256), whether they move, the point and spot intensities and the 
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the raw occlusion view. |
+| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | M | 16, 64, 100 or 256 lights. |
 | P | The lights moving or still. |
 
@@ -129,7 +138,7 @@ height, intensity and sidedness.
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the raw occlusion view. |
+| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | Z | Every light at half, as set, or twice its size. |
 | V | Every light's sidedness flipped. |
 
@@ -158,7 +167,9 @@ Beside the ring's outer edge floats a field of 5,000 rock entities, each its own
 materials, which automatic instancing merges into a handful of draws, and beside the field a station: a hull and six
 modules on spokes, glowing windows (emissive, strength 6) and on each module a coloured beacon with a point light that
 lights the field's nearest rocks. The sky is a starfield panorama the demo makes at spawn: faint blue-black, a soft milky
-band round a tilted great circle and stars, a few bright enough to bloom. A sun lights everything from one side. The
+band round a tilted great circle and stars, a few bright enough to bloom. A sun lights everything from one side, and the
+planet's shadow falls across the ring behind it (its shadow distance 200, so the whole ring is in the cascades from the
+start; the ring's rocks take shadows and cast none, which would cost four times the ring again). The
 rocks and the planet's texture are fetched; without them the ring is spheres and cubes and the planet plain, and the
 scene says so on screen.
 
@@ -169,7 +180,7 @@ and uploads.
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the raw occlusion view. |
+| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | N | 10k, 50k or 100k ring rocks. |
 | I | Automatic instancing off or back on: the field's 5,000 rocks become 5,000 draws, and back to a handful. |
 | R | The ring turning or still. |
@@ -183,6 +194,8 @@ Hand checks, on OpenGL:
 - Uploads stay 0 while the ring turns; moving the count slider shows 3 uploads in that frame.
 - Without the fetched assets: spheres and cubes in the ring and field, a plain planet, and an amber message naming
   `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
+- The planet's shadow darkens the ring's far side behind it, its edge sliding over the rocks as the ring turns, and the
+  field's rocks shadow one another.
 
 | Key | What it does |
 | --- | --- |

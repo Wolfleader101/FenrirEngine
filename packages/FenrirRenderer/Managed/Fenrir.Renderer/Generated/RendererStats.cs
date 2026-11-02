@@ -32,4 +32,9 @@ public partial struct RendererStats
     public uint DistinctPalettesWritten;
     /// <summary>Skinned MeshRenderers drawn, one per item per view; part of `instances`.</summary>
     public uint SkinnedDraws;
+    /// <summary>
+    /// Draws into the sun's shadow cascades (ADR-0050): one per run of matching casting items, merged as in `draws`,
+    /// per cascade of each view.
+    /// </summary>
+    public uint ShadowDraws;
 }

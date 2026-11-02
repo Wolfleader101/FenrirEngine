@@ -18,6 +18,7 @@
 #include "FenrirShaders/BuiltinLit.hpp"
 #include "FenrirShaders/BuiltinOutput.hpp"
 #include "FenrirShaders/BuiltinPanorama.hpp"
+#include "FenrirShaders/BuiltinShadow.hpp"
 #include "FenrirShaders/BuiltinSkinning.hpp"
 #include "FenrirShaders/BuiltinSkyIrradiance.hpp"
 #include "FenrirShaders/BuiltinSkySpecular.hpp"
@@ -33,9 +34,9 @@ namespace Fenrir::Render
             return std::as_bytes(std::span<const std::uint8_t, N>(embedded));
         }
 
-        const std::array<BuiltinShader, 18>& Table()
+        const std::array<BuiltinShader, 19>& Table()
         {
-            static const std::array<BuiltinShader, 18> table{{
+            static const std::array<BuiltinShader, 19> table{{
                 {BuiltinProgram::Unlit, "builtin:unlit", BytesOf(Shaders::BuiltinUnlit)},
                 {BuiltinProgram::Lit, "builtin:lit", BytesOf(Shaders::BuiltinLit)},
                 {BuiltinProgram::Fallback, "builtin:fallback", BytesOf(Shaders::BuiltinFallback)},
@@ -54,6 +55,7 @@ namespace Fenrir::Render
                 {BuiltinProgram::DepthPrepass, "builtin:depth-prepass", BytesOf(Shaders::BuiltinDepthPrepass)},
                 {BuiltinProgram::Gtao, "builtin:gtao", BytesOf(Shaders::BuiltinGtao)},
                 {BuiltinProgram::Skinning, "builtin:skinning", BytesOf(Shaders::BuiltinSkinning)},
+                {BuiltinProgram::Shadow, "builtin:shadow", BytesOf(Shaders::BuiltinShadow)},
             }};
             return table;
         }

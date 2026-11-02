@@ -77,6 +77,18 @@ namespace Fenrir
          * (ADR-0035). Changeable later with Renderer::SetComputeSkinning.
          */
         bool computeSkinning = true;
+        /** @brief How many shadow cascades the DirectionalLight has per camera (ADR-0050): 1 to 4, 4 by default. */
+        std::uint32_t shadowCascades = 4;
+        /**
+         * @brief The side of each cascade's shadow map, in texels: 2048 by default. Each camera's maps sit side by
+         * side in one depth texture, so its width (this times shadowCascades) must be within the GPU's largest.
+         */
+        std::uint32_t shadowMapSize = 2048;
+        /**
+         * @brief How the cascades split the shadow distance (the practical scheme): 0 evenly, 1 logarithmically, so
+         * the nearest cascades are smallest and sharpest. 0.75 by default.
+         */
+        float shadowSplitLambda = 0.75f;
     };
 
     /** @brief What the renderer did in its last drawn frame (ADR-0023). */
@@ -108,6 +120,11 @@ namespace Fenrir
         std::uint32_t distinctPalettesWritten = 0;
         /** @brief Skinned MeshRenderers drawn, one per item per view; part of `instances`. */
         std::uint32_t skinnedDraws = 0;
+        /**
+         * @brief Draws into the sun's shadow cascades (ADR-0050): one per run of matching casting items, merged as in
+         * `draws`, per cascade of each view.
+         */
+        std::uint32_t shadowDraws = 0;
     };
 
     /**

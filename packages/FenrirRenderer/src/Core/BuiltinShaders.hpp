@@ -50,6 +50,8 @@ namespace Fenrir::Render
          * pass to draw rigidly (ADR-0050).
          */
         Skinning,
+        /** @brief `builtin:shadow`: the shadow passes' fragment stage, depth only, cutting Masked items out. */
+        Shadow,
     };
 
     /** @brief A built-in program's `builtin:` name and its embedded container's bytes. */

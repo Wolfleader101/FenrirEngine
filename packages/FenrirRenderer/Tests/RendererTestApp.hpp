@@ -179,6 +179,8 @@ namespace RendererTest
         /** @brief Where each vertex buffer slot's stream starts in its buffer, in bytes. */
         std::vector<std::size_t> vertexOffsets;
         Fenrir::Graphics::BufferHandle indexBuffer;
+        /** @brief The viewport last set in its pass before it. */
+        Fenrir::Graphics::PixelRect viewport;
         Fenrir::Graphics::CmdDrawIndexed draw;
     };
 
@@ -220,6 +222,10 @@ namespace RendererTest
                 else if (const auto* indices = std::get_if<CmdSetIndexBuffer>(&command))
                 {
                     bound.indexBuffer = indices->buffer;
+                }
+                else if (const auto* viewport = std::get_if<CmdSetViewport>(&command))
+                {
+                    bound.viewport = viewport->rect;
                 }
                 else if (const auto* draw = std::get_if<CmdDrawIndexed>(&command))
                 {

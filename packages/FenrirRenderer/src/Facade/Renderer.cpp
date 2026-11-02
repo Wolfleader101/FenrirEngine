@@ -72,6 +72,14 @@ namespace Fenrir
             return static_cast<Render::Tonemapper>(tonemapper);
         }
 
+        /** @brief The core's copy of a camera's debug view: the same values in the same order. */
+        Render::ViewDebug ToCore(CameraDebugView debugView)
+        {
+            static_assert(static_cast<int>(CameraDebugView::ShadowAtlas) ==
+                          static_cast<int>(Render::ViewDebug::ShadowAtlas));
+            return static_cast<Render::ViewDebug>(debugView);
+        }
+
         /** @brief Whether the shader's GPU side is ready: prepared now if it is new or changed. False if stale. */
         bool PrepareShader(Render::SceneRenderer& scene, const AssetStore& store, AssetHandle<Shader> handle)
         {
@@ -458,6 +466,12 @@ namespace Fenrir
                 const Math::Mat4 world = GetWorldMatrix(entity);
                 lighting.lightDirection = glm::normalize(-Math::Vec3(world[2]));
                 lighting.lightColour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                // A light that lights nothing casts nothing (ADR-0050).
+                lighting.shadows.enabled = light.castShadows && light.shadowDistance > 0.0f &&
+                                           glm::dot(lighting.lightColour, lighting.lightColour) > 0.0f;
+                lighting.shadows.distance = light.shadowDistance;
+                lighting.shadows.normalBias = std::max(light.shadowNormalBias, 0.0f);
+                lighting.shadows.slopeBias = std::max(light.shadowSlopeBias, 0.0f);
             });
             if (found > 1 && !state.loggedLights)
             {
@@ -695,7 +709,7 @@ namespace Fenrir
                 view.bloom = {camera.bloom.intensity, camera.bloom.radius};
                 view.ambientOcclusion = {camera.ambientOcclusion.enabled, camera.ambientOcclusion.radius,
                                          camera.ambientOcclusion.intensity};
-                view.showOcclusion = camera.debugView == CameraDebugView::AmbientOcclusion;
+                view.debugView = ToCore(camera.debugView);
                 candidates.push_back(candidate);
             });
 
@@ -1022,6 +1036,7 @@ namespace Fenrir
                 draw.material = DrawnMaterial(state, store, id, renderer.material);
                 draw.world = GetWorldMatrix(entity);
                 draw.instances = KeyOf(renderer.instances);
+                draw.castShadows = renderer.castShadows;
                 draws.push_back(draw);
             });
         }
@@ -1052,6 +1067,7 @@ namespace Fenrir
                 Render::DrawRequest draw;
                 draw.mesh = KeyOf(renderer.mesh);
                 draw.material = DrawnMaterial(state, store, id, renderer.material);
+                draw.castShadows = renderer.castShadows;
                 const MeshData& data = *store.TryGet(renderer.mesh);
                 if (data.skin.has_value())
                 {
@@ -1258,6 +1274,7 @@ namespace Fenrir
                 state.stats.paletteBytesUploaded = scene.paletteBytes;
                 state.stats.distinctPalettesWritten = scene.palettes;
                 state.stats.skinnedDraws = scene.skinnedDraws;
+                state.stats.shadowDraws = scene.shadowDraws;
             }
         }
 
@@ -1427,9 +1444,12 @@ namespace Fenrir
             return Renderer(nullptr);
         }
         state->core = std::make_unique<Render::RendererCore>(std::move(made), *state->surface);
+        const Render::CascadeConfig cascades{std::clamp(config.shadowCascades, 1u, Render::MaxCascades),
+                                             std::max(config.shadowMapSize, 1u),
+                                             std::clamp(config.shadowSplitLambda, 0.0f, 1.0f)};
         auto scene =
             std::make_unique<Render::SceneRenderer>(state->core->Device(), *app.Logger(), SupportedMsaa(app, config),
-                                                    config.automaticInstancing, config.computeSkinning);
+                                                    config.automaticInstancing, config.computeSkinning, cascades);
         state->scene = scene.get();
         // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
         // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).
