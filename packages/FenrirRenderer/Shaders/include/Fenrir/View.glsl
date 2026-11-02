@@ -27,6 +27,13 @@ layout(set = 1, binding = 0, std140) uniform ViewData
     // x: how many cascades there are, 0 for no shadow; y: 1 to tint each pixel by its cascade (a camera's
     // CameraDebugView::ShadowCascades). zw unused.
     uvec4 shadowInfo;
+    // The view's light clusters (ADR-0049, Fenrir/Clusters.glsl). x: the view depth its first slice starts at; y:
+    // 24 / ln(far / near), which takes the log of a depth over x to its slice. zw unused.
+    vec4 clusterDepths;
+    // x: 1 when fenrirClusterLights holds the view's clusters, 0 to loop over every light; y: 1 to show each pixel's
+    // light count as heat (CameraDebugView::LightClusters); z: how many indices each cluster's list has room for.
+    // w unused.
+    uvec4 clusterInfo;
 } view;
 
 // The view's ambient occlusion (ADR-0049) at its pixels, as its GTAO passes make it from the depth prepass: in red, how
@@ -38,5 +45,13 @@ layout(set = 1, binding = 1) uniform sampler2D fenrirAmbientOcclusion;
 // the reference is at least the stored depth) and filtered bilinearly. A 1 x 1 map of depth 0, which lights
 // everything, where the view has no shadow and in the shadow passes themselves.
 layout(set = 1, binding = 2) uniform sampler2DShadow fenrirShadowAtlas;
+
+// The view's light clusters (ADR-0049), as its LightClusters pass lists them: each cluster's light count, by
+// FenrirClusterIndex, then each cluster's light buffer indices, ascending, view.clusterInfo.z words a cluster. A single
+// 0 where the view loops over every light instead (view.clusterInfo.x 0).
+layout(set = 1, binding = 3, std430) readonly buffer FenrirClusterLights
+{
+    uint words[];
+} fenrirClusterLights;
 
 #endif

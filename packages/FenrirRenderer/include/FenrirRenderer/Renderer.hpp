@@ -77,6 +77,13 @@ namespace Fenrir
          * (ADR-0035). Changeable later with Renderer::SetComputeSkinning.
          */
         bool computeSkinning = true;
+        /**
+         * @brief Whether each camera's PointLights, SpotLights and RectLights are clustered (ADR-0049): a compute pass
+         * a view lists them in 16 x 9 x 24 clusters of its frustum by range, and each pixel lights by its cluster's
+         * lights only; off, every pixel loops over every light, for comparison. Changeable later with
+         * Renderer::SetClusteredLights.
+         */
+        bool clusteredLights = true;
         /** @brief How many shadow cascades the DirectionalLight has per camera (ADR-0050): 1 to 4, 4 by default. */
         std::uint32_t shadowCascades = 4;
         /**
@@ -208,6 +215,12 @@ namespace Fenrir
         void SetComputeSkinning(bool on);
 
         /**
+         * @brief Turns light clustering (RendererConfig::clusteredLights, ADR-0049) on or off from the next frame. An
+         * invalid owner does nothing.
+         */
+        void SetClusteredLights(bool on);
+
+        /**
          * @brief Sets how many SpotLights may cast shadows (RendererConfig::spotShadowBudget, ADR-0050) from the next
          * frame, which makes the spot shadow atlas again at the new budget's size. An invalid owner does nothing.
          */
@@ -270,6 +283,7 @@ namespace Fenrir
         [[nodiscard]] static RendererStats Stats(App& app);
         static void SetAutomaticInstancing(App& app, bool on);
         static void SetComputeSkinning(App& app, bool on);
+        static void SetClusteredLights(App& app, bool on);
         static void SetSpotShadowBudget(App& app, std::uint32_t budget);
         static void SetPointShadowBudget(App& app, std::uint32_t budget);
         [[nodiscard]] static std::optional<Math::Ray> ScreenPointToRay(App& app, const Entity& camera,

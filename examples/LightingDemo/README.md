@@ -12,8 +12,9 @@ Every scene shows the same ImGui window, Lighting (`src/LightingPanel.cpp`): the
 tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius) and ambient occlusion (GTAO: on, which it is
 by default here, its radius and strength), the sun's shadows (on, their distance and their normal and slope biases,
 given to every DirectionalLight in the scene), a debug view (the lit scene, the raw occlusion as grey, the shadow
-cascades tinted red, green, blue and yellow from the nearest, the shadow atlas, or the spot shadow atlas), and the
-sky: which panorama, its
+cascades tinted red, green, blue and yellow from the nearest, the shadow atlas, the spot shadow atlas, or the light
+clusters' heat: how many lights each pixel loops over, black none, then blue, cyan, green and yellow to red at 32 or
+more), and the sky: which panorama, its
 intensity and its rotation. It writes them to every camera in the scene each frame, the free-fly camera among them.
 Keys do the same, for the smoke runs and by hand: T the next tonemapper, E the next exposure (0, +1, +2, -1 EV), B bloom
 off or back on at its default, O ambient occlusion off or back on, G the next debug view, H the sun's shadows off or
@@ -105,22 +106,24 @@ Hand checks, on OpenGL with the assets fetched:
 
 A dark room, twenty metres square, of PBR surfaces: a floor of five by five grey tiles, rough to smooth from left to
 right and dielectric to metal from back to front, four pale walls, a ring of eight columns (polished metal and blue
-plastic) and spheres of gold and white plastic between them. Up to 256 coloured lights circle it, each marked by a small
-glowing sphere of its colour: point lights bobbing at waist height, and every fourth a spot light up high, pointing
+plastic) and spheres of gold and white plastic between them. Up to 1024 coloured lights circle it, in 32 hues, each
+marked by a small glowing sphere of its colour (each hue's markers one instanced draw): point lights bobbing at waist height, and every fourth a spot light up high, pointing
 down and leaning out as it goes, its cone lighting a moving pool. A hundred are on at first, and the spot lights cast
 shadows: the eight nearest the camera each frame, RendererConfig's default spot shadow budget. So do the point lights,
 the four nearest (the default point shadow budget), each into a cube round it. The window's Scene part has the count (0
-to 256), whether they move, the point and spot intensities, the range, whether the spot lights cast, and their budget
+to 1024), whether they move, the point and spot intensities, the range, whether the spot lights cast, and their budget
 (0 to 16, Renderer::SetSpotShadowBudget), and whether the point lights cast, and their budget (0 to 8,
-Renderer::SetPointShadowBudget). The budgets are the renderer's, so other scenes keep them as they were left.
+Renderer::SetPointShadowBudget), and whether the lights are clustered (Renderer::SetClusteredLights). The budgets and
+the clustering are the renderer's, so other scenes keep them as they were left.
 
 | Keys | |
 | --- | --- |
 | T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
-| M | 16, 64, 100 or 256 lights. |
+| M | 16, 64, 100, 256 or 1024 lights. |
 | P | The lights moving or still. |
 | K | Spot shadows off or on. |
 | J | Point shadows off or on. |
+| C | The lights clustered or not. |
 
 Hand checks, on OpenGL:
 
@@ -128,8 +131,10 @@ Hand checks, on OpenGL:
   fades to nothing before its range, with no hard edge where the range ends; spots light round pools with soft rims.
 - The smooth floor tiles and the metal columns show sharp coloured highlights that slide as the lights move; the rough
   tiles show broad soft ones. The markers glow and bloom softly.
-- The frame rate stays usable with a hundred lights, and with 256 (the loop runs over every light until clustering,
-  ADR-0049).
+- The frame rate holds at a thousand lights with clustering on (ADR-0049); C, turning it off, drops it, and turning it
+  back on looks the same as before, pixel for pixel. G to the light clusters' heat shows each light's reach as warm
+  blobs, cooling to black between them, and the count follows the lights as they move; lowering the range shrinks
+  them.
 - Range shrinks and grows every pool; 0 lights leaves the room almost black.
 - The spot lights nearest the camera cast shadows of the columns and spheres across the floor, soft-edged and attached
   to their casters, with no acne on the lit floor or walls. As the lights circle, lights move in and out of the budget

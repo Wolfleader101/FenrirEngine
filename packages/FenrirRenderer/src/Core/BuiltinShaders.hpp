@@ -52,6 +52,11 @@ namespace Fenrir::Render
         Skinning,
         /** @brief `builtin:shadow`: the shadow passes' fragment stage, depth only, cutting Masked items out. */
         Shadow,
+        /**
+         * @brief `builtin:light-clusters`: a compute program, each view's point, spot and rect lights listed in its
+         * clusters (ADR-0049).
+         */
+        LightClusters,
     };
 
     /** @brief A built-in program's `builtin:` name and its embedded container's bytes. */

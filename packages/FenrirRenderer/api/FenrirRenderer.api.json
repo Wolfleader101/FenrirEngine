@@ -237,6 +237,11 @@
           "name": "SpotShadowAtlas",
           "value": 4,
           "doc": "The frame's spot shadow atlas as grey (ADR-0050), each shadowed spot light's tile along the rows from the top left, nearest the view first, white nearest its light, with no exposure or tonemap; black where no spot light casts."
+        },
+        {
+          "name": "LightClusters",
+          "value": 5,
+          "doc": "Each lit pixel as the heat of how many lights it loops over (ADR-0049), its cluster's or, unclustered, every light: black for none, then blue, cyan, green and yellow to red at 32 or more, exposed and tonemapped."
         }
       ]
     },

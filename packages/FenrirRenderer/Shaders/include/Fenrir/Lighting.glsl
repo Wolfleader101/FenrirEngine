@@ -2,7 +2,8 @@
 // calls FenrirLitColour, which returns the surface's lit colour as linear HDR: the frame's directional light, its point,
 // spot and rect lights, and the scene's Sky as image-based lighting (ADR-0047), diffuse from its spherical harmonics and
 // specular from its prefiltered cube through the split sum's BRDF lookup table, darkened by the surface's occlusion and
-// the view's ambient occlusion (ADR-0049), which never touch the direct lights. The directional light is shadowed by the
+// the view's ambient occlusion (ADR-0049), which never touch the direct lights. Each pixel loops over the lights its
+// view's cluster lists (ADR-0049), the whole light buffer where the view has none. The directional light is shadowed by the
 // view's cascades, the spot lights within their budget by their tiles of the frame's spot shadow atlas, and the point
 // lights within theirs by their cubes (Fenrir/Shadows.glsl, ADR-0050). Intensities are plain multipliers, so
 // the BRDF is scaled by pi: a white light of intensity 1 falling straight onto a white rough face gives about 1, not
@@ -23,6 +24,7 @@
 #define FENRIR_LIGHTING_GLSL
 
 #include "Fenrir/Brdf.glsl"
+#include "Fenrir/Clusters.glsl"
 #include "Fenrir/Frame.glsl"
 #include "Fenrir/Shadows.glsl"
 #include "Fenrir/SphericalHarmonics.glsl"
@@ -211,6 +213,35 @@ vec3 FenrirRectLight(FenrirLight light, vec3 position, vec3 n, vec3 v, float nDo
             specular * FenrirLtcIntegral(light, position, toLobe));
 }
 
+// The index of the view's cluster (Fenrir/Clusters.glsl) the world position `position` is in: its tile from where the
+// view's projection puts it in NDC, clamped into the grid, and its slice from its view depth. Core/LightClusters'
+// ClusterOf mirrors it on the CPU.
+uint FenrirClusterOf(vec3 position)
+{
+    vec4 viewPosition = view.view * vec4(position, 1.0);
+    vec4 clip = view.projection * viewPosition;
+    vec2 grid = vec2(FenrirClusterColumns, FenrirClusterRows);
+    vec2 tile = clamp(floor((clip.xy / clip.w * 0.5 + 0.5) * grid), vec2(0.0), grid - 1.0);
+    uint slice = FenrirClusterSliceOf(-viewPosition.z, view.clusterDepths.x, view.clusterDepths.y);
+    return FenrirClusterIndex(uvec3(uvec2(tile), slice));
+}
+
+// How many lights a pixel loops over as heat (CameraDebugView::LightClusters), linear and about 1 bright: black for
+// none, then blue, cyan, green and yellow to red at FenrirClusterHeatFull or more.
+const float FenrirClusterHeatFull = 32.0;
+vec3 FenrirClusterHeat(uint count)
+{
+    if (count == 0u)
+    {
+        return vec3(0.0);
+    }
+    const vec3 stops[5] = vec3[5](vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 1.0), vec3(0.0, 1.0, 0.0), vec3(1.0, 1.0, 0.0),
+                                  vec3(1.0, 0.0, 0.0));
+    float t = clamp(float(count) / FenrirClusterHeatFull, 0.0, 1.0) * 4.0;
+    int below = min(int(t), 3);
+    return mix(stops[below], stops[below + 1], t - float(below));
+}
+
 // The view's ambient occlusion (Fenrir/View.glsl) at this fragment's pixel; 1 where the view has none.
 float FenrirViewOcclusion()
 {
@@ -255,10 +286,20 @@ vec4 FenrirLitColour(FenrirSurface surface)
     vec3 rectSpecular = specularAlbedo * energyCompensation;
     vec3 rectDiffuse = (1.0 - specularAlbedo) * (1.0 - metallic) * base;
 
-    // The point, spot and rect lights, a plain loop over the frame's light buffer until clustering lands (ADR-0049),
-    // skipping each whose range does not reach the pixel.
-    for (uint i = 0u; i < frame.lights.x; ++i)
+    // The point, spot and rect lights: those listed in the pixel's cluster (ADR-0049), or every one where the view
+    // has no clusters, skipping each whose range does not reach the pixel.
+    bool clustered = view.clusterInfo.x != 0u;
+    uint lightCount = frame.lights.x;
+    uint firstListed = 0u;
+    if (clustered)
     {
+        uint cluster = FenrirClusterOf(surface.position);
+        lightCount = fenrirClusterLights.words[cluster];
+        firstListed = FenrirClusterCount + cluster * view.clusterInfo.z;
+    }
+    for (uint k = 0u; k < lightCount; ++k)
+    {
+        uint i = clustered ? fenrirClusterLights.words[firstListed + k] : k;
         FenrirLight light = fenrirLights.items[i];
         if (light.kind == FenrirLightRect)
         {
@@ -312,6 +353,10 @@ vec4 FenrirLitColour(FenrirSurface surface)
     if (view.shadowInfo.y != 0u)
     {
         colour *= FenrirCascadeTint(cascade);
+    }
+    if (view.clusterInfo.y != 0u)
+    {
+        colour = FenrirClusterHeat(lightCount);
     }
     // SceneColor is RGBA16F: a glint past its largest finite value would be written as infinity, which the bloom
     // chain turns to NaN and spreads over its coarsest levels' texels, a flickering black box.

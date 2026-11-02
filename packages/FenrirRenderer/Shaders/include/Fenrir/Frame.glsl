@@ -3,6 +3,8 @@
 #ifndef FENRIR_FRAME_GLSL
 #define FENRIR_FRAME_GLSL
 
+#include "Fenrir/LightRecord.glsl"
+
 layout(set = 0, binding = 0, std140) uniform FrameData
 {
     // xyz: the way the directional light travels, in world space (its entity's world -Z), unit length. w unused.
@@ -31,36 +33,6 @@ layout(set = 0, binding = 1) uniform sampler2D fenrirSkyIrradiance;
 layout(set = 0, binding = 2) uniform samplerCube fenrirSkySpecular;
 // The split sum's BRDF lookup table: red the scale and green the bias of f0, by N.V across and roughness down.
 layout(set = 0, binding = 3) uniform sampler2D fenrirBrdfLut;
-
-// The kinds of light a FenrirLight record is, as Core/PunctualLights' LightKind numbers them.
-const uint FenrirLightPoint = 0u;
-const uint FenrirLightSpot = 1u;
-const uint FenrirLightRect = 2u;
-
-// One point, spot or rect light (ADR-0048), in world space. Ticket 19's clusters index these records unchanged.
-struct FenrirLight
-{
-    // A point or spot light's position; a rect light's centre.
-    vec3 position;
-    // The distance at which its light has fallen to zero.
-    float range;
-    // Its colour times its intensity, linear: a rect light's radiance.
-    vec3 colour;
-    // FenrirLightPoint, FenrirLightSpot or FenrirLightRect.
-    uint kind;
-    // The way a spot light points, or a rect light faces, unit length.
-    vec3 direction;
-    // The spot's cone falloff is smoothstep of cos(angle off its axis) x coneScale + coneOffset: for a point light,
-    // scale 0 and offset 1, so 1 everywhere.
-    float coneScale;
-    // A rect light's right and top halves: from its centre to the middle of its right edge and of its top edge. It
-    // faces the way their cross product does not.
-    vec3 halfWidth;
-    float coneOffset;
-    vec3 halfHeight;
-    // 1 for a rect light that shines from both faces.
-    uint twoSided;
-};
 
 // Every point, spot and rect light of the scene that can light anything, frame.lights.x of them: the spot lights that
 // cast shadows first (frame.lights.y of them), then the point lights that do (frame.lights.z), then the rest, points,

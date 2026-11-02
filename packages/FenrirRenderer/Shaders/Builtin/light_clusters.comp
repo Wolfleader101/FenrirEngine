@@ -1,0 +1,127 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+// builtin:light-clusters (ADR-0049): lists one view's point, spot and rect lights in each of its clusters, one
+// invocation a cluster. Each light reaches a sphere, its range about its position (past its corners for a rect light),
+// and is listed in every cluster whose view-space box that sphere touches, in light buffer order, up to the lists'
+// room. The lights are read 64 at a time into shared memory, each invocation loading one, so each record is read once
+// a work group. Core/LightClusters mirrors it on the CPU.
+#include "Fenrir/Clusters.glsl"
+#include "Fenrir/LightRecord.glsl"
+
+layout(local_size_x = 64) in;
+
+// The view's job.
+layout(set = 0, binding = 0, std140) uniform ClusterJob
+{
+    // World to view.
+    mat4 view;
+    // The inverse of its reversed-Z projection.
+    mat4 inverseProjection;
+    // x: the view depth the first slice starts at; y: the depth the last one ends at. zw unused.
+    vec4 depths;
+    // x: how many records the light buffer holds; y: how many indices each cluster's list has room for. zw unused.
+    uvec4 counts;
+} job;
+
+// The frame's light buffer, Fenrir/Frame.glsl's fenrirLights.
+layout(set = 1, binding = 0, std430) readonly buffer Lights
+{
+    FenrirLight items[];
+} lights;
+
+// The view's clusters, as Fenrir/View.glsl's fenrirClusterLights reads them: each cluster's count, then its list.
+layout(set = 1, binding = 1, std430) writeonly buffer Clusters
+{
+    uint words[];
+} clusters;
+
+// A batch of lights' spheres: view-space centre and radius.
+shared vec4 spheres[64];
+
+// The view-space point the NDC point (ndc, z) is at.
+vec3 Unproject(vec2 ndc, float z)
+{
+    vec4 point = job.inverseProjection * vec4(ndc, z, 1.0);
+    return point.xyz / point.w;
+}
+
+// The view depth of slice `slice`'s near face; slice 24 is the far one.
+float SliceDepth(uint slice)
+{
+    if (slice >= FenrirClusterSlices)
+    {
+        return job.depths.y;
+    }
+    return job.depths.x * pow(job.depths.y / job.depths.x, float(slice) / float(FenrirClusterSlices));
+}
+
+void main()
+{
+    uint cluster = gl_GlobalInvocationID.x;
+    bool inGrid = cluster < FenrirClusterCount;
+
+    // The cluster's box: its tile's four corners on their lines of sight, through their points on the near plane and
+    // at NDC depth 0.5, at its slice's near and far depths.
+    vec3 low = vec3(0.0);
+    vec3 high = vec3(0.0);
+    if (inGrid)
+    {
+        uvec3 cell = uvec3(cluster % FenrirClusterColumns, (cluster / FenrirClusterColumns) % FenrirClusterRows,
+                           cluster / (FenrirClusterColumns * FenrirClusterRows));
+        vec2 grid = vec2(FenrirClusterColumns, FenrirClusterRows);
+        vec2 from = -1.0 + 2.0 * vec2(cell.xy) / grid;
+        vec2 to = -1.0 + 2.0 * vec2(cell.xy + 1u) / grid;
+        float depths[2] = float[2](SliceDepth(cell.z), SliceDepth(cell.z + 1u));
+        vec2 corners[4] = vec2[4](from, vec2(to.x, from.y), vec2(from.x, to.y), to);
+        low = vec3(1e30);
+        high = vec3(-1e30);
+        for (int c = 0; c < 4; ++c)
+        {
+            vec3 a = Unproject(corners[c], 1.0);
+            vec3 b = Unproject(corners[c], 0.5);
+            for (int d = 0; d < 2; ++d)
+            {
+                vec3 point = a + (b - a) * ((depths[d] + a.z) / (a.z - b.z));
+                low = min(low, point);
+                high = max(high, point);
+            }
+        }
+    }
+
+    uint count = 0u;
+    uint first = FenrirClusterCount + cluster * job.counts.y;
+    for (uint start = 0u; start < job.counts.x; start += 64u)
+    {
+        uint i = start + gl_LocalInvocationID.x;
+        if (i < job.counts.x)
+        {
+            FenrirLight light = lights.items[i];
+            float radius = light.range;
+            if (light.kind == FenrirLightRect)
+            {
+                radius += sqrt(dot(light.halfWidth, light.halfWidth) + dot(light.halfHeight, light.halfHeight));
+            }
+            spheres[gl_LocalInvocationID.x] = vec4((job.view * vec4(light.position, 1.0)).xyz, radius);
+        }
+        barrier();
+        uint batch = min(64u, job.counts.x - start);
+        if (inGrid)
+        {
+            for (uint k = 0u; k < batch && count < job.counts.y; ++k)
+            {
+                vec4 sphere = spheres[k];
+                vec3 gap = sphere.xyz - clamp(sphere.xyz, low, high);
+                if (dot(gap, gap) <= sphere.w * sphere.w)
+                {
+                    clusters.words[first + count] = start + k;
+                    ++count;
+                }
+            }
+        }
+        barrier();
+    }
+    if (inGrid)
+    {
+        clusters.words[cluster] = count;
+    }
+}

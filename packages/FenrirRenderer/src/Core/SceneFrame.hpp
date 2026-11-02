@@ -108,6 +108,8 @@ namespace Fenrir::Render
         ShadowAtlas,
         /** @brief The frame's spot shadow atlas, its tiles as grey depths; black when no spot light casts. */
         SpotShadowAtlas,
+        /** @brief Each lit pixel as the heat of how many lights its cluster lists (ADR-0049), or of every light. */
+        LightClusters,
     };
 
     /**
