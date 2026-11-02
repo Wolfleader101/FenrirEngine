@@ -20,7 +20,7 @@ namespace Fenrir::Graphics
      * drawn. It keeps the CommandLists submitted since the frame began, every stale handle a submitted command named,
      * each buffer's bytes, each binding group's bindings, each texture's description and written mip levels, each
      * pipeline's sample count, variant keys and render state, and the labels of buffers, textures, groups and
-     * pipelines, for RendererProbe to read.
+     * pipelines, for RendererProbe to read. It has every DeviceFeature, which RendererProbe can turn off.
      */
     class NullDevice final : public GraphicsDevice
     {
@@ -28,6 +28,7 @@ namespace Fenrir::Graphics
         explicit NullDevice(const DeviceConfig& config);
 
         [[nodiscard]] std::uint32_t FramesInFlight() const override;
+        [[nodiscard]] DeviceFeatures Features() const override;
         void BeginFrame(std::uint64_t frameIndex) override;
 
         [[nodiscard]] BufferHandle CreateBuffer(const BufferDesc& desc, std::span<const std::byte> initial,
@@ -113,6 +114,8 @@ namespace Fenrir::Graphics
         void CheckLive(bool live, const char* what);
 
         DeviceConfig m_config;
+        /** @brief What Features reports: everything, unless RendererProbe turned some off. */
+        DeviceFeatures m_features{.vertexLayer = true};
         std::uint64_t m_frameIndex = 0;
         ResourceTable<BufferHandle, NullBuffer> m_buffers;
         ResourceTable<TextureHandle, NullTexture> m_textures;

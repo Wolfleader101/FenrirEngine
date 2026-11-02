@@ -600,6 +600,12 @@ namespace Fenrir
      * light falls with the square of the distance, windowed smoothly to zero at `range`: a white light of intensity 1
      * one unit straight above a white rough face lights it about as a DirectionalLight of intensity 1 does, when its
      * range is well past one unit. A light that can light nothing (range or intensity 0, or black) is skipped.
+     *
+     * With `castShadows` on it casts shadows (ADR-0050) while it is within RendererConfig::pointShadowBudget: each
+     * frame the shadowed point lights nearest to any camera keep them, each drawn into a cube of one shared cube array,
+     * as far as its range, and the rest light unshadowed, warned about once. Edges are filtered and biased as the
+     * DirectionalLight's are. A mesh round the light's position, such as a glowing bulb, shadows everything: turn that
+     * mesh's castShadows off.
      */
     struct PointLight
     {
@@ -609,8 +615,21 @@ namespace Fenrir
         float intensity = 1.0f;
         /** @brief The distance, in world units, at which the light has fallen to zero; nothing past it is lit. */
         float range = 10.0f;
-        /** @brief Whether the light casts shadows. Off by default; not drawn yet. */
+        /**
+         * @brief Whether the light casts shadows: off by default. Only RendererConfig::pointShadowBudget of them do in
+         * a frame, the nearest to the cameras.
+         */
         bool castShadows = false;
+        /**
+         * @brief How far a lit point moves out along its normal before its shadow is looked up, in shadow-map texels
+         * (whose size grows with the distance from the light): 1 by default.
+         */
+        float shadowNormalBias = 1.0f;
+        /**
+         * @brief How far it moves towards the light, in texels per unit of slope (the tangent of the angle between its
+         * normal and the light, held between 0.1 and 8): 2 by default.
+         */
+        float shadowSlopeBias = 2.0f;
     };
 
     /**

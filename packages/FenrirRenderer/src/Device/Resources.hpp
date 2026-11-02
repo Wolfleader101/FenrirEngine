@@ -85,11 +85,13 @@ namespace Fenrir::Graphics
         Rg16Float,
     };
 
-    /** @brief Whether a texture is one image or six cube faces. */
+    /** @brief Whether a texture is one image, six cube faces, or an array of cubes. */
     enum class TextureKind : std::uint8_t
     {
         Texture2D,
         Cube,
+        /** @brief `layers` cubes, six faces each: face f of cube c is layer 6c + f, in a cube's face order. */
+        CubeArray,
     };
 
     /** @brief A texture's shape, format and uses. Rows are stored top row first on every backend (ADR-0016). */
@@ -103,6 +105,8 @@ namespace Fenrir::Graphics
         /** @brief Samples per texel: 1 unless it is a multisampled attachment. */
         std::uint32_t samples = 1;
         TextureUsage usage = TextureUsage::Sampled;
+        /** @brief A CubeArray's cubes; 1 for every other kind. */
+        std::uint32_t layers = 1;
 
         friend bool operator==(const TextureDesc&, const TextureDesc&) = default;
     };

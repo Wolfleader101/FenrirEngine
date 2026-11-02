@@ -1,11 +1,13 @@
 // The sun's cascaded shadow on OpenGL (the spec's seam 2, ADR-0050): a box's shadow on a floor falls where the light's
 // direction puts it; a lit floor shows no acne at angles up to grazing within the biases' limits; and posts' shadows
 // across every cascade boundary match their golden images, lit and with the cascades tinted. A spot light's shadow
-// falls where its cone puts it, leaving no acne.
+// falls where its cone puts it, leaving no acne, and a point light's shadows fall on each of its six sides.
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
+#include <span>
 #include <string>
 
 #include <catch2/catch_test_macros.hpp>
@@ -113,6 +115,17 @@ namespace
                 std::lround(static_cast<float>(Side) * 0.5f * (1.0f + offset / HalfSpan) - 0.5f));
         };
         return {pixel(x - CameraX), pixel(z - CameraZ)};
+    }
+
+    /** @brief A material on the test shader SampledPicture, whose program has no POINT_SHADOW variant. */
+    Fenrir::AssetHandle<Fenrir::Material> NoPointShadowVariant(GlScene& test)
+    {
+        Fenrir::AssetStore& store = test.assets.Store();
+        Fenrir::ShaderData data;
+        const auto bytes = std::as_bytes(std::span(Fenrir::Shaders::SampledPicture));
+        data.bytes.assign(bytes.begin(), bytes.end());
+        const auto shader = store.Add<Fenrir::Shader>(std::move(data), Fenrir::AssetOwner::App());
+        return store.CreateMaterial(shader, Fenrir::AssetOwner::App());
     }
 } // namespace
 
@@ -392,4 +405,87 @@ TEST_CASE("A spot light's shadow on a floor lies where its cone puts it, with no
     }
     INFO("the darkest lit floor pixel against the unshadowed frame: " << worst);
     REQUIRE(worst > 0.97f);
+}
+
+TEST_CASE("A point light's casters shadow each of its six sides, where the way from the light puts them",
+          "[renderer][gl][shadows][point-shadows]")
+{
+    // A point light at the origin with a half-unit box 2 units out along each axis, and, for the side probed, a wall 4
+    // units out facing it: the box's shadow on the wall is a unit square round the axis. A camera 3 units out to one
+    // side looks at the wall's middle past the box. The boxes are drawn with builtin:lit, which draws a light's six
+    // faces as instances where the GPU can, or with a shader whose program has no POINT_SHADOW variant, a face at a
+    // time.
+    const int side = GENERATE(0, 1, 2, 3, 4, 5);
+    const bool instanced = GENERATE(true, false);
+    CAPTURE(side, instanced);
+    const std::array<Vec3, 3> axes{Vec3(1.0f, 0.0f, 0.0f), Vec3(0.0f, 1.0f, 0.0f), Vec3(0.0f, 0.0f, 1.0f)};
+    const Vec3 axis = axes.at(side / 2) * (side % 2 == 0 ? 1.0f : -1.0f);
+    const Vec3 aside = axes.at((side / 2 + 1) % 3);
+    const Vec3 across = glm::cross(axis, aside);
+    const Vec3 eye = aside * 3.0f;
+    const Fenrir::Math::Quat look = glm::quatLookAt(glm::normalize(axis * 4.0f - eye), across);
+
+    const auto render = [&](bool castShadows) {
+        GlScene test;
+        test.RequireOpenGL();
+        test.app.GetActiveScene().AddResource<Fenrir::Sky>(
+            Fenrir::ColourSky{Fenrir::Colour{0.02f, 0.02f, 0.02f, 1.0f}});
+        const auto white = Lit(test, Fenrir::Colour::White);
+        const auto boxes = instanced ? white : NoPointShadowVariant(test);
+        for (const Vec3 out : axes)
+        {
+            AddBox(test, out * 2.0f, Vec3(0.5f), boxes);
+            AddBox(test, out * -2.0f, Vec3(0.5f), boxes);
+        }
+        // The wall: a quad faces +Z, turned to face back along the axis.
+        const auto quad =
+            test.assets.Store().Add<Fenrir::Mesh>(RendererTest::Quad(12.0f, 0.0f), Fenrir::AssetOwner::App());
+        Fenrir::Entity wall = test.app.GetActiveScene().GetEntityList().CreateEntity();
+        wall.GetComponent<Fenrir::Transform>().pos = axis * 4.0f;
+        wall.GetComponent<Fenrir::Transform>().rot = glm::quatLookAt(axis, aside);
+        wall.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{quad, white, true});
+        Fenrir::Entity entity = test.app.GetActiveScene().GetEntityList().CreateEntity();
+        Fenrir::PointLight light;
+        light.intensity = 16.0f;
+        light.range = 30.0f;
+        light.castShadows = castShadows;
+        entity.AddComponent<Fenrir::PointLight>(light);
+        const auto target = Target(test, Side, Side);
+        AddCameraAt(test, eye, look, target);
+        test.RunFrame();
+        INFO("no GL error or other error was logged");
+        REQUIRE(test.messages->errors.empty());
+        return test.ReadTarget(target);
+    };
+    const RendererTest::Rgba8Image shadowed = render(true);
+    const RendererTest::Rgba8Image unshadowed = render(false);
+    // The pixel the camera shows world point `point` at, through its 60-degree view.
+    const auto at = [&](const RendererTest::Rgba8Image& frame, Vec3 point) {
+        const Vec3 view = glm::inverse(look) * (point - eye);
+        const float reach = -view.z * std::tan(1.04719755f * 0.5f);
+        const auto pixel = [](float ndc) {
+            return static_cast<std::uint32_t>(std::clamp(
+                std::lround(static_cast<float>(Side) * 0.5f * (1.0f + ndc) - 0.5f), 0L, static_cast<long>(Side) - 1));
+        };
+        return GreenAt(frame, pixel(view.x / reach), pixel(-view.y / reach));
+    };
+
+    for (const Vec3 offset : {Vec3(0.0f), across * 0.3f, across * -0.3f, aside * -0.3f})
+    {
+        const Vec3 point = axis * 4.0f + offset;
+        CAPTURE(point.x, point.y, point.z);
+        INFO("lit without shadows: " << at(unshadowed, point));
+        REQUIRE(at(unshadowed, point) > 0.3f);
+        INFO("inside the box's shadow the wall has only the sky's light: " << at(shadowed, point));
+        REQUIRE(at(shadowed, point) < 0.05f);
+    }
+    for (const Vec3 offset : {across * 1.5f, across * -1.5f, aside * 1.5f, aside * -1.5f})
+    {
+        const Vec3 point = axis * 4.0f + offset;
+        CAPTURE(point.x, point.y, point.z);
+        INFO("outside it the light reaches the wall as it does without shadows: " << at(shadowed, point) << " against "
+                                                                                  << at(unshadowed, point));
+        REQUIRE(at(unshadowed, point) > 0.3f);
+        REQUIRE(at(shadowed, point) > 0.97f * at(unshadowed, point));
+    }
 }

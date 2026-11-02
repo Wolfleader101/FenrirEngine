@@ -86,6 +86,18 @@ namespace Fenrir::Render
         access.clearDepth = clear;
     }
 
+    void PassBuilder::DepthAttachmentLayer(GraphResource texture, std::uint32_t layer, LoadOp load, float clear)
+    {
+        DepthAttachment(texture, load, clear);
+        m_graph.m_passes[m_pass].accesses.back().layer = layer;
+    }
+
+    void PassBuilder::LayeredDepthAttachment(GraphResource texture, LoadOp load, float clear)
+    {
+        DepthAttachment(texture, load, clear);
+        m_graph.m_passes[m_pass].accesses.back().layered = true;
+    }
+
     void PassBuilder::DepthReadOnly(GraphResource texture)
     {
         Use(texture, ResourceUsage::DepthRead, true, false);
@@ -427,8 +439,9 @@ namespace Fenrir::Render
             }
             else if (access.usage == ResourceUsage::DepthWrite || access.usage == ResourceUsage::DepthRead)
             {
-                desc.depth = Graphics::DepthAttachment{texture, access.load, access.clearDepth,
-                                                       access.usage == ResourceUsage::DepthRead};
+                desc.depth = Graphics::DepthAttachment{texture,           access.load,
+                                                       access.clearDepth, access.usage == ResourceUsage::DepthRead,
+                                                       access.layer,      access.layered};
             }
             desc.uses.push_back({texture, buffers[access.resource], access.usage});
         }

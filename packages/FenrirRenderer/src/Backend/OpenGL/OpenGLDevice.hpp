@@ -68,6 +68,8 @@ namespace Fenrir::Graphics
         OpenGLDevice& operator=(OpenGLDevice&&) = delete;
 
         [[nodiscard]] std::uint32_t FramesInFlight() const override;
+        /** @copydoc GraphicsDevice::Features Read from the context's SPIR-V extensions when the device starts. */
+        [[nodiscard]] DeviceFeatures Features() const override;
         void BeginFrame(std::uint64_t frameIndex) override;
 
         [[nodiscard]] BufferHandle CreateBuffer(const BufferDesc& desc, std::span<const std::byte> initial,
@@ -127,7 +129,10 @@ namespace Fenrir::Graphics
             TextureDesc desc;
         };
 
-        /** @brief One attachment of a framebuffer: a texture's GL name, and the mip level and layer drawn into. */
+        /**
+         * @brief One attachment of a framebuffer: a texture's GL name, and the mip level and layer drawn into
+         * (LayeredAttachment for every layer).
+         */
         struct FramebufferAttachment
         {
             std::uint32_t name = 0;
@@ -136,6 +141,9 @@ namespace Fenrir::Graphics
 
             friend auto operator<=>(const FramebufferAttachment&, const FramebufferAttachment&) = default;
         };
+
+        /** @brief FramebufferAttachment::layer for a layered attachment, every layer at once. */
+        static constexpr std::uint32_t LayeredAttachment = ~0u;
 
         /** @brief A binding group with each entry's resource kind, read from its layout when it was made. */
         struct GlBindingGroup
@@ -273,6 +281,7 @@ namespace Fenrir::Graphics
         std::unique_ptr<GladGLContext> m_gl;
         /** @brief Whether Start succeeded, so the GL functions are loaded and there are GL objects to delete. */
         bool m_started = false;
+        DeviceFeatures m_features;
         std::uint64_t m_frameIndex = 0;
 
         ResourceTable<BufferHandle, GlBuffer> m_buffers;

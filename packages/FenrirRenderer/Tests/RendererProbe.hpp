@@ -52,6 +52,12 @@ namespace Fenrir
             return Null(device).m_staleUses;
         }
 
+        /** @brief Sets what the null device behind `device` reports it can do, from the next frame's use of it. */
+        static void SetFeatures(Graphics::GraphicsDevice& device, Graphics::DeviceFeatures features)
+        {
+            dynamic_cast<Graphics::NullDevice&>(device).m_features = features;
+        }
+
         /** @brief How many times the device presented. */
         [[nodiscard]] static std::uint64_t Presents(const Graphics::GraphicsDevice& device)
         {

@@ -1,6 +1,7 @@
-// Fenrir/Shadows.glsl: the sun's cascaded shadow and the spot lights' shadows (ADR-0050), from the view block's cascades
-// and shadow atlas (Fenrir/View.glsl) and the frame's spot shadows (Fenrir/Frame.glsl). Fenrir/Lighting.glsl darkens
-// the directional light and each shadowed spot light by them; a shader may call them itself.
+// Fenrir/Shadows.glsl: the sun's cascaded shadow and the spot and point lights' shadows (ADR-0050), from the view block's
+// cascades and shadow atlas (Fenrir/View.glsl) and the frame's spot and point shadows (Fenrir/Frame.glsl).
+// Fenrir/Lighting.glsl darkens the directional light and each shadowed spot and point light by them; a shader may call
+// them itself.
 //
 // Each cascade is a texel-snapped orthographic view of the sun, so its texels stay on the world's grid as the camera
 // moves. A pixel reads the first cascade whose depth range holds it, and in the last share of that range (the view
@@ -12,6 +13,10 @@
 //
 // A spot light's shadow is a perspective tile of the frame's spot shadow atlas, read the same way: the same filter, and
 // the same biases in its own texels, whose world size grows with the distance along the light.
+//
+// A point light's shadow is a cube of distances from it, read along the way from the light to the pixel against the
+// pixel's own distance: the same Vogel disk, laid across that way, and the same biases, in its texels' world size where
+// the pixel is. The cube's faces filter into each other, so its edges show no seam.
 #ifndef FENRIR_SHADOWS_GLSL
 #define FENRIR_SHADOWS_GLSL
 
@@ -154,6 +159,42 @@ float FenrirSpotLightShadow(uint index, vec3 position, vec3 normal, vec3 l)
     float angle = 6.28318531 * FenrirInterleavedGradientNoise(gl_FragCoord.xy);
     return FenrirFilteredShadow(fenrirSpotShadowAtlas, coords, shadow.bounds.xy, shadow.bounds.zw, texelUv,
                                 shadow.bias.w, angle);
+}
+
+// How much of point light `index` of the light buffer reaches `position`, 0 to 1, for the face's world normal `normal`
+// and `l` towards the light: 1 for a light without a shadow (outside the shadowed point lights' records, frame.lights.y
+// to y + z) and on a face turned from the light, which its N.L darkens.
+float FenrirPointLightShadow(uint index, vec3 position, vec3 normal, vec3 l)
+{
+    float nDotL = dot(normal, l);
+    uint first = frame.lights.y;
+    if (index < first || index >= first + frame.lights.z || nDotL <= 0.0)
+    {
+        return 1.0;
+    }
+    FenrirLight light = fenrirLights.items[index];
+    FenrirPointShadow shadow = fenrirPointShadows.items[index - first];
+    // A texel's world size grows with the distance along the face's axis: the largest of the way's components.
+    vec3 away = position - light.position;
+    float along = max(abs(away.x), max(abs(away.y), abs(away.z)));
+    vec3 biased = FenrirShadowBiased(position, normal, l, nDotL, shadow.bias.z * along, shadow.bias.x, shadow.bias.y);
+    vec3 way = biased - light.position;
+    float reference = 1.0 - length(way) / light.range;
+    float texel = shadow.bias.z * max(abs(way.x), max(abs(way.y), abs(way.z)));
+    // The disk across the way: two directions perpendicular to it.
+    vec3 axis = normalize(way);
+    vec3 side = normalize(cross(abs(axis.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0), axis));
+    vec3 up = cross(axis, side);
+    float angle = 6.28318531 * FenrirInterleavedGradientNoise(gl_FragCoord.xy);
+    float cube = float(index - first);
+    float lit = 0.0;
+    for (int i = 0; i < FenrirShadowTaps; ++i)
+    {
+        vec2 offset = FenrirVogelDisk(i, FenrirShadowTaps, angle) * shadow.bias.w * texel;
+        // GLSL has no explicit level for a cube array comparison; its one level makes the implicit one level 0.
+        lit += texture(fenrirPointShadowMaps, vec4(way + side * offset.x + up * offset.y, cube), reference);
+    }
+    return lit / float(FenrirShadowTaps);
 }
 
 // A tint per cascade for CameraDebugView::ShadowCascades: red, green, blue and yellow, white for none.

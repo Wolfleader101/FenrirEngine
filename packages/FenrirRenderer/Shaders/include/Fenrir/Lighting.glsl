@@ -3,8 +3,8 @@
 // spot and rect lights, and the scene's Sky as image-based lighting (ADR-0047), diffuse from its spherical harmonics and
 // specular from its prefiltered cube through the split sum's BRDF lookup table, darkened by the surface's occlusion and
 // the view's ambient occlusion (ADR-0049), which never touch the direct lights. The directional light is shadowed by the
-// view's cascades, and the spot lights within the budget by their tiles of the frame's spot shadow atlas
-// (Fenrir/Shadows.glsl, ADR-0050). Intensities are plain multipliers, so
+// view's cascades, the spot lights within their budget by their tiles of the frame's spot shadow atlas, and the point
+// lights within theirs by their cubes (Fenrir/Shadows.glsl, ADR-0050). Intensities are plain multipliers, so
 // the BRDF is scaled by pi: a white light of intensity 1 falling straight onto a white rough face gives about 1, not
 // 1 / pi, as does a point light of intensity 1 one unit away (well inside its range), and a white sky of intensity 1
 // all round it. A rect light's intensity is its radiance: a white one of intensity 1 filling a white rough face's view
@@ -274,10 +274,14 @@ vec4 FenrirLitColour(FenrirSurface surface)
         vec3 l = toLight * inversesqrt(max(distanceSquared, 1e-12));
         float falloff = FenrirDistanceFalloff(distanceSquared, light.range) *
                         FenrirConeFalloff(dot(-l, light.direction), light.coneScale, light.coneOffset);
-        // The spot lights that cast shadows come first in the buffer (ADR-0050).
+        // The spot lights that cast shadows come first in the buffer, then the point lights that do (ADR-0050).
         if (i < frame.lights.y && falloff > 0.0)
         {
             falloff *= FenrirSpotLightShadow(i, surface.position, face, l);
+        }
+        else if (i < frame.lights.y + frame.lights.z && falloff > 0.0)
+        {
+            falloff *= FenrirPointLightShadow(i, surface.position, face, l);
         }
         colour += FenrirDirectLight(n, v, l, nDotV, a, f0, energyCompensation, metallic, base) * light.colour * falloff;
     }

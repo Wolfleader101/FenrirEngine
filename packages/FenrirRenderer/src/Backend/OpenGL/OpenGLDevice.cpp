@@ -270,6 +270,18 @@ namespace Fenrir::Graphics
         gl.Enable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
         gl.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
         gl.PixelStorei(GL_PACK_ALIGNMENT, 1);
+        // A vertex stage writing gl_Layer, as point shadows' instanced faces do, needs the driver to take it in SPIR-V.
+        GLint spirvExtensions = 0;
+        gl.GetIntegerv(GL_NUM_SPIR_V_EXTENSIONS, &spirvExtensions);
+        for (GLint i = 0; i < spirvExtensions; ++i)
+        {
+            const auto* name =
+                reinterpret_cast<const char*>(gl.GetStringi(GL_SPIR_V_EXTENSIONS, static_cast<GLuint>(i)));
+            if (name != nullptr && std::string_view(name) == "SPV_EXT_shader_viewport_index_layer")
+            {
+                m_features.vertexLayer = true;
+            }
+        }
 
         const PixelSize size = m_surface->GetPixelSize();
         TextureDesc backbuffer;
@@ -284,13 +296,19 @@ namespace Fenrir::Graphics
         const auto* renderer = reinterpret_cast<const char*>(gl.GetString(GL_RENDERER));
         const std::string_view versionView = versionText != nullptr ? versionText : "";
         const std::string_view rendererView = renderer != nullptr ? renderer : "";
-        m_logger->Info("OpenGL backend started: OpenGL {} on {}", versionView, rendererView);
+        m_logger->Info("OpenGL backend started: OpenGL {} on {}{}", versionView, rendererView,
+                       m_features.vertexLayer ? ", vertex stages writing gl_Layer" : "");
         return true;
     }
 
     std::uint32_t OpenGLDevice::FramesInFlight() const
     {
         return m_config.framesInFlight;
+    }
+
+    DeviceFeatures OpenGLDevice::Features() const
+    {
+        return m_features;
     }
 
     void OpenGLDevice::BeginFrame(std::uint64_t frameIndex)
@@ -340,6 +358,14 @@ namespace Fenrir::Graphics
             gl.CreateTextures(GL_TEXTURE_2D_MULTISAMPLE, 1, &texture.name);
             gl.TextureStorage2DMultisample(texture.name, static_cast<GLsizei>(desc.samples),
                                            internalFormats.at(IndexOf(desc.format)), width, height, GL_TRUE);
+        }
+        else if (desc.kind == TextureKind::CubeArray)
+        {
+            // Six layers a cube.
+            gl.CreateTextures(GL_TEXTURE_CUBE_MAP_ARRAY, 1, &texture.name);
+            gl.TextureStorage3D(texture.name, static_cast<GLsizei>(desc.mipLevels),
+                                internalFormats.at(IndexOf(desc.format)), width, height,
+                                static_cast<GLsizei>(6 * std::max(desc.layers, 1u)));
         }
         else
         {
@@ -601,7 +627,9 @@ namespace Fenrir::Graphics
             return false;
         }
         const TextureDesc& desc = found->desc;
-        const std::uint32_t layers = desc.kind == TextureKind::Cube ? 6 : 1;
+        const std::uint32_t layers = desc.kind == TextureKind::Cube        ? 6
+                                     : desc.kind == TextureKind::CubeArray ? 6 * desc.layers
+                                                                           : 1;
         const std::uint32_t width = std::max(1u, desc.width >> mipLevel);
         const std::uint32_t height = std::max(1u, desc.height >> mipLevel);
         const UploadFormat upload = uploadFormats.at(IndexOf(desc.format));
@@ -615,7 +643,7 @@ namespace Fenrir::Graphics
             return false;
         }
         GladGLContext& gl = *m_gl;
-        if (desc.kind == TextureKind::Cube)
+        if (desc.kind != TextureKind::Texture2D)
         {
             gl.TextureSubImage3D(found->name, static_cast<GLint>(mipLevel), 0, 0, static_cast<GLint>(layer),
                                  static_cast<GLsizei>(width), static_cast<GLsizei>(height), 1, upload.format,
@@ -1074,7 +1102,8 @@ namespace Fenrir::Graphics
         {
             names.push_back({m_textures.Find(colour.texture)->name, colour.mipLevel, colour.layer});
         }
-        names.push_back({pass.depth ? m_textures.Find(pass.depth->texture)->name : 0, 0, 0});
+        names.push_back({pass.depth ? m_textures.Find(pass.depth->texture)->name : 0, 0,
+                         pass.depth && pass.depth->layered ? LayeredAttachment : (pass.depth ? pass.depth->layer : 0)});
         if (const auto found = m_framebuffers.find(names); found != m_framebuffers.end())
         {
             return found->second;
@@ -1090,7 +1119,7 @@ namespace Fenrir::Graphics
             const FramebufferAttachment& colour = names[i];
             const auto level = static_cast<GLint>(colour.mipLevel);
             // A cube texture's face is a layer of it; a 2D texture is attached whole.
-            if (m_textures.Find(pass.colour[i].texture)->desc.kind == TextureKind::Cube)
+            if (m_textures.Find(pass.colour[i].texture)->desc.kind != TextureKind::Texture2D)
             {
                 gl.NamedFramebufferTextureLayer(framebuffer, attachment, colour.name, level,
                                                 static_cast<GLint>(colour.layer));
@@ -1101,9 +1130,19 @@ namespace Fenrir::Graphics
             }
             drawBuffers.push_back(attachment);
         }
-        if (names.back().name != 0)
+        if (const FramebufferAttachment& depth = names.back(); depth.name != 0)
         {
-            gl.NamedFramebufferTexture(framebuffer, GL_DEPTH_ATTACHMENT, names.back().name, 0);
+            // A cube or cube array's single layer, or every layer of it (layered: each primitive's gl_Layer picks).
+            const bool layers = m_textures.Find(pass.depth->texture)->desc.kind != TextureKind::Texture2D;
+            if (layers && depth.layer != LayeredAttachment)
+            {
+                gl.NamedFramebufferTextureLayer(framebuffer, GL_DEPTH_ATTACHMENT, depth.name, 0,
+                                                static_cast<GLint>(depth.layer));
+            }
+            else
+            {
+                gl.NamedFramebufferTexture(framebuffer, GL_DEPTH_ATTACHMENT, depth.name, 0);
+            }
         }
         if (drawBuffers.empty())
         {

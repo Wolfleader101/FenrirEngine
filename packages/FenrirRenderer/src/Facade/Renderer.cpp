@@ -383,6 +383,9 @@ namespace Fenrir
                 out.position = Math::Vec3(GetWorldMatrix(entity)[3]);
                 out.colour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
                 out.range = light.range;
+                out.castShadows = light.castShadows;
+                out.shadowNormalBias = std::max(light.shadowNormalBias, 0.0f);
+                out.shadowSlopeBias = std::max(light.shadowSlopeBias, 0.0f);
             });
             const std::array<ComponentType, 1> spots{ComponentType::Native<SpotLight>()};
             entities.ForEachWith(spots, [&](std::uint32_t id) {
@@ -1453,9 +1456,10 @@ namespace Fenrir
                                              std::max(config.shadowMapSize, 1u),
                                              std::clamp(config.shadowSplitLambda, 0.0f, 1.0f)};
         const Render::SpotShadowConfig spotShadows{config.spotShadowBudget, std::max(config.spotShadowMapSize, 16u)};
-        auto scene = std::make_unique<Render::SceneRenderer>(state->core->Device(), *app.Logger(),
-                                                             SupportedMsaa(app, config), config.automaticInstancing,
-                                                             config.computeSkinning, cascades, spotShadows);
+        const Render::PointShadowConfig pointShadows{config.pointShadowBudget, std::max(config.pointShadowMapSize, 1u)};
+        auto scene = std::make_unique<Render::SceneRenderer>(
+            state->core->Device(), *app.Logger(), SupportedMsaa(app, config), config.automaticInstancing,
+            config.computeSkinning, cascades, spotShadows, pointShadows);
         state->scene = scene.get();
         // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
         // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).
@@ -1522,6 +1526,14 @@ namespace Fenrir
         if (m_state != nullptr)
         {
             m_state->scene->SetSpotShadowBudget(budget);
+        }
+    }
+
+    void Renderer::SetPointShadowBudget(std::uint32_t budget)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetPointShadowBudget(budget);
         }
     }
 
@@ -1714,6 +1726,11 @@ namespace Fenrir
     void Renderer::SetSpotShadowBudget(App& app, std::uint32_t budget)
     {
         Renderer(InstalledState(app)).SetSpotShadowBudget(budget);
+    }
+
+    void Renderer::SetPointShadowBudget(App& app, std::uint32_t budget)
+    {
+        Renderer(InstalledState(app)).SetPointShadowBudget(budget);
     }
 
     RendererStats Renderer::Stats(App& app)
