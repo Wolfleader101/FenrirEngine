@@ -137,6 +137,8 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBloomUpsample VERTEX Shader
 # GTAO (ADR-0049): the horizon search, whose MSAA variant reads sample 0 of the prepass's targets, and the DENOISE blur.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinGtao VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/gtao.frag KEYS DENOISE MSAA EMBED)
+# Compute skinning (ADR-0050): each skinned mesh's vertices skinned once a frame, which every pass then draws rigidly.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinSkinning COMPUTE Shaders/Builtin/skinning.comp EMBED)
 # MSAA: the variant that resolves a multisampled SceneColor. OCCLUSION: the one that shows a view's ambient occlusion.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinOutput VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/output.frag KEYS MSAA OCCLUSION EMBED)

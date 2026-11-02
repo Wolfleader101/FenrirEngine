@@ -25,6 +25,8 @@ namespace Fenrir::Render
     {
         /** @brief Work whose result is kept across frames, such as a panorama sky's cube texture, made when needed. */
         Prepare,
+        /** @brief Each skinned mesh skinned once a frame in compute, for every later pass to draw (ADR-0050). */
+        Skinning,
         Shadow,
         /** @brief Opaque and masked items' depth and view-space normals, which `Opaque` then shades (ADR-0049). */
         DepthPrepass,
@@ -82,6 +84,8 @@ namespace Fenrir::Render
         void StorageRead(GraphResource resource);
         /** @brief Writes `resource` as storage in a shader. */
         void StorageWrite(GraphResource resource);
+        /** @brief Reads `buffer` as vertex input in its draws. */
+        void VertexInput(GraphResource buffer);
         /** @brief Copies from `resource`. */
         void CopySource(GraphResource resource);
         /** @brief Copies into `resource`. */

@@ -1,5 +1,6 @@
 #include "StageCompiler.hpp"
 
+#include <array>
 #include <format>
 #include <fstream>
 #include <iterator>
@@ -264,7 +265,8 @@ namespace Fenrir::ShaderCompiler
         }
         read.insert(absolute);
 
-        const EShLanguage language = stage == ShaderStage::Vertex ? EShLangVertex : EShLangFragment;
+        constexpr std::array<EShLanguage, 3> languages{EShLangVertex, EShLangFragment, EShLangCompute};
+        const EShLanguage language = languages.at(static_cast<std::size_t>(stage));
         const char* sources[] = {source.c_str()};
         const char* names[] = {name.c_str()};
         const std::string preamble = Preamble(defines);

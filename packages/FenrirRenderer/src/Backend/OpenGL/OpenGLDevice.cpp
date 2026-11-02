@@ -7,6 +7,7 @@
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -425,70 +426,14 @@ namespace Fenrir::Graphics
             return {{}, "the shader variant lacks the GL SPIR-V of a vertex or a fragment stage"};
         }
 
-        GladGLContext& gl = *m_gl;
-        ProgramKey key{*vertex, *fragment};
-        auto program = m_programs.find(key);
+        std::string diagnostic;
+        const auto program = ProgramFor({*vertex, *fragment, {}}, label, diagnostic);
         if (program == m_programs.end())
         {
-            std::string diagnostic;
-            std::array<GLuint, 2> shaders{};
-            const std::array<std::pair<GLenum, const std::vector<std::uint32_t>*>, 2> stages{
-                {{GL_VERTEX_SHADER, vertex}, {GL_FRAGMENT_SHADER, fragment}}};
-            for (std::size_t i = 0; i < stages.size() && diagnostic.empty(); ++i)
-            {
-                const auto& [type, spirv] = stages[i];
-                shaders[i] = gl.CreateShader(type);
-                gl.ShaderBinary(1, &shaders[i], GL_SHADER_BINARY_FORMAT_SPIR_V, spirv->data(),
-                                static_cast<GLsizei>(spirv->size() * sizeof(std::uint32_t)));
-                gl.SpecializeShader(shaders[i], "main", 0, nullptr, nullptr);
-                GLint compiled = 0;
-                gl.GetShaderiv(shaders[i], GL_COMPILE_STATUS, &compiled);
-                if (compiled == 0)
-                {
-                    std::array<GLchar, 2048> log{};
-                    gl.GetShaderInfoLog(shaders[i], static_cast<GLsizei>(log.size()), nullptr, log.data());
-                    diagnostic = std::string(i == 0 ? "the vertex" : "the fragment") +
-                                 " stage could not be specialised: " + log.data();
-                }
-            }
-            GLuint name = 0;
-            if (diagnostic.empty())
-            {
-                name = gl.CreateProgram();
-                gl.AttachShader(name, shaders[0]);
-                gl.AttachShader(name, shaders[1]);
-                gl.LinkProgram(name);
-                gl.DetachShader(name, shaders[0]);
-                gl.DetachShader(name, shaders[1]);
-                GLint linked = 0;
-                gl.GetProgramiv(name, GL_LINK_STATUS, &linked);
-                if (linked == 0)
-                {
-                    std::array<GLchar, 2048> log{};
-                    gl.GetProgramInfoLog(name, static_cast<GLsizei>(log.size()), nullptr, log.data());
-                    diagnostic = std::string("the program could not be linked: ") + log.data();
-                    gl.DeleteProgram(name);
-                }
-            }
-            for (const GLuint shader : shaders)
-            {
-                if (shader != 0)
-                {
-                    gl.DeleteShader(shader);
-                }
-            }
-            if (!diagnostic.empty())
-            {
-                return {{}, std::move(diagnostic)};
-            }
-            if (!label.empty())
-            {
-                gl.ObjectLabel(GL_PROGRAM, name, static_cast<GLsizei>(label.size()), label.data());
-            }
-            program = m_programs.emplace(std::move(key), GlProgram{name, 0}).first;
+            return {{}, std::move(diagnostic)};
         }
-        ++program->second.users;
 
+        GladGLContext& gl = *m_gl;
         GlPipeline pipeline;
         pipeline.program = &program->first;
         pipeline.programName = program->second.name;
@@ -524,6 +469,106 @@ namespace Fenrir::Graphics
             gl.ObjectLabel(GL_VERTEX_ARRAY, pipeline.vertexArray, static_cast<GLsizei>(label.size()), label.data());
         }
         return {m_pipelines.Add(std::move(pipeline)), {}};
+    }
+
+    PipelineResult OpenGLDevice::CreateComputePipeline(const ComputePipelineDesc& desc, std::string_view label)
+    {
+        if (desc.shader == nullptr)
+        {
+            return {{}, "the pipeline names no shader variant"};
+        }
+        const std::vector<std::uint32_t>* compute = GlSpirvOf(*desc.shader, ShaderStage::Compute);
+        if (compute == nullptr)
+        {
+            return {{}, "the shader variant lacks the GL SPIR-V of a compute stage"};
+        }
+        std::string diagnostic;
+        const auto program = ProgramFor({{}, {}, *compute}, label, diagnostic);
+        if (program == m_programs.end())
+        {
+            return {{}, std::move(diagnostic)};
+        }
+        GlPipeline pipeline;
+        pipeline.program = &program->first;
+        pipeline.programName = program->second.name;
+        pipeline.compute = true;
+        return {m_pipelines.Add(std::move(pipeline)), {}};
+    }
+
+    std::map<OpenGLDevice::ProgramKey, OpenGLDevice::GlProgram>::iterator OpenGLDevice::ProgramFor(
+        ProgramKey key, std::string_view label, std::string& diagnostic)
+    {
+        auto program = m_programs.find(key);
+        if (program != m_programs.end())
+        {
+            ++program->second.users;
+            return program;
+        }
+        GladGLContext& gl = *m_gl;
+        // A graphics program's vertex and fragment stages, or a compute program's one stage.
+        std::vector<std::tuple<GLenum, const std::vector<std::uint32_t>*, const char*>> stages;
+        if (key.compute.empty())
+        {
+            stages = {{GL_VERTEX_SHADER, &key.vertex, "the vertex"},
+                      {GL_FRAGMENT_SHADER, &key.fragment, "the fragment"}};
+        }
+        else
+        {
+            stages = {{GL_COMPUTE_SHADER, &key.compute, "the compute"}};
+        }
+        std::vector<GLuint> shaders;
+        for (const auto& [type, spirv, name] : stages)
+        {
+            const GLuint shader = shaders.emplace_back(gl.CreateShader(type));
+            gl.ShaderBinary(1, &shader, GL_SHADER_BINARY_FORMAT_SPIR_V, spirv->data(),
+                            static_cast<GLsizei>(spirv->size() * sizeof(std::uint32_t)));
+            gl.SpecializeShader(shader, "main", 0, nullptr, nullptr);
+            GLint compiled = 0;
+            gl.GetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+            if (compiled == 0)
+            {
+                std::array<GLchar, 2048> log{};
+                gl.GetShaderInfoLog(shader, static_cast<GLsizei>(log.size()), nullptr, log.data());
+                diagnostic = std::string(name) + " stage could not be specialised: " + log.data();
+                break;
+            }
+        }
+        GLuint name = 0;
+        if (diagnostic.empty())
+        {
+            name = gl.CreateProgram();
+            for (const GLuint shader : shaders)
+            {
+                gl.AttachShader(name, shader);
+            }
+            gl.LinkProgram(name);
+            for (const GLuint shader : shaders)
+            {
+                gl.DetachShader(name, shader);
+            }
+            GLint linked = 0;
+            gl.GetProgramiv(name, GL_LINK_STATUS, &linked);
+            if (linked == 0)
+            {
+                std::array<GLchar, 2048> log{};
+                gl.GetProgramInfoLog(name, static_cast<GLsizei>(log.size()), nullptr, log.data());
+                diagnostic = std::string("the program could not be linked: ") + log.data();
+                gl.DeleteProgram(name);
+            }
+        }
+        for (const GLuint shader : shaders)
+        {
+            gl.DeleteShader(shader);
+        }
+        if (!diagnostic.empty())
+        {
+            return m_programs.end();
+        }
+        if (!label.empty())
+        {
+            gl.ObjectLabel(GL_PROGRAM, name, static_cast<GLsizei>(label.size()), label.data());
+        }
+        return m_programs.emplace(std::move(key), GlProgram{name, 1}).first;
     }
 
     bool OpenGLDevice::WriteBuffer(BufferHandle buffer, std::size_t offset, std::span<const std::byte> bytes)
@@ -692,6 +737,17 @@ namespace Fenrir::Graphics
     {
         const PassDesc& pass = command.pass;
         m_replay = ReplayState{};
+        if (pass.queue == QueueKind::Compute)
+        {
+            // Dispatches only: no target to bind. What it writes as storage, later passes read as vertices or storage,
+            // which GL makes visible only after a barrier at its end.
+            m_replay.computing = true;
+            m_replay.storageWrites = std::ranges::any_of(
+                pass.uses, [](const PassResourceUse& use) { return use.usage == ResourceUsage::StorageWrite; });
+            m_gl->PushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, static_cast<GLsizei>(pass.label.size()),
+                                 pass.label.data());
+            return;
+        }
         m_replay.drawingToBackbuffer = pass.colour.size() == 1 && pass.colour.front().texture == m_backbuffer;
 
         GLuint framebuffer = 0;
@@ -775,6 +831,10 @@ namespace Fenrir::Graphics
             m_replay.skipping = false;
             return;
         }
+        if (m_replay.storageWrites)
+        {
+            m_gl->MemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+        }
         // A pipeline on the gamma path turned encoding off; every pass, and its clears, starts with it on.
         m_gl->Enable(GL_FRAMEBUFFER_SRGB);
         m_gl->PopDebugGroup();
@@ -792,6 +852,17 @@ namespace Fenrir::Graphics
         }
         GladGLContext& gl = *m_gl;
         gl.UseProgram(pipeline->programName);
+        if (pipeline->compute != m_replay.computing)
+        {
+            m_logger->Error("OpenGL backend: a {} pipeline was set in a {} pass; it runs nothing",
+                            pipeline->compute ? "compute" : "graphics", m_replay.computing ? "compute" : "graphics");
+            m_replay.pipeline = nullptr;
+            return;
+        }
+        if (pipeline->compute)
+        {
+            return;
+        }
         gl.BindVertexArray(pipeline->vertexArray);
         BindVertexInput();
 
@@ -919,7 +990,7 @@ namespace Fenrir::Graphics
 
     void OpenGLDevice::Execute(const CmdDraw& command)
     {
-        if (m_replay.pipeline == nullptr)
+        if (m_replay.pipeline == nullptr || m_replay.pipeline->compute)
         {
             return;
         }
@@ -931,7 +1002,7 @@ namespace Fenrir::Graphics
 
     void OpenGLDevice::Execute(const CmdDrawIndexed& command)
     {
-        if (m_replay.pipeline == nullptr)
+        if (m_replay.pipeline == nullptr || m_replay.pipeline->compute)
         {
             return;
         }
@@ -945,9 +1016,13 @@ namespace Fenrir::Graphics
             command.firstInstance);
     }
 
-    void OpenGLDevice::Execute(const CmdDispatch&)
+    void OpenGLDevice::Execute(const CmdDispatch& command)
     {
-        m_logger->Error("OpenGL backend: a dispatch was submitted, but pipelines are graphics only so far");
+        if (m_replay.pipeline == nullptr || !m_replay.pipeline->compute)
+        {
+            return;
+        }
+        m_gl->DispatchCompute(command.groupsX, command.groupsY, command.groupsZ);
     }
 
     void OpenGLDevice::Execute(const CmdCopyBuffer& command)
@@ -1059,7 +1134,10 @@ namespace Fenrir::Graphics
 
     void OpenGLDevice::ReleasePipeline(GlPipeline& pipeline)
     {
-        m_gl->DeleteVertexArrays(1, &pipeline.vertexArray);
+        if (pipeline.vertexArray != 0)
+        {
+            m_gl->DeleteVertexArrays(1, &pipeline.vertexArray);
+        }
         const auto program = m_programs.find(*pipeline.program);
         if (program != m_programs.end() && --program->second.users == 0)
         {

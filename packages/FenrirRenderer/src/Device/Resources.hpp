@@ -292,4 +292,16 @@ namespace Fenrir::Graphics
         std::optional<TextureFormat> depthFormat = TextureFormat::Depth32Float;
         std::uint32_t samples = 1;
     };
+
+    /**
+     * @brief A compute pipeline, made once as the explicit APIs require: the compute program's variant and the layouts
+     * of its binding sets. Compute pass dispatches run it (ADR-0050).
+     */
+    struct ComputePipelineDesc
+    {
+        /** @brief The shader variant, with one compute stage. It must outlive the call only. */
+        const ShaderVariant* shader = nullptr;
+        /** @brief Each binding set's layout; an empty handle for a set the shader does not use. */
+        std::array<BindingGroupLayoutHandle, BindingSetCount> sets{};
+    };
 } // namespace Fenrir::Graphics

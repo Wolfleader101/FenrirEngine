@@ -71,6 +71,12 @@ namespace Fenrir
          * Renderer::SetAutomaticInstancing.
          */
         bool automaticInstancing = true;
+        /**
+         * @brief Whether each skinned mesh is skinned once a frame by a compute pass, which every pass then draws
+         * rigidly (ADR-0050); off, every draw of it skins it in its vertex stage, under its shader's `SKINNED` variant
+         * (ADR-0035). Changeable later with Renderer::SetComputeSkinning.
+         */
+        bool computeSkinning = true;
     };
 
     /** @brief What the renderer did in its last drawn frame (ADR-0023). */
@@ -156,6 +162,12 @@ namespace Fenrir
         void SetAutomaticInstancing(bool on);
 
         /**
+         * @brief Turns compute skinning (RendererConfig::computeSkinning, ADR-0050) on or off from the next frame. An
+         * invalid owner does nothing.
+         */
+        void SetComputeSkinning(bool on);
+
+        /**
          * @brief The box around `entity`'s drawn mesh in world space, from the mesh's local bounds and the entity's
          * world matrix now. Empty if the entity is not alive, has no MeshRenderer, its mesh does not resolve, or this
          * owner is invalid.
@@ -204,6 +216,7 @@ namespace Fenrir
         [[nodiscard]] static std::optional<Math::AABB> GetWorldBounds(App& app, const Entity& entity);
         [[nodiscard]] static RendererStats Stats(App& app);
         static void SetAutomaticInstancing(App& app, bool on);
+        static void SetComputeSkinning(App& app, bool on);
         [[nodiscard]] static std::optional<Math::Ray> ScreenPointToRay(App& app, const Entity& camera,
                                                                        Math::Vec2 point);
         [[nodiscard]] static std::optional<Math::Vec2> WorldToScreenPoint(App& app, const Entity& camera,

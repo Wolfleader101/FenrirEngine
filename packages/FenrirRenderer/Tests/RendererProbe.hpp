@@ -142,6 +142,12 @@ namespace Fenrir
             return found == nullptr ? std::string() : found->label;
         }
 
+        /** @brief The label a buffer was made with. */
+        [[nodiscard]] static std::string Label(const Graphics::GraphicsDevice& device, Graphics::BufferHandle buffer)
+        {
+            const auto* found = const_cast<Graphics::NullDevice&>(Null(device)).m_buffers.Find(buffer);
+            return found == nullptr ? std::string() : found->label;
+        }
         /** @brief The label a texture was made with. */
         [[nodiscard]] static std::string Label(const Graphics::GraphicsDevice& device, Graphics::TextureHandle texture)
         {

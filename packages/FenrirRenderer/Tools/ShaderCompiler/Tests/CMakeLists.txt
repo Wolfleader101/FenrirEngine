@@ -19,6 +19,7 @@ fenrir_add_shaders(FenrirShaderCompilerTests PROGRAM Variants VERTEX fixtures/pl
 fenrir_add_shaders(FenrirShaderCompilerTests PROGRAM Material VERTEX fixtures/uv.vert
                    FRAGMENT fixtures/material.frag EMBED)
 fenrir_add_shaders(FenrirShaderCompilerTests PROGRAM TwoD VERTEX fixtures/twod.vert FRAGMENT fixtures/twod.frag EMBED)
+fenrir_add_shaders(FenrirShaderCompilerTests PROGRAM Compute COMPUTE fixtures/compute.comp EMBED)
 # The depfile fenrir_add_shaders has the tool write, which the Includes test reads.
 target_compile_definitions(FenrirShaderCompilerTests PRIVATE
     FENRIR_SHADER_TEST_DEPFILE="${CMAKE_CURRENT_BINARY_DIR}/shaders/Includes.fshader.d"

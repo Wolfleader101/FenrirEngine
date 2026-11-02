@@ -122,6 +122,17 @@ namespace Fenrir::Render
      * passes the buffer's capacity is an internal error and is not drawn. Every record also carries the sign of its
      * world matrix's determinant, for the shaders' tangent handedness.
      *
+     * **Compute skinning** (ADR-0050), on unless turned off: a `Skinning` pass, in its stage before any view's, runs
+     * `builtin:skinning` once per skinned mesh and palette range drawn this frame, however many items, views and passes
+     * draw it, into the frame's skinned vertex buffer (ring-buffered per frame in flight, grown by doubling): the
+     * model-space positions, normals and tangents the `SKINNED` variant would make, for the skinned draws of the
+     * built-in mesh programs (`builtin:lit`, `builtin:unlit` and the fallback). Those draws then use the variant
+     * without `SKINNED`, reading those three streams from that buffer and the rest from the mesh, rigidly under the
+     * skeleton entity's world matrix; they merge only with draws of the same skinned vertices. A user shader's skinned
+     * draws keep its own `SKINNED` variant, a shader without the key still draws skinned meshes as the fallback
+     * material (whose draws are compute-skinned), and with compute skinning off, or without the compute pipeline, every
+     * skinned draw skins in its vertex stage as before.
+     *
      * **Instance lists** (ADR-0051) are prepared like assets: each copy's transform, normal matrix and colour, kept
      * packed back to back with every other list's in one storage buffer, set 3 binding 1, made again whenever a list
      * is prepared or released, so a list that never changes is uploaded once. An item naming one is one draw of as many
@@ -154,7 +165,7 @@ namespace Fenrir::Render
          * draw as one instanced draw (ADR-0051).
          */
         SceneRenderer(Graphics::GraphicsDevice& device, ILogger& logger, std::uint32_t samples = 1,
-                      bool automaticInstancing = true);
+                      bool automaticInstancing = true, bool computeSkinning = true);
         ~SceneRenderer() override;
 
         SceneRenderer(const SceneRenderer&) = delete;
@@ -233,6 +244,12 @@ namespace Fenrir::Render
             m_automaticInstancing = on;
         }
 
+        /** @brief Whether skinned meshes are skinned in compute from the next frame (ADR-0050). */
+        void SetComputeSkinning(bool on) noexcept
+        {
+            m_computeSkinning = on;
+        }
+
         /** @brief What the next frame draws. */
         void SetFrame(SceneFrame frame);
 
@@ -300,6 +317,11 @@ namespace Fenrir::Render
             std::vector<VariantEntry> variants;
             /** @brief The number in sort keys, unique among live shaders. */
             std::uint32_t id = 0;
+            /**
+             * @brief Whether its skinned draws are compute-skinned: a built-in mesh program's. A user shader's are
+             * drawn with its own `SKINNED` variant, which may do more than skin (ADR-0050).
+             */
+            bool computeSkinned = false;
         };
 
         /** @brief A prepared image: its texture with every mip level. */
@@ -352,6 +374,9 @@ namespace Fenrir::Render
             bool skinned = false;
             /** @brief How many palette entries a skinned draw of it reads, from its paletteOffset. */
             std::uint32_t boneCount = 0;
+            std::uint32_t vertexCount = 0;
+            /** @brief A skinned mesh's vertex buffer as builtin:skinning reads it, its set 1; else empty. */
+            Graphics::BindingGroupHandle skinSource;
         };
 
         /** @brief An instance list's copies in the instance-list buffer: its first record and how many; 0 for none. */
@@ -500,6 +525,28 @@ namespace Fenrir::Render
             bool prepassMasked = false;
             /** @brief An instance list's copies; none for one item. */
             InstanceRange instances;
+            /**
+             * @brief A compute-skinned draw's skinned vertices in the frame's skinned vertex buffer: the byte offset of
+             * its positions, followed by its normals and its tangents. Empty for every other draw.
+             */
+            std::optional<std::size_t> skinnedVertices;
+        };
+
+        /** @brief One dispatch of the frame's Skinning pass: a skinned mesh and palette range, and where they go. */
+        struct SkinDispatch
+        {
+            const MeshEntry* mesh = nullptr;
+            std::uint32_t paletteOffset = 0;
+            /** @brief The byte offset of its skinned vertices, as ResolvedDraw::skinnedVertices. */
+            std::size_t skinnedVertices = 0;
+        };
+
+        /** @brief One frame in flight's set 2 of builtin:skinning: the palette and skinned vertex buffers it binds. */
+        struct SkinTargetGroup
+        {
+            Graphics::BufferHandle palette;
+            Graphics::BufferHandle skinned;
+            Graphics::BindingGroupHandle group;
         };
 
         /**
@@ -527,12 +574,13 @@ namespace Fenrir::Render
             Graphics::BindingGroupHandle group;
         };
 
+        /** @brief The pipeline drawing a mesh with the standard streams `streams` (StreamsOf's bits) has. */
         [[nodiscard]] const PipelineEntry& MeshPipeline(const ShaderEntry& shader, const VariantEntry& variant,
-                                                        const MeshEntry& mesh, BlendMode blend, bool doubleSided,
+                                                        std::uint32_t streams, BlendMode blend, bool doubleSided,
                                                         bool prepassed);
         /** @brief The depth prepass pipeline running `variant`'s vertex stage; why it failed is logged as a warning. */
         [[nodiscard]] const PipelineEntry& PrepassPipeline(const ShaderEntry& shader, const VariantEntry& variant,
-                                                           const MeshEntry& mesh, bool masked, bool doubleSided);
+                                                           std::uint32_t streams, bool masked, bool doubleSided);
         /**
          * @brief Makes a Masked material's prepass block and group from its variant, data and block as written, or
          * marks it as drawn without a prepass when its shader has no base colour to cut it out by.
@@ -562,12 +610,14 @@ namespace Fenrir::Render
                                                   const std::vector<std::size_t>& order, bool prepass) const;
         /**
          * @brief Records `runs` of `draws` into a pass, binding each one's pipeline (its prepass pipeline when
-         * `prepass`), groups and streams, and drawing each run's instances.
+         * `prepass`), groups and streams, a compute-skinned draw's first three from `skinned`, and drawing each run's
+         * instances.
          */
         void RecordDraws(Graphics::PassEncoder& encoder, const std::vector<ResolvedDraw>& draws,
                          const std::vector<Graphics::BindingGroupHandle>& groups, const std::vector<DrawRun>& runs,
                          Graphics::BindingGroupHandle frameGroup, Graphics::BindingGroupHandle viewGroup,
-                         Graphics::BindingGroupHandle drawGroup, Graphics::PixelRect viewport, bool prepass) const;
+                         Graphics::BindingGroupHandle drawGroup, Graphics::BufferHandle skinned,
+                         Graphics::PixelRect viewport, bool prepass) const;
         [[nodiscard]] Graphics::PipelineHandle MakeInternalPipeline(
             const ShaderContainer& container, const ShaderVariant* variant, Graphics::BindingGroupLayoutHandle layout,
             Graphics::TextureFormat colour, bool depthTested, std::uint32_t samples,
@@ -591,7 +641,17 @@ namespace Fenrir::Render
         void DestroyMesh(MeshEntry& mesh);
         /** @brief Packs every instance list into a new instance-list buffer, if one was prepared or released since. */
         void PackInstanceLists();
-        [[nodiscard]] std::vector<ResolvedDraw> ResolveDraws();
+        /**
+         * @brief The frame's draws, sorted; with compute skinning, each skinned mesh and palette range they draw is one
+         * of `skins`, whose skinned vertices its draws read.
+         */
+        [[nodiscard]] std::vector<ResolvedDraw> ResolveDraws(std::vector<SkinDispatch>& skins);
+        /**
+         * @brief Adds the Skinning pass running `skins` into the frame's skinned vertex buffer, imported into `graph`
+         * as the returned resource; empty, with no pass, when there are none.
+         */
+        [[nodiscard]] GraphResource AddSkinningPass(RenderGraph& graph, std::uint64_t frameIndex,
+                                                    const std::vector<SkinDispatch>& skins);
         /** @brief The frame set's group for frame `frameIndex`: its copy of the frame block, and the sky's light. */
         [[nodiscard]] Graphics::BindingGroupHandle FrameGroupFor(std::uint64_t frameIndex);
         /** @brief What the scene's Sky lights with: its prepared cube texture, else its colour. */
@@ -615,6 +675,8 @@ namespace Fenrir::Render
         std::uint32_t m_samples;
         /** @brief RendererConfig::automaticInstancing: whether RunsOf merges matching draws. */
         bool m_automaticInstancing;
+        /** @brief RendererConfig::computeSkinning: whether skinned draws read the Skinning pass's vertices. */
+        bool m_computeSkinning;
 
         std::map<AssetKey, ShaderEntry> m_shaders;
         std::map<AssetKey, MeshEntry> m_meshes;
@@ -644,6 +706,13 @@ namespace Fenrir::Render
         ShaderContainer m_panorama;
         /** @brief `builtin:depth-prepass`, whose fragment stages the prepass pipelines run. */
         ShaderContainer m_prepass;
+        /** @brief `builtin:skinning`, the Skinning pass's compute program, and its pipeline; empty if it failed. */
+        ShaderContainer m_skinning;
+        Graphics::PipelineHandle m_skinningPipeline;
+        /** @brief Its sets: 0 a dispatch's job block, 1 the mesh's vertices, 2 the palette and skinned vertices. */
+        Graphics::BindingGroupLayoutHandle m_skinJobLayout;
+        Graphics::BindingGroupLayoutHandle m_skinSourceLayout;
+        Graphics::BindingGroupLayoutHandle m_skinTargetLayout;
 
         Graphics::BindingGroupLayoutHandle m_frameLayout;
         Graphics::BindingGroupLayoutHandle m_viewLayout;
@@ -688,6 +757,14 @@ namespace Fenrir::Render
         std::unique_ptr<BlockRing> m_drawBlocks;
         /** @brief The palette buffer, one GpuBone a slot. */
         std::unique_ptr<BlockRing> m_paletteBlocks;
+        /** @brief Each Skinning dispatch's job block, one uniform slot a dispatch, bound at its set 0. */
+        std::unique_ptr<BlockRing> m_skinJobs;
+        /** @brief The skinned vertex buffer, one copy per frame in flight, which the Skinning pass writes. */
+        std::unique_ptr<FrameRingBuffer> m_skinnedVertices;
+        /** @brief Its size in bytes. */
+        std::size_t m_skinnedCapacity = 0;
+        /** @brief builtin:skinning's set 2 per copy, by frame index modulo the copies. */
+        std::vector<SkinTargetGroup> m_skinTargetGroups;
         /** @brief The sky filtered into image-based lighting, which set 0 binds. */
         std::unique_ptr<SkyLighting> m_skyLighting;
         /** @brief Each view's bloom passes, in `PostProcess`. */

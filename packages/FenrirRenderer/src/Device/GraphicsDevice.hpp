@@ -92,6 +92,9 @@ namespace Fenrir::Graphics
                                                                     std::string_view label = {}) = 0;
         /** @brief A pipeline, or a diagnostic if the backend refuses the shader variant or the state. */
         [[nodiscard]] virtual PipelineResult CreatePipeline(const PipelineDesc& desc, std::string_view label = {}) = 0;
+        /** @brief A compute pipeline, or a diagnostic if the backend refuses the shader variant. */
+        [[nodiscard]] virtual PipelineResult CreateComputePipeline(const ComputePipelineDesc& desc,
+                                                                   std::string_view label = {}) = 0;
         /** @} */
 
         /** @brief Writes `bytes` into a live buffer from `offset`. False, writing nothing, for a stale handle. */

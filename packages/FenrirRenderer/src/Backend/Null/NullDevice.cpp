@@ -80,6 +80,17 @@ namespace Fenrir::Graphics
         return {m_pipelines.Add(std::move(pipeline)), {}};
     }
 
+    PipelineResult NullDevice::CreateComputePipeline(const ComputePipelineDesc& desc, std::string_view label)
+    {
+        NullPipeline pipeline;
+        pipeline.label = std::string(label);
+        if (desc.shader != nullptr)
+        {
+            pipeline.keys = desc.shader->keys;
+        }
+        return {m_pipelines.Add(std::move(pipeline)), {}};
+    }
+
     bool NullDevice::WriteBuffer(BufferHandle buffer, std::size_t offset, std::span<const std::byte> bytes)
     {
         NullBuffer* found = m_buffers.Find(buffer);

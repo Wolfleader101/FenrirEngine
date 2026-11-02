@@ -158,9 +158,11 @@ TEST_CASE("Stats count one palette for two meshes and two cameras on one skeleto
     REQUIRE(test.messages->errors.empty());
 }
 
-TEST_CASE("A skinned draw uses its shader's SKINNED variant, and a rigid one does not", "[renderer][skinning]")
+TEST_CASE("With compute skinning off, a skinned draw uses its shader's SKINNED variant, and a rigid one does not",
+          "[renderer][skinning]")
 {
     SkinningTestApp test;
+    test.renderer.SetComputeSkinning(false);
     test.AddCamera({0.0f, 1.0f, 10.0f});
     test.AddRig({-2.0f, 0.0f, 0.0f});
     test.AddMeshRenderer(test.Mesh(), test.Material()).GetComponent<Fenrir::Transform>().pos = {2.0f, 0.0f, 0.0f};
@@ -363,10 +365,12 @@ TEST_CASE("A draw record's sign is -1 for a mirroring world matrix", "[renderer]
     REQUIRE(test.Record(draws[0]).worldSign == -1.0f);
 }
 
-TEST_CASE("A shader without SKINNED draws a skinned mesh with the fallback material's SKINNED variant, logged once",
+TEST_CASE("With compute skinning off, a shader without SKINNED draws a skinned mesh with the fallback material's "
+          "SKINNED variant, logged once",
           "[renderer][skinning]")
 {
     SkinningTestApp test;
+    test.renderer.SetComputeSkinning(false);
     test.AddCamera({0.0f, 1.0f, 10.0f});
     const Fenrir::Entity owner = test.AddSkeleton();
     // SampledPicture is built with no variant keys at all.

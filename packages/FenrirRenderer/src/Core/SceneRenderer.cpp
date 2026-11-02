@@ -77,6 +77,50 @@ namespace Fenrir::Render
         };
         static_assert(sizeof(InstanceBlock) == 128);
 
+        /**
+         * @brief A Skinning dispatch's job block, as `builtin:skinning` declares it (std140): where its mesh's streams
+         * start in the mesh's vertex buffer and its skinned vertices in the frame's skinned vertex buffer, in 32-bit
+         * words, and its palette range's first entry, in bones.
+         */
+        struct SkinJobBlock
+        {
+            std::uint32_t vertexCount = 0;
+            std::uint32_t paletteOffset = 0;
+            std::uint32_t skinnedFirst = 0;
+            /** @brief Bit 0: the mesh has normals; bit 1: it has tangents. */
+            std::uint32_t flags = 0;
+            std::uint32_t positions = 0;
+            std::uint32_t normals = 0;
+            std::uint32_t tangents = 0;
+            std::uint32_t joints = 0;
+            std::uint32_t weights = 0;
+            std::array<std::uint32_t, 3> padding{};
+        };
+        static_assert(sizeof(SkinJobBlock) == 48);
+
+        /** @name The standard vertex locations (`Fenrir/Vertex.glsl`, `Fenrir/Skinning.glsl`) compute skinning names.
+         * @{
+         */
+        constexpr std::uint32_t PositionLocation = 0;
+        constexpr std::uint32_t NormalLocation = 1;
+        constexpr std::uint32_t TangentLocation = 2;
+        constexpr std::uint32_t JointLocation = 6;
+        constexpr std::uint32_t WeightLocation = 7;
+        /** @} */
+
+        /** @brief The standard streams a compute-skinned draw reads from the skinned vertex buffer, as bits. */
+        constexpr std::uint32_t SkinnedStreams =
+            (1u << PositionLocation) | (1u << NormalLocation) | (1u << TangentLocation);
+        /**
+         * @brief Where each skinned stream starts within a mesh's skinned vertices, in bytes a vertex: its positions,
+         * then its normals, then its tangents, by location.
+         */
+        constexpr std::array<std::size_t, 3> SkinnedStreamStarts{0, 12, 24};
+        /** @brief The bytes of one skinned vertex: its position, normal and tangent, each in a stream of its own. */
+        constexpr std::size_t SkinnedVertexBytes = SkinnedStreamStarts.back() + 16;
+        /** @brief builtin:skinning's work group size, one invocation a vertex. */
+        constexpr std::uint32_t SkinningGroupSize = 64;
+
         /** @brief The background block, as `builtin:background` declares it (std140). */
         struct BackgroundBlock
         {
@@ -678,9 +722,9 @@ namespace Fenrir::Render
     // ---- SceneRenderer ----
 
     SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples,
-                                 bool automaticInstancing)
+                                 bool automaticInstancing, bool computeSkinning)
         : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1)),
-          m_automaticInstancing(automaticInstancing)
+          m_automaticInstancing(automaticInstancing), m_computeSkinning(computeSkinning)
     {
         m_frameLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer},
                                                             {1, ShaderBindingKind::Texture},
@@ -756,6 +800,7 @@ namespace Fenrir::Render
             }
         }
         m_fallback.id = 0;
+        m_fallback.computeSkinned = true;
 
         m_background = ReadBuiltin(BuiltinProgram::Background, m_logger);
         m_output = ReadBuiltin(BuiltinProgram::Output, m_logger);
@@ -815,6 +860,27 @@ namespace Fenrir::Render
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true, sizeof(DrawBlock), "Draw");
         m_paletteBlocks =
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true, sizeof(GpuBone), "Palette");
+
+        // Compute skinning (ADR-0050): without its pipeline, skinned draws skin in their vertex stages.
+        m_skinJobLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Skin job");
+        m_skinSourceLayout =
+            m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::StorageBuffer}}}, "Skin source");
+        m_skinTargetLayout = m_device.CreateBindingGroupLayout(
+            {{{0, ShaderBindingKind::StorageBuffer}, {1, ShaderBindingKind::StorageBuffer}}}, "Skin target");
+        m_skinJobs = std::make_unique<BlockRing>(m_device, m_skinJobLayout, false, sizeof(SkinJobBlock), "Skin jobs");
+        m_skinning = ReadBuiltin(BuiltinProgram::Skinning, m_logger);
+        if (const ShaderVariant* variant = BaseVariant(m_skinning))
+        {
+            PipelineResult made = m_device.CreateComputePipeline(
+                {variant, {m_skinJobLayout, m_skinSourceLayout, m_skinTargetLayout, {}}}, "Skinning");
+            m_skinningPipeline = made.pipeline;
+            if (m_skinningPipeline.IsEmpty())
+            {
+                m_logger.Error("FenrirRenderer: no compute skinning pipeline, so skinned meshes skin in their vertex "
+                               "stages: {}",
+                               made.diagnostic);
+            }
+        }
         m_frameBlocks->Reserve(1);
         m_lightBlocks->Reserve(1);
     }
@@ -890,6 +956,16 @@ namespace Fenrir::Render
         m_outputBlocks.reset();
         m_drawBlocks.reset();
         m_paletteBlocks.reset();
+        m_skinJobs.reset();
+        m_skinnedVertices.reset();
+        for (const SkinTargetGroup& group : m_skinTargetGroups)
+        {
+            m_device.Destroy(group.group);
+        }
+        m_device.Destroy(m_skinningPipeline);
+        m_device.Destroy(m_skinJobLayout);
+        m_device.Destroy(m_skinSourceLayout);
+        m_device.Destroy(m_skinTargetLayout);
         m_device.Destroy(m_instanceListBuffer);
         m_device.Destroy(m_fallback.materialLayout);
         m_device.Destroy(m_backgroundPipeline);
@@ -1323,6 +1399,12 @@ namespace Fenrir::Render
         entry.id = NextId();
         if (read.Ok() && read.container->materialSet == MaterialSet)
         {
+            // The built-in mesh programs have a compute path; a user's SKINNED variant may do more than skin, so it is
+            // drawn as it is (ADR-0050). Told by the embedded bytes, which a user shader cannot share by name.
+            const std::span<const std::byte> bytes(shader.bytes);
+            entry.computeSkinned = std::ranges::any_of(
+                std::array{BuiltinProgram::Lit, BuiltinProgram::Unlit, BuiltinProgram::Fallback},
+                [&](BuiltinProgram program) { return std::ranges::equal(GetBuiltinShader(program).bytes, bytes); });
             entry.container = std::move(*read.container);
             entry.variant = BaseVariant(entry.container);
             for (const ShaderVariant& variant : entry.container.variants)
@@ -1430,9 +1512,19 @@ namespace Fenrir::Render
             entry.skinned = true;
             entry.boneCount = mesh.skin->boneCount;
         }
+        entry.vertexCount = static_cast<std::uint32_t>(mesh.positions.size());
         if (!vertices.empty())
         {
-            entry.vertices = m_device.CreateBuffer({vertices.size(), BufferUsage::Vertex}, vertices, "Mesh vertices");
+            // A skinned mesh's is also builtin:skinning's source, read as storage (ADR-0050).
+            const BufferUsage usage = entry.skinned ? BufferUsage::Vertex | BufferUsage::Storage : BufferUsage::Vertex;
+            entry.vertices = m_device.CreateBuffer({vertices.size(), usage}, vertices, "Mesh vertices");
+            if (entry.skinned)
+            {
+                BindingGroupEntry source;
+                source.binding = 0;
+                source.buffer = entry.vertices;
+                entry.skinSource = m_device.CreateBindingGroup({m_skinSourceLayout, {source}}, "Skin source");
+            }
         }
         if (!mesh.indices.empty())
         {
@@ -1445,6 +1537,7 @@ namespace Fenrir::Render
 
     void SceneRenderer::DestroyMesh(MeshEntry& mesh)
     {
+        m_device.Destroy(mesh.skinSource);
         m_device.Destroy(mesh.vertices);
         m_device.Destroy(mesh.indices);
     }
@@ -1836,13 +1929,12 @@ namespace Fenrir::Render
     }
 
     const SceneRenderer::PipelineEntry& SceneRenderer::MeshPipeline(const ShaderEntry& shader,
-                                                                    const VariantEntry& variant, const MeshEntry& mesh,
+                                                                    const VariantEntry& variant, std::uint32_t streams,
                                                                     Fenrir::BlendMode blend, bool doubleSided,
                                                                     bool prepassed)
     {
         const std::uint32_t read = variant.variant != nullptr ? ReadMask(*variant.variant) : 0;
-        const PipelineKey key{&shader,   variant.variant, read & StreamsOf(mesh.streams), blend, doubleSided,
-                              m_samples, prepassed};
+        const PipelineKey key{&shader, variant.variant, read & streams, blend, doubleSided, m_samples, prepassed};
         if (const auto found = m_pipelines.find(key); found != m_pipelines.end())
         {
             return found->second;
@@ -1893,11 +1985,11 @@ namespace Fenrir::Render
 
     const SceneRenderer::PipelineEntry& SceneRenderer::PrepassPipeline(const ShaderEntry& shader,
                                                                        const VariantEntry& variant,
-                                                                       const MeshEntry& mesh, bool masked,
+                                                                       std::uint32_t streams, bool masked,
                                                                        bool doubleSided)
     {
         const std::uint32_t read = variant.variant != nullptr ? ReadMask(*variant.variant) : 0;
-        const PrepassKey key{&shader, variant.variant, read & StreamsOf(mesh.streams), masked, doubleSided};
+        const PrepassKey key{&shader, variant.variant, read & streams, masked, doubleSided};
         if (const auto found = m_prepassPipelines.find(key); found != m_prepassPipelines.end())
         {
             return found->second.pipeline;
@@ -1964,8 +2056,11 @@ namespace Fenrir::Render
         return entry;
     }
 
-    std::vector<SceneRenderer::ResolvedDraw> SceneRenderer::ResolveDraws()
+    std::vector<SceneRenderer::ResolvedDraw> SceneRenderer::ResolveDraws(std::vector<SkinDispatch>& skins)
     {
+        // Each skinned mesh and palette range skinned once, however many draws read it (ADR-0050).
+        std::map<std::pair<const MeshEntry*, std::uint32_t>, std::size_t> skinIndex;
+        std::size_t skinnedBytes = 0;
         std::vector<ResolvedDraw> draws;
         draws.reserve(m_frame.draws.size());
         for (const DrawRequest& request : m_frame.draws)
@@ -2009,24 +2104,32 @@ namespace Fenrir::Render
                 }
                 usable = false;
             }
+            // Compute-skinned (ADR-0050), it draws its shader's variant without SKINNED, rigidly from the skinned
+            // vertex buffer's positions, normals and tangents; else its SKINNED variant skins it.
+            const ShaderEntry* drawnBy = usable ? found->shader : &m_fallback;
+            const bool computeSkinned = skinned && drawnBy->computeSkinned && m_computeSkinning &&
+                                        !m_skinningPipeline.IsEmpty() &&
+                                        mesh->second.streams.at(JointLocation).has_value() &&
+                                        mesh->second.streams.at(WeightLocation).has_value();
+            const bool vertexSkinned = skinned && !computeSkinned;
+            const std::uint32_t streams = StreamsOf(mesh->second.streams) | (computeSkinned ? SkinnedStreams : 0u);
             const VariantEntry& fallbackVariant =
-                skinned && m_fallback.variants.size() > 1 ? m_fallback.variants[1] : m_fallback.variants.front();
+                vertexSkinned && m_fallback.variants.size() > 1 ? m_fallback.variants[1] : m_fallback.variants.front();
             const ShaderEntry* shader = usable ? found->shader : &m_fallback;
             const VariantEntry* variant =
-                usable ? (skinned ? found->skinnedVariant : found->variant) : &fallbackVariant;
+                usable ? (vertexSkinned ? found->skinnedVariant : found->variant) : &fallbackVariant;
             Fenrir::BlendMode blend = usable ? found->blendMode : Fenrir::BlendMode::Opaque;
             bool doubleSided = usable && found->doubleSided;
             // Opaque and Masked items draw in the depth prepass (ADR-0049), but for Masked ones it cannot cut out.
             const auto prepassed = [&] { return !IsTransparent(blend) && (shader == &m_fallback || found->prepassed); };
-            const PipelineEntry* pipeline =
-                &MeshPipeline(*shader, *variant, mesh->second, blend, doubleSided, prepassed());
+            const PipelineEntry* pipeline = &MeshPipeline(*shader, *variant, streams, blend, doubleSided, prepassed());
             if (pipeline->pipeline.IsEmpty() && shader != &m_fallback)
             {
                 shader = &m_fallback;
                 variant = &fallbackVariant;
                 blend = Fenrir::BlendMode::Opaque;
                 doubleSided = false;
-                pipeline = &MeshPipeline(m_fallback, *variant, mesh->second, blend, doubleSided, true);
+                pipeline = &MeshPipeline(m_fallback, *variant, streams, blend, doubleSided, true);
             }
             if (pipeline->pipeline.IsEmpty())
             {
@@ -2036,12 +2139,12 @@ namespace Fenrir::Render
             const bool masked = blend == Fenrir::BlendMode::Masked;
             if (prepassed())
             {
-                prepass = &PrepassPipeline(*shader, *variant, mesh->second, masked, doubleSided);
+                prepass = &PrepassPipeline(*shader, *variant, streams, masked, doubleSided);
                 if (prepass->pipeline.IsEmpty())
                 {
                     // Not in the prepass after all: Opaque writes its depth.
                     prepass = nullptr;
-                    pipeline = &MeshPipeline(*shader, *variant, mesh->second, blend, doubleSided, false);
+                    pipeline = &MeshPipeline(*shader, *variant, streams, blend, doubleSided, false);
                     if (pipeline->pipeline.IsEmpty())
                     {
                         continue;
@@ -2074,6 +2177,17 @@ namespace Fenrir::Render
             draw.prepass = prepass;
             draw.prepassMasked = prepass != nullptr && masked;
             draw.instances = list == nullptr ? InstanceRange{} : list->range;
+            if (computeSkinned)
+            {
+                const auto [skin, added] = skinIndex.try_emplace({&mesh->second, request.paletteOffset}, skins.size());
+                if (added)
+                {
+                    skins.push_back({&mesh->second, request.paletteOffset, skinnedBytes});
+                    // Each mesh's skinned vertices start on a 16-byte boundary.
+                    skinnedBytes += (std::size_t{mesh->second.vertexCount} * SkinnedVertexBytes + 15) / 16 * 16;
+                }
+                draw.skinnedVertices = skins[skin->second].skinnedVertices;
+            }
             const std::uint64_t stage = draw.transparent ? TransparentStage : OpaqueStage;
             const std::uint64_t materialId = fallback ? 0 : found->id;
             draw.sortKey = (stage << 56u) | ((std::uint64_t{pipeline->id} & 0xFFFFu) << 40u) |
@@ -2100,7 +2214,8 @@ namespace Fenrir::Render
                 DrawRun& run = runs.back();
                 const std::size_t last = run.first + run.count - 1;
                 if (i == last + 1 && pipelineOf(i) == pipelineOf(last) && draws[i].material == draws[last].material &&
-                    groups[i] == groups[last] && draws[i].mesh == draws[last].mesh && draws[i].instances.count == 0 &&
+                    groups[i] == groups[last] && draws[i].mesh == draws[last].mesh &&
+                    draws[i].skinnedVertices == draws[last].skinnedVertices && draws[i].instances.count == 0 &&
                     draws[last].instances.count == 0)
                 {
                     ++run.count;
@@ -2115,7 +2230,8 @@ namespace Fenrir::Render
     void SceneRenderer::RecordDraws(PassEncoder& encoder, const std::vector<ResolvedDraw>& draws,
                                     const std::vector<BindingGroupHandle>& groups, const std::vector<DrawRun>& runs,
                                     BindingGroupHandle frameGroup, BindingGroupHandle viewGroup,
-                                    BindingGroupHandle drawGroup, PixelRect viewport, bool prepass) const
+                                    BindingGroupHandle drawGroup, BufferHandle skinned, PixelRect viewport,
+                                    bool prepass) const
     {
         encoder.SetViewport(viewport);
         const PipelineEntry* current = nullptr;
@@ -2144,7 +2260,13 @@ namespace Fenrir::Render
             {
                 const std::uint32_t location = current->locations[slot];
                 const std::optional<std::size_t>& offset = draw.mesh->streams.at(location);
-                if (offset.has_value())
+                if (draw.skinnedVertices.has_value() && (SkinnedStreams & (1u << location)) != 0)
+                {
+                    // Its skinned positions, normals or tangents (ADR-0050).
+                    const std::size_t stream = std::size_t{draw.mesh->vertexCount} * SkinnedStreamStarts.at(location);
+                    encoder.SetVertexBuffer(static_cast<std::uint32_t>(slot), skinned, *draw.skinnedVertices + stream);
+                }
+                else if (offset.has_value())
                 {
                     encoder.SetVertexBuffer(static_cast<std::uint32_t>(slot), draw.mesh->vertices, *offset);
                 }
@@ -2161,6 +2283,92 @@ namespace Fenrir::Render
                                  .instanceCount = draw.instances.count == 0 ? run.count : draw.instances.count,
                                  .firstInstance = static_cast<std::uint32_t>(i)});
         }
+    }
+
+    GraphResource SceneRenderer::AddSkinningPass(RenderGraph& graph, std::uint64_t frameIndex,
+                                                 const std::vector<SkinDispatch>& skins)
+    {
+        if (skins.empty())
+        {
+            return {};
+        }
+        const std::size_t bytes =
+            skins.back().skinnedVertices + std::size_t{skins.back().mesh->vertexCount} * SkinnedVertexBytes;
+        // The skinned vertex buffer, grown by doubling; frames in flight keep their copies (ADR-0019).
+        const BufferUsage usage = BufferUsage::Vertex | BufferUsage::Storage;
+        if (m_skinnedVertices == nullptr || bytes > m_skinnedCapacity)
+        {
+            m_skinnedCapacity = std::max(bytes, m_skinnedCapacity * 2);
+            m_skinnedVertices =
+                std::make_unique<FrameRingBuffer>(m_device, BufferDesc{m_skinnedCapacity, usage}, "Skinned vertices");
+        }
+        const BufferHandle skinned = m_skinnedVertices->Current(frameIndex);
+        const BufferHandle palette = m_paletteBlocks->Buffer(frameIndex);
+        // A copy's group outlives the frame, but either buffer may be remade by growing.
+        const std::size_t copies = std::max<std::size_t>(m_device.FramesInFlight(), 1);
+        m_skinTargetGroups.resize(copies);
+        SkinTargetGroup& target = m_skinTargetGroups[static_cast<std::size_t>(frameIndex % copies)];
+        if (target.group.IsEmpty() || target.palette != palette || target.skinned != skinned)
+        {
+            m_device.Destroy(target.group);
+            BindingGroupEntry paletteEntry;
+            paletteEntry.binding = 0;
+            paletteEntry.buffer = palette;
+            BindingGroupEntry skinnedEntry;
+            skinnedEntry.binding = 1;
+            skinnedEntry.buffer = skinned;
+            target = {palette, skinned,
+                      m_device.CreateBindingGroup({m_skinTargetLayout, {paletteEntry, skinnedEntry}}, "Skin target")};
+        }
+
+        // The shader reads the mesh's buffer as words and has no push constants, so each dispatch's offsets go in a
+        // uniform slot of its own.
+        struct SkinPassJob
+        {
+            BindingGroupHandle job;
+            BindingGroupHandle source;
+            std::uint32_t groups = 0;
+        };
+        std::vector<SkinPassJob> dispatches;
+        m_skinJobs->Reserve(skins.size());
+        for (std::size_t i = 0; i < skins.size(); ++i)
+        {
+            const MeshEntry& mesh = *skins[i].mesh;
+            const auto word = [&](std::uint32_t location) {
+                return static_cast<std::uint32_t>(mesh.streams.at(location).value_or(0) / sizeof(std::uint32_t));
+            };
+            SkinJobBlock block;
+            block.vertexCount = mesh.vertexCount;
+            block.paletteOffset = skins[i].paletteOffset;
+            block.skinnedFirst = static_cast<std::uint32_t>(skins[i].skinnedVertices / sizeof(std::uint32_t));
+            block.flags = (mesh.streams.at(NormalLocation).has_value() ? 1u : 0u) |
+                          (mesh.streams.at(TangentLocation).has_value() ? 2u : 0u);
+            block.positions = word(PositionLocation);
+            block.normals = word(NormalLocation);
+            block.tangents = word(TangentLocation);
+            block.joints = word(JointLocation);
+            block.weights = word(WeightLocation);
+            m_skinJobs->Write(frameIndex, i, BytesOf(block));
+            dispatches.push_back({m_skinJobs->Group(frameIndex, i), mesh.skinSource,
+                                  (mesh.vertexCount + SkinningGroupSize - 1) / SkinningGroupSize});
+        }
+
+        const GraphResource resource = graph.ImportBuffer("SkinnedVertices", skinned, {m_skinnedCapacity, usage});
+        graph.AddPass(
+            "Skinning", RenderStage::Skinning, QueueKind::Compute,
+            [=](PassBuilder& pass) { pass.StorageWrite(resource); },
+            [pipeline = m_skinningPipeline, group = target.group, dispatches](PassContext& context) {
+                PassEncoder& encoder = context.Encoder();
+                encoder.SetPipeline(pipeline);
+                encoder.SetBindingGroup(2, group);
+                for (const SkinPassJob& dispatch : dispatches)
+                {
+                    encoder.SetBindingGroup(0, dispatch.job);
+                    encoder.SetBindingGroup(1, dispatch.source);
+                    encoder.Dispatch({.groupsX = dispatch.groups});
+                }
+            });
+        return resource;
     }
 
     BindingGroupHandle SceneRenderer::DrawGroupFor(std::uint64_t frameIndex)
@@ -2351,7 +2559,8 @@ namespace Fenrir::Render
             return;
         }
 
-        const auto draws = std::make_shared<const std::vector<ResolvedDraw>>(ResolveDraws());
+        std::vector<SkinDispatch> skins;
+        const auto draws = std::make_shared<const std::vector<ResolvedDraw>>(ResolveDraws(skins));
         const std::uint64_t frameIndex = frame.frameIndex;
         const SceneLighting& lighting = m_frame.lighting;
         const FrameBlock frameBlock{
@@ -2394,6 +2603,15 @@ namespace Fenrir::Render
         {
             m_paletteBlocks->Write(frameIndex, bone, BytesOf(GpuBone::FromMatrix(m_frame.palette[bone])));
         }
+        // Every skinned mesh skinned once, for every pass of every view (ADR-0050), which declare reading it.
+        const GraphResource skinnedResource = AddSkinningPass(graph, frameIndex, skins);
+        const BufferHandle skinned = skins.empty() ? BufferHandle{} : m_skinnedVertices->Current(frameIndex);
+        const auto readSkinned = [skinnedResource](PassBuilder& pass) {
+            if (!skinnedResource.IsEmpty())
+            {
+                pass.VertexInput(skinnedResource);
+            }
+        };
         m_stats.paletteBytes = static_cast<std::uint32_t>(m_frame.palette.size() * sizeof(GpuBone));
         m_stats.palettes = m_frame.palettes;
         const auto skinnedDraws = static_cast<std::uint32_t>(
@@ -2604,11 +2822,12 @@ namespace Fenrir::Render
                     {
                         pass.Sample(image);
                     }
+                    readSkinned(pass);
                 },
-                [this, draws, prepassGroups, prepassRuns, frameGroup, viewGroup, drawGroup,
+                [this, draws, prepassGroups, prepassRuns, frameGroup, viewGroup, drawGroup, skinned,
                  viewport](PassContext& context) {
                     RecordDraws(context.Encoder(), *draws, *prepassGroups, *prepassRuns, frameGroup, viewGroup,
-                                drawGroup, viewport, true);
+                                drawGroup, skinned, viewport, true);
                 });
             // GTAO from the prepass's depth and normals, when the camera has it; Opaque samples what it makes.
             const GraphResource occlusion = m_gtao->AddPasses(
@@ -2628,14 +2847,15 @@ namespace Fenrir::Render
                     {
                         pass.Sample(occlusion);
                     }
+                    readSkinned(pass);
                 },
-                [this, draws, groups, opaqueRuns, frameGroup, viewGroup, drawGroup, viewport, occlusion,
+                [this, draws, groups, opaqueRuns, frameGroup, viewGroup, drawGroup, skinned, viewport, occlusion,
                  v](PassContext& context) {
                     const BindingGroupHandle occludedView =
                         occlusion.IsEmpty() ? viewGroup
                                             : ViewGroupFor(context.FrameIndex(), v, context.Texture(occlusion));
                     RecordDraws(context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup, occludedView, drawGroup,
-                                viewport, false);
+                                skinned, viewport, false);
                 });
             if (!transparent->empty())
             {
@@ -2649,11 +2869,12 @@ namespace Fenrir::Render
                         {
                             pass.Sample(image);
                         }
+                        readSkinned(pass);
                     },
-                    [this, draws, groups, transparentRuns, frameGroup, viewGroup, drawGroup,
+                    [this, draws, groups, transparentRuns, frameGroup, viewGroup, drawGroup, skinned,
                      viewport](PassContext& context) {
                         RecordDraws(context.Encoder(), *draws, *groups, *transparentRuns, frameGroup, viewGroup,
-                                    drawGroup, viewport, false);
+                                    drawGroup, skinned, viewport, false);
                     });
             }
             m_stats.draws += static_cast<std::uint32_t>(opaqueRuns->size() + transparentRuns->size());

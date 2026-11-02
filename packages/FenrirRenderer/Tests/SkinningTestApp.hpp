@@ -81,12 +81,14 @@ namespace RendererTest
 
     /**
      * @brief RendererTestApp with FenrirSkeleton installed too, so the renderer finds a skinning source, unless
-     * `withSkeletons` is false. Its skeleton owner is destroyed before the renderer's.
+     * `withSkeletons` is false, and the renderer installed with `config`. Its skeleton owner is destroyed before the
+     * renderer's.
      */
     class SkinningTestApp : public RendererTestApp
     {
       public:
-        explicit SkinningTestApp(bool withSkeletons = true)
+        explicit SkinningTestApp(bool withSkeletons = true, Fenrir::RendererConfig config = NullBackend())
+            : RendererTestApp(config)
         {
             if (withSkeletons)
             {
