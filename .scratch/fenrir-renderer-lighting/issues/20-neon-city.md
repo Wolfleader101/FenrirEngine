@@ -29,11 +29,20 @@ Built 2026-11-02, stacked on ticket 19's branch (#265 to #279 not yet merged). D
   street wall, billboards on some roofs, each on an unlit slab of its size and radiance), 154 coloured spot uplights
   washing the towers, 200 point-light lamps, 144 spot headlights on 72 cars whose four instance lists are replaced each
   frame they move. 545 neon boards stacked up some walls glow but light nothing: colour without a light's cost.
-- **The facade shader** (`shaders/facade.*`): windows by bay and storey counted from the ground, in three styles
-  (punched, curtain wall lit a floor at a time, ribbon); the copy colour's RGB is the windows' light and its alpha packs
-  the share lit, the style and the edge-strip flag; one lit window in sixteen takes a neon hue; neon edge strips up the
-  corners and along the crowns of about half the towers; distant windows fade to their average, so far facades do not
-  shimmer.
+- **The facade shader** (`shaders/facade.*`), reworked a second time (the user found the flat-coloured walls fake
+  beside the textured street): fetched Poly Haven walls (Concrete Tile Facade, lifted x2.5 from charcoal; Dark Brick
+  Wall; Exterior Wall Cladding; eight textures, the set's limit) by world position at their real sizes, normal mapped,
+  streaked with grime; windows by bay and storey counted from the ground, in three styles (punched with frame, reveal
+  and sill; curtain wall with metal mullions, lit a floor at a time; ribbon); **rooms behind the windows by interior
+  mapping** (a ray-box into a room the bay wide, the storey high, 5 m deep or 8 for shops: back wall with desks, side
+  walls, floor, a ceiling light panel), some with blinds; the copy colour's RGB is the rooms' light and its alpha packs
+  the share lit, the style and the edge-strip flag; neon edge strips on about half the towers; distant windows fade to
+  their average, so far facades do not shimmer.
+- **The sign shader** (`shaders/sign.*`): every sign board and wall board is neon tubes on a dark board, an edge tube
+  and hashed glyph strokes, in a row on wide boards and a column on tall ones, fading to their average far off. Flat
+  glowing slabs looked fake once the walls were real.
+- **A Vsync checkbox** in the panel sets the main window's swap interval (`Window::SetSwapInterval`; LightingDemo now
+  links FenrirWindow): with vsync on, Release sat at the display's 240 Hz and its frame time said nothing.
 - **Uplights reach three-quarters of the way up**, brighter by the square of their reach. Reaching the top doubled
   the cluster load (yellow to orange in the heat view) and cost 4 ms in Debug.
 - **The puddle mask is procedural**, in the street shader (`shaders/street.*`): value noise over the world position, cut
@@ -47,10 +56,14 @@ Built 2026-11-02, stacked on ticket 19's branch (#265 to #279 not yet merged). D
   what photographs of neon show, so the signs stay bright (5).
 - **Not asked for:** `src/DemoMaterials.*` (`EmbeddedMaterial` and `AsLinear` moved out of the forest for both scenes),
   keys N (traffic), M (wet or dry) and C (clustering), and the panel's intensity sliders.
-- **Timing (Debug, RTX 5080, 1280 x 720, 4x MSAA, 1092 lights):** about 12.5 ms a frame at street level clustered
-  (12.8, 12.6) and unclustered (12.3, 12.2): at this size the Debug CPU work bounds the frame, not the light loop.
-  13.1 ms above a street. The cluster heat view shows 16 to 64 lights a cluster, under the cap of 256.
+- **Timing (RTX 5080, 1280 x 720, 4x MSAA, 1092 lights, street level):** Release with vsync off, 1.37 and 1.28 ms
+  clustered against 10.20 and 10.31 ms unclustered; above a street 1.41 against 11.00 ms. Debug about 13 ms, CPU
+  bound. The cluster heat view shows 16 to 64 lights a cluster, under the cap of 256.
+- **Release build** (`msvc-x64-release`, LightingDemo only, tests and scripting off), asked for by the user for this
+  scene. Twice in about twenty launches, a Release start straight after a forced kill of the previous one exited at
+  once with 0xC0000142 (a DLL failed to initialise, before `main`, no log line); the next launch ran. Not seen in
+  Debug.
 - **Screenshots:** `.scratch/fenrir-renderer-lighting/screenshots/20-neon-city/`.
 - **msvc-x64-debug:** the whole CTest tree passed (GL included, RTX 5080): 163 of 170 at once, and the seven C#
   hosting tests run again after their `Iris.Bridge` runtime configs, zeroed by a session crash mid-build, were copied
-  back from `iris/bridge`. LightingDemo's smoke runs passed again after the review fixes and the rework.
+  back from `iris/bridge`. LightingDemo's smoke runs passed again after the review fixes and each rework.

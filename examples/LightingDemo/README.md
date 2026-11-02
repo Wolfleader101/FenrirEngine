@@ -31,7 +31,7 @@ detaches the shadows from the helmets' bases, lowering them to 0 brings acne bac
 ## Assets
 
 Committed ones are in `assets/` (`assets/ATTRIBUTION.md`); the large ones are fetched (ADR-0052). Configure with
-`-DFENRIR_FETCH_DEMO_ASSETS=ON` and CMake downloads every file `fetched-assets.json` lists, about 800 MB (487 MB of it
+`-DFENRIR_FETCH_DEMO_ASSETS=ON` and CMake downloads every file `fetched-assets.json` lists, about 830 MB (487 MB of it
 the forest's Fir Tree 01), into `FENRIR_DEMO_ASSET_CACHE` (by default `%LOCALAPPDATA%/FenrirEngine/demo-assets` on
 Windows, else `$XDG_CACHE_HOME/FenrirEngine/demo-assets` or `~/.cache/FenrirEngine/demo-assets`), outside the build
 directory, and checks each one's SHA-256: a file whose hash is not the manifest's fails configure, naming it. A file
@@ -289,8 +289,8 @@ Small 02's branches sample their textures at the wrong scale.
 ### Neon city
 
 A neon city at night after rain: the many-lights scene at city scale. Twenty-five blocks of nine lots each, between
-two-lane streets with sidewalks and dashed centre lines. Everything is generated except the asphalt and one of the
-skies. The buildings rise towards the middle of the city:
+two-lane streets with sidewalks and dashed centre lines. The geometry is all generated; the asphalt, the walls'
+materials and one of the skies are fetched. The buildings rise towards the middle of the city:
 
 - **Towers** stand on podiums that front the street, up to about 190 metres. More than half have a narrower crown.
 - **Lower blocks** fill the other lots.
@@ -299,15 +299,29 @@ skies. The buildings rise towards the middle of the city:
 Every tier of every building is one copy in one instance list, drawn by the demo's facade shader
 (`shaders/facade.vert`, `facade.frag`):
 
-- **Styles:** punched windows, a glass curtain wall lit a floor at a time, or ribbon windows.
+- **Walls** are fetched Poly Haven materials at their real sizes, textured by world position and normal mapped in the
+  wall's frame:
+  - Concrete Tile Facade (lifted from charcoal to a weathered grey) on towers and spandrels;
+  - Dark Brick Wall or Exterior Wall Cladding on lower blocks.
+
+  They are streaked darker under each window and towards the ground.
+- **Styles:**
+  - punched windows, set back with a dark frame, a shadowed reveal and a sill;
+  - a glass curtain wall with metal mullions, lit a floor at a time;
+  - ribbon windows.
+- **Rooms behind the glass (interior mapping).** The view ray through each window is followed into a box the bay's
+  width, the storey's height and five metres deep (eight for shops). What it meets is shaded: a back wall with desks,
+  side walls, a floor, and a ceiling light panel whose light falls off across the room. So the rooms shift with
+  parallax as the camera passes. Some windows have blinds part drawn. The glass in front stays dark and glossy, so the
+  lights outside shine in it.
 - **Storeys** are counted from the ground, so a tower's tiers keep their floors in line. Only a tier standing on the
   ground has the shop floor.
-- **Copy colour:** its RGB is the windows' light (warm tungsten, neutral or cool fluorescent). Its alpha packs the share
-  of windows lit, the style, and whether the tier has neon edge strips.
-- **Edge strips** run up the corners and along the crowns of about half the towers. They and the odd window lit in a
+- **Copy colour:** its RGB is the rooms' light (warm tungsten, neutral or cool fluorescent). Its alpha packs the share
+  of rooms lit, the style, and whether the tier has neon edge strips.
+- **Edge strips** run up the corners and along the crowns of about half the towers. They and the odd room lit in a
   neon hue carry the city's colour from far off.
-- **Distance:** as a bay shrinks below a few pixels, the windows give way to their average, so distant facades glow
-  evenly instead of shimmering.
+- **Distance:** as a bay shrinks below a few pixels, the windows and rooms give way to their average, so distant
+  facades glow evenly instead of shimmering.
 - **Lighting:** the walls light through `Fenrir/Lighting.glsl`.
 
 1092 lights, all clustered (ADR-0049):
@@ -316,8 +330,12 @@ Every tier of every building is one copy in one instance list, drawn by the demo
   - one-sided shop signs above the ground floor, about one to every six metres;
   - up to two two-sided blade signs standing out from it.
 
-  Some low and middling roofs carry a billboard. Each sign glows on an unlit slab of its size and radiance, so the
-  light and what shows it match.
+  Some low and middling roofs carry a billboard. Each is a board of the light's size, drawn by the demo's sign
+  shader (`shaders/sign.vert`, `sign.frag`):
+  - neon tubes glowing at the light's radiance on a dark board: one round the edge, and glyphs inside;
+  - glyphs in a row on a wide board and stacked in a column on a tall one, each a few hashed strokes, so no two signs
+    read alike;
+  - fading to their average glow when too small to hold still.
 - **Uplights, 154 spot lights.** Coloured washes up the towers' walls from their podiums. Each reaches three-quarters
   of the way up its tower, brighter for taller towers.
 - **Street lamps, 200 point lights.** Two on every side of every block, on poles with glowing heads.
@@ -325,8 +343,8 @@ Every tier of every building is one copy in one instance list, drawn by the demo
   (bodies, cabins, headlamps, tail-lights) rebuilt each frame they move. Each car's two headlights dip a little onto
   the road ahead.
 
-Beside them, 545 neon boards are stacked up some walls like a street of vertical signs. They glow but light nothing,
-so they add colour without a light's cost.
+Beside them, 545 more boards in the sign shader are stacked up some walls like a street of vertical signs. They glow
+but light nothing, so they add colour without a light's cost.
 
 The streets are Poly Haven's Asphalt 01, drawn by the demo's street shader (`shaders/street.vert`, `street.frag`):
 
@@ -344,15 +362,16 @@ lifts the dim spill on the upper walls to dusk.
 The window's Scene part has:
 
 - the frame time, the light and copy counts, and the last frame's draws and instances;
-- clustering, the traffic and the puddles;
+- clustering, vsync (the main window's swap interval), the traffic and the puddles;
 - each kind of light's intensity.
 
-In Debug on an RTX 5080 at 1280 by 720 with 4x MSAA, a frame takes about 13 ms clustered or not: at this size the Debug
-CPU work bounds it, not the light loop. The cluster heat view shows 16 to 64 lights a cluster along the streets, under
-the cap of 256.
+On an RTX 5080 at 1280 by 720 with 4x MSAA, in Release with vsync off, a frame at street level takes 1.3 to 1.4 ms
+clustered (about 750 fps) against 10 to 11 ms with clustering off: the light loop is what clustering saves. Debug takes
+about 13 ms, bound by its CPU work. The cluster heat view shows 16 to 64 lights a cluster along the streets, under the
+cap of 256.
 
-Without the fetched assets, the streets are plain dark asphalt, still wet, under the generated sky. Everything else is
-generated, and the scene says so on screen.
+Without the fetched assets, the streets are plain dark asphalt, still wet, and the walls a plain dark grey, under the
+generated sky. Everything else is generated, and the scene says so on screen.
 
 | Keys | |
 | --- | --- |
@@ -368,7 +387,10 @@ Hand checks, on OpenGL:
 - The signs glow, with bloom round them; their light falls on the walls and sidewalks below them in their colour.
 - From high above, the skyline glows: edge-lit towers, coloured washes up their walls, beacons, and the glow behind.
 - The headlights light the road ahead of each car, and move with it.
-- The frame rate stays smooth flying down the streets with the free-fly camera; distant facades do not shimmer.
+- The frame rate stays smooth flying down the streets with the free-fly camera; distant facades and signs do not
+  shimmer.
+- Flying past a lit window, the room behind it shifts with parallax: its back wall, side walls, floor and ceiling
+  light.
 - G to the light clusters' heat: no red (256 lights) anywhere along the streets.
 - Without the fetched assets: dark wet streets, the city and its lights, and an amber message naming
   `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.

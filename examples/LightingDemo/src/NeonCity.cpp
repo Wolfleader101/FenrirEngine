@@ -24,7 +24,9 @@
 #include "FenrirRenderer/Renderer.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirShaders/LightingDemoFacade.hpp"
+#include "FenrirShaders/LightingDemoSign.hpp"
 #include "FenrirShaders/LightingDemoStreet.hpp"
+#include "FenrirWindow/Window.hpp"
 #include "FetchedAssets.hpp"
 #include "LightingPanel.hpp"
 #include "LightingScenes.hpp"
@@ -64,6 +66,26 @@ namespace LightingDemo
                                                          "asphalt_01/asphalt_01_nor_gl_2k.jpg",
                                                          "asphalt_01/asphalt_01_arm_2k.jpg"};
         constexpr const char* Panorama = "panoramas/kloppenheim_07_puresky_2k.hdr";
+        /**
+         * @brief The facade shader's fetched textures, by its sampler names: Poly Haven's Concrete Tile Facade, Dark
+         * Brick Wall and Exterior Wall Cladding, and whether each is linear data (normal and ARM maps) or colour.
+         */
+        struct FacadeMap
+        {
+            const char* sampler;
+            const char* path;
+            bool linear;
+        };
+        constexpr std::array<FacadeMap, 8> FacadeMaps{{
+            {"concreteColour", "concrete_tile_facade/concrete_tile_facade_diff_2k.jpg", false},
+            {"concreteNormal", "concrete_tile_facade/concrete_tile_facade_nor_gl_2k.jpg", true},
+            {"concreteArm", "concrete_tile_facade/concrete_tile_facade_arm_2k.jpg", true},
+            {"brickColour", "dark_brick_wall/dark_brick_wall_diff_2k.jpg", false},
+            {"brickNormal", "dark_brick_wall/dark_brick_wall_nor_gl_2k.jpg", true},
+            {"brickArm", "dark_brick_wall/dark_brick_wall_arm_2k.jpg", true},
+            {"claddingColour", "exterior_wall_cladding/exterior_wall_cladding_diff_2k.jpg", false},
+            {"claddingNormal", "exterior_wall_cladding/exterior_wall_cladding_nor_gl_2k.jpg", true},
+        }};
 
         /** @brief The neon's colours, linear. */
         constexpr std::array<Fenrir::Colour, 8> Neon{{{1.0f, 0.08f, 0.5f, 1.0f},
@@ -100,7 +122,7 @@ namespace LightingDemo
             return StreetLine(i) + Pitch * 0.5f;
         }
 
-        /** @brief A colour's RGB times `scale`, alpha 1: what a glowing slab shows for a light of that colour. */
+        /** @brief A colour's RGB times `scale`, alpha 1: what a sign's tubes glow for a light of that colour. */
         Fenrir::Colour Scaled(Fenrir::Colour colour, float scale)
         {
             return {colour.r * scale, colour.g * scale, colour.b * scale, 1.0f};
@@ -154,7 +176,7 @@ namespace LightingDemo
             return image;
         }
 
-        /** @brief A neon sign: its rect light, and its slab's place and size. */
+        /** @brief A neon sign: its rect light, and its board's place and size (the sign shader's copy). */
         struct Sign
         {
             Fenrir::Entity light;
@@ -229,6 +251,9 @@ namespace LightingDemo
             float wetPuddles = 0.5f;
             bool moving = true;
             bool clustered = true;
+            /** @brief Whether presents wait for the display; off, the frame time is the frame's own. */
+            bool vsync = true;
+            bool appliedVsync = true;
             bool fetched = false;
             /** @brief The frame time, smoothed over about a second, in seconds. */
             float frameTime = 0.0f;
@@ -264,7 +289,8 @@ namespace LightingDemo
             return std::min(static_cast<std::size_t>(unit * static_cast<float>(count)), count - 1);
         }
 
-        /** @brief The signs' slabs, each glowing its sign's colour at the panel's sign intensity times its share. */
+        /** @brief The signs' boards, their tubes glowing each sign's colour at the panel's sign intensity times its
+         * share. */
         Fenrir::InstanceListData SignSlabs(const CityState& state)
         {
             Fenrir::InstanceListData slabs;
@@ -278,7 +304,7 @@ namespace LightingDemo
 
         /**
          * @brief A neon sign: `rect` at `at`, turned by `facing` (a rect light faces its entity's -Z), at `share` of
-         * the panel's sign intensity, with a slab of its width and height.
+         * the panel's sign intensity, on a board of its width and height drawn by the sign shader.
          */
         void AddSign(Fenrir::Scene& scene, CityState& state, Vec3 at, Quat facing, Fenrir::RectLight rect, float share)
         {
@@ -512,7 +538,7 @@ namespace LightingDemo
                     dressing.panels.transforms.push_back(Placement(
                         wall.foot + wall.out * 0.08f + Up * y + wall.along * offset, facing, {0.8f, 1.8f, 0.05f}));
                     const Fenrir::Colour board = unit(random) < 0.25f ? Neon.at(Pick(random, Neon.size())) : hue;
-                    dressing.panels.colours.push_back(Scaled(board, 1.0f));
+                    dressing.panels.colours.push_back(Scaled(board, 3.0f));
                 }
             }
         }
@@ -575,7 +601,7 @@ namespace LightingDemo
          */
         void SpawnBuildings(Fenrir::App& app, Fenrir::Scene& scene, CityState& state,
                             Fenrir::AssetHandle<Fenrir::Mesh> cube, Fenrir::AssetHandle<Fenrir::Mesh> sphere,
-                            std::mt19937& random)
+                            std::mt19937& random, bool& fetched)
         {
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
             const auto facade = EmbeddedMaterial(store, scene, Fenrir::Shaders::LightingDemoFacade);
@@ -583,6 +609,26 @@ namespace LightingDemo
             {
                 app.Logger()->Error("{}: the facade shader did not load", SceneName);
                 return;
+            }
+            // The walls' textures, all or none; without them the walls are a plain dark grey.
+            std::array<Fenrir::AssetHandle<Fenrir::Image>, FacadeMaps.size()> maps;
+            for (std::size_t i = 0; i < FacadeMaps.size() && fetched; ++i)
+            {
+                const std::optional<std::string> path = FetchedAsset(FacadeMaps.at(i).path);
+                const auto image = path ? store.Load<Fenrir::Image>(*path, scene) : Fenrir::LoadResult<Fenrir::Image>{};
+                fetched = path.has_value() && image.Ok();
+                maps.at(i) = FacadeMaps.at(i).linear ? AsLinear(store, scene, image.handle) : image.handle;
+            }
+            if (fetched)
+            {
+                for (std::size_t i = 0; i < FacadeMaps.size(); ++i)
+                {
+                    store.SetTexture(facade, FacadeMaps.at(i).sampler, maps.at(i));
+                }
+            }
+            else
+            {
+                store.SetColour(facade, "wallTint", {0.1f, 0.1f, 0.1f, 1.0f});
             }
             std::uniform_real_distribution<float> unit(0.0f, 1.0f);
             Fenrir::InstanceListData tiers;
@@ -665,9 +711,16 @@ namespace LightingDemo
                 }
             }
             AddList(store, scene, cube, facade, std::move(tiers));
-            state.signSlabs = AddList(store, scene, cube, UnlitMaterial(store, scene), SignSlabs(state));
+            // The signs' boards and the wall boards share the sign shader: neon tubes on a dark board.
+            auto sign = EmbeddedMaterial(store, scene, Fenrir::Shaders::LightingDemoSign);
+            if (sign.IsEmpty())
+            {
+                app.Logger()->Error("{}: the sign shader did not load", SceneName);
+                sign = UnlitMaterial(store, scene);
+            }
+            state.signSlabs = AddList(store, scene, cube, sign, SignSlabs(state));
             state.panels = dressing.panels.transforms.size();
-            AddList(store, scene, cube, UnlitMaterial(store, scene), std::move(dressing.panels));
+            AddList(store, scene, cube, sign, std::move(dressing.panels));
             AddList(store, scene, cube, LitMaterial(store, scene, {0.12f, 0.12f, 0.12f, 1.0f}, 0.0f, 0.7f),
                     std::move(dressing.plant));
             AddList(store, scene, cube, LitMaterial(store, scene, {0.05f, 0.05f, 0.05f, 1.0f}, 0.8f, 0.45f),
@@ -872,14 +925,15 @@ namespace LightingDemo
             const auto sphere = store.Load<Fenrir::Mesh>("sphere.obj#Mesh0", scene);
             std::mt19937 random(2077);
             SpawnGround(app, scene, state, cube.handle, fetched);
-            SpawnBuildings(app, scene, state, cube.handle, sphere.handle, random);
+            SpawnBuildings(app, scene, state, cube.handle, sphere.handle, random, fetched);
             SpawnLamps(app, scene, state, cube.handle);
             SpawnCars(app, scene, state, cube.handle, random);
             state.fetched = fetched;
             if (!fetched)
             {
-                app.Logger()->Info("{}: the asphalt and the night panorama are fetched assets "
-                                   "(FENRIR_FETCH_DEMO_ASSETS); plain dark streets under the generated sky stand in",
+                app.Logger()->Info("{}: the asphalt, the walls' textures and the night panorama are fetched assets "
+                                   "(FENRIR_FETCH_DEMO_ASSETS); plain dark streets and walls under the generated sky "
+                                   "stand in",
                                    SceneName);
             }
             scene.AddResource<CityState>(std::move(state));
@@ -987,6 +1041,8 @@ namespace LightingDemo
                             state->cars.size());
                 ImGui::Text("Draws: %u  Instances: %u", stats.draws, stats.instances);
                 ImGui::Checkbox("Clustered (C)", &clustered);
+                ImGui::SameLine();
+                ImGui::Checkbox("Vsync", &state->vsync);
                 ImGui::Checkbox("Traffic moving (N)", &state->moving);
                 ImGui::SliderFloat("Puddles (M)", &state->puddles, 0.0f, 1.0f);
                 ImGui::SliderFloat("Lamp intensity", &state->lampIntensity, 0.0f, 150.0f);
@@ -994,6 +1050,12 @@ namespace LightingDemo
                 ImGui::SliderFloat("Headlight intensity", &state->headlightIntensity, 0.0f, 200.0f);
                 ImGui::SliderFloat("Uplight intensity", &state->uplightIntensity, 0.0f, 5000.0f);
             });
+            if (state->vsync != state->appliedVsync)
+            {
+                // The main window's swap interval: the renderer presents to it. False on the null backend's no window.
+                Fenrir::Window::SetSwapInterval(app, Fenrir::Window::MainWindow(), state->vsync ? 1 : 0);
+                state->appliedVsync = state->vsync;
+            }
             if (clustered != state->clustered)
             {
                 state->clustered = clustered;
