@@ -154,8 +154,8 @@ namespace Fenrir::Render
      * **Light clusters** (ADR-0049), on unless turned off: each view with point, spot or rect lights gets a
      * `LightClusters` compute pass, in the `DepthPrepass` stage, running `builtin:light-clusters` over its 16 x 9 x 24
      * clusters (Core/LightClusters): each light's sphere listed in every cluster its range touches, up to
-     * MaxClusterLights a cluster, or the light count when fewer, into the view's own cluster buffer (one per view,
-     * grown, never ringed: only the GPU writes and reads it, in order). Its slices run exponentially from the near
+     * MaxClusterLights a cluster, or the light count when fewer, into the view's own cluster buffer (one per view and
+     * frame in flight, grown as the room needs). Its slices run exponentially from the near
      * plane to the farthest any light reaches. Set 1 binds that buffer at binding 3 and the view block says so
      * (`clusterInfo.x`), and `Fenrir/Lighting.glsl` loops over its pixel's cluster; every other view block, and every
      * view when clustering is off, binds a buffer of one 0 and loops over the whole light buffer.
@@ -983,8 +983,14 @@ namespace Fenrir::Render
         std::vector<SkinTargetGroup> m_skinTargetGroups;
         /** @brief Each LightClusters pass's job block, one uniform slot a view, bound at its set 0. */
         std::unique_ptr<BlockRing> m_clusterJobs;
-        /** @brief Each view's cluster buffer, by view index, and how many bytes it holds. */
-        std::vector<std::pair<Graphics::BufferHandle, std::size_t>> m_clusterBuffers;
+        /** @brief A view's cluster buffers, a copy per frame in flight, and how many bytes each holds. */
+        struct ClusterBuffers
+        {
+            std::unique_ptr<FrameRingBuffer> copies;
+            std::size_t capacity = 0;
+        };
+        /** @brief Each view's cluster buffers, by view index. */
+        std::vector<ClusterBuffers> m_clusterBuffers;
         /** @brief The buffer of one 0 that view blocks without clusters bind at set 1 binding 3. */
         Graphics::BufferHandle m_noClusters;
         /**

@@ -31,7 +31,8 @@ public enum CameraDebugView : byte
     SpotShadowAtlas = 4,
     /// <summary>
     /// Each lit pixel as the heat of how many lights it loops over (ADR-0049), its cluster's or, unclustered, every
-    /// light: black for none, then blue, cyan, green and yellow to red at 32 or more, exposed and tonemapped.
+    /// light: black for none, then blue at 1, cyan at 4, green at 16, yellow at 64 and red at 256, the most a cluster
+    /// lists, on a log scale, exposed and tonemapped.
     /// </summary>
     LightClusters = 5,
 }

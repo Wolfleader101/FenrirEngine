@@ -13,9 +13,8 @@ tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius) and ambi
 by default here, its radius and strength), the sun's shadows (on, their distance and their normal and slope biases,
 given to every DirectionalLight in the scene), a debug view (the lit scene, the raw occlusion as grey, the shadow
 cascades tinted red, green, blue and yellow from the nearest, the shadow atlas, the spot shadow atlas, or the light
-clusters' heat: how many lights each pixel loops over, black none, then blue, cyan, green and yellow to red at 32 or
-more), and the sky: which panorama, its
-intensity and its rotation. It writes them to every camera in the scene each frame, the free-fly camera among them.
+clusters' heat: how many lights each pixel loops over, black none, 1 blue, 4 cyan, 16 green, 64 yellow and 256 red),
+and the sky: which panorama, its intensity and its rotation. It writes them to every camera in the scene each frame, the free-fly camera among them.
 Keys do the same, for the smoke runs and by hand: T the next tonemapper, E the next exposure (0, +1, +2, -1 EV), B bloom
 off or back on at its default, O ambient occlusion off or back on, G the next debug view, H the sun's shadows off or
 back on, S the next panorama where the scene has more than one.
@@ -131,10 +130,11 @@ Hand checks, on OpenGL:
   fades to nothing before its range, with no hard edge where the range ends; spots light round pools with soft rims.
 - The smooth floor tiles and the metal columns show sharp coloured highlights that slide as the lights move; the rough
   tiles show broad soft ones. The markers glow and bloom softly.
-- The frame rate holds at a thousand lights with clustering on (ADR-0049); C, turning it off, drops it, and turning it
-  back on looks the same as before, pixel for pixel. G to the light clusters' heat shows each light's reach as warm
-  blobs, cooling to black between them, and the count follows the lights as they move; lowering the range shrinks
-  them.
+- The frame rate holds at a thousand lights with clustering on (ADR-0049), and C, turning it off, drops it to about a
+  third. With 256 lights, or a thousand at a range of 1.5, C changes nothing on screen. G to the light clusters' heat
+  shows the count following the lights as they move, cluster by cluster: cooler at 256 lights than at a thousand,
+  red (the cap of 256) round the camera at a thousand and range 5, where the lights past the cap drop out of those
+  clusters; lowering the range cools it to blue, black between the lights' reach.
 - Range shrinks and grows every pool; 0 lights leaves the room almost black.
 - The spot lights nearest the camera cast shadows of the columns and spheres across the floor, soft-edged and attached
   to their casters, with no acne on the lit floor or walls. As the lights circle, lights move in and out of the budget

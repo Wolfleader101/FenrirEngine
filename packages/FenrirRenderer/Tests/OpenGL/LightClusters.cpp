@@ -143,8 +143,8 @@ TEST_CASE("The cluster heat view colours every pixel a light reaches, and few of
             }
         }
     }
-    INFO("and its clusters list far fewer than all 150 lights, so it is red, at 32 or more, at few pixels: "
-         << red << " of " << coloured);
+    INFO("and its clusters list far fewer than all 150 lights, so it is red, at 256, at few pixels: " << red << " of "
+                                                                                                      << coloured);
     REQUIRE(coloured > 0);
     REQUIRE(red < coloured / 4);
     INFO("with no GL error");

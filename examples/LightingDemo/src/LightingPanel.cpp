@@ -168,7 +168,8 @@ namespace LightingDemo
             }
             if (settings.debugView == Fenrir::CameraDebugView::LightClusters)
             {
-                ImGui::TextUnformatted("Lights a pixel loops over: black none, blue, cyan, green, yellow, red 32+.");
+                ImGui::TextUnformatted(
+                    "Lights a pixel loops over: none black, 1 blue, 4 cyan, 16 green, 64 yellow, 256 red.");
             }
 
             ImGui::SeparatorText("Sky");

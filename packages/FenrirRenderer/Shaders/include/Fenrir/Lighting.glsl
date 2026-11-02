@@ -227,8 +227,9 @@ uint FenrirClusterOf(vec3 position)
 }
 
 // How many lights a pixel loops over as heat (CameraDebugView::LightClusters), linear and about 1 bright: black for
-// none, then blue, cyan, green and yellow to red at FenrirClusterHeatFull or more.
-const float FenrirClusterHeatFull = 32.0;
+// none, then on a log scale blue at 1, cyan at 4, green at 16, yellow at 64 and red at FenrirClusterHeatFull, the most a
+// cluster lists.
+const float FenrirClusterHeatFull = 256.0;
 vec3 FenrirClusterHeat(uint count)
 {
     if (count == 0u)
@@ -237,7 +238,7 @@ vec3 FenrirClusterHeat(uint count)
     }
     const vec3 stops[5] = vec3[5](vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 1.0), vec3(0.0, 1.0, 0.0), vec3(1.0, 1.0, 0.0),
                                   vec3(1.0, 0.0, 0.0));
-    float t = clamp(float(count) / FenrirClusterHeatFull, 0.0, 1.0) * 4.0;
+    float t = clamp(log2(float(count)) / log2(FenrirClusterHeatFull), 0.0, 1.0) * 4.0;
     int below = min(int(t), 3);
     return mix(stops[below], stops[below + 1], t - float(below));
 }

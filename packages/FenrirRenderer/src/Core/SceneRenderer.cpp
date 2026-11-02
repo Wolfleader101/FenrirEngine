@@ -1108,10 +1108,7 @@ namespace Fenrir::Render
             m_device.Destroy(group);
         }
         m_clusterJobs.reset();
-        for (const auto& [buffer, bytes] : m_clusterBuffers)
-        {
-            m_device.Destroy(buffer);
-        }
+        m_clusterBuffers.clear();
         m_device.Destroy(m_noClusters);
         m_device.Destroy(m_lightClustersPipeline);
         m_device.Destroy(m_clusterJobLayout);
@@ -2659,23 +2656,23 @@ namespace Fenrir::Render
         {
             return {};
         }
-        // Each cluster's count, then its list, with room for every light up to MaxClusterLights. The buffer grows and
-        // is never ringed: the GPU alone writes and reads it, and the device runs one queue in submission order, so the
-        // next frame's pass cannot write it while this frame's passes still read it. A device with frames in flight on
-        // several queues would need a copy per frame in flight.
+        // Each cluster's count, then its list, with room for every light up to MaxClusterLights. The buffers grow, a
+        // copy per frame in flight, so this frame's pass never writes what an earlier frame's passes may still read.
         const std::uint32_t room = std::min(lightCount, MaxClusterLights);
         const std::size_t bytes = std::size_t{ClusterCount} * (1 + room) * sizeof(std::uint32_t);
         if (m_clusterBuffers.size() <= view)
         {
             m_clusterBuffers.resize(view + 1);
         }
-        auto& [buffer, capacity] = m_clusterBuffers[view];
-        if (buffer.IsEmpty() || bytes > capacity)
+        ClusterBuffers& ring = m_clusterBuffers[view];
+        if (ring.copies == nullptr || bytes > ring.capacity)
         {
-            m_device.Destroy(buffer);
-            capacity = bytes;
-            buffer = m_device.CreateBuffer({capacity, BufferUsage::Storage}, {}, "Light clusters");
+            ring.capacity = bytes;
+            ring.copies = std::make_unique<FrameRingBuffer>(m_device, BufferDesc{ring.capacity, BufferUsage::Storage},
+                                                            "Light clusters");
         }
+        const BufferHandle buffer = ring.copies->Current(frameIndex);
+        const std::size_t capacity = ring.capacity;
         const BufferHandle lights = m_lightBlocks->Buffer(frameIndex);
         const std::array<std::uint32_t, 4> key{lights.index, lights.generation, buffer.index, buffer.generation};
         auto target = m_clusterTargetGroups.find(key);

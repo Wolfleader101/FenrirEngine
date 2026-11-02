@@ -351,11 +351,11 @@ namespace LightingDemo
             LightingKeyHelp(false) +
             " M: 16, 64, 100, 256 or 1024 lights. P: the lights moving or still. K: spot shadows off or on. "
             "J: point shadows off or on. C: the lights clustered or not.";
-        scene.keys = {Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::B, Fenrir::Key::M, Fenrir::Key::P, Fenrir::Key::M,
-                      Fenrir::Key::P, Fenrir::Key::M, Fenrir::Key::K, Fenrir::Key::K, Fenrir::Key::J, Fenrir::Key::J,
-                      Fenrir::Key::C, Fenrir::Key::C,
-                      // Through the debug views to the spot shadow atlas, then the light clusters' heat.
-                      Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G};
+        // To 256 lights and to 1024, then through the debug views to the light clusters' heat at 1024, and back to 16.
+        scene.keys = {Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::B, Fenrir::Key::M, Fenrir::Key::P,
+                      Fenrir::Key::M, Fenrir::Key::P, Fenrir::Key::K, Fenrir::Key::K, Fenrir::Key::J,
+                      Fenrir::Key::J, Fenrir::Key::C, Fenrir::Key::C, Fenrir::Key::G, Fenrir::Key::G,
+                      Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::M};
         // Inside the room, by its front wall, looking down across it.
         scene.camera.position = {0.0f, 4.5f, 9.0f};
         scene.camera.pitch = -0.45f;
