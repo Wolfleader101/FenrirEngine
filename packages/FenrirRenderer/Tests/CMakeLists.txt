@@ -16,7 +16,7 @@ add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp 
                                    DebugDrawing.cpp Overlay.cpp Draw2D.cpp Skinning.cpp SkinningMaths.cpp
                                    SphericalHarmonics.cpp SkyLighting.cpp Tonemapping.cpp Brdf.cpp Bloom.cpp
                                    PunctualLights.cpp Lights.cpp RectLights.cpp DepthPrepass.cpp OctahedralNormals.cpp
-                                   AmbientOcclusion.cpp Instancing.cpp
+                                   AmbientOcclusion.cpp Instancing.cpp InstanceLists.cpp
                                    GoldenComparison.cpp DeviceTest.hpp DrawLists2D.hpp FakeSurface.hpp RecordingLogger.hpp
                                    RendererProbe.hpp RendererTestApp.hpp SkinningTestApp.hpp)
 target_include_directories(FenrirRendererTests PRIVATE ../src)
@@ -57,7 +57,7 @@ add_executable(FenrirRendererGlTests OpenGL/Clears.cpp OpenGL/Draws.cpp OpenGL/V
                                      OpenGL/Sky.cpp OpenGL/Debug.cpp OpenGL/Overlay.cpp OpenGL/Skinning.cpp
                                      OpenGL/Tonemapping.cpp OpenGL/NormalMaps.cpp OpenGL/SkyLighting.cpp OpenGL/Bloom.cpp
                                      OpenGL/Lights.cpp OpenGL/RectLights.cpp OpenGL/DepthPrepass.cpp
-                                     OpenGL/AmbientOcclusion.cpp OpenGL/Instancing.cpp
+                                     OpenGL/AmbientOcclusion.cpp OpenGL/Instancing.cpp OpenGL/InstanceLists.cpp
                                      OpenGL/GlProbe.hpp OpenGL/GlScene.hpp OpenGL/GlTestApp.hpp
                                      DrawLists2D.hpp RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp
                                      SkinningTestApp.hpp)

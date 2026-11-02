@@ -29,6 +29,28 @@ namespace Fenrir
     };
 
     /**
+     * @brief Draws one mesh with one material many times, once per transform of an instance list, with no entity per
+     * copy (ADR-0051). Each copy is drawn at the entity's world matrix times its own transform, its colour multiplying
+     * the material's base colour in builtin:lit and builtin:unlit. The renderer uploads the list when it is new or its
+     * revision has moved on, so a list that never changes uploads once, however far the entity moves.
+     *
+     * One draw a pass, whatever the count: never merged with other items, and never culled, copy by copy or whole. A
+     * transparent material sorts the whole list by the entity's world position. An empty or stale mesh or list is
+     * skipped (a stale one logged once per handle), as is a mesh with skin data; an empty or stale material draws with
+     * the fallback material, as a MeshRenderer's does.
+     */
+    struct InstancedMeshRenderer
+    {
+        AssetHandle<Mesh> mesh;
+        AssetHandle<Material> material;
+        AssetHandle<InstanceList> instances;
+        /** @brief Whether the copies are drawn into shadow maps. Nothing reads it yet: the renderer has no shadows. */
+        bool castShadows = true;
+        /** @brief False hides every copy; the entity's children are drawn as their own renderers say. */
+        bool visible = true;
+    };
+
+    /**
      * @brief Skins the MeshRenderer beside it from a skeleton's pose (ADR-0035): plain data naming the skeleton entity,
      * the entity carrying FenrirSkeleton's `SkeletonPose`. The mesh is drawn on the GPU from that skeleton's palette.
      *

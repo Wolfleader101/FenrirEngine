@@ -9,6 +9,7 @@ private-members = ["Fenrir::Entity"]
 
 [types]
 "Fenrir::MeshRenderer" = "component"
+"Fenrir::InstancedMeshRenderer" = "component"
 "Fenrir::Camera" = "component"
 "Fenrir::DirectionalLight" = "component"
 "Fenrir::PointLight" = "component"
@@ -29,5 +30,6 @@ private-members = ["Fenrir::Entity"]
 "Fenrir::AssetHandle<Fenrir::Mesh>" = "bound-type"
 "Fenrir::AssetHandle<Fenrir::Material>" = "bound-type"
 "Fenrir::AssetHandle<Fenrir::Image>" = "bound-type"
+"Fenrir::AssetHandle<Fenrir::InstanceList>" = "bound-type"
 "Fenrir::Math::Vec2" = "bound-type"
 "Fenrir::Math::Vec3" = "bound-type"

@@ -13,11 +13,16 @@ public partial struct RendererStats
     /// items merged into an instanced draw (ADR-0051), and one per transparent item.
     /// </summary>
     public uint Draws;
-    /// <summary>MeshRenderers drawn, one per item per view, however many draws they took.</summary>
+    /// <summary>
+    /// MeshRenderers drawn, one per item per view, however many draws they took, and the copies of each
+    /// InstancedMeshRenderer's instance list, one per copy per view.
+    /// </summary>
     public uint Instances;
     /// <summary>Render passes run.</summary>
     public uint Passes;
-    /// <summary>Assets uploaded to the GPU by the prepare step: a mesh, or a material's parameter block.</summary>
+    /// <summary>
+    /// Assets uploaded to the GPU by the prepare step: a mesh, a material's parameter block, or an instance list.
+    /// </summary>
     public uint Uploads;
     /// <summary>Bytes copied into the frame's palette buffer: every skeleton palette the frame's draws read.</summary>
     public uint PaletteBytesUploaded;

@@ -29,6 +29,10 @@ static_assert(sizeof(Fenrir::AssetHandle<Fenrir::Image>) == 8 && alignof(Fenrir:
               "Fenrir::AssetHandle<Fenrir::Image> is not the layout FenrirAssets.api.json describes: "
               "regenerate the description, then this binding");
 
+static_assert(sizeof(Fenrir::AssetHandle<Fenrir::InstanceList>) == 8 && alignof(Fenrir::AssetHandle<Fenrir::InstanceList>) == 4,
+              "Fenrir::AssetHandle<Fenrir::InstanceList> is not the layout FenrirAssets.api.json describes: "
+              "regenerate the description, then this binding");
+
 static_assert(sizeof(Fenrir::AssetHandle<Fenrir::Material>) == 8 && alignof(Fenrir::AssetHandle<Fenrir::Material>) == 4,
               "Fenrir::AssetHandle<Fenrir::Material> is not the layout FenrirAssets.api.json describes: "
               "regenerate the description, then this binding");

@@ -20,6 +20,7 @@
 #include "Core/SkyLighting.hpp"
 #include "Device/GraphicsDevice.hpp"
 #include "FenrirAssets/ImageData.hpp"
+#include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
@@ -41,9 +42,12 @@ namespace Fenrir::Render
          * matching items (ADR-0051), and one per transparent item, per view.
          */
         std::uint32_t draws = 0;
-        /** @brief Draw-list items drawn in the last frame, one per item per view, merged or not. */
+        /**
+         * @brief Draw-list items drawn in the last frame, one per item per view, merged or not, and one per copy of an
+         * instance list.
+         */
         std::uint32_t instances = 0;
-        /** @brief Meshes, images and material blocks uploaded since the last call. */
+        /** @brief Meshes, images, material blocks and instance lists uploaded since the last call. */
         std::uint32_t uploads = 0;
         /** @brief Bytes written into the last frame's palette buffer. */
         std::uint32_t paletteBytes = 0;
@@ -112,11 +116,17 @@ namespace Fenrir::Render
      * member. A skinned draw (ADR-0035) draws with the `SKINNED` variant; a shader without the key draws it with the
      * fallback material's, logged once per shader as a warning. Every other key stays off.
      *
-     * **Skinning** (ADR-0035): each frame's palettes are written into the frame's palette buffer, set 3 binding 1, as
+     * **Skinning** (ADR-0035): each frame's palettes are written into the frame's palette buffer, set 3 binding 2, as
      * `GpuBone`s, ring-buffered per frame in flight and grown by doubling, with nothing kept across frames. A skinned
      * draw's record carries its `paletteOffset`; one whose palette range (`paletteOffset` plus its mesh's bone count)
      * passes the buffer's capacity is an internal error and is not drawn. Every record also carries the sign of its
      * world matrix's determinant, for the shaders' tangent handedness.
+     *
+     * **Instance lists** (ADR-0051) are prepared like assets: each copy's transform, normal matrix and colour, kept
+     * packed back to back with every other list's in one storage buffer, set 3 binding 1, made again whenever a list
+     * is prepared or released, so a list that never changes is uploaded once. An item naming one is one draw of as many
+     * instances as the list has copies, from its own record: `Fenrir/Draw.glsl` composes each copy's record from it.
+     * It never merges with other items, and is never culled.
      *
      * **Images** with pixels that materials name are prepared like assets: uploaded as 2D textures (RGBA8, sRGB or
      * linear as the image is, RGBA16F or RGBA32F) with every mip level made at upload, and bound with their texture
@@ -201,6 +211,11 @@ namespace Fenrir::Render
         void PrepareTarget(AssetKey key, std::uint32_t revision, Graphics::PixelSize size);
         void ReleaseTarget(AssetKey key);
 
+        [[nodiscard]] bool IsInstanceListCurrent(AssetKey key, std::uint32_t revision) const;
+        /** @brief An instance list's copies, uploaded into the instance-list buffer before the next frame's draws. */
+        void PrepareInstanceList(AssetKey key, std::uint32_t revision, const InstanceListData& list);
+        void ReleaseInstanceList(AssetKey key);
+
         /** @brief The keys with GPU resources, for the facade to release those that went stale. */
         [[nodiscard]] std::vector<AssetKey> TargetKeys() const;
         [[nodiscard]] std::vector<AssetKey> ImageKeys() const;
@@ -209,7 +224,14 @@ namespace Fenrir::Render
         [[nodiscard]] std::vector<AssetKey> ShaderKeys() const;
         [[nodiscard]] std::vector<AssetKey> MeshKeys() const;
         [[nodiscard]] std::vector<AssetKey> MaterialKeys() const;
+        [[nodiscard]] std::vector<AssetKey> InstanceListKeys() const;
         /** @} */
+
+        /** @brief Whether matching draws merge into instanced draws from the next frame (ADR-0051). */
+        void SetAutomaticInstancing(bool on) noexcept
+        {
+            m_automaticInstancing = on;
+        }
 
         /** @brief What the next frame draws. */
         void SetFrame(SceneFrame frame);
@@ -330,6 +352,21 @@ namespace Fenrir::Render
             bool skinned = false;
             /** @brief How many palette entries a skinned draw of it reads, from its paletteOffset. */
             std::uint32_t boneCount = 0;
+        };
+
+        /** @brief An instance list's copies in the instance-list buffer: its first record and how many; 0 for none. */
+        struct InstanceRange
+        {
+            std::uint32_t first = 0;
+            std::uint32_t count = 0;
+        };
+
+        /** @brief A prepared instance list: its copies' records back to back, and where they sit as last packed. */
+        struct InstanceListEntry
+        {
+            std::uint32_t revision = 0;
+            std::vector<std::byte> records;
+            InstanceRange range;
         };
 
         /** @brief A prepared render target image: its texture and size. */
@@ -461,6 +498,8 @@ namespace Fenrir::Render
             const PipelineEntry* prepass = nullptr;
             /** @brief Cut out in the prepass, which binds its material's prepass group at set 2. */
             bool prepassMasked = false;
+            /** @brief An instance list's copies; none for one item. */
+            InstanceRange instances;
         };
 
         /**
@@ -476,11 +515,15 @@ namespace Fenrir::Render
             Graphics::BindingGroupHandle group;
         };
 
-        /** @brief One copy's draw set binding group (set 3), for the draw and palette buffers it was made with. */
+        /**
+         * @brief One frame in flight's draw set binding group (set 3), for the draw, palette and instance-list
+         * buffers it was made with.
+         */
         struct DrawGroup
         {
             Graphics::BufferHandle draws;
             Graphics::BufferHandle palette;
+            Graphics::BufferHandle instanceLists;
             Graphics::BindingGroupHandle group;
         };
 
@@ -512,7 +555,7 @@ namespace Fenrir::Render
         /**
          * @brief `order`'s opaque or masked draws as the runs a pass draws (ADR-0051): with automatic instancing on,
          * each run of consecutive records with the same pipeline (the prepass's when `prepass`), material, set 2 group
-         * and mesh is one instanced draw; with it off, each draw is its own.
+         * and mesh is one instanced draw; with it off, each draw is its own. An instance list's draw is always its own.
          */
         [[nodiscard]] std::vector<DrawRun> RunsOf(const std::vector<ResolvedDraw>& draws,
                                                   const std::vector<Graphics::BindingGroupHandle>& groups,
@@ -546,6 +589,8 @@ namespace Fenrir::Render
         void DestroyPipelinesOf(const ShaderEntry& shader);
         void DestroyMaterial(MaterialEntry& material);
         void DestroyMesh(MeshEntry& mesh);
+        /** @brief Packs every instance list into a new instance-list buffer, if one was prepared or released since. */
+        void PackInstanceLists();
         [[nodiscard]] std::vector<ResolvedDraw> ResolveDraws();
         /** @brief The frame set's group for frame `frameIndex`: its copy of the frame block, and the sky's light. */
         [[nodiscard]] Graphics::BindingGroupHandle FrameGroupFor(std::uint64_t frameIndex);
@@ -557,7 +602,10 @@ namespace Fenrir::Render
          */
         [[nodiscard]] Graphics::BindingGroupHandle ViewGroupFor(std::uint64_t frameIndex, std::size_t slot,
                                                                 Graphics::TextureHandle occlusion);
-        /** @brief The draw set's group for frame `frameIndex`: its copies of the draw and palette buffers. */
+        /**
+         * @brief The draw set's group for frame `frameIndex`: its copies of the draw and palette buffers, and the
+         * instance-list buffer.
+         */
         [[nodiscard]] Graphics::BindingGroupHandle DrawGroupFor(std::uint64_t frameIndex);
         [[nodiscard]] std::uint32_t NextId();
 
@@ -575,6 +623,14 @@ namespace Fenrir::Render
         std::map<AssetKey, ImageEntry> m_images;
         std::map<AssetKey, CubemapEntry> m_cubemaps;
         std::map<AssetKey, PanoramaEntry> m_panoramas;
+        std::map<AssetKey, InstanceListEntry> m_instanceLists;
+        /**
+         * @brief Every instance list's copies, back to back (`Fenrir/Draw.glsl`'s FenrirInstance), at set 3 binding 1:
+         * one zeroed record when there are none.
+         */
+        Graphics::BufferHandle m_instanceListBuffer;
+        /** @brief Whether a list was prepared or released since the instance-list buffer was packed. */
+        bool m_instancesChanged = true;
         /** @brief The samplers made for material parameters, by description. */
         std::vector<std::pair<SamplerDescription, Graphics::SamplerHandle>> m_samplers;
         std::map<PipelineKey, PipelineEntry> m_pipelines;

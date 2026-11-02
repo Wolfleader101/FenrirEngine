@@ -208,3 +208,47 @@ TEST_CASE("An emissive sphere glowing with bloom matches its golden image", "[re
     RendererTest::RequireGolden("bloom-emissive-sphere", test.ReadTarget(image), FENRIR_TEST_GOLDENS,
                                 FENRIR_TEST_GOLDEN_FAILURES);
 }
+
+TEST_CASE("A spot brighter than SceneColor holds blooms round it instead of blackening the frame",
+          "[renderer][gl][bloom]")
+{
+    GlScene test;
+    test.RequireOpenGL();
+    // Past RGBA16F's largest value, 65504, the spot is written as infinity, which the Karis average would turn to NaN
+    // and every level would spread: the first downsample clamps it instead.
+    const GlProbe::Image frame = DrawSpot(test, 1.0e6f, 0.04f, 0.7f);
+
+    INFO("every pixel off the spot is finite, and the bloom lights its neighbours");
+    for (std::uint32_t y = 0; y < frame.height; ++y)
+    {
+        for (std::uint32_t x = 0; x < frame.width; ++x)
+        {
+            const bool spot = (x == Size / 2 || x == Size / 2 - 1) && (y == Size / 2 || y == Size / 2 - 1);
+            if (!spot)
+            {
+                INFO("pixel (" << x << ", " << y << ")");
+                REQUIRE(std::isfinite(Red(frame, x, y)));
+            }
+        }
+    }
+    REQUIRE(Red(frame, Size / 2 + 2, Size / 2) > 1.0f);
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("builtin:lit never writes past SceneColor's largest value", "[renderer][gl][bloom]")
+{
+    GlScene test;
+    test.RequireOpenGL();
+    Fenrir::Camera& camera = test.AddCamera();
+    camera.projection = Fenrir::Orthographic{static_cast<float>(Size), 0.1f, 100.0f};
+    camera.tonemapper = Fenrir::Tonemapper::None;
+    const auto material = test.AddQuad(static_cast<float>(Size), 1.0f, "builtin:lit", Fenrir::Colour::Black);
+    test.assets.Store().SetColour(material, "emissive", Fenrir::Colour::White);
+    test.assets.Store().SetFloat(material, "emissiveStrength", 1.0e6f);
+
+    const GlProbe::Image frame = test.Frame(Size, Size);
+
+    INFO("an emissive strength of a million is clamped to RGBA16F's 65504, not written as infinity");
+    REQUIRE(Red(frame, Size / 2, Size / 2) == 65504.0f);
+    REQUIRE(test.messages->errors.empty());
+}

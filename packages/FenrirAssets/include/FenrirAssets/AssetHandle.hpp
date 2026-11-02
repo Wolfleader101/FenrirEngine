@@ -19,6 +19,7 @@ namespace Fenrir
     struct Skeleton;
     struct Clip;
     struct BoneMask;
+    struct InstanceList;
     /** @} */
 
     struct MeshData;
@@ -28,6 +29,7 @@ namespace Fenrir
     struct SkeletonData;
     struct ClipData;
     struct BoneMaskData;
+    struct InstanceListData;
 
     namespace Detail
     {
@@ -42,10 +44,11 @@ namespace Fenrir
             Skeleton,
             Clip,
             BoneMask,
+            InstanceList,
         };
 
         /** @brief How many kinds of asset the store holds. */
-        inline constexpr std::size_t AssetKindCount = 8;
+        inline constexpr std::size_t AssetKindCount = 9;
 
         /** @brief What an asset name resolves to: its data type, its kind and the word log messages use for it. */
         template <typename T>
@@ -114,6 +117,14 @@ namespace Fenrir
             static constexpr AssetKind kind = AssetKind::BoneMask;
             static constexpr std::string_view name = "bone mask";
         };
+
+        template <>
+        struct AssetTraits<InstanceList>
+        {
+            using Data = InstanceListData;
+            static constexpr AssetKind kind = AssetKind::InstanceList;
+            static constexpr std::string_view name = "instance list";
+        };
     } // namespace Detail
 
     /** @brief The data an asset handle of `T` resolves to: `AssetData<Mesh>` is `MeshData`. */
@@ -121,11 +132,11 @@ namespace Fenrir
     using AssetData = typename Detail::AssetTraits<T>::Data;
 
     /**
-     * @brief Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip` or
-     * `BoneMask`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021).
-     * Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed
-     * the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made
-     * handle is empty and never resolves.
+     * @brief Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`,
+     * `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset
+     * was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value.
+     * Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users
+     * skip it. A default-made handle is empty and never resolves.
      */
     template <typename T>
     struct AssetHandle

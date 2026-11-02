@@ -30,4 +30,12 @@ namespace LightingDemo
      * light one- or two-sided.
      */
     [[nodiscard]] FenrirDemo::DemoScene Showroom();
+
+    /**
+     * @brief Asteroid ring: a planet ringed by 100k fetched Poly Haven rocks of three kinds, one InstancedMeshRenderer
+     * each, under a starfield the demo makes; beside the ring, 5k rock entities merged automatically and an emissive
+     * station whose point lights light them. The panel sets the ring's count and turns merging off and on, and shows
+     * draws and instances. Without fetched assets, spheres and cubes stand in.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene AsteroidRing();
 } // namespace LightingDemo

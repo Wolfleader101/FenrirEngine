@@ -35,6 +35,10 @@ static_assert(sizeof(Fenrir::AssetHandle<Fenrir::Image>) == 8 && alignof(Fenrir:
               "Fenrir::AssetHandle<Fenrir::Image> is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
+static_assert(sizeof(Fenrir::AssetHandle<Fenrir::InstanceList>) == 8 && alignof(Fenrir::AssetHandle<Fenrir::InstanceList>) == 4,
+              "Fenrir::AssetHandle<Fenrir::InstanceList> is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
 static_assert(sizeof(Fenrir::AssetHandle<Fenrir::Material>) == 8 && alignof(Fenrir::AssetHandle<Fenrir::Material>) == 4,
               "Fenrir::AssetHandle<Fenrir::Material> is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
@@ -277,6 +281,21 @@ struct Iris::StructMapping<Fenrir::DirectionalLight>
 };
 static_assert(sizeof(Fenrir::DirectionalLight) == 20 && alignof(Fenrir::DirectionalLight) == 4,
               "Fenrir::DirectionalLight is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fenrir::InstancedMeshRenderer>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.InstancedMeshRenderer";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<Fenrir::AssetHandle<Fenrir::Mesh>>("Mesh", 0),
+        Iris::Field<Fenrir::AssetHandle<Fenrir::Material>>("Material", 8),
+        Iris::Field<Fenrir::AssetHandle<Fenrir::InstanceList>>("Instances", 16),
+        Iris::Field<bool>("CastShadows", 24),
+        Iris::Field<bool>("Visible", 25));
+};
+static_assert(sizeof(Fenrir::InstancedMeshRenderer) == 28 && alignof(Fenrir::InstancedMeshRenderer) == 4,
+              "Fenrir::InstancedMeshRenderer is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
 static_assert(sizeof(Fenrir::Math::Vec3) == 12 && alignof(Fenrir::Math::Vec3) == 4,
