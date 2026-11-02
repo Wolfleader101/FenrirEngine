@@ -44,7 +44,8 @@ namespace Fenrir::Graphics
     {
         /**
          * @brief Whether a vertex stage may write gl_Layer, choosing the layer of a layered attachment each primitive
-         * is drawn into (GL_ARB_shader_viewport_layer_array, or Vulkan 1.2's shaderOutputLayer).
+         * is drawn into: on OpenGL, whose shaders are SPIR-V, when the driver takes SPV_EXT_shader_viewport_index_layer
+         * (Vulkan 1.2's shaderOutputLayer would be its Vulkan counterpart).
          */
         bool vertexLayer = false;
     };

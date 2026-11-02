@@ -192,7 +192,7 @@ float FenrirPointLightShadow(uint index, vec3 position, vec3 normal, vec3 l)
     {
         vec2 offset = FenrirVogelDisk(i, FenrirShadowTaps, angle) * shadow.bias.w * texel;
         // GLSL has no explicit level for a cube array comparison; its one level makes the implicit one level 0.
-        lit += texture(fenrirPointShadowMaps, vec4(way + side * offset.x + up * offset.y, cube), reference);
+        lit += texture(fenrirPointShadowCubes, vec4(way + side * offset.x + up * offset.y, cube), reference);
     }
     return lit / float(FenrirShadowTaps);
 }

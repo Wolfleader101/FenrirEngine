@@ -172,26 +172,32 @@ TEST_CASE("Each cube face's turn and perspective draw what a lookup of the cube 
     }
 }
 
-TEST_CASE("A point shadow's near plane follows its range, and its texels grow one face's width over its size",
+TEST_CASE("A point shadow's near plane is a two-hundredth of its range, held to 0.1",
+          "[renderer][shadows][point-shadows]")
+{
+    using namespace Fenrir::Render;
+    PunctualLight light = Point({0.0f, 2.0f, 0.0f});
+    INFO("a two-hundredth of the range of 10");
+    REQUIRE(FitPointShadow(light, 512).near == Approx(0.05f));
+    light.range = 100.0f;
+    INFO("a range of 100 holds the near plane at 0.1");
+    REQUIRE(FitPointShadow(light, 512).near == Approx(0.1f));
+}
+
+TEST_CASE("A point shadow's record carries its light's biases and a face's width one unit out over its texels",
           "[renderer][shadows][point-shadows]")
 {
     using namespace Fenrir::Render;
     PunctualLight light = Point({0.0f, 2.0f, 0.0f});
     light.shadowNormalBias = 1.5f;
     light.shadowSlopeBias = 3.0f;
-    const PointShadow shadow = FitPointShadow(light, 512);
-    INFO("a two-hundredth of the range of 10");
-    REQUIRE(shadow.near == Approx(0.05f));
-    INFO("a 90-degree face is two units wide one unit out, over 512 texels");
-    REQUIRE(shadow.texelScale == Approx(2.0f / 512.0f));
-    const GpuPointShadow record = ToGpuPointShadow(light, shadow);
-    INFO("the record holds the light's biases and that texel size");
+    const GpuPointShadow record = ToGpuPointShadow(light, FitPointShadow(light, 512));
+    INFO("the light's normal-offset bias");
     REQUIRE(record.bias.x == 1.5f);
+    INFO("its slope-scaled bias");
     REQUIRE(record.bias.y == 3.0f);
-    REQUIRE(record.bias.z == shadow.texelScale);
-    INFO("a long range holds the near plane at 0.1");
-    light.range = 100.0f;
-    REQUIRE(FitPointShadow(light, 512).near == Approx(0.1f));
+    INFO("a 90-degree face is two units wide one unit out, over 512 texels");
+    REQUIRE(record.bias.z == Approx(2.0f / 512.0f));
 }
 
 TEST_CASE("The point shadow budget keeps the casting point lights nearest to any camera, and no spot light",
@@ -324,6 +330,7 @@ TEST_CASE("RendererProbe on null: a caster whose shader has no POINT_SHADOW vari
     REQUIRE(faces.front().pass.depth->load == LoadOp::Load);
     REQUIRE(test.Draws("PointShadowFaces").size() == CubeFaceCount);
     const std::vector<std::string> labels = RendererTest::PassesIn(RendererProbe::Submitted(test.renderer));
+    INFO("the instanced pass first, since it clears every layer");
     REQUIRE(std::ranges::find(labels, "PointShadows") < std::ranges::find(labels, "PointShadowFaces"));
 }
 
@@ -351,14 +358,29 @@ TEST_CASE("RendererProbe on null: the point budget picks the nearest lights, whi
     INFO("five lights: one shadowed spot, then two shadowed points");
     REQUIRE(LightCounts(test) == std::array<std::uint32_t, 3>{5, 1, 2});
     const std::vector<Vec3> positions = LightPositions(test, 5);
+    INFO("the shadowed spot first");
     REQUIRE(positions[0] == Vec3(5.0f, 5.0f, 5.0f));
     INFO("the two nearest points next, nearest first");
     REQUIRE(positions[1] == Vec3(0.0f, 3.0f, 2.0f));
     REQUIRE(positions[2] == Vec3(0.0f, 3.0f, 0.0f));
+    INFO("then the other points");
     REQUIRE(std::ranges::is_permutation(std::vector<Vec3>(positions.begin() + 3, positions.end()),
                                         std::vector<Vec3>{Vec3(0.0f, 3.0f, -20.0f), Vec3(0.0f, 3.0f, -8.0f)}));
-    INFO("one warning that the budget left some out");
+}
+
+TEST_CASE("RendererProbe on null: point lights past the budget are warned about once",
+          "[renderer][shadows][point-shadows]")
+{
+    Fenrir::RendererConfig config = RendererTest::NullBackend();
+    config.pointShadowBudget = 1;
+    RendererTestApp test(config);
+    AddCubeScene(test);
+    AddPointLight(test, {0.0f, 3.0f, 0.0f});
+    AddPointLight(test, {2.0f, 3.0f, 0.0f});
+
     test.Frame();
+    test.Frame();
+    INFO("one warning over two frames");
     REQUIRE(RendererTest::CountContaining(test.messages->warnings, "point shadow budget") == 1);
 }
 
@@ -380,34 +402,53 @@ TEST_CASE("Opaque reads the point shadow records at set 0 binding 9 and the cube
     REQUIRE(bound.texture == cubes);
     REQUIRE(bound.sampler == EntryAt(test, opaque.groups.at(0), 8).sampler);
     const std::vector<PassRecord> opaquePasses = RendererTest::Labelled(test.Passes(), "Opaque");
+    INFO("Opaque declares sampling the cubes, so it runs after the pass drawing them");
     REQUIRE(std::ranges::any_of(opaquePasses.front().pass.uses, [&](const Fenrir::Graphics::PassResourceUse& use) {
         return use.texture == cubes && use.usage == Fenrir::Graphics::ResourceUsage::Sampled;
     }));
 }
 
-TEST_CASE("RendererProbe on null: changing the point budget makes the cubes again; 0 shadows none and frees them",
+namespace
+{
+    /** @brief The point shadow cubes the last frame's PointShadows pass drew into. */
+    Fenrir::Graphics::TextureHandle CubesDrawn(const RendererTestApp& test)
+    {
+        return RendererTest::Labelled(test.Passes(), "PointShadows").front().pass.depth->texture;
+    }
+} // namespace
+
+TEST_CASE("RendererProbe on null: changing the point budget makes the cubes again at the new budget's size",
           "[renderer][shadows][point-shadows]")
 {
     RendererTestApp test;
     AddCubeScene(test);
     AddPointLight(test, {0.0f, 3.0f, 0.0f});
-    const auto cubesDrawn = [&] {
-        return RendererTest::Labelled(test.Passes(), "PointShadows").front().pass.depth->texture;
-    };
 
     test.Frame();
-    const Fenrir::Graphics::TextureHandle before = cubesDrawn();
+    const Fenrir::Graphics::TextureHandle before = CubesDrawn(test);
     test.Frame();
     INFO("kept from frame to frame");
-    REQUIRE(cubesDrawn() == before);
+    REQUIRE(CubesDrawn(test) == before);
 
     test.renderer.SetPointShadowBudget(2);
     test.Frame();
-    const Fenrir::Graphics::TextureHandle after = cubesDrawn();
-    INFO("a new cube array of two cubes");
+    const Fenrir::Graphics::TextureHandle after = CubesDrawn(test);
+    INFO("new cubes, two of them");
     REQUIRE(after != before);
     REQUIRE(RendererProbe::Desc(test.Device(), after).layers == 2);
+    INFO("which Opaque binds, and no command named the old ones");
     REQUIRE(EntryAt(test, test.Draws().front().groups.at(0), 10).texture == after);
+    REQUIRE(RendererProbe::StaleUses(test.Device()).empty());
+}
+
+TEST_CASE("RendererProbe on null: a point budget of 0 shadows no point light and frees the cubes",
+          "[renderer][shadows][point-shadows]")
+{
+    RendererTestApp test;
+    AddCubeScene(test);
+    AddPointLight(test, {0.0f, 3.0f, 0.0f});
+    test.Frame();
+    const Fenrir::Graphics::TextureHandle cubes = CubesDrawn(test);
 
     test.renderer.SetPointShadowBudget(0);
     test.Frame();
@@ -417,8 +458,8 @@ TEST_CASE("RendererProbe on null: changing the point budget makes the cubes agai
     INFO("set 0 binds the cube that lights everything");
     REQUIRE(RendererProbe::Label(test.Device(), EntryAt(test, test.Draws().front().groups.at(0), 10).texture) ==
             "No point shadow");
-    INFO("the cubes are let go, and no command named a stale one");
-    REQUIRE_FALSE(test.Device().IsLive(after));
+    INFO("the cubes are let go, and no command named them");
+    REQUIRE_FALSE(test.Device().IsLive(cubes));
     REQUIRE(RendererProbe::StaleUses(test.Device()).empty());
 }
 
@@ -431,6 +472,7 @@ TEST_CASE("Point lights without castShadows, or nothing that casts, add no point
         AddCubeScene(test);
         AddPointLight(test, {0.0f, 3.0f, 0.0f}, false);
         test.Frame();
+        INFO("no pass, and no shadowed light");
         REQUIRE(RendererTest::Labelled(test.Passes(), "PointShadows").empty());
         REQUIRE(LightCounts(test) == std::array<std::uint32_t, 3>{1, 0, 0});
     }
@@ -442,6 +484,7 @@ TEST_CASE("Point lights without castShadows, or nothing that casts, add no point
         cube.GetComponent<Fenrir::MeshRenderer>().castShadows = false;
         AddPointLight(test, {0.0f, 3.0f, 0.0f});
         test.Frame();
+        INFO("no pass of either kind, and no shadowed light");
         REQUIRE(RendererTest::Labelled(test.Passes(), "PointShadows").empty());
         REQUIRE(RendererTest::Labelled(test.Passes(), "PointShadowFaces").empty());
         REQUIRE(LightCounts(test) == std::array<std::uint32_t, 3>{1, 0, 0});

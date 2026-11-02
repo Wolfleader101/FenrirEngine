@@ -139,7 +139,7 @@ namespace Fenrir::Render
      * binding 8 is the map that lights everything. A view showing the spot shadow atlas has Output draw it as grey.
      *
      * **Point shadows** (ADR-0050): chosen as spot shadows are, within their own budget (ChoosePointShadows), each
-     * shadowed point light a cube of the point shadow cube array (CubeArray, Depth32Float, `mapSize` square faces, a
+     * shadowed point light a cube of the point shadow cubes (CubeArray, Depth32Float, `mapSize` square faces, a
      * cube per budget, kept and made again when the budget changes). Casters are drawn from the light's position
      * through six 90-degree faces (FitPointShadow) behind builtin:shadow's POINT_SHADOW variant, which writes the
      * distance from the light over its range. Where the device lets a vertex stage write gl_Layer, one `PointShadows`
@@ -147,8 +147,8 @@ namespace Fenrir::Render
      * POINT_SHADOW variant (`Fenrir/Draw.glsl`); casters whose shader has no POINT_SHADOW variant, and every caster on
      * a device without it, are drawn into each face by `PointShadowFaces` passes, one a face, through a view block of
      * that face's own. The light buffer holds those lights after the shadowed spot lights, frame block `lights.z`
-     * counting them, and set 0 binds their records (GpuPointShadow) at binding 9 and the cube array at binding 10; with
-     * none, and in the passes drawing it, binding 10 is a cube that lights everything.
+     * counting them, and set 0 binds their records (GpuPointShadow) at binding 9 and the point shadow cubes at binding
+     * 10; with none, and in the passes drawing it, binding 10 is a cube that lights everything.
      *
      * **Ambient occlusion** (ADR-0049): a view whose camera has it gets Gtao's passes after its DepthPrepass pass, and
      * its `Opaque` pass binds their occlusion texture at set 1 binding 1 (`Fenrir/View.glsl`), which
@@ -306,7 +306,7 @@ namespace Fenrir::Render
         void SetSpotShadowBudget(std::uint32_t budget);
 
         /**
-         * @brief How many point lights may cast shadows from the next frame (ADR-0050); the point shadow cube array is
+         * @brief How many point lights may cast shadows from the next frame (ADR-0050); the point shadow cubes is
          * made again at its new size when next needed.
          */
         void SetPointShadowBudget(std::uint32_t budget);
@@ -647,16 +647,18 @@ namespace Fenrir::Render
             Graphics::BufferHandle lights;
             Graphics::TextureHandle irradiance;
             Graphics::TextureHandle specular;
+            /** @brief The spot shadow records' buffer `group` binds at binding 7. */
             Graphics::BufferHandle spotShadows;
             /** @brief The spot shadow atlas `group` binds; empty for none. */
             Graphics::TextureHandle spotAtlas;
+            /** @brief The point shadow records' buffer `group` binds at binding 9. */
             Graphics::BufferHandle pointShadows;
-            /** @brief The point shadow cube array `group` binds; empty for none. */
-            Graphics::TextureHandle pointShadowMaps;
+            /** @brief The point shadow cubes `group` binds; empty for none. */
+            Graphics::TextureHandle pointShadowCubes;
             Graphics::BindingGroupHandle group;
             /**
-             * @brief The same, but binding the maps that light everything for the atlas and the cube array, for the
-             * shadow passes that draw them; `group` itself when it binds neither.
+             * @brief The same, but binding the maps that light everything for the atlas and the point shadow cubes, for
+             * the shadow passes that draw them; `group` itself when it binds neither.
              */
             Graphics::BindingGroupHandle unshadowed;
         };
@@ -791,11 +793,11 @@ namespace Fenrir::Render
                                                     const std::vector<SkinDispatch>& skins);
         /**
          * @brief The frame set's groups for frame `frameIndex`: its copy of the frame block, the sky's light, its spot
-         * shadow records with `spotAtlas` and its point shadow records with `pointShadowMaps` (the maps that light
+         * shadow records with `spotAtlas` and its point shadow records with `pointShadowCubes` (the maps that light
          * everything when empty).
          */
         [[nodiscard]] const FrameGroup& FrameGroupFor(std::uint64_t frameIndex, Graphics::TextureHandle spotAtlas,
-                                                      Graphics::TextureHandle pointShadowMaps);
+                                                      Graphics::TextureHandle pointShadowCubes);
         /** @brief What the scene's Sky lights with: its prepared cube texture, else its colour. */
         [[nodiscard]] SkySource SkySourceOf(const SceneLighting& lighting) const;
         /**
@@ -910,11 +912,11 @@ namespace Fenrir::Render
         /** @brief The shadowed spot lights' records (GpuSpotShadow), bound at set 0 binding 7 by the frame's groups. */
         std::unique_ptr<BlockRing> m_spotShadowBlocks;
         /**
-         * @brief The point shadow cube array, made when a point light first casts with a cube per budget, and its
+         * @brief The point shadow cubes, made when a point light first casts with a cube per budget, and its
          * description.
          */
-        Graphics::TextureHandle m_pointShadowMaps;
-        Graphics::TextureDesc m_pointShadowMapsDesc;
+        Graphics::TextureHandle m_pointShadowCubes;
+        Graphics::TextureDesc m_pointShadowCubesDesc;
         /** @brief One cube of depth 0 that lights everything, bound at set 0 binding 10 where no point light casts. */
         Graphics::TextureHandle m_noPointShadow;
         /** @brief The shadowed point lights' records (GpuPointShadow), bound at set 0 binding 9 by the frame's groups.

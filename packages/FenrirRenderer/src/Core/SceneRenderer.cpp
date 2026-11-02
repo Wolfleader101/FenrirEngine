@@ -58,7 +58,7 @@ namespace Fenrir::Render
             Math::Vec4 shadowBias{0.0f};
             /**
              * @brief x: how many cascades (0: no shadow); y: 1 to tint pixels by their cascade; z: in a point light's
-             * shadow pass, its cube of the point shadow cube array.
+             * shadow pass, its cube of the point shadow cubes.
              */
             std::array<std::uint32_t, 4> shadowInfo{};
         };
@@ -199,7 +199,7 @@ namespace Fenrir::Render
         // 0's textures are the sky's light (ADR-0047): its spherical harmonics, its specular cube and the BRDF table,
         // then the rect lights' two LTC tables; its storage blocks are the point, spot and rect lights (ADR-0048), as
         // many as the frame has, and the shadowed spot lights' records, with their atlas, then the shadowed point
-        // lights' records, with their cube array (ADR-0050). Set 1's textures are the view's ambient occlusion
+        // lights' records, with the point shadow cubes (ADR-0050). Set 1's textures are the view's ambient occlusion
         // (ADR-0049) and its sun's shadow atlas (ADR-0050).
         [[maybe_unused]] constexpr std::array<FixedBinding, 17> FixedBindings{{
             {0, 0, ShaderBindingKind::UniformBuffer, sizeof(FrameBlock)},
@@ -1039,7 +1039,7 @@ namespace Fenrir::Render
         m_spotShadowBlocks.reset();
         m_device.Destroy(m_spotAtlas);
         m_pointShadowBlocks.reset();
-        m_device.Destroy(m_pointShadowMaps);
+        m_device.Destroy(m_pointShadowCubes);
         m_device.Destroy(m_noPointShadow);
         m_viewBlocks.reset();
         m_backgroundBlocks.reset();
@@ -2034,8 +2034,8 @@ namespace Fenrir::Render
         }
         m_pointShadowConfig.budget = budget;
         // As the spot shadow atlas: made again at the new size when a point light next casts.
-        m_device.Destroy(m_pointShadowMaps);
-        m_pointShadowMaps = {};
+        m_device.Destroy(m_pointShadowCubes);
+        m_pointShadowCubes = {};
     }
 
     SceneStats SceneRenderer::TakeStats()
@@ -2619,7 +2619,7 @@ namespace Fenrir::Render
     }
 
     const SceneRenderer::FrameGroup& SceneRenderer::FrameGroupFor(std::uint64_t frameIndex, TextureHandle spotAtlas,
-                                                                  TextureHandle pointShadowMaps)
+                                                                  TextureHandle pointShadowCubes)
     {
         const BufferHandle block = m_frameBlocks->Buffer(frameIndex);
         const BufferHandle lights = m_lightBlocks->Buffer(frameIndex);
@@ -2627,14 +2627,14 @@ namespace Fenrir::Render
         const BufferHandle pointShadows = m_pointShadowBlocks->Buffer(frameIndex);
         const SkyLightingTextures& sky = m_skyLighting->Textures();
         // One pair of groups per copy, made again when a ring remade its buffer, the sky's textures changed, or the
-        // spot shadow atlas or point shadow cube array came, went or was made again.
+        // spot shadow atlas or point shadow cubes came, went or was made again.
         const std::size_t copies = std::max<std::size_t>(m_device.FramesInFlight(), 1);
         m_frameGroups.resize(copies);
         FrameGroup& group = m_frameGroups[static_cast<std::size_t>(frameIndex % copies)];
         if (group.group.IsEmpty() || group.block != block || group.lights != lights ||
             group.irradiance != sky.irradiance || group.specular != sky.specular || group.spotShadows != spotShadows ||
             group.spotAtlas != spotAtlas || group.pointShadows != pointShadows ||
-            group.pointShadowMaps != pointShadowMaps)
+            group.pointShadowCubes != pointShadowCubes)
         {
             if (group.unshadowed != group.group)
             {
@@ -2680,16 +2680,16 @@ namespace Fenrir::Render
             pointEntry.buffer = pointShadows;
             BindingGroupEntry cubesEntry;
             cubesEntry.binding = 10;
-            cubesEntry.texture = pointShadowMaps.IsEmpty() ? m_noPointShadow : pointShadowMaps;
+            cubesEntry.texture = pointShadowCubes.IsEmpty() ? m_noPointShadow : pointShadowCubes;
             cubesEntry.sampler = m_shadowSampler;
             std::vector<BindingGroupEntry> entries{blockEntry, irradiance, specular,     brdf,
                                                    lightEntry, ltcMatrix,  ltcAmplitude, spotEntry,
                                                    atlasEntry, pointEntry, cubesEntry};
             group = {block,       lights,    sky.irradiance, sky.specular,
-                     spotShadows, spotAtlas, pointShadows,   pointShadowMaps};
+                     spotShadows, spotAtlas, pointShadows,   pointShadowCubes};
             group.group = m_device.CreateBindingGroup({m_frameLayout, entries}, "Frame");
             group.unshadowed = group.group;
-            if (!spotAtlas.IsEmpty() || !pointShadowMaps.IsEmpty())
+            if (!spotAtlas.IsEmpty() || !pointShadowCubes.IsEmpty())
             {
                 entries.at(8).texture = m_noShadow;
                 entries.at(10).texture = m_noPointShadow;
@@ -2988,8 +2988,8 @@ namespace Fenrir::Render
             spotAtlas = graph.ImportTexture("SpotShadowAtlas", m_spotAtlas, desc);
         }
 
-        // Each shadowed point light's faces and record, and the cube array its cube is in, a cube per budget, kept
-        // across frames.
+        // Each shadowed point light's faces and record, and the point shadow cubes its cube is in, a cube per budget,
+        // kept across frames.
         const std::uint32_t faceSize = m_pointShadowConfig.mapSize;
         std::vector<PointShadow> pointShadows;
         m_pointShadowBlocks->Reserve(std::max<std::size_t>(pointCount, 1));
@@ -2999,7 +2999,7 @@ namespace Fenrir::Render
             pointShadows.push_back(FitPointShadow(light, faceSize));
             m_pointShadowBlocks->Write(frameIndex, c, BytesOf(ToGpuPointShadow(light, pointShadows.back())));
         }
-        GraphResource pointShadowMaps;
+        GraphResource pointShadowCubes;
         if (pointCount > 0)
         {
             TextureDesc desc;
@@ -3009,13 +3009,13 @@ namespace Fenrir::Render
             desc.height = faceSize;
             desc.layers = m_pointShadowConfig.budget;
             desc.usage = TextureUsage::DepthAttachment | TextureUsage::Sampled;
-            if (m_pointShadowMaps.IsEmpty() || m_pointShadowMapsDesc != desc)
+            if (m_pointShadowCubes.IsEmpty() || m_pointShadowCubesDesc != desc)
             {
-                m_device.Destroy(m_pointShadowMaps);
-                m_pointShadowMaps = m_device.CreateTexture(desc, "Point shadow cubes");
-                m_pointShadowMapsDesc = desc;
+                m_device.Destroy(m_pointShadowCubes);
+                m_pointShadowCubes = m_device.CreateTexture(desc, "Point shadow cubes");
+                m_pointShadowCubesDesc = desc;
             }
-            pointShadowMaps = graph.ImportTexture("PointShadowMaps", m_pointShadowMaps, desc);
+            pointShadowCubes = graph.ImportTexture("PointShadowCubes", m_pointShadowCubes, desc);
         }
         m_gtao->BeginFrame(views.size());
         m_backgroundBlocks->Reserve(views.size());
@@ -3095,7 +3095,7 @@ namespace Fenrir::Render
         }
 
         const FrameGroup& frameGroups = FrameGroupFor(frameIndex, spotCount > 0 ? m_spotAtlas : TextureHandle{},
-                                                      pointCount > 0 ? m_pointShadowMaps : TextureHandle{});
+                                                      pointCount > 0 ? m_pointShadowCubes : TextureHandle{});
         const BindingGroupHandle frameGroup = frameGroups.group;
         const BindingGroupHandle unshadowedFrame = frameGroups.unshadowed;
         const BindingGroupHandle drawGroup = DrawGroupFor(frameIndex);
@@ -3218,7 +3218,7 @@ namespace Fenrir::Render
                 graph.AddPass(
                     "PointShadows", RenderStage::Shadow, QueueKind::Graphics,
                     [=](PassBuilder& pass) {
-                        pass.LayeredDepthAttachment(pointShadowMaps, LoadOp::Clear, 0.0f);
+                        pass.LayeredDepthAttachment(pointShadowCubes, LoadOp::Clear, 0.0f);
                         readSkinned(pass);
                     },
                     [this, draws, pointGroups, layeredRuns, unshadowedFrame, cubeGroups, face, drawGroup,
@@ -3241,7 +3241,7 @@ namespace Fenrir::Render
                     graph.AddPass(
                         "PointShadowFaces", RenderStage::Shadow, QueueKind::Graphics,
                         [=](PassBuilder& pass) {
-                            pass.DepthAttachmentLayer(pointShadowMaps, layer, load, 0.0f);
+                            pass.DepthAttachmentLayer(pointShadowCubes, layer, load, 0.0f);
                             readSkinned(pass);
                         },
                         [this, draws, pointGroups, facedRuns, unshadowedFrame, faceGroup, face, drawGroup,
@@ -3487,9 +3487,9 @@ namespace Fenrir::Render
                     {
                         pass.Sample(spotAtlas);
                     }
-                    if (!pointShadowMaps.IsEmpty())
+                    if (!pointShadowCubes.IsEmpty())
                     {
-                        pass.Sample(pointShadowMaps);
+                        pass.Sample(pointShadowCubes);
                     }
                     readSkinned(pass);
                 },
@@ -3523,9 +3523,9 @@ namespace Fenrir::Render
                         {
                             pass.Sample(spotAtlas);
                         }
-                        if (!pointShadowMaps.IsEmpty())
+                        if (!pointShadowCubes.IsEmpty())
                         {
-                            pass.Sample(pointShadowMaps);
+                            pass.Sample(pointShadowCubes);
                         }
                         readSkinned(pass);
                     },

@@ -14,7 +14,7 @@ namespace Fenrir::Render
     // one cube array pooled by the budget, holding the distance from the light over its range; drawn without a
     // geometry shader, read by `Fenrir/Shadows.glsl`.
 
-    /** @brief How the point shadow cube array is made, from RendererConfig. */
+    /** @brief How the point shadow cubes is made, from RendererConfig. */
     struct PointShadowConfig
     {
         /** @brief How many point lights may cast shadows in a frame; 0 shadows none. */
@@ -58,8 +58,8 @@ namespace Fenrir::Render
 
     /**
      * @brief The shadow of the point `light`, its faces `mapSize` texels square: six 90-degree perspectives from its
-     * position, their near plane a two-hundredth of its range, at most 0.1. What they store is the distance from the
-     * light over its range, so its range is the far plane.
+     * position, their near plane a two-hundredth of its range, held between 0.001 and 0.1. What they store is the
+     * distance from the light over its range, so its range is the far plane.
      */
     [[nodiscard]] PointShadow FitPointShadow(const PunctualLight& light, std::uint32_t mapSize);
 

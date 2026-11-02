@@ -19,7 +19,7 @@ layout(set = 0, binding = 0, std140) uniform FrameData
     vec4 skyLight;
     // x: how many records fenrirLights.items holds this frame; y: how many of them, from the first, are spot lights
     // casting shadows (ADR-0050), record i reading fenrirSpotShadows.items[i]; z: how many point lights casting shadows
-    // follow them, record y + i reading fenrirPointShadows.items[i] and cube i of fenrirPointShadowMaps. w unused.
+    // follow them, record y + i reading fenrirPointShadows.items[i] and cube i of fenrirPointShadowCubes. w unused.
     uvec4 lights;
 } frame;
 
@@ -101,7 +101,7 @@ layout(set = 0, binding = 7, std430) readonly buffer FenrirSpotShadows
 // the pass drawing the atlas.
 layout(set = 0, binding = 8) uniform sampler2DShadow fenrirSpotShadowAtlas;
 
-// How a shadowed point light's cube of fenrirPointShadowMaps is read (ADR-0050); Fenrir/Shadows.glsl reads it.
+// How a shadowed point light's cube of fenrirPointShadowCubes is read (ADR-0050); Fenrir/Shadows.glsl reads it.
 struct FenrirPointShadow
 {
     // x: the normal-offset bias and y: the slope-scaled bias, in texels; z: a texel's world size one unit along a
@@ -120,7 +120,7 @@ layout(set = 0, binding = 9, std430) readonly buffer FenrirPointShadows
 // distance from its light to the nearest caster over the light's range, reversed (1 at the light, 0 at its range),
 // compared by the sampler as the atlases are. One cube of 0, which lights everything, when no point light casts and in
 // the pass drawing the cubes.
-layout(set = 0, binding = 10) uniform samplerCubeArrayShadow fenrirPointShadowMaps;
+layout(set = 0, binding = 10) uniform samplerCubeArrayShadow fenrirPointShadowCubes;
 
 // The world direction `direction` turned back by a sky's rotation about +Y, whose cosine is `c` and sine `s`: the
 // direction to sample that sky's cube along.

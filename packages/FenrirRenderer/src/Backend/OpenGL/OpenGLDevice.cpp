@@ -30,6 +30,20 @@ namespace Fenrir::Graphics
         }
 
         /** @brief GL's internal format for each TextureFormat. */
+        /** @brief A texture's layers: a cube's six faces, six for each of a cube array's cubes, else one. */
+        std::uint32_t LayersOf(const TextureDesc& desc) noexcept
+        {
+            switch (desc.kind)
+            {
+            case TextureKind::Cube:
+                return 6;
+            case TextureKind::CubeArray:
+                return 6 * std::max(desc.layers, 1u);
+            default:
+                return 1;
+            }
+        }
+
         constexpr std::array<GLenum, 7> internalFormats{GL_RGBA8,   GL_SRGB8_ALPHA8, GL_RGBA16F, GL_DEPTH_COMPONENT32F,
                                                         GL_RGBA32F, GL_R8,           GL_RG16F};
 
@@ -365,7 +379,7 @@ namespace Fenrir::Graphics
             gl.CreateTextures(GL_TEXTURE_CUBE_MAP_ARRAY, 1, &texture.name);
             gl.TextureStorage3D(texture.name, static_cast<GLsizei>(desc.mipLevels),
                                 internalFormats.at(IndexOf(desc.format)), width, height,
-                                static_cast<GLsizei>(6 * std::max(desc.layers, 1u)));
+                                static_cast<GLsizei>(LayersOf(desc)));
         }
         else
         {
@@ -627,9 +641,7 @@ namespace Fenrir::Graphics
             return false;
         }
         const TextureDesc& desc = found->desc;
-        const std::uint32_t layers = desc.kind == TextureKind::Cube        ? 6
-                                     : desc.kind == TextureKind::CubeArray ? 6 * desc.layers
-                                                                           : 1;
+        const std::uint32_t layers = LayersOf(desc);
         const std::uint32_t width = std::max(1u, desc.width >> mipLevel);
         const std::uint32_t height = std::max(1u, desc.height >> mipLevel);
         const UploadFormat upload = uploadFormats.at(IndexOf(desc.format));
@@ -1118,7 +1130,7 @@ namespace Fenrir::Graphics
             const auto attachment = static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i);
             const FramebufferAttachment& colour = names[i];
             const auto level = static_cast<GLint>(colour.mipLevel);
-            // A cube texture's face is a layer of it; a 2D texture is attached whole.
+            // A cube or cube array texture's face is a layer of it; a 2D texture is attached whole.
             if (m_textures.Find(pass.colour[i].texture)->desc.kind != TextureKind::Texture2D)
             {
                 gl.NamedFramebufferTextureLayer(framebuffer, attachment, colour.name, level,
@@ -1133,8 +1145,8 @@ namespace Fenrir::Graphics
         if (const FramebufferAttachment& depth = names.back(); depth.name != 0)
         {
             // A cube or cube array's single layer, or every layer of it (layered: each primitive's gl_Layer picks).
-            const bool layers = m_textures.Find(pass.depth->texture)->desc.kind != TextureKind::Texture2D;
-            if (layers && depth.layer != LayeredAttachment)
+            const bool hasLayers = m_textures.Find(pass.depth->texture)->desc.kind != TextureKind::Texture2D;
+            if (hasLayers && depth.layer != LayeredAttachment)
             {
                 gl.NamedFramebufferTextureLayer(framebuffer, GL_DEPTH_ATTACHMENT, depth.name, 0,
                                                 static_cast<GLint>(depth.layer));

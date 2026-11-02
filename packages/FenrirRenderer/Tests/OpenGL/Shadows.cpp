@@ -1,7 +1,8 @@
 // The sun's cascaded shadow on OpenGL (the spec's seam 2, ADR-0050): a box's shadow on a floor falls where the light's
 // direction puts it; a lit floor shows no acne at angles up to grazing within the biases' limits; and posts' shadows
 // across every cascade boundary match their golden images, lit and with the cascades tinted. A spot light's shadow
-// falls where its cone puts it, leaving no acne, and a point light's shadows fall on each of its six sides.
+// falls where its cone puts it, leaving no acne, and a point light's shadow falls where it should on each of its six
+// sides.
 
 #include <algorithm>
 #include <array>
@@ -407,14 +408,15 @@ TEST_CASE("A spot light's shadow on a floor lies where its cone puts it, with no
     REQUIRE(worst > 0.97f);
 }
 
-TEST_CASE("A point light's casters shadow each of its six sides, where the way from the light puts them",
+TEST_CASE("A point light's caster shadows each of its six sides, where the way from the light puts it",
           "[renderer][gl][shadows][point-shadows]")
 {
-    // A point light at the origin with a half-unit box 2 units out along each axis, and, for the side probed, a wall 4
-    // units out facing it: the box's shadow on the wall is a unit square round the axis. A camera 3 units out to one
-    // side looks at the wall's middle past the box. The boxes are drawn with builtin:lit, which draws a light's six
-    // faces as instances where the GPU can, or with a shader whose program has no POINT_SHADOW variant, a face at a
-    // time.
+    // A point light at the origin, a half-unit box 2 units out along the side probed and set off its axis, and a wall 4
+    // units out facing the light. Rays from the light through the box reach the wall at 4 / 2.25 to 4 / 1.75 of their
+    // offset: the shadow spans about 0.27 to 1.49 across and -0.11 to 1.03 aside. A camera 3 units out aside looks at
+    // the wall's middle past the box. Off its axis, a face drawn swapped or mirrored puts the shadow somewhere else.
+    // The box is drawn with builtin:lit, whose six faces are instances where the GPU can, or with a shader whose
+    // program has no POINT_SHADOW variant, a face at a time.
     const int side = GENERATE(0, 1, 2, 3, 4, 5);
     const bool instanced = GENERATE(true, false);
     CAPTURE(side, instanced);
@@ -431,12 +433,8 @@ TEST_CASE("A point light's casters shadow each of its six sides, where the way f
         test.app.GetActiveScene().AddResource<Fenrir::Sky>(
             Fenrir::ColourSky{Fenrir::Colour{0.02f, 0.02f, 0.02f, 1.0f}});
         const auto white = Lit(test, Fenrir::Colour::White);
-        const auto boxes = instanced ? white : NoPointShadowVariant(test);
-        for (const Vec3 out : axes)
-        {
-            AddBox(test, out * 2.0f, Vec3(0.5f), boxes);
-            AddBox(test, out * -2.0f, Vec3(0.5f), boxes);
-        }
+        AddBox(test, axis * 2.0f + across * 0.4f + aside * 0.2f, Vec3(0.5f),
+               instanced ? white : NoPointShadowVariant(test));
         // The wall: a quad faces +Z, turned to face back along the axis.
         const auto quad =
             test.assets.Store().Add<Fenrir::Mesh>(RendererTest::Quad(12.0f, 0.0f), Fenrir::AssetOwner::App());
@@ -459,9 +457,9 @@ TEST_CASE("A point light's casters shadow each of its six sides, where the way f
     };
     const RendererTest::Rgba8Image shadowed = render(true);
     const RendererTest::Rgba8Image unshadowed = render(false);
-    // The pixel the camera shows world point `point` at, through its 60-degree view.
-    const auto at = [&](const RendererTest::Rgba8Image& frame, Vec3 point) {
-        const Vec3 view = glm::inverse(look) * (point - eye);
+    // The wall's green at `x` across and `y` aside of its middle, at the pixel the camera's 60-degree view shows it.
+    const auto at = [&](const RendererTest::Rgba8Image& frame, float x, float y) {
+        const Vec3 view = glm::inverse(look) * (axis * 4.0f + across * x + aside * y - eye);
         const float reach = -view.z * std::tan(1.04719755f * 0.5f);
         const auto pixel = [](float ndc) {
             return static_cast<std::uint32_t>(std::clamp(
@@ -470,22 +468,24 @@ TEST_CASE("A point light's casters shadow each of its six sides, where the way f
         return GreenAt(frame, pixel(view.x / reach), pixel(-view.y / reach));
     };
 
-    for (const Vec3 offset : {Vec3(0.0f), across * 0.3f, across * -0.3f, aside * -0.3f})
+    for (const auto& [x, y] : {std::array<float, 2>{0.8f, 0.4f}, std::array<float, 2>{1.1f, 0.6f},
+                               std::array<float, 2>{0.55f, 0.15f}, std::array<float, 2>{0.9f, 0.8f}})
     {
-        const Vec3 point = axis * 4.0f + offset;
-        CAPTURE(point.x, point.y, point.z);
-        INFO("lit without shadows: " << at(unshadowed, point));
-        REQUIRE(at(unshadowed, point) > 0.3f);
-        INFO("inside the box's shadow the wall has only the sky's light: " << at(shadowed, point));
-        REQUIRE(at(shadowed, point) < 0.05f);
+        CAPTURE(x, y);
+        INFO("the wall is lit there without shadows: " << at(unshadowed, x, y));
+        REQUIRE(at(unshadowed, x, y) > 0.3f);
+        INFO("inside the box's shadow it has only the sky's light: " << at(shadowed, x, y));
+        REQUIRE(at(shadowed, x, y) < 0.05f);
     }
-    for (const Vec3 offset : {across * 1.5f, across * -1.5f, aside * 1.5f, aside * -1.5f})
+    // Outside it: mirrored across each of the face's axes, at the wall's middle, and past the shadow's far edge.
+    for (const auto& [x, y] :
+         {std::array<float, 2>{-0.8f, 0.4f}, std::array<float, 2>{0.8f, -0.5f}, std::array<float, 2>{-0.8f, -0.4f},
+          std::array<float, 2>{0.0f, 0.0f}, std::array<float, 2>{1.9f, 0.4f}})
     {
-        const Vec3 point = axis * 4.0f + offset;
-        CAPTURE(point.x, point.y, point.z);
-        INFO("outside it the light reaches the wall as it does without shadows: " << at(shadowed, point) << " against "
-                                                                                  << at(unshadowed, point));
-        REQUIRE(at(unshadowed, point) > 0.3f);
-        REQUIRE(at(shadowed, point) > 0.97f * at(unshadowed, point));
+        CAPTURE(x, y);
+        INFO("the wall is lit there without shadows: " << at(unshadowed, x, y));
+        REQUIRE(at(unshadowed, x, y) > 0.3f);
+        INFO("and as brightly with them: " << at(shadowed, x, y) << " against " << at(unshadowed, x, y));
+        REQUIRE(at(shadowed, x, y) > 0.97f * at(unshadowed, x, y));
     }
 }

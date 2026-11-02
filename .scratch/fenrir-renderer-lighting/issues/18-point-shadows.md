@@ -59,7 +59,8 @@ Built 2026-11-02, stacked on ticket 17's branch (#265 to #277 not yet merged). D
   size, the choice; null: one layered `PointShadows` pass and six instances a light, a pass a face without vertex
   layers, a `POINT_SHADOW`-less user shader mixed in, light order and `lights.z`, bindings 9 and 10, one warning, the
   cubes remade and freed), `Tests/OpenGL/Shadows.cpp` (a box's shadow on a wall behind it on each of the six sides,
-  drawn instanced and a face at a time; fails with the shadow multiply in `Lighting.glsl` removed). Set 0 counts in
+  the box off the face's axis so a swapped or mirrored face misses, drawn instanced and a face at a time; fails with
+  the shadow multiply in `Lighting.glsl` removed). Set 0 counts in
   Lights, Sky, SkyLighting and Scripting Drawing went 9 to 11, Flattening 17 to 19.
 - **msvc-x64-debug:** the whole CTest tree passed (GL included, RTX 5080).
 
