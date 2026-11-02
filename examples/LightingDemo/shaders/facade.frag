@@ -85,9 +85,10 @@ void main()
     float bay = (u + halfWidth - Pier) / (span / bays);
     bool shop = height < ShopHeight;
     float storey = shop ? height / ShopHeight : (height - ShopHeight) / StoreyHeight;
-    // Taken here, in uniform control flow, for the masks below.
+    // Taken here, in uniform control flow, for the masks below. The storey's from the height, which runs on smoothly
+    // where the storey's formula changes at the shop floor's top.
     float bayWidth = fwidth(bay);
-    float storeyWidth = fwidth(storey);
+    float storeyWidth = fwidth(height) / (shop ? ShopHeight : StoreyHeight);
 
     // The window of this bay and storey, and how much of the pixel it covers.
     float column = floor(bay);

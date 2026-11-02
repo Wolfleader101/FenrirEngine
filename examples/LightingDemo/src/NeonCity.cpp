@@ -116,8 +116,8 @@ namespace LightingDemo
         /** @brief A car driving round one lane, wrapping at the city's edge. */
         struct Car
         {
-            /** @brief The lane's centre line, as the fixed coordinate across it, and the axis it runs along. */
-            float lane = 0.0f;
+            /** @brief Its lane's centre line: the fixed coordinate across the axis it runs along. */
+            float across = 0.0f;
             bool alongX = true;
             /** @brief +1 or -1 along the axis. */
             float direction = 1.0f;
@@ -126,6 +126,16 @@ namespace LightingDemo
             float speed = 10.0f;
             Fenrir::Colour paint;
             std::array<Fenrir::Entity, 2> headlights;
+        };
+
+        /** @brief Which of a car's parts a CarPart list draws: its index in CityState::carParts. */
+        enum CarPartKind : std::uint8_t
+        {
+            Body,
+            Cabin,
+            Headlamp,
+            Taillight,
+            CarPartKinds
         };
 
         /** @brief One instance list the cars are drawn from, rebuilt each frame they move. */
@@ -144,8 +154,8 @@ namespace LightingDemo
             std::vector<Sign> signs;
             Fenrir::AssetHandle<Fenrir::InstanceList> signSlabs;
             std::vector<Car> cars;
-            /** @brief The bodies, cabins, headlamps and tail-lights. */
-            std::array<CarPart, 4> carParts;
+            /** @brief The bodies, cabins, headlamps and tail-lights, by CarPartKind. */
+            std::array<CarPart, CarPartKinds> carParts;
             std::size_t buildings = 0;
             float lampIntensity = 40.0f;
             float signIntensity = 5.0f;
@@ -166,6 +176,7 @@ namespace LightingDemo
             float appliedPuddles = -1.0f;
         };
 
+        /** @brief A builtin:lit material of `colour`, `metallic` and `roughness`. */
         Fenrir::AssetHandle<Fenrir::Material> LitMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene,
                                                           Fenrir::Colour colour, float metallic, float roughness)
         {
@@ -174,6 +185,47 @@ namespace LightingDemo
             store.SetFloat(material, "metallic", metallic);
             store.SetFloat(material, "roughness", roughness);
             return material;
+        }
+
+        /** @brief A white builtin:unlit material: its copies glow their copy colour. */
+        Fenrir::AssetHandle<Fenrir::Material> UnlitMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene)
+        {
+            return store.CreateMaterial(store.Load<Fenrir::Shader>("builtin:unlit", scene).handle, scene);
+        }
+
+        /** @brief One of `count` choices, picked evenly by `random`. */
+        std::size_t Pick(std::mt19937& random, std::size_t count)
+        {
+            const float unit = std::uniform_real_distribution<float>(0.0f, 1.0f)(random);
+            return std::min(static_cast<std::size_t>(unit * static_cast<float>(count)), count - 1);
+        }
+
+        /** @brief The signs' slabs, each glowing its sign's colour at the panel's sign intensity times its share. */
+        Fenrir::InstanceListData SignSlabs(const CityState& state)
+        {
+            Fenrir::InstanceListData slabs;
+            for (const Sign& sign : state.signs)
+            {
+                slabs.transforms.push_back(sign.slab);
+                slabs.colours.push_back(Scaled(sign.colour, state.signIntensity * sign.share));
+            }
+            return slabs;
+        }
+
+        /**
+         * @brief A neon sign: `rect` at `at`, turned by `facing` (a rect light faces its entity's -Z), at `share` of
+         * the panel's sign intensity, with a slab of its width and height.
+         */
+        void AddSign(Fenrir::Scene& scene, CityState& state, Vec3 at, Quat facing, Fenrir::RectLight rect, float share)
+        {
+            rect.intensity = state.signIntensity * share;
+            Fenrir::Entity entity = scene.GetEntityList().CreateEntity();
+            Fenrir::Transform& transform = entity.AddComponent<Fenrir::Transform>();
+            transform.pos = at;
+            transform.rot = facing;
+            entity.AddComponent<Fenrir::RectLight>(rect);
+            state.signs.push_back(
+                {entity, Placement(at, facing, {rect.width, rect.height, 0.05f}), rect.colour, share});
         }
 
         /** @brief An entity drawing `copies` of `mesh` in `material`, none of them shadow casters (no light casts). */
@@ -281,11 +333,7 @@ namespace LightingDemo
                 return;
             }
             std::uniform_real_distribution<float> unit(0.0f, 1.0f);
-            const auto pick = [&](std::size_t count) {
-                return std::min(static_cast<std::size_t>(unit(random) * static_cast<float>(count)), count - 1);
-            };
             Fenrir::InstanceListData buildings;
-            Fenrir::EntityList& entities = scene.GetEntityList();
             for (int bx = 0; bx < Blocks; ++bx)
             {
                 for (int bz = 0; bz < Blocks; ++bz)
@@ -307,7 +355,7 @@ namespace LightingDemo
                             const Vec2 centre = lot + push * (Vec2(Lot - size.x, Lot - size.z) * 0.5f);
                             buildings.transforms.push_back(Placement({centre.x, KerbHeight + height * 0.5f, centre.y},
                                                                      Quat(1.0f, 0.0f, 0.0f, 0.0f), size));
-                            Fenrir::Colour light = WindowLight.at(pick(WindowLight.size()));
+                            Fenrir::Colour light = WindowLight.at(Pick(random, WindowLight.size()));
                             light.a = 0.1f + 0.35f * unit(random);
                             buildings.colours.push_back(light);
 
@@ -326,42 +374,25 @@ namespace LightingDemo
                                 const Vec3 wall = Vec3(centre.x, KerbHeight, centre.y) + out * halfDepth;
                                 if (unit(random) < 0.8f)
                                 {
+                                    // A shop sign above the ground floor, facing out from the wall.
                                     const float width = std::min(wallWidth * (0.4f + 0.3f * unit(random)), 7.0f);
                                     const Vec3 at = wall + out * 0.25f + Up * 3.7f +
                                                     along * ((unit(random) - 0.5f) * (wallWidth - width) * 0.8f);
-                                    const Fenrir::RectLight rect{
-                                        Neon.at(pick(Neon.size())), state.signIntensity, width, 0.5f, false, 12.0f};
-                                    // A rect light faces its entity's -Z: out from the wall.
-                                    const Quat facing = glm::quatLookAt(out, Up);
-                                    Fenrir::Entity entity = entities.CreateEntity();
-                                    Fenrir::Transform& transform = entity.AddComponent<Fenrir::Transform>();
-                                    transform.pos = at;
-                                    transform.rot = facing;
-                                    entity.AddComponent<Fenrir::RectLight>(rect);
-                                    state.signs.push_back(
-                                        {entity, Placement(at, facing, {width, 0.5f, 0.05f}), rect.colour, 1.0f});
+                                    AddSign(scene, state, at, glm::quatLookAt(out, Up),
+                                            {Neon.at(Pick(random, Neon.size())), 1.0f, width, 0.5f, false, 12.0f},
+                                            1.0f);
                                 }
                                 if (unit(random) < 0.35f && height > 12.0f)
                                 {
+                                    // A brighter blade sign standing out from a corner, its faces along the street
+                                    // (its +X points out).
                                     const float tallness = std::min(4.0f + 5.0f * unit(random), height - 7.0f);
                                     const float corner = unit(random) < 0.5f ? -1.0f : 1.0f;
                                     const Vec3 at = wall + out * 0.75f + Up * (5.5f + tallness * 0.5f) +
                                                     along * (corner * (wallWidth * 0.5f - 1.0f));
-                                    const Fenrir::RectLight rect{Neon.at(pick(Neon.size())),
-                                                                 state.signIntensity * 1.4f,
-                                                                 1.0f,
-                                                                 tallness,
-                                                                 true,
-                                                                 16.0f};
-                                    // Standing out from the wall, its faces along the street: its +X points out.
-                                    const Quat facing = glm::quatLookAt(along, Up);
-                                    Fenrir::Entity entity = entities.CreateEntity();
-                                    Fenrir::Transform& transform = entity.AddComponent<Fenrir::Transform>();
-                                    transform.pos = at;
-                                    transform.rot = facing;
-                                    entity.AddComponent<Fenrir::RectLight>(rect);
-                                    state.signs.push_back(
-                                        {entity, Placement(at, facing, {1.0f, tallness, 0.05f}), rect.colour, 1.4f});
+                                    AddSign(scene, state, at, glm::quatLookAt(along, Up),
+                                            {Neon.at(Pick(random, Neon.size())), 1.0f, 1.0f, tallness, true, 16.0f},
+                                            1.4f);
                                 }
                             }
                         }
@@ -371,14 +402,7 @@ namespace LightingDemo
             state.buildings = buildings.transforms.size();
             AddList(store, scene, cube, facade, std::move(buildings));
 
-            Fenrir::InstanceListData slabs;
-            for (const Sign& sign : state.signs)
-            {
-                slabs.transforms.push_back(sign.slab);
-                slabs.colours.push_back(Scaled(sign.colour, state.signIntensity * sign.share));
-            }
-            const auto unlit = store.CreateMaterial(store.Load<Fenrir::Shader>("builtin:unlit", scene).handle, scene);
-            state.signSlabs = AddList(store, scene, cube, unlit, std::move(slabs));
+            state.signSlabs = AddList(store, scene, cube, UnlitMaterial(store, scene), SignSlabs(state));
         }
 
         /** @brief A street lamp on the kerb of every block's side, two a side: a pole, an arm, a glowing head. */
@@ -427,15 +451,14 @@ namespace LightingDemo
             heads.colours.assign(heads.transforms.size(), Scaled(LampColour, 25.0f));
             AddList(store, scene, cube, LitMaterial(store, scene, {0.05f, 0.05f, 0.05f, 1.0f}, 0.8f, 0.45f),
                     std::move(metal));
-            const auto unlit = store.CreateMaterial(store.Load<Fenrir::Shader>("builtin:unlit", scene).handle, scene);
-            AddList(store, scene, cube, unlit, std::move(heads));
+            AddList(store, scene, cube, UnlitMaterial(store, scene), std::move(heads));
         }
 
         /** @brief Where `car` is and which way it faces, in the world: its body's origin on the road. */
         Mat4 CarFrame(const Car& car)
         {
             const Vec3 forward = car.alongX ? Vec3(car.direction, 0.0f, 0.0f) : Vec3(0.0f, 0.0f, car.direction);
-            const Vec3 at = car.alongX ? Vec3(car.along, 0.0f, car.lane) : Vec3(car.lane, 0.0f, car.along);
+            const Vec3 at = car.alongX ? Vec3(car.along, 0.0f, car.across) : Vec3(car.across, 0.0f, car.along);
             // A car faces its frame's -Z.
             return Placement(at, glm::quatLookAt(forward, Up), Vec3(1.0f));
         }
@@ -458,13 +481,13 @@ namespace LightingDemo
             for (Car& car : state.cars)
             {
                 const Mat4 frame = CarFrame(car);
-                add(state.carParts[0], frame, {0.0f, 0.62f, 0.0f}, {1.85f, 0.72f, 4.5f}, car.paint);
-                add(state.carParts[1], frame, {0.0f, 1.22f, 0.3f}, {1.6f, 0.5f, 2.3f}, Fenrir::Colour::White);
+                add(state.carParts[Body], frame, {0.0f, 0.62f, 0.0f}, {1.85f, 0.72f, 4.5f}, car.paint);
+                add(state.carParts[Cabin], frame, {0.0f, 1.22f, 0.3f}, {1.6f, 0.5f, 2.3f}, Fenrir::Colour::White);
                 for (const float side : {-1.0f, 1.0f})
                 {
-                    add(state.carParts[2], frame, {side * 0.62f, 0.72f, -2.26f}, {0.42f, 0.14f, 0.04f},
+                    add(state.carParts[Headlamp], frame, {side * 0.62f, 0.72f, -2.26f}, {0.42f, 0.14f, 0.04f},
                         Scaled(HeadlightColour, 30.0f));
-                    add(state.carParts[3], frame, {side * 0.7f, 0.78f, 2.26f}, {0.36f, 0.12f, 0.04f},
+                    add(state.carParts[Taillight], frame, {side * 0.7f, 0.78f, 2.26f}, {0.36f, 0.12f, 0.04f},
                         Scaled(TaillightColour, 3.0f));
                 }
                 const Quat facing = glm::quat_cast(frame) * dipped;
@@ -505,7 +528,7 @@ namespace LightingDemo
                         for (int c = 0; c < CarsPerLane; ++c)
                         {
                             Car car;
-                            car.lane = StreetLine(i) + offset;
+                            car.across = StreetLine(i) + offset;
                             car.alongX = alongX;
                             car.direction = direction;
                             car.along = std::fmod(start + static_cast<float>(c) * 2.0f * CityHalf / CarsPerLane +
@@ -513,8 +536,7 @@ namespace LightingDemo
                                                   2.0f * CityHalf) -
                                         CityHalf;
                             car.speed = speed;
-                            car.paint = Paint.at(
-                                std::min(static_cast<std::size_t>(unit(random) * Paint.size()), Paint.size() - 1));
+                            car.paint = Paint.at(Pick(random, Paint.size()));
                             for (Fenrir::Entity& headlight : car.headlights)
                             {
                                 headlight = entities.CreateEntity();
@@ -527,11 +549,11 @@ namespace LightingDemo
                     }
                 }
             }
-            const auto unlit = store.Load<Fenrir::Shader>("builtin:unlit", scene).handle;
-            const std::array<Fenrir::AssetHandle<Fenrir::Material>, 4> materials{
+            // By CarPartKind: painted bodies, dark glass cabins, glowing headlamps and tail-lights.
+            const std::array<Fenrir::AssetHandle<Fenrir::Material>, CarPartKinds> materials{
                 LitMaterial(store, scene, Fenrir::Colour::White, 0.6f, 0.3f),
-                LitMaterial(store, scene, {0.02f, 0.022f, 0.025f, 1.0f}, 0.0f, 0.08f),
-                store.CreateMaterial(unlit, scene), store.CreateMaterial(unlit, scene)};
+                LitMaterial(store, scene, {0.02f, 0.022f, 0.025f, 1.0f}, 0.0f, 0.08f), UnlitMaterial(store, scene),
+                UnlitMaterial(store, scene)};
             for (std::size_t i = 0; i < state.carParts.size(); ++i)
             {
                 state.carParts.at(i).list = AddList(store, scene, cube, materials.at(i), {});
@@ -600,16 +622,13 @@ namespace LightingDemo
             }
             if (state.appliedSigns != state.signIntensity)
             {
-                Fenrir::InstanceListData slabs;
                 for (Sign& sign : state.signs)
                 {
                     sign.light.GetComponent<Fenrir::RectLight>().intensity = state.signIntensity * sign.share;
-                    slabs.transforms.push_back(sign.slab);
-                    slabs.colours.push_back(Scaled(sign.colour, state.signIntensity * sign.share));
                 }
                 if (!state.signSlabs.IsEmpty())
                 {
-                    store.Replace(state.signSlabs, std::move(slabs));
+                    store.Replace(state.signSlabs, SignSlabs(state));
                 }
                 state.appliedSigns = state.signIntensity;
             }

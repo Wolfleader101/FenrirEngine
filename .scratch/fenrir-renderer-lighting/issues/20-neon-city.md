@@ -9,10 +9,40 @@
 
 **Touches:** `examples/LightingDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] LightingDemo's smoke runs pass on null with no fetched assets.
+- [x] LightingDemo's smoke runs pass on null with no fetched assets.
 
 Hand check: neon streaks on wet streets, glowing signs, and a smooth frame rate flying down the streets.
 
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+
+Built 2026-11-02, stacked on ticket 19's branch (#265 to #279 not yet merged). Decisions to review:
+
+- **No renderer change.** A user shader reached `Fenrir/Lighting.glsl`, the instance lists and their copy colours as
+  the forest's did; nothing was missing.
+- **The city.** 5 x 5 blocks of 3 x 3 lots, 225 towers (one instance list, the facade shader), two-lane streets,
+  sidewalks and dashed centre lines; all generated from the `builtin:` cube, no fetched model. `src/NeonCity.cpp`.
+- **662 lights at the demo's seed:** 318 rect-light signs (shop signs over the ground floor, two-sided blade signs at
+  some corners, each on an unlit slab of its own size and radiance), 200 point-light lamps, 144 spot headlights on 72
+  cars whose four instance lists (bodies, cabins, headlamps, tail-lights) are replaced each frame they move.
+- **The facade shader** (`shaders/facade.*`): windows by bay and storey; the copy colour's RGB is the windows' light and
+  its alpha the share lit; a hash picks each lit window; distant windows fade to their average, so far facades do not
+  shimmer.
+- **The puddle mask is procedural**, in the street shader (`shaders/street.*`): value noise over the world position, cut
+  at a share the panel sets. Puddles are smooth, level and darker, the asphalt between them damp (roughness x 0.3).
+  No mask texture was fetched.
+- **The sky is Kloppenheim 07 (Pure Sky), not Modern Buildings Night.** The latter's bright plaza floor, below the
+  horizon, made the city read as a model on a table. Pure sky has no ground.
+- **Exposure -1 EV, sky 0.03, windows 0.12.** AgX lifts the lamps' dim spill on the upper walls to dusk at 0 EV, and its
+  log curve turns window emission of even 0.3 to cream. The bright neon's pale cores with coloured bloom and spill are
+  what photographs of neon show, so the signs stay bright (5).
+- **Not asked for:** `src/DemoMaterials.*` (`EmbeddedMaterial` and `AsLinear` moved out of the forest for both scenes),
+  keys N (traffic), M (wet or dry) and C (clustering), and the panel's intensity sliders.
+- **Timing (Debug, RTX 5080, 1280 x 720, 4x MSAA):** about 9 ms a frame clustered (9.3, 9.1) and unclustered (9.1,
+  8.8): at this size the Debug CPU work bounds the frame, not the light loop. The cluster heat view shows about 16
+  lights a cluster along the streets, far under the cap of 256.
+- **Screenshots:** `.scratch/fenrir-renderer-lighting/screenshots/20-neon-city/`.
+- **msvc-x64-debug:** the whole CTest tree passed (GL included, RTX 5080): 163 of 170 at once, and the seven C#
+  hosting tests run again after their `Iris.Bridge` runtime configs, zeroed by a session crash mid-build, were copied
+  back from `iris/bridge`. LightingDemo's smoke runs passed again after the review fixes.
