@@ -30,12 +30,12 @@ detaches the shadows from the helmets' bases, lowering them to 0 brings acne bac
 ## Assets
 
 Committed ones are in `assets/` (`assets/ATTRIBUTION.md`); the large ones are fetched (ADR-0052). Configure with
-`-DFENRIR_FETCH_DEMO_ASSETS=ON` and CMake downloads every file `fetched-assets.json` lists, about 110 MB, into
-`FENRIR_DEMO_ASSET_CACHE` (by default `%LOCALAPPDATA%/FenrirEngine/demo-assets` on Windows, else
-`$XDG_CACHE_HOME/FenrirEngine/demo-assets` or `~/.cache/FenrirEngine/demo-assets`), outside the build directory, and
-checks each one's SHA-256: a file whose hash is not the manifest's fails configure, naming it. A file already cached with
-the right hash is not downloaded again, so a clean build reuses the cache. The app loads the fetched files from the cache
-by absolute path; nothing is copied into the build.
+`-DFENRIR_FETCH_DEMO_ASSETS=ON` and CMake downloads every file `fetched-assets.json` lists, about 790 MB (487 MB of it
+the forest's Fir Tree 01), into `FENRIR_DEMO_ASSET_CACHE` (by default `%LOCALAPPDATA%/FenrirEngine/demo-assets` on
+Windows, else `$XDG_CACHE_HOME/FenrirEngine/demo-assets` or `~/.cache/FenrirEngine/demo-assets`), outside the build
+directory, and checks each one's SHA-256: a file whose hash is not the manifest's fails configure, naming it. A file
+already cached with the right hash is not downloaded again, so a clean build reuses the cache. The app loads the fetched
+files from the cache by absolute path; nothing is copied into the build.
 
 `fetched-assets.json` holds `{"assets": [{"path", "url", "sha256", "licence"}]}`: the file's place in the cache, its
 pinned upstream URL (Khronos glTF-Sample-Assets at a commit, Poly Haven, or Solar System Scope), its SHA-256 and its
@@ -197,6 +197,70 @@ Hand checks, on OpenGL:
 - The planet's shadow darkens the ring's far side behind it, its edge sliding over the rocks as the ring turns, and the
   field's rocks shadow one another.
 
+### Forest clearing
+
+A temperate forest clearing in late-afternoon sun: the dense, alpha-tested, animated instancing case. A clearing about
+40 metres across lies in a shallow hollow, its edge ragged, ringed by a dense forest of Poly Haven's Fir Tree 01
+(firs of 11 to 17 metres) with broadleaf Tree Small 02 and Fir Sapling below the crowns, out to 75 metres. A winding dirt
+path crosses it from where the camera starts towards the sun, low beyond the trees ahead, whose gap in the crowns
+lets it light the clearing's middle; a large mossy boulder (Rock Moss Set 01) stands in the foreground beside the path,
+a fallen log (Dead Tree Trunk 02) beside it to the left. Ferns, shrubs, mossy rocks, pebbles, stumps, roots and dry
+branches grow along the edge and under the trees, about 20,000 copies of thirteen species in all, half of them pebbles
+(ADR-0051): each of a model's glTF nodes is a kind, with one instance list per level of detail, and each mesh one
+InstancedMeshRenderer drawing that list.
+
+The renderer has no LODs and its shadow cascades draw every caster, so the demo budgets the forest itself:
+
+- **Trees thin with distance** (`ThinnedCards`, `src/MeshTools.cpp`): a tree's leaf and twig cards (the fir's
+  4 million twig triangles are 800,000 cards) are split into their connected pieces, one in 16, 48 or 128 kept as the
+  tree stands farther past the clearing's edge, each grown so the crown keeps its cover; the farther trunks are
+  simplified by vertex clustering, the nearest kept whole. The deepest trees cast no shadow and are drawn darker instead, as the floor under them is.
+- **The understory stays near the clearing**: ferns, pebbles and branches grow only within 12 to 20 metres of its
+  edge, and only the nearest cast shadows.
+- **Foliage is cut out by its alpha**: Poly Haven's JPEG glTFs leave the alpha out of the leaf and twig textures,
+  so their cards draw solid whether the material is MASK, BLEND or OPAQUE, and each species' alpha map is fetched and put back into its
+  base colour, which is drawn `Masked` with a cutoff of 0.3 (thin needles fade in the smaller mips): the cut-outs show
+  in the depth prepass, the shadow cascades and the lit pass alike.
+
+The ground is a generated terrain mesh drawn by the demo's ground shader (`shaders/ground.vert`, `ground.frag`): Poly
+Haven's Forest Ground 04 in the clearing, Forest Leaves 04 under the trees and Stony Dirt Path on the path, blended by
+weights the mesh carries per vertex and broken up by each texture's occlusion, the floor darkened under the canopy. The
+grass is about 200,000 generated blades, no asset (`src/ForestGround.cpp`): thick in the open, thinning under the trees
+and off the path, in 38 chunk meshes, each blade a curving strip with a face each way, drawn by the demo's wind shader
+(`shaders/grass.vert`, `grass.frag`), whose vertex stage sways each blade by the square of its height in rolling gusts
+and whose fragment stage lights it through `Fenrir/Lighting.glsl`. The renderer runs that vertex stage in the depth
+prepass and the shadow cascades too, so the blades' depth, shadows and pixels sway together. GTAO (radius 1 metre here)
+grounds the plants. The sky is Poly Haven's Qwantani Late Afternoon, whose sun the DirectionalLight comes from, or a sky
+the demo makes with its sun in the same place.
+
+The window's Scene part has the forest's density (cutting each list to its share, which uploads it again), the grass
+shown or hidden, the counts, the last frame's draws, instances and shadow draws, and the frame time. In Release on an
+RTX 5080 at 1280 by 720 with 4x MSAA the full scene takes about 30 ms a frame. Without the fetched assets the grass
+still grows over plain earth-coloured ground and path, among box trunks and sphere boulders (two instance lists) and
+stand-ins for the boulder and log, under the demo's sky, and the scene says so on screen.
+
+| Keys | |
+| --- | --- |
+| T, E, B, O, G, H, S | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows, the next panorama. |
+| N | 25%, 50% or all of the forest. |
+| M | The grass hidden or shown. |
+
+Hand checks, on OpenGL (Release for a usable frame rate):
+
+- The grass sways in rolling gusts, and its shadows on the ground and on its neighbours sway with it.
+- The ferns', shrubs', saplings' and trees' leaves and twigs cut out cleanly in light and in their shadows: no
+  box-shaped shadows of their cards, and no holes or halos where the prepass and the lit pass disagree.
+- The sun lights the clearing's middle through the gap in the crowns; the edges and the forest lie in the trees' shade.
+- G to the occlusion view shows the plants, boulder and log grounded by dark contact shading.
+- Without the fetched assets: grass, trunks and boulders, and an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, no
+  error in the log.
+
+Not yet here: haze and sun shafts through the trees (ticket 24), debug views of the albedo, normals, roughness,
+metallic, direct and indirect light and wireframe (ticket 23); higher-quality trees and ground vegetation from Fab
+(Megascans), which need a login and so cannot be fetched by the manifest; and the bark's texture transforms: the glTF
+importer reads neither `KHR_texture_transform` nor a texture's `texCoord`, so Fir Tree 01's bark and one trunk and Tree
+Small 02's branches sample their textures at the wrong scale.
+
 | Key | What it does |
 | --- | --- |
 | F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
@@ -205,4 +269,4 @@ Hand checks, on OpenGL:
 
 The scaffold's `LightingDemo-Smoke-null` (everywhere) and `LightingDemo-Smoke-opengl` (label `gl`) run every scene for
 60 frames with its keys pressed, and fail on any error. Neither uses the fetched assets, so Showcase models runs empty
-Showroom's plinths bare and the asteroid ring of spheres and cubes, each with its message shown. `FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.
+Showroom's plinths bare, the asteroid ring of spheres and cubes and the forest clearing of grass, boulders and trunks, each with its message shown. `FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.
