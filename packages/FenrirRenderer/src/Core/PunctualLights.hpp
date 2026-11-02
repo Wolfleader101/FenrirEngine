@@ -33,9 +33,12 @@ namespace Fenrir::Render
         /** @brief A spot light's cone: full light inside `innerAngle`, none outside `outerAngle`, in radians. */
         float innerAngle = 0.0f;
         float outerAngle = 0.0f;
-        /** @brief Whether a spot light asks to cast shadows (ADR-0050), which the spot shadow budget may refuse. */
+        /**
+         * @brief Whether a point or spot light asks to cast shadows (ADR-0050), which its kind's shadow budget may
+         * refuse.
+         */
         bool castShadows = false;
-        /** @brief A shadowed spot light's normal-offset bias, in its shadow's texels, as the sun's: at least 0. */
+        /** @brief A shadowed light's normal-offset bias, in its shadow's texels, as the sun's: at least 0. */
         float shadowNormalBias = 1.0f;
         /** @brief Its slope-scaled bias, in its shadow's texels per unit of slope, as the sun's: at least 0. */
         float shadowSlopeBias = 2.0f;

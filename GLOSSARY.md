@@ -571,6 +571,10 @@ One of the directional light's shadow maps for one camera: an orthographic view 
 **Shadow atlas**
 One depth texture holding several shadow maps side by side, each drawn into its own tile: a camera's cascades, or every shadowed spot light's (ADR-0050).
 *Avoid:* shadow texture array, shadow page.
+
+**Point shadow cubes**
+One cube array of depth, a cube for each point light the budget lets cast, each face holding the distance from its light to the nearest caster over the light's range (ADR-0050).
+*Avoid:* point shadow maps, omni shadow map, shadow cubemap atlas.
 ## FenrirEngine debug drawing
 
 **FenrirDebugDraw**

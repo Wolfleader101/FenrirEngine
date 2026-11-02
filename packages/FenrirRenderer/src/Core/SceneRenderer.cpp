@@ -30,7 +30,10 @@ namespace Fenrir::Render
             Math::Vec4 sky;
             /** @brief The sky the scene is lit by: as `sky`, and its specular cube's highest mip. */
             Math::Vec4 skyLight;
-            /** @brief x: how many records the light buffer holds this frame; y: how many cast spot shadows, first. */
+            /**
+             * @brief x: how many records the light buffer holds this frame; y: how many cast spot shadows, first; z:
+             * how many cast point shadows, after them.
+             */
             std::array<std::uint32_t, 4> lights{};
         };
         static_assert(sizeof(FrameBlock) == 96);
@@ -53,7 +56,10 @@ namespace Fenrir::Render
             /** @brief Normal-offset and slope-scaled biases in texels, the filter's radius in texels, the blend share.
              */
             Math::Vec4 shadowBias{0.0f};
-            /** @brief x: how many cascades (0: no shadow); y: 1 to tint pixels by their cascade. */
+            /**
+             * @brief x: how many cascades (0: no shadow); y: 1 to tint pixels by their cascade; z: in a point light's
+             * shadow pass, its cube of the point shadow cubes.
+             */
             std::array<std::uint32_t, 4> shadowInfo{};
         };
         static_assert(sizeof(ViewBlock) == 608);
@@ -192,9 +198,10 @@ namespace Fenrir::Render
         // records as they need; reflection sizes such a block by one record, so their record layouts are checked. Set
         // 0's textures are the sky's light (ADR-0047): its spherical harmonics, its specular cube and the BRDF table,
         // then the rect lights' two LTC tables; its storage blocks are the point, spot and rect lights (ADR-0048), as
-        // many as the frame has, and the shadowed spot lights' records, with their atlas last (ADR-0050). Set 1's
-        // textures are the view's ambient occlusion (ADR-0049) and its sun's shadow atlas (ADR-0050).
-        [[maybe_unused]] constexpr std::array<FixedBinding, 15> FixedBindings{{
+        // many as the frame has, and the shadowed spot lights' records, with their atlas, then the shadowed point
+        // lights' records, with the point shadow cubes (ADR-0050). Set 1's textures are the view's ambient occlusion
+        // (ADR-0049) and its sun's shadow atlas (ADR-0050).
+        [[maybe_unused]] constexpr std::array<FixedBinding, 17> FixedBindings{{
             {0, 0, ShaderBindingKind::UniformBuffer, sizeof(FrameBlock)},
             {0, 1, ShaderBindingKind::Texture, 0},
             {0, 2, ShaderBindingKind::Texture, 0},
@@ -204,6 +211,8 @@ namespace Fenrir::Render
             {0, 6, ShaderBindingKind::Texture, 0},
             {0, 7, ShaderBindingKind::StorageBuffer, sizeof(GpuSpotShadow)},
             {0, 8, ShaderBindingKind::Texture, 0},
+            {0, 9, ShaderBindingKind::StorageBuffer, sizeof(GpuPointShadow)},
+            {0, 10, ShaderBindingKind::Texture, 0},
             {1, 0, ShaderBindingKind::UniformBuffer, sizeof(ViewBlock)},
             {1, 1, ShaderBindingKind::Texture, 0},
             {1, 2, ShaderBindingKind::Texture, 0},
@@ -254,6 +263,9 @@ namespace Fenrir::Render
         constexpr std::string_view AlphaMaskKey = "ALPHA_MASK";
         /** @brief The variant key the renderer sets for a skinned draw (ADR-0035). */
         constexpr std::string_view SkinnedKey = "SKINNED";
+        /** @brief The variant key of a point light's shadow: six cube faces as instances, or its distance (ADR-0050).
+         */
+        constexpr std::string_view PointShadowKey = "POINT_SHADOW";
         /** @brief The block member a `Masked` material's alpha cutoff is written into. */
         constexpr std::string_view AlphaCutoffMember = "alphaCutoff";
 
@@ -680,6 +692,18 @@ namespace Fenrir::Render
             return container.FindVariant(wanted);
         }
 
+        /** @brief `of`'s keys with POINT_SHADOW too, in `container`; null if the container has no such key. */
+        const ShaderVariant* PointShadowVariant(const ShaderContainer& container, const ShaderVariant& of)
+        {
+            if (std::ranges::find(container.keys, PointShadowKey) == container.keys.end())
+            {
+                return nullptr;
+            }
+            std::vector<std::string_view> wanted(of.keys.begin(), of.keys.end());
+            wanted.push_back(PointShadowKey);
+            return container.FindVariant(wanted);
+        }
+
         /** @brief -1 when `world` mirrors (a negative determinant of its 3x3), else 1. */
         float WorldSign(const Math::Mat4& world)
         {
@@ -738,14 +762,15 @@ namespace Fenrir::Render
 
     SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples,
                                  bool automaticInstancing, bool computeSkinning, CascadeConfig cascades,
-                                 SpotShadowConfig spotShadows)
+                                 SpotShadowConfig spotShadows, PointShadowConfig pointShadows)
         : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1)),
           m_automaticInstancing(automaticInstancing), m_computeSkinning(computeSkinning), m_cascades(cascades),
-          m_spotShadowConfig(spotShadows)
+          m_spotShadowConfig(spotShadows), m_pointShadowConfig(pointShadows)
     {
         m_cascades.count = std::clamp(m_cascades.count, 1u, MaxCascades);
         m_cascades.mapSize = std::max(m_cascades.mapSize, 1u);
         m_spotShadowConfig.mapSize = std::max(m_spotShadowConfig.mapSize, 16u);
+        m_pointShadowConfig.mapSize = std::max(m_pointShadowConfig.mapSize, 1u);
         m_frameLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer},
                                                             {1, ShaderBindingKind::Texture},
                                                             {2, ShaderBindingKind::Texture},
@@ -754,7 +779,9 @@ namespace Fenrir::Render
                                                             {5, ShaderBindingKind::Texture},
                                                             {6, ShaderBindingKind::Texture},
                                                             {7, ShaderBindingKind::StorageBuffer},
-                                                            {8, ShaderBindingKind::Texture}}},
+                                                            {8, ShaderBindingKind::Texture},
+                                                            {9, ShaderBindingKind::StorageBuffer},
+                                                            {10, ShaderBindingKind::Texture}}},
                                                           "Frame");
         m_viewLayout = m_device.CreateBindingGroupLayout(
             {{{0, ShaderBindingKind::UniformBuffer}, {1, ShaderBindingKind::Texture}, {2, ShaderBindingKind::Texture}}},
@@ -819,6 +846,14 @@ namespace Fenrir::Render
         m_noShadow = m_device.CreateTexture(noShadow, "No shadow");
         constexpr float farthest = 0.0f;
         m_device.WriteTexture(m_noShadow, 0, 0, BytesOf(farthest));
+        // The same for point shadows: one cube of 0.
+        TextureDesc noPointShadow = noShadow;
+        noPointShadow.kind = TextureKind::CubeArray;
+        m_noPointShadow = m_device.CreateTexture(noPointShadow, "No point shadow");
+        for (std::uint32_t face = 0; face < CubeFaceCount; ++face)
+        {
+            m_device.WriteTexture(m_noPointShadow, 0, face, BytesOf(farthest));
+        }
         m_defaultStreams = m_device.CreateBuffer({sizeof(DefaultStreams), BufferUsage::Vertex},
                                                  std::as_bytes(std::span(DefaultStreams)), "Default vertex streams");
 
@@ -883,6 +918,8 @@ namespace Fenrir::Render
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true, sizeof(GpuLight), "Lights");
         m_spotShadowBlocks = std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true,
                                                          sizeof(GpuSpotShadow), "Spot shadows");
+        m_pointShadowBlocks = std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true,
+                                                          sizeof(GpuPointShadow), "Point shadows");
         m_skyLighting = std::make_unique<SkyLighting>(m_device, m_logger);
         m_bloom = std::make_unique<BloomChain>(m_device, m_logger, m_samples);
         m_gtao = std::make_unique<Gtao>(m_device, m_logger, m_samples);
@@ -922,6 +959,7 @@ namespace Fenrir::Render
         m_frameBlocks->Reserve(1);
         m_lightBlocks->Reserve(1);
         m_spotShadowBlocks->Reserve(1);
+        m_pointShadowBlocks->Reserve(1);
     }
 
     SceneRenderer::~SceneRenderer()
@@ -1000,6 +1038,9 @@ namespace Fenrir::Render
         m_lightBlocks.reset();
         m_spotShadowBlocks.reset();
         m_device.Destroy(m_spotAtlas);
+        m_pointShadowBlocks.reset();
+        m_device.Destroy(m_pointShadowCubes);
+        m_device.Destroy(m_noPointShadow);
         m_viewBlocks.reset();
         m_backgroundBlocks.reset();
         m_outputBlocks.reset();
@@ -1985,6 +2026,18 @@ namespace Fenrir::Render
         m_spotAtlas = {};
     }
 
+    void SceneRenderer::SetPointShadowBudget(std::uint32_t budget)
+    {
+        if (budget == m_pointShadowConfig.budget)
+        {
+            return;
+        }
+        m_pointShadowConfig.budget = budget;
+        // As the spot shadow atlas: made again at the new size when a point light next casts.
+        m_device.Destroy(m_pointShadowCubes);
+        m_pointShadowCubes = {};
+    }
+
     SceneStats SceneRenderer::TakeStats()
     {
         const SceneStats stats = m_stats;
@@ -2049,13 +2102,20 @@ namespace Fenrir::Render
 
     void SceneRenderer::MakeBehindVertexStage(PrepassEntry& made, const VariantEntry& variant, std::uint32_t streams,
                                               const ShaderContainer& program, bool masked, PipelineDesc desc,
-                                              std::string_view label)
+                                              std::string_view label, bool point)
     {
         PipelineEntry& entry = made.pipeline;
         entry.id = NextId();
-        const std::array<std::string_view, 1> maskKeys{AlphaMaskKey};
-        const ShaderVariant* ours = program.FindVariant(masked ? std::span<const std::string_view>(maskKeys)
-                                                               : std::span<const std::string_view>());
+        std::vector<std::string_view> ourKeys;
+        if (masked)
+        {
+            ourKeys.push_back(AlphaMaskKey);
+        }
+        if (point)
+        {
+            ourKeys.push_back(PointShadowKey);
+        }
+        const ShaderVariant* ours = program.FindVariant(ourKeys);
         const auto stageOf = [](const ShaderVariant* of, ShaderStage stage) -> const ShaderStageCode* {
             if (of == nullptr)
             {
@@ -2124,10 +2184,10 @@ namespace Fenrir::Render
 
     const SceneRenderer::PipelineEntry& SceneRenderer::ShadowPipeline(const ShaderEntry& shader,
                                                                       const VariantEntry& variant,
-                                                                      std::uint32_t streams, bool masked)
+                                                                      std::uint32_t streams, bool masked, bool point)
     {
         const std::uint32_t read = variant.variant != nullptr ? ReadMask(*variant.variant) : 0;
-        const ShadowKey key{&shader, variant.variant, read & streams, masked};
+        const ShadowKey key{&shader, variant.variant, read & streams, masked, point};
         if (const auto found = m_shadowPipelines.find(key); found != m_shadowPipelines.end())
         {
             return found->second.pipeline;
@@ -2137,7 +2197,8 @@ namespace Fenrir::Render
         PipelineDesc desc;
         desc.cull = CullMode::None;
         desc.samples = 1;
-        MakeBehindVertexStage(made, variant, key.streams, m_shadow, masked, desc, "Shadow");
+        MakeBehindVertexStage(made, variant, key.streams, m_shadow, masked, desc, point ? "PointShadow" : "Shadow",
+                              point);
         if (!made.pipeline.failure.empty())
         {
             m_logger.Warn("FenrirRenderer: no shadow pipeline for shader '{}', so its items cast no shadow: {}",
@@ -2146,8 +2207,26 @@ namespace Fenrir::Render
         return made.pipeline;
     }
 
+    const SceneRenderer::PipelineEntry* SceneRenderer::LayeredShadowPipeline(const ShaderEntry& shader,
+                                                                             const VariantEntry& variant,
+                                                                             std::uint32_t streams, bool masked)
+    {
+        if (!m_device.Features().vertexLayer || variant.variant == nullptr)
+        {
+            return nullptr;
+        }
+        const ShaderVariant* layered = PointShadowVariant(shader.container, *variant.variant);
+        if (layered == nullptr)
+        {
+            return nullptr;
+        }
+        // The POINT_SHADOW variant's vertex stage, keyed as its own variant; its set 2 is the item's.
+        const PipelineEntry& entry = ShadowPipeline(shader, {layered, variant.materialLayout}, streams, masked, true);
+        return entry.pipeline.IsEmpty() ? nullptr : &entry;
+    }
+
     std::vector<SceneRenderer::ResolvedDraw> SceneRenderer::ResolveDraws(std::vector<SkinDispatch>& skins,
-                                                                         bool shadowed)
+                                                                         bool shadowed, bool pointShadowed)
     {
         // Each skinned mesh and palette range skinned once, however many draws read it (ADR-0050).
         std::map<std::pair<const MeshEntry*, std::uint32_t>, std::size_t> skinIndex;
@@ -2231,12 +2310,26 @@ namespace Fenrir::Render
             // Opaque and Masked items cast (ADR-0050), a Masked one cut out by its prepass mask group if it has one.
             const PipelineEntry* shadow = nullptr;
             const bool shadowMasked = masked && shader != &m_fallback && found->prepassed;
+            const PipelineEntry* pointShadow = nullptr;
+            const PipelineEntry* pointShadowLayered = nullptr;
             if (shadowed && request.castShadows && !IsTransparent(blend))
             {
                 shadow = &ShadowPipeline(*shader, *variant, streams, shadowMasked);
                 if (shadow->pipeline.IsEmpty())
                 {
                     shadow = nullptr;
+                }
+            }
+            if (pointShadowed && request.castShadows && !IsTransparent(blend))
+            {
+                pointShadow = &ShadowPipeline(*shader, *variant, streams, shadowMasked, true);
+                if (pointShadow->pipeline.IsEmpty())
+                {
+                    pointShadow = nullptr;
+                }
+                else
+                {
+                    pointShadowLayered = LayeredShadowPipeline(*shader, *variant, streams, shadowMasked);
                 }
             }
             if (prepassed())
@@ -2279,7 +2372,9 @@ namespace Fenrir::Render
             draw.prepass = prepass;
             draw.prepassMasked = prepass != nullptr && masked;
             draw.shadow = shadow;
-            draw.shadowMasked = shadow != nullptr && shadowMasked;
+            draw.shadowMasked = (shadow != nullptr || pointShadow != nullptr) && shadowMasked;
+            draw.pointShadow = pointShadow;
+            draw.pointShadowLayered = pointShadowLayered;
             draw.instances = list == nullptr ? InstanceRange{} : list->range;
             if (computeSkinned)
             {
@@ -2311,6 +2406,10 @@ namespace Fenrir::Render
             return draw.prepass;
         case DrawPass::Shadow:
             return draw.shadow;
+        case DrawPass::PointShadow:
+            return draw.pointShadow;
+        case DrawPass::PointShadowLayered:
+            return draw.pointShadowLayered;
         default:
             return draw.pipeline;
         }
@@ -2396,10 +2495,13 @@ namespace Fenrir::Render
             }
             encoder.SetIndexBuffer(draw.mesh->indices, IndexFormat::UInt32);
             // Each item reads its own record of the draw buffer, by its place in the draw list; an instance list's
-            // copies all read its one record, which Fenrir/Draw.glsl composes with each copy's.
-            encoder.DrawIndexed({.indexCount = draw.mesh->indexCount,
-                                 .instanceCount = draw.instances.count == 0 ? run.count : draw.instances.count,
-                                 .firstInstance = static_cast<std::uint32_t>(i)});
+            // copies all read its one record, which Fenrir/Draw.glsl composes with each copy's. Drawing a point light's
+            // cube faces as instances, each is six, one a face.
+            const std::uint32_t instances = draw.instances.count == 0 ? run.count : draw.instances.count;
+            encoder.DrawIndexed(
+                {.indexCount = draw.mesh->indexCount,
+                 .instanceCount = pass == DrawPass::PointShadowLayered ? instances * CubeFaceCount : instances,
+                 .firstInstance = static_cast<std::uint32_t>(i)});
         }
     }
 
@@ -2516,20 +2618,23 @@ namespace Fenrir::Render
         return group.group;
     }
 
-    const SceneRenderer::FrameGroup& SceneRenderer::FrameGroupFor(std::uint64_t frameIndex, TextureHandle spotAtlas)
+    const SceneRenderer::FrameGroup& SceneRenderer::FrameGroupFor(std::uint64_t frameIndex, TextureHandle spotAtlas,
+                                                                  TextureHandle pointShadowCubes)
     {
         const BufferHandle block = m_frameBlocks->Buffer(frameIndex);
         const BufferHandle lights = m_lightBlocks->Buffer(frameIndex);
         const BufferHandle spotShadows = m_spotShadowBlocks->Buffer(frameIndex);
+        const BufferHandle pointShadows = m_pointShadowBlocks->Buffer(frameIndex);
         const SkyLightingTextures& sky = m_skyLighting->Textures();
         // One pair of groups per copy, made again when a ring remade its buffer, the sky's textures changed, or the
-        // spot shadow atlas came, went or was made again.
+        // spot shadow atlas or point shadow cubes came, went or was made again.
         const std::size_t copies = std::max<std::size_t>(m_device.FramesInFlight(), 1);
         m_frameGroups.resize(copies);
         FrameGroup& group = m_frameGroups[static_cast<std::size_t>(frameIndex % copies)];
         if (group.group.IsEmpty() || group.block != block || group.lights != lights ||
             group.irradiance != sky.irradiance || group.specular != sky.specular || group.spotShadows != spotShadows ||
-            group.spotAtlas != spotAtlas)
+            group.spotAtlas != spotAtlas || group.pointShadows != pointShadows ||
+            group.pointShadowCubes != pointShadowCubes)
         {
             if (group.unshadowed != group.group)
             {
@@ -2570,14 +2675,24 @@ namespace Fenrir::Render
             atlasEntry.binding = 8;
             atlasEntry.texture = spotAtlas.IsEmpty() ? m_noShadow : spotAtlas;
             atlasEntry.sampler = m_shadowSampler;
-            std::vector<BindingGroupEntry> entries{blockEntry, irradiance,   specular,  brdf,      lightEntry,
-                                                   ltcMatrix,  ltcAmplitude, spotEntry, atlasEntry};
-            group = {block, lights, sky.irradiance, sky.specular, spotShadows, spotAtlas};
+            BindingGroupEntry pointEntry;
+            pointEntry.binding = 9;
+            pointEntry.buffer = pointShadows;
+            BindingGroupEntry cubesEntry;
+            cubesEntry.binding = 10;
+            cubesEntry.texture = pointShadowCubes.IsEmpty() ? m_noPointShadow : pointShadowCubes;
+            cubesEntry.sampler = m_shadowSampler;
+            std::vector<BindingGroupEntry> entries{blockEntry, irradiance, specular,     brdf,
+                                                   lightEntry, ltcMatrix,  ltcAmplitude, spotEntry,
+                                                   atlasEntry, pointEntry, cubesEntry};
+            group = {block,       lights,    sky.irradiance, sky.specular,
+                     spotShadows, spotAtlas, pointShadows,   pointShadowCubes};
             group.group = m_device.CreateBindingGroup({m_frameLayout, entries}, "Frame");
             group.unshadowed = group.group;
-            if (!spotAtlas.IsEmpty())
+            if (!spotAtlas.IsEmpty() || !pointShadowCubes.IsEmpty())
             {
-                entries.back().texture = m_noShadow;
+                entries.at(8).texture = m_noShadow;
+                entries.at(10).texture = m_noPointShadow;
                 group.unshadowed = m_device.CreateBindingGroup({m_frameLayout, entries}, "Frame unshadowed");
             }
         }
@@ -2717,7 +2832,7 @@ namespace Fenrir::Render
         {
             cameras.push_back(view.position);
         }
-        SpotShadowChoice spotChoice = ChooseSpotShadows(lighting.lights, cameras, m_spotShadowConfig.budget);
+        ShadowChoice spotChoice = ChooseSpotShadows(lighting.lights, cameras, m_spotShadowConfig.budget);
         if (spotChoice.wanted > spotChoice.lights.size() && !m_loggedSpotBudget)
         {
             m_loggedSpotBudget = true;
@@ -2725,44 +2840,68 @@ namespace Fenrir::Render
                           "farthest from the cameras light unshadowed",
                           spotChoice.wanted, m_spotShadowConfig.budget);
         }
+        // And the point lights, within theirs.
+        ShadowChoice pointChoice = ChoosePointShadows(lighting.lights, cameras, m_pointShadowConfig.budget);
+        if (pointChoice.wanted > pointChoice.lights.size() && !m_loggedPointBudget)
+        {
+            m_loggedPointBudget = true;
+            m_logger.Warn("FenrirRenderer: {} point lights cast shadows, past the point shadow budget of {}, so those "
+                          "farthest from the cameras light unshadowed",
+                          pointChoice.wanted, m_pointShadowConfig.budget);
+        }
 
         std::vector<SkinDispatch> skins;
         const auto draws = std::make_shared<const std::vector<ResolvedDraw>>(
-            ResolveDraws(skins, lighting.shadows.enabled || !spotChoice.lights.empty()));
+            ResolveDraws(skins, lighting.shadows.enabled || !spotChoice.lights.empty(), !pointChoice.lights.empty()));
         const std::uint64_t frameIndex = frame.frameIndex;
-        // The items that cast the sun's and the spot lights' shadows, in draw-list order.
+        // The items that cast the sun's and the spot lights' shadows, and those that cast the point lights', in
+        // draw-list order.
         std::vector<std::size_t> casters;
+        std::vector<std::size_t> pointCasters;
         for (std::size_t i = 0; i < draws->size(); ++i)
         {
             if ((*draws)[i].shadow != nullptr)
             {
                 casters.push_back(i);
             }
+            if ((*draws)[i].pointShadow != nullptr)
+            {
+                pointCasters.push_back(i);
+            }
         }
         if (casters.empty())
         {
             spotChoice.lights.clear();
         }
+        if (pointCasters.empty())
+        {
+            pointChoice.lights.clear();
+        }
         const auto spotCount = static_cast<std::uint32_t>(spotChoice.lights.size());
-        const FrameBlock frameBlock{
-            Math::Vec4(lighting.lightDirection, 0.0f),
-            Math::Vec4(lighting.lightColour, 0.0f),
-            Math::Vec4(m_frame.time, m_frame.deltaTime, 0.0f, 0.0f),
-            Math::Vec4(m_frame.backgroundIntensity, std::cos(m_frame.backgroundRotation),
-                       std::sin(m_frame.backgroundRotation), 0.0f),
-            Math::Vec4(lighting.skyIntensity, std::cos(lighting.skyRotation), std::sin(lighting.skyRotation),
-                       m_skyLighting->Textures().specularMaxLevel),
-            {static_cast<std::uint32_t>(lighting.lights.size() + lighting.rectLights.size()), spotCount, 0, 0}};
+        const auto pointCount = static_cast<std::uint32_t>(pointChoice.lights.size());
+        const FrameBlock frameBlock{Math::Vec4(lighting.lightDirection, 0.0f),
+                                    Math::Vec4(lighting.lightColour, 0.0f),
+                                    Math::Vec4(m_frame.time, m_frame.deltaTime, 0.0f, 0.0f),
+                                    Math::Vec4(m_frame.backgroundIntensity, std::cos(m_frame.backgroundRotation),
+                                               std::sin(m_frame.backgroundRotation), 0.0f),
+                                    Math::Vec4(lighting.skyIntensity, std::cos(lighting.skyRotation),
+                                               std::sin(lighting.skyRotation),
+                                               m_skyLighting->Textures().specularMaxLevel),
+                                    {static_cast<std::uint32_t>(lighting.lights.size() + lighting.rectLights.size()),
+                                     spotCount, pointCount, 0}};
         m_frameBlocks->Write(frameIndex, 0, BytesOf(frameBlock));
-        // The shadowed spot lights in their tiles' order, the other point and spot lights, then the rect lights,
-        // written again each frame into a buffer that grows by doubling.
+        // The shadowed spot lights in their tiles' order, the shadowed point lights in their cubes' order, the other
+        // point and spot lights, then the rect lights, written again each frame into a buffer that grows by doubling.
         m_lightBlocks->Reserve(lighting.lights.size() + lighting.rectLights.size());
         std::vector<bool> shadowedLight(lighting.lights.size(), false);
         std::size_t record = 0;
-        for (const std::size_t i : spotChoice.lights)
+        for (const std::vector<std::size_t>* chosen : {&spotChoice.lights, &pointChoice.lights})
         {
-            shadowedLight[i] = true;
-            m_lightBlocks->Write(frameIndex, record++, BytesOf(ToGpuLight(lighting.lights[i])));
+            for (const std::size_t i : *chosen)
+            {
+                shadowedLight[i] = true;
+                m_lightBlocks->Write(frameIndex, record++, BytesOf(ToGpuLight(lighting.lights[i])));
+            }
         }
         for (std::size_t i = 0; i < lighting.lights.size(); ++i)
         {
@@ -2814,9 +2953,11 @@ namespace Fenrir::Render
         }
         const std::vector<ViewRequest>& views = m_frame.views;
         // Each view's block, then each view's cascades' (ADR-0050), MaxCascades slots a view, then each spot light
-        // tile's.
+        // tile's, then each point light's: its cube's, then its faces'.
         const std::size_t firstTileSlot = views.size() * (1 + MaxCascades);
-        m_viewBlocks->Reserve(firstTileSlot + spotCount);
+        const std::size_t firstCubeSlot = firstTileSlot + spotCount;
+        constexpr std::size_t CubeSlots = 1 + CubeFaceCount;
+        m_viewBlocks->Reserve(firstCubeSlot + pointCount * CubeSlots);
 
         // Each shadowed spot light's perspective and record, and the atlas its tile is in, kept across frames.
         const SpotAtlasGrid grid = SpotAtlasGridOf(m_spotShadowConfig.budget);
@@ -2845,6 +2986,36 @@ namespace Fenrir::Render
                 m_spotAtlasDesc = desc;
             }
             spotAtlas = graph.ImportTexture("SpotShadowAtlas", m_spotAtlas, desc);
+        }
+
+        // Each shadowed point light's faces and record, and the point shadow cubes its cube is in, a cube per budget,
+        // kept across frames.
+        const std::uint32_t faceSize = m_pointShadowConfig.mapSize;
+        std::vector<PointShadow> pointShadows;
+        m_pointShadowBlocks->Reserve(std::max<std::size_t>(pointCount, 1));
+        for (std::uint32_t c = 0; c < pointCount; ++c)
+        {
+            const PunctualLight& light = lighting.lights[pointChoice.lights[c]];
+            pointShadows.push_back(FitPointShadow(light, faceSize));
+            m_pointShadowBlocks->Write(frameIndex, c, BytesOf(ToGpuPointShadow(light, pointShadows.back())));
+        }
+        GraphResource pointShadowCubes;
+        if (pointCount > 0)
+        {
+            TextureDesc desc;
+            desc.kind = TextureKind::CubeArray;
+            desc.format = TextureFormat::Depth32Float;
+            desc.width = faceSize;
+            desc.height = faceSize;
+            desc.layers = m_pointShadowConfig.budget;
+            desc.usage = TextureUsage::DepthAttachment | TextureUsage::Sampled;
+            if (m_pointShadowCubes.IsEmpty() || m_pointShadowCubesDesc != desc)
+            {
+                m_device.Destroy(m_pointShadowCubes);
+                m_pointShadowCubes = m_device.CreateTexture(desc, "Point shadow cubes");
+                m_pointShadowCubesDesc = desc;
+            }
+            pointShadowCubes = graph.ImportTexture("PointShadowCubes", m_pointShadowCubes, desc);
         }
         m_gtao->BeginFrame(views.size());
         m_backgroundBlocks->Reserve(views.size());
@@ -2923,7 +3094,8 @@ namespace Fenrir::Render
             }
         }
 
-        const FrameGroup& frameGroups = FrameGroupFor(frameIndex, spotCount > 0 ? m_spotAtlas : TextureHandle{});
+        const FrameGroup& frameGroups = FrameGroupFor(frameIndex, spotCount > 0 ? m_spotAtlas : TextureHandle{},
+                                                      pointCount > 0 ? m_pointShadowCubes : TextureHandle{});
         const BindingGroupHandle frameGroup = frameGroups.group;
         const BindingGroupHandle unshadowedFrame = frameGroups.unshadowed;
         const BindingGroupHandle drawGroup = DrawGroupFor(frameIndex);
@@ -2984,6 +3156,102 @@ namespace Fenrir::Render
                     }
                 });
             m_stats.shadowDraws += static_cast<std::uint32_t>(spotRuns->size() * tiles.size());
+        }
+
+        if (pointCount > 0)
+        {
+            // Each casting item's set 2, as in SpotShadows. Those whose shader has a POINT_SHADOW variant the device
+            // can draw are drawn into all six faces at once, the rest a face at a time.
+            const std::vector<AssetKey> allSampled(sampled.begin(), sampled.end());
+            auto pointGroups = std::make_shared<std::vector<BindingGroupHandle>>(draws->size());
+            std::vector<std::size_t> layered;
+            std::vector<std::size_t> faced;
+            for (const std::size_t i : pointCasters)
+            {
+                const ResolvedDraw& draw = (*draws)[i];
+                if (draw.material != nullptr)
+                {
+                    (*pointGroups)[i] = draw.shadowMasked ? PrepassGroup(*draw.material, allSampled)
+                                                          : GroupWithout(*draw.material, allSampled);
+                }
+                (draw.pointShadowLayered != nullptr ? layered : faced).push_back(i);
+            }
+            auto layeredRuns = std::make_shared<std::vector<DrawRun>>(
+                RunsOf(*draws, *pointGroups, layered, DrawPass::PointShadowLayered));
+            auto facedRuns =
+                std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *pointGroups, faced, DrawPass::PointShadow));
+            // Each light's view blocks: one from the light, not turned, naming its cube for the instanced faces, and
+            // one per face. The camera is the light, its range in w, which builtin:shadow's POINT_SHADOW variant reads.
+            const PixelRect face{0, 0, faceSize, faceSize};
+            const Math::Vec4 viewport(0.0f, 0.0f, static_cast<float>(faceSize), static_cast<float>(faceSize));
+            const TextureHandle white = GetDefaultTexture(DefaultTexture::White);
+            std::vector<BindingGroupHandle> cubeGroups;
+            std::vector<BindingGroupHandle> faceGroups;
+            for (std::uint32_t c = 0; c < pointCount; ++c)
+            {
+                const PointShadow& shadow = pointShadows[c];
+                const PunctualLight& light = lighting.lights[pointChoice.lights[c]];
+                const std::size_t slot = firstCubeSlot + c * CubeSlots;
+                const auto blockFor = [&](const Math::Mat4& view) {
+                    const Math::Mat4 viewProjection = shadow.projection * view;
+                    ViewBlock block{view,
+                                    shadow.projection,
+                                    viewProjection,
+                                    glm::inverse(viewProjection),
+                                    Math::Vec4(light.position, light.range),
+                                    viewport};
+                    block.shadowInfo = {0, 0, c, 0};
+                    return block;
+                };
+                m_viewBlocks->Write(frameIndex, slot, BytesOf(blockFor(shadow.view)));
+                cubeGroups.push_back(ViewGroupFor(frameIndex, slot, white));
+                for (std::uint32_t f = 0; f < CubeFaceCount; ++f)
+                {
+                    m_viewBlocks->Write(frameIndex, slot + 1 + f, BytesOf(blockFor(shadow.faceViews.at(f))));
+                    faceGroups.push_back(ViewGroupFor(frameIndex, slot + 1 + f, white));
+                }
+            }
+            // The instanced faces of every shadowed point light, in one pass attaching every layer, binding the frame
+            // group that does not read the cubes it draws.
+            if (!layered.empty())
+            {
+                graph.AddPass(
+                    "PointShadows", RenderStage::Shadow, QueueKind::Graphics,
+                    [=](PassBuilder& pass) {
+                        pass.LayeredDepthAttachment(pointShadowCubes, LoadOp::Clear, 0.0f);
+                        readSkinned(pass);
+                    },
+                    [this, draws, pointGroups, layeredRuns, unshadowedFrame, cubeGroups, face, drawGroup,
+                     skinned](PassContext& context) {
+                        for (const BindingGroupHandle cube : cubeGroups)
+                        {
+                            RecordDraws(context.Encoder(), *draws, *pointGroups, *layeredRuns, unshadowedFrame, cube,
+                                        drawGroup, skinned, face, DrawPass::PointShadowLayered);
+                        }
+                    });
+                m_stats.shadowDraws += static_cast<std::uint32_t>(layeredRuns->size() * pointCount);
+            }
+            // The rest a face at a time, a pass a face, clearing it unless the instanced pass cleared every layer.
+            if (!faced.empty())
+            {
+                const LoadOp load = layered.empty() ? LoadOp::Clear : LoadOp::Load;
+                for (std::uint32_t layer = 0; layer < pointCount * CubeFaceCount; ++layer)
+                {
+                    const BindingGroupHandle faceGroup = faceGroups[layer];
+                    graph.AddPass(
+                        "PointShadowFaces", RenderStage::Shadow, QueueKind::Graphics,
+                        [=](PassBuilder& pass) {
+                            pass.DepthAttachmentLayer(pointShadowCubes, layer, load, 0.0f);
+                            readSkinned(pass);
+                        },
+                        [this, draws, pointGroups, facedRuns, unshadowedFrame, faceGroup, face, drawGroup,
+                         skinned](PassContext& context) {
+                            RecordDraws(context.Encoder(), *draws, *pointGroups, *facedRuns, unshadowedFrame, faceGroup,
+                                        drawGroup, skinned, face, DrawPass::PointShadow);
+                        });
+                }
+                m_stats.shadowDraws += static_cast<std::uint32_t>(facedRuns->size() * pointCount * CubeFaceCount);
+            }
         }
         // The targets drawn into so far: the first view into each clears it. The window's key is empty.
         std::set<AssetKey> cleared;
@@ -3219,6 +3487,10 @@ namespace Fenrir::Render
                     {
                         pass.Sample(spotAtlas);
                     }
+                    if (!pointShadowCubes.IsEmpty())
+                    {
+                        pass.Sample(pointShadowCubes);
+                    }
                     readSkinned(pass);
                 },
                 [this, draws, groups, opaqueRuns, frameGroup, drawGroup, skinned, viewport, occlusion, shadowAtlas,
@@ -3250,6 +3522,10 @@ namespace Fenrir::Render
                         if (!spotAtlas.IsEmpty())
                         {
                             pass.Sample(spotAtlas);
+                        }
+                        if (!pointShadowCubes.IsEmpty())
+                        {
+                            pass.Sample(pointShadowCubes);
                         }
                         readSkinned(pass);
                     },

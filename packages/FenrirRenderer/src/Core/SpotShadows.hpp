@@ -45,22 +45,27 @@ namespace Fenrir::Render
     /** @brief Tile `tile` of `grid`, in order along the rows from the top left. */
     [[nodiscard]] SpotAtlasTile SpotAtlasTileOf(std::uint32_t tile, SpotAtlasGrid grid) noexcept;
 
-    /** @brief Which spot lights cast this frame: their places in the frame's light list, nearest first. */
-    struct SpotShadowChoice
+    /** @brief Which spot or point lights cast this frame: their places in the frame's light list, nearest first. */
+    struct ShadowChoice
     {
         /** @brief At most the budget of them. */
         std::vector<std::size_t> lights;
-        /** @brief How many spot lights asked to cast: more than `lights` when the budget left some out. */
+        /** @brief How many lights of the kind asked to cast: more than `lights` when the budget left some out. */
         std::size_t wanted = 0;
     };
 
     /**
-     * @brief The spot lights of `lights` with castShadows that keep their shadows: the `budget` nearest to any of the
-     * cameras at `cameras` (the distance from each light's position to the nearest camera), the nearer first, ties in
-     * list order. With no camera, the first `budget` in list order.
+     * @brief The lights of `kind` in `lights` with castShadows that keep their shadows: the `budget` nearest to any of
+     * the cameras at `cameras` (the distance from each light's position to the nearest camera), the nearer first, ties
+     * in list order. With no camera, the first `budget` in list order.
      */
-    [[nodiscard]] SpotShadowChoice ChooseSpotShadows(std::span<const PunctualLight> lights,
-                                                     std::span<const Math::Vec3> cameras, std::uint32_t budget);
+    [[nodiscard]] ShadowChoice ChooseShadowedLights(std::span<const PunctualLight> lights,
+                                                    std::span<const Math::Vec3> cameras, std::uint32_t budget,
+                                                    LightKind kind);
+
+    /** @brief The spot lights that keep their shadows: ChooseShadowedLights of the spot lights. */
+    [[nodiscard]] ShadowChoice ChooseSpotShadows(std::span<const PunctualLight> lights,
+                                                 std::span<const Math::Vec3> cameras, std::uint32_t budget);
 
     /** @brief A spot light's shadow: what its tile's shadow pass draws with. */
     struct SpotShadow

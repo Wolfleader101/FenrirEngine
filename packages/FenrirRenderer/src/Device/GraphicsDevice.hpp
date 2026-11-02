@@ -39,6 +39,17 @@ namespace Fenrir::Graphics
         Adaptive,
     };
 
+    /** @brief What a device can do beyond what every backend must. */
+    struct DeviceFeatures
+    {
+        /**
+         * @brief Whether a vertex stage may write gl_Layer, choosing the layer of a layered attachment each primitive
+         * is drawn into: on OpenGL, whose shaders are SPIR-V, when the driver takes SPV_EXT_shader_viewport_index_layer
+         * or NVIDIA's SPV_NV_viewport_array2 (Vulkan 1.2's shaderOutputLayer would be its Vulkan counterpart).
+         */
+        bool vertexLayer = false;
+    };
+
     /** @brief A new pipeline, or why the backend refused its shader or state. */
     struct PipelineResult
     {
@@ -69,6 +80,9 @@ namespace Fenrir::Graphics
 
         /** @brief How many frames may be in flight, as the device was configured. */
         [[nodiscard]] virtual std::uint32_t FramesInFlight() const = 0;
+
+        /** @brief What the device can do beyond what every backend must. */
+        [[nodiscard]] virtual DeviceFeatures Features() const = 0;
 
         /**
          * @brief Starts frame `frameIndex`, which counts up by one each frame, drawn or not. Frees the slots of
@@ -101,8 +115,8 @@ namespace Fenrir::Graphics
         virtual bool WriteBuffer(BufferHandle buffer, std::size_t offset, std::span<const std::byte> bytes) = 0;
 
         /**
-         * @brief Writes one mip level of one layer (a cube face, else 0) of a live texture, as tightly packed rows top
-         * row first. False, writing nothing, for a stale handle.
+         * @brief Writes one mip level of one layer (a cube face, or a cube array's layer, else 0) of a live texture, as
+         * tightly packed rows top row first. False, writing nothing, for a stale handle.
          */
         virtual bool WriteTexture(TextureHandle texture, std::uint32_t mipLevel, std::uint32_t layer,
                                   std::span<const std::byte> texels) = 0;

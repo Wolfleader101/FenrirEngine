@@ -34,7 +34,8 @@ public partial struct RendererStats
     public uint SkinnedDraws;
     /// <summary>
     /// Draws into the sun's shadow cascades and the spot lights' shadow tiles (ADR-0050): one per run of matching
-    /// casting items, merged as in `draws`, per cascade of each view and per shadowed spot light.
+    /// casting items, merged as in `draws`, per cascade of each view, per shadowed spot light, and per shadowed point
+    /// light (six times over for items whose shader draws its six faces one at a time).
     /// </summary>
     public uint ShadowDraws;
 }

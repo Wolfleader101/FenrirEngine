@@ -62,6 +62,9 @@ namespace LightingDemo
             /** @brief Whether the spot lights cast shadows, and how many may (RendererConfig::spotShadowBudget). */
             bool spotShadows = true;
             int shadowBudget = 8;
+            /** @brief Whether the point lights cast shadows, and how many may (RendererConfig::pointShadowBudget). */
+            bool pointShadows = true;
+            int pointShadowBudget = 4;
         };
 
         /** @brief Hue `hue` (0 to 1 round the wheel) at full saturation and value, linear. */
@@ -189,11 +192,11 @@ namespace LightingDemo
                 else
                 {
                     light.entity.AddComponent<Fenrir::PointLight>(
-                        Fenrir::PointLight{light.colour, state.pointIntensity, state.range, false});
+                        Fenrir::PointLight{light.colour, state.pointIntensity, state.range, state.pointShadows});
                 }
 
                 // A small sphere of the light's colour, bright enough to bloom. It casts no shadow: round the light, it
-                // would shadow all of a spot light's cone.
+                // would shadow all of a spot light's cone, or everything a point light lights.
                 const auto glow = store.CreateMaterial(unlit, scene);
                 store.SetColour(glow, "baseColour",
                                 {light.colour.r * 4.0f, light.colour.g * 4.0f, light.colour.b * 4.0f, 1.0f});
@@ -244,6 +247,11 @@ namespace LightingDemo
                 state->spotShadows = !state->spotShadows;
                 app.Logger()->Info("K: spot shadows {}", state->spotShadows ? "on" : "off");
             }
+            if (keyboard.JustPressed(Fenrir::Key::J))
+            {
+                state->pointShadows = !state->pointShadows;
+                app.Logger()->Info("J: point shadows {}", state->pointShadows ? "on" : "off");
+            }
 
             RunLightingPanel(app, scene, state->lighting, [&] {
                 ImGui::SliderInt("Lights", &state->count, 0, MaxLights);
@@ -258,6 +266,13 @@ namespace LightingDemo
                     Fenrir::Renderer::SetSpotShadowBudget(app, static_cast<std::uint32_t>(state->shadowBudget));
                 }
                 ImGui::TextUnformatted("The nearest spot lights cast; the rest light unshadowed.");
+                ImGui::SeparatorText("Point shadows");
+                ImGui::Checkbox("Cast (J)", &state->pointShadows);
+                if (ImGui::SliderInt("Point budget", &state->pointShadowBudget, 0, 8))
+                {
+                    Fenrir::Renderer::SetPointShadowBudget(app, static_cast<std::uint32_t>(state->pointShadowBudget));
+                }
+                ImGui::TextUnformatted("The nearest point lights cast into a cube each; the rest light unshadowed.");
             });
 
             if (state->moving)
@@ -288,6 +303,7 @@ namespace LightingDemo
                     Fenrir::PointLight& point = light.entity.GetComponent<Fenrir::PointLight>();
                     point.intensity = on ? state->pointIntensity : 0.0f;
                     point.range = state->range;
+                    point.castShadows = state->pointShadows;
                 }
             }
         }
@@ -298,9 +314,10 @@ namespace LightingDemo
         FenrirDemo::DemoScene scene;
         scene.name = "Many lights";
         scene.keyHelp = LightingKeyHelp(false) +
-                        " M: 16, 64, 100 or 256 lights. P: the lights moving or still. K: spot shadows off or on.";
+                        " M: 16, 64, 100 or 256 lights. P: the lights moving or still. K: spot shadows off or on. J: "
+                        "point shadows off or on.";
         scene.keys = {Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::B, Fenrir::Key::M, Fenrir::Key::P, Fenrir::Key::M,
-                      Fenrir::Key::P, Fenrir::Key::M, Fenrir::Key::K, Fenrir::Key::K,
+                      Fenrir::Key::P, Fenrir::Key::M, Fenrir::Key::K, Fenrir::Key::K, Fenrir::Key::J, Fenrir::Key::J,
                       // Through the debug views to the spot shadow atlas.
                       Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G};
         // Inside the room, by its front wall, looking down across it.

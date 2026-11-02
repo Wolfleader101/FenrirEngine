@@ -1,11 +1,14 @@
 // The sun's cascaded shadow on OpenGL (the spec's seam 2, ADR-0050): a box's shadow on a floor falls where the light's
 // direction puts it; a lit floor shows no acne at angles up to grazing within the biases' limits; and posts' shadows
 // across every cascade boundary match their golden images, lit and with the cascades tinted. A spot light's shadow
-// falls where its cone puts it, leaving no acne.
+// falls where its cone puts it, leaving no acne, and a point light's shadow falls where it should on each of its six
+// sides.
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
+#include <span>
 #include <string>
 
 #include <catch2/catch_test_macros.hpp>
@@ -113,6 +116,17 @@ namespace
                 std::lround(static_cast<float>(Side) * 0.5f * (1.0f + offset / HalfSpan) - 0.5f));
         };
         return {pixel(x - CameraX), pixel(z - CameraZ)};
+    }
+
+    /** @brief A material on the test shader SampledPicture, whose program has no POINT_SHADOW variant. */
+    Fenrir::AssetHandle<Fenrir::Material> NoPointShadowVariant(GlScene& test)
+    {
+        Fenrir::AssetStore& store = test.assets.Store();
+        Fenrir::ShaderData data;
+        const auto bytes = std::as_bytes(std::span(Fenrir::Shaders::SampledPicture));
+        data.bytes.assign(bytes.begin(), bytes.end());
+        const auto shader = store.Add<Fenrir::Shader>(std::move(data), Fenrir::AssetOwner::App());
+        return store.CreateMaterial(shader, Fenrir::AssetOwner::App());
     }
 } // namespace
 
@@ -392,4 +406,88 @@ TEST_CASE("A spot light's shadow on a floor lies where its cone puts it, with no
     }
     INFO("the darkest lit floor pixel against the unshadowed frame: " << worst);
     REQUIRE(worst > 0.97f);
+}
+
+TEST_CASE("A point light's caster shadows each of its six sides, where the way from the light puts it",
+          "[renderer][gl][shadows][point-shadows]")
+{
+    // A point light at the origin, a half-unit box 2 units out along the side probed and set off its axis, and a wall 4
+    // units out facing the light. Rays from the light through the box reach the wall at 4 / 2.25 to 4 / 1.75 of their
+    // offset: the shadow spans about 0.27 to 1.49 across and -0.11 to 1.03 aside. A camera 3 units out aside looks at
+    // the wall's middle past the box. Off its axis, a face drawn swapped or mirrored puts the shadow somewhere else.
+    // The box is drawn with builtin:lit, whose six faces are instances where the GPU can, or with a shader whose
+    // program has no POINT_SHADOW variant, a face at a time.
+    const int side = GENERATE(0, 1, 2, 3, 4, 5);
+    const bool instanced = GENERATE(true, false);
+    CAPTURE(side, instanced);
+    const std::array<Vec3, 3> axes{Vec3(1.0f, 0.0f, 0.0f), Vec3(0.0f, 1.0f, 0.0f), Vec3(0.0f, 0.0f, 1.0f)};
+    const Vec3 axis = axes.at(side / 2) * (side % 2 == 0 ? 1.0f : -1.0f);
+    const Vec3 aside = axes.at((side / 2 + 1) % 3);
+    const Vec3 across = glm::cross(axis, aside);
+    const Vec3 eye = aside * 3.0f;
+    const Fenrir::Math::Quat look = glm::quatLookAt(glm::normalize(axis * 4.0f - eye), across);
+
+    const auto render = [&](bool castShadows) {
+        GlScene test;
+        test.RequireOpenGL();
+        test.app.GetActiveScene().AddResource<Fenrir::Sky>(
+            Fenrir::ColourSky{Fenrir::Colour{0.02f, 0.02f, 0.02f, 1.0f}});
+        const auto white = Lit(test, Fenrir::Colour::White);
+        AddBox(test, axis * 2.0f + across * 0.4f + aside * 0.2f, Vec3(0.5f),
+               instanced ? white : NoPointShadowVariant(test));
+        // The wall: a quad faces +Z, turned to face back along the axis.
+        const auto quad =
+            test.assets.Store().Add<Fenrir::Mesh>(RendererTest::Quad(12.0f, 0.0f), Fenrir::AssetOwner::App());
+        Fenrir::Entity wall = test.app.GetActiveScene().GetEntityList().CreateEntity();
+        wall.GetComponent<Fenrir::Transform>().pos = axis * 4.0f;
+        wall.GetComponent<Fenrir::Transform>().rot = glm::quatLookAt(axis, aside);
+        wall.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{quad, white, true});
+        Fenrir::Entity entity = test.app.GetActiveScene().GetEntityList().CreateEntity();
+        Fenrir::PointLight light;
+        light.intensity = 16.0f;
+        light.range = 30.0f;
+        light.castShadows = castShadows;
+        entity.AddComponent<Fenrir::PointLight>(light);
+        const auto target = Target(test, Side, Side);
+        AddCameraAt(test, eye, look, target);
+        test.RunFrame();
+        INFO("no GL error or other error was logged");
+        REQUIRE(test.messages->errors.empty());
+        INFO("and the driver took every shadow pipeline, the instanced faces' too");
+        REQUIRE(RendererTest::CountContaining(test.messages->warnings, "shadow pipeline") == 0);
+        return test.ReadTarget(target);
+    };
+    const RendererTest::Rgba8Image shadowed = render(true);
+    const RendererTest::Rgba8Image unshadowed = render(false);
+    // The wall's green at `x` across and `y` aside of its middle, at the pixel the camera's 60-degree view shows it.
+    const auto at = [&](const RendererTest::Rgba8Image& frame, float x, float y) {
+        const Vec3 view = glm::inverse(look) * (axis * 4.0f + across * x + aside * y - eye);
+        const float reach = -view.z * std::tan(1.04719755f * 0.5f);
+        const auto pixel = [](float ndc) {
+            return static_cast<std::uint32_t>(std::clamp(
+                std::lround(static_cast<float>(Side) * 0.5f * (1.0f + ndc) - 0.5f), 0L, static_cast<long>(Side) - 1));
+        };
+        return GreenAt(frame, pixel(view.x / reach), pixel(-view.y / reach));
+    };
+
+    for (const auto& [x, y] : {std::array<float, 2>{0.8f, 0.4f}, std::array<float, 2>{1.1f, 0.6f},
+                               std::array<float, 2>{0.55f, 0.15f}, std::array<float, 2>{0.9f, 0.8f}})
+    {
+        CAPTURE(x, y);
+        INFO("the wall is lit there without shadows: " << at(unshadowed, x, y));
+        REQUIRE(at(unshadowed, x, y) > 0.3f);
+        INFO("inside the box's shadow it has only the sky's light: " << at(shadowed, x, y));
+        REQUIRE(at(shadowed, x, y) < 0.05f);
+    }
+    // Outside it: mirrored across each of the face's axes, at the wall's middle, and past the shadow's far edge.
+    for (const auto& [x, y] :
+         {std::array<float, 2>{-0.8f, 0.4f}, std::array<float, 2>{0.8f, -0.5f}, std::array<float, 2>{-0.8f, -0.4f},
+          std::array<float, 2>{0.0f, 0.0f}, std::array<float, 2>{1.9f, 0.4f}})
+    {
+        CAPTURE(x, y);
+        INFO("the wall is lit there without shadows: " << at(unshadowed, x, y));
+        REQUIRE(at(unshadowed, x, y) > 0.3f);
+        INFO("and as brightly with them: " << at(shadowed, x, y) << " against " << at(unshadowed, x, y));
+        REQUIRE(at(shadowed, x, y) > 0.97f * at(unshadowed, x, y));
+    }
 }

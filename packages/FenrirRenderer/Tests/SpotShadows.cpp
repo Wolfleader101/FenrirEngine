@@ -153,7 +153,7 @@ TEST_CASE("The budget keeps the casting spot lights nearest to any camera, neare
 
     SECTION("within the budget, every caster, nearest first, and no point light or spot not asking")
     {
-        const Fenrir::Render::SpotShadowChoice choice = ChooseSpotShadows(lights, origin, 8);
+        const Fenrir::Render::ShadowChoice choice = ChooseSpotShadows(lights, origin, 8);
         INFO("four spot lights ask to cast");
         REQUIRE(choice.wanted == 4);
         INFO("all four keep their shadows, nearest first");
@@ -161,7 +161,7 @@ TEST_CASE("The budget keeps the casting spot lights nearest to any camera, neare
     }
     SECTION("past it, the nearest the budget allows")
     {
-        const Fenrir::Render::SpotShadowChoice choice = ChooseSpotShadows(lights, origin, 2);
+        const Fenrir::Render::ShadowChoice choice = ChooseSpotShadows(lights, origin, 2);
         INFO("four ask to cast");
         REQUIRE(choice.wanted == 4);
         INFO("the two nearest keep their shadows");
@@ -170,7 +170,7 @@ TEST_CASE("The budget keeps the casting spot lights nearest to any camera, neare
     SECTION("each light by its nearest camera")
     {
         const std::array<Vec3, 2> cameras{Vec3(0.0f), Vec3(10.0f, 0.0f, 0.0f)};
-        const Fenrir::Render::SpotShadowChoice choice = ChooseSpotShadows(lights, cameras, 2);
+        const Fenrir::Render::ShadowChoice choice = ChooseSpotShadows(lights, cameras, 2);
         INFO("the light at x 10 is on the second camera");
         REQUIRE(choice.lights == std::vector<std::size_t>{0, 2});
     }

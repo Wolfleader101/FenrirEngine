@@ -16,6 +16,7 @@
 #include "Core/Bloom.hpp"
 #include "Core/Cascades.hpp"
 #include "Core/Gtao.hpp"
+#include "Core/PointShadows.hpp"
 #include "Core/RenderFeature.hpp"
 #include "Core/SceneFrame.hpp"
 #include "Core/SkyLighting.hpp"
@@ -59,7 +60,8 @@ namespace Fenrir::Render
         std::uint32_t skinnedDraws = 0;
         /**
          * @brief Draws in the last frame's shadow passes (ADR-0050): one per merged run of casting items, per cascade
-         * of each view and per shadowed spot light.
+         * of each view, per shadowed spot light, and per shadowed point light (six when its faces are drawn one at a
+         * time).
          */
         std::uint32_t shadowDraws = 0;
     };
@@ -136,6 +138,18 @@ namespace Fenrir::Render
      * (`Fenrir/Frame.glsl`), which `Fenrir/Shadows.glsl` reads; with none, and in the SpotShadows pass itself,
      * binding 8 is the map that lights everything. A view showing the spot shadow atlas has Output draw it as grey.
      *
+     * **Point shadows** (ADR-0050): chosen as spot shadows are, within their own budget (ChoosePointShadows), each
+     * shadowed point light a cube of the point shadow cubes (CubeArray, Depth32Float, `mapSize` square faces, a
+     * cube per budget, kept and made again when the budget changes). Casters are drawn from the light's position
+     * through six 90-degree faces (FitPointShadow) behind builtin:shadow's POINT_SHADOW variant, which writes the
+     * distance from the light over its range. Where the device lets a vertex stage write gl_Layer, one `PointShadows`
+     * pass attaches every layer and draws each light's casters once, as six instances each, through the item's own
+     * POINT_SHADOW variant (`Fenrir/Draw.glsl`); casters whose shader has no POINT_SHADOW variant, and every caster on
+     * a device without it, are drawn into each face by `PointShadowFaces` passes, one a face, through a view block of
+     * that face's own. The light buffer holds those lights after the shadowed spot lights, frame block `lights.z`
+     * counting them, and set 0 binds their records (GpuPointShadow) at binding 9 and the point shadow cubes at binding
+     * 10; with none, and in the passes drawing it, binding 10 is a cube that lights everything.
+     *
      * **Ambient occlusion** (ADR-0049): a view whose camera has it gets Gtao's passes after its DepthPrepass pass, and
      * its `Opaque` pass binds their occlusion texture at set 1 binding 1 (`Fenrir/View.glsl`), which
      * `Fenrir/Lighting.glsl` darkens the sky's light by. Every other pass, and every view without it, binds the white
@@ -195,11 +209,12 @@ namespace Fenrir::Render
          * targets of `samples` samples per pixel (1: no MSAA). With `automaticInstancing`, consecutive matching items
          * draw as one instanced draw (ADR-0051); with `computeSkinning`, skinned meshes skin once a frame in compute;
          * `cascades` says how each view's sun cascades are made (ADR-0050), its count held to 1 to MaxCascades;
-         * `spotShadows` the spot shadow budget and the side of each light's tile.
+         * `spotShadows` the spot shadow budget and the side of each light's tile; `pointShadows` the point shadow
+         * budget and the side of each cube face.
          */
         SceneRenderer(Graphics::GraphicsDevice& device, ILogger& logger, std::uint32_t samples = 1,
                       bool automaticInstancing = true, bool computeSkinning = true, CascadeConfig cascades = {},
-                      SpotShadowConfig spotShadows = {});
+                      SpotShadowConfig spotShadows = {}, PointShadowConfig pointShadows = {});
         ~SceneRenderer() override;
 
         SceneRenderer(const SceneRenderer&) = delete;
@@ -289,6 +304,12 @@ namespace Fenrir::Render
          * again at its new size when next needed.
          */
         void SetSpotShadowBudget(std::uint32_t budget);
+
+        /**
+         * @brief How many point lights may cast shadows from the next frame (ADR-0050); the point shadow cubes is
+         * made again at its new size when next needed.
+         */
+        void SetPointShadowBudget(std::uint32_t budget);
 
         /** @brief What the next frame draws. */
         void SetFrame(SceneFrame frame);
@@ -526,7 +547,8 @@ namespace Fenrir::Render
 
         /**
          * @brief What a shadow pipeline is made for: the item's shader and variant, whose vertex stage it runs, the
-         * streams it reads that the mesh has, and whether it cuts a Masked item out.
+         * streams it reads that the mesh has, whether it cuts a Masked item out, and whether it writes a point light's
+         * distance (builtin:shadow's POINT_SHADOW variant).
          */
         struct ShadowKey
         {
@@ -534,6 +556,7 @@ namespace Fenrir::Render
             const ShaderVariant* variant = nullptr;
             std::uint32_t streams = 0;
             bool masked = false;
+            bool point = false;
 
             friend auto operator<=>(const ShadowKey&, const ShadowKey&) = default;
         };
@@ -581,6 +604,13 @@ namespace Fenrir::Render
             const PipelineEntry* shadow = nullptr;
             /** @brief Cut out in the shadow passes, which bind its material's prepass group at set 2 too. */
             bool shadowMasked = false;
+            /** @brief Its pipeline for one face of a point light's cube at a time; null when it casts no shadow. */
+            const PipelineEntry* pointShadow = nullptr;
+            /**
+             * @brief Its pipeline for all six faces as instances, through its shader's POINT_SHADOW variant; null when
+             * the device or the shader cannot, so it is drawn a face at a time.
+             */
+            const PipelineEntry* pointShadowLayered = nullptr;
             /** @brief An instance list's copies; none for one item. */
             InstanceRange instances;
             /**
@@ -617,13 +647,18 @@ namespace Fenrir::Render
             Graphics::BufferHandle lights;
             Graphics::TextureHandle irradiance;
             Graphics::TextureHandle specular;
+            /** @brief The spot shadow records' buffer `group` binds at binding 7. */
             Graphics::BufferHandle spotShadows;
             /** @brief The spot shadow atlas `group` binds; empty for none. */
             Graphics::TextureHandle spotAtlas;
+            /** @brief The point shadow records' buffer `group` binds at binding 9. */
+            Graphics::BufferHandle pointShadows;
+            /** @brief The point shadow cubes `group` binds; empty for none. */
+            Graphics::TextureHandle pointShadowCubes;
             Graphics::BindingGroupHandle group;
             /**
-             * @brief The same, but binding the map that lights everything for the atlas, for the SpotShadows pass that
-             * draws it; `group` itself when it binds no atlas.
+             * @brief The same, but binding the maps that light everything for the atlas and the point shadow cubes, for
+             * the shadow passes that draw them; `group` itself when it binds neither.
              */
             Graphics::BindingGroupHandle unshadowed;
         };
@@ -649,15 +684,22 @@ namespace Fenrir::Render
          * failed is logged as a warning, and the item casts no shadow.
          */
         [[nodiscard]] const PipelineEntry& ShadowPipeline(const ShaderEntry& shader, const VariantEntry& variant,
-                                                          std::uint32_t streams, bool masked);
+                                                          std::uint32_t streams, bool masked, bool point = false);
+        /**
+         * @brief The pipeline drawing a point light's six faces as instances: `variant`'s POINT_SHADOW variant's vertex
+         * stage behind builtin:shadow's POINT_SHADOW fragment stage. Null, with nothing logged, when the device cannot
+         * write gl_Layer from a vertex stage or `shader` has no such variant; why it otherwise failed is logged.
+         */
+        [[nodiscard]] const PipelineEntry* LayeredShadowPipeline(const ShaderEntry& shader, const VariantEntry& variant,
+                                                                 std::uint32_t streams, bool masked);
         /**
          * @brief Makes `made`'s pipeline: `variant`'s vertex stage behind `program`'s fragment stage (its ALPHA_MASK
-         * variant when `masked`, binding the prepass mask group at set 2), with `desc`'s render state and the streams
-         * `streams` the mesh has; why it could not, in its failure.
+         * variant when `masked`, binding the prepass mask group at set 2, and its POINT_SHADOW one when `point`), with
+         * `desc`'s render state and the streams `streams` the mesh has; why it could not, in its failure.
          */
         void MakeBehindVertexStage(PrepassEntry& made, const VariantEntry& variant, std::uint32_t streams,
                                    const ShaderContainer& program, bool masked, Graphics::PipelineDesc desc,
-                                   std::string_view label);
+                                   std::string_view label, bool point = false);
         /** @brief The depth prepass pipeline running `variant`'s vertex stage; why it failed is logged as a warning. */
         [[nodiscard]] const PipelineEntry& PrepassPipeline(const ShaderEntry& shader, const VariantEntry& variant,
                                                            std::uint32_t streams, bool masked, bool doubleSided);
@@ -677,6 +719,10 @@ namespace Fenrir::Render
             Main,
             Prepass,
             Shadow,
+            /** @brief One face of a point light's cube. */
+            PointShadow,
+            /** @brief All six faces of a point light's cube, as six instances an item. */
+            PointShadowLayered,
         };
 
         /** @brief The pipeline `pass` draws `draw` with: null when it has none there. */
@@ -734,9 +780,11 @@ namespace Fenrir::Render
         void PackInstanceLists();
         /**
          * @brief The frame's draws, sorted; with compute skinning, each skinned mesh and palette range they draw is one
-         * of `skins`, whose skinned vertices its draws read. Casting items have shadow pipelines when `shadowed`.
+         * of `skins`, whose skinned vertices its draws read. Casting items have shadow pipelines when `shadowed`, and
+         * point shadow pipelines when `pointShadowed`.
          */
-        [[nodiscard]] std::vector<ResolvedDraw> ResolveDraws(std::vector<SkinDispatch>& skins, bool shadowed);
+        [[nodiscard]] std::vector<ResolvedDraw> ResolveDraws(std::vector<SkinDispatch>& skins, bool shadowed,
+                                                             bool pointShadowed);
         /**
          * @brief Adds the Skinning pass running `skins` into the frame's skinned vertex buffer, imported into `graph`
          * as the returned resource; empty, with no pass, when there are none.
@@ -744,10 +792,12 @@ namespace Fenrir::Render
         [[nodiscard]] GraphResource AddSkinningPass(RenderGraph& graph, std::uint64_t frameIndex,
                                                     const std::vector<SkinDispatch>& skins);
         /**
-         * @brief The frame set's groups for frame `frameIndex`: its copy of the frame block, the sky's light, and its
-         * spot shadow records with `spotAtlas` (the map that lights everything when empty).
+         * @brief The frame set's groups for frame `frameIndex`: its copy of the frame block, the sky's light, its spot
+         * shadow records with `spotAtlas` and its point shadow records with `pointShadowCubes` (the maps that light
+         * everything when empty).
          */
-        [[nodiscard]] const FrameGroup& FrameGroupFor(std::uint64_t frameIndex, Graphics::TextureHandle spotAtlas);
+        [[nodiscard]] const FrameGroup& FrameGroupFor(std::uint64_t frameIndex, Graphics::TextureHandle spotAtlas,
+                                                      Graphics::TextureHandle pointShadowCubes);
         /** @brief What the scene's Sky lights with: its prepared cube texture, else its colour. */
         [[nodiscard]] SkySource SkySourceOf(const SceneLighting& lighting) const;
         /**
@@ -777,6 +827,8 @@ namespace Fenrir::Render
         CascadeConfig m_cascades;
         /** @brief The spot shadow budget and tile size (RendererConfig's spot shadow members). */
         SpotShadowConfig m_spotShadowConfig;
+        /** @brief The point shadow budget and face size (RendererConfig's point shadow members). */
+        PointShadowConfig m_pointShadowConfig;
 
         std::map<AssetKey, ShaderEntry> m_shaders;
         std::map<AssetKey, MeshEntry> m_meshes;
@@ -859,6 +911,17 @@ namespace Fenrir::Render
         Graphics::TextureDesc m_spotAtlasDesc;
         /** @brief The shadowed spot lights' records (GpuSpotShadow), bound at set 0 binding 7 by the frame's groups. */
         std::unique_ptr<BlockRing> m_spotShadowBlocks;
+        /**
+         * @brief The point shadow cubes, made when a point light first casts with a cube per budget, and its
+         * description.
+         */
+        Graphics::TextureHandle m_pointShadowCubes;
+        Graphics::TextureDesc m_pointShadowCubesDesc;
+        /** @brief One cube of depth 0 that lights everything, bound at set 0 binding 10 where no point light casts. */
+        Graphics::TextureHandle m_noPointShadow;
+        /** @brief The shadowed point lights' records (GpuPointShadow), bound at set 0 binding 9 by the frame's groups.
+         */
+        std::unique_ptr<BlockRing> m_pointShadowBlocks;
         /** @brief The constant every vertex stream a mesh lacks reads, at stride 0. */
         Graphics::BufferHandle m_defaultStreams;
 
@@ -908,5 +971,7 @@ namespace Fenrir::Render
         std::set<AssetKey> m_loggedUnskinned;
         /** @brief Whether more spot lights asked to cast than the budget allows, already logged. */
         bool m_loggedSpotBudget = false;
+        /** @brief Whether more point lights asked to cast than the budget allows, already logged. */
+        bool m_loggedPointBudget = false;
     };
 } // namespace Fenrir::Render

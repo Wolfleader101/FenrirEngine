@@ -84,6 +84,14 @@ namespace Fenrir::Graphics
         float clear = 0.0f;
         /** @brief Whether the pass only tests against it. */
         bool readOnly = false;
+        /** @brief The layer drawn into, for a cube or cube array texture (in TextureKind::CubeArray's order); else 0.
+         */
+        std::uint32_t layer = 0;
+        /**
+         * @brief Whether every layer is attached at once, each draw's vertex stage choosing a primitive's by writing
+         * gl_Layer (DeviceFeatures::vertexLayer); `layer` is then unused. Clearing clears them all.
+         */
+        bool layered = false;
 
         friend bool operator==(const DepthAttachment&, const DepthAttachment&) = default;
     };

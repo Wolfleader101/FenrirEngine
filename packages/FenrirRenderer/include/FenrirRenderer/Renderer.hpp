@@ -100,6 +100,17 @@ namespace Fenrir
          * atlas is a grid of the budget's tiles, ceil(sqrt(budget)) across, which must be within the GPU's largest.
          */
         std::uint32_t spotShadowMapSize = 1024;
+        /**
+         * @brief How many PointLights may cast shadows in a frame (ADR-0050): 4 by default, the nearest to any camera
+         * each frame; the rest light unshadowed, warned about once. 0 shadows none. Changeable later with
+         * Renderer::SetPointShadowBudget.
+         */
+        std::uint32_t pointShadowBudget = 4;
+        /**
+         * @brief The side of each face of each shadowed point light's cube, in texels: 512 by default. The cubes are
+         * one cube array of the budget's cubes.
+         */
+        std::uint32_t pointShadowMapSize = 512;
     };
 
     /** @brief What the renderer did in its last drawn frame (ADR-0023). */
@@ -133,7 +144,8 @@ namespace Fenrir
         std::uint32_t skinnedDraws = 0;
         /**
          * @brief Draws into the sun's shadow cascades and the spot lights' shadow tiles (ADR-0050): one per run of
-         * matching casting items, merged as in `draws`, per cascade of each view and per shadowed spot light.
+         * matching casting items, merged as in `draws`, per cascade of each view, per shadowed spot light, and per
+         * shadowed point light (six times over for items whose shader draws its six faces one at a time).
          */
         std::uint32_t shadowDraws = 0;
     };
@@ -202,6 +214,13 @@ namespace Fenrir
         void SetSpotShadowBudget(std::uint32_t budget);
 
         /**
+         * @brief Sets how many PointLights may cast shadows (RendererConfig::pointShadowBudget, ADR-0050) from the
+         * next frame, which makes the point shadow cubes again at the new budget's size. An invalid owner does
+         * nothing.
+         */
+        void SetPointShadowBudget(std::uint32_t budget);
+
+        /**
          * @brief The box around `entity`'s drawn mesh in world space, from the mesh's local bounds and the entity's
          * world matrix now. Empty if the entity is not alive, has no MeshRenderer, its mesh does not resolve, or this
          * owner is invalid.
@@ -252,6 +271,7 @@ namespace Fenrir
         static void SetAutomaticInstancing(App& app, bool on);
         static void SetComputeSkinning(App& app, bool on);
         static void SetSpotShadowBudget(App& app, std::uint32_t budget);
+        static void SetPointShadowBudget(App& app, std::uint32_t budget);
         [[nodiscard]] static std::optional<Math::Ray> ScreenPointToRay(App& app, const Entity& camera,
                                                                        Math::Vec2 point);
         [[nodiscard]] static std::optional<Math::Vec2> WorldToScreenPoint(App& app, const Entity& camera,

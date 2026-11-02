@@ -30,15 +30,15 @@ namespace Fenrir::Render
         return {tile % across, tile / across};
     }
 
-    SpotShadowChoice ChooseSpotShadows(std::span<const PunctualLight> lights, std::span<const Math::Vec3> cameras,
-                                       std::uint32_t budget)
+    ShadowChoice ChooseShadowedLights(std::span<const PunctualLight> lights, std::span<const Math::Vec3> cameras,
+                                      std::uint32_t budget, LightKind kind)
     {
-        SpotShadowChoice choice;
+        ShadowChoice choice;
         std::vector<float> distance(lights.size(), 0.0f);
         for (std::size_t i = 0; i < lights.size(); ++i)
         {
             const PunctualLight& light = lights[i];
-            if (light.kind != LightKind::Spot || !light.castShadows)
+            if (light.kind != kind || !light.castShadows)
             {
                 continue;
             }
@@ -55,6 +55,12 @@ namespace Fenrir::Render
                                  [&](std::size_t a, std::size_t b) { return distance[a] < distance[b]; });
         choice.lights.resize(std::min<std::size_t>(choice.lights.size(), budget));
         return choice;
+    }
+
+    ShadowChoice ChooseSpotShadows(std::span<const PunctualLight> lights, std::span<const Math::Vec3> cameras,
+                                   std::uint32_t budget)
+    {
+        return ChooseShadowedLights(lights, cameras, budget, LightKind::Spot);
     }
 
     SpotShadow FitSpotShadow(const PunctualLight& light, std::uint32_t mapSize)

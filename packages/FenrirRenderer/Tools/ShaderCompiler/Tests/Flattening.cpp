@@ -62,9 +62,10 @@ TEST_CASE("The GL copy flattens every resource kind's bindings and zeroes the se
 {
     const auto gl = Resources(true);
 
-    INFO("the fixture's seventeen resources are all decorated: its own eight, Frame.glsl's three sky textures, light "
-         "buffer, two LTC tables and spot shadow records and atlas, and Draw.glsl's instance-list buffer");
-    REQUIRE(gl.size() == 17);
+    INFO("the fixture's nineteen resources are all decorated: its own eight, Frame.glsl's three sky textures, light "
+         "buffer, two LTC tables, spot shadow records and atlas and point shadow records and cubes, and Draw.glsl's "
+         "instance-list buffer");
+    REQUIRE(gl.size() == 19);
     for (const auto& [name, decoration] : gl)
     {
         INFO(name << "'s descriptor set is zeroed");
@@ -139,9 +140,9 @@ TEST_CASE("Each binding is reflected with its set, kind and name", "[shader-comp
             variant.bindings, [&](const Fenrir::ShaderBinding& b) { return b.set == set && b.binding == binding; });
     };
 
-    INFO("seventeen bindings across both stages, eight of them Frame.glsl's sky textures, light buffer, LTC tables and "
-         "spot shadow records and atlas, and one Draw.glsl's instance-list buffer");
-    REQUIRE(variant.bindings.size() == 17);
+    INFO("nineteen bindings across both stages, ten of them Frame.glsl's sky textures, light buffer, LTC tables, spot "
+         "shadow records and atlas and point shadow records and cubes, and one Draw.glsl's instance-list buffer");
+    REQUIRE(variant.bindings.size() == 19);
     INFO("set 0 binding 0 is the FrameData uniform block from Fenrir/Frame.glsl");
     REQUIRE(find(0, 0)->kind == Fenrir::ShaderBindingKind::UniformBuffer);
     REQUIRE(find(0, 0)->name == "FrameData");

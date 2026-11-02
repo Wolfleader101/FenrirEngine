@@ -108,9 +108,11 @@ right and dielectric to metal from back to front, four pale walls, a ring of eig
 plastic) and spheres of gold and white plastic between them. Up to 256 coloured lights circle it, each marked by a small
 glowing sphere of its colour: point lights bobbing at waist height, and every fourth a spot light up high, pointing
 down and leaning out as it goes, its cone lighting a moving pool. A hundred are on at first, and the spot lights cast
-shadows: the eight nearest the camera each frame, RendererConfig's default spot shadow budget. The window's Scene part
-has the count (0 to 256), whether they move, the point and spot intensities, the range, whether the spot lights cast,
-and the budget (0 to 16, Renderer::SetSpotShadowBudget: the renderer's, so other scenes keep it as it was left).
+shadows: the eight nearest the camera each frame, RendererConfig's default spot shadow budget. So do the point lights,
+the four nearest (the default point shadow budget), each into a cube round it. The window's Scene part has the count (0
+to 256), whether they move, the point and spot intensities, the range, whether the spot lights cast, and their budget
+(0 to 16, Renderer::SetSpotShadowBudget), and whether the point lights cast, and their budget (0 to 8,
+Renderer::SetPointShadowBudget). The budgets are the renderer's, so other scenes keep them as they were left.
 
 | Keys | |
 | --- | --- |
@@ -118,6 +120,7 @@ and the budget (0 to 16, Renderer::SetSpotShadowBudget: the renderer's, so other
 | M | 16, 64, 100 or 256 lights. |
 | P | The lights moving or still. |
 | K | Spot shadows off or on. |
+| J | Point shadows off or on. |
 
 Hand checks, on OpenGL:
 
@@ -133,6 +136,10 @@ Hand checks, on OpenGL:
   without popping badly: a light leaving it is far from the camera, its pool small on screen. K turns them off and on.
 - G to the spot shadow atlas shows a three by three grid of grey tiles, eight of them each one spot light's view down
   onto the floor and the columns; the budget slider makes it a grid of the new size.
+- The point lights nearest the camera, low among the columns and spheres, throw their shadows out across the floor and
+  up the walls on every side of them, soft-edged and attached. No seam shows where a shadow crosses from one face of a
+  light's cube to the next (look along the floor's diagonals from a light, where the faces meet). J turns them off and
+  on.
 
 ### Showroom
 

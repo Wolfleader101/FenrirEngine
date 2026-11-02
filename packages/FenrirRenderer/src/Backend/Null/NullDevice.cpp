@@ -28,6 +28,11 @@ namespace Fenrir::Graphics
         return m_config.framesInFlight;
     }
 
+    DeviceFeatures NullDevice::Features() const
+    {
+        return m_features;
+    }
+
     void NullDevice::BeginFrame(std::uint64_t frameIndex)
     {
         m_frameIndex = frameIndex;

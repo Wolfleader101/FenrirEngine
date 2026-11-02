@@ -66,7 +66,7 @@ namespace
     std::vector<LightRecordRead> LightRecords(const RendererTestApp& test, std::size_t count)
     {
         const std::vector<BindingGroupEntry> set = FrameSet(test);
-        REQUIRE(set.size() == 9);
+        REQUIRE(set.size() == 11);
         REQUIRE(set[4].binding == 4);
         const auto bytes = RendererProbe::Bytes(test.Device(), set[4].buffer);
         REQUIRE(bytes.size() >= count * LightRecord);
@@ -118,9 +118,9 @@ TEST_CASE("Set 0 binds the light buffer at binding 4 and the LTC tables at 5 and
     test.Frame();
 
     const std::vector<BindingGroupEntry> set = FrameSet(test);
-    INFO("set 0's nine entries: the frame block, three sky textures, the light buffer, two LTC tables, and the spot "
-         "shadow records and atlas");
-    REQUIRE(set.size() == 9);
+    INFO("set 0's eleven entries: the frame block, three sky textures, the light buffer, two LTC tables, the spot "
+         "shadow records and atlas, and the point shadow records and cubes");
+    REQUIRE(set.size() == 11);
     INFO("binding 4 is the light buffer");
     REQUIRE(set[4].binding == 4);
     REQUIRE_FALSE(set[4].buffer.IsEmpty());
