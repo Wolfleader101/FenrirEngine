@@ -14,6 +14,20 @@ option(FENRIR_ENABLE_ASSETS "Build FenrirAssets with cgltf, ufbx and stb (the pa
 option(FENRIR_ENABLE_RENDERER "Build FenrirWindow and SDL3 (the packages/FenrirWindow/libs/SDL submodule), and FenrirRenderer's FenrirShaderCompiler with glslang and SPIRV-Reflect, the renderer core with its graphics device, null backend and OpenGL backend (with the checked-in glad loader), and FenrirRenderer's ECS facade" ON)
 option(FENRIR_BUILD_TESTS "Build the package tests (Catch2: the libs/catch2 submodule, or an installed Catch2 v3)" OFF)
 option(FENRIR_BUILD_EXAMPLES "Build the demo apps on the demo scaffold (examples/; with the renderer only)" ON)
+option(FENRIR_FETCH_DEMO_ASSETS "Download the demo apps' large assets at configure time, into FENRIR_DEMO_ASSET_CACHE (ADR-0052)" OFF)
+
+# Where FENRIR_FETCH_DEMO_ASSETS keeps what it downloads: outside every build directory, so a clean build does not
+# download again, and shared by every checkout of the user's.
+if(WIN32 AND DEFINED ENV{LOCALAPPDATA})
+    file(TO_CMAKE_PATH "$ENV{LOCALAPPDATA}/FenrirEngine/demo-assets" fenrir_default_asset_cache)
+elseif(DEFINED ENV{XDG_CACHE_HOME})
+    set(fenrir_default_asset_cache "$ENV{XDG_CACHE_HOME}/FenrirEngine/demo-assets")
+else()
+    set(fenrir_default_asset_cache "$ENV{HOME}/.cache/FenrirEngine/demo-assets")
+endif()
+set(FENRIR_DEMO_ASSET_CACHE "${fenrir_default_asset_cache}" CACHE PATH
+    "Where FENRIR_FETCH_DEMO_ASSETS keeps the demo apps' downloaded assets")
+include(cmake/FenrirDemoAssets.cmake)
 
 # The renderer draws assets, so it cannot be built without them.
 if(FENRIR_ENABLE_RENDERER AND NOT FENRIR_ENABLE_ASSETS)
@@ -26,9 +40,10 @@ if(FENRIR_ENABLE_RENDERER)
     include(cmake/FenrirShaders.cmake)
 endif()
 
-# One CTest run for every package that has tests.
+# One CTest run for every package that has tests, and the tests of the build's own CMake modules.
 if(FENRIR_BUILD_TESTS)
     enable_testing()
+    add_subdirectory(cmake/Tests)
 endif()
 
 
