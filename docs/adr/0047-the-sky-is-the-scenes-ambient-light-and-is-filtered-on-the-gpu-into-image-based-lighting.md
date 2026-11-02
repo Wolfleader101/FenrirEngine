@@ -24,7 +24,7 @@ ADR-0024 lit `builtin:lit` with one directional light and a constant `AmbientLig
 
 ## Consequences
 
-- `AmbientLight` leaves the C++ API, FenrirRenderer's API description and every demo. Its C# mirror stays as a deprecated no-op until the C# ticket removes it, so C# keeps compiling.
+- `AmbientLight` leaves the C++ API, FenrirRenderer's API description and every demo. Its C# mirror stays as a deprecated no-op until the C# ticket removes it, so C# keeps compiling. *Amended 2026-11-02 (lighting ticket 22):* the C# ticket removed it, with the stand-in that registered it; C# has no `AmbientLight`.
 - The frame set grows to carry the sky's coefficients, cubemap and lookup table (ADR-0048).
 
 ## Considered options

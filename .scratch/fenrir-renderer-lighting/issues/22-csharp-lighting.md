@@ -27,8 +27,9 @@ Built 2026-11-02, stacked on ticket 21's branch (#283; #265 to #283 not yet merg
   `DirectionalLight`, `MeshRenderer` and `Camera` fields, `PanoramaSky`, `CubemapSky`'s `intensity` and `rotation`,
   `SkyLight` and every `RendererStats` count were generated mirrors before this ticket. What it adds is the proof:
   `Scripting/Tests/Lighting.cpp` round-trips each component and each kind of `Sky` and `SkyLight` both ways through the
-  ECS with every field off its default, compared field by field with `Iris::FieldDifferences`, and C# reads
-  `RendererStats` whole.
+  ECS with every field off its default, compared field by field with `Iris::FieldDifferences`; C# reads the renderer's
+  `RendererStats` whole, and a `RendererStats` of eight distinct counts crosses to C# and back unchanged (a null frame
+  leaves the skinning counts zero, so the live read alone could not catch a misplaced one).
 - **No generator change was needed.** The instance lists' natives take and give spans of `Matrix4x4` and `Colour`,
   which the natives pipeline already describes, so `Assets.AddInstanceList`, `ReplaceInstanceList`,
   `GetInstanceTransforms` and `GetInstanceColours` are generated from their C++ definitions in
@@ -44,6 +45,7 @@ Built 2026-11-02, stacked on ticket 21's branch (#283; #265 to #283 not yet merg
   lights and paths from `scripts/ManyLights.cs`, but the markers are one instance list C# rewrites each frame (the
   first `count` lights' markers, tinted per copy) instead of a sphere entity each, so the scene places lights and an
   instance list as the ticket asks. V steps the budgets (8/4, 16/8, 0/0) through the new setters; C (clustering) is
-  C++'s only, so the twin has no C. The Lighting window stays C++'s (`scene.update`), as in every scene. Its hand
+  C++'s only, so the twin has no C. C# has no ImGui, so the twin also lacks Many lights' sliders (count, intensities,
+  range, budgets): its count is M's and the rest are Many lights' starting values. The Lighting window stays C++'s (`scene.update`), as in every scene. Its hand
   checks are in the README's Hand checks section.
 

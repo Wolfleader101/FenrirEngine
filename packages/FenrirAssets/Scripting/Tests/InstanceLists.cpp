@@ -35,27 +35,30 @@ namespace
     }
 } // namespace
 
-TEST_CASE("C# adds an instance list of transforms and colours that C++ reads, then replaces it, bumping its revision",
-          "[assets][scripting]")
+TEST_CASE("C# adds an instance list of transforms and colours that C++ reads as C# made it", "[assets][scripting]")
 {
     AssetsScriptingApp test;
     const auto list =
         HandleFrom<InstanceList>(test.Call<std::uint64_t>(InstanceListCallsType, "Add", 3, 3, sceneOwner));
+    const InstanceListData* added = test.Store().TryGet(list);
+    INFO("C#'s list of three copies at (i, 0, 0), coloured (i / 4, 0.5, 1 - i / 4), was not added as C# made it");
+    REQUIRE(added != nullptr);
+    REQUIRE(added->transforms.size() == 3);
+    REQUIRE(added->colours.size() == 3);
+    for (int i = 0; i < 3; ++i)
     {
-        const InstanceListData* added = test.Store().TryGet(list);
-        INFO("C#'s list of three copies at (i, 0, 0), coloured (i / 4, 0.5, 1 - i / 4), was not added as C# made it");
-        REQUIRE(added != nullptr);
-        REQUIRE(added->transforms.size() == 3);
-        REQUIRE(added->colours.size() == 3);
-        for (int i = 0; i < 3; ++i)
-        {
-            REQUIRE(added->transforms.at(static_cast<std::size_t>(i)) == CopyAt(i, 0.0f));
-            const float quarter = static_cast<float>(i) / 4.0f;
-            REQUIRE(Same(added->colours.at(static_cast<std::size_t>(i)), {quarter, 0.5f, 1.0f - quarter, 1.0f}));
-        }
-        REQUIRE(test.Store().Revision(list) == 1);
+        REQUIRE(added->transforms.at(static_cast<std::size_t>(i)) == CopyAt(i, 0.0f));
+        const float quarter = static_cast<float>(i) / 4.0f;
+        REQUIRE(Same(added->colours.at(static_cast<std::size_t>(i)), {quarter, 0.5f, 1.0f - quarter, 1.0f}));
     }
+    REQUIRE(test.Store().Revision(list) == 1);
+}
 
+TEST_CASE("C# replaces an instance list's copies, bumping the revision C++ sees", "[assets][scripting]")
+{
+    AssetsScriptingApp test;
+    const auto list =
+        HandleFrom<InstanceList>(test.Call<std::uint64_t>(InstanceListCallsType, "Add", 3, 3, sceneOwner));
     {
         INFO("C#'s replace with two white copies at height 2 did not succeed");
         REQUIRE(test.Call<bool>(InstanceListCallsType, "Replace", BitsOf(list), 2, 2.0f, -1));
@@ -95,8 +98,7 @@ TEST_CASE("C# reads an instance list C++ made into spans, as many as fit, with t
     REQUIRE(Text(test.scripting, InstanceListCallsType, "ReadColours", BitsOf(list), 3) == "0:");
 }
 
-TEST_CASE("Instance lists from C# with no colours are white, and colours not one per copy are refused",
-          "[assets][scripting]")
+TEST_CASE("An instance list from C# with no colours is white, for the active scene or the app", "[assets][scripting]")
 {
     AssetsScriptingApp test;
     const auto white = HandleFrom<InstanceList>(test.Call<std::uint64_t>(InstanceListCallsType, "AddWhite", 2));
@@ -107,13 +109,18 @@ TEST_CASE("Instance lists from C# with no colours are white, and colours not one
         REQUIRE(added->transforms.size() == 2);
         REQUIRE(added->colours.empty());
     }
-    {
-        const auto forApp =
-            HandleFrom<InstanceList>(test.Call<std::uint64_t>(InstanceListCallsType, "Add", 1, 0, appOwner));
-        INFO("A list of one white copy for the app should be added");
-        REQUIRE(test.Store().IsValid(forApp));
-    }
+    const auto forApp =
+        HandleFrom<InstanceList>(test.Call<std::uint64_t>(InstanceListCallsType, "Add", 1, 0, appOwner));
+    INFO("A list of one white copy for the app should be added, with no colours");
+    REQUIRE(test.Store().IsValid(forApp));
+    REQUIRE(test.Store().TryGet(forApp)->colours.empty());
+}
 
+TEST_CASE("Instance lists from C# whose colours are not one per copy are refused, as C++'s store refuses them",
+          "[assets][scripting]")
+{
+    AssetsScriptingApp test;
+    const auto white = HandleFrom<InstanceList>(test.Call<std::uint64_t>(InstanceListCallsType, "AddWhite", 2));
     {
         INFO("A list of three copies with two colours should give C# the empty handle");
         REQUIRE(test.Call<std::uint64_t>(InstanceListCallsType, "Add", 3, 2, sceneOwner) == 0);

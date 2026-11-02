@@ -59,6 +59,9 @@ public static class RoundTripCalls
         return stats;
     }
 
+    // RendererStats as C++ passed them, back: each count in the place C++ put it.
+    public static RendererStats EchoStats(RendererStats stats) => stats;
+
     public static bool SpotShadowBudget(uint budget) => Renderer.SetSpotShadowBudget(budget);
 
     public static bool PointShadowBudget(uint budget) => Renderer.SetPointShadowBudget(budget);

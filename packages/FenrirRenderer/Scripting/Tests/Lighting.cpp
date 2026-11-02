@@ -1,7 +1,7 @@
 // The lighting spec from C# (ticket 22): every component and scene resource the lighting tickets added or grew
 // round-trips between C++ and C#, field by field, both ways through the ECS, with every field off its default; an
 // instance list made in C# draws as one instanced draw and draws again when C# replaces it; C# reads RendererStats
-// whole; and C#'s shadow budgets decide which lights draw shadows.
+// whole, and every count in its place; and C#'s shadow budgets decide which lights draw shadows.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -90,6 +90,21 @@ namespace
         REQUIRE(Iris::FieldDifferences(sky, written, taggedUnions).empty());
     }
 
+    // The list InstanceListCalls.Draw made, by the handle C# kept.
+    AssetHandle<InstanceList> DrawnList(RendererScriptingApp& test)
+    {
+        return {test.Call<std::uint32_t>(InstanceListCallsType, "Index"),
+                test.Call<std::uint32_t>(InstanceListCallsType, "Generation")};
+    }
+
+    // The shadow draws of the frame after next: a budget C# sets applies from the next frame.
+    std::uint32_t ShadowDraws(RendererScriptingApp& test)
+    {
+        test.Frame();
+        test.Frame();
+        return Renderer::Stats(test.Get()).shadowDraws;
+    }
+
     // A Camera with every field off its default, each union on its other kind.
     Camera LitCamera()
     {
@@ -157,8 +172,7 @@ TEST_CASE("Each kind of Sky, and the SkyLight, round-trip between C++ and C#, fi
     REQUIRE(Iris::FieldDifferences(cubemap, *scene.GetResource<SkyLight>(), taggedUnions).empty());
 }
 
-TEST_CASE("An instance list made in C# draws as one instanced draw of its copies, and again when C# replaces it",
-          "[renderer][scripting]")
+TEST_CASE("An instance list made in C# draws as one instanced draw of its copies", "[renderer][scripting]")
 {
     RendererScriptingApp test;
     const std::uint32_t drawn = test.Entities().CreateEntity().GetId();
@@ -167,37 +181,43 @@ TEST_CASE("An instance list made in C# draws as one instanced draw of its copies
     test.ApplyChanges();
     test.Frame();
     {
-        const std::vector<RecordedDraw> opaque = DrawsIn(test.Submitted(), "Opaque");
-        INFO("The Opaque pass should hold one draw of C#'s five copies");
-        REQUIRE(opaque.size() == 1);
-        REQUIRE(opaque.front().draw.instanceCount == 5);
-        REQUIRE(Renderer::Stats(test.Get()).instances == 5);
-    }
-
-    const AssetHandle<InstanceList> list{test.Call<std::uint32_t>(InstanceListCallsType, "Index"),
-                                         test.Call<std::uint32_t>(InstanceListCallsType, "Generation")};
-    {
+        const AssetHandle<InstanceList> list = DrawnList(test);
         const InstanceListData* data = test.Store().TryGet(list);
         INFO("The list C# made should hold its five transforms and one colour each");
         REQUIRE(data != nullptr);
         REQUIRE(data->transforms.size() == 5);
         REQUIRE(data->colours.size() == 5);
     }
+    const std::vector<RecordedDraw> opaque = DrawsIn(test.Submitted(), "Opaque");
+    INFO("The Opaque pass should hold one draw of C#'s five copies");
+    REQUIRE(opaque.size() == 1);
+    REQUIRE(opaque.front().draw.instanceCount == 5);
+    REQUIRE(Renderer::Stats(test.Get()).instances == 5);
+}
 
+TEST_CASE("An instance list C# replaces is uploaded again and draws its new copies", "[renderer][scripting]")
+{
+    RendererScriptingApp test;
+    const std::uint32_t drawn = test.Entities().CreateEntity().GetId();
+    const std::uint32_t camera = test.Entities().CreateEntity().GetId();
+    test.Call<void>(InstanceListCallsType, "Draw", drawn, camera, 5);
+    test.ApplyChanges();
+    test.Frame();
+    test.Frame();
     {
         INFO("C#'s replace of the drawn list should succeed");
         REQUIRE(test.Call<bool>(InstanceListCallsType, "Replace", 8));
     }
     test.Frame();
     const std::vector<RecordedDraw> opaque = DrawsIn(test.Submitted(), "Opaque");
-    INFO("The Opaque pass should draw the replaced list's eight copies, uploaded again");
+    INFO("The Opaque pass should draw the replaced list's eight copies, uploaded again at revision 2");
     REQUIRE(opaque.size() == 1);
     REQUIRE(opaque.front().draw.instanceCount == 8);
-    REQUIRE(Renderer::Stats(test.Get()).uploads >= 1);
-    REQUIRE(test.Store().Revision(list) == 2);
+    REQUIRE(Renderer::Stats(test.Get()).uploads == 1);
+    REQUIRE(test.Store().Revision(DrawnList(test)) == 2);
 }
 
-TEST_CASE("C# reads RendererStats as C++ does, every count", "[renderer][scripting]")
+TEST_CASE("C# reads the renderer's RendererStats as C++ does", "[renderer][scripting]")
 {
     RendererScriptingApp test;
     const std::uint32_t drawn = test.Entities().CreateEntity().GetId();
@@ -219,22 +239,22 @@ TEST_CASE("C# reads RendererStats as C++ does, every count", "[renderer][scripti
     REQUIRE(Iris::FieldDifferences(stats, read, taggedUnions).empty());
 }
 
-TEST_CASE("The shadow budgets C# sets decide whether a shadowed spot or point light draws shadows",
-          "[renderer][scripting]")
+TEST_CASE("Every RendererStats count crosses between C++ and C# in its own place", "[renderer][scripting]")
+{
+    // A frame on the null backend leaves the skinning counts zero, so each count is given a value of its own here.
+    RendererScriptingApp test;
+    const RendererStats stats{1, 2, 3, 4, 5, 6, 7, 8};
+    const RendererStats echoed = test.Call<RendererStats>(RoundTripCallsType, "EchoStats", stats);
+    INFO("RendererStats C++ passed C# come back with these counts changed:" << Differences(stats, echoed));
+    REQUIRE(Iris::FieldDifferences(stats, echoed, taggedUnions).empty());
+}
+
+TEST_CASE("The spot shadow budget C# sets decides whether a shadowed spot light draws shadows", "[renderer][scripting]")
 {
     RendererScriptingApp test;
-    // A casting mesh at (1, 2, 3) and a camera at (0, 0, 5).
+    // A casting mesh at (1, 2, 3) and a camera at (0, 0, 5), and a spot light behind the mesh pointing at it along -Z.
     test.Call<void>(SceneBuilderType, "Arm");
     test.ApplyChanges();
-    test.Frame();
-
-    const auto shadowDraws = [&] {
-        test.Frame();
-        test.Frame();
-        return Renderer::Stats(test.Get()).shadowDraws;
-    };
-
-    // A spot light behind the mesh, pointing at it along -Z.
     Entity spot = test.Entities().CreateEntity();
     spot.AddComponent<Transform>().pos = {1.0f, 2.0f, 6.0f};
     SpotLight spotLight;
@@ -242,20 +262,25 @@ TEST_CASE("The shadow budgets C# sets decide whether a shadowed spot or point li
     spot.AddComponent<SpotLight>(spotLight);
     {
         INFO("Under the default budget the shadowed spot light should draw the mesh into its shadow");
-        REQUIRE(shadowDraws() > 0);
+        REQUIRE(ShadowDraws(test) > 0);
     }
     {
         INFO("C# setting the spot budget to 0 should leave nothing drawn into shadows");
         REQUIRE(test.Call<bool>(RoundTripCallsType, "SpotShadowBudget", 0u));
-        REQUIRE(shadowDraws() == 0);
+        REQUIRE(ShadowDraws(test) == 0);
     }
+    INFO("C# setting it back to 8 should draw the spot light's shadow again");
     REQUIRE(test.Call<bool>(RoundTripCallsType, "SpotShadowBudget", 8u));
-    {
-        INFO("C# setting it back to 8 should draw the spot light's shadow again");
-        REQUIRE(shadowDraws() > 0);
-    }
-    spot.GetComponent<SpotLight>().castShadows = false;
+    REQUIRE(ShadowDraws(test) > 0);
+}
 
+TEST_CASE("The point shadow budget C# sets decides whether a shadowed point light draws shadows",
+          "[renderer][scripting]")
+{
+    RendererScriptingApp test;
+    // A casting mesh at (1, 2, 3) and a camera at (0, 0, 5), and a point light just behind the mesh.
+    test.Call<void>(SceneBuilderType, "Arm");
+    test.ApplyChanges();
     Entity point = test.Entities().CreateEntity();
     point.AddComponent<Transform>().pos = {1.0f, 2.0f, 5.0f};
     PointLight pointLight;
@@ -263,9 +288,14 @@ TEST_CASE("The shadow budgets C# sets decide whether a shadowed spot or point li
     point.AddComponent<PointLight>(pointLight);
     {
         INFO("Under the default budget the shadowed point light should draw the mesh into its shadow");
-        REQUIRE(shadowDraws() > 0);
+        REQUIRE(ShadowDraws(test) > 0);
     }
-    INFO("C# setting the point budget to 0 should leave nothing drawn into shadows");
-    REQUIRE(test.Call<bool>(RoundTripCallsType, "PointShadowBudget", 0u));
-    REQUIRE(shadowDraws() == 0);
+    {
+        INFO("C# setting the point budget to 0 should leave nothing drawn into shadows");
+        REQUIRE(test.Call<bool>(RoundTripCallsType, "PointShadowBudget", 0u));
+        REQUIRE(ShadowDraws(test) == 0);
+    }
+    INFO("C# setting it back to 4 should draw the point light's shadow again");
+    REQUIRE(test.Call<bool>(RoundTripCallsType, "PointShadowBudget", 4u));
+    REQUIRE(ShadowDraws(test) > 0);
 }

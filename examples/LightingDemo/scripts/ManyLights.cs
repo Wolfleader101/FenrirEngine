@@ -24,12 +24,12 @@ namespace LightingDemo.Scripts;
 //       SetPointShadowBudget).
 
 // The scene's own marker, on one entity, so it is built once each time it is entered.
-public struct ManyLightsScene : IComponent
+public struct ManyLightsSceneMarker : IComponent
 {
     public int Built;
 }
 
-// One moving light: its entity, which of the hues it is, and its orbit about the room's centre.
+// One moving light: its entity, whether it is a spot, its colour, and its orbit about the room's centre.
 public struct MovingLight
 {
     public Entity Entity;
@@ -68,13 +68,16 @@ public static class ManyLights
     public static bool SpotShadows = true;
     public static bool PointShadows = true;
     public static int Budget;
+    // The markers' copies, written for the lit lights each frame: one buffer, so a frame allocates nothing.
+    private static readonly Matrix4x4[] markerTransforms = new Matrix4x4[MaxLights];
+    private static readonly Colour[] markerColours = new Colour[MaxLights];
 
     // Whether the active scene is this one, built.
     public static bool IsActive(in SystemContext context)
     {
         if (!CSharpScene.IsActive(SceneId, out _))
             return false;
-        foreach (var (_, marker) in context.Query<ManyLightsScene>())
+        foreach (var (_, marker) in context.Query<ManyLightsSceneMarker>())
             if (marker.Built != 0)
                 return true;
         return false;
@@ -141,16 +144,45 @@ public static class ManyLights
         return transform;
     }
 
-    // The markers of the first `Count` lights at `Time`: a small sphere at each light, coloured by it.
-    public static void MarkerCopies(Span<Matrix4x4> transforms, Span<Colour> colours)
+    // Light `i`'s place at `Time`, and its intensity (none past the count), range and shadows as the keys set them.
+    public static void Apply(int i)
     {
-        for (int i = 0; i < transforms.Length; ++i)
+        ref MovingLight light = ref Lights[i];
+        bool on = i < Count;
+        light.Entity.Get<Transform>().Value = Place(light, Time);
+        if (light.Spot)
+        {
+            ref SpotLight spot = ref light.Entity.Get<SpotLight>().Value;
+            spot.Intensity = on ? SpotIntensity : 0;
+            spot.Range = Range + 2;
+            spot.CastShadows = SpotShadows;
+        }
+        else
+        {
+            ref PointLight point = ref light.Entity.Get<PointLight>().Value;
+            point.Intensity = on ? PointIntensity : 0;
+            point.Range = Range;
+            point.CastShadows = PointShadows;
+        }
+    }
+
+    // The markers of the first `Count` lights at `Time`: a small sphere at each light, coloured by it. The list holds as
+    // many copies as there are lights on. With no list yet (Build's call), it makes one.
+    public static void WriteMarkers()
+    {
+        for (int i = 0; i < Count; ++i)
         {
             Vector3 at = Place(Lights[i], Time).Position;
-            transforms[i] = new Matrix4x4(new Vector4(MarkerSize, 0, 0, 0), new Vector4(0, MarkerSize, 0, 0),
+            markerTransforms[i] = new Matrix4x4(new Vector4(MarkerSize, 0, 0, 0), new Vector4(0, MarkerSize, 0, 0),
                 new Vector4(0, 0, MarkerSize, 0), new Vector4(at.X, at.Y, at.Z, 1));
-            colours[i] = Lights[i].Colour;
+            markerColours[i] = Lights[i].Colour;
         }
+        ReadOnlySpan<Matrix4x4> transforms = markerTransforms.AsSpan(0, Count);
+        ReadOnlySpan<Colour> colours = markerColours.AsSpan(0, Count);
+        if (Assets.IsValid(Markers))
+            Assets.ReplaceInstanceList(Markers, transforms, colours);
+        else
+            Markers = Assets.AddInstanceList(transforms, colours);
     }
 }
 
@@ -163,7 +195,7 @@ public sealed class ManyLightsBuilder : ISystem
     {
         if (!CSharpScene.IsActive(ManyLights.SceneId, out _))
             return;
-        foreach (var _ in context.Query<ManyLightsScene>())
+        foreach (var _ in context.Query<ManyLightsSceneMarker>())
             return; // Built already, this entry.
         Build(in context);
     }
@@ -186,11 +218,14 @@ public sealed class ManyLightsBuilder : ISystem
 
     private static void Build(in SystemContext context)
     {
+        // Nothing of the last entry's: its entities and assets went with its FenrirScene.
+        ManyLights.Lights = [];
+        ManyLights.Markers = default;
         Entity marker = Entity.Create();
         var label = new Name();
         label.SetText("Many lights (C#) scene");
         marker.Add(label);
-        marker.Add(new ManyLightsScene { Built = 1 });
+        marker.Add(new ManyLightsSceneMarker { Built = 1 });
 
         // A dark room: the lights are what shows.
         Sky sky = new ColourSky { Colour = new Colour(0.002f, 0.002f, 0.003f, 1) };
@@ -203,6 +238,7 @@ public sealed class ManyLightsBuilder : ISystem
         AssetHandle<Mesh> sphere = Assets.Load<Mesh>("sphere.obj#Mesh0");
         if (!Assets.IsValid(cube) || !Assets.IsValid(sphere))
         {
+            // Built with no lights, so the updater has nothing to move, as C++ keeps its state with none.
             context.Log.Error("Many lights (C#): the cube or the sphere did not load from the asset root");
             return;
         }
@@ -271,35 +307,19 @@ public sealed class ManyLightsBuilder : ISystem
                 Speed = (0.15f + 0.35f * spread) * (i % 2 == 0 ? 1 : -1),
                 Phase = 2 * MathF.PI * spread,
             };
+            // Their place, intensity, range and shadows are the updater's (ManyLights.Apply), from this frame on.
             light.Entity.Add(ManyLights.Place(light, 0));
             if (spot)
-                light.Entity.Add(new SpotLight
-                {
-                    Colour = light.Colour,
-                    Intensity = i < ManyLights.Count ? ManyLights.SpotIntensity : 0,
-                    Range = ManyLights.Range + 2,
-                    InnerAngle = 0.25f,
-                    OuterAngle = 0.5f,
-                    CastShadows = ManyLights.SpotShadows,
-                });
+                light.Entity.Add(new SpotLight { Colour = light.Colour, InnerAngle = 0.25f, OuterAngle = 0.5f });
             else
-                light.Entity.Add(new PointLight
-                {
-                    Colour = light.Colour,
-                    Intensity = i < ManyLights.Count ? ManyLights.PointIntensity : 0,
-                    Range = ManyLights.Range,
-                    CastShadows = ManyLights.PointShadows,
-                });
+                light.Entity.Add(new PointLight { Colour = light.Colour });
             ManyLights.Lights[i] = light;
         }
 
         // Each light marked by a small sphere of its colour, bright enough to bloom: one copy of the markers' list each,
         // the unlit material's colour of 4 times its hue. It casts no shadow: round the light, it would shadow all of a
         // spot light's cone, or everything a point light lights.
-        var transforms = new Matrix4x4[ManyLights.Count];
-        var colours = new Colour[ManyLights.Count];
-        ManyLights.MarkerCopies(transforms, colours);
-        ManyLights.Markers = Assets.AddInstanceList(transforms, colours);
+        ManyLights.WriteMarkers();
         AssetHandle<Material> glow = Materials.Create(Assets.Load<Shader>("builtin:unlit"));
         Materials.SetColour(glow, "baseColour", new Colour(4, 4, 4, 1));
         Entity markers = Entity.Create();
@@ -358,33 +378,10 @@ public sealed class ManyLightsUpdater : ISystem
 
         if (ManyLights.Moving)
             ManyLights.Time += context.Time.DeltaTime;
+        if (ManyLights.Lights.Length == 0)
+            return; // Built without its meshes: there is nothing to move.
         for (int i = 0; i < ManyLights.Lights.Length; ++i)
-        {
-            ref MovingLight light = ref ManyLights.Lights[i];
-            if (!light.Entity.IsValid)
-                continue;
-            bool on = i < ManyLights.Count;
-            light.Entity.Get<Transform>().Value = ManyLights.Place(light, ManyLights.Time);
-            if (light.Spot)
-            {
-                ref SpotLight spot = ref light.Entity.Get<SpotLight>().Value;
-                spot.Intensity = on ? ManyLights.SpotIntensity : 0;
-                spot.Range = ManyLights.Range + 2;
-                spot.CastShadows = ManyLights.SpotShadows;
-            }
-            else
-            {
-                ref PointLight point = ref light.Entity.Get<PointLight>().Value;
-                point.Intensity = on ? ManyLights.PointIntensity : 0;
-                point.Range = ManyLights.Range;
-                point.CastShadows = ManyLights.PointShadows;
-            }
-        }
-
-        // Only the lit lights' markers: the list holds as many copies as there are lights on.
-        var transforms = new Matrix4x4[ManyLights.Count];
-        var colours = new Colour[ManyLights.Count];
-        ManyLights.MarkerCopies(transforms, colours);
-        Assets.ReplaceInstanceList(ManyLights.Markers, transforms, colours);
+            ManyLights.Apply(i);
+        ManyLights.WriteMarkers();
     }
 }

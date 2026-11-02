@@ -192,27 +192,6 @@ metallic, direct and indirect light and wireframe (ticket 23); higher-quality tr
 importer reads neither `KHR_texture_transform` nor a texture's `texCoord`, so Fir Tree 01's bark and one trunk and Tree
 Small 02's branches sample their textures at the wrong scale.
 
-### Many lights (C#)
-
-Many lights again, made and run from C# by `scripts/ManyLights.cs` (the lighting spec's ticket 22), with scripting
-only: the same room, materials, lights, paths, intensities, range and camera, built from `Fenrir.Renderer`'s
-`MeshRenderer`, `PointLight`, `SpotLight` and `Sky` and moved each frame by a C# system. Where C++ marks each light with
-a sphere entity, C# draws every lit light's marker as one copy of an instance list it makes with
-`Assets.AddInstanceList` and rewrites each frame with `ReplaceInstanceList`, through one `InstancedMeshRenderer` whose
-unlit material each copy's colour tints: one draw for every marker. V steps the shadow budgets through C#'s
-`Renderer.SetSpotShadowBudget` and `SetPointShadowBudget`. The Lighting window is C++'s, as in every scene; its Scene
-part only says what C# does, as the count, intensities and range are C#'s and set by keys. C# sets the budgets back to
-8 and 4 on entering.
-
-| Keys | |
-| --- | --- |
-| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
-| M | 16, 64, 100, 256 or 1024 lights. |
-| P | The lights moving or still. |
-| K | Spot shadows off or on. |
-| J | Point shadows off or on. |
-| V | The shadow budgets: 8 spot and 4 point, 16 and 8, then none. |
-
 | Key | What it does |
 | --- | --- |
 | F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
@@ -313,27 +292,6 @@ generated sky. Everything else is generated, and the scene says so on screen.
 | M | The streets dry or wet again. |
 | C | The lights clustered or not. |
 
-### Many lights (C#)
-
-Many lights again, made and run from C# by `scripts/ManyLights.cs` (the lighting spec's ticket 22), with scripting
-only: the same room, materials, lights, paths, intensities, range and camera, built from `Fenrir.Renderer`'s
-`MeshRenderer`, `PointLight`, `SpotLight` and `Sky` and moved each frame by a C# system. Where C++ marks each light with
-a sphere entity, C# draws every lit light's marker as one copy of an instance list it makes with
-`Assets.AddInstanceList` and rewrites each frame with `ReplaceInstanceList`, through one `InstancedMeshRenderer` whose
-unlit material each copy's colour tints: one draw for every marker. V steps the shadow budgets through C#'s
-`Renderer.SetSpotShadowBudget` and `SetPointShadowBudget`. The Lighting window is C++'s, as in every scene; its Scene
-part only says what C# does, as the count, intensities and range are C#'s and set by keys. C# sets the budgets back to
-8 and 4 on entering.
-
-| Keys | |
-| --- | --- |
-| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
-| M | 16, 64, 100, 256 or 1024 lights. |
-| P | The lights moving or still. |
-| K | Spot shadows off or on. |
-| J | Point shadows off or on. |
-| V | The shadow budgets: 8 spot and 4 point, 16 and 8, then none. |
-
 | Key | What it does |
 | --- | --- |
 | F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
@@ -382,8 +340,9 @@ a sphere entity, C# draws every lit light's marker as one copy of an instance li
 `Assets.AddInstanceList` and rewrites each frame with `ReplaceInstanceList`, through one `InstancedMeshRenderer` whose
 unlit material each copy's colour tints: one draw for every marker. V steps the shadow budgets through C#'s
 `Renderer.SetSpotShadowBudget` and `SetPointShadowBudget`. The Lighting window is C++'s, as in every scene; its Scene
-part only says what C# does, as the count, intensities and range are C#'s and set by keys. C# sets the budgets back to
-8 and 4 on entering.
+part only says what C# does: C# has no ImGui, so the twin has none of Many lights' sliders, and its count is set by M
+and its intensities and range are Many lights' starting ones. C# sets the budgets to 8 and 4 on entering; they are the
+renderer's, so other scenes keep them as V left them, as Many lights' sliders leave them.
 
 | Keys | |
 | --- | --- |
