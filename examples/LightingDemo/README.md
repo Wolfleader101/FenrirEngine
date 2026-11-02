@@ -2,9 +2,9 @@
 
 The lighting spec's demo app (`GLOSSARY.md`: demo app): physically based lighting, image-based lighting from HDR
 panoramas, tonemapping and bloom on the demo scaffold (`examples/DemoScaffold/README.md`), one scene per showcase, flown
-through on the scaffold's free-fly camera. Built with the examples when the renderer is on. Each scene below has a
-section of its own: what it shows, its keys and its hand checks. Later lighting tickets add their scenes to the list
-(`.scratch/fenrir-renderer-lighting/spec.md`, "LightingDemo").
+through on the scaffold's free-fly camera. Built with the examples when the renderer is on. Each of its eight scenes
+(`.scratch/fenrir-renderer-lighting/spec.md`, "LightingDemo") has a section below saying what it shows and its keys;
+every scene's hand checks are collected in one place after them, under Hand checks.
 
 ## The Lighting window
 
@@ -19,20 +19,11 @@ Keys do the same, for the smoke runs and by hand: T the next tonemapper, E the n
 off or back on at its default, O ambient occlusion off or back on, G the next debug view, H the sun's shadows off or
 back on, S the next panorama where the scene has more than one.
 
-Hand check for ambient occlusion: in Showcase models, contact shadows under the helmets where they meet the ground, and
-with G, dark creases and corners on white, no dark halo round a model's silhouette against what is far behind it.
-
-Hand check for the sun's shadows (ADR-0050): flying round Showcase models with the free-fly camera, the helmets'
-shadows on the floor hold still, neither shimmering as the camera turns nor swimming as it moves; G to the cascade
-colours shows four bands on the floor, their boundaries following the camera, and no seam in a shadow that crosses one.
-The lit floor shows no speckled acne at any sun angle the sky's rotation leaves it; raising the biases in the window
-detaches the shadows from the helmets' bases, lowering them to 0 brings acne back.
-
 ## Assets
 
 Committed ones are in `assets/` (`assets/ATTRIBUTION.md`); the large ones are fetched (ADR-0052). Configure with
-`-DFENRIR_FETCH_DEMO_ASSETS=ON` and CMake downloads every file `fetched-assets.json` lists, about 830 MB (487 MB of it
-the forest's Fir Tree 01), into `FENRIR_DEMO_ASSET_CACHE` (by default `%LOCALAPPDATA%/FenrirEngine/demo-assets` on
+`-DFENRIR_FETCH_DEMO_ASSETS=ON` and CMake downloads every file `fetched-assets.json` lists, about 890 MB (487 MB of it
+the forest's Fir Tree 01, 53 MB Sponza), into `FENRIR_DEMO_ASSET_CACHE` (by default `%LOCALAPPDATA%/FenrirEngine/demo-assets` on
 Windows, else `$XDG_CACHE_HOME/FenrirEngine/demo-assets` or `~/.cache/FenrirEngine/demo-assets`), outside the build
 directory, and checks each one's SHA-256: a file whose hash is not the manifest's fails configure, naming it. A file
 already cached with the right hash is not downloaded again, so a clean build reuses the cache. The app loads the fetched
@@ -60,20 +51,6 @@ committed 1k panorama) alone; a sun can be added. The window's Scene part has th
 | T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | L | The sun (a DirectionalLight of intensity 3) on or off. |
 
-Hand checks, on OpenGL:
-
-- The grid reads as LearnOpenGL's IBL result does, in spirit: bottom left a glossy red plastic with a sharp reflection of
-  the studio's softboxes, the reflection blurring and widening to the right until the rightmost column is matte.
-  Upwards the rows turn metallic: the white reflections take on the red, and the top row is a red metal with no
-  diffuse light. No row or column is much brighter or darker overall than its neighbours: a rough metal
-  keeps its energy (ADR-0048's multi-scatter compensation), and no sphere glows at its rim.
-- Turning the sky (Rotation) turns the reflections with it, without a hitch; Intensity scales the whole grid's light.
-- L adds a sun from above and to the right, behind the camera: a highlight on each sphere, small and sharp at the left, broad at the right.
-- T steps the tonemapper: AgX (the default) softens the brightest highlights towards white, PBR Neutral keeps the red
-  truer, ACES is more contrasty, None clips the softbox reflections flat. E brightens a stop at a time.
-- Bloom (B, and the window's sliders): the softbox reflections in the glossy spheres glow softly into their
-  surroundings, with no hard threshold edge; intensity 0 removes it, and radius widens or narrows the glow.
-
 ### Showcase models
 
 Khronos's DamagedHelmet, FlightHelmet and SciFiHelmet in a row, each about two metres high, on a grey floor under one
@@ -88,18 +65,6 @@ large textures at once: about 15 seconds in a Debug build on an RTX 5080 machine
 | T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | S | The next panorama. |
 | R | The turntable on or off. |
-
-Hand checks, on OpenGL with the assets fetched:
-
-- Under each sky the helmets look as they do in Khronos's sample viewer: DamagedHelmet's worn metal and its glowing
-  emissive panels (which bloom softly), its scratches in the normal map; FlightHelmet's leather, brass, glass lenses and
-  wooden stand reading as their own materials; SciFiHelmet's painted and bare metal panels. Each is lit by the sky
-  around it: warm and directional at the Venice sunset, soft and neutral in the studio, cool and even in the garden.
-- S changes the sky and the helmets' light and reflections with it in the same frame, with no flash.
-- Rotation turns the light round the helmets; the turntable (R) shows reflections sliding over the curved surfaces
-  without swimming or sparkling.
-- Without the fetched assets: an empty scene with an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, and no error in
-  the log.
 
 ### Many lights
 
@@ -124,28 +89,6 @@ the clustering are the renderer's, so other scenes keep them as they were left.
 | J | Point shadows off or on. |
 | C | The lights clustered or not. |
 
-Hand checks, on OpenGL:
-
-- With a hundred lights the room reads as lit by many small coloured lights: each makes a soft pool on the floor that
-  fades to nothing before its range, with no hard edge where the range ends; spots light round pools with soft rims.
-- The smooth floor tiles and the metal columns show sharp coloured highlights that slide as the lights move; the rough
-  tiles show broad soft ones. The markers glow and bloom softly.
-- The frame rate holds at a thousand lights with clustering on (ADR-0049), and C, turning it off, drops it to about a
-  third. With 256 lights, or a thousand at a range of 1.5, C changes nothing on screen. G to the light clusters' heat
-  shows the count following the lights as they move, cluster by cluster: cooler at 256 lights than at a thousand,
-  red (the cap of 256) round the camera at a thousand and range 5, where the lights past the cap drop out of those
-  clusters; lowering the range cools it to blue, black between the lights' reach.
-- Range shrinks and grows every pool; 0 lights leaves the room almost black.
-- The spot lights nearest the camera cast shadows of the columns and spheres across the floor, soft-edged and attached
-  to their casters, with no acne on the lit floor or walls. As the lights circle, lights move in and out of the budget
-  without popping badly: a light leaving it is far from the camera, its pool small on screen. K turns them off and on.
-- G to the spot shadow atlas shows a three by three grid of grey tiles, eight of them each one spot light's view down
-  onto the floor and the columns; the budget slider makes it a grid of the new size.
-- The point lights nearest the camera, low among the columns and spheres, throw their shadows out across the floor and
-  up the walls on every side of them, soft-edged and attached. No seam shows where a shadow crosses from one face of a
-  light's cube to the next (look along the floor's diagonals from a light, where the faces meet). J turns them off and
-  on.
-
 ### Showroom
 
 A dark room, twelve metres wide and ten deep, lit by rect lights (ADR-0048) alone: a magenta neon strip low along the
@@ -162,18 +105,6 @@ height, intensity and sidedness.
 | T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | Z | Every light at half, as set, or twice its size. |
 | V | Every light's sidedness flipped. |
-
-Hand checks, on OpenGL:
-
-- The polished floor reflects each light as its own shape: the neon strip as a thin line and the panel as a rectangle,
-  sharp-edged on the left of the floor and blurring, stretching towards the camera and dimming across it to the right.
-- Widening, heightening or dimming a light in the window changes its slab, its reflection and the light it casts in the
-  same frame; Z does it to all three at once.
-- The sign lights the floor and walls on both sides of it; turned one-sided (its checkbox, or V), only the side its front
-  faces, towards -X, the room's left half, is lit. V also makes the neon and the panel two-sided: each then lights the
-  strip of back wall just behind it too.
-- The helmets' metal shows the lights' shapes in its highlights; the room stays dark beyond the lights' ranges.
-- Without the fetched assets: bare plinths and an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
 
 ### Asteroid ring
 
@@ -205,18 +136,6 @@ and uploads.
 | N | 10k, 50k or 100k ring rocks. |
 | I | Automatic instancing off or back on: the field's 5,000 rocks become 5,000 draws, and back to a handful. |
 | R | The ring turning or still. |
-
-Hand checks, on OpenGL:
-
-- The ring holds a smooth frame rate at 100k rocks, and the panel shows a few dozen draws and over 100,000 instances.
-- The station's beacons light the nearest rocks of the field in their colours; the rocks far from it are lit by the sun
-  and the sky alone.
-- Switching merging off multiplies the draws by thousands and costs frame time; the ring stays three draws either way.
-- Uploads stay 0 while the ring turns; moving the count slider shows 3 uploads in that frame.
-- Without the fetched assets: spheres and cubes in the ring and field, a plain planet, and an amber message naming
-  `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
-- The planet's shadow darkens the ring's far side behind it, its edge sliding over the rocks as the ring turns, and the
-  field's rocks shadow one another.
 
 ### Forest clearing
 
@@ -265,16 +184,6 @@ stand-ins for the boulder and log, under the demo's sky, and the scene says so o
 | T, E, B, O, G, H, S | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows, the next panorama. |
 | N | 25%, 50% or all of the forest. |
 | M | The grass hidden or shown. |
-
-Hand checks, on OpenGL (Release for a usable frame rate):
-
-- The grass sways in rolling gusts, and its shadows on the ground and on its neighbours sway with it.
-- The ferns', shrubs', saplings' and trees' leaves and twigs cut out cleanly in light and in their shadows: no
-  box-shaped shadows of their cards, and no holes or halos where the prepass and the lit pass disagree.
-- The sun lights the clearing's middle through the gap in the crowns; the edges and the forest lie in the trees' shade.
-- G to the occlusion view shows the plants, boulder and log grounded by dark contact shading.
-- Without the fetched assets: grass, trunks and boulders, and an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, no
-  error in the log.
 
 Not yet here: haze and sun shafts through the trees (ticket 24), debug views of the albedo, normals, roughness,
 metallic, direct and indirect light and wireframe (ticket 23); higher-quality trees and ground vegetation from Fab
@@ -382,6 +291,160 @@ generated sky. Everything else is generated, and the scene says so on screen.
 | M | The streets dry or wet again. |
 | C | The lights clustered or not. |
 
+| Key | What it does |
+| --- | --- |
+| F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
+
+### Sponza
+
+Everything at once in a real building: Khronos's Sponza, Crytek's atrium of two storeys of arcades round an open
+courtyard, about 30 metres long, 18 wide and 11 high, with its masked plants, chains and curtains, fetched (ADR-0052).
+The sky is Poly Haven's Kloofendal 48d Partly Cloudy (Pure Sky), fetched, and the sun is that sky's: the
+DirectionalLight comes from its brightest texels, 48 degrees up, and turns with it when the window's sky rotation does.
+The sky starts turned so the sun stands high over the courtyard's east end and a little to the south, shining down its
+length through the open roof onto the west end's walls and floor and the north arcade's faces, its shadows in four
+cascades over 40 metres. The camera starts on the courtyard floor at the east end, looking west with the sun behind.
+
+Four torches stand in the ground-floor galleries, one on the gallery side of each of the courtyard's four middle
+columns: an iron bracket, a small flame that glows and blooms, and in it a warm point light that flickers and casts
+shadows. Four is RendererConfig's default point shadow budget, which the scene sets on entering, so every torch keeps
+its shadows: their light stops at the columns and walls instead of leaking through them into the courtyard and the
+next bay. GTAO (radius 1 metre) darkens the arcades' corners and the columns' feet; bloom and AgX finish it. The
+lights are clustered.
+
+The sky still lights the galleries' shade: the renderer has no light probes, so the sky's light reaches every
+surface whatever stands between it and the sky, darkened only by GTAO and the material's own occlusion. The scene
+draws the sky at 0.35 so the shade stays darker than the sunlit floor and the torches carry the galleries.
+
+The window's Scene part has the frame time, the last frame's draws, instances and shadow draws, the sun's intensity,
+the torches lit, their shadows, their flicker, their intensity and their range. Without the fetched assets, a stone
+floor, the two colonnades as plain columns and the galleries' outer walls stand in, under a plain blue sky, with the
+sun and the four torches, and the scene says so on screen.
+
+| Keys | |
+| --- | --- |
+| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
+| J | The torches' shadows off or on. |
+| K | The torches out or lit. |
+| N | The torches' flicker off or on. |
+
+| Key | What it does |
+| --- | --- |
+| F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
+
+## Hand checks
+
+Every scene's hand checks, in one place: run each scene through its keys (`FENRIR_DEMO_SCENE=<scene>` with
+`FENRIR_DEMO_KEYS=1`) or fly it by hand, on OpenGL, and check what its list says. The scenes' own sections
+above say what each shows and its keys.
+
+### Every scene
+
+Hand check for ambient occlusion: in Showcase models, contact shadows under the helmets where they meet the ground, and
+with G, dark creases and corners on white, no dark halo round a model's silhouette against what is far behind it.
+
+Hand check for the sun's shadows (ADR-0050): flying round Showcase models with the free-fly camera, the helmets'
+shadows on the floor hold still, neither shimmering as the camera turns nor swimming as it moves; G to the cascade
+colours shows four bands on the floor, their boundaries following the camera, and no seam in a shadow that crosses one.
+The lit floor shows no speckled acne at any sun angle the sky's rotation leaves it; raising the biases in the window
+detaches the shadows from the helmets' bases, lowering them to 0 brings acne back.
+
+### Material grid
+
+Hand checks, on OpenGL:
+
+- The grid reads as LearnOpenGL's IBL result does, in spirit: bottom left a glossy red plastic with a sharp reflection of
+  the studio's softboxes, the reflection blurring and widening to the right until the rightmost column is matte.
+  Upwards the rows turn metallic: the white reflections take on the red, and the top row is a red metal with no
+  diffuse light. No row or column is much brighter or darker overall than its neighbours: a rough metal
+  keeps its energy (ADR-0048's multi-scatter compensation), and no sphere glows at its rim.
+- Turning the sky (Rotation) turns the reflections with it, without a hitch; Intensity scales the whole grid's light.
+- L adds a sun from above and to the right, behind the camera: a highlight on each sphere, small and sharp at the left, broad at the right.
+- T steps the tonemapper: AgX (the default) softens the brightest highlights towards white, PBR Neutral keeps the red
+  truer, ACES is more contrasty, None clips the softbox reflections flat. E brightens a stop at a time.
+- Bloom (B, and the window's sliders): the softbox reflections in the glossy spheres glow softly into their
+  surroundings, with no hard threshold edge; intensity 0 removes it, and radius widens or narrows the glow.
+
+### Showcase models
+
+Hand checks, on OpenGL with the assets fetched:
+
+- Under each sky the helmets look as they do in Khronos's sample viewer: DamagedHelmet's worn metal and its glowing
+  emissive panels (which bloom softly), its scratches in the normal map; FlightHelmet's leather, brass, glass lenses and
+  wooden stand reading as their own materials; SciFiHelmet's painted and bare metal panels. Each is lit by the sky
+  around it: warm and directional at the Venice sunset, soft and neutral in the studio, cool and even in the garden.
+- S changes the sky and the helmets' light and reflections with it in the same frame, with no flash.
+- Rotation turns the light round the helmets; the turntable (R) shows reflections sliding over the curved surfaces
+  without swimming or sparkling.
+- Without the fetched assets: an empty scene with an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, and no error in
+  the log.
+
+### Many lights
+
+Hand checks, on OpenGL:
+
+- With a hundred lights the room reads as lit by many small coloured lights: each makes a soft pool on the floor that
+  fades to nothing before its range, with no hard edge where the range ends; spots light round pools with soft rims.
+- The smooth floor tiles and the metal columns show sharp coloured highlights that slide as the lights move; the rough
+  tiles show broad soft ones. The markers glow and bloom softly.
+- The frame rate holds at a thousand lights with clustering on (ADR-0049), and C, turning it off, drops it to about a
+  third. With 256 lights, or a thousand at a range of 1.5, C changes nothing on screen. G to the light clusters' heat
+  shows the count following the lights as they move, cluster by cluster: cooler at 256 lights than at a thousand,
+  red (the cap of 256) round the camera at a thousand and range 5, where the lights past the cap drop out of those
+  clusters; lowering the range cools it to blue, black between the lights' reach.
+- Range shrinks and grows every pool; 0 lights leaves the room almost black.
+- The spot lights nearest the camera cast shadows of the columns and spheres across the floor, soft-edged and attached
+  to their casters, with no acne on the lit floor or walls. As the lights circle, lights move in and out of the budget
+  without popping badly: a light leaving it is far from the camera, its pool small on screen. K turns them off and on.
+- G to the spot shadow atlas shows a three by three grid of grey tiles, eight of them each one spot light's view down
+  onto the floor and the columns; the budget slider makes it a grid of the new size.
+- The point lights nearest the camera, low among the columns and spheres, throw their shadows out across the floor and
+  up the walls on every side of them, soft-edged and attached. No seam shows where a shadow crosses from one face of a
+  light's cube to the next (look along the floor's diagonals from a light, where the faces meet). J turns them off and
+  on.
+
+### Showroom
+
+Hand checks, on OpenGL:
+
+- The polished floor reflects each light as its own shape: the neon strip as a thin line and the panel as a rectangle,
+  sharp-edged on the left of the floor and blurring, stretching towards the camera and dimming across it to the right.
+- Widening, heightening or dimming a light in the window changes its slab, its reflection and the light it casts in the
+  same frame; Z does it to all three at once.
+- The sign lights the floor and walls on both sides of it; turned one-sided (its checkbox, or V), only the side its front
+  faces, towards -X, the room's left half, is lit. V also makes the neon and the panel two-sided: each then lights the
+  strip of back wall just behind it too.
+- The helmets' metal shows the lights' shapes in its highlights; the room stays dark beyond the lights' ranges.
+- Without the fetched assets: bare plinths and an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
+
+### Asteroid ring
+
+Hand checks, on OpenGL:
+
+- The ring holds a smooth frame rate at 100k rocks, and the panel shows a few dozen draws and over 100,000 instances.
+- The station's beacons light the nearest rocks of the field in their colours; the rocks far from it are lit by the sun
+  and the sky alone.
+- Switching merging off multiplies the draws by thousands and costs frame time; the ring stays three draws either way.
+- Uploads stay 0 while the ring turns; moving the count slider shows 3 uploads in that frame.
+- Without the fetched assets: spheres and cubes in the ring and field, a plain planet, and an amber message naming
+  `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
+- The planet's shadow darkens the ring's far side behind it, its edge sliding over the rocks as the ring turns, and the
+  field's rocks shadow one another.
+
+### Forest clearing
+
+Hand checks, on OpenGL (Release for a usable frame rate):
+
+- The grass sways in rolling gusts, and its shadows on the ground and on its neighbours sway with it.
+- The ferns', shrubs', saplings' and trees' leaves and twigs cut out cleanly in light and in their shadows: no
+  box-shaped shadows of their cards, and no holes or halos where the prepass and the lit pass disagree.
+- The sun lights the clearing's middle through the gap in the crowns; the edges and the forest lie in the trees' shade.
+- G to the occlusion view shows the plants, boulder and log grounded by dark contact shading.
+- Without the fetched assets: grass, trunks and boulders, and an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, no
+  error in the log.
+
+### Neon city
+
 Hand checks, on OpenGL:
 
 - Neon streaks on the wet streets: the signs and headlights mirror in the puddles and smear along the damp asphalt
@@ -397,12 +460,30 @@ Hand checks, on OpenGL:
 - Without the fetched assets: dark wet streets, the city and its lights, and an amber message naming
   `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
 
-| Key | What it does |
-| --- | --- |
-| F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
+### Sponza
 
+Hand checks, on OpenGL with the assets fetched:
+
+- From the courtyard floor: the sunlit strip of floor and the lit faces of the arcades read as stone in sun, the
+  shade as stone in skylight, darker and cooler; the lion's-head relief, the curtains and the plants hold their
+  colour and texture, and the plants and chains cut out cleanly, in light and in their shadows.
+- From the galleries, upstairs and down: the columns, arches and balustrades throw sharp shadows across the gallery
+  floors where the sun comes in, and the shadows hold still as the free-fly camera turns and moves; G to the cascade
+  colours shows the bands following the camera, with no seam where a shadow crosses one.
+- No light leaks: no sunlight on a gallery's vault or floor where the storey above or the arcade should shadow it, and
+  no torchlight through a column, curtain or wall. Each torch stands behind its arch's curtain from the courtyard:
+  looking down at the courtyard floor in front of a curtain, only streaks of torchlight between the curtain and the
+  columns reach it. J turns the torches' shadows off, and the torch's warm light then comes straight through the
+  curtain onto the floor.
+- The torches' flames glow and bloom softly, and their light flickers gently on the gallery walls and floor; K puts
+  them out, leaving the galleries in skylight.
+- G to the occlusion view: the arcades' corners, the columns' feet and the plants' pots darkened, the open floor white.
+- Without the fetched assets: plain colonnades and walls with the four torches, under a blue sky, and an amber message
+  naming `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
 ## Smoke runs
 
 The scaffold's `LightingDemo-Smoke-null` (everywhere) and `LightingDemo-Smoke-opengl` (label `gl`) run every scene for
-60 frames with its keys pressed, and fail on any error. Neither uses the fetched assets, so Showcase models runs empty
-Showroom's plinths bare, the asteroid ring of spheres and cubes, the forest clearing of grass, boulders and trunks and the neon city's streets plain under its generated sky, each with its message shown. `FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.
+60 frames with its keys pressed, and fail on any error. Neither uses the fetched assets, so Showcase models runs empty,
+Showroom's plinths bare, the asteroid ring of spheres and cubes, the forest clearing of grass, boulders and trunks, the
+neon city's streets plain under its generated sky and Sponza's colonnades plain columns, each with its message shown.
+`FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.

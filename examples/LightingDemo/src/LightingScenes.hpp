@@ -59,4 +59,12 @@ namespace LightingDemo
      * off and shows the light count and the frame time. Without fetched assets the streets and walls are plain.
      */
     [[nodiscard]] FenrirDemo::DemoScene NeonCity();
+
+    /**
+     * @brief Sponza: Khronos's Sponza atrium (fetched) under a partly cloudy Poly Haven sky (fetched), lit by the sun
+     * through the open roof, its shadows in cascades, and by four flickering torches in the galleries, each a shadowed
+     * point light; GTAO grounds the colonnades and the flames bloom. The panel sets the sun's and the torches'
+     * intensities and turns the torches' shadows off. Without fetched assets, plain colonnades and walls stand in.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene Sponza();
 } // namespace LightingDemo

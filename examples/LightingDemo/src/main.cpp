@@ -14,7 +14,7 @@ int main()
     config.appName = "LightingDemo";
     config.scenes = {LightingDemo::MaterialGrid(), LightingDemo::ShowcaseModels(), LightingDemo::ManyLights(),
                      LightingDemo::Showroom(),     LightingDemo::AsteroidRing(),   LightingDemo::ForestClearing(),
-                     LightingDemo::NeonCity()};
+                     LightingDemo::NeonCity(),     LightingDemo::Sponza()};
     config.msaa = 4;
     // The Lighting window, in every scene.
     config.imguiOverlay = true;

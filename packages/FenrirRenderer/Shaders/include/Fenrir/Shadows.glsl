@@ -100,18 +100,30 @@ int FenrirShadowCascade(float viewDepth)
     return -1;
 }
 
+// What reaches a face turned from a shadowed light, at the face's own N.L `nDotL` (0 or less), instead of a shadow
+// lookup: all of it at the terminator, where a smooth normal can still face the light a little and a faceted mesh
+// would otherwise step from facet to facet, fading to none a quarter turned away. Past that a normal map's turn back
+// towards the light would otherwise light a face that the light cannot reach, such as an arch's soffit in shadow.
+float FenrirTurnedFromLight(float nDotL)
+{
+    return smoothstep(-0.25, 0.0, nDotL);
+}
+
 // How much of the sun reaches `position`, a world position on a face of world normal `normal` (the face's own, not a
-// normal map's), 0 to 1: 1 where the view has no shadow, past its last cascade, and on a face turned from the sun,
-// which the light's own N.L darkens (a smooth normal can still face the sun a little there, and the terminator of a
-// faceted mesh would otherwise step from facet to facet). `cascade` is the cascade read, -1 for none.
+// normal map's), 0 to 1: 1 where the view has no shadow and past its last cascade, and on a face turned from the sun,
+// FenrirTurnedFromLight's share. `cascade` is the cascade read, -1 for none.
 float FenrirSunShadow(vec3 position, vec3 normal, vec3 l, out int cascade)
 {
     float nDotL = dot(normal, l);
     float viewDepth = -(view.view * vec4(position, 1.0)).z;
     cascade = view.shadowInfo.x == 0u ? -1 : FenrirShadowCascade(viewDepth);
-    if (cascade < 0 || nDotL <= 0.0)
+    if (cascade < 0)
     {
         return 1.0;
+    }
+    if (nDotL <= 0.0)
+    {
+        return FenrirTurnedFromLight(nDotL);
     }
     float angle = 6.28318531 * FenrirInterleavedGradientNoise(gl_FragCoord.xy);
     float shadow = FenrirCascadeShadow(cascade, position, normal, l, nDotL, angle);
@@ -131,14 +143,18 @@ float FenrirSunShadow(vec3 position, vec3 normal, vec3 l, out int cascade)
 }
 
 // How much of spot light `index` of the light buffer reaches `position`, 0 to 1, for the face's world normal `normal`
-// and `l` towards the light: 1 for a light without a shadow (index frame.lights.y or past it), on a face turned from the
-// light, which its N.L darkens, and outside its tile (a cone wider than its shadow's 80 degrees).
+// and `l` towards the light: 1 for a light without a shadow (index frame.lights.y or past it) and outside its tile (a
+// cone wider than its shadow's 80 degrees), and on a face turned from the light, FenrirTurnedFromLight's share.
 float FenrirSpotLightShadow(uint index, vec3 position, vec3 normal, vec3 l)
 {
     float nDotL = dot(normal, l);
-    if (index >= frame.lights.y || nDotL <= 0.0)
+    if (index >= frame.lights.y)
     {
         return 1.0;
+    }
+    if (nDotL <= 0.0)
+    {
+        return FenrirTurnedFromLight(nDotL);
     }
     FenrirSpotShadow shadow = fenrirSpotShadows.items[index];
     // Clip w is the distance along the light's axis, which a texel's world size grows with.
@@ -163,14 +179,18 @@ float FenrirSpotLightShadow(uint index, vec3 position, vec3 normal, vec3 l)
 
 // How much of point light `index` of the light buffer reaches `position`, 0 to 1, for the face's world normal `normal`
 // and `l` towards the light: 1 for a light without a shadow (outside the shadowed point lights' records, frame.lights.y
-// to y + z) and on a face turned from the light, which its N.L darkens.
+// to y + z), and on a face turned from the light, FenrirTurnedFromLight's share.
 float FenrirPointLightShadow(uint index, vec3 position, vec3 normal, vec3 l)
 {
     float nDotL = dot(normal, l);
     uint first = frame.lights.y;
-    if (index < first || index >= first + frame.lights.z || nDotL <= 0.0)
+    if (index < first || index >= first + frame.lights.z)
     {
         return 1.0;
+    }
+    if (nDotL <= 0.0)
+    {
+        return FenrirTurnedFromLight(nDotL);
     }
     FenrirLight light = fenrirLights.items[index];
     FenrirPointShadow shadow = fenrirPointShadows.items[index - first];
