@@ -349,13 +349,14 @@ struct Iris::StructMapping<Fenrir::RendererStats>
     static constexpr std::string_view typeName = "Fenrir.Renderer.RendererStats";
     static constexpr auto fields = Iris::StructFields(
         Iris::Field<std::uint32_t>("Draws", 0),
-        Iris::Field<std::uint32_t>("Passes", 4),
-        Iris::Field<std::uint32_t>("Uploads", 8),
-        Iris::Field<std::uint32_t>("PaletteBytesUploaded", 12),
-        Iris::Field<std::uint32_t>("DistinctPalettesWritten", 16),
-        Iris::Field<std::uint32_t>("SkinnedDraws", 20));
+        Iris::Field<std::uint32_t>("Instances", 4),
+        Iris::Field<std::uint32_t>("Passes", 8),
+        Iris::Field<std::uint32_t>("Uploads", 12),
+        Iris::Field<std::uint32_t>("PaletteBytesUploaded", 16),
+        Iris::Field<std::uint32_t>("DistinctPalettesWritten", 20),
+        Iris::Field<std::uint32_t>("SkinnedDraws", 24));
 };
-static_assert(sizeof(Fenrir::RendererStats) == 24 && alignof(Fenrir::RendererStats) == 4,
+static_assert(sizeof(Fenrir::RendererStats) == 28 && alignof(Fenrir::RendererStats) == 4,
               "Fenrir::RendererStats is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 

@@ -15,7 +15,11 @@ using ShaderCompilerTest::SpirvDecorations;
 namespace
 {
     constexpr std::uint32_t BuiltInVertexId = 5;
+    constexpr std::uint32_t BuiltInInstanceId = 6;
     constexpr std::uint32_t BuiltInVertexIndex = 42;
+    constexpr std::uint32_t BuiltInInstanceIndex = 43;
+    // Fenrir/Draw.glsl's fenrirInstanceIndexExcludesBase.
+    constexpr std::uint32_t ExcludesBaseSpecId = 61440;
 
     // The fixture's stages: [0] vertex, [1] fragment.
     const Fenrir::ShaderVariant& FlattenVariant()
@@ -106,6 +110,22 @@ TEST_CASE("The GL copy reads VertexId where the shader read gl_VertexIndex", "[s
     INFO("the GL copy uses VertexId instead, and VertexIndex nowhere");
     REQUIRE(std::ranges::count(gl.builtIns, BuiltInVertexId) == 1);
     REQUIRE(std::ranges::count(gl.builtIns, BuiltInVertexIndex) == 0);
+}
+
+TEST_CASE("Fenrir/Draw.glsl's record index adds the base instance in the GL copy only", "[shader-compiler][flattening]")
+{
+    const Fenrir::ShaderStageCode& vertex = FlattenVariant().stages.at(0);
+    REQUIRE(vertex.stage == Fenrir::ShaderStage::Vertex);
+    const SpirvDecorations gl = Decorate(vertex.glSpirv);
+    const SpirvDecorations original = Decorate(vertex.spirv);
+
+    INFO("the original reads InstanceIndex, which on Vulkan counts from the base instance, and adds nothing");
+    REQUIRE(std::ranges::count(original.builtIns, BuiltInInstanceIndex) == 1);
+    REQUIRE(original.specBools.at(ExcludesBaseSpecId) == false);
+    INFO("the GL copy reads InstanceId, which counts from 0, and adds the base instance");
+    REQUIRE(std::ranges::count(gl.builtIns, BuiltInInstanceId) == 1);
+    REQUIRE(std::ranges::count(gl.builtIns, BuiltInInstanceIndex) == 0);
+    REQUIRE(gl.specBools.at(ExcludesBaseSpecId) == true);
 }
 
 TEST_CASE("Each binding is reflected with its set, kind and name", "[shader-compiler][reflection]")

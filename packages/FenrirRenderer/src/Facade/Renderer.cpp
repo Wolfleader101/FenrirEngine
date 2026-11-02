@@ -1166,6 +1166,7 @@ namespace Fenrir
             {
                 const Render::SceneStats scene = state.scene->TakeStats();
                 state.stats.draws = scene.draws;
+                state.stats.instances = scene.instances;
                 state.stats.passes = report.passesRun;
                 state.stats.uploads = scene.uploads;
                 state.stats.paletteBytesUploaded = scene.paletteBytes;
@@ -1340,8 +1341,8 @@ namespace Fenrir
             return Renderer(nullptr);
         }
         state->core = std::make_unique<Render::RendererCore>(std::move(made), *state->surface);
-        auto scene =
-            std::make_unique<Render::SceneRenderer>(state->core->Device(), *app.Logger(), SupportedMsaa(app, config));
+        auto scene = std::make_unique<Render::SceneRenderer>(state->core->Device(), *app.Logger(),
+                                                             SupportedMsaa(app, config), config.automaticInstancing);
         state->scene = scene.get();
         // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
         // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).

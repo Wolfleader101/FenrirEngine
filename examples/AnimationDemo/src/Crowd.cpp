@@ -199,9 +199,10 @@ namespace AnimationDemo
                                          state->frameTime > 0.0 ? 1.0 / state->frameTime : 0.0),
                              Colour::White);
             draw->ScreenText({16.0f, 168.0f},
-                             std::format("Palettes: {} distinct written, {} bytes uploaded; draws {}, {} skinned",
+                             std::format("Palettes: {} distinct written, {} bytes uploaded; {} draws of {} instances, "
+                                         "{} skinned",
                                          stats.distinctPalettesWritten, stats.paletteBytesUploaded, stats.draws,
-                                         stats.skinnedDraws),
+                                         stats.instances, stats.skinnedDraws),
                              Colour::FromSrgb(0x80FF80FF));
         }
     } // namespace

@@ -926,7 +926,7 @@
       "name": "Fenrir::RendererStats",
       "category": "struct",
       "role": "shared-struct",
-      "size": 24,
+      "size": 28,
       "alignment": 4,
       "doc": "What the renderer did in its last drawn frame (ADR-0023).",
       "fields": [
@@ -935,42 +935,49 @@
           "offset": 0,
           "kind": "u32",
           "default": 0,
-          "doc": "Draws of MeshRenderers, one per item per view."
+          "doc": "Draws of MeshRenderers in each view's Opaque and Transparent passes: one per run of matching opaque or masked items merged into an instanced draw (ADR-0051), and one per transparent item."
+        },
+        {
+          "name": "instances",
+          "offset": 4,
+          "kind": "u32",
+          "default": 0,
+          "doc": "MeshRenderers drawn, one per item per view, however many draws they took."
         },
         {
           "name": "passes",
-          "offset": 4,
+          "offset": 8,
           "kind": "u32",
           "default": 0,
           "doc": "Render passes run."
         },
         {
           "name": "uploads",
-          "offset": 8,
+          "offset": 12,
           "kind": "u32",
           "default": 0,
           "doc": "Assets uploaded to the GPU by the prepare step: a mesh, or a material's parameter block."
         },
         {
           "name": "paletteBytesUploaded",
-          "offset": 12,
+          "offset": 16,
           "kind": "u32",
           "default": 0,
           "doc": "Bytes copied into the frame's palette buffer: every skeleton palette the frame's draws read."
         },
         {
           "name": "distinctPalettesWritten",
-          "offset": 16,
+          "offset": 20,
           "kind": "u32",
           "default": 0,
           "doc": "Skeleton palettes written, one per skeleton and pose however many meshes and views draw it (ADR-0035)."
         },
         {
           "name": "skinnedDraws",
-          "offset": 20,
+          "offset": 24,
           "kind": "u32",
           "default": 0,
-          "doc": "Draws of skinned MeshRenderers, one per item per view; part of `draws`."
+          "doc": "Skinned MeshRenderers drawn, one per item per view; part of `instances`."
         }
       ]
     },

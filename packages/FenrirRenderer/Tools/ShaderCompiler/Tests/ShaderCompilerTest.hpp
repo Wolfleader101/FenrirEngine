@@ -34,23 +34,31 @@ namespace ShaderCompilerTest
     };
 
     // Reads SPIR-V the way a driver would, independently of the tool: OpName gives each id its name, OpDecorate its
-    // set, binding and built-in.
+    // set, binding, built-in and specialisation constant id, and OpSpecConstantTrue and False a bool constant's
+    // default.
     struct SpirvDecorations
     {
         std::map<std::string, Decorations> byName;
         std::vector<std::uint32_t> builtIns;
+        // Each bool specialisation constant's default, by its constant_id.
+        std::map<std::uint32_t, bool> specBools;
     };
 
     inline SpirvDecorations Decorate(const std::vector<std::uint32_t>& words)
     {
         constexpr std::uint32_t OpName = 5;
+        constexpr std::uint32_t OpSpecConstantTrue = 48;
+        constexpr std::uint32_t OpSpecConstantFalse = 49;
         constexpr std::uint32_t OpDecorate = 71;
+        constexpr std::uint32_t SpecId = 1;
         constexpr std::uint32_t BuiltIn = 11;
         constexpr std::uint32_t Binding = 33;
         constexpr std::uint32_t DescriptorSet = 34;
 
         std::map<std::uint32_t, std::string> names;
         std::map<std::uint32_t, Decorations> byId;
+        std::map<std::uint32_t, std::uint32_t> specIds;
+        std::map<std::uint32_t, bool> bools;
         SpirvDecorations result;
         for (std::size_t at = 5; at < words.size();)
         {
@@ -76,8 +84,23 @@ namespace ShaderCompilerTest
                 {
                     result.builtIns.push_back(words[at + 3]);
                 }
+                else if (decoration == SpecId)
+                {
+                    specIds[words[at + 1]] = words[at + 3];
+                }
+            }
+            else if (op == OpSpecConstantTrue || op == OpSpecConstantFalse)
+            {
+                bools[words[at + 2]] = op == OpSpecConstantTrue;
             }
             at += count == 0 ? 1 : count;
+        }
+        for (const auto& [id, specId] : specIds)
+        {
+            if (const auto value = bools.find(id); value != bools.end())
+            {
+                result.specBools[specId] = value->second;
+            }
         }
         for (const auto& [id, decorations] : byId)
         {

@@ -377,7 +377,9 @@ TEST_CASE("A shader without SKINNED draws a skinned mesh with the fallback mater
     test.Frame();
 
     const auto draws = test.Draws();
-    REQUIRE(draws.size() == 2);
+    INFO("both are one draw, merged as two instances of the fallback material (ADR-0051)");
+    REQUIRE(draws.size() == 1);
+    REQUIRE(draws.front().draw.instanceCount == 2);
     for (const auto& draw : draws)
     {
         INFO("drawn by the fallback program, skinned, with no material group");

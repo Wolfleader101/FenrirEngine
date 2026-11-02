@@ -181,7 +181,7 @@ namespace Fenrir::Graphics
         std::uint32_t vertexCount = 0;
         std::uint32_t instanceCount = 1;
         std::uint32_t firstVertex = 0;
-        /** @brief Read by shaders as `gl_BaseInstance`, which indexes the draw (ADR-0018). */
+        /** @brief The first instance's record, which Fenrir/Draw.glsl adds each instance's index to (ADR-0051). */
         std::uint32_t firstInstance = 0;
         friend bool operator==(const CmdDraw&, const CmdDraw&) = default;
     };
@@ -192,7 +192,7 @@ namespace Fenrir::Graphics
         std::uint32_t instanceCount = 1;
         std::uint32_t firstIndex = 0;
         std::int32_t baseVertex = 0;
-        /** @brief Read by shaders as `gl_BaseInstance`, which indexes the draw (ADR-0018). */
+        /** @brief The first instance's record, which Fenrir/Draw.glsl adds each instance's index to (ADR-0051). */
         std::uint32_t firstInstance = 0;
         friend bool operator==(const CmdDrawIndexed&, const CmdDrawIndexed&) = default;
     };

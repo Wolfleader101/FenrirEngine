@@ -18,10 +18,15 @@ namespace Fenrir::ShaderCompiler
      */
     GlBindingMap GlBindingsOf(const std::vector<ShaderBinding>& bindings);
 
+    /** @brief The `constant_id` of Fenrir/Draw.glsl's `fenrirInstanceIndexExcludesBase`, reserved for it. */
+    inline constexpr std::uint32_t InstanceIndexExcludesBaseSpecId = 61440;
+
     /**
      * @brief The GL copy of a stage's SPIR-V (spike lesson 1): every descriptor set zeroed, every binding flattened to
-     * its point in `bindings` (from GlBindingsOf), and `VertexIndex` retargeted to GL's `VertexId` (they agree, base
-     * vertex included). Everything else is copied unchanged.
+     * its point in `bindings` (from GlBindingsOf), `VertexIndex` retargeted to GL's `VertexId` (they agree, base vertex
+     * included), and `InstanceIndex` to GL's `InstanceId`, which leaves out the base instance, so the constant with
+     * InstanceIndexExcludesBaseSpecId defaults to true, for Fenrir/Draw.glsl to add the base back (ADR-0051).
+     * Everything else is copied unchanged.
      */
     std::vector<std::uint32_t> RewriteForGl(const std::vector<std::uint32_t>& spirv, const GlBindingMap& bindings);
 } // namespace Fenrir::ShaderCompiler
