@@ -53,7 +53,7 @@ namespace LightingDemo
         constexpr float ColumnRadius = 0.28f;
         /** @brief The flames' height over the floor, and how far each stands out from its column's surface. */
         constexpr float FlameHeight = 1.55f;
-        constexpr float FlameOut = 0.3f;
+        constexpr float FlameStandoff = 0.3f;
         const Fenrir::Colour TorchColour{1.0f, 0.52f, 0.2f, 1.0f};
 
         /** @brief A torch: its point light, and the phase its flicker starts at. */
@@ -79,7 +79,8 @@ namespace LightingDemo
             /** @brief Whether presents wait for the display; off, the frame time is the frame's own. */
             bool vsync = true;
             bool appliedVsync = true;
-            float seconds = 0.0f;
+            /** @brief How long the torches have flickered, in seconds. */
+            float flickerSeconds = 0.0f;
             /** @brief The frame time, smoothed over about a second, in seconds. */
             float frameTime = 0.0f;
         };
@@ -155,15 +156,11 @@ namespace LightingDemo
                     // Away from the courtyard, into the gallery behind the column.
                     const float out = z < 0.0f ? -1.0f : 1.0f;
                     const float surface = z + out * ColumnRadius;
-                    const Vec3 flamePosition{x, FlameHeight, surface + out * FlameOut};
+                    const Vec3 flamePosition{x, FlameHeight, surface + out * FlameStandoff};
                     // The bracket and the flame cast no shadow: round the light, they would darken all it lights.
-                    AddBox(scene, cube, iron, {x, FlameHeight - 0.16f, surface + out * FlameOut * 0.5f},
-                           {0.05f, 0.05f, FlameOut}, false);
+                    AddBox(scene, cube, iron, {x, FlameHeight - 0.16f, surface + out * FlameStandoff * 0.5f},
+                           {0.05f, 0.05f, FlameStandoff}, false);
                     AddBox(scene, cube, iron, {x, FlameHeight - 0.12f, flamePosition.z}, {0.12f, 0.08f, 0.12f}, false);
-                    if (sphere.IsEmpty())
-                    {
-                        continue;
-                    }
                     Fenrir::Entity glow = entities.CreateEntity();
                     auto& transform = glow.AddComponent<Fenrir::Transform>();
                     transform.pos = flamePosition;
@@ -195,7 +192,6 @@ namespace LightingDemo
 
             const std::optional<std::string> model = FetchedAsset(Model);
             const std::optional<std::string> panorama = FetchedAsset(Panorama);
-            state.fetched = model.has_value() && panorama.has_value();
             if (panorama)
             {
                 if (const auto image = store.Load<Fenrir::Image>(*panorama, scene); image.Ok())
@@ -240,7 +236,9 @@ namespace LightingDemo
             {
                 SpawnStandIn(store, scene, cube.handle);
             }
-            if (!state.fetched)
+            // Shown on screen whenever either is missing, in the cache or loading from it.
+            state.fetched = spawned && !state.lighting.panoramas.empty();
+            if (!model || !panorama)
             {
                 app.Logger()->Info("{}: the model and the sky are fetched assets (FENRIR_FETCH_DEMO_ASSETS); "
                                    "plain colonnades and a blue sky stand in",
@@ -315,12 +313,12 @@ namespace LightingDemo
             }
             if (state->flicker)
             {
-                state->seconds += delta;
+                state->flickerSeconds += delta;
             }
             for (const Torch& torch : state->torches)
             {
                 // Two fast waves out of step, a few percent each: a flame's unsteady light, not a strobe.
-                const float t = state->seconds + torch.phase;
+                const float t = state->flickerSeconds + torch.phase;
                 const float flicker =
                     state->flicker ? 1.0f + 0.07f * std::sin(t * 11.0f) + 0.05f * std::sin(t * 23.0f + 1.3f) : 1.0f;
                 auto& light = torch.light.GetComponent<Fenrir::PointLight>();

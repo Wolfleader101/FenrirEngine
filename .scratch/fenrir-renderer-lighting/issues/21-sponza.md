@@ -23,8 +23,9 @@ Built 2026-11-02, stacked on ticket 20's branch at `7571fa6` (#265 to #280 not y
   relied on N.L to darken it, but a normal map can turn the shading normal back towards the light: Sponza's arch soffits
   in shadow took speckled, unshadowed sunlight. Now such a face takes `FenrirTurnedFromLight`'s share, all of the light
   at the terminator (so faceted spheres still shade smoothly and every golden image still matches), fading to none a
-  quarter turned away. It applies to the sun's, spot and point shadows alike; lights without shadows are unchanged. New
-  GL test in `Tests/OpenGL/Shadows.cpp`; it fails without the fix (0.72 lit against under 0.02).
+  quarter turned away. Within that quarter a face still takes a little light unlooked-up, less than the whole of it
+  before. It applies to the sun's, spot and point shadows alike; lights without shadows are unchanged. New
+  GL tests in `Tests/OpenGL/Shadows.cpp`; the shadowed one fails without the fix (0.72 lit against under 0.02).
 - **Sponza is Khronos's, fetched:** 71 files, 53 MB, pinned to glTF-Sample-Assets commit `8f49239`, as the helmets
   are, each file's git blob hash checked against the commit's tree. **Its licence is the CRYENGINE Limited License
   Agreement** (`LicenseRef-CRYENGINE-Agreement`), Crytek's engine licence, not an open one: the files are fetched for
