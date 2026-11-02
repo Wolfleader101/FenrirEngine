@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 
+#include "Core/PunctualLights.hpp"
 #include "Core/Tonemapping.hpp"
 #include "Device/CommandList.hpp"
 #include "Device/GraphicsSurface.hpp"
@@ -122,6 +123,11 @@ namespace Fenrir::Render
         /** @brief Its intensity and its rotation about +Y in radians: 1 and 0 for a ColourSky. */
         float skyIntensity = 1.0f;
         float skyRotation = 0.0f;
+        /**
+         * @brief The point and spot lights (ADR-0048), in the order the light buffer holds them: every one in the
+         * scene that can light anything.
+         */
+        std::vector<PunctualLight> lights;
     };
 
     /**

@@ -57,8 +57,9 @@ TEST_CASE("The GL copy flattens every resource kind's bindings and zeroes the se
 {
     const auto gl = Resources(true);
 
-    INFO("the fixture's eleven resources are all decorated: its own eight, and Frame.glsl's three sky textures");
-    REQUIRE(gl.size() == 11);
+    INFO("the fixture's twelve resources are all decorated: its own eight, and Frame.glsl's three sky textures and "
+         "light buffer");
+    REQUIRE(gl.size() == 12);
     for (const auto& [name, decoration] : gl)
     {
         INFO(name << "'s descriptor set is zeroed");
@@ -115,8 +116,8 @@ TEST_CASE("Each binding is reflected with its set, kind and name", "[shader-comp
             variant.bindings, [&](const Fenrir::ShaderBinding& b) { return b.set == set && b.binding == binding; });
     };
 
-    INFO("eleven bindings across both stages, three of them Frame.glsl's sky textures");
-    REQUIRE(variant.bindings.size() == 11);
+    INFO("twelve bindings across both stages, four of them Frame.glsl's sky textures and light buffer");
+    REQUIRE(variant.bindings.size() == 12);
     INFO("set 0 binding 0 is the FrameData uniform block from Fenrir/Frame.glsl");
     REQUIRE(find(0, 0)->kind == Fenrir::ShaderBindingKind::UniformBuffer);
     REQUIRE(find(0, 0)->name == "FrameData");

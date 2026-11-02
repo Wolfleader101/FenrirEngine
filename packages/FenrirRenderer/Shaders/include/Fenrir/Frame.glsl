@@ -17,6 +17,8 @@ layout(set = 0, binding = 0, std140) uniform FrameData
     // The sky the scene is lit by: its SkyLight's, else its Sky. x: its intensity; y and z: the cosine and sine of its
     // rotation about +Y; w: the highest mip level of fenrirSkySpecular, which holds roughness 1.
     vec4 skyLight;
+    // x: how many records fenrirLights.items holds this frame. yzw unused.
+    uvec4 lights;
 } frame;
 
 // The diffuse light of the sky the scene is lit by (ADR-0047): L2 spherical harmonics of its irradiance divided by
@@ -27,6 +29,33 @@ layout(set = 0, binding = 1) uniform sampler2D fenrirSkyIrradiance;
 layout(set = 0, binding = 2) uniform samplerCube fenrirSkySpecular;
 // The split sum's BRDF lookup table: red the scale and green the bias of f0, by N.V across and roughness down.
 layout(set = 0, binding = 3) uniform sampler2D fenrirBrdfLut;
+
+// One point or spot light (ADR-0048), in world space. Ticket 19's clusters index these records unchanged.
+struct FenrirLight
+{
+    vec3 position;
+    // The distance at which its light has fallen to zero.
+    float range;
+    // Its colour times its intensity, linear.
+    vec3 colour;
+    // 0 a point light, 1 a spot light.
+    uint kind;
+    // The way a spot light points, unit length.
+    vec3 direction;
+    // The spot's cone falloff is smoothstep of cos(angle off its axis) x coneScale + coneOffset: for a point light,
+    // scale 0 and offset 1, so 1 everywhere.
+    float coneScale;
+    float coneOffset;
+    float padding0;
+    float padding1;
+    float padding2;
+};
+
+// Every point and spot light of the scene that can light anything, frame.lights.x of them; the buffer may be longer.
+layout(set = 0, binding = 4, std430) readonly buffer FenrirLights
+{
+    FenrirLight items[];
+} fenrirLights;
 
 // The world direction `direction` turned back by a sky's rotation about +Y, whose cosine is `c` and sine `s`: the
 // direction to sample that sky's cube along.

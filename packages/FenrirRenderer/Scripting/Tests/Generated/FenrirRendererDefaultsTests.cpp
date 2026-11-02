@@ -78,6 +78,12 @@ TEST_CASE("C#'s new MeshRenderer() has C++'s Fenrir::MeshRenderer{} defaults, fi
     CheckDefaults<Fenrir::MeshRenderer>(Fenrir::ScriptingProbe::Component(app.scripting), "MeshRenderer");
 }
 
+TEST_CASE("C#'s new PointLight() has C++'s Fenrir::PointLight{} defaults, field by field", "[renderer][scripting][bindings]")
+{
+    Fenrir::Testing::RendererScriptingApp app;
+    CheckDefaults<Fenrir::PointLight>(Fenrir::ScriptingProbe::Component(app.scripting), "PointLight");
+}
+
 TEST_CASE("C#'s new RendererStats() has C++'s Fenrir::RendererStats{} defaults, field by field", "[renderer][scripting][bindings]")
 {
     Fenrir::Testing::RendererScriptingApp app;
@@ -100,6 +106,12 @@ TEST_CASE("C#'s new SkyLight() has C++'s Fenrir::SkyLight{} defaults, field by f
 {
     Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::SkyLight>(Fenrir::ScriptingProbe::Component(app.scripting), "SkyLight");
+}
+
+TEST_CASE("C#'s new SpotLight() has C++'s Fenrir::SpotLight{} defaults, field by field", "[renderer][scripting][bindings]")
+{
+    Fenrir::Testing::RendererScriptingApp app;
+    CheckDefaults<Fenrir::SpotLight>(Fenrir::ScriptingProbe::Component(app.scripting), "SpotLight");
 }
 
 // clang-format on

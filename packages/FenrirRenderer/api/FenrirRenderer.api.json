@@ -754,6 +754,50 @@
       ]
     },
     {
+      "name": "Fenrir::PointLight",
+      "category": "struct",
+      "role": "component",
+      "size": 28,
+      "alignment": 4,
+      "doc": "A light shining from its entity's world position in every direction (ADR-0048), any number per scene. Its light falls with the square of the distance, windowed smoothly to zero at `range`: a white light of intensity 1 one unit straight above a white rough face lights it about as a DirectionalLight of intensity 1 does, when its range is well past one unit. A light that can light nothing (range or intensity 0, or black) is skipped.",
+      "fields": [
+        {
+          "name": "colour",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          },
+          "doc": "Linear. White by default (Colour::White)."
+        },
+        {
+          "name": "intensity",
+          "offset": 16,
+          "kind": "f32",
+          "default": 1,
+          "doc": "A plain multiplier on the colour."
+        },
+        {
+          "name": "range",
+          "offset": 20,
+          "kind": "f32",
+          "default": 10,
+          "doc": "The distance, in world units, at which the light has fallen to zero; nothing past it is lit."
+        },
+        {
+          "name": "castShadows",
+          "offset": 24,
+          "kind": "bool",
+          "default": false,
+          "doc": "Whether the light casts shadows. Off by default; not drawn yet."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::RendererStats",
       "category": "struct",
       "role": "shared-struct",
@@ -897,6 +941,64 @@
           "type": "Fenrir::Sky",
           "default": {},
           "doc": "The sky the scene is lit by: the default ColourSky, a dark grey, unless set."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::SpotLight",
+      "category": "struct",
+      "role": "component",
+      "size": 36,
+      "alignment": 4,
+      "doc": "A light shining from its entity's world position along its world -Z in a cone (ADR-0048), any number per scene. It falls off with distance as a PointLight does, and across its cone smoothly from full inside `innerAngle` to none outside `outerAngle`, both measured from its axis. A light that can light nothing is skipped.",
+      "fields": [
+        {
+          "name": "colour",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          },
+          "doc": "Linear. White by default (Colour::White)."
+        },
+        {
+          "name": "intensity",
+          "offset": 16,
+          "kind": "f32",
+          "default": 1,
+          "doc": "A plain multiplier on the colour."
+        },
+        {
+          "name": "range",
+          "offset": 20,
+          "kind": "f32",
+          "default": 10,
+          "doc": "The distance, in world units, at which the light has fallen to zero; nothing past it is lit."
+        },
+        {
+          "name": "innerAngle",
+          "offset": 24,
+          "kind": "f32",
+          "default": 0,
+          "doc": "The angle off its axis, in radians, inside which the cone is fully lit: 0 by default, as glTF's."
+        },
+        {
+          "name": "outerAngle",
+          "offset": 28,
+          "kind": "f32",
+          "default": 0.7853982,
+          "doc": "The angle off its axis, in radians, outside which nothing is lit: 45 degrees by default, as glTF's."
+        },
+        {
+          "name": "castShadows",
+          "offset": 32,
+          "kind": "bool",
+          "default": false,
+          "doc": "Whether the light casts shadows. Off by default; not drawn yet."
         }
       ]
     }

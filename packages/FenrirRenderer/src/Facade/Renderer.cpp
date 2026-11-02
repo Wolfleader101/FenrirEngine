@@ -339,8 +339,56 @@ namespace Fenrir
             return {ColourSky{}.colour, KeyOf(handle), intensity, rotation};
         }
 
+        /** @brief Whether a light of `colour` times `intensity` reaching `range` can light anything. */
+        bool CanLight(const Colour& colour, float intensity, float range)
+        {
+            return range > 0.0f && intensity > 0.0f && (colour.r > 0.0f || colour.g > 0.0f || colour.b > 0.0f);
+        }
+
         /**
-         * @brief The active scene's light: the first DirectionalLight, warned once if there are more, and `sky`, the
+         * @brief Every PointLight and SpotLight of `scene` that can light anything, at its entity's world position, a
+         * spot pointing along its world -Z (ADR-0048), into `lights`: points first, then spots.
+         */
+        void ReadPunctualLights(Scene& scene, std::vector<Render::PunctualLight>& lights)
+        {
+            EntityList& entities = scene.GetEntityList();
+            const std::array<ComponentType, 1> points{ComponentType::Native<PointLight>()};
+            entities.ForEachWith(points, [&](std::uint32_t id) {
+                const Entity entity = entities.GetEntity(id);
+                const PointLight& light = entity.GetComponent<PointLight>();
+                if (!CanLight(light.colour, light.intensity, light.range))
+                {
+                    return;
+                }
+                Render::PunctualLight& out = lights.emplace_back();
+                out.kind = Render::LightKind::Point;
+                out.position = Math::Vec3(GetWorldMatrix(entity)[3]);
+                out.colour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                out.range = light.range;
+            });
+            const std::array<ComponentType, 1> spots{ComponentType::Native<SpotLight>()};
+            entities.ForEachWith(spots, [&](std::uint32_t id) {
+                const Entity entity = entities.GetEntity(id);
+                const SpotLight& light = entity.GetComponent<SpotLight>();
+                if (!CanLight(light.colour, light.intensity, light.range))
+                {
+                    return;
+                }
+                const Math::Mat4 world = GetWorldMatrix(entity);
+                Render::PunctualLight& out = lights.emplace_back();
+                out.kind = Render::LightKind::Spot;
+                out.position = Math::Vec3(world[3]);
+                out.direction = glm::normalize(-Math::Vec3(world[2]));
+                out.colour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                out.range = light.range;
+                out.innerAngle = light.innerAngle;
+                out.outerAngle = light.outerAngle;
+            });
+        }
+
+        /**
+         * @brief The active scene's light: the first DirectionalLight, warned once if there are more, its point and
+         * spot lights, and `sky`, the
          * sky it is lit by (ADR-0047): its SkyLight's, else its Sky, whatever each camera's background.
          */
         Render::SceneLighting ReadLighting(Detail::RendererState& state, Scene& scene, const SceneSky& sky)
@@ -373,6 +421,7 @@ namespace Fenrir
                                           "is used",
                                           found);
             }
+            ReadPunctualLights(scene, lighting.lights);
             return lighting;
         }
 

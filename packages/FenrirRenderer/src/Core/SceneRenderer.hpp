@@ -397,10 +397,14 @@ namespace Fenrir::Render
             Math::Vec3 sortPoint{0.0f};
         };
 
-        /** @brief One copy's frame set binding group (set 0), for the frame block and sky textures it was made with. */
+        /**
+         * @brief One copy's frame set binding group (set 0), for the frame block, light buffer and sky textures it was
+         * made with.
+         */
         struct FrameGroup
         {
             Graphics::BufferHandle block;
+            Graphics::BufferHandle lights;
             Graphics::TextureHandle irradiance;
             Graphics::TextureHandle specular;
             Graphics::BindingGroupHandle group;
@@ -502,6 +506,8 @@ namespace Fenrir::Render
         Graphics::BufferHandle m_defaultStreams;
 
         std::unique_ptr<BlockRing> m_frameBlocks;
+        /** @brief The point and spot lights (ADR-0048), bound at set 0 binding 4 by the frame's groups. */
+        std::unique_ptr<BlockRing> m_lightBlocks;
         std::unique_ptr<BlockRing> m_viewBlocks;
         std::unique_ptr<BlockRing> m_backgroundBlocks;
         std::unique_ptr<BlockRing> m_outputBlocks;

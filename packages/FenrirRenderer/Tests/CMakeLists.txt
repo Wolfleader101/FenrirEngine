@@ -15,6 +15,7 @@ add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp 
                                    Cameras.cpp Picking.cpp Materials.cpp SpawnModel.cpp Sky.cpp DebugFont.cpp
                                    DebugDrawing.cpp Overlay.cpp Draw2D.cpp Skinning.cpp SkinningMaths.cpp
                                    SphericalHarmonics.cpp SkyLighting.cpp Tonemapping.cpp Brdf.cpp Bloom.cpp
+                                   PunctualLights.cpp Lights.cpp
                                    GoldenComparison.cpp DeviceTest.hpp DrawLists2D.hpp FakeSurface.hpp RecordingLogger.hpp
                                    RendererProbe.hpp RendererTestApp.hpp SkinningTestApp.hpp)
 target_include_directories(FenrirRendererTests PRIVATE ../src)
@@ -41,7 +42,8 @@ target_compile_definitions(FenrirRendererTests PRIVATE
     FENRIR_TEST_USER_SHADER="${CMAKE_CURRENT_BINARY_DIR}/shaders/UserTint.fshader"
     FENRIR_TEST_BOX_TEXTURED="${CMAKE_CURRENT_SOURCE_DIR}/../../../examples/assets/BoxTextured/BoxTextured.gltf"
     FENRIR_TEST_TWO_PARTS="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/two_parts.gltf"
-    FENRIR_TEST_ARMATURES="${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirAssets/tests/fixtures/models/armatures.gltf")
+    FENRIR_TEST_ARMATURES="${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirAssets/tests/fixtures/models/armatures.gltf"
+    FENRIR_TEST_LIGHTS="${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirAssets/tests/fixtures/models/lights.gltf")
 add_test(NAME FenrirRenderer COMMAND FenrirRendererTests)
 
 # The GL pixel probes (the spec's seam 2): the OpenGL backend on a hidden window's OpenGL 4.6 core context, made through
@@ -53,6 +55,7 @@ add_executable(FenrirRendererGlTests OpenGL/Clears.cpp OpenGL/Draws.cpp OpenGL/V
                                      OpenGL/Vsync.cpp OpenGL/Scenes.cpp OpenGL/Targets.cpp OpenGL/Materials.cpp
                                      OpenGL/Sky.cpp OpenGL/Debug.cpp OpenGL/Overlay.cpp OpenGL/Skinning.cpp
                                      OpenGL/Tonemapping.cpp OpenGL/NormalMaps.cpp OpenGL/SkyLighting.cpp OpenGL/Bloom.cpp
+                                     OpenGL/Lights.cpp
                                      OpenGL/GlProbe.hpp OpenGL/GlScene.hpp OpenGL/GlTestApp.hpp
                                      DrawLists2D.hpp RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp
                                      SkinningTestApp.hpp)

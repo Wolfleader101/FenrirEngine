@@ -20,7 +20,10 @@ namespace Fenrir
      *    node's own entity, and each further one on a child entity of it, named after the node and the mesh's place
      *    (`Body mesh 2`), at the identity transform. Each skinned mesh (`ModelMesh::skeleton` set) gets an entity of
      *    its own named after its node, a child of its skeleton's owner at the identity, with a MeshRenderer and a
-     *    SkinnedMesh naming that owner: the node's own transform is never applied to it.
+     *    SkinnedMesh naming that owner: the node's own transform is never applied to it. A node carrying a light
+     *    (`ModelNode::light`, glTF's `KHR_lights_punctual`) gets a PointLight or SpotLight on its entity, its
+     *    intensity taken as a plain multiplier; one the file gives no range reaches where it falls to 1/256 of its
+     *    light one unit away (`sqrt(256 x intensity)`, at least one unit). A light on a bone is not spawned.
      *
      * Every model mesh holds one submesh (the importer makes one mesh per material), so this is one MeshRenderer per
      * mesh and submesh. With no skinning source registered (FenrirSkeleton not installed) it skips step 2, logged once

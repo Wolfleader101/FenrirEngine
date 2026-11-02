@@ -490,6 +490,47 @@ namespace Fenrir
         float intensity = 1.0f;
     };
 
+    /**
+     * @brief A light shining from its entity's world position in every direction (ADR-0048), any number per scene. Its
+     * light falls with the square of the distance, windowed smoothly to zero at `range`: a white light of intensity 1
+     * one unit straight above a white rough face lights it about as a DirectionalLight of intensity 1 does, when its
+     * range is well past one unit. A light that can light nothing (range or intensity 0, or black) is skipped.
+     */
+    struct PointLight
+    {
+        /** @brief Linear. White by default (Colour::White). */
+        Colour colour{1.0f, 1.0f, 1.0f, 1.0f};
+        /** @brief A plain multiplier on the colour. */
+        float intensity = 1.0f;
+        /** @brief The distance, in world units, at which the light has fallen to zero; nothing past it is lit. */
+        float range = 10.0f;
+        /** @brief Whether the light casts shadows. Off by default; not drawn yet. */
+        bool castShadows = false;
+    };
+
+    /**
+     * @brief A light shining from its entity's world position along its world -Z in a cone (ADR-0048), any number per
+     * scene. It falls off with distance as a PointLight does, and across its cone smoothly from full inside
+     * `innerAngle` to none outside `outerAngle`, both measured from its axis. A light that can light nothing is
+     * skipped.
+     */
+    struct SpotLight
+    {
+        /** @brief Linear. White by default (Colour::White). */
+        Colour colour{1.0f, 1.0f, 1.0f, 1.0f};
+        /** @brief A plain multiplier on the colour. */
+        float intensity = 1.0f;
+        /** @brief The distance, in world units, at which the light has fallen to zero; nothing past it is lit. */
+        float range = 10.0f;
+        /** @brief The angle off its axis, in radians, inside which the cone is fully lit: 0 by default, as glTF's. */
+        float innerAngle = 0.0f;
+        /** @brief The angle off its axis, in radians, outside which nothing is lit: 45 degrees by default, as glTF's.
+         */
+        float outerAngle = 0.785398163f;
+        /** @brief Whether the light casts shadows. Off by default; not drawn yet. */
+        bool castShadows = false;
+    };
+
     /** @brief A sky of one colour, which lights every surface with that colour from every side (ADR-0047). */
     struct ColourSky
     {

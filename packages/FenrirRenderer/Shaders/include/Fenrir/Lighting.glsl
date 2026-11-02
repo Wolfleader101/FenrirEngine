@@ -1,9 +1,10 @@
 // Fenrir/Lighting.glsl: the lighting every material shares (ADR-0048). A shader fills a FenrirSurface its own way and
-// calls FenrirLitColour, which returns the surface's lit colour as linear HDR: the frame's directional light, and the
-// scene's Sky as image-based lighting (ADR-0047), diffuse from its spherical harmonics and specular from its prefiltered
-// cube through the split sum's BRDF lookup table. Intensities are plain multipliers, so the BRDF is scaled by pi: a
-// white light of intensity 1 falling straight onto a white rough face gives about 1, not 1 / pi, and so does a white sky
-// of intensity 1 all round it.
+// calls FenrirLitColour, which returns the surface's lit colour as linear HDR: the frame's directional light, its point
+// and spot lights, and the scene's Sky as image-based lighting (ADR-0047), diffuse from its spherical harmonics and
+// specular from its prefiltered cube through the split sum's BRDF lookup table. Intensities are plain multipliers, so
+// the BRDF is scaled by pi: a white light of intensity 1 falling straight onto a white rough face gives about 1, not
+// 1 / pi, as does a point light of intensity 1 one unit away (well inside its range), and a white sky of intensity 1
+// all round it.
 //
 // The specular lobe is GGX with height-correlated Smith visibility (Fenrir/Brdf.glsl), with multi-scatter energy
 // compensation (Fdez-Aguera 2019) read from the lookup table, so a rough metal keeps the light it is lit by, and
@@ -71,6 +72,40 @@ vec3 FenrirSkyIrradiance(vec3 normal)
     return max(sum, vec3(0.0));
 }
 
+// How a point or spot light of intensity 1 falls off at the squared distance `distanceSquared`, windowed to zero at
+// `range` (glTF's KHR_lights_punctual, Karis 2013): 1 / d^2 times (1 - (d / range)^4)^2. d^2 is held at least 1e-4,
+// so a pixel on the light stays finite. Core/PunctualLights mirrors it on the CPU.
+float FenrirDistanceFalloff(float distanceSquared, float range)
+{
+    float ratio = distanceSquared / (range * range);
+    float window = clamp(1.0 - ratio * ratio, 0.0, 1.0);
+    return window * window / max(distanceSquared, 1e-4);
+}
+
+// How a spot light falls off at the cosine `cosAngle` of the angle off its axis: smoothstep from its outer cone's
+// cosine to its inner's, by the record's scale and offset. A point light's scale 0 and offset 1 give 1.
+float FenrirConeFalloff(float cosAngle, float coneScale, float coneOffset)
+{
+    float t = clamp(cosAngle * coneScale + coneOffset, 0.0, 1.0);
+    return t * t * (3.0 - 2.0 * t);
+}
+
+// What a light of colour 1 arriving along `l` (pointing back at it) reflects towards `v`, N.L included: GGX with
+// height-correlated Smith visibility, its specular lobe compensated in Filament's form of Fdez-Aguera's (times
+// `energyCompensation`, 1 + f0 (1 / Ess - 1)), and the diffuse what the Fresnel leaves, scaled by pi as the file says.
+vec3 FenrirDirectLight(vec3 n, vec3 v, vec3 l, float nDotV, float a, vec3 f0, vec3 energyCompensation, float metallic,
+                       vec3 base)
+{
+    vec3 h = normalize(v + l);
+    float nDotL = max(dot(n, l), 0.0);
+    float nDotH = max(dot(n, h), 0.0);
+    vec3 fresnel = f0 + (1.0 - f0) * pow(1.0 - max(dot(h, v), 0.0), 5.0);
+    vec3 specular = FenrirPi * FenrirDistribution(nDotH, a) * FenrirVisibility(nDotV, max(nDotL, 1e-4), a) * fresnel *
+                    energyCompensation;
+    vec3 diffuse = (1.0 - fresnel) * (1.0 - metallic) * base;
+    return (diffuse + specular) * nDotL;
+}
+
 // The lit colour of `surface` seen from the view's camera, linear HDR, with its alpha.
 vec4 FenrirLitColour(FenrirSurface surface)
 {
@@ -88,18 +123,27 @@ vec4 FenrirLitColour(FenrirSurface surface)
     vec2 brdf = texture(fenrirBrdfLut, vec2(nDotV, roughness)).rg;
     float singleScatter = max(brdf.x + brdf.y, 1e-4);
 
-    // The directional light. lightDirection is the way the light travels; l points back at it. Its specular lobe is
-    // compensated in Filament's form of Fdez-Aguera's: times 1 + f0 (1 / Ess - 1).
-    vec3 l = -frame.lightDirection.xyz;
-    vec3 h = normalize(v + l);
-    float nDotL = max(dot(n, l), 0.0);
-    float nDotH = max(dot(n, h), 0.0);
-    vec3 fresnel = f0 + (1.0 - f0) * pow(1.0 - max(dot(h, v), 0.0), 5.0);
+    // The directional light. lightDirection is the way the light travels; l points back at it.
     vec3 energyCompensation = 1.0 + f0 * (1.0 / singleScatter - 1.0);
-    vec3 specular = FenrirPi * FenrirDistribution(nDotH, a) * FenrirVisibility(nDotV, max(nDotL, 1e-4), a) * fresnel *
-                    energyCompensation;
-    vec3 diffuse = (1.0 - fresnel) * (1.0 - metallic) * base;
-    vec3 colour = (diffuse + specular) * frame.lightColour.rgb * nDotL;
+    vec3 colour = FenrirDirectLight(n, v, -frame.lightDirection.xyz, nDotV, a, f0, energyCompensation, metallic, base) *
+                  frame.lightColour.rgb;
+
+    // The point and spot lights, a plain loop over the frame's light buffer until clustering lands (ADR-0049),
+    // skipping each whose range does not reach the pixel.
+    for (uint i = 0u; i < frame.lights.x; ++i)
+    {
+        FenrirLight light = fenrirLights.items[i];
+        vec3 toLight = light.position - surface.position;
+        float distanceSquared = dot(toLight, toLight);
+        if (distanceSquared >= light.range * light.range)
+        {
+            continue;
+        }
+        vec3 l = toLight * inversesqrt(max(distanceSquared, 1e-12));
+        float falloff = FenrirDistanceFalloff(distanceSquared, light.range) *
+                        FenrirConeFalloff(dot(-l, light.direction), light.coneScale, light.coneOffset);
+        colour += FenrirDirectLight(n, v, l, nDotV, a, f0, energyCompensation, metallic, base) * light.colour * falloff;
+    }
 
     // The sky (Fdez-Aguera 2019). The single-scattering share reflects the prefiltered cube along the reflection at the
     // mip of this roughness: f0 scaled and biased by the table. What it loses scatters on, each bounce reflecting the

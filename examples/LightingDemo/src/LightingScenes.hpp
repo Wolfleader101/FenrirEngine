@@ -16,4 +16,11 @@ namespace LightingDemo
      * Poly Haven panoramas, all fetched (ADR-0052); without them the scene is empty and says how to fetch them.
      */
     [[nodiscard]] FenrirDemo::DemoScene ShowcaseModels();
+
+    /**
+     * @brief Many lights: a dark room of PBR floor tiles, walls, columns and spheres lit by up to 256 moving coloured
+     * point and spot lights (every fourth a spot), each with a glowing marker; the panel sets how many, their
+     * intensities and range.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene ManyLights();
 } // namespace LightingDemo
