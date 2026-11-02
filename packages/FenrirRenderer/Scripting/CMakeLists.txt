@@ -12,8 +12,6 @@ fenrir_scripting_extension(Renderer
         include/FenrirRendererScripting/RendererScripting.hpp
         src/RendererScripting.cpp
         src/RendererScriptingState.hpp
-        src/DeprecatedAmbientLight.hpp
-        src/DeprecatedAmbientLight.cpp
     LINK FenrirRenderer FenrirAssetsScripting FenrirInputScripting
     NO_SELECTION
 )

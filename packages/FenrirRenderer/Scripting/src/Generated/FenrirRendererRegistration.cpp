@@ -39,6 +39,8 @@ namespace Fenrir::Generated
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::CameraAt, 4>::Call>("Fenrir.Renderer.RendererNative.CameraAt"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::GetWorldBounds, 3>::Call>("Fenrir.Renderer.RendererNative.GetWorldBounds"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::Stats, 2>::Call>("Fenrir.Renderer.RendererNative.Stats"),
+                Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::SetSpotShadowBudget>("Fenrir.Renderer.RendererNative.SetSpotShadowBudget"),
+                Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::SetPointShadowBudget>("Fenrir.Renderer.RendererNative.SetPointShadowBudget"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::SpawnModel, 4>::Call>("Fenrir.Renderer.RendererNative.SpawnModel"),
             };
         }

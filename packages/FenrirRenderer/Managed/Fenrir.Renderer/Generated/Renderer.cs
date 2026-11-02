@@ -57,6 +57,20 @@ public static partial class Renderer
     public static bool Stats(out RendererStats stats) => RendererNative.Stats(out stats);
 
     /// <summary>
+    /// Sets how many SpotLights may cast shadows from the next frame (RendererConfig::spotShadowBudget, ADR-0050): the
+    /// nearest to any camera each frame; the rest light unshadowed. 0 shadows none.
+    /// </summary>
+    /// <returns>Whether the app has a renderer.</returns>
+    public static bool SetSpotShadowBudget(uint budget) => RendererNative.SetSpotShadowBudget(budget);
+
+    /// <summary>
+    /// Sets how many PointLights may cast shadows from the next frame (RendererConfig::pointShadowBudget, ADR-0050):
+    /// the nearest to any camera each frame; the rest light unshadowed. 0 shadows none.
+    /// </summary>
+    /// <returns>Whether the app has a renderer.</returns>
+    public static bool SetPointShadowBudget(uint budget) => RendererNative.SetPointShadowBudget(budget);
+
+    /// <summary>
     /// Spawns `model` into the active scene as C++'s SpawnModel does, under `parent` unless it is no entity: a root
     /// named after the file holding one entity per node, each mesh a MeshRenderer, each skinned mesh with a SkinnedMesh
     /// naming its skeleton's owner, and with FenrirSkeleton installed a SkeletonPose on each owner and bone attachments

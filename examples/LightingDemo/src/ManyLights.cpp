@@ -2,6 +2,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <numbers>
 #include <vector>
 
@@ -341,6 +342,15 @@ namespace LightingDemo
                 }
             }
         }
+
+        /** @brief The C# twin's number in its CSharpScene, as scripts/ManyLights.cs knows it (ManyLights.SceneId). */
+        constexpr std::uint32_t ManyLightsCSharpScene = 1;
+
+        /** @brief What the C# twin's lighting panel has set; the scene itself is C#'s. */
+        struct ManyLightsCSharpState
+        {
+            LightingSettings lighting;
+        };
     } // namespace
 
     FenrirDemo::DemoScene ManyLights()
@@ -361,6 +371,41 @@ namespace LightingDemo
         scene.camera.pitch = -0.45f;
         scene.spawn = Spawn;
         scene.update = Update;
+        return scene;
+    }
+
+    FenrirDemo::DemoScene ManyLightsCSharp()
+    {
+        FenrirDemo::DemoScene scene;
+        scene.name = "Many lights (C#)";
+        scene.keyHelp =
+            LightingKeyHelp(false) +
+            " M: 16, 64, 100, 256 or 1024 lights. P: the lights moving or still. K: spot shadows off or on. "
+            "J: point shadows off or on. V: the shadow budgets, 8 spot and 4 point, 16 and 8, or none.";
+        // To 256 lights and to 1024, through the budgets to none and back, then the light clusters' heat, and to 16.
+        scene.keys = {Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::B, Fenrir::Key::M, Fenrir::Key::P,
+                      Fenrir::Key::M, Fenrir::Key::P, Fenrir::Key::K, Fenrir::Key::K, Fenrir::Key::J,
+                      Fenrir::Key::J, Fenrir::Key::V, Fenrir::Key::V, Fenrir::Key::V, Fenrir::Key::G,
+                      Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::M};
+        scene.camera.position = {0.0f, 4.5f, 9.0f};
+        scene.camera.pitch = -0.45f;
+        // C# builds and runs the room (scripts/ManyLights.cs); C++ keeps the panel every LightingDemo scene has.
+        scene.spawn = [](Fenrir::App&, Fenrir::Scene& spawned) {
+            spawned.AddResource<ManyLightsCSharpState>(ManyLightsCSharpState{});
+        };
+        scene.update = [](Fenrir::App& app, Fenrir::Scene& active) {
+            ManyLightsCSharpState* state = active.GetResource<ManyLightsCSharpState>();
+            if (state == nullptr)
+            {
+                return;
+            }
+            RunLightingPanel(app, active, state->lighting, [] {
+                ImGui::TextUnformatted("Built and run by scripts/ManyLights.cs: its lights are C# components,");
+                ImGui::TextUnformatted("its markers one instance list C# rewrites each frame.");
+                ImGui::TextUnformatted("M lights, P moving, K and J shadows, V shadow budgets.");
+            });
+        };
+        scene.csharpScene = ManyLightsCSharpScene;
         return scene;
     }
 } // namespace LightingDemo

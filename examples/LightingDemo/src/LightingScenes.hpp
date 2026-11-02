@@ -67,4 +67,11 @@ namespace LightingDemo
      * intensities and turns the torches' shadows off. Without fetched assets, plain colonnades and walls stand in.
      */
     [[nodiscard]] FenrirDemo::DemoScene Sponza();
+
+    /**
+     * @brief Many lights (C#): the many-lights room made and run by scripts/ManyLights.cs, its lights C# components and
+     * its markers one instance list C# rewrites each frame; the lighting panel stays C++'s. In the list only with
+     * scripting.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene ManyLightsCSharp();
 } // namespace LightingDemo

@@ -1,5 +1,5 @@
 // Drawing from C# (spec seam 7): a C# system's MeshRenderer and Camera drawn on the null backend, the Sky C# writes
-// reaching the frame, and C#'s deprecated AmbientLight doing nothing, all read back through RendererProbe.
+// reaching the frame, all read back through RendererProbe.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -125,27 +125,4 @@ TEST_CASE("A Sky written from C# is what the Background pass draws, and C++'s sk
     REQUIRE(test.Call<int>(ResourceCallsType, "ReadSky") == 1);
     REQUIRE(Exactly(test.Call<float>(ResourceCallsType, "Value", 0), 7.0f));
     REQUIRE(Exactly(test.Call<float>(ResourceCallsType, "Value", 1), 9.0f));
-}
-
-TEST_CASE("C#'s deprecated AmbientLight can still be inserted and written, and lights nothing", "[renderer][scripting]")
-{
-    RendererScriptingApp test;
-    test.Call<void>(SceneBuilderType, "Arm");
-    test.Frame();
-    const std::vector<Fenrir::Graphics::BindingGroupEntry> before =
-        Fenrir::RendererProbe::Entries(test.Device(), OnlyOpaqueDraw(test).groups.at(0));
-
-    INFO("inserting one, then writing it, from C# runs");
-    test.Call<void>(ResourceCallsType, "Ambient", 0.5f, 0.25f, 1.0f, 2.0f);
-    test.ApplyChanges();
-    test.Call<void>(ResourceCallsType, "Ambient", 1.0f, 1.0f, 1.0f, 4.0f);
-    test.ApplyChanges();
-    test.Frame();
-
-    INFO("the frame set binds the same sky light as before: the default ColourSky's");
-    const std::vector<Fenrir::Graphics::BindingGroupEntry> after =
-        Fenrir::RendererProbe::Entries(test.Device(), OnlyOpaqueDraw(test).groups.at(0));
-    REQUIRE(after.size() == 11);
-    REQUIRE(after[1].texture == before[1].texture);
-    REQUIRE(after[2].texture == before[2].texture);
 }

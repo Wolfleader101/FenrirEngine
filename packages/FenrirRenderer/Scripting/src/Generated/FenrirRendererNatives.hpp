@@ -20,6 +20,8 @@ namespace Fenrir::RendererNatives
     bool CameraAt(const Fenrir::CallContext&, Fenrir::RendererScripting&, Fenrir::WindowId window, const Fenrir::Math::Vec2* point, Fenrir::Entity* camera);
     bool GetWorldBounds(const Fenrir::CallContext&, Fenrir::RendererScripting&, const Fenrir::Entity* entity, Fenrir::Math::AABB* bounds);
     bool Stats(const Fenrir::CallContext&, Fenrir::RendererScripting&, Fenrir::RendererStats* stats);
+    bool SetSpotShadowBudget(const Fenrir::CallContext&, Fenrir::RendererScripting&, std::uint32_t budget);
+    bool SetPointShadowBudget(const Fenrir::CallContext&, Fenrir::RendererScripting&, std::uint32_t budget);
     bool SpawnModel(const Fenrir::CallContext&, Fenrir::RendererScripting&, const Fenrir::AssetHandle<Fenrir::Model>* model, const Fenrir::Entity* parent, Fenrir::Entity* root);
 } // namespace Fenrir::RendererNatives
 

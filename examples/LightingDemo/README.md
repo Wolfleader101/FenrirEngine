@@ -3,8 +3,9 @@
 The lighting spec's demo app (`GLOSSARY.md`: demo app): physically based lighting, image-based lighting from HDR
 panoramas, tonemapping and bloom on the demo scaffold (`examples/DemoScaffold/README.md`), one scene per showcase, flown
 through on the scaffold's free-fly camera. Built with the examples when the renderer is on. Each of its eight scenes
-(`.scratch/fenrir-renderer-lighting/spec.md`, "LightingDemo") has a section below saying what it shows and its keys;
-every scene's hand checks are collected in one place after them, under Hand checks.
+(`.scratch/fenrir-renderer-lighting/spec.md`, "LightingDemo"), and with scripting (`FENRIR_ENABLE_SCRIPTING`) a ninth,
+Many lights (C#), made and run from C# (`scripts/`), has a section below saying what it shows and its keys; every
+scene's hand checks are collected in one place after them, under Hand checks.
 
 ## The Lighting window
 
@@ -330,6 +331,28 @@ sun and the four torches, and the scene says so on screen.
 | K | The torches out or lit. |
 | N | The torches' flicker off or on. |
 
+### Many lights (C#)
+
+Many lights again, made and run from C# by `scripts/ManyLights.cs` (the lighting spec's ticket 22), with scripting
+only: the same room, materials, lights, paths, intensities, range and camera, built from `Fenrir.Renderer`'s
+`MeshRenderer`, `PointLight`, `SpotLight` and `Sky` and moved each frame by a C# system. Where C++ marks each light with
+a sphere entity, C# draws every lit light's marker as one copy of an instance list it makes with
+`Assets.AddInstanceList` and rewrites each frame with `ReplaceInstanceList`, through one `InstancedMeshRenderer` whose
+unlit material each copy's colour tints: one draw for every marker. V steps the shadow budgets through C#'s
+`Renderer.SetSpotShadowBudget` and `SetPointShadowBudget`. The Lighting window is C++'s, as in every scene; its Scene
+part only says what C# does: C# has no ImGui, so the twin has none of Many lights' sliders, and its count is set by M
+and its intensities and range are Many lights' starting ones. C# sets the budgets to 8 and 4 on entering; they are the
+renderer's, so other scenes keep them as V left them, as Many lights' sliders leave them.
+
+| Keys | |
+| --- | --- |
+| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
+| M | 16, 64, 100, 256 or 1024 lights. |
+| P | The lights moving or still. |
+| K | Spot shadows off or on. |
+| J | Point shadows off or on. |
+| V | The shadow budgets: 8 spot and 4 point, 16 and 8, then none. |
+
 | Key | What it does |
 | --- | --- |
 | F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
@@ -482,10 +505,22 @@ Hand checks, on OpenGL with the assets fetched:
 - G to the occlusion view: the arcades' corners, the columns' feet and the plants' pots darkened, the open floor white.
 - Without the fetched assets: plain colonnades and walls with the four torches, under a blue sky, and an amber message
   naming `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
+### Many lights (C#)
+
+Hand checks, on OpenGL, beside Many lights (PageUp and PageDown between them, or each through its keys):
+
+- From the starting camera the two scenes look the same: the room, the columns and spheres, the lights' colours,
+  paths, pools and shadows, and the markers' size, colour and glow, with a hundred lights and at 16, 64, 256 and 1024
+  (M); P stops and starts them both alike.
+- Only lit lights have markers: stepping M from 1024 to 16 leaves sixteen markers, each on its light.
+- K and J turn the spot and point shadows off and on, as in Many lights. V to 16 and 8 shadows more lights, the spot
+  atlas (G) a four by four grid; V to none leaves every light unshadowed; V again returns to 8 and 4.
+
 ## Smoke runs
 
 The scaffold's `LightingDemo-Smoke-null` (everywhere) and `LightingDemo-Smoke-opengl` (label `gl`) run every scene for
 60 frames with its keys pressed, and fail on any error. Neither uses the fetched assets, so Showcase models runs empty,
 Showroom's plinths bare, the asteroid ring of spheres and cubes, the forest clearing of grass, boulders and trunks, the
 neon city's streets plain under its generated sky and Sponza's colonnades plain columns, each with its message shown.
+With scripting, they run Many lights (C#) too, its scripts loaded.
 `FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.
