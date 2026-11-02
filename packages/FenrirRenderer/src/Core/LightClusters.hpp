@@ -78,6 +78,9 @@ namespace Fenrir::Render
     /** @brief The view depth of slice `slice`'s near face, near x (far / near)^(slice / 24); slice 24 is `far`. */
     [[nodiscard]] float ClusterSliceDepth(std::uint32_t slice, ClusterDepths depths) noexcept;
 
+    /** @brief 24 / ln(far / near): what the log of a view depth over `near` is scaled by to find its slice. */
+    [[nodiscard]] float ClusterSliceScale(ClusterDepths depths) noexcept;
+
     /** @brief The slice the view depth `depth` is in, 0 nearer than `near` and the last past `far`. */
     [[nodiscard]] std::uint32_t ClusterSliceOf(float depth, ClusterDepths depths) noexcept;
 
@@ -89,7 +92,9 @@ namespace Fenrir::Render
 
     /**
      * @brief The view-space box round cluster `cell` of a view projected by `projection`, whose inverse is
-     * `inverseProjection`: its tile's four corners in NDC, on their lines of sight, at its slice's near and far depths.
+     * `inverseProjection`: its tile's four corners in NDC, on their lines of sight, at its slice's near and far depths
+     * (the first slice's from the near plane itself), the edge tiles' reaching a little past the viewport, padded by a
+     * hundredth of its size, so every point found in the cluster is inside it.
      */
     [[nodiscard]] ClusterBox ClusterBoundsOf(const Math::Mat4& inverseProjection, ClusterDepths depths,
                                              ClusterCell cell) noexcept;

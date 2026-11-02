@@ -62,7 +62,7 @@ namespace Fenrir::Render
              */
             std::array<std::uint32_t, 4> shadowInfo{};
             /** @brief Its light clusters (ADR-0049): the first slice's view depth and 24 / ln(far / near). */
-            Math::Vec4 clusterDepths{0.0f};
+            Math::Vec4 clusterSlices{0.0f};
             /**
              * @brief x: 1 when set 1 binding 3 holds its clusters; y: 1 to show their heat; z: each cluster's room for
              * light indices.
@@ -2660,7 +2660,9 @@ namespace Fenrir::Render
             return {};
         }
         // Each cluster's count, then its list, with room for every light up to MaxClusterLights. The buffer grows and
-        // is never ringed: the GPU alone writes and reads it, in order.
+        // is never ringed: the GPU alone writes and reads it, and the device runs one queue in submission order, so the
+        // next frame's pass cannot write it while this frame's passes still read it. A device with frames in flight on
+        // several queues would need a copy per frame in flight.
         const std::uint32_t room = std::min(lightCount, MaxClusterLights);
         const std::size_t bytes = std::size_t{ClusterCount} * (1 + room) * sizeof(std::uint32_t);
         if (m_clusterBuffers.size() <= view)
@@ -3460,9 +3462,7 @@ namespace Fenrir::Render
                 AddLightClustersPass(graph, frameIndex, v, request, lightCount, clusterDepths);
             const BufferHandle clusterBuffer = clustered.first;
             const GraphResource clusters = clustered.second;
-            viewBlock.clusterDepths = Math::Vec4(
-                clusterDepths.near,
-                static_cast<float>(ClusterSlices) / std::log(clusterDepths.far / clusterDepths.near), 0.0f, 0.0f);
+            viewBlock.clusterSlices = Math::Vec4(clusterDepths.near, ClusterSliceScale(clusterDepths), 0.0f, 0.0f);
             viewBlock.clusterInfo = {clusterBuffer.IsEmpty() ? 0u : 1u,
                                      request.debugView == ViewDebug::LightClusters ? 1u : 0u,
                                      std::min(lightCount, MaxClusterLights), 0};

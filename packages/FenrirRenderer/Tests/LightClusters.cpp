@@ -20,6 +20,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
+#include "Core/Cascades.hpp"
 #include "Core/LightClusters.hpp"
 #include "Core/SceneFrame.hpp"
 #include "RendererTestApp.hpp"
@@ -32,6 +33,7 @@ using Fenrir::Graphics::BufferHandle;
 using Fenrir::Math::Mat4;
 using Fenrir::Math::Vec3;
 using Fenrir::Math::Vec4;
+using Fenrir::Render::ClusterAssignment;
 using Fenrir::Render::ClusterBox;
 using Fenrir::Render::ClusterCell;
 using Fenrir::Render::ClusterCount;
@@ -58,6 +60,12 @@ namespace
         return Fenrir::Render::ReversedZOrthographic(10.0f, 16.0f / 9.0f, 0.5f, 40.0f);
     }
 
+    /** @brief The slices of `projection` out to 30 units, from its near plane held at least 1e-3. */
+    ClusterDepths ThirtyUnits(const Mat4& projection)
+    {
+        return {std::max(Fenrir::Render::DepthRangeOf(projection).near, 1e-3f), 30.0f};
+    }
+
     /** @brief A view-space point in the frustum of `projection`, at NDC (x, y) and the view depth `depth`. */
     Vec3 InFrustum(const Mat4& projection, float x, float y, float depth)
     {
@@ -68,6 +76,19 @@ namespace
         const Vec3 near = Vec3(a) / a.w;
         const Vec3 far = Vec3(b) / b.w;
         return near + (far - near) * ((-depth - near.z) / (far.z - near.z));
+    }
+
+    /** @brief Whether `point` is inside `box`. */
+    bool Inside(const ClusterBox& box, Vec3 point)
+    {
+        return glm::all(glm::greaterThanEqual(point, box.min)) && glm::all(glm::lessThanEqual(point, box.max));
+    }
+
+    /** @brief The box of the cluster `point` is found in, for `projection` and `depths`. */
+    ClusterBox BoxFoundFor(const Mat4& projection, ClusterDepths depths, Vec3 point)
+    {
+        return Fenrir::Render::ClusterBoundsOf(glm::inverse(projection), depths,
+                                               Fenrir::Render::ClusterOf(point, projection, depths));
     }
 
     /** @brief How far `point` is from `box`, by brute force over a grid of `steps` points a side through it. */
@@ -129,6 +150,37 @@ namespace
         return Fenrir::Math::Dot(offset, offset) < light.range * light.range;
     }
 
+    /** @brief A camera at (0, 1, 5) turned a little about +Y: world to its view. */
+    Mat4 TurnedView()
+    {
+        return glm::inverse(glm::translate(Mat4(1.0f), Vec3(0.0f, 1.0f, 5.0f)) *
+                            glm::rotate(Mat4(1.0f), 0.3f, Vec3(0.0f, 1.0f, 0.0f)));
+    }
+
+    /** @brief 200 lights scattered in front of TurnedView's camera, a third each point, spot and rect lights. */
+    std::vector<GpuLight> ScatteredLights()
+    {
+        std::mt19937 random(7);
+        std::uniform_real_distribution<float> across(-8.0f, 8.0f);
+        std::uniform_real_distribution<float> range(0.3f, 3.0f);
+        std::vector<GpuLight> lights;
+        for (int i = 0; i < 200; ++i)
+        {
+            const Vec3 position(across(random), across(random) * 0.5f, -across(random) * 2.0f);
+            if (i % 3 == 2)
+            {
+                lights.push_back(RectRecord(position, range(random) * 0.5f, range(random) * 0.5f, range(random)));
+            }
+            else
+            {
+                GpuLight light = PointRecord(position, range(random));
+                light.kind = static_cast<std::uint32_t>(i % 3 == 0 ? LightKind::Point : LightKind::Spot);
+                lights.push_back(light);
+            }
+        }
+        return lights;
+    }
+
     /** @brief A PointLight entity at `position` reaching `range`. */
     Fenrir::Entity AddPointLight(RendererTestApp& test, Vec3 position, float range = 2.0f)
     {
@@ -138,6 +190,31 @@ namespace
         light.range = range;
         entity.AddComponent<Fenrir::PointLight>(light);
         return entity;
+    }
+
+    /** @brief Two cameras four units apart over a lit cube and a thousand point lights in rows behind it, one frame. */
+    void ThousandLights(RendererTestApp& test)
+    {
+        test.AddCamera({0.0f, 1.0f, 10.0f});
+        test.AddCamera({4.0f, 1.0f, 10.0f});
+        test.AddMeshRenderer(test.Mesh(), test.Material());
+        for (int i = 0; i < 1000; ++i)
+        {
+            AddPointLight(test, {static_cast<float>(i % 40) - 20.0f, 0.5f, -static_cast<float>(i / 40)});
+        }
+        test.Frame();
+    }
+
+    /** @brief One camera over a lit cube and `lights` point lights, one frame. */
+    void FewLights(RendererTestApp& test, int lights)
+    {
+        test.AddCamera();
+        test.AddMeshRenderer(test.Mesh(), test.Material());
+        for (int i = 0; i < lights; ++i)
+        {
+            AddPointLight(test, {static_cast<float>(i), 1.0f, 0.0f});
+        }
+        test.Frame();
     }
 
     /** @brief A LightClusters pass's job block, as `light_clusters.comp` declares it. */
@@ -175,8 +252,10 @@ namespace
                 {
                     ClusterDispatch recorded{{}, groups, *dispatch};
                     const std::vector<BindingGroupEntry> entries = RendererProbe::Entries(test.Device(), groups[0]);
+                    INFO("a dispatch binds its job block alone at set 0");
                     REQUIRE(entries.size() == 1);
                     const std::vector<std::byte> bytes = RendererProbe::Bytes(test.Device(), entries[0].buffer);
+                    INFO("and the block fits its buffer");
                     REQUIRE(entries[0].offset + sizeof(ClusterJob) <= bytes.size());
                     std::memcpy(&recorded.job, std::span(bytes).subspan(entries[0].offset).data(), sizeof(ClusterJob));
                     dispatches.push_back(recorded);
@@ -199,7 +278,7 @@ namespace
         return {};
     }
 
-    /** @brief Where a view block's clusterInfo sits: after the 608 bytes before ticket 19 and clusterDepths. */
+    /** @brief Where a view block's clusterInfo sits: after the 608 bytes before ticket 19 and clusterSlices. */
     constexpr std::size_t ClusterInfoOffset = 624;
 
     /** @brief The x and z of clusterInfo in the view block a draw bound at set 1. */
@@ -208,45 +287,74 @@ namespace
         const std::vector<BindingGroupEntry> entries = RendererProbe::Entries(test.Device(), draw.groups.at(1));
         const auto block = std::find_if(entries.begin(), entries.end(),
                                         [](const BindingGroupEntry& entry) { return entry.binding == 0; });
+        INFO("set 1 binds a view block at binding 0");
         REQUIRE(block != entries.end());
         const std::vector<std::byte> bytes = RendererProbe::Bytes(test.Device(), block->buffer);
         return {RendererTest::UintAt(bytes, block->offset + ClusterInfoOffset),
                 RendererTest::UintAt(bytes, block->offset + ClusterInfoOffset + 8)};
     }
+
+    /** @brief How many passes labelled LightClusters the last frame ran. */
+    std::ptrdiff_t LightClustersPasses(const RendererTestApp& test)
+    {
+        const std::vector<std::string> passes = RendererTest::PassesIn(RendererProbe::Submitted(test.renderer));
+        return std::count(passes.begin(), passes.end(), "LightClusters");
+    }
 } // namespace
 
-TEST_CASE("Light clusters' slices run exponentially from the near plane to the far depth", "[renderer][light-clusters]")
+// ---- The grid, on the CPU ----
+
+TEST_CASE("Each light cluster slice is a constant ratio deeper than the one before, from the near plane to the far "
+          "depth",
+          "[renderer][light-clusters]")
 {
     const ClusterDepths depths{0.1f, 100.0f};
+    INFO("the first slice starts at the near plane");
     REQUIRE(Fenrir::Render::ClusterSliceDepth(0, depths) == Approx(0.1f));
+    INFO("the last ends at the far depth");
     REQUIRE(Fenrir::Render::ClusterSliceDepth(ClusterSlices, depths) == Approx(100.0f));
-    INFO("each slice a constant ratio deeper than the one before");
     const float ratio = std::pow(1000.0f, 1.0f / static_cast<float>(ClusterSlices));
     for (std::uint32_t slice = 0; slice < ClusterSlices; ++slice)
     {
         CAPTURE(slice);
         const float from = Fenrir::Render::ClusterSliceDepth(slice, depths);
         const float to = Fenrir::Render::ClusterSliceDepth(slice + 1, depths);
+        INFO("each slice is (far / near)^(1 / 24) times as deep as the one before");
         REQUIRE(to / from == Approx(ratio).epsilon(1e-4));
-        INFO("a depth inside the slice is in it");
-        REQUIRE(Fenrir::Render::ClusterSliceOf(std::sqrt(from * to), depths) == slice);
     }
-    INFO("nearer than the near plane is the first slice, past the far depth the last");
+}
+
+TEST_CASE("A view depth is found in the slice spanning it, the first nearer than the near plane and the last past the "
+          "far depth",
+          "[renderer][light-clusters]")
+{
+    const ClusterDepths depths{0.1f, 100.0f};
+    for (std::uint32_t slice = 0; slice < ClusterSlices; ++slice)
+    {
+        CAPTURE(slice);
+        const float middle = std::sqrt(Fenrir::Render::ClusterSliceDepth(slice, depths) *
+                                       Fenrir::Render::ClusterSliceDepth(slice + 1, depths));
+        INFO("a depth between a slice's faces is in that slice");
+        REQUIRE(Fenrir::Render::ClusterSliceOf(middle, depths) == slice);
+    }
+    INFO("nearer than the near plane is the first slice");
     REQUIRE(Fenrir::Render::ClusterSliceOf(0.01f, depths) == 0);
+    INFO("past the far depth is the last");
     REQUIRE(Fenrir::Render::ClusterSliceOf(500.0f, depths) == ClusterSlices - 1);
 }
 
-TEST_CASE("A cluster's index and cell turn into each other, column first", "[renderer][light-clusters]")
+TEST_CASE("A cluster's index runs along columns, then rows, then slices, and turns back into its cell",
+          "[renderer][light-clusters]")
 {
+    INFO("16 x 9 x 24 clusters");
     REQUIRE(ClusterCount == 16 * 9 * 24);
     for (std::uint32_t index = 0; index < ClusterCount; ++index)
     {
-        const ClusterCell cell = Fenrir::Render::ClusterCellOf(index);
-        REQUIRE(cell.column < 16);
-        REQUIRE(cell.row < 9);
-        REQUIRE(cell.slice < 24);
-        REQUIRE(Fenrir::Render::ClusterIndex(cell) == index);
+        CAPTURE(index);
+        INFO("each index's cell gives the index back");
+        REQUIRE(Fenrir::Render::ClusterIndex(Fenrir::Render::ClusterCellOf(index)) == index);
     }
+    INFO("one column along is one index along, one row 16 and one slice 144");
     REQUIRE(Fenrir::Render::ClusterIndex({1, 0, 0}) == 1);
     REQUIRE(Fenrir::Render::ClusterIndex({0, 1, 0}) == 16);
     REQUIRE(Fenrir::Render::ClusterIndex({0, 0, 1}) == 144);
@@ -256,57 +364,86 @@ TEST_CASE("Every point of a view's frustum is inside the box of the cluster it i
           "[renderer][light-clusters]")
 {
     const Mat4 projection = GENERATE(Perspective(), Orthographic());
-    const ClusterDepths depths{std::max(Fenrir::Render::DepthRangeOf(projection).near, 1e-3f), 30.0f};
-    const Mat4 inverse = glm::inverse(projection);
+    const ClusterDepths depths = ThirtyUnits(projection);
     std::mt19937 random(19);
-    std::uniform_real_distribution<float> ndc(-0.999f, 0.999f);
-    std::uniform_real_distribution<float> logDepth(std::log(depths.near * 1.001f), std::log(depths.far * 0.999f));
-    // A tolerance for float rounding, relative to the depth.
+    std::uniform_real_distribution<float> ndc(-1.0f, 1.0f);
+    std::uniform_real_distribution<float> logDepth(std::log(depths.near), std::log(depths.far));
     for (int sample = 0; sample < 20000; ++sample)
     {
-        const float depth = std::exp(logDepth(random));
-        const Vec3 point = InFrustum(projection, ndc(random), ndc(random), depth);
-        const ClusterCell cell = Fenrir::Render::ClusterOf(point, projection, depths);
-        const ClusterBox box = Fenrir::Render::ClusterBoundsOf(inverse, depths, cell);
-        CAPTURE(sample, point.x, point.y, point.z, cell.column, cell.row, cell.slice);
-        const float slack = 1e-4f * depth;
-        REQUIRE(glm::all(glm::greaterThanEqual(point, box.min - slack)));
-        REQUIRE(glm::all(glm::lessThanEqual(point, box.max + slack)));
+        const Vec3 point = InFrustum(projection, ndc(random), ndc(random), std::exp(logDepth(random)));
+        CAPTURE(sample, point.x, point.y, point.z);
+        INFO("the point is inside its cluster's box, boundaries and the viewport's edges included");
+        REQUIRE(Inside(BoxFoundFor(projection, depths, point), point));
     }
 }
 
-TEST_CASE("A cluster's box spans its slice's depths and no more than its tile's frustum", "[renderer][light-clusters]")
+TEST_CASE("A point just past the viewport's edge, as MSAA can interpolate one, is inside its edge tile's box",
+          "[renderer][light-clusters]")
 {
     const Mat4 projection = GENERATE(Perspective(), Orthographic());
-    const ClusterDepths depths{std::max(Fenrir::Render::DepthRangeOf(projection).near, 1e-3f), 30.0f};
+    const ClusterDepths depths = ThirtyUnits(projection);
+    for (const Vec3 ndc :
+         {Vec3(1.02f, 0.3f, 5.0f), Vec3(-1.02f, -0.5f, 12.0f), Vec3(0.2f, 1.02f, 2.0f), Vec3(-1.02f, -1.02f, 20.0f)})
+    {
+        const Vec3 point = InFrustum(projection, ndc.x, ndc.y, ndc.z);
+        CAPTURE(ndc.x, ndc.y, ndc.z);
+        INFO("the point is clamped into an edge tile whose box reaches it");
+        REQUIRE(Inside(BoxFoundFor(projection, depths, point), point));
+    }
+}
+
+TEST_CASE("An orthographic view's first slice starts at its near plane, even behind the camera",
+          "[renderer][light-clusters]")
+{
+    // Its near plane two units behind the camera.
+    const Mat4 projection = Fenrir::Render::ReversedZOrthographic(10.0f, 16.0f / 9.0f, -2.0f, 40.0f);
+    const ClusterDepths depths = ThirtyUnits(projection);
+    for (const float depth : {-1.9f, -0.5f, 0.0f, 0.0005f})
+    {
+        const Vec3 point = InFrustum(projection, 0.1f, -0.2f, depth);
+        CAPTURE(depth);
+        INFO("a visible point nearer than the slices' start is in the first slice");
+        REQUIRE(Fenrir::Render::ClusterOf(point, projection, depths).slice == 0);
+        INFO("whose box reaches back to it");
+        REQUIRE(Inside(BoxFoundFor(projection, depths, point), point));
+    }
+}
+
+TEST_CASE("A cluster's box spans its slice's depths and its tile's frustum, padded by a hundredth of its size",
+          "[renderer][light-clusters]")
+{
+    const Mat4 projection = GENERATE(Perspective(), Orthographic());
+    const ClusterDepths depths = ThirtyUnits(projection);
     const Mat4 inverse = glm::inverse(projection);
-    for (const ClusterCell cell : {ClusterCell{0, 0, 0}, ClusterCell{7, 4, 11}, ClusterCell{15, 8, 23}})
+    // Tiles away from the viewport's edges, which reach past it.
+    for (const ClusterCell cell : {ClusterCell{7, 4, 11}, ClusterCell{3, 2, 5}, ClusterCell{14, 7, 23}})
     {
         CAPTURE(cell.column, cell.row, cell.slice);
         const ClusterBox box = Fenrir::Render::ClusterBoundsOf(inverse, depths, cell);
         const float from = Fenrir::Render::ClusterSliceDepth(cell.slice, depths);
         const float to = Fenrir::Render::ClusterSliceDepth(cell.slice + 1, depths);
-        REQUIRE(-box.max.z == Approx(from).epsilon(1e-4));
-        REQUIRE(-box.min.z == Approx(to).epsilon(1e-4));
-        INFO("its x and y those of its tile's corners at the slice's depths");
         const float x0 = -1.0f + 2.0f * static_cast<float>(cell.column) / 16.0f;
-        const float x1 = x0 + 2.0f / 16.0f;
         const float y0 = -1.0f + 2.0f * static_cast<float>(cell.row) / 9.0f;
-        const float y1 = y0 + 2.0f / 9.0f;
         Vec3 low(INFINITY);
         Vec3 high(-INFINITY);
         for (const float depth : {from, to})
         {
-            for (const Vec3 point : {InFrustum(projection, x0, y0, depth), InFrustum(projection, x1, y1, depth)})
+            for (const Vec3 point : {InFrustum(projection, x0, y0, depth),
+                                     InFrustum(projection, x0 + 2.0f / 16.0f, y0 + 2.0f / 9.0f, depth)})
             {
                 low = glm::min(low, point);
                 high = glm::max(high, point);
             }
         }
-        REQUIRE(box.min.x == Approx(low.x).margin(1e-4));
-        REQUIRE(box.min.y == Approx(low.y).margin(1e-4));
-        REQUIRE(box.max.x == Approx(high.x).margin(1e-4));
-        REQUIRE(box.max.y == Approx(high.y).margin(1e-4));
+        const Vec3 padding = (high - low) * 0.01f;
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            CAPTURE(axis);
+            INFO("the box's low face is the frustum segment's, a hundredth of its size further out");
+            REQUIRE(box.min[axis] == Approx(low[axis] - padding[axis]).margin(1e-4));
+            INFO("and so is its high face");
+            REQUIRE(box.max[axis] == Approx(high[axis] + padding[axis]).margin(1e-4));
+        }
     }
 }
 
@@ -331,10 +468,12 @@ TEST_CASE("A light's sphere touches a box as far as brute force finds it", "[ren
         const bool touches = Fenrir::Render::SphereTouchesBox(sphere, box);
         if (sampled <= sphere.radius)
         {
+            INFO("a box point brute force finds within the radius means they touch");
             REQUIRE(touches);
         }
         else if (sampled > sphere.radius + step)
         {
+            INFO("no box point within the radius plus the grid's step means they do not");
             REQUIRE_FALSE(touches);
         }
         touching += touches ? 1 : 0;
@@ -346,64 +485,67 @@ TEST_CASE("A light's sphere touches a box as far as brute force finds it", "[ren
 
 TEST_CASE("A rect light's sphere reaches its range past the rect's corners", "[renderer][light-clusters]")
 {
-    const GpuLight rect = RectRecord({1.0f, 2.0f, -3.0f}, 3.0f, 4.0f, 2.0f);
-    const LightSphere sphere = Fenrir::Render::LightSphereOf(rect, Mat4(1.0f));
+    // Half sizes 3 and 4: corners 5 from the centre.
+    const LightSphere sphere =
+        Fenrir::Render::LightSphereOf(RectRecord({1.0f, 2.0f, -3.0f}, 3.0f, 4.0f, 2.0f), Mat4(1.0f));
+    INFO("centred on the rect");
     REQUIRE(sphere.centre == Vec3(1.0f, 2.0f, -3.0f));
+    INFO("its radius the corner's distance and the range");
     REQUIRE(sphere.radius == Approx(7.0f));
-    INFO("a point or spot light's is its range");
-    REQUIRE(Fenrir::Render::LightSphereOf(PointRecord({0.0f, 0.0f, 0.0f}, 2.5f), Mat4(1.0f)).radius == 2.5f);
 }
 
-TEST_CASE("The slices reach as far as the farthest light, held to an orthographic projection's far plane",
+TEST_CASE("A point or spot light's sphere is its range about it, in view space", "[renderer][light-clusters]")
+{
+    const Mat4 view = glm::translate(Mat4(1.0f), Vec3(0.0f, 0.0f, -4.0f));
+    const LightSphere sphere = Fenrir::Render::LightSphereOf(PointRecord({1.0f, 0.0f, 0.0f}, 2.5f), view);
+    INFO("its position taken into the view");
+    REQUIRE(sphere.centre == Vec3(1.0f, 0.0f, -4.0f));
+    INFO("its radius its range");
+    REQUIRE(sphere.radius == 2.5f);
+}
+
+TEST_CASE("A perspective view's slices reach from its near plane as far as the farthest light reaches",
           "[renderer][light-clusters]")
 {
     const std::array<LightSphere, 2> spheres{{{{0.0f, 0.0f, -10.0f}, 3.0f}, {{5.0f, 0.0f, -50.0f}, 2.0f}}};
-    const ClusterDepths perspective = Fenrir::Render::ClusterDepthsOf(Perspective(), spheres);
-    REQUIRE(perspective.near == Approx(0.1f));
-    REQUIRE(perspective.far == Approx(52.0f));
-    const ClusterDepths orthographic = Fenrir::Render::ClusterDepthsOf(Orthographic(), spheres);
-    REQUIRE(orthographic.near == Approx(0.5f));
-    REQUIRE(orthographic.far == Approx(40.0f));
-    INFO("with no lights, a little past the near plane");
-    const ClusterDepths none = Fenrir::Render::ClusterDepthsOf(Perspective(), {});
-    REQUIRE(none.far > none.near);
+    const ClusterDepths depths = Fenrir::Render::ClusterDepthsOf(Perspective(), spheres);
+    INFO("from the near plane");
+    REQUIRE(depths.near == Approx(0.1f));
+    INFO("to 50 + 2");
+    REQUIRE(depths.far == Approx(52.0f));
 }
+
+TEST_CASE("An orthographic view's slices reach no farther than its far plane", "[renderer][light-clusters]")
+{
+    const std::array<LightSphere, 1> spheres{{{{0.0f, 0.0f, -50.0f}, 2.0f}}};
+    const ClusterDepths depths = Fenrir::Render::ClusterDepthsOf(Orthographic(), spheres);
+    INFO("from its near plane at 0.5");
+    REQUIRE(depths.near == Approx(0.5f));
+    INFO("to its far plane at 40, short of the light's 52");
+    REQUIRE(depths.far == Approx(40.0f));
+}
+
+TEST_CASE("With no lights a view's slices still reach past the near plane", "[renderer][light-clusters]")
+{
+    const ClusterDepths depths = Fenrir::Render::ClusterDepthsOf(Perspective(), {});
+    INFO("the slices keep a depth, so their logarithm stays finite");
+    REQUIRE(depths.far > depths.near);
+}
+
+// ---- The assignment, on the CPU ----
 
 TEST_CASE("Every light that reaches a point of the view is listed in that point's cluster",
           "[renderer][light-clusters]")
 {
     const Mat4 projection = GENERATE(Perspective(), Orthographic());
-    // A camera at (0, 1, 5) turned a little, over lights of every kind scattered in front of it.
-    const Mat4 view = glm::inverse(glm::translate(Mat4(1.0f), Vec3(0.0f, 1.0f, 5.0f)) *
-                                   glm::rotate(Mat4(1.0f), 0.3f, Vec3(0.0f, 1.0f, 0.0f)));
-    std::mt19937 random(7);
-    std::uniform_real_distribution<float> across(-8.0f, 8.0f);
-    std::uniform_real_distribution<float> range(0.3f, 3.0f);
-    std::vector<GpuLight> lights;
-    for (int i = 0; i < 200; ++i)
-    {
-        const Vec3 position(across(random), across(random) * 0.5f, -across(random) * 2.0f);
-        if (i % 3 == 2)
-        {
-            lights.push_back(RectRecord(position, range(random) * 0.5f, range(random) * 0.5f, range(random)));
-        }
-        else
-        {
-            GpuLight light = PointRecord(position, range(random));
-            light.kind = static_cast<std::uint32_t>(i % 3 == 0 ? LightKind::Point : LightKind::Spot);
-            lights.push_back(light);
-        }
-    }
-    const Fenrir::Render::ClusterAssignment assignment = Fenrir::Render::AssignClusters(lights, view, projection);
-    for (const std::vector<std::uint32_t>& listed : assignment.lights)
-    {
-        REQUIRE(std::is_sorted(listed.begin(), listed.end()));
-    }
+    const Mat4 view = TurnedView();
+    const std::vector<GpuLight> lights = ScatteredLights();
+    const ClusterAssignment assignment = Fenrir::Render::AssignClusters(lights, view, projection);
 
     const Mat4 world = glm::inverse(view);
-    std::uniform_real_distribution<float> ndc(-0.999f, 0.999f);
-    std::uniform_real_distribution<float> logDepth(std::log(assignment.depths.near * 1.001f),
-                                                   std::log(assignment.depths.far * 0.999f));
+    std::mt19937 random(8);
+    std::uniform_real_distribution<float> ndc(-1.0f, 1.0f);
+    std::uniform_real_distribution<float> logDepth(std::log(assignment.depths.near), std::log(assignment.depths.far));
     std::size_t reached = 0;
     for (int sample = 0; sample < 20000; ++sample)
     {
@@ -417,138 +559,193 @@ TEST_CASE("Every light that reaches a point of the view is listed in that point'
             {
                 ++reached;
                 CAPTURE(sample, i);
-                REQUIRE(std::binary_search(listed.begin(), listed.end(), i));
+                INFO("a light reaching the point is in its cluster's list");
+                REQUIRE(std::find(listed.begin(), listed.end(), i) != listed.end());
             }
         }
     }
     INFO("the samples are lit often enough to mean something: " << reached);
     REQUIRE(reached > 1000);
+}
 
-    INFO("and the lists are far shorter than the light buffer");
+TEST_CASE("A cluster lists its lights in light buffer order", "[renderer][light-clusters]")
+{
+    const ClusterAssignment assignment = Fenrir::Render::AssignClusters(ScatteredLights(), TurnedView(), Perspective());
+    for (const std::vector<std::uint32_t>& listed : assignment.lights)
+    {
+        INFO("each list is ascending, so its pixels add their lights in the same order as unclustered");
+        REQUIRE(std::is_sorted(listed.begin(), listed.end()));
+    }
+}
+
+TEST_CASE("Clusters list far fewer lights than the light buffer holds", "[renderer][light-clusters]")
+{
+    const std::vector<GpuLight> lights = ScatteredLights();
+    const ClusterAssignment assignment = Fenrir::Render::AssignClusters(lights, TurnedView(), Perspective());
     std::size_t total = 0;
     for (const std::vector<std::uint32_t>& listed : assignment.lights)
     {
         total += listed.size();
     }
+    INFO("the clusters list " << total << " lights in all, under a tenth of every cluster listing every light");
     REQUIRE(total < ClusterCount * lights.size() / 10);
 }
 
 TEST_CASE("A cluster lists its first lights up to its room, in light buffer order", "[renderer][light-clusters]")
 {
     // 300 lights round one point, all reaching it.
-    std::vector<GpuLight> lights(300, PointRecord({0.0f, 0.0f, -5.0f}, 1.0f));
-    const Fenrir::Render::ClusterAssignment assignment =
-        Fenrir::Render::AssignClusters(lights, Mat4(1.0f), Perspective());
+    const std::vector<GpuLight> lights(300, PointRecord({0.0f, 0.0f, -5.0f}, 1.0f));
+    const ClusterAssignment assignment = Fenrir::Render::AssignClusters(lights, Mat4(1.0f), Perspective());
     const std::vector<std::uint32_t>& listed = assignment.lights.at(
         Fenrir::Render::ClusterIndex(Fenrir::Render::ClusterOf({0.0f, 0.0f, -5.0f}, Perspective(), assignment.depths)));
+    INFO("the cluster holds 256 of them");
     REQUIRE(listed.size() == MaxClusterLights);
     for (std::uint32_t i = 0; i < MaxClusterLights; ++i)
     {
+        CAPTURE(i);
+        INFO("the first 256 in the light buffer");
         REQUIRE(listed[i] == i);
     }
 }
 
-TEST_CASE("A thousand lights are clustered once per view by a LightClusters pass before its Opaque pass",
+// ---- The passes, on the null backend ----
+
+TEST_CASE("Each view with lights gets one LightClusters pass, before its Opaque pass", "[renderer][light-clusters]")
+{
+    RendererTestApp test;
+    ThousandLights(test);
+    const std::vector<std::string> passes = RendererTest::PassesIn(RendererProbe::Submitted(test.renderer));
+    INFO("one pass for each of the two views");
+    REQUIRE(LightClustersPasses(test) == 2);
+    INFO("the first before the first Opaque pass");
+    REQUIRE(std::find(passes.begin(), passes.end(), "LightClusters") <
+            std::find(passes.begin(), passes.end(), "Opaque"));
+}
+
+TEST_CASE("A LightClusters pass runs an invocation a cluster over every light, with room for 256 lights a cluster",
           "[renderer][light-clusters]")
 {
     RendererTestApp test;
-    test.AddCamera({0.0f, 1.0f, 10.0f});
-    test.AddCamera({4.0f, 1.0f, 10.0f});
-    test.AddMeshRenderer(test.Mesh(), test.Material());
-    for (int i = 0; i < 1000; ++i)
-    {
-        AddPointLight(test, {static_cast<float>(i % 40) - 20.0f, 0.5f, -static_cast<float>(i / 40)});
-    }
-    test.Frame();
-
-    const std::vector<std::string> passes = RendererTest::PassesIn(RendererProbe::Submitted(test.renderer));
-    INFO("one pass a view");
-    REQUIRE(std::count(passes.begin(), passes.end(), "LightClusters") == 2);
-    INFO("each before its view's Opaque pass");
-    const auto first = std::find(passes.begin(), passes.end(), "LightClusters");
-    REQUIRE(first < std::find(passes.begin(), passes.end(), "Opaque"));
-
+    ThousandLights(test);
     const std::vector<ClusterDispatch> dispatches = Dispatches(test);
+    INFO("one dispatch a view");
     REQUIRE(dispatches.size() == 2);
     for (const ClusterDispatch& dispatch : dispatches)
     {
-        INFO("an invocation a cluster, in groups of 64, over every light, with room for 256 a cluster");
+        INFO("3456 invocations, in groups of 64");
         REQUIRE(dispatch.dispatch.groupsX == ClusterCount / 64);
+        INFO("over all thousand lights");
         REQUIRE(dispatch.job.counts[0] == 1000);
+        INFO("with room for 256 in each cluster");
         REQUIRE(dispatch.job.counts[1] == MaxClusterLights);
-        INFO("its slices from the camera's near plane to the farthest light's reach");
-        REQUIRE(dispatch.job.depths.x == Approx(0.1f));
-        REQUIRE(dispatch.job.depths.y > 30.0f);
-        REQUIRE(RendererProbe::Label(test.Device(), BufferAt(test, dispatch.groups[1], 1)) == "Light clusters");
     }
-    INFO("each view's lists in a buffer of its own, of each cluster's count and its room");
-    const BufferHandle firstClusters = BufferAt(test, dispatches[0].groups[1], 1);
-    const BufferHandle secondClusters = BufferAt(test, dispatches[1].groups[1], 1);
-    REQUIRE(firstClusters != secondClusters);
-    REQUIRE(RendererProbe::Bytes(test.Device(), firstClusters).size() == ClusterCount * (1 + MaxClusterLights) * 4);
-    INFO("from different cameras");
-    REQUIRE(dispatches[0].job.view != dispatches[1].job.view);
-
-    INFO("which each view's Opaque draws bind at set 1 binding 3, its view block saying so");
-    const std::vector<RecordedDraw> draws = test.Draws("Opaque");
-    REQUIRE(draws.size() == 2);
-    std::vector<BufferHandle> bound;
-    for (const RecordedDraw& draw : draws)
-    {
-        bound.push_back(BufferAt(test, draw.groups.at(1), 3));
-        REQUIRE(ClusterInfoOf(test, draw) == std::array<std::uint32_t, 2>{1, MaxClusterLights});
-    }
-    REQUIRE(bound == std::vector<BufferHandle>{firstClusters, secondClusters});
-    REQUIRE(test.messages->errors.empty());
 }
 
-TEST_CASE("A cluster's room is the light count when fewer lights than its most", "[renderer][light-clusters]")
-{
-    RendererTestApp test;
-    test.AddCamera();
-    test.AddMeshRenderer(test.Mesh(), test.Material());
-    AddPointLight(test, {0.0f, 1.0f, 0.0f});
-    AddPointLight(test, {1.0f, 1.0f, 0.0f});
-    AddPointLight(test, {2.0f, 1.0f, 0.0f});
-    test.Frame();
-
-    const std::vector<ClusterDispatch> dispatches = Dispatches(test);
-    REQUIRE(dispatches.size() == 1);
-    REQUIRE(dispatches[0].job.counts[0] == 3);
-    REQUIRE(dispatches[0].job.counts[1] == 3);
-    REQUIRE(RendererProbe::Bytes(test.Device(), BufferAt(test, dispatches[0].groups[1], 1)).size() ==
-            ClusterCount * 4 * 4);
-    REQUIRE(ClusterInfoOf(test, test.Draws().at(0)) == std::array<std::uint32_t, 2>{1, 3});
-}
-
-TEST_CASE("Without lights, or with clustering off, a view loops over the light buffer with no LightClusters pass",
+TEST_CASE("A LightClusters pass's slices run from its camera's near plane to the farthest light's reach",
           "[renderer][light-clusters]")
 {
     RendererTestApp test;
-    test.AddCamera();
-    test.AddMeshRenderer(test.Mesh(), test.Material());
-    const bool lights = GENERATE(false, true);
-    CAPTURE(lights);
-    if (lights)
+    ThousandLights(test);
+    for (const ClusterDispatch& dispatch : Dispatches(test))
     {
-        AddPointLight(test, {0.0f, 1.0f, 0.0f});
-        test.renderer.SetClusteredLights(false);
+        INFO("from the camera's near plane, 0.1 by default");
+        REQUIRE(dispatch.job.depths.x == Approx(0.1f));
+        INFO(
+            "past the farthest row of lights, 34 units from the cameras, by its range of 2: " << dispatch.job.depths.y);
+        REQUIRE(dispatch.job.depths.y == Approx(36.0f).margin(0.5f));
     }
-    test.Frame();
+}
 
-    const std::vector<std::string> passes = RendererTest::PassesIn(RendererProbe::Submitted(test.renderer));
-    REQUIRE(std::count(passes.begin(), passes.end(), "LightClusters") == 0);
-    REQUIRE(Dispatches(test).empty());
+TEST_CASE("Each view's light clusters are in a buffer of its own, of each cluster's count and its room",
+          "[renderer][light-clusters]")
+{
+    RendererTestApp test;
+    ThousandLights(test);
+    const std::vector<ClusterDispatch> dispatches = Dispatches(test);
+    INFO("one dispatch a view");
+    REQUIRE(dispatches.size() == 2);
+    const BufferHandle first = BufferAt(test, dispatches[0].groups[1], 1);
+    const BufferHandle second = BufferAt(test, dispatches[1].groups[1], 1);
+    INFO("a buffer each");
+    REQUIRE(first != second);
+    INFO("labelled for the light clusters");
+    REQUIRE(RendererProbe::Label(test.Device(), first) == "Light clusters");
+    INFO("each cluster's count and 256 indices, four bytes each");
+    REQUIRE(RendererProbe::Bytes(test.Device(), first).size() == ClusterCount * (1 + MaxClusterLights) * 4);
+    INFO("each pass clustering for its own camera");
+    REQUIRE(dispatches[0].job.view != dispatches[1].job.view);
+}
+
+TEST_CASE("A view's Opaque draws bind its light clusters at set 1 binding 3, its view block saying so",
+          "[renderer][light-clusters]")
+{
+    RendererTestApp test;
+    ThousandLights(test);
+    const std::vector<ClusterDispatch> dispatches = Dispatches(test);
+    const std::vector<RecordedDraw> draws = test.Draws("Opaque");
+    INFO("a draw of the cube in each view");
+    REQUIRE(draws.size() == 2);
+    for (std::size_t v = 0; v < draws.size(); ++v)
+    {
+        CAPTURE(v);
+        INFO("the view's own cluster buffer");
+        REQUIRE(BufferAt(test, draws[v].groups.at(1), 3) == BufferAt(test, dispatches.at(v).groups[1], 1));
+        INFO("its view block marking the clusters there, with room for 256");
+        REQUIRE(ClusterInfoOf(test, draws[v]) == std::array<std::uint32_t, 2>{1, MaxClusterLights});
+    }
+}
+
+TEST_CASE("A cluster's room is the light count when there are fewer lights than its most", "[renderer][light-clusters]")
+{
+    RendererTestApp test;
+    FewLights(test, 3);
+    const std::vector<ClusterDispatch> dispatches = Dispatches(test);
+    INFO("one dispatch");
+    REQUIRE(dispatches.size() == 1);
+    INFO("with room for the three lights");
+    REQUIRE(dispatches[0].job.counts[1] == 3);
+    INFO("so the buffer holds each cluster's count and three indices");
+    REQUIRE(RendererProbe::Bytes(test.Device(), BufferAt(test, dispatches[0].groups[1], 1)).size() ==
+            ClusterCount * 4 * 4);
+    INFO("and the view block says so");
+    REQUIRE(ClusterInfoOf(test, test.Draws().at(0)) == std::array<std::uint32_t, 2>{1, 3});
+}
+
+TEST_CASE("A view without lights has no LightClusters pass and loops over the empty light buffer",
+          "[renderer][light-clusters]")
+{
+    RendererTestApp test;
+    FewLights(test, 0);
+    INFO("no pass");
+    REQUIRE(LightClustersPasses(test) == 0);
     const RecordedDraw draw = test.Draws().at(0);
-    INFO("set 1 binds the buffer of one 0 there, and the view block says to loop over every light");
+    INFO("set 1 binds the buffer of one 0");
     REQUIRE(RendererProbe::Label(test.Device(), BufferAt(test, draw.groups.at(1), 3)) == "No light clusters");
+    INFO("and the view block says to loop over every light");
     REQUIRE(ClusterInfoOf(test, draw)[0] == 0);
+}
 
-    if (lights)
-    {
-        INFO("turned on again, the next frame clusters");
-        test.renderer.SetClusteredLights(true);
-        test.Frame();
-        REQUIRE(Dispatches(test).size() == 1);
-    }
+TEST_CASE("With clustering off, a view loops over every light with no LightClusters pass", "[renderer][light-clusters]")
+{
+    RendererTestApp test;
+    test.renderer.SetClusteredLights(false);
+    FewLights(test, 1);
+    INFO("no pass");
+    REQUIRE(LightClustersPasses(test) == 0);
+    const RecordedDraw draw = test.Draws().at(0);
+    INFO("set 1 binds the buffer of one 0");
+    REQUIRE(RendererProbe::Label(test.Device(), BufferAt(test, draw.groups.at(1), 3)) == "No light clusters");
+    INFO("and the view block says to loop over every light");
+    REQUIRE(ClusterInfoOf(test, draw)[0] == 0);
+}
+
+TEST_CASE("Clustering turned back on clusters from the next frame", "[renderer][light-clusters]")
+{
+    RendererTestApp test;
+    test.renderer.SetClusteredLights(false);
+    FewLights(test, 1);
+    test.renderer.SetClusteredLights(true);
+    test.Frame();
+    INFO("the next frame has its pass again");
+    REQUIRE(LightClustersPasses(test) == 1);
 }

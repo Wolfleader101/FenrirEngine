@@ -14,6 +14,13 @@ namespace Fenrir::Render
         constexpr float MinClusterNear = 1e-3f;
         /** @brief How far past the near plane the last slice reaches at least, so the slices never collapse. */
         constexpr float MinClusterDepthRatio = 1.01f;
+        /**
+         * @brief How far past the viewport, in NDC, the edge tiles' boxes reach: a sample MSAA interpolates outside its
+         * triangle can sit past the viewport's edge, and is clamped into an edge tile.
+         */
+        constexpr float ClusterEdgeReach = 0.05f;
+        /** @brief The share of its size each box is padded by, so a point rounded onto a boundary is still inside. */
+        constexpr float ClusterPadding = 0.01f;
 
         /** @brief The view-space point the inverse projection `inverse` takes the NDC point (x, y, z) back to. */
         Math::Vec3 Unproject(const Math::Mat4& inverse, float x, float y, float z) noexcept
@@ -58,14 +65,18 @@ namespace Fenrir::Render
                std::pow(depths.far / depths.near, static_cast<float>(slice) / static_cast<float>(ClusterSlices));
     }
 
+    float ClusterSliceScale(ClusterDepths depths) noexcept
+    {
+        return static_cast<float>(ClusterSlices) / std::log(depths.far / depths.near);
+    }
+
     std::uint32_t ClusterSliceOf(float depth, ClusterDepths depths) noexcept
     {
         if (!(depth > depths.near))
         {
             return 0;
         }
-        const float scale = static_cast<float>(ClusterSlices) / std::log(depths.far / depths.near);
-        const float slice = std::floor(std::log(depth / depths.near) * scale);
+        const float slice = std::floor(std::log(depth / depths.near) * ClusterSliceScale(depths));
         return static_cast<std::uint32_t>(std::min(slice, static_cast<float>(ClusterSlices - 1)));
     }
 
@@ -81,27 +92,32 @@ namespace Fenrir::Render
 
     ClusterBox ClusterBoundsOf(const Math::Mat4& inverseProjection, ClusterDepths depths, ClusterCell cell) noexcept
     {
-        const float x0 = -1.0f + 2.0f * static_cast<float>(cell.column) / static_cast<float>(ClusterColumns);
-        const float x1 = -1.0f + 2.0f * static_cast<float>(cell.column + 1) / static_cast<float>(ClusterColumns);
-        const float y0 = -1.0f + 2.0f * static_cast<float>(cell.row) / static_cast<float>(ClusterRows);
-        const float y1 = -1.0f + 2.0f * static_cast<float>(cell.row + 1) / static_cast<float>(ClusterRows);
-        const std::array<float, 2> sliceDepths{ClusterSliceDepth(cell.slice, depths),
-                                               ClusterSliceDepth(cell.slice + 1, depths)};
+        const auto edge = [](std::uint32_t at, std::uint32_t count) {
+            const float ndc = -1.0f + 2.0f * static_cast<float>(at) / static_cast<float>(count);
+            return at == 0 ? ndc - ClusterEdgeReach : at == count ? ndc + ClusterEdgeReach : ndc;
+        };
+        const float x0 = edge(cell.column, ClusterColumns);
+        const float x1 = edge(cell.column + 1, ClusterColumns);
+        const float y0 = edge(cell.row, ClusterRows);
+        const float y1 = edge(cell.row + 1, ClusterRows);
+        const float far = ClusterSliceDepth(cell.slice + 1, depths);
         ClusterBox box{Math::Vec3(INFINITY), Math::Vec3(-INFINITY)};
         for (const Math::Vec2 corner : {Math::Vec2(x0, y0), Math::Vec2(x1, y0), Math::Vec2(x0, y1), Math::Vec2(x1, y1)})
         {
             // The corner's line of sight, through its points on the near plane and at NDC depth 0.5 (twice the near
-            // plane's depth for a perspective), so an orthographic projection's parallel lines work as well.
+            // plane's depth for a perspective), so an orthographic projection's parallel lines work as well. The first
+            // slice starts at the near plane itself, which an orthographic projection may put at or behind the camera.
             const Math::Vec3 a = Unproject(inverseProjection, corner.x, corner.y, 1.0f);
             const Math::Vec3 b = Unproject(inverseProjection, corner.x, corner.y, 0.5f);
-            for (const float depth : sliceDepths)
+            const auto at = [&](float depth) { return a + (b - a) * ((depth + a.z) / (a.z - b.z)); };
+            for (const Math::Vec3 point : {cell.slice == 0 ? a : at(ClusterSliceDepth(cell.slice, depths)), at(far)})
             {
-                const Math::Vec3 point = a + (b - a) * ((depth + a.z) / (a.z - b.z));
                 box.min = glm::min(box.min, point);
                 box.max = glm::max(box.max, point);
             }
         }
-        return box;
+        const Math::Vec3 padding = (box.max - box.min) * ClusterPadding;
+        return {box.min - padding, box.max + padding};
     }
 
     bool SphereTouchesBox(const LightSphere& sphere, const ClusterBox& box) noexcept

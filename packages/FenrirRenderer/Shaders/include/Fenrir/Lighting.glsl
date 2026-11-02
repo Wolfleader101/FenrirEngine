@@ -222,7 +222,7 @@ uint FenrirClusterOf(vec3 position)
     vec4 clip = view.projection * viewPosition;
     vec2 grid = vec2(FenrirClusterColumns, FenrirClusterRows);
     vec2 tile = clamp(floor((clip.xy / clip.w * 0.5 + 0.5) * grid), vec2(0.0), grid - 1.0);
-    uint slice = FenrirClusterSliceOf(-viewPosition.z, view.clusterDepths.x, view.clusterDepths.y);
+    uint slice = FenrirClusterSliceOf(-viewPosition.z, view.clusterSlices.x, view.clusterSlices.y);
     return FenrirClusterIndex(uvec3(uvec2(tile), slice));
 }
 

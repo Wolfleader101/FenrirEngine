@@ -25,8 +25,8 @@ namespace
 
     /**
      * @brief A white rough wall filling the view under a black sky, lit by 150 small lights in front of it, a third
-     * each point, spot and rect lights, each reaching 0.2 to 0.9 units: a few at each pixel, none at some. Returns its
-     * camera.
+     * each point, spot and rect lights, some casting shadows, each reaching 0.2 to 0.9 units: a few at each pixel, none
+     * at some. Returns its camera.
      */
     Fenrir::Camera& AddLitWall(GlScene& test)
     {
@@ -49,15 +49,16 @@ namespace
             entity.GetComponent<Fenrir::Transform>().pos = {across(random), across(random),
                                                             -WallDistance + height(random)};
             const Fenrir::Colour colour{hue(random), hue(random), hue(random), 1.0f};
-            // Each faces the wall: its -Z is the camera's.
+            // Each faces the wall: its -Z is the camera's. The first four point lights and eight spot lights cast
+            // shadows, the default budgets, so the shadowed records' indices come through the clusters too.
             switch (i % 3)
             {
             case 0:
-                entity.AddComponent<Fenrir::PointLight>(Fenrir::PointLight{colour, 0.5f, range(random), false});
+                entity.AddComponent<Fenrir::PointLight>(Fenrir::PointLight{colour, 0.5f, range(random), i < 12});
                 break;
             case 1:
                 entity.AddComponent<Fenrir::SpotLight>(
-                    Fenrir::SpotLight{colour, 0.5f, range(random), 0.3f, 0.6f, false});
+                    Fenrir::SpotLight{colour, 0.5f, range(random), 0.3f, 0.6f, i < 24});
                 break;
             default: {
                 Fenrir::RectLight rect;
@@ -85,6 +86,7 @@ TEST_CASE("A wall lit by many lights is lit the same with its lights clustered a
     test.renderer.SetClusteredLights(false);
     const GlProbe::Image unclustered = test.Frame();
 
+    INFO("both frames read back at the window's size");
     REQUIRE(clustered.width == unclustered.width);
     std::uint32_t lit = 0;
     std::uint32_t dark = 0;
@@ -98,15 +100,17 @@ TEST_CASE("A wall lit by many lights is lit the same with its lights clustered a
             {
                 CAPTURE(x, y, c, a[c], b[c]);
                 // Only the order of the sum can differ: the lights each pixel adds are the same.
+                INFO("the pixel's channel is the same clustered as unclustered");
                 REQUIRE(std::abs(a[c] - b[c]) <= 1e-3f * std::max(1.0f, b[c]));
             }
             const bool any = b[0] > 0.0f || b[1] > 0.0f || b[2] > 0.0f;
             (any ? lit : dark) += 1;
         }
     }
-    INFO("lit pixels " << lit << ", dark " << dark);
+    INFO("the wall is lit at most pixels and dark at some, so both are compared: lit " << lit << ", dark " << dark);
     REQUIRE(lit > Size * Size / 2);
     REQUIRE(dark > 0);
+    INFO("with no GL error");
     REQUIRE(test.messages->errors.empty());
 }
 
@@ -143,5 +147,6 @@ TEST_CASE("The cluster heat view colours every pixel a light reaches, and few of
          << red << " of " << coloured);
     REQUIRE(coloured > 0);
     REQUIRE(red < coloured / 4);
+    INFO("with no GL error");
     REQUIRE(test.messages->errors.empty());
 }

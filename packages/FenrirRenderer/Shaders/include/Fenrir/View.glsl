@@ -29,7 +29,7 @@ layout(set = 1, binding = 0, std140) uniform ViewData
     uvec4 shadowInfo;
     // The view's light clusters (ADR-0049, Fenrir/Clusters.glsl). x: the view depth its first slice starts at; y:
     // 24 / ln(far / near), which takes the log of a depth over x to its slice. zw unused.
-    vec4 clusterDepths;
+    vec4 clusterSlices;
     // x: 1 when fenrirClusterLights holds the view's clusters, 0 to loop over every light; y: 1 to show each pixel's
     // light count as heat (CameraDebugView::LightClusters); z: how many indices each cluster's list has room for.
     // w unused.

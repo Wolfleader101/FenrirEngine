@@ -38,6 +38,11 @@ layout(set = 1, binding = 1, std430) writeonly buffer Clusters
 // A batch of lights' spheres: view-space centre and radius.
 shared vec4 spheres[64];
 
+// How far past the viewport, in NDC, the edge tiles' boxes reach, for samples MSAA interpolates past it; and the share of
+// its size each box is padded by, so a point rounded onto a boundary is still inside. Core/LightClusters' own.
+const float EdgeReach = 0.05;
+const float Padding = 0.01;
+
 // The view-space point the NDC point (ndc, z) is at.
 vec3 Unproject(vec2 ndc, float z)
 {
@@ -61,7 +66,7 @@ void main()
     bool inGrid = cluster < FenrirClusterCount;
 
     // The cluster's box: its tile's four corners on their lines of sight, through their points on the near plane and
-    // at NDC depth 0.5, at its slice's near and far depths.
+    // at NDC depth 0.5, at its slice's near and far depths, the first slice's from the near plane itself; padded.
     vec3 low = vec3(0.0);
     vec3 high = vec3(0.0);
     if (inGrid)
@@ -69,8 +74,9 @@ void main()
         uvec3 cell = uvec3(cluster % FenrirClusterColumns, (cluster / FenrirClusterColumns) % FenrirClusterRows,
                            cluster / (FenrirClusterColumns * FenrirClusterRows));
         vec2 grid = vec2(FenrirClusterColumns, FenrirClusterRows);
-        vec2 from = -1.0 + 2.0 * vec2(cell.xy) / grid;
-        vec2 to = -1.0 + 2.0 * vec2(cell.xy + 1u) / grid;
+        vec2 from = -1.0 + 2.0 * vec2(cell.xy) / grid - mix(vec2(0.0), vec2(EdgeReach), equal(cell.xy, uvec2(0u)));
+        vec2 to = -1.0 + 2.0 * vec2(cell.xy + 1u) / grid +
+                  mix(vec2(0.0), vec2(EdgeReach), equal(cell.xy + 1u, uvec2(FenrirClusterColumns, FenrirClusterRows)));
         float depths[2] = float[2](SliceDepth(cell.z), SliceDepth(cell.z + 1u));
         vec2 corners[4] = vec2[4](from, vec2(to.x, from.y), vec2(from.x, to.y), to);
         low = vec3(1e30);
@@ -81,11 +87,14 @@ void main()
             vec3 b = Unproject(corners[c], 0.5);
             for (int d = 0; d < 2; ++d)
             {
-                vec3 point = a + (b - a) * ((depths[d] + a.z) / (a.z - b.z));
+                vec3 point = d == 0 && cell.z == 0u ? a : a + (b - a) * ((depths[d] + a.z) / (a.z - b.z));
                 low = min(low, point);
                 high = max(high, point);
             }
         }
+        vec3 padding = (high - low) * Padding;
+        low -= padding;
+        high += padding;
     }
 
     uint count = 0u;
