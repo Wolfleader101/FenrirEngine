@@ -365,9 +365,10 @@ The window's Scene part has:
 - clustering, vsync (the main window's swap interval), the traffic and the puddles;
 - each kind of light's intensity.
 
-On an RTX 5080 at 1280 by 720 with 4x MSAA, in Release with vsync off, a frame at street level takes 1.3 to 1.4 ms
-clustered (about 750 fps) against 10 to 11 ms with clustering off: the light loop is what clustering saves. Debug takes
-about 13 ms, bound by its CPU work. The cluster heat view shows 16 to 64 lights a cluster along the streets, under the
+On an RTX 5080 at 1280 by 720 with 4x MSAA, in Release with vsync off, the panel's frame time (wall clock, smoothed
+over about a second) at street level is 1.3 to 1.4 ms clustered (about 750 fps) against 10 to 11 ms with clustering
+off, the only change between the runs. Debug takes about 13 ms either way. The scene turns vsync back on each time it
+is entered; switched off here, it stays off in the scenes after. The cluster heat view shows 16 to 64 lights a cluster along the streets, under the
 cap of 256.
 
 Without the fetched assets, the streets are plain dark asphalt, still wet, and the walls a plain dark grey, under the
@@ -375,7 +376,7 @@ generated sky. Everything else is generated, and the scene says so on screen.
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G, H, S | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows, the next sky. |
+| T, E, B, O, G, S | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the next sky. |
 | N | The traffic stopped or moving. |
 | M | The streets dry or wet again. |
 | C | The lights clustered or not. |

@@ -148,17 +148,15 @@ namespace LightingDemo
                         2.0f * Pi * ((static_cast<float>(column) + 0.5f) / static_cast<float>(width) - 0.5f);
                     const float up = std::cos(theta);
                     const float uneven = 1.0f + 0.25f * std::sin(phi * 3.0f) + 0.15f * std::sin(phi * 7.0f + 1.3f);
-                    const Vec3 horizon = (Vec3(1.6f, 0.45f, 1.1f) + Vec3(0.9f, 0.35f, 0.1f)) * uneven;
-                    Vec3 colour;
-                    if (up >= 0.0f)
-                    {
-                        colour = Vec3(0.05f, 0.06f, 0.15f) + Vec3(1.6f, 0.45f, 1.1f) * uneven * std::exp(-up * 7.0f) +
-                                 Vec3(0.9f, 0.35f, 0.1f) * uneven * std::exp(-up * 25.0f);
-                    }
-                    else
-                    {
-                        colour = glm::mix(horizon, Vec3(0.05f, 0.04f, 0.05f), std::min(-up * 8.0f, 1.0f));
-                    }
+                    // Above the horizon, the glow falls off upwards; below it, the horizon's colour darkens to the
+                    // ground, meeting it without a seam.
+                    const auto sky = [&](float height) {
+                        return Vec3(0.05f, 0.06f, 0.15f) + Vec3(1.6f, 0.45f, 1.1f) * uneven * std::exp(-height * 7.0f) +
+                               Vec3(0.9f, 0.35f, 0.1f) * uneven * std::exp(-height * 25.0f);
+                    };
+                    const Vec3 colour =
+                        up >= 0.0f ? sky(up)
+                                   : glm::mix(sky(0.0f), Vec3(0.05f, 0.04f, 0.05f), std::min(-up * 8.0f, 1.0f));
                     float* texel = &texels[(std::size_t{row} * width + column) * 4];
                     texel[0] = colour.r;
                     texel[1] = colour.g;
@@ -180,7 +178,7 @@ namespace LightingDemo
         struct Sign
         {
             Fenrir::Entity light;
-            Mat4 slab;
+            Mat4 board;
             Fenrir::Colour colour;
             /** @brief Its intensity as a share of the panel's sign intensity: blade signs are brighter. */
             float share = 1.0f;
@@ -232,7 +230,7 @@ namespace LightingDemo
             Fenrir::AssetHandle<Fenrir::Material> street;
             std::vector<Fenrir::Entity> lamps;
             std::vector<Sign> signs;
-            Fenrir::AssetHandle<Fenrir::InstanceList> signSlabs;
+            Fenrir::AssetHandle<Fenrir::InstanceList> signBoards;
             std::vector<WashLight> uplights;
             std::vector<Car> cars;
             /** @brief The bodies, cabins, headlamps and tail-lights, by CarPartKind. */
@@ -257,7 +255,7 @@ namespace LightingDemo
             bool fetched = false;
             /** @brief The frame time, smoothed over about a second, in seconds. */
             float frameTime = 0.0f;
-            /** @brief What the lights and slabs were last given, so a change in the panel reaches them once. */
+            /** @brief What the lights and boards were last given, so a change in the panel reaches them once. */
             float appliedLamps = -1.0f;
             float appliedSigns = -1.0f;
             float appliedHeadlights = -1.0f;
@@ -291,15 +289,15 @@ namespace LightingDemo
 
         /** @brief The signs' boards, their tubes glowing each sign's colour at the panel's sign intensity times its
          * share. */
-        Fenrir::InstanceListData SignSlabs(const CityState& state)
+        Fenrir::InstanceListData SignBoards(const CityState& state)
         {
-            Fenrir::InstanceListData slabs;
+            Fenrir::InstanceListData boards;
             for (const Sign& sign : state.signs)
             {
-                slabs.transforms.push_back(sign.slab);
-                slabs.colours.push_back(Scaled(sign.colour, state.signIntensity * sign.share));
+                boards.transforms.push_back(sign.board);
+                boards.colours.push_back(Scaled(sign.colour, state.signIntensity * sign.share));
             }
-            return slabs;
+            return boards;
         }
 
         /**
@@ -471,7 +469,7 @@ namespace LightingDemo
             return tier.centre.y + tier.size.y * 0.5f;
         }
 
-        /** @brief One wall of a tier facing `out`: its foot's centre, the way along it, its width. */
+        /** @brief One wall of a tier: its foot's centre, the way out of it and along it, and its width. */
         struct Wall
         {
             Vec3 foot;
@@ -480,6 +478,7 @@ namespace LightingDemo
             float width;
         };
 
+        /** @brief The wall of `tier` facing `out`, one of the four horizontal axes. */
         Wall WallOf(const Tier& tier, Vec3 out)
         {
             const bool alongZ = out.x != 0.0f;
@@ -657,11 +656,11 @@ namespace LightingDemo
                             const bool strips = unit(random) < (building.size() > 1 ? 0.5f : 0.15f);
                             for (std::size_t i = 0; i < building.size(); ++i)
                             {
-                                const bool lit = strips && (building.size() == 1 || i > 0);
+                                const bool edged = strips && (building.size() == 1 || i > 0);
                                 tiers.transforms.push_back(Placement(
                                     building.at(i).centre, Quat(1.0f, 0.0f, 0.0f, 0.0f), building.at(i).size));
                                 tiers.colours.push_back(
-                                    {light.r, light.g, light.b, style + (lit ? 3.0f : 0.0f) + share});
+                                    {light.r, light.g, light.b, style + (edged ? 3.0f : 0.0f) + share});
                             }
 
                             // Signs on the ground tier's walls that face a street.
@@ -718,7 +717,7 @@ namespace LightingDemo
                 app.Logger()->Error("{}: the sign shader did not load", SceneName);
                 sign = UnlitMaterial(store, scene);
             }
-            state.signSlabs = AddList(store, scene, cube, sign, SignSlabs(state));
+            state.signBoards = AddList(store, scene, cube, sign, SignBoards(state));
             state.panels = dressing.panels.transforms.size();
             AddList(store, scene, cube, sign, std::move(dressing.panels));
             AddList(store, scene, cube, LitMaterial(store, scene, {0.12f, 0.12f, 0.12f, 1.0f}, 0.0f, 0.7f),
@@ -911,8 +910,9 @@ namespace LightingDemo
                     fetched = true;
                 }
             }
-            // Clustered, whatever another scene left it as.
+            // Clustered and with vsync, whatever another scene left them as.
             Fenrir::Renderer::SetClusteredLights(app, true);
+            Fenrir::Window::SetSwapInterval(app, Fenrir::Window::MainWindow(), 1);
 
             const auto cube = store.Load<Fenrir::Mesh>("cube.obj#Mesh0", scene);
             if (!cube.Ok())
@@ -939,7 +939,7 @@ namespace LightingDemo
             scene.AddResource<CityState>(std::move(state));
         }
 
-        /** @brief Gives the lights, the sign slabs and the street what the panel last set, where it changed. */
+        /** @brief Gives the lights, the sign boards and the street what the panel last set, where it changed. */
         void Apply(Fenrir::AssetStore& store, CityState& state)
         {
             if (state.appliedLamps != state.lampIntensity)
@@ -956,9 +956,9 @@ namespace LightingDemo
                 {
                     sign.light.GetComponent<Fenrir::RectLight>().intensity = state.signIntensity * sign.share;
                 }
-                if (!state.signSlabs.IsEmpty())
+                if (!state.signBoards.IsEmpty())
                 {
-                    store.Replace(state.signSlabs, SignSlabs(state));
+                    store.Replace(state.signBoards, SignBoards(state));
                 }
                 state.appliedSigns = state.signIntensity;
             }

@@ -230,10 +230,11 @@ void main()
     float opening = Span(across, bayWidth, openX.x, openX.y) * Span(up, storeyWidth, openY.x, openY.y);
     float glassMask = Span(across, bayWidth, openX.x + frame.x, openX.y - frame.x) *
                       Span(up, storeyWidth, openY.x + frame.y, openY.y - frame.y);
-    float shadow = Span(across, bayWidth, openX.x - reveal.x, openX.y + reveal.x) *
-                       Span(up, storeyWidth, openY.x - reveal.y, openY.y + reveal.y) -
-                   opening;
-    float sill = style == 0 && !shop ? Span(across, bayWidth, openX.x - frame.x, openX.y + frame.x) *
+    float shadow = inside ? Span(across, bayWidth, openX.x - reveal.x, openX.y + reveal.x) *
+                                    Span(up, storeyWidth, openY.x - reveal.y, openY.y + reveal.y) -
+                                opening
+                          : 0.0;
+    float sill = inside && style == 0 && !shop ? Span(across, bayWidth, openX.x - frame.x, openX.y + frame.x) *
                                            Span(up, storeyWidth, openY.x - 0.12 / storeyMetres, openY.x)
                                      : 0.0;
 
@@ -317,19 +318,19 @@ void main()
     surface.normal = normalize(mix(mix(mapped, sillNormal, sill * near), n, max(glass, frameShare)));
     float wallRoughness = wallArm.g;
     float wallMetal = 0.0;
-    vec3 base3 = wallColour * grime * (1.0 - 0.5 * shadow * near) * material.wallTint.rgb;
+    vec3 wallBase = wallColour * grime * (1.0 - 0.5 * shadow * near) * material.wallTint.rgb;
     if (side && style == 1)
     {
         // The curtain wall's mullions and spandrels: dark anodised metal round the glass, concrete between floors.
-        float mullion = Span(up, storeyWidth, openY.x - 0.05, openY.y + 0.05);
-        base3 = mix(base3, vec3(0.05, 0.055, 0.06), mullion);
+        float mullion = inside ? Span(up, storeyWidth, openY.x - 0.05, openY.y + 0.05) : 0.0;
+        wallBase = mix(wallBase, vec3(0.05, 0.055, 0.06), mullion);
         wallRoughness = mix(wallRoughness, 0.35, mullion);
         wallMetal = mullion * 0.8;
     }
     // The frame, dark metal; the sill, lighter stone.
-    base3 = mix(base3, vec3(0.04), frameShare);
-    base3 = mix(base3, vec3(0.3, 0.29, 0.27), sill * near * (1.0 - glass));
-    surface.baseColour = mix(base3, vec3(0.012, 0.014, 0.018), glass);
+    wallBase = mix(wallBase, vec3(0.04), frameShare);
+    wallBase = mix(wallBase, vec3(0.3, 0.29, 0.27), sill * near * (1.0 - glass));
+    surface.baseColour = mix(wallBase, vec3(0.012, 0.014, 0.018), glass);
     surface.roughness = mix(mix(wallRoughness, 0.4, frameShare), material.glassRoughness, glass);
     surface.metallic = mix(mix(wallMetal, 0.7, frameShare), 0.0, glass);
     surface.occlusion = mix(wallArm.r, 1.0, glass);

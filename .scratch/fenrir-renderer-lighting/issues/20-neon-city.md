@@ -26,7 +26,7 @@ Built 2026-11-02, stacked on ticket 19's branch (#265 to #279 not yet merged). D
   lower blocks between; plant rooms on the roofs, masts with red beacons. Every tier is one copy in one instance list,
   all generated from the cube and sphere, no fetched model. `src/NeonCity.cpp`.
 - **1092 lights at the demo's seed:** 594 rect-light signs (shop signs every six metres or so, up to two blade signs a
-  street wall, billboards on some roofs, each on an unlit slab of its size and radiance), 154 coloured spot uplights
+  street wall, billboards on some roofs, each on a board of its size in the sign shader), 154 coloured spot uplights
   washing the towers, 200 point-light lamps, 144 spot headlights on 72 cars whose four instance lists are replaced each
   frame they move. 545 neon boards stacked up some walls glow but light nothing: colour without a light's cost.
 - **The facade shader** (`shaders/facade.*`), reworked a second time (the user found the flat-coloured walls fake
@@ -56,7 +56,8 @@ Built 2026-11-02, stacked on ticket 19's branch (#265 to #279 not yet merged). D
   what photographs of neon show, so the signs stay bright (5).
 - **Not asked for:** `src/DemoMaterials.*` (`EmbeddedMaterial` and `AsLinear` moved out of the forest for both scenes),
   keys N (traffic), M (wet or dry) and C (clustering), and the panel's intensity sliders.
-- **Timing (RTX 5080, 1280 x 720, 4x MSAA, 1092 lights, street level):** Release with vsync off, 1.37 and 1.28 ms
+- **Timing (RTX 5080, 1280 x 720, 4x MSAA, 1092 lights, street level; the panel's frame time, wall clock smoothed
+  over about a second, alternating runs):** Release with vsync off, 1.37 and 1.28 ms
   clustered against 10.20 and 10.31 ms unclustered; above a street 1.41 against 11.00 ms. Debug about 13 ms, CPU
   bound. The cluster heat view shows 16 to 64 lights a cluster, under the cap of 256.
 - **Release build** (`msvc-x64-release`, LightingDemo only, tests and scripting off), asked for by the user for this

@@ -4,7 +4,8 @@
 // Fenrir/Lighting.glsl so the board catches the lights round it. The tubes glow the copy colour's RGB: a tube round the
 // board's edge, and glyphs inside it, one to a cell of a row along a wide board or a column down a tall one, as the
 // blade signs of an Asian street are lettered. Each glyph is a few strokes, horizontal and vertical, picked by a hash of
-// the board (its centre) and the cell, so no two signs read the same. A faint halo round each tube helps the bloom.
+// the board (its centre) and the cell, so no two signs read the same. The board's face glows faintly all over, as a
+// backlit board does, which helps the bloom.
 //
 // The board's edges are dark. Far off, as a glyph's cell shrinks below a few pixels, the strokes give way to their
 // average glow, so a distant sign holds still instead of shimmering.
@@ -84,7 +85,8 @@ void main()
     vec2 c = tall ? vec2((p.x + inner.x) / glyphSize.x, 1.0 - fract(along))
                   : vec2(fract(along), (p.y + inner.y) / glyphSize.y);
     vec2 cWidth = pWidth / glyphSize;
-    float strokeHalf = tube / min(glyphSize.x, glyphSize.y);
+    // A tube's half width in the cell's units, across and up: the same in metres both ways.
+    vec2 strokeHalf = tube / glyphSize;
     float glyph = 0.0;
     uint glyphSeed = board ^ (uint(index) * 2654435761u);
     // Three horizontal and three vertical strokes, each kept or not, at least two kept, each spanning part of the cell.
@@ -96,10 +98,11 @@ void main()
             continue;
         }
         float at = 0.18 + 0.32 * float(i % 3u);
-        float from = 0.15 + 0.35 * Hash(uvec4(glyphSeed, i, 2u, 0u)) * 0.6;
-        float to = 0.85 - 0.35 * Hash(uvec4(glyphSeed, i, 3u, 0u)) * 0.6;
-        float s = i < 3u ? Stroke(c.y, c.x, at, from, to, strokeHalf, cWidth.yx)
-                         : Stroke(c.x, c.y, at, from, to, strokeHalf, cWidth.xy);
+        // Each stroke shortened at either end by up to a fifth of the cell.
+        float from = 0.15 + 0.21 * Hash(uvec4(glyphSeed, i, 2u, 0u));
+        float to = 0.85 - 0.21 * Hash(uvec4(glyphSeed, i, 3u, 0u));
+        float s = i < 3u ? Stroke(c.y, c.x, at, from, to, strokeHalf.y, cWidth.yx)
+                         : Stroke(c.x, c.y, at, from, to, strokeHalf.x, cWidth.xy);
         glyph = max(glyph, s);
     }
     bool inGlyphs = abs(p.x) < inner.x && abs(p.y) < inner.y;
@@ -109,7 +112,7 @@ void main()
     float near = smoothstep(3.0, 8.0, 1.0 / max(max(cWidth.x, cWidth.y), 1e-5));
     float glyphs = mix(inGlyphs ? 0.3 : 0.0, glyph, near);
     float lit = face ? max(rim, glyphs) : 0.0;
-    // A faint halo inside the board, brightest by the tubes.
+    // The board's faint glow all over its face, less of it far off where the glyphs' average carries it.
     float halo = face ? 0.08 * (1.0 - near * 0.5) : 0.0;
 
     FenrirSurface surface;
