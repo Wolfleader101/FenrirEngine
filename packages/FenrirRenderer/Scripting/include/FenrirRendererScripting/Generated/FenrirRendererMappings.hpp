@@ -304,6 +304,22 @@ static_assert(sizeof(Fenrir::PointLight) == 28 && alignof(Fenrir::PointLight) ==
               "regenerate the description, then this binding");
 
 template <>
+struct Iris::StructMapping<Fenrir::RectLight>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.RectLight";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<Fenrir::Colour>("Colour", 0),
+        Iris::Field<float>("Intensity", 16),
+        Iris::Field<float>("Width", 20),
+        Iris::Field<float>("Height", 24),
+        Iris::Field<bool>("TwoSided", 28),
+        Iris::Field<float>("Range", 32));
+};
+static_assert(sizeof(Fenrir::RectLight) == 36 && alignof(Fenrir::RectLight) == 4,
+              "Fenrir::RectLight is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
 struct Iris::StructMapping<Fenrir::RendererStats>
 {
     static constexpr std::string_view typeName = "Fenrir.Renderer.RendererStats";

@@ -30,32 +30,49 @@ layout(set = 0, binding = 2) uniform samplerCube fenrirSkySpecular;
 // The split sum's BRDF lookup table: red the scale and green the bias of f0, by N.V across and roughness down.
 layout(set = 0, binding = 3) uniform sampler2D fenrirBrdfLut;
 
-// One point or spot light (ADR-0048), in world space. Ticket 19's clusters index these records unchanged.
+// The kinds of light a FenrirLight record is, as Core/PunctualLights' LightKind numbers them.
+const uint FenrirLightPoint = 0u;
+const uint FenrirLightSpot = 1u;
+const uint FenrirLightRect = 2u;
+
+// One point, spot or rect light (ADR-0048), in world space. Ticket 19's clusters index these records unchanged.
 struct FenrirLight
 {
+    // A point or spot light's position; a rect light's centre.
     vec3 position;
     // The distance at which its light has fallen to zero.
     float range;
-    // Its colour times its intensity, linear.
+    // Its colour times its intensity, linear: a rect light's radiance.
     vec3 colour;
-    // 0 a point light, 1 a spot light.
+    // FenrirLightPoint, FenrirLightSpot or FenrirLightRect.
     uint kind;
-    // The way a spot light points, unit length.
+    // The way a spot light points, or a rect light faces, unit length.
     vec3 direction;
     // The spot's cone falloff is smoothstep of cos(angle off its axis) x coneScale + coneOffset: for a point light,
     // scale 0 and offset 1, so 1 everywhere.
     float coneScale;
+    // A rect light's right and top halves: from its centre to the middle of its right edge and of its top edge. It
+    // faces the way their cross product does not.
+    vec3 halfWidth;
     float coneOffset;
-    float padding0;
-    float padding1;
-    float padding2;
+    vec3 halfHeight;
+    // 1 for a rect light that shines from both faces.
+    uint twoSided;
 };
 
-// Every point and spot light of the scene that can light anything, frame.lights.x of them; the buffer may be longer.
+// Every point, spot and rect light of the scene that can light anything, frame.lights.x of them, in that order; the
+// buffer may be longer.
 layout(set = 0, binding = 4, std430) readonly buffer FenrirLights
 {
     FenrirLight items[];
 } fenrirLights;
+
+// The linearly transformed cosines of GGX (Heitz et al. 2016) that rect lights are shaded with, 64 x 64 texels each, by
+// perceptual roughness across and sqrt(1 - N.V) down: the inverse transform's m00, m02, m20 and m22 (column, row), and
+// in alpha of the second, the form factor of a sphere clipped by the horizon, by the cosine of its centre's elevation
+// (mapped to [0, 1]) across and its unclipped form factor down. Read with FenrirLtcUv.
+layout(set = 0, binding = 5) uniform sampler2D fenrirLtcMatrix;
+layout(set = 0, binding = 6) uniform sampler2D fenrirLtcAmplitude;
 
 // The world direction `direction` turned back by a sky's rotation about +Y, whose cosine is `c` and sine `s`: the
 // direction to sample that sky's cube along.

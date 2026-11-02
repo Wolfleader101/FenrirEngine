@@ -387,9 +387,46 @@ namespace Fenrir
         }
 
         /**
-         * @brief The active scene's light: the first DirectionalLight, warned once if there are more, its point and
-         * spot lights, and `sky`, the
-         * sky it is lit by (ADR-0047): its SkyLight's, else its Sky, whatever each camera's background.
+         * @brief Every RectLight of `scene` that can light anything, centred on its entity's world position and
+         * spanning its world X and Y, facing its world -Z (ADR-0048), into `lights`.
+         */
+        void ReadRectLights(Scene& scene, std::vector<Render::RectLight>& lights)
+        {
+            EntityList& entities = scene.GetEntityList();
+            const std::array<ComponentType, 1> rects{ComponentType::Native<RectLight>()};
+            entities.ForEachWith(rects, [&](std::uint32_t id) {
+                const Entity entity = entities.GetEntity(id);
+                const RectLight& light = entity.GetComponent<RectLight>();
+                if (!CanLight(light.colour, light.intensity, light.range) || light.width <= 0.0f ||
+                    light.height <= 0.0f)
+                {
+                    return;
+                }
+                const Math::Mat4 world = GetWorldMatrix(entity);
+                Render::RectLight& out = lights.emplace_back();
+                out.position = Math::Vec3(world[3]);
+                out.right = glm::normalize(Math::Vec3(world[0]));
+                // Square to the right, so a sheared parent leaves it a rectangle.
+                const Math::Vec3 up = Math::Vec3(world[1]);
+                out.up = glm::normalize(up - out.right * glm::dot(up, out.right));
+                // It faces -(right x up). Under a mirroring parent that is its world +Z, so turn its width round: the
+                // rectangle is the same, and it faces its world -Z.
+                if (glm::dot(glm::cross(out.up, out.right), Math::Vec3(world[2])) > 0.0f)
+                {
+                    out.right = -out.right;
+                }
+                out.colour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                out.width = light.width;
+                out.height = light.height;
+                out.twoSided = light.twoSided;
+                out.range = light.range;
+            });
+        }
+
+        /**
+         * @brief The active scene's light: the first DirectionalLight, warned once if there are more, its point, spot
+         * and rect lights, and `sky`, the sky it is lit by (ADR-0047): its SkyLight's, else its Sky, whatever each
+         * camera's background.
          */
         Render::SceneLighting ReadLighting(Detail::RendererState& state, Scene& scene, const SceneSky& sky)
         {
@@ -422,6 +459,7 @@ namespace Fenrir
                                           found);
             }
             ReadPunctualLights(scene, lighting.lights);
+            ReadRectLights(scene, lighting.rectLights);
             return lighting;
         }
 

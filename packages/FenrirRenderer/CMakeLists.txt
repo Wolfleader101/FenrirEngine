@@ -62,6 +62,9 @@ add_library(FenrirRendererCore STATIC
     src/Core/Brdf.cpp
     src/Core/PunctualLights.hpp
     src/Core/PunctualLights.cpp
+    src/Core/LtcTables.hpp
+    src/Core/RectLights.hpp
+    src/Core/RectLights.cpp
     src/Core/SceneFrame.hpp
     src/Core/SceneRenderer.hpp
     src/Core/SceneRenderer.cpp

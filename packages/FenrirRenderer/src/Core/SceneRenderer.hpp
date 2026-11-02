@@ -497,6 +497,9 @@ namespace Fenrir::Render
 
         /** @brief The default textures, by DefaultTexture: white, black and the flat normal. */
         std::array<Graphics::TextureHandle, 3> m_defaultTextures{};
+        /** @brief The rect lights' LTC tables (ADR-0048): the matrix's at set 0 binding 5, the amplitude's at 6. */
+        Graphics::TextureHandle m_ltcMatrix;
+        Graphics::TextureHandle m_ltcAmplitude;
         Graphics::SamplerHandle m_defaultSampler;
         Graphics::SamplerHandle m_outputSampler;
         Graphics::SamplerHandle m_skySampler;
@@ -506,7 +509,7 @@ namespace Fenrir::Render
         Graphics::BufferHandle m_defaultStreams;
 
         std::unique_ptr<BlockRing> m_frameBlocks;
-        /** @brief The point and spot lights (ADR-0048), bound at set 0 binding 4 by the frame's groups. */
+        /** @brief The point, spot and rect lights (ADR-0048), bound at set 0 binding 4 by the frame's groups. */
         std::unique_ptr<BlockRing> m_lightBlocks;
         std::unique_ptr<BlockRing> m_viewBlocks;
         std::unique_ptr<BlockRing> m_backgroundBlocks;

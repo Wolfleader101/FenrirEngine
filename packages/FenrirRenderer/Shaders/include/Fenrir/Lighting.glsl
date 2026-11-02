@@ -1,10 +1,11 @@
 // Fenrir/Lighting.glsl: the lighting every material shares (ADR-0048). A shader fills a FenrirSurface its own way and
-// calls FenrirLitColour, which returns the surface's lit colour as linear HDR: the frame's directional light, its point
-// and spot lights, and the scene's Sky as image-based lighting (ADR-0047), diffuse from its spherical harmonics and
+// calls FenrirLitColour, which returns the surface's lit colour as linear HDR: the frame's directional light, its point,
+// spot and rect lights, and the scene's Sky as image-based lighting (ADR-0047), diffuse from its spherical harmonics and
 // specular from its prefiltered cube through the split sum's BRDF lookup table. Intensities are plain multipliers, so
 // the BRDF is scaled by pi: a white light of intensity 1 falling straight onto a white rough face gives about 1, not
 // 1 / pi, as does a point light of intensity 1 one unit away (well inside its range), and a white sky of intensity 1
-// all round it.
+// all round it. A rect light's intensity is its radiance: a white one of intensity 1 filling a white rough face's view
+// lights it about 1.
 //
 // The specular lobe is GGX with height-correlated Smith visibility (Fenrir/Brdf.glsl), with multi-scatter energy
 // compensation (Fdez-Aguera 2019) read from the lookup table, so a rough metal keeps the light it is lit by, and
@@ -106,6 +107,104 @@ vec3 FenrirDirectLight(vec3 n, vec3 v, vec3 l, float nDotV, float a, vec3 f0, ve
     return (diffuse + specular) * nDotL;
 }
 
+// Rect lights (ADR-0048), shaded with linearly transformed cosines (Heitz, Dupuy, Hill and Neubelt 2016): the light is
+// a cosine lobe's integral over the rect, a plain cosine for the diffuse and, for the specular, a cosine turned into
+// the shape of GGX by a transform from fenrirLtcMatrix. Each edge's vector form factor is summed and the horizon
+// clipped by Hill's sphere approximation from fenrirLtcAmplitude, so no polygon is clipped. Core/RectLights mirrors it
+// on the CPU. The tables are read at mip 0 explicitly: the light loop is not uniform control flow.
+
+// A lookup's [0, 1] coordinates moved onto the 64 x 64 tables' first and last texels' centres.
+vec2 FenrirLtcUv(vec2 lookup)
+{
+    return lookup * (63.0 / 64.0) + 0.5 / 64.0;
+}
+
+// The vector form factor of the arc from the unit vector `from` to `to`: their cross product times
+// theta / (2 pi sin theta), from Hill's rational fit, accurate to where the two are opposite.
+vec3 FenrirLtcEdge(vec3 from, vec3 to)
+{
+    float x = dot(from, to);
+    float y = abs(x);
+    float a = 0.8543985 + (0.4965155 + 0.0145206 * y) * y;
+    float b = 3.4175940 + (4.1616724 + y) * y;
+    float v = a / b;
+    float thetaSinTheta = x > 0.0 ? v : 0.5 * inversesqrt(max(1.0 - x * x, 1e-7)) - v;
+    return cross(from, to) * thetaSinTheta;
+}
+
+// The integral over the rect `light` of a cosine lobe about +Z in the frame `toLobe` takes world directions into, seen
+// from `position`: its form factor, 0 to 1, clipped to the lobe's upper hemisphere. 0 from behind a one-sided light.
+float FenrirLtcIntegral(FenrirLight light, vec3 position, mat3 toLobe)
+{
+    vec3 centre = light.position - position;
+    // Behind the light: on the side it does not face.
+    bool behind = dot(centre, light.direction) > 0.0;
+    if (behind && light.twoSided == 0u)
+    {
+        return 0.0;
+    }
+    vec3 c0 = normalize(toLobe * (centre - light.halfWidth - light.halfHeight));
+    vec3 c1 = normalize(toLobe * (centre + light.halfWidth - light.halfHeight));
+    vec3 c2 = normalize(toLobe * (centre + light.halfWidth + light.halfHeight));
+    vec3 c3 = normalize(toLobe * (centre - light.halfWidth + light.halfHeight));
+    vec3 sum = FenrirLtcEdge(c0, c1) + FenrirLtcEdge(c1, c2) + FenrirLtcEdge(c2, c3) + FenrirLtcEdge(c3, c0);
+    float formFactor = length(sum);
+    // Seen from behind, the corners wind the other way.
+    float elevation = (behind ? -sum.z : sum.z) / max(formFactor, 1e-7);
+    float horizon = textureLod(fenrirLtcAmplitude, FenrirLtcUv(vec2(elevation * 0.5 + 0.5, formFactor)), 0.0).a;
+    return formFactor * horizon;
+}
+
+// How the rect `light`'s light is windowed by distance: (1 - (d / range)^4)^2, d the distance from `position` to the
+// rect's nearest point; 0 at and past the range. The lobes' integrals already fall with distance.
+float FenrirRectWindow(FenrirLight light, vec3 position)
+{
+    vec3 offset = position - light.position;
+    float across = clamp(dot(offset, light.halfWidth) / dot(light.halfWidth, light.halfWidth), -1.0, 1.0);
+    float along = clamp(dot(offset, light.halfHeight) / dot(light.halfHeight, light.halfHeight), -1.0, 1.0);
+    vec3 gap = offset - light.halfWidth * across - light.halfHeight * along;
+    float distanceSquared = dot(gap, gap);
+    float rangeSquared = light.range * light.range;
+    if (distanceSquared >= rangeSquared)
+    {
+        return 0.0;
+    }
+    float ratio = distanceSquared / rangeSquared;
+    float window = clamp(1.0 - ratio * ratio, 0.0, 1.0);
+    return window * window;
+}
+
+// World directions into the tangent space of a surface at `n` seen along `v`: x towards the view, z the normal.
+mat3 FenrirLtcSurfaceFrame(vec3 n, vec3 v)
+{
+    vec3 tangent = v - n * dot(n, v);
+    if (dot(tangent, tangent) < 1e-8)
+    {
+        // Seen straight on, the lobe is round about the normal: any tangent will do.
+        tangent = cross(n, abs(n.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0));
+    }
+    tangent = normalize(tangent);
+    return transpose(mat3(tangent, cross(n, tangent), n));
+}
+
+// What the rect `light` reflects towards the viewer from `position`: the diffuse lobe's integral times `diffuse`, and
+// GGX's, through the transform for `nDotV` and perceptual `roughness`, times `specular`, the lobe's directional albedo.
+vec3 FenrirRectLight(FenrirLight light, vec3 position, vec3 n, vec3 v, float nDotV, float roughness, vec3 diffuse,
+                     vec3 specular)
+{
+    float window = FenrirRectWindow(light, position);
+    if (window <= 0.0)
+    {
+        return vec3(0.0);
+    }
+    mat3 toSurface = FenrirLtcSurfaceFrame(n, v);
+    vec4 m = textureLod(fenrirLtcMatrix, FenrirLtcUv(vec2(roughness, sqrt(1.0 - nDotV))), 0.0);
+    mat3 toLobe = mat3(vec3(m.x, 0.0, m.y), vec3(0.0, 1.0, 0.0), vec3(m.z, 0.0, m.w)) * toSurface;
+    return light.colour * window *
+           (diffuse * FenrirLtcIntegral(light, position, toSurface) +
+            specular * FenrirLtcIntegral(light, position, toLobe));
+}
+
 // The lit colour of `surface` seen from the view's camera, linear HDR, with its alpha.
 vec4 FenrirLitColour(FenrirSurface surface)
 {
@@ -128,11 +227,22 @@ vec4 FenrirLitColour(FenrirSurface surface)
     vec3 colour = FenrirDirectLight(n, v, -frame.lightDirection.xyz, nDotV, a, f0, energyCompensation, metallic, base) *
                   frame.lightColour.rgb;
 
-    // The point and spot lights, a plain loop over the frame's light buffer until clustering lands (ADR-0049),
+    // What the specular lobe reflects of light from all round, by the split sum: f0 scaled and biased by the table. A
+    // rect light's specular takes it, compensated; its diffuse what is left.
+    vec3 specularAlbedo = f0 * brdf.x + brdf.y;
+    vec3 rectSpecular = specularAlbedo * energyCompensation;
+    vec3 rectDiffuse = (1.0 - specularAlbedo) * (1.0 - metallic) * base;
+
+    // The point, spot and rect lights, a plain loop over the frame's light buffer until clustering lands (ADR-0049),
     // skipping each whose range does not reach the pixel.
     for (uint i = 0u; i < frame.lights.x; ++i)
     {
         FenrirLight light = fenrirLights.items[i];
+        if (light.kind == FenrirLightRect)
+        {
+            colour += FenrirRectLight(light, surface.position, n, v, nDotV, roughness, rectDiffuse, rectSpecular);
+            continue;
+        }
         vec3 toLight = light.position - surface.position;
         float distanceSquared = dot(toLight, toLight);
         if (distanceSquared >= light.range * light.range)
@@ -148,7 +258,7 @@ vec4 FenrirLitColour(FenrirSurface surface)
     // The sky (Fdez-Aguera 2019). The single-scattering share reflects the prefiltered cube along the reflection at the
     // mip of this roughness: f0 scaled and biased by the table. What it loses scatters on, each bounce reflecting the
     // average Fresnel, and leaves spread wide enough to take the sky's irradiance. The diffuse takes what neither does.
-    vec3 skySingleScatter = f0 * brdf.x + brdf.y;
+    vec3 skySingleScatter = specularAlbedo;
     float lost = 1.0 - singleScatter;
     // The hemispherical average of Schlick's Fresnel.
     vec3 averageFresnel = f0 + (1.0 - f0) / 21.0;

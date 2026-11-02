@@ -798,6 +798,64 @@
       ]
     },
     {
+      "name": "Fenrir::RectLight",
+      "category": "struct",
+      "role": "component",
+      "size": 36,
+      "alignment": 4,
+      "doc": "A glowing rectangle centred on its entity, `width` along its world +X and `height` along its world +Y, shining from its face towards its world -Z (and from its back too when `twoSided`), any number per scene (ADR-0048). Its highlights take its shape, blurring with the surface's roughness: it is shaded with linearly transformed cosines, and casts no shadows. Its intensity is its radiance: a white rect light of intensity 1 filling the view of a white rough face lights it about 1, and one subtending less lights it less, as the sky does. Its light is windowed smoothly to zero at `range` from the rectangle. The rectangle itself is not drawn: give it an emissive mesh to see it. A light that can light nothing (range, intensity, width or height 0, or black) is skipped.",
+      "fields": [
+        {
+          "name": "colour",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          },
+          "doc": "Linear. White by default (Colour::White)."
+        },
+        {
+          "name": "intensity",
+          "offset": 16,
+          "kind": "f32",
+          "default": 1,
+          "doc": "A plain multiplier on the colour."
+        },
+        {
+          "name": "width",
+          "offset": 20,
+          "kind": "f32",
+          "default": 1,
+          "doc": "Its size along its entity's world +X, in world units; the entity's scale does not stretch it."
+        },
+        {
+          "name": "height",
+          "offset": 24,
+          "kind": "f32",
+          "default": 1,
+          "doc": "Its size along its entity's world +Y, in world units."
+        },
+        {
+          "name": "twoSided",
+          "offset": 28,
+          "kind": "bool",
+          "default": false,
+          "doc": "Whether it shines from its back face as well as its front."
+        },
+        {
+          "name": "range",
+          "offset": 32,
+          "kind": "f32",
+          "default": 10,
+          "doc": "The distance from the rectangle, in world units, at which its light has fallen to zero."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::RendererStats",
       "category": "struct",
       "role": "shared-struct",

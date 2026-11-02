@@ -8,12 +8,15 @@ namespace Fenrir::Render
 {
     // Point and spot lights (ADR-0048): what the frame's light buffer holds, and the CPU mirror of how
     // Fenrir/Lighting.glsl falls each one off, kept step for step with the shader so the CPU tests check its maths.
+    // Rect lights share the buffer's record (Core/RectLights).
 
     /** @brief Which kind of light a light buffer record is; the shader reads it as a uint. */
     enum class LightKind : std::uint32_t
     {
         Point = 0,
         Spot = 1,
+        /** @brief A rect light (Core/RectLights), shaded with linearly transformed cosines. */
+        Rect = 2,
     };
 
     /** @brief One point or spot light read from the scene, in world space. */
@@ -33,26 +36,31 @@ namespace Fenrir::Render
     };
 
     /**
-     * @brief One record of the frame's light buffer, as `Fenrir/Frame.glsl` declares `FenrirLight` (std430). Ticket
-     * 19's clusters index these records unchanged. A point light's cone scale is 0 and its offset 1, so it takes the
-     * spot's cone falloff as 1 everywhere.
+     * @brief One record of the frame's light buffer, as `Fenrir/Frame.glsl` declares `FenrirLight` (std430): a point,
+     * spot or rect light. Ticket 19's clusters index these records unchanged. A point light's cone scale is 0 and its
+     * offset 1, so it takes the spot's cone falloff as 1 everywhere.
      */
     struct GpuLight
     {
+        /** @brief Where a point or spot light is; a rect light's centre. */
         Math::Vec3 position{0.0f};
         float range = 0.0f;
         Math::Vec3 colour{0.0f};
         std::uint32_t kind = 0;
+        /** @brief The way a spot light points, or a rect light faces (its entity's world -Z), unit length. */
         Math::Vec3 direction{0.0f, 0.0f, -1.0f};
         /** @brief 1 / (cos inner - cos outer): the cone falloff is smoothstep(cos x scale + offset). */
         float coneScale = 0.0f;
+        /** @brief A rect light's right half: from its centre to the middle of its right edge (its world +X). */
+        Math::Vec3 halfWidth{0.0f};
         /** @brief -cos outer x coneScale; 1 for a point light. */
         float coneOffset = 1.0f;
-        float padding0 = 0.0f;
-        float padding1 = 0.0f;
-        float padding2 = 0.0f;
+        /** @brief A rect light's top half: from its centre to the middle of its top edge (its world +Y). */
+        Math::Vec3 halfHeight{0.0f};
+        /** @brief 1 for a rect light that shines from both faces, else 0. */
+        std::uint32_t twoSided = 0;
     };
-    static_assert(sizeof(GpuLight) == 64);
+    static_assert(sizeof(GpuLight) == 80);
 
     /** @brief `light` as its light buffer record. */
     [[nodiscard]] GpuLight ToGpuLight(const PunctualLight& light) noexcept;

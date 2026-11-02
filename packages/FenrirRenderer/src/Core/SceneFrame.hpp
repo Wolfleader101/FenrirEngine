@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Core/PunctualLights.hpp"
+#include "Core/RectLights.hpp"
 #include "Core/Tonemapping.hpp"
 #include "Device/CommandList.hpp"
 #include "Device/GraphicsSurface.hpp"
@@ -128,6 +129,8 @@ namespace Fenrir::Render
          * scene that can light anything.
          */
         std::vector<PunctualLight> lights;
+        /** @brief The rect lights (ADR-0048), written into the light buffer after `lights`. */
+        std::vector<RectLight> rectLights;
     };
 
     /**

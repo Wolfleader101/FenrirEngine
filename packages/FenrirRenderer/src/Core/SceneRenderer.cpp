@@ -104,14 +104,17 @@ namespace Fenrir::Render
 
         // Sets 0, 1 and 3, declared in C++ (ADR-0024, ADR-0035, ADR-0048). The draw and palette buffers hold as many
         // records as they need; reflection sizes such a block by one record, so their record layouts are checked. Set
-        // 0's textures are the sky's light (ADR-0047): its spherical harmonics, its specular cube and the BRDF table;
-        // its storage block is the point and spot lights (ADR-0048), as many as the frame has.
-        [[maybe_unused]] constexpr std::array<FixedBinding, 8> FixedBindings{{
+        // 0's textures are the sky's light (ADR-0047): its spherical harmonics, its specular cube and the BRDF table,
+        // then the rect lights' two LTC tables; its storage block is the point, spot and rect lights (ADR-0048), as
+        // many as the frame has.
+        [[maybe_unused]] constexpr std::array<FixedBinding, 10> FixedBindings{{
             {0, 0, ShaderBindingKind::UniformBuffer, sizeof(FrameBlock)},
             {0, 1, ShaderBindingKind::Texture, 0},
             {0, 2, ShaderBindingKind::Texture, 0},
             {0, 3, ShaderBindingKind::Texture, 0},
             {0, 4, ShaderBindingKind::StorageBuffer, sizeof(GpuLight)},
+            {0, 5, ShaderBindingKind::Texture, 0},
+            {0, 6, ShaderBindingKind::Texture, 0},
             {1, 0, ShaderBindingKind::UniformBuffer, sizeof(ViewBlock)},
             {3, 0, ShaderBindingKind::StorageBuffer, sizeof(DrawBlock)},
             {3, 1, ShaderBindingKind::StorageBuffer, sizeof(GpuBone)},
@@ -610,7 +613,9 @@ namespace Fenrir::Render
                                                             {1, ShaderBindingKind::Texture},
                                                             {2, ShaderBindingKind::Texture},
                                                             {3, ShaderBindingKind::Texture},
-                                                            {4, ShaderBindingKind::StorageBuffer}}},
+                                                            {4, ShaderBindingKind::StorageBuffer},
+                                                            {5, ShaderBindingKind::Texture},
+                                                            {6, ShaderBindingKind::Texture}}},
                                                           "Frame");
         m_viewLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "View");
         m_outputBlockLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Output");
@@ -631,6 +636,19 @@ namespace Fenrir::Render
             m_defaultTextures.at(i) = m_device.CreateTexture(desc, names.at(i));
             m_device.WriteTexture(m_defaultTextures.at(i), 0, 0, std::as_bytes(std::span(texels.at(i))));
         }
+        // The rect lights' linearly transformed cosines (ADR-0048): two 64 x 64 RGBA16F tables, written once.
+        const auto makeLtcTable = [&](std::span<const std::uint16_t> texels, std::string_view name) {
+            TextureDesc desc;
+            desc.format = TextureFormat::Rgba16Float;
+            desc.width = LtcSide;
+            desc.height = LtcSide;
+            desc.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
+            const TextureHandle texture = m_device.CreateTexture(desc, name);
+            m_device.WriteTexture(texture, 0, 0, std::as_bytes(texels));
+            return texture;
+        };
+        m_ltcMatrix = makeLtcTable(LtcMatrixTexels(), "LTC matrix");
+        m_ltcAmplitude = makeLtcTable(LtcAmplitudeTexels(), "LTC amplitude");
         // SamplerDescription's default: repeat, trilinear, anisotropy 8.
         SamplerDesc sampler;
         sampler.maxAnisotropy = 8.0f;
@@ -795,6 +813,8 @@ namespace Fenrir::Render
         {
             m_device.Destroy(texture);
         }
+        m_device.Destroy(m_ltcMatrix);
+        m_device.Destroy(m_ltcAmplitude);
         m_device.Destroy(m_defaultSampler);
         m_device.Destroy(m_outputSampler);
         m_device.Destroy(m_skySampler);
@@ -1804,9 +1824,18 @@ namespace Fenrir::Render
             BindingGroupEntry lightEntry;
             lightEntry.binding = 4;
             lightEntry.buffer = lights;
+            BindingGroupEntry ltcMatrix;
+            ltcMatrix.binding = 5;
+            ltcMatrix.texture = m_ltcMatrix;
+            ltcMatrix.sampler = m_skySampler;
+            BindingGroupEntry ltcAmplitude;
+            ltcAmplitude.binding = 6;
+            ltcAmplitude.texture = m_ltcAmplitude;
+            ltcAmplitude.sampler = m_skySampler;
             group = {block, lights, sky.irradiance, sky.specular,
-                     m_device.CreateBindingGroup({m_frameLayout, {blockEntry, irradiance, specular, brdf, lightEntry}},
-                                                 "Frame")};
+                     m_device.CreateBindingGroup(
+                         {m_frameLayout, {blockEntry, irradiance, specular, brdf, lightEntry, ltcMatrix, ltcAmplitude}},
+                         "Frame")};
         }
         return group.group;
     }
@@ -1888,21 +1917,26 @@ namespace Fenrir::Render
         const auto draws = std::make_shared<const std::vector<ResolvedDraw>>(ResolveDraws());
         const std::uint64_t frameIndex = frame.frameIndex;
         const SceneLighting& lighting = m_frame.lighting;
-        const FrameBlock frameBlock{Math::Vec4(lighting.lightDirection, 0.0f),
-                                    Math::Vec4(lighting.lightColour, 0.0f),
-                                    Math::Vec4(m_frame.time, m_frame.deltaTime, 0.0f, 0.0f),
-                                    Math::Vec4(m_frame.backgroundIntensity, std::cos(m_frame.backgroundRotation),
-                                               std::sin(m_frame.backgroundRotation), 0.0f),
-                                    Math::Vec4(lighting.skyIntensity, std::cos(lighting.skyRotation),
-                                               std::sin(lighting.skyRotation),
-                                               m_skyLighting->Textures().specularMaxLevel),
-                                    {static_cast<std::uint32_t>(lighting.lights.size()), 0, 0, 0}};
+        const FrameBlock frameBlock{
+            Math::Vec4(lighting.lightDirection, 0.0f),
+            Math::Vec4(lighting.lightColour, 0.0f),
+            Math::Vec4(m_frame.time, m_frame.deltaTime, 0.0f, 0.0f),
+            Math::Vec4(m_frame.backgroundIntensity, std::cos(m_frame.backgroundRotation),
+                       std::sin(m_frame.backgroundRotation), 0.0f),
+            Math::Vec4(lighting.skyIntensity, std::cos(lighting.skyRotation), std::sin(lighting.skyRotation),
+                       m_skyLighting->Textures().specularMaxLevel),
+            {static_cast<std::uint32_t>(lighting.lights.size() + lighting.rectLights.size()), 0, 0, 0}};
         m_frameBlocks->Write(frameIndex, 0, BytesOf(frameBlock));
-        // The point and spot lights, written again each frame into a buffer that grows by doubling.
-        m_lightBlocks->Reserve(lighting.lights.size());
+        // The point and spot lights, then the rect lights, written again each frame into a buffer that grows by
+        // doubling.
+        m_lightBlocks->Reserve(lighting.lights.size() + lighting.rectLights.size());
         for (std::size_t i = 0; i < lighting.lights.size(); ++i)
         {
             m_lightBlocks->Write(frameIndex, i, BytesOf(ToGpuLight(lighting.lights[i])));
+        }
+        for (std::size_t i = 0; i < lighting.rectLights.size(); ++i)
+        {
+            m_lightBlocks->Write(frameIndex, lighting.lights.size() + i, BytesOf(ToGpuLight(lighting.rectLights[i])));
         }
         m_drawBlocks->Reserve(draws->size());
         for (std::size_t i = 0; i < draws->size(); ++i)

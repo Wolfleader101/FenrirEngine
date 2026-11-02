@@ -110,6 +110,35 @@ Hand checks, on OpenGL:
   ADR-0049).
 - Range shrinks and grows every pool; 0 lights leaves the room almost black.
 
+### Showroom
+
+A dark room, twelve metres wide and ten deep, lit by rect lights (ADR-0048) alone: a magenta neon strip low along the
+back wall, a warm white panel high on it to the left, and a cyan two-sided sign hung side on from the ceiling to the
+right, lighting both halves of the room. Each shows as a thin glowing slab of its size and radiance. The floor is one
+dark polished slab whose roughness rises smoothly from a near mirror (0.02) at its left edge to satin (0.5) at its
+right, slowly at first: 0.05 a quarter of the way across, 0.14 in the middle.
+Khronos's DamagedHelmet, FlightHelmet and SciFiHelmet stand on white plinths across the middle, fetched (ADR-0052);
+without them the plinths are bare and the scene says so on screen. The window's Scene part has each light's width,
+height, intensity and sidedness.
+
+| Keys | |
+| --- | --- |
+| T, E, B | The Lighting window's: tonemapper, exposure, bloom. |
+| Z | Every light at half, as set, or twice its size. |
+| V | Every light's sidedness flipped. |
+
+Hand checks, on OpenGL:
+
+- The polished floor reflects each light as its own shape: the neon strip as a thin line and the panel as a rectangle,
+  sharp-edged on the left of the floor and blurring, stretching towards the camera and dimming across it to the right.
+- Widening, heightening or dimming a light in the window changes its slab, its reflection and the light it casts in the
+  same frame; Z does it to all three at once.
+- The sign lights the floor and walls on both sides of it; turned one-sided (its checkbox, or V), only the side its front
+  faces, towards -X, the room's left half, is lit. V also makes the neon and the panel two-sided: each then lights the
+  strip of back wall just behind it too.
+- The helmets' metal shows the lights' shapes in its highlights; the room stays dark beyond the lights' ranges.
+- Without the fetched assets: bare plinths and an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
+
 | Key | What it does |
 | --- | --- |
 | F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
@@ -117,5 +146,5 @@ Hand checks, on OpenGL:
 ## Smoke runs
 
 The scaffold's `LightingDemo-Smoke-null` (everywhere) and `LightingDemo-Smoke-opengl` (label `gl`) run every scene for
-60 frames with its keys pressed, and fail on any error. Neither uses the fetched assets, so Showcase models runs empty,
-its message shown. `FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.
+60 frames with its keys pressed, and fail on any error. Neither uses the fetched assets, so Showcase models runs empty
+and Showroom's plinths bare, each with its message shown. `FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.
