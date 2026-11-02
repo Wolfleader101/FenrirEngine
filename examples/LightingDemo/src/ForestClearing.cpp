@@ -14,6 +14,7 @@
 
 #include <imgui.h>
 
+#include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirAssets/ImageData.hpp"
@@ -21,7 +22,6 @@
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/Model.hpp"
-#include "FenrirAssets/ShaderData.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirRenderer/Components.hpp"
@@ -305,16 +305,6 @@ namespace LightingDemo
             float frameTime = 0.0f;
         };
 
-        /** @brief A material drawing with the embedded shader container `bytes`; empty if it does not load. */
-        Fenrir::AssetHandle<Fenrir::Material> EmbeddedMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene,
-                                                               std::span<const std::uint8_t> bytes)
-        {
-            Fenrir::ShaderData shader;
-            const auto raw = std::as_bytes(bytes);
-            shader.bytes.assign(raw.begin(), raw.end());
-            return store.CreateMaterial(store.Add<Fenrir::Shader>(std::move(shader), scene), scene);
-        }
-
         /** @brief A builtin:lit material of `colour` and `roughness`. */
         Fenrir::AssetHandle<Fenrir::Material> LitMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene,
                                                           Fenrir::Colour colour, float roughness)
@@ -323,23 +313,6 @@ namespace LightingDemo
             store.SetColour(material, "baseColour", colour);
             store.SetFloat(material, "roughness", roughness);
             return material;
-        }
-
-        /**
-         * @brief `image` again, read as linear: JPEGs load as sRGB, which a normal or ARM map is not. Empty if `image`
-         * does not resolve.
-         */
-        Fenrir::AssetHandle<Fenrir::Image> AsLinear(Fenrir::AssetStore& store, Fenrir::Scene& scene,
-                                                    Fenrir::AssetHandle<Fenrir::Image> image)
-        {
-            const Fenrir::ImageData* data = store.TryGet(image);
-            if (data == nullptr)
-            {
-                return {};
-            }
-            Fenrir::ImageData linear = *data;
-            linear.colourSpace = Fenrir::ColourSpace::Linear;
-            return store.Add<Fenrir::Image>(std::move(linear), scene);
         }
 
         /** @brief The forest floor's material, and whether its fetched textures loaded. */
