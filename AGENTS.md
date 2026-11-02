@@ -25,3 +25,5 @@ Rules for review: `CODING_STANDARDS.md`.
 Write multi-line files with the Write tool, not Bash heredocs: apostrophes and backslashes in them mis-parse, and `cat >` with no input hangs the call.
 
 For `git show <rev>:<path>` in Bash, prefix `MSYS_NO_PATHCONV=1` (or use PowerShell): Git Bash otherwise rewrites the `rev:path` argument as a Windows path.
+
+Build the MSVC presets with the PowerShell tool through `scripts\msvc.ps1`, from a worktree through `scripts\short-path.ps1`'s junction (the README's "Building and testing").
