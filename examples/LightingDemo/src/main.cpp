@@ -13,7 +13,8 @@ int main()
     FenrirDemo::DemoConfig config;
     config.appName = "LightingDemo";
     config.scenes = {LightingDemo::MaterialGrid(), LightingDemo::ShowcaseModels(), LightingDemo::ManyLights(),
-                     LightingDemo::Showroom(),     LightingDemo::AsteroidRing(),   LightingDemo::ForestClearing()};
+                     LightingDemo::Showroom(),     LightingDemo::AsteroidRing(),   LightingDemo::ForestClearing(),
+                     LightingDemo::NeonCity()};
     config.msaa = 4;
     // The Lighting window, in every scene.
     config.imguiOverlay = true;

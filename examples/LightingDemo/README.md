@@ -31,7 +31,7 @@ detaches the shadows from the helmets' bases, lowering them to 0 brings acne bac
 ## Assets
 
 Committed ones are in `assets/` (`assets/ATTRIBUTION.md`); the large ones are fetched (ADR-0052). Configure with
-`-DFENRIR_FETCH_DEMO_ASSETS=ON` and CMake downloads every file `fetched-assets.json` lists, about 790 MB (487 MB of it
+`-DFENRIR_FETCH_DEMO_ASSETS=ON` and CMake downloads every file `fetched-assets.json` lists, about 800 MB (487 MB of it
 the forest's Fir Tree 01), into `FENRIR_DEMO_ASSET_CACHE` (by default `%LOCALAPPDATA%/FenrirEngine/demo-assets` on
 Windows, else `$XDG_CACHE_HOME/FenrirEngine/demo-assets` or `~/.cache/FenrirEngine/demo-assets`), outside the build
 directory, and checks each one's SHA-256: a file whose hash is not the manifest's fails configure, naming it. A file
@@ -286,8 +286,67 @@ Small 02's branches sample their textures at the wrong scale.
 | --- | --- |
 | F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
 
+### Neon city
+
+A city block grid at night after rain: the many-lights scene at city scale. Twenty-five blocks of nine lots each, 225
+towers of 10 to 90 metres (tallest towards the middle), between two-lane streets with sidewalks and dashed centre lines.
+Everything is generated; no model is fetched. 662 lights, all clustered (ADR-0049):
+
+- **Neon signs, 318 rect lights.** On most walls that face a street, a one-sided shop sign above the ground floor. On
+  some, a two-sided blade sign stands out from a corner. Each glows on an unlit slab of its size and radiance, so the
+  light and what shows it match. The signs are in eight neon colours.
+- **Street lamps, 200 point lights.** Two on every side of every block, on poles with glowing heads.
+- **Headlights, 144 spot lights.** 72 boxy cars drive round the blocks, three to a lane, in four instance lists
+  (bodies, cabins, headlamps, tail-lights) rebuilt each frame they move. Each car's two headlights dip a little onto
+  the road ahead.
+
+The towers are one instance list drawn by the demo's facade shader (`shaders/facade.vert`, `facade.frag`), which lays
+windows out on each wall: bays between corner piers, storeys above a taller shop floor. Each tower's copy colour lights
+them: its RGB is the windows' light (warm tungsten, neutral or cool fluorescent) and its alpha is the share of windows
+lit. Which window is lit is a hash of the tower, the wall, the bay and the storey. Far off, as a bay shrinks below a few
+pixels, the windows give way to their average, so distant facades glow evenly instead of shimmering. The walls light
+through `Fenrir/Lighting.glsl`, so the lamps and signs light them and shine in the dark glass.
+
+The streets are Poly Haven's Asphalt 01, drawn by the demo's street shader (`shaders/street.vert`, `street.frag`). Its
+puddle mask is two octaves of value noise over the world position, cut at the panel's puddle share. In a puddle the
+surface is smooth, level and darker, so the signs mirror in it through the rect lights' LTC specular and the lamps and
+headlights through GGX. Between puddles the asphalt is damp, its roughness lowered, so the lights streak along the
+street. At a puddle's edge the asphalt's stones break the water first. The sky is Poly Haven's Kloppenheim 07 (Pure
+Sky), an overcast night lit from below by distant towns, at 0.03 intensity. There is no sun. Bloom (0.12), GTAO
+(1.5 m) and AgX finish it, at -1 EV: at 0 EV, AgX lifts the lamps' dim spill on the upper walls to dusk.
+
+The window's Scene part has the frame time, the light and copy counts, the last frame's draws and instances,
+clustering, the traffic, the puddles and each kind of light's intensity. In Debug on an RTX 5080 at 1280 by 720 with
+4x MSAA, a frame takes about 9 ms clustered or not: at this size the Debug CPU work bounds it, not the light loop. The
+cluster heat view shows about 16 lights a cluster along the streets, far under the cap of 256.
+
+Without the fetched assets the streets are plain dark asphalt, still wet, under a dark blue sky; everything else is
+generated, and the scene says so on screen.
+
+| Keys | |
+| --- | --- |
+| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
+| N | The traffic stopped or moving. |
+| M | The streets dry or wet again. |
+| C | The lights clustered or not. |
+
+Hand checks, on OpenGL:
+
+- Neon streaks on the wet streets: the signs and headlights mirror in the puddles and smear along the damp asphalt
+  between them; M dries the streets and the streaks go.
+- The signs glow, with bloom round them; their light falls on the walls and sidewalks below them in their colour.
+- The headlights light the road ahead of each car, and move with it.
+- The frame rate stays smooth flying down the streets with the free-fly camera; distant facades do not shimmer.
+- G to the light clusters' heat: no red (256 lights) anywhere along the streets.
+- Without the fetched assets: dark wet streets, the city and its lights, and an amber message naming
+  `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
+
+| Key | What it does |
+| --- | --- |
+| F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
+
 ## Smoke runs
 
 The scaffold's `LightingDemo-Smoke-null` (everywhere) and `LightingDemo-Smoke-opengl` (label `gl`) run every scene for
 60 frames with its keys pressed, and fail on any error. Neither uses the fetched assets, so Showcase models runs empty
-Showroom's plinths bare, the asteroid ring of spheres and cubes and the forest clearing of grass, boulders and trunks, each with its message shown. `FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.
+Showroom's plinths bare, the asteroid ring of spheres and cubes, the forest clearing of grass, boulders and trunks and the neon city's streets plain, each with its message shown. `FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.

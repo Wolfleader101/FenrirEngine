@@ -18,6 +18,9 @@ fenrir_add_demo_app(LightingDemo
         src/ForestGround.cpp
         src/MeshTools.hpp
         src/MeshTools.cpp
+        src/DemoMaterials.hpp
+        src/DemoMaterials.cpp
+        src/NeonCity.cpp
     ASSETS assets
 )
 # The grid's labels and the missing-assets message are drawn through the scene's DebugDraw.
@@ -26,6 +29,9 @@ target_link_libraries(LightingDemo PRIVATE FenrirDebugDraw FenrirAssets)
 # the forest floor, blending soil, leaf litter and the path.
 fenrir_add_shaders(LightingDemo PROGRAM LightingDemoGrass VERTEX shaders/grass.vert FRAGMENT shaders/grass.frag EMBED)
 fenrir_add_shaders(LightingDemo PROGRAM LightingDemoGround VERTEX shaders/ground.vert FRAGMENT shaders/ground.frag EMBED)
+# The neon city's: the building facades, whose windows each copy's colour lights, and the wet streets with their puddles.
+fenrir_add_shaders(LightingDemo PROGRAM LightingDemoFacade VERTEX shaders/facade.vert FRAGMENT shaders/facade.frag EMBED)
+fenrir_add_shaders(LightingDemo PROGRAM LightingDemoStreet VERTEX shaders/street.vert FRAGMENT shaders/street.frag EMBED)
 
 # With FENRIR_FETCH_DEMO_ASSETS, configure downloads every file of the manifest into the cache, and the app loads them
 # from there: they are never copied into the build.
