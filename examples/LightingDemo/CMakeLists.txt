@@ -21,6 +21,7 @@ fenrir_add_demo_app(LightingDemo
         src/DemoMaterials.hpp
         src/DemoMaterials.cpp
         src/NeonCity.cpp
+        src/Sponza.cpp
     ASSETS assets
 )
 # The grid's labels and the missing-assets message are drawn through the scene's DebugDraw; the neon city's vsync switch

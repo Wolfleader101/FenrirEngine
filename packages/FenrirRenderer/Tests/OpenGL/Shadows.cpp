@@ -1,8 +1,8 @@
 // The sun's cascaded shadow on OpenGL (the spec's seam 2, ADR-0050): a box's shadow on a floor falls where the light's
-// direction puts it; a lit floor shows no acne at angles up to grazing within the biases' limits; and posts' shadows
-// across every cascade boundary match their golden images, lit and with the cascades tinted. A spot light's shadow
-// falls where its cone puts it, leaving no acne, and a point light's shadow falls where it should on each of its six
-// sides.
+// direction puts it; a lit floor shows no acne at angles up to grazing within the biases' limits; a face turned well
+// away from the sun takes none of its light whatever its shading normal says; and posts' shadows across every cascade
+// boundary match their golden images, lit and with the cascades tinted. A spot light's shadow falls where its cone puts
+// it, leaving no acne, and a point light's shadow falls where it should on each of its six sides.
 
 #include <algorithm>
 #include <array>
@@ -118,6 +118,38 @@ namespace
         return {pixel(x - CameraX), pixel(z - CameraZ)};
     }
 
+    /**
+     * @brief The linear green in the middle of the top-down probe of a white floor the sun shines up at from below, so
+     * it can light none of the floor's top, whose vertex normals lean 70 degrees from its face towards the sun, as a
+     * normal map's can on a soffit in shadow: N.L 0.75 against the face's -0.37. The sun casts shadows or not.
+     */
+    float TurnedAwayFloor(bool castShadows)
+    {
+        GlScene test;
+        test.RequireOpenGL();
+        test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour::Black});
+        Fenrir::MeshData floor = RendererTest::Quad(30.0f, 0.0f);
+        // In the quad's own frame, before the turn takes its +Z to world +Y: world (-0.94, 0.34, 0).
+        floor.normals.assign(floor.positions.size(), glm::normalize(Vec3(-0.94f, 0.0f, 0.34f)));
+        Fenrir::Entity entity = test.app.GetActiveScene().GetEntityList().CreateEntity();
+        entity.GetComponent<Fenrir::Transform>().pos = {0.0f, -1.0f, -6.0f};
+        entity.GetComponent<Fenrir::Transform>().rot =
+            Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(-90.0f), Vec3(1.0f, 0.0f, 0.0f));
+        entity.AddComponent<Fenrir::MeshRenderer>(
+            Fenrir::MeshRenderer{test.assets.Store().Add<Fenrir::Mesh>(std::move(floor), Fenrir::AssetOwner::App()),
+                                 Lit(test, Fenrir::Colour::White), true});
+        AddSun(test, {1.0f, 0.4f, 0.0f}).castShadows = castShadows;
+        const auto target = Target(test, Side, Side);
+        AddCameraAt(test, {CameraX, 5.0f, CameraZ},
+                    Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(-90.0f), Vec3(1.0f, 0.0f, 0.0f)), target);
+        test.RunFrame();
+        INFO("no GL error or other error was logged");
+        REQUIRE(test.messages->errors.empty());
+        const float middle = GreenAt(test.ReadTarget(target), Side / 2, Side / 2);
+        UNSCOPED_INFO("the floor's middle: " << middle);
+        return middle;
+    }
+
     /** @brief A material on the test shader SampledPicture, whose program has no POINT_SHADOW variant. */
     Fenrir::AssetHandle<Fenrir::Material> NoPointShadowVariant(GlScene& test)
     {
@@ -226,6 +258,20 @@ TEST_CASE("A lit floor shows no shadow acne from the sun at angles up to grazing
     INFO("with the sun " << angle << " degrees from the floor's normal, the darkest floor pixel against the unshadowed "
                          << "frame is at (" << worstX << ", " << worstY << "): " << worst);
     REQUIRE(worst > 0.97f);
+}
+
+TEST_CASE("A face turned well away from the shadowing sun takes none of its light, though its shading normal turns "
+          "towards it",
+          "[renderer][gl][shadows]")
+{
+    INFO("with the sun's shadows on, the floor stays dark");
+    REQUIRE(TurnedAwayFloor(true) < 0.02f);
+}
+
+TEST_CASE("A face turned away from an unshadowed sun is lit as its shading normal says", "[renderer][gl][shadows]")
+{
+    // Without shadows nothing stops the light: the shading normal alone decides, as for every unshadowed light.
+    REQUIRE(TurnedAwayFloor(false) > 0.4f);
 }
 
 TEST_CASE("Posts' shadows across every cascade boundary match their golden images, lit and tinted by cascade",
