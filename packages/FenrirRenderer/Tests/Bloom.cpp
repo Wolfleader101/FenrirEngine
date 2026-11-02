@@ -65,10 +65,11 @@ namespace
         return labels;
     }
 
-    /** @brief A view's passes from Opaque on, as a camera with its bloom passes in a 1280 x 720 window has them. */
+    /** @brief A view's passes from DepthPrepass on, as a camera with its bloom passes in a 1280 x 720 window has them.
+     */
     std::vector<std::string> ViewPasses(std::uint32_t levels)
     {
-        std::vector<std::string> labels{"Opaque", "Background"};
+        std::vector<std::string> labels{"DepthPrepass", "Opaque", "Background"};
         labels.insert(labels.end(), levels, "BloomDownsample");
         labels.insert(labels.end(), levels - 1, "BloomUpsample");
         labels.emplace_back("BloomComposite");
@@ -237,7 +238,8 @@ TEST_CASE("A camera at bloom intensity 0 draws the frame as it was without bloom
 
     test.Frame();
     INFO("no bloom pass between Background and Output");
-    REQUIRE(Labels(test.Passes()) == std::vector<std::string>{"BrdfLut", "Opaque", "Background", "Output"});
+    REQUIRE(Labels(test.Passes()) ==
+            std::vector<std::string>{"BrdfLut", "DepthPrepass", "Opaque", "Background", "Output"});
 }
 
 TEST_CASE("A camera's bloom intensity and radius reach its passes, clamped to [0, 1]", "[renderer][bloom]")

@@ -233,6 +233,25 @@ namespace Fenrir
         }
 
         /**
+         * @brief The view-space normal target the last frame's DepthPrepass drew into (the transient pool's RG16F
+         * texture, ADR-0049), on any backend; empty if there is none.
+         */
+        [[nodiscard]] static Graphics::TextureHandle SceneNormals(const Renderer& renderer)
+        {
+            const Render::RendererCore& core = Core(renderer);
+            for (const auto& entry : core.m_transients.m_sets.at(core.m_transients.m_current))
+            {
+                const auto* desc = std::get_if<Graphics::TextureDesc>(&entry.desc);
+                if (desc != nullptr && desc->format == Graphics::TextureFormat::Rg16Float &&
+                    core.m_device->IsLive(entry.texture))
+                {
+                    return entry.texture;
+                }
+            }
+            return {};
+        }
+
+        /**
          * @brief The SceneColor texture of `width` by `height` pixels the last frame drew into, on any backend, for a
          * frame with several views; the largest when both are 0, since a view's bloom levels (RGBA16F too) are at most
          * half its size. Empty if there is none.

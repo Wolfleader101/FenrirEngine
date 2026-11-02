@@ -228,7 +228,10 @@ namespace Fenrir::Graphics
         Back,
     };
 
-    /** @brief How a fragment's depth is compared with the stored one. Reversed-Z draws with `GreaterEqual`. */
+    /**
+     * @brief How a fragment's depth is compared with the stored one. Reversed-Z draws with `GreaterEqual`; what the
+     * depth prepass laid down is shaded with `Equal` (ADR-0049).
+     */
     enum class CompareOp : std::uint8_t
     {
         Always,
@@ -236,6 +239,7 @@ namespace Fenrir::Graphics
         LessEqual,
         Greater,
         GreaterEqual,
+        Equal,
     };
 
     /** @brief How a fragment's colour combines with the target's. */

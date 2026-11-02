@@ -55,6 +55,8 @@ namespace Fenrir::Render
         /** @brief Its scene targets, which its Output pass reads after every earlier stage. */
         GraphResource sceneColour;
         GraphResource sceneDepth;
+        /** @brief Its view-space normals (RG16F, octahedral), which its DepthPrepass pass writes (ADR-0049). */
+        GraphResource sceneNormals;
         /** @brief Its view block's binding group this frame: binding set 1, as `Fenrir/View.glsl` declares it. */
         Graphics::BindingGroupHandle viewGroup;
     };
@@ -73,7 +75,15 @@ namespace Fenrir::Render
      * holds every view (ADR-0019). Each view gets transient `SceneColor` (linear RGBA16F) and `SceneDepth` (32-bit
      * float, reversed-Z, cleared to 0) at its viewport's size with the configured MSAA samples, and its passes, after
      * the `Prepare` stage's `Panorama` passes for any panorama prepared since the last frame:
-     * `Opaque`, one draw per `Opaque` or `Masked` item, writing depth; `Background` at depth 0, the view's colour or
+     * `DepthPrepass` (ADR-0049), one draw per `Opaque` or `Masked` item in Opaque's order, laying down SceneDepth and
+     * the view-space normal of each pixel's nearest surface into `SceneNormals` (RG16F, octahedral as
+     * `Fenrir/Normals.glsl` packs it, cleared to 0, at the same size and samples), through the item's own vertex stage
+     * and `builtin:depth-prepass`'s fragment stage, whose ALPHA_MASK variant cuts a Masked item out by its material's
+     * `baseColour` alpha, `baseColourTexture` and alpha cutoff, as builtin:lit does; `Opaque`, one draw per `Opaque` or
+     * `Masked` item, testing depth for equality without writing it, so each pixel is shaded once (an item with no
+     * prepass draw, a Masked material whose shader has neither `baseColour` nor `baseColourTexture` or a vertex stage
+     * the prepass's fragment stage cannot follow, is drawn there testing and writing depth as before, and is missing
+     * from SceneNormals); `Background` at depth 0, the view's colour or
      * its Sky cubemap or panorama's cube texture (sampled by the direction each pixel looks along, turned by the
      * sky's rotation and scaled by its intensity, from the frame block); `Transparent`, when there are `AlphaBlend` or
      * `Additive` items, depth tested without writing, drawn back to front by the view-space depth of each item's world
@@ -350,6 +360,16 @@ namespace Fenrir::Render
             std::map<std::vector<AssetKey>, Graphics::BindingGroupHandle> withoutTargets;
             bool doubleSided = false;
             std::uint32_t id = 0;
+            /** @brief Whether its items draw in the depth prepass: all but Masked ones it cannot cut out. */
+            bool prepassed = true;
+            /** @brief A Masked material's prepass set 2: its base colour alpha and cutoff, and its base colour texture.
+             */
+            Graphics::BufferHandle prepassBlock;
+            std::vector<Graphics::BindingGroupEntry> prepassBindings;
+            Graphics::BindingGroupHandle prepassGroup;
+            /** @brief Which of `images` its base colour texture is, if any, and its group with that image replaced. */
+            std::optional<std::size_t> prepassImage;
+            Graphics::BindingGroupHandle prepassWithout;
         };
 
         /**
@@ -364,8 +384,25 @@ namespace Fenrir::Render
             BlendMode blend = BlendMode::Opaque;
             bool doubleSided = false;
             std::uint32_t samples = 1;
+            /** @brief Drawn over the depth prepass: depth tested for equality, not written. */
+            bool prepassed = false;
 
             friend auto operator<=>(const PipelineKey&, const PipelineKey&) = default;
+        };
+
+        /**
+         * @brief What a depth prepass pipeline is made for: the item's shader and variant, whose vertex stage it runs,
+         * the streams it reads that the mesh has, whether it cuts a Masked item out, and culling.
+         */
+        struct PrepassKey
+        {
+            const ShaderEntry* shader = nullptr;
+            const ShaderVariant* variant = nullptr;
+            std::uint32_t streams = 0;
+            bool masked = false;
+            bool doubleSided = false;
+
+            friend auto operator<=>(const PrepassKey&, const PrepassKey&) = default;
         };
 
         /** @brief A made pipeline, or why it could not be made. */
@@ -376,6 +413,14 @@ namespace Fenrir::Render
             std::vector<std::uint32_t> locations;
             std::uint32_t id = 0;
             std::string failure;
+        };
+
+        /** @brief A made depth prepass pipeline, and the variant it was made from: the item's vertex stage, then ours.
+         */
+        struct PrepassEntry
+        {
+            PipelineEntry pipeline;
+            std::unique_ptr<ShaderVariant> variant;
         };
 
         /** @brief A draw resolved for recording, in draw-list order. */
@@ -395,6 +440,10 @@ namespace Fenrir::Render
             bool skinned = false;
             /** @brief The world point a transparent draw is sorted by. */
             Math::Vec3 sortPoint{0.0f};
+            /** @brief Its depth prepass pipeline; null when it has none, so Opaque writes its depth. */
+            const PipelineEntry* prepass = nullptr;
+            /** @brief Cut out in the prepass, which binds its material's prepass group at set 2. */
+            bool prepassMasked = false;
         };
 
         /**
@@ -419,12 +468,28 @@ namespace Fenrir::Render
         };
 
         [[nodiscard]] const PipelineEntry& MeshPipeline(const ShaderEntry& shader, const VariantEntry& variant,
-                                                        const MeshEntry& mesh, BlendMode blend, bool doubleSided);
-        /** @brief Records `order`'s draws of `draws` into a pass, binding each one's pipeline, groups and streams. */
+                                                        const MeshEntry& mesh, BlendMode blend, bool doubleSided,
+                                                        bool prepassed);
+        /** @brief The depth prepass pipeline running `variant`'s vertex stage; why it failed is logged as a warning. */
+        [[nodiscard]] const PipelineEntry& PrepassPipeline(const ShaderEntry& shader, const VariantEntry& variant,
+                                                           const MeshEntry& mesh, bool masked, bool doubleSided);
+        /**
+         * @brief Makes a Masked material's prepass block and group from its variant, data and block as written, or
+         * marks it as drawn without a prepass when its shader has no base colour to cut it out by.
+         */
+        void PrepareMaskedPrepass(MaterialEntry& entry, const ShaderVariant& variant, const MaterialData& material,
+                                  std::span<const std::byte> block);
+        /** @brief A Masked material's prepass group, with its base colour texture replaced if it is in `replaced`. */
+        [[nodiscard]] Graphics::BindingGroupHandle PrepassGroup(MaterialEntry& material,
+                                                                const std::vector<AssetKey>& replaced);
+        /**
+         * @brief Records `order`'s draws of `draws` into a pass, binding each one's pipeline (its prepass pipeline
+         * when `prepass`), groups and streams.
+         */
         void RecordDraws(Graphics::PassEncoder& encoder, const std::vector<ResolvedDraw>& draws,
                          const std::vector<Graphics::BindingGroupHandle>& groups, const std::vector<std::size_t>& order,
                          Graphics::BindingGroupHandle frameGroup, Graphics::BindingGroupHandle viewGroup,
-                         Graphics::BindingGroupHandle drawGroup, Graphics::PixelRect viewport) const;
+                         Graphics::BindingGroupHandle drawGroup, Graphics::PixelRect viewport, bool prepass) const;
         [[nodiscard]] Graphics::PipelineHandle MakeInternalPipeline(
             const ShaderContainer& container, const ShaderVariant* variant, Graphics::BindingGroupLayoutHandle layout,
             Graphics::TextureFormat colour, bool depthTested, std::uint32_t samples,
@@ -470,6 +535,7 @@ namespace Fenrir::Render
         /** @brief The samplers made for material parameters, by description. */
         std::vector<std::pair<SamplerDescription, Graphics::SamplerHandle>> m_samplers;
         std::map<PipelineKey, PipelineEntry> m_pipelines;
+        std::map<PrepassKey, PrepassEntry> m_prepassPipelines;
         std::uint32_t m_nextId = 1;
 
         /** @brief The fallback material: its program, laid out as any shader, and drawn with no material group. */
@@ -477,6 +543,8 @@ namespace Fenrir::Render
         ShaderContainer m_background;
         ShaderContainer m_output;
         ShaderContainer m_panorama;
+        /** @brief `builtin:depth-prepass`, whose fragment stages the prepass pipelines run. */
+        ShaderContainer m_prepass;
 
         Graphics::BindingGroupLayoutHandle m_frameLayout;
         Graphics::BindingGroupLayoutHandle m_viewLayout;
@@ -486,6 +554,8 @@ namespace Fenrir::Render
         Graphics::BindingGroupLayoutHandle m_skyLayout;
         /** @brief Set 2 of the Panorama passes: their block and the panorama. */
         Graphics::BindingGroupLayoutHandle m_panoramaLayout;
+        /** @brief Set 2 of a Masked item's prepass pipeline: its block (alpha, cutoff) and base colour texture. */
+        Graphics::BindingGroupLayoutHandle m_prepassMaskLayout;
         /** @brief Set 2 of the Output pass: the view's SceneColor and its sampler. */
         Graphics::BindingGroupLayoutHandle m_outputLayout;
         /** @brief Set 1 of the Output pass: the Output block, the view's exposure and tonemapper. */

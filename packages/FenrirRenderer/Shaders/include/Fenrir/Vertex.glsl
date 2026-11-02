@@ -2,8 +2,13 @@
 // lacks binds a constant default instead (normal +Y, UV 0, colour white, and the zero tangent, whose w of 0 says the mesh
 // has no tangents: ADR-0048). Locations 6 and 7 are a skinned mesh's joints and weights, which Fenrir/Skinning.glsl
 // declares (ADR-0035).
+//
+// gl_Position is invariant: the depth prepass runs a vertex stage with another fragment stage than Opaque does, and
+// Opaque tests the depth it laid down for equality (ADR-0049), so both programs must place every vertex alike.
 #ifndef FENRIR_VERTEX_GLSL
 #define FENRIR_VERTEX_GLSL
+
+invariant gl_Position;
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;

@@ -93,6 +93,22 @@ namespace Fenrir::Render
         };
         static_assert(sizeof(OutputBlock) == 16);
 
+        /** @brief A Masked material's depth prepass block, as `builtin:depth-prepass` declares it (std140). */
+        struct PrepassMaskBlock
+        {
+            /** @brief Its base colour's alpha. */
+            float alpha = 1.0f;
+            float cutoff = 0.5f;
+            std::uint32_t padding0 = 0;
+            std::uint32_t padding1 = 0;
+        };
+        static_assert(sizeof(PrepassMaskBlock) == 16);
+
+        /** @brief The material members and textures the prepass cuts a Masked item out by, as builtin:lit names them.
+         */
+        constexpr std::string_view BaseColourMember = "baseColour";
+        constexpr std::string_view BaseColourTexture = "baseColourTexture";
+
         /** @brief One binding of a fixed set as the renderer declares it: a block's kind and size (0: any size). */
         struct FixedBinding
         {
@@ -406,6 +422,44 @@ namespace Fenrir::Render
             return mask;
         }
 
+        /** @brief The standard vertex locations a mesh has a stream for, as bits, from its streams' offsets. */
+        std::uint32_t StreamsOf(const std::array<std::optional<std::size_t>, 8>& streams)
+        {
+            std::uint32_t present = 0;
+            for (std::uint32_t location = 0; location < streams.size(); ++location)
+            {
+                if (streams.at(location).has_value())
+                {
+                    present |= 1u << location;
+                }
+            }
+            return present;
+        }
+
+        /**
+         * @brief One vertex buffer slot per input the variant reads, at stride 0 for a stream not in `streams`
+         * (ADR-0024), and the location each slot feeds; why not, if an input is at no standard location.
+         */
+        std::string VertexBuffersOf(const ShaderVariant& variant, std::uint32_t streams,
+                                    std::vector<VertexBufferLayout>& buffers, std::vector<std::uint32_t>& locations)
+        {
+            for (const ShaderVertexInput& input : variant.vertexInputs)
+            {
+                if (input.location >= Streams.size())
+                {
+                    return std::format("it reads vertex input '{}' at location {}, which no mesh stream feeds",
+                                       input.name, input.location);
+                }
+                const StreamFormat& stream = Streams.at(input.location);
+                // A stream the mesh lacks reads one constant: a stride of 0.
+                const bool has = (streams & (1u << input.location)) != 0;
+                buffers.push_back(
+                    {has ? static_cast<std::uint32_t>(stream.size) : 0u, {{input.location, stream.format, 0}}});
+                locations.push_back(input.location);
+            }
+            return {};
+        }
+
         [[maybe_unused]] std::string_view KindName(ShaderBindingKind kind)
         {
             // By ShaderBindingKind: uniform block, storage block, texture.
@@ -684,6 +738,9 @@ namespace Fenrir::Render
         m_background = ReadBuiltin(BuiltinProgram::Background, m_logger);
         m_output = ReadBuiltin(BuiltinProgram::Output, m_logger);
         m_panorama = ReadBuiltin(BuiltinProgram::Panorama, m_logger);
+        m_prepass = ReadBuiltin(BuiltinProgram::DepthPrepass, m_logger);
+        m_prepassMaskLayout = m_device.CreateBindingGroupLayout(
+            {{{0, ShaderBindingKind::UniformBuffer}, {1, ShaderBindingKind::Texture}}}, "Prepass mask");
         if (const ShaderVariant* variant = BaseVariant(m_panorama))
         {
             m_panoramaLayout = MaterialLayoutOf(*variant);
@@ -769,6 +826,10 @@ namespace Fenrir::Render
         {
             m_device.Destroy(pipeline.pipeline);
         }
+        for (auto& [key, prepass] : m_prepassPipelines)
+        {
+            m_device.Destroy(prepass.pipeline.pipeline);
+        }
         for (auto& [key, shader] : m_shaders)
         {
             for (const VariantEntry& variant : shader.variants)
@@ -802,6 +863,7 @@ namespace Fenrir::Render
         m_device.Destroy(m_outputPipeline);
         m_device.Destroy(m_panoramaPipeline);
         m_device.Destroy(m_panoramaLayout);
+        m_device.Destroy(m_prepassMaskLayout);
         m_device.Destroy(m_backgroundLayout);
         m_device.Destroy(m_skyLayout);
         m_device.Destroy(m_outputLayout);
@@ -1282,6 +1344,18 @@ namespace Fenrir::Render
                 ++it;
             }
         }
+        for (auto it = m_prepassPipelines.begin(); it != m_prepassPipelines.end();)
+        {
+            if (it->first.shader == &shader)
+            {
+                m_device.Destroy(it->second.pipeline.pipeline);
+                it = m_prepassPipelines.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
     }
 
     bool SceneRenderer::IsMeshCurrent(AssetKey key, std::uint32_t revision) const
@@ -1410,6 +1484,8 @@ namespace Fenrir::Render
         const ShaderVariant& variant = *entry.variant->variant;
 
         std::vector<BindingGroupEntry> bindings;
+        // The block as written, for the prepass's base colour alpha.
+        std::vector<std::byte> written;
         for (const ShaderBinding& binding : variant.bindings)
         {
             if (binding.set != MaterialSet)
@@ -1457,6 +1533,7 @@ namespace Fenrir::Render
                 }
                 entry.block = m_device.CreateBuffer({block.size(), BufferUsage::Uniform}, block, "Material block");
                 bound.buffer = entry.block;
+                written = std::move(block);
                 ++m_stats.uploads;
             }
             bindings.push_back(bound);
@@ -1467,6 +1544,85 @@ namespace Fenrir::Render
         {
             entry.group = m_device.CreateBindingGroup({entry.layout, std::move(bindings)}, "Material");
         }
+        if (masked)
+        {
+            PrepareMaskedPrepass(entry, variant, material, written);
+        }
+    }
+
+    void SceneRenderer::PrepareMaskedPrepass(MaterialEntry& entry, const ShaderVariant& variant,
+                                             const MaterialData& material, std::span<const std::byte> block)
+    {
+        // The prepass cuts a Masked item out as builtin:lit does (ADR-0049), by its base colour's alpha and texture; a
+        // shader with neither is cut out only by its own fragment stage, in Opaque, which then writes its depth.
+        const auto colour = std::find_if(
+            variant.materialMembers.begin(), variant.materialMembers.end(),
+            [](const ShaderBlockMember& m) { return m.name == BaseColourMember && m.type == ShaderValueType::Vec4; });
+        const auto texture =
+            std::find_if(entry.bindings.begin(), entry.bindings.end(), [&](const BindingGroupEntry& e) {
+                return std::ranges::any_of(variant.bindings, [&](const ShaderBinding& b) {
+                    return b.set == MaterialSet && b.binding == e.binding && b.kind == ShaderBindingKind::Texture &&
+                           b.name == BaseColourTexture;
+                });
+            });
+        const bool hasColour = colour != variant.materialMembers.end() && colour->offset + 16 <= block.size();
+        entry.prepassed = hasColour || texture != entry.bindings.end();
+        if (!entry.prepassed)
+        {
+            return;
+        }
+        PrepassMaskBlock mask;
+        mask.cutoff = material.alphaCutoff;
+        if (hasColour)
+        {
+            std::memcpy(&mask.alpha, block.subspan(colour->offset + 12).data(), sizeof(float));
+        }
+        entry.prepassBlock = m_device.CreateBuffer({sizeof(mask), BufferUsage::Uniform}, BytesOf(mask), "Prepass mask");
+        BindingGroupEntry blockEntry;
+        blockEntry.binding = 0;
+        blockEntry.buffer = entry.prepassBlock;
+        BindingGroupEntry textureEntry;
+        textureEntry.binding = 1;
+        textureEntry.texture = m_defaultTextures.at(static_cast<std::size_t>(DefaultTexture::White));
+        textureEntry.sampler = m_defaultSampler;
+        if (texture != entry.bindings.end())
+        {
+            const auto index = static_cast<std::size_t>(texture - entry.bindings.begin());
+            textureEntry.texture = texture->texture;
+            textureEntry.sampler = texture->sampler;
+            for (std::size_t i = 0; i < entry.images.size(); ++i)
+            {
+                if (entry.images[i].binding == index)
+                {
+                    entry.prepassImage = i;
+                }
+            }
+        }
+        entry.prepassBindings = {blockEntry, textureEntry};
+        entry.prepassGroup = m_device.CreateBindingGroup({m_prepassMaskLayout, entry.prepassBindings}, "Prepass mask");
+    }
+
+    BindingGroupHandle SceneRenderer::PrepassGroup(MaterialEntry& material, const std::vector<AssetKey>& replaced)
+    {
+        if (!material.prepassImage.has_value())
+        {
+            return material.prepassGroup;
+        }
+        const SampledImage& image = material.images.at(*material.prepassImage);
+        if (image.bound.IsEmpty() || std::find(replaced.begin(), replaced.end(), image.image) == replaced.end())
+        {
+            return material.prepassGroup;
+        }
+        // The view may not sample the image (ADR-0026): its default texture, as the material's own group has.
+        if (material.prepassWithout.IsEmpty())
+        {
+            std::vector<BindingGroupEntry> bindings = material.prepassBindings;
+            bindings.at(1).texture = image.fallback;
+            bindings.at(1).sampler = m_defaultSampler;
+            material.prepassWithout =
+                m_device.CreateBindingGroup({m_prepassMaskLayout, std::move(bindings)}, "Prepass mask");
+        }
+        return material.prepassWithout;
     }
 
     BindingGroupHandle SceneRenderer::GroupWithout(MaterialEntry& material, const std::vector<AssetKey>& replaced)
@@ -1512,6 +1668,9 @@ namespace Fenrir::Render
         }
         m_device.Destroy(material.group);
         m_device.Destroy(material.block);
+        m_device.Destroy(material.prepassWithout);
+        m_device.Destroy(material.prepassGroup);
+        m_device.Destroy(material.prepassBlock);
     }
 
     void SceneRenderer::ReleaseMaterial(AssetKey key)
@@ -1570,18 +1729,12 @@ namespace Fenrir::Render
 
     const SceneRenderer::PipelineEntry& SceneRenderer::MeshPipeline(const ShaderEntry& shader,
                                                                     const VariantEntry& variant, const MeshEntry& mesh,
-                                                                    Fenrir::BlendMode blend, bool doubleSided)
+                                                                    Fenrir::BlendMode blend, bool doubleSided,
+                                                                    bool prepassed)
     {
         const std::uint32_t read = variant.variant != nullptr ? ReadMask(*variant.variant) : 0;
-        std::uint32_t present = 0;
-        for (std::uint32_t location = 0; location < Streams.size(); ++location)
-        {
-            if (mesh.streams.at(location).has_value())
-            {
-                present |= 1u << location;
-            }
-        }
-        const PipelineKey key{&shader, variant.variant, read & present, blend, doubleSided, m_samples};
+        const PipelineKey key{&shader,   variant.variant, read & StreamsOf(mesh.streams), blend, doubleSided,
+                              m_samples, prepassed};
         if (const auto found = m_pipelines.find(key); found != m_pipelines.end())
         {
             return found->second;
@@ -1598,25 +1751,20 @@ namespace Fenrir::Render
         PipelineDesc desc;
         desc.shader = variant.variant;
         desc.sets = {m_frameLayout, m_viewLayout, variant.materialLayout, m_drawLayout};
-        for (const ShaderVertexInput& input : variant.variant->vertexInputs)
+        if (std::string streams = VertexBuffersOf(*variant.variant, key.streams, desc.vertexBuffers, entry.locations);
+            !streams.empty())
         {
-            if (input.location >= Streams.size())
-            {
-                entry.failure = std::format("it reads vertex input '{}' at location {}, which no mesh stream feeds",
-                                            input.name, input.location);
-                break;
-            }
-            const StreamFormat& stream = Streams.at(input.location);
-            // A stream the mesh lacks reads one constant: a stride of 0 (ADR-0024).
-            const bool has = (key.streams & (1u << input.location)) != 0;
-            desc.vertexBuffers.push_back(
-                {has ? static_cast<std::uint32_t>(stream.size) : 0u, {{input.location, stream.format, 0}}});
-            entry.locations.push_back(input.location);
+            entry.failure = std::move(streams);
         }
         // The render state (ADR-0024): Opaque and Masked write depth; AlphaBlend and Additive blend without writing it.
-        // Depth is always tested, greater-or-equal for reversed-Z, and doubleSided turns culling off.
+        // Depth is always tested, greater-or-equal for reversed-Z, and doubleSided turns culling off. Over the depth
+        // prepass, Opaque and Masked test for equality instead, and write none (ADR-0049).
         desc.cull = doubleSided ? CullMode::None : CullMode::Back;
-        desc.depth.write = !IsTransparent(blend);
+        desc.depth.write = !IsTransparent(blend) && !prepassed;
+        if (prepassed)
+        {
+            desc.depth.compare = CompareOp::Equal;
+        }
         desc.blend = DeviceBlendOf(blend);
         desc.colourFormats = {TextureFormat::Rgba16Float};
         desc.samples = m_samples;
@@ -1631,6 +1779,79 @@ namespace Fenrir::Render
             m_logger.Error("FenrirRenderer: no pipeline for shader '{}', so its materials draw as the fallback "
                            "material: {}",
                            shader.container.name, entry.failure);
+        }
+        return entry;
+    }
+
+    const SceneRenderer::PipelineEntry& SceneRenderer::PrepassPipeline(const ShaderEntry& shader,
+                                                                       const VariantEntry& variant,
+                                                                       const MeshEntry& mesh, bool masked,
+                                                                       bool doubleSided)
+    {
+        const std::uint32_t read = variant.variant != nullptr ? ReadMask(*variant.variant) : 0;
+        const PrepassKey key{&shader, variant.variant, read & StreamsOf(mesh.streams), masked, doubleSided};
+        if (const auto found = m_prepassPipelines.find(key); found != m_prepassPipelines.end())
+        {
+            return found->second.pipeline;
+        }
+
+        PrepassEntry& made = m_prepassPipelines[key];
+        PipelineEntry& entry = made.pipeline;
+        entry.id = NextId();
+        const std::array<std::string_view, 1> maskKeys{AlphaMaskKey};
+        const ShaderVariant* prepass = m_prepass.FindVariant(masked ? std::span<const std::string_view>(maskKeys)
+                                                                    : std::span<const std::string_view>());
+        const auto stageOf = [](const ShaderVariant* of, ShaderStage stage) -> const ShaderStageCode* {
+            if (of == nullptr)
+            {
+                return nullptr;
+            }
+            const auto found = std::ranges::find(of->stages, stage, &ShaderStageCode::stage);
+            return found == of->stages.end() ? nullptr : &*found;
+        };
+        const ShaderStageCode* vertex = stageOf(variant.variant, ShaderStage::Vertex);
+        const ShaderStageCode* fragment = stageOf(prepass, ShaderStage::Fragment);
+        if (vertex == nullptr || fragment == nullptr)
+        {
+            entry.failure = vertex == nullptr ? "it has no vertex stage" : "builtin:depth-prepass did not read";
+        }
+        else
+        {
+            // The item's vertex stage, so it lands where Opaque's does (Fenrir/Vertex.glsl's gl_Position is
+            // invariant), then ours; its keys, as the probes read them, are the item's.
+            made.variant = std::make_unique<ShaderVariant>();
+            made.variant->keys = variant.variant->keys;
+            made.variant->stages = {*vertex, *fragment};
+            made.variant->vertexInputs = variant.variant->vertexInputs;
+            made.variant->bindings = variant.variant->bindings;
+            entry.failure = CheckFixedSets(*variant.variant);
+            PipelineDesc desc;
+            desc.shader = made.variant.get();
+            // A Masked item's set 2 is its prepass group, not its material's.
+            desc.sets = {m_frameLayout, m_viewLayout, masked ? m_prepassMaskLayout : variant.materialLayout,
+                         m_drawLayout};
+            if (std::string streams =
+                    VertexBuffersOf(*variant.variant, key.streams, desc.vertexBuffers, entry.locations);
+                !streams.empty())
+            {
+                entry.failure = std::move(streams);
+            }
+            desc.cull = doubleSided ? CullMode::None : CullMode::Back;
+            desc.blend = Graphics::BlendMode::None;
+            desc.colourFormats = {TextureFormat::Rg16Float};
+            desc.samples = m_samples;
+            if (entry.failure.empty())
+            {
+                PipelineResult result = m_device.CreatePipeline(desc, "DepthPrepass");
+                entry.pipeline = result.pipeline;
+                entry.failure = std::move(result.diagnostic);
+            }
+        }
+        if (!entry.failure.empty())
+        {
+            m_logger.Warn("FenrirRenderer: no depth prepass pipeline for shader '{}', so Opaque writes its items' "
+                          "depth and they are missing from the view's normals: {}",
+                          shader.container.name, entry.failure);
         }
         return entry;
     }
@@ -1676,18 +1897,38 @@ namespace Fenrir::Render
             const VariantEntry* variant =
                 usable ? (skinned ? found->skinnedVariant : found->variant) : &fallbackVariant;
             Fenrir::BlendMode blend = usable ? found->blendMode : Fenrir::BlendMode::Opaque;
+            bool doubleSided = usable && found->doubleSided;
+            // Opaque and Masked items draw in the depth prepass (ADR-0049), but for Masked ones it cannot cut out.
+            const auto prepassed = [&] { return !IsTransparent(blend) && (shader == &m_fallback || found->prepassed); };
             const PipelineEntry* pipeline =
-                &MeshPipeline(*shader, *variant, mesh->second, blend, usable && found->doubleSided);
+                &MeshPipeline(*shader, *variant, mesh->second, blend, doubleSided, prepassed());
             if (pipeline->pipeline.IsEmpty() && shader != &m_fallback)
             {
                 shader = &m_fallback;
                 variant = &fallbackVariant;
                 blend = Fenrir::BlendMode::Opaque;
-                pipeline = &MeshPipeline(m_fallback, *variant, mesh->second, blend, false);
+                doubleSided = false;
+                pipeline = &MeshPipeline(m_fallback, *variant, mesh->second, blend, doubleSided, true);
             }
             if (pipeline->pipeline.IsEmpty())
             {
                 continue;
+            }
+            const PipelineEntry* prepass = nullptr;
+            const bool masked = blend == Fenrir::BlendMode::Masked;
+            if (prepassed())
+            {
+                prepass = &PrepassPipeline(*shader, *variant, mesh->second, masked, doubleSided);
+                if (prepass->pipeline.IsEmpty())
+                {
+                    // Not in the prepass after all: Opaque writes its depth.
+                    prepass = nullptr;
+                    pipeline = &MeshPipeline(*shader, *variant, mesh->second, blend, doubleSided, false);
+                    if (pipeline->pipeline.IsEmpty())
+                    {
+                        continue;
+                    }
+                }
             }
 
             for (const ShaderVertexInput& input : variant->variant->vertexInputs)
@@ -1712,6 +1953,8 @@ namespace Fenrir::Render
             draw.paletteOffset = skinned ? request.paletteOffset : 0;
             draw.skinned = skinned;
             draw.sortPoint = request.sortPoint.value_or(Math::Vec3(request.world[3]));
+            draw.prepass = prepass;
+            draw.prepassMasked = prepass != nullptr && masked;
             const std::uint64_t stage = draw.transparent ? TransparentStage : OpaqueStage;
             const std::uint64_t materialId = fallback ? 0 : found->id;
             draw.sortKey = (stage << 56u) | ((std::uint64_t{pipeline->id} & 0xFFFFu) << 40u) |
@@ -1726,8 +1969,8 @@ namespace Fenrir::Render
     void SceneRenderer::RecordDraws(PassEncoder& encoder, const std::vector<ResolvedDraw>& draws,
                                     const std::vector<BindingGroupHandle>& groups,
                                     const std::vector<std::size_t>& order, BindingGroupHandle frameGroup,
-                                    BindingGroupHandle viewGroup, BindingGroupHandle drawGroup,
-                                    PixelRect viewport) const
+                                    BindingGroupHandle viewGroup, BindingGroupHandle drawGroup, PixelRect viewport,
+                                    bool prepass) const
     {
         encoder.SetViewport(viewport);
         const PipelineEntry* current = nullptr;
@@ -1736,10 +1979,11 @@ namespace Fenrir::Render
         {
             const ResolvedDraw& draw = draws[i];
             const BindingGroupHandle group = groups[i];
-            const bool newPipeline = draw.pipeline != current;
+            const PipelineEntry* pipeline = prepass ? draw.prepass : draw.pipeline;
+            const bool newPipeline = pipeline != current;
             if (newPipeline)
             {
-                current = draw.pipeline;
+                current = pipeline;
                 encoder.SetPipeline(current->pipeline);
                 encoder.SetBindingGroup(0, frameGroup);
                 encoder.SetBindingGroup(1, viewGroup);
@@ -2107,37 +2351,68 @@ namespace Fenrir::Render
             TextureDesc depthDesc = colourDesc;
             depthDesc.format = TextureFormat::Depth32Float;
             depthDesc.usage = TextureUsage::DepthAttachment;
+            TextureDesc normalDesc = colourDesc;
+            normalDesc.format = TextureFormat::Rg16Float;
             const GraphResource sceneColour = graph.CreateTexture("SceneColor", colourDesc);
             const GraphResource sceneDepth = graph.CreateTexture("SceneDepth", depthDesc);
-            m_drawnViews.push_back({v, sceneColour, sceneDepth, viewGroup});
+            const GraphResource sceneNormals = graph.CreateTexture("SceneNormals", normalDesc);
+            m_drawnViews.push_back({v, sceneColour, sceneDepth, sceneNormals, viewGroup});
 
-            // Opaque items in draw-list order; transparent ones back to front by the view-space depth of their world
-            // origins, the farthest (most negative view z) first.
+            // Opaque items in draw-list order, and those of them in the depth prepass; transparent ones back to front
+            // by the view-space depth of their world origins, the farthest (most negative view z) first.
             auto opaque = std::make_shared<std::vector<std::size_t>>();
+            auto prepassed = std::make_shared<std::vector<std::size_t>>();
             auto transparent = std::make_shared<std::vector<std::size_t>>();
+            // Each draw's set 2 in the prepass: a Masked item's prepass group, else its material group.
+            auto prepassGroups = std::make_shared<std::vector<BindingGroupHandle>>(*groups);
             std::vector<float> depth(draws->size(), 0.0f);
             for (std::size_t i = 0; i < draws->size(); ++i)
             {
                 const ResolvedDraw& draw = (*draws)[i];
                 (draw.transparent ? *transparent : *opaque).push_back(i);
+                if (draw.prepass != nullptr)
+                {
+                    prepassed->push_back(i);
+                }
+                if (draw.prepassMasked)
+                {
+                    (*prepassGroups)[i] = PrepassGroup(*draw.material, replaced[v]);
+                }
                 depth[i] = (request.view * Math::Vec4(draw.sortPoint, 1.0f)).z;
             }
             std::stable_sort(transparent->begin(), transparent->end(),
                              [&](std::size_t a, std::size_t b) { return depth[a] < depth[b]; });
 
+            // Depth and normals first (ADR-0049), so Opaque shades each pixel once, by equal depth.
             graph.AddPass(
-                "Opaque", RenderStage::Opaque, QueueKind::Graphics,
+                "DepthPrepass", RenderStage::DepthPrepass, QueueKind::Graphics,
                 [=](PassBuilder& pass) {
-                    pass.ColourAttachment(sceneColour, LoadOp::Clear, {0.0f, 0.0f, 0.0f, 0.0f});
+                    pass.ColourAttachment(sceneNormals, LoadOp::Clear, {0.0f, 0.0f, 0.0f, 0.0f});
                     pass.DepthAttachment(sceneDepth, LoadOp::Clear, 0.0f);
                     for (const GraphResource image : samples)
                     {
                         pass.Sample(image);
                     }
                 },
+                [this, draws, prepassGroups, prepassed, frameGroup, viewGroup, drawGroup,
+                 viewport](PassContext& context) {
+                    RecordDraws(context.Encoder(), *draws, *prepassGroups, *prepassed, frameGroup, viewGroup, drawGroup,
+                                viewport, true);
+                });
+            graph.AddPass(
+                "Opaque", RenderStage::Opaque, QueueKind::Graphics,
+                [=](PassBuilder& pass) {
+                    pass.ColourAttachment(sceneColour, LoadOp::Clear, {0.0f, 0.0f, 0.0f, 0.0f});
+                    // Loaded, and written only by items with no prepass draw.
+                    pass.DepthAttachment(sceneDepth, LoadOp::Load);
+                    for (const GraphResource image : samples)
+                    {
+                        pass.Sample(image);
+                    }
+                },
                 [this, draws, groups, opaque, frameGroup, viewGroup, drawGroup, viewport](PassContext& context) {
-                    RecordDraws(context.Encoder(), *draws, *groups, *opaque, frameGroup, viewGroup, drawGroup,
-                                viewport);
+                    RecordDraws(context.Encoder(), *draws, *groups, *opaque, frameGroup, viewGroup, drawGroup, viewport,
+                                false);
                 });
             if (!transparent->empty())
             {
@@ -2155,7 +2430,7 @@ namespace Fenrir::Render
                     [this, draws, groups, transparent, frameGroup, viewGroup, drawGroup,
                      viewport](PassContext& context) {
                         RecordDraws(context.Encoder(), *draws, *groups, *transparent, frameGroup, viewGroup, drawGroup,
-                                    viewport);
+                                    viewport, false);
                     });
             }
             m_stats.draws += static_cast<std::uint32_t>(draws->size());
