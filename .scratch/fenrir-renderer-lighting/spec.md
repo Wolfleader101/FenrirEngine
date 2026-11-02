@@ -106,9 +106,15 @@ Each ticket's tests follow the foundation's seams: the null backend through `Ren
 | 20 | The neon city | 06, 11, 13, 19 |
 | 21 | Sponza | 11, 18, 19 |
 | 22 | C# for lighting, the sky, cameras, shadows and instancing | 21 |
+| 25 | Vignette, film grain and chromatic aberration (requested while tuning 20; needs triage) | 20 |
+| 26 | Parametric colour grading (requested while tuning 20; needs triage) | 20 |
+| 27 | Anamorphic streaks (requested while tuning 20; needs triage) | 20 |
+| 28 | Lens flare and lens dirt (requested while tuning 20; needs triage) | 27 |
 
 Every C++ ticket touches `packages/FenrirRenderer/src/` and its shaders, so most of them stack. C# waits for every C++ ticket, as in the animation spec; until ticket 22, `AmbientLight`'s C# mirror is a deprecated no-op.
 
+Tickets 25 to 28 are camera post effects, ordered round the tonemap by ADR-0057: streaks and the flare blend into SceneColor after bloom, and Output reads with chromatic aberration, then exposes, vignettes, grades, tonemaps and adds grain. Each adds its `Camera` fields to the generated C# binding itself, rather than waiting for 22. 25, 26 and 27 touch different parts of the frame and can run side by side; 28 builds on 27's composite.
+
 ## Out of scope
 
-Deferred shading; physical light units; auto-exposure; screen-space reflections; fog and volumetric light; PCSS and VSM; area-light shadows and disc, tube or sphere lights; clearcoat, sheen, transmission and anisotropy; GPU culling and indirect draws; LearnOpenGL's Blinn-Phong (the engine is already GGX).
+Deferred shading; physical light units; auto-exposure; screen-space reflections; fog and volumetric light; PCSS and VSM; area-light shadows and disc, tube or sphere lights; clearcoat, sheen, transmission and anisotropy; GPU culling and indirect draws; 3D colour-grading LUTs, per-light starbursts, depth of field and motion blur (ADR-0057's "Not yet"); LearnOpenGL's Blinn-Phong (the engine is already GGX).
