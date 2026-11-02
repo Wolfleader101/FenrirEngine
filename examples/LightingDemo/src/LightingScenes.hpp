@@ -49,12 +49,13 @@ namespace LightingDemo
     [[nodiscard]] FenrirDemo::DemoScene ForestClearing();
 
     /**
-     * @brief Neon city at night: a grid of generated towers, one instance list drawn by the demo's facade shader, whose
-     * windows each tower's copy colour lights; wet asphalt streets (fetched) whose puddles mirror rect-light neon
-     * signs, point-light street lamps and the spot headlights of instanced cars driving round the blocks, hundreds of
-     * lights, clustered, under a dim night panorama (fetched). The panel sets the lights' intensities and the puddles,
-     * stops the traffic, turns clustering off and shows the light count and the frame time. Without fetched assets the
-     * streets are plain dark asphalt under a dark sky.
+     * @brief Neon city at night: a grid of generated towers on podiums and lower blocks, every tier one copy drawn by
+     * the demo's facade shader (punched, curtain-wall or ribbon windows lit by the copy colour, neon edge strips on
+     * many towers), over wet asphalt streets (fetched) whose puddles mirror the lights: rect-light neon signs and
+     * billboards, coloured spot uplights washing the towers, point-light street lamps and the spot headlights of
+     * instanced cars, over a thousand lights, clustered, under the demo's city glow or a dim night panorama (fetched).
+     * The panel sets the lights' intensities and the puddles, stops the traffic, turns clustering off and shows the
+     * light count and the frame time. Without fetched assets the streets are plain dark asphalt.
      */
     [[nodiscard]] FenrirDemo::DemoScene NeonCity();
 } // namespace LightingDemo

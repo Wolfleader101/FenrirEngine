@@ -3,8 +3,10 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <numbers>
 #include <optional>
 #include <random>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -14,6 +16,7 @@
 #include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
+#include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirInput/Input.hpp"
@@ -103,6 +106,54 @@ namespace LightingDemo
             return {colour.r * scale, colour.g * scale, colour.b * scale, 1.0f};
         }
 
+        /**
+         * @brief A night sky made here, linear RGBA32F in the renderer's panorama mapping, to be drawn at the scene's
+         * dim sky intensity: a dark blue zenith over the city's own light pollution, a magenta glow rising from the
+         * horizon with a warmer band along it, uneven round the compass; a dark ground below.
+         */
+        Fenrir::ImageData CityGlow(std::uint32_t width)
+        {
+            constexpr float Pi = std::numbers::pi_v<float>;
+            const std::uint32_t height = width / 2;
+            std::vector<float> texels(std::size_t{width} * height * 4, 0.0f);
+            for (std::uint32_t row = 0; row < height; ++row)
+            {
+                const float theta = Pi * (static_cast<float>(row) + 0.5f) / static_cast<float>(height);
+                for (std::uint32_t column = 0; column < width; ++column)
+                {
+                    // panorama.frag's inverse: u = 0.5 + atan(x, -z) / 2pi, v = acos(y) / pi.
+                    const float phi =
+                        2.0f * Pi * ((static_cast<float>(column) + 0.5f) / static_cast<float>(width) - 0.5f);
+                    const float up = std::cos(theta);
+                    const float uneven = 1.0f + 0.25f * std::sin(phi * 3.0f) + 0.15f * std::sin(phi * 7.0f + 1.3f);
+                    const Vec3 horizon = (Vec3(1.6f, 0.45f, 1.1f) + Vec3(0.9f, 0.35f, 0.1f)) * uneven;
+                    Vec3 colour;
+                    if (up >= 0.0f)
+                    {
+                        colour = Vec3(0.05f, 0.06f, 0.15f) + Vec3(1.6f, 0.45f, 1.1f) * uneven * std::exp(-up * 7.0f) +
+                                 Vec3(0.9f, 0.35f, 0.1f) * uneven * std::exp(-up * 25.0f);
+                    }
+                    else
+                    {
+                        colour = glm::mix(horizon, Vec3(0.05f, 0.04f, 0.05f), std::min(-up * 8.0f, 1.0f));
+                    }
+                    float* texel = &texels[(std::size_t{row} * width + column) * 4];
+                    texel[0] = colour.r;
+                    texel[1] = colour.g;
+                    texel[2] = colour.b;
+                    texel[3] = 1.0f;
+                }
+            }
+            Fenrir::ImageData image;
+            image.width = width;
+            image.height = height;
+            image.format = Fenrir::ImageFormat::RGBA32F;
+            image.colourSpace = Fenrir::ColourSpace::Linear;
+            const auto bytes = std::as_bytes(std::span(texels));
+            image.pixels.assign(bytes.begin(), bytes.end());
+            return image;
+        }
+
         /** @brief A neon sign: its rect light, and its slab's place and size. */
         struct Sign
         {
@@ -145,6 +196,13 @@ namespace LightingDemo
             Fenrir::InstanceListData copies;
         };
 
+        /** @brief A tower's uplight, and its intensity as a multiple of the panel's: taller towers' are brighter. */
+        struct WashLight
+        {
+            Fenrir::Entity light;
+            float scale = 1.0f;
+        };
+
         /** @brief The city's lights and lists, and what the panel and keys have set, kept as a scene resource. */
         struct CityState
         {
@@ -153,13 +211,18 @@ namespace LightingDemo
             std::vector<Fenrir::Entity> lamps;
             std::vector<Sign> signs;
             Fenrir::AssetHandle<Fenrir::InstanceList> signSlabs;
+            std::vector<WashLight> uplights;
             std::vector<Car> cars;
             /** @brief The bodies, cabins, headlamps and tail-lights, by CarPartKind. */
             std::array<CarPart, CarPartKinds> carParts;
             std::size_t buildings = 0;
+            /** @brief The neon panels on the walls, which light nothing. */
+            std::size_t panels = 0;
             float lampIntensity = 40.0f;
             float signIntensity = 5.0f;
             float headlightIntensity = 60.0f;
+            /** @brief A 40-metre uplight's; longer ones are brighter by the square of their reach. */
+            float uplightIntensity = 1500.0f;
             /** @brief The street material's puddles: the share of the street under water. */
             float puddles = 0.5f;
             /** @brief What M brings the puddles back to. */
@@ -173,6 +236,7 @@ namespace LightingDemo
             float appliedLamps = -1.0f;
             float appliedSigns = -1.0f;
             float appliedHeadlights = -1.0f;
+            float appliedUplights = -1.0f;
             float appliedPuddles = -1.0f;
         };
 
@@ -318,12 +382,200 @@ namespace LightingDemo
                     std::move(markings));
         }
 
+        /** @brief One box of a building: where its centre is and its size, in metres. */
+        struct Tier
+        {
+            Vec3 centre;
+            Vec3 size;
+        };
+
+        /** @brief What dresses the buildings beyond their tiers and lit signs, as instance lists. */
+        struct Dressing
+        {
+            /** @brief Plant rooms and boxes on the roofs. */
+            Fenrir::InstanceListData plant;
+            /** @brief Radio masts. */
+            Fenrir::InstanceListData masts;
+            /** @brief The masts' red beacons. */
+            Fenrir::InstanceListData beacons;
+            /** @brief Neon panels stacked up the walls: glowing, but no lights of their own. */
+            Fenrir::InstanceListData panels;
+        };
+
+        /** @brief The tiers of the building on a lot centred at `lot`, pushed `push` towards its block's edges. */
+        std::vector<Tier> BuildingTiers(Vec2 lot, Vec2 push, std::mt19937& random)
+        {
+            std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+            // Taller and more often a tower towards the middle of the city.
+            const float centrality = std::clamp(1.0f - glm::length(lot) / (CityHalf * 1.1f), 0.0f, 1.0f);
+            const Vec2 foot{Lot - 1.0f - 1.5f * unit(random), Lot - 1.0f - 1.5f * unit(random)};
+            // Its ground tier fronts the street: pushed to its lot's outer edges, so the walls line up.
+            const Vec2 centre = lot + push * ((Vec2(Lot) - foot) * 0.5f);
+            std::vector<Tier> tiers;
+            if (unit(random) < 0.25f + 0.6f * centrality)
+            {
+                // A tower on a podium, often with a narrower crown.
+                const float podium = 8.0f + 10.0f * unit(random);
+                tiers.push_back({{centre.x, KerbHeight + podium * 0.5f, centre.y}, {foot.x, podium, foot.y}});
+                const float tall = unit(random);
+                const float height = (35.0f + 140.0f * tall * tall) * (0.35f + 0.65f * centrality);
+                const Vec2 towerFoot = foot * (0.55f + 0.25f * unit(random));
+                const float towerBase = KerbHeight + podium;
+                tiers.push_back({{centre.x, towerBase + height * 0.5f, centre.y}, {towerFoot.x, height, towerFoot.y}});
+                if (unit(random) < 0.55f)
+                {
+                    const Vec2 crownFoot = towerFoot * (0.6f + 0.2f * unit(random));
+                    const float crown = 5.0f + 12.0f * unit(random);
+                    tiers.push_back(
+                        {{centre.x, towerBase + height + crown * 0.5f, centre.y}, {crownFoot.x, crown, crownFoot.y}});
+                }
+            }
+            else
+            {
+                const float tall = unit(random);
+                const float height = 9.0f + (8.0f + 30.0f * tall * tall) * (0.5f + 0.5f * centrality);
+                tiers.push_back({{centre.x, KerbHeight + height * 0.5f, centre.y}, {foot.x, height, foot.y}});
+            }
+            return tiers;
+        }
+
+        /** @brief The top of `tier`, from the ground. */
+        float TopOf(const Tier& tier)
+        {
+            return tier.centre.y + tier.size.y * 0.5f;
+        }
+
+        /** @brief One wall of a tier facing `out`: its foot's centre, the way along it, its width. */
+        struct Wall
+        {
+            Vec3 foot;
+            Vec3 out;
+            Vec3 along;
+            float width;
+        };
+
+        Wall WallOf(const Tier& tier, Vec3 out)
+        {
+            const bool alongZ = out.x != 0.0f;
+            const float halfDepth = (alongZ ? tier.size.x : tier.size.z) * 0.5f;
+            const Vec3 foot{tier.centre.x, tier.centre.y - tier.size.y * 0.5f, tier.centre.z};
+            return {foot + out * halfDepth, out, alongZ ? Vec3(0.0f, 0.0f, 1.0f) : Vec3(1.0f, 0.0f, 0.0f),
+                    alongZ ? tier.size.z : tier.size.x};
+        }
+
         /**
-         * @brief The buildings, one copy each in the facade shader's list, and the neon signs on the walls that face a
-         * street: a shop sign above the ground floor and, on some, a two-sided blade sign standing out from a corner.
+         * @brief The signs on a street-facing wall of a building's ground tier, `height` tall: a row of shop signs
+         * above the ground floor, up to two two-sided blade signs standing out from it and, on some, a column of neon
+         * panels flat on the wall.
+         */
+        void SignWall(Fenrir::Scene& scene, CityState& state, Dressing& dressing, const Wall& wall, float height,
+                      std::mt19937& random)
+        {
+            std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+            const Quat facing = glm::quatLookAt(wall.out, Up);
+            // Shop signs, one to every six metres or so of the wall.
+            const int shops = std::max(1, static_cast<int>(wall.width / 6.0f));
+            const float segment = wall.width / static_cast<float>(shops);
+            for (int i = 0; i < shops; ++i)
+            {
+                if (unit(random) < 0.75f)
+                {
+                    const float width = segment * (0.5f + 0.35f * unit(random));
+                    const float tallness = 0.45f + 0.35f * unit(random);
+                    const float offset = (static_cast<float>(i) + 0.5f) * segment - wall.width * 0.5f;
+                    AddSign(scene, state, wall.foot + wall.out * 0.25f + Up * 3.8f + wall.along * offset, facing,
+                            {Neon.at(Pick(random, Neon.size())), 1.0f, width, tallness, false, 12.0f}, 1.0f);
+                }
+            }
+            // Blade signs standing out from the wall, their faces along the street (their +X points out).
+            for (int i = 0; i < 2 && height > 10.0f; ++i)
+            {
+                if (unit(random) < 0.55f)
+                {
+                    const float tallness = std::min(3.0f + 6.0f * unit(random), height - 6.0f);
+                    const float lowest = 5.0f + tallness * 0.5f;
+                    const float y = lowest + unit(random) * std::max(height - 1.0f - tallness * 0.5f - lowest, 0.0f);
+                    const float offset = (unit(random) - 0.5f) * (wall.width - 2.0f);
+                    AddSign(scene, state, wall.foot + wall.out * 0.75f + Up * y + wall.along * offset,
+                            glm::quatLookAt(wall.along, Up),
+                            {Neon.at(Pick(random, Neon.size())), 1.0f, 1.0f, tallness, true, 16.0f}, 1.4f);
+                }
+            }
+            // A column of panels flat on the wall, glowing but lighting nothing: colour without the light's cost.
+            if (unit(random) < 0.4f && height > 10.0f)
+            {
+                const float offset = (unit(random) - 0.5f) * (wall.width - 2.0f);
+                // Tall boards one above another, mostly in one hue, like a street of vertical signs.
+                const Fenrir::Colour hue = Neon.at(Pick(random, Neon.size()));
+                for (float y = 6.5f; y < height - 1.5f && y < 22.0f; y += 2.2f)
+                {
+                    dressing.panels.transforms.push_back(Placement(
+                        wall.foot + wall.out * 0.08f + Up * y + wall.along * offset, facing, {0.8f, 1.8f, 0.05f}));
+                    const Fenrir::Colour board = unit(random) < 0.25f ? Neon.at(Pick(random, Neon.size())) : hue;
+                    dressing.panels.colours.push_back(Scaled(board, 1.0f));
+                }
+            }
+        }
+
+        /** @brief Plant rooms, and on some a radio mast with a beacon, on the roof of `top`. */
+        void DressRoof(Dressing& dressing, const Tier& top, std::mt19937& random)
+        {
+            std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+            const Quat identity(1.0f, 0.0f, 0.0f, 0.0f);
+            const float roof = TopOf(top);
+            const auto spot = [&](float margin) {
+                return Vec2(top.centre.x + (unit(random) - 0.5f) * std::max(top.size.x - margin, 0.0f),
+                            top.centre.z + (unit(random) - 0.5f) * std::max(top.size.z - margin, 0.0f));
+            };
+            const int plant = 1 + static_cast<int>(Pick(random, 3));
+            for (int i = 0; i < plant; ++i)
+            {
+                const Vec3 size{2.0f + 2.0f * unit(random), 1.2f + 1.8f * unit(random), 2.0f + 2.0f * unit(random)};
+                const Vec2 at = spot(size.x + 1.0f);
+                dressing.plant.transforms.push_back(Placement({at.x, roof + size.y * 0.5f, at.y}, identity, size));
+            }
+            if (roof > 40.0f && unit(random) < 0.4f)
+            {
+                const float mast = 6.0f + 10.0f * unit(random);
+                const Vec2 at = spot(2.0f);
+                dressing.masts.transforms.push_back(
+                    Placement({at.x, roof + mast * 0.5f, at.y}, identity, {0.25f, mast, 0.25f}));
+                dressing.beacons.transforms.push_back(Placement({at.x, roof + mast, at.y}, identity, Vec3(0.5f)));
+            }
+        }
+
+        /**
+         * @brief Coloured uplights washing a tower's walls: a spot light standing out from each of `walls` at the
+         * tower's foot, looking up and a little in, reaching its top.
+         */
+        void Uplight(Fenrir::Scene& scene, CityState& state, const Tier& tower, std::span<const Vec3> walls,
+                     Fenrir::Colour colour)
+        {
+            // Fading out three-quarters of the way up: a wash, and fewer clusters for each light to reach.
+            const float range = tower.size.y * 0.75f + 6.0f;
+            // As bright at the top as a short tower's is: the inverse square over the reach.
+            const float scale = (range / 40.0f) * (range / 40.0f);
+            for (const Vec3 out : walls)
+            {
+                const Wall wall = WallOf(tower, out);
+                Fenrir::Entity entity = scene.GetEntityList().CreateEntity();
+                Fenrir::Transform& transform = entity.AddComponent<Fenrir::Transform>();
+                transform.pos = wall.foot + out * 2.5f + Up * 0.3f;
+                // A spot light shines along its entity's -Z.
+                transform.rot = glm::quatLookAt(glm::normalize(Up - out * 0.35f), wall.along);
+                entity.AddComponent<Fenrir::SpotLight>(
+                    Fenrir::SpotLight{colour, state.uplightIntensity * scale, range, 0.12f, 0.38f, false});
+                state.uplights.push_back({entity, scale});
+            }
+        }
+
+        /**
+         * @brief The buildings, each tier one copy in the facade shader's list, with their signs, rooftop billboards,
+         * uplights, roof plant and masts.
          */
         void SpawnBuildings(Fenrir::App& app, Fenrir::Scene& scene, CityState& state,
-                            Fenrir::AssetHandle<Fenrir::Mesh> cube, std::mt19937& random)
+                            Fenrir::AssetHandle<Fenrir::Mesh> cube, Fenrir::AssetHandle<Fenrir::Mesh> sphere,
+                            std::mt19937& random)
         {
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
             const auto facade = EmbeddedMaterial(store, scene, Fenrir::Shaders::LightingDemoFacade);
@@ -333,7 +585,8 @@ namespace LightingDemo
                 return;
             }
             std::uniform_real_distribution<float> unit(0.0f, 1.0f);
-            Fenrir::InstanceListData buildings;
+            Fenrir::InstanceListData tiers;
+            Dressing dressing;
             for (int bx = 0; bx < Blocks; ++bx)
             {
                 for (int bz = 0; bz < Blocks; ++bz)
@@ -344,65 +597,87 @@ namespace LightingDemo
                         {
                             const Vec2 lot{BlockCentre(bx) + (static_cast<float>(lx) - 1.0f) * Lot,
                                            BlockCentre(bz) + (static_cast<float>(lz) - 1.0f) * Lot};
-                            // Taller towards the middle of the city.
-                            const float centrality = 1.0f - glm::length(lot) / (CityHalf * 1.2f);
-                            const float tall = unit(random);
-                            const float height = 10.0f + (20.0f + 70.0f * tall * tall) * (0.4f + 0.6f * centrality);
-                            const Vec3 size{Lot - 1.0f - 2.0f * unit(random), height, Lot - 1.0f - 2.0f * unit(random)};
-                            // Each building fronts the street: pushed to its lot's outer edges, so the walls line up.
                             const Vec2 push{lx == 0 ? -1.0f : (lx == 2 ? 1.0f : 0.0f),
                                             lz == 0 ? -1.0f : (lz == 2 ? 1.0f : 0.0f)};
-                            const Vec2 centre = lot + push * (Vec2(Lot - size.x, Lot - size.z) * 0.5f);
-                            buildings.transforms.push_back(Placement({centre.x, KerbHeight + height * 0.5f, centre.y},
-                                                                     Quat(1.0f, 0.0f, 0.0f, 0.0f), size));
-                            Fenrir::Colour light = WindowLight.at(Pick(random, WindowLight.size()));
-                            light.a = 0.1f + 0.35f * unit(random);
-                            buildings.colours.push_back(light);
+                            const std::vector<Tier> building = BuildingTiers(lot, push, random);
+                            ++state.buildings;
 
-                            // A sign on each wall facing a street.
-                            for (int axis = 0; axis < 2; ++axis)
+                            // The facade shader's copy colour: the windows' light, and in alpha the share lit, the
+                            // style, and 3 more where the tier has edge strips (facade.frag). A tower's podium keeps
+                            // its style but never its strips.
+                            const Fenrir::Colour light = WindowLight.at(Pick(random, WindowLight.size()));
+                            const float share = 0.1f + 0.35f * unit(random);
+                            const auto style = static_cast<float>(Pick(random, 3));
+                            const bool strips = unit(random) < (building.size() > 1 ? 0.5f : 0.15f);
+                            for (std::size_t i = 0; i < building.size(); ++i)
                             {
-                                const float side = axis == 0 ? push.x : push.y;
-                                if (side == 0.0f)
-                                {
-                                    continue;
-                                }
-                                const Vec3 out = axis == 0 ? Vec3(side, 0.0f, 0.0f) : Vec3(0.0f, 0.0f, side);
-                                const Vec3 along = axis == 0 ? Vec3(0.0f, 0.0f, 1.0f) : Vec3(1.0f, 0.0f, 0.0f);
-                                const float halfDepth = (axis == 0 ? size.x : size.z) * 0.5f;
-                                const float wallWidth = axis == 0 ? size.z : size.x;
-                                const Vec3 wall = Vec3(centre.x, KerbHeight, centre.y) + out * halfDepth;
-                                if (unit(random) < 0.8f)
-                                {
-                                    // A shop sign above the ground floor, facing out from the wall.
-                                    const float width = std::min(wallWidth * (0.4f + 0.3f * unit(random)), 7.0f);
-                                    const Vec3 at = wall + out * 0.25f + Up * 3.7f +
-                                                    along * ((unit(random) - 0.5f) * (wallWidth - width) * 0.8f);
-                                    AddSign(scene, state, at, glm::quatLookAt(out, Up),
-                                            {Neon.at(Pick(random, Neon.size())), 1.0f, width, 0.5f, false, 12.0f},
-                                            1.0f);
-                                }
-                                if (unit(random) < 0.35f && height > 12.0f)
-                                {
-                                    // A brighter blade sign standing out from a corner, its faces along the street
-                                    // (its +X points out).
-                                    const float tallness = std::min(4.0f + 5.0f * unit(random), height - 7.0f);
-                                    const float corner = unit(random) < 0.5f ? -1.0f : 1.0f;
-                                    const Vec3 at = wall + out * 0.75f + Up * (5.5f + tallness * 0.5f) +
-                                                    along * (corner * (wallWidth * 0.5f - 1.0f));
-                                    AddSign(scene, state, at, glm::quatLookAt(along, Up),
-                                            {Neon.at(Pick(random, Neon.size())), 1.0f, 1.0f, tallness, true, 16.0f},
-                                            1.4f);
-                                }
+                                const bool lit = strips && (building.size() == 1 || i > 0);
+                                tiers.transforms.push_back(Placement(
+                                    building.at(i).centre, Quat(1.0f, 0.0f, 0.0f, 0.0f), building.at(i).size));
+                                tiers.colours.push_back(
+                                    {light.r, light.g, light.b, style + (lit ? 3.0f : 0.0f) + share});
                             }
+
+                            // Signs on the ground tier's walls that face a street.
+                            const Tier& ground = building.front();
+                            std::vector<Vec3> streetWalls;
+                            if (push.x != 0.0f)
+                            {
+                                streetWalls.emplace_back(push.x, 0.0f, 0.0f);
+                            }
+                            if (push.y != 0.0f)
+                            {
+                                streetWalls.emplace_back(0.0f, 0.0f, push.y);
+                            }
+                            for (const Vec3 out : streetWalls)
+                            {
+                                SignWall(scene, state, dressing, WallOf(ground, out), ground.size.y, random);
+                            }
+
+                            // A tower's walls washed by coloured uplights from its podium's roof: those facing the
+                            // streets, or two for a tower in a block's middle.
+                            if (building.size() > 1)
+                            {
+                                std::vector<Vec3> washed = streetWalls;
+                                if (washed.empty())
+                                {
+                                    washed = {Vec3(1.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f)};
+                                }
+                                Uplight(scene, state, building.at(1), washed, Neon.at(Pick(random, Neon.size())));
+                            }
+
+                            // A billboard on some low and middling roofs, facing a street.
+                            const Tier& top = building.back();
+                            if (!streetWalls.empty() && TopOf(top) < 60.0f && unit(random) < 0.3f)
+                            {
+                                const Wall wall = WallOf(top, streetWalls.front());
+                                const float width = std::min(wall.width * 0.8f, 12.0f);
+                                const float tallness = 3.0f + 2.0f * unit(random);
+                                AddSign(scene, state,
+                                        wall.foot - wall.out * 1.0f + Up * (top.size.y + 1.5f + tallness * 0.5f),
+                                        glm::quatLookAt(wall.out, Up),
+                                        {Neon.at(Pick(random, Neon.size())), 1.0f, width, tallness, false, 25.0f},
+                                        1.5f);
+                            }
+                            DressRoof(dressing, top, random);
                         }
                     }
                 }
             }
-            state.buildings = buildings.transforms.size();
-            AddList(store, scene, cube, facade, std::move(buildings));
-
+            AddList(store, scene, cube, facade, std::move(tiers));
             state.signSlabs = AddList(store, scene, cube, UnlitMaterial(store, scene), SignSlabs(state));
+            state.panels = dressing.panels.transforms.size();
+            AddList(store, scene, cube, UnlitMaterial(store, scene), std::move(dressing.panels));
+            AddList(store, scene, cube, LitMaterial(store, scene, {0.12f, 0.12f, 0.12f, 1.0f}, 0.0f, 0.7f),
+                    std::move(dressing.plant));
+            AddList(store, scene, cube, LitMaterial(store, scene, {0.05f, 0.05f, 0.05f, 1.0f}, 0.8f, 0.45f),
+                    std::move(dressing.masts));
+            if (sphere.IsEmpty())
+            {
+                return;
+            }
+            dressing.beacons.colours.assign(dressing.beacons.transforms.size(), Scaled(TaillightColour, 8.0f));
+            AddList(store, scene, sphere, UnlitMaterial(store, scene), std::move(dressing.beacons));
         }
 
         /** @brief A street lamp on the kerb of every block's side, two a side: a pole, an arm, a glowing head. */
@@ -571,18 +846,17 @@ namespace LightingDemo
             state.lighting.ambientOcclusion.radius = 1.5f;
             // Every light here is small against the dark: the sky is dim, so the neon and the lamps carry the scene.
             state.lighting.skyIntensity = 0.03f;
-            bool fetched = true;
+            // The city's own glow first; Poly Haven's overcast night (S) when fetched.
+            state.lighting.panoramas.push_back(
+                {"City glow (generated)", store.Add<Fenrir::Image>(CityGlow(1024), scene)});
+            bool fetched = false;
             if (const std::optional<std::string> path = FetchedAsset(Panorama))
             {
                 if (const auto image = store.Load<Fenrir::Image>(*path, scene); image.Ok())
                 {
                     state.lighting.panoramas.push_back({"Kloppenheim 07 (2k)", image.handle});
+                    fetched = true;
                 }
-            }
-            if (state.lighting.panoramas.empty())
-            {
-                fetched = false;
-                scene.AddResource<Fenrir::Sky>(Fenrir::ColourSky{{0.004f, 0.005f, 0.009f, 1.0f}});
             }
             // Clustered, whatever another scene left it as.
             Fenrir::Renderer::SetClusteredLights(app, true);
@@ -594,16 +868,18 @@ namespace LightingDemo
                 scene.AddResource<CityState>(std::move(state));
                 return;
             }
+            // Only the masts' beacons are round: without the sphere they are left out.
+            const auto sphere = store.Load<Fenrir::Mesh>("sphere.obj#Mesh0", scene);
             std::mt19937 random(2077);
             SpawnGround(app, scene, state, cube.handle, fetched);
-            SpawnBuildings(app, scene, state, cube.handle, random);
+            SpawnBuildings(app, scene, state, cube.handle, sphere.handle, random);
             SpawnLamps(app, scene, state, cube.handle);
             SpawnCars(app, scene, state, cube.handle, random);
             state.fetched = fetched;
             if (!fetched)
             {
                 app.Logger()->Info("{}: the asphalt and the night panorama are fetched assets "
-                                   "(FENRIR_FETCH_DEMO_ASSETS); plain dark streets and sky stand in",
+                                   "(FENRIR_FETCH_DEMO_ASSETS); plain dark streets under the generated sky stand in",
                                    SceneName);
             }
             scene.AddResource<CityState>(std::move(state));
@@ -642,6 +918,14 @@ namespace LightingDemo
                     }
                 }
                 state.appliedHeadlights = state.headlightIntensity;
+            }
+            if (state.appliedUplights != state.uplightIntensity)
+            {
+                for (WashLight& uplight : state.uplights)
+                {
+                    uplight.light.GetComponent<Fenrir::SpotLight>().intensity = state.uplightIntensity * uplight.scale;
+                }
+                state.appliedUplights = state.uplightIntensity;
             }
             if (state.appliedPuddles != state.puddles && !state.street.IsEmpty())
             {
@@ -690,22 +974,25 @@ namespace LightingDemo
             const Fenrir::RendererStats stats = Fenrir::Renderer::Stats(app);
             const auto delta = static_cast<float>(app.GetTime().deltaTime);
             state->frameTime = state->frameTime == 0.0f ? delta : glm::mix(state->frameTime, delta, 0.05f);
-            const std::size_t spots = state->cars.size() * 2;
-            const std::size_t lights = state->lamps.size() + state->signs.size() + spots;
+            const std::size_t headlights = state->cars.size() * 2;
+            const std::size_t lights = state->lamps.size() + state->signs.size() + headlights + state->uplights.size();
             RunLightingPanel(app, scene, state->lighting, [&] {
                 // The counts first: the window is long, and they are what a hand check reads.
                 ImGui::Text("Frame: %.2f ms (%.0f fps)", state->frameTime * 1000.0f,
                             state->frameTime > 0.0f ? 1.0f / state->frameTime : 0.0f);
-                ImGui::Text("Lights: %zu (%zu point lamps, %zu rect signs, %zu spot headlights)", lights,
-                            state->lamps.size(), state->signs.size(), spots);
-                ImGui::Text("Buildings: %zu  Cars: %zu  Draws: %u  Instances: %u", state->buildings, state->cars.size(),
-                            stats.draws, stats.instances);
+                ImGui::Text("Lights: %zu: %zu rect signs, %zu point lamps,", lights, state->signs.size(),
+                            state->lamps.size());
+                ImGui::Text("  %zu spot headlights, %zu spot uplights", headlights, state->uplights.size());
+                ImGui::Text("Buildings: %zu  Neon panels: %zu  Cars: %zu", state->buildings, state->panels,
+                            state->cars.size());
+                ImGui::Text("Draws: %u  Instances: %u", stats.draws, stats.instances);
                 ImGui::Checkbox("Clustered (C)", &clustered);
                 ImGui::Checkbox("Traffic moving (N)", &state->moving);
                 ImGui::SliderFloat("Puddles (M)", &state->puddles, 0.0f, 1.0f);
                 ImGui::SliderFloat("Lamp intensity", &state->lampIntensity, 0.0f, 150.0f);
                 ImGui::SliderFloat("Sign intensity", &state->signIntensity, 0.0f, 30.0f);
                 ImGui::SliderFloat("Headlight intensity", &state->headlightIntensity, 0.0f, 200.0f);
+                ImGui::SliderFloat("Uplight intensity", &state->uplightIntensity, 0.0f, 5000.0f);
             });
             if (clustered != state->clustered)
             {
@@ -738,12 +1025,13 @@ namespace LightingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp = LightingKeyHelp(false) +
+        scene.keyHelp = LightingKeyHelp(true) +
                         " N: the traffic stopped or moving. M: the streets dry or wet. C: the lights clustered or not.";
         // The traffic stopped and the streets dried, then through the debug views to the light clusters' heat and back,
-        // unclustered and clustered again, wet again and moving again.
-        scene.keys = {Fenrir::Key::N, Fenrir::Key::M, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G,
-                      Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::C, Fenrir::Key::C, Fenrir::Key::M, Fenrir::Key::N};
+        // unclustered and clustered again, wet again and moving again, and the other sky where there is one.
+        scene.keys = {Fenrir::Key::N, Fenrir::Key::M, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G,
+                      Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::C, Fenrir::Key::C,
+                      Fenrir::Key::M, Fenrir::Key::N, Fenrir::Key::S};
         // Above the middle of a street, a few metres up, looking down it between the towers.
         scene.camera.position = {StreetLine(2) - 1.5f, 3.5f, CityHalf - 10.0f};
         scene.camera.yaw = 0.0f;

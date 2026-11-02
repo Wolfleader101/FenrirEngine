@@ -288,44 +288,75 @@ Small 02's branches sample their textures at the wrong scale.
 
 ### Neon city
 
-A city block grid at night after rain: the many-lights scene at city scale. Twenty-five blocks of nine lots each, 225
-towers of 10 to 90 metres (tallest towards the middle), between two-lane streets with sidewalks and dashed centre lines.
-Everything is generated; no model is fetched. 662 lights, all clustered (ADR-0049):
+A neon city at night after rain: the many-lights scene at city scale. Twenty-five blocks of nine lots each, between
+two-lane streets with sidewalks and dashed centre lines. Everything is generated except the asphalt and one of the
+skies. The buildings rise towards the middle of the city:
 
-- **Neon signs, 318 rect lights.** On most walls that face a street, a one-sided shop sign above the ground floor. On
-  some, a two-sided blade sign stands out from a corner. Each glows on an unlit slab of its size and radiance, so the
-  light and what shows it match. The signs are in eight neon colours.
+- **Towers** stand on podiums that front the street, up to about 190 metres. More than half have a narrower crown.
+- **Lower blocks** fill the other lots.
+- **Roofs** carry plant rooms; some masts carry red beacons.
+
+Every tier of every building is one copy in one instance list, drawn by the demo's facade shader
+(`shaders/facade.vert`, `facade.frag`):
+
+- **Styles:** punched windows, a glass curtain wall lit a floor at a time, or ribbon windows.
+- **Storeys** are counted from the ground, so a tower's tiers keep their floors in line. Only a tier standing on the
+  ground has the shop floor.
+- **Copy colour:** its RGB is the windows' light (warm tungsten, neutral or cool fluorescent). Its alpha packs the share
+  of windows lit, the style, and whether the tier has neon edge strips.
+- **Edge strips** run up the corners and along the crowns of about half the towers. They and the odd window lit in a
+  neon hue carry the city's colour from far off.
+- **Distance:** as a bay shrinks below a few pixels, the windows give way to their average, so distant facades glow
+  evenly instead of shimmering.
+- **Lighting:** the walls light through `Fenrir/Lighting.glsl`.
+
+1092 lights, all clustered (ADR-0049):
+
+- **Neon signs, 594 rect lights.** On every wall that faces a street:
+  - one-sided shop signs above the ground floor, about one to every six metres;
+  - up to two two-sided blade signs standing out from it.
+
+  Some low and middling roofs carry a billboard. Each sign glows on an unlit slab of its size and radiance, so the
+  light and what shows it match.
+- **Uplights, 154 spot lights.** Coloured washes up the towers' walls from their podiums. Each reaches three-quarters
+  of the way up its tower, brighter for taller towers.
 - **Street lamps, 200 point lights.** Two on every side of every block, on poles with glowing heads.
 - **Headlights, 144 spot lights.** 72 boxy cars drive round the blocks, three to a lane, in four instance lists
   (bodies, cabins, headlamps, tail-lights) rebuilt each frame they move. Each car's two headlights dip a little onto
   the road ahead.
 
-The towers are one instance list drawn by the demo's facade shader (`shaders/facade.vert`, `facade.frag`), which lays
-windows out on each wall: bays between corner piers, storeys above a taller shop floor. Each tower's copy colour lights
-them: its RGB is the windows' light (warm tungsten, neutral or cool fluorescent) and its alpha is the share of windows
-lit. Which window is lit is a hash of the tower, the wall, the bay and the storey. Far off, as a bay shrinks below a few
-pixels, the windows give way to their average, so distant facades glow evenly instead of shimmering. The walls light
-through `Fenrir/Lighting.glsl`, so the lamps and signs light them and shine in the dark glass.
+Beside them, 545 neon boards are stacked up some walls like a street of vertical signs. They glow but light nothing,
+so they add colour without a light's cost.
 
-The streets are Poly Haven's Asphalt 01, drawn by the demo's street shader (`shaders/street.vert`, `street.frag`). Its
-puddle mask is two octaves of value noise over the world position, cut at the panel's puddle share. In a puddle the
-surface is smooth, level and darker, so the signs mirror in it through the rect lights' LTC specular and the lamps and
-headlights through GGX. Between puddles the asphalt is damp, its roughness lowered, so the lights streak along the
-street. At a puddle's edge the asphalt's stones break the water first. The sky is Poly Haven's Kloppenheim 07 (Pure
-Sky), an overcast night lit from below by distant towns, at 0.03 intensity. There is no sun. Bloom (0.12), GTAO
-(1.5 m) and AgX finish it, at -1 EV: at 0 EV, AgX lifts the lamps' dim spill on the upper walls to dusk.
+The streets are Poly Haven's Asphalt 01, drawn by the demo's street shader (`shaders/street.vert`, `street.frag`):
 
-The window's Scene part has the frame time, the light and copy counts, the last frame's draws and instances,
-clustering, the traffic, the puddles and each kind of light's intensity. In Debug on an RTX 5080 at 1280 by 720 with
-4x MSAA, a frame takes about 9 ms clustered or not: at this size the Debug CPU work bounds it, not the light loop. The
-cluster heat view shows about 16 lights a cluster along the streets, far under the cap of 256.
+- **Puddles:** two octaves of value noise over the world position, cut at the panel's puddle share. In a puddle the
+  surface is smooth, level and darker. The signs mirror in it through the rect lights' LTC specular, the lamps and
+  headlights through GGX.
+- **Damp asphalt** between the puddles has its roughness lowered, so the lights streak along the street.
+- **Edges:** at a puddle's edge, the asphalt's stones break the water first.
 
-Without the fetched assets the streets are plain dark asphalt, still wet, under a dark blue sky; everything else is
+The sky is the demo's own city glow (a dark blue zenith over a magenta and orange light-pollution glow from the
+horizon), or with S, Poly Haven's Kloppenheim 07 (Pure Sky), an overcast night lit from below by distant towns. Both
+are drawn at 0.03 intensity, and there is no sun. Bloom (0.12), GTAO (1.5 m) and AgX finish it, at -1 EV: at 0 EV, AgX
+lifts the dim spill on the upper walls to dusk.
+
+The window's Scene part has:
+
+- the frame time, the light and copy counts, and the last frame's draws and instances;
+- clustering, the traffic and the puddles;
+- each kind of light's intensity.
+
+In Debug on an RTX 5080 at 1280 by 720 with 4x MSAA, a frame takes about 13 ms clustered or not: at this size the Debug
+CPU work bounds it, not the light loop. The cluster heat view shows 16 to 64 lights a cluster along the streets, under
+the cap of 256.
+
+Without the fetched assets, the streets are plain dark asphalt, still wet, under the generated sky. Everything else is
 generated, and the scene says so on screen.
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
+| T, E, B, O, G, H, S | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows, the next sky. |
 | N | The traffic stopped or moving. |
 | M | The streets dry or wet again. |
 | C | The lights clustered or not. |
@@ -333,8 +364,9 @@ generated, and the scene says so on screen.
 Hand checks, on OpenGL:
 
 - Neon streaks on the wet streets: the signs and headlights mirror in the puddles and smear along the damp asphalt
-  between them; M dries the streets and the streaks go.
+  between them. M dries the streets, and the streaks go.
 - The signs glow, with bloom round them; their light falls on the walls and sidewalks below them in their colour.
+- From high above, the skyline glows: edge-lit towers, coloured washes up their walls, beacons, and the glow behind.
 - The headlights light the road ahead of each car, and move with it.
 - The frame rate stays smooth flying down the streets with the free-fly camera; distant facades do not shimmer.
 - G to the light clusters' heat: no red (256 lights) anywhere along the streets.
@@ -349,4 +381,4 @@ Hand checks, on OpenGL:
 
 The scaffold's `LightingDemo-Smoke-null` (everywhere) and `LightingDemo-Smoke-opengl` (label `gl`) run every scene for
 60 frames with its keys pressed, and fail on any error. Neither uses the fetched assets, so Showcase models runs empty
-Showroom's plinths bare, the asteroid ring of spheres and cubes, the forest clearing of grass, boulders and trunks and the neon city's streets plain, each with its message shown. `FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.
+Showroom's plinths bare, the asteroid ring of spheres and cubes, the forest clearing of grass, boulders and trunks and the neon city's streets plain under its generated sky, each with its message shown. `FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.
