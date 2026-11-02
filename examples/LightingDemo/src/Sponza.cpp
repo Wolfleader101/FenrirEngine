@@ -16,6 +16,7 @@
 #include "FenrirRenderer/Renderer.hpp"
 #include "FenrirRenderer/SpawnModel.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "FenrirWindow/Window.hpp"
 #include "FetchedAssets.hpp"
 #include "LightingPanel.hpp"
 #include "LightingScenes.hpp"
@@ -75,7 +76,11 @@ namespace LightingDemo
             bool torchesLit = true;
             bool torchShadows = true;
             bool flicker = true;
+            /** @brief Whether presents wait for the display; off, the frame time is the frame's own. */
+            bool vsync = true;
+            bool appliedVsync = true;
             float seconds = 0.0f;
+            /** @brief The frame time, smoothed over about a second, in seconds. */
             float frameTime = 0.0f;
         };
 
@@ -206,9 +211,10 @@ namespace LightingDemo
             {
                 scene.AddResource<Fenrir::Sky>(Fenrir::ColourSky{{0.35f, 0.5f, 0.75f, 1.0f}});
             }
-            // Every torch shadowed and clustered, whatever another scene left the renderer as.
+            // Every torch shadowed, clustered and with vsync, whatever another scene left them as.
             Fenrir::Renderer::SetPointShadowBudget(app, 4);
             Fenrir::Renderer::SetClusteredLights(app, true);
+            Fenrir::Window::SetSwapInterval(app, Fenrir::Window::MainWindow(), 1);
 
             const auto cube = store.Load<Fenrir::Mesh>("cube.obj#Mesh0", scene);
             const auto sphere = store.Load<Fenrir::Mesh>("sphere.obj#Mesh0", scene);
@@ -284,6 +290,7 @@ namespace LightingDemo
                             state->frameTime > 0.0f ? 1.0f / state->frameTime : 0.0f);
                 ImGui::Text("Draws: %u  Instances: %u  Shadow draws: %u", stats.draws, stats.instances,
                             stats.shadowDraws);
+                ImGui::Checkbox("Vsync", &state->vsync);
                 ImGui::SliderFloat("Sun intensity", &state->sunIntensity, 0.0f, 20.0f);
                 ImGui::Checkbox("Torches lit (K)", &state->torchesLit);
                 ImGui::Checkbox("Torch shadows (J)", &state->torchShadows);
@@ -291,6 +298,13 @@ namespace LightingDemo
                 ImGui::SliderFloat("Torch intensity", &state->torchIntensity, 0.0f, 30.0f);
                 ImGui::SliderFloat("Torch range", &state->torchRange, 1.0f, 20.0f);
             });
+
+            if (state->vsync != state->appliedVsync)
+            {
+                // The main window's swap interval: the renderer presents to it. False on the null backend's no window.
+                Fenrir::Window::SetSwapInterval(app, Fenrir::Window::MainWindow(), state->vsync ? 1 : 0);
+                state->appliedVsync = state->vsync;
+            }
 
             // The sun follows the sky as the panel turns it.
             if (state->sun.IsValid())

@@ -316,8 +316,10 @@ The sky still lights the galleries' shade: the renderer has no light probes, so 
 surface whatever stands between it and the sky, darkened only by GTAO and the material's own occlusion. The scene
 draws the sky at 0.35 so the shade stays darker than the sunlit floor and the torches carry the galleries.
 
-The window's Scene part has the frame time, the last frame's draws, instances and shadow draws, the sun's intensity,
-the torches lit, their shadows, their flicker, their intensity and their range. Without the fetched assets, a stone
+The window's Scene part has the frame time, the last frame's draws, instances and shadow draws, vsync (on when the
+scene is entered; off, the frame time is the frame's own), the sun's intensity, the torches lit, their shadows, their
+flicker, their intensity and their range. In Release on an RTX 5080 at 1280 by 720 with 4x MSAA and vsync off, a frame
+takes about 2.2 ms from the floor or a gallery; in Debug about 11 ms. Without the fetched assets, a stone
 floor, the two colonnades as plain columns and the galleries' outer walls stand in, under a plain blue sky, with the
 sun and the four torches, and the scene says so on screen.
 

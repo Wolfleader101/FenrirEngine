@@ -17,7 +17,7 @@ Hand check: Sponza looks right from the floor and the galleries, with stable sha
 
 - [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
 
-Built 2026-11-02, stacked on ticket 20's branch (#265 to #280 not yet merged). Decisions to review:
+Built 2026-11-02, stacked on ticket 20's branch at `7571fa6` (#265 to #280 not yet merged). Decisions to review:
 
 - **A renderer fix, in `Fenrir/Shadows.glsl`.** A face turned from a shadowed light skipped its shadow lookup and
   relied on N.L to darken it, but a normal map can turn the shading normal back towards the light: Sponza's arch soffits
@@ -43,8 +43,9 @@ Built 2026-11-02, stacked on ticket 20's branch (#265 to #280 not yet merged). D
   sun and the torches, so the smoke runs still draw cascades and point shadows.
 - **README:** every scene's hand checks, 1 to 8, are now in one "Hand checks" section after the scenes; each scene's
   section keeps what it shows and its keys.
-- **Not asked for:** keys J (torch shadows), K (torches out) and N (flicker), and the panel's sun and torch sliders.
+- **Not asked for:** keys J (torch shadows), K (torches out) and N (flicker), and the panel's sun and torch sliders and
+  vsync checkbox.
 - **Timing (RTX 5080, 1280 x 720, 4x MSAA):** Debug about 11 ms a frame (vsync on, under 240 Hz); Release about 2.2 ms
-  (2.11 to 2.23 over four runs from the floor and the lower gallery, vsync off through a temporary scaffold switch, not
-  committed), 105 draws and 824 shadow draws.
+  (2.11 to 2.23 over four runs from the floor and the lower gallery, vsync off; the panel now has the neon city's
+  Vsync checkbox for this), 105 draws and 824 shadow draws.
 - **Screenshots:** `.scratch/fenrir-renderer-lighting/screenshots/21-sponza/`.
