@@ -424,6 +424,25 @@ namespace Fenrir
     };
 
     /**
+     * @brief A view's bloom (ADR-0049): the scene blurred over ever wider areas and mixed back in before the tonemap,
+     * so bright pixels bleed light into their surroundings. There is no threshold: everything blooms by the same
+     * share, and only what is bright shows it. The blur keeps the scene's energy, so bloom moves light, never adds it.
+     */
+    struct Bloom
+    {
+        /**
+         * @brief The share of the blur the view's colour is mixed with, from 0 to 1: 0.04 by default, a soft glow
+         * round what is several times brighter than its surroundings. 0 turns bloom off and costs nothing.
+         */
+        float intensity = 0.04f;
+        /**
+         * @brief How far the glow spreads, from 0 (the narrowest blur only, a few pixels) to 1 (the widest only, made
+         * at a sixty-fourth of the view's size). 0.7 by default.
+         */
+        float radius = 0.7f;
+    };
+
+    /**
      * @brief Makes a view of the active scene from its entity, looking along the entity's local -Z with +Y up
      * (ADR-0026). Plain data. Every enabled camera in the active scene draws one view a frame, into its viewport of its
      * render target. Views into one target draw by `order`, lowest first, and ties by entity id, logged once. Each view
@@ -455,6 +474,8 @@ namespace Fenrir
         float exposure = 0.0f;
         /** @brief How the view's Output pass maps its HDR colour into what its target stores (ADR-0049). */
         Tonemapper tonemapper = Tonemapper::AgX;
+        /** @brief How the view's bright pixels bleed into their surroundings before the tonemap. */
+        Bloom bloom;
     };
 
     /**

@@ -694,6 +694,7 @@ namespace Fenrir::Render
         m_frameBlocks =
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, false, sizeof(FrameBlock), "Frame");
         m_skyLighting = std::make_unique<SkyLighting>(m_device, m_logger);
+        m_bloom = std::make_unique<BloomChain>(m_device, m_logger, m_samples);
         m_viewBlocks = std::make_unique<BlockRing>(m_device, m_viewLayout, false, sizeof(ViewBlock), "View");
         m_backgroundBlocks =
             std::make_unique<BlockRing>(m_device, m_backgroundLayout, false, sizeof(BackgroundBlock), "Background");
@@ -1984,6 +1985,7 @@ namespace Fenrir::Render
         const BindingGroupHandle drawGroup = DrawGroupFor(frameIndex);
         // The targets drawn into so far: the first view into each clears it. The window's key is empty.
         std::set<AssetKey> cleared;
+        std::vector<BloomView> blooms;
         for (std::size_t v = 0; v < views.size(); ++v)
         {
             const ViewRequest& request = views[v];
@@ -2122,6 +2124,8 @@ namespace Fenrir::Render
                     encoder.Draw({.vertexCount = 3});
                 });
 
+            blooms.push_back({sceneColour, {rect.width, rect.height}, request.bloom});
+
             // The first view into a target clears all of it; each later one draws over it, in its viewport only.
             const LoadOp load = cleared.insert(request.target).second ? LoadOp::Clear : LoadOp::Load;
             graph.AddPass(
@@ -2139,6 +2143,7 @@ namespace Fenrir::Render
                     encoder.Draw({.vertexCount = 3});
                 });
         }
+        m_bloom->AddPasses(graph, frameIndex, blooms);
         if (!cleared.contains(AssetKey{}))
         {
             AddWindowClear(graph, frame);

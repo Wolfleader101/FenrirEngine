@@ -46,6 +46,30 @@
       ]
     },
     {
+      "name": "Fenrir::Bloom",
+      "category": "struct",
+      "role": "nested",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A view's bloom (ADR-0049): the scene blurred over ever wider areas and mixed back in before the tonemap, so bright pixels bleed light into their surroundings. There is no threshold: everything blooms by the same share, and only what is bright shows it. The blur keeps the scene's energy, so bloom moves light, never adds it.",
+      "fields": [
+        {
+          "name": "intensity",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0.04,
+          "doc": "The share of the blur the view's colour is mixed with, from 0 to 1: 0.04 by default, a soft glow round what is several times brighter than its surroundings. 0 turns bloom off and costs nothing."
+        },
+        {
+          "name": "radius",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0.7,
+          "doc": "How far the glow spreads, from 0 (the narrowest blur only, a few pixels) to 1 (the widest only, made at a sixty-fourth of the view's size). 0.7 by default."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::Colour",
       "category": "struct",
       "role": "nested",
@@ -416,7 +440,7 @@
       "name": "Fenrir::Camera",
       "category": "struct",
       "role": "component",
-      "size": 84,
+      "size": 92,
       "alignment": 4,
       "doc": "Makes a view of the active scene from its entity, looking along the entity's local -Z with +Y up (ADR-0026). Plain data. Every enabled camera in the active scene draws one view a frame, into its viewport of its render target. Views into one target draw by `order`, lowest first, and ties by entity id, logged once. Each view has its own scene targets, and writes only its viewport.\n\nNot drawn, logged once: a camera targeting a window other than the main window, a viewport under one pixel, or a target image that is stale, empty or not a render target. A minimised window draws nothing. A window no camera draws into is cleared to black, logged once.",
       "fields": [
@@ -483,6 +507,14 @@
           "type": "Fenrir::Tonemapper",
           "default": "AgX",
           "doc": "How the view's Output pass maps its HDR colour into what its target stores (ADR-0049)."
+        },
+        {
+          "name": "bloom",
+          "offset": 84,
+          "kind": "struct",
+          "type": "Fenrir::Bloom",
+          "default": {},
+          "doc": "How the view's bright pixels bleed into their surroundings before the tonemap."
         }
       ]
     },

@@ -6,6 +6,8 @@
 
 #include "FenrirShaders/Builtin2D.hpp"
 #include "FenrirShaders/BuiltinBackground.hpp"
+#include "FenrirShaders/BuiltinBloomDownsample.hpp"
+#include "FenrirShaders/BuiltinBloomUpsample.hpp"
 #include "FenrirShaders/BuiltinBrdfLut.hpp"
 #include "FenrirShaders/BuiltinDebugLines.hpp"
 #include "FenrirShaders/BuiltinDebugText.hpp"
@@ -28,9 +30,9 @@ namespace Fenrir::Render
             return std::as_bytes(std::span<const std::uint8_t, N>(embedded));
         }
 
-        const std::array<BuiltinShader, 13>& Table()
+        const std::array<BuiltinShader, 15>& Table()
         {
-            static const std::array<BuiltinShader, 13> table{{
+            static const std::array<BuiltinShader, 15> table{{
                 {BuiltinProgram::Unlit, "builtin:unlit", BytesOf(Shaders::BuiltinUnlit)},
                 {BuiltinProgram::Lit, "builtin:lit", BytesOf(Shaders::BuiltinLit)},
                 {BuiltinProgram::Fallback, "builtin:fallback", BytesOf(Shaders::BuiltinFallback)},
@@ -44,6 +46,8 @@ namespace Fenrir::Render
                 {BuiltinProgram::SkyIrradiance, "builtin:sky-irradiance", BytesOf(Shaders::BuiltinSkyIrradiance)},
                 {BuiltinProgram::SkySpecular, "builtin:sky-specular", BytesOf(Shaders::BuiltinSkySpecular)},
                 {BuiltinProgram::BrdfLut, "builtin:brdf-lut", BytesOf(Shaders::BuiltinBrdfLut)},
+                {BuiltinProgram::BloomDownsample, "builtin:bloom-downsample", BytesOf(Shaders::BuiltinBloomDownsample)},
+                {BuiltinProgram::BloomUpsample, "builtin:bloom-upsample", BytesOf(Shaders::BuiltinBloomUpsample)},
             }};
             return table;
         }

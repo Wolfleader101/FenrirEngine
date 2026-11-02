@@ -597,6 +597,7 @@ namespace Fenrir
                 view.drawDebug = camera.drawDebug;
                 view.exposure = camera.exposure;
                 view.tonemapper = ToCore(camera.tonemapper);
+                view.bloom = {camera.bloom.intensity, camera.bloom.radius};
                 candidates.push_back(candidate);
             });
 

@@ -45,7 +45,8 @@ TEST_CASE("One MeshRenderer seen by one camera is one draw in Opaque with the li
 TEST_CASE("A MeshRenderer that is not visible is not drawn", "[renderer][facade]")
 {
     RendererTestApp test;
-    test.AddCamera();
+    // Without bloom, whose passes Bloom.cpp checks.
+    test.AddCamera().GetComponent<Fenrir::Camera>().bloom.intensity = 0.0f;
     Fenrir::Entity entity = test.AddMeshRenderer(test.Mesh(), test.Material());
     entity.GetComponent<Fenrir::MeshRenderer>().visible = false;
 

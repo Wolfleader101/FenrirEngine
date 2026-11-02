@@ -39,6 +39,8 @@ public partial struct Camera : IComponent
     public float Exposure = 0;
     /// <summary>How the view's Output pass maps its HDR colour into what its target stores (ADR-0049).</summary>
     public Tonemapper Tonemapper = Tonemapper.AgX;
+    /// <summary>How the view's bright pixels bleed into their surroundings before the tonemap.</summary>
+    public Bloom Bloom = new();
 
     public Camera()
     {

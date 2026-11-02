@@ -78,7 +78,8 @@ TEST_CASE("Opaque and masked items write depth; alpha-blended and additive ones 
           "[renderer][materials]")
 {
     RendererTestApp test;
-    test.AddCamera();
+    // Without bloom, whose passes Bloom.cpp checks.
+    test.AddCamera().GetComponent<Fenrir::Camera>().bloom.intensity = 0.0f;
     AddQuadAt(test, 0.0f, Blended(test, Fenrir::BlendMode::Opaque));
     AddQuadAt(test, 0.0f, Blended(test, Fenrir::BlendMode::Masked));
     AddQuadAt(test, 0.0f, Blended(test, Fenrir::BlendMode::AlphaBlend));

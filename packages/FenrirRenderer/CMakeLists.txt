@@ -39,6 +39,8 @@ add_library(FenrirRendererOpenGL STATIC
 target_link_libraries(FenrirRendererOpenGL PUBLIC FenrirRendererDevice FenrirLogger PRIVATE FenrirGlad)
 
 add_library(FenrirRendererCore STATIC
+    src/Core/Bloom.hpp
+    src/Core/Bloom.cpp
     src/Core/BlockRing.hpp
     src/Core/BlockRing.cpp
     src/Core/BuiltinShaders.hpp
@@ -114,6 +116,11 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinSkySpecular VERTEX Shaders/
                    FRAGMENT Shaders/Builtin/sky_specular.frag EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBrdfLut VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/brdf_lut.frag EMBED)
+# Bloom (ADR-0049): the 13-tap downsample, whose MSAA variant reads a multisampled SceneColor, and the tent upsample.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBloomDownsample VERTEX Shaders/Builtin/fullscreen.vert
+                   FRAGMENT Shaders/Builtin/bloom_downsample.frag KEYS MSAA EMBED)
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBloomUpsample VERTEX Shaders/Builtin/fullscreen.vert
+                   FRAGMENT Shaders/Builtin/bloom_upsample.frag EMBED)
 # MSAA: the variant that resolves a multisampled SceneColor.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinOutput VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/output.frag KEYS MSAA EMBED)

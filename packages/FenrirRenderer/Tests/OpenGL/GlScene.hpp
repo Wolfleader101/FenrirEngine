@@ -51,10 +51,15 @@ namespace GlTest
             }
         }
 
-        /** @brief A camera at the origin, looking along -Z. */
+        /**
+         * @brief A camera at the origin, looking along -Z, with its bloom off, so the probes read each surface's own
+         * colour rather than 4% of its surroundings' (ADR-0049). The bloom's own tests turn it back on.
+         */
         Fenrir::Camera& AddCamera()
         {
-            return app.GetActiveScene().GetEntityList().CreateEntity().AddComponent<Fenrir::Camera>();
+            Fenrir::Camera& camera = app.GetActiveScene().GetEntityList().CreateEntity().AddComponent<Fenrir::Camera>();
+            camera.bloom.intensity = 0.0f;
+            return camera;
         }
 
         /** @brief A square of side `size` facing the camera at distance `distance`, drawn with `material`. */

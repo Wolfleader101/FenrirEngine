@@ -520,6 +520,10 @@ A camera's brightness setting in EV stops, applied in its view's `Output` before
 How a view's `Output` maps its exposed HDR colour into the [0, 1] its render target stores: `AgX` (the default), `PbrNeutral`, `Aces`, or `None`, which clamps (ADR-0049).
 *Avoid:* tone curve, colour grading (a look applied on top, which FenrirRenderer does not have), tonemapping operator.
 
+**Bloom**
+Bright pixels bleeding light into their surroundings: a view's SceneColor blurred over ever wider areas and mixed back into it before `Output` by its camera's `bloom.intensity`, with no threshold, keeping the scene's energy (ADR-0049).
+*Avoid:* glow (what bloom looks like, not the effect), bright pass or threshold (there is none), lens flare (a different effect).
+
 **Golden image**
 A small PNG committed beside the GL tests, the frame a test scene should draw, which the test's frame is compared with under a perceptual tolerance. It changes only when the tests are run with `FENRIR_UPDATE_GOLDENS=1` (ADR-0049).
 *Avoid:* snapshot, reference image, screenshot test.
