@@ -16,6 +16,7 @@
 #include "Core/Bloom.hpp"
 #include "Core/Cascades.hpp"
 #include "Core/Gtao.hpp"
+#include "Core/LightClusters.hpp"
 #include "Core/PointShadows.hpp"
 #include "Core/RenderFeature.hpp"
 #include "Core/SceneFrame.hpp"
@@ -149,6 +150,15 @@ namespace Fenrir::Render
      * that face's own. The light buffer holds those lights after the shadowed spot lights, frame block `lights.z`
      * counting them, and set 0 binds their records (GpuPointShadow) at binding 9 and the point shadow cubes at binding
      * 10; with none, and in the passes drawing it, binding 10 is a cube that lights everything.
+     *
+     * **Light clusters** (ADR-0049), on unless turned off: each view with point, spot or rect lights gets a
+     * `LightClusters` compute pass, in the `DepthPrepass` stage, running `builtin:light-clusters` over its 16 x 9 x 24
+     * clusters (Core/LightClusters): each light's sphere listed in every cluster its range touches, up to
+     * MaxClusterLights a cluster, or the light count when fewer, into the view's own cluster buffer (one per view and
+     * frame in flight, grown as the room needs). Its slices run exponentially from the near
+     * plane to the farthest any light reaches. Set 1 binds that buffer at binding 3 and the view block says so
+     * (`clusterInfo.x`), and `Fenrir/Lighting.glsl` loops over its pixel's cluster; every other view block, and every
+     * view when clustering is off, binds a buffer of one 0 and loops over the whole light buffer.
      *
      * **Ambient occlusion** (ADR-0049): a view whose camera has it gets Gtao's passes after its DepthPrepass pass, and
      * its `Opaque` pass binds their occlusion texture at set 1 binding 1 (`Fenrir/View.glsl`), which
@@ -297,6 +307,15 @@ namespace Fenrir::Render
         void SetComputeSkinning(bool on) noexcept
         {
             m_computeSkinning = on;
+        }
+
+        /**
+         * @brief Whether each view's lights are clustered from the next frame (ADR-0049); off, every pixel loops over
+         * the whole light buffer.
+         */
+        void SetClusteredLights(bool on) noexcept
+        {
+            m_clusteredLights = on;
         }
 
         /**
@@ -802,12 +821,21 @@ namespace Fenrir::Render
         [[nodiscard]] SkySource SkySourceOf(const SceneLighting& lighting) const;
         /**
          * @brief The view set's group for slot `slot` of frame `frameIndex`'s view blocks, with `occlusion` as its
-         * ambient occlusion and `shadow` as its shadow atlas (the map that lights everything when empty), made once
-         * while all three live.
+         * ambient occlusion, `shadow` as its shadow atlas (the map that lights everything when empty) and `clusters`
+         * as its light clusters (the buffer of one 0 when empty), made once while all four live.
          */
         [[nodiscard]] Graphics::BindingGroupHandle ViewGroupFor(std::uint64_t frameIndex, std::size_t slot,
                                                                 Graphics::TextureHandle occlusion,
-                                                                Graphics::TextureHandle shadow = {});
+                                                                Graphics::TextureHandle shadow = {},
+                                                                Graphics::BufferHandle clusters = {});
+        /**
+         * @brief Adds view `view`'s LightClusters pass over the frame's `lightCount` lights into its cluster buffer,
+         * imported into `graph`, which the view's lit passes then read; returns that buffer and its resource, or empty
+         * ones when clustering is off, unavailable or there are no lights.
+         */
+        [[nodiscard]] std::pair<Graphics::BufferHandle, GraphResource> AddLightClustersPass(
+            RenderGraph& graph, std::uint64_t frameIndex, std::size_t view, const ViewRequest& request,
+            std::uint32_t lightCount, ClusterDepths depths);
         /**
          * @brief The draw set's group for frame `frameIndex`: its copies of the draw and palette buffers, and the
          * instance-list buffer.
@@ -823,6 +851,8 @@ namespace Fenrir::Render
         bool m_automaticInstancing;
         /** @brief RendererConfig::computeSkinning: whether skinned draws read the Skinning pass's vertices. */
         bool m_computeSkinning;
+        /** @brief RendererConfig::clusteredLights: whether views with lights get a LightClusters pass. */
+        bool m_clusteredLights = true;
         /** @brief How each view's sun cascades are made (RendererConfig's shadow members). */
         CascadeConfig m_cascades;
         /** @brief The spot shadow budget and tile size (RendererConfig's spot shadow members). */
@@ -869,6 +899,15 @@ namespace Fenrir::Render
         Graphics::BindingGroupLayoutHandle m_skinJobLayout;
         Graphics::BindingGroupLayoutHandle m_skinSourceLayout;
         Graphics::BindingGroupLayoutHandle m_skinTargetLayout;
+        /**
+         * @brief `builtin:light-clusters`, the LightClusters passes' compute program, and its pipeline; empty if it
+         * failed.
+         */
+        ShaderContainer m_lightClusters;
+        Graphics::PipelineHandle m_lightClustersPipeline;
+        /** @brief Its sets: 0 the view's job block, 1 the frame's light buffer and the view's cluster buffer. */
+        Graphics::BindingGroupLayoutHandle m_clusterJobLayout;
+        Graphics::BindingGroupLayoutHandle m_clusterTargetLayout;
 
         Graphics::BindingGroupLayoutHandle m_frameLayout;
         Graphics::BindingGroupLayoutHandle m_viewLayout;
@@ -942,6 +981,23 @@ namespace Fenrir::Render
         std::size_t m_skinnedCapacity = 0;
         /** @brief builtin:skinning's set 2 per copy, by frame index modulo the copies. */
         std::vector<SkinTargetGroup> m_skinTargetGroups;
+        /** @brief Each LightClusters pass's job block, one uniform slot a view, bound at its set 0. */
+        std::unique_ptr<BlockRing> m_clusterJobs;
+        /** @brief A view's cluster buffers, a copy per frame in flight, and how many bytes each holds. */
+        struct ClusterBuffers
+        {
+            std::unique_ptr<FrameRingBuffer> copies;
+            std::size_t capacity = 0;
+        };
+        /** @brief Each view's cluster buffers, by view index. */
+        std::vector<ClusterBuffers> m_clusterBuffers;
+        /** @brief The buffer of one 0 that view blocks without clusters bind at set 1 binding 3. */
+        Graphics::BufferHandle m_noClusters;
+        /**
+         * @brief builtin:light-clusters' set 1 groups, by the light buffer's and the cluster buffer's (index,
+         * generation), while both live.
+         */
+        std::map<std::array<std::uint32_t, 4>, Graphics::BindingGroupHandle> m_clusterTargetGroups;
         /** @brief The sky filtered into image-based lighting, which set 0 binds. */
         std::unique_ptr<SkyLighting> m_skyLighting;
         /** @brief Each view's bloom passes, in `PostProcess`. */
@@ -953,10 +1009,10 @@ namespace Fenrir::Render
         /** @brief Each copy's draw set group, by frame index modulo the copies. */
         std::vector<DrawGroup> m_drawGroups;
         /**
-         * @brief The view set's groups, by the view ring's buffer (index, generation), slot, and the occlusion and
-         * shadow textures (index, generation), while all three live.
+         * @brief The view set's groups, by the view ring's buffer (index, generation), slot, the occlusion and shadow
+         * textures and the cluster buffer (index, generation), while all four live.
          */
-        std::map<std::array<std::uint32_t, 7>, Graphics::BindingGroupHandle> m_viewGroups;
+        std::map<std::array<std::uint32_t, 9>, Graphics::BindingGroupHandle> m_viewGroups;
         /** @brief The Output pass's binding group for each SceneColor texture, while the texture lives. */
         std::map<std::pair<std::uint32_t, std::uint32_t>, Graphics::BindingGroupHandle> m_outputGroups;
 

@@ -75,10 +75,11 @@ namespace Fenrir
         /** @brief The core's copy of a camera's debug view: the same values in the same order. */
         Render::ViewDebug ToCore(CameraDebugView debugView)
         {
-            static_assert(static_cast<int>(CameraDebugView::ShadowAtlas) ==
-                              static_cast<int>(Render::ViewDebug::ShadowAtlas) &&
-                          static_cast<int>(CameraDebugView::SpotShadowAtlas) ==
-                              static_cast<int>(Render::ViewDebug::SpotShadowAtlas));
+            static_assert(
+                static_cast<int>(CameraDebugView::ShadowAtlas) == static_cast<int>(Render::ViewDebug::ShadowAtlas) &&
+                static_cast<int>(CameraDebugView::SpotShadowAtlas) ==
+                    static_cast<int>(Render::ViewDebug::SpotShadowAtlas) &&
+                static_cast<int>(CameraDebugView::LightClusters) == static_cast<int>(Render::ViewDebug::LightClusters));
             return static_cast<Render::ViewDebug>(debugView);
         }
 
@@ -1460,6 +1461,7 @@ namespace Fenrir
         auto scene = std::make_unique<Render::SceneRenderer>(
             state->core->Device(), *app.Logger(), SupportedMsaa(app, config), config.automaticInstancing,
             config.computeSkinning, cascades, spotShadows, pointShadows);
+        scene->SetClusteredLights(config.clusteredLights);
         state->scene = scene.get();
         // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
         // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).
@@ -1518,6 +1520,14 @@ namespace Fenrir
         if (m_state != nullptr)
         {
             m_state->scene->SetComputeSkinning(on);
+        }
+    }
+
+    void Renderer::SetClusteredLights(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetClusteredLights(on);
         }
     }
 
@@ -1721,6 +1731,11 @@ namespace Fenrir
     void Renderer::SetComputeSkinning(App& app, bool on)
     {
         Renderer(InstalledState(app)).SetComputeSkinning(on);
+    }
+
+    void Renderer::SetClusteredLights(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetClusteredLights(on);
     }
 
     void Renderer::SetSpotShadowBudget(App& app, std::uint32_t budget)

@@ -25,9 +25,14 @@ namespace LightingDemo
 
         constexpr float Pi = std::numbers::pi_v<float>;
         /** @brief The most lights the scene holds; the panel shows any number up to it. */
-        constexpr int MaxLights = 256;
+        constexpr int MaxLights = 1024;
         /** @brief The counts M steps through. */
-        constexpr std::array<int, 4> CountSteps{16, 64, 100, 256};
+        constexpr std::array<int, 5> CountSteps{16, 64, 100, 256, 1024};
+        /**
+         * @brief How many hues the lights take, each with one marker material: the markers of a hue are spawned
+         * together, so automatic instancing draws each hue's in one draw.
+         */
+        constexpr int Hues = 32;
         /** @brief Half the floor's side, in metres. */
         constexpr float HalfRoom = 10.0f;
         /** @brief Every fourth light is a spot light. */
@@ -40,6 +45,8 @@ namespace LightingDemo
             Fenrir::Entity entity;
             Fenrir::Entity marker;
             bool spot = false;
+            /** @brief Which of the Hues it is, and its colour. */
+            int hue = 0;
             Fenrir::Colour colour;
             /** @brief Its orbit about the room's centre: radius, height, angular speed and phase. */
             float radius = 0.0f;
@@ -65,6 +72,8 @@ namespace LightingDemo
             /** @brief Whether the point lights cast shadows, and how many may (RendererConfig::pointShadowBudget). */
             bool pointShadows = true;
             int pointShadowBudget = 4;
+            /** @brief Whether the renderer clusters the lights (RendererConfig::clusteredLights). */
+            bool clustered = true;
         };
 
         /** @brief Hue `hue` (0 to 1 round the wheel) at full saturation and value, linear. */
@@ -176,7 +185,8 @@ namespace LightingDemo
                 light.spot = i % SpotEvery == SpotEvery - 1;
                 // The golden ratio spreads neighbours' hues and paths apart.
                 const float spread = std::fmod(static_cast<float>(i) * 0.618034f, 1.0f);
-                light.colour = HueColour(spread);
+                light.hue = static_cast<int>(spread * Hues);
+                light.colour = HueColour(static_cast<float>(light.hue) / Hues);
                 light.radius = 1.5f + 7.5f * std::fmod(static_cast<float>(i) * 0.381966f, 1.0f);
                 light.height = light.spot ? 3.5f : 0.4f + 1.6f * spread;
                 light.speed = (0.15f + 0.35f * spread) * (i % 2 == 0 ? 1.0f : -1.0f);
@@ -194,16 +204,26 @@ namespace LightingDemo
                     light.entity.AddComponent<Fenrir::PointLight>(
                         Fenrir::PointLight{light.colour, state.pointIntensity, state.range, state.pointShadows});
                 }
-
-                // A small sphere of the light's colour, bright enough to bloom. It casts no shadow: round the light, it
-                // would shadow all of a spot light's cone, or everything a point light lights.
-                const auto glow = store.CreateMaterial(unlit, scene);
-                store.SetColour(glow, "baseColour",
-                                {light.colour.r * 4.0f, light.colour.g * 4.0f, light.colour.b * 4.0f, 1.0f});
-                light.marker = entities.CreateEntity();
-                light.marker.AddComponent<Fenrir::Transform>().scale = Vec3(MarkerSize);
-                light.marker.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{sphere.handle, glow, true, false});
                 state.lights.push_back(light);
+            }
+
+            // Each light marked by a small sphere of its colour, bright enough to bloom, a hue at a time. It casts no
+            // shadow: round the light, it would shadow all of a spot light's cone, or everything a point light lights.
+            for (int hue = 0; hue < Hues; ++hue)
+            {
+                const Fenrir::Colour colour = HueColour(static_cast<float>(hue) / Hues);
+                const auto glow = store.CreateMaterial(unlit, scene);
+                store.SetColour(glow, "baseColour", {colour.r * 4.0f, colour.g * 4.0f, colour.b * 4.0f, 1.0f});
+                for (MovingLight& light : state.lights)
+                {
+                    if (light.hue == hue)
+                    {
+                        light.marker = entities.CreateEntity();
+                        light.marker.AddComponent<Fenrir::Transform>().scale = Vec3(MarkerSize);
+                        light.marker.AddComponent<Fenrir::MeshRenderer>(
+                            Fenrir::MeshRenderer{sphere.handle, glow, true, false});
+                    }
+                }
             }
             scene.AddResource<ManyLightsState>(state);
         }
@@ -252,6 +272,12 @@ namespace LightingDemo
                 state->pointShadows = !state->pointShadows;
                 app.Logger()->Info("J: point shadows {}", state->pointShadows ? "on" : "off");
             }
+            bool clustered = state->clustered;
+            if (keyboard.JustPressed(Fenrir::Key::C))
+            {
+                clustered = !clustered;
+                app.Logger()->Info("C: the lights are {}", clustered ? "clustered" : "not clustered");
+            }
 
             RunLightingPanel(app, scene, state->lighting, [&] {
                 ImGui::SliderInt("Lights", &state->count, 0, MaxLights);
@@ -273,7 +299,15 @@ namespace LightingDemo
                     Fenrir::Renderer::SetPointShadowBudget(app, static_cast<std::uint32_t>(state->pointShadowBudget));
                 }
                 ImGui::TextUnformatted("The nearest point lights cast into a cube each; the rest light unshadowed.");
+                ImGui::SeparatorText("Light clusters");
+                ImGui::Checkbox("Clustered (C)", &clustered);
+                ImGui::TextUnformatted("Off, every pixel loops over every light.");
             });
+            if (clustered != state->clustered)
+            {
+                state->clustered = clustered;
+                Fenrir::Renderer::SetClusteredLights(app, clustered);
+            }
 
             if (state->moving)
             {
@@ -313,13 +347,15 @@ namespace LightingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Many lights";
-        scene.keyHelp = LightingKeyHelp(false) +
-                        " M: 16, 64, 100 or 256 lights. P: the lights moving or still. K: spot shadows off or on. J: "
-                        "point shadows off or on.";
-        scene.keys = {Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::B, Fenrir::Key::M, Fenrir::Key::P, Fenrir::Key::M,
-                      Fenrir::Key::P, Fenrir::Key::M, Fenrir::Key::K, Fenrir::Key::K, Fenrir::Key::J, Fenrir::Key::J,
-                      // Through the debug views to the spot shadow atlas.
-                      Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G};
+        scene.keyHelp =
+            LightingKeyHelp(false) +
+            " M: 16, 64, 100, 256 or 1024 lights. P: the lights moving or still. K: spot shadows off or on. "
+            "J: point shadows off or on. C: the lights clustered or not.";
+        // To 256 lights and to 1024, then through the debug views to the light clusters' heat at 1024, and back to 16.
+        scene.keys = {Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::B, Fenrir::Key::M, Fenrir::Key::P,
+                      Fenrir::Key::M, Fenrir::Key::P, Fenrir::Key::K, Fenrir::Key::K, Fenrir::Key::J,
+                      Fenrir::Key::J, Fenrir::Key::C, Fenrir::Key::C, Fenrir::Key::G, Fenrir::Key::G,
+                      Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::M};
         // Inside the room, by its front wall, looking down across it.
         scene.camera.position = {0.0f, 4.5f, 9.0f};
         scene.camera.pitch = -0.45f;
