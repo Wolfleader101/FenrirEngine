@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <span>
 
+#include "Core/LightShadows.hpp"
 #include "Core/PunctualLights.hpp"
 #include "Core/SpotShadows.hpp"
 #include "FenrirMath/Math.hpp"
@@ -13,15 +14,6 @@ namespace Fenrir::Render
     // Point shadows (ADR-0050): a budget of shadowed point lights, the nearest to the views each frame, each a cube of
     // one cube array pooled by the budget, holding the distance from the light over its range; drawn without a
     // geometry shader, read by `Fenrir/Shadows.glsl`.
-
-    /** @brief How the point shadow cubes is made, from RendererConfig. */
-    struct PointShadowConfig
-    {
-        /** @brief How many point lights may cast shadows in a frame; 0 shadows none. */
-        std::uint32_t budget = 4;
-        /** @brief Each cube face's side, in texels. */
-        std::uint32_t mapSize = 512;
-    };
 
     /** @brief The faces of a cube, in the order a cube texture's layers hold them: +X, -X, +Y, -Y, +Z, -Z. */
     inline constexpr std::uint32_t CubeFaceCount = 6;

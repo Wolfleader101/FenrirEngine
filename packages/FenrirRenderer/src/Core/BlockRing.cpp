@@ -9,9 +9,6 @@ namespace Fenrir::Render
     {
         using namespace Fenrir::Graphics;
 
-        /** @brief Uniform ranges are bound at multiples of this, the largest alignment GL implementations ask for. */
-        constexpr std::size_t UniformAlignment = 256;
-
         std::size_t RoundUp(std::size_t size, std::size_t multiple)
         {
             return (size + multiple - 1) / multiple * multiple;
@@ -21,7 +18,7 @@ namespace Fenrir::Render
     BlockRing::BlockRing(GraphicsDevice& device, BindingGroupLayoutHandle layout, bool storage, std::size_t slotSize,
                          std::string label)
         : m_device(device), m_layout(layout), m_storage(storage),
-          m_slotSize(storage ? slotSize : RoundUp(slotSize, UniformAlignment)), m_label(std::move(label))
+          m_slotSize(storage ? slotSize : RoundUp(slotSize, UniformBlockAlignment)), m_label(std::move(label))
     {
     }
 

@@ -74,18 +74,6 @@ namespace Fenrir::Render
             return encode(colour.r) | (encode(colour.g) << 8u) | (encode(colour.b) << 16u) | (alpha << 24u);
         }
 
-        ShaderContainer ReadBuiltin(BuiltinProgram program, ILogger& logger)
-        {
-            ShaderContainerResult read = ReadShaderContainer(GetBuiltinShader(program).bytes);
-            if (!read.Ok())
-            {
-                logger.Error("FenrirRenderer: the built-in shader '{}' does not read: {}",
-                             GetBuiltinShader(program).name, read.diagnostic);
-                return {};
-            }
-            return std::move(*read.container);
-        }
-
         template <typename T>
         std::span<const std::byte> BytesOf(const std::vector<T>& values)
         {

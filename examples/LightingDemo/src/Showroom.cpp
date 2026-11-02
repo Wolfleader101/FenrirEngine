@@ -9,6 +9,7 @@
 
 #include <imgui.h>
 
+#include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
@@ -80,28 +81,6 @@ namespace LightingDemo
         /** @brief The sizes Z steps through, as multiples of each light's own. */
         constexpr std::array<float, 3> SizeSteps{0.5f, 1.0f, 2.0f};
 
-        Fenrir::AssetHandle<Fenrir::Material> LitMaterial(Fenrir::AssetStore& store,
-                                                          Fenrir::AssetHandle<Fenrir::Shader> lit, Fenrir::Scene& scene,
-                                                          Fenrir::Colour colour, float metallic, float roughness)
-        {
-            const auto material = store.CreateMaterial(lit, scene);
-            store.SetColour(material, "baseColour", colour);
-            store.SetFloat(material, "metallic", metallic);
-            store.SetFloat(material, "roughness", roughness);
-            return material;
-        }
-
-        Fenrir::Entity Box(Fenrir::EntityList& entities, Fenrir::AssetHandle<Fenrir::Mesh> cube,
-                           Fenrir::AssetHandle<Fenrir::Material> material, Vec3 position, Vec3 scale)
-        {
-            Fenrir::Entity entity = entities.CreateEntity();
-            Fenrir::Transform& transform = entity.AddComponent<Fenrir::Transform>();
-            transform.pos = position;
-            transform.scale = scale;
-            entity.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{cube, material});
-            return entity;
-        }
-
         /**
          * @brief A linear metallic-roughness texture whose green, the roughness, rises smoothly from SmoothestFloor at
          * its left edge to RoughestFloor at its right, with the square of the distance across, and whose blue, the
@@ -132,21 +111,20 @@ namespace LightingDemo
         }
 
         /** @brief The floor, the walls and the plinths: a dark room whose floor goes from polished to satin. */
-        void SpawnRoom(Fenrir::AssetStore& store, Fenrir::Scene& scene, Fenrir::AssetHandle<Fenrir::Shader> lit,
-                       Fenrir::AssetHandle<Fenrir::Mesh> cube)
+        void SpawnRoom(Fenrir::AssetStore& store, Fenrir::Scene& scene, Fenrir::AssetHandle<Fenrir::Mesh> cube)
         {
             Fenrir::EntityList& entities = scene.GetEntityList();
-            const auto floor = LitMaterial(store, lit, scene, {0.03f, 0.03f, 0.035f, 1.0f}, 0.0f, 1.0f);
+            const auto floor = LitMaterial(store, scene, {0.03f, 0.03f, 0.035f, 1.0f}, 0.0f, 1.0f);
             store.SetTexture(floor, "metallicRoughnessTexture", store.Add<Fenrir::Image>(RoughnessRamp(), scene));
             Box(entities, cube, floor, {0.0f, -0.1f, 0.0f}, {2.0f * HalfWidth, 0.2f, 2.0f * HalfDepth});
 
-            const auto wall = LitMaterial(store, lit, scene, {0.06f, 0.06f, 0.065f, 1.0f}, 0.0f, 0.85f);
+            const auto wall = LitMaterial(store, scene, {0.06f, 0.06f, 0.065f, 1.0f}, 0.0f, 0.85f);
             Box(entities, cube, wall, {0.0f, RoomHeight * 0.5f, -HalfDepth}, {2.0f * HalfWidth, RoomHeight, 0.2f});
             Box(entities, cube, wall, {-HalfWidth, RoomHeight * 0.5f, 0.0f}, {0.2f, RoomHeight, 2.0f * HalfDepth});
             Box(entities, cube, wall, {HalfWidth, RoomHeight * 0.5f, 0.0f}, {0.2f, RoomHeight, 2.0f * HalfDepth});
             Box(entities, cube, wall, {0.0f, RoomHeight, 0.0f}, {2.0f * HalfWidth, 0.2f, 2.0f * HalfDepth});
 
-            const auto plinth = LitMaterial(store, lit, scene, {0.85f, 0.85f, 0.82f, 1.0f}, 0.0f, 0.35f);
+            const auto plinth = LitMaterial(store, scene, {0.85f, 0.85f, 0.82f, 1.0f}, 0.0f, 0.35f);
             for (const Exhibit& exhibit : Exhibits)
             {
                 Box(entities, cube, plinth, {exhibit.x, PlinthHeight * 0.5f, -1.5f},
@@ -198,9 +176,8 @@ namespace LightingDemo
                 scene.AddResource<ShowroomState>(state);
                 return;
             }
-            const auto lit = store.Load<Fenrir::Shader>("builtin:lit", scene).handle;
             const auto unlit = store.Load<Fenrir::Shader>("builtin:unlit", scene).handle;
-            SpawnRoom(store, scene, lit, cube.handle);
+            SpawnRoom(store, scene, cube.handle);
 
             // Each light faces its entity's -Z: the room's front, turned half round, for those on the back wall.
             const Quat facingFront = Fenrir::Math::AngleAxis(Pi, Vec3(0.0f, 1.0f, 0.0f));

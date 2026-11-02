@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "Core/BindingGroupCache.hpp"
 #include "Core/BlockRing.hpp"
 #include "Core/Bloom.hpp"
 #include "Core/Cascades.hpp"
@@ -224,7 +225,7 @@ namespace Fenrir::Render
          */
         SceneRenderer(Graphics::GraphicsDevice& device, ILogger& logger, std::uint32_t samples = 1,
                       bool automaticInstancing = true, bool computeSkinning = true, CascadeConfig cascades = {},
-                      SpotShadowConfig spotShadows = {}, PointShadowConfig pointShadows = {});
+                      ShadowBudgetConfig spotShadows = {8, 1024}, ShadowBudgetConfig pointShadows = {4, 512});
         ~SceneRenderer() override;
 
         SceneRenderer(const SceneRenderer&) = delete;
@@ -319,16 +320,10 @@ namespace Fenrir::Render
         }
 
         /**
-         * @brief How many spot lights may cast shadows from the next frame (ADR-0050); the spot shadow atlas is made
-         * again at its new size when next needed.
+         * @brief How many lights of `kind`, LightKind::Spot or LightKind::Point, may cast shadows from the next frame
+         * (ADR-0050); the spot shadow atlas or the point shadow cubes is made again at its new size when next needed.
          */
-        void SetSpotShadowBudget(std::uint32_t budget);
-
-        /**
-         * @brief How many point lights may cast shadows from the next frame (ADR-0050); the point shadow cubes is
-         * made again at its new size when next needed.
-         */
-        void SetPointShadowBudget(std::uint32_t budget);
+        void SetShadowBudget(LightKind kind, std::uint32_t budget);
 
         /** @brief What the next frame draws. */
         void SetFrame(SceneFrame frame);
@@ -856,9 +851,9 @@ namespace Fenrir::Render
         /** @brief How each view's sun cascades are made (RendererConfig's shadow members). */
         CascadeConfig m_cascades;
         /** @brief The spot shadow budget and tile size (RendererConfig's spot shadow members). */
-        SpotShadowConfig m_spotShadowConfig;
+        ShadowBudgetConfig m_spotShadowConfig;
         /** @brief The point shadow budget and face size (RendererConfig's point shadow members). */
-        PointShadowConfig m_pointShadowConfig;
+        ShadowBudgetConfig m_pointShadowConfig;
 
         std::map<AssetKey, ShaderEntry> m_shaders;
         std::map<AssetKey, MeshEntry> m_meshes;
@@ -993,11 +988,8 @@ namespace Fenrir::Render
         std::vector<ClusterBuffers> m_clusterBuffers;
         /** @brief The buffer of one 0 that view blocks without clusters bind at set 1 binding 3. */
         Graphics::BufferHandle m_noClusters;
-        /**
-         * @brief builtin:light-clusters' set 1 groups, by the light buffer's and the cluster buffer's (index,
-         * generation), while both live.
-         */
-        std::map<std::array<std::uint32_t, 4>, Graphics::BindingGroupHandle> m_clusterTargetGroups;
+        /** @brief builtin:light-clusters' set 1 groups, by the light buffer and the cluster buffer, while both live. */
+        BindingGroupCache<2> m_clusterTargetGroups;
         /** @brief The sky filtered into image-based lighting, which set 0 binds. */
         std::unique_ptr<SkyLighting> m_skyLighting;
         /** @brief Each view's bloom passes, in `PostProcess`. */
@@ -1009,12 +1001,12 @@ namespace Fenrir::Render
         /** @brief Each copy's draw set group, by frame index modulo the copies. */
         std::vector<DrawGroup> m_drawGroups;
         /**
-         * @brief The view set's groups, by the view ring's buffer (index, generation), slot, the occlusion and shadow
-         * textures and the cluster buffer (index, generation), while all four live.
+         * @brief The view set's groups, by the view ring's buffer, slot, the occlusion and shadow textures and the
+         * cluster buffer, while all four live.
          */
-        std::map<std::array<std::uint32_t, 9>, Graphics::BindingGroupHandle> m_viewGroups;
+        BindingGroupCache<5> m_viewGroups;
         /** @brief The Output pass's binding group for each SceneColor texture, while the texture lives. */
-        std::map<std::pair<std::uint32_t, std::uint32_t>, Graphics::BindingGroupHandle> m_outputGroups;
+        BindingGroupCache<1> m_outputGroups;
 
         SceneFrame m_frame;
         std::vector<DrawnView> m_drawnViews;

@@ -5,6 +5,13 @@
 #include <span>
 #include <string_view>
 
+#include "FenrirAssets/ShaderContainer.hpp"
+
+namespace Fenrir
+{
+    class ILogger;
+} // namespace Fenrir
+
 namespace Fenrir::Render
 {
     /** @brief One of the renderer's built-in shader programs, embedded in it as a shader container (ADR-0018). */
@@ -72,4 +79,7 @@ namespace Fenrir::Render
 
     /** @brief One built-in program's embedded container. */
     [[nodiscard]] const BuiltinShader& GetBuiltinShader(BuiltinProgram program);
+
+    /** @brief One built-in program's container, read from its embedded bytes; empty, and logged, if it cannot be. */
+    [[nodiscard]] ShaderContainer ReadBuiltin(BuiltinProgram program, ILogger& logger);
 } // namespace Fenrir::Render

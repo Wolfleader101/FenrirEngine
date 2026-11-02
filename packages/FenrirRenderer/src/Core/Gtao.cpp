@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "Core/BuiltinShaders.hpp"
+#include "Core/FullscreenPipeline.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
 namespace Fenrir::Render
@@ -37,18 +38,10 @@ namespace Fenrir::Render
         return settings.enabled && settings.radius > 0.0f && settings.intensity > 0.0f;
     }
 
-    Gtao::Gtao(GraphicsDevice& device, ILogger& logger, std::uint32_t samples) : m_device(device), m_logger(logger)
+    Gtao::Gtao(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
+        : m_device(device), m_logger(logger), m_sourceGroups(device)
     {
-        ShaderContainerResult read = ReadShaderContainer(GetBuiltinShader(BuiltinProgram::Gtao).bytes);
-        if (read.Ok())
-        {
-            m_program = std::move(*read.container);
-        }
-        else
-        {
-            m_logger.Error("FenrirRenderer: the built-in shader '{}' does not read: {}",
-                           GetBuiltinShader(BuiltinProgram::Gtao).name, read.diagnostic);
-        }
+        m_program = ReadBuiltin(BuiltinProgram::Gtao, m_logger);
         m_blockLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "GTAO block");
         m_sourceLayout = m_device.CreateBindingGroupLayout(
             {{{0, ShaderBindingKind::Texture}, {1, ShaderBindingKind::Texture}}}, "GTAO sources");
@@ -72,10 +65,7 @@ namespace Fenrir::Render
 
     Gtao::~Gtao()
     {
-        for (const auto& [key, group] : m_sourceGroups)
-        {
-            m_device.Destroy(group);
-        }
+        m_sourceGroups.Clear();
         m_blocks.reset();
         m_device.Destroy(m_sampler);
         m_device.Destroy(m_horizons);
@@ -94,55 +84,31 @@ namespace Fenrir::Render
         desc.shader = variant;
         desc.sets.at(BlockSet) = m_blockLayout;
         desc.sets.at(SourceSet) = m_sourceLayout;
-        desc.cull = CullMode::None;
         desc.colourFormats.assign(outputs, TextureFormat::R8Unorm);
-        desc.depth.test = false;
-        desc.depth.write = false;
-        desc.depthFormat.reset();
-        const PipelineResult made = m_device.CreatePipeline(desc, m_program.name);
-        if (made.pipeline.IsEmpty())
-        {
-            m_logger.Error("FenrirRenderer: the built-in pipeline '{}' could not be made: {}", m_program.name,
-                           made.diagnostic);
-        }
-        return made.pipeline;
+        return MakeFullscreenPipeline(m_device, m_logger, desc, m_program.name);
     }
 
     BindingGroupHandle Gtao::SourceGroup(TextureHandle first, TextureHandle second)
     {
-        const std::array<std::uint32_t, 4> key{first.index, first.generation, second.index, second.generation};
-        if (const auto found = m_sourceGroups.find(key); found != m_sourceGroups.end())
-        {
-            return found->second;
-        }
-        std::vector<BindingGroupEntry> entries(2);
-        entries[0].binding = 0;
-        entries[0].texture = first;
-        entries[0].sampler = m_sampler;
-        entries[1].binding = 1;
-        entries[1].texture = second;
-        entries[1].sampler = m_sampler;
-        const BindingGroupHandle group = m_device.CreateBindingGroup({m_sourceLayout, entries}, "GTAO sources");
-        m_sourceGroups.emplace(key, group);
-        return group;
+        return m_sourceGroups.Get({BindingGroupKeyPart::Of(first), BindingGroupKeyPart::Of(second)}, [&] {
+            std::vector<BindingGroupEntry> entries(2);
+            entries[0].binding = 0;
+            entries[0].texture = first;
+            entries[0].sampler = m_sampler;
+            entries[1].binding = 1;
+            entries[1].texture = second;
+            entries[1].sampler = m_sampler;
+            return m_device.CreateBindingGroup({m_sourceLayout, entries}, "GTAO sources");
+        });
+    }
+
+    void Gtao::PruneGroups()
+    {
+        m_sourceGroups.Prune();
     }
 
     void Gtao::BeginFrame(std::size_t views)
     {
-        // A transient texture's group outlives its frame, so groups of textures the pool has since freed go here.
-        for (auto it = m_sourceGroups.begin(); it != m_sourceGroups.end();)
-        {
-            const std::array<std::uint32_t, 4>& key = it->first;
-            if (!m_device.IsLive(TextureHandle{key[0], key[1]}) || !m_device.IsLive(TextureHandle{key[2], key[3]}))
-            {
-                m_device.Destroy(it->second);
-                it = m_sourceGroups.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
         m_blocks->Reserve(views * 2);
     }
 

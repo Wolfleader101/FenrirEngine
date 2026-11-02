@@ -1456,8 +1456,9 @@ namespace Fenrir
         const Render::CascadeConfig cascades{std::clamp(config.shadowCascades, 1u, Render::MaxCascades),
                                              std::max(config.shadowMapSize, 1u),
                                              std::clamp(config.shadowSplitLambda, 0.0f, 1.0f)};
-        const Render::SpotShadowConfig spotShadows{config.spotShadowBudget, std::max(config.spotShadowMapSize, 16u)};
-        const Render::PointShadowConfig pointShadows{config.pointShadowBudget, std::max(config.pointShadowMapSize, 1u)};
+        const Render::ShadowBudgetConfig spotShadows{config.spotShadowBudget, std::max(config.spotShadowMapSize, 16u)};
+        const Render::ShadowBudgetConfig pointShadows{config.pointShadowBudget,
+                                                      std::max(config.pointShadowMapSize, 1u)};
         auto scene = std::make_unique<Render::SceneRenderer>(
             state->core->Device(), *app.Logger(), SupportedMsaa(app, config), config.automaticInstancing,
             config.computeSkinning, cascades, spotShadows, pointShadows);
@@ -1535,7 +1536,7 @@ namespace Fenrir
     {
         if (m_state != nullptr)
         {
-            m_state->scene->SetSpotShadowBudget(budget);
+            m_state->scene->SetShadowBudget(Render::LightKind::Spot, budget);
         }
     }
 
@@ -1543,7 +1544,7 @@ namespace Fenrir
     {
         if (m_state != nullptr)
         {
-            m_state->scene->SetPointShadowBudget(budget);
+            m_state->scene->SetShadowBudget(Render::LightKind::Point, budget);
         }
     }
 

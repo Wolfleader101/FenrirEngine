@@ -2,12 +2,11 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <span>
-#include <utility>
 #include <vector>
 
+#include "Core/BindingGroupCache.hpp"
 #include "Core/BlockRing.hpp"
 #include "Core/RenderGraph.hpp"
 #include "Core/SceneFrame.hpp"
@@ -80,6 +79,12 @@ namespace Fenrir::Render
         BloomChain(BloomChain&&) = delete;
         BloomChain& operator=(BloomChain&&) = delete;
 
+        /**
+         * @brief Destroys the groups of source textures the transient pool has let go of: a transient texture's group
+         * outlives its frame. Call once a frame, before AddPasses.
+         */
+        void PruneGroups();
+
         /** @brief Adds the passes of every view in `views` that blooms, in frame `frameIndex`. */
         void AddPasses(RenderGraph& graph, std::uint64_t frameIndex, std::span<const BloomView> views);
 
@@ -109,7 +114,7 @@ namespace Fenrir::Render
         /** @brief Mirrored at the edges, bilinear. */
         Graphics::SamplerHandle m_sampler;
         std::unique_ptr<BlockRing> m_blocks;
-        /** @brief Each source texture's group, by its handle's index and generation, while the texture lives. */
-        std::map<std::pair<std::uint32_t, std::uint32_t>, Graphics::BindingGroupHandle> m_sourceGroups;
+        /** @brief Each source texture's group, while the texture lives. */
+        BindingGroupCache<1> m_sourceGroups;
     };
 } // namespace Fenrir::Render

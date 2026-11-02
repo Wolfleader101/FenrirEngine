@@ -8,7 +8,9 @@
 
 #include <glm/gtc/packing.hpp>
 
+#include "Core/BlockRing.hpp"
 #include "Core/BuiltinShaders.hpp"
+#include "Core/FullscreenPipeline.hpp"
 #include "Core/SphericalHarmonics.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
@@ -25,8 +27,6 @@ namespace Fenrir::Render
         /** @brief The widest specular cube face, and the widest cube mip the projection reads. */
         constexpr std::uint32_t SpecularSide = 128;
         constexpr std::uint32_t ProjectionSide = 32;
-        /** @brief The passes' blocks sit at multiples of this, the largest uniform offset alignment GL asks for. */
-        constexpr std::size_t Slot = 256;
 
         /** @brief The SkyIrradiance pass's block, as `builtin:sky-irradiance` declares it (std140). */
         struct IrradianceBlock
@@ -75,25 +75,13 @@ namespace Fenrir::Render
             return halves;
         }
 
-        ShaderContainer ReadProgram(BuiltinProgram program, ILogger& logger)
-        {
-            ShaderContainerResult read = ReadShaderContainer(GetBuiltinShader(program).bytes);
-            if (!read.Ok())
-            {
-                logger.Error("FenrirRenderer: the built-in shader '{}' does not read: {}",
-                             GetBuiltinShader(program).name, read.diagnostic);
-                return {};
-            }
-            return std::move(*read.container);
-        }
-
     } // namespace
 
     SkyLighting::SkyLighting(GraphicsDevice& device, ILogger& logger) : m_device(device), m_logger(logger)
     {
-        m_irradianceProgram = ReadProgram(BuiltinProgram::SkyIrradiance, m_logger);
-        m_specularProgram = ReadProgram(BuiltinProgram::SkySpecular, m_logger);
-        m_brdfProgram = ReadProgram(BuiltinProgram::BrdfLut, m_logger);
+        m_irradianceProgram = ReadBuiltin(BuiltinProgram::SkyIrradiance, m_logger);
+        m_specularProgram = ReadBuiltin(BuiltinProgram::SkySpecular, m_logger);
+        m_brdfProgram = ReadBuiltin(BuiltinProgram::BrdfLut, m_logger);
         m_passLayout = m_device.CreateBindingGroupLayout(
             {{{0, ShaderBindingKind::UniformBuffer}, {1, ShaderBindingKind::Texture}}}, "Sky filtering");
         m_irradiancePipeline = MakePipeline(m_irradianceProgram, m_passLayout, TextureFormat::Rgba16Float);
@@ -133,18 +121,8 @@ namespace Fenrir::Render
         PipelineDesc desc;
         desc.shader = container.FindVariant({});
         desc.sets.at(PassSet) = layout;
-        desc.cull = CullMode::None;
         desc.colourFormats = {format};
-        desc.depth.test = false;
-        desc.depth.write = false;
-        desc.depthFormat.reset();
-        const PipelineResult made = m_device.CreatePipeline(desc, container.name);
-        if (made.pipeline.IsEmpty())
-        {
-            m_logger.Error("FenrirRenderer: the built-in pipeline '{}' could not be made: {}", container.name,
-                           made.diagnostic);
-        }
-        return made.pipeline;
+        return MakeFullscreenPipeline(m_device, m_logger, desc, container.name);
     }
 
     void SkyLighting::Destroy(Filtered& filtered)
@@ -215,7 +193,7 @@ namespace Fenrir::Render
         {
             ++lod;
         }
-        std::vector<std::byte> blocks(Slot * (1 + std::size_t{6} * specular.mipLevels));
+        std::vector<std::byte> blocks(UniformBlockAlignment * (1 + std::size_t{6} * specular.mipLevels));
         const IrradianceBlock irradianceBlock{std::max(sky.cubeDesc.width >> lod, 1u), static_cast<float>(lod)};
         std::memcpy(blocks.data(), &irradianceBlock, sizeof(irradianceBlock));
         for (std::uint32_t level = 0; level < specular.mipLevels; ++level)
@@ -228,7 +206,8 @@ namespace Fenrir::Render
                 block.sourceSide = static_cast<float>(sky.cubeDesc.width);
                 block.sourceMaxLod = static_cast<float>(sourceLevels - 1);
                 block.side = static_cast<float>(std::max(specular.width >> level, 1u));
-                std::memcpy(blocks.data() + Slot * (1 + std::size_t{level} * 6 + face), &block, sizeof(block));
+                std::memcpy(blocks.data() + UniformBlockAlignment * (1 + std::size_t{level} * 6 + face), &block,
+                            sizeof(block));
             }
         }
         filtered.params = m_device.CreateBuffer({blocks.size(), BufferUsage::Uniform}, blocks, "Sky filtering");
@@ -242,7 +221,7 @@ namespace Fenrir::Render
             BindingGroupEntry params;
             params.binding = 0;
             params.buffer = filtered.params;
-            params.offset = Slot * pass;
+            params.offset = UniformBlockAlignment * pass;
             params.size = pass == 0 ? sizeof(IrradianceBlock) : sizeof(SpecularBlock);
             filtered.groups.push_back(m_device.CreateBindingGroup({m_passLayout, {params, cube}}, "Sky filtering"));
         }

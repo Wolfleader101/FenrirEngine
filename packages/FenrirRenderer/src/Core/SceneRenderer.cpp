@@ -174,10 +174,6 @@ namespace Fenrir::Render
             std::uint32_t padding0 = 0;
         };
 
-        /** @brief Panorama passes' blocks sit at multiples of this, the largest uniform offset alignment GL asks for.
-         */
-        constexpr std::size_t PanoramaSlot = 256;
-
         /** @brief The Output block, as `builtin:output` declares it at set 1 (std140). */
         struct OutputBlock
         {
@@ -685,18 +681,6 @@ namespace Fenrir::Render
             }
         }
 
-        ShaderContainer ReadBuiltin(BuiltinProgram program, ILogger& logger)
-        {
-            ShaderContainerResult read = ReadShaderContainer(GetBuiltinShader(program).bytes);
-            if (!read.Ok())
-            {
-                logger.Error("FenrirRenderer: the built-in shader '{}' does not read: {}",
-                             GetBuiltinShader(program).name, read.diagnostic);
-                return {};
-            }
-            return std::move(*read.container);
-        }
-
         const ShaderVariant* BaseVariant(const ShaderContainer& container)
         {
             return container.FindVariant({});
@@ -784,10 +768,11 @@ namespace Fenrir::Render
 
     SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples,
                                  bool automaticInstancing, bool computeSkinning, CascadeConfig cascades,
-                                 SpotShadowConfig spotShadows, PointShadowConfig pointShadows)
+                                 ShadowBudgetConfig spotShadows, ShadowBudgetConfig pointShadows)
         : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1)),
           m_automaticInstancing(automaticInstancing), m_computeSkinning(computeSkinning), m_cascades(cascades),
-          m_spotShadowConfig(spotShadows), m_pointShadowConfig(pointShadows)
+          m_spotShadowConfig(spotShadows), m_pointShadowConfig(pointShadows), m_clusterTargetGroups(device),
+          m_viewGroups(device), m_outputGroups(device)
     {
         m_cascades.count = std::clamp(m_cascades.count, 1u, MaxCascades);
         m_cascades.mapSize = std::max(m_cascades.mapSize, 1u);
@@ -1059,14 +1044,8 @@ namespace Fenrir::Render
                 m_device.Destroy(variant.materialLayout);
             }
         }
-        for (auto& [texture, group] : m_outputGroups)
-        {
-            m_device.Destroy(group);
-        }
-        for (auto& [key, group] : m_viewGroups)
-        {
-            m_device.Destroy(group);
-        }
+        m_outputGroups.Clear();
+        m_viewGroups.Clear();
         for (const DrawGroup& group : m_drawGroups)
         {
             m_device.Destroy(group.group);
@@ -1103,10 +1082,7 @@ namespace Fenrir::Render
         m_device.Destroy(m_skinJobLayout);
         m_device.Destroy(m_skinSourceLayout);
         m_device.Destroy(m_skinTargetLayout);
-        for (auto& [key, group] : m_clusterTargetGroups)
-        {
-            m_device.Destroy(group);
-        }
+        m_clusterTargetGroups.Clear();
         m_clusterJobs.reset();
         m_clusterBuffers.clear();
         m_device.Destroy(m_noClusters);
@@ -1337,7 +1313,7 @@ namespace Fenrir::Render
 
         // Each pass's block: its face, half its level's texel, and the panorama's mip whose texels are as tall as the
         // level's (a face spans half the panorama's height).
-        std::vector<std::byte> blocks(PanoramaSlot * 6 * cube.mipLevels);
+        std::vector<std::byte> blocks(UniformBlockAlignment * 6 * cube.mipLevels);
         for (std::uint32_t level = 0; level < cube.mipLevels; ++level)
         {
             const std::uint32_t levelSide = std::max(side >> level, 1u);
@@ -1345,7 +1321,8 @@ namespace Fenrir::Render
             for (std::uint32_t face = 0; face < 6; ++face)
             {
                 const PanoramaBlock block{face, 1.0f / static_cast<float>(levelSide), lod};
-                std::memcpy(blocks.data() + PanoramaSlot * (std::size_t{level} * 6 + face), &block, sizeof(block));
+                std::memcpy(blocks.data() + UniformBlockAlignment * (std::size_t{level} * 6 + face), &block,
+                            sizeof(block));
             }
         }
         entry.params = m_device.CreateBuffer({blocks.size(), BufferUsage::Uniform}, blocks, "Panorama passes");
@@ -1354,7 +1331,7 @@ namespace Fenrir::Render
             BindingGroupEntry params;
             params.binding = 0;
             params.buffer = entry.params;
-            params.offset = PanoramaSlot * pass;
+            params.offset = UniformBlockAlignment * pass;
             params.size = sizeof(PanoramaBlock);
             BindingGroupEntry panorama;
             panorama.binding = 1;
@@ -2071,28 +2048,20 @@ namespace Fenrir::Render
         m_frame = std::move(frame);
     }
 
-    void SceneRenderer::SetSpotShadowBudget(std::uint32_t budget)
+    void SceneRenderer::SetShadowBudget(LightKind kind, std::uint32_t budget)
     {
-        if (budget == m_spotShadowConfig.budget)
+        const bool spot = kind == LightKind::Spot;
+        ShadowBudgetConfig& config = spot ? m_spotShadowConfig : m_pointShadowConfig;
+        if (budget == config.budget)
         {
             return;
         }
-        m_spotShadowConfig.budget = budget;
-        // Made again at the new size when a spot light next casts, and not kept meanwhile; its frame groups go with it.
-        m_device.Destroy(m_spotAtlas);
-        m_spotAtlas = {};
-    }
-
-    void SceneRenderer::SetPointShadowBudget(std::uint32_t budget)
-    {
-        if (budget == m_pointShadowConfig.budget)
-        {
-            return;
-        }
-        m_pointShadowConfig.budget = budget;
-        // As the spot shadow atlas: made again at the new size when a point light next casts.
-        m_device.Destroy(m_pointShadowCubes);
-        m_pointShadowCubes = {};
+        config.budget = budget;
+        // Made again at the new size when a light of the kind next casts, and not kept meanwhile; its frame groups go
+        // with it.
+        TextureHandle& maps = spot ? m_spotAtlas : m_pointShadowCubes;
+        m_device.Destroy(maps);
+        maps = {};
     }
 
     SceneStats SceneRenderer::TakeStats()
@@ -2674,21 +2643,17 @@ namespace Fenrir::Render
         const BufferHandle buffer = ring.copies->Current(frameIndex);
         const std::size_t capacity = ring.capacity;
         const BufferHandle lights = m_lightBlocks->Buffer(frameIndex);
-        const std::array<std::uint32_t, 4> key{lights.index, lights.generation, buffer.index, buffer.generation};
-        auto target = m_clusterTargetGroups.find(key);
-        if (target == m_clusterTargetGroups.end())
-        {
-            BindingGroupEntry lightEntry;
-            lightEntry.binding = 0;
-            lightEntry.buffer = lights;
-            BindingGroupEntry clusterEntry;
-            clusterEntry.binding = 1;
-            clusterEntry.buffer = buffer;
-            target = m_clusterTargetGroups
-                         .emplace(key, m_device.CreateBindingGroup({m_clusterTargetLayout, {lightEntry, clusterEntry}},
-                                                                   "Cluster target"))
-                         .first;
-        }
+        const BindingGroupHandle targetGroup =
+            m_clusterTargetGroups.Get({BindingGroupKeyPart::Of(lights), BindingGroupKeyPart::Of(buffer)}, [&] {
+                BindingGroupEntry lightEntry;
+                lightEntry.binding = 0;
+                lightEntry.buffer = lights;
+                BindingGroupEntry clusterEntry;
+                clusterEntry.binding = 1;
+                clusterEntry.buffer = buffer;
+                return m_device.CreateBindingGroup({m_clusterTargetLayout, {lightEntry, clusterEntry}},
+                                                   "Cluster target");
+            });
         ClusterJobBlock job;
         job.view = request.view;
         job.inverseProjection = glm::inverse(request.projection);
@@ -2701,7 +2666,7 @@ namespace Fenrir::Render
             "LightClusters", RenderStage::DepthPrepass, QueueKind::Compute,
             [=](PassBuilder& pass) { pass.StorageWrite(resource); },
             [pipeline = m_lightClustersPipeline, jobGroup = m_clusterJobs->Group(frameIndex, view),
-             targetGroup = target->second](PassContext& context) {
+             targetGroup](PassContext& context) {
                 PassEncoder& encoder = context.Encoder();
                 encoder.SetPipeline(pipeline);
                 encoder.SetBindingGroup(0, jobGroup);
@@ -2850,50 +2815,39 @@ namespace Fenrir::Render
             clusters = m_noClusters;
         }
         const BufferHandle buffer = m_viewBlocks->Buffer(frameIndex);
-        const std::array<std::uint32_t, 9> key{
-            buffer.index,      buffer.generation,    static_cast<std::uint32_t>(slot),
-            occlusion.index,   occlusion.generation, shadow.index,
-            shadow.generation, clusters.index,       clusters.generation};
-        if (const auto found = m_viewGroups.find(key); found != m_viewGroups.end())
-        {
-            return found->second;
-        }
-        BindingGroupEntry block;
-        block.binding = 0;
-        block.buffer = buffer;
-        block.offset = slot * m_viewBlocks->SlotSize();
-        block.size = m_viewBlocks->SlotSize();
-        BindingGroupEntry texture;
-        texture.binding = 1;
-        texture.texture = occlusion;
-        texture.sampler = m_outputSampler;
-        BindingGroupEntry shadowAtlas;
-        shadowAtlas.binding = 2;
-        shadowAtlas.texture = shadow;
-        shadowAtlas.sampler = m_shadowSampler;
-        BindingGroupEntry clusterLights;
-        clusterLights.binding = 3;
-        clusterLights.buffer = clusters;
-        const BindingGroupHandle group =
-            m_device.CreateBindingGroup({m_viewLayout, {block, texture, shadowAtlas, clusterLights}}, "View");
-        m_viewGroups.emplace(key, group);
-        return group;
+        const BindingGroupCache<5>::Key key{
+            BindingGroupKeyPart::Of(buffer), BindingGroupKeyPart::Value(static_cast<std::uint32_t>(slot)),
+            BindingGroupKeyPart::Of(occlusion), BindingGroupKeyPart::Of(shadow), BindingGroupKeyPart::Of(clusters)};
+        return m_viewGroups.Get(key, [&] {
+            BindingGroupEntry block;
+            block.binding = 0;
+            block.buffer = buffer;
+            block.offset = slot * m_viewBlocks->SlotSize();
+            block.size = m_viewBlocks->SlotSize();
+            BindingGroupEntry texture;
+            texture.binding = 1;
+            texture.texture = occlusion;
+            texture.sampler = m_outputSampler;
+            BindingGroupEntry shadowAtlas;
+            shadowAtlas.binding = 2;
+            shadowAtlas.texture = shadow;
+            shadowAtlas.sampler = m_shadowSampler;
+            BindingGroupEntry clusterLights;
+            clusterLights.binding = 3;
+            clusterLights.buffer = clusters;
+            return m_device.CreateBindingGroup({m_viewLayout, {block, texture, shadowAtlas, clusterLights}}, "View");
+        });
     }
 
     BindingGroupHandle SceneRenderer::OutputGroup(TextureHandle sceneColour)
     {
-        const std::pair<std::uint32_t, std::uint32_t> key{sceneColour.index, sceneColour.generation};
-        if (const auto found = m_outputGroups.find(key); found != m_outputGroups.end())
-        {
-            return found->second;
-        }
-        BindingGroupEntry entry;
-        entry.binding = 0;
-        entry.texture = sceneColour;
-        entry.sampler = m_outputSampler;
-        const BindingGroupHandle group = m_device.CreateBindingGroup({m_outputLayout, {entry}}, "Output");
-        m_outputGroups.emplace(key, group);
-        return group;
+        return m_outputGroups.Get({BindingGroupKeyPart::Of(sceneColour)}, [&] {
+            BindingGroupEntry entry;
+            entry.binding = 0;
+            entry.texture = sceneColour;
+            entry.sampler = m_outputSampler;
+            return m_device.CreateBindingGroup({m_outputLayout, {entry}}, "Output");
+        });
     }
 
     void SceneRenderer::AddWindowClear(RenderGraph& graph, const FrameContext& frame)
@@ -2908,50 +2862,13 @@ namespace Fenrir::Render
 
     void SceneRenderer::AddPasses(RenderGraph& graph, const FrameContext& frame)
     {
-        // The Output groups of SceneColor textures the transient pool has let go of.
-        for (auto it = m_outputGroups.begin(); it != m_outputGroups.end();)
-        {
-            if (!m_device.IsLive(TextureHandle{it->first.first, it->first.second}))
-            {
-                m_device.Destroy(it->second);
-                it = m_outputGroups.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
-        // And the view groups of view rings remade since, of occlusion or shadow textures it has let go of, or of
-        // cluster buffers grown since.
-        for (auto it = m_viewGroups.begin(); it != m_viewGroups.end();)
-        {
-            const std::array<std::uint32_t, 9>& key = it->first;
-            if (!m_device.IsLive(BufferHandle{key[0], key[1]}) || !m_device.IsLive(TextureHandle{key[3], key[4]}) ||
-                !m_device.IsLive(TextureHandle{key[5], key[6]}) || !m_device.IsLive(BufferHandle{key[7], key[8]}))
-            {
-                m_device.Destroy(it->second);
-                it = m_viewGroups.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
-
-        // And the LightClusters passes' groups of light buffers or cluster buffers remade since.
-        for (auto it = m_clusterTargetGroups.begin(); it != m_clusterTargetGroups.end();)
-        {
-            const std::array<std::uint32_t, 4>& key = it->first;
-            if (!m_device.IsLive(BufferHandle{key[0], key[1]}) || !m_device.IsLive(BufferHandle{key[2], key[3]}))
-            {
-                m_device.Destroy(it->second);
-                it = m_clusterTargetGroups.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
+        // Every cached group of a texture the transient pool has let go of, or of a ring's buffer remade since, goes
+        // here, before this frame's passes ask for any.
+        m_outputGroups.Prune();
+        m_viewGroups.Prune();
+        m_clusterTargetGroups.Prune();
+        m_bloom->PruneGroups();
+        m_gtao->PruneGroups();
 
         m_stats.draws = 0;
         m_stats.instances = 0;

@@ -10,6 +10,7 @@
 // The board's edges are dark. Far off, as a glyph's cell shrinks below a few pixels, the strokes give way to their
 // average glow, so a distant sign holds still instead of shimmering.
 #include "Fenrir/Lighting.glsl"
+#include "Hash.glsl"
 
 #pragma fenrir default(boardColour, 0.02, 0.02, 0.025, 1.0)
 #pragma fenrir default(tubeWidth, 0.045)
@@ -29,18 +30,6 @@ layout(location = 4) flat in vec3 vHalfSize;
 layout(location = 5) in vec3 vLocalNormal;
 layout(location = 6) flat in vec3 vCentre;
 layout(location = 0) out vec4 outColour;
-
-// 0 to 1, from four integers.
-float Hash(uvec4 v)
-{
-    uint h = v.x * 0x8da6b343u ^ v.y * 0xd8163841u ^ v.z * 0xcb1ab31fu ^ v.w * 0x165667b1u;
-    h ^= h >> 15;
-    h *= 0x2c1b3c6du;
-    h ^= h >> 12;
-    h *= 0x297a2d39u;
-    h ^= h >> 15;
-    return float(h) / 4294967295.0;
-}
 
 // How much of a tube of half width `radius` along the line `x` = `at` covers the pixel, `width` being x's change
 // across it; `from` to `to` is the tube's extent along the other coordinate `y`.

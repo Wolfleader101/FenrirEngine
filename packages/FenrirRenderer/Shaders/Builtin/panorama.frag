@@ -4,6 +4,7 @@
 // one pass per face and level, once per image revision. Each texel takes the average of four points across it, each
 // sampled from the panorama's mip whose texels are as tall as the cube's at this level, so every level is filtered from
 // the panorama itself and no level is drawn from another.
+#include "Fenrir/Brdf.glsl"
 #include "Fenrir/CubeFaces.glsl"
 
 layout(set = 2, binding = 0, std140) uniform PanoramaParams
@@ -21,7 +22,6 @@ layout(set = 2, binding = 1) uniform sampler2D panorama;
 layout(location = 0) in vec2 vNdc;
 layout(location = 0) out vec4 outColour;
 
-const float Pi = 3.14159265358979;
 // The largest finite half float: brighter texels (a sun's core, in some panoramas) are clamped, not made infinite.
 const float HalfMax = 65504.0;
 
@@ -30,7 +30,7 @@ const float HalfMax = 65504.0;
 vec2 PanoramaPoint(vec3 direction)
 {
     vec3 d = normalize(direction);
-    return vec2(0.5 + atan(d.x, -d.z) / (2.0 * Pi), acos(clamp(d.y, -1.0, 1.0)) / Pi);
+    return vec2(0.5 + atan(d.x, -d.z) / (2.0 * FenrirPi), acos(clamp(d.y, -1.0, 1.0)) / FenrirPi);
 }
 
 void main()

@@ -3,9 +3,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <map>
 #include <memory>
 
+#include "Core/BindingGroupCache.hpp"
 #include "Core/BlockRing.hpp"
 #include "Core/RenderGraph.hpp"
 #include "Core/SceneFrame.hpp"
@@ -73,8 +73,14 @@ namespace Fenrir::Render
         Gtao& operator=(Gtao&&) = delete;
 
         /**
-         * @brief Readies this frame's blocks for `views` views (two each: the final denoise pass has its own) and frees
-         * groups of textures that have since gone. Call once a frame, before AddPasses.
+         * @brief Destroys the groups of source textures the transient pool has let go of: a transient texture's group
+         * outlives its frame. Call once a frame, before AddPasses.
+         */
+        void PruneGroups();
+
+        /**
+         * @brief Readies this frame's blocks for `views` views (two each: the final denoise pass has its own). Call
+         * once a frame, before AddPasses.
          */
         void BeginFrame(std::size_t views);
 
@@ -104,7 +110,7 @@ namespace Fenrir::Render
         /** @brief Nearest, clamped: every read is a texelFetch. */
         Graphics::SamplerHandle m_sampler;
         std::unique_ptr<BlockRing> m_blocks;
-        /** @brief Each pair of source textures' group, by their handles' indices and generations, while both live. */
-        std::map<std::array<std::uint32_t, 4>, Graphics::BindingGroupHandle> m_sourceGroups;
+        /** @brief Each pair of source textures' group, while both live. */
+        BindingGroupCache<2> m_sourceGroups;
     };
 } // namespace Fenrir::Render

@@ -1,6 +1,7 @@
 // Fenrir/Brdf.glsl: the specular BRDF's terms (ADR-0048), shared by Fenrir/Lighting.glsl and the BrdfLut and
 // SkySpecular passes that integrate them, so the lookup table, the prefiltered cube and the direct light agree. It binds
-// nothing. `a` is perceptual roughness squared throughout. Core/Brdf is its CPU mirror, which the CPU tests exercise.
+// nothing, and its FenrirPi is the one every built-in shader uses. `a` is perceptual roughness squared throughout.
+// Core/Brdf is its CPU mirror, which the CPU tests exercise.
 #ifndef FENRIR_BRDF_GLSL
 #define FENRIR_BRDF_GLSL
 

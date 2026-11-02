@@ -8,6 +8,7 @@
 
 #include <imgui.h>
 
+#include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
@@ -92,17 +93,6 @@ namespace LightingDemo
             const float c = std::cos(rotation);
             const float s = std::sin(rotation);
             return {c * direction.x + s * direction.z, direction.y, -s * direction.x + c * direction.z};
-        }
-
-        /** @brief A builtin:lit material of one colour and roughness, for the stand-in and the torches' brackets. */
-        Fenrir::AssetHandle<Fenrir::Material> LitMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene,
-                                                          Fenrir::Colour colour, float metallic, float roughness)
-        {
-            const auto material = store.CreateMaterial(store.Load<Fenrir::Shader>("builtin:lit", scene).handle, scene);
-            store.SetColour(material, "baseColour", colour);
-            store.SetFloat(material, "metallic", metallic);
-            store.SetFloat(material, "roughness", roughness);
-            return material;
         }
 
         /** @brief A box of `size` centred at `position`. */

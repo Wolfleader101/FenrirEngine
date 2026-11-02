@@ -5,6 +5,7 @@
 #include <string_view>
 
 #include "Core/BuiltinShaders.hpp"
+#include "Core/FullscreenPipeline.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
 namespace Fenrir::Render
@@ -32,18 +33,6 @@ namespace Fenrir::Render
         std::span<const std::byte> BytesOf(const BloomBlock& block)
         {
             return std::as_bytes(std::span(&block, 1));
-        }
-
-        ShaderContainer ReadProgram(BuiltinProgram program, ILogger& logger)
-        {
-            ShaderContainerResult read = ReadShaderContainer(GetBuiltinShader(program).bytes);
-            if (!read.Ok())
-            {
-                logger.Error("FenrirRenderer: the built-in shader '{}' does not read: {}",
-                             GetBuiltinShader(program).name, read.diagnostic);
-                return {};
-            }
-            return std::move(*read.container);
         }
 
         /** @brief Level `level`'s size: the view's halved `level + 1` times, at least one pixel. */
@@ -88,10 +77,10 @@ namespace Fenrir::Render
     }
 
     BloomChain::BloomChain(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
-        : m_device(device), m_logger(logger)
+        : m_device(device), m_logger(logger), m_sourceGroups(device)
     {
-        m_downsample = ReadProgram(BuiltinProgram::BloomDownsample, m_logger);
-        m_upsample = ReadProgram(BuiltinProgram::BloomUpsample, m_logger);
+        m_downsample = ReadBuiltin(BuiltinProgram::BloomDownsample, m_logger);
+        m_upsample = ReadBuiltin(BuiltinProgram::BloomUpsample, m_logger);
         m_blockLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Bloom block");
         m_sourceLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::Texture}}}, "Bloom source");
 
@@ -119,10 +108,7 @@ namespace Fenrir::Render
 
     BloomChain::~BloomChain()
     {
-        for (const auto& [key, group] : m_sourceGroups)
-        {
-            m_device.Destroy(group);
-        }
+        m_sourceGroups.Clear();
         m_blocks.reset();
         m_device.Destroy(m_sampler);
         m_device.Destroy(m_firstDownsample);
@@ -144,53 +130,30 @@ namespace Fenrir::Render
         desc.shader = variant;
         desc.sets.at(BlockSet) = m_blockLayout;
         desc.sets.at(SourceSet) = m_sourceLayout;
-        desc.cull = CullMode::None;
         desc.colourFormats = {TextureFormat::Rgba16Float};
-        desc.depth.test = false;
-        desc.depth.write = false;
-        desc.depthFormat.reset();
         desc.blend = blend;
         desc.samples = samples;
-        const PipelineResult made = m_device.CreatePipeline(desc, container.name);
-        if (made.pipeline.IsEmpty())
-        {
-            m_logger.Error("FenrirRenderer: the built-in pipeline '{}' could not be made: {}", container.name,
-                           made.diagnostic);
-        }
-        return made.pipeline;
+        return MakeFullscreenPipeline(m_device, m_logger, desc, container.name);
     }
 
     BindingGroupHandle BloomChain::SourceGroup(TextureHandle texture)
     {
-        const std::pair<std::uint32_t, std::uint32_t> key{texture.index, texture.generation};
-        if (const auto found = m_sourceGroups.find(key); found != m_sourceGroups.end())
-        {
-            return found->second;
-        }
-        BindingGroupEntry entry;
-        entry.binding = 0;
-        entry.texture = texture;
-        entry.sampler = m_sampler;
-        const BindingGroupHandle group = m_device.CreateBindingGroup({m_sourceLayout, {entry}}, "Bloom source");
-        m_sourceGroups.emplace(key, group);
-        return group;
+        return m_sourceGroups.Get({BindingGroupKeyPart::Of(texture)}, [&] {
+            BindingGroupEntry entry;
+            entry.binding = 0;
+            entry.texture = texture;
+            entry.sampler = m_sampler;
+            return m_device.CreateBindingGroup({m_sourceLayout, {entry}}, "Bloom source");
+        });
+    }
+
+    void BloomChain::PruneGroups()
+    {
+        m_sourceGroups.Prune();
     }
 
     void BloomChain::AddPasses(RenderGraph& graph, std::uint64_t frameIndex, std::span<const BloomView> views)
     {
-        // A transient texture's group outlives its frame, so groups of textures the pool has since freed go here.
-        for (auto it = m_sourceGroups.begin(); it != m_sourceGroups.end();)
-        {
-            if (!m_device.IsLive(TextureHandle{it->first.first, it->first.second}))
-            {
-                m_device.Destroy(it->second);
-                it = m_sourceGroups.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
         if (m_firstDownsample.IsEmpty() || m_downsamplePipeline.IsEmpty() || m_upsamplePipeline.IsEmpty() ||
             m_compositePipeline.IsEmpty())
         {
