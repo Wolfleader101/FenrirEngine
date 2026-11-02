@@ -47,7 +47,7 @@ All in FenrirRenderer, with an instance-list asset in FenrirAssets and a new Lig
 
 ### The frame
 
-- **Stages** (ADR-0049): `Shadow, DepthPrepass, Opaque, Background, Transparent, Debug, PostProcess, Output, Overlay`.
+- **Stages** (ADR-0049): `Prepare, Skinning, Shadow, DepthPrepass, Opaque, Background, Transparent, Debug, PostProcess, Output, Overlay`.
 - **`DepthPrepass`** writes depth and view-space normals for opaque and masked items; `Opaque` tests for equality.
 - **GTAO** from the prepass, per camera, darkening indirect light only.
 - **Clustered lights:** a compute pass per view; a plain loop over the light buffer until it lands.

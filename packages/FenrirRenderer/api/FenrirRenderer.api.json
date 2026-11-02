@@ -781,7 +781,7 @@
           "offset": 24,
           "kind": "bool",
           "default": true,
-          "doc": "Whether the copies are drawn into the sun's shadow, as a MeshRenderer's castShadows says."
+          "doc": "Whether the copies are drawn into shadow maps, as a MeshRenderer's castShadows says."
         },
         {
           "name": "visible",
@@ -893,7 +893,7 @@
           "offset": 17,
           "kind": "bool",
           "default": true,
-          "doc": "Whether it is drawn into the sun's shadow (ADR-0050). Only an `Opaque` or `Masked` material casts, a Masked one cut out by its alpha cutoff; `AlphaBlend` and `Additive` ones never do."
+          "doc": "Whether it is drawn into shadow maps: the sun's cascades and the shadowed spot and point lights' (ADR-0050). Only an `Opaque` or `Masked` material casts, a Masked one cut out by its alpha cutoff; `AlphaBlend` and `Additive` ones never do."
         }
       ]
     },

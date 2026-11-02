@@ -23,8 +23,9 @@ public partial struct MeshRenderer : IComponent
     /// <summary>False hides this entity only; its children are drawn as their own MeshRenderers say.</summary>
     public bool Visible = true;
     /// <summary>
-    /// Whether it is drawn into the sun's shadow (ADR-0050). Only an `Opaque` or `Masked` material casts, a Masked one
-    /// cut out by its alpha cutoff; `AlphaBlend` and `Additive` ones never do.
+    /// Whether it is drawn into shadow maps: the sun's cascades and the shadowed spot and point lights' (ADR-0050).
+    /// Only an `Opaque` or `Masked` material casts, a Masked one cut out by its alpha cutoff; `AlphaBlend` and
+    /// `Additive` ones never do.
     /// </summary>
     public bool CastShadows = true;
 

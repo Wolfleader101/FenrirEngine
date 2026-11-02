@@ -562,7 +562,7 @@ An HDR image wrapping the whole sphere around the viewer, its width twice its he
 
 **Light**
 A component that lights the scene from its entity: a *directional light* (the sun; one per scene, shining along its entity's -Z), a *point light* (from its position in every direction), a *spot light* (from its position along its -Z, within a cone) or a *rect light* (from a rectangle facing its -Z, one-sided or two-sided). A scene can hold any number of point, spot and rect lights.
-*Avoid:* lamp, punctual light (glTF's word for point and spot), area light (a rect light is one shape of it), light source.
+*Avoid:* lamp, area light (a rect light is one shape of it), light source.
 
 **Instance list**
 An asset holding the placements of many copies of one mesh, each a transform relative to the entity that draws them and an optional colour. An `InstancedMeshRenderer` draws one, with no entity per copy.
@@ -579,6 +579,7 @@ One depth texture holding several shadow maps side by side, each drawn into its 
 **Point shadow cubes**
 One cube array of depth, a cube for each point light the budget lets cast, each face holding the distance from its light to the nearest caster over the light's range (ADR-0050).
 *Avoid:* point shadow maps, omni shadow map, shadow cubemap atlas.
+
 ## FenrirEngine debug drawing
 
 **FenrirDebugDraw**

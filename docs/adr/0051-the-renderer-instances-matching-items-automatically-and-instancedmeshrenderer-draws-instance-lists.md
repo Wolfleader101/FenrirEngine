@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # The renderer instances matching items automatically, and InstancedMeshRenderer draws instance lists

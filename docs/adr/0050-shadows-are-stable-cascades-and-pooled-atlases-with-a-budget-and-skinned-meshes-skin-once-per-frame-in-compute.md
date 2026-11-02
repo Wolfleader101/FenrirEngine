@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Shadows are stable cascades and pooled atlases with a budget, and skinned meshes skin once per frame in compute

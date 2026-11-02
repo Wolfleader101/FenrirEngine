@@ -24,7 +24,7 @@ public partial struct InstancedMeshRenderer : IComponent
     public AssetHandle<Mesh> Mesh = new();
     public AssetHandle<Material> Material = new();
     public AssetHandle<InstanceList> Instances = new();
-    /// <summary>Whether the copies are drawn into the sun's shadow, as a MeshRenderer's castShadows says.</summary>
+    /// <summary>Whether the copies are drawn into shadow maps, as a MeshRenderer's castShadows says.</summary>
     public bool CastShadows = true;
     /// <summary>False hides every copy; the entity's children are drawn as their own renderers say.</summary>
     public bool Visible = true;
