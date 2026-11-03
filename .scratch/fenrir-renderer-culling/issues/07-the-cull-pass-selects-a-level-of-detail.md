@@ -1,15 +1,15 @@
-# 06: The cull pass draws each surviving copy at the coarsest level whose error is under a pixel
+# 07: The cull pass draws each surviving copy at the coarsest level whose error is under a pixel
 
-**What to build:** Levels of detail on screen: a mesh's levels are drawn by distance, chosen per copy on the GPU (spec: "Levels of detail"; ADR-0055).
+**What to build:** Levels of detail on screen: a mesh's levels are drawn by distance, chosen per copy on the GPU (spec: "Levels of detail"; ADR-0057).
 
-- **Upload:** a mesh's index buffer holds level 0 then each of ticket 05's levels back to back; its entry keeps each level's first index, count and error. A mesh without levels has one.
+- **Upload:** a mesh's index buffer holds level 0 then each of ticket 06's levels back to back; its entry keeps each level's first index, count and error. A mesh without levels has one.
 - **Templates:** each run writes one command per level of its mesh, contiguous, each with that level's first index and count and its own base instance; each level's region of the indirection is sized for the whole run, as any copy may land in any level.
 - **Selection** in the cull shader, for each survivor: its distance `d` from the camera's position to the sphere's nearest point (zero inside it), and the coarsest level `i` with `error[i] * scale * projection / max(d, near) < RendererConfig::lodErrorPixels`, where `scale` is the copy's largest axis scale and `projection` is the camera's pixels per unit at distance 1 (`height / (2 tan(fov / 2))`, or the orthographic equivalent). The survivor is counted into level `i`'s command. A survivor whose radius projects under `RendererConfig::minProjectedPixels` (0, off) is dropped instead, as if it had failed the frustum.
 - **Draws:** each run's `DrawIndexedIndirect` has `drawCount` equal to its mesh's level count, one multi-draw; `DepthPrepass` and `Opaque` share the choice.
-- **`RendererConfig::lodErrorPixels`** (1.0) **and `minProjectedPixels`** (0), with `gpuCulling` off forcing level 0 and dropping nothing, for comparison; `RendererStats` gains `drawnByLod`, counts per level from ticket 04's readback. The API description gains them (generated output only).
+- **`RendererConfig::lodErrorPixels`** (1.0) **and `minProjectedPixels`** (0), with `gpuCulling` off forcing level 0 and dropping nothing, for comparison; `RendererStats` gains `drawnByLod`, counts per level from ticket 05's readback. The API description gains them (generated output only).
 - A CPU `SelectLod` with the same formula, for tests and the docs.
 
-**Blocked by:** 03, 05
+**Blocked by:** 04, 06
 
 **Touches:** `packages/FenrirRenderer/src/`, `packages/FenrirRenderer/Shaders/`, `packages/FenrirRenderer/include/FenrirRenderer/`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`, `packages/FenrirRenderer/api/`
 

@@ -1,14 +1,14 @@
-# 09: Each shadow view culls its own casters, at the level the camera sees them
+# 10: Each shadow view culls its own casters, at the level the camera sees them
 
-**What to build:** The shadow passes stop drawing every caster: each cascade, shadowed spot light and shadowed point light culls on the GPU as a camera does (spec: "Culling", "Prerequisite"; ADR-0055, ADR-0050).
+**What to build:** The shadow passes stop drawing every caster: each cascade, shadowed spot light and shadowed point light culls on the GPU as a camera does (spec: "Culling", "Prerequisite"; ADR-0057, ADR-0050).
 
 - **Shadow candidates** are the opaque and masked runs whose renderer casts (`castShadows`), written once a frame beside the camera candidates, with their own templates and group table.
 - **Views:** each cascade culls against its orthographic box's four side planes and its far plane, but not its near plane, so casters between the light and the cascade still cast (drawn with depth clamping or a pulled-back near plane, whichever lighting 15 chose). A spot light culls against its cone's frustum; a point light against its range sphere, once for all six faces, which then draw from the one result.
-- **Levels** are chosen by the camera the shadows are for (its position and projection, ticket 06's formula), not the light; a cascade belongs to one camera, and an atlas slot of a spot or point light, shared by every camera, chooses by the first camera that draws it this frame. A copy the camera cannot see still gets a level from its distance to the camera.
+- **Levels** are chosen by the camera the shadows are for (its position and projection, ticket 07's formula), not the light; a cascade belongs to one camera, and an atlas slot of a spot or point light, shared by every camera, chooses by the first camera that draws it this frame. A copy the camera cannot see still gets a level from its distance to the camera.
 - **The shadow passes draw indirectly** from their view's buffers, as `DepthPrepass` does.
-- **Coverage:** the shadow views that exist when this is built (lighting 15's cascades at least; 17's and 18's if landed). The README says how a later shadow pass adds its views.
+- **Coverage:** all three view kinds, built once after lighting 15, 17 and 18 have landed. The README says how a later shadow pass adds its views.
 
-**Blocked by:** 06 (and the spec's Prerequisite: lighting fifteen merged)
+**Blocked by:** 07 (and the spec's Prerequisite: lighting fifteen, seventeen and eighteen merged)
 
 **Touches:** `packages/FenrirRenderer/src/`, `packages/FenrirRenderer/Shaders/`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`
 

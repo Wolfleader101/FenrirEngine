@@ -1,6 +1,6 @@
-# 05: Meshes carry levels of detail, and FenrirAssets generates them with meshoptimizer
+# 06: Meshes carry levels of detail, and FenrirAssets generates them with meshoptimizer
 
-**What to build:** Levels of detail as mesh data, and a way to make them (spec: "Levels of detail"; ADR-0055, amending ADR-0021).
+**What to build:** Levels of detail as mesh data, and a way to make them (spec: "Levels of detail"; ADR-0057, amending ADR-0021).
 
 - **`MeshData::lods`**: a vector of `MeshLod { indices, error }`, each a triangle list into the mesh's own streams and the greatest distance, in the mesh's local units, by which it departs from full detail. Level 0 is the mesh's `indices`, with error 0, and is not in the vector. The store refuses a level with an index out of range, a count that is not a multiple of three, an error that does not grow, or levels on a mesh with more than one submesh; it keeps them through `Replace`.
 - **meshoptimizer** (MIT) as a submodule at `packages/FenrirAssets/libs/meshoptimizer`, built as a static library with FenrirAssets as other libs are, its licence recorded where the others are.

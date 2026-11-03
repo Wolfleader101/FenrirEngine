@@ -1,6 +1,6 @@
 # 01: The graphics device draws indexed indirect, many commands at once
 
-**What to build:** Indirect draws through the private graphics device, the backends and the command list, for the cull pass to feed (spec: "Culling"; ADR-0055, ADR-0016).
+**What to build:** Indirect draws through the private graphics device, the backends and the command list, for the cull pass to feed (spec: "Culling"; ADR-0057, ADR-0016).
 
 - **`BufferUsage::Indirect`** and **`ResourceUsage::IndirectRead`** in `packages/FenrirRenderer/src/Device/`. A pass that draws from a buffer declares `IndirectRead` on it, as it declares every other use.
 - **`CmdDrawIndexedIndirect { buffer, offset, drawCount, stride }`** in `Command` and `PassEncoder::DrawIndexedIndirect`. Each command in the buffer is five `u32`s, `indexCount, instanceCount, firstIndex, baseVertex, baseInstance`, as GL's `DrawElementsIndirectCommand` and Vulkan's `VkDrawIndexedIndirectCommand` both lay it; a header names the struct (`DrawIndexedIndirectCommand`) and asserts its size.
