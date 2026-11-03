@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <set>
 #include <span>
 #include <vector>
@@ -8,16 +9,31 @@
 
 namespace Fenrir::Render
 {
+    /** @brief Why a view samples the default texture for a render target image instead of the image. */
+    enum class ReplacedBecause : std::uint8_t
+    {
+        /** @brief The view draws into it. */
+        OwnTarget,
+        /** @brief Its views would wait on this one, directly or through other views. */
+        Cycle,
+    };
+
+    /** @brief A render target image a view samples the default texture for, and why. */
+    struct ReplacedImage
+    {
+        AssetKey image;
+        ReplacedBecause reason = ReplacedBecause::OwnTarget;
+
+        friend constexpr bool operator==(const ReplacedImage&, const ReplacedImage&) = default;
+    };
+
     /** @brief The render target images one view's materials sample (ADR-0026), as PlanImageReads splits them. */
     struct ImageReads
     {
         /** @brief Those it reads, after every view that draws into them. */
         std::vector<AssetKey> reads;
-        /**
-         * @brief Those it samples the default texture for instead: its own target, or one whose views would wait on
-         * it, directly or through other views.
-         */
-        std::vector<AssetKey> replaced;
+        /** @brief Those it samples the default texture for instead. */
+        std::vector<ReplacedImage> replaced;
     };
 
     /**

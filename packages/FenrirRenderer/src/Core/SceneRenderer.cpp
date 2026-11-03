@@ -2516,7 +2516,6 @@ namespace Fenrir::Render
                                     {static_cast<std::uint32_t>(lighting.lights.size() + lighting.rectLights.size()),
                                      spotCount, pointCount, 0}};
         m_frameBlocks->Write(frameIndex, 0, BytesOf(frameBlock));
-        // Written again each frame into a buffer that grows by doubling.
         const std::vector<GpuLight> lightRecords =
             LightRecords(lighting.lights, lighting.rectLights, spotFrame.lights, pointFrame.lights);
         m_lightBlocks->Reserve(lightRecords.size());
@@ -2610,20 +2609,23 @@ namespace Fenrir::Render
             return resource;
         };
 
-        // Which sampled images each view may read (ADR-0026), each it may not warned of once per target.
+        // Which sampled images each view may read (ADR-0026). Each it may not is warned of once per target, and its
+        // materials bind the default texture for it.
         std::vector<AssetKey> targets;
         for (const ViewRequest& view : views)
         {
             targets.push_back(view.target);
         }
         const std::vector<ImageReads> imageReads = PlanImageReads(targets, sampled);
+        std::vector<std::vector<AssetKey>> replaced(views.size());
         for (std::size_t v = 0; v < views.size(); ++v)
         {
-            for (const AssetKey image : imageReads[v].replaced)
+            for (const auto& [image, reason] : imageReads[v].replaced)
             {
+                replaced[v].push_back(image);
                 if (m_loggedSampling.insert({views[v].target, image}).second)
                 {
-                    m_logger.Warn(views[v].target == image
+                    m_logger.Warn(reason == ReplacedBecause::OwnTarget
                                       ? "FenrirRenderer: a view into {} draws materials that sample its own target "
                                         "image, so they sample the default texture there"
                                       : "FenrirRenderer: a view into {} draws materials that sample image {}, whose "
@@ -2895,7 +2897,7 @@ namespace Fenrir::Render
             for (const ResolvedDraw& draw : *draws)
             {
                 groups->push_back(draw.material == nullptr ? BindingGroupHandle{}
-                                                           : GroupWithout(*draw.material, imageReads[v].replaced));
+                                                           : GroupWithout(*draw.material, replaced[v]));
             }
             std::vector<GraphResource> samples;
             for (const AssetKey image : imageReads[v].reads)
@@ -2947,7 +2949,7 @@ namespace Fenrir::Render
                 }
                 if (draw.prepassMasked)
                 {
-                    (*prepassGroups)[i] = PrepassGroup(*draw.material, imageReads[v].replaced);
+                    (*prepassGroups)[i] = PrepassGroup(*draw.material, replaced[v]);
                 }
                 depth[i] = (request.view * Math::Vec4(draw.sortPoint, 1.0f)).z;
             }
@@ -2968,7 +2970,7 @@ namespace Fenrir::Render
                 {
                     if ((*draws)[i].shadowMasked)
                     {
-                        (*shadowGroups)[i] = PrepassGroup(*(*draws)[i].material, imageReads[v].replaced);
+                        (*shadowGroups)[i] = PrepassGroup(*(*draws)[i].material, replaced[v]);
                     }
                 }
                 auto shadowRuns =

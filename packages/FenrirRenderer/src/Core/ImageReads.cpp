@@ -52,7 +52,7 @@ namespace Fenrir::Render
                     std::any_of(writers.begin(), writers.end(), [&](std::size_t w) { return Waits(waitsOn, w, v); });
                 if (own || cycle)
                 {
-                    plan[v].replaced.push_back(image);
+                    plan[v].replaced.push_back({image, own ? ReplacedBecause::OwnTarget : ReplacedBecause::Cycle});
                     continue;
                 }
                 waitsOn[v].insert(waitsOn[v].end(), writers.begin(), writers.end());
