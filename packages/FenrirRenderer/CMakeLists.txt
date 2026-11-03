@@ -56,16 +56,16 @@ add_library(FenrirRendererCore STATIC
     src/Core/Draw2DFeature.cpp
     src/Core/FrameRingBuffer.hpp
     src/Core/FrameRingBuffer.cpp
-    src/Core/FullscreenPipeline.hpp
-    src/Core/FullscreenPipeline.cpp
+    src/Core/FullscreenPasses.hpp
+    src/Core/FullscreenPasses.cpp
     src/Core/ImageUpload.hpp
     src/Core/ImageUpload.cpp
     src/Core/ImageReads.hpp
     src/Core/ImageReads.cpp
     src/Core/Gtao.hpp
     src/Core/Gtao.cpp
-    src/Core/LightShadows.hpp
-    src/Core/LightShadows.cpp
+    src/Core/ShadowPool.hpp
+    src/Core/ShadowPool.cpp
     src/Core/RenderFeature.hpp
     src/Core/RenderGraph.hpp
     src/Core/RenderGraph.cpp
@@ -101,6 +101,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/Tonemapping.cpp
     src/Core/TransientPool.hpp
     src/Core/TransientPool.cpp
+    src/Core/UniformBlocks.hpp
+    src/Core/UniformBlocks.cpp
 )
 target_link_libraries(FenrirRendererCore PUBLIC FenrirRendererDevice FenrirMath FenrirLogger PRIVATE FenrirStbTruetype)
 # The debug font (ADR-0025), an OFL monospace TrueType font checked in with its licence (Resources/Fonts), embedded as a

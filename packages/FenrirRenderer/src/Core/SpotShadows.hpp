@@ -3,8 +3,8 @@
 #include <cstdint>
 #include <span>
 
-#include "Core/LightShadows.hpp"
 #include "Core/PunctualLights.hpp"
+#include "Core/ShadowPool.hpp"
 #include "FenrirMath/Math.hpp"
 
 namespace Fenrir::Render

@@ -222,13 +222,7 @@ namespace Fenrir::Render
     PipelineHandle DebugFeature::MakePipeline(const ShaderContainer& container, PipelineDesc desc)
     {
         desc.shader = container.FindVariant({});
-        const PipelineResult made = m_device.CreatePipeline(desc, container.name);
-        if (made.pipeline.IsEmpty())
-        {
-            m_logger.Error("FenrirRenderer: the built-in pipeline '{}' could not be made: {}", container.name,
-                           made.diagnostic);
-        }
-        return made.pipeline;
+        return MakeBuiltinPipeline(m_device, m_logger, desc, container.name);
     }
 
     void DebugFeature::SetFrame(DebugFrame frame)

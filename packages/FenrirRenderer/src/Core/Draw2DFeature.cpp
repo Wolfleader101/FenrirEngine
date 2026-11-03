@@ -12,6 +12,7 @@
 
 #include "Core/BlockRing.hpp"
 #include "Core/FrameRingBuffer.hpp"
+#include "Core/UniformBlocks.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
 namespace Fenrir::Render
