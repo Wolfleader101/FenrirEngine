@@ -25,6 +25,7 @@ private-fields = [
 
 [cpp]
 mappings = "../include/FenrirInputScripting/Generated/FenrirInputMappings.hpp"
+include = "FenrirInputScripting/Generated/FenrirInputMappings.hpp"
 includes = [
     "FenrirInput/InputEvents.hpp",
     "FenrirInput/InputRouter.hpp",

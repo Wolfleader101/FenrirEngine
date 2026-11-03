@@ -9,8 +9,8 @@
 #include "FenrirDebugDraw/DebugDraw.hpp"
 #include "ScriptOptions.hpp"
 #include "FenrirScripting/BoundMappings.hpp"
-#include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirScriptingMappings.hpp"
-#include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
+#include "FenrirScripting/Generated/FenrirMathMappings.hpp"
 
 #include <cstdint>
 #include <string_view>

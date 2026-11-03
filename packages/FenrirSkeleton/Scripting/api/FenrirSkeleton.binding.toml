@@ -25,6 +25,7 @@ private-fields = ["Fenrir::BoneName::m_bytes"]
 [cpp]
 # On the include path, for the bindings that use this one.
 mappings = "../include/FenrirSkeletonScripting/Generated/FenrirSkeletonMappings.hpp"
+include = "FenrirSkeletonScripting/Generated/FenrirSkeletonMappings.hpp"
 includes = [
     "FenrirSkeleton/BoneAttachment.hpp",
     "FenrirSkeleton/PoseStages.hpp",

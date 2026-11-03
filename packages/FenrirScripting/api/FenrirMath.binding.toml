@@ -16,6 +16,7 @@ private-fields = ["Fenrir::Math::Frustum::m_planes", "Fenrir::Math::Frustum::m_c
 
 [cpp]
 mappings = "../include/FenrirScripting/Generated/FenrirMathMappings.hpp"
+include = "FenrirScripting/Generated/FenrirMathMappings.hpp"
 includes = ["FenrirMath/Colour.hpp", "FenrirMath/Math.hpp", "FenrirMath/Frustum.hpp"]
 
 # No registration: the built-in extension shares the Fenrir.Math assembly. The defaults test runs in the built-in

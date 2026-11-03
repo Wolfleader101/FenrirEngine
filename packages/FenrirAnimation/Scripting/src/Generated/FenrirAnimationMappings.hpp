@@ -12,10 +12,10 @@
 #include "FenrirAnimation/Animator.hpp"
 #include "FenrirAssets/BoneMaskData.hpp"
 #include "FenrirAssetsScripting/AssetMappings.hpp"
-#include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirScriptingMappings.hpp"
-#include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
-#include "../../../../FenrirAssets/Scripting/include/FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
-#include "../../../../FenrirSkeleton/Scripting/include/FenrirSkeletonScripting/Generated/FenrirSkeletonMappings.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
+#include "FenrirScripting/Generated/FenrirMathMappings.hpp"
+#include "FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
+#include "FenrirSkeletonScripting/Generated/FenrirSkeletonMappings.hpp"
 
 #include <cstdint>
 #include <string_view>
