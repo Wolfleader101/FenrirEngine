@@ -579,6 +579,10 @@ One depth texture holding several shadow maps side by side, each drawn into its 
 **Point shadow cubes**
 One cube array of depth, a cube for each point light the budget lets cast, each face holding the distance from its light to the nearest caster over the light's range (ADR-0050).
 *Avoid:* point shadow maps, omni shadow map, shadow cubemap atlas.
+
+**Shadow pool**
+The shadow maps one kind of light may cast into, kept across frames and sized by its budget (the spot shadow atlas, or the point shadow cubes), with each frame's choice of which lights of that kind get them: those nearest any camera, the rest unshadowed and warned about once (ADR-0050).
+*Avoid:* shadow cache, shadow manager, shadow budget (the number the pool is sized by).
 ## FenrirEngine debug drawing
 
 **FenrirDebugDraw**

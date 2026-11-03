@@ -21,13 +21,6 @@ namespace Fenrir::Render
     inline constexpr std::uint32_t CubeFaceCount = 6;
 
     /**
-     * @brief The point lights of `lights` with castShadows that keep their shadows, as ChooseSpotShadows chooses spot
-     * lights: the `budget` nearest to any of the cameras at `cameras`, the nearer first, ties in list order.
-     */
-    [[nodiscard]] ShadowChoice ChoosePointShadows(std::span<const PunctualLight> lights,
-                                                  std::span<const Math::Vec3> cameras, std::uint32_t budget);
-
-    /**
      * @brief World directions to cube face `face`'s view space, as `Fenrir/CubeFaces.glsl`'s FenrirFaceTurn: looking
      * down its -Z along the face's axis, its +X and +Y towards the face's NDC +x and +y (its first row at the top), so
      * a 90-degree perspective draws what a lookup of the cube along those directions reads. It mirrors, as cube faces
@@ -73,4 +66,35 @@ namespace Fenrir::Render
 
     /** @brief The record of `light`'s `shadow`. */
     [[nodiscard]] GpuPointShadow ToGpuPointShadow(const PunctualLight& light, const PointShadow& shadow);
+
+    /** @brief The point lights' kind of ShadowPool: each shadowed light a cube of one cube array, a cube per budget. */
+    struct PointShadowKind
+    {
+        /** @brief What the pool draws each light's shadow with: its six faces' views. */
+        using Shadow = PointShadow;
+        /** @brief One light's record in the ring set 0 binds. */
+        using Record = GpuPointShadow;
+        /** @brief The kind of light the pool chooses from. */
+        static constexpr LightKind Light = LightKind::Point;
+        /** @brief The kind's name in the budget's warning. */
+        static constexpr const char* Name = "point";
+        /** @brief The least side of a light's map, in texels, that the config's map size is held to. */
+        static constexpr std::uint32_t MinMapSize = 1;
+        /** @brief The maps' label on the device. */
+        static constexpr const char* MapLabel = "Point shadow cubes";
+        /** @brief The maps' name in the frame's graph. */
+        static constexpr const char* MapResource = "PointShadowCubes";
+        /** @brief The record ring's label. */
+        static constexpr const char* RecordsLabel = "Point shadows";
+
+        /** @brief FitPointShadow, its faces the config's map size square. */
+        [[nodiscard]] static PointShadow Fit(const PunctualLight& light, const ShadowBudgetConfig& config);
+        /** @brief ToGpuPointShadow; record i belongs to cube i. */
+        [[nodiscard]] static GpuPointShadow ToRecord(const PunctualLight& light, const PointShadow& shadow,
+                                                     std::uint32_t cube, const ShadowBudgetConfig& config);
+        /** @brief A Depth32Float CubeArray of a cube per budget, its faces the map size square. */
+        [[nodiscard]] static Graphics::TextureDesc MapDesc(const ShadowBudgetConfig& config);
+        /** @brief One cube of depth 0, which lights everything, bound where no point light casts. */
+        [[nodiscard]] static Graphics::TextureHandle MakeFallback(Graphics::GraphicsDevice& device);
+    };
 } // namespace Fenrir::Render

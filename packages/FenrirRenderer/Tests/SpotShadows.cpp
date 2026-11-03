@@ -143,7 +143,7 @@ TEST_CASE("The atlas grid is as square as the budget allows", "[renderer][shadow
 TEST_CASE("The budget keeps the casting spot lights nearest to any camera, nearest first",
           "[renderer][shadows][spot-shadows]")
 {
-    using Fenrir::Render::ChooseSpotShadows;
+    using Fenrir::Render::ChooseShadowedLights;
     std::vector<PunctualLight> lights{Spot({10.0f, 0.0f, 0.0f}), Spot({1.0f, 0.0f, 0.0f}),
                                       Spot({3.0f, 0.0f, 0.0f}, {0.0f, -1.0f, 0.0f}, false), Spot({-4.0f, 0.0f, 0.0f}),
                                       Spot({2.0f, 0.0f, 0.0f})};
@@ -153,7 +153,7 @@ TEST_CASE("The budget keeps the casting spot lights nearest to any camera, neare
 
     SECTION("within the budget, every caster, nearest first, and no point light or spot not asking")
     {
-        const Fenrir::Render::ShadowChoice choice = ChooseSpotShadows(lights, origin, 8);
+        const Fenrir::Render::ShadowChoice choice = ChooseShadowedLights(lights, origin, 8, LightKind::Spot);
         INFO("four spot lights ask to cast");
         REQUIRE(choice.wanted == 4);
         INFO("all four keep their shadows, nearest first");
@@ -161,7 +161,7 @@ TEST_CASE("The budget keeps the casting spot lights nearest to any camera, neare
     }
     SECTION("past it, the nearest the budget allows")
     {
-        const Fenrir::Render::ShadowChoice choice = ChooseSpotShadows(lights, origin, 2);
+        const Fenrir::Render::ShadowChoice choice = ChooseShadowedLights(lights, origin, 2, LightKind::Spot);
         INFO("four ask to cast");
         REQUIRE(choice.wanted == 4);
         INFO("the two nearest keep their shadows");
@@ -170,14 +170,14 @@ TEST_CASE("The budget keeps the casting spot lights nearest to any camera, neare
     SECTION("each light by its nearest camera")
     {
         const std::array<Vec3, 2> cameras{Vec3(0.0f), Vec3(10.0f, 0.0f, 0.0f)};
-        const Fenrir::Render::ShadowChoice choice = ChooseSpotShadows(lights, cameras, 2);
+        const Fenrir::Render::ShadowChoice choice = ChooseShadowedLights(lights, cameras, 2, LightKind::Spot);
         INFO("the light at x 10 is on the second camera");
         REQUIRE(choice.lights == std::vector<std::size_t>{0, 2});
     }
     SECTION("a budget of 0 keeps none")
     {
         INFO("no light keeps a shadow");
-        REQUIRE(ChooseSpotShadows(lights, origin, 0).lights.empty());
+        REQUIRE(ChooseShadowedLights(lights, origin, 0, LightKind::Spot).lights.empty());
     }
 }
 

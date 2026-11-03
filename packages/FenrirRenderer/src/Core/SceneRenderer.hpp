@@ -131,7 +131,7 @@ namespace Fenrir::Render
      * tints its lit colour by them; one showing its shadow atlas has Output draw the atlas as grey.
      *
      * **Spot shadows** (ADR-0050): each frame the spot lights with castShadows nearest to any view's camera, up to
-     * the budget, keep their shadows (ChooseSpotShadows), the rest light unshadowed, warned about once. With items
+     * the budget, keep their shadows (the spot shadow pool), the rest light unshadowed, warned about once. With items
      * that cast, one `SpotShadows` pass in the `Shadow` stage, before every view's, draws them as ShadowCascades does
      * into each light's tile of the spot shadow atlas: a Depth32Float texture the renderer keeps, a grid of the
      * budget's tiles (SpotAtlasGridOf), each `mapSize` square, made again when the budget changes, through a view
@@ -141,7 +141,7 @@ namespace Fenrir::Render
      * (`Fenrir/Frame.glsl`), which `Fenrir/Shadows.glsl` reads; with none, and in the SpotShadows pass itself,
      * binding 8 is the map that lights everything. A view showing the spot shadow atlas has Output draw it as grey.
      *
-     * **Point shadows** (ADR-0050): chosen as spot shadows are, within their own budget (ChoosePointShadows), each
+     * **Point shadows** (ADR-0050): chosen as spot shadows are, within their own budget (the point shadow pool), each
      * shadowed point light a cube of the point shadow cubes (CubeArray, Depth32Float, `mapSize` square faces, a
      * cube per budget, kept and made again when the budget changes). Casters are drawn from the light's position
      * through six 90-degree faces (FitPointShadow) behind builtin:shadow's POINT_SHADOW variant, which writes the
@@ -814,12 +814,10 @@ namespace Fenrir::Render
         [[nodiscard]] GraphResource AddSkinningPass(RenderGraph& graph, std::uint64_t frameIndex,
                                                     const std::vector<SkinDispatch>& skins);
         /**
-         * @brief The frame set's groups for frame `frameIndex`: its copy of the frame block, the sky's light, its spot
-         * shadow records with `spotAtlas` and its point shadow records with `pointShadowCubes` (the maps that light
-         * everything when empty).
+         * @brief The frame set's groups for frame `frameIndex`: its copy of the frame block, the sky's light, and each
+         * shadow pool's records with what it binds this frame (its maps, else the map that lights everything).
          */
-        [[nodiscard]] const FrameGroup& FrameGroupFor(std::uint64_t frameIndex, Graphics::TextureHandle spotAtlas,
-                                                      Graphics::TextureHandle pointShadowCubes);
+        [[nodiscard]] const FrameGroup& FrameGroupFor(std::uint64_t frameIndex);
         /** @brief What the scene's Sky lights with: its prepared cube texture, else its colour. */
         [[nodiscard]] SkySource SkySourceOf(const SceneLighting& lighting) const;
         /**
@@ -831,11 +829,6 @@ namespace Fenrir::Render
                                                                 Graphics::TextureHandle occlusion,
                                                                 Graphics::TextureHandle shadow = {},
                                                                 Graphics::BufferHandle clusters = {});
-        /**
-         * @brief Sets `config`'s budget to `budget`, destroying `maps`, the kind's shadow maps, when it changes; the
-         * frame makes them again at the new size when a light of the kind next casts.
-         */
-        void SetShadowBudget(ShadowBudgetConfig& config, Graphics::TextureHandle& maps, std::uint32_t budget);
         /**
          * @brief Adds view `view`'s LightClusters pass over the frame's `lightCount` lights into its cluster buffer,
          * imported into `graph`, which the view's lit passes then read; returns that buffer and its resource, or empty
@@ -863,10 +856,6 @@ namespace Fenrir::Render
         bool m_clusteredLights = true;
         /** @brief How each view's sun cascades are made (RendererConfig's shadow members). */
         CascadeConfig m_cascades;
-        /** @brief The spot shadow budget and tile size (RendererConfig's spot shadow members). */
-        ShadowBudgetConfig m_spotShadowConfig;
-        /** @brief The point shadow budget and face size (RendererConfig's point shadow members). */
-        ShadowBudgetConfig m_pointShadowConfig;
 
         std::map<AssetKey, ShaderEntry> m_shaders;
         std::map<AssetKey, MeshEntry> m_meshes;
@@ -952,23 +941,16 @@ namespace Fenrir::Render
         Graphics::SamplerHandle m_shadowSampler;
         /** @brief The 1 x 1 shadow map of depth 0 that lights everything, bound where a view has no shadow. */
         Graphics::TextureHandle m_noShadow;
-        /** @brief The spot shadow atlas, made when a spot light first casts at the budget's size, and its description.
-         */
-        Graphics::TextureHandle m_spotAtlas;
-        Graphics::TextureDesc m_spotAtlasDesc;
-        /** @brief The shadowed spot lights' records (GpuSpotShadow), bound at set 0 binding 7 by the frame's groups. */
-        std::unique_ptr<BlockRing> m_spotShadowBlocks;
         /**
-         * @brief The point shadow cubes, made when a point light first casts with a cube per budget, and its
-         * description.
+         * @brief The spot shadow pool (RendererConfig's spot shadow members): the spot shadow atlas, and the records
+         * set 0 binds at binding 7 beside it at binding 8.
          */
-        Graphics::TextureHandle m_pointShadowCubes;
-        Graphics::TextureDesc m_pointShadowCubesDesc;
-        /** @brief One cube of depth 0 that lights everything, bound at set 0 binding 10 where no point light casts. */
-        Graphics::TextureHandle m_noPointShadow;
-        /** @brief The shadowed point lights' records (GpuPointShadow), bound at set 0 binding 9 by the frame's groups.
+        std::unique_ptr<ShadowPool<SpotShadowKind>> m_spotShadows;
+        /**
+         * @brief The point shadow pool (RendererConfig's point shadow members): the point shadow cubes, and the
+         * records set 0 binds at binding 9 beside them at binding 10.
          */
-        std::unique_ptr<BlockRing> m_pointShadowBlocks;
+        std::unique_ptr<ShadowPool<PointShadowKind>> m_pointShadows;
         /** @brief The constant every vertex stream a mesh lacks reads, at stride 0. */
         Graphics::BufferHandle m_defaultStreams;
 
@@ -1030,9 +1012,5 @@ namespace Fenrir::Render
         std::set<std::pair<AssetKey, AssetKey>> m_loggedSampling;
         /** @brief Shaders without `SKINNED` that skinned draws fell back from, already logged. */
         std::set<AssetKey> m_loggedUnskinned;
-        /** @brief Whether more spot lights asked to cast than the budget allows, already logged. */
-        bool m_loggedSpotBudget = false;
-        /** @brief Whether more point lights asked to cast than the budget allows, already logged. */
-        bool m_loggedPointBudget = false;
     };
 } // namespace Fenrir::Render
