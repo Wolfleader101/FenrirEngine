@@ -727,6 +727,10 @@ A per-bone scale, default 1, that gameplay sets on a skeleton instance to say ho
 `HumanoidBones`: named slots (hips, spine, chest, head, and each side's upper arm, lower arm, hand, upper leg, lower leg, foot) that game code fills with a rig's bone names, any of them empty. The ragdoll derivation never guesses a slot from a name.
 *Avoid:* avatar (Unity's), retarget map.
 
+**Stature**
+A skeleton's head-to-foot distance in its rest pose, which the ragdoll derivation sizes capsule radii and leaf parts from, because bone lengths (a short spine bone) do not scale a body's girth.
+*Avoid:* height (an entity's), scale.
+
 **Strength**
 How hard a powered ragdoll's motors drive towards the base pose: one value in [0, 1] on the ragdoll, scaled per part, that the glue turns into each motor's maximum torque, frequency and damping, so it means the same on every rig.
 *Avoid:* stiffness, blend weight (an *override weight* is how much the simulated pose shows, not how hard it is driven).
