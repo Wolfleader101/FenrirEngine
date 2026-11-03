@@ -12,8 +12,9 @@ Origin: the FenrirRenderer wayfinder map (`.scratch/fenrir-renderer/map.md`), it
 | 0050 | Shadows are stable cascades and pooled atlases with a budget, and skinned meshes skin once per frame in compute |
 | 0051 | The renderer instances matching items automatically, and `InstancedMeshRenderer` draws instance lists |
 | 0052 | Large demo assets are downloaded at configure time, and tests never use them |
+| 0056 | Screen-space reflections trace the prepass's depth, and materials blend last frame's colour through the lighting include |
 
-They amend ADR-0019, ADR-0023, ADR-0024, ADR-0026 and ADR-0035.
+They amend ADR-0019, ADR-0023, ADR-0024, ADR-0026 and ADR-0035; ADR-0056 amends ADR-0048 and ADR-0049.
 
 ## Prerequisite
 
@@ -55,6 +56,10 @@ All in FenrirRenderer, with an instance-list asset in FenrirAssets and a new Lig
 - **`Output`** applies `exposure` (EV stops) and the `tonemapper` (`None`, `AgX` default, `PbrNeutral`, `Aces`).
 - **`Camera` gains** `exposure`, `tonemapper`, `ambientOcclusion { enabled, radius, intensity }` and `bloom { intensity, radius }`.
 
+### Screen-space reflections
+
+Added on 2026-11-02 at the user's request, after ticket 20's neon city showed wet streets mirroring only the analytic lights and the sky, not the neon strips, sign boards and windows. ADR-0056: per view, a Hi-Z pyramid of the prepass's depth and a Hi-Z trace of each pixel's mirror ray from the prepass normal, in fragment passes before `Opaque`, into a hit target holding the hit's UV in the previous frame and its confidence; a per-camera history of `SceneColor` taken before bloom, with mips. `Fenrir/Lighting.glsl` blends last frame's colour at the hit, at a mip chosen by roughness, over the sky's prefiltered specular by the confidence, so user shaders get it too. A rect light's specular yields to the reflection where its board is drawn (`RectLight::visibleSurface`). Off screen, the sky and the analytic lights as before. `Camera` gains `reflections { enabled, intensity, maxDistance, thickness, roughnessCutoff }`, off by default.
+
 ### Shadows
 
 ADR-0050: `castShadows` on lights and on both mesh renderers; a `RendererConfig` budget of shadowed point (4) and spot (8) lights, chosen by distance each frame; stable texel-snapped cascades for the sun (up to four, practical split scheme, blended boundaries); a 2D atlas for spot shadows and a cubemap array for point shadows, drawn without geometry shaders; hardware comparison with rotated Vogel-disk PCF, slope-scaled and normal-offset biases. Compute skinning skins each skinned mesh once a frame for every pass.
@@ -77,7 +82,7 @@ Each ticket's tests follow the foundation's seams: the null backend through `Ren
 4. **Showroom:** a dark room, a polished floor of varying roughness, a neon strip, a panel and a two-sided sign as rect lights, the helmets on plinths (09).
 5. **Asteroid ring:** a planet (Solar System Scope textures, CC-BY 4.0) with a ring of 100k Poly Haven rocks, 3–4 kinds, one `InstancedMeshRenderer` each, under a procedural starfield panorama made by the demo; a field of about 5k rock entities merged automatically; an emissive station with point lights; the panel shows the asteroid count, the merging switch and draw and instance counts (13), shadowed by the sun from 15.
 6. **Forest clearing at golden hour:** Poly Haven CC0 trees, ferns, shrubs, rocks and logs as about 20k instances; about 200k procedural grass blades through a user wind shader that lights through `Fenrir/Lighting.glsl`; a Poly Haven ground set and sunset panorama; cascaded shadows, alpha-tested leaves in the prepass and shadows (16).
-7. **Neon city at night:** procedural instanced buildings drawn by a user facade shader whose per-instance colour lights windows; asphalt with a puddle mask; rect-light signs reflected by the wet streets through LTC specular; point-light street lamps; spot-light car headlights; a Poly Haven night panorama; bloom, GTAO and AgX (20).
+7. **Neon city at night:** procedural instanced buildings drawn by a user facade shader whose per-instance colour lights windows; asphalt with a puddle mask; rect-light signs reflected by the wet streets through LTC specular; point-light street lamps; spot-light car headlights; a Poly Haven night panorama; bloom, GTAO and AgX (20). From ticket 31 the wet streets also reflect the glowing edge strips, sign boards and windows through screen-space reflections.
 8. **Sponza:** Khronos Sponza under an HDR sky with the sun's cascades, shadowed point lights, GTAO and bloom (21).
 
 ## Tickets
@@ -108,9 +113,12 @@ Each ticket's tests follow the foundation's seams: the null backend through `Ren
 | 22 | C# for lighting, the sky, cameras, shadows and instancing | 21 |
 | 23 | Debug views of what the renderer shades with (requested in review of 16; needs triage) | 16 |
 | 24 | Atmospheric haze and sun shafts (requested in review of 16; needs triage) | 15, 16 |
+| 29 | Scene history colour and the Hi-Z pyramid (requested in review of 20) | 06, 11 |
+| 30 | Screen-space reflections: the trace and the lighting include's blend | 19, 29 |
+| 31 | Reflection debug views, LightingDemo's controls and the neon city's wet streets | 20, 30 |
 
-Every C++ ticket touches `packages/FenrirRenderer/src/` and its shaders, so most of them stack. C# waits for every C++ ticket, as in the animation spec; until ticket 22, `AmbientLight`'s C# mirror is a deprecated no-op.
+Every C++ ticket touches `packages/FenrirRenderer/src/` and its shaders, so most of them stack. C# waits for every C++ ticket, as in the animation spec; until ticket 22, `AmbientLight`'s C# mirror is a deprecated no-op. Screen-space reflections (29 to 31, settled in a grilling session on 2026-11-03) stack straight after 20, and the camera post-effects tickets (25 to 28) on top of them; ticket 22 has been built, so each of them regenerates FenrirRenderer's C# binding for its own fields and adds them to the scripting round trip.
 
 ## Out of scope
 
-Deferred shading; physical light units; auto-exposure; screen-space reflections; fog and volumetric light; PCSS and VSM; area-light shadows and disc, tube or sphere lights; clearcoat, sheen, transmission and anisotropy; GPU culling and indirect draws; LearnOpenGL's Blinn-Phong (the engine is already GGX).
+Deferred shading; physical light units; auto-exposure; reflection probes, planar reflections, and temporal accumulation or half-resolution tracing for screen-space reflections (ADR-0056); motion vectors; fog and volumetric light; PCSS and VSM; area-light shadows and disc, tube or sphere lights; clearcoat, sheen, transmission and anisotropy; GPU culling and indirect draws; LearnOpenGL's Blinn-Phong (the engine is already GGX).
