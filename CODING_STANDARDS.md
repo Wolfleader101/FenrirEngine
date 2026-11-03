@@ -4,7 +4,8 @@ The rules a reviewer applies. Anything a tool can check is checked by the tool (
 
 ## Keep the documents true
 
-- A change that makes a statement in an ADR, `GLOSSARY.md` or a README false amends that statement in the same change. A reader who finds an ADR contradicting the code stops trusting all of them.
+- A change that makes a statement in an ADR, `GLOSSARY.md` or a README false amends that statement in the same change. A reader who finds an ADR contradicting the code stops trusting all of them. The false statement is usually outside the diff: for each list the change extends (a stage, a light kind, a component field), search the ADRs, glossary, specs and comments for the places that list its siblings.
+- An ADR's status becomes `accepted` in the change that ships the last of its decision.
 - Use the `GLOSSARY.md` words in code, comments, log messages and tests. Where the glossary has a term for a concept, a second name for it is a defect.
 
 ## Design
