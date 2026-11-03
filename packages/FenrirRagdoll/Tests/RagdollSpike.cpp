@@ -13,8 +13,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "FenrirAnimation/Animation.hpp"
+#include "FenrirAnimation/Animator.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
+#include "FenrirAssets/Model.hpp"
 #include "FenrirAssets/SkeletonData.hpp"
 #include "FenrirDebugDraw/DebugDrawing.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
@@ -391,4 +394,120 @@ TEST_CASE("Two runs of the fall are bit-identical", "[ragdoll-spike]")
     INFO("every body's world transform after a second of falling matches byte for byte");
     REQUIRE(first.size() == second.size());
     REQUIRE(std::memcmp(first.data(), second.data(), first.size()) == 0);
+}
+
+namespace
+{
+    /** @brief The demo's rig, headless: the Quaternius human playing its walk clip on a tick-posed skeleton, its
+     * ragdoll built from the demo's bone map. */
+    struct HumanApp
+    {
+        std::shared_ptr<std::vector<std::string>> messages = std::make_shared<std::vector<std::string>>();
+        App app{std::make_unique<RecordingLogger>(messages), 1};
+        Scene& level = app.CreateScene("Level");
+        Assets assets = Assets::Install(app, AssetsConfig{.root = FENRIR_RAGDOLL_DEMO_ASSETS});
+        Skeletons skeletons = Skeletons::Install(app);
+        Animation animation = Animation::Install(app, skeletons);
+        DebugDrawing debugDrawing = DebugDrawing::Install(app);
+        Physics physics = Physics::Install(app, [] {
+            PhysicsConfig config;
+            config.interpolate = false;
+            config.useWorkerThreads = false;
+            return config;
+        }());
+        Ragdolls ragdolls = Ragdolls::Install(app);
+        Entity skeleton;
+        SpawnedRagdoll spawned;
+
+        HumanApp()
+        {
+            app.ChangeActiveScene("Level");
+            Entity ground = level.GetEntityList().CreateEntity();
+            ground.GetComponent<Transform>().pos = Vec3(0.0f, -0.5f, 0.0f);
+            ground.AddComponent<Collider>(Collider{BoxShape{Vec3(20.0f, 0.5f, 20.0f)}});
+
+            const auto model = assets.Store().Load<Model>("quaternius/rig-human.glb", level);
+            REQUIRE(model.Ok());
+            const SpawnedNodes nodes = skeletons.SpawnModel(level, model.handle);
+            REQUIRE(nodes.root.IsValid());
+            for (const Entity& node : nodes.nodes)
+            {
+                if (node.IsValid() && node.HasComponent<SkeletonPose>())
+                {
+                    skeleton = node;
+                }
+            }
+            REQUIRE(skeleton.IsValid());
+            skeleton.GetComponent<SkeletonPose>().timing = PoseTiming::Tick;
+            const auto walk = assets.Store().Load<Model>("quaternius/walk_loop.glb", level);
+            REQUIRE(walk.Ok());
+            const Model* walkData = assets.Store().TryGet(walk.handle);
+            REQUIRE((walkData != nullptr && !walkData->clips.empty()));
+            Animator animator;
+            animator.clip = walkData->clips.front();
+            skeleton.AddComponent<Animator>(animator);
+
+            HumanoidBones bones;
+            bones.hips = "pelvis";
+            bones.spine = "spine_01";
+            bones.chest = "spine_03";
+            bones.head = "Head";
+            bones.leftUpperArm = "upperarm_l";
+            bones.leftLowerArm = "lowerarm_l";
+            bones.leftHand = "hand_l";
+            bones.rightUpperArm = "upperarm_r";
+            bones.rightLowerArm = "lowerarm_r";
+            bones.rightHand = "hand_r";
+            bones.leftUpperLeg = "thigh_l";
+            bones.leftLowerLeg = "calf_l";
+            bones.leftFoot = "foot_l";
+            bones.rightUpperLeg = "thigh_r";
+            bones.rightLowerLeg = "calf_r";
+            bones.rightFoot = "foot_r";
+            const SkeletonData* data = assets.Store().TryGet(skeleton.GetComponent<SkeletonPose>().skeleton);
+            REQUIRE(data != nullptr);
+            const RagdollDescription description = DescribeHumanoid(*data, bones);
+            REQUIRE(description.error.empty());
+            spawned = BuildRagdoll(app, level, skeleton, description);
+            REQUIRE(spawned.error.empty());
+        }
+
+        void Run(int ticks)
+        {
+            for (int i = 0; i < ticks; ++i)
+            {
+                app.RunFrame(Tick);
+            }
+        }
+    };
+} // namespace
+
+TEST_CASE("On the demo's human, every mapped bone's render pose is its simulating body's, legs included",
+          "[ragdoll-spike][demo-rig]")
+{
+    HumanApp test;
+    test.Run(10);
+    test.skeleton.GetComponent<Ragdoll>().mode = RagdollMode::Simulating;
+    test.Run(45);
+    INFO("nothing was warned about: " << (test.messages->empty() ? "" : test.messages->front()));
+    REQUIRE(test.messages->empty());
+    const Math::Mat4 entityWorld = GetWorldMatrix(test.skeleton);
+    for (const Entity& body : test.spawned.bodies)
+    {
+        const RagdollBody& mapping = body.GetComponent<RagdollBody>();
+        const std::int32_t bone = Skeletons::FindBone(test.level, test.skeleton, mapping.bone.Get().value_or(""));
+        REQUIRE(bone != NoBone);
+        // The render pose (the final pose with the override applied) × offset should be the body.
+        const std::optional<Math::Mat4> model = Skeletons::GetModel(test.level, test.skeleton, bone);
+        REQUIRE(model.has_value());
+        Transform fromPose;
+        Math::Decompose(entityWorld * *model * TransformToMat4(mapping.offset), fromPose.pos, fromPose.rot,
+                        fromPose.scale);
+        const Transform actual = GetWorldTransform(body);
+        INFO(mapping.bone.Get().value_or("")
+             << ": pose puts the body at (" << fromPose.pos.x << ", " << fromPose.pos.y << ", " << fromPose.pos.z
+             << "), the body is at (" << actual.pos.x << ", " << actual.pos.y << ", " << actual.pos.z << ")");
+        REQUIRE(Near(fromPose.pos, actual.pos, 0.02f));
+        REQUIRE(Near(fromPose.rot, actual.rot, 1e-2f));
+    }
 }
