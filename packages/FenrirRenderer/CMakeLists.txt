@@ -60,6 +60,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/FullscreenPipeline.cpp
     src/Core/ImageUpload.hpp
     src/Core/ImageUpload.cpp
+    src/Core/ImageReads.hpp
+    src/Core/ImageReads.cpp
     src/Core/Gtao.hpp
     src/Core/Gtao.cpp
     src/Core/LightShadows.hpp

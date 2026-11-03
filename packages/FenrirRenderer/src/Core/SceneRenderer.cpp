@@ -9,6 +9,7 @@
 #include <variant>
 
 #include "Core/BuiltinShaders.hpp"
+#include "Core/ImageReads.hpp"
 #include "Core/ImageUpload.hpp"
 #include "Core/Skinning.hpp"
 #include "FenrirLogger/ILogger.hpp"
@@ -299,6 +300,49 @@ namespace Fenrir::Render
             return std::as_bytes(std::span(&value, 1));
         }
 
+        /**
+         * @brief Where each view block sits in the frame's view block ring: each view's, then each view's cascades'
+         * (ADR-0050), MaxCascades slots a view, then each spot light tile's, then each point light's: its cube's, then
+         * its faces'.
+         */
+        struct ViewBlockSlots
+        {
+            std::size_t views = 0;
+            std::size_t spotTiles = 0;
+            std::size_t pointCubes = 0;
+
+            /** @brief View `v`'s block. */
+            [[nodiscard]] constexpr std::size_t View(std::size_t v) const noexcept
+            {
+                return v;
+            }
+            /** @brief View `v`'s cascade `c`'s block. */
+            [[nodiscard]] constexpr std::size_t Cascade(std::size_t v, std::size_t c) const noexcept
+            {
+                return views + v * MaxCascades + c;
+            }
+            /** @brief Spot light tile `t`'s block. */
+            [[nodiscard]] constexpr std::size_t Tile(std::size_t t) const noexcept
+            {
+                return views * (1 + MaxCascades) + t;
+            }
+            /** @brief Point light cube `c`'s block, from the light and not turned. */
+            [[nodiscard]] constexpr std::size_t Cube(std::size_t c) const noexcept
+            {
+                return Tile(spotTiles) + c * (1 + CubeFaceCount);
+            }
+            /** @brief Face `f` of point light cube `c`'s block. */
+            [[nodiscard]] constexpr std::size_t Face(std::size_t c, std::size_t f) const noexcept
+            {
+                return Cube(c) + 1 + f;
+            }
+            /** @brief How many slots the frame takes. */
+            [[nodiscard]] constexpr std::size_t Count() const noexcept
+            {
+                return Cube(pointCubes);
+            }
+        };
+
         /** @brief The standard vertex locations a variant reads, as bits. */
         std::uint32_t ReadMask(const ShaderVariant& variant)
         {
@@ -517,29 +561,6 @@ namespace Fenrir::Render
             desc.mipFilter = description.filter == SamplerFilter::Trilinear ? Filter::Linear : Filter::Nearest;
             desc.maxAnisotropy = static_cast<float>(std::max<std::uint32_t>(description.anisotropy, 1));
             return desc;
-        }
-
-        /** @brief Whether `from` waits, directly or through other views, on `to`, by each view's `waitsOn`. */
-        bool Waits(const std::vector<std::vector<std::size_t>>& waitsOn, std::size_t from, std::size_t to)
-        {
-            std::vector<bool> seen(waitsOn.size(), false);
-            std::vector<std::size_t> stack{from};
-            while (!stack.empty())
-            {
-                const std::size_t view = stack.back();
-                stack.pop_back();
-                if (view == to)
-                {
-                    return true;
-                }
-                if (seen[view])
-                {
-                    continue;
-                }
-                seen[view] = true;
-                stack.insert(stack.end(), waitsOn[view].begin(), waitsOn[view].end());
-            }
-            return false;
         }
 
         /** @brief How a log line names a view's target: an image by its asset index, or the window. */
@@ -2495,30 +2516,8 @@ namespace Fenrir::Render
                                     {static_cast<std::uint32_t>(lighting.lights.size() + lighting.rectLights.size()),
                                      spotCount, pointCount, 0}};
         m_frameBlocks->Write(frameIndex, 0, BytesOf(frameBlock));
-        // The shadowed spot lights in their tiles' order, the shadowed point lights in their cubes' order, the other
-        // point and spot lights, then the rect lights, written again each frame into a buffer that grows by doubling.
-        std::vector<GpuLight> lightRecords;
-        lightRecords.reserve(lighting.lights.size() + lighting.rectLights.size());
-        std::vector<bool> shadowedLight(lighting.lights.size(), false);
-        for (const std::span<const std::size_t> chosen : {spotFrame.lights, pointFrame.lights})
-        {
-            for (const std::size_t i : chosen)
-            {
-                shadowedLight[i] = true;
-                lightRecords.push_back(ToGpuLight(lighting.lights[i]));
-            }
-        }
-        for (std::size_t i = 0; i < lighting.lights.size(); ++i)
-        {
-            if (!shadowedLight[i])
-            {
-                lightRecords.push_back(ToGpuLight(lighting.lights[i]));
-            }
-        }
-        for (const RectLight& light : lighting.rectLights)
-        {
-            lightRecords.push_back(ToGpuLight(light));
-        }
+        const std::vector<GpuLight> lightRecords =
+            LightRecords(lighting.lights, lighting.rectLights, spotFrame.lights, pointFrame.lights);
         m_lightBlocks->Reserve(lightRecords.size());
         for (std::size_t i = 0; i < lightRecords.size(); ++i)
         {
@@ -2563,12 +2562,8 @@ namespace Fenrir::Render
             instances += std::max<std::uint32_t>(draw.instances.count, 1);
         }
         const std::vector<ViewRequest>& views = m_frame.views;
-        // Each view's block, then each view's cascades' (ADR-0050), MaxCascades slots a view, then each spot light
-        // tile's, then each point light's: its cube's, then its faces'.
-        const std::size_t firstTileSlot = views.size() * (1 + MaxCascades);
-        const std::size_t firstCubeSlot = firstTileSlot + spotCount;
-        constexpr std::size_t CubeSlots = 1 + CubeFaceCount;
-        m_viewBlocks->Reserve(firstCubeSlot + pointCount * CubeSlots);
+        const ViewBlockSlots slots{views.size(), spotCount, pointCount};
+        m_viewBlocks->Reserve(slots.Count());
 
         // The spot shadow atlas's grid of tiles, and the point shadow cubes' faces.
         const SpotAtlasGrid grid = SpotAtlasGridOf(m_spotShadows->Config().budget);
@@ -2614,43 +2609,29 @@ namespace Fenrir::Render
             return resource;
         };
 
-        // Which sampled images each view may read. A view samples an image after every view that draws it, so the
-        // graph orders them; one that would wait on itself, directly or through other views, gets the default texture
-        // for that image instead (ADR-0026), the views taken in their order.
-        std::vector<std::vector<std::size_t>> waitsOn(views.size());
+        // Which sampled images each view may read (ADR-0026). Each it may not is warned of once per target, and its
+        // materials bind the default texture for it.
+        std::vector<AssetKey> targets;
+        for (const ViewRequest& view : views)
+        {
+            targets.push_back(view.target);
+        }
+        const std::vector<ImageReads> imageReads = PlanImageReads(targets, sampled);
         std::vector<std::vector<AssetKey>> replaced(views.size());
-        std::vector<std::vector<AssetKey>> reads(views.size());
         for (std::size_t v = 0; v < views.size(); ++v)
         {
-            for (const AssetKey image : sampled)
+            for (const auto& [image, reason] : imageReads[v].replaced)
             {
-                std::vector<std::size_t> writers;
-                for (std::size_t w = 0; w < views.size(); ++w)
+                replaced[v].push_back(image);
+                if (m_loggedSampling.insert({views[v].target, image}).second)
                 {
-                    if (views[w].target == image && m_targets.contains(image))
-                    {
-                        writers.push_back(w);
-                    }
+                    m_logger.Warn(reason == ReplacedBecause::OwnTarget
+                                      ? "FenrirRenderer: a view into {} draws materials that sample its own target "
+                                        "image, so they sample the default texture there"
+                                      : "FenrirRenderer: a view into {} draws materials that sample image {}, whose "
+                                        "views wait on it in a cycle, so they sample the default texture there",
+                                  TargetName(views[v].target), image.index);
                 }
-                const bool own = views[v].target == image;
-                const bool cycle =
-                    std::any_of(writers.begin(), writers.end(), [&](std::size_t w) { return Waits(waitsOn, w, v); });
-                if (own || cycle)
-                {
-                    replaced[v].push_back(image);
-                    if (m_loggedSampling.insert({views[v].target, image}).second)
-                    {
-                        m_logger.Warn(own ? "FenrirRenderer: a view into {} draws materials that sample its own target "
-                                            "image, so they sample the default texture there"
-                                          : "FenrirRenderer: a view into {} draws materials that sample image {}, "
-                                            "whose views wait on it in a cycle, so they sample the default texture "
-                                            "there",
-                                      TargetName(views[v].target), image.index);
-                    }
-                    continue;
-                }
-                waitsOn[v].insert(waitsOn[v].end(), writers.begin(), writers.end());
-                reads[v].push_back(image);
             }
         }
 
@@ -2693,9 +2674,8 @@ namespace Fenrir::Render
                                           Math::Vec4(lighting.lights[spotFrame.lights[t]].position, 1.0f),
                                           Math::Vec4(static_cast<float>(tile.x), static_cast<float>(tile.y),
                                                      static_cast<float>(tileSize), static_cast<float>(tileSize))};
-                m_viewBlocks->Write(frameIndex, firstTileSlot + t, BytesOf(tileBlock));
-                tileGroups.push_back(
-                    ViewGroupFor(frameIndex, firstTileSlot + t, GetDefaultTexture(DefaultTexture::White)));
+                m_viewBlocks->Write(frameIndex, slots.Tile(t), BytesOf(tileBlock));
+                tileGroups.push_back(ViewGroupFor(frameIndex, slots.Tile(t), GetDefaultTexture(DefaultTexture::White)));
                 tiles.push_back(tile);
             }
             // Every shadowed spot light into its tile of the atlas, in one pass, binding the frame group that does not
@@ -2750,7 +2730,6 @@ namespace Fenrir::Render
             {
                 const PointShadow& shadow = pointFrame.shadows[c];
                 const PunctualLight& light = lighting.lights[pointFrame.lights[c]];
-                const std::size_t slot = firstCubeSlot + c * CubeSlots;
                 const auto blockFor = [&](const Math::Mat4& view) {
                     const Math::Mat4 viewProjection = shadow.projection * view;
                     ViewBlock block{view,
@@ -2762,12 +2741,12 @@ namespace Fenrir::Render
                     block.shadowInfo = {0, 0, c, 0};
                     return block;
                 };
-                m_viewBlocks->Write(frameIndex, slot, BytesOf(blockFor(shadow.view)));
-                cubeGroups.push_back(ViewGroupFor(frameIndex, slot, white));
+                m_viewBlocks->Write(frameIndex, slots.Cube(c), BytesOf(blockFor(shadow.view)));
+                cubeGroups.push_back(ViewGroupFor(frameIndex, slots.Cube(c), white));
                 for (std::uint32_t f = 0; f < CubeFaceCount; ++f)
                 {
-                    m_viewBlocks->Write(frameIndex, slot + 1 + f, BytesOf(blockFor(shadow.faceViews.at(f))));
-                    faceGroups.push_back(ViewGroupFor(frameIndex, slot + 1 + f, white));
+                    m_viewBlocks->Write(frameIndex, slots.Face(c, f), BytesOf(blockFor(shadow.faceViews.at(f))));
+                    faceGroups.push_back(ViewGroupFor(frameIndex, slots.Face(c, f), white));
                 }
             }
             // The instanced faces of every shadowed point light, in one pass attaching every layer, binding the frame
@@ -2826,6 +2805,7 @@ namespace Fenrir::Render
             const GraphResource target = intoImage ? imported(request.target) : frame.backbuffer;
             const PixelRect rect = request.viewport;
             const PixelRect viewport{0, 0, rect.width, rect.height};
+            const std::size_t viewSlot = slots.View(v);
 
             // The sun's cascades for this camera, when it casts and something casts (ADR-0050).
             const SunShadowSettings& sun = lighting.shadows;
@@ -2871,13 +2851,13 @@ namespace Fenrir::Render
             viewBlock.clusterInfo = {clusterBuffer.IsEmpty() ? 0u : 1u,
                                      request.debugView == ViewDebug::LightClusters ? 1u : 0u,
                                      std::min(lightCount, MaxClusterLights), 0};
-            m_viewBlocks->Write(frameIndex, v, BytesOf(viewBlock));
+            m_viewBlocks->Write(frameIndex, viewSlot, BytesOf(viewBlock));
             // Each cascade's own view block, which the casting items' vertex stages place them by.
             std::vector<BindingGroupHandle> cascadeGroups;
             for (std::uint32_t c = 0; c < cascadeCount; ++c)
             {
                 const Cascade& cascade = cascades[c];
-                const std::size_t slot = views.size() + v * MaxCascades + c;
+                const std::size_t slot = slots.Cascade(v, c);
                 const auto size = static_cast<float>(m_cascades.mapSize);
                 const ViewBlock cascadeBlock{cascade.view,
                                              cascade.projection,
@@ -2898,7 +2878,7 @@ namespace Fenrir::Render
             const BindingGroupHandle outputBlockGroup = m_outputBlocks->Group(frameIndex, v);
             // The white texture as its ambient occlusion, for every pass but Opaque.
             const BindingGroupHandle viewGroup =
-                ViewGroupFor(frameIndex, v, GetDefaultTexture(DefaultTexture::White), {}, clusterBuffer);
+                ViewGroupFor(frameIndex, viewSlot, GetDefaultTexture(DefaultTexture::White), {}, clusterBuffer);
             // The Sky cube texture's pipeline and group, when the view draws one that is prepared; else its colour's,
             // which reads no frame block.
             BindingGroupHandle backgroundGroup = m_backgroundBlocks->Group(frameIndex, v);
@@ -2920,7 +2900,7 @@ namespace Fenrir::Render
                                                            : GroupWithout(*draw.material, replaced[v]));
             }
             std::vector<GraphResource> samples;
-            for (const AssetKey image : reads[v])
+            for (const AssetKey image : imageReads[v].reads)
             {
                 samples.push_back(imported(image));
             }
@@ -3078,14 +3058,15 @@ namespace Fenrir::Render
                     readSkinned(pass);
                 },
                 [this, draws, groups, opaqueRuns, frameGroup, drawGroup, skinned, viewport, occlusion, shadowAtlas,
-                 clusterBuffer, v](PassContext& context) {
+                 clusterBuffer, viewSlot](PassContext& context) {
                     const TextureHandle occlusionTexture =
                         occlusion.IsEmpty() ? GetDefaultTexture(DefaultTexture::White) : context.Texture(occlusion);
                     const TextureHandle shadowTexture =
                         shadowAtlas.IsEmpty() ? TextureHandle{} : context.Texture(shadowAtlas);
-                    RecordDraws(context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup,
-                                ViewGroupFor(context.FrameIndex(), v, occlusionTexture, shadowTexture, clusterBuffer),
-                                drawGroup, skinned, viewport, DrawPass::Main);
+                    RecordDraws(
+                        context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup,
+                        ViewGroupFor(context.FrameIndex(), viewSlot, occlusionTexture, shadowTexture, clusterBuffer),
+                        drawGroup, skinned, viewport, DrawPass::Main);
                 });
             if (!transparent->empty())
             {
@@ -3118,12 +3099,12 @@ namespace Fenrir::Render
                         readSkinned(pass);
                     },
                     [this, draws, groups, transparentRuns, frameGroup, viewGroup, drawGroup, skinned, viewport,
-                     shadowAtlas, clusterBuffer, v](PassContext& context) {
+                     shadowAtlas, clusterBuffer, viewSlot](PassContext& context) {
                         // Shadowed, but never darkened by the occlusion of what is behind it.
                         const BindingGroupHandle shadowedView =
                             shadowAtlas.IsEmpty()
                                 ? viewGroup
-                                : ViewGroupFor(context.FrameIndex(), v, GetDefaultTexture(DefaultTexture::White),
+                                : ViewGroupFor(context.FrameIndex(), viewSlot, GetDefaultTexture(DefaultTexture::White),
                                                context.Texture(shadowAtlas), clusterBuffer);
                         RecordDraws(context.Encoder(), *draws, *groups, *transparentRuns, frameGroup, shadowedView,
                                     drawGroup, skinned, viewport, DrawPass::Main);
