@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <ranges>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -20,13 +21,13 @@ namespace Fenrir::Render
                                                            std::span<const std::span<const std::byte>> blocks,
                                                            std::string_view label);
 
-    /** @brief Each of `blocks` as its bytes, for MakeAlignedBlocks; valid while `blocks` is. */
-    template <typename Block>
-    [[nodiscard]] std::vector<std::span<const std::byte>> BlocksOf(std::span<const Block> blocks)
+    /** @brief Each block of `blocks`, a contiguous range, as its bytes, for MakeAlignedBlocks; valid while it is. */
+    template <std::ranges::contiguous_range Blocks>
+    [[nodiscard]] std::vector<std::span<const std::byte>> BlocksOf(const Blocks& blocks)
     {
         std::vector<std::span<const std::byte>> bytes;
-        bytes.reserve(blocks.size());
-        for (const Block& block : blocks)
+        bytes.reserve(std::ranges::size(blocks));
+        for (const auto& block : blocks)
         {
             bytes.push_back(std::as_bytes(std::span(&block, 1)));
         }

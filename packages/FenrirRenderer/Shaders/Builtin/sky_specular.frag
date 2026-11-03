@@ -6,6 +6,7 @@
 // whose texels span about the sample's share of the lobe's solid angle (Karis 2013, after Colbert and Krivanek), so a
 // few samples give a smooth result. Roughness 0 copies the source at the level's own resolution.
 #include "Fenrir/Brdf.glsl"
+#include "Fenrir/Constants.glsl"
 #include "Fenrir/CubeFaces.glsl"
 
 layout(set = 2, binding = 0, std140) uniform SkySpecularParams

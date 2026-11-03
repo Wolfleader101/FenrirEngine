@@ -158,7 +158,7 @@ namespace Fenrir::Render
                 blocks.push_back({face, 1.0f / static_cast<float>(levelSide), lod});
             }
         }
-        entry.params = MakeAlignedBlocks(m_device, BlocksOf(std::span<const PanoramaBlock>(blocks)), "Panorama passes");
+        entry.params = MakeAlignedBlocks(m_device, BlocksOf(blocks), "Panorama passes");
         for (std::size_t pass = 0; pass < blocks.size(); ++pass)
         {
             BindingGroupEntry params;

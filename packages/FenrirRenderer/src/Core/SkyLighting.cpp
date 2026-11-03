@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <iterator>
 #include <span>
 
 #include <glm/gtc/packing.hpp>
@@ -208,8 +209,8 @@ namespace Fenrir::Render
             }
         }
         // The irradiance block first, then the specular passes' in pass order.
-        std::vector<std::span<const std::byte>> blocks = BlocksOf(std::span<const SpecularBlock>(specularBlocks));
-        blocks.insert(blocks.begin(), std::as_bytes(std::span(&irradianceBlock, 1)));
+        std::vector<std::span<const std::byte>> blocks{std::as_bytes(std::span(&irradianceBlock, 1))};
+        std::ranges::copy(BlocksOf(specularBlocks), std::back_inserter(blocks));
         filtered.params = MakeAlignedBlocks(m_device, blocks, "Sky filtering");
 
         BindingGroupEntry cube;
