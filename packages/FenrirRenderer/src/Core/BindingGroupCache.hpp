@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <utility>
 
 #include "Device/GraphicsDevice.hpp"
@@ -50,7 +51,8 @@ namespace Fenrir::Render
     /**
      * @brief Binding groups made once per key of `Parts` parts and kept while every texture and buffer in the key
      * lives. A group of a transient texture outlives its frame, and a group of a ring's buffer outlives the ring
-     * remaking it, so Prune destroys the groups whose resources the device has since let go of.
+     * remaking it, so the first Get of each frame destroys the groups whose resources the device has since let go of.
+     * A cache not asked in a frame keeps its groups until it next is, or is cleared.
      */
     template <std::size_t Parts>
     class BindingGroupCache
@@ -72,10 +74,19 @@ namespace Fenrir::Render
         BindingGroupCache(BindingGroupCache&&) = delete;
         BindingGroupCache& operator=(BindingGroupCache&&) = delete;
 
-        /** @brief The group of `key`, made by `make` (which returns a BindingGroupHandle) when first asked for. */
+        /**
+         * @brief The group of `key` in frame `frameIndex`, made by `make` (which returns a BindingGroupHandle) when
+         * first asked for. The first call of a new frame first destroys the groups of keys naming a texture or buffer
+         * the device no longer holds.
+         */
         template <typename Make>
-        [[nodiscard]] Graphics::BindingGroupHandle Get(const Key& key, Make&& make)
+        [[nodiscard]] Graphics::BindingGroupHandle Get(const Key& key, std::uint64_t frameIndex, Make&& make)
         {
+            if (m_frame != frameIndex)
+            {
+                Prune();
+                m_frame = frameIndex;
+            }
             if (const auto found = m_groups.find(key); found != m_groups.end())
             {
                 return found->second;
@@ -85,6 +96,17 @@ namespace Fenrir::Render
             return group;
         }
 
+        /** @brief Destroys every group. */
+        void Clear()
+        {
+            for (const auto& [key, group] : m_groups)
+            {
+                m_device.Destroy(group);
+            }
+            m_groups.clear();
+        }
+
+      private:
         /** @brief Destroys the groups of keys naming a texture or buffer the device no longer holds. */
         void Prune()
         {
@@ -102,17 +124,6 @@ namespace Fenrir::Render
             }
         }
 
-        /** @brief Destroys every group. */
-        void Clear()
-        {
-            for (const auto& [key, group] : m_groups)
-            {
-                m_device.Destroy(group);
-            }
-            m_groups.clear();
-        }
-
-      private:
         [[nodiscard]] bool IsLive(const Key& key) const
         {
             for (const BindingGroupKeyPart& part : key)
@@ -132,5 +143,7 @@ namespace Fenrir::Render
 
         Graphics::GraphicsDevice& m_device;
         std::map<Key, Graphics::BindingGroupHandle> m_groups;
+        /** @brief The frame of the last Get, whose first call pruned; none before the first. */
+        std::optional<std::uint64_t> m_frame;
     };
 } // namespace Fenrir::Render

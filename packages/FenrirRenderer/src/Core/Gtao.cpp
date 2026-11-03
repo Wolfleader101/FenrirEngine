@@ -88,9 +88,9 @@ namespace Fenrir::Render
         return MakeFullscreenPipeline(m_device, m_logger, desc, m_program.name);
     }
 
-    BindingGroupHandle Gtao::SourceGroup(TextureHandle first, TextureHandle second)
+    BindingGroupHandle Gtao::SourceGroup(TextureHandle first, TextureHandle second, std::uint64_t frameIndex)
     {
-        return m_sourceGroups.Get({BindingGroupKeyPart::Of(first), BindingGroupKeyPart::Of(second)}, [&] {
+        return m_sourceGroups.Get({BindingGroupKeyPart::Of(first), BindingGroupKeyPart::Of(second)}, frameIndex, [&] {
             std::vector<BindingGroupEntry> entries(2);
             entries[0].binding = 0;
             entries[0].texture = first;
@@ -100,11 +100,6 @@ namespace Fenrir::Render
             entries[1].sampler = m_sampler;
             return m_device.CreateBindingGroup({m_sourceLayout, entries}, "GTAO sources");
         });
-    }
-
-    void Gtao::PruneGroups()
-    {
-        m_sourceGroups.Prune();
     }
 
     void Gtao::BeginFrame(std::size_t views)
@@ -163,7 +158,8 @@ namespace Fenrir::Render
                     encoder.SetViewport(viewport);
                     encoder.SetPipeline(pipeline);
                     encoder.SetBindingGroup(BlockSet, blockGroup);
-                    encoder.SetBindingGroup(SourceSet, SourceGroup(context.Texture(first), context.Texture(second)));
+                    encoder.SetBindingGroup(
+                        SourceSet, SourceGroup(context.Texture(first), context.Texture(second), context.FrameIndex()));
                     encoder.Draw({.vertexCount = 3});
                 });
         };
