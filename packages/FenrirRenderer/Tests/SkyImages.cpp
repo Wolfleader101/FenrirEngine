@@ -146,6 +146,7 @@ TEST_CASE("Releasing a Sky image frees its textures", "[renderer][sky][sky-image
     sky.images->ReleasePanorama(Second);
     INFO("all three go");
     REQUIRE(RendererProbe::LiveTextures(*sky.device) == textures);
+    INFO("a released key has no cube texture");
     REQUIRE(sky.images->Cube(First).texture.IsEmpty());
     REQUIRE(sky.images->Cube(Second).texture.IsEmpty());
 }

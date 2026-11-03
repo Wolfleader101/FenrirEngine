@@ -40,6 +40,7 @@ namespace Fenrir::Render
     class SkyImages
     {
       public:
+        /** @brief No images yet, and the Panorama passes' pipeline, whose failure is logged to `logger`. */
         SkyImages(Graphics::GraphicsDevice& device, ILogger& logger);
         ~SkyImages();
 
