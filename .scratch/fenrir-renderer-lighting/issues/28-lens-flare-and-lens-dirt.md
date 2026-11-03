@@ -7,19 +7,20 @@
 - **Lens dirt:** an optional texture asset over the view, scaling bloom's and the flare's share where the lens is dirty, by `dirtIntensity`, with each pixel's share held at or below 1 so the mix stays a blend. Off when no texture is set.
 - `Camera` gains `lensFlare { intensity, ghostCount, ghostSpacing, haloRadius, haloWidth, chromaticOffset, dirt, dirtIntensity }`, off by default (intensity 0, which adds no pass).
 - The C# binding is regenerated from the header (`packages/FenrirRenderer/Scripting/api/`, `Managed/Fenrir.Renderer/Generated/`).
-- LightingDemo's panel gains the flare's intensity and the dirt's; the neon city turns on a subtle flare with a dirt texture fetched as a demo asset (ADR-0052), CC0.
+- **The dirt texture** (settled in grilling, 2026-11-03): LightingDemo generates one at startup (smudges, specks and a few hair-like streaks), from a generator the tests share. The neon city also fetches one ambientCG smear or surface-imperfection map (CC0 1.0, https://docs.ambientcg.com/license; e.g. `Smear008`, `SurfaceImperfections003`) as a demo asset (ADR-0052), used in greyscale when it is there; the generated texture is the fallback without fetched assets. Pick the map here by looking at the candidates in the neon city.
+- LightingDemo's panel gains the flare's intensity and the dirt's; the neon city turns on a subtle flare with the dirt.
 - **Not here:** per-light starbursts and sprite flares placed by a light's screen position, which need a light's visibility and a sprite set; a later ticket if the neon city wants them.
 
-**Blocked by:** 27
+**Blocked by:** 25
 
 **Touches:** `packages/FenrirRenderer/include/FenrirRenderer/`, `packages/FenrirRenderer/src/`, `packages/FenrirRenderer/Shaders/`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`, `packages/FenrirRenderer/Scripting/api/`, `packages/FenrirRenderer/Managed/`, `examples/LightingDemo/`
 
-**Status:** needs-triage
+**Status:** ready-for-agent
 
 - [ ] CPU unit tests: ghost positions along the line through the centre for a given count and spacing; the dirt-scaled share never exceeds 1.
 - [ ] Null-backend probes: a view with the flare off adds no pass; with it on, its passes follow the streaks' in `PostProcess`.
 - [ ] GL pixel probes: a bright point off-centre makes a ghost on the opposite side of the centre; a dirt texture that is black leaves bloom as it was.
-- [ ] Golden images: a bright point off-centre with the flare on, and with a dirt texture made in the test (no committed demo asset).
+- [ ] Golden images: a bright point off-centre with the flare on, and with a dirt texture from the shared generator (never the fetched map).
 
 Hand check: in the neon city, turning towards a bright sign throws faint coloured ghosts across the view and lights up the dirt on the lens.
 

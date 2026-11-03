@@ -8,11 +8,11 @@
 - The C# binding is regenerated from the header (`packages/FenrirRenderer/Scripting/api/`, `Managed/Fenrir.Renderer/Generated/`).
 - LightingDemo's panel gains the streaks' intensity and length; the neon city turns them on, tinted blue.
 
-**Blocked by:** 20
+**Blocked by:** 26
 
 **Touches:** `packages/FenrirRenderer/include/FenrirRenderer/`, `packages/FenrirRenderer/src/`, `packages/FenrirRenderer/Shaders/`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`, `packages/FenrirRenderer/Scripting/api/`, `packages/FenrirRenderer/Managed/`, `examples/LightingDemo/`
 
-**Status:** needs-triage
+**Status:** ready-for-agent
 
 - [ ] CPU unit tests: the streak levels' weights sum to 1 for every length, as `BloomLevelWeights` does; the normalised tint has unit luminance.
 - [ ] Null-backend probes: a view with streaks off adds no pass; with them on, its passes follow bloom's in `PostProcess`, and without bloom it runs one downsample of its own.

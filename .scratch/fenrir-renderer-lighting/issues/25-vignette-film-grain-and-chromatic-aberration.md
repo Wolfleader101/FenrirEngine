@@ -9,11 +9,11 @@
 - The C# binding is regenerated from the header (`packages/FenrirRenderer/Scripting/api/`, `Managed/Fenrir.Renderer/Generated/`).
 - LightingDemo's panel gains each effect's main setting; the neon city turns on a light vignette, fine grain and a little chromatic aberration.
 
-**Blocked by:** 20
+**Blocked by:** 27
 
 **Touches:** `packages/FenrirRenderer/include/FenrirRenderer/`, `packages/FenrirRenderer/src/`, `packages/FenrirRenderer/Shaders/`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`, `packages/FenrirRenderer/Scripting/api/`, `packages/FenrirRenderer/Managed/`, `examples/LightingDemo/`
 
-**Status:** needs-triage
+**Status:** ready-for-agent
 
 - [ ] CPU unit tests: the vignette's falloff is 1 at the centre and matches its closed form at the corners for both roundness extremes; the grain's hash is the same for the same pixel and frame and differs between frames.
 - [ ] GL pixel probes: with chromatic aberration, a white bar near the view's edge shows red outside and blue inside, and the centre pixel is unchanged; with the vignette, a flat grey view is darker at the corners by the CPU falloff; with each effect at 0, the frame matches the tonemap goldens exactly.
