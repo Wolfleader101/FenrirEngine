@@ -307,8 +307,11 @@ namespace Fenrir::Render
          */
         struct ViewBlockSlots
         {
+            /** @brief How many views the frame draws. */
             std::size_t views = 0;
+            /** @brief How many spot lights keep their shadows: one tile each. */
             std::size_t spotTiles = 0;
+            /** @brief How many point lights keep their shadows: one cube each. */
             std::size_t pointCubes = 0;
 
             /** @brief View `v`'s block. */
