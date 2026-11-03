@@ -28,6 +28,7 @@
 #include <memory>
 #include <numbers>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -48,6 +49,7 @@
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirRenderer/SpawnModel.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "FenrirSkeleton/PoseStages.hpp"
 #include "FenrirSkeleton/SkeletonPose.hpp"
 #include "FenrirSkeleton/Skeletons.hpp"
 #include "PhysicsScenes.hpp"
@@ -112,6 +114,9 @@ namespace PhysicsDemo
             Fenrir::SpawnedRagdoll ragdoll;
             std::int32_t hipsBone = Fenrir::NoBone;
             std::int32_t leftShoulderBone = Fenrir::NoBone;
+            /** @brief The clip's root-motion bone and its rest translation, which PinRoots holds it at. */
+            std::int32_t rootBone = Fenrir::NoBone;
+            Vec3 rootRest = Vec3(0.0f);
 
             [[nodiscard]] bool IsValid() const
             {
@@ -145,7 +150,10 @@ namespace PhysicsDemo
           public:
             void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
             {
+                // A new entry starts the scene afresh; the hosted Animate item is added once and kept.
+                const bool pinned = m_pinned;
                 *this = RagdollScene();
+                m_pinned = pinned;
                 m_entities = &scene.GetEntityList();
                 m_looks.emplace(app, scene);
                 BuildLevel();
@@ -155,6 +163,15 @@ namespace PhysicsDemo
                 if (m_walker.IsValid())
                 {
                     MakeCharacter();
+                }
+                if (!m_pinned)
+                {
+                    // The walk clip moves its root bone 1.3 m forward over each loop and snaps back (no root motion
+                    // extraction, ADR-0034): held at rest after the sampler, so the character alone moves the human.
+                    m_pinned =
+                        Fenrir::Skeletons::HostAnimate(app, "Ragdolls (spike) pins the walk's root", 1,
+                                                       [this](Fenrir::AnimateContext& context) { PinRoots(context); })
+                            .id != 0;
                 }
                 m_readout = m_entities->CreateEntity();
                 m_readout.GetComponent<Fenrir::Name>().Set(
@@ -322,11 +339,39 @@ namespace PhysicsDemo
                     return {};
                 }
                 human.hipsBone = Fenrir::Skeletons::FindBone(scene, human.skeleton, "pelvis");
+                human.rootBone = Fenrir::Skeletons::FindBone(scene, human.skeleton, "root");
+                if (human.rootBone != Fenrir::NoBone)
+                {
+                    human.rootRest = data->bones[static_cast<std::size_t>(human.rootBone)].rest.pos;
+                }
                 human.leftShoulderBone = Fenrir::Skeletons::FindBone(scene, human.skeleton, "upperarm_l");
                 app.Logger()->Info("Ragdolls (spike): {} built with {} bodies and {} joints in collision group {}",
                                    humanName, human.ragdoll.bodies.size(), human.ragdoll.joints.size(),
                                    human.skeleton.GetComponent<Fenrir::Ragdoll>().group);
                 return human;
+            }
+
+            // After the clip sampler, in the tick pass: each human's root bone stays at its rest translation.
+            void PinRoots(Fenrir::AnimateContext& context)
+            {
+                if (context.Timing() != Fenrir::PoseTiming::Tick || m_entities == nullptr)
+                {
+                    return;
+                }
+                for (const Human* human : {&m_walker, &m_other})
+                {
+                    if (!human->IsValid() || human->rootBone == Fenrir::NoBone ||
+                        std::ranges::find(context.Instances(), human->skeleton) == context.Instances().end())
+                    {
+                        continue;
+                    }
+                    const std::span<Fenrir::Transform> base =
+                        Fenrir::Skeletons::EditBasePose(context.GetScene(), human->skeleton);
+                    if (!base.empty())
+                    {
+                        base[static_cast<std::size_t>(human->rootBone)].pos = human->rootRest;
+                    }
+                }
             }
 
             // The capsule the walker's game code moves, in the walker's collision group so its own ragdoll ignores it.
@@ -644,6 +689,7 @@ namespace PhysicsDemo
             /** @brief Seconds into the get-up ramp, or below 0 when none runs; likewise the arm's blend back. */
             float m_getUp = -1.0f;
             float m_armBlend = -1.0f;
+            bool m_pinned = false;
             bool m_autopilot = false;
             float m_autopilotTime = 0.0f;
             std::size_t m_autopilotStep = 0;
