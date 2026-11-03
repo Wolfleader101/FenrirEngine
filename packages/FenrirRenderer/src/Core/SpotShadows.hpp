@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <span>
+#include <string_view>
 
 #include "Core/LightShadows.hpp"
 #include "Core/PunctualLights.hpp"
@@ -37,10 +38,6 @@ namespace Fenrir::Render
 
     /** @brief Tile `tile` of `grid`, in order along the rows from the top left. */
     [[nodiscard]] SpotAtlasTile SpotAtlasTileOf(std::uint32_t tile, SpotAtlasGrid grid) noexcept;
-
-    /** @brief The spot lights that keep their shadows: ChooseShadowedLights of the spot lights. */
-    [[nodiscard]] ShadowChoice ChooseSpotShadows(std::span<const PunctualLight> lights,
-                                                 std::span<const Math::Vec3> cameras, std::uint32_t budget);
 
     /** @brief A spot light's shadow: what its tile's shadow pass draws with. */
     struct SpotShadow
@@ -95,4 +92,25 @@ namespace Fenrir::Render
     /** @brief The record of `light`'s `shadow` in tile `tile` of `grid`, tiles of `mapSize` texels. */
     [[nodiscard]] GpuSpotShadow ToGpuSpotShadow(const PunctualLight& light, const SpotShadow& shadow,
                                                 std::uint32_t tile, SpotAtlasGrid grid, std::uint32_t mapSize);
+
+    /** @brief The spot lights' kind of ShadowPool: each shadowed light a tile of one atlas, a grid of the budget's. */
+    struct SpotShadowKind
+    {
+        using Shadow = SpotShadow;
+        using Record = GpuSpotShadow;
+        static constexpr LightKind Light = LightKind::Spot;
+        static constexpr std::string_view Name = "spot";
+        static constexpr std::uint32_t MinMapSize = 16;
+        static constexpr const char* MapLabel = "Spot shadow atlas";
+        static constexpr const char* MapResource = "SpotShadowAtlas";
+        static constexpr const char* RecordsLabel = "Spot shadows";
+
+        /** @brief FitSpotShadow, into a tile of the config's map size. */
+        [[nodiscard]] static SpotShadow Fit(const PunctualLight& light, const ShadowBudgetConfig& config);
+        /** @brief ToGpuSpotShadow, for tile `tile` of the budget's grid. */
+        [[nodiscard]] static GpuSpotShadow ToRecord(const PunctualLight& light, const SpotShadow& shadow,
+                                                    std::uint32_t tile, const ShadowBudgetConfig& config);
+        /** @brief A Depth32Float atlas of the budget's grid (SpotAtlasGridOf) of tiles the map size square. */
+        [[nodiscard]] static Graphics::TextureDesc MapDesc(const ShadowBudgetConfig& config);
+    };
 } // namespace Fenrir::Render

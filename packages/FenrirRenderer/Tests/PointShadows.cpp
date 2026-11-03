@@ -203,14 +203,14 @@ TEST_CASE("A point shadow's record carries its light's biases and a face's width
 TEST_CASE("The point shadow budget keeps the casting point lights nearest to any camera, and no spot light",
           "[renderer][shadows][point-shadows]")
 {
-    using Fenrir::Render::ChoosePointShadows;
+    using Fenrir::Render::ChooseShadowedLights;
     std::vector<PunctualLight> lights{Point({10.0f, 0.0f, 0.0f}), Point({1.0f, 0.0f, 0.0f}),
                                       Point({3.0f, 0.0f, 0.0f}, false), Point({-4.0f, 0.0f, 0.0f})};
     PunctualLight spot = Point({0.5f, 0.0f, 0.0f});
     spot.kind = LightKind::Spot;
     lights.push_back(spot);
     const std::array<Vec3, 1> origin{Vec3(0.0f)};
-    const Fenrir::Render::ShadowChoice choice = ChoosePointShadows(lights, origin, 2);
+    const Fenrir::Render::ShadowChoice choice = ChooseShadowedLights(lights, origin, 2, LightKind::Point);
     INFO("three point lights ask to cast");
     REQUIRE(choice.wanted == 3);
     INFO("the two nearest keep their shadows, nearest first");

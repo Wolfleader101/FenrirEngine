@@ -1,18 +1,13 @@
 #include "Core/PointShadows.hpp"
 
 #include <algorithm>
+#include <span>
 
 #include "Core/Cascades.hpp"
 #include "Core/SceneFrame.hpp"
 
 namespace Fenrir::Render
 {
-    ShadowChoice ChoosePointShadows(std::span<const PunctualLight> lights, std::span<const Math::Vec3> cameras,
-                                    std::uint32_t budget)
-    {
-        return ChooseShadowedLights(lights, cameras, budget, LightKind::Point);
-    }
-
     Math::Mat3 CubeFaceTurn(std::uint32_t face) noexcept
     {
         // Each face's +x and +y directions and its axis, as FenrirFaceDirection lays them out; the view's rows are
@@ -56,5 +51,43 @@ namespace Fenrir::Render
         GpuPointShadow gpu;
         gpu.bias = Math::Vec4(light.shadowNormalBias, light.shadowSlopeBias, shadow.texelScale, ShadowFilterRadius);
         return gpu;
+    }
+
+    PointShadow PointShadowKind::Fit(const PunctualLight& light, const ShadowBudgetConfig& config)
+    {
+        return FitPointShadow(light, config.mapSize);
+    }
+
+    GpuPointShadow PointShadowKind::ToRecord(const PunctualLight& light, const PointShadow& shadow, std::uint32_t,
+                                             const ShadowBudgetConfig&)
+    {
+        return ToGpuPointShadow(light, shadow);
+    }
+
+    Graphics::TextureDesc PointShadowKind::MapDesc(const ShadowBudgetConfig& config)
+    {
+        Graphics::TextureDesc desc;
+        desc.kind = Graphics::TextureKind::CubeArray;
+        desc.format = Graphics::TextureFormat::Depth32Float;
+        desc.width = config.mapSize;
+        desc.height = config.mapSize;
+        desc.layers = config.budget;
+        desc.usage = Graphics::TextureUsage::DepthAttachment | Graphics::TextureUsage::Sampled;
+        return desc;
+    }
+
+    Graphics::TextureHandle PointShadowKind::MakeFallback(Graphics::GraphicsDevice& device)
+    {
+        Graphics::TextureDesc desc;
+        desc.kind = Graphics::TextureKind::CubeArray;
+        desc.format = Graphics::TextureFormat::Depth32Float;
+        desc.usage = Graphics::TextureUsage::Sampled | Graphics::TextureUsage::CopyDestination;
+        const Graphics::TextureHandle cube = device.CreateTexture(desc, "No point shadow");
+        constexpr float farthest = 0.0f;
+        for (std::uint32_t face = 0; face < CubeFaceCount; ++face)
+        {
+            device.WriteTexture(cube, 0, face, std::as_bytes(std::span(&farthest, 1)));
+        }
+        return cube;
     }
 } // namespace Fenrir::Render

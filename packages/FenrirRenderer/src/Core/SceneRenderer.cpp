@@ -771,13 +771,10 @@ namespace Fenrir::Render
                                  ShadowBudgetConfig spotShadows, ShadowBudgetConfig pointShadows)
         : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1)),
           m_automaticInstancing(automaticInstancing), m_computeSkinning(computeSkinning), m_cascades(cascades),
-          m_spotShadowConfig(spotShadows), m_pointShadowConfig(pointShadows), m_clusterTargetGroups(device),
-          m_viewGroups(device), m_outputGroups(device)
+          m_clusterTargetGroups(device), m_viewGroups(device), m_outputGroups(device)
     {
         m_cascades.count = std::clamp(m_cascades.count, 1u, MaxCascades);
         m_cascades.mapSize = std::max(m_cascades.mapSize, 1u);
-        m_spotShadowConfig.mapSize = std::max(m_spotShadowConfig.mapSize, 16u);
-        m_pointShadowConfig.mapSize = std::max(m_pointShadowConfig.mapSize, 1u);
         m_frameLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer},
                                                             {1, ShaderBindingKind::Texture},
                                                             {2, ShaderBindingKind::Texture},
@@ -855,14 +852,6 @@ namespace Fenrir::Render
         m_noShadow = m_device.CreateTexture(noShadow, "No shadow");
         constexpr float farthest = 0.0f;
         m_device.WriteTexture(m_noShadow, 0, 0, BytesOf(farthest));
-        // The same for point shadows: one cube of 0.
-        TextureDesc noPointShadow = noShadow;
-        noPointShadow.kind = TextureKind::CubeArray;
-        m_noPointShadow = m_device.CreateTexture(noPointShadow, "No point shadow");
-        for (std::uint32_t face = 0; face < CubeFaceCount; ++face)
-        {
-            m_device.WriteTexture(m_noPointShadow, 0, face, BytesOf(farthest));
-        }
         m_defaultStreams = m_device.CreateBuffer({sizeof(DefaultStreams), BufferUsage::Vertex},
                                                  std::as_bytes(std::span(DefaultStreams)), "Default vertex streams");
 
@@ -925,10 +914,8 @@ namespace Fenrir::Render
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, false, sizeof(FrameBlock), "Frame");
         m_lightBlocks =
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true, sizeof(GpuLight), "Lights");
-        m_spotShadowBlocks = std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true,
-                                                         sizeof(GpuSpotShadow), "Spot shadows");
-        m_pointShadowBlocks = std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true,
-                                                          sizeof(GpuPointShadow), "Point shadows");
+        m_spotShadows = std::make_unique<ShadowPool<SpotShadowKind>>(m_device, m_logger, spotShadows, m_noShadow);
+        m_pointShadows = std::make_unique<ShadowPool<PointShadowKind>>(m_device, m_logger, pointShadows);
         m_skyLighting = std::make_unique<SkyLighting>(m_device, m_logger);
         m_bloom = std::make_unique<BloomChain>(m_device, m_logger, m_samples);
         m_gtao = std::make_unique<Gtao>(m_device, m_logger, m_samples);
@@ -990,8 +977,6 @@ namespace Fenrir::Render
                                              std::as_bytes(std::span(noClusters)), "No light clusters");
         m_frameBlocks->Reserve(1);
         m_lightBlocks->Reserve(1);
-        m_spotShadowBlocks->Reserve(1);
-        m_pointShadowBlocks->Reserve(1);
     }
 
     SceneRenderer::~SceneRenderer()
@@ -1062,11 +1047,8 @@ namespace Fenrir::Render
         m_gtao.reset();
         m_frameBlocks.reset();
         m_lightBlocks.reset();
-        m_spotShadowBlocks.reset();
-        m_device.Destroy(m_spotAtlas);
-        m_pointShadowBlocks.reset();
-        m_device.Destroy(m_pointShadowCubes);
-        m_device.Destroy(m_noPointShadow);
+        m_spotShadows.reset();
+        m_pointShadows.reset();
         m_viewBlocks.reset();
         m_backgroundBlocks.reset();
         m_outputBlocks.reset();
@@ -2050,25 +2032,12 @@ namespace Fenrir::Render
 
     void SceneRenderer::SetSpotShadowBudget(std::uint32_t budget)
     {
-        SetShadowBudget(m_spotShadowConfig, m_spotAtlas, budget);
+        m_spotShadows->SetBudget(budget);
     }
 
     void SceneRenderer::SetPointShadowBudget(std::uint32_t budget)
     {
-        SetShadowBudget(m_pointShadowConfig, m_pointShadowCubes, budget);
-    }
-
-    void SceneRenderer::SetShadowBudget(ShadowBudgetConfig& config, TextureHandle& maps, std::uint32_t budget)
-    {
-        if (budget == config.budget)
-        {
-            return;
-        }
-        config.budget = budget;
-        // Made again at the new size when a light of the kind next casts, and not kept meanwhile; its frame groups go
-        // with it.
-        m_device.Destroy(maps);
-        maps = {};
+        m_pointShadows->SetBudget(budget);
     }
 
     SceneStats SceneRenderer::TakeStats()
@@ -2710,13 +2679,14 @@ namespace Fenrir::Render
         return group.group;
     }
 
-    const SceneRenderer::FrameGroup& SceneRenderer::FrameGroupFor(std::uint64_t frameIndex, TextureHandle spotAtlas,
-                                                                  TextureHandle pointShadowCubes)
+    const SceneRenderer::FrameGroup& SceneRenderer::FrameGroupFor(std::uint64_t frameIndex)
     {
         const BufferHandle block = m_frameBlocks->Buffer(frameIndex);
         const BufferHandle lights = m_lightBlocks->Buffer(frameIndex);
-        const BufferHandle spotShadows = m_spotShadowBlocks->Buffer(frameIndex);
-        const BufferHandle pointShadows = m_pointShadowBlocks->Buffer(frameIndex);
+        const BufferHandle spotShadows = m_spotShadows->Records(frameIndex);
+        const BufferHandle pointShadows = m_pointShadows->Records(frameIndex);
+        const TextureHandle spotAtlas = m_spotShadows->Map();
+        const TextureHandle pointShadowCubes = m_pointShadows->Map();
         const SkyLightingTextures& sky = m_skyLighting->Textures();
         // One pair of groups per copy, made again when a ring remade its buffer, the sky's textures changed, or the
         // spot shadow atlas or point shadow cubes came, went or was made again.
@@ -2765,14 +2735,14 @@ namespace Fenrir::Render
             spotEntry.buffer = spotShadows;
             BindingGroupEntry atlasEntry;
             atlasEntry.binding = 8;
-            atlasEntry.texture = spotAtlas.IsEmpty() ? m_noShadow : spotAtlas;
+            atlasEntry.texture = m_spotShadows->Bound();
             atlasEntry.sampler = m_shadowSampler;
             BindingGroupEntry pointEntry;
             pointEntry.binding = 9;
             pointEntry.buffer = pointShadows;
             BindingGroupEntry cubesEntry;
             cubesEntry.binding = 10;
-            cubesEntry.texture = pointShadowCubes.IsEmpty() ? m_noPointShadow : pointShadowCubes;
+            cubesEntry.texture = m_pointShadows->Bound();
             cubesEntry.sampler = m_shadowSampler;
             std::vector<BindingGroupEntry> entries{blockEntry, irradiance, specular,     brdf,
                                                    lightEntry, ltcMatrix,  ltcAmplitude, spotEntry,
@@ -2783,8 +2753,8 @@ namespace Fenrir::Render
             group.unshadowed = group.group;
             if (!spotAtlas.IsEmpty() || !pointShadowCubes.IsEmpty())
             {
-                entries.at(8).texture = m_noShadow;
-                entries.at(10).texture = m_noPointShadow;
+                entries.at(8).texture = m_spotShadows->Fallback();
+                entries.at(10).texture = m_pointShadows->Fallback();
                 group.unshadowed = m_device.CreateBindingGroup({m_frameLayout, entries}, "Frame unshadowed");
             }
         }
@@ -2900,23 +2870,9 @@ namespace Fenrir::Render
         {
             cameras.push_back(view.position);
         }
-        ShadowChoice spotChoice = ChooseSpotShadows(lighting.lights, cameras, m_spotShadowConfig.budget);
-        if (spotChoice.wanted > spotChoice.lights.size() && !m_loggedSpotBudget)
-        {
-            m_loggedSpotBudget = true;
-            m_logger.Warn("FenrirRenderer: {} spot lights cast shadows, past the spot shadow budget of {}, so those "
-                          "farthest from the cameras light unshadowed",
-                          spotChoice.wanted, m_spotShadowConfig.budget);
-        }
+        ShadowChoice spotChoice = m_spotShadows->Choose(lighting.lights, cameras);
         // And the point lights, within theirs.
-        ShadowChoice pointChoice = ChoosePointShadows(lighting.lights, cameras, m_pointShadowConfig.budget);
-        if (pointChoice.wanted > pointChoice.lights.size() && !m_loggedPointBudget)
-        {
-            m_loggedPointBudget = true;
-            m_logger.Warn("FenrirRenderer: {} point lights cast shadows, past the point shadow budget of {}, so those "
-                          "farthest from the cameras light unshadowed",
-                          pointChoice.wanted, m_pointShadowConfig.budget);
-        }
+        ShadowChoice pointChoice = m_pointShadows->Choose(lighting.lights, cameras);
 
         std::vector<SkinDispatch> skins;
         const auto draws = std::make_shared<const std::vector<ResolvedDraw>>(
@@ -2937,16 +2893,14 @@ namespace Fenrir::Render
                 pointCasters.push_back(i);
             }
         }
-        if (casters.empty())
-        {
-            spotChoice.lights.clear();
-        }
-        if (pointCasters.empty())
-        {
-            pointChoice.lights.clear();
-        }
-        const auto spotCount = static_cast<std::uint32_t>(spotChoice.lights.size());
-        const auto pointCount = static_cast<std::uint32_t>(pointChoice.lights.size());
+        // Each kind's shadowed lights (none when nothing casts their shadows), their shadows fitted and records
+        // written, and the maps they are drawn into.
+        const auto spotFrame =
+            m_spotShadows->Prepare(std::move(spotChoice), frameIndex, graph, lighting.lights, !casters.empty());
+        const auto pointFrame =
+            m_pointShadows->Prepare(std::move(pointChoice), frameIndex, graph, lighting.lights, !pointCasters.empty());
+        const std::uint32_t spotCount = m_spotShadows->Count();
+        const std::uint32_t pointCount = m_pointShadows->Count();
         const FrameBlock frameBlock{Math::Vec4(lighting.lightDirection, 0.0f),
                                     Math::Vec4(lighting.lightColour, 0.0f),
                                     Math::Vec4(m_frame.time, m_frame.deltaTime, 0.0f, 0.0f),
@@ -2963,9 +2917,9 @@ namespace Fenrir::Render
         std::vector<GpuLight> lightRecords;
         lightRecords.reserve(lighting.lights.size() + lighting.rectLights.size());
         std::vector<bool> shadowedLight(lighting.lights.size(), false);
-        for (const std::vector<std::size_t>* chosen : {&spotChoice.lights, &pointChoice.lights})
+        for (const std::span<const std::size_t> chosen : {spotFrame.lights, pointFrame.lights})
         {
-            for (const std::size_t i : *chosen)
+            for (const std::size_t i : chosen)
             {
                 shadowedLight[i] = true;
                 lightRecords.push_back(ToGpuLight(lighting.lights[i]));
@@ -3033,64 +2987,12 @@ namespace Fenrir::Render
         constexpr std::size_t CubeSlots = 1 + CubeFaceCount;
         m_viewBlocks->Reserve(firstCubeSlot + pointCount * CubeSlots);
 
-        // Each shadowed spot light's perspective and record, and the atlas its tile is in, kept across frames.
-        const SpotAtlasGrid grid = SpotAtlasGridOf(m_spotShadowConfig.budget);
-        const std::uint32_t tileSize = m_spotShadowConfig.mapSize;
-        std::vector<SpotShadow> spotShadows;
-        m_spotShadowBlocks->Reserve(std::max<std::size_t>(spotCount, 1));
-        for (std::uint32_t t = 0; t < spotCount; ++t)
-        {
-            const PunctualLight& light = lighting.lights[spotChoice.lights[t]];
-            spotShadows.push_back(FitSpotShadow(light, tileSize));
-            m_spotShadowBlocks->Write(frameIndex, t,
-                                      BytesOf(ToGpuSpotShadow(light, spotShadows.back(), t, grid, tileSize)));
-        }
-        GraphResource spotAtlas;
-        if (spotCount > 0)
-        {
-            TextureDesc desc;
-            desc.format = TextureFormat::Depth32Float;
-            desc.width = grid.columns * tileSize;
-            desc.height = grid.rows * tileSize;
-            desc.usage = TextureUsage::DepthAttachment | TextureUsage::Sampled;
-            if (m_spotAtlas.IsEmpty() || m_spotAtlasDesc.width != desc.width || m_spotAtlasDesc.height != desc.height)
-            {
-                m_device.Destroy(m_spotAtlas);
-                m_spotAtlas = m_device.CreateTexture(desc, "Spot shadow atlas");
-                m_spotAtlasDesc = desc;
-            }
-            spotAtlas = graph.ImportTexture("SpotShadowAtlas", m_spotAtlas, desc);
-        }
-
-        // Each shadowed point light's faces and record, and the point shadow cubes its cube is in, a cube per budget,
-        // kept across frames.
-        const std::uint32_t faceSize = m_pointShadowConfig.mapSize;
-        std::vector<PointShadow> pointShadows;
-        m_pointShadowBlocks->Reserve(std::max<std::size_t>(pointCount, 1));
-        for (std::uint32_t c = 0; c < pointCount; ++c)
-        {
-            const PunctualLight& light = lighting.lights[pointChoice.lights[c]];
-            pointShadows.push_back(FitPointShadow(light, faceSize));
-            m_pointShadowBlocks->Write(frameIndex, c, BytesOf(ToGpuPointShadow(light, pointShadows.back())));
-        }
-        GraphResource pointShadowCubes;
-        if (pointCount > 0)
-        {
-            TextureDesc desc;
-            desc.kind = TextureKind::CubeArray;
-            desc.format = TextureFormat::Depth32Float;
-            desc.width = faceSize;
-            desc.height = faceSize;
-            desc.layers = m_pointShadowConfig.budget;
-            desc.usage = TextureUsage::DepthAttachment | TextureUsage::Sampled;
-            if (m_pointShadowCubes.IsEmpty() || m_pointShadowCubesDesc != desc)
-            {
-                m_device.Destroy(m_pointShadowCubes);
-                m_pointShadowCubes = m_device.CreateTexture(desc, "Point shadow cubes");
-                m_pointShadowCubesDesc = desc;
-            }
-            pointShadowCubes = graph.ImportTexture("PointShadowCubes", m_pointShadowCubes, desc);
-        }
+        // The spot shadow atlas's grid of tiles, and the point shadow cubes' faces.
+        const SpotAtlasGrid grid = SpotAtlasGridOf(m_spotShadows->Config().budget);
+        const std::uint32_t tileSize = m_spotShadows->Config().mapSize;
+        const std::uint32_t faceSize = m_pointShadows->Config().mapSize;
+        const GraphResource spotAtlas = spotFrame.map;
+        const GraphResource pointShadowCubes = pointFrame.map;
         m_gtao->BeginFrame(views.size());
         m_clusterJobs->Reserve(views.size());
         m_backgroundBlocks->Reserve(views.size());
@@ -3169,8 +3071,7 @@ namespace Fenrir::Render
             }
         }
 
-        const FrameGroup& frameGroups = FrameGroupFor(frameIndex, spotCount > 0 ? m_spotAtlas : TextureHandle{},
-                                                      pointCount > 0 ? m_pointShadowCubes : TextureHandle{});
+        const FrameGroup& frameGroups = FrameGroupFor(frameIndex);
         const BindingGroupHandle frameGroup = frameGroups.group;
         const BindingGroupHandle unshadowedFrame = frameGroups.unshadowed;
         const BindingGroupHandle drawGroup = DrawGroupFor(frameIndex);
@@ -3198,7 +3099,7 @@ namespace Fenrir::Render
             std::vector<PixelRect> tiles;
             for (std::uint32_t t = 0; t < spotCount; ++t)
             {
-                const SpotShadow& shadow = spotShadows[t];
+                const SpotShadow& shadow = spotFrame.shadows[t];
                 const SpotAtlasTile at = SpotAtlasTileOf(t, grid);
                 const PixelRect tile{static_cast<std::int32_t>(at.column * tileSize),
                                      static_cast<std::int32_t>(at.row * tileSize), tileSize, tileSize};
@@ -3206,7 +3107,7 @@ namespace Fenrir::Render
                                           shadow.projection,
                                           shadow.viewProjection,
                                           glm::inverse(shadow.viewProjection),
-                                          Math::Vec4(lighting.lights[spotChoice.lights[t]].position, 1.0f),
+                                          Math::Vec4(lighting.lights[spotFrame.lights[t]].position, 1.0f),
                                           Math::Vec4(static_cast<float>(tile.x), static_cast<float>(tile.y),
                                                      static_cast<float>(tileSize), static_cast<float>(tileSize))};
                 m_viewBlocks->Write(frameIndex, firstTileSlot + t, BytesOf(tileBlock));
@@ -3264,8 +3165,8 @@ namespace Fenrir::Render
             std::vector<BindingGroupHandle> faceGroups;
             for (std::uint32_t c = 0; c < pointCount; ++c)
             {
-                const PointShadow& shadow = pointShadows[c];
-                const PunctualLight& light = lighting.lights[pointChoice.lights[c]];
+                const PointShadow& shadow = pointFrame.shadows[c];
+                const PunctualLight& light = lighting.lights[pointFrame.lights[c]];
                 const std::size_t slot = firstCubeSlot + c * CubeSlots;
                 const auto blockFor = [&](const Math::Mat4& view) {
                     const Math::Mat4 viewProjection = shadow.projection * view;
