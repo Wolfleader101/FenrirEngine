@@ -14,7 +14,7 @@ add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp 
                                    FrameRing.cpp Frames.cpp OpenGLStart.cpp Drawing.cpp Preparing.cpp RendererFrames.cpp
                                    Cameras.cpp Picking.cpp Materials.cpp SpawnModel.cpp Sky.cpp DebugFont.cpp
                                    DebugDrawing.cpp Overlay.cpp Draw2D.cpp Skinning.cpp SkinningMaths.cpp
-                                   SphericalHarmonics.cpp SkyLighting.cpp Tonemapping.cpp Brdf.cpp Bloom.cpp
+                                   SphericalHarmonics.cpp SkyLighting.cpp SkyImages.cpp Tonemapping.cpp Brdf.cpp Bloom.cpp
                                    PunctualLights.cpp Lights.cpp RectLights.cpp DepthPrepass.cpp OctahedralNormals.cpp
                                    BindingGroupCache.cpp
                                    AmbientOcclusion.cpp Instancing.cpp InstanceLists.cpp ComputeSkinning.cpp
