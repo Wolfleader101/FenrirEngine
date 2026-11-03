@@ -25,6 +25,7 @@
 
 #include "Fenrir/Brdf.glsl"
 #include "Fenrir/Clusters.glsl"
+#include "Fenrir/Constants.glsl"
 #include "Fenrir/Frame.glsl"
 #include "Fenrir/Shadows.glsl"
 #include "Fenrir/SphericalHarmonics.glsl"

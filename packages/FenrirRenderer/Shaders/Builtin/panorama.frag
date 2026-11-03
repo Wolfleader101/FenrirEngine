@@ -4,7 +4,7 @@
 // one pass per face and level, once per image revision. Each texel takes the average of four points across it, each
 // sampled from the panorama's mip whose texels are as tall as the cube's at this level, so every level is filtered from
 // the panorama itself and no level is drawn from another.
-#include "Fenrir/Brdf.glsl"
+#include "Fenrir/Constants.glsl"
 #include "Fenrir/CubeFaces.glsl"
 
 layout(set = 2, binding = 0, std140) uniform PanoramaParams

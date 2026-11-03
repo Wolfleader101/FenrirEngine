@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -48,18 +49,34 @@ namespace Fenrir::Render
                                                     LightKind kind);
 
     /**
+     * @brief What a ShadowPool needs of its kind of light, as SpotShadowKind and PointShadowKind give it: the `Light`
+     * it chooses from, its `Name` in the warning, the least `MinMapSize` of a map, the labels of its map (`MapLabel`),
+     * the map in the graph (`MapResource`) and its records (`RecordsLabel`), its `Shadow` (what its passes draw with)
+     * by `Fit`, its `Record` by `ToRecord`, and its map's description by `MapDesc`. A kind may also have
+     * `MakeFallback(device)`, to make and own the map bound when none of its lights casts.
+     */
+    template <typename Kind>
+    concept ShadowKind = requires(const PunctualLight& light, const ShadowBudgetConfig& config,
+                                  const typename Kind::Shadow& shadow, std::uint32_t index) {
+        typename Kind::Record;
+        { Kind::Light } -> std::convertible_to<LightKind>;
+        { Kind::Name } -> std::convertible_to<const char*>;
+        { Kind::MinMapSize } -> std::convertible_to<std::uint32_t>;
+        { Kind::MapLabel } -> std::convertible_to<const char*>;
+        { Kind::MapResource } -> std::convertible_to<const char*>;
+        { Kind::RecordsLabel } -> std::convertible_to<const char*>;
+        { Kind::Fit(light, config) } -> std::same_as<typename Kind::Shadow>;
+        { Kind::ToRecord(light, shadow, index, config) } -> std::same_as<typename Kind::Record>;
+        { Kind::MapDesc(config) } -> std::same_as<Graphics::TextureDesc>;
+    };
+
+    /**
      * @brief One kind of light's shadow pool (ADR-0050): its budget, each frame's choice of the lights that keep their
      * shadows, warned about once when the budget leaves some out, their records in a ring set 0 binds, and the maps
      * they are drawn into, kept across frames and made again when the budget or size changes. Drawing the casters
-     * into the maps is the caller's.
-     *
-     * `Kind` is SpotShadowKind or PointShadowKind: the kind's `Light`, its `Name` in the warning, the least
-     * `MinMapSize` of a map, the labels of its map (`MapLabel`), the map in the graph (`MapResource`) and its records
-     * (`RecordsLabel`), its `Shadow` (what its passes draw with) by `Fit`, its `Record` by `ToRecord`, and its map's
-     * description by `MapDesc`. A kind with `MakeFallback` makes and owns the map bound when none of its lights casts;
-     * the others are given one.
+     * into the maps is the caller's. A kind without MakeFallback is given the map bound when none of its lights casts.
      */
-    template <typename Kind>
+    template <ShadowKind Kind>
     class ShadowPool
     {
       public:

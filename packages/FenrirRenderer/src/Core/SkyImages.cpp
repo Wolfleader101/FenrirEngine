@@ -5,10 +5,10 @@
 #include <cstddef>
 #include <span>
 
-#include "Core/BlockRing.hpp"
 #include "Core/BuiltinShaders.hpp"
-#include "Core/FullscreenPipeline.hpp"
+#include "Core/FullscreenPasses.hpp"
 #include "Core/ImageUpload.hpp"
+#include "Core/UniformBlocks.hpp"
 
 namespace Fenrir::Render
 {
@@ -158,12 +158,7 @@ namespace Fenrir::Render
                 blocks.push_back({face, 1.0f / static_cast<float>(levelSide), lod});
             }
         }
-        std::vector<std::span<const std::byte>> bytes;
-        for (const PanoramaBlock& block : blocks)
-        {
-            bytes.push_back(std::as_bytes(std::span(&block, 1)));
-        }
-        entry.params = MakeAlignedBlocks(m_device, bytes, "Panorama passes");
+        entry.params = MakeAlignedBlocks(m_device, BlocksOf(blocks), "Panorama passes");
         for (std::size_t pass = 0; pass < blocks.size(); ++pass)
         {
             BindingGroupEntry params;

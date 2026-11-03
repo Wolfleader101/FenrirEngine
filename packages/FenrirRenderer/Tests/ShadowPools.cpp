@@ -10,9 +10,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "Core/LightShadows.hpp"
 #include "Core/PointShadows.hpp"
 #include "Core/RenderGraph.hpp"
+#include "Core/ShadowPool.hpp"
 #include "Core/SpotShadows.hpp"
 #include "Device/GraphicsDevice.hpp"
 #include "RecordingLogger.hpp"

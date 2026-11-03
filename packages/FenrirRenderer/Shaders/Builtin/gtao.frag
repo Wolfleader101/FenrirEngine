@@ -16,7 +16,7 @@
 // The view space is the renderer's (right-handed, the camera looking down -Z, reversed-Z depth, NDC +y at row 0), not
 // XeGTAO's (left-handed, +Z forward); the search uses only dot products and lengths, so it carries over as it is.
 // XeGTAO's depth MIP chain and temporal noise are left out: depth is read at full resolution, and the noise is fixed.
-#include "Fenrir/Brdf.glsl"
+#include "Fenrir/Constants.glsl"
 #include "Fenrir/Normals.glsl"
 
 layout(set = 1, binding = 0, std140) uniform GtaoData

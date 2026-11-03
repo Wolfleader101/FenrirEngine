@@ -3,14 +3,15 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <iterator>
 #include <span>
 
 #include <glm/gtc/packing.hpp>
 
-#include "Core/BlockRing.hpp"
 #include "Core/BuiltinShaders.hpp"
-#include "Core/FullscreenPipeline.hpp"
+#include "Core/FullscreenPasses.hpp"
 #include "Core/SphericalHarmonics.hpp"
+#include "Core/UniformBlocks.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
 namespace Fenrir::Render
@@ -209,10 +210,7 @@ namespace Fenrir::Render
         }
         // The irradiance block first, then the specular passes' in pass order.
         std::vector<std::span<const std::byte>> blocks{std::as_bytes(std::span(&irradianceBlock, 1))};
-        for (const SpecularBlock& block : specularBlocks)
-        {
-            blocks.push_back(std::as_bytes(std::span(&block, 1)));
-        }
+        std::ranges::copy(BlocksOf(specularBlocks), std::back_inserter(blocks));
         filtered.params = MakeAlignedBlocks(m_device, blocks, "Sky filtering");
 
         BindingGroupEntry cube;

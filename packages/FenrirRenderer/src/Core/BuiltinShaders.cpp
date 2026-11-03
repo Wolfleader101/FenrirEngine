@@ -86,4 +86,15 @@ namespace Fenrir::Render
         }
         return std::move(*read.container);
     }
+
+    Graphics::PipelineHandle MakeBuiltinPipeline(Graphics::GraphicsDevice& device, ILogger& logger,
+                                                 const Graphics::PipelineDesc& desc, std::string_view name)
+    {
+        const Graphics::PipelineResult made = device.CreatePipeline(desc, name);
+        if (made.pipeline.IsEmpty())
+        {
+            logger.Error("FenrirRenderer: the built-in pipeline '{}' could not be made: {}", name, made.diagnostic);
+        }
+        return made.pipeline;
+    }
 } // namespace Fenrir::Render

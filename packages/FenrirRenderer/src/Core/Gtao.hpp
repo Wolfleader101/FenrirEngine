@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "Core/FullscreenPipeline.hpp"
+#include "Core/FullscreenPasses.hpp"
 #include "Core/RenderGraph.hpp"
 #include "Core/SceneFrame.hpp"
 #include "Device/GraphicsDevice.hpp"

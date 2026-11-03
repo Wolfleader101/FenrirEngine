@@ -1,6 +1,6 @@
-#include "Core/FullscreenPipeline.hpp"
+#include "Core/FullscreenPasses.hpp"
 
-#include "FenrirLogger/ILogger.hpp"
+#include "Core/BuiltinShaders.hpp"
 
 namespace Fenrir::Render
 {
@@ -13,11 +13,6 @@ namespace Fenrir::Render
         desc.depth.test = false;
         desc.depth.write = false;
         desc.depthFormat.reset();
-        const PipelineResult made = device.CreatePipeline(desc, name);
-        if (made.pipeline.IsEmpty())
-        {
-            logger.Error("FenrirRenderer: the built-in pipeline '{}' could not be made: {}", name, made.diagnostic);
-        }
-        return made.pipeline;
+        return MakeBuiltinPipeline(device, logger, desc, name);
     }
 } // namespace Fenrir::Render

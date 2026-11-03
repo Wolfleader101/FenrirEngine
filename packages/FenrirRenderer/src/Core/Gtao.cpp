@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "Core/BuiltinShaders.hpp"
-#include "Core/FullscreenPipeline.hpp"
+#include "Core/FullscreenPasses.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
 namespace Fenrir::Render

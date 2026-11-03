@@ -1,4 +1,4 @@
-#include "Core/LightShadows.hpp"
+#include "Core/ShadowPool.hpp"
 
 #include <algorithm>
 #include <limits>
