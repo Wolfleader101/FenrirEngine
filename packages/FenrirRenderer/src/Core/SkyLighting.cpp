@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstring>
 #include <span>
 
 #include <glm/gtc/packing.hpp>
@@ -193,9 +192,8 @@ namespace Fenrir::Render
         {
             ++lod;
         }
-        std::vector<std::byte> blocks(UniformBlockAlignment * (1 + std::size_t{6} * specular.mipLevels));
         const IrradianceBlock irradianceBlock{std::max(sky.cubeDesc.width >> lod, 1u), static_cast<float>(lod)};
-        std::memcpy(blocks.data(), &irradianceBlock, sizeof(irradianceBlock));
+        std::vector<SpecularBlock> specularBlocks;
         for (std::uint32_t level = 0; level < specular.mipLevels; ++level)
         {
             for (std::uint32_t face = 0; face < 6; ++face)
@@ -206,11 +204,16 @@ namespace Fenrir::Render
                 block.sourceSide = static_cast<float>(sky.cubeDesc.width);
                 block.sourceMaxLod = static_cast<float>(sourceLevels - 1);
                 block.side = static_cast<float>(std::max(specular.width >> level, 1u));
-                std::memcpy(blocks.data() + UniformBlockAlignment * (1 + std::size_t{level} * 6 + face), &block,
-                            sizeof(block));
+                specularBlocks.push_back(block);
             }
         }
-        filtered.params = m_device.CreateBuffer({blocks.size(), BufferUsage::Uniform}, blocks, "Sky filtering");
+        // The irradiance block first, then the specular passes' in pass order.
+        std::vector<std::span<const std::byte>> blocks{std::as_bytes(std::span(&irradianceBlock, 1))};
+        for (const SpecularBlock& block : specularBlocks)
+        {
+            blocks.push_back(std::as_bytes(std::span(&block, 1)));
+        }
+        filtered.params = MakeAlignedBlocks(m_device, blocks, "Sky filtering");
 
         BindingGroupEntry cube;
         cube.binding = 1;

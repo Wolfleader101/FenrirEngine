@@ -8,9 +8,8 @@
 #include <type_traits>
 #include <variant>
 
-#include <glm/gtc/packing.hpp>
-
 #include "Core/BuiltinShaders.hpp"
+#include "Core/ImageUpload.hpp"
 #include "Core/Skinning.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
@@ -165,15 +164,6 @@ namespace Fenrir::Render
             Math::Vec4 colour;
         };
 
-        /** @brief A Panorama pass's block, as `builtin:panorama` declares it (std140). */
-        struct PanoramaBlock
-        {
-            std::uint32_t face = 0;
-            float halfTexel = 1.0f;
-            float lod = 0.0f;
-            std::uint32_t padding0 = 0;
-        };
-
         /** @brief The Output block, as `builtin:output` declares it at set 1 (std140). */
         struct OutputBlock
         {
@@ -301,211 +291,6 @@ namespace Fenrir::Render
                 return Graphics::BlendMode::Alpha;
             }
             return mode == Fenrir::BlendMode::Additive ? Graphics::BlendMode::Additive : Graphics::BlendMode::None;
-        }
-
-        /** @brief How many mip levels a full chain for an image of `width` x `height` has, down to 1 x 1. */
-        std::uint32_t MipCount(std::uint32_t width, std::uint32_t height)
-        {
-            std::uint32_t levels = 1;
-            for (std::uint32_t side = std::max(width, height); side > 1; side /= 2)
-            {
-                ++levels;
-            }
-            return levels;
-        }
-
-        /** @brief The device format an image is uploaded as: its own format, sRGB-decoded on sampling if it is sRGB. */
-        TextureFormat TextureFormatOf(const ImageData& image)
-        {
-            if (image.format == ImageFormat::RGBA16F)
-            {
-                return TextureFormat::Rgba16Float;
-            }
-            if (image.format == ImageFormat::RGBA32F)
-            {
-                return TextureFormat::Rgba32Float;
-            }
-            return image.colourSpace == ColourSpace::Srgb ? TextureFormat::Rgba8Srgb : TextureFormat::Rgba8Unorm;
-        }
-
-        /** @brief Reads and writes one texel of an image format as four linear floats, for making mips. */
-        struct TexelCodec
-        {
-            std::size_t bytes = 4;
-            void (*read)(std::span<const std::byte> texel, std::array<float, 4>& out) = nullptr;
-            void (*write)(const std::array<float, 4>& in, std::span<std::byte> texel) = nullptr;
-        };
-
-        /** @brief sRGB-encoded bytes to linear values, by byte. */
-        const std::array<float, 256>& SrgbToLinear()
-        {
-            static const std::array<float, 256> table = [] {
-                std::array<float, 256> made{};
-                for (std::size_t i = 0; i < made.size(); ++i)
-                {
-                    const float c = static_cast<float>(i) / 255.0f;
-                    made.at(i) = c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
-                }
-                return made;
-            }();
-            return table;
-        }
-
-        /** @brief Linear values, in 4096 steps over [0, 1], to sRGB-encoded bytes. */
-        const std::array<std::uint8_t, 4096>& LinearToSrgb()
-        {
-            static const std::array<std::uint8_t, 4096> table = [] {
-                std::array<std::uint8_t, 4096> made{};
-                for (std::size_t i = 0; i < made.size(); ++i)
-                {
-                    const float l = static_cast<float>(i) / 4095.0f;
-                    const float c = l <= 0.0031308f ? l * 12.92f : 1.055f * std::pow(l, 1.0f / 2.4f) - 0.055f;
-                    made.at(i) = static_cast<std::uint8_t>(std::lround(std::clamp(c, 0.0f, 1.0f) * 255.0f));
-                }
-                return made;
-            }();
-            return table;
-        }
-
-        std::uint8_t ToByte(float value)
-        {
-            return static_cast<std::uint8_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
-        }
-
-        /** @brief The codec of an image's pixels: colours are averaged as linear values, so sRGB mips keep brightness.
-         */
-        TexelCodec CodecOf(const ImageData& image)
-        {
-            TexelCodec codec;
-            codec.bytes = BytesPerPixel(image.format);
-            if (image.format == ImageFormat::RGBA32F)
-            {
-                codec.read = [](std::span<const std::byte> texel, std::array<float, 4>& out) {
-                    std::memcpy(out.data(), texel.data(), sizeof(float) * 4);
-                };
-                codec.write = [](const std::array<float, 4>& in, std::span<std::byte> texel) {
-                    std::memcpy(texel.data(), in.data(), sizeof(float) * 4);
-                };
-            }
-            else if (image.format == ImageFormat::RGBA16F)
-            {
-                codec.read = [](std::span<const std::byte> texel, std::array<float, 4>& out) {
-                    std::array<std::uint16_t, 4> halves{};
-                    std::memcpy(halves.data(), texel.data(), sizeof(halves));
-                    for (std::size_t c = 0; c < 4; ++c)
-                    {
-                        out.at(c) = glm::unpackHalf1x16(halves.at(c));
-                    }
-                };
-                codec.write = [](const std::array<float, 4>& in, std::span<std::byte> texel) {
-                    std::array<std::uint16_t, 4> halves{};
-                    for (std::size_t c = 0; c < 4; ++c)
-                    {
-                        halves.at(c) = glm::packHalf1x16(in.at(c));
-                    }
-                    std::memcpy(texel.data(), halves.data(), sizeof(halves));
-                };
-            }
-            else if (image.colourSpace == ColourSpace::Srgb)
-            {
-                codec.read = [](std::span<const std::byte> texel, std::array<float, 4>& out) {
-                    const std::span<const std::byte> bytes = texel;
-                    for (std::size_t c = 0; c < 3; ++c)
-                    {
-                        out.at(c) = SrgbToLinear().at(static_cast<std::size_t>(bytes[c]));
-                    }
-                    out[3] = static_cast<float>(bytes[3]) / 255.0f;
-                };
-                codec.write = [](const std::array<float, 4>& in, std::span<std::byte> texel) {
-                    const std::span<std::byte> bytes = texel;
-                    for (std::size_t c = 0; c < 3; ++c)
-                    {
-                        const auto step =
-                            static_cast<std::size_t>(std::lround(std::clamp(in.at(c), 0.0f, 1.0f) * 4095.0f));
-                        bytes[c] = std::byte{LinearToSrgb().at(step)};
-                    }
-                    bytes[3] = std::byte{ToByte(in[3])};
-                };
-            }
-            else
-            {
-                codec.read = [](std::span<const std::byte> texel, std::array<float, 4>& out) {
-                    const std::span<const std::byte> bytes = texel;
-                    for (std::size_t c = 0; c < 4; ++c)
-                    {
-                        out.at(c) = static_cast<float>(bytes[c]) / 255.0f;
-                    }
-                };
-                codec.write = [](const std::array<float, 4>& in, std::span<std::byte> texel) {
-                    const std::span<std::byte> bytes = texel;
-                    for (std::size_t c = 0; c < 4; ++c)
-                    {
-                        bytes[c] = std::byte{ToByte(in.at(c))};
-                    }
-                };
-            }
-            return codec;
-        }
-
-        /**
-         * @brief The next mip level of a `width` x `height` level: each texel the average of the 2 x 2 texels above it
-         * (an odd last row or column is left out, and a side of 1 stays 1).
-         */
-        std::vector<std::byte> Downsample(std::span<const std::byte> level, std::uint32_t width, std::uint32_t height,
-                                          const TexelCodec& codec)
-        {
-            const std::uint32_t nextWidth = std::max(1u, width / 2);
-            const std::uint32_t nextHeight = std::max(1u, height / 2);
-            std::vector<std::byte> next(std::size_t{nextWidth} * nextHeight * codec.bytes);
-            std::array<float, 4> texel{};
-            for (std::uint32_t y = 0; y < nextHeight; ++y)
-            {
-                for (std::uint32_t x = 0; x < nextWidth; ++x)
-                {
-                    std::array<float, 4> sum{};
-                    for (const std::uint32_t sy : {std::min(2 * y, height - 1), std::min(2 * y + 1, height - 1)})
-                    {
-                        for (const std::uint32_t sx : {std::min(2 * x, width - 1), std::min(2 * x + 1, width - 1)})
-                        {
-                            codec.read(level.subspan((std::size_t{sy} * width + sx) * codec.bytes, codec.bytes), texel);
-                            for (std::size_t c = 0; c < 4; ++c)
-                            {
-                                sum.at(c) += texel.at(c);
-                            }
-                        }
-                    }
-                    for (float& channel : sum)
-                    {
-                        channel *= 0.25f;
-                    }
-                    codec.write(sum,
-                                std::span(next).subspan((std::size_t{y} * nextWidth + x) * codec.bytes, codec.bytes));
-                }
-            }
-            return next;
-        }
-
-        /**
-         * @brief Writes one layer of `texture` (a cube face, else 0) from `pixels`, `width` x `height`, and every mip
-         * level below it, each made from the one above (ADR-0024: mips are made at upload).
-         */
-        void WriteWithMips(GraphicsDevice& device, TextureHandle texture, std::uint32_t layer, std::uint32_t mipLevels,
-                           std::span<const std::byte> pixels, std::uint32_t width, std::uint32_t height,
-                           const TexelCodec& codec)
-        {
-            std::vector<std::byte> level;
-            std::span<const std::byte> current = pixels;
-            for (std::uint32_t mip = 0; mip < mipLevels; ++mip)
-            {
-                if (mip > 0)
-                {
-                    level = Downsample(current, width, height, codec);
-                    current = level;
-                    width = std::max(1u, width / 2);
-                    height = std::max(1u, height / 2);
-                }
-                device.WriteTexture(texture, mip, layer, current);
-            }
         }
 
         template <typename T>
@@ -771,7 +556,7 @@ namespace Fenrir::Render
                                  ShadowBudgetConfig spotShadows, ShadowBudgetConfig pointShadows)
         : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1)),
           m_automaticInstancing(automaticInstancing), m_computeSkinning(computeSkinning), m_cascades(cascades),
-          m_clusterTargetGroups(device), m_viewGroups(device), m_outputGroups(device)
+          m_clusterTargetGroups(device), m_skyGroups(device), m_viewGroups(device), m_outputGroups(device)
     {
         m_cascades.count = std::clamp(m_cascades.count, 1u, MaxCascades);
         m_cascades.mapSize = std::max(m_cascades.mapSize, 1u);
@@ -836,10 +621,6 @@ namespace Fenrir::Render
         m_outputSampler = m_device.CreateSampler(clamp, "Output sampler");
         // Clamped, so a face's edge does not wrap round to its opposite edge, and trilinear across the mips.
         m_skySampler = m_device.CreateSampler(clamp, "Sky sampler");
-        // Round a panorama's sides, clamped at its top and bottom.
-        SamplerDesc panorama = clamp;
-        panorama.addressU = AddressMode::Repeat;
-        m_panoramaSampler = m_device.CreateSampler(panorama, "Panorama sampler");
         // Lit where the reference is at least the stored depth: nearer the light under reversed-Z. Bilinear, so each
         // read is itself a 2 x 2 filter.
         SamplerDesc shadow = clamp;
@@ -872,17 +653,11 @@ namespace Fenrir::Render
 
         m_background = ReadBuiltin(BuiltinProgram::Background, m_logger);
         m_output = ReadBuiltin(BuiltinProgram::Output, m_logger);
-        m_panorama = ReadBuiltin(BuiltinProgram::Panorama, m_logger);
         m_prepass = ReadBuiltin(BuiltinProgram::DepthPrepass, m_logger);
         m_shadow = ReadBuiltin(BuiltinProgram::Shadow, m_logger);
         m_prepassMaskLayout = m_device.CreateBindingGroupLayout(
             {{{0, ShaderBindingKind::UniformBuffer}, {1, ShaderBindingKind::Texture}}}, "Prepass mask");
-        if (const ShaderVariant* variant = BaseVariant(m_panorama))
-        {
-            m_panoramaLayout = MaterialLayoutOf(*variant);
-        }
-        m_panoramaPipeline = MakeInternalPipeline(m_panorama, BaseVariant(m_panorama), m_panoramaLayout,
-                                                  TextureFormat::Rgba16Float, false, 1);
+        m_skyImages = std::make_unique<SkyImages>(m_device, m_logger);
         if (const ShaderVariant* variant = BaseVariant(m_background))
         {
             m_backgroundLayout = MaterialLayoutOf(*variant);
@@ -997,15 +772,8 @@ namespace Fenrir::Render
         {
             m_device.Destroy(image.texture);
         }
-        for (auto& [key, cubemap] : m_cubemaps)
-        {
-            m_device.Destroy(cubemap.group);
-            m_device.Destroy(cubemap.texture);
-        }
-        while (!m_panoramas.empty())
-        {
-            ReleasePanorama(m_panoramas.begin()->first);
-        }
+        m_skyGroups.Clear();
+        m_skyImages.reset();
         for (auto& [desc, sampler] : m_samplers)
         {
             m_device.Destroy(sampler);
@@ -1077,8 +845,6 @@ namespace Fenrir::Render
         m_device.Destroy(m_skyPipeline);
         m_device.Destroy(m_outputPipeline);
         m_device.Destroy(m_occlusionOutputPipeline);
-        m_device.Destroy(m_panoramaPipeline);
-        m_device.Destroy(m_panoramaLayout);
         m_device.Destroy(m_prepassMaskLayout);
         m_device.Destroy(m_backgroundLayout);
         m_device.Destroy(m_skyLayout);
@@ -1096,7 +862,6 @@ namespace Fenrir::Render
         m_device.Destroy(m_defaultSampler);
         m_device.Destroy(m_outputSampler);
         m_device.Destroy(m_skySampler);
-        m_device.Destroy(m_panoramaSampler);
         m_device.Destroy(m_shadowSampler);
         m_device.Destroy(m_noShadow);
         m_device.Destroy(m_defaultStreams);
@@ -1214,220 +979,55 @@ namespace Fenrir::Render
 
     bool SceneRenderer::IsCubemapCurrent(AssetKey key, std::uint32_t revision) const
     {
-        const auto found = m_cubemaps.find(key);
-        return found != m_cubemaps.end() && found->second.revision == revision;
+        return m_skyImages->IsCubemapCurrent(key, revision);
     }
 
     void SceneRenderer::PrepareCubemap(AssetKey key, std::uint32_t revision, const ImageData& image)
     {
-        ReleaseCubemap(key);
-        CubemapEntry& entry = m_cubemaps[key];
-        entry.revision = revision;
-        TextureDesc desc;
-        desc.kind = TextureKind::Cube;
-        desc.format = TextureFormatOf(image);
-        desc.width = image.width;
-        desc.height = image.height;
-        desc.mipLevels = MipCount(image.width, image.height);
-        desc.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
-        entry.texture = m_device.CreateTexture(desc, "Sky cubemap");
-        entry.desc = desc;
-        const TexelCodec codec = CodecOf(image);
-        const std::size_t faceBytes = std::size_t{image.width} * image.height * codec.bytes;
-        for (std::uint32_t face = 0; face < 6; ++face)
-        {
-            WriteWithMips(m_device, entry.texture, face, desc.mipLevels,
-                          std::span(image.pixels).subspan(face * faceBytes, faceBytes), image.width, image.height,
-                          codec);
-        }
-        BindingGroupEntry binding;
-        binding.binding = 0;
-        binding.texture = entry.texture;
-        binding.sampler = m_skySampler;
-        entry.group = m_device.CreateBindingGroup({m_skyLayout, {binding}}, "Sky");
+        m_skyImages->PrepareCubemap(key, revision, image);
         ++m_stats.uploads;
     }
 
     void SceneRenderer::ReleaseCubemap(AssetKey key)
     {
-        const auto found = m_cubemaps.find(key);
-        if (found != m_cubemaps.end())
-        {
-            m_device.Destroy(found->second.group);
-            m_device.Destroy(found->second.texture);
-            m_cubemaps.erase(found);
-        }
+        m_skyImages->ReleaseCubemap(key);
     }
 
     bool SceneRenderer::IsPanoramaCurrent(AssetKey key, std::uint32_t revision) const
     {
-        const auto found = m_panoramas.find(key);
-        return found != m_panoramas.end() && found->second.revision == revision;
+        return m_skyImages->IsPanoramaCurrent(key, revision);
     }
 
     void SceneRenderer::PreparePanorama(AssetKey key, std::uint32_t revision, const ImageData& image)
     {
-        ReleasePanorama(key);
-        PanoramaEntry& entry = m_panoramas[key];
-        entry.revision = revision;
-
-        TextureDesc source;
-        source.format = TextureFormatOf(image);
-        source.width = image.width;
-        source.height = image.height;
-        source.mipLevels = MipCount(image.width, image.height);
-        source.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
-        entry.source = m_device.CreateTexture(source, "Panorama");
-        WriteWithMips(m_device, entry.source, 0, source.mipLevels, image.pixels, image.width, image.height,
-                      CodecOf(image));
-
-        // Faces half as wide as the panorama is high, so as many texels go round the cube's horizon as round the
-        // panorama's: four faces across its width. RGBA16F holds an HDR sky in half the memory of RGBA32F.
-        const std::uint32_t side = std::max(image.height / 2, 1u);
-        TextureDesc& cube = entry.cubeDesc;
-        cube.kind = TextureKind::Cube;
-        cube.format = TextureFormat::Rgba16Float;
-        cube.width = side;
-        cube.height = side;
-        cube.mipLevels = MipCount(side, side);
-        cube.usage = TextureUsage::Sampled | TextureUsage::ColourAttachment;
-        entry.cube = m_device.CreateTexture(cube, "Sky panorama cube");
-
-        // Each pass's block: its face, half its level's texel, and the panorama's mip whose texels are as tall as the
-        // level's (a face spans half the panorama's height).
-        std::vector<std::byte> blocks(UniformBlockAlignment * 6 * cube.mipLevels);
-        for (std::uint32_t level = 0; level < cube.mipLevels; ++level)
-        {
-            const std::uint32_t levelSide = std::max(side >> level, 1u);
-            const float lod = std::max(std::log2(static_cast<float>(image.height) / (2.0f * levelSide)), 0.0f);
-            for (std::uint32_t face = 0; face < 6; ++face)
-            {
-                const PanoramaBlock block{face, 1.0f / static_cast<float>(levelSide), lod};
-                std::memcpy(blocks.data() + UniformBlockAlignment * (std::size_t{level} * 6 + face), &block,
-                            sizeof(block));
-            }
-        }
-        entry.params = m_device.CreateBuffer({blocks.size(), BufferUsage::Uniform}, blocks, "Panorama passes");
-        for (std::size_t pass = 0; pass < std::size_t{6} * cube.mipLevels; ++pass)
-        {
-            BindingGroupEntry params;
-            params.binding = 0;
-            params.buffer = entry.params;
-            params.offset = UniformBlockAlignment * pass;
-            params.size = sizeof(PanoramaBlock);
-            BindingGroupEntry panorama;
-            panorama.binding = 1;
-            panorama.texture = entry.source;
-            panorama.sampler = m_panoramaSampler;
-            entry.passGroups.push_back(m_device.CreateBindingGroup({m_panoramaLayout, {params, panorama}}, "Panorama"));
-        }
-
-        BindingGroupEntry binding;
-        binding.binding = 0;
-        binding.texture = entry.cube;
-        binding.sampler = m_skySampler;
-        entry.group = m_device.CreateBindingGroup({m_skyLayout, {binding}}, "Sky");
+        m_skyImages->PreparePanorama(key, revision, image);
         ++m_stats.uploads;
     }
 
     void SceneRenderer::ReleasePanorama(AssetKey key)
     {
-        const auto found = m_panoramas.find(key);
-        if (found == m_panoramas.end())
-        {
-            return;
-        }
-        PanoramaEntry& entry = found->second;
-        FreePanoramaPasses(entry);
-        m_device.Destroy(entry.group);
-        m_device.Destroy(entry.cube);
-        m_panoramas.erase(found);
+        m_skyImages->ReleasePanorama(key);
     }
 
     std::vector<AssetKey> SceneRenderer::PanoramaKeys() const
     {
-        std::vector<AssetKey> keys;
-        for (const auto& [key, entry] : m_panoramas)
-        {
-            keys.push_back(key);
-        }
-        return keys;
+        return m_skyImages->PanoramaKeys();
     }
 
-    void SceneRenderer::FreePanoramaPasses(PanoramaEntry& entry)
+    BindingGroupHandle SceneRenderer::SkyGroup(TextureHandle cube, std::uint64_t frameIndex)
     {
-        for (const BindingGroupHandle group : entry.passGroups)
-        {
-            m_device.Destroy(group);
-        }
-        entry.passGroups.clear();
-        m_device.Destroy(entry.params);
-        m_device.Destroy(entry.source);
-        entry.params = {};
-        entry.source = {};
-    }
-
-    void SceneRenderer::AddPanoramaPasses(RenderGraph& graph)
-    {
-        for (auto& [key, entry] : m_panoramas)
-        {
-            if (entry.converted)
-            {
-                // Its passes ran in an earlier frame, so the image's texture can go.
-                FreePanoramaPasses(entry);
-                continue;
-            }
-            if (m_panoramaPipeline.IsEmpty())
-            {
-                continue;
-            }
-            const GraphResource cube = graph.ImportTexture("Sky panorama cube", entry.cube, entry.cubeDesc);
-            for (std::uint32_t level = 0; level < entry.cubeDesc.mipLevels; ++level)
-            {
-                const std::uint32_t side = std::max(entry.cubeDesc.width >> level, 1u);
-                for (std::uint32_t face = 0; face < 6; ++face)
-                {
-                    const BindingGroupHandle group = entry.passGroups.at(std::size_t{level} * 6 + face);
-                    graph.AddPass(
-                        "Panorama", RenderStage::Prepare, QueueKind::Graphics,
-                        [=](PassBuilder& pass) { pass.ColourAttachmentLevel(cube, level, face); },
-                        [this, key, group, side](PassContext& context) {
-                            PassEncoder& encoder = context.Encoder();
-                            encoder.SetViewport({0, 0, side, side});
-                            encoder.SetPipeline(m_panoramaPipeline);
-                            encoder.SetBindingGroup(MaterialSet, group);
-                            encoder.Draw({.vertexCount = 3});
-                            // Recorded in this frame's graph, which runs before any Prepare or Release can come.
-                            m_panoramas.at(key).converted = true;
-                        });
-                }
-            }
-        }
-    }
-
-    BindingGroupHandle SceneRenderer::SkyGroup(AssetKey key) const
-    {
-        if (const auto cubemap = m_cubemaps.find(key); cubemap != m_cubemaps.end())
-        {
-            return cubemap->second.group;
-        }
-        // A panorama whose passes cannot run (builtin:panorama did not load) has nothing in its cube texture.
-        const auto panorama = m_panoramas.find(key);
-        if (panorama == m_panoramas.end() || (!panorama->second.converted && m_panoramaPipeline.IsEmpty()))
-        {
-            return {};
-        }
-        return panorama->second.group;
+        return m_skyGroups.Get({BindingGroupKeyPart::Of(cube)}, frameIndex, [&] {
+            BindingGroupEntry binding;
+            binding.binding = 0;
+            binding.texture = cube;
+            binding.sampler = m_skySampler;
+            return m_device.CreateBindingGroup({m_skyLayout, {binding}}, "Sky");
+        });
     }
 
     std::vector<AssetKey> SceneRenderer::CubemapKeys() const
     {
-        std::vector<AssetKey> keys;
-        for (const auto& [key, entry] : m_cubemaps)
-        {
-            keys.push_back(key);
-        }
-        return keys;
+        return m_skyImages->CubemapKeys();
     }
 
     TextureHandle SceneRenderer::SampledTexture(AssetKey key) const
@@ -2765,18 +2365,9 @@ namespace Fenrir::Render
     {
         SkySource source;
         source.colour = lighting.skyColour;
-        if (const auto cubemap = m_cubemaps.find(lighting.sky); cubemap != m_cubemaps.end())
-        {
-            source.cube = cubemap->second.texture;
-            source.cubeDesc = cubemap->second.desc;
-        }
-        else if (const auto panorama = m_panoramas.find(lighting.sky);
-                 panorama != m_panoramas.end() && (panorama->second.converted || !m_panoramaPipeline.IsEmpty()))
-        {
-            // Converted in an earlier frame, or by this frame's Panorama passes, which run first in Prepare.
-            source.cube = panorama->second.cube;
-            source.cubeDesc = panorama->second.cubeDesc;
-        }
+        const SkyCube cube = m_skyImages->Cube(lighting.sky);
+        source.cube = cube.texture;
+        source.cubeDesc = cube.desc;
         return source;
     }
 
@@ -2847,7 +2438,7 @@ namespace Fenrir::Render
         m_stats.shadowDraws = 0;
         m_drawnViews.clear();
         PackInstanceLists();
-        AddPanoramaPasses(graph);
+        m_skyImages->AddPasses(graph);
         m_skyLighting->AddPasses(graph, SkySourceOf(m_frame.lighting));
         if (m_frame.views.empty())
         {
@@ -3313,9 +2904,9 @@ namespace Fenrir::Render
             BindingGroupHandle backgroundGroup = m_backgroundBlocks->Group(frameIndex, v);
             PipelineHandle backgroundPipeline = m_backgroundPipeline;
             BindingGroupHandle backgroundFrame;
-            if (const BindingGroupHandle sky = SkyGroup(request.sky); !sky.IsEmpty() && !m_skyPipeline.IsEmpty())
+            if (const SkyCube sky = m_skyImages->Cube(request.sky); !sky.texture.IsEmpty() && !m_skyPipeline.IsEmpty())
             {
-                backgroundGroup = sky;
+                backgroundGroup = SkyGroup(sky.texture, frameIndex);
                 backgroundPipeline = m_skyPipeline;
                 backgroundFrame = frameGroup;
             }
@@ -3452,7 +3043,7 @@ namespace Fenrir::Render
                 });
             // GTAO from the prepass's depth and normals, when the camera has it; Opaque samples what it makes.
             const GraphResource occlusion = m_gtao->AddPasses(
-                graph, frameIndex, v,
+                graph, frameIndex,
                 {sceneDepth, sceneNormals, {rect.width, rect.height}, request.projection, request.ambientOcclusion});
             graph.AddPass(
                 "Opaque", RenderStage::Opaque, QueueKind::Graphics,
