@@ -136,20 +136,15 @@ namespace Fenrir::Render
         return MakeFullscreenPipeline(m_device, m_logger, desc, container.name);
     }
 
-    BindingGroupHandle BloomChain::SourceGroup(TextureHandle texture)
+    BindingGroupHandle BloomChain::SourceGroup(TextureHandle texture, std::uint64_t frameIndex)
     {
-        return m_sourceGroups.Get({BindingGroupKeyPart::Of(texture)}, [&] {
+        return m_sourceGroups.Get({BindingGroupKeyPart::Of(texture)}, frameIndex, [&] {
             BindingGroupEntry entry;
             entry.binding = 0;
             entry.texture = texture;
             entry.sampler = m_sampler;
             return m_device.CreateBindingGroup({m_sourceLayout, {entry}}, "Bloom source");
         });
-    }
-
-    void BloomChain::PruneGroups()
-    {
-        m_sourceGroups.Prune();
     }
 
     void BloomChain::AddPasses(RenderGraph& graph, std::uint64_t frameIndex, std::span<const BloomView> views)
@@ -193,7 +188,7 @@ namespace Fenrir::Render
                     encoder.SetViewport(viewport);
                     encoder.SetPipeline(pipeline);
                     encoder.SetBindingGroup(BlockSet, block);
-                    encoder.SetBindingGroup(SourceSet, SourceGroup(context.Texture(source)));
+                    encoder.SetBindingGroup(SourceSet, SourceGroup(context.Texture(source), context.FrameIndex()));
                     encoder.Draw({.vertexCount = 3});
                 });
         };

@@ -79,12 +79,6 @@ namespace Fenrir::Render
         BloomChain(BloomChain&&) = delete;
         BloomChain& operator=(BloomChain&&) = delete;
 
-        /**
-         * @brief Destroys the groups of source textures the transient pool has let go of: a transient texture's group
-         * outlives its frame. Call once a frame, before AddPasses.
-         */
-        void PruneGroups();
-
         /** @brief Adds the passes of every view in `views` that blooms, in frame `frameIndex`. */
         void AddPasses(RenderGraph& graph, std::uint64_t frameIndex, std::span<const BloomView> views);
 
@@ -92,8 +86,9 @@ namespace Fenrir::Render
         [[nodiscard]] Graphics::PipelineHandle MakePipeline(const ShaderContainer& container,
                                                             const ShaderVariant* variant, Graphics::BlendMode blend,
                                                             std::uint32_t samples);
-        /** @brief The group binding `texture` as a pass's source, made once while the texture lives. */
-        [[nodiscard]] Graphics::BindingGroupHandle SourceGroup(Graphics::TextureHandle texture);
+        /** @brief The group binding `texture` as a pass's source in frame `frameIndex`, made once while it lives. */
+        [[nodiscard]] Graphics::BindingGroupHandle SourceGroup(Graphics::TextureHandle texture,
+                                                               std::uint64_t frameIndex);
 
         Graphics::GraphicsDevice& m_device;
         ILogger& m_logger;

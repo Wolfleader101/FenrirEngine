@@ -2619,8 +2619,8 @@ namespace Fenrir::Render
         const BufferHandle buffer = ring.copies->Current(frameIndex);
         const std::size_t capacity = ring.capacity;
         const BufferHandle lights = m_lightBlocks->Buffer(frameIndex);
-        const BindingGroupHandle targetGroup =
-            m_clusterTargetGroups.Get({BindingGroupKeyPart::Of(lights), BindingGroupKeyPart::Of(buffer)}, [&] {
+        const BindingGroupHandle targetGroup = m_clusterTargetGroups.Get(
+            {BindingGroupKeyPart::Of(lights), BindingGroupKeyPart::Of(buffer)}, frameIndex, [&] {
                 BindingGroupEntry lightEntry;
                 lightEntry.binding = 0;
                 lightEntry.buffer = lights;
@@ -2795,7 +2795,7 @@ namespace Fenrir::Render
         const BindingGroupCache<5>::Key key{
             BindingGroupKeyPart::Of(buffer), BindingGroupKeyPart::Value(static_cast<std::uint32_t>(slot)),
             BindingGroupKeyPart::Of(occlusion), BindingGroupKeyPart::Of(shadow), BindingGroupKeyPart::Of(clusters)};
-        return m_viewGroups.Get(key, [&] {
+        return m_viewGroups.Get(key, frameIndex, [&] {
             BindingGroupEntry block;
             block.binding = 0;
             block.buffer = buffer;
@@ -2816,9 +2816,9 @@ namespace Fenrir::Render
         });
     }
 
-    BindingGroupHandle SceneRenderer::OutputGroup(TextureHandle sceneColour)
+    BindingGroupHandle SceneRenderer::OutputGroup(TextureHandle sceneColour, std::uint64_t frameIndex)
     {
-        return m_outputGroups.Get({BindingGroupKeyPart::Of(sceneColour)}, [&] {
+        return m_outputGroups.Get({BindingGroupKeyPart::Of(sceneColour)}, frameIndex, [&] {
             BindingGroupEntry entry;
             entry.binding = 0;
             entry.texture = sceneColour;
@@ -2839,14 +2839,6 @@ namespace Fenrir::Render
 
     void SceneRenderer::AddPasses(RenderGraph& graph, const FrameContext& frame)
     {
-        // Every cached group of a texture the transient pool has let go of, or of a ring's buffer remade since, goes
-        // here, before this frame's passes ask for any.
-        m_outputGroups.Prune();
-        m_viewGroups.Prune();
-        m_clusterTargetGroups.Prune();
-        m_bloom->PruneGroups();
-        m_gtao->PruneGroups();
-
         m_stats.draws = 0;
         m_stats.instances = 0;
         m_stats.paletteBytes = 0;
@@ -3600,7 +3592,8 @@ namespace Fenrir::Render
                     encoder.SetViewport(rect);
                     encoder.SetPipeline(outputPipeline);
                     encoder.SetBindingGroup(1, outputBlockGroup);
-                    encoder.SetBindingGroup(MaterialSet, OutputGroup(shownBlack ? black : context.Texture(shown)));
+                    encoder.SetBindingGroup(
+                        MaterialSet, OutputGroup(shownBlack ? black : context.Texture(shown), context.FrameIndex()));
                     encoder.Draw({.vertexCount = 3});
                 });
         }

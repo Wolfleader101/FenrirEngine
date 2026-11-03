@@ -73,12 +73,6 @@ namespace Fenrir::Render
         Gtao& operator=(Gtao&&) = delete;
 
         /**
-         * @brief Destroys the groups of source textures the transient pool has let go of: a transient texture's group
-         * outlives its frame. Call once a frame, before AddPasses.
-         */
-        void PruneGroups();
-
-        /**
          * @brief Readies this frame's blocks for `views` views (two each: the final denoise pass has its own). Call
          * once a frame, before AddPasses.
          */
@@ -93,9 +87,13 @@ namespace Fenrir::Render
 
       private:
         [[nodiscard]] Graphics::PipelineHandle MakePipeline(const ShaderVariant* variant, std::size_t outputs);
-        /** @brief The group binding `first` and `second` as a pass's sources, made once while both live. */
+        /**
+         * @brief The group binding `first` and `second` as a pass's sources in frame `frameIndex`, made once while
+         * both live.
+         */
         [[nodiscard]] Graphics::BindingGroupHandle SourceGroup(Graphics::TextureHandle first,
-                                                               Graphics::TextureHandle second);
+                                                               Graphics::TextureHandle second,
+                                                               std::uint64_t frameIndex);
 
         Graphics::GraphicsDevice& m_device;
         ILogger& m_logger;
