@@ -263,12 +263,6 @@ namespace LightingDemo
             float appliedPuddles = -1.0f;
         };
 
-        /** @brief A white builtin:unlit material: its copies glow their copy colour. */
-        Fenrir::AssetHandle<Fenrir::Material> UnlitMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene)
-        {
-            return store.CreateMaterial(store.Load<Fenrir::Shader>("builtin:unlit", scene).handle, scene);
-        }
-
         /** @brief One of `count` choices, picked evenly by `random`. */
         std::size_t Pick(std::mt19937& random, std::size_t count)
         {

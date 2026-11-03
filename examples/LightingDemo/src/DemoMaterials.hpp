@@ -15,8 +15,8 @@ namespace Fenrir
     class Scene;
 } // namespace Fenrir
 
-// Material tools for the scenes: builtin:lit materials and boxes of them, materials drawn by the demo's own shaders
-// (shaders/, embedded by fenrir_add_shaders), and images fetched to texture them.
+// Material tools for the scenes: builtin:lit and builtin:unlit materials and boxes of them, materials drawn by the
+// demo's own shaders (shaders/, embedded by fenrir_add_shaders), and images fetched to texture them.
 namespace LightingDemo
 {
     /** @brief A builtin:lit material of `colour`, `metallic` and `roughness`, glowing `emissive` times `strength`. */
@@ -25,6 +25,10 @@ namespace LightingDemo
                                                                     float roughness,
                                                                     Fenrir::Colour emissive = Fenrir::Colour::Black,
                                                                     float strength = 1.0f);
+
+    /** @brief A builtin:unlit material of `colour`, which glows it as it is: HDR, so it can bloom. */
+    [[nodiscard]] Fenrir::AssetHandle<Fenrir::Material> UnlitMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene,
+                                                                      Fenrir::Colour colour = Fenrir::Colour::White);
 
     /** @brief An entity drawing `cube` in `material` at `position`, scaled by `scale`: a box, for a unit cube. */
     Fenrir::Entity Box(Fenrir::EntityList& entities, Fenrir::AssetHandle<Fenrir::Mesh> cube,

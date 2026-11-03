@@ -4,6 +4,7 @@
 
 #include <imgui.h>
 
+#include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirDebugDraw/DebugDraw.hpp"
@@ -72,16 +73,13 @@ namespace LightingDemo
                 scene.AddResource<GridState>(state);
                 return;
             }
-            const auto lit = store.Load<Fenrir::Shader>("builtin:lit", scene).handle;
             Fenrir::EntityList& entities = scene.GetEntityList();
             for (std::size_t row = 0; row < Rows; ++row)
             {
                 for (std::size_t column = 0; column < Columns; ++column)
                 {
-                    const auto material = store.CreateMaterial(lit, scene);
-                    store.SetColour(material, "baseColour", state.baseColour);
-                    store.SetFloat(material, "metallic", Fraction(row, Rows));
-                    store.SetFloat(material, "roughness", Fraction(column, Columns));
+                    const auto material =
+                        LitMaterial(store, scene, state.baseColour, Fraction(row, Rows), Fraction(column, Columns));
                     state.materials.push_back(material);
 
                     Fenrir::Entity entity = entities.CreateEntity();

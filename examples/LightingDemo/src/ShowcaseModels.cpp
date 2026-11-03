@@ -6,6 +6,7 @@
 
 #include <imgui.h>
 
+#include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
@@ -98,10 +99,7 @@ namespace LightingDemo
             // A floor to catch the sun's shadows, and the sun low over it, from behind the helmets on the left.
             if (const auto cube = store.Load<Fenrir::Mesh>("cube.obj#Mesh0", scene); cube.Ok())
             {
-                const auto lit = store.Load<Fenrir::Shader>("builtin:lit", scene).handle;
-                const auto floorMaterial = store.CreateMaterial(lit, scene);
-                store.SetColour(floorMaterial, "baseColour", {0.55f, 0.55f, 0.55f, 1.0f});
-                store.SetFloat(floorMaterial, "roughness", 0.7f);
+                const auto floorMaterial = LitMaterial(store, scene, {0.55f, 0.55f, 0.55f, 1.0f}, 0.0f, 0.7f);
                 Fenrir::Entity floor = entities.CreateEntity();
                 auto& transform = floor.AddComponent<Fenrir::Transform>();
                 transform.pos = {0.0f, -0.5f * FloorSize.y, 0.0f};
