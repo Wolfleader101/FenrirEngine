@@ -1,7 +1,7 @@
 # What do the ragdoll demo scenes show?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 55, 56
 
 ## Question

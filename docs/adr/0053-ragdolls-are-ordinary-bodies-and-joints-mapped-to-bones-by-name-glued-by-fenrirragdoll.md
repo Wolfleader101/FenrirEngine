@@ -18,6 +18,7 @@ ADR-0028 and ADR-0038 have **ragdoll glue** write simulated body poses into a sk
       Entity ragdoll;    // the skeleton entity carrying the Ragdoll
       BoneName bone;     // the bone this body follows and drives, by name
       Transform offset;  // the body's pose relative to its bone
+      // plus, from the ragdoll spec's spike: a per-body RagdollMode override and a strengthScale
   };
   ```
 
@@ -41,4 +42,5 @@ ADR-0028 and ADR-0038 have **ragdoll glue** write simulated body poses into a sk
 - A new package and a new scripting contract; the demo scaffold installs it where physics is installed.
 - The description a ragdoll is built from, its default bodies, joints, motors and strengths, and the modes that switch bodies between kinematic and dynamic are the ragdoll spec's next decisions, within this model.
 - Vocabulary (`GLOSSARY.md`): *ragdoll*, *ragdoll body*, *ragdoll glue*; avoid *physical bone*, *physics asset*, *rig* and Jolt's *part*.
+- *Amended by the ragdoll spike (2026-11-03):* `RagdollBody` also carries the per-body mode override of ADR-0054 and the part's `strengthScale`; the builder takes the `App` for the asset store, since the rest pose is the skeleton asset's.
 - Listed, not built: offsets recalibrated across skeleton rest-pose changes; several ragdolls on one skeleton.
