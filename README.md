@@ -80,9 +80,11 @@ ctest --test-dir out/build/clang-x64-debug
 ```
 
 The MSVC presets need Visual Studio's build environment: run their commands through `scripts\msvc.ps1` from PowerShell
-or `scripts\msvc.cmd` from cmd, as in `scripts\msvc.ps1 cmake --preset msvc-x64-debug`. In a deep path (a git worktree),
-MSVC passes Windows' 260-character limit: `scripts\short-path.ps1` prints a short junction to the checkout to configure
-and build through, as its header shows.
+or `scripts\msvc.cmd` from cmd, as in `scripts\msvc.ps1 cmake --preset msvc-x64-debug`. MSVC's `cl.exe` fails on a path past
+260 characters even with Windows' long paths on, and the deepest build path (glslang's objects) is about 180 characters
+below the checkout, so keep a checkout's path under about 80 characters (built clean at 78). A path an `#include`
+spells, `..` and all, counts too: the generated mappings include each other's headers through include directories for
+that reason (Iris.Bindings' `[cpp] include`).
 
 CI (`.github/workflows/build-and-test.yml`) runs these steps with the demo apps on pull requests only, for `msvc-x64-release`; changes to docs and tickets alone build nothing. The `linux-debug` job is commented out in the workflow to spare the Actions budget; when on, it also runs the GL tests (CTest label `gl`: the renderer's GL tests and the demo apps' OpenGL smoke runs) on Mesa's llvmpipe, through SDL's offscreen video driver over EGL; the Windows jobs run the null tests only, the demo apps' null smoke runs among them.
 
