@@ -26,6 +26,14 @@ namespace LightingDemo
         return material;
     }
 
+    Fenrir::AssetHandle<Fenrir::Material> UnlitMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene,
+                                                        Fenrir::Colour colour)
+    {
+        const auto material = store.CreateMaterial(store.Load<Fenrir::Shader>("builtin:unlit", scene).handle, scene);
+        store.SetColour(material, "baseColour", colour);
+        return material;
+    }
+
     Fenrir::Entity Box(Fenrir::EntityList& entities, Fenrir::AssetHandle<Fenrir::Mesh> cube,
                        Fenrir::AssetHandle<Fenrir::Material> material, Fenrir::Math::Vec3 position,
                        Fenrir::Math::Vec3 scale)

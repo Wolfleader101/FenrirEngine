@@ -143,8 +143,7 @@ namespace LightingDemo
          * @brief A rect light at `position`, turned by `rotation`, with a thin unlit slab of its radiance and size
          * where it is, so the light shows as the shape it lights with.
          */
-        ShowroomLight AddLight(Fenrir::AssetStore& store, Fenrir::Scene& scene,
-                               Fenrir::AssetHandle<Fenrir::Shader> unlit, Fenrir::AssetHandle<Fenrir::Mesh> cube,
+        ShowroomLight AddLight(Fenrir::AssetStore& store, Fenrir::Scene& scene, Fenrir::AssetHandle<Fenrir::Mesh> cube,
                                const char* name, Vec3 position, Quat rotation, const Fenrir::RectLight& light)
         {
             Fenrir::EntityList& entities = scene.GetEntityList();
@@ -155,8 +154,7 @@ namespace LightingDemo
             transform.pos = position;
             transform.rot = rotation;
             out.light.AddComponent<Fenrir::RectLight>(light);
-            out.glow = store.CreateMaterial(unlit, scene);
-            store.SetColour(out.glow, "baseColour", Radiance(light));
+            out.glow = UnlitMaterial(store, scene, Radiance(light));
             out.slab = Box(entities, cube, out.glow, position, {light.width, light.height, 0.02f});
             out.slab.GetComponent<Fenrir::Transform>().rot = rotation;
             return out;
@@ -176,19 +174,17 @@ namespace LightingDemo
                 scene.AddResource<ShowroomState>(state);
                 return;
             }
-            const auto unlit = store.Load<Fenrir::Shader>("builtin:unlit", scene).handle;
             SpawnRoom(store, scene, cube.handle);
 
             // Each light faces its entity's -Z: the room's front, turned half round, for those on the back wall.
             const Quat facingFront = Fenrir::Math::AngleAxis(Pi, Vec3(0.0f, 1.0f, 0.0f));
-            state.lights.push_back(AddLight(store, scene, unlit, cube.handle, "Neon strip",
-                                            {0.0f, 0.5f, -HalfDepth + 0.15f}, facingFront,
+            state.lights.push_back(AddLight(store, scene, cube.handle, "Neon strip", {0.0f, 0.5f, -HalfDepth + 0.15f},
+                                            facingFront,
                                             {{1.0f, 0.08f, 0.55f, 1.0f}, 12.0f, 8.0f, 0.06f, false, 12.0f}));
-            state.lights.push_back(AddLight(store, scene, unlit, cube.handle, "Panel",
-                                            {-3.5f, 2.4f, -HalfDepth + 0.15f}, facingFront,
-                                            {{1.0f, 0.92f, 0.8f, 1.0f}, 4.0f, 2.4f, 1.2f, false, 12.0f}));
+            state.lights.push_back(AddLight(store, scene, cube.handle, "Panel", {-3.5f, 2.4f, -HalfDepth + 0.15f},
+                                            facingFront, {{1.0f, 0.92f, 0.8f, 1.0f}, 4.0f, 2.4f, 1.2f, false, 12.0f}));
             // Hung side on from the ceiling, lighting the room's two halves, cyan on both faces.
-            state.lights.push_back(AddLight(store, scene, unlit, cube.handle, "Two-sided sign", {3.0f, 2.6f, 0.5f},
+            state.lights.push_back(AddLight(store, scene, cube.handle, "Two-sided sign", {3.0f, 2.6f, 0.5f},
                                             Fenrir::Math::AngleAxis(Pi * 0.5f, Vec3(0.0f, 1.0f, 0.0f)),
                                             {{0.1f, 0.85f, 1.0f, 1.0f}, 5.0f, 1.6f, 0.7f, true, 10.0f}));
 

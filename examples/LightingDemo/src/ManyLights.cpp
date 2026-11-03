@@ -152,7 +152,6 @@ namespace LightingDemo
                 scene.AddResource<ManyLightsState>(state);
                 return;
             }
-            const auto unlit = store.Load<Fenrir::Shader>("builtin:unlit", scene).handle;
             SpawnRoom(store, scene, cube.handle, sphere.handle);
 
             // Every light is made now and the ones past the count switched off, so the slider spawns nothing.
@@ -190,8 +189,8 @@ namespace LightingDemo
             for (int hue = 0; hue < Hues; ++hue)
             {
                 const Fenrir::Colour colour = HueColour(static_cast<float>(hue) / Hues);
-                const auto glow = store.CreateMaterial(unlit, scene);
-                store.SetColour(glow, "baseColour", {colour.r * 4.0f, colour.g * 4.0f, colour.b * 4.0f, 1.0f});
+                const auto glow =
+                    UnlitMaterial(store, scene, {colour.r * 4.0f, colour.g * 4.0f, colour.b * 4.0f, 1.0f});
                 for (MovingLight& light : state.lights)
                 {
                     if (light.hue == hue)

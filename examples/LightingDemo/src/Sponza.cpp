@@ -136,8 +136,7 @@ namespace LightingDemo
                           Fenrir::AssetHandle<Fenrir::Mesh> sphere, SponzaState& state)
         {
             const auto iron = LitMaterial(store, scene, {0.04f, 0.035f, 0.03f, 1.0f}, 1.0f, 0.55f);
-            const auto flame = store.CreateMaterial(store.Load<Fenrir::Shader>("builtin:unlit", scene).handle, scene);
-            store.SetColour(flame, "baseColour", {12.0f, 5.0f, 1.6f, 1.0f});
+            const auto flame = UnlitMaterial(store, scene, {12.0f, 5.0f, 1.6f, 1.0f});
             Fenrir::EntityList& entities = scene.GetEntityList();
             for (const float x : ColumnX)
             {
