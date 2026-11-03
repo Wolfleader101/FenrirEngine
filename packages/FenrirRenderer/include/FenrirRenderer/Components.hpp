@@ -27,8 +27,9 @@ namespace Fenrir
         /** @brief False hides this entity only; its children are drawn as their own MeshRenderers say. */
         bool visible = true;
         /**
-         * @brief Whether it is drawn into the sun's shadow (ADR-0050). Only an `Opaque` or `Masked` material casts, a
-         * Masked one cut out by its alpha cutoff; `AlphaBlend` and `Additive` ones never do.
+         * @brief Whether it is drawn into shadow maps: the sun's cascades and the shadowed spot and point lights'
+         * (ADR-0050). Only an `Opaque` or `Masked` material casts, a Masked one cut out by its alpha cutoff;
+         * `AlphaBlend` and `Additive` ones never do.
          */
         bool castShadows = true;
     };
@@ -49,7 +50,7 @@ namespace Fenrir
         AssetHandle<Mesh> mesh;
         AssetHandle<Material> material;
         AssetHandle<InstanceList> instances;
-        /** @brief Whether the copies are drawn into the sun's shadow, as a MeshRenderer's castShadows says. */
+        /** @brief Whether the copies are drawn into shadow maps, as a MeshRenderer's castShadows says. */
         bool castShadows = true;
         /** @brief False hides every copy; the entity's children are drawn as their own renderers say. */
         bool visible = true;

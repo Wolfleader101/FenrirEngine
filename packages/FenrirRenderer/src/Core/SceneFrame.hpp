@@ -69,8 +69,9 @@ namespace Fenrir::Render
          */
         std::optional<Math::Vec3> sortPoint;
         /**
-         * @brief Whether it is drawn into the sun's shadow cascades and the spot lights' shadow tiles (ADR-0050): an
-         * `Opaque` or `Masked` one only, a Masked one cut out by its alpha cutoff as the depth prepass cuts it.
+         * @brief Whether it is drawn into the sun's shadow cascades and the spot and point lights' shadow maps
+         * (ADR-0050): an `Opaque` or `Masked` one only, a Masked one cut out by its alpha cutoff as the depth prepass
+         * cuts it.
          */
         bool castShadows = true;
     };

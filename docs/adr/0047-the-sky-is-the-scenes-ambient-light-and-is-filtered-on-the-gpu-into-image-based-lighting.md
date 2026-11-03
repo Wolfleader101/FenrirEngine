@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # The sky is the scene's ambient light, and is filtered on the GPU into image-based lighting

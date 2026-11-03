@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Large demo assets are downloaded at configure time, and tests never use them
