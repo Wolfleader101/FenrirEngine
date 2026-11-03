@@ -2899,8 +2899,8 @@ namespace Fenrir::Render
             m_spotShadows->Prepare(std::move(spotChoice), frameIndex, graph, lighting.lights, !casters.empty());
         const auto pointFrame =
             m_pointShadows->Prepare(std::move(pointChoice), frameIndex, graph, lighting.lights, !pointCasters.empty());
-        const std::uint32_t spotCount = m_spotShadows->Count();
-        const std::uint32_t pointCount = m_pointShadows->Count();
+        const auto spotCount = static_cast<std::uint32_t>(spotFrame.lights.size());
+        const auto pointCount = static_cast<std::uint32_t>(pointFrame.lights.size());
         const FrameBlock frameBlock{Math::Vec4(lighting.lightDirection, 0.0f),
                                     Math::Vec4(lighting.lightColour, 0.0f),
                                     Math::Vec4(m_frame.time, m_frame.deltaTime, 0.0f, 0.0f),

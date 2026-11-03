@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <span>
-#include <string_view>
 
 #include "Core/LightShadows.hpp"
 #include "Core/PunctualLights.hpp"
@@ -96,13 +95,21 @@ namespace Fenrir::Render
     /** @brief The spot lights' kind of ShadowPool: each shadowed light a tile of one atlas, a grid of the budget's. */
     struct SpotShadowKind
     {
+        /** @brief What the pool draws each light's shadow with: its perspective. */
         using Shadow = SpotShadow;
+        /** @brief One light's record in the ring set 0 binds. */
         using Record = GpuSpotShadow;
+        /** @brief The kind of light the pool chooses from. */
         static constexpr LightKind Light = LightKind::Spot;
-        static constexpr std::string_view Name = "spot";
+        /** @brief The kind's name in the budget's warning. */
+        static constexpr const char* Name = "spot";
+        /** @brief The least side of a light's map, in texels, that the config's map size is held to. */
         static constexpr std::uint32_t MinMapSize = 16;
+        /** @brief The maps' label on the device. */
         static constexpr const char* MapLabel = "Spot shadow atlas";
+        /** @brief The maps' name in the frame's graph. */
         static constexpr const char* MapResource = "SpotShadowAtlas";
+        /** @brief The record ring's label. */
         static constexpr const char* RecordsLabel = "Spot shadows";
 
         /** @brief FitSpotShadow, into a tile of the config's map size. */

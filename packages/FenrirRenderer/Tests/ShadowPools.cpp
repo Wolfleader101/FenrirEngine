@@ -3,6 +3,8 @@
 // otherwise.
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -27,6 +29,7 @@ using Fenrir::Render::LightKind;
 using Fenrir::Render::PointShadowKind;
 using Fenrir::Render::PunctualLight;
 using Fenrir::Render::RenderGraph;
+using Fenrir::Render::ShadowBudgetConfig;
 using Fenrir::Render::ShadowPool;
 using Fenrir::Render::SpotShadowKind;
 using RendererTest::LoggedMessages;
@@ -54,6 +57,40 @@ namespace
         desc.usage = TextureUsage::Sampled;
         return device.CreateTexture(desc, "No shadow");
     }
+
+    /** @brief A spot shadow pool of budget 4 on the null device, over one spot and one point light that cast. */
+    struct SpotPool
+    {
+        std::unique_ptr<Fenrir::Graphics::GraphicsDevice> device = CreateNullDevice({.framesInFlight = 2});
+        RecordingLogger logger{std::make_shared<LoggedMessages>()};
+        TextureHandle fallback;
+        std::unique_ptr<ShadowPool<SpotShadowKind>> pool;
+        std::vector<PunctualLight> lights{Caster(LightKind::Spot, {1.0f, 0.0f, 0.0f}),
+                                          Caster(LightKind::Point, {2.0f, 0.0f, 0.0f})};
+
+        SpotPool()
+        {
+            device->BeginFrame(0);
+            fallback = MakeFallback(*device);
+            pool = std::make_unique<ShadowPool<SpotShadowKind>>(*device, logger, ShadowBudgetConfig{4, 64}, fallback);
+        }
+        ~SpotPool()
+        {
+            pool.reset();
+            device->Destroy(fallback);
+        }
+        SpotPool(const SpotPool&) = delete;
+        SpotPool& operator=(const SpotPool&) = delete;
+        SpotPool(SpotPool&&) = delete;
+        SpotPool& operator=(SpotPool&&) = delete;
+
+        /** @brief Frame `frameIndex`'s spot shadows into `graph`, chosen from the origin, with casters when `casts`. */
+        ShadowPool<SpotShadowKind>::Frame Prepare(RenderGraph& graph, std::uint64_t frameIndex, bool casts)
+        {
+            const std::array<Vec3, 1> origin{Vec3(0.0f)};
+            return pool->Prepare(pool->Choose(lights, origin), frameIndex, graph, lights, casts);
+        }
+    };
 } // namespace
 
 TEST_CASE("A shadow pool warns once when its budget leaves lights unshadowed", "[renderer][shadows][shadow-pools]")
@@ -83,63 +120,69 @@ TEST_CASE("A shadow pool warns once when its budget leaves lights unshadowed", "
     device->Destroy(fallback);
 }
 
-TEST_CASE("A shadow pool makes its maps only while a light casts, and binds the fallback otherwise",
+TEST_CASE("A shadow pool makes no map, and binds its fallback, while nothing casts its lights' shadows",
           "[renderer][shadows][shadow-pools]")
 {
-    auto device = CreateNullDevice({.framesInFlight = 2});
-    device->BeginFrame(0);
-    auto messages = std::make_shared<LoggedMessages>();
-    RecordingLogger logger(messages);
-    const TextureHandle fallback = MakeFallback(*device);
-    ShadowPool<SpotShadowKind> pool(*device, logger, {4, 64}, fallback);
-    const std::vector<PunctualLight> lights{Caster(LightKind::Spot, {1.0f, 0.0f, 0.0f}),
-                                            Caster(LightKind::Point, {2.0f, 0.0f, 0.0f})};
-    const std::array<Vec3, 1> origin{Vec3(0.0f)};
-    const std::size_t textures = RendererProbe::LiveTextures(*device);
+    SpotPool spot;
+    const std::size_t textures = RendererProbe::LiveTextures(*spot.device);
+    RenderGraph graph;
+    const auto frame = spot.Prepare(graph, 0, false);
+    INFO("no light keeps a shadow");
+    REQUIRE(frame.lights.empty());
+    INFO("no map, none imported, and the fallback bound");
+    REQUIRE(RendererProbe::LiveTextures(*spot.device) == textures);
+    REQUIRE(spot.pool->Map().IsEmpty());
+    REQUIRE(spot.pool->Bound() == spot.fallback);
+}
 
-    SECTION("with nothing casting, no light keeps a shadow and no map is made")
-    {
-        RenderGraph graph;
-        const auto frame = pool.Prepare(pool.Choose(lights, origin), 0, graph, lights, false);
-        INFO("no light keeps a shadow");
-        REQUIRE(frame.lights.empty());
-        REQUIRE(pool.Count() == 0);
-        INFO("no map, none imported, and the fallback bound");
-        REQUIRE(RendererProbe::LiveTextures(*device) == textures);
-        REQUIRE(pool.Map().IsEmpty());
-        REQUIRE(pool.Bound() == fallback);
-    }
-    SECTION("with casters, the spot light's shadow in a map of the budget's grid")
-    {
-        RenderGraph graph;
-        const auto frame = pool.Prepare(pool.Choose(lights, origin), 0, graph, lights, true);
-        INFO("only the spot light keeps a shadow");
-        REQUIRE(frame.lights.size() == 1);
-        REQUIRE(frame.lights[0] == 0);
-        REQUIRE(frame.shadows.size() == 1);
-        INFO("one map made, and bound");
-        REQUIRE(RendererProbe::LiveTextures(*device) == textures + 1);
-        REQUIRE(!pool.Map().IsEmpty());
-        REQUIRE(pool.Bound() == pool.Map());
+TEST_CASE("A shadow pool makes its map when a light of its kind casts, and binds it",
+          "[renderer][shadows][shadow-pools]")
+{
+    SpotPool spot;
+    const std::size_t textures = RendererProbe::LiveTextures(*spot.device);
+    RenderGraph graph;
+    const auto frame = spot.Prepare(graph, 0, true);
+    INFO("only the spot light keeps a shadow, with its fit");
+    REQUIRE(frame.lights.size() == 1);
+    REQUIRE(frame.lights[0] == 0);
+    REQUIRE(frame.shadows.size() == 1);
+    INFO("one map made, and bound");
+    REQUIRE(RendererProbe::LiveTextures(*spot.device) == textures + 1);
+    REQUIRE(!spot.pool->Map().IsEmpty());
+    REQUIRE(spot.pool->Bound() == spot.pool->Map());
+}
 
-        const TextureHandle map = pool.Map();
-        RenderGraph next;
-        (void)pool.Prepare(pool.Choose(lights, origin), 1, next, lights, true);
-        INFO("the next frame keeps it");
-        REQUIRE(pool.Map() == map);
-        REQUIRE(RendererProbe::LiveTextures(*device) == textures + 1);
+TEST_CASE("A shadow pool keeps its map from frame to frame", "[renderer][shadows][shadow-pools]")
+{
+    SpotPool spot;
+    RenderGraph first;
+    (void)spot.Prepare(first, 0, true);
+    const TextureHandle map = spot.pool->Map();
+    const std::size_t textures = RendererProbe::LiveTextures(*spot.device);
+    RenderGraph second;
+    (void)spot.Prepare(second, 1, true);
+    INFO("the same map, and no other made");
+    REQUIRE(spot.pool->Map() == map);
+    REQUIRE(RendererProbe::LiveTextures(*spot.device) == textures);
+}
 
-        pool.SetBudget(9);
-        INFO("a new budget lets the map go at once");
-        REQUIRE(RendererProbe::LiveTextures(*device) == textures);
-        RenderGraph after;
-        (void)pool.Prepare(pool.Choose(lights, origin), 2, after, lights, true);
-        INFO("and the next frame with a caster makes it again");
-        REQUIRE(RendererProbe::LiveTextures(*device) == textures + 1);
-        REQUIRE(!pool.Map().IsEmpty());
-        REQUIRE(pool.Map() != map);
-    }
-    device->Destroy(fallback);
+TEST_CASE("A new budget lets a shadow pool's map go, and the next frame with a caster makes it again",
+          "[renderer][shadows][shadow-pools]")
+{
+    SpotPool spot;
+    RenderGraph first;
+    (void)spot.Prepare(first, 0, true);
+    const TextureHandle map = spot.pool->Map();
+    const std::size_t textures = RendererProbe::LiveTextures(*spot.device);
+    spot.pool->SetBudget(9);
+    INFO("the map goes at once");
+    REQUIRE(RendererProbe::LiveTextures(*spot.device) == textures - 1);
+    RenderGraph second;
+    (void)spot.Prepare(second, 1, true);
+    INFO("and a new one is made");
+    REQUIRE(RendererProbe::LiveTextures(*spot.device) == textures);
+    REQUIRE(!spot.pool->Map().IsEmpty());
+    REQUIRE(spot.pool->Map() != map);
 }
 
 TEST_CASE("A shadow pool with a budget of 0 never makes its maps", "[renderer][shadows][shadow-pools]")

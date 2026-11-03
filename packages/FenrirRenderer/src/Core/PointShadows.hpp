@@ -3,7 +3,6 @@
 #include <array>
 #include <cstdint>
 #include <span>
-#include <string_view>
 
 #include "Core/LightShadows.hpp"
 #include "Core/PunctualLights.hpp"
@@ -71,13 +70,21 @@ namespace Fenrir::Render
     /** @brief The point lights' kind of ShadowPool: each shadowed light a cube of one cube array, a cube per budget. */
     struct PointShadowKind
     {
+        /** @brief What the pool draws each light's shadow with: its six faces' views. */
         using Shadow = PointShadow;
+        /** @brief One light's record in the ring set 0 binds. */
         using Record = GpuPointShadow;
+        /** @brief The kind of light the pool chooses from. */
         static constexpr LightKind Light = LightKind::Point;
-        static constexpr std::string_view Name = "point";
+        /** @brief The kind's name in the budget's warning. */
+        static constexpr const char* Name = "point";
+        /** @brief The least side of a light's map, in texels, that the config's map size is held to. */
         static constexpr std::uint32_t MinMapSize = 1;
+        /** @brief The maps' label on the device. */
         static constexpr const char* MapLabel = "Point shadow cubes";
+        /** @brief The maps' name in the frame's graph. */
         static constexpr const char* MapResource = "PointShadowCubes";
+        /** @brief The record ring's label. */
         static constexpr const char* RecordsLabel = "Point shadows";
 
         /** @brief FitPointShadow, its faces the config's map size square. */

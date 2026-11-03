@@ -180,12 +180,6 @@ namespace Fenrir::Render
             return frame;
         }
 
-        /** @brief How many lights of the kind keep their shadows this frame. */
-        [[nodiscard]] std::uint32_t Count() const noexcept
-        {
-            return static_cast<std::uint32_t>(m_lights.size());
-        }
-
         /** @brief The maps this frame's lights are drawn into; empty when none casts. */
         [[nodiscard]] Graphics::TextureHandle Map() const noexcept
         {
@@ -213,15 +207,23 @@ namespace Fenrir::Render
       private:
         Graphics::GraphicsDevice& m_device;
         ILogger& m_logger;
+        /** @brief The budget and map size, the size held to the kind's least. */
         ShadowBudgetConfig m_config;
+        /** @brief The map that lights everything: the kind's own when it has MakeFallback, else the caller's. */
         Graphics::TextureHandle m_fallback;
+        /** @brief Whether the pool made `m_fallback`, and so destroys it. */
         bool m_ownsFallback = false;
+        /** @brief This frame's records, one a shadowed light, in the order of `m_lights`. */
         std::unique_ptr<BlockRing> m_records;
+        /** @brief The maps, made when a light first casts and again when the budget or size changes; else empty. */
         Graphics::TextureHandle m_map;
+        /** @brief What `m_map` was made with. */
         Graphics::TextureDesc m_mapDesc;
         /** @brief Whether the budget has left lights out yet, already logged. */
         bool m_loggedBudget = false;
+        /** @brief This frame's shadowed lights, as places in its light list, in their maps' order. */
         std::vector<std::size_t> m_lights;
+        /** @brief Each one's shadow, in the same order. */
         std::vector<Shadow> m_shadows;
     };
 } // namespace Fenrir::Render
