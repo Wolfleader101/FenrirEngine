@@ -26,7 +26,10 @@ namespace LightingDemo
                                                                     Fenrir::Colour emissive = Fenrir::Colour::Black,
                                                                     float strength = 1.0f);
 
-    /** @brief A builtin:unlit material of `colour`, which glows it as it is: HDR, so it can bloom. */
+    /**
+     * @brief A builtin:unlit material of `colour`, which glows it as it is: HDR, so it can bloom. White by default, so
+     * an instance list's copies glow their copy colour.
+     */
     [[nodiscard]] Fenrir::AssetHandle<Fenrir::Material> UnlitMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene,
                                                                       Fenrir::Colour colour = Fenrir::Colour::White);
 
