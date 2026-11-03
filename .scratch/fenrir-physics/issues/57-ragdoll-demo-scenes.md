@@ -1,7 +1,7 @@
 # What do the ragdoll demo scenes show?
 
 Type: grilling
-Status: claimed
+Status: resolved
 Blocked by: 55, 56
 
 ## Question
@@ -15,3 +15,14 @@ What do the PhysicsDemo's ragdoll scenes show, one built in C++ and one built in
 - **Hand-check list** for the README, in the format of the other families' scenes, and the CTest scene-log checks (`cmake/CheckSceneLog.cmake`) each scene must log.
 
 No ADR.
+
+## Answer
+
+No ADR, no new glossary terms.
+
+- **The model and dependencies:** the Quaternius human and its clips (CesiumMan has one clip and no idle), fetched under ADR-0052's option; the PhysicsDemo links FenrirSkeleton, FenrirAnimation and FenrirRagdoll. The ragdoll scenes are skipped with the scaffold's "skipped" line when the assets are not fetched, so CI without assets passes.
+- **Powered pose source:** game code pauses or swaps the clip when it powers the ragdoll (the demo plays the idle clip); `Powered` drives towards the base pose and `Ragdoll` gets no second pose source. A "hold this pose" source is listed as later work.
+- **Ragdolls (C++):** the spike's scene rewritten: the walking human on a `CharacterBody` (root bone pinned, or an in-place clip), its ragdoll following as hit boxes; Space drops it with a shove, A toggles a limp arm with blend-back, K powers it (switching to the idle clip) with 1 and 2 stepping strength, G gets up with the weight ramp and the character re-enabled, H casts a ray from the camera and logs the bone hit, 3 drops the bystander into the lane, B drops a crate on the head, L logs state; two collision groups; readouts in names (mode, strength, awake, hips weight); the scaffold's follow camera; P autopilots the keys for the smoke run; a `CheckSceneLog.cmake` entry.
+- **Ragdolls (C#):** built only from C# through `Fenrir.Ragdoll`: the same human described and built from C# (`DescribeHumanoid`, `Build`), a drop and get-up cycle, a partial ragdoll on one arm, a powered ragdoll with strength stepping, two ragdolls in different groups colliding with each other and ignoring their own characters, a bone-name hit log from a raycast; readouts in names; P autopilot; its own `CheckSceneLog.cmake` entry.
+- **Debug lines:** a new `DebugDraw::Ragdolls` category in `PhysicsDebugCategories` (C++ and C#), drawn by FenrirRagdoll into the scene's `DebugDraw`: each body's bone frame and its offset line to the body, coloured by mode (following grey, simulating orange, powered green), and powered motor targets as small frames. Joints and colliders keep their categories.
+- **Hand-check list:** the README gets the ragdoll scenes in the other families' format; the list is ticket 55's "React to it" items plus the spike's two findings (root-motion slide, powered legs stepping) as regressions to watch.
