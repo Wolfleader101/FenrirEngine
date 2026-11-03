@@ -28,6 +28,7 @@ namespace Fenrir::Render
         };
         static_assert(sizeof(GtaoBlock) == 160);
 
+        // Nearest and clamped: every read is a texelFetch.
         SamplerDesc NearestSampler()
         {
             SamplerDesc sampler;
@@ -47,7 +48,8 @@ namespace Fenrir::Render
     }
 
     Gtao::Gtao(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
-        : m_device(device), m_passes(device, logger, "GTAO", NearestSampler(), sizeof(GtaoBlock))
+        : m_device(device),
+          m_passes(device, logger, "GTAO", RenderStage::DepthPrepass, NearestSampler(), sizeof(GtaoBlock))
     {
         m_program = ReadBuiltin(BuiltinProgram::Gtao, logger);
         // Under MSAA the horizon search reads sample 0 of the multisampled prepass targets.
@@ -100,11 +102,11 @@ namespace Fenrir::Render
         const GraphResource occlusion = graph.CreateTexture("AmbientOcclusion", desc);
         const PixelRect viewport{0, 0, view.size.width, view.size.height};
 
-        // Each pass covers its targets whole, so nothing is loaded.
         const auto addPass = [&](const char* name, PipelineHandle pipeline, BindingGroupHandle blockGroup,
                                  GraphResource first, GraphResource second, std::vector<GraphResource> targets) {
-            m_passes.AddPass(graph, name, RenderStage::DepthPrepass, pipeline, blockGroup, {first, second},
-                             std::move(targets), LoadOp::DontCare, viewport);
+            // Each pass covers its targets whole, so nothing is loaded.
+            m_passes.AddPass(graph, name, pipeline, blockGroup, {first, second}, std::move(targets), LoadOp::DontCare,
+                             viewport);
         };
         addPass("GtaoHorizons", m_horizons, firstBlock, view.sceneDepth, view.sceneNormals, {raw, edges});
         addPass("GtaoDenoise", m_denoise, firstBlock, raw, edges, {blurred});

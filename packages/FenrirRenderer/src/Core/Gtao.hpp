@@ -3,7 +3,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <memory>
 
 #include "Core/FullscreenPipeline.hpp"
 #include "Core/RenderGraph.hpp"

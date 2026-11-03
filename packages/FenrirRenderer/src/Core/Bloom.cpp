@@ -84,7 +84,8 @@ namespace Fenrir::Render
     }
 
     BloomChain::BloomChain(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
-        : m_device(device), m_passes(device, logger, "Bloom", MirroredSampler(), sizeof(BloomBlock))
+        : m_device(device),
+          m_passes(device, logger, "Bloom", RenderStage::PostProcess, MirroredSampler(), sizeof(BloomBlock))
     {
         m_downsample = ReadBuiltin(BuiltinProgram::BloomDownsample, logger);
         m_upsample = ReadBuiltin(BuiltinProgram::BloomUpsample, logger);
@@ -139,7 +140,7 @@ namespace Fenrir::Render
         const auto addPass = [&](const char* name, PipelineHandle pipeline, GraphResource source, GraphResource target,
                                  LoadOp load, PixelSize sourceSize, PixelSize targetSize, float blend, bool karis) {
             const BindingGroupHandle block = m_passes.Block(frameIndex, BytesOf(BlockFor(sourceSize, blend, karis)));
-            m_passes.AddPass(graph, name, RenderStage::PostProcess, pipeline, block, {source}, {target}, load,
+            m_passes.AddPass(graph, name, pipeline, block, {source}, {target}, load,
                              {0, 0, targetSize.width, targetSize.height});
         };
 

@@ -48,12 +48,12 @@ namespace Fenrir::Render
         static constexpr std::uint32_t SourceSet = 2;
 
         /**
-         * @brief The layouts, `sampler` and a ring of blocks of `blockSize` bytes, labelled by `name`; the
-         * pipelines' failures are logged to `logger`.
+         * @brief The layouts, `sampler` and a ring of blocks of `blockSize` bytes, labelled by `name`, for passes in
+         * `stage`; the pipelines' failures are logged to `logger`.
          */
-        FullscreenPasses(Graphics::GraphicsDevice& device, ILogger& logger, std::string name,
+        FullscreenPasses(Graphics::GraphicsDevice& device, ILogger& logger, std::string name, RenderStage stage,
                          const Graphics::SamplerDesc& sampler, std::size_t blockSize)
-            : m_device(device), m_logger(logger), m_name(std::move(name)), m_sourceGroups(device)
+            : m_device(device), m_logger(logger), m_name(std::move(name)), m_stage(stage), m_sourceGroups(device)
         {
             m_blockLayout =
                 m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, m_name + " block");
@@ -62,7 +62,7 @@ namespace Fenrir::Render
             {
                 sources.push_back({binding, ShaderBindingKind::Texture});
             }
-            m_sourceLayout = m_device.CreateBindingGroupLayout({sources}, m_name + " sources");
+            m_sourceLayout = m_device.CreateBindingGroupLayout({sources}, m_name + SourcesLabel);
             m_sampler = m_device.CreateSampler(sampler, m_name + " sampler");
             m_blocks = std::make_unique<BlockRing>(m_device, m_blockLayout, false, blockSize, m_name);
         }
@@ -118,15 +118,15 @@ namespace Fenrir::Render
         }
 
         /**
-         * @brief Adds the pass `name` in `stage`: `pipeline` over `viewport`, with `block` and `sources` bound,
+         * @brief Adds the pass `name` in the stage: `pipeline` over `viewport`, with `block` and `sources` bound,
          * sampling `sources` and drawing into each of `targets` loaded by `load`.
          */
-        void AddPass(RenderGraph& graph, const char* name, RenderStage stage, Graphics::PipelineHandle pipeline,
+        void AddPass(RenderGraph& graph, const char* name, Graphics::PipelineHandle pipeline,
                      Graphics::BindingGroupHandle block, std::array<GraphResource, Sources> sources,
                      std::vector<GraphResource> targets, Graphics::LoadOp load, Graphics::PixelRect viewport)
         {
             graph.AddPass(
-                name, stage, Graphics::QueueKind::Graphics,
+                name, m_stage, Graphics::QueueKind::Graphics,
                 [=](PassBuilder& pass) {
                     for (const GraphResource source : sources)
                     {
@@ -153,6 +153,9 @@ namespace Fenrir::Render
         }
 
       private:
+        /** @brief The suffix of the source layout's and groups' labels. */
+        static constexpr const char* SourcesLabel = Sources == 1 ? " source" : " sources";
+
         /** @brief The group binding `textures` as a pass's sources in frame `frameIndex`, made once while they live. */
         [[nodiscard]] Graphics::BindingGroupHandle SourceGroup(
             const std::array<Graphics::TextureHandle, Sources>& textures, std::uint64_t frameIndex)
@@ -170,7 +173,7 @@ namespace Fenrir::Render
                     entries[i].texture = textures[i];
                     entries[i].sampler = m_sampler;
                 }
-                return m_device.CreateBindingGroup({m_sourceLayout, entries}, m_name + " sources");
+                return m_device.CreateBindingGroup({m_sourceLayout, entries}, m_name + SourcesLabel);
             });
         }
 
@@ -178,6 +181,8 @@ namespace Fenrir::Render
         ILogger& m_logger;
         /** @brief What the layouts, sampler, ring and groups are labelled by. */
         std::string m_name;
+        /** @brief The render stage every pass runs in. */
+        RenderStage m_stage;
         /** @brief Set 1: the pass's block. */
         Graphics::BindingGroupLayoutHandle m_blockLayout;
         /** @brief Set 2: the textures it reads. */
