@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "Core/RectLights.hpp"
+
 namespace Fenrir::Render
 {
     namespace
@@ -12,6 +14,35 @@ namespace Fenrir::Render
         /** @brief The least gap between the cone's cosines, so its scale stays finite. */
         constexpr float MinConeGap = 1e-4f;
     } // namespace
+
+    std::vector<GpuLight> LightRecords(std::span<const PunctualLight> lights, std::span<const RectLight> rectLights,
+                                       std::span<const std::size_t> spotShadowed,
+                                       std::span<const std::size_t> pointShadowed)
+    {
+        std::vector<GpuLight> records;
+        records.reserve(lights.size() + rectLights.size());
+        std::vector<bool> shadowedLight(lights.size(), false);
+        for (const std::span<const std::size_t> chosen : {spotShadowed, pointShadowed})
+        {
+            for (const std::size_t i : chosen)
+            {
+                shadowedLight[i] = true;
+                records.push_back(ToGpuLight(lights[i]));
+            }
+        }
+        for (std::size_t i = 0; i < lights.size(); ++i)
+        {
+            if (!shadowedLight[i])
+            {
+                records.push_back(ToGpuLight(lights[i]));
+            }
+        }
+        for (const RectLight& light : rectLights)
+        {
+            records.push_back(ToGpuLight(light));
+        }
+        return records;
+    }
 
     GpuLight ToGpuLight(const PunctualLight& light) noexcept
     {
