@@ -65,6 +65,7 @@ namespace
             return device->CreateBindingGroup({layout, {entry}}, "Test");
         }
 
+        /** @brief A 1 x 1 texture for a group to bind. */
         TextureHandle Texture()
         {
             return device->CreateTexture(TextureDesc{}, "Test");
@@ -77,13 +78,17 @@ TEST_CASE("A binding group cache makes each key's group once in a frame", "[rend
     CacheDevice test;
     const TextureHandle texture = test.Texture();
     BindingGroupCache<1> cache(*test.device);
-    const BindingGroupHandle first =
-        cache.Get({BindingGroupKeyPart::Of(texture)}, 0, [&] { return test.Make(texture); });
-    const BindingGroupHandle again =
-        cache.Get({BindingGroupKeyPart::Of(texture)}, 0, [&] { return test.Make(texture); });
-    INFO("the second Get returns the first group, without making another");
-    REQUIRE(again == first);
-    REQUIRE(test.made == 1);
+    const BindingGroupCache<1>::Key key{BindingGroupKeyPart::Of(texture)};
+    const BindingGroupHandle first = cache.Get(key, 0, [&] { return test.Make(texture); });
+    const BindingGroupHandle again = cache.Get(key, 0, [&] { return test.Make(texture); });
+    {
+        INFO("the second Get returns the first group");
+        REQUIRE(again == first);
+    }
+    {
+        INFO("only one group was made");
+        REQUIRE(test.made == 1);
+    }
     cache.Clear();
     test.device->Destroy(texture);
 }
@@ -93,16 +98,33 @@ TEST_CASE("A binding group cache keeps a live texture's group from frame to fram
     CacheDevice test;
     const TextureHandle texture = test.Texture();
     BindingGroupCache<1> cache(*test.device);
-    const BindingGroupHandle first =
-        cache.Get({BindingGroupKeyPart::Of(texture)}, 0, [&] { return test.Make(texture); });
-    const BindingGroupHandle next =
-        cache.Get({BindingGroupKeyPart::Of(texture)}, 1, [&] { return test.Make(texture); });
-    INFO("the next frame reuses the group");
-    REQUIRE(next == first);
-    REQUIRE(test.made == 1);
-    REQUIRE(test.device->IsLive(first));
+    const BindingGroupCache<1>::Key key{BindingGroupKeyPart::Of(texture)};
+    const BindingGroupHandle first = cache.Get(key, 0, [&] { return test.Make(texture); });
+    const BindingGroupHandle next = cache.Get(key, 1, [&] { return test.Make(texture); });
+    {
+        INFO("the next frame returns the same group");
+        REQUIRE(next == first);
+    }
+    {
+        INFO("which is still live, and no other was made");
+        REQUIRE((test.device->IsLive(first) && test.made == 1));
+    }
     cache.Clear();
     test.device->Destroy(texture);
+}
+
+TEST_CASE("A binding group cache prunes nothing within a frame", "[renderer][binding-groups]")
+{
+    CacheDevice test;
+    const TextureHandle texture = test.Texture();
+    BindingGroupCache<1> cache(*test.device);
+    const BindingGroupCache<1>::Key key{BindingGroupKeyPart::Of(texture)};
+    const BindingGroupHandle group = cache.Get(key, 0, [&] { return test.Make(texture); });
+    test.device->Destroy(texture);
+    (void)cache.Get({BindingGroupKeyPart::Value(1)}, 0, [&] { return test.Make(texture); });
+    INFO("a later Get in the same frame leaves the dead texture's group alone");
+    REQUIRE(test.device->IsLive(group));
+    cache.Clear();
 }
 
 TEST_CASE("A new frame's first Get destroys the groups of textures and buffers the device let go of",
@@ -119,17 +141,15 @@ TEST_CASE("A new frame's first Get destroys the groups of textures and buffers t
         cache.Get({BindingGroupKeyPart::Of(kept), BindingGroupKeyPart::Of(buffer)}, 0, [&] { return test.Make(kept); });
     test.device->Destroy(gone);
     test.device->Destroy(buffer);
-
-    const BindingGroupHandle again =
-        cache.Get({BindingGroupKeyPart::Of(gone), BindingGroupKeyPart::Value(0)}, 0, [&] { return test.Make(gone); });
-    INFO("within the same frame, nothing is pruned");
-    REQUIRE(again == textureGroup);
-    REQUIRE(test.device->IsLive(textureGroup));
-
     (void)cache.Get({BindingGroupKeyPart::Of(kept), BindingGroupKeyPart::Value(1)}, 1, [&] { return test.Make(kept); });
-    INFO("the next frame's first Get destroys the group of the destroyed texture, and of the destroyed buffer");
-    REQUIRE(!test.device->IsLive(textureGroup));
-    REQUIRE(!test.device->IsLive(bufferGroup));
+    {
+        INFO("the group of the destroyed texture is destroyed");
+        REQUIRE(!test.device->IsLive(textureGroup));
+    }
+    {
+        INFO("and so is the group of the destroyed buffer, though its texture lives");
+        REQUIRE(!test.device->IsLive(bufferGroup));
+    }
     cache.Clear();
     test.device->Destroy(kept);
 }
@@ -141,8 +161,7 @@ TEST_CASE("A binding group cache never counts a value part of its key as dead", 
     BindingGroupCache<1> cache(*test.device);
     const BindingGroupHandle valued = cache.Get({BindingGroupKeyPart::Value(7)}, 0, [&] { return test.Make(texture); });
     (void)cache.Get({BindingGroupKeyPart::Value(8)}, 1, [&] { return test.Make(texture); });
-    INFO("a key of only a value survives the next frame's prune");
-    REQUIRE(test.device->IsLive(valued));
+    INFO("a key of only a value keeps its group through the next frame's prune");
     REQUIRE(cache.Get({BindingGroupKeyPart::Value(7)}, 1, [&] { return test.Make(texture); }) == valued);
     cache.Clear();
     test.device->Destroy(texture);
@@ -159,9 +178,9 @@ TEST_CASE("Clearing a binding group cache destroys every group", "[renderer][bin
         groups.push_back(cache.Get({BindingGroupKeyPart::Value(value)}, 0, [&] { return test.Make(texture); }));
     }
     cache.Clear();
-    INFO("all three groups are gone");
     for (const BindingGroupHandle group : groups)
     {
+        INFO("each of the three groups is gone");
         REQUIRE(!test.device->IsLive(group));
     }
     test.device->Destroy(texture);

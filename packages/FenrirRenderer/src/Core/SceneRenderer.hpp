@@ -792,8 +792,7 @@ namespace Fenrir::Render
         [[nodiscard]] Graphics::BindingGroupHandle GroupWithout(MaterialEntry& material,
                                                                 const std::vector<AssetKey>& replaced);
         [[nodiscard]] Graphics::BindingGroupLayoutHandle MaterialLayoutOf(const ShaderVariant& variant);
-        /** @brief The group binding `sceneColour` as Output's source in frame `frameIndex`, made once while it lives.
-         */
+        /** @brief The group binding `sceneColour` as Output's source in frame `frameIndex`, made while it lives. */
         [[nodiscard]] Graphics::BindingGroupHandle OutputGroup(Graphics::TextureHandle sceneColour,
                                                                std::uint64_t frameIndex);
         /** @brief Adds the pass that clears the window to black, for a frame with no view into it. */

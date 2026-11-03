@@ -87,8 +87,10 @@ namespace Fenrir::Render
 
       private:
         [[nodiscard]] Graphics::PipelineHandle MakePipeline(const ShaderVariant* variant, std::size_t outputs);
-        /** @brief The group binding `first` and `second` as a pass's sources in frame `frameIndex`, made once while
-         * both live. */
+        /**
+         * @brief The group binding `first` and `second` as a pass's sources in frame `frameIndex`, made once while
+         * both live.
+         */
         [[nodiscard]] Graphics::BindingGroupHandle SourceGroup(Graphics::TextureHandle first,
                                                                Graphics::TextureHandle second,
                                                                std::uint64_t frameIndex);
