@@ -16,10 +16,6 @@ namespace Fenrir::Render
     {
         using namespace Fenrir::Graphics;
 
-        /** @brief The binding sets of the passes' block and source textures. */
-        constexpr std::uint32_t BlockSet = 1;
-        constexpr std::uint32_t SourceSet = 2;
-
         /** @brief A pass's block, as `builtin:gtao` declares it (std140). */
         struct GtaoBlock
         {
@@ -31,6 +27,18 @@ namespace Fenrir::Render
             Math::Vec4 settings{0.0f};
         };
         static_assert(sizeof(GtaoBlock) == 160);
+
+        SamplerDesc NearestSampler()
+        {
+            SamplerDesc sampler;
+            sampler.minFilter = Filter::Nearest;
+            sampler.magFilter = Filter::Nearest;
+            sampler.mipFilter = Filter::Nearest;
+            sampler.addressU = AddressMode::ClampToEdge;
+            sampler.addressV = AddressMode::ClampToEdge;
+            sampler.addressW = AddressMode::ClampToEdge;
+            return sampler;
+        }
     } // namespace
 
     bool HasAmbientOcclusion(const AmbientOcclusionSettings& settings) noexcept
@@ -39,75 +47,29 @@ namespace Fenrir::Render
     }
 
     Gtao::Gtao(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
-        : m_device(device), m_logger(logger), m_sourceGroups(device)
+        : m_device(device), m_passes(device, logger, "GTAO", NearestSampler(), sizeof(GtaoBlock))
     {
-        m_program = ReadBuiltin(BuiltinProgram::Gtao, m_logger);
-        m_blockLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "GTAO block");
-        m_sourceLayout = m_device.CreateBindingGroupLayout(
-            {{{0, ShaderBindingKind::Texture}, {1, ShaderBindingKind::Texture}}}, "GTAO sources");
-
+        m_program = ReadBuiltin(BuiltinProgram::Gtao, logger);
         // Under MSAA the horizon search reads sample 0 of the multisampled prepass targets.
         constexpr std::array<std::string_view, 1> msaa{"MSAA"};
         constexpr std::array<std::string_view, 1> denoise{"DENOISE"};
-        m_horizons = MakePipeline(samples > 1 ? m_program.FindVariant(msaa) : m_program.FindVariant({}), 2);
-        m_denoise = MakePipeline(m_program.FindVariant(denoise), 1);
-
-        SamplerDesc sampler;
-        sampler.minFilter = Filter::Nearest;
-        sampler.magFilter = Filter::Nearest;
-        sampler.mipFilter = Filter::Nearest;
-        sampler.addressU = AddressMode::ClampToEdge;
-        sampler.addressV = AddressMode::ClampToEdge;
-        sampler.addressW = AddressMode::ClampToEdge;
-        m_sampler = m_device.CreateSampler(sampler, "GTAO sampler");
-        m_blocks = std::make_unique<BlockRing>(m_device, m_blockLayout, false, sizeof(GtaoBlock), "GTAO");
+        m_horizons = m_passes.MakePipeline(samples > 1 ? m_program.FindVariant(msaa) : m_program.FindVariant({}),
+                                           m_program.name, {TextureFormat::R8Unorm, TextureFormat::R8Unorm});
+        m_denoise = m_passes.MakePipeline(m_program.FindVariant(denoise), m_program.name, {TextureFormat::R8Unorm});
     }
 
     Gtao::~Gtao()
     {
-        m_sourceGroups.Clear();
-        m_blocks.reset();
-        m_device.Destroy(m_sampler);
         m_device.Destroy(m_horizons);
         m_device.Destroy(m_denoise);
-        m_device.Destroy(m_sourceLayout);
-        m_device.Destroy(m_blockLayout);
-    }
-
-    PipelineHandle Gtao::MakePipeline(const ShaderVariant* variant, std::size_t outputs)
-    {
-        if (variant == nullptr)
-        {
-            return {};
-        }
-        PipelineDesc desc;
-        desc.shader = variant;
-        desc.sets.at(BlockSet) = m_blockLayout;
-        desc.sets.at(SourceSet) = m_sourceLayout;
-        desc.colourFormats.assign(outputs, TextureFormat::R8Unorm);
-        return MakeFullscreenPipeline(m_device, m_logger, desc, m_program.name);
-    }
-
-    BindingGroupHandle Gtao::SourceGroup(TextureHandle first, TextureHandle second, std::uint64_t frameIndex)
-    {
-        return m_sourceGroups.Get({BindingGroupKeyPart::Of(first), BindingGroupKeyPart::Of(second)}, frameIndex, [&] {
-            std::vector<BindingGroupEntry> entries(2);
-            entries[0].binding = 0;
-            entries[0].texture = first;
-            entries[0].sampler = m_sampler;
-            entries[1].binding = 1;
-            entries[1].texture = second;
-            entries[1].sampler = m_sampler;
-            return m_device.CreateBindingGroup({m_sourceLayout, entries}, "GTAO sources");
-        });
     }
 
     void Gtao::BeginFrame(std::size_t views)
     {
-        m_blocks->Reserve(views * 2);
+        m_passes.Reserve(views * 2);
     }
 
-    GraphResource Gtao::AddPasses(RenderGraph& graph, std::uint64_t frameIndex, std::size_t slot, const GtaoView& view)
+    GraphResource Gtao::AddPasses(RenderGraph& graph, std::uint64_t frameIndex, const GtaoView& view)
     {
         if (!HasAmbientOcclusion(view.settings) || m_horizons.IsEmpty() || m_denoise.IsEmpty() ||
             view.size.width == 0 || view.size.height == 0)
@@ -123,11 +85,9 @@ namespace Fenrir::Render
         block.settings = Math::Vec4(view.settings.radius * GtaoRadiusMultiplier,
                                     GtaoFinalPower * view.settings.intensity, GtaoBlurBeta / 5.0f, 0.0f);
         // The horizon search and first denoise pass read one block, the final denoise pass the next.
-        m_blocks->Write(frameIndex, slot * 2, std::as_bytes(std::span(&block, 1)));
+        const BindingGroupHandle firstBlock = m_passes.Block(frameIndex, std::as_bytes(std::span(&block, 1)));
         block.settings.z = GtaoBlurBeta;
-        m_blocks->Write(frameIndex, slot * 2 + 1, std::as_bytes(std::span(&block, 1)));
-        const BindingGroupHandle firstBlock = m_blocks->Group(frameIndex, slot * 2);
-        const BindingGroupHandle finalBlock = m_blocks->Group(frameIndex, slot * 2 + 1);
+        const BindingGroupHandle finalBlock = m_passes.Block(frameIndex, std::as_bytes(std::span(&block, 1)));
 
         TextureDesc desc;
         desc.format = TextureFormat::R8Unorm;
@@ -140,28 +100,11 @@ namespace Fenrir::Render
         const GraphResource occlusion = graph.CreateTexture("AmbientOcclusion", desc);
         const PixelRect viewport{0, 0, view.size.width, view.size.height};
 
+        // Each pass covers its targets whole, so nothing is loaded.
         const auto addPass = [&](const char* name, PipelineHandle pipeline, BindingGroupHandle blockGroup,
                                  GraphResource first, GraphResource second, std::vector<GraphResource> targets) {
-            graph.AddPass(
-                name, RenderStage::DepthPrepass, QueueKind::Graphics,
-                [=](PassBuilder& pass) {
-                    pass.Sample(first);
-                    pass.Sample(second);
-                    // Each pass covers its targets whole, so nothing is loaded.
-                    for (const GraphResource target : targets)
-                    {
-                        pass.ColourAttachment(target, LoadOp::DontCare);
-                    }
-                },
-                [this, pipeline, blockGroup, first, second, viewport](PassContext& context) {
-                    PassEncoder& encoder = context.Encoder();
-                    encoder.SetViewport(viewport);
-                    encoder.SetPipeline(pipeline);
-                    encoder.SetBindingGroup(BlockSet, blockGroup);
-                    encoder.SetBindingGroup(
-                        SourceSet, SourceGroup(context.Texture(first), context.Texture(second), context.FrameIndex()));
-                    encoder.Draw({.vertexCount = 3});
-                });
+            m_passes.AddPass(graph, name, RenderStage::DepthPrepass, pipeline, blockGroup, {first, second},
+                             std::move(targets), LoadOp::DontCare, viewport);
         };
         addPass("GtaoHorizons", m_horizons, firstBlock, view.sceneDepth, view.sceneNormals, {raw, edges});
         addPass("GtaoDenoise", m_denoise, firstBlock, raw, edges, {blurred});

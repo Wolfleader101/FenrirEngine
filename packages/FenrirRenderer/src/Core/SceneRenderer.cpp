@@ -3452,7 +3452,7 @@ namespace Fenrir::Render
                 });
             // GTAO from the prepass's depth and normals, when the camera has it; Opaque samples what it makes.
             const GraphResource occlusion = m_gtao->AddPasses(
-                graph, frameIndex, v,
+                graph, frameIndex,
                 {sceneDepth, sceneNormals, {rect.width, rect.height}, request.projection, request.ambientOcclusion});
             graph.AddPass(
                 "Opaque", RenderStage::Opaque, QueueKind::Graphics,
