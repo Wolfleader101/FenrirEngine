@@ -11,11 +11,58 @@
 
 **Touches:** `packages/FenrirRenderer/src/`, `packages/FenrirRenderer/Shaders/`, `packages/FenrirRenderer/include/FenrirRenderer/`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`, `packages/FenrirRenderer/Scripting/api/`, `packages/FenrirAssets/`, `examples/LightingDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `RendererProbe` on null: an unchanged list uploads once; an edit re-uploads it; 100k instances are one draw per pass.
-- [ ] GL pixel probes: instances land at their transforms under a moved entity; per-instance colour tints them.
+- [x] `RendererProbe` on null: an unchanged list uploads once; an edit re-uploads it; 100k instances are one draw per pass.
+- [x] GL pixel probes: instances land at their transforms under a moved entity; per-instance colour tints them.
 
 Hand check: the ring holds a smooth frame rate at 100k, and the station's lights light nearby rocks.
 
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+
+## Comments
+
+Built 2026-11-01, stacked on ticket 12's branch (#265 to #271 not yet merged). Decisions to review:
+
+- **The asset:** `InstanceListData { transforms, colours }` (`AssetHandle<InstanceList>`, a ninth `AssetKind`): colours
+  empty for white, or one per transform, else refused. Edits are `Replace`, which bumps the revision; there is no edit
+  API of its own. Loading one from a file is refused. C# gets the marker type, the `AssetKind` entry and the
+  component's generated mirror, nothing to make or edit lists (ticket 22).
+- **One instance-list buffer, set 3 binding 1:** every list's copies packed back to back (`FenrirInstance`: transform,
+  inverse-transpose 3x3, colour; 128 bytes), made again into a new buffer whenever a list is prepared or released, the
+  old one freed after the frames in flight. A static field uploads once; changing one list repacks all of them (12.8 MB
+  for the demo's 100k, so dragging its slider repacks every frame it moves).
+- **The palette moved from set 3 binding 1 to binding 2** (ADR-0035 amended). GL flattens a program's storage blocks
+  densely in binding order, so the list buffer, which every program declares and reads beside the records, must come
+  before the palette, which only skinned programs declare; at binding 2 a rigid program put it where the device binds
+  the palette, and nothing landed.
+- **The record:** `DrawItem` grows to 160 bytes: `instanceFirst`, `instanceCount` and a `colour`, white for every
+  record the CPU writes. `CurrentDraw()` reads the record at `gl_BaseInstance` first: with copies, it composes the
+  entity's world and normal matrices with the copy's and multiplies in its colour; otherwise it reads the instance's own
+  record as before (one extra read a vertex for every draw). `mesh.vert` multiplies `vColour` by it, so `lit`, `unlit`
+  and the masked prepass all take the tint.
+- **Draws:** a list is one draw a pass of `count` instances from its own record, never merged (`RunsOf`), never culled.
+  Stats count it as one draw and `count` instances; uploads count each list prepared.
+- **`Renderer::SetAutomaticInstancing(bool)`** (and the `App&` form) changes ticket 12's setting at run time, for the
+  panel's switch. It is the renderer's, so it stays as left when the scene changes.
+- **A NaN guard, found in the hand check:** the station's beacons (point lights of 60 a metre or less from glossy
+  surfaces) made highlights past RGBA16F's 65504, written as infinity; bloom's Karis average turned that into NaN and
+  spread it over its coarsest level's texels, a flickering black box on 64-pixel boundaries
+  (`screenshots/13-bloom-nan-before-fix.png`). `FenrirLitColour` now clamps to 65504, and the first downsample clamps
+  infinities and drops NaN. Before: 4 of 150 captured frames flying through the ring had a box; after: 0 of 300.
+- **The demo's rocks are simplified at spawn:** Poly Haven's moon rocks have 3.3k to 6.8k triangles and there are no
+  LODs; 100k of them took 136 ms a frame in Release on an RTX 5080 (GPU 100% busy, the CPU 0.04 of a core). Vertex
+  clustering on 5 cells a side for the ring (9 ms a frame, 108 fps, looks the same) and 16 for the field's 5k entities.
+  GPU culling and LODs are the structural fix: proposed as their own planning session.
+- **Scene 5:** three moon rocks (02, 03, 07), Solar System Scope's 2k Jupiter, a 2048 x 1024 starfield made at spawn,
+  the ring on one turning entity with one `InstancedMeshRenderer` child a kind, a field of 5,000 rock entities in nine
+  tinted materials (22 draws in all with merging on), and a station of boxes with six beacon point lights. Without the
+  fetched files, spheres and cubes stand in and the scene says so. The panel shows the count (N), merging (I), the ring
+  turning (R), draws, instances, uploads and the frame time.
+- **Tests:** `Tests/InstanceLists.cpp` (null: uploads once and again on an edit; 100k copies one draw a pass; lists never
+  merge; a stale list draws nothing), `Tests/OpenGL/InstanceLists.cpp` (placement under a moved, turned entity; tint in
+  `unlit` and `lit`), and two bloom GL tests (a spot past RGBA16F blooms instead of blackening; `lit` clamps to 65504).
+- **msvc-x64-debug:** the whole CTest tree passed (170 tests, GL included, RTX 5080) before the review fixes; after them
+  the renderer, assets, shader compiler and demo suites (27). Screenshots in `screenshots/13-asteroid-ring.png`.
+
+Hand check, by the user: the ring's frame rate at 100k in Release, and the station's lights on the nearest rocks.

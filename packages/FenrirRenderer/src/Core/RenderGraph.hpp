@@ -23,7 +23,13 @@ namespace Fenrir::Render
      */
     enum class RenderStage : std::uint8_t
     {
+        /** @brief Work whose result is kept across frames, such as a panorama sky's cube texture, made when needed. */
+        Prepare,
+        /** @brief Each skinned mesh skinned once a frame in compute, for every later pass to draw (ADR-0050). */
+        Skinning,
         Shadow,
+        /** @brief Opaque and masked items' depth and view-space normals, which `Opaque` then shades (ADR-0049). */
+        DepthPrepass,
         Opaque,
         Background,
         Transparent,
@@ -62,9 +68,26 @@ namespace Fenrir::Render
          */
         void ColourAttachment(GraphResource texture, Graphics::LoadOp load = Graphics::LoadOp::Clear,
                               std::array<float, 4> clear = {0.0f, 0.0f, 0.0f, 1.0f});
+        /**
+         * @brief Draws into one mip level of one layer (a cube texture's face) of `texture` as the next colour
+         * attachment, covering all of it: what it held is not loaded.
+         */
+        void ColourAttachmentLevel(GraphResource texture, std::uint32_t mipLevel, std::uint32_t layer = 0);
         /** @brief Tests and writes depth in `texture`; loading it also reads it. Clears to `clear` (0 is far). */
         void DepthAttachment(GraphResource texture, Graphics::LoadOp load = Graphics::LoadOp::Clear,
                              float clear = 0.0f);
+        /**
+         * @brief Tests and writes depth in one layer of a cube or cube array `texture` (a face), as DepthAttachment
+         * does; clearing clears that layer only.
+         */
+        void DepthAttachmentLayer(GraphResource texture, std::uint32_t layer,
+                                  Graphics::LoadOp load = Graphics::LoadOp::Clear, float clear = 0.0f);
+        /**
+         * @brief Tests and writes depth in every layer of a cube or cube array `texture` at once, each draw's vertex
+         * stage choosing its primitives' layer (Graphics::DeviceFeatures::vertexLayer); clearing clears them all.
+         */
+        void LayeredDepthAttachment(GraphResource texture, Graphics::LoadOp load = Graphics::LoadOp::Clear,
+                                    float clear = 0.0f);
         /** @brief Tests depth in `texture` without writing it. */
         void DepthReadOnly(GraphResource texture);
         /** @brief Samples `texture` in a shader. */
@@ -73,6 +96,8 @@ namespace Fenrir::Render
         void StorageRead(GraphResource resource);
         /** @brief Writes `resource` as storage in a shader. */
         void StorageWrite(GraphResource resource);
+        /** @brief Reads `buffer` as vertex input in its draws. */
+        void VertexInput(GraphResource buffer);
         /** @brief Copies from `resource`. */
         void CopySource(GraphResource resource);
         /** @brief Copies into `resource`. */
@@ -249,6 +274,11 @@ namespace Fenrir::Render
             Graphics::LoadOp load = Graphics::LoadOp::Clear;
             std::array<float, 4> clearColour{};
             float clearDepth = 0.0f;
+            /** @brief A colour attachment's mip level and layer; a depth attachment's layer. */
+            std::uint32_t mipLevel = 0;
+            std::uint32_t layer = 0;
+            /** @brief A depth attachment of every layer at once. */
+            bool layered = false;
         };
 
         struct Pass

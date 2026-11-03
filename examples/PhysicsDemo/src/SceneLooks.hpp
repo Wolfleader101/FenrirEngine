@@ -28,8 +28,8 @@ namespace PhysicsDemo
     {
       public:
         /**
-         * @brief Loads the cube, the sphere, builtin:lit and the skybox for `scene`, and gives it a directional light,
-         * an ambient light and the skybox as its Sky. Logs an error if any did not load.
+         * @brief Loads the cube, the sphere, builtin:lit and the skybox for `scene`, and gives it a directional light
+         * and the skybox as its Sky, which lights it too. Logs an error if any did not load.
          */
         SceneLooks(Fenrir::App& app, Fenrir::Scene& scene);
 

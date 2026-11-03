@@ -45,7 +45,8 @@ TEST_CASE("One MeshRenderer seen by one camera is one draw in Opaque with the li
 TEST_CASE("A MeshRenderer that is not visible is not drawn", "[renderer][facade]")
 {
     RendererTestApp test;
-    test.AddCamera();
+    // Without bloom, whose passes Bloom.cpp checks.
+    test.AddCamera().GetComponent<Fenrir::Camera>().bloom.intensity = 0.0f;
     Fenrir::Entity entity = test.AddMeshRenderer(test.Mesh(), test.Material());
     entity.GetComponent<Fenrir::MeshRenderer>().visible = false;
 
@@ -55,7 +56,7 @@ TEST_CASE("A MeshRenderer that is not visible is not drawn", "[renderer][facade]
     REQUIRE(test.Draws().empty());
     INFO("the frame still ran its passes");
     REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)) ==
-            std::vector<std::string>{"Opaque", "Background", "Output"});
+            std::vector<std::string>{"BrdfLut", "DepthPrepass", "Opaque", "Background", "Output"});
 }
 
 TEST_CASE("A MeshRenderer naming a stale mesh is skipped, logged once", "[renderer][facade]")
@@ -113,7 +114,10 @@ TEST_CASE("A MeshRenderer whose material went stale draws with the fallback mate
 
 TEST_CASE("Opaque items are drawn grouped by pipeline, then material, then mesh", "[renderer][facade]")
 {
-    RendererTestApp test;
+    // With automatic instancing off, so each item is its own draw and the order of all eight shows.
+    Fenrir::RendererConfig config = RendererTest::NullBackend();
+    config.automaticInstancing = false;
+    RendererTestApp test(config);
     test.AddCamera();
     const auto cube = test.Mesh(RendererTest::Cube());
     const auto quad = test.Mesh(RendererTest::Quad());
@@ -198,6 +202,23 @@ TEST_CASE("A vertex stream the shader reads but the mesh lacks binds a constant 
         buffers.insert({buffer.index, buffer.generation});
     }
     REQUIRE(buffers.size() == 2);
+}
+
+TEST_CASE("A mesh without a tangent stream is drawn by builtin:lit with nothing logged about its tangents",
+          "[renderer][facade]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    // Every stream builtin:lit reads but tangents.
+    Fenrir::MeshData mesh = RendererTest::TexturedQuad();
+    mesh.colours.assign(mesh.positions.size(), Fenrir::Colour::White);
+    test.AddMeshRenderer(test.Mesh(std::move(mesh)), test.Material("builtin:lit"));
+
+    test.Frame();
+
+    INFO("it is drawn, and nothing is logged about its tangents");
+    REQUIRE(test.Draws().size() == 1);
+    REQUIRE(RendererTest::CountContaining(test.messages->warnings, "tangents") == 0);
 }
 
 TEST_CASE("A shader whose frame set disagrees with the renderer's fails its pipeline in debug builds",

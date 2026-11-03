@@ -47,7 +47,7 @@ All in FenrirRenderer, with an instance-list asset in FenrirAssets and a new Lig
 
 ### The frame
 
-- **Stages** (ADR-0049): `Shadow, DepthPrepass, Opaque, Background, Transparent, Debug, PostProcess, Output, Overlay`.
+- **Stages** (ADR-0049): `Prepare, Skinning, Shadow, DepthPrepass, Opaque, Background, Transparent, Debug, PostProcess, Output, Overlay`.
 - **`DepthPrepass`** writes depth and view-space normals for opaque and masked items; `Opaque` tests for equality.
 - **GTAO** from the prepass, per camera, darkening indirect light only.
 - **Clustered lights:** a compute pass per view; a plain loop over the light buffer until it lands.
@@ -106,6 +106,8 @@ Each ticket's tests follow the foundation's seams: the null backend through `Ren
 | 20 | The neon city | 06, 11, 13, 19 |
 | 21 | Sponza | 11, 18, 19 |
 | 22 | C# for lighting, the sky, cameras, shadows and instancing | 21 |
+| 23 | Debug views of what the renderer shades with (requested in review of 16; needs triage) | 16 |
+| 24 | Atmospheric haze and sun shafts (requested in review of 16; needs triage) | 15, 16 |
 
 Every C++ ticket touches `packages/FenrirRenderer/src/` and its shaders, so most of them stack. C# waits for every C++ ticket, as in the animation spec; until ticket 22, `AmbientLight`'s C# mirror is a deprecated no-op.
 

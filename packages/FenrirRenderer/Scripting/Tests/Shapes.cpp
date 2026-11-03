@@ -126,19 +126,12 @@ TEST_CASE("A new MeshRenderer, DirectionalLight and Camera from C# are C++'s, fo
     }
 }
 
-TEST_CASE("A new AmbientLight, Sky and CubemapSky inserted from C# are C++'s", "[renderer][scripting]")
+TEST_CASE("A new Sky and CubemapSky inserted from C# are C++'s", "[renderer][scripting]")
 {
     RendererScriptingApp test;
     test.Call<void>(NewCallsType, "InsertResources", 0);
     test.ApplyChanges();
     Scene& scene = test.Get().GetActiveScene();
-    {
-        const AmbientLight* ambient = scene.GetResource<AmbientLight>();
-        INFO("A new AmbientLight should be C++'s dim grey at intensity 1");
-        REQUIRE(ambient != nullptr);
-        REQUIRE(Same(ambient->colour, AmbientLight{}.colour));
-        REQUIRE(Exactly(ambient->intensity, AmbientLight{}.intensity));
-    }
     {
         const Sky* sky = scene.GetResource<Sky>();
         INFO("A new Sky should be C++'s default dark grey colour sky");

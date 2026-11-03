@@ -65,16 +65,80 @@ namespace Fenrir
         bool debugValidation = DebugValidationByDefault;
         /** @brief How many frames the GPU may still be drawing while the next is recorded (ADR-0019). */
         std::uint32_t framesInFlight = 2;
+        /**
+         * @brief Whether consecutive opaque and masked MeshRenderers with the same pipeline, material and mesh draw as
+         * one instanced draw (ADR-0051); off draws each on its own, for comparison. Changeable later with
+         * Renderer::SetAutomaticInstancing.
+         */
+        bool automaticInstancing = true;
+        /**
+         * @brief Whether each skinned mesh is skinned once a frame by a compute pass, which every pass then draws
+         * rigidly (ADR-0050); off, every draw of it skins it in its vertex stage, under its shader's `SKINNED` variant
+         * (ADR-0035). Changeable later with Renderer::SetComputeSkinning.
+         */
+        bool computeSkinning = true;
+        /**
+         * @brief Whether each camera's PointLights, SpotLights and RectLights are clustered (ADR-0049): a compute pass
+         * a view lists them in 16 x 9 x 24 clusters of its frustum by range, and each pixel lights by its cluster's
+         * lights only; off, every pixel loops over every light, for comparison. Changeable later with
+         * Renderer::SetClusteredLights.
+         */
+        bool clusteredLights = true;
+        /** @brief How many shadow cascades the DirectionalLight has per camera (ADR-0050): 1 to 4, 4 by default. */
+        std::uint32_t shadowCascades = 4;
+        /**
+         * @brief The side of each cascade's shadow map, in texels: 2048 by default. Each camera's maps sit side by
+         * side in one depth texture, so its width (this times shadowCascades) must be within the GPU's largest.
+         */
+        std::uint32_t shadowMapSize = 2048;
+        /**
+         * @brief How the cascades split the shadow distance (the practical scheme): 0 evenly, 1 logarithmically, so
+         * the nearest cascades are smallest and sharpest. 0.75 by default.
+         */
+        float shadowSplitLambda = 0.75f;
+        /**
+         * @brief How many SpotLights may cast shadows in a frame (ADR-0050): 8 by default, the nearest to any camera
+         * each frame; the rest light unshadowed, warned about once. 0 shadows none. Changeable later with
+         * Renderer::SetSpotShadowBudget.
+         */
+        std::uint32_t spotShadowBudget = 8;
+        /**
+         * @brief The side of each shadowed spot light's tile of the spot shadow atlas, in texels: 1024 by default. The
+         * atlas is a grid of the budget's tiles, ceil(sqrt(budget)) across, which must be within the GPU's largest.
+         */
+        std::uint32_t spotShadowMapSize = 1024;
+        /**
+         * @brief How many PointLights may cast shadows in a frame (ADR-0050): 4 by default, the nearest to any camera
+         * each frame; the rest light unshadowed, warned about once. 0 shadows none. Changeable later with
+         * Renderer::SetPointShadowBudget.
+         */
+        std::uint32_t pointShadowBudget = 4;
+        /**
+         * @brief The side of each face of each shadowed point light's cube, in texels: 512 by default. The cubes are
+         * one cube array of the budget's cubes.
+         */
+        std::uint32_t pointShadowMapSize = 512;
     };
 
     /** @brief What the renderer did in its last drawn frame (ADR-0023). */
     struct RendererStats
     {
-        /** @brief Draws of MeshRenderers, one per item per view. */
+        /**
+         * @brief Draws of MeshRenderers in each view's Opaque and Transparent passes: one per run of matching opaque or
+         * masked items merged into an instanced draw (ADR-0051), and one per transparent item.
+         */
         std::uint32_t draws = 0;
+        /**
+         * @brief MeshRenderers drawn, one per item per view, however many draws they took, and the copies of each
+         * InstancedMeshRenderer's instance list, one per copy per view.
+         */
+        std::uint32_t instances = 0;
         /** @brief Render passes run. */
         std::uint32_t passes = 0;
-        /** @brief Assets uploaded to the GPU by the prepare step: a mesh, or a material's parameter block. */
+        /**
+         * @brief Assets uploaded to the GPU by the prepare step: a mesh, a material's parameter block, or an instance
+         * list.
+         */
         std::uint32_t uploads = 0;
         /** @brief Bytes copied into the frame's palette buffer: every skeleton palette the frame's draws read. */
         std::uint32_t paletteBytesUploaded = 0;
@@ -83,8 +147,14 @@ namespace Fenrir
          * (ADR-0035).
          */
         std::uint32_t distinctPalettesWritten = 0;
-        /** @brief Draws of skinned MeshRenderers, one per item per view; part of `draws`. */
+        /** @brief Skinned MeshRenderers drawn, one per item per view; part of `instances`. */
         std::uint32_t skinnedDraws = 0;
+        /**
+         * @brief Draws into the sun's shadow cascades and the spot lights' shadow tiles (ADR-0050): one per run of
+         * matching casting items, merged as in `draws`, per cascade of each view, per shadowed spot light, and per
+         * shadowed point light (six times over for items whose shader draws its six faces one at a time).
+         */
+        std::uint32_t shadowDraws = 0;
     };
 
     /**
@@ -103,9 +173,9 @@ namespace Fenrir
          * @brief Turns rendering on for `app`: for OpenGL, requests the main window's graphics surface (an OpenGL 4.6
          * core context, a debug one with `debugValidation`, and an sRGB backbuffer) and starts the backend on it;
          * registers the renderer's built-in shaders in the asset store under `builtin:` names (`builtin:unlit`,
-         * `builtin:lit`, `builtin:fallback`, `builtin:background`, `builtin:output`, the debug drawing programs and
-         * `builtin:2d`); adds the Overlay app resource (ADR-0027), removed when the owner ends; and adds the sequential
-         * Render system that draws each frame.
+         * `builtin:lit`, `builtin:fallback`, `builtin:background`, `builtin:output`, the debug drawing programs,
+         * `builtin:2d` and `builtin:panorama`); adds the Overlay app resource (ADR-0027), removed when the owner ends;
+         * and adds the sequential Render system that draws each frame.
          *
          * Fails with one logged diagnostic, returning an owner whose IsValid() is false that added no systems, when the
          * app has no AssetStore, when the backend is not `Null` and the app has no valid Window (or the window was
@@ -131,6 +201,37 @@ namespace Fenrir
          * not support falls back to `On`, logged. An invalid owner does nothing and returns `Off`.
          */
         Vsync SetVsync(Vsync mode);
+
+        /**
+         * @brief Turns automatic instancing (RendererConfig::automaticInstancing, ADR-0051) on or off from the next
+         * frame. An invalid owner does nothing.
+         */
+        void SetAutomaticInstancing(bool on);
+
+        /**
+         * @brief Turns compute skinning (RendererConfig::computeSkinning, ADR-0050) on or off from the next frame. An
+         * invalid owner does nothing.
+         */
+        void SetComputeSkinning(bool on);
+
+        /**
+         * @brief Turns light clustering (RendererConfig::clusteredLights, ADR-0049) on or off from the next frame. An
+         * invalid owner does nothing.
+         */
+        void SetClusteredLights(bool on);
+
+        /**
+         * @brief Sets how many SpotLights may cast shadows (RendererConfig::spotShadowBudget, ADR-0050) from the next
+         * frame, which makes the spot shadow atlas again at the new budget's size. An invalid owner does nothing.
+         */
+        void SetSpotShadowBudget(std::uint32_t budget);
+
+        /**
+         * @brief Sets how many PointLights may cast shadows (RendererConfig::pointShadowBudget, ADR-0050) from the
+         * next frame, which makes the point shadow cubes again at the new budget's size. An invalid owner does
+         * nothing.
+         */
+        void SetPointShadowBudget(std::uint32_t budget);
 
         /**
          * @brief The box around `entity`'s drawn mesh in world space, from the mesh's local bounds and the entity's
@@ -180,6 +281,11 @@ namespace Fenrir
         [[nodiscard]] static bool IsInstalled(App& app);
         [[nodiscard]] static std::optional<Math::AABB> GetWorldBounds(App& app, const Entity& entity);
         [[nodiscard]] static RendererStats Stats(App& app);
+        static void SetAutomaticInstancing(App& app, bool on);
+        static void SetComputeSkinning(App& app, bool on);
+        static void SetClusteredLights(App& app, bool on);
+        static void SetSpotShadowBudget(App& app, std::uint32_t budget);
+        static void SetPointShadowBudget(App& app, std::uint32_t budget);
         [[nodiscard]] static std::optional<Math::Ray> ScreenPointToRay(App& app, const Entity& camera,
                                                                        Math::Vec2 point);
         [[nodiscard]] static std::optional<Math::Vec2> WorldToScreenPoint(App& app, const Entity& camera,

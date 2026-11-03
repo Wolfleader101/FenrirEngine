@@ -117,6 +117,6 @@ namespace AnimationDemo
     void DrawBones(Fenrir::App& app, Fenrir::Scene& scene, Fenrir::DebugDraw& draw, Fenrir::Entity skeleton, bool bones,
                    bool names);
 
-    /** @brief A lit floor, a directional light and ambient light: the stage every scene stands on. */
+    /** @brief A lit floor, a directional light and a ColourSky: the stage every scene stands on. */
     void AddStage(Fenrir::App& app, Fenrir::Scene& scene, float width = 16.0f, float depth = 10.0f);
 } // namespace AnimationDemo

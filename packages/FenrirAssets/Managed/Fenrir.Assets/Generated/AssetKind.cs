@@ -14,4 +14,5 @@ public enum AssetKind : byte
     Skeleton = 5,
     Clip = 6,
     BoneMask = 7,
+    InstanceList = 8,
 }

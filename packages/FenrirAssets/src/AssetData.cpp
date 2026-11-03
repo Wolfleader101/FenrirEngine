@@ -6,6 +6,7 @@
 
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/ImageData.hpp"
+#include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/ShaderData.hpp"
@@ -112,6 +113,16 @@ namespace Fenrir::Detail
             return std::move(read.diagnostic);
         }
         shader.parameters = CollectShaderParameters(*read.container);
+        return {};
+    }
+
+    std::string PrepareAsset(InstanceListData& list, AssetWarnings&)
+    {
+        if (!list.colours.empty() && list.colours.size() != list.transforms.size())
+        {
+            return std::format("it has {} colours for {} transforms: give one colour per transform, or none",
+                               list.colours.size(), list.transforms.size());
+        }
         return {};
     }
 

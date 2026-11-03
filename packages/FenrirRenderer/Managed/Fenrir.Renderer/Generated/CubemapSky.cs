@@ -12,5 +12,16 @@ namespace Fenrir.Renderer;
 /// </summary>
 public partial struct CubemapSky
 {
-    public AssetHandle<Image> Cubemap;
+    public AssetHandle<Image> Cubemap = new();
+    /// <summary>A plain multiplier on what the sky draws.</summary>
+    public float Intensity = 1;
+    /// <summary>
+    /// How far the sky is turned about world +Y, in radians, counter-clockwise seen from above: a quarter turn brings
+    /// what was ahead (-Z) round to the left (-X).
+    /// </summary>
+    public float Rotation = 0;
+
+    public CubemapSky()
+    {
+    }
 }

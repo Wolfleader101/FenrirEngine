@@ -1,0 +1,1420 @@
+{
+  "assets": [
+    {
+      "path": "DamagedHelmet/DamagedHelmet.bin",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/DamagedHelmet/glTF/DamagedHelmet.bin",
+      "sha256": "61b33ead6aa3de23f39f02aaf0965bc3988575716a768f45b15d5ea3fb783fdf",
+      "licence": "CC-BY-4.0 AND CC-BY-NC-4.0"
+    },
+    {
+      "path": "DamagedHelmet/DamagedHelmet.gltf",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/DamagedHelmet/glTF/DamagedHelmet.gltf",
+      "sha256": "efe99dfac198094a30c71dc02a4d3421f0eef6bf335aeb695daa4d62134cd93f",
+      "licence": "CC-BY-4.0 AND CC-BY-NC-4.0"
+    },
+    {
+      "path": "DamagedHelmet/Default_AO.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/DamagedHelmet/glTF/Default_AO.jpg",
+      "sha256": "7024051b65ed2ead8d24ebc9bd5ea61d4c21639a57b15dab29870668bcc6b90f",
+      "licence": "CC-BY-4.0 AND CC-BY-NC-4.0"
+    },
+    {
+      "path": "DamagedHelmet/Default_albedo.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/DamagedHelmet/glTF/Default_albedo.jpg",
+      "sha256": "2dc95e87aeb0cd7c8a65ef0eb8b23212388da0534ca379811427a9a8780511f5",
+      "licence": "CC-BY-4.0 AND CC-BY-NC-4.0"
+    },
+    {
+      "path": "DamagedHelmet/Default_emissive.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/DamagedHelmet/glTF/Default_emissive.jpg",
+      "sha256": "dd0057989f22f93a4ab796d06ebf85a7c12fbfae1d59a86ae8b0c54770dc1159",
+      "licence": "CC-BY-4.0 AND CC-BY-NC-4.0"
+    },
+    {
+      "path": "DamagedHelmet/Default_metalRoughness.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/DamagedHelmet/glTF/Default_metalRoughness.jpg",
+      "sha256": "0f05e7ffbeaa974f7d2c83436b04109969966d64ab188cbc3a19a265a0a69ae0",
+      "licence": "CC-BY-4.0 AND CC-BY-NC-4.0"
+    },
+    {
+      "path": "DamagedHelmet/Default_normal.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/DamagedHelmet/glTF/Default_normal.jpg",
+      "sha256": "f253ba09a90a86ffd8a807dc45d7953111f8b3421e15d7a21d1e915b01dd33c1",
+      "licence": "CC-BY-4.0 AND CC-BY-NC-4.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet.bin",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet.bin",
+      "sha256": "9e623a27f837e1cc995d1380da5fd3becf4d29586fefba882fc0ba76b49f94bf",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet.gltf",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet.gltf",
+      "sha256": "c9c16c8b85749f62f38ec6069700e5388c6894d8e566f51a35cc270255402cd3",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet_Materials_GlassPlasticMat_BaseColor.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet_Materials_GlassPlasticMat_BaseColor.png",
+      "sha256": "0914544aabe161046f417274051e34ecc85163cfce6698581b3e1e18c96fe4f1",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet_Materials_GlassPlasticMat_Normal.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet_Materials_GlassPlasticMat_Normal.png",
+      "sha256": "c297f18f3b4259fc8b411cdc843a4a44b8cef3e3a53b21cec7b53574e5ef6872",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet_Materials_GlassPlasticMat_OcclusionRoughMetal.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet_Materials_GlassPlasticMat_OcclusionRoughMetal.png",
+      "sha256": "d4519704f15395c7138421a5814b478df549a2411bc6fa97dd6d02ba62dc6c54",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet_Materials_LeatherPartsMat_BaseColor.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet_Materials_LeatherPartsMat_BaseColor.png",
+      "sha256": "c9346ac6daa3ad34d0b36c1e7cf311ccbcc298710ea453cdf3b6ad40dc60013f",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet_Materials_LeatherPartsMat_Normal.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet_Materials_LeatherPartsMat_Normal.png",
+      "sha256": "7fb69b26f80c67df41e87d7344bde9d24dda0be77546b0a6acabc4040694872a",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet_Materials_LeatherPartsMat_OcclusionRoughMetal.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet_Materials_LeatherPartsMat_OcclusionRoughMetal.png",
+      "sha256": "b77e60f175e4632cd3d892bc9f0e748f522c9288a469585d5cb90270cd68910e",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet_Materials_LensesMat_BaseColor.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet_Materials_LensesMat_BaseColor.png",
+      "sha256": "b55f6561f8adabc907360443aab010f3effaf05074fdccea46d8c2d66247cf16",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet_Materials_LensesMat_Normal.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet_Materials_LensesMat_Normal.png",
+      "sha256": "430775894001933044c89070b1bfd4f9b8489f74780b1ab7079efb0afca95d8d",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet_Materials_LensesMat_OcclusionRoughMetal.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet_Materials_LensesMat_OcclusionRoughMetal.png",
+      "sha256": "35d81a71ab184f9b50f63ff8f3e0f90cfb6c99f9b2d9ed9d9887a902c16a458d",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet_Materials_MetalPartsMat_BaseColor.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet_Materials_MetalPartsMat_BaseColor.png",
+      "sha256": "8e26add3ad1b2398d58638580bb1fe56f2fbae3572b4a682b6595a5a26fb1b40",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet_Materials_MetalPartsMat_Normal.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet_Materials_MetalPartsMat_Normal.png",
+      "sha256": "a833fcc12718c02bcba97cbc9760d06c4a711ce7f36c23076e7cf6d4393a80e7",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet_Materials_MetalPartsMat_OcclusionRoughMetal.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet_Materials_MetalPartsMat_OcclusionRoughMetal.png",
+      "sha256": "17f3e27b51011b8f98751dae25958e2b850fcf1467f1019bec812553e0e5eb1d",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet_Materials_RubberWoodMat_BaseColor.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet_Materials_RubberWoodMat_BaseColor.png",
+      "sha256": "f751d643d1f220b300705d9ad57ed284a883eb7d3788469199b752f4381dcc37",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet_Materials_RubberWoodMat_Normal.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet_Materials_RubberWoodMat_Normal.png",
+      "sha256": "bb70753c836c59db7e245e5fe2c9db8eee833d29d67e03da348f6adb1e95142a",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "FlightHelmet/FlightHelmet_Materials_RubberWoodMat_OcclusionRoughMetal.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/FlightHelmet/glTF/FlightHelmet_Materials_RubberWoodMat_OcclusionRoughMetal.png",
+      "sha256": "2727d4638514f75fcbd29777bf03db6bd2f0f1ad926e2976cf2346aa22c0bd19",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "SciFiHelmet/SciFiHelmet.bin",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/SciFiHelmet/glTF/SciFiHelmet.bin",
+      "sha256": "6a7af42896359f8e0d9ba65260cbb7b1a1d36aa787439d3775a48aba1f9a25ba",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "SciFiHelmet/SciFiHelmet.gltf",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/SciFiHelmet/glTF/SciFiHelmet.gltf",
+      "sha256": "4b9e64c5337ddaba5b44821d76786bcad3b5b78f877cf034ec6163dc8baca35a",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "SciFiHelmet/SciFiHelmet_AmbientOcclusion.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/SciFiHelmet/glTF/SciFiHelmet_AmbientOcclusion.png",
+      "sha256": "95823e77b0a6e45308b53be4fdf1b7a7b6ac085c190dc1c5ef47097d0e35eb2f",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "SciFiHelmet/SciFiHelmet_BaseColor.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/SciFiHelmet/glTF/SciFiHelmet_BaseColor.png",
+      "sha256": "bda08dd029775ea0964d5721b779a639da091222eaa750233ba34e01e3eeace2",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "SciFiHelmet/SciFiHelmet_MetallicRoughness.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/SciFiHelmet/glTF/SciFiHelmet_MetallicRoughness.png",
+      "sha256": "f38f025af3201697679e2a04ba4cf01b4506e68ce4e0e0f09c268a7dfb80b2c3",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "SciFiHelmet/SciFiHelmet_Normal.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/SciFiHelmet/glTF/SciFiHelmet_Normal.png",
+      "sha256": "437c034b60900b503bb41be3328011ab3b7602c8454f8eebcab98929ea25fe99",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_02/moon_rock_02.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/moon_rock_02/moon_rock_02.bin",
+      "sha256": "3ba6af10eebb46347e4e0c9d3e2a836d1328525d9d47e82b798a13d9ca2b216f",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_02/moon_rock_02_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/moon_rock_02/moon_rock_02_1k.gltf",
+      "sha256": "fada2419ab6de440c24081bf06545f37c41c3d4f8bb57fc4d1ba45bdb35baf5d",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_02/textures/moon_rock_02_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_02/moon_rock_02_arm_1k.jpg",
+      "sha256": "4b87eaca9c57ecb145b26033cfb9fbb03191b67777458e4e699eaca823cca0e2",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_02/textures/moon_rock_02_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_02/moon_rock_02_diff_1k.jpg",
+      "sha256": "2df7bedcd0f169d76f37af52768c2a674019b6c6b812492a47c230726cff96ad",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_02/textures/moon_rock_02_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_02/moon_rock_02_nor_gl_1k.jpg",
+      "sha256": "6c7a4c51e89ee1b66b243a8341e8491bcc5a9151c30feee5b35e19742106f872",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_03/moon_rock_03.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/moon_rock_03/moon_rock_03.bin",
+      "sha256": "b9e79d1c12719515f48b8e27ddf692f9e2076ad4eafd1cf4a4d12d1bcc6d85df",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_03/moon_rock_03_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/moon_rock_03/moon_rock_03_1k.gltf",
+      "sha256": "aee7860497473cba4d06038abaa37e6da675cc97a4e7fa2fdee28ebf8844eea1",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_03/textures/moon_rock_03_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_03/moon_rock_03_arm_1k.jpg",
+      "sha256": "748403657a81b7c38c2cf8ddce22d8f41212a33a41520a92df79ba31c9b229dc",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_03/textures/moon_rock_03_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_03/moon_rock_03_diff_1k.jpg",
+      "sha256": "ab94cec085c5e6c5db832f7c69c504bfefcffce0a0c2215f592ebcbbaa12862b",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_03/textures/moon_rock_03_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_03/moon_rock_03_nor_gl_1k.jpg",
+      "sha256": "b5ace21b213a3c76ba6e0fabd37a9150ef4b525214fb5eba17546ec480f14bf7",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_07/moon_rock_07.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/moon_rock_07/moon_rock_07.bin",
+      "sha256": "86d82068bc2d7f65cf653e9e591cd14b40e3ef893924dba46a8c9747269f1e14",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_07/moon_rock_07_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/moon_rock_07/moon_rock_07_1k.gltf",
+      "sha256": "5aec6881f1c76cfd57a9c58c356bf2bf69c5acb80705246fc5df63dde9fc906e",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_07/textures/moon_rock_07_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_07/moon_rock_07_arm_1k.jpg",
+      "sha256": "b3e39d8b88a181960c6b950c9f7642addbec3793aeda319e577d5154d9ec4be3",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_07/textures/moon_rock_07_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_07/moon_rock_07_diff_1k.jpg",
+      "sha256": "ea0228898a9ee7cbca4392aa385d5998f6769adcc70b3d778ccde4b944029617",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "moon_rock_07/textures/moon_rock_07_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/moon_rock_07/moon_rock_07_nor_gl_1k.jpg",
+      "sha256": "c5c40bd39c605ac2128bfa17d869868c73dad9af830fcda5be0f84ea83cebea6",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "panoramas/studio_small_09_2k.hdr",
+      "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/studio_small_09_2k.hdr",
+      "sha256": "36724313c0fc66dab126ff90f081b85a0b1ef47be65eda1417bd20b033f0573f",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "panoramas/symmetrical_garden_02_2k.hdr",
+      "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/symmetrical_garden_02_2k.hdr",
+      "sha256": "f14afaeb4ddd5ed4624b459a87f44cfc8215d4346fac0bb72304348c9a15dec7",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "panoramas/venice_sunset_2k.hdr",
+      "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/venice_sunset_2k.hdr",
+      "sha256": "cbfac020ee17ab36016ccc7fbe9020b828587b9864af6ecda0a93089914889a6",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "planets/2k_jupiter.jpg",
+      "url": "https://www.solarsystemscope.com/textures/download/2k_jupiter.jpg",
+      "sha256": "b0f04d005350252636b0e3396fc592548cbd9e9126b269d32d5c6abd4b0e4f2b",
+      "licence": "CC-BY-4.0"
+    },
+    {
+      "path": "fir_sapling/fir_sapling_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/fir_sapling/fir_sapling_1k.gltf",
+      "sha256": "a9466ca9d8c5b9b2eeeeafd3ce426f8912dcbd98a7281bad8c734833eb35b186",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_sapling/textures/fir_sapling_twigs_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_sapling/fir_sapling_twigs_nor_gl_1k.jpg",
+      "sha256": "34928b2a9d1f722d2f64a7da468c790ecaca9b89c00ac0878a9e0bad26748368",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_sapling/textures/fir_sapling_branches_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_sapling/fir_sapling_branches_diff_1k.jpg",
+      "sha256": "46d216526b6203dbd5dc3cfce5e49d7a4cc1770da2420faab45adf33671c7de4",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_sapling/textures/fir_sapling_twigs_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_sapling/fir_sapling_twigs_diff_1k.jpg",
+      "sha256": "a9900fafad850deeb5f79b928fd7590bca9e8ec8734d2368d4c64bba8b0c5b22",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_sapling/textures/fir_sapling_branches_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_sapling/fir_sapling_branches_nor_gl_1k.jpg",
+      "sha256": "dbe474f6cd593d51a19fb92a627ad900b9ab47dabd1bf60117a2cf9d110f79ea",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_sapling/textures/fir_sapling_twigs_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_sapling/fir_sapling_twigs_arm_1k.jpg",
+      "sha256": "d1ec27a55bb67bfe5fa2c8a41a545dc71769934b142db56ad7c703d4146e1770",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_sapling/textures/fir_sapling_branches_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_sapling/fir_sapling_branches_arm_1k.jpg",
+      "sha256": "44c32b056b78c1046aeeb44c973a1d1352ea12d0d7ef2425527555f1256a0964",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_sapling/fir_sapling.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/fir_sapling/fir_sapling.bin",
+      "sha256": "efdebfae6ee4b3ea20c7a85eb9f798ff4953259a3616bcff0b7e580b00f34f40",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fern_02/fern_02_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/fern_02/fern_02_1k.gltf",
+      "sha256": "33974295ee19670af4877705fc7d91f33f42d6302f0d44a625e072271223031f",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fern_02/textures/fern_02_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fern_02/fern_02_arm_1k.jpg",
+      "sha256": "ebfb5d76ce9cbdaec20bcd22dce9b755f0b1b8650ef29ca13555e3e6961025d7",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fern_02/textures/fern_02_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fern_02/fern_02_diff_1k.jpg",
+      "sha256": "a828a6e7b4c01c826911e2eac4b3afc7457dab7b3b392a31c681ed88b7d50029",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fern_02/textures/fern_02_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fern_02/fern_02_nor_gl_1k.jpg",
+      "sha256": "45bce132c6e96a0864bc89ab5da51361ab3f4afa83a6669ae499ab5ca811f621",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fern_02/fern_02.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/fern_02/fern_02.bin",
+      "sha256": "fe1abb762bcbbc7ad9e86925c8080437a62add257d9280e9142fdc85c226e64c",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "shrub_03/shrub_03_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/shrub_03/shrub_03_1k.gltf",
+      "sha256": "b76d7c14bc027e834e82d3f984c32b5d060e62908aa90ff9420a637ca253a8ea",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "shrub_03/shrub_03.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/shrub_03/shrub_03.bin",
+      "sha256": "bf4df21e6d2a2bc5f00b4c9142f776171fe7da00cf960001825748067af542b6",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "shrub_03/textures/shrub_03_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/shrub_03/shrub_03_arm_1k.jpg",
+      "sha256": "3e2b16812a623037138eedace958210c5f3443a827bbe69663045bba5612f815",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "shrub_03/textures/shrub_03_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/shrub_03/shrub_03_diff_1k.jpg",
+      "sha256": "3cadc7aba46d3aabbd7d6d2b1d04aa32e2a7da0bc87c2d38ef3cb1ee42cb03ec",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "shrub_03/textures/shrub_03_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/shrub_03/shrub_03_nor_gl_1k.jpg",
+      "sha256": "ff856bacfce859b8a7555dd9a3b92fbd36b2e775d486be71df485afb4235d6c9",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "shrub_04/shrub_04_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/shrub_04/shrub_04_1k.gltf",
+      "sha256": "782832cbc57e96686b78c6ef9df6234c25f564f78421c8ed4bd42c3631f5aeae",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "shrub_04/textures/shrub_04_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/shrub_04/shrub_04_nor_gl_1k.jpg",
+      "sha256": "200d791e0474495bfc876ba1c289dade669c6a5b124647c55bc840a875f6b51c",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "shrub_04/textures/shrub_04_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/shrub_04/shrub_04_diff_1k.jpg",
+      "sha256": "0b0fa0a474753d13f3093858cea79d0de05da1e6a0c5d6e181cd351080980b6c",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "shrub_04/textures/shrub_04_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/shrub_04/shrub_04_arm_1k.jpg",
+      "sha256": "d1085df021928b29b0f38dde7e58e9a2e304c4e8d838e390b37cf57f8aa492e8",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "shrub_04/shrub_04.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/shrub_04/shrub_04.bin",
+      "sha256": "cb442c39682e54cc63f912aa78ab17a03566f947a61adbbbaaa6473166744f01",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "rock_09/rock_09_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/rock_09/rock_09_1k.gltf",
+      "sha256": "636e57eb0090889627da18edaec202ff9f65f83101b94f91b7da4d21dc080ab9",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "rock_09/textures/rock_09_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_09/rock_09_arm_1k.jpg",
+      "sha256": "594e2cec49e6bb40bd9bab2649e37dcc261079456cf4d6f680f56770c19db5ea",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "rock_09/textures/rock_09_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_09/rock_09_nor_gl_1k.jpg",
+      "sha256": "2195b5c7da3a23af2a5f93dbb20f38bc069028509b106397bc8d2aee0bc55729",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "rock_09/textures/rock_09_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_09/rock_09_diff_1k.jpg",
+      "sha256": "afb7ae5ae82238d304aba589391ac6bc87f7cf1dbfe50980c21f762cfdd87efd",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "rock_09/rock_09.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/rock_09/rock_09.bin",
+      "sha256": "780c37d6fc11ca3a01c3763535ef883908b6007271a46bd446d2289ded820751",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dead_tree_trunk/dead_tree_trunk_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/dead_tree_trunk/dead_tree_trunk_1k.gltf",
+      "sha256": "8baaf1ff66ba1f79acdceed0dc3797a882990a3abb10b18abe56762f34c26e39",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dead_tree_trunk/textures/dead_tree_trunk_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dead_tree_trunk/dead_tree_trunk_arm_1k.jpg",
+      "sha256": "0e0f7d64ac4ee3a7e7861a48f4bbd1ec2c026facd8f48b756f6b5d4557af3fd3",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dead_tree_trunk/textures/dead_tree_trunk_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dead_tree_trunk/dead_tree_trunk_nor_gl_1k.jpg",
+      "sha256": "b7c393204c93f0c67535ff3b5d723b26598f9dbb2b5110b74249ab88189f026f",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dead_tree_trunk/textures/dead_tree_trunk_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dead_tree_trunk/dead_tree_trunk_diff_1k.jpg",
+      "sha256": "bc31d7d23db90d90cfb568c583914eeec11b29716b79096818b706a9e3e0216c",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dead_tree_trunk/dead_tree_trunk.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/dead_tree_trunk/dead_tree_trunk.bin",
+      "sha256": "c1ac6b3195246e8647a28eee2fbfdd4712a045c7cf2dcb4f5abcc2d40a446ca6",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_stump_01/tree_stump_01_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/tree_stump_01/tree_stump_01_1k.gltf",
+      "sha256": "9c66ba87d693f35eb404acaa96e0eeff831c295b61a0a903795584cbcc3527c9",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_stump_01/tree_stump_01.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/tree_stump_01/tree_stump_01.bin",
+      "sha256": "b4d9ca70b3c908c4a638fbd6a23ed96c84055bbbf14cf44b89e31ad59fa21e0a",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_stump_01/textures/tree_stump_01_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_stump_01/tree_stump_01_diff_1k.jpg",
+      "sha256": "781ebe420ac4d84f2e44b9e9937a596e3d5d90711d978a1392f8bf3771b5bf31",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_stump_01/textures/tree_stump_01_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_stump_01/tree_stump_01_nor_gl_1k.jpg",
+      "sha256": "425117514b0386bb6df41cb64a61a624d2596472e05777483d4021b3285e3ceb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_stump_01/textures/tree_stump_01_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_stump_01/tree_stump_01_arm_1k.jpg",
+      "sha256": "d845cd6ab45288c546267d059ebe1f8a737e174330fe9375e5f99e753f2f95d8",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dry_branches_medium_01/dry_branches_medium_01_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/dry_branches_medium_01/dry_branches_medium_01_1k.gltf",
+      "sha256": "23f328ded9be1e151ccd7994b303c70221551544c4857a71474c1c01a14b8a22",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dry_branches_medium_01/textures/dry_branches_medium_01_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dry_branches_medium_01/dry_branches_medium_01_arm_1k.jpg",
+      "sha256": "6d1ba6f4763d2815301a15bf62eaf68c345cecafb107e2681d12f26fbc657f5a",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dry_branches_medium_01/textures/dry_branches_medium_01_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dry_branches_medium_01/dry_branches_medium_01_diff_1k.jpg",
+      "sha256": "1fbaf810a9ca29d2faf0a179834e8dce10cf4854bafe13f63af111030b3ec660",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dry_branches_medium_01/textures/dry_branches_medium_01_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dry_branches_medium_01/dry_branches_medium_01_nor_gl_1k.jpg",
+      "sha256": "62f5205bfec599000bb7a430e003bbada939bc8d7976a7d3ab7709fd5893413c",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dry_branches_medium_01/dry_branches_medium_01.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/dry_branches_medium_01/dry_branches_medium_01.bin",
+      "sha256": "969da1e8cbb2d8201e7fa0fc0dac5b19ef354b32c3d8c62dd9faa7cb3833d8ca",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "forest_ground_04/forest_ground_04_diff_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forest_ground_04/forest_ground_04_diff_2k.jpg",
+      "sha256": "24b8aaf4c8547305d80b0e029ec365219ab1b90748d4ca5651bdc9e75bfde5e6",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "forest_ground_04/forest_ground_04_nor_gl_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forest_ground_04/forest_ground_04_nor_gl_2k.jpg",
+      "sha256": "b37ac799ed410976541e0011c246fca254e74eaa3f096ae7a7d74178db5a6d9b",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_tree_01/fir_tree_01_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/fir_tree_01/fir_tree_01_1k.gltf",
+      "sha256": "72e49eefb4ed4db6a8ca5e17fb10980f8463dd300d94589ac774cde95ade7709",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_tree_01/textures/fir_tree_01_bark_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_bark_nor_gl_1k.jpg",
+      "sha256": "6a570ab53ab2249ecdfa93e7d3b9a8a2cb1a8ad391400e5a64c708914779b2c3",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_tree_01/textures/fir_tree_01_bark_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_bark_diff_1k.jpg",
+      "sha256": "a5d25150ba1bee10008c039f98aa3c73b4477a404d6715c511ca9b5b0f4a9077",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_tree_01/textures/fir_tree_01_bark_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_bark_arm_1k.jpg",
+      "sha256": "95d4e9e62cd309fbc38a175e2306379c76c062425b09c0fb72c5b7356a719123",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_tree_01/textures/fir_tree_01_trunk_a_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_trunk_a_nor_gl_1k.jpg",
+      "sha256": "9d46c05be22de0dcc4af7e3703fde4c7397644b9faeff4914c0469a6bde99caf",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_tree_01/textures/fir_tree_01_trunk_a_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_trunk_a_diff_1k.jpg",
+      "sha256": "cfb646cbc4b6cb2db410eb4342174ebe7812a4ae03520491e788722cf1867286",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_tree_01/textures/fir_tree_01_trunk_a_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_trunk_a_arm_1k.jpg",
+      "sha256": "2e439391e98f427207a7fc180eb262f4c1ab3ca0ef570785ea7352826bac342b",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_tree_01/textures/fir_tree_01_twig_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_twig_nor_gl_1k.jpg",
+      "sha256": "d470dc39b1d02bbeba06feb0ad818680ef3c24623b4db597270301a5fb8c9369",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_tree_01/textures/fir_tree_01_twig_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_twig_diff_1k.jpg",
+      "sha256": "8c0833a10e4fd44498d848cf9e659fe250a3813984cbd679f42430eb98c61fb8",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_tree_01/textures/fir_tree_01_twig_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_twig_arm_1k.jpg",
+      "sha256": "d66c81fc073ee7ea97a76b6da2399769f16944e50ef0e007f09c95619f597c79",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_tree_01/textures/fir_tree_01_trunk_b_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_trunk_b_nor_gl_1k.jpg",
+      "sha256": "5e498ee6fee29437196085620c978346ba6731edad8bfc2a2642868f8bf64efe",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_tree_01/textures/fir_tree_01_trunk_b_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_trunk_b_diff_1k.jpg",
+      "sha256": "9d39263a9243a4b6cd669de5e3a504eae32d52f5ab48e471cad5f7e52e052508",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_tree_01/textures/fir_tree_01_trunk_b_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_trunk_b_arm_1k.jpg",
+      "sha256": "c9e0571b2067cad25a4553119204874e6a5ea3156043cacbd5171155d856cff4",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_tree_01/fir_tree_01.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/fir_tree_01/fir_tree_01.bin",
+      "sha256": "ba2ef15a1061a84c73b0a74643e88c118f801ce1664ca7a25a6a79bcc2c63790",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_small_02/tree_small_02_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/tree_small_02/tree_small_02_1k.gltf",
+      "sha256": "3062a709614c05b80fdc1e56583998bc3cb1027b0d52f956c8ecfb882ff8ca6d",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_small_02/textures/tree_small_02_branch_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_small_02/tree_small_02_branch_nor_gl_1k.jpg",
+      "sha256": "a2efae9e7fede259601188cd5cb7e561fc502bd87e04d862a9532b2d8e647a62",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_small_02/textures/tree_small_02_branch_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_small_02/tree_small_02_branch_diff_1k.jpg",
+      "sha256": "a71b768e330c0c6cca097e30314f6b4e842ef724a1370f6aab14b4434eec64cb",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_small_02/textures/tree_small_02_branch_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_small_02/tree_small_02_branch_arm_1k.jpg",
+      "sha256": "8968b46d76c67da09ebbf4eed04b8123c9e0ddf5b55d123968b35b32aa76d27a",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_small_02/textures/tree_small_02_leaves_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_small_02/tree_small_02_leaves_nor_gl_1k.jpg",
+      "sha256": "8c72e04fb23e16ae1df79c01385a638473d1dd4dede3d51e83d70153c129f09b",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_small_02/textures/tree_small_02_leaves_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_small_02/tree_small_02_leaves_diff_1k.jpg",
+      "sha256": "261e7d7a5ac7d2e16ea8823ff8510be8f3f615999724232994039ad2885e5c36",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_small_02/textures/tree_small_02_leaves_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_small_02/tree_small_02_leaves_arm_1k.jpg",
+      "sha256": "71f81374daf5a8f3e6eb2c694264a1769fdb0bea508178e4105618eecea83c3e",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_small_02/textures/tree_small_02_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_small_02/tree_small_02_nor_gl_1k.jpg",
+      "sha256": "9c83be074c950ea1b94c732c0c0291b53b9ba357f932d378bafe3ca3b4418871",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_small_02/textures/tree_small_02_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_small_02/tree_small_02_diff_1k.jpg",
+      "sha256": "4e0093f407b3a1120a36de49a48ebe5a465a9a9b77e361c7a3e66866e115e404",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_small_02/textures/tree_small_02_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_small_02/tree_small_02_arm_1k.jpg",
+      "sha256": "891c5a1bb124292984b01558e9f2b0302d27d2fa3ccf9dfc6c34f9ea4ca24e6c",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_small_02/tree_small_02.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/tree_small_02/tree_small_02.bin",
+      "sha256": "8da6c3c389ad8748286d1b7488cd827f75ebdad9d8f59ef7dfb0916df5edc634",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "rock_moss_set_01/rock_moss_set_01_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/rock_moss_set_01/rock_moss_set_01_1k.gltf",
+      "sha256": "c36675aca9c6b2be7785c2534cf413b03ec82a5a2a5407a2b1c0cdb0346c9727",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "rock_moss_set_01/textures/rock_moss_set_01_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_moss_set_01/rock_moss_set_01_nor_gl_1k.jpg",
+      "sha256": "eb4aad3f207f1dc5b624d74ae240372171626a66912bd71adf7bd3e518181d6e",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "rock_moss_set_01/rock_moss_set_01.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/rock_moss_set_01/rock_moss_set_01.bin",
+      "sha256": "de8360e6175879aaf02c171911069cf5f1852547f9ca7f10e440085dbcc3315e",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "rock_moss_set_01/textures/rock_moss_set_01_rough_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_moss_set_01/rock_moss_set_01_rough_1k.jpg",
+      "sha256": "4d6ec46623abd8e2cdb855f59c7ce31873ad61b36b60e4de579e9e776a497c6b",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "rock_moss_set_01/textures/rock_moss_set_01_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_moss_set_01/rock_moss_set_01_diff_1k.jpg",
+      "sha256": "40cea65d8aa4ee73a93b04af19963834d061eee9779c3fc2c1cba76eef812ccc",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "rock_moss_set_02/rock_moss_set_02_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/rock_moss_set_02/rock_moss_set_02_1k.gltf",
+      "sha256": "c3b992a7622e94f7d8da97a47277a2a5177a513af0312a127ec908d4056c97db",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "rock_moss_set_02/textures/rock_moss_set_02_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_moss_set_02/rock_moss_set_02_nor_gl_1k.jpg",
+      "sha256": "dd2503789089fb72ef469efd14364d393e769c0de8781a251475cac7e0b6f51d",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "rock_moss_set_02/textures/rock_moss_set_02_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_moss_set_02/rock_moss_set_02_diff_1k.jpg",
+      "sha256": "91dd2cc77d5198b067d77e5bdb3fa8ee7b8950aeff5aec2c1ccaddb76dcca481",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "rock_moss_set_02/textures/rock_moss_set_02_rough_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_moss_set_02/rock_moss_set_02_rough_1k.jpg",
+      "sha256": "12252219a98a560940359973e83af831abdcfab0ead3f0a2a7b135a0143105f1",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "rock_moss_set_02/rock_moss_set_02.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/rock_moss_set_02/rock_moss_set_02.bin",
+      "sha256": "2df9d8eaaca4207529b0f613d4886d3962d0b9ffc0cdfd2bc4bf35dbcd391cb5",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dead_tree_trunk_02/dead_tree_trunk_02_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/dead_tree_trunk_02/dead_tree_trunk_02_1k.gltf",
+      "sha256": "b486ab1f0c7f4972e0eec97b19de53b26a34d09f07da5f9c2a70f8621f9e574c",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dead_tree_trunk_02/textures/dead_tree_trunk_02_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dead_tree_trunk_02/dead_tree_trunk_02_diff_1k.jpg",
+      "sha256": "fac23e81ab5639dcde93db605e5dd94c65e0aa2b1fb4a303f37de9afbb9af5b4",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dead_tree_trunk_02/textures/dead_tree_trunk_02_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dead_tree_trunk_02/dead_tree_trunk_02_arm_1k.jpg",
+      "sha256": "ea15561ce36572ebd0db3c997f70d68a76d4bcbfef7efb4f91c8fd3b5f766e62",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dead_tree_trunk_02/textures/dead_tree_trunk_02_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dead_tree_trunk_02/dead_tree_trunk_02_nor_gl_1k.jpg",
+      "sha256": "9b26c29b89afced0ddb91dbe6f917e59038bed5ba6076dfceb8d1b4b00ca04f7",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dead_tree_trunk_02/dead_tree_trunk_02.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/dead_tree_trunk_02/dead_tree_trunk_02.bin",
+      "sha256": "2b1b7ca07d98396ddc1987e367dcff9734df16b62e997c14837512d134687ded",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "root_cluster_01/root_cluster_01_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/root_cluster_01/root_cluster_01_1k.gltf",
+      "sha256": "b9060cfe2c1db4326428a0bf834e8409a99988082c8e5465cb09738d72117463",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "root_cluster_01/textures/root_cluster_01_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/root_cluster_01/root_cluster_01_arm_1k.jpg",
+      "sha256": "493dde9d58cd89366af63277148bcdfef50e3df9167ce965742eecd111cbd798",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "root_cluster_01/textures/root_cluster_01_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/root_cluster_01/root_cluster_01_nor_gl_1k.jpg",
+      "sha256": "4e16ca657a47112137cfbb2985e4473c1f2554631739826985fd61fc49c25e5b",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "root_cluster_01/textures/root_cluster_01_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/root_cluster_01/root_cluster_01_diff_1k.jpg",
+      "sha256": "3f4dbb0864982d228d37ee283125b8f8eb442b019fa5469249b332cb7b9d6d62",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "root_cluster_01/root_cluster_01.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/root_cluster_01/root_cluster_01.bin",
+      "sha256": "8f91654c0b72edf978082e8edf97bf3f0cde72027a8a4d8d5e6c1b84231b5f93",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "panoramas/qwantani_late_afternoon_puresky_2k.hdr",
+      "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/qwantani_late_afternoon_puresky_2k.hdr",
+      "sha256": "d1c4d610811b7b94328d67fa48fc107078af21318197e5b937310c825d72074d",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "forest_leaves_04/forest_leaves_04_diff_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forest_leaves_04/forest_leaves_04_diff_2k.jpg",
+      "sha256": "a4f964eb32909ef9b41dbf4000bde142995711b7b755850f6523eb4d99c4a5d4",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "forest_leaves_04/forest_leaves_04_nor_gl_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forest_leaves_04/forest_leaves_04_nor_gl_2k.jpg",
+      "sha256": "4870de640c043377b2f992337477cab9ff26f915b6cd5302cf2cb41d94b0c339",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "forest_leaves_04/forest_leaves_04_arm_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forest_leaves_04/forest_leaves_04_arm_2k.jpg",
+      "sha256": "f8880113d1d3ae2dbb984813bb0559bf8aba0490e68d6bcb85e412965ef056b9",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "stony_dirt_path/stony_dirt_path_diff_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stony_dirt_path/stony_dirt_path_diff_2k.jpg",
+      "sha256": "9c35b98628c17382b3a494ae15f17f95410edcaaac2e5922e50e5878f98d4a20",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "stony_dirt_path/stony_dirt_path_nor_gl_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stony_dirt_path/stony_dirt_path_nor_gl_2k.jpg",
+      "sha256": "6e0ee32808d6ae091cbfb23f6024ab4c7148495d23ae0baf39d0e7ee1f3269d9",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "stony_dirt_path/stony_dirt_path_arm_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stony_dirt_path/stony_dirt_path_arm_2k.jpg",
+      "sha256": "6b8dcf5c01623d83a0e4902e398367c0cd37193aba4593007d7201606959bd00",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fern_02/textures/fern_02_alpha_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fern_02/fern_02_alpha_1k.jpg",
+      "sha256": "4d8c4d57373651e500f1a3b2071cd59d2d9cc031bc30ff73bc8a5d2b2c91571a",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "shrub_03/textures/shrub_03_alpha_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/shrub_03/shrub_03_alpha_1k.jpg",
+      "sha256": "a696908aa8144a2697eb528815acf103ac6c5e3511aace8383f771b2f9c4ade8",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "shrub_04/textures/shrub_04_alpha_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/shrub_04/shrub_04_alpha_1k.jpg",
+      "sha256": "79b42a2e9703f3080192e1d0c6be89d7d36a5543ee7cc411339f2741dd11a1ee",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_sapling/textures/fir_sapling_twigs_alpha_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_sapling/fir_sapling_twigs_alpha_1k.jpg",
+      "sha256": "75eb87d94fdcd1c8961838aadc99f73d4ca273923add1b81cbf3281d2ec66da5",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "tree_small_02/textures/tree_small_02_leaves_alpha_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_small_02/tree_small_02_leaves_alpha_1k.jpg",
+      "sha256": "66d49e18d043c483d0f4a8638f379ec164e30a61e9c10e60384e72815ca0bb40",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "fir_tree_01/textures/fir_tree_01_twig_alpha_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_twig_alpha_1k.jpg",
+      "sha256": "1f0607dd457c32406717daffe5049b1d2248c497589c83795c623c5e8b03e542",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "asphalt_01/asphalt_01_diff_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/asphalt_01/asphalt_01_diff_2k.jpg",
+      "sha256": "10fe1dafe34fec51397dbe9011f798c68c4e3fc16abfd4d7aea0123122db8993",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "asphalt_01/asphalt_01_nor_gl_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/asphalt_01/asphalt_01_nor_gl_2k.jpg",
+      "sha256": "60fd6af2aae30bb3fd2231227ecbe52d0ced2c761d53a64f50dea59d173307cd",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "asphalt_01/asphalt_01_arm_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/asphalt_01/asphalt_01_arm_2k.jpg",
+      "sha256": "4db10d1e7a965951a418b96819e11f7eef810d99c7ba6bf5e3d9a89a8fd60aff",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "panoramas/kloppenheim_07_puresky_2k.hdr",
+      "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/kloppenheim_07_puresky_2k.hdr",
+      "sha256": "e06e7f63d48dbe86a5f5a7f987920fa87fd1bfc9de017ce74ce91617b33161c1",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "concrete_tile_facade/concrete_tile_facade_diff_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_tile_facade/concrete_tile_facade_diff_2k.jpg",
+      "sha256": "2e74131c21dbbdfae29265e400b12ac4943d8481123fc4433ca33c32caf8c07e",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "concrete_tile_facade/concrete_tile_facade_nor_gl_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_tile_facade/concrete_tile_facade_nor_gl_2k.jpg",
+      "sha256": "13239b9f555feb5e931b260c90eaf14fa79579968d7159d96841f342e736dbf1",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "concrete_tile_facade/concrete_tile_facade_arm_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_tile_facade/concrete_tile_facade_arm_2k.jpg",
+      "sha256": "dabe67d90ee891f1343c770c438a74c6231a6f150fb6daf850570ecd79d0f3cd",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dark_brick_wall/dark_brick_wall_diff_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dark_brick_wall/dark_brick_wall_diff_2k.jpg",
+      "sha256": "d51a040a960cbeb34c66b3768d1381e910c752d0f1825156b3f65abac81a55d4",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dark_brick_wall/dark_brick_wall_nor_gl_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dark_brick_wall/dark_brick_wall_nor_gl_2k.jpg",
+      "sha256": "f56788cd891ac5a4d8f1a1cdabec7f3881454c77869f0c918afa97526e9dd428",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "dark_brick_wall/dark_brick_wall_arm_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dark_brick_wall/dark_brick_wall_arm_2k.jpg",
+      "sha256": "4e8bccd2fc7083c81897c43a7e76ac30bc14ace38dba82ea2f7a61ce210d2060",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "exterior_wall_cladding/exterior_wall_cladding_diff_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/exterior_wall_cladding/exterior_wall_cladding_diff_2k.jpg",
+      "sha256": "7ad7e763dcfd8c8c24ac18832cec7e05bcd6622d562e7b82cac04a75e4f9ffe7",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "exterior_wall_cladding/exterior_wall_cladding_nor_gl_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/exterior_wall_cladding/exterior_wall_cladding_nor_gl_2k.jpg",
+      "sha256": "22c99ade32b32d82fb878ad564574fb15644110e4430c94f2deb89477530c860",
+      "licence": "CC0-1.0"
+    },
+    {
+      "path": "Sponza/10381718147657362067.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/10381718147657362067.jpg",
+      "sha256": "c119be5aae2419a8120fd17691033ca28e0b5546cef7e31d40f6dec1543affee",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/10388182081421875623.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/10388182081421875623.jpg",
+      "sha256": "c915c9cc8be8f198ab1cc3bc68c2f6c694b88432f381a8f27935d480141ae8f5",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/11474523244911310074.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/11474523244911310074.jpg",
+      "sha256": "23c32277c33d8eac091cd73daf81561ebe3640eede49b037546ed5c244a01347",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/11490520546946913238.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/11490520546946913238.jpg",
+      "sha256": "98e4c4a091fea684cd693f3ae7ebe83e491969b501b4cd6e1fdd6a3cc1fa5cab",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/11872827283454512094.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/11872827283454512094.jpg",
+      "sha256": "da2a0b308b4d6d57ffbcf4bb7509d4afe91156d5d86d0396e83d7cac883a4857",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/11968150294050148237.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/11968150294050148237.jpg",
+      "sha256": "bee42826d56d3ff719c4908c11ef65584fbe19e08273862fde7ec1408e44ba25",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/1219024358953944284.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/1219024358953944284.jpg",
+      "sha256": "9cbd61fcb8047f1c21450eff05207b29d71824edd75483267b5fbc2f7b21378c",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/12501374198249454378.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/12501374198249454378.jpg",
+      "sha256": "fe640b8875c8ff04f4ec427274d2e799b703cff384b9c2dafef63b61d05f34fa",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/13196865903111448057.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/13196865903111448057.jpg",
+      "sha256": "8c26ae9523cfae7a062fd074f74e0ddbb61630772f9a2130489e1d6e4724c38b",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/13824894030729245199.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/13824894030729245199.jpg",
+      "sha256": "9158388312a76ba25a40d3b57978e1ace224882e53198a766494d98f9118aeba",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/13982482287905699490.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/13982482287905699490.jpg",
+      "sha256": "b91209e6ede0b905565bd719d6e27533abc7a5930d031a454f9aae65771fc4b0",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/14118779221266351425.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/14118779221266351425.jpg",
+      "sha256": "994ba4e063564d75350ceec1381347a620baef75f9ca689e28718a88c3e3bd88",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/14170708867020035030.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/14170708867020035030.jpg",
+      "sha256": "55cbda42c13377a71cb8ee78406309e888f56bc85af9473ca84a6097f2252166",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/14267839433702832875.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/14267839433702832875.jpg",
+      "sha256": "d14f693c5cf7d1e506865488fdb68daadd42bbdcb0c534e2f96ccfd747e46a60",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/14650633544276105767.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/14650633544276105767.jpg",
+      "sha256": "e8b68080eb4c5709536dfb7858d595d51d4bb725003e11b0f383acf76a7e05a3",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/15295713303328085182.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/15295713303328085182.jpg",
+      "sha256": "5bbd0cbf2da7416d5620514ebb0c4837b0ccc841b649cf4070281aa333ff8520",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/15722799267630235092.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/15722799267630235092.jpg",
+      "sha256": "8511ada3c77ed171a21d58362d996b20cfa6c632fe4c95c3a8614e410e623a31",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/16275776544635328252.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/16275776544635328252.png",
+      "sha256": "d6df943a0dcf535d9dfb009c2833e0c7dc21939cfe3a2c10316c552b3dc3441b",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/16299174074766089871.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/16299174074766089871.jpg",
+      "sha256": "21d5f7ab6a7d05200b76165771fb3c5f14d006236a9dd27fff9eb92b69de4fa6",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/16885566240357350108.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/16885566240357350108.jpg",
+      "sha256": "5562f0e76ca213d72295e48b8a14a59ee1971f58a47f95e5c022a4e78371c5aa",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/17556969131407844942.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/17556969131407844942.jpg",
+      "sha256": "cb09708202859d08764601acc9c9ea3b5254b2c4fd39dcc6b6055768c77aee9b",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/17876391417123941155.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/17876391417123941155.jpg",
+      "sha256": "005b774a968c1f6af00e4bf97afd668a6a045126a94f524df722ba19edc77d61",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/2051777328469649772.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/2051777328469649772.jpg",
+      "sha256": "0f25b73991003300bd5e2c8fcbc46ec4e2788a8deb42321f575d5187aee21b85",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/2185409758123873465.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/2185409758123873465.jpg",
+      "sha256": "88861c8c7f10517c1d7942f316aae3b74dc5b8ae2faa2021d9dfe9d2c09fb24f",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/2299742237651021498.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/2299742237651021498.jpg",
+      "sha256": "da92fd0303571290c36b0f655f357fda77015b788613c65b18346480e1bd8324",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/2374361008830720677.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/2374361008830720677.jpg",
+      "sha256": "782c48410db52360083719a48f8d15d29aa5cd4beeb817f1fd195083b2feb60a",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/2411100444841994089.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/2411100444841994089.jpg",
+      "sha256": "12e1f2ea3c2714a6ec455fa8e623a702e33ef95765ebd09f7874a68fa55fd104",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/2775690330959970771.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/2775690330959970771.jpg",
+      "sha256": "751606c94a5fe5bda3bf6709e7f6a74363bd7902bf2353d54e55ef3b50007487",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/2969916736137545357.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/2969916736137545357.jpg",
+      "sha256": "dfa17f2dee2cd2d850585673d19d5cda477a63e21659b346d8730e80edd3b347",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/332936164838540657.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/332936164838540657.jpg",
+      "sha256": "782c48410db52360083719a48f8d15d29aa5cd4beeb817f1fd195083b2feb60a",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/3371964815757888145.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/3371964815757888145.jpg",
+      "sha256": "d939d2e8bf11c2cf375154129f861b982c786b83db79cb9fde1a2b94b46caf62",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/3455394979645218238.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/3455394979645218238.jpg",
+      "sha256": "967005ccfbf4d38f674df41aebb3e58ac1fdcd91f554ead7acfcc132372f8ec6",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/3628158980083700836.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/3628158980083700836.jpg",
+      "sha256": "5a05dc004bbff7e6f89cffab57ae4f4fe2cf04dfbd22b52ec85cf17bf92c8855",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/3827035219084910048.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/3827035219084910048.jpg",
+      "sha256": "1c2fc5ddaefc59763823f58d0450c00d114d89ab3d0ac395fd1316b664a8a56d",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/4477655471536070370.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/4477655471536070370.jpg",
+      "sha256": "f0592537da8edc8476d9903f4ab1839d1a7ab0efa2507d303e8720b57bedf848",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/4601176305987539675.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/4601176305987539675.jpg",
+      "sha256": "70eaa9efca842696271d2e4e04b1c77c087f8b5350d8d90940b800cc654b269a",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/466164707995436622.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/466164707995436622.jpg",
+      "sha256": "21bb124f5b5d4d5e9c8d9773cd31dedfc41b30eb302af36e7257cf930152908e",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/4675343432951571524.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/4675343432951571524.jpg",
+      "sha256": "9d5fd79619a52db0232edb2287f5f05c0124c304355e3b035a4e48c0871090bf",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/4871783166746854860.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/4871783166746854860.jpg",
+      "sha256": "259b6659cb2681e06ef04becd49298d379f2f25b2cc468acf0c2ade4d190637c",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/4910669866631290573.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/4910669866631290573.jpg",
+      "sha256": "70eaa9efca842696271d2e4e04b1c77c087f8b5350d8d90940b800cc654b269a",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/4975155472559461469.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/4975155472559461469.jpg",
+      "sha256": "fbdb7bcced57a005b84b4c3bbf744bae6309804cca51dabd9237e03a72fbc505",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/5061699253647017043.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/5061699253647017043.png",
+      "sha256": "6fbdbf67d3501831ad3a4e2adbf3d27e4c3d13ba1d655e5861c3f39b5f899f65",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/5792855332885324923.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/5792855332885324923.jpg",
+      "sha256": "9330cf1d51c8f6924b6c9ce09f2dedb21a82e1c7406c37d49ce95beca40bb3be",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/5823059166183034438.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/5823059166183034438.jpg",
+      "sha256": "34b464edddbd2295b0ee23fa7a7a440a19456888c586acdc47032f841b302abd",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/6047387724914829168.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/6047387724914829168.jpg",
+      "sha256": "c39c9f304c2605be791b4c0a58cd0f8eb20de2dd6a4a4af893c4eb112d158353",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/6151467286084645207.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/6151467286084645207.jpg",
+      "sha256": "170f6c637ebd71a101244eb4d80c3dcf7063caf89e42053d3114d8aeca755cdf",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/6593109234861095314.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/6593109234861095314.jpg",
+      "sha256": "70eaa9efca842696271d2e4e04b1c77c087f8b5350d8d90940b800cc654b269a",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/6667038893015345571.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/6667038893015345571.jpg",
+      "sha256": "34f6408c6b8e8dc3c89d528e014ee3b254c7208c41339cfd15c4ae5151ad7cbe",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/6772804448157695701.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/6772804448157695701.jpg",
+      "sha256": "1ea4f9bc86354d363ea8153df9b7593c3bd3da153c53b9624c1fd8a960cb3ebc",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/7056944414013900257.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/7056944414013900257.jpg",
+      "sha256": "782c48410db52360083719a48f8d15d29aa5cd4beeb817f1fd195083b2feb60a",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/715093869573992647.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/715093869573992647.jpg",
+      "sha256": "d81efcb42b3a044595ca984cb46d941b159064bddae9a43ed8d9582db68d6b47",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/7268504077753552595.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/7268504077753552595.jpg",
+      "sha256": "430758549ba2189d94f06abeaae092bfc0a1d8c22afc56f5caf3f99c5ee7407c",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/7441062115984513793.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/7441062115984513793.jpg",
+      "sha256": "9edc7c1c73661658cd8ed7733728002d45fecd17cb37a962fb654ff1d8c1933d",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/755318871556304029.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/755318871556304029.jpg",
+      "sha256": "9f849f0510ca0df66ba1cba2380a6a1b481444d9e64b68da6b2ce202b54d9cec",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/759203620573749278.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/759203620573749278.jpg",
+      "sha256": "c76e66915ce3abaf2ce365b314cf1e1a95f77bd4791adebdad01ab5c93658d0a",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/7645212358685992005.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/7645212358685992005.jpg",
+      "sha256": "da33886bb34e236f0ed9616ff40e87d87c4ab5ed458858e0d96839fa717978af",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/7815564343179553343.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/7815564343179553343.jpg",
+      "sha256": "8ad0e8a9ca6de602225a527361bc718881de8741bc48927e27259a8803e7fed7",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/8006627369776289000.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/8006627369776289000.png",
+      "sha256": "75328d1aac87f8539be2456e6a5392cef7c6d08476d75585eafcd334dbeee0c5",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/8051790464816141987.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/8051790464816141987.jpg",
+      "sha256": "4f06c93f8e9f90be44a2e78847e57acec82bd793f58f7be7f86b088150730b88",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/8114461559286000061.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/8114461559286000061.jpg",
+      "sha256": "06c6480e207ce64f9e7c08df3f7f21638da7da43f77682657f4c823acd8c81a5",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/8481240838833932244.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/8481240838833932244.jpg",
+      "sha256": "1da7664b7b88ae58386a6e6b5eca2829537818061d704f002356d8fc483c1a28",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/8503262930880235456.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/8503262930880235456.jpg",
+      "sha256": "c288a37ed8373d1132644873624b096a72ba81d03cda601e050a5de24ba13c39",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/8747919177698443163.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/8747919177698443163.jpg",
+      "sha256": "8e90e94cadf80528a3df3496035d3c77900eba24d88b1c1d31c9dce77990fc44",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/8750083169368950601.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/8750083169368950601.jpg",
+      "sha256": "73a94a12fb0a9ab4c75e40996c9a2d49ac45ac18a8c8ae81d5ceb1c8ae52d6dc",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/8773302468495022225.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/8773302468495022225.jpg",
+      "sha256": "dc5bf5f3091b548f1dfe40410b1aa1e2e55d82e2d77ba57dbd1f92955a0d8ff8",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/8783994986360286082.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/8783994986360286082.jpg",
+      "sha256": "93d495e33d754c5723c910e322ac94108fc753b65af082a19be5252905aa741b",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/9288698199695299068.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/9288698199695299068.jpg",
+      "sha256": "7f55814430f289e89c7d675c3db925eee904fbc566ff83f4b49904de53138e98",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/9916269861720640319.jpg",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/9916269861720640319.jpg",
+      "sha256": "81b21b9352f1fb9ccfeaf237f8547b985ddbf0cfd7ade7a4a8670b73a72b2cb5",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/Sponza.bin",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/Sponza.bin",
+      "sha256": "fdbdbfb6a76edeb6626f28a1401bc1536bb1c864131a64e90fbc3df2d2d191bd",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/Sponza.gltf",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/Sponza.gltf",
+      "sha256": "646c10cbc8fab990ca29f363e90e2d65155f3a3569506852eb1434a9465b9501",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "Sponza/white.png",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/Sponza/glTF/white.png",
+      "sha256": "e2ab2939dda535ad28779e41c20c98368f630f29c5824a0a5a430f47b3b6da12",
+      "licence": "LicenseRef-CRYENGINE-Agreement"
+    },
+    {
+      "path": "panoramas/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+      "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+      "sha256": "5244534e9cf5b606f2ff513aa00ddb161b0a4826ffd88a0d3bd03ac29247d198",
+      "licence": "CC0-1.0"
+    }
+  ]
+}

@@ -185,7 +185,7 @@ namespace RendererDemo
             light.AddComponent<Fenrir::Transform>().rot =
                 glm::quatLookAt(glm::normalize(Vec3(-0.4f, -0.8f, -0.5f)), Vec3(0.0f, 1.0f, 0.0f));
             light.AddComponent<Fenrir::DirectionalLight>();
-            scene.AddResource<Fenrir::AmbientLight>(Fenrir::AmbientLight{Fenrir::Colour{0.2f, 0.22f, 0.25f, 1.0f}});
+            scene.AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour{0.2f, 0.22f, 0.25f, 1.0f}});
             scene.AddResource<OverlayState>(std::move(state));
         }
 

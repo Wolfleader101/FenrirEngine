@@ -1,9 +1,12 @@
 // SpawnModel (ADR-0023, ADR-0031, ADR-0041): a model as drawn entities, SpawnNodes, then SpawnSkeletons through the
-// skinning source, then a MeshRenderer per mesh.
+// skinning source, then a MeshRenderer per mesh and a PointLight or SpotLight per light (ADR-0048).
 #include "FenrirRenderer/SpawnModel.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <format>
+#include <optional>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
@@ -73,6 +76,40 @@ namespace Fenrir
                 }
             }
         }
+
+        /**
+         * @brief The range a light the file gives none to is given: where a light of its intensity falls to 1/256 of
+         * what it gives one unit away, so a brighter light reaches further. Never under one unit.
+         */
+        float DefaultRange(float intensity)
+        {
+            return std::max(1.0f, std::sqrt(std::max(intensity, 0.0f) * 256.0f));
+        }
+
+        /** @brief A PointLight or SpotLight on the entity of each spawned node that carries a light. */
+        void AddLights(const Model& model, const SpawnedNodes& spawned)
+        {
+            for (std::size_t i = 0; i < model.nodes.size() && i < spawned.nodes.size(); ++i)
+            {
+                const std::optional<ModelLight>& light = model.nodes[i].light;
+                Entity entity = spawned.nodes[i];
+                if (!light || !entity.IsValid())
+                {
+                    continue;
+                }
+                const Colour colour{light->colour.r, light->colour.g, light->colour.b, 1.0f};
+                const float range = light->range > 0.0f ? light->range : DefaultRange(light->intensity);
+                if (light->kind == ModelLightKind::Spot)
+                {
+                    entity.AddComponent<SpotLight>(
+                        SpotLight{colour, light->intensity, range, light->innerAngle, light->outerAngle, false});
+                }
+                else
+                {
+                    entity.AddComponent<PointLight>(PointLight{colour, light->intensity, range, false});
+                }
+            }
+        }
     } // namespace
 
     Entity SpawnModel(App& app, Scene& scene, AssetHandle<Model> model, Entity parent)
@@ -109,6 +146,7 @@ namespace Fenrir
             }
         }
         AddMeshRenderers(scene, *data, spawned);
+        AddLights(*data, spawned);
         return spawned;
     }
 } // namespace Fenrir

@@ -32,6 +32,7 @@ namespace Fenrir
         inline constexpr std::string_view SkeletonHandleTypeName = FENRIR_ASSET_HANDLE_TYPE_NAME("Skeleton");
         inline constexpr std::string_view ClipHandleTypeName = FENRIR_ASSET_HANDLE_TYPE_NAME("Clip");
         inline constexpr std::string_view BoneMaskHandleTypeName = FENRIR_ASSET_HANDLE_TYPE_NAME("BoneMask");
+        inline constexpr std::string_view InstanceListHandleTypeName = FENRIR_ASSET_HANDLE_TYPE_NAME("InstanceList");
 #undef FENRIR_ASSET_HANDLE_TYPE_NAME
     } // namespace Detail
 } // namespace Fenrir
@@ -104,6 +105,15 @@ struct Iris::StructMapping<Fenrir::AssetHandle<Fenrir::BoneMask>>
 {
     using Handle = Fenrir::AssetHandle<Fenrir::BoneMask>;
     static constexpr std::string_view typeName = Fenrir::Detail::BoneMaskHandleTypeName;
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Handle, index, "Index"), IRIS_FIELD_AS(Handle, generation, "Generation"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::AssetHandle<Fenrir::InstanceList>>
+{
+    using Handle = Fenrir::AssetHandle<Fenrir::InstanceList>;
+    static constexpr std::string_view typeName = Fenrir::Detail::InstanceListHandleTypeName;
     static constexpr auto fields =
         Iris::StructFields(IRIS_FIELD_AS(Handle, index, "Index"), IRIS_FIELD_AS(Handle, generation, "Generation"));
 };

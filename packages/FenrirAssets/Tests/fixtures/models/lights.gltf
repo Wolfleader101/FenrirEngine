@@ -1,0 +1,25 @@
+{
+  "asset": { "version": "2.0", "generator": "hand-written for Models.cpp's KHR_lights_punctual test" },
+  "extensionsUsed": ["KHR_lights_punctual"],
+  "extensions": {
+    "KHR_lights_punctual": {
+      "lights": [
+        { "name": "Lamp", "type": "point", "color": [1.0, 0.5, 0.25], "intensity": 3.0, "range": 7.0 },
+        { "name": "Torch", "type": "spot", "intensity": 20.0, "spot": { "innerConeAngle": 0.2, "outerConeAngle": 0.6 } },
+        { "name": "Sun", "type": "directional", "intensity": 2.0 }
+      ]
+    }
+  },
+  "scene": 0,
+  "scenes": [{ "nodes": [0, 1, 2] }],
+  "nodes": [
+    { "name": "Lamp", "translation": [1.0, 2.0, 3.0], "extensions": { "KHR_lights_punctual": { "light": 0 } } },
+    {
+      "name": "Torch",
+      "translation": [0.0, 4.0, 0.0],
+      "rotation": [-0.7071068, 0.0, 0.0, 0.7071068],
+      "extensions": { "KHR_lights_punctual": { "light": 1 } }
+    },
+    { "name": "Sun", "extensions": { "KHR_lights_punctual": { "light": 2 } } }
+  ]
+}

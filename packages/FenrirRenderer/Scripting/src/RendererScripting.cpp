@@ -48,10 +48,10 @@ namespace Fenrir
         }
 
         // Records `source`, an entity of a scratch scene, and its children, depth first, as new entities of the active
-        // scene with its Name, Transform, MeshRenderer and SkinnedMesh, `source` a child of `parent` if there is one,
-        // noting each new entity's id under its scratch id in `made`. Children are parented in the order `source` holds
-        // them, so the tree is the one the scratch scene holds. A SkinnedMesh names its skeleton entity by the new id:
-        // the skeleton's owner is the mesh's ancestor, so it was made first.
+        // scene with its Name, Transform, MeshRenderer, SkinnedMesh, PointLight and SpotLight, `source` a child of
+        // `parent` if there is one, noting each new entity's id under its scratch id in `made`. Children are parented
+        // in the order `source` holds them, so the tree is the one the scratch scene holds. A SkinnedMesh names its
+        // skeleton entity by the new id: the skeleton's owner is the mesh's ancestor, so it was made first.
         std::uint32_t Record(const ChangeBuffer& changes, EntityList& entities, const Entity& source,
                              std::optional<std::uint32_t> parent,
                              std::unordered_map<std::uint32_t, std::uint32_t>& made)
@@ -69,6 +69,14 @@ namespace Fenrir
                 const auto skeleton = made.find(source.GetComponent<SkinnedMesh>().skeleton.GetId());
                 const Entity remapped = skeleton != made.end() ? entities.HandleOf(skeleton->second) : Entity{};
                 (void)changes.AddComponent<SkinnedMesh>(entity, SkinnedMesh{remapped});
+            }
+            if (source.HasComponent<PointLight>())
+            {
+                (void)changes.AddComponent<PointLight>(entity, source.GetComponent<PointLight>());
+            }
+            if (source.HasComponent<SpotLight>())
+            {
+                (void)changes.AddComponent<SpotLight>(entity, source.GetComponent<SpotLight>());
             }
             if (parent)
             {
@@ -206,6 +214,38 @@ namespace Fenrir
                 return false;
             }
             *stats = Renderer::Stats(context.GetApp());
+            return true;
+        }
+
+        /**
+         * @brief Sets how many SpotLights may cast shadows from the next frame (RendererConfig::spotShadowBudget,
+         * ADR-0050): the nearest to any camera each frame; the rest light unshadowed. 0 shadows none.
+         * @return Whether the app has a renderer.
+         * @facade Renderer.SetSpotShadowBudget
+         */
+        bool SetSpotShadowBudget(const CallContext& context, RendererScripting& renderer, std::uint32_t budget)
+        {
+            if (!renderer.HasRenderer(context))
+            {
+                return false;
+            }
+            Renderer::SetSpotShadowBudget(context.GetApp(), budget);
+            return true;
+        }
+
+        /**
+         * @brief Sets how many PointLights may cast shadows from the next frame (RendererConfig::pointShadowBudget,
+         * ADR-0050): the nearest to any camera each frame; the rest light unshadowed. 0 shadows none.
+         * @return Whether the app has a renderer.
+         * @facade Renderer.SetPointShadowBudget
+         */
+        bool SetPointShadowBudget(const CallContext& context, RendererScripting& renderer, std::uint32_t budget)
+        {
+            if (!renderer.HasRenderer(context))
+            {
+                return false;
+            }
+            Renderer::SetPointShadowBudget(context.GetApp(), budget);
             return true;
         }
 

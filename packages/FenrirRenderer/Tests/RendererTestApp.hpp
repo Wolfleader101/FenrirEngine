@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <iterator>
 #include <memory>
+#include <numbers>
 #include <span>
 #include <string>
 #include <string_view>
@@ -72,6 +74,79 @@ namespace RendererTest
         return mesh;
     }
 
+    /** @brief A sphere of radius 0.5 about the origin, 24 segments round and 16 pole to pole, counter-clockwise. */
+    inline Fenrir::MeshData Sphere()
+    {
+        using Fenrir::Math::Vec3;
+        constexpr std::uint32_t segments = 24;
+        constexpr std::uint32_t rings = 16;
+        Fenrir::MeshData mesh;
+        for (std::uint32_t ring = 0; ring <= rings; ++ring)
+        {
+            const float polar = std::numbers::pi_v<float> * static_cast<float>(ring) / rings;
+            for (std::uint32_t segment = 0; segment <= segments; ++segment)
+            {
+                const float azimuth = 2.0f * std::numbers::pi_v<float> * static_cast<float>(segment) / segments;
+                const Vec3 normal(std::sin(polar) * std::cos(azimuth), std::cos(polar),
+                                  -std::sin(polar) * std::sin(azimuth));
+                mesh.positions.push_back(normal * 0.5f);
+                mesh.normals.push_back(normal);
+            }
+        }
+        for (std::uint32_t ring = 0; ring < rings; ++ring)
+        {
+            for (std::uint32_t segment = 0; segment < segments; ++segment)
+            {
+                const std::uint32_t a = ring * (segments + 1) + segment;
+                const std::uint32_t b = a + segments + 1;
+                for (const std::uint32_t index : {a, b, a + 1, a + 1, b, b + 1})
+                {
+                    mesh.indices.push_back(index);
+                }
+            }
+        }
+        return mesh;
+    }
+
+    /**
+     * @brief The world direction a panorama's point (u, v) looks along, both in [0, 1]: its centre looks along -Z, u
+     * turns towards +X (to the right, seen from inside), and its top row looks up +Y.
+     */
+    inline Fenrir::Math::Vec3 PanoramaDirection(float u, float v)
+    {
+        const float azimuth = (u - 0.5f) * 2.0f * std::numbers::pi_v<float>;
+        const float polar = v * std::numbers::pi_v<float>;
+        return {std::sin(polar) * std::sin(azimuth), std::cos(polar), -std::sin(polar) * std::cos(azimuth)};
+    }
+
+    /**
+     * @brief A flat RGBA32F panorama of `width` x `width / 2`, linear, each pixel the RGB `colour` gives its direction
+     * (a `Vec3(Vec3)`).
+     */
+    template <typename ColourOf>
+    Fenrir::ImageData Panorama(std::uint32_t width, ColourOf colour)
+    {
+        Fenrir::ImageData image;
+        image.width = width;
+        image.height = width / 2;
+        image.format = Fenrir::ImageFormat::RGBA32F;
+        image.colourSpace = Fenrir::ColourSpace::Linear;
+        std::vector<float> texels;
+        for (std::uint32_t row = 0; row < image.height; ++row)
+        {
+            for (std::uint32_t column = 0; column < image.width; ++column)
+            {
+                const Fenrir::Math::Vec3 rgb =
+                    colour(PanoramaDirection((static_cast<float>(column) + 0.5f) / static_cast<float>(image.width),
+                                             (static_cast<float>(row) + 0.5f) / static_cast<float>(image.height)));
+                texels.insert(texels.end(), {rgb.r, rgb.g, rgb.b, 1.0f});
+            }
+        }
+        const auto bytes = std::as_bytes(std::span(texels));
+        image.pixels.assign(bytes.begin(), bytes.end());
+        return image;
+    }
+
     /** @brief Quad(size, z) with UV0 too: (0, 0) at its top-left corner and (1, 1) at its bottom-right. */
     inline Fenrir::MeshData TexturedQuad(float size = 1.0f, float z = 0.0f)
     {
@@ -101,7 +176,11 @@ namespace RendererTest
         Fenrir::Graphics::PipelineHandle pipeline;
         std::array<Fenrir::Graphics::BindingGroupHandle, 4> groups{};
         std::vector<Fenrir::Graphics::BufferHandle> vertexBuffers;
+        /** @brief Where each vertex buffer slot's stream starts in its buffer, in bytes. */
+        std::vector<std::size_t> vertexOffsets;
         Fenrir::Graphics::BufferHandle indexBuffer;
+        /** @brief The viewport last set in its pass before it. */
+        Fenrir::Graphics::PixelRect viewport;
         Fenrir::Graphics::CmdDrawIndexed draw;
     };
 
@@ -135,12 +214,18 @@ namespace RendererTest
                     if (bound.vertexBuffers.size() <= vertices->slot)
                     {
                         bound.vertexBuffers.resize(vertices->slot + 1);
+                        bound.vertexOffsets.resize(vertices->slot + 1);
                     }
                     bound.vertexBuffers.at(vertices->slot) = vertices->buffer;
+                    bound.vertexOffsets.at(vertices->slot) = vertices->offset;
                 }
                 else if (const auto* indices = std::get_if<CmdSetIndexBuffer>(&command))
                 {
                     bound.indexBuffer = indices->buffer;
+                }
+                else if (const auto* viewport = std::get_if<CmdSetViewport>(&command))
+                {
+                    bound.viewport = viewport->rect;
                 }
                 else if (const auto* draw = std::get_if<CmdDrawIndexed>(&command))
                 {
@@ -242,6 +327,15 @@ namespace RendererTest
         float value = 0.0f;
         REQUIRE(offset + sizeof(float) <= bytes.size());
         std::memcpy(&value, std::span(bytes).subspan(offset).data(), sizeof(float));
+        return value;
+    }
+
+    /** @brief The 32-bit unsigned integer at byte `offset` of `bytes`. */
+    inline std::uint32_t UintAt(const std::vector<std::byte>& bytes, std::size_t offset)
+    {
+        std::uint32_t value = 0;
+        REQUIRE(offset + sizeof(value) <= bytes.size());
+        std::memcpy(&value, std::span(bytes).subspan(offset).data(), sizeof(value));
         return value;
     }
 
@@ -391,7 +485,7 @@ namespace RendererTest
 
         /**
          * @brief The world position of the item a draw drew: column 3 of the world matrix in its record of the draw
-         * buffer (set 3, binding 0; 144 bytes a record, `Fenrir/Draw.glsl`).
+         * buffer (set 3, binding 0; 160 bytes a record, `Fenrir/Draw.glsl`).
          */
         [[nodiscard]] Fenrir::Math::Vec3 DrawPosition(const RecordedDraw& draw) const
         {
@@ -401,7 +495,7 @@ namespace RendererTest
                 if (entry.binding == 0)
                 {
                     const std::vector<std::byte> bytes = Fenrir::RendererProbe::Bytes(Device(), entry.buffer);
-                    const std::size_t at = std::size_t{draw.draw.firstInstance} * 144 + 48;
+                    const std::size_t at = std::size_t{draw.draw.firstInstance} * 160 + 48;
                     return {FloatAt(bytes, at), FloatAt(bytes, at + 4), FloatAt(bytes, at + 8)};
                 }
             }

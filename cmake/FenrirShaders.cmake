@@ -4,6 +4,7 @@
 #   fenrir_add_shaders(<target>
 #       PROGRAM <name>                  the program's name, a C++ identifier when EMBED is given
 #       VERTEX <file> FRAGMENT <file>   its stages, GLSL #version 460 in the Vulkan dialect
+#       | COMPUTE <file>                or a compute program's one stage, run by dispatches (ADR-0050)
 #       [KEYS <key>...]                 its variant #define keys: every combination is built into the container
 #       [INCLUDE_DIRECTORIES <dir>...]  searched for #include after the stage's own directory, before the engine's
 #       [OUTPUT_DIRECTORY <dir>]        where <name>.fshader goes (default: <current binary dir>/shaders)
@@ -20,29 +21,40 @@ set(FENRIR_SHADER_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}/../packages/FenrirRende
 cmake_path(NORMAL_PATH FENRIR_SHADER_INCLUDE_DIR)
 
 function(fenrir_add_shaders target)
-    cmake_parse_arguments(PARSE_ARGV 1 ARG "EMBED" "PROGRAM;VERTEX;FRAGMENT;OUTPUT_DIRECTORY"
+    cmake_parse_arguments(PARSE_ARGV 1 ARG "EMBED" "PROGRAM;VERTEX;FRAGMENT;COMPUTE;OUTPUT_DIRECTORY"
                           "KEYS;INCLUDE_DIRECTORIES")
     if(ARG_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR "fenrir_add_shaders(${target}): unknown arguments: ${ARG_UNPARSED_ARGUMENTS}")
     endif()
-    foreach(required PROGRAM VERTEX FRAGMENT)
-        if(NOT ARG_${required})
-            message(FATAL_ERROR "fenrir_add_shaders(${target}): ${required} is required")
-        endif()
-    endforeach()
+    if(NOT ARG_PROGRAM)
+        message(FATAL_ERROR "fenrir_add_shaders(${target}): PROGRAM is required")
+    endif()
+    if(ARG_COMPUTE AND (ARG_VERTEX OR ARG_FRAGMENT))
+        message(FATAL_ERROR "fenrir_add_shaders(${target}): COMPUTE makes a compute program, with no VERTEX or FRAGMENT")
+    endif()
+    if(NOT ARG_COMPUTE AND NOT (ARG_VERTEX AND ARG_FRAGMENT))
+        message(FATAL_ERROR "fenrir_add_shaders(${target}): VERTEX and FRAGMENT, or COMPUTE, are required")
+    endif()
     if(NOT ARG_OUTPUT_DIRECTORY)
         set(ARG_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shaders")
     endif()
 
-    cmake_path(ABSOLUTE_PATH ARG_VERTEX BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" OUTPUT_VARIABLE vertex)
-    cmake_path(ABSOLUTE_PATH ARG_FRAGMENT BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" OUTPUT_VARIABLE fragment)
     cmake_path(ABSOLUTE_PATH ARG_OUTPUT_DIRECTORY BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" OUTPUT_VARIABLE out_dir)
 
     set(container "${out_dir}/${ARG_PROGRAM}.fshader")
     set(depfile "${CMAKE_CURRENT_BINARY_DIR}/shaders/${ARG_PROGRAM}.fshader.d")
     set(outputs "${container}")
-    set(arguments --name "${ARG_PROGRAM}" --vertex "${vertex}" --fragment "${fragment}" --output "${container}"
-                  --depfile "${depfile}")
+    set(arguments --name "${ARG_PROGRAM}")
+    set(stages)
+    foreach(stage VERTEX FRAGMENT COMPUTE)
+        if(ARG_${stage})
+            cmake_path(ABSOLUTE_PATH ARG_${stage} BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" OUTPUT_VARIABLE file)
+            string(TOLOWER "${stage}" flag)
+            list(APPEND arguments "--${flag}" "${file}")
+            list(APPEND stages "${file}")
+        endif()
+    endforeach()
+    list(APPEND arguments --output "${container}" --depfile "${depfile}")
     foreach(key IN LISTS ARG_KEYS)
         list(APPEND arguments --key "${key}")
     endforeach()
@@ -63,7 +75,7 @@ function(fenrir_add_shaders target)
     add_custom_command(
         OUTPUT ${outputs}
         COMMAND FenrirShaderCompiler ${arguments}
-        DEPENDS FenrirShaderCompiler "${vertex}" "${fragment}"
+        DEPENDS FenrirShaderCompiler ${stages}
         DEPFILE "${depfile}"
         COMMENT "Building shader program ${ARG_PROGRAM}"
         VERBATIM

@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Materials light through one shared lighting include over a grown frame set

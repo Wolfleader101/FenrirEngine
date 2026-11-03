@@ -23,7 +23,7 @@ namespace
         {"Fenrir.Renderer.CameraBackground", {{0u, 1}, {1u, 2}}},
         {"Fenrir.Renderer.CameraProjection", {{0u, 1}, {1u, 2}}},
         {"Fenrir.Renderer.RenderTarget", {{0u, 1}, {1u, 2}}},
-        {"Fenrir.Renderer.Sky", {{0u, 1}, {1u, 2}}},
+        {"Fenrir.Renderer.Sky", {{0u, 1}, {1u, 2}, {2u, 3}}},
     };
 
     // Calls the C# class's method for T and compares what it returns with T{}, naming every field that differs.
@@ -60,12 +60,6 @@ namespace
     }
 } // namespace
 
-TEST_CASE("C#'s new AmbientLight() has C++'s Fenrir::AmbientLight{} defaults, field by field", "[renderer][scripting][bindings]")
-{
-    Fenrir::Testing::RendererScriptingApp app;
-    CheckDefaults<Fenrir::AmbientLight>(Fenrir::ScriptingProbe::Component(app.scripting), "AmbientLight");
-}
-
 TEST_CASE("C#'s new Camera() has C++'s Fenrir::Camera{} defaults, field by field", "[renderer][scripting][bindings]")
 {
     Fenrir::Testing::RendererScriptingApp app;
@@ -78,10 +72,28 @@ TEST_CASE("C#'s new DirectionalLight() has C++'s Fenrir::DirectionalLight{} defa
     CheckDefaults<Fenrir::DirectionalLight>(Fenrir::ScriptingProbe::Component(app.scripting), "DirectionalLight");
 }
 
+TEST_CASE("C#'s new InstancedMeshRenderer() has C++'s Fenrir::InstancedMeshRenderer{} defaults, field by field", "[renderer][scripting][bindings]")
+{
+    Fenrir::Testing::RendererScriptingApp app;
+    CheckDefaults<Fenrir::InstancedMeshRenderer>(Fenrir::ScriptingProbe::Component(app.scripting), "InstancedMeshRenderer");
+}
+
 TEST_CASE("C#'s new MeshRenderer() has C++'s Fenrir::MeshRenderer{} defaults, field by field", "[renderer][scripting][bindings]")
 {
     Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::MeshRenderer>(Fenrir::ScriptingProbe::Component(app.scripting), "MeshRenderer");
+}
+
+TEST_CASE("C#'s new PointLight() has C++'s Fenrir::PointLight{} defaults, field by field", "[renderer][scripting][bindings]")
+{
+    Fenrir::Testing::RendererScriptingApp app;
+    CheckDefaults<Fenrir::PointLight>(Fenrir::ScriptingProbe::Component(app.scripting), "PointLight");
+}
+
+TEST_CASE("C#'s new RectLight() has C++'s Fenrir::RectLight{} defaults, field by field", "[renderer][scripting][bindings]")
+{
+    Fenrir::Testing::RendererScriptingApp app;
+    CheckDefaults<Fenrir::RectLight>(Fenrir::ScriptingProbe::Component(app.scripting), "RectLight");
 }
 
 TEST_CASE("C#'s new RendererStats() has C++'s Fenrir::RendererStats{} defaults, field by field", "[renderer][scripting][bindings]")
@@ -100,6 +112,18 @@ TEST_CASE("C#'s new Sky() has C++'s Fenrir::Sky{} defaults, field by field", "[r
 {
     Fenrir::Testing::RendererScriptingApp app;
     CheckDefaults<Fenrir::Sky>(Fenrir::ScriptingProbe::Component(app.scripting), "Sky");
+}
+
+TEST_CASE("C#'s new SkyLight() has C++'s Fenrir::SkyLight{} defaults, field by field", "[renderer][scripting][bindings]")
+{
+    Fenrir::Testing::RendererScriptingApp app;
+    CheckDefaults<Fenrir::SkyLight>(Fenrir::ScriptingProbe::Component(app.scripting), "SkyLight");
+}
+
+TEST_CASE("C#'s new SpotLight() has C++'s Fenrir::SpotLight{} defaults, field by field", "[renderer][scripting][bindings]")
+{
+    Fenrir::Testing::RendererScriptingApp app;
+    CheckDefaults<Fenrir::SpotLight>(Fenrir::ScriptingProbe::Component(app.scripting), "SpotLight");
 }
 
 // clang-format on
