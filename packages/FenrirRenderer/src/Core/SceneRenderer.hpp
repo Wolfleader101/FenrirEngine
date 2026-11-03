@@ -22,6 +22,7 @@
 #include "Core/PointShadows.hpp"
 #include "Core/RenderFeature.hpp"
 #include "Core/SceneFrame.hpp"
+#include "Core/SkyImages.hpp"
 #include "Core/SkyLighting.hpp"
 #include "Core/SpotShadows.hpp"
 #include "Device/GraphicsDevice.hpp"
@@ -414,35 +415,6 @@ namespace Fenrir::Render
             Graphics::TextureHandle texture;
         };
 
-        /** @brief A prepared Sky cubemap: its cube texture, and the Background pass's binding group sampling it. */
-        struct CubemapEntry
-        {
-            std::uint32_t revision = 0;
-            Graphics::TextureHandle texture;
-            Graphics::TextureDesc desc;
-            Graphics::BindingGroupHandle group;
-        };
-
-        /**
-         * @brief A prepared Sky panorama: its cube texture and the Background pass's group sampling it, and until its
-         * `Panorama` passes have run, the image's own texture and those passes' blocks and groups.
-         */
-        struct PanoramaEntry
-        {
-            std::uint32_t revision = 0;
-            Graphics::TextureHandle cube;
-            /** @brief The cube texture's description: its faces' side and mip levels. */
-            Graphics::TextureDesc cubeDesc;
-            Graphics::BindingGroupHandle group;
-            Graphics::TextureHandle source;
-            /** @brief Each pass's block (face, half a texel, the panorama's mip), one uniform slot a pass. */
-            Graphics::BufferHandle params;
-            /** @brief Each pass's group, face by face within each mip level, from mip 0. */
-            std::vector<Graphics::BindingGroupHandle> passGroups;
-            /** @brief Whether its passes have been recorded, so its source can go. */
-            bool converted = false;
-        };
-
         /** @brief A prepared mesh: its streams back to back in one buffer, and its indices. */
         struct MeshEntry
         {
@@ -782,12 +754,11 @@ namespace Fenrir::Render
             Graphics::TextureFormat colour, bool depthTested, std::uint32_t samples,
             Graphics::BindingGroupLayoutHandle setOneLayout = {},
             Graphics::BindingGroupLayoutHandle setZeroLayout = {});
-        /** @brief Adds the `Panorama` passes of each panorama not yet drawn into its cube texture. */
-        void AddPanoramaPasses(RenderGraph& graph);
-        /** @brief Frees a panorama's image texture and its passes' blocks and groups, if it still has them. */
-        void FreePanoramaPasses(PanoramaEntry& entry);
-        /** @brief The Background pass's group for the Sky cubemap or panorama `key`; empty if neither is prepared. */
-        [[nodiscard]] Graphics::BindingGroupHandle SkyGroup(AssetKey key) const;
+        /**
+         * @brief The Background pass's group sampling the Sky cube texture `cube` in frame `frameIndex`, made once
+         * while it lives.
+         */
+        [[nodiscard]] Graphics::BindingGroupHandle SkyGroup(Graphics::TextureHandle cube, std::uint64_t frameIndex);
         /** @brief The material's group with the sampled targets in `replaced` bound to their defaults instead. */
         [[nodiscard]] Graphics::BindingGroupHandle GroupWithout(MaterialEntry& material,
                                                                 const std::vector<AssetKey>& replaced);
@@ -864,8 +835,8 @@ namespace Fenrir::Render
         std::map<AssetKey, MaterialEntry> m_materials;
         std::map<AssetKey, TargetEntry> m_targets;
         std::map<AssetKey, ImageEntry> m_images;
-        std::map<AssetKey, CubemapEntry> m_cubemaps;
-        std::map<AssetKey, PanoramaEntry> m_panoramas;
+        /** @brief The Sky cubemaps and panoramas, as cube textures. */
+        std::unique_ptr<SkyImages> m_skyImages;
         std::map<AssetKey, InstanceListEntry> m_instanceLists;
         /**
          * @brief Every instance list's copies, back to back (`Fenrir/Draw.glsl`'s FenrirInstance), at set 3 binding 1:
@@ -886,7 +857,6 @@ namespace Fenrir::Render
         ShaderEntry m_fallback;
         ShaderContainer m_background;
         ShaderContainer m_output;
-        ShaderContainer m_panorama;
         /** @brief `builtin:depth-prepass`, whose fragment stages the prepass pipelines run. */
         ShaderContainer m_prepass;
         /** @brief `builtin:shadow`, whose fragment stages the shadow pipelines run. */
@@ -914,8 +884,6 @@ namespace Fenrir::Render
         Graphics::BindingGroupLayoutHandle m_backgroundLayout;
         /** @brief Set 2 of the Background pass's CUBEMAP variant: the Sky cubemap. */
         Graphics::BindingGroupLayoutHandle m_skyLayout;
-        /** @brief Set 2 of the Panorama passes: their block and the panorama. */
-        Graphics::BindingGroupLayoutHandle m_panoramaLayout;
         /** @brief Set 2 of a Masked item's prepass pipeline: its block (alpha, cutoff) and base colour texture. */
         Graphics::BindingGroupLayoutHandle m_prepassMaskLayout;
         /** @brief Set 2 of the Output pass: the view's SceneColor and its sampler. */
@@ -927,7 +895,6 @@ namespace Fenrir::Render
         Graphics::PipelineHandle m_outputPipeline;
         /** @brief Output's OCCLUSION variant, which draws a view's ambient occlusion as grey. */
         Graphics::PipelineHandle m_occlusionOutputPipeline;
-        Graphics::PipelineHandle m_panoramaPipeline;
 
         /** @brief The default textures, by DefaultTexture: white, black and the flat normal. */
         std::array<Graphics::TextureHandle, 3> m_defaultTextures{};
@@ -937,8 +904,6 @@ namespace Fenrir::Render
         Graphics::SamplerHandle m_defaultSampler;
         Graphics::SamplerHandle m_outputSampler;
         Graphics::SamplerHandle m_skySampler;
-        /** @brief Wraps round a panorama's sides and clamps at its top and bottom. */
-        Graphics::SamplerHandle m_panoramaSampler;
         /** @brief Reads a shadow atlas by hardware comparison, bilinearly, clamped (ADR-0050). */
         Graphics::SamplerHandle m_shadowSampler;
         /** @brief The 1 x 1 shadow map of depth 0 that lights everything, bound where a view has no shadow. */
@@ -987,6 +952,8 @@ namespace Fenrir::Render
         Graphics::BufferHandle m_noClusters;
         /** @brief builtin:light-clusters' set 1 groups, by the light buffer and the cluster buffer, while both live. */
         BindingGroupCache<2> m_clusterTargetGroups;
+        /** @brief The Background pass's group of each Sky cube texture it draws, while the texture lives. */
+        BindingGroupCache<1> m_skyGroups;
         /** @brief The sky filtered into image-based lighting, which set 0 binds. */
         std::unique_ptr<SkyLighting> m_skyLighting;
         /** @brief Each view's bloom passes, in `PostProcess`. */

@@ -58,6 +58,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/FrameRingBuffer.cpp
     src/Core/FullscreenPipeline.hpp
     src/Core/FullscreenPipeline.cpp
+    src/Core/ImageUpload.hpp
+    src/Core/ImageUpload.cpp
     src/Core/Gtao.hpp
     src/Core/Gtao.cpp
     src/Core/LightShadows.hpp
@@ -83,6 +85,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/SceneRenderer.cpp
     src/Core/SkyLighting.hpp
     src/Core/SkyLighting.cpp
+    src/Core/SkyImages.hpp
+    src/Core/SkyImages.cpp
     src/Core/Skinning.hpp
     src/Core/SphericalHarmonics.hpp
     src/Core/SphericalHarmonics.cpp

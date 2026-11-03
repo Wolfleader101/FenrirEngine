@@ -5,6 +5,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "Core/FrameRingBuffer.hpp"
@@ -14,6 +15,14 @@ namespace Fenrir::Render
 {
     /** @brief Uniform blocks are bound at multiples of this, the largest offset alignment GL implementations want. */
     inline constexpr std::size_t UniformBlockAlignment = 256;
+
+    /**
+     * @brief A uniform buffer, labelled `label`, holding `blocks` one after another at multiples of
+     * UniformBlockAlignment: block `i` at `UniformBlockAlignment * i`. Each block is at most that many bytes.
+     */
+    [[nodiscard]] Graphics::BufferHandle MakeAlignedBlocks(Graphics::GraphicsDevice& device,
+                                                           std::span<const std::span<const std::byte>> blocks,
+                                                           std::string_view label);
 
     /**
      * @brief Uniform or storage blocks written each frame, in one ring buffer per frame in flight (ADR-0019), with a
