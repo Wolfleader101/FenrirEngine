@@ -3,7 +3,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 
+#include "FenrirLogger/ILogger.hpp"
 #include "FenrirShaders/Builtin2D.hpp"
 #include "FenrirShaders/BuiltinBackground.hpp"
 #include "FenrirShaders/BuiltinBloomDownsample.hpp"
@@ -71,5 +73,28 @@ namespace Fenrir::Render
     const BuiltinShader& GetBuiltinShader(BuiltinProgram program)
     {
         return Table().at(static_cast<std::size_t>(program));
+    }
+
+    ShaderContainer ReadBuiltin(BuiltinProgram program, ILogger& logger)
+    {
+        ShaderContainerResult read = ReadShaderContainer(GetBuiltinShader(program).bytes);
+        if (!read.Ok())
+        {
+            logger.Error("FenrirRenderer: the built-in shader '{}' does not read: {}", GetBuiltinShader(program).name,
+                         read.diagnostic);
+            return {};
+        }
+        return std::move(*read.container);
+    }
+
+    Graphics::PipelineHandle MakeBuiltinPipeline(Graphics::GraphicsDevice& device, ILogger& logger,
+                                                 const Graphics::PipelineDesc& desc, std::string_view name)
+    {
+        const Graphics::PipelineResult made = device.CreatePipeline(desc, name);
+        if (made.pipeline.IsEmpty())
+        {
+            logger.Error("FenrirRenderer: the built-in pipeline '{}' could not be made: {}", name, made.diagnostic);
+        }
+        return made.pipeline;
     }
 } // namespace Fenrir::Render

@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 
 #include "Core/Cascades.hpp"
 #include "Core/SceneFrame.hpp"
@@ -28,39 +27,6 @@ namespace Fenrir::Render
     {
         const std::uint32_t across = std::max(grid.columns, 1u);
         return {tile % across, tile / across};
-    }
-
-    ShadowChoice ChooseShadowedLights(std::span<const PunctualLight> lights, std::span<const Math::Vec3> cameras,
-                                      std::uint32_t budget, LightKind kind)
-    {
-        ShadowChoice choice;
-        std::vector<float> distance(lights.size(), 0.0f);
-        for (std::size_t i = 0; i < lights.size(); ++i)
-        {
-            const PunctualLight& light = lights[i];
-            if (light.kind != kind || !light.castShadows)
-            {
-                continue;
-            }
-            choice.lights.push_back(i);
-            float nearest = cameras.empty() ? 0.0f : std::numeric_limits<float>::infinity();
-            for (const Math::Vec3 camera : cameras)
-            {
-                nearest = std::min(nearest, glm::distance(light.position, camera));
-            }
-            distance[i] = nearest;
-        }
-        choice.wanted = choice.lights.size();
-        std::ranges::stable_sort(choice.lights,
-                                 [&](std::size_t a, std::size_t b) { return distance[a] < distance[b]; });
-        choice.lights.resize(std::min<std::size_t>(choice.lights.size(), budget));
-        return choice;
-    }
-
-    ShadowChoice ChooseSpotShadows(std::span<const PunctualLight> lights, std::span<const Math::Vec3> cameras,
-                                   std::uint32_t budget)
-    {
-        return ChooseShadowedLights(lights, cameras, budget, LightKind::Spot);
     }
 
     SpotShadow FitSpotShadow(const PunctualLight& light, std::uint32_t mapSize)
@@ -116,5 +82,27 @@ namespace Fenrir::Render
         gpu.bias = Math::Vec4(light.shadowNormalBias, light.shadowSlopeBias, shadow.texelScale, ShadowFilterRadius);
         gpu.bounds = Math::Vec4(low, high);
         return gpu;
+    }
+
+    SpotShadow SpotShadowKind::Fit(const PunctualLight& light, const ShadowBudgetConfig& config)
+    {
+        return FitSpotShadow(light, config.mapSize);
+    }
+
+    GpuSpotShadow SpotShadowKind::ToRecord(const PunctualLight& light, const SpotShadow& shadow, std::uint32_t tile,
+                                           const ShadowBudgetConfig& config)
+    {
+        return ToGpuSpotShadow(light, shadow, tile, SpotAtlasGridOf(config.budget), config.mapSize);
+    }
+
+    Graphics::TextureDesc SpotShadowKind::MapDesc(const ShadowBudgetConfig& config)
+    {
+        const SpotAtlasGrid grid = SpotAtlasGridOf(config.budget);
+        Graphics::TextureDesc desc;
+        desc.format = Graphics::TextureFormat::Depth32Float;
+        desc.width = grid.columns * config.mapSize;
+        desc.height = grid.rows * config.mapSize;
+        desc.usage = Graphics::TextureUsage::DepthAttachment | Graphics::TextureUsage::Sampled;
+        return desc;
     }
 } // namespace Fenrir::Render

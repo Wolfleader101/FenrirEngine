@@ -8,6 +8,7 @@
 
 #include <imgui.h>
 
+#include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
@@ -94,17 +95,6 @@ namespace LightingDemo
             return {c * direction.x + s * direction.z, direction.y, -s * direction.x + c * direction.z};
         }
 
-        /** @brief A builtin:lit material of one colour and roughness, for the stand-in and the torches' brackets. */
-        Fenrir::AssetHandle<Fenrir::Material> LitMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene,
-                                                          Fenrir::Colour colour, float metallic, float roughness)
-        {
-            const auto material = store.CreateMaterial(store.Load<Fenrir::Shader>("builtin:lit", scene).handle, scene);
-            store.SetColour(material, "baseColour", colour);
-            store.SetFloat(material, "metallic", metallic);
-            store.SetFloat(material, "roughness", roughness);
-            return material;
-        }
-
         /** @brief A box of `size` centred at `position`. */
         void AddBox(Fenrir::Scene& scene, Fenrir::AssetHandle<Fenrir::Mesh> cube,
                     Fenrir::AssetHandle<Fenrir::Material> material, Vec3 position, Vec3 size, bool castShadows = true)
@@ -146,8 +136,7 @@ namespace LightingDemo
                           Fenrir::AssetHandle<Fenrir::Mesh> sphere, SponzaState& state)
         {
             const auto iron = LitMaterial(store, scene, {0.04f, 0.035f, 0.03f, 1.0f}, 1.0f, 0.55f);
-            const auto flame = store.CreateMaterial(store.Load<Fenrir::Shader>("builtin:unlit", scene).handle, scene);
-            store.SetColour(flame, "baseColour", {12.0f, 5.0f, 1.6f, 1.0f});
+            const auto flame = UnlitMaterial(store, scene, {12.0f, 5.0f, 1.6f, 1.0f});
             Fenrir::EntityList& entities = scene.GetEntityList();
             for (const float x : ColumnX)
             {

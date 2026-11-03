@@ -8,14 +8,15 @@
 #include <vector>
 
 #include "Core/FrameRingBuffer.hpp"
+#include "Core/UniformBlocks.hpp"
 #include "Device/GraphicsDevice.hpp"
 
 namespace Fenrir::Render
 {
     /**
      * @brief Uniform or storage blocks written each frame, in one ring buffer per frame in flight (ADR-0019), with a
-     * binding group per copy and slot. It grows as more slots are needed. Uniform slots are bound at multiples of 256
-     * bytes, the largest alignment GL implementations ask for.
+     * binding group per copy and slot. It grows as more slots are needed. Uniform slots are bound at multiples of
+     * UniformBlockAlignment.
      */
     class BlockRing
     {

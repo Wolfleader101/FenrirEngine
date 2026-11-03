@@ -305,16 +305,6 @@ namespace LightingDemo
             float frameTime = 0.0f;
         };
 
-        /** @brief A builtin:lit material of `colour` and `roughness`. */
-        Fenrir::AssetHandle<Fenrir::Material> LitMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene,
-                                                          Fenrir::Colour colour, float roughness)
-        {
-            const auto material = store.CreateMaterial(store.Load<Fenrir::Shader>("builtin:lit", scene).handle, scene);
-            store.SetColour(material, "baseColour", colour);
-            store.SetFloat(material, "roughness", roughness);
-            return material;
-        }
-
         /** @brief The forest floor's material, and whether its fetched textures loaded. */
         struct GroundMaterial
         {
@@ -788,8 +778,8 @@ namespace LightingDemo
             {
                 return;
             }
-            const Part rock{sphere.handle, LitMaterial(store, scene, {0.35f, 0.36f, 0.3f, 1.0f}, 0.9f)};
-            const Part bark{cube.handle, LitMaterial(store, scene, {0.18f, 0.12f, 0.08f, 1.0f}, 0.9f)};
+            const Part rock{sphere.handle, LitMaterial(store, scene, {0.35f, 0.36f, 0.3f, 1.0f}, 0.0f, 0.9f)};
+            const Part bark{cube.handle, LitMaterial(store, scene, {0.18f, 0.12f, 0.08f, 1.0f}, 0.0f, 0.9f)};
             // Both meshes are a unit across round their middle: a trunk is 0.6 by 14 metres, standing on the ground.
             const Fenrir::Math::Mat4 trunk =
                 Placement(Vec3(0.0f, 7.0f, 0.0f), {1.0f, 0.0f, 0.0f, 0.0f}, Vec3(0.6f, 14.0f, 0.6f));

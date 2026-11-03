@@ -3,10 +3,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <map>
-#include <memory>
 
-#include "Core/BlockRing.hpp"
+#include "Core/FullscreenPasses.hpp"
 #include "Core/RenderGraph.hpp"
 #include "Core/SceneFrame.hpp"
 #include "Device/GraphicsDevice.hpp"
@@ -73,38 +71,24 @@ namespace Fenrir::Render
         Gtao& operator=(Gtao&&) = delete;
 
         /**
-         * @brief Readies this frame's blocks for `views` views (two each: the final denoise pass has its own) and frees
-         * groups of textures that have since gone. Call once a frame, before AddPasses.
+         * @brief Readies this frame's blocks for `views` views (two each: the final denoise pass has its own). Call
+         * once a frame, before AddPasses.
          */
         void BeginFrame(std::size_t views);
 
         /**
-         * @brief Adds the passes of the view in slot `slot` (below BeginFrame's count) of frame `frameIndex`; its
-         * occlusion texture, or empty when it has none.
+         * @brief Adds the passes of `view`, one of BeginFrame's count, in frame `frameIndex`; its occlusion texture, or
+         * empty when it has none.
          */
-        [[nodiscard]] GraphResource AddPasses(RenderGraph& graph, std::uint64_t frameIndex, std::size_t slot,
-                                              const GtaoView& view);
+        [[nodiscard]] GraphResource AddPasses(RenderGraph& graph, std::uint64_t frameIndex, const GtaoView& view);
 
       private:
-        [[nodiscard]] Graphics::PipelineHandle MakePipeline(const ShaderVariant* variant, std::size_t outputs);
-        /** @brief The group binding `first` and `second` as a pass's sources, made once while both live. */
-        [[nodiscard]] Graphics::BindingGroupHandle SourceGroup(Graphics::TextureHandle first,
-                                                               Graphics::TextureHandle second);
-
         Graphics::GraphicsDevice& m_device;
-        ILogger& m_logger;
 
         ShaderContainer m_program;
-        /** @brief Set 1: the pass's block. */
-        Graphics::BindingGroupLayoutHandle m_blockLayout;
-        /** @brief Set 2: the two textures it reads. */
-        Graphics::BindingGroupLayoutHandle m_sourceLayout;
+        /** @brief Every pass's block, two sources, sampler (nearest, clamped: every read is a texelFetch) and group. */
+        FullscreenPasses<2> m_passes;
         Graphics::PipelineHandle m_horizons;
         Graphics::PipelineHandle m_denoise;
-        /** @brief Nearest, clamped: every read is a texelFetch. */
-        Graphics::SamplerHandle m_sampler;
-        std::unique_ptr<BlockRing> m_blocks;
-        /** @brief Each pair of source textures' group, by their handles' indices and generations, while both live. */
-        std::map<std::array<std::uint32_t, 4>, Graphics::BindingGroupHandle> m_sourceGroups;
     };
 } // namespace Fenrir::Render

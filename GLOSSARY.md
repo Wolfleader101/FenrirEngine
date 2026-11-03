@@ -556,6 +556,10 @@ The scene resource saying what is drawn behind everything and what light reaches
 The optional scene resource (`SkyLight`) that lights the scene with a sky other than the one drawn behind it: a neutral colour, say, under a skybox chosen for its look. Without one the scene is lit by its Sky. One sky lights the scene either way.
 *Avoid:* ambient light, ambient override, environment lighting.
 
+**Sky image**
+A cubemap or panorama a Sky can name, prepared into a cube texture that the Background pass draws and the sky's light is filtered from. A panorama's cube texture is drawn from it on the GPU; a cubemap's is the cubemap itself.
+*Avoid:* environment map, skybox texture.
+
 **Panorama**
 An HDR image wrapping the whole sphere around the viewer, its width twice its height (equirectangular). A sky made from one is a *panorama sky*.
 *Avoid:* HDRI, environment map, light probe, equirect.
@@ -579,6 +583,10 @@ One depth texture holding several shadow maps side by side, each drawn into its 
 **Point shadow cubes**
 One cube array of depth, a cube for each point light the budget lets cast, each face holding the distance from its light to the nearest caster over the light's range (ADR-0050).
 *Avoid:* point shadow maps, omni shadow map, shadow cubemap atlas.
+
+**Shadow pool**
+The shadow maps one kind of light may cast into, kept across frames and sized by its budget (the spot shadow atlas, or the point shadow cubes), with each frame's choice of which lights of that kind get them: those nearest any camera, the rest unshadowed and warned about once (ADR-0050).
+*Avoid:* shadow cache, shadow manager, shadow budget (the number the pool is sized by).
 
 ## FenrirEngine debug drawing
 

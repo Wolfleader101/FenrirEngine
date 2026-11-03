@@ -2,13 +2,10 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <map>
-#include <memory>
 #include <span>
-#include <utility>
 #include <vector>
 
-#include "Core/BlockRing.hpp"
+#include "Core/FullscreenPasses.hpp"
 #include "Core/RenderGraph.hpp"
 #include "Core/SceneFrame.hpp"
 #include "Device/GraphicsDevice.hpp"
@@ -84,21 +81,12 @@ namespace Fenrir::Render
         void AddPasses(RenderGraph& graph, std::uint64_t frameIndex, std::span<const BloomView> views);
 
       private:
-        [[nodiscard]] Graphics::PipelineHandle MakePipeline(const ShaderContainer& container,
-                                                            const ShaderVariant* variant, Graphics::BlendMode blend,
-                                                            std::uint32_t samples);
-        /** @brief The group binding `texture` as a pass's source, made once while the texture lives. */
-        [[nodiscard]] Graphics::BindingGroupHandle SourceGroup(Graphics::TextureHandle texture);
-
         Graphics::GraphicsDevice& m_device;
-        ILogger& m_logger;
 
         ShaderContainer m_downsample;
         ShaderContainer m_upsample;
-        /** @brief Set 1 of both programs: the pass's block. */
-        Graphics::BindingGroupLayoutHandle m_blockLayout;
-        /** @brief Set 2 of both programs: the texture the pass reads. */
-        Graphics::BindingGroupLayoutHandle m_sourceLayout;
+        /** @brief Every pass's block, source, sampler (mirrored at the edges, bilinear) and group. */
+        FullscreenPasses<1> m_passes;
         /** @brief The first downsample, which reads SceneColor (its MSAA variant when SceneColor is multisampled). */
         Graphics::PipelineHandle m_firstDownsample;
         Graphics::PipelineHandle m_downsamplePipeline;
@@ -106,10 +94,5 @@ namespace Fenrir::Render
         Graphics::PipelineHandle m_upsamplePipeline;
         /** @brief Into SceneColor, at its samples, blended by the intensity. */
         Graphics::PipelineHandle m_compositePipeline;
-        /** @brief Mirrored at the edges, bilinear. */
-        Graphics::SamplerHandle m_sampler;
-        std::unique_ptr<BlockRing> m_blocks;
-        /** @brief Each source texture's group, by its handle's index and generation, while the texture lives. */
-        std::map<std::pair<std::uint32_t, std::uint32_t>, Graphics::BindingGroupHandle> m_sourceGroups;
     };
 } // namespace Fenrir::Render

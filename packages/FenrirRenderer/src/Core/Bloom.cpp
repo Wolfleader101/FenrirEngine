@@ -5,6 +5,7 @@
 #include <string_view>
 
 #include "Core/BuiltinShaders.hpp"
+#include "Core/FullscreenPasses.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
 namespace Fenrir::Render
@@ -12,10 +13,6 @@ namespace Fenrir::Render
     namespace
     {
         using namespace Fenrir::Graphics;
-
-        /** @brief The binding sets of the passes' block and source texture. */
-        constexpr std::uint32_t BlockSet = 1;
-        constexpr std::uint32_t SourceSet = 2;
 
         /** @brief A pass's block, as `builtin:bloom-downsample` and `builtin:bloom-upsample` declare it (std140). */
         struct BloomBlock
@@ -34,18 +31,6 @@ namespace Fenrir::Render
             return std::as_bytes(std::span(&block, 1));
         }
 
-        ShaderContainer ReadProgram(BuiltinProgram program, ILogger& logger)
-        {
-            ShaderContainerResult read = ReadShaderContainer(GetBuiltinShader(program).bytes);
-            if (!read.Ok())
-            {
-                logger.Error("FenrirRenderer: the built-in shader '{}' does not read: {}",
-                             GetBuiltinShader(program).name, read.diagnostic);
-                return {};
-            }
-            return std::move(*read.container);
-        }
-
         /** @brief Level `level`'s size: the view's halved `level + 1` times, at least one pixel. */
         PixelSize LevelSize(PixelSize view, std::uint32_t level)
         {
@@ -60,6 +45,17 @@ namespace Fenrir::Render
             block.blend = blend;
             block.karis = karis ? 1u : 0u;
             return block;
+        }
+
+        // Mirrored at the edges, not clamped: the filters then see each level as one tile of an endless mirrored image,
+        // whose mean they keep, so light near an edge is neither lost past it nor piled onto the edge texels.
+        SamplerDesc MirroredSampler()
+        {
+            SamplerDesc sampler;
+            sampler.addressU = AddressMode::MirroredRepeat;
+            sampler.addressV = AddressMode::MirroredRepeat;
+            sampler.addressW = AddressMode::MirroredRepeat;
+            return sampler;
         }
     } // namespace
 
@@ -88,109 +84,38 @@ namespace Fenrir::Render
     }
 
     BloomChain::BloomChain(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
-        : m_device(device), m_logger(logger)
+        : m_device(device),
+          m_passes(device, logger, "Bloom", RenderStage::PostProcess, MirroredSampler(), sizeof(BloomBlock))
     {
-        m_downsample = ReadProgram(BuiltinProgram::BloomDownsample, m_logger);
-        m_upsample = ReadProgram(BuiltinProgram::BloomUpsample, m_logger);
-        m_blockLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Bloom block");
-        m_sourceLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::Texture}}}, "Bloom source");
+        m_downsample = ReadBuiltin(BuiltinProgram::BloomDownsample, logger);
+        m_upsample = ReadBuiltin(BuiltinProgram::BloomUpsample, logger);
 
         // Under MSAA the first downsample reads every sample of SceneColor; the rest read single-sampled levels.
         samples = std::max(samples, 1u);
         constexpr std::array<std::string_view, 1> msaa{"MSAA"};
         const ShaderVariant* base = m_downsample.FindVariant({});
-        m_firstDownsample =
-            MakePipeline(m_downsample, samples > 1 ? m_downsample.FindVariant(msaa) : base, BlendMode::None, 1);
-        m_downsamplePipeline = MakePipeline(m_downsample, base, BlendMode::None, 1);
+        const ShaderVariant* first = samples > 1 ? m_downsample.FindVariant(msaa) : base;
+        m_firstDownsample = m_passes.MakePipeline(first, m_downsample.name, {TextureFormat::Rgba16Float});
+        m_downsamplePipeline = m_passes.MakePipeline(base, m_downsample.name, {TextureFormat::Rgba16Float});
         // Straight alpha blending, the block's alpha the share of the source: (1 - a) of the target and a of the
         // source.
-        m_upsamplePipeline = MakePipeline(m_upsample, m_upsample.FindVariant({}), BlendMode::Alpha, 1);
-        m_compositePipeline = MakePipeline(m_upsample, m_upsample.FindVariant({}), BlendMode::Alpha, samples);
-
-        // Mirrored at the edges, not clamped: the filters then see each level as one tile of an endless mirrored image,
-        // whose mean they keep, so light near an edge is neither lost past it nor piled onto the edge texels.
-        SamplerDesc sampler;
-        sampler.addressU = AddressMode::MirroredRepeat;
-        sampler.addressV = AddressMode::MirroredRepeat;
-        sampler.addressW = AddressMode::MirroredRepeat;
-        m_sampler = m_device.CreateSampler(sampler, "Bloom sampler");
-        m_blocks = std::make_unique<BlockRing>(m_device, m_blockLayout, false, sizeof(BloomBlock), "Bloom");
+        const ShaderVariant* upsample = m_upsample.FindVariant({});
+        m_upsamplePipeline =
+            m_passes.MakePipeline(upsample, m_upsample.name, {TextureFormat::Rgba16Float}, BlendMode::Alpha);
+        m_compositePipeline =
+            m_passes.MakePipeline(upsample, m_upsample.name, {TextureFormat::Rgba16Float}, BlendMode::Alpha, samples);
     }
 
     BloomChain::~BloomChain()
     {
-        for (const auto& [key, group] : m_sourceGroups)
-        {
-            m_device.Destroy(group);
-        }
-        m_blocks.reset();
-        m_device.Destroy(m_sampler);
         m_device.Destroy(m_firstDownsample);
         m_device.Destroy(m_downsamplePipeline);
         m_device.Destroy(m_upsamplePipeline);
         m_device.Destroy(m_compositePipeline);
-        m_device.Destroy(m_sourceLayout);
-        m_device.Destroy(m_blockLayout);
-    }
-
-    PipelineHandle BloomChain::MakePipeline(const ShaderContainer& container, const ShaderVariant* variant,
-                                            BlendMode blend, std::uint32_t samples)
-    {
-        if (variant == nullptr)
-        {
-            return {};
-        }
-        PipelineDesc desc;
-        desc.shader = variant;
-        desc.sets.at(BlockSet) = m_blockLayout;
-        desc.sets.at(SourceSet) = m_sourceLayout;
-        desc.cull = CullMode::None;
-        desc.colourFormats = {TextureFormat::Rgba16Float};
-        desc.depth.test = false;
-        desc.depth.write = false;
-        desc.depthFormat.reset();
-        desc.blend = blend;
-        desc.samples = samples;
-        const PipelineResult made = m_device.CreatePipeline(desc, container.name);
-        if (made.pipeline.IsEmpty())
-        {
-            m_logger.Error("FenrirRenderer: the built-in pipeline '{}' could not be made: {}", container.name,
-                           made.diagnostic);
-        }
-        return made.pipeline;
-    }
-
-    BindingGroupHandle BloomChain::SourceGroup(TextureHandle texture)
-    {
-        const std::pair<std::uint32_t, std::uint32_t> key{texture.index, texture.generation};
-        if (const auto found = m_sourceGroups.find(key); found != m_sourceGroups.end())
-        {
-            return found->second;
-        }
-        BindingGroupEntry entry;
-        entry.binding = 0;
-        entry.texture = texture;
-        entry.sampler = m_sampler;
-        const BindingGroupHandle group = m_device.CreateBindingGroup({m_sourceLayout, {entry}}, "Bloom source");
-        m_sourceGroups.emplace(key, group);
-        return group;
     }
 
     void BloomChain::AddPasses(RenderGraph& graph, std::uint64_t frameIndex, std::span<const BloomView> views)
     {
-        // A transient texture's group outlives its frame, so groups of textures the pool has since freed go here.
-        for (auto it = m_sourceGroups.begin(); it != m_sourceGroups.end();)
-        {
-            if (!m_device.IsLive(TextureHandle{it->first.first, it->first.second}))
-            {
-                m_device.Destroy(it->second);
-                it = m_sourceGroups.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
         if (m_firstDownsample.IsEmpty() || m_downsamplePipeline.IsEmpty() || m_upsamplePipeline.IsEmpty() ||
             m_compositePipeline.IsEmpty())
         {
@@ -210,29 +135,13 @@ namespace Fenrir::Render
         {
             return;
         }
-        m_blocks->Reserve(slots);
+        m_passes.Reserve(slots);
 
-        std::size_t slot = 0;
         const auto addPass = [&](const char* name, PipelineHandle pipeline, GraphResource source, GraphResource target,
                                  LoadOp load, PixelSize sourceSize, PixelSize targetSize, float blend, bool karis) {
-            m_blocks->Write(frameIndex, slot, BytesOf(BlockFor(sourceSize, blend, karis)));
-            const BindingGroupHandle block = m_blocks->Group(frameIndex, slot);
-            ++slot;
-            const PixelRect viewport{0, 0, targetSize.width, targetSize.height};
-            graph.AddPass(
-                name, RenderStage::PostProcess, QueueKind::Graphics,
-                [=](PassBuilder& pass) {
-                    pass.Sample(source);
-                    pass.ColourAttachment(target, load);
-                },
-                [this, pipeline, block, source, viewport](PassContext& context) {
-                    PassEncoder& encoder = context.Encoder();
-                    encoder.SetViewport(viewport);
-                    encoder.SetPipeline(pipeline);
-                    encoder.SetBindingGroup(BlockSet, block);
-                    encoder.SetBindingGroup(SourceSet, SourceGroup(context.Texture(source)));
-                    encoder.Draw({.vertexCount = 3});
-                });
+            const BindingGroupHandle block = m_passes.Block(frameIndex, BytesOf(BlockFor(sourceSize, blend, karis)));
+            m_passes.AddPass(graph, name, pipeline, block, {source}, {target}, load,
+                             {0, 0, targetSize.width, targetSize.height});
         };
 
         for (const BloomView& view : views)

@@ -8,9 +8,9 @@
 #include <type_traits>
 #include <variant>
 
-#include <glm/gtc/packing.hpp>
-
 #include "Core/BuiltinShaders.hpp"
+#include "Core/ImageReads.hpp"
+#include "Core/ImageUpload.hpp"
 #include "Core/Skinning.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
@@ -165,19 +165,6 @@ namespace Fenrir::Render
             Math::Vec4 colour;
         };
 
-        /** @brief A Panorama pass's block, as `builtin:panorama` declares it (std140). */
-        struct PanoramaBlock
-        {
-            std::uint32_t face = 0;
-            float halfTexel = 1.0f;
-            float lod = 0.0f;
-            std::uint32_t padding0 = 0;
-        };
-
-        /** @brief Panorama passes' blocks sit at multiples of this, the largest uniform offset alignment GL asks for.
-         */
-        constexpr std::size_t PanoramaSlot = 256;
-
         /** @brief The Output block, as `builtin:output` declares it at set 1 (std140). */
         struct OutputBlock
         {
@@ -307,216 +294,57 @@ namespace Fenrir::Render
             return mode == Fenrir::BlendMode::Additive ? Graphics::BlendMode::Additive : Graphics::BlendMode::None;
         }
 
-        /** @brief How many mip levels a full chain for an image of `width` x `height` has, down to 1 x 1. */
-        std::uint32_t MipCount(std::uint32_t width, std::uint32_t height)
-        {
-            std::uint32_t levels = 1;
-            for (std::uint32_t side = std::max(width, height); side > 1; side /= 2)
-            {
-                ++levels;
-            }
-            return levels;
-        }
-
-        /** @brief The device format an image is uploaded as: its own format, sRGB-decoded on sampling if it is sRGB. */
-        TextureFormat TextureFormatOf(const ImageData& image)
-        {
-            if (image.format == ImageFormat::RGBA16F)
-            {
-                return TextureFormat::Rgba16Float;
-            }
-            if (image.format == ImageFormat::RGBA32F)
-            {
-                return TextureFormat::Rgba32Float;
-            }
-            return image.colourSpace == ColourSpace::Srgb ? TextureFormat::Rgba8Srgb : TextureFormat::Rgba8Unorm;
-        }
-
-        /** @brief Reads and writes one texel of an image format as four linear floats, for making mips. */
-        struct TexelCodec
-        {
-            std::size_t bytes = 4;
-            void (*read)(std::span<const std::byte> texel, std::array<float, 4>& out) = nullptr;
-            void (*write)(const std::array<float, 4>& in, std::span<std::byte> texel) = nullptr;
-        };
-
-        /** @brief sRGB-encoded bytes to linear values, by byte. */
-        const std::array<float, 256>& SrgbToLinear()
-        {
-            static const std::array<float, 256> table = [] {
-                std::array<float, 256> made{};
-                for (std::size_t i = 0; i < made.size(); ++i)
-                {
-                    const float c = static_cast<float>(i) / 255.0f;
-                    made.at(i) = c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
-                }
-                return made;
-            }();
-            return table;
-        }
-
-        /** @brief Linear values, in 4096 steps over [0, 1], to sRGB-encoded bytes. */
-        const std::array<std::uint8_t, 4096>& LinearToSrgb()
-        {
-            static const std::array<std::uint8_t, 4096> table = [] {
-                std::array<std::uint8_t, 4096> made{};
-                for (std::size_t i = 0; i < made.size(); ++i)
-                {
-                    const float l = static_cast<float>(i) / 4095.0f;
-                    const float c = l <= 0.0031308f ? l * 12.92f : 1.055f * std::pow(l, 1.0f / 2.4f) - 0.055f;
-                    made.at(i) = static_cast<std::uint8_t>(std::lround(std::clamp(c, 0.0f, 1.0f) * 255.0f));
-                }
-                return made;
-            }();
-            return table;
-        }
-
-        std::uint8_t ToByte(float value)
-        {
-            return static_cast<std::uint8_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
-        }
-
-        /** @brief The codec of an image's pixels: colours are averaged as linear values, so sRGB mips keep brightness.
-         */
-        TexelCodec CodecOf(const ImageData& image)
-        {
-            TexelCodec codec;
-            codec.bytes = BytesPerPixel(image.format);
-            if (image.format == ImageFormat::RGBA32F)
-            {
-                codec.read = [](std::span<const std::byte> texel, std::array<float, 4>& out) {
-                    std::memcpy(out.data(), texel.data(), sizeof(float) * 4);
-                };
-                codec.write = [](const std::array<float, 4>& in, std::span<std::byte> texel) {
-                    std::memcpy(texel.data(), in.data(), sizeof(float) * 4);
-                };
-            }
-            else if (image.format == ImageFormat::RGBA16F)
-            {
-                codec.read = [](std::span<const std::byte> texel, std::array<float, 4>& out) {
-                    std::array<std::uint16_t, 4> halves{};
-                    std::memcpy(halves.data(), texel.data(), sizeof(halves));
-                    for (std::size_t c = 0; c < 4; ++c)
-                    {
-                        out.at(c) = glm::unpackHalf1x16(halves.at(c));
-                    }
-                };
-                codec.write = [](const std::array<float, 4>& in, std::span<std::byte> texel) {
-                    std::array<std::uint16_t, 4> halves{};
-                    for (std::size_t c = 0; c < 4; ++c)
-                    {
-                        halves.at(c) = glm::packHalf1x16(in.at(c));
-                    }
-                    std::memcpy(texel.data(), halves.data(), sizeof(halves));
-                };
-            }
-            else if (image.colourSpace == ColourSpace::Srgb)
-            {
-                codec.read = [](std::span<const std::byte> texel, std::array<float, 4>& out) {
-                    const std::span<const std::byte> bytes = texel;
-                    for (std::size_t c = 0; c < 3; ++c)
-                    {
-                        out.at(c) = SrgbToLinear().at(static_cast<std::size_t>(bytes[c]));
-                    }
-                    out[3] = static_cast<float>(bytes[3]) / 255.0f;
-                };
-                codec.write = [](const std::array<float, 4>& in, std::span<std::byte> texel) {
-                    const std::span<std::byte> bytes = texel;
-                    for (std::size_t c = 0; c < 3; ++c)
-                    {
-                        const auto step =
-                            static_cast<std::size_t>(std::lround(std::clamp(in.at(c), 0.0f, 1.0f) * 4095.0f));
-                        bytes[c] = std::byte{LinearToSrgb().at(step)};
-                    }
-                    bytes[3] = std::byte{ToByte(in[3])};
-                };
-            }
-            else
-            {
-                codec.read = [](std::span<const std::byte> texel, std::array<float, 4>& out) {
-                    const std::span<const std::byte> bytes = texel;
-                    for (std::size_t c = 0; c < 4; ++c)
-                    {
-                        out.at(c) = static_cast<float>(bytes[c]) / 255.0f;
-                    }
-                };
-                codec.write = [](const std::array<float, 4>& in, std::span<std::byte> texel) {
-                    const std::span<std::byte> bytes = texel;
-                    for (std::size_t c = 0; c < 4; ++c)
-                    {
-                        bytes[c] = std::byte{ToByte(in.at(c))};
-                    }
-                };
-            }
-            return codec;
-        }
-
-        /**
-         * @brief The next mip level of a `width` x `height` level: each texel the average of the 2 x 2 texels above it
-         * (an odd last row or column is left out, and a side of 1 stays 1).
-         */
-        std::vector<std::byte> Downsample(std::span<const std::byte> level, std::uint32_t width, std::uint32_t height,
-                                          const TexelCodec& codec)
-        {
-            const std::uint32_t nextWidth = std::max(1u, width / 2);
-            const std::uint32_t nextHeight = std::max(1u, height / 2);
-            std::vector<std::byte> next(std::size_t{nextWidth} * nextHeight * codec.bytes);
-            std::array<float, 4> texel{};
-            for (std::uint32_t y = 0; y < nextHeight; ++y)
-            {
-                for (std::uint32_t x = 0; x < nextWidth; ++x)
-                {
-                    std::array<float, 4> sum{};
-                    for (const std::uint32_t sy : {std::min(2 * y, height - 1), std::min(2 * y + 1, height - 1)})
-                    {
-                        for (const std::uint32_t sx : {std::min(2 * x, width - 1), std::min(2 * x + 1, width - 1)})
-                        {
-                            codec.read(level.subspan((std::size_t{sy} * width + sx) * codec.bytes, codec.bytes), texel);
-                            for (std::size_t c = 0; c < 4; ++c)
-                            {
-                                sum.at(c) += texel.at(c);
-                            }
-                        }
-                    }
-                    for (float& channel : sum)
-                    {
-                        channel *= 0.25f;
-                    }
-                    codec.write(sum,
-                                std::span(next).subspan((std::size_t{y} * nextWidth + x) * codec.bytes, codec.bytes));
-                }
-            }
-            return next;
-        }
-
-        /**
-         * @brief Writes one layer of `texture` (a cube face, else 0) from `pixels`, `width` x `height`, and every mip
-         * level below it, each made from the one above (ADR-0024: mips are made at upload).
-         */
-        void WriteWithMips(GraphicsDevice& device, TextureHandle texture, std::uint32_t layer, std::uint32_t mipLevels,
-                           std::span<const std::byte> pixels, std::uint32_t width, std::uint32_t height,
-                           const TexelCodec& codec)
-        {
-            std::vector<std::byte> level;
-            std::span<const std::byte> current = pixels;
-            for (std::uint32_t mip = 0; mip < mipLevels; ++mip)
-            {
-                if (mip > 0)
-                {
-                    level = Downsample(current, width, height, codec);
-                    current = level;
-                    width = std::max(1u, width / 2);
-                    height = std::max(1u, height / 2);
-                }
-                device.WriteTexture(texture, mip, layer, current);
-            }
-        }
-
         template <typename T>
         std::span<const std::byte> BytesOf(const T& value)
         {
             return std::as_bytes(std::span(&value, 1));
         }
+
+        /**
+         * @brief Where each view block sits in the frame's view block ring: each view's, then each view's cascades'
+         * (ADR-0050), MaxCascades slots a view, then each spot light tile's, then each point light's: its cube's, then
+         * its faces'.
+         */
+        struct ViewBlockSlots
+        {
+            /** @brief How many views the frame draws. */
+            std::size_t views = 0;
+            /** @brief How many spot lights keep their shadows: one tile each. */
+            std::size_t spotTiles = 0;
+            /** @brief How many point lights keep their shadows: one cube each. */
+            std::size_t pointCubes = 0;
+
+            /** @brief View `v`'s block. */
+            [[nodiscard]] constexpr std::size_t View(std::size_t v) const noexcept
+            {
+                return v;
+            }
+            /** @brief View `v`'s cascade `c`'s block. */
+            [[nodiscard]] constexpr std::size_t Cascade(std::size_t v, std::size_t c) const noexcept
+            {
+                return views + v * MaxCascades + c;
+            }
+            /** @brief Spot light tile `t`'s block. */
+            [[nodiscard]] constexpr std::size_t Tile(std::size_t t) const noexcept
+            {
+                return views * (1 + MaxCascades) + t;
+            }
+            /** @brief Point light cube `c`'s block, from the light and not turned. */
+            [[nodiscard]] constexpr std::size_t Cube(std::size_t c) const noexcept
+            {
+                return Tile(spotTiles) + c * (1 + CubeFaceCount);
+            }
+            /** @brief Face `f` of point light cube `c`'s block. */
+            [[nodiscard]] constexpr std::size_t Face(std::size_t c, std::size_t f) const noexcept
+            {
+                return Cube(c) + 1 + f;
+            }
+            /** @brief How many slots the frame takes. */
+            [[nodiscard]] constexpr std::size_t Count() const noexcept
+            {
+                return Cube(pointCubes);
+            }
+        };
 
         /** @brief The standard vertex locations a variant reads, as bits. */
         std::uint32_t ReadMask(const ShaderVariant& variant)
@@ -685,18 +513,6 @@ namespace Fenrir::Render
             }
         }
 
-        ShaderContainer ReadBuiltin(BuiltinProgram program, ILogger& logger)
-        {
-            ShaderContainerResult read = ReadShaderContainer(GetBuiltinShader(program).bytes);
-            if (!read.Ok())
-            {
-                logger.Error("FenrirRenderer: the built-in shader '{}' does not read: {}",
-                             GetBuiltinShader(program).name, read.diagnostic);
-                return {};
-            }
-            return std::move(*read.container);
-        }
-
         const ShaderVariant* BaseVariant(const ShaderContainer& container)
         {
             return container.FindVariant({});
@@ -750,29 +566,6 @@ namespace Fenrir::Render
             return desc;
         }
 
-        /** @brief Whether `from` waits, directly or through other views, on `to`, by each view's `waitsOn`. */
-        bool Waits(const std::vector<std::vector<std::size_t>>& waitsOn, std::size_t from, std::size_t to)
-        {
-            std::vector<bool> seen(waitsOn.size(), false);
-            std::vector<std::size_t> stack{from};
-            while (!stack.empty())
-            {
-                const std::size_t view = stack.back();
-                stack.pop_back();
-                if (view == to)
-                {
-                    return true;
-                }
-                if (seen[view])
-                {
-                    continue;
-                }
-                seen[view] = true;
-                stack.insert(stack.end(), waitsOn[view].begin(), waitsOn[view].end());
-            }
-            return false;
-        }
-
         /** @brief How a log line names a view's target: an image by its asset index, or the window. */
         std::string TargetName(AssetKey target)
         {
@@ -784,15 +577,13 @@ namespace Fenrir::Render
 
     SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples,
                                  bool automaticInstancing, bool computeSkinning, CascadeConfig cascades,
-                                 SpotShadowConfig spotShadows, PointShadowConfig pointShadows)
+                                 ShadowBudgetConfig spotShadows, ShadowBudgetConfig pointShadows)
         : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1)),
           m_automaticInstancing(automaticInstancing), m_computeSkinning(computeSkinning), m_cascades(cascades),
-          m_spotShadowConfig(spotShadows), m_pointShadowConfig(pointShadows)
+          m_clusterTargetGroups(device), m_skyGroups(device), m_viewGroups(device), m_outputGroups(device)
     {
         m_cascades.count = std::clamp(m_cascades.count, 1u, MaxCascades);
         m_cascades.mapSize = std::max(m_cascades.mapSize, 1u);
-        m_spotShadowConfig.mapSize = std::max(m_spotShadowConfig.mapSize, 16u);
-        m_pointShadowConfig.mapSize = std::max(m_pointShadowConfig.mapSize, 1u);
         m_frameLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer},
                                                             {1, ShaderBindingKind::Texture},
                                                             {2, ShaderBindingKind::Texture},
@@ -854,10 +645,6 @@ namespace Fenrir::Render
         m_outputSampler = m_device.CreateSampler(clamp, "Output sampler");
         // Clamped, so a face's edge does not wrap round to its opposite edge, and trilinear across the mips.
         m_skySampler = m_device.CreateSampler(clamp, "Sky sampler");
-        // Round a panorama's sides, clamped at its top and bottom.
-        SamplerDesc panorama = clamp;
-        panorama.addressU = AddressMode::Repeat;
-        m_panoramaSampler = m_device.CreateSampler(panorama, "Panorama sampler");
         // Lit where the reference is at least the stored depth: nearer the light under reversed-Z. Bilinear, so each
         // read is itself a 2 x 2 filter.
         SamplerDesc shadow = clamp;
@@ -870,14 +657,6 @@ namespace Fenrir::Render
         m_noShadow = m_device.CreateTexture(noShadow, "No shadow");
         constexpr float farthest = 0.0f;
         m_device.WriteTexture(m_noShadow, 0, 0, BytesOf(farthest));
-        // The same for point shadows: one cube of 0.
-        TextureDesc noPointShadow = noShadow;
-        noPointShadow.kind = TextureKind::CubeArray;
-        m_noPointShadow = m_device.CreateTexture(noPointShadow, "No point shadow");
-        for (std::uint32_t face = 0; face < CubeFaceCount; ++face)
-        {
-            m_device.WriteTexture(m_noPointShadow, 0, face, BytesOf(farthest));
-        }
         m_defaultStreams = m_device.CreateBuffer({sizeof(DefaultStreams), BufferUsage::Vertex},
                                                  std::as_bytes(std::span(DefaultStreams)), "Default vertex streams");
 
@@ -898,17 +677,11 @@ namespace Fenrir::Render
 
         m_background = ReadBuiltin(BuiltinProgram::Background, m_logger);
         m_output = ReadBuiltin(BuiltinProgram::Output, m_logger);
-        m_panorama = ReadBuiltin(BuiltinProgram::Panorama, m_logger);
         m_prepass = ReadBuiltin(BuiltinProgram::DepthPrepass, m_logger);
         m_shadow = ReadBuiltin(BuiltinProgram::Shadow, m_logger);
         m_prepassMaskLayout = m_device.CreateBindingGroupLayout(
             {{{0, ShaderBindingKind::UniformBuffer}, {1, ShaderBindingKind::Texture}}}, "Prepass mask");
-        if (const ShaderVariant* variant = BaseVariant(m_panorama))
-        {
-            m_panoramaLayout = MaterialLayoutOf(*variant);
-        }
-        m_panoramaPipeline = MakeInternalPipeline(m_panorama, BaseVariant(m_panorama), m_panoramaLayout,
-                                                  TextureFormat::Rgba16Float, false, 1);
+        m_skyImages = std::make_unique<SkyImages>(m_device, m_logger);
         if (const ShaderVariant* variant = BaseVariant(m_background))
         {
             m_backgroundLayout = MaterialLayoutOf(*variant);
@@ -940,10 +713,8 @@ namespace Fenrir::Render
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, false, sizeof(FrameBlock), "Frame");
         m_lightBlocks =
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true, sizeof(GpuLight), "Lights");
-        m_spotShadowBlocks = std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true,
-                                                         sizeof(GpuSpotShadow), "Spot shadows");
-        m_pointShadowBlocks = std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, true,
-                                                          sizeof(GpuPointShadow), "Point shadows");
+        m_spotShadows = std::make_unique<ShadowPool<SpotShadowKind>>(m_device, m_logger, spotShadows, m_noShadow);
+        m_pointShadows = std::make_unique<ShadowPool<PointShadowKind>>(m_device, m_logger, pointShadows);
         m_skyLighting = std::make_unique<SkyLighting>(m_device, m_logger);
         m_bloom = std::make_unique<BloomChain>(m_device, m_logger, m_samples);
         m_gtao = std::make_unique<Gtao>(m_device, m_logger, m_samples);
@@ -1005,8 +776,6 @@ namespace Fenrir::Render
                                              std::as_bytes(std::span(noClusters)), "No light clusters");
         m_frameBlocks->Reserve(1);
         m_lightBlocks->Reserve(1);
-        m_spotShadowBlocks->Reserve(1);
-        m_pointShadowBlocks->Reserve(1);
     }
 
     SceneRenderer::~SceneRenderer()
@@ -1027,15 +796,8 @@ namespace Fenrir::Render
         {
             m_device.Destroy(image.texture);
         }
-        for (auto& [key, cubemap] : m_cubemaps)
-        {
-            m_device.Destroy(cubemap.group);
-            m_device.Destroy(cubemap.texture);
-        }
-        while (!m_panoramas.empty())
-        {
-            ReleasePanorama(m_panoramas.begin()->first);
-        }
+        m_skyGroups.Clear();
+        m_skyImages.reset();
         for (auto& [desc, sampler] : m_samplers)
         {
             m_device.Destroy(sampler);
@@ -1059,14 +821,8 @@ namespace Fenrir::Render
                 m_device.Destroy(variant.materialLayout);
             }
         }
-        for (auto& [texture, group] : m_outputGroups)
-        {
-            m_device.Destroy(group);
-        }
-        for (auto& [key, group] : m_viewGroups)
-        {
-            m_device.Destroy(group);
-        }
+        m_outputGroups.Clear();
+        m_viewGroups.Clear();
         for (const DrawGroup& group : m_drawGroups)
         {
             m_device.Destroy(group.group);
@@ -1083,11 +839,8 @@ namespace Fenrir::Render
         m_gtao.reset();
         m_frameBlocks.reset();
         m_lightBlocks.reset();
-        m_spotShadowBlocks.reset();
-        m_device.Destroy(m_spotAtlas);
-        m_pointShadowBlocks.reset();
-        m_device.Destroy(m_pointShadowCubes);
-        m_device.Destroy(m_noPointShadow);
+        m_spotShadows.reset();
+        m_pointShadows.reset();
         m_viewBlocks.reset();
         m_backgroundBlocks.reset();
         m_outputBlocks.reset();
@@ -1103,10 +856,7 @@ namespace Fenrir::Render
         m_device.Destroy(m_skinJobLayout);
         m_device.Destroy(m_skinSourceLayout);
         m_device.Destroy(m_skinTargetLayout);
-        for (auto& [key, group] : m_clusterTargetGroups)
-        {
-            m_device.Destroy(group);
-        }
+        m_clusterTargetGroups.Clear();
         m_clusterJobs.reset();
         m_clusterBuffers.clear();
         m_device.Destroy(m_noClusters);
@@ -1119,8 +869,6 @@ namespace Fenrir::Render
         m_device.Destroy(m_skyPipeline);
         m_device.Destroy(m_outputPipeline);
         m_device.Destroy(m_occlusionOutputPipeline);
-        m_device.Destroy(m_panoramaPipeline);
-        m_device.Destroy(m_panoramaLayout);
         m_device.Destroy(m_prepassMaskLayout);
         m_device.Destroy(m_backgroundLayout);
         m_device.Destroy(m_skyLayout);
@@ -1138,7 +886,6 @@ namespace Fenrir::Render
         m_device.Destroy(m_defaultSampler);
         m_device.Destroy(m_outputSampler);
         m_device.Destroy(m_skySampler);
-        m_device.Destroy(m_panoramaSampler);
         m_device.Destroy(m_shadowSampler);
         m_device.Destroy(m_noShadow);
         m_device.Destroy(m_defaultStreams);
@@ -1186,13 +933,7 @@ namespace Fenrir::Render
         {
             desc.depthFormat.reset();
         }
-        const PipelineResult made = m_device.CreatePipeline(desc, container.name);
-        if (made.pipeline.IsEmpty())
-        {
-            m_logger.Error("FenrirRenderer: the built-in pipeline '{}' could not be made: {}", container.name,
-                           made.diagnostic);
-        }
-        return made.pipeline;
+        return MakeBuiltinPipeline(m_device, m_logger, desc, container.name);
     }
 
     SamplerHandle SceneRenderer::SamplerFor(const SamplerDescription& description)
@@ -1256,219 +997,55 @@ namespace Fenrir::Render
 
     bool SceneRenderer::IsCubemapCurrent(AssetKey key, std::uint32_t revision) const
     {
-        const auto found = m_cubemaps.find(key);
-        return found != m_cubemaps.end() && found->second.revision == revision;
+        return m_skyImages->IsCubemapCurrent(key, revision);
     }
 
     void SceneRenderer::PrepareCubemap(AssetKey key, std::uint32_t revision, const ImageData& image)
     {
-        ReleaseCubemap(key);
-        CubemapEntry& entry = m_cubemaps[key];
-        entry.revision = revision;
-        TextureDesc desc;
-        desc.kind = TextureKind::Cube;
-        desc.format = TextureFormatOf(image);
-        desc.width = image.width;
-        desc.height = image.height;
-        desc.mipLevels = MipCount(image.width, image.height);
-        desc.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
-        entry.texture = m_device.CreateTexture(desc, "Sky cubemap");
-        entry.desc = desc;
-        const TexelCodec codec = CodecOf(image);
-        const std::size_t faceBytes = std::size_t{image.width} * image.height * codec.bytes;
-        for (std::uint32_t face = 0; face < 6; ++face)
-        {
-            WriteWithMips(m_device, entry.texture, face, desc.mipLevels,
-                          std::span(image.pixels).subspan(face * faceBytes, faceBytes), image.width, image.height,
-                          codec);
-        }
-        BindingGroupEntry binding;
-        binding.binding = 0;
-        binding.texture = entry.texture;
-        binding.sampler = m_skySampler;
-        entry.group = m_device.CreateBindingGroup({m_skyLayout, {binding}}, "Sky");
+        m_skyImages->PrepareCubemap(key, revision, image);
         ++m_stats.uploads;
     }
 
     void SceneRenderer::ReleaseCubemap(AssetKey key)
     {
-        const auto found = m_cubemaps.find(key);
-        if (found != m_cubemaps.end())
-        {
-            m_device.Destroy(found->second.group);
-            m_device.Destroy(found->second.texture);
-            m_cubemaps.erase(found);
-        }
+        m_skyImages->ReleaseCubemap(key);
     }
 
     bool SceneRenderer::IsPanoramaCurrent(AssetKey key, std::uint32_t revision) const
     {
-        const auto found = m_panoramas.find(key);
-        return found != m_panoramas.end() && found->second.revision == revision;
+        return m_skyImages->IsPanoramaCurrent(key, revision);
     }
 
     void SceneRenderer::PreparePanorama(AssetKey key, std::uint32_t revision, const ImageData& image)
     {
-        ReleasePanorama(key);
-        PanoramaEntry& entry = m_panoramas[key];
-        entry.revision = revision;
-
-        TextureDesc source;
-        source.format = TextureFormatOf(image);
-        source.width = image.width;
-        source.height = image.height;
-        source.mipLevels = MipCount(image.width, image.height);
-        source.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
-        entry.source = m_device.CreateTexture(source, "Panorama");
-        WriteWithMips(m_device, entry.source, 0, source.mipLevels, image.pixels, image.width, image.height,
-                      CodecOf(image));
-
-        // Faces half as wide as the panorama is high, so as many texels go round the cube's horizon as round the
-        // panorama's: four faces across its width. RGBA16F holds an HDR sky in half the memory of RGBA32F.
-        const std::uint32_t side = std::max(image.height / 2, 1u);
-        TextureDesc& cube = entry.cubeDesc;
-        cube.kind = TextureKind::Cube;
-        cube.format = TextureFormat::Rgba16Float;
-        cube.width = side;
-        cube.height = side;
-        cube.mipLevels = MipCount(side, side);
-        cube.usage = TextureUsage::Sampled | TextureUsage::ColourAttachment;
-        entry.cube = m_device.CreateTexture(cube, "Sky panorama cube");
-
-        // Each pass's block: its face, half its level's texel, and the panorama's mip whose texels are as tall as the
-        // level's (a face spans half the panorama's height).
-        std::vector<std::byte> blocks(PanoramaSlot * 6 * cube.mipLevels);
-        for (std::uint32_t level = 0; level < cube.mipLevels; ++level)
-        {
-            const std::uint32_t levelSide = std::max(side >> level, 1u);
-            const float lod = std::max(std::log2(static_cast<float>(image.height) / (2.0f * levelSide)), 0.0f);
-            for (std::uint32_t face = 0; face < 6; ++face)
-            {
-                const PanoramaBlock block{face, 1.0f / static_cast<float>(levelSide), lod};
-                std::memcpy(blocks.data() + PanoramaSlot * (std::size_t{level} * 6 + face), &block, sizeof(block));
-            }
-        }
-        entry.params = m_device.CreateBuffer({blocks.size(), BufferUsage::Uniform}, blocks, "Panorama passes");
-        for (std::size_t pass = 0; pass < std::size_t{6} * cube.mipLevels; ++pass)
-        {
-            BindingGroupEntry params;
-            params.binding = 0;
-            params.buffer = entry.params;
-            params.offset = PanoramaSlot * pass;
-            params.size = sizeof(PanoramaBlock);
-            BindingGroupEntry panorama;
-            panorama.binding = 1;
-            panorama.texture = entry.source;
-            panorama.sampler = m_panoramaSampler;
-            entry.passGroups.push_back(m_device.CreateBindingGroup({m_panoramaLayout, {params, panorama}}, "Panorama"));
-        }
-
-        BindingGroupEntry binding;
-        binding.binding = 0;
-        binding.texture = entry.cube;
-        binding.sampler = m_skySampler;
-        entry.group = m_device.CreateBindingGroup({m_skyLayout, {binding}}, "Sky");
+        m_skyImages->PreparePanorama(key, revision, image);
         ++m_stats.uploads;
     }
 
     void SceneRenderer::ReleasePanorama(AssetKey key)
     {
-        const auto found = m_panoramas.find(key);
-        if (found == m_panoramas.end())
-        {
-            return;
-        }
-        PanoramaEntry& entry = found->second;
-        FreePanoramaPasses(entry);
-        m_device.Destroy(entry.group);
-        m_device.Destroy(entry.cube);
-        m_panoramas.erase(found);
+        m_skyImages->ReleasePanorama(key);
     }
 
     std::vector<AssetKey> SceneRenderer::PanoramaKeys() const
     {
-        std::vector<AssetKey> keys;
-        for (const auto& [key, entry] : m_panoramas)
-        {
-            keys.push_back(key);
-        }
-        return keys;
+        return m_skyImages->PanoramaKeys();
     }
 
-    void SceneRenderer::FreePanoramaPasses(PanoramaEntry& entry)
+    BindingGroupHandle SceneRenderer::SkyGroup(TextureHandle cube, std::uint64_t frameIndex)
     {
-        for (const BindingGroupHandle group : entry.passGroups)
-        {
-            m_device.Destroy(group);
-        }
-        entry.passGroups.clear();
-        m_device.Destroy(entry.params);
-        m_device.Destroy(entry.source);
-        entry.params = {};
-        entry.source = {};
-    }
-
-    void SceneRenderer::AddPanoramaPasses(RenderGraph& graph)
-    {
-        for (auto& [key, entry] : m_panoramas)
-        {
-            if (entry.converted)
-            {
-                // Its passes ran in an earlier frame, so the image's texture can go.
-                FreePanoramaPasses(entry);
-                continue;
-            }
-            if (m_panoramaPipeline.IsEmpty())
-            {
-                continue;
-            }
-            const GraphResource cube = graph.ImportTexture("Sky panorama cube", entry.cube, entry.cubeDesc);
-            for (std::uint32_t level = 0; level < entry.cubeDesc.mipLevels; ++level)
-            {
-                const std::uint32_t side = std::max(entry.cubeDesc.width >> level, 1u);
-                for (std::uint32_t face = 0; face < 6; ++face)
-                {
-                    const BindingGroupHandle group = entry.passGroups.at(std::size_t{level} * 6 + face);
-                    graph.AddPass(
-                        "Panorama", RenderStage::Prepare, QueueKind::Graphics,
-                        [=](PassBuilder& pass) { pass.ColourAttachmentLevel(cube, level, face); },
-                        [this, key, group, side](PassContext& context) {
-                            PassEncoder& encoder = context.Encoder();
-                            encoder.SetViewport({0, 0, side, side});
-                            encoder.SetPipeline(m_panoramaPipeline);
-                            encoder.SetBindingGroup(MaterialSet, group);
-                            encoder.Draw({.vertexCount = 3});
-                            // Recorded in this frame's graph, which runs before any Prepare or Release can come.
-                            m_panoramas.at(key).converted = true;
-                        });
-                }
-            }
-        }
-    }
-
-    BindingGroupHandle SceneRenderer::SkyGroup(AssetKey key) const
-    {
-        if (const auto cubemap = m_cubemaps.find(key); cubemap != m_cubemaps.end())
-        {
-            return cubemap->second.group;
-        }
-        // A panorama whose passes cannot run (builtin:panorama did not load) has nothing in its cube texture.
-        const auto panorama = m_panoramas.find(key);
-        if (panorama == m_panoramas.end() || (!panorama->second.converted && m_panoramaPipeline.IsEmpty()))
-        {
-            return {};
-        }
-        return panorama->second.group;
+        return m_skyGroups.Get({BindingGroupKeyPart::Of(cube)}, frameIndex, [&] {
+            BindingGroupEntry binding;
+            binding.binding = 0;
+            binding.texture = cube;
+            binding.sampler = m_skySampler;
+            return m_device.CreateBindingGroup({m_skyLayout, {binding}}, "Sky");
+        });
     }
 
     std::vector<AssetKey> SceneRenderer::CubemapKeys() const
     {
-        std::vector<AssetKey> keys;
-        for (const auto& [key, entry] : m_cubemaps)
-        {
-            keys.push_back(key);
-        }
-        return keys;
+        return m_skyImages->CubemapKeys();
     }
 
     TextureHandle SceneRenderer::SampledTexture(AssetKey key) const
@@ -2073,26 +1650,12 @@ namespace Fenrir::Render
 
     void SceneRenderer::SetSpotShadowBudget(std::uint32_t budget)
     {
-        if (budget == m_spotShadowConfig.budget)
-        {
-            return;
-        }
-        m_spotShadowConfig.budget = budget;
-        // Made again at the new size when a spot light next casts, and not kept meanwhile; its frame groups go with it.
-        m_device.Destroy(m_spotAtlas);
-        m_spotAtlas = {};
+        m_spotShadows->SetBudget(budget);
     }
 
     void SceneRenderer::SetPointShadowBudget(std::uint32_t budget)
     {
-        if (budget == m_pointShadowConfig.budget)
-        {
-            return;
-        }
-        m_pointShadowConfig.budget = budget;
-        // As the spot shadow atlas: made again at the new size when a point light next casts.
-        m_device.Destroy(m_pointShadowCubes);
-        m_pointShadowCubes = {};
+        m_pointShadows->SetBudget(budget);
     }
 
     SceneStats SceneRenderer::TakeStats()
@@ -2674,21 +2237,17 @@ namespace Fenrir::Render
         const BufferHandle buffer = ring.copies->Current(frameIndex);
         const std::size_t capacity = ring.capacity;
         const BufferHandle lights = m_lightBlocks->Buffer(frameIndex);
-        const std::array<std::uint32_t, 4> key{lights.index, lights.generation, buffer.index, buffer.generation};
-        auto target = m_clusterTargetGroups.find(key);
-        if (target == m_clusterTargetGroups.end())
-        {
-            BindingGroupEntry lightEntry;
-            lightEntry.binding = 0;
-            lightEntry.buffer = lights;
-            BindingGroupEntry clusterEntry;
-            clusterEntry.binding = 1;
-            clusterEntry.buffer = buffer;
-            target = m_clusterTargetGroups
-                         .emplace(key, m_device.CreateBindingGroup({m_clusterTargetLayout, {lightEntry, clusterEntry}},
-                                                                   "Cluster target"))
-                         .first;
-        }
+        const BindingGroupHandle targetGroup = m_clusterTargetGroups.Get(
+            {BindingGroupKeyPart::Of(lights), BindingGroupKeyPart::Of(buffer)}, frameIndex, [&] {
+                BindingGroupEntry lightEntry;
+                lightEntry.binding = 0;
+                lightEntry.buffer = lights;
+                BindingGroupEntry clusterEntry;
+                clusterEntry.binding = 1;
+                clusterEntry.buffer = buffer;
+                return m_device.CreateBindingGroup({m_clusterTargetLayout, {lightEntry, clusterEntry}},
+                                                   "Cluster target");
+            });
         ClusterJobBlock job;
         job.view = request.view;
         job.inverseProjection = glm::inverse(request.projection);
@@ -2701,7 +2260,7 @@ namespace Fenrir::Render
             "LightClusters", RenderStage::DepthPrepass, QueueKind::Compute,
             [=](PassBuilder& pass) { pass.StorageWrite(resource); },
             [pipeline = m_lightClustersPipeline, jobGroup = m_clusterJobs->Group(frameIndex, view),
-             targetGroup = target->second](PassContext& context) {
+             targetGroup](PassContext& context) {
                 PassEncoder& encoder = context.Encoder();
                 encoder.SetPipeline(pipeline);
                 encoder.SetBindingGroup(0, jobGroup);
@@ -2738,13 +2297,14 @@ namespace Fenrir::Render
         return group.group;
     }
 
-    const SceneRenderer::FrameGroup& SceneRenderer::FrameGroupFor(std::uint64_t frameIndex, TextureHandle spotAtlas,
-                                                                  TextureHandle pointShadowCubes)
+    const SceneRenderer::FrameGroup& SceneRenderer::FrameGroupFor(std::uint64_t frameIndex)
     {
         const BufferHandle block = m_frameBlocks->Buffer(frameIndex);
         const BufferHandle lights = m_lightBlocks->Buffer(frameIndex);
-        const BufferHandle spotShadows = m_spotShadowBlocks->Buffer(frameIndex);
-        const BufferHandle pointShadows = m_pointShadowBlocks->Buffer(frameIndex);
+        const BufferHandle spotShadows = m_spotShadows->Records(frameIndex);
+        const BufferHandle pointShadows = m_pointShadows->Records(frameIndex);
+        const TextureHandle spotAtlas = m_spotShadows->Map();
+        const TextureHandle pointShadowCubes = m_pointShadows->Map();
         const SkyLightingTextures& sky = m_skyLighting->Textures();
         // One pair of groups per copy, made again when a ring remade its buffer, the sky's textures changed, or the
         // spot shadow atlas or point shadow cubes came, went or was made again.
@@ -2793,14 +2353,14 @@ namespace Fenrir::Render
             spotEntry.buffer = spotShadows;
             BindingGroupEntry atlasEntry;
             atlasEntry.binding = 8;
-            atlasEntry.texture = spotAtlas.IsEmpty() ? m_noShadow : spotAtlas;
+            atlasEntry.texture = m_spotShadows->Bound();
             atlasEntry.sampler = m_shadowSampler;
             BindingGroupEntry pointEntry;
             pointEntry.binding = 9;
             pointEntry.buffer = pointShadows;
             BindingGroupEntry cubesEntry;
             cubesEntry.binding = 10;
-            cubesEntry.texture = pointShadowCubes.IsEmpty() ? m_noPointShadow : pointShadowCubes;
+            cubesEntry.texture = m_pointShadows->Bound();
             cubesEntry.sampler = m_shadowSampler;
             std::vector<BindingGroupEntry> entries{blockEntry, irradiance, specular,     brdf,
                                                    lightEntry, ltcMatrix,  ltcAmplitude, spotEntry,
@@ -2811,8 +2371,8 @@ namespace Fenrir::Render
             group.unshadowed = group.group;
             if (!spotAtlas.IsEmpty() || !pointShadowCubes.IsEmpty())
             {
-                entries.at(8).texture = m_noShadow;
-                entries.at(10).texture = m_noPointShadow;
+                entries.at(8).texture = m_spotShadows->Fallback();
+                entries.at(10).texture = m_pointShadows->Fallback();
                 group.unshadowed = m_device.CreateBindingGroup({m_frameLayout, entries}, "Frame unshadowed");
             }
         }
@@ -2823,18 +2383,9 @@ namespace Fenrir::Render
     {
         SkySource source;
         source.colour = lighting.skyColour;
-        if (const auto cubemap = m_cubemaps.find(lighting.sky); cubemap != m_cubemaps.end())
-        {
-            source.cube = cubemap->second.texture;
-            source.cubeDesc = cubemap->second.desc;
-        }
-        else if (const auto panorama = m_panoramas.find(lighting.sky);
-                 panorama != m_panoramas.end() && (panorama->second.converted || !m_panoramaPipeline.IsEmpty()))
-        {
-            // Converted in an earlier frame, or by this frame's Panorama passes, which run first in Prepare.
-            source.cube = panorama->second.cube;
-            source.cubeDesc = panorama->second.cubeDesc;
-        }
+        const SkyCube cube = m_skyImages->Cube(lighting.sky);
+        source.cube = cube.texture;
+        source.cubeDesc = cube.desc;
         return source;
     }
 
@@ -2850,50 +2401,39 @@ namespace Fenrir::Render
             clusters = m_noClusters;
         }
         const BufferHandle buffer = m_viewBlocks->Buffer(frameIndex);
-        const std::array<std::uint32_t, 9> key{
-            buffer.index,      buffer.generation,    static_cast<std::uint32_t>(slot),
-            occlusion.index,   occlusion.generation, shadow.index,
-            shadow.generation, clusters.index,       clusters.generation};
-        if (const auto found = m_viewGroups.find(key); found != m_viewGroups.end())
-        {
-            return found->second;
-        }
-        BindingGroupEntry block;
-        block.binding = 0;
-        block.buffer = buffer;
-        block.offset = slot * m_viewBlocks->SlotSize();
-        block.size = m_viewBlocks->SlotSize();
-        BindingGroupEntry texture;
-        texture.binding = 1;
-        texture.texture = occlusion;
-        texture.sampler = m_outputSampler;
-        BindingGroupEntry shadowAtlas;
-        shadowAtlas.binding = 2;
-        shadowAtlas.texture = shadow;
-        shadowAtlas.sampler = m_shadowSampler;
-        BindingGroupEntry clusterLights;
-        clusterLights.binding = 3;
-        clusterLights.buffer = clusters;
-        const BindingGroupHandle group =
-            m_device.CreateBindingGroup({m_viewLayout, {block, texture, shadowAtlas, clusterLights}}, "View");
-        m_viewGroups.emplace(key, group);
-        return group;
+        const BindingGroupCache<5>::Key key{
+            BindingGroupKeyPart::Of(buffer), BindingGroupKeyPart::Value(static_cast<std::uint32_t>(slot)),
+            BindingGroupKeyPart::Of(occlusion), BindingGroupKeyPart::Of(shadow), BindingGroupKeyPart::Of(clusters)};
+        return m_viewGroups.Get(key, frameIndex, [&] {
+            BindingGroupEntry block;
+            block.binding = 0;
+            block.buffer = buffer;
+            block.offset = slot * m_viewBlocks->SlotSize();
+            block.size = m_viewBlocks->SlotSize();
+            BindingGroupEntry texture;
+            texture.binding = 1;
+            texture.texture = occlusion;
+            texture.sampler = m_outputSampler;
+            BindingGroupEntry shadowAtlas;
+            shadowAtlas.binding = 2;
+            shadowAtlas.texture = shadow;
+            shadowAtlas.sampler = m_shadowSampler;
+            BindingGroupEntry clusterLights;
+            clusterLights.binding = 3;
+            clusterLights.buffer = clusters;
+            return m_device.CreateBindingGroup({m_viewLayout, {block, texture, shadowAtlas, clusterLights}}, "View");
+        });
     }
 
-    BindingGroupHandle SceneRenderer::OutputGroup(TextureHandle sceneColour)
+    BindingGroupHandle SceneRenderer::OutputGroup(TextureHandle sceneColour, std::uint64_t frameIndex)
     {
-        const std::pair<std::uint32_t, std::uint32_t> key{sceneColour.index, sceneColour.generation};
-        if (const auto found = m_outputGroups.find(key); found != m_outputGroups.end())
-        {
-            return found->second;
-        }
-        BindingGroupEntry entry;
-        entry.binding = 0;
-        entry.texture = sceneColour;
-        entry.sampler = m_outputSampler;
-        const BindingGroupHandle group = m_device.CreateBindingGroup({m_outputLayout, {entry}}, "Output");
-        m_outputGroups.emplace(key, group);
-        return group;
+        return m_outputGroups.Get({BindingGroupKeyPart::Of(sceneColour)}, frameIndex, [&] {
+            BindingGroupEntry entry;
+            entry.binding = 0;
+            entry.texture = sceneColour;
+            entry.sampler = m_outputSampler;
+            return m_device.CreateBindingGroup({m_outputLayout, {entry}}, "Output");
+        });
     }
 
     void SceneRenderer::AddWindowClear(RenderGraph& graph, const FrameContext& frame)
@@ -2908,51 +2448,6 @@ namespace Fenrir::Render
 
     void SceneRenderer::AddPasses(RenderGraph& graph, const FrameContext& frame)
     {
-        // The Output groups of SceneColor textures the transient pool has let go of.
-        for (auto it = m_outputGroups.begin(); it != m_outputGroups.end();)
-        {
-            if (!m_device.IsLive(TextureHandle{it->first.first, it->first.second}))
-            {
-                m_device.Destroy(it->second);
-                it = m_outputGroups.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
-        // And the view groups of view rings remade since, of occlusion or shadow textures it has let go of, or of
-        // cluster buffers grown since.
-        for (auto it = m_viewGroups.begin(); it != m_viewGroups.end();)
-        {
-            const std::array<std::uint32_t, 9>& key = it->first;
-            if (!m_device.IsLive(BufferHandle{key[0], key[1]}) || !m_device.IsLive(TextureHandle{key[3], key[4]}) ||
-                !m_device.IsLive(TextureHandle{key[5], key[6]}) || !m_device.IsLive(BufferHandle{key[7], key[8]}))
-            {
-                m_device.Destroy(it->second);
-                it = m_viewGroups.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
-
-        // And the LightClusters passes' groups of light buffers or cluster buffers remade since.
-        for (auto it = m_clusterTargetGroups.begin(); it != m_clusterTargetGroups.end();)
-        {
-            const std::array<std::uint32_t, 4>& key = it->first;
-            if (!m_device.IsLive(BufferHandle{key[0], key[1]}) || !m_device.IsLive(BufferHandle{key[2], key[3]}))
-            {
-                m_device.Destroy(it->second);
-                it = m_clusterTargetGroups.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
-
         m_stats.draws = 0;
         m_stats.instances = 0;
         m_stats.paletteBytes = 0;
@@ -2961,7 +2456,7 @@ namespace Fenrir::Render
         m_stats.shadowDraws = 0;
         m_drawnViews.clear();
         PackInstanceLists();
-        AddPanoramaPasses(graph);
+        m_skyImages->AddPasses(graph);
         m_skyLighting->AddPasses(graph, SkySourceOf(m_frame.lighting));
         if (m_frame.views.empty())
         {
@@ -2976,23 +2471,9 @@ namespace Fenrir::Render
         {
             cameras.push_back(view.position);
         }
-        ShadowChoice spotChoice = ChooseSpotShadows(lighting.lights, cameras, m_spotShadowConfig.budget);
-        if (spotChoice.wanted > spotChoice.lights.size() && !m_loggedSpotBudget)
-        {
-            m_loggedSpotBudget = true;
-            m_logger.Warn("FenrirRenderer: {} spot lights cast shadows, past the spot shadow budget of {}, so those "
-                          "farthest from the cameras light unshadowed",
-                          spotChoice.wanted, m_spotShadowConfig.budget);
-        }
+        ShadowChoice spotChoice = m_spotShadows->Choose(lighting.lights, cameras);
         // And the point lights, within theirs.
-        ShadowChoice pointChoice = ChoosePointShadows(lighting.lights, cameras, m_pointShadowConfig.budget);
-        if (pointChoice.wanted > pointChoice.lights.size() && !m_loggedPointBudget)
-        {
-            m_loggedPointBudget = true;
-            m_logger.Warn("FenrirRenderer: {} point lights cast shadows, past the point shadow budget of {}, so those "
-                          "farthest from the cameras light unshadowed",
-                          pointChoice.wanted, m_pointShadowConfig.budget);
-        }
+        ShadowChoice pointChoice = m_pointShadows->Choose(lighting.lights, cameras);
 
         std::vector<SkinDispatch> skins;
         const auto draws = std::make_shared<const std::vector<ResolvedDraw>>(
@@ -3013,16 +2494,14 @@ namespace Fenrir::Render
                 pointCasters.push_back(i);
             }
         }
-        if (casters.empty())
-        {
-            spotChoice.lights.clear();
-        }
-        if (pointCasters.empty())
-        {
-            pointChoice.lights.clear();
-        }
-        const auto spotCount = static_cast<std::uint32_t>(spotChoice.lights.size());
-        const auto pointCount = static_cast<std::uint32_t>(pointChoice.lights.size());
+        // Each kind's shadowed lights (none when nothing casts their shadows), their shadows fitted and records
+        // written, and the maps they are drawn into.
+        const auto spotFrame =
+            m_spotShadows->Prepare(std::move(spotChoice), frameIndex, graph, lighting.lights, !casters.empty());
+        const auto pointFrame =
+            m_pointShadows->Prepare(std::move(pointChoice), frameIndex, graph, lighting.lights, !pointCasters.empty());
+        const auto spotCount = static_cast<std::uint32_t>(spotFrame.lights.size());
+        const auto pointCount = static_cast<std::uint32_t>(pointFrame.lights.size());
         const FrameBlock frameBlock{Math::Vec4(lighting.lightDirection, 0.0f),
                                     Math::Vec4(lighting.lightColour, 0.0f),
                                     Math::Vec4(m_frame.time, m_frame.deltaTime, 0.0f, 0.0f),
@@ -3034,30 +2513,8 @@ namespace Fenrir::Render
                                     {static_cast<std::uint32_t>(lighting.lights.size() + lighting.rectLights.size()),
                                      spotCount, pointCount, 0}};
         m_frameBlocks->Write(frameIndex, 0, BytesOf(frameBlock));
-        // The shadowed spot lights in their tiles' order, the shadowed point lights in their cubes' order, the other
-        // point and spot lights, then the rect lights, written again each frame into a buffer that grows by doubling.
-        std::vector<GpuLight> lightRecords;
-        lightRecords.reserve(lighting.lights.size() + lighting.rectLights.size());
-        std::vector<bool> shadowedLight(lighting.lights.size(), false);
-        for (const std::vector<std::size_t>* chosen : {&spotChoice.lights, &pointChoice.lights})
-        {
-            for (const std::size_t i : *chosen)
-            {
-                shadowedLight[i] = true;
-                lightRecords.push_back(ToGpuLight(lighting.lights[i]));
-            }
-        }
-        for (std::size_t i = 0; i < lighting.lights.size(); ++i)
-        {
-            if (!shadowedLight[i])
-            {
-                lightRecords.push_back(ToGpuLight(lighting.lights[i]));
-            }
-        }
-        for (const RectLight& light : lighting.rectLights)
-        {
-            lightRecords.push_back(ToGpuLight(light));
-        }
+        const std::vector<GpuLight> lightRecords =
+            LightRecords(lighting.lights, lighting.rectLights, spotFrame.lights, pointFrame.lights);
         m_lightBlocks->Reserve(lightRecords.size());
         for (std::size_t i = 0; i < lightRecords.size(); ++i)
         {
@@ -3102,71 +2559,15 @@ namespace Fenrir::Render
             instances += std::max<std::uint32_t>(draw.instances.count, 1);
         }
         const std::vector<ViewRequest>& views = m_frame.views;
-        // Each view's block, then each view's cascades' (ADR-0050), MaxCascades slots a view, then each spot light
-        // tile's, then each point light's: its cube's, then its faces'.
-        const std::size_t firstTileSlot = views.size() * (1 + MaxCascades);
-        const std::size_t firstCubeSlot = firstTileSlot + spotCount;
-        constexpr std::size_t CubeSlots = 1 + CubeFaceCount;
-        m_viewBlocks->Reserve(firstCubeSlot + pointCount * CubeSlots);
+        const ViewBlockSlots slots{views.size(), spotCount, pointCount};
+        m_viewBlocks->Reserve(slots.Count());
 
-        // Each shadowed spot light's perspective and record, and the atlas its tile is in, kept across frames.
-        const SpotAtlasGrid grid = SpotAtlasGridOf(m_spotShadowConfig.budget);
-        const std::uint32_t tileSize = m_spotShadowConfig.mapSize;
-        std::vector<SpotShadow> spotShadows;
-        m_spotShadowBlocks->Reserve(std::max<std::size_t>(spotCount, 1));
-        for (std::uint32_t t = 0; t < spotCount; ++t)
-        {
-            const PunctualLight& light = lighting.lights[spotChoice.lights[t]];
-            spotShadows.push_back(FitSpotShadow(light, tileSize));
-            m_spotShadowBlocks->Write(frameIndex, t,
-                                      BytesOf(ToGpuSpotShadow(light, spotShadows.back(), t, grid, tileSize)));
-        }
-        GraphResource spotAtlas;
-        if (spotCount > 0)
-        {
-            TextureDesc desc;
-            desc.format = TextureFormat::Depth32Float;
-            desc.width = grid.columns * tileSize;
-            desc.height = grid.rows * tileSize;
-            desc.usage = TextureUsage::DepthAttachment | TextureUsage::Sampled;
-            if (m_spotAtlas.IsEmpty() || m_spotAtlasDesc.width != desc.width || m_spotAtlasDesc.height != desc.height)
-            {
-                m_device.Destroy(m_spotAtlas);
-                m_spotAtlas = m_device.CreateTexture(desc, "Spot shadow atlas");
-                m_spotAtlasDesc = desc;
-            }
-            spotAtlas = graph.ImportTexture("SpotShadowAtlas", m_spotAtlas, desc);
-        }
-
-        // Each shadowed point light's faces and record, and the point shadow cubes its cube is in, a cube per budget,
-        // kept across frames.
-        const std::uint32_t faceSize = m_pointShadowConfig.mapSize;
-        std::vector<PointShadow> pointShadows;
-        m_pointShadowBlocks->Reserve(std::max<std::size_t>(pointCount, 1));
-        for (std::uint32_t c = 0; c < pointCount; ++c)
-        {
-            const PunctualLight& light = lighting.lights[pointChoice.lights[c]];
-            pointShadows.push_back(FitPointShadow(light, faceSize));
-            m_pointShadowBlocks->Write(frameIndex, c, BytesOf(ToGpuPointShadow(light, pointShadows.back())));
-        }
-        GraphResource pointShadowCubes;
-        if (pointCount > 0)
-        {
-            TextureDesc desc;
-            desc.kind = TextureKind::CubeArray;
-            desc.format = TextureFormat::Depth32Float;
-            desc.width = faceSize;
-            desc.height = faceSize;
-            desc.layers = m_pointShadowConfig.budget;
-            desc.usage = TextureUsage::DepthAttachment | TextureUsage::Sampled;
-            if (m_pointShadowCubes.IsEmpty() || m_pointShadowCubesDesc != desc)
-            {
-                m_device.Destroy(m_pointShadowCubes);
-                m_pointShadowCubes = m_device.CreateTexture(desc, "Point shadow cubes");
-                m_pointShadowCubesDesc = desc;
-            }
-            pointShadowCubes = graph.ImportTexture("PointShadowCubes", m_pointShadowCubes, desc);
-        }
+        // The spot shadow atlas's grid of tiles, and the point shadow cubes' faces.
+        const SpotAtlasGrid grid = SpotAtlasGridOf(m_spotShadows->Config().budget);
+        const std::uint32_t tileSize = m_spotShadows->Config().mapSize;
+        const std::uint32_t faceSize = m_pointShadows->Config().mapSize;
+        const GraphResource spotAtlas = spotFrame.map;
+        const GraphResource pointShadowCubes = pointFrame.map;
         m_gtao->BeginFrame(views.size());
         m_clusterJobs->Reserve(views.size());
         m_backgroundBlocks->Reserve(views.size());
@@ -3205,48 +2606,33 @@ namespace Fenrir::Render
             return resource;
         };
 
-        // Which sampled images each view may read. A view samples an image after every view that draws it, so the
-        // graph orders them; one that would wait on itself, directly or through other views, gets the default texture
-        // for that image instead (ADR-0026), the views taken in their order.
-        std::vector<std::vector<std::size_t>> waitsOn(views.size());
+        // Which sampled images each view may read (ADR-0026). Each it may not is warned of once per target, and its
+        // materials bind the default texture for it.
+        std::vector<AssetKey> targets;
+        for (const ViewRequest& view : views)
+        {
+            targets.push_back(view.target);
+        }
+        const std::vector<ImageReads> imageReads = PlanImageReads(targets, sampled);
         std::vector<std::vector<AssetKey>> replaced(views.size());
-        std::vector<std::vector<AssetKey>> reads(views.size());
         for (std::size_t v = 0; v < views.size(); ++v)
         {
-            for (const AssetKey image : sampled)
+            for (const auto& [image, reason] : imageReads[v].replaced)
             {
-                std::vector<std::size_t> writers;
-                for (std::size_t w = 0; w < views.size(); ++w)
+                replaced[v].push_back(image);
+                if (m_loggedSampling.insert({views[v].target, image}).second)
                 {
-                    if (views[w].target == image && m_targets.contains(image))
-                    {
-                        writers.push_back(w);
-                    }
+                    m_logger.Warn(reason == ReplacedBecause::OwnTarget
+                                      ? "FenrirRenderer: a view into {} draws materials that sample its own target "
+                                        "image, so they sample the default texture there"
+                                      : "FenrirRenderer: a view into {} draws materials that sample image {}, whose "
+                                        "views wait on it in a cycle, so they sample the default texture there",
+                                  TargetName(views[v].target), image.index);
                 }
-                const bool own = views[v].target == image;
-                const bool cycle =
-                    std::any_of(writers.begin(), writers.end(), [&](std::size_t w) { return Waits(waitsOn, w, v); });
-                if (own || cycle)
-                {
-                    replaced[v].push_back(image);
-                    if (m_loggedSampling.insert({views[v].target, image}).second)
-                    {
-                        m_logger.Warn(own ? "FenrirRenderer: a view into {} draws materials that sample its own target "
-                                            "image, so they sample the default texture there"
-                                          : "FenrirRenderer: a view into {} draws materials that sample image {}, "
-                                            "whose views wait on it in a cycle, so they sample the default texture "
-                                            "there",
-                                      TargetName(views[v].target), image.index);
-                    }
-                    continue;
-                }
-                waitsOn[v].insert(waitsOn[v].end(), writers.begin(), writers.end());
-                reads[v].push_back(image);
             }
         }
 
-        const FrameGroup& frameGroups = FrameGroupFor(frameIndex, spotCount > 0 ? m_spotAtlas : TextureHandle{},
-                                                      pointCount > 0 ? m_pointShadowCubes : TextureHandle{});
+        const FrameGroup& frameGroups = FrameGroupFor(frameIndex);
         const BindingGroupHandle frameGroup = frameGroups.group;
         const BindingGroupHandle unshadowedFrame = frameGroups.unshadowed;
         const BindingGroupHandle drawGroup = DrawGroupFor(frameIndex);
@@ -3274,7 +2660,7 @@ namespace Fenrir::Render
             std::vector<PixelRect> tiles;
             for (std::uint32_t t = 0; t < spotCount; ++t)
             {
-                const SpotShadow& shadow = spotShadows[t];
+                const SpotShadow& shadow = spotFrame.shadows[t];
                 const SpotAtlasTile at = SpotAtlasTileOf(t, grid);
                 const PixelRect tile{static_cast<std::int32_t>(at.column * tileSize),
                                      static_cast<std::int32_t>(at.row * tileSize), tileSize, tileSize};
@@ -3282,12 +2668,11 @@ namespace Fenrir::Render
                                           shadow.projection,
                                           shadow.viewProjection,
                                           glm::inverse(shadow.viewProjection),
-                                          Math::Vec4(lighting.lights[spotChoice.lights[t]].position, 1.0f),
+                                          Math::Vec4(lighting.lights[spotFrame.lights[t]].position, 1.0f),
                                           Math::Vec4(static_cast<float>(tile.x), static_cast<float>(tile.y),
                                                      static_cast<float>(tileSize), static_cast<float>(tileSize))};
-                m_viewBlocks->Write(frameIndex, firstTileSlot + t, BytesOf(tileBlock));
-                tileGroups.push_back(
-                    ViewGroupFor(frameIndex, firstTileSlot + t, GetDefaultTexture(DefaultTexture::White)));
+                m_viewBlocks->Write(frameIndex, slots.Tile(t), BytesOf(tileBlock));
+                tileGroups.push_back(ViewGroupFor(frameIndex, slots.Tile(t), GetDefaultTexture(DefaultTexture::White)));
                 tiles.push_back(tile);
             }
             // Every shadowed spot light into its tile of the atlas, in one pass, binding the frame group that does not
@@ -3340,9 +2725,8 @@ namespace Fenrir::Render
             std::vector<BindingGroupHandle> faceGroups;
             for (std::uint32_t c = 0; c < pointCount; ++c)
             {
-                const PointShadow& shadow = pointShadows[c];
-                const PunctualLight& light = lighting.lights[pointChoice.lights[c]];
-                const std::size_t slot = firstCubeSlot + c * CubeSlots;
+                const PointShadow& shadow = pointFrame.shadows[c];
+                const PunctualLight& light = lighting.lights[pointFrame.lights[c]];
                 const auto blockFor = [&](const Math::Mat4& view) {
                     const Math::Mat4 viewProjection = shadow.projection * view;
                     ViewBlock block{view,
@@ -3354,12 +2738,12 @@ namespace Fenrir::Render
                     block.shadowInfo = {0, 0, c, 0};
                     return block;
                 };
-                m_viewBlocks->Write(frameIndex, slot, BytesOf(blockFor(shadow.view)));
-                cubeGroups.push_back(ViewGroupFor(frameIndex, slot, white));
+                m_viewBlocks->Write(frameIndex, slots.Cube(c), BytesOf(blockFor(shadow.view)));
+                cubeGroups.push_back(ViewGroupFor(frameIndex, slots.Cube(c), white));
                 for (std::uint32_t f = 0; f < CubeFaceCount; ++f)
                 {
-                    m_viewBlocks->Write(frameIndex, slot + 1 + f, BytesOf(blockFor(shadow.faceViews.at(f))));
-                    faceGroups.push_back(ViewGroupFor(frameIndex, slot + 1 + f, white));
+                    m_viewBlocks->Write(frameIndex, slots.Face(c, f), BytesOf(blockFor(shadow.faceViews.at(f))));
+                    faceGroups.push_back(ViewGroupFor(frameIndex, slots.Face(c, f), white));
                 }
             }
             // The instanced faces of every shadowed point light, in one pass attaching every layer, binding the frame
@@ -3418,6 +2802,7 @@ namespace Fenrir::Render
             const GraphResource target = intoImage ? imported(request.target) : frame.backbuffer;
             const PixelRect rect = request.viewport;
             const PixelRect viewport{0, 0, rect.width, rect.height};
+            const std::size_t viewSlot = slots.View(v);
 
             // The sun's cascades for this camera, when it casts and something casts (ADR-0050).
             const SunShadowSettings& sun = lighting.shadows;
@@ -3463,13 +2848,13 @@ namespace Fenrir::Render
             viewBlock.clusterInfo = {clusterBuffer.IsEmpty() ? 0u : 1u,
                                      request.debugView == ViewDebug::LightClusters ? 1u : 0u,
                                      std::min(lightCount, MaxClusterLights), 0};
-            m_viewBlocks->Write(frameIndex, v, BytesOf(viewBlock));
+            m_viewBlocks->Write(frameIndex, viewSlot, BytesOf(viewBlock));
             // Each cascade's own view block, which the casting items' vertex stages place them by.
             std::vector<BindingGroupHandle> cascadeGroups;
             for (std::uint32_t c = 0; c < cascadeCount; ++c)
             {
                 const Cascade& cascade = cascades[c];
-                const std::size_t slot = views.size() + v * MaxCascades + c;
+                const std::size_t slot = slots.Cascade(v, c);
                 const auto size = static_cast<float>(m_cascades.mapSize);
                 const ViewBlock cascadeBlock{cascade.view,
                                              cascade.projection,
@@ -3490,15 +2875,15 @@ namespace Fenrir::Render
             const BindingGroupHandle outputBlockGroup = m_outputBlocks->Group(frameIndex, v);
             // The white texture as its ambient occlusion, for every pass but Opaque.
             const BindingGroupHandle viewGroup =
-                ViewGroupFor(frameIndex, v, GetDefaultTexture(DefaultTexture::White), {}, clusterBuffer);
+                ViewGroupFor(frameIndex, viewSlot, GetDefaultTexture(DefaultTexture::White), {}, clusterBuffer);
             // The Sky cube texture's pipeline and group, when the view draws one that is prepared; else its colour's,
             // which reads no frame block.
             BindingGroupHandle backgroundGroup = m_backgroundBlocks->Group(frameIndex, v);
             PipelineHandle backgroundPipeline = m_backgroundPipeline;
             BindingGroupHandle backgroundFrame;
-            if (const BindingGroupHandle sky = SkyGroup(request.sky); !sky.IsEmpty() && !m_skyPipeline.IsEmpty())
+            if (const SkyCube sky = m_skyImages->Cube(request.sky); !sky.texture.IsEmpty() && !m_skyPipeline.IsEmpty())
             {
-                backgroundGroup = sky;
+                backgroundGroup = SkyGroup(sky.texture, frameIndex);
                 backgroundPipeline = m_skyPipeline;
                 backgroundFrame = frameGroup;
             }
@@ -3512,7 +2897,7 @@ namespace Fenrir::Render
                                                            : GroupWithout(*draw.material, replaced[v]));
             }
             std::vector<GraphResource> samples;
-            for (const AssetKey image : reads[v])
+            for (const AssetKey image : imageReads[v].reads)
             {
                 samples.push_back(imported(image));
             }
@@ -3635,7 +3020,7 @@ namespace Fenrir::Render
                 });
             // GTAO from the prepass's depth and normals, when the camera has it; Opaque samples what it makes.
             const GraphResource occlusion = m_gtao->AddPasses(
-                graph, frameIndex, v,
+                graph, frameIndex,
                 {sceneDepth, sceneNormals, {rect.width, rect.height}, request.projection, request.ambientOcclusion});
             graph.AddPass(
                 "Opaque", RenderStage::Opaque, QueueKind::Graphics,
@@ -3670,14 +3055,15 @@ namespace Fenrir::Render
                     readSkinned(pass);
                 },
                 [this, draws, groups, opaqueRuns, frameGroup, drawGroup, skinned, viewport, occlusion, shadowAtlas,
-                 clusterBuffer, v](PassContext& context) {
+                 clusterBuffer, viewSlot](PassContext& context) {
                     const TextureHandle occlusionTexture =
                         occlusion.IsEmpty() ? GetDefaultTexture(DefaultTexture::White) : context.Texture(occlusion);
                     const TextureHandle shadowTexture =
                         shadowAtlas.IsEmpty() ? TextureHandle{} : context.Texture(shadowAtlas);
-                    RecordDraws(context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup,
-                                ViewGroupFor(context.FrameIndex(), v, occlusionTexture, shadowTexture, clusterBuffer),
-                                drawGroup, skinned, viewport, DrawPass::Main);
+                    RecordDraws(
+                        context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup,
+                        ViewGroupFor(context.FrameIndex(), viewSlot, occlusionTexture, shadowTexture, clusterBuffer),
+                        drawGroup, skinned, viewport, DrawPass::Main);
                 });
             if (!transparent->empty())
             {
@@ -3710,12 +3096,12 @@ namespace Fenrir::Render
                         readSkinned(pass);
                     },
                     [this, draws, groups, transparentRuns, frameGroup, viewGroup, drawGroup, skinned, viewport,
-                     shadowAtlas, clusterBuffer, v](PassContext& context) {
+                     shadowAtlas, clusterBuffer, viewSlot](PassContext& context) {
                         // Shadowed, but never darkened by the occlusion of what is behind it.
                         const BindingGroupHandle shadowedView =
                             shadowAtlas.IsEmpty()
                                 ? viewGroup
-                                : ViewGroupFor(context.FrameIndex(), v, GetDefaultTexture(DefaultTexture::White),
+                                : ViewGroupFor(context.FrameIndex(), viewSlot, GetDefaultTexture(DefaultTexture::White),
                                                context.Texture(shadowAtlas), clusterBuffer);
                         RecordDraws(context.Encoder(), *draws, *groups, *transparentRuns, frameGroup, shadowedView,
                                     drawGroup, skinned, viewport, DrawPass::Main);
@@ -3775,7 +3161,8 @@ namespace Fenrir::Render
                     encoder.SetViewport(rect);
                     encoder.SetPipeline(outputPipeline);
                     encoder.SetBindingGroup(1, outputBlockGroup);
-                    encoder.SetBindingGroup(MaterialSet, OutputGroup(shownBlack ? black : context.Texture(shown)));
+                    encoder.SetBindingGroup(
+                        MaterialSet, OutputGroup(shownBlack ? black : context.Texture(shown), context.FrameIndex()));
                     encoder.Draw({.vertexCount = 3});
                 });
         }

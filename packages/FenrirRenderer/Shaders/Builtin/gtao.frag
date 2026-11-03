@@ -16,6 +16,7 @@
 // The view space is the renderer's (right-handed, the camera looking down -Z, reversed-Z depth, NDC +y at row 0), not
 // XeGTAO's (left-handed, +Z forward); the search uses only dot products and lengths, so it carries over as it is.
 // XeGTAO's depth MIP chain and temporal noise are left out: depth is read at full resolution, and the noise is fixed.
+#include "Fenrir/Constants.glsl"
 #include "Fenrir/Normals.glsl"
 
 layout(set = 1, binding = 0, std140) uniform GtaoData
@@ -34,8 +35,7 @@ layout(set = 1, binding = 0, std140) uniform GtaoData
 layout(location = 0) in vec2 vNdc;
 layout(location = 0) out vec4 outOcclusion;
 
-const float GtaoPi = 3.1415926535897932;
-const float GtaoHalfPi = 1.5707963267948966;
+const float GtaoHalfPi = 0.5 * FenrirPi;
 
 // A pixel's coordinates clamped into the view, as XeGTAO's clamping sampler reads past its edges.
 ivec2 GtaoClamped(ivec2 pixel)
@@ -161,7 +161,7 @@ float FastACos(float x)
 {
     float a = abs(x);
     float result = (-0.156583 * a + GtaoHalfPi) * sqrt(1.0 - a);
-    return x >= 0.0 ? result : GtaoPi - result;
+    return x >= 0.0 ? result : FenrirPi - result;
 }
 
 // XeGTAO's HilbertIndex: a pixel's place along a Hilbert curve over 64 x 64 tiles.
@@ -245,7 +245,7 @@ void main()
     float minS = pixelTooCloseThreshold / screenRadius;
     for (int slice = 0; slice < GtaoSlices; ++slice)
     {
-        float phi = (float(slice) + noise.x) / float(GtaoSlices) * GtaoPi;
+        float phi = (float(slice) + noise.x) / float(GtaoSlices) * FenrirPi;
         float cosPhi = cos(phi);
         float sinPhi = sin(phi);
         // In pixels, y down the view.

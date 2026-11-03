@@ -12,6 +12,7 @@
 
 #include <imgui.h>
 
+#include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirAssets/ImageData.hpp"
@@ -249,32 +250,6 @@ namespace LightingDemo
                 const auto material = tints[kind * 3 + static_cast<std::size_t>(i / 3) % 3];
                 rock.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{kinds[kind].mesh, material});
             }
-        }
-
-        /** @brief A builtin:lit material of `colour`, `metallic` and `roughness`, glowing `emissive` times `strength`.
-         */
-        Fenrir::AssetHandle<Fenrir::Material> LitMaterial(Fenrir::AssetStore& store, Fenrir::Scene& scene,
-                                                          Fenrir::Colour colour, float metallic, float roughness,
-                                                          Fenrir::Colour emissive = Fenrir::Colour::Black,
-                                                          float strength = 1.0f)
-        {
-            const auto material = store.CreateMaterial(store.Load<Fenrir::Shader>("builtin:lit", scene).handle, scene);
-            store.SetColour(material, "baseColour", colour);
-            store.SetFloat(material, "metallic", metallic);
-            store.SetFloat(material, "roughness", roughness);
-            store.SetColour(material, "emissive", emissive);
-            store.SetFloat(material, "emissiveStrength", strength);
-            return material;
-        }
-
-        void Box(Fenrir::EntityList& entities, Fenrir::AssetHandle<Fenrir::Mesh> cube,
-                 Fenrir::AssetHandle<Fenrir::Material> material, Vec3 position, Vec3 scale)
-        {
-            Fenrir::Entity entity = entities.CreateEntity();
-            Fenrir::Transform& transform = entity.AddComponent<Fenrir::Transform>();
-            transform.pos = position;
-            transform.scale = scale;
-            entity.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{cube, material});
         }
 
         /**

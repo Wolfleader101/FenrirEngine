@@ -5,6 +5,14 @@
 #include <span>
 #include <string_view>
 
+#include "Device/GraphicsDevice.hpp"
+#include "FenrirAssets/ShaderContainer.hpp"
+
+namespace Fenrir
+{
+    class ILogger;
+} // namespace Fenrir
+
 namespace Fenrir::Render
 {
     /** @brief One of the renderer's built-in shader programs, embedded in it as a shader container (ADR-0018). */
@@ -72,4 +80,13 @@ namespace Fenrir::Render
 
     /** @brief One built-in program's embedded container. */
     [[nodiscard]] const BuiltinShader& GetBuiltinShader(BuiltinProgram program);
+
+    /** @brief One built-in program's container, read from its embedded bytes; empty, and logged, if it cannot be. */
+    [[nodiscard]] ShaderContainer ReadBuiltin(BuiltinProgram program, ILogger& logger);
+
+    /** @brief A built-in pipeline of `desc`; when the device cannot make it, logs why under `name` and returns empty.
+     */
+    [[nodiscard]] Graphics::PipelineHandle MakeBuiltinPipeline(Graphics::GraphicsDevice& device, ILogger& logger,
+                                                               const Graphics::PipelineDesc& desc,
+                                                               std::string_view name);
 } // namespace Fenrir::Render

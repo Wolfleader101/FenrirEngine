@@ -33,6 +33,7 @@
 // below a few pixels, each window's own mask and room give way to their averages over the wall, so a distant facade
 // glows evenly instead of shimmering.
 #include "Fenrir/Lighting.glsl"
+#include "Hash.glsl"
 
 #pragma fenrir default(wallTint, 1.0, 1.0, 1.0, 1.0)
 #pragma fenrir default(tiles, 2.09, 1.05, 2.0, 0.0)
@@ -95,18 +96,6 @@ const float ShopDepth = 8.0;
 // The neon hues of the edge strips and of the odd coloured room.
 const vec3 Neon[6] = vec3[](vec3(1.0, 0.08, 0.5), vec3(0.08, 0.8, 1.0), vec3(0.55, 0.15, 1.0), vec3(1.0, 0.4, 0.04),
                             vec3(0.15, 1.0, 0.3), vec3(0.12, 0.25, 1.0));
-
-// 0 to 1, from four integers.
-float Hash(uvec4 v)
-{
-    uint h = v.x * 0x8da6b343u ^ v.y * 0xd8163841u ^ v.z * 0xcb1ab31fu ^ v.w * 0x165667b1u;
-    h ^= h >> 15;
-    h *= 0x2c1b3c6du;
-    h ^= h >> 12;
-    h *= 0x297a2d39u;
-    h ^= h >> 15;
-    return float(h) / 4294967295.0;
-}
 
 // How much of a span from `from` to `to` covers the coordinate `x`, softened over `width`, the coordinate's change
 // across the pixel.

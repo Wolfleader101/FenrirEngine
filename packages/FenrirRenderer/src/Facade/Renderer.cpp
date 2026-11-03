@@ -1453,11 +1453,12 @@ namespace Fenrir
             return Renderer(nullptr);
         }
         state->core = std::make_unique<Render::RendererCore>(std::move(made), *state->surface);
-        const Render::CascadeConfig cascades{std::clamp(config.shadowCascades, 1u, Render::MaxCascades),
-                                             std::max(config.shadowMapSize, 1u),
+        // The scene renderer holds the cascade count and map size in range, and the shadow pools each map size to
+        // their kind's least.
+        const Render::CascadeConfig cascades{config.shadowCascades, config.shadowMapSize,
                                              std::clamp(config.shadowSplitLambda, 0.0f, 1.0f)};
-        const Render::SpotShadowConfig spotShadows{config.spotShadowBudget, std::max(config.spotShadowMapSize, 16u)};
-        const Render::PointShadowConfig pointShadows{config.pointShadowBudget, std::max(config.pointShadowMapSize, 1u)};
+        const Render::ShadowBudgetConfig spotShadows{config.spotShadowBudget, config.spotShadowMapSize};
+        const Render::ShadowBudgetConfig pointShadows{config.pointShadowBudget, config.pointShadowMapSize};
         auto scene = std::make_unique<Render::SceneRenderer>(
             state->core->Device(), *app.Logger(), SupportedMsaa(app, config), config.automaticInstancing,
             config.computeSkinning, cascades, spotShadows, pointShadows);

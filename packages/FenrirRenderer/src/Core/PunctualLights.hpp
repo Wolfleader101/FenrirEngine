@@ -1,6 +1,9 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <span>
+#include <vector>
 
 #include "FenrirMath/Math.hpp"
 
@@ -73,6 +76,18 @@ namespace Fenrir::Render
 
     /** @brief `light` as its light buffer record. */
     [[nodiscard]] GpuLight ToGpuLight(const PunctualLight& light) noexcept;
+
+    struct RectLight;
+
+    /**
+     * @brief The light buffer's records, in the order the shaders index them: the lights of `lights` that keep spot
+     * shadows, in `spotShadowed`'s order (their tiles'), then those that keep point shadows, in `pointShadowed`'s
+     * (their cubes'), then the other point and spot lights in scene order, then `rectLights`.
+     */
+    [[nodiscard]] std::vector<GpuLight> LightRecords(std::span<const PunctualLight> lights,
+                                                     std::span<const RectLight> rectLights,
+                                                     std::span<const std::size_t> spotShadowed,
+                                                     std::span<const std::size_t> pointShadowed);
 
     /**
      * @brief How a light of intensity 1 falls off at `distance`, windowed to zero at `range` (glTF's

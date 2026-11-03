@@ -8,6 +8,7 @@
 
 #include <imgui.h>
 
+#include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
@@ -87,32 +88,9 @@ namespace LightingDemo
             return {channel(5.0f), channel(3.0f), channel(1.0f), 1.0f};
         }
 
-        /** @brief A builtin:lit material of `colour`, `metallic` and `roughness`. */
-        Fenrir::AssetHandle<Fenrir::Material> LitMaterial(Fenrir::AssetStore& store,
-                                                          Fenrir::AssetHandle<Fenrir::Shader> lit, Fenrir::Scene& scene,
-                                                          Fenrir::Colour colour, float metallic, float roughness)
-        {
-            const auto material = store.CreateMaterial(lit, scene);
-            store.SetColour(material, "baseColour", colour);
-            store.SetFloat(material, "metallic", metallic);
-            store.SetFloat(material, "roughness", roughness);
-            return material;
-        }
-
-        Fenrir::Entity Box(Fenrir::EntityList& entities, Fenrir::AssetHandle<Fenrir::Mesh> cube,
-                           Fenrir::AssetHandle<Fenrir::Material> material, Vec3 position, Vec3 scale)
-        {
-            Fenrir::Entity entity = entities.CreateEntity();
-            Fenrir::Transform& transform = entity.AddComponent<Fenrir::Transform>();
-            transform.pos = position;
-            transform.scale = scale;
-            entity.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{cube, material});
-            return entity;
-        }
-
         /** @brief The floor in tiles of varying roughness and metal, four walls, and columns and spheres to light. */
-        void SpawnRoom(Fenrir::AssetStore& store, Fenrir::Scene& scene, Fenrir::AssetHandle<Fenrir::Shader> lit,
-                       Fenrir::AssetHandle<Fenrir::Mesh> cube, Fenrir::AssetHandle<Fenrir::Mesh> sphere)
+        void SpawnRoom(Fenrir::AssetStore& store, Fenrir::Scene& scene, Fenrir::AssetHandle<Fenrir::Mesh> cube,
+                       Fenrir::AssetHandle<Fenrir::Mesh> sphere)
         {
             Fenrir::EntityList& entities = scene.GetEntityList();
             // Five by five tiles, rough to smooth across and dielectric to metal back to front, all a light grey.
@@ -124,7 +102,7 @@ namespace LightingDemo
                 {
                     const float roughness = 0.1f + 0.8f * static_cast<float>(x) / (Tiles - 1);
                     const float metallic = static_cast<float>(z) / (Tiles - 1);
-                    const auto material = LitMaterial(store, lit, scene, {0.6f, 0.6f, 0.6f, 1.0f}, metallic, roughness);
+                    const auto material = LitMaterial(store, scene, {0.6f, 0.6f, 0.6f, 1.0f}, metallic, roughness);
                     Box(entities, cube, material,
                         {-HalfRoom + Tile * (static_cast<float>(x) + 0.5f), -0.1f,
                          -HalfRoom + Tile * (static_cast<float>(z) + 0.5f)},
@@ -132,7 +110,7 @@ namespace LightingDemo
                 }
             }
 
-            const auto wall = LitMaterial(store, lit, scene, {0.8f, 0.78f, 0.75f, 1.0f}, 0.0f, 0.8f);
+            const auto wall = LitMaterial(store, scene, {0.8f, 0.78f, 0.75f, 1.0f}, 0.0f, 0.8f);
             constexpr float WallHeight = 4.0f;
             Box(entities, cube, wall, {0.0f, WallHeight * 0.5f, -HalfRoom}, {2.0f * HalfRoom, WallHeight, 0.2f});
             Box(entities, cube, wall, {0.0f, WallHeight * 0.5f, HalfRoom}, {2.0f * HalfRoom, WallHeight, 0.2f});
@@ -140,10 +118,10 @@ namespace LightingDemo
             Box(entities, cube, wall, {HalfRoom, WallHeight * 0.5f, 0.0f}, {0.2f, WallHeight, 2.0f * HalfRoom});
 
             // A ring of columns, alternately polished metal and rough plastic, and spheres between them.
-            const auto metal = LitMaterial(store, lit, scene, {0.95f, 0.93f, 0.88f, 1.0f}, 1.0f, 0.25f);
-            const auto plastic = LitMaterial(store, lit, scene, {0.2f, 0.25f, 0.7f, 1.0f}, 0.0f, 0.6f);
-            const auto gold = LitMaterial(store, lit, scene, {1.0f, 0.77f, 0.34f, 1.0f}, 1.0f, 0.4f);
-            const auto white = LitMaterial(store, lit, scene, {0.9f, 0.9f, 0.9f, 1.0f}, 0.0f, 0.15f);
+            const auto metal = LitMaterial(store, scene, {0.95f, 0.93f, 0.88f, 1.0f}, 1.0f, 0.25f);
+            const auto plastic = LitMaterial(store, scene, {0.2f, 0.25f, 0.7f, 1.0f}, 0.0f, 0.6f);
+            const auto gold = LitMaterial(store, scene, {1.0f, 0.77f, 0.34f, 1.0f}, 1.0f, 0.4f);
+            const auto white = LitMaterial(store, scene, {0.9f, 0.9f, 0.9f, 1.0f}, 0.0f, 0.15f);
             constexpr int Columns = 8;
             for (int i = 0; i < Columns; ++i)
             {
@@ -174,9 +152,7 @@ namespace LightingDemo
                 scene.AddResource<ManyLightsState>(state);
                 return;
             }
-            const auto lit = store.Load<Fenrir::Shader>("builtin:lit", scene).handle;
-            const auto unlit = store.Load<Fenrir::Shader>("builtin:unlit", scene).handle;
-            SpawnRoom(store, scene, lit, cube.handle, sphere.handle);
+            SpawnRoom(store, scene, cube.handle, sphere.handle);
 
             // Every light is made now and the ones past the count switched off, so the slider spawns nothing.
             Fenrir::EntityList& entities = scene.GetEntityList();
@@ -213,8 +189,8 @@ namespace LightingDemo
             for (int hue = 0; hue < Hues; ++hue)
             {
                 const Fenrir::Colour colour = HueColour(static_cast<float>(hue) / Hues);
-                const auto glow = store.CreateMaterial(unlit, scene);
-                store.SetColour(glow, "baseColour", {colour.r * 4.0f, colour.g * 4.0f, colour.b * 4.0f, 1.0f});
+                const auto glow =
+                    UnlitMaterial(store, scene, {colour.r * 4.0f, colour.g * 4.0f, colour.b * 4.0f, 1.0f});
                 for (MovingLight& light : state.lights)
                 {
                     if (light.hue == hue)
