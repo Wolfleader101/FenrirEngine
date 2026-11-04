@@ -97,6 +97,13 @@ namespace Fenrir::Render
         float intensity = 1.0f;
     };
 
+    /** @brief A view's screen-space reflections (ADR-0056), the core's copy of Camera::reflections. */
+    struct ReflectionSettings
+    {
+        /** @brief Whether the view keeps a history colour and Hi-Z pyramids, and adds their passes. */
+        bool enabled = false;
+    };
+
     /** @brief What a view's Output pass shows instead of its lit colour (Camera::debugView). */
     enum class ViewDebug : std::uint8_t
     {
@@ -146,6 +153,13 @@ namespace Fenrir::Render
         BloomSettings bloom;
         /** @brief Its GTAO, which builtin:lit's sky light is darkened by in `Opaque` (Camera::ambientOcclusion). */
         AmbientOcclusionSettings ambientOcclusion;
+        /** @brief Its screen-space reflections' history and pyramids (Camera::reflections). */
+        ReflectionSettings reflections;
+        /**
+         * @brief Its camera's entity id, which what the renderer keeps of the view across frames (its reflection
+         * history, ADR-0056) is kept under: one view a frame per id.
+         */
+        std::uint32_t camera = 0;
         /** @brief What Output draws instead of SceneColor, or how its lit colour is tinted. */
         ViewDebug debugView = ViewDebug::None;
     };

@@ -17,10 +17,12 @@
 #include "FenrirShaders/BuiltinDepthPrepass.hpp"
 #include "FenrirShaders/BuiltinFallback.hpp"
 #include "FenrirShaders/BuiltinGtao.hpp"
+#include "FenrirShaders/BuiltinHiZ.hpp"
 #include "FenrirShaders/BuiltinLightClusters.hpp"
 #include "FenrirShaders/BuiltinLit.hpp"
 #include "FenrirShaders/BuiltinOutput.hpp"
 #include "FenrirShaders/BuiltinPanorama.hpp"
+#include "FenrirShaders/BuiltinSceneHistory.hpp"
 #include "FenrirShaders/BuiltinShadow.hpp"
 #include "FenrirShaders/BuiltinSkinning.hpp"
 #include "FenrirShaders/BuiltinSkyIrradiance.hpp"
@@ -37,9 +39,9 @@ namespace Fenrir::Render
             return std::as_bytes(std::span<const std::uint8_t, N>(embedded));
         }
 
-        const std::array<BuiltinShader, 20>& Table()
+        const std::array<BuiltinShader, 22>& Table()
         {
-            static const std::array<BuiltinShader, 20> table{{
+            static const std::array<BuiltinShader, 22> table{{
                 {BuiltinProgram::Unlit, "builtin:unlit", BytesOf(Shaders::BuiltinUnlit)},
                 {BuiltinProgram::Lit, "builtin:lit", BytesOf(Shaders::BuiltinLit)},
                 {BuiltinProgram::Fallback, "builtin:fallback", BytesOf(Shaders::BuiltinFallback)},
@@ -60,6 +62,8 @@ namespace Fenrir::Render
                 {BuiltinProgram::Skinning, "builtin:skinning", BytesOf(Shaders::BuiltinSkinning)},
                 {BuiltinProgram::Shadow, "builtin:shadow", BytesOf(Shaders::BuiltinShadow)},
                 {BuiltinProgram::LightClusters, "builtin:light-clusters", BytesOf(Shaders::BuiltinLightClusters)},
+                {BuiltinProgram::HiZ, "builtin:hi-z", BytesOf(Shaders::BuiltinHiZ)},
+                {BuiltinProgram::SceneHistory, "builtin:scene-history", BytesOf(Shaders::BuiltinSceneHistory)},
             }};
             return table;
         }

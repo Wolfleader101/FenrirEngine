@@ -83,6 +83,8 @@ namespace Fenrir::Graphics
         R8Unorm,
         /** @brief Two linear half floats, read by shaders as red and green; the BRDF lookup table (ADR-0047). */
         Rg16Float,
+        /** @brief One linear 32-bit float, read by shaders as red; a view's Hi-Z pyramid (ADR-0056). */
+        R32Float,
     };
 
     /** @brief Whether a texture is one image, six cube faces, or an array of cubes. */
@@ -189,6 +191,11 @@ namespace Fenrir::Graphics
         std::size_t size = 0;
         TextureHandle texture;
         SamplerHandle sampler;
+        /**
+         * @brief The one mip level of `texture` the binding reads, as its level 0, so a pass can draw into the next
+         * level of the same texture (a mip chain drawn level by level, ADR-0056); empty reads every level.
+         */
+        std::optional<std::uint32_t> mipLevel;
 
         friend bool operator==(const BindingGroupEntry&, const BindingGroupEntry&) = default;
     };

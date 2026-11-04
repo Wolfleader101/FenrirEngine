@@ -51,8 +51,8 @@ namespace Fenrir::Render
             Graphics::BlendMode::None};
 
         /** @brief Each TextureFormat's name, for the log, in its order. */
-        constexpr std::array<std::string_view, 6> formatNames{"RGBA8", "RGBA8 sRGB", "RGBA16F",
-                                                              "depth", "RGBA32F",    "R8"};
+        constexpr std::array<std::string_view, 8> formatNames{"RGBA8",   "RGBA8 sRGB", "RGBA16F", "depth",
+                                                              "RGBA32F", "R8",         "RG16F",   "R32F"};
 
         /** @brief The default texture of the texture parameter `name`; white if the variant does not list it. */
         DefaultTexture DefaultOf(const ShaderVariant& variant, std::string_view name)

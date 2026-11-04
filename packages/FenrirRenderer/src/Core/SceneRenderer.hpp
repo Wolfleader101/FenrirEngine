@@ -21,6 +21,7 @@
 #include "Core/PointShadows.hpp"
 #include "Core/RenderFeature.hpp"
 #include "Core/SceneFrame.hpp"
+#include "Core/SceneHistory.hpp"
 #include "Core/ShadowPool.hpp"
 #include "Core/SkyImages.hpp"
 #include "Core/SkyLighting.hpp"
@@ -168,6 +169,12 @@ namespace Fenrir::Render
      * `Fenrir/Lighting.glsl` darkens the sky's light by. Every other pass, and every view without it, binds the white
      * texture there. A view showing its occlusion (`ViewRequest::showOcclusion`) has Output draw that texture as grey
      * instead of SceneColor, so the passes only SceneColor needs are culled; it shows black without the passes.
+     *
+     * **Reflection inputs** (ADR-0056): a view whose camera has reflections keeps, under its camera's entity id, a
+     * history colour and two Hi-Z pyramids across frames (SceneHistory): its HiZ passes after GTAO's draw this frame's
+     * pyramid from SceneDepth, and its SceneHistory passes, the first of `PostProcess`, copy SceneColor before bloom.
+     * They write textures kept outside the graph, so they are never culled, and keep the passes SceneColor needs even
+     * when Output shows grey. A camera with no such view in a frame has its textures freed.
      *
      * **Variants** (ADR-0024): the renderer picks the keys. A `Masked` material draws with its shader's `ALPHA_MASK`
      * variant if the shader has the key, its `MaterialData::alphaCutoff` written into the variant's `alphaCutoff` block
@@ -960,6 +967,8 @@ namespace Fenrir::Render
         std::unique_ptr<BloomChain> m_bloom;
         /** @brief The GTAO passes of each view that has ambient occlusion, after its prepass. */
         std::unique_ptr<Gtao> m_gtao;
+        /** @brief Each reflecting camera's history colour and Hi-Z pyramids, kept across frames, and their passes. */
+        std::unique_ptr<SceneHistory> m_sceneHistory;
         /** @brief Each copy's frame set group, by frame index modulo the copies. */
         std::vector<FrameGroup> m_frameGroups;
         /** @brief Each copy's draw set group, by frame index modulo the copies. */

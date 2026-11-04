@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -14,6 +15,7 @@
 #include "Core/BlockRing.hpp"
 #include "Core/RenderGraph.hpp"
 #include "Device/GraphicsDevice.hpp"
+#include "Device/GraphicsSurface.hpp"
 
 namespace Fenrir
 {
@@ -29,6 +31,9 @@ namespace Fenrir::Render
      */
     [[nodiscard]] Graphics::PipelineHandle MakeFullscreenPipeline(Graphics::GraphicsDevice& device, ILogger& logger,
                                                                   Graphics::PipelineDesc desc, std::string_view name);
+
+    /** @brief A sampler that filters nothing and clamps at the edges, for passes whose every read is a texelFetch. */
+    [[nodiscard]] Graphics::SamplerDesc NearestClampedSampler() noexcept;
 
     /**
      * @brief The passes of a render feature that draws fullscreen triangles over textures it samples, as bloom and GTAO
@@ -152,19 +157,61 @@ namespace Fenrir::Render
                 });
         }
 
+        /**
+         * @brief Adds the pass `name` in the stage that draws one level of a mip chain (ADR-0056): `pipeline` with
+         * `block` bound, sampling mip `sourceMip` of each of `sources` as its level 0 (every level when empty), and
+         * drawing into mip `targetMip` of `target`, whose size is `targetSize`, all of it. A source may be `target`
+         * itself when `sourceMip` is another level.
+         */
+        void AddMipPass(RenderGraph& graph, const char* name, Graphics::PipelineHandle pipeline,
+                        Graphics::BindingGroupHandle block, std::array<GraphResource, Sources> sources,
+                        std::optional<std::uint32_t> sourceMip, GraphResource target, std::uint32_t targetMip,
+                        Graphics::PixelSize targetSize)
+        {
+            graph.AddPass(
+                name, m_stage, Graphics::QueueKind::Graphics,
+                [=](PassBuilder& pass) {
+                    for (const GraphResource source : sources)
+                    {
+                        pass.Sample(source);
+                    }
+                    pass.ColourAttachmentLevel(target, targetMip);
+                },
+                [this, pipeline, block, sources, sourceMip, targetSize](PassContext& context) {
+                    std::array<Graphics::TextureHandle, Sources> textures;
+                    for (std::size_t i = 0; i < Sources; ++i)
+                    {
+                        textures[i] = context.Texture(sources[i]);
+                    }
+                    Graphics::PassEncoder& encoder = context.Encoder();
+                    encoder.SetViewport({0, 0, targetSize.width, targetSize.height});
+                    encoder.SetPipeline(pipeline);
+                    encoder.SetBindingGroup(BlockSet, block);
+                    encoder.SetBindingGroup(SourceSet, SourceGroup(textures, context.FrameIndex(), sourceMip));
+                    encoder.Draw({.vertexCount = 3});
+                });
+        }
+
       private:
         /** @brief The suffix of the source layout's and groups' labels. */
         static constexpr const char* SourcesLabel = Sources == 1 ? " source" : " sources";
+        /** @brief The key part of a group that samples every level of its sources. */
+        static constexpr std::uint32_t EveryMip = 0xffffffffu;
 
-        /** @brief The group binding `textures` as a pass's sources in frame `frameIndex`, made once while they live. */
+        /**
+         * @brief The group binding `textures` as a pass's sources in frame `frameIndex`, each at `mip` only when it
+         * has one, made once while they live.
+         */
         [[nodiscard]] Graphics::BindingGroupHandle SourceGroup(
-            const std::array<Graphics::TextureHandle, Sources>& textures, std::uint64_t frameIndex)
+            const std::array<Graphics::TextureHandle, Sources>& textures, std::uint64_t frameIndex,
+            std::optional<std::uint32_t> mip = std::nullopt)
         {
-            typename BindingGroupCache<Sources>::Key key;
+            typename BindingGroupCache<Sources + 1>::Key key;
             for (std::size_t i = 0; i < Sources; ++i)
             {
                 key[i] = BindingGroupKeyPart::Of(textures[i]);
             }
+            key[Sources] = BindingGroupKeyPart::Value(mip.value_or(EveryMip));
             return m_sourceGroups.Get(key, frameIndex, [&] {
                 std::vector<Graphics::BindingGroupEntry> entries(Sources);
                 for (std::uint32_t i = 0; i < Sources; ++i)
@@ -172,6 +219,7 @@ namespace Fenrir::Render
                     entries[i].binding = i;
                     entries[i].texture = textures[i];
                     entries[i].sampler = m_sampler;
+                    entries[i].mipLevel = mip;
                 }
                 return m_device.CreateBindingGroup({m_sourceLayout, entries}, m_name + SourcesLabel);
             });
@@ -191,7 +239,7 @@ namespace Fenrir::Render
         std::unique_ptr<BlockRing> m_blocks;
         /** @brief The next block Block takes this frame. */
         std::size_t m_next = 0;
-        /** @brief Each set of sources' group, while its textures live. */
-        BindingGroupCache<Sources> m_sourceGroups;
+        /** @brief Each set of sources' group, at each mip it was sampled at, while its textures live. */
+        BindingGroupCache<Sources + 1> m_sourceGroups;
     };
 } // namespace Fenrir::Render

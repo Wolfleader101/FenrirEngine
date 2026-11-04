@@ -41,10 +41,11 @@ namespace Fenrir
             return dynamic_cast<Graphics::OpenGLDevice&>(device);
         }
 
-        /** @brief Reads back mip 0 of an offscreen colour target; empty if it cannot be read. */
-        [[nodiscard]] static Image Read(Graphics::GraphicsDevice& device, Graphics::TextureHandle texture)
+        /** @brief Reads back mip `mipLevel` of an offscreen colour target; empty if it cannot be read. */
+        [[nodiscard]] static Image Read(Graphics::GraphicsDevice& device, Graphics::TextureHandle texture,
+                                        std::uint32_t mipLevel = 0)
         {
-            Graphics::OpenGLDevice::Texels texels = Gl(device).ReadTexels(texture);
+            Graphics::OpenGLDevice::Texels texels = Gl(device).ReadTexels(texture, mipLevel);
             return {texels.width, texels.height, std::move(texels.rgba)};
         }
 

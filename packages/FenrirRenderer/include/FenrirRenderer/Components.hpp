@@ -492,6 +492,20 @@ namespace Fenrir
         float intensity = 1.0f;
     };
 
+    /**
+     * @brief A view's screen-space reflections (ADR-0056): what is on screen mirrored in smooth surfaces, from the
+     * previous frame's colour, over the sky's reflection. So far it keeps only what they read across frames, the view's
+     * colour before bloom and a hierarchical-Z pyramid of its depth; nothing is reflected yet.
+     */
+    struct Reflections
+    {
+        /**
+         * @brief Whether the view has them: off by default, and off costs nothing. On, the view keeps about 44 MB at
+         * 1920 x 1080 across frames.
+         */
+        bool enabled = false;
+    };
+
     /** @brief What a view shows instead of its lit colour, to look at one of its inputs. */
     enum class CameraDebugView : std::uint8_t
     {
@@ -562,6 +576,8 @@ namespace Fenrir
         Bloom bloom;
         /** @brief How nearby geometry darkens the sky's light in the view. */
         AmbientOcclusion ambientOcclusion;
+        /** @brief How smooth surfaces in the view mirror what is on screen. */
+        Reflections reflections;
         /** @brief What the view shows: its lit colour, or one of its inputs. */
         CameraDebugView debugView = CameraDebugView::None;
     };

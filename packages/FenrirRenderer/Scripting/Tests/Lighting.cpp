@@ -120,6 +120,7 @@ namespace
         camera.tonemapper = Tonemapper::Aces;
         camera.bloom = {0.2f, 0.3f};
         camera.ambientOcclusion = {true, 0.8f, 1.7f};
+        camera.reflections = {true};
         camera.debugView = CameraDebugView::LightClusters;
         return camera;
     }

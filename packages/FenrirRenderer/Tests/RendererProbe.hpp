@@ -8,6 +8,8 @@
 
 #include "Backend/Null/NullDevice.hpp"
 #include "Core/RendererCore.hpp"
+#include "Core/SceneHistory.hpp"
+#include "Core/SceneRenderer.hpp"
 #include "Core/TransientPool.hpp"
 #include "Facade/RendererState.hpp"
 #include "FenrirRenderer/Renderer.hpp"
@@ -103,6 +105,29 @@ namespace Fenrir
         [[nodiscard]] static std::size_t TransientCount(const Render::RendererCore& core)
         {
             return TransientCount(core.m_transients);
+        }
+
+        /** @brief One camera's reflection textures, kept across frames (ADR-0056). */
+        struct ReflectionTextures
+        {
+            /** @brief Its camera's entity id. */
+            std::uint32_t camera = 0;
+            Graphics::TextureHandle history;
+            /** @brief The pyramid the last frame drew, then last frame's other one. */
+            Graphics::TextureHandle pyramid;
+            Graphics::TextureHandle previousPyramid;
+        };
+
+        /** @brief Every camera's reflection textures the renderer keeps, by camera, on any backend. */
+        [[nodiscard]] static std::vector<ReflectionTextures> Reflections(const Renderer& renderer)
+        {
+            std::vector<ReflectionTextures> textures;
+            for (const auto& [camera, entry] : renderer.m_state->scene->m_sceneHistory->m_entries)
+            {
+                textures.push_back(
+                    {camera, entry.history, entry.pyramids.at(entry.current), entry.pyramids.at(1 - entry.current)});
+            }
+            return textures;
         }
 
         /** @brief The renderer core a valid Renderer owner draws with. */
