@@ -34,6 +34,10 @@ layout(set = 1, binding = 0, std140) uniform ViewData
     // light count as heat (CameraDebugView::LightClusters); z: how many indices each cluster's list has room for.
     // w unused.
     uvec4 clusterInfo;
+    // The view's screen-space reflections (ADR-0056), which Fenrir/Lighting.glsl blends. x: 1 when its camera has
+    // them; y: their intensity; z: the perceptual roughness at which they have faded out; w: fenrirSceneHistory's last
+    // mip.
+    vec4 reflectionInfo;
 } view;
 
 // The view's ambient occlusion (ADR-0049) at its pixels, as its GTAO passes make it from the depth prepass: in red, how
@@ -53,5 +57,15 @@ layout(set = 1, binding = 3, std430) readonly buffer FenrirClusterLights
 {
     uint words[];
 } fenrirClusterLights;
+
+// The view's reflection hits (ADR-0056), as its ReflectionTrace pass makes them at its pixels: each pixel's mirror ray's
+// hit as a UV in last frame's view (red, green), its confidence, 0 to 1 (blue), and the ray's view-space length
+// (alpha). The 1 x 1 black texture, zero confidence, when the view's camera has reflections off, and in every pass but
+// Opaque, so transparent items reflect nothing they are in front of.
+layout(set = 1, binding = 4) uniform sampler2D fenrirReflectionHits;
+
+// Last frame's colour of the view (ADR-0056), linear HDR before bloom and exposure, with a full mip chain each level
+// the mean of the one above, sampled trilinearly. The 1 x 1 black texture where fenrirReflectionHits is.
+layout(set = 1, binding = 5) uniform sampler2D fenrirSceneHistory;
 
 #endif

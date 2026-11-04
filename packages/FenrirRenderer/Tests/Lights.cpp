@@ -43,7 +43,7 @@ namespace
         Vec3 direction{0.0f};
         Vec3 halfWidth{0.0f};
         Vec3 halfHeight{0.0f};
-        std::uint32_t twoSided = 0;
+        std::uint32_t flags = 0;
     };
 
     /** @brief What the first Opaque draw of the last frame binds at set 0. */
@@ -82,7 +82,7 @@ namespace
             record.direction = {FloatAt(bytes, at + 32), FloatAt(bytes, at + 36), FloatAt(bytes, at + 40)};
             record.halfWidth = {FloatAt(bytes, at + 48), FloatAt(bytes, at + 52), FloatAt(bytes, at + 56)};
             record.halfHeight = {FloatAt(bytes, at + 64), FloatAt(bytes, at + 68), FloatAt(bytes, at + 72)};
-            record.twoSided = UintAt(bytes, at + 76);
+            record.flags = UintAt(bytes, at + 76);
             records.push_back(record);
         }
         return records;
@@ -252,8 +252,8 @@ TEST_CASE("A rect light reaches the light buffer after the point and spot lights
     REQUIRE(Near(records[1].direction, {-1.0f, 0.0f, 0.0f}));
     REQUIRE(Near(records[1].halfWidth, {0.0f, 0.0f, -2.0f}));
     REQUIRE(Near(records[1].halfHeight, {0.0f, 0.5f, 0.0f}));
-    INFO("two-sided");
-    REQUIRE(records[1].twoSided == 1);
+    INFO("two-sided, its surface drawn");
+    REQUIRE(records[1].flags == (Fenrir::Render::LightFlag::TwoSided | Fenrir::Render::LightFlag::VisibleSurface));
     REQUIRE(test.messages->errors.empty());
 }
 

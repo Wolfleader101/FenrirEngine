@@ -37,7 +37,8 @@ namespace Fenrir::Render
         gpu.direction = glm::normalize(glm::cross(light.up, light.right));
         gpu.halfWidth = light.right * (light.width * 0.5f);
         gpu.halfHeight = light.up * (light.height * 0.5f);
-        gpu.twoSided = light.twoSided ? 1u : 0u;
+        gpu.flags =
+            (light.twoSided ? LightFlag::TwoSided : 0u) | (light.visibleSurface ? LightFlag::VisibleSurface : 0u);
         return gpu;
     }
 
@@ -86,7 +87,7 @@ namespace Fenrir::Render
         const Math::Vec3 centre = light.position - point;
         // Behind the light: on the side it does not face.
         const bool behind = glm::dot(centre, light.direction) > 0.0f;
-        if (behind && light.twoSided == 0)
+        if (behind && (light.flags & LightFlag::TwoSided) == 0)
         {
             return 0.0f;
         }

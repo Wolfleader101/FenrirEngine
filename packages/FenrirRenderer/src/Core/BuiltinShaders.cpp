@@ -22,6 +22,7 @@
 #include "FenrirShaders/BuiltinLit.hpp"
 #include "FenrirShaders/BuiltinOutput.hpp"
 #include "FenrirShaders/BuiltinPanorama.hpp"
+#include "FenrirShaders/BuiltinReflectionTrace.hpp"
 #include "FenrirShaders/BuiltinSceneHistory.hpp"
 #include "FenrirShaders/BuiltinShadow.hpp"
 #include "FenrirShaders/BuiltinSkinning.hpp"
@@ -39,9 +40,9 @@ namespace Fenrir::Render
             return std::as_bytes(std::span<const std::uint8_t, N>(embedded));
         }
 
-        const std::array<BuiltinShader, 22>& Table()
+        const std::array<BuiltinShader, 23>& Table()
         {
-            static const std::array<BuiltinShader, 22> table{{
+            static const std::array<BuiltinShader, 23> table{{
                 {BuiltinProgram::Unlit, "builtin:unlit", BytesOf(Shaders::BuiltinUnlit)},
                 {BuiltinProgram::Lit, "builtin:lit", BytesOf(Shaders::BuiltinLit)},
                 {BuiltinProgram::Fallback, "builtin:fallback", BytesOf(Shaders::BuiltinFallback)},
@@ -64,6 +65,7 @@ namespace Fenrir::Render
                 {BuiltinProgram::LightClusters, "builtin:light-clusters", BytesOf(Shaders::BuiltinLightClusters)},
                 {BuiltinProgram::HiZ, "builtin:hi-z", BytesOf(Shaders::BuiltinHiZ)},
                 {BuiltinProgram::SceneHistory, "builtin:scene-history", BytesOf(Shaders::BuiltinSceneHistory)},
+                {BuiltinProgram::ReflectionTrace, "builtin:reflection-trace", BytesOf(Shaders::BuiltinReflectionTrace)},
             }};
             return table;
         }

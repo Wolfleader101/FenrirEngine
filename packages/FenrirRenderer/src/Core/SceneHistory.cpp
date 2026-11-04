@@ -5,6 +5,7 @@
 
 #include "Core/BuiltinShaders.hpp"
 #include "Core/ImageUpload.hpp"
+#include "Core/ReflectionTrace.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
 namespace Fenrir::Render
@@ -110,7 +111,7 @@ namespace Fenrir::Render
         std::size_t levels = 0;
         for (const ViewRequest& view : views)
         {
-            levels += view.reflections.enabled ? MipCount(view.viewport.width, view.viewport.height) : 0;
+            levels += HasReflections(view.reflections) ? MipCount(view.viewport.width, view.viewport.height) : 0;
         }
         m_hiZPasses.Reserve(levels);
         m_historyPasses.Reserve(levels);
@@ -123,7 +124,7 @@ namespace Fenrir::Render
     HistoryView SceneHistory::Import(RenderGraph& graph, const ViewRequest& view, PixelSize size,
                                      const Math::Mat4& viewProjection)
     {
-        if (!view.reflections.enabled || size.width == 0 || size.height == 0 || m_hiZCopy.IsEmpty() ||
+        if (!HasReflections(view.reflections) || size.width == 0 || size.height == 0 || m_hiZCopy.IsEmpty() ||
             m_hiZReduce.IsEmpty() || m_historyCopy.IsEmpty() || m_historyDownsample.IsEmpty())
         {
             return {};

@@ -179,10 +179,10 @@ TEST_CASE("A reflecting camera's HiZ passes follow its prepass and its SceneHist
     test.Frame();
     std::vector<std::string> expected{"BrdfLut", "DepthPrepass"};
     expected.insert(expected.end(), 11, "HiZ");
-    expected.insert(expected.end(), {"Opaque", "Background"});
+    expected.insert(expected.end(), {"ReflectionTrace", "Opaque", "Background"});
     expected.insert(expected.end(), 11, "SceneHistory");
     expected.emplace_back("Output");
-    INFO("one HiZ and one SceneHistory pass per level of a 1280 x 720 chain");
+    INFO("one HiZ and one SceneHistory pass per level of a 1280 x 720 chain, and the trace between");
     REQUIRE(Labels(test.Passes()) == expected);
 }
 

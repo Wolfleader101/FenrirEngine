@@ -353,16 +353,44 @@
       "name": "Fenrir::Reflections",
       "category": "struct",
       "role": "nested",
-      "size": 1,
-      "alignment": 1,
-      "doc": "A view's screen-space reflections (ADR-0056): what is on screen mirrored in smooth surfaces, from the previous frame's colour, over the sky's reflection. So far it keeps only what they read across frames, the view's colour before bloom and a hierarchical-Z pyramid of its depth; nothing is reflected yet.",
+      "size": 20,
+      "alignment": 4,
+      "doc": "A view's screen-space reflections (ADR-0056): what is on screen mirrored in smooth surfaces, from the previous frame's colour, over the sky's reflection. Each pixel's mirror ray is traced through a hierarchical-Z pyramid of the view's depth, from its vertex normal, and every material lighting through `Fenrir/Lighting.glsl` takes the colour it hit by how sure the hit is and how smooth the material is. They catch only what is on screen: what is off it, or hidden, falls back to the sky's reflection. They show last frame's colour, so a moving object's reflection trails it by a frame.",
       "fields": [
         {
           "name": "enabled",
           "offset": 0,
           "kind": "bool",
           "default": false,
-          "doc": "Whether the view has them: off by default, and off costs nothing. On, the view keeps about 44 MB at 1920 x 1080 across frames."
+          "doc": "Whether the view has them: off by default, and off costs nothing. On, the view keeps about 44 MB at 1920 x 1080 across frames, and 17 MB more within each frame."
+        },
+        {
+          "name": "intensity",
+          "offset": 4,
+          "kind": "f32",
+          "default": 1,
+          "doc": "How much of a sure reflection replaces the sky's: 1 by default, 0 turns them off."
+        },
+        {
+          "name": "maxDistance",
+          "offset": 8,
+          "kind": "f32",
+          "default": 50,
+          "doc": "How far a mirror ray is traced, in world units: 50 by default. Reflections fade out towards it."
+        },
+        {
+          "name": "thickness",
+          "offset": 12,
+          "kind": "f32",
+          "default": 0.5,
+          "doc": "How far behind a surface, in view depth (world units), a ray may pass and still hit it: 0.5 by default. Thicker catches thin things seen edge on; thinner stops rays catching on what they pass behind."
+        },
+        {
+          "name": "roughnessCutoff",
+          "offset": 16,
+          "kind": "f32",
+          "default": 0.6,
+          "doc": "The roughness at and above which a surface reflects only the sky: 0.6 by default, fading in from 0.1 below it, as a blurred screen is a worse reflection than the sky's own."
         }
       ]
     },
@@ -536,7 +564,7 @@
       "name": "Fenrir::Camera",
       "category": "struct",
       "role": "component",
-      "size": 108,
+      "size": 128,
       "alignment": 4,
       "doc": "Makes a view of the active scene from its entity, looking along the entity's local -Z with +Y up (ADR-0026). Plain data. Every enabled camera in the active scene draws one view a frame, into its viewport of its render target. Views into one target draw by `order`, lowest first, and ties by entity id, logged once. Each view has its own scene targets, and writes only its viewport.\n\nNot drawn, logged once: a camera targeting a window other than the main window, a viewport under one pixel, or a target image that is stale, empty or not a render target. A minimised window draws nothing. A window no camera draws into is cleared to black, logged once.",
       "fields": [
@@ -630,7 +658,7 @@
         },
         {
           "name": "debugView",
-          "offset": 105,
+          "offset": 124,
           "kind": "enum",
           "type": "Fenrir::CameraDebugView",
           "default": "None",
@@ -1015,7 +1043,7 @@
       "name": "Fenrir::RectLight",
       "category": "struct",
       "role": "component",
-      "size": 36,
+      "size": 40,
       "alignment": 4,
       "doc": "A glowing rectangle centred on its entity, `width` along its world +X and `height` along its world +Y, shining from its face towards its world -Z (and from its back too when `twoSided`), any number per scene (ADR-0048). Its highlights take its shape, blurring with the surface's roughness: it is shaded with linearly transformed cosines, and casts no shadows. Its intensity is its radiance: a white rect light of intensity 1 filling the view of a white rough face lights it about 1, and one subtending less lights it less, as the sky does. Its light is windowed smoothly to zero at `range` from the rectangle. The rectangle itself is not drawn: give it an emissive mesh to see it. A light that can light nothing (range, intensity, width or height 0, or black) is skipped.",
       "fields": [
@@ -1066,6 +1094,13 @@
           "kind": "f32",
           "default": 10,
           "doc": "The distance from the rectangle, in world units, at which its light has fallen to zero."
+        },
+        {
+          "name": "visibleSurface",
+          "offset": 36,
+          "kind": "bool",
+          "default": true,
+          "doc": "Whether the scene draws the light's surface, an emissive mesh where it is: true by default. Then, in a camera with reflections, its specular yields to the reflection of that surface where it is on screen, so it is not reflected twice. Set it false for a light with nothing drawn, which keeps its specular everywhere."
         }
       ]
     },

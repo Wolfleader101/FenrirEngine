@@ -64,6 +64,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/ImageReads.cpp
     src/Core/Gtao.hpp
     src/Core/Gtao.cpp
+    src/Core/ReflectionTrace.hpp
+    src/Core/ReflectionTrace.cpp
     src/Core/SceneHistory.hpp
     src/Core/SceneHistory.cpp
     src/Core/ShadowPool.hpp
@@ -172,6 +174,10 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinHiZ VERTEX Shaders/Builtin/
                    FRAGMENT Shaders/Builtin/hi_z.frag KEYS COPY MSAA EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinSceneHistory VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/scene_history.frag KEYS DOWNSAMPLE MSAA EMBED)
+# Their trace (ADR-0056): each pixel's mirror ray marched through the pyramid, whose MSAA variant reads sample 0 of a
+# multisampled SceneNormals.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinReflectionTrace VERTEX Shaders/Builtin/fullscreen.vert
+                   FRAGMENT Shaders/Builtin/reflection_trace.frag KEYS MSAA EMBED)
 # Compute skinning (ADR-0050): each skinned mesh's vertices skinned once a frame, which every pass then draws rigidly.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinSkinning COMPUTE Shaders/Builtin/skinning.comp EMBED)
 # Light clustering (ADR-0049): each view's point, spot and rect lights listed in its clusters.

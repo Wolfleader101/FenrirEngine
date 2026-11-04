@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -289,14 +290,25 @@ namespace Fenrir
         }
 
         /**
+         * @brief The reflection hit targets (ADR-0056) the last frame's ReflectionTrace passes drew into, one a
+         * reflecting view, in the order they ran, on any backend.
+         */
+        [[nodiscard]] static std::vector<Graphics::TextureHandle> ReflectionHits(const Renderer& renderer)
+        {
+            return renderer.m_state->scene->m_reflectionTrace->m_drawn;
+        }
+
+        /**
          * @brief The SceneColor texture of `width` by `height` pixels the last frame drew into, on any backend, for a
          * frame with several views; the largest when both are 0, since a view's bloom levels (RGBA16F too) are at most
-         * half its size. Empty if there is none.
+         * half its size. Empty if there is none. Reflection hit targets, RGBA16F at the view's size too, are passed
+         * over.
          */
         [[nodiscard]] static Graphics::TextureHandle SceneColour(const Renderer& renderer, std::uint32_t width,
                                                                  std::uint32_t height)
         {
             const Render::RendererCore& core = Core(renderer);
+            const std::vector<Graphics::TextureHandle> hits = ReflectionHits(renderer);
             Graphics::TextureHandle found;
             std::uint64_t foundArea = 0;
             // The set the last frame took from.
@@ -306,7 +318,8 @@ namespace Fenrir
                 const std::uint64_t area = desc == nullptr ? 0 : std::uint64_t{desc->width} * desc->height;
                 if (desc != nullptr && desc->format == Graphics::TextureFormat::Rgba16Float &&
                     (width == 0 || (desc->width == width && desc->height == height)) && area > foundArea &&
-                    core.m_device->IsLive(entry.texture))
+                    core.m_device->IsLive(entry.texture) &&
+                    std::find(hits.begin(), hits.end(), entry.texture) == hits.end())
                 {
                     found = entry.texture;
                     foundArea = area;

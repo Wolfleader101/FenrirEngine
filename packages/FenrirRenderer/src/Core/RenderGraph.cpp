@@ -109,6 +109,12 @@ namespace Fenrir::Render
         Use(texture, ResourceUsage::Sampled, true, false);
     }
 
+    void PassBuilder::SamplePrevious(GraphResource texture)
+    {
+        Use(texture, ResourceUsage::Sampled, true, false);
+        m_graph.m_passes[m_pass].accesses.back().previous = true;
+    }
+
     void PassBuilder::StorageRead(GraphResource resource)
     {
         Use(resource, ResourceUsage::StorageRead, true, false);
@@ -232,10 +238,17 @@ namespace Fenrir::Render
             bool writes = false;
         };
         std::vector<std::vector<User>> users(m_resources.size());
+        // The passes reading each resource's contents from before the frame, which run before its first writer.
+        std::vector<std::vector<std::uint32_t>> previousReaders(m_resources.size());
         for (std::uint32_t pass : baseline)
         {
             for (const Access& access : m_passes[pass].accesses)
             {
+                if (access.previous)
+                {
+                    previousReaders[access.resource].push_back(pass);
+                    continue;
+                }
                 std::vector<User>& list = users[access.resource];
                 if (list.empty() || list.back().pass != pass)
                 {
@@ -255,12 +268,17 @@ namespace Fenrir::Render
                 ++waitingOn[to];
             }
         };
-        for (std::vector<User>& list : users)
+        for (std::size_t r = 0; r < users.size(); ++r)
         {
+            std::vector<User>& list = users[r];
             const auto firstWriter = std::find_if(list.begin(), list.end(), [](const User& u) { return u.writes; });
             if (firstWriter == list.end())
             {
                 continue;
+            }
+            for (const std::uint32_t reader : previousReaders[r])
+            {
+                addEdge(reader, firstWriter->pass);
             }
             std::rotate(list.begin(), firstWriter, list.end());
 
@@ -351,7 +369,12 @@ namespace Fenrir::Render
             for (const Access& access : pass.accesses)
             {
                 const Resource& resource = m_resources[access.resource];
-                if (access.reads && !written[access.resource] && !resource.imported)
+                if (access.previous && !resource.imported)
+                {
+                    compilation.errors.push_back("render pass " + pass.name + " reads what " + resource.name +
+                                                 " held before the frame, but it is transient");
+                }
+                else if (access.reads && !written[access.resource] && !resource.imported)
                 {
                     compilation.errors.push_back("render pass " + pass.name + " reads " + resource.name +
                                                  ", which nothing wrote");

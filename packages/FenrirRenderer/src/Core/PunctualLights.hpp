@@ -52,6 +52,15 @@ namespace Fenrir::Render
      * spot or rect light. Ticket 19's clusters index these records unchanged. A point light's cone scale is 0 and its
      * offset 1, so it takes the spot's cone falloff as 1 everywhere.
      */
+    /** @brief The bits of a light record's flags, as `Fenrir/LightRecord.glsl` names them. */
+    namespace LightFlag
+    {
+        /** @brief A rect light that shines from both faces. */
+        inline constexpr std::uint32_t TwoSided = 1u;
+        /** @brief A rect light whose surface the scene draws: its specular yields to reflections (ADR-0056). */
+        inline constexpr std::uint32_t VisibleSurface = 2u;
+    } // namespace LightFlag
+
     struct GpuLight
     {
         /** @brief Where a point or spot light is; a rect light's centre. */
@@ -69,8 +78,8 @@ namespace Fenrir::Render
         float coneOffset = 1.0f;
         /** @brief A rect light's top half: from its centre to the middle of its top edge (its world +Y). */
         Math::Vec3 halfHeight{0.0f};
-        /** @brief 1 for a rect light that shines from both faces, else 0. */
-        std::uint32_t twoSided = 0;
+        /** @brief A rect light's LightFlag bits. */
+        std::uint32_t flags = 0;
     };
     static_assert(sizeof(GpuLight) == 80);
 

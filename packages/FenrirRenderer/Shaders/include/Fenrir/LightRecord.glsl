@@ -8,6 +8,12 @@ const uint FenrirLightPoint = 0u;
 const uint FenrirLightSpot = 1u;
 const uint FenrirLightRect = 2u;
 
+// The bits of a FenrirLight record's flags, as Core/PunctualLights' LightFlag numbers them.
+// A rect light that shines from both faces.
+const uint FenrirLightTwoSided = 1u;
+// A rect light whose surface the scene draws, so its specular yields to the reflection of that surface (ADR-0056).
+const uint FenrirLightVisibleSurface = 2u;
+
 // One point, spot or rect light (ADR-0048), in world space. Each view's clusters (Fenrir/Clusters.glsl) index these
 // records unchanged.
 struct FenrirLight
@@ -30,8 +36,8 @@ struct FenrirLight
     vec3 halfWidth;
     float coneOffset;
     vec3 halfHeight;
-    // 1 for a rect light that shines from both faces.
-    uint twoSided;
+    // A rect light's FenrirLightTwoSided and FenrirLightVisibleSurface bits.
+    uint flags;
 };
 
 #endif

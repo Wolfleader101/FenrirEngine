@@ -92,6 +92,11 @@ namespace Fenrir::Render
         void DepthReadOnly(GraphResource texture);
         /** @brief Samples `texture` in a shader. */
         void Sample(GraphResource texture);
+        /**
+         * @brief Samples what the imported `texture` held before this frame's passes wrote it (last frame's contents,
+         * say), so this pass runs before every pass that writes it. An error on a transient, which holds nothing then.
+         */
+        void SamplePrevious(GraphResource texture);
         /** @brief Reads `resource` as storage in a shader. */
         void StorageRead(GraphResource resource);
         /** @brief Writes `resource` as storage in a shader. */
@@ -279,6 +284,8 @@ namespace Fenrir::Render
             std::uint32_t layer = 0;
             /** @brief A depth attachment of every layer at once. */
             bool layered = false;
+            /** @brief A read of what the resource held before this frame's writes (PassBuilder::SamplePrevious). */
+            bool previous = false;
         };
 
         struct Pass

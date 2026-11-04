@@ -102,6 +102,14 @@ namespace Fenrir::Render
     {
         /** @brief Whether the view keeps a history colour and Hi-Z pyramids, and adds their passes. */
         bool enabled = false;
+        /** @brief How much of the reflection replaces the sky's prefiltered specular, times its confidence. */
+        float intensity = 1.0f;
+        /** @brief How far a mirror ray is traced, in world units. */
+        float maxDistance = 50.0f;
+        /** @brief How far, in view depth, a ray may pass behind a surface and still hit it. */
+        float thickness = 0.5f;
+        /** @brief The perceptual roughness at and above which surfaces reflect nothing. */
+        float roughnessCutoff = 0.6f;
     };
 
     /** @brief What a view's Output pass shows instead of its lit colour (Camera::debugView). */
