@@ -1,10 +1,10 @@
 #include "Core/SceneHistory.hpp"
 
 #include <algorithm>
-#include <bit>
 #include <string_view>
 
 #include "Core/BuiltinShaders.hpp"
+#include "Core/ImageUpload.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
 namespace Fenrir::Render
@@ -21,36 +21,17 @@ namespace Fenrir::Render
         };
         static_assert(sizeof(LevelBlock) == 16);
 
-        // Nearest and clamped: every read is a texelFetch.
-        SamplerDesc NearestSampler()
-        {
-            SamplerDesc sampler;
-            sampler.minFilter = Filter::Nearest;
-            sampler.magFilter = Filter::Nearest;
-            sampler.mipFilter = Filter::Nearest;
-            sampler.addressU = AddressMode::ClampToEdge;
-            sampler.addressV = AddressMode::ClampToEdge;
-            sampler.addressW = AddressMode::ClampToEdge;
-            return sampler;
-        }
-
         TextureDesc ChainDesc(TextureFormat format, PixelSize size)
         {
             TextureDesc desc;
             desc.format = format;
             desc.width = size.width;
             desc.height = size.height;
-            desc.mipLevels = MipCount(size);
+            desc.mipLevels = MipCount(size.width, size.height);
             desc.usage = TextureUsage::ColourAttachment | TextureUsage::Sampled;
             return desc;
         }
     } // namespace
-
-    std::uint32_t MipCount(PixelSize size) noexcept
-    {
-        const std::uint32_t side = std::max(size.width, size.height);
-        return side == 0 ? 0 : static_cast<std::uint32_t>(std::bit_width(side));
-    }
 
     PixelSize MipSize(PixelSize size, std::uint32_t level) noexcept
     {
@@ -88,8 +69,8 @@ namespace Fenrir::Render
 
     SceneHistory::SceneHistory(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
         : m_device(device), m_samples(std::max(samples, 1u)),
-          m_hiZPasses(device, logger, "HiZ", RenderStage::DepthPrepass, NearestSampler(), sizeof(LevelBlock)),
-          m_historyPasses(device, logger, "SceneHistory", RenderStage::PostProcess, NearestSampler(),
+          m_hiZPasses(device, logger, "HiZ", RenderStage::DepthPrepass, NearestClampedSampler(), sizeof(LevelBlock)),
+          m_historyPasses(device, logger, "SceneHistory", RenderStage::PostProcess, NearestClampedSampler(),
                           sizeof(LevelBlock))
     {
         m_hiZProgram = ReadBuiltin(BuiltinProgram::HiZ, logger);
@@ -125,11 +106,11 @@ namespace Fenrir::Render
 
     void SceneHistory::BeginFrame(std::span<const ViewRequest> views)
     {
-        // A block per pass: one per level of each chain.
+        // Each pass draws one level, with its own block of sizes.
         std::size_t levels = 0;
         for (const ViewRequest& view : views)
         {
-            levels += view.reflections.enabled ? MipCount({view.viewport.width, view.viewport.height}) : 0;
+            levels += view.reflections.enabled ? MipCount(view.viewport.width, view.viewport.height) : 0;
         }
         m_hiZPasses.Reserve(levels);
         m_historyPasses.Reserve(levels);

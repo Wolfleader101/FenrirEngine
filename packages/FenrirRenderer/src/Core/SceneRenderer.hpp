@@ -173,7 +173,8 @@ namespace Fenrir::Render
      * **Reflection inputs** (ADR-0056): a view whose camera has reflections keeps, under its camera's entity id, a
      * history colour and two Hi-Z pyramids across frames (SceneHistory): its HiZ passes after GTAO's draw this frame's
      * pyramid from SceneDepth, and its SceneHistory passes, the first of `PostProcess`, copy SceneColor before bloom.
-     * A camera with no such view in a frame has its textures freed.
+     * They write textures kept outside the graph, so they are never culled, and keep the passes SceneColor needs even
+     * when Output shows grey. A camera with no such view in a frame has its textures freed.
      *
      * **Variants** (ADR-0024): the renderer picks the keys. A `Masked` material draws with its shader's `ALPHA_MASK`
      * variant if the shader has the key, its `MaterialData::alphaCutoff` written into the variant's `alphaCutoff` block

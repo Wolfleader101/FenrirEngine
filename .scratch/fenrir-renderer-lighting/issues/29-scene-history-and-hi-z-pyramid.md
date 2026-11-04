@@ -32,6 +32,8 @@ Built 2026-11-04, stacked on `claude/ssr-spec` (#282, not yet merged). Decisions
   is next bound whole (the explicit backends would use a one-level view). `FullscreenPasses` gains `AddMipPass`, which
   samples one level and draws into another, and its source groups are cached by mip too. Bloom's separate textures per
   level were the other way, but the ticket and ticket 30's trace want one texture with mips, sampled across levels.
+  A pass drawing into a texture widens its levels again first, so a level drawn is never outside the texture's range.
+  ADR-0056's "need no new device work" now says this.
 - **R32F is a new `TextureFormat` (`R32Float`).** The pyramid holds depth to full float precision; RG16F or R16F would
   lose the near-plane precision reversed-Z keeps. `Draw2DFeature`'s format names for the log gain RG16F and R32F; the
   list had stopped one short of the formats since RG16F was added.
@@ -43,6 +45,11 @@ Built 2026-11-04, stacked on `claude/ssr-spec` (#282, not yet merged). Decisions
 - **Freed after one frame without the camera.** A camera disabled, deleted, made unable to draw or with reflections
   turned off has its textures freed at the end of that frame, so turning reflections back on starts invalid. A frame the
   window is minimised draws nothing and frees nothing.
+- **A view that cannot draw this frame loses its textures.** A view into a render target image the renderer has not
+  prepared yet is skipped, so its camera has no view that frame and starts invalid the next.
+- **Reflections keep the scene's passes from being culled.** The HiZ and SceneHistory passes write textures kept
+  outside the graph, which the graph never culls, so a view showing a grey debug view (its occlusion or a shadow atlas)
+  still draws Opaque and the rest when its camera has reflections on.
 - **"Remade when MSAA changes" needs no check.** The scene renderer's sample count is fixed at install, so only the
   view's size remakes the textures; they are always single-sampled.
 - **Full mip chains to 1 x 1**: 11 levels at 1920 x 1080, so 11 HiZ and 11 SceneHistory passes a view. The history's
@@ -50,11 +57,12 @@ Built 2026-11-04, stacked on `claude/ssr-spec` (#282, not yet merged). Decisions
 - **The history's box filter is 2 x 2, clamped.** Where a level's side is odd, the last row or column of the level
   above is left out of the history's mips (not of the pyramid's, where leaving it out would hide geometry). The
   reflection blur only needs a cone-width average, so a missing texel row at the edge of the blur costs nothing visible.
-- **The history copy drops NaN and clamps infinities**, as bloom's first level does, so one bad pixel does not spread
+- **The history copy drops NaN and clamps infinities either way**, as bloom's first level does, so one bad pixel does not spread
   through every level and into every reflection of it.
 - **What the previous frame is.** `HistoryView::previousViewProjection` is the view-projection of the frame that drew
   the history and the previous pyramid; on a camera's first frame, and after a remake, it is this frame's and `valid`
   is false. `previousPyramid` is imported each frame for ticket 30 to read; this ticket's passes do not read it.
-- **The probes use committed assets only**: unlit quads under an orthographic camera one unit a pixel. The MSAA probe
+- **The probes use committed assets only**: unlit quads under an orthographic camera one unit a pixel. A 48 x 48
+  viewport, whose pyramid runs 6, 3, 1, probes the odd-size fold on the GPU as `ReduceHiZ` does on the CPU. The MSAA probe
   checks that a pixel an edge halves holds between a fifth and four fifths of the colour, not an exact half, since GL
   leaves the 4x sample positions to the driver.

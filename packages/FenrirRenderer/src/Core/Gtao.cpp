@@ -27,19 +27,6 @@ namespace Fenrir::Render
             Math::Vec4 settings{0.0f};
         };
         static_assert(sizeof(GtaoBlock) == 160);
-
-        // Nearest and clamped: every read is a texelFetch.
-        SamplerDesc NearestSampler()
-        {
-            SamplerDesc sampler;
-            sampler.minFilter = Filter::Nearest;
-            sampler.magFilter = Filter::Nearest;
-            sampler.mipFilter = Filter::Nearest;
-            sampler.addressU = AddressMode::ClampToEdge;
-            sampler.addressV = AddressMode::ClampToEdge;
-            sampler.addressW = AddressMode::ClampToEdge;
-            return sampler;
-        }
     } // namespace
 
     bool HasAmbientOcclusion(const AmbientOcclusionSettings& settings) noexcept
@@ -49,7 +36,7 @@ namespace Fenrir::Render
 
     Gtao::Gtao(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
         : m_device(device),
-          m_passes(device, logger, "GTAO", RenderStage::DepthPrepass, NearestSampler(), sizeof(GtaoBlock))
+          m_passes(device, logger, "GTAO", RenderStage::DepthPrepass, NearestClampedSampler(), sizeof(GtaoBlock))
     {
         m_program = ReadBuiltin(BuiltinProgram::Gtao, logger);
         // Under MSAA the horizon search reads sample 0 of the multisampled prepass targets.

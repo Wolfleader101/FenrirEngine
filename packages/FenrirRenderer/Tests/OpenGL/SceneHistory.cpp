@@ -126,3 +126,48 @@ TEST_CASE("GL: each level of a reflecting camera's Hi-Z pyramid holds the neares
     REQUIRE((last.width == 1 && last.height == 1));
     REQUIRE(Close(last.At(0, 0)[0], near, 1e-5f));
 }
+
+TEST_CASE("GL: a Hi-Z level of an odd size folds the last row and column of the one above into its last texel",
+          "[renderer][gl][ssr]")
+{
+    GlScene test;
+    test.RequireOpenGL();
+    // A 48 x 48 viewport, one unit a pixel: its pyramid runs 48, 24, 12, 6, 3 and 1, so the last level comes from an
+    // odd one, whose third column and row it sees only by folding them in.
+    Fenrir::Camera& camera = AddCamera(test, 0.0f);
+    camera.viewport = {0.0f, 0.0f, 0.75f, 0.75f};
+    camera.projection = Fenrir::Orthographic{48.0f, Near, Far};
+    test.AddQuad(128.0f, 10.0f, "builtin:unlit", Fenrir::Colour{0.1f, 0.1f, 0.1f, 1.0f});
+    // A 4 x 4 pixel square at distance 1 on pixels 40 to 43 each way, inside level 4's last texel alone.
+    Fenrir::AssetStore& store = test.assets.Store();
+    const auto material = store.CreateMaterial(
+        store.Load<Fenrir::Shader>("builtin:unlit", Fenrir::AssetOwner::App()).handle, Fenrir::AssetOwner::App());
+    const auto mesh = store.Add<Fenrir::Mesh>(RendererTest::Quad(4.0f, -1.0f), Fenrir::AssetOwner::App());
+    Fenrir::Entity square = test.app.GetActiveScene().GetEntityList().CreateEntity();
+    square.GetComponent<Fenrir::Transform>().pos = {18.0f, -18.0f, 0.0f};
+    square.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{mesh, material, true});
+
+    test.RunFrame();
+    const auto kept = Fenrir::RendererProbe::Reflections(test.renderer);
+    REQUIRE(kept.size() == 1);
+    Fenrir::Graphics::GraphicsDevice& device = Fenrir::RendererProbe::Device(test.renderer);
+    const float near = DepthAt(1.0f);
+    const float far = DepthAt(10.0f);
+
+    const GlProbe::Image full = GlProbe::Read(device, kept[0].pyramid, 0);
+    REQUIRE((full.width == 48 && full.height == 48));
+    INFO("the square is where it was placed");
+    REQUIRE(Close(full.At(41, 41)[0], near, 1e-5f));
+    REQUIRE(Close(full.At(38, 41)[0], far, 1e-5f));
+
+    const GlProbe::Image three = GlProbe::Read(device, kept[0].pyramid, 4);
+    REQUIRE((three.width == 3 && three.height == 3));
+    INFO("level 4, 3 x 3, has the square in its last texel only");
+    REQUIRE(Close(three.At(2, 2)[0], near, 1e-5f));
+    REQUIRE(Close(three.At(1, 1)[0], far, 1e-5f));
+
+    const GlProbe::Image last = GlProbe::Read(device, kept[0].pyramid, 5);
+    INFO("level 5, 1 x 1, folds in level 4's third column and row, so it has the square's depth");
+    REQUIRE((last.width == 1 && last.height == 1));
+    REQUIRE(Close(last.At(0, 0)[0], near, 1e-5f));
+}

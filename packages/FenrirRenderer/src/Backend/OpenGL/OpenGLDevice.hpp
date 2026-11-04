@@ -252,6 +252,11 @@ namespace Fenrir::Graphics
         void Execute(const CmdDispatch& command);
         void Execute(const CmdCopyBuffer& command);
 
+        /**
+         * @brief Sets the levels shaders sample of `texture`: only `level`, as its base and maximum, or every level
+         * when empty. Does nothing when they are already so.
+         */
+        void SampleLevels(GlTexture& texture, std::optional<std::uint32_t> level);
         /** @brief The framebuffer drawing into `pass`'s attachments, made the first time they are drawn into together.
          */
         std::uint32_t FramebufferFor(const PassDesc& pass);

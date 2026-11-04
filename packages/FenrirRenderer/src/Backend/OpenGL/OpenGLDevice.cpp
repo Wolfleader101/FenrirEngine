@@ -871,7 +871,7 @@ namespace Fenrir::Graphics
         {
             for (const ColourAttachment& colour : pass.colour)
             {
-                const GlTexture* texture = m_textures.Find(colour.texture);
+                GlTexture* texture = m_textures.Find(colour.texture);
                 if (texture == nullptr || texture->name == 0)
                 {
                     m_logger->Error("OpenGL backend: pass '{}' draws into a stale texture or mixes in the backbuffer, "
@@ -880,6 +880,9 @@ namespace Fenrir::Graphics
                     m_replay.skipping = true;
                     return;
                 }
+                // Drawn into, a texture spans every level again, so the level drawn is inside its range; a binding of
+                // one level in this pass narrows it again before the draw.
+                SampleLevels(*texture, std::nullopt);
                 size = {std::max(texture->desc.width >> colour.mipLevel, 1u),
                         std::max(texture->desc.height >> colour.mipLevel, 1u)};
             }
@@ -1041,14 +1044,9 @@ namespace Fenrir::Graphics
                 const std::uint32_t* sampler = m_samplers.Find(entry.sampler);
                 // A binding of one level narrows the texture's levels to it, so drawing into another level is no
                 // feedback loop; the next binding of every level widens them again.
-                if (texture != nullptr && texture->name != 0 && texture->sampledLevel != entry.mipLevel)
+                if (texture != nullptr && texture->name != 0)
                 {
-                    const std::uint32_t last = texture->desc.mipLevels - 1;
-                    const std::uint32_t base = entry.mipLevel ? std::min(*entry.mipLevel, last) : 0;
-                    gl.TextureParameteri(texture->name, GL_TEXTURE_BASE_LEVEL, static_cast<GLint>(base));
-                    gl.TextureParameteri(texture->name, GL_TEXTURE_MAX_LEVEL,
-                                         static_cast<GLint>(entry.mipLevel ? base : last));
-                    texture->sampledLevel = entry.mipLevel;
+                    SampleLevels(*texture, entry.mipLevel);
                 }
                 gl.BindTextureUnit(unit, texture != nullptr ? texture->name : 0);
                 gl.BindSampler(unit, sampler != nullptr ? *sampler : 0);
@@ -1181,6 +1179,19 @@ namespace Fenrir::Graphics
             }
         }
         gl.VertexArrayElementBuffer(pipeline->vertexArray, m_replay.indexBuffer.name);
+    }
+
+    void OpenGLDevice::SampleLevels(GlTexture& texture, std::optional<std::uint32_t> level)
+    {
+        if (texture.sampledLevel == level)
+        {
+            return;
+        }
+        const std::uint32_t last = texture.desc.mipLevels - 1;
+        const std::uint32_t base = level ? std::min(*level, last) : 0;
+        m_gl->TextureParameteri(texture.name, GL_TEXTURE_BASE_LEVEL, static_cast<GLint>(base));
+        m_gl->TextureParameteri(texture.name, GL_TEXTURE_MAX_LEVEL, static_cast<GLint>(level ? base : last));
+        texture.sampledLevel = level;
     }
 
     std::uint32_t OpenGLDevice::FramebufferFor(const PassDesc& pass)

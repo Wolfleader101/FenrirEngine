@@ -3,7 +3,7 @@
 // reflections sample last frame's scene from. The base variant, the first SceneHistory pass, copies SceneColor before
 // bloom into level 0; with the MSAA key SceneColor is multisampled and each texel is the plain mean of its samples (not
 // bloom's Karis average, which would darken the bright pixels reflections are for). As bloom's first level does, it
-// clamps infinities to RGBA16F's largest value and leaves out NaN, so one bad pixel cannot spread through every level.
+// clamps infinities to RGBA16F's largest values and leaves out NaN, so one bad pixel cannot spread through every level.
 // The DOWNSAMPLE variant, each later SceneHistory pass, draws a level from the one above it, which the pass binds as
 // its only level: each texel the mean of the 2 x 2 source texels it covers, clamped at the source's edges.
 
@@ -43,6 +43,6 @@ void main()
 #else
     vec4 colour = texelFetch(source, pixel, 0);
 #endif
-    outColour = any(isnan(colour)) ? vec4(0.0) : min(colour, vec4(65504.0));
+    outColour = any(isnan(colour)) ? vec4(0.0) : clamp(colour, vec4(-65504.0), vec4(65504.0));
 #endif
 }

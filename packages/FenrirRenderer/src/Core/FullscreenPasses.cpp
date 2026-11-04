@@ -6,6 +6,18 @@ namespace Fenrir::Render
 {
     using namespace Fenrir::Graphics;
 
+    SamplerDesc NearestClampedSampler() noexcept
+    {
+        SamplerDesc sampler;
+        sampler.minFilter = Filter::Nearest;
+        sampler.magFilter = Filter::Nearest;
+        sampler.mipFilter = Filter::Nearest;
+        sampler.addressU = AddressMode::ClampToEdge;
+        sampler.addressV = AddressMode::ClampToEdge;
+        sampler.addressW = AddressMode::ClampToEdge;
+        return sampler;
+    }
+
     PipelineHandle MakeFullscreenPipeline(GraphicsDevice& device, ILogger& logger, PipelineDesc desc,
                                           std::string_view name)
     {

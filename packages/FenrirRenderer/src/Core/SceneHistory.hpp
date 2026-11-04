@@ -23,9 +23,6 @@ namespace Fenrir
 
 namespace Fenrir::Render
 {
-    /** @brief How many levels a full mip chain of a texture of `size` has: down to 1 x 1. 0 for an empty size. */
-    [[nodiscard]] std::uint32_t MipCount(Graphics::PixelSize size) noexcept;
-
     /** @brief Level `level`'s size in a mip chain from `size`: halved `level` times and rounded down, at least 1. */
     [[nodiscard]] Graphics::PixelSize MipSize(Graphics::PixelSize size, std::uint32_t level) noexcept;
 
@@ -51,7 +48,7 @@ namespace Fenrir::Render
         GraphResource previousPyramid;
         /** @brief The textures' size: the view's, in pixels. */
         Graphics::PixelSize size;
-        /** @brief Every texture's mip count, MipCount(size). */
+        /** @brief Every texture's mip count, a full chain down to 1 x 1 (MipCount). */
         std::uint32_t mips = 0;
         /** @brief The view-projection the view had last frame, which the history and the previous pyramid were seen by.
          */
@@ -62,6 +59,7 @@ namespace Fenrir::Render
          */
         bool valid = false;
 
+        /** @brief Whether the view has no reflection inputs this frame, so it adds no pass. */
         [[nodiscard]] bool IsEmpty() const noexcept
         {
             return history.IsEmpty();

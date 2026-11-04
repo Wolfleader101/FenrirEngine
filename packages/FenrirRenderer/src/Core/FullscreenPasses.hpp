@@ -32,6 +32,9 @@ namespace Fenrir::Render
     [[nodiscard]] Graphics::PipelineHandle MakeFullscreenPipeline(Graphics::GraphicsDevice& device, ILogger& logger,
                                                                   Graphics::PipelineDesc desc, std::string_view name);
 
+    /** @brief A sampler that filters nothing and clamps at the edges, for passes whose every read is a texelFetch. */
+    [[nodiscard]] Graphics::SamplerDesc NearestClampedSampler() noexcept;
+
     /**
      * @brief The passes of a render feature that draws fullscreen triangles over textures it samples, as bloom and GTAO
      * do: each pass binds a block from a per-frame ring at set 1 and its `Sources` textures at set 2 (bindings 0 up,
