@@ -2,7 +2,8 @@
 // builtin:reflection-trace's and Fenrir/Lighting.glsl's maths, checked against worked examples (the mirror ray's ends
 // on screen, a Hi-Z march over a known pyramid, the fades, the reprojection into last frame's view and the history mip
 // a roughness picks); and each reflecting view's ReflectionTrace pass after its HiZ passes, whose hit target and the
-// history its Opaque pass binds in the view set, with 1 x 1 stand-ins everywhere else.
+// history its Opaque pass binds in the view set, with 1 x 1 stand-ins everywhere else; and the two debug views'
+// Output passes (lighting ticket 31).
 
 #include <algorithm>
 #include <cmath>
@@ -98,14 +99,21 @@ namespace
         });
     }
 
-    /** @brief The texture the view group a pass bound at set 1 binds at `binding`. */
-    TextureHandle ViewTexture(const RendererTestApp& test, const PassRecord& pass, std::uint32_t binding)
+    /** @brief The texture the group a pass bound at `set` binds at `binding`. */
+    TextureHandle GroupTexture(const RendererTestApp& test, const PassRecord& pass, std::size_t set,
+                               std::uint32_t binding)
     {
-        const auto entries = RendererProbe::Entries(test.Device(), pass.groups.at(1));
+        const auto entries = RendererProbe::Entries(test.Device(), pass.groups.at(set));
         const auto found =
             std::find_if(entries.begin(), entries.end(), [&](const auto& e) { return e.binding == binding; });
         REQUIRE(found != entries.end());
         return found->texture;
+    }
+
+    /** @brief The texture the view group a pass bound at set 1 binds at `binding`. */
+    TextureHandle ViewTexture(const RendererTestApp& test, const PassRecord& pass, std::uint32_t binding)
+    {
+        return GroupTexture(test, pass, 1, binding);
     }
 
     /** @brief The float at byte `offset` of the view block a pass bound at set 1. */
@@ -132,6 +140,23 @@ namespace
     constexpr std::uint32_t HistoryBinding = 5;
     /** @brief Where ViewData::reflectionInfo starts in the view block. */
     constexpr std::size_t ReflectionInfoOffset = 640;
+    /** @brief Where the Output block's grey channel is: the third word, after the exposure and the tonemapper. */
+    constexpr std::size_t GreyChannelOffset = 8;
+
+    /** @brief The texture the material group an Output pass bound at set 2 binds at `binding`. */
+    TextureHandle OutputTexture(const RendererTestApp& test, const PassRecord& pass, std::uint32_t binding)
+    {
+        return GroupTexture(test, pass, 2, binding);
+    }
+
+    /** @brief The word at byte `offset` of the Output block an Output pass bound at set 1. */
+    std::uint32_t OutputUint(const RendererTestApp& test, const PassRecord& pass, std::size_t offset)
+    {
+        const auto entries = RendererProbe::Entries(test.Device(), pass.groups.at(1));
+        const auto block = std::find_if(entries.begin(), entries.end(), [](const auto& e) { return e.binding == 0; });
+        REQUIRE(block != entries.end());
+        return RendererTest::UintAt(RendererProbe::Bytes(test.Device(), block->buffer), block->offset + offset);
+    }
 } // namespace
 
 TEST_CASE("Reflections are on only when enabled with an intensity and a max distance above 0", "[renderer][ssr]")
@@ -460,4 +485,82 @@ TEST_CASE("A camera with reflections at intensity 0 has no reflection pass", "[r
     REQUIRE(Labelled(test.Passes(), "ReflectionTrace").empty());
     REQUIRE(Labelled(test.Passes(), "HiZ").empty());
     REQUIRE(RendererProbe::Reflections(test.renderer).empty());
+}
+
+TEST_CASE("A camera showing its reflections has Output draw last frame's history at its hits, before SceneHistory "
+          "replaces it",
+          "[renderer][ssr]")
+{
+    RendererTestApp test;
+    AddReflectingCamera(test).debugView = Fenrir::CameraDebugView::Reflections;
+
+    test.Frame();
+    const std::vector<PassRecord> passes = test.Passes();
+    const TextureHandle hits = Labelled(passes, "ReflectionTrace").at(0).pass.colour.at(0).texture;
+    const TextureHandle history = RendererProbe::Reflections(test.renderer).at(0).history;
+    const PassRecord output = Labelled(passes, "Output").at(0);
+    INFO("Output samples the hits and the history, bound at set 2 bindings 0 and 1");
+    REQUIRE(Samples(output, hits));
+    REQUIRE(Samples(output, history));
+    REQUIRE(OutputTexture(test, output, 0) == hits);
+    REQUIRE(OutputTexture(test, output, 1) == history);
+    const std::vector<std::string> labels = Labels(passes);
+    const auto outputAt = std::find(labels.begin(), labels.end(), "Output");
+    const auto historyAt = std::find(labels.begin(), labels.end(), "SceneHistory");
+    INFO("the frame has SceneHistory passes");
+    REQUIRE(historyAt != labels.end());
+    INFO("and Output runs before them, before the history is overwritten with this frame's colour");
+    REQUIRE(outputAt < historyAt);
+    INFO("no error was logged");
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A camera showing its reflection confidence has Output draw the hit target's blue as grey", "[renderer][ssr]")
+{
+    RendererTestApp test;
+    AddReflectingCamera(test).debugView = Fenrir::CameraDebugView::ReflectionConfidence;
+
+    test.Frame();
+    const std::vector<PassRecord> passes = test.Passes();
+    const TextureHandle hits = Labelled(passes, "ReflectionTrace").at(0).pass.colour.at(0).texture;
+    const PassRecord output = Labelled(passes, "Output").at(0);
+    INFO("Output samples the hits, bound at set 2 binding 0");
+    REQUIRE(Samples(output, hits));
+    REQUIRE(OutputTexture(test, output, 0) == hits);
+    INFO("and its block picks channel 2, where the confidence is");
+    REQUIRE(OutputUint(test, output, GreyChannelOffset) == 2u);
+}
+
+TEST_CASE("A camera showing its ambient occlusion has Output draw its red channel", "[renderer][ssr][gtao]")
+{
+    RendererTestApp test;
+    Fenrir::Camera& camera = AddReflectingCamera(test);
+    camera.ambientOcclusion.enabled = true;
+    camera.debugView = Fenrir::CameraDebugView::AmbientOcclusion;
+
+    test.Frame();
+    INFO("its block picks channel 0, where the occlusion is");
+    REQUIRE(OutputUint(test, Labelled(test.Passes(), "Output").at(0), GreyChannelOffset) == 0u);
+}
+
+TEST_CASE("A camera showing either reflection view with reflections off draws Output black", "[renderer][ssr]")
+{
+    RendererTestApp test;
+    Fenrir::Camera& camera = AddReflectingCamera(test);
+    camera.reflections.enabled = false;
+    for (const Fenrir::CameraDebugView view :
+         {Fenrir::CameraDebugView::Reflections, Fenrir::CameraDebugView::ReflectionConfidence})
+    {
+        camera.debugView = view;
+        test.Frame();
+        const std::vector<PassRecord> passes = test.Passes();
+        INFO("view " << static_cast<int>(view) << ": no trace");
+        REQUIRE(Labelled(passes, "ReflectionTrace").empty());
+        INFO("and Output binds the 1 x 1 black texture");
+        const TextureHandle shown = OutputTexture(test, Labelled(passes, "Output").at(0), 0);
+        const auto desc = RendererProbe::Desc(test.Device(), shown);
+        REQUIRE((desc.width == 1 && desc.height == 1));
+    }
+    INFO("no error was logged");
+    REQUIRE(test.messages->errors.empty());
 }

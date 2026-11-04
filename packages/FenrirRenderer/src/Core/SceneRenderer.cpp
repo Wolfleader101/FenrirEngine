@@ -177,8 +177,9 @@ namespace Fenrir::Render
             float exposureScale = 1.0f;
             /** @brief The Tonemapper's value, which the shader switches on. */
             std::uint32_t tonemapper = 0;
+            /** @brief The channel the OCCLUSION variant draws as grey: 0 red, 2 blue (reflection confidence). */
+            std::uint32_t greyChannel = 0;
             std::uint32_t padding0 = 0;
-            std::uint32_t padding1 = 0;
         };
         static_assert(sizeof(OutputBlock) == 16);
 
@@ -588,7 +589,8 @@ namespace Fenrir::Render
                                  ShadowBudgetConfig spotShadows, ShadowBudgetConfig pointShadows)
         : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1)),
           m_automaticInstancing(automaticInstancing), m_computeSkinning(computeSkinning), m_cascades(cascades),
-          m_clusterTargetGroups(device), m_skyGroups(device), m_viewGroups(device), m_outputGroups(device)
+          m_clusterTargetGroups(device), m_skyGroups(device), m_viewGroups(device), m_outputGroups(device),
+          m_reflectionOutputGroups(device)
     {
         m_cascades.count = std::clamp(m_cascades.count, 1u, MaxCascades);
         m_cascades.mapSize = std::max(m_cascades.mapSize, 1u);
@@ -717,6 +719,13 @@ namespace Fenrir::Render
         constexpr std::array<std::string_view, 1> occlusion{"OCCLUSION"};
         m_occlusionOutputPipeline = MakeInternalPipeline(m_output, m_output.FindVariant(occlusion), m_outputLayout,
                                                          TextureFormat::Rgba8Srgb, false, 1, m_outputBlockLayout);
+        constexpr std::array<std::string_view, 1> reflections{"REFLECTIONS"};
+        if (const ShaderVariant* variant = m_output.FindVariant(reflections))
+        {
+            m_reflectionOutputLayout = MaterialLayoutOf(*variant);
+            m_reflectionOutputPipeline = MakeInternalPipeline(m_output, variant, m_reflectionOutputLayout,
+                                                              TextureFormat::Rgba8Srgb, false, 1, m_outputBlockLayout);
+        }
 
         // The frame set's groups bind the frame block with the sky's textures, so the ring makes none of its own.
         m_frameBlocks =
@@ -834,6 +843,7 @@ namespace Fenrir::Render
             }
         }
         m_outputGroups.Clear();
+        m_reflectionOutputGroups.Clear();
         m_viewGroups.Clear();
         for (const DrawGroup& group : m_drawGroups)
         {
@@ -883,10 +893,12 @@ namespace Fenrir::Render
         m_device.Destroy(m_skyPipeline);
         m_device.Destroy(m_outputPipeline);
         m_device.Destroy(m_occlusionOutputPipeline);
+        m_device.Destroy(m_reflectionOutputPipeline);
         m_device.Destroy(m_prepassMaskLayout);
         m_device.Destroy(m_backgroundLayout);
         m_device.Destroy(m_skyLayout);
         m_device.Destroy(m_outputLayout);
+        m_device.Destroy(m_reflectionOutputLayout);
         m_device.Destroy(m_outputBlockLayout);
         m_device.Destroy(m_frameLayout);
         m_device.Destroy(m_viewLayout);
@@ -2471,6 +2483,24 @@ namespace Fenrir::Render
         });
     }
 
+    BindingGroupHandle SceneRenderer::ReflectionOutputGroup(TextureHandle hits, TextureHandle history,
+                                                            std::uint64_t frameIndex)
+    {
+        return m_reflectionOutputGroups.Get(
+            {BindingGroupKeyPart::Of(hits), BindingGroupKeyPart::Of(history)}, frameIndex, [&] {
+                BindingGroupEntry hitsEntry;
+                hitsEntry.binding = 0;
+                hitsEntry.texture = hits;
+                hitsEntry.sampler = m_outputSampler;
+                BindingGroupEntry historyEntry;
+                historyEntry.binding = 1;
+                historyEntry.texture = history;
+                historyEntry.sampler = m_outputSampler;
+                return m_device.CreateBindingGroup({m_reflectionOutputLayout, {hitsEntry, historyEntry}},
+                                                   "Reflection output");
+            });
+    }
+
     void SceneRenderer::AddWindowClear(RenderGraph& graph, const FrameContext& frame)
     {
         // A window no view draws into is cleared to black.
@@ -2917,6 +2947,8 @@ namespace Fenrir::Render
             OutputBlock outputBlock;
             outputBlock.exposureScale = ExposureScale(request.exposure);
             outputBlock.tonemapper = static_cast<std::uint32_t>(request.tonemapper);
+            // The reflection hit target's confidence is its blue; every other grey view's value its red.
+            outputBlock.greyChannel = request.debugView == ViewDebug::ReflectionConfidence ? 2u : 0u;
             m_outputBlocks->Write(frameIndex, v, BytesOf(outputBlock));
             const BindingGroupHandle outputBlockGroup = m_outputBlocks->Group(frameIndex, v);
             // The white texture as its ambient occlusion, for every pass but Opaque.
@@ -3189,35 +3221,56 @@ namespace Fenrir::Render
 
             // The first view into a target clears all of it; each later one draws over it, in its viewport only.
             const LoadOp load = cleared.insert(request.target).second ? LoadOp::Clear : LoadOp::Load;
-            // A view showing its ambient occlusion, its shadow atlas or the spot shadow atlas draws that instead, as
-            // grey, black when it has none.
+            // A view showing its ambient occlusion, its shadow atlas, the spot shadow atlas or its reflections'
+            // confidence draws that instead, as grey, black when it has none.
             const bool showGrey =
                 (request.debugView == ViewDebug::AmbientOcclusion || request.debugView == ViewDebug::ShadowAtlas ||
-                 request.debugView == ViewDebug::SpotShadowAtlas) &&
+                 request.debugView == ViewDebug::SpotShadowAtlas ||
+                 request.debugView == ViewDebug::ReflectionConfidence) &&
                 !m_occlusionOutputPipeline.IsEmpty();
-            const GraphResource grey = request.debugView == ViewDebug::ShadowAtlas       ? shadowAtlas
-                                       : request.debugView == ViewDebug::SpotShadowAtlas ? spotAtlas
-                                                                                         : occlusion;
-            const GraphResource shown = showGrey && !grey.IsEmpty() ? grey : sceneColour;
-            const PipelineHandle outputPipeline = showGrey ? m_occlusionOutputPipeline : m_outputPipeline;
+            const GraphResource grey = request.debugView == ViewDebug::ShadowAtlas            ? shadowAtlas
+                                       : request.debugView == ViewDebug::SpotShadowAtlas      ? spotAtlas
+                                       : request.debugView == ViewDebug::ReflectionConfidence ? reflectionHits
+                                                                                              : occlusion;
+            // A view showing its reflections draws last frame's history at its hits, the colour Opaque blended, so
+            // it reads the history before this frame's SceneHistory passes replace it; black without reflections.
+            const bool showReflections =
+                request.debugView == ViewDebug::Reflections && !m_reflectionOutputPipeline.IsEmpty();
+            const bool shownBlack = (showGrey && grey.IsEmpty()) || (showReflections && reflectionHits.IsEmpty());
+            const GraphResource shown = shownBlack        ? GraphResource{}
+                                        : showGrey        ? grey
+                                        : showReflections ? reflectionHits
+                                                          : sceneColour;
+            const GraphResource shownHistory = showReflections && !shownBlack ? sceneHistory : GraphResource{};
+            // Black is the 1 x 1 black texture, drawn as grey.
+            const PipelineHandle outputPipeline = showGrey || shownBlack ? m_occlusionOutputPipeline
+                                                  : showReflections      ? m_reflectionOutputPipeline
+                                                                         : m_outputPipeline;
             const TextureHandle black = GetDefaultTexture(DefaultTexture::Black);
-            const bool shownBlack = showGrey && grey.IsEmpty();
             graph.AddPass(
                 "Output", RenderStage::Output, QueueKind::Graphics,
                 [=](PassBuilder& pass) {
-                    if (!shownBlack)
+                    if (!shown.IsEmpty())
                     {
                         pass.Sample(shown);
                     }
+                    if (!shownHistory.IsEmpty())
+                    {
+                        pass.SamplePrevious(shownHistory);
+                    }
                     pass.ColourAttachment(target, load, {0.0f, 0.0f, 0.0f, 1.0f});
                 },
-                [this, shown, shownBlack, black, outputPipeline, rect, outputBlockGroup](PassContext& context) {
+                [this, shown, shownHistory, black, outputPipeline, rect, outputBlockGroup](PassContext& context) {
                     PassEncoder& encoder = context.Encoder();
                     encoder.SetViewport(rect);
                     encoder.SetPipeline(outputPipeline);
                     encoder.SetBindingGroup(1, outputBlockGroup);
+                    const TextureHandle source = shown.IsEmpty() ? black : context.Texture(shown);
                     encoder.SetBindingGroup(
-                        MaterialSet, OutputGroup(shownBlack ? black : context.Texture(shown), context.FrameIndex()));
+                        MaterialSet,
+                        shownHistory.IsEmpty()
+                            ? OutputGroup(source, context.FrameIndex())
+                            : ReflectionOutputGroup(source, context.Texture(shownHistory), context.FrameIndex()));
                     encoder.Draw({.vertexCount = 3});
                 });
         }

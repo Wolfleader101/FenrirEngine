@@ -5,10 +5,17 @@
 // pixel is the mean of its samples, before the tonemap. The tonemappers are mirrored step for step in C++
 // (src/Core/Tonemapping.cpp), which the CPU tests check against published values and the GL tests hold this to; a
 // change to one is a change to both. Matrices are written column by column. With the OCCLUSION key (a camera's
-// CameraDebugView::AmbientOcclusion), the texture is the view's ambient occlusion instead, single-sampled, drawn as
-// grey as it is: no exposure, no tonemap.
+// grey debug views), the texture is single-sampled, and its `greyChannel` is drawn as grey as it is: no exposure, no
+// tonemap. With the REFLECTIONS key (CameraDebugView::Reflections, ADR-0056), it is the view's reflection hit target,
+// and the colour is last frame's history at each hit's UV, its sharpest level, times the hit's confidence: what a
+// mirror would blend, exposed and tonemapped. The hit target is read texel by texel, as Fenrir/Lighting.glsl reads it,
+// so neighbouring hits' UVs are never blended. REFLECTIONS overrides the other keys.
 
-#if defined(MSAA) && !defined(OCCLUSION)
+#if defined(REFLECTIONS)
+// r, g: the hit's UV in last frame's view; b: its confidence. At the view's size.
+layout(set = 2, binding = 0) uniform sampler2D reflectionHits;
+layout(set = 2, binding = 1) uniform sampler2D sceneHistory;
+#elif defined(MSAA) && !defined(OCCLUSION)
 layout(set = 2, binding = 0) uniform sampler2DMS sceneColour;
 #else
 layout(set = 2, binding = 0) uniform sampler2D sceneColour;
@@ -20,6 +27,8 @@ layout(set = 1, binding = 0, std140) uniform OutputData
     float exposureScale;
     // Render::Tonemapper: 0 None, 1 AgX, 2 PbrNeutral, 3 Aces.
     uint tonemapper;
+    // With OCCLUSION, the channel drawn as grey: 0 red, 2 blue.
+    uint greyChannel;
 } settings;
 
 layout(location = 0) in vec2 vNdc;
@@ -109,8 +118,13 @@ void main()
 {
     // NDC +y is up and a texture's row 0 is its top row, on every backend (ADR-0016).
     vec2 uv = vec2(vNdc.x * 0.5 + 0.5, 0.5 - vNdc.y * 0.5);
-#ifdef OCCLUSION
-    outColour = vec4(vec3(texture(sceneColour, uv).r), 1.0);
+#if defined(REFLECTIONS)
+    ivec2 size = textureSize(reflectionHits, 0);
+    vec4 hit = texelFetch(reflectionHits, clamp(ivec2(uv * vec2(size)), ivec2(0), size - 1), 0);
+    vec3 colour = hit.b > 0.0 ? textureLod(sceneHistory, hit.rg, 0.0).rgb * hit.b : vec3(0.0);
+    outColour = vec4(Tonemap(colour * settings.exposureScale), 1.0);
+#elif defined(OCCLUSION)
+    outColour = vec4(vec3(texture(sceneColour, uv)[settings.greyChannel]), 1.0);
 #else
 #ifdef MSAA
     ivec2 size = textureSize(sceneColour);

@@ -164,6 +164,9 @@ namespace LightingDemo
         {
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
             ShowroomState state;
+            // The polished floor mirrors the slabs and the helmets on screen; the slabs are drawn, so the lights keep
+            // visibleSurface and their own glints give way to them.
+            state.lighting.reflections.enabled = true;
             // A dark room: the rect lights are what shows, and the floor's reflections of them.
             scene.AddResource<Fenrir::Sky>(Fenrir::ColourSky{{0.003f, 0.003f, 0.004f, 1.0f}});
 

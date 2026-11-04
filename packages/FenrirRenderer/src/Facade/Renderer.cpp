@@ -75,11 +75,14 @@ namespace Fenrir
         /** @brief The core's copy of a camera's debug view: the same values in the same order. */
         Render::ViewDebug ToCore(CameraDebugView debugView)
         {
-            static_assert(
-                static_cast<int>(CameraDebugView::ShadowAtlas) == static_cast<int>(Render::ViewDebug::ShadowAtlas) &&
-                static_cast<int>(CameraDebugView::SpotShadowAtlas) ==
-                    static_cast<int>(Render::ViewDebug::SpotShadowAtlas) &&
-                static_cast<int>(CameraDebugView::LightClusters) == static_cast<int>(Render::ViewDebug::LightClusters));
+            static_assert(static_cast<int>(CameraDebugView::ShadowAtlas) ==
+                              static_cast<int>(Render::ViewDebug::ShadowAtlas) &&
+                          static_cast<int>(CameraDebugView::SpotShadowAtlas) ==
+                              static_cast<int>(Render::ViewDebug::SpotShadowAtlas) &&
+                          static_cast<int>(CameraDebugView::LightClusters) ==
+                              static_cast<int>(Render::ViewDebug::LightClusters) &&
+                          static_cast<int>(CameraDebugView::ReflectionConfidence) ==
+                              static_cast<int>(Render::ViewDebug::ReflectionConfidence));
             return static_cast<Render::ViewDebug>(debugView);
         }
 
