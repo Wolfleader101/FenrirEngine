@@ -266,9 +266,10 @@ vec4 FenrirReflectionHit()
 
 // How much of the reflection a surface of perceptual `roughness` takes: 1 up to 0.1 below the camera's cutoff, falling
 // to 0 at it, so rough surfaces keep the sky's specular, smoother than a blurred screen. Core/ReflectionTrace mirrors it.
+const float FenrirReflectionRoughnessFadeWidth = 0.1;
 float FenrirReflectionRoughnessFade(float roughness)
 {
-    return clamp((view.reflectionInfo.z - roughness) / 0.1, 0.0, 1.0);
+    return clamp((view.reflectionInfo.z - roughness) / FenrirReflectionRoughnessFadeWidth, 0.0, 1.0);
 }
 
 // The history's mip a reflection of perceptual `roughness` samples, a ray `rayLength` long off a surface `viewDepth` in

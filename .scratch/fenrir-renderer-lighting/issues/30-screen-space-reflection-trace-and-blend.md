@@ -64,3 +64,8 @@ so is the 1.5 ms measurement (RenderDoc is installed on the developer's machine)
 - **`reflectionInfo` is a `vec4`** of floats (on, intensity, cutoff, the history's last mip), and is set from the camera's
   settings even when the history could not be had that frame (a second view of one camera); the stand-ins' zero
   confidence keeps that harmless.
+- **After `/code-review`:** ADR-0056 now says rect lights yield by the reflection's share and that `reflectionInfo`
+  holds the history's last mip; ADR-0019 states the graph's read rule and `SamplePrevious`. A hit behind last frame's
+  camera (negative w) no longer passes the on-screen test. Kept as they are, for the reviewer: `m_drawn` (a probe seam
+  that also makes `RendererProbe::SceneColour` skip hit targets), `ViewGroupFor`'s seven parameters, and the tests'
+  copied `Labels`/`Samples`/`Close` helpers, which every renderer test file repeats.

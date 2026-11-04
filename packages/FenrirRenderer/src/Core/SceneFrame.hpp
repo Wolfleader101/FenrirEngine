@@ -112,6 +112,15 @@ namespace Fenrir::Render
         float roughnessCutoff = 0.6f;
     };
 
+    /**
+     * @brief Whether a view with `settings` gets reflections: enabled, with an intensity and a max distance above 0.
+     * Only then does it keep a history and pyramids, and add their passes and the trace.
+     */
+    [[nodiscard]] inline bool HasReflections(const ReflectionSettings& settings) noexcept
+    {
+        return settings.enabled && settings.intensity > 0.0f && settings.maxDistance > 0.0f;
+    }
+
     /** @brief What a view's Output pass shows instead of its lit colour (Camera::debugView). */
     enum class ViewDebug : std::uint8_t
     {

@@ -5,7 +5,6 @@
 
 #include "Core/BuiltinShaders.hpp"
 #include "Core/ImageUpload.hpp"
-#include "Core/ReflectionTrace.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
 namespace Fenrir::Render

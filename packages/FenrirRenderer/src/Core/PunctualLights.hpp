@@ -47,11 +47,6 @@ namespace Fenrir::Render
         float shadowSlopeBias = 2.0f;
     };
 
-    /**
-     * @brief One record of the frame's light buffer, as `Fenrir/Frame.glsl` declares `FenrirLight` (std430): a point,
-     * spot or rect light. Ticket 19's clusters index these records unchanged. A point light's cone scale is 0 and its
-     * offset 1, so it takes the spot's cone falloff as 1 everywhere.
-     */
     /** @brief The bits of a light record's flags, as `Fenrir/LightRecord.glsl` names them. */
     namespace LightFlag
     {
@@ -61,6 +56,11 @@ namespace Fenrir::Render
         inline constexpr std::uint32_t VisibleSurface = 2u;
     } // namespace LightFlag
 
+    /**
+     * @brief One record of the frame's light buffer, as `Fenrir/Frame.glsl` declares `FenrirLight` (std430): a point,
+     * spot or rect light. Ticket 19's clusters index these records unchanged. A point light's cone scale is 0 and its
+     * offset 1, so it takes the spot's cone falloff as 1 everywhere.
+     */
     struct GpuLight
     {
         /** @brief Where a point or spot light is; a rect light's centre. */

@@ -48,11 +48,6 @@ namespace Fenrir::Render
         }
     } // namespace
 
-    bool HasReflections(const ReflectionSettings& settings) noexcept
-    {
-        return settings.enabled && settings.intensity > 0.0f && settings.maxDistance > 0.0f;
-    }
-
     ScreenPoint ProjectToScreen(const Math::Mat4& projection, Math::Vec3 position, PixelSize size) noexcept
     {
         const Math::Vec4 clip = projection * Math::Vec4(position, 1.0f);
@@ -230,7 +225,11 @@ namespace Fenrir::Render
     {
         const Math::Vec4 clip = viewToPreviousClip * Math::Vec4(position, 1.0f);
         const Math::Vec3 ndc = Math::Vec3(clip) / clip.w;
-        return {{ndc.x * 0.5f + 0.5f, 0.5f - ndc.y * 0.5f}, ndc.z};
+        PreviousPoint point{{ndc.x * 0.5f + 0.5f, 0.5f - ndc.y * 0.5f}, ndc.z};
+        // Behind last frame's camera, w is negative and the divide turns the point round onto the screen.
+        point.onScreen =
+            clip.w > 0.0f && point.uv.x >= 0.0f && point.uv.x <= 1.0f && point.uv.y >= 0.0f && point.uv.y <= 1.0f;
+        return point;
     }
 
     float ReflectionDisocclusion(const Math::Mat4& inverseProjection, float depth, float previousDepth,

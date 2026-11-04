@@ -141,10 +141,8 @@ TEST_CASE("Reflections are on only when enabled with an intensity and a max dist
     REQUIRE_FALSE(HasReflections({}));
     Fenrir::Render::ReflectionSettings settings;
     settings.enabled = true;
-    INFO("on when enabled with the defaults: intensity 1, max distance 50, thickness 0.5, roughness cutoff 0.6");
+    INFO("on when enabled with the defaults");
     REQUIRE(HasReflections(settings));
-    REQUIRE((settings.intensity == 1.0f && settings.maxDistance == 50.0f && settings.thickness == 0.5f &&
-             settings.roughnessCutoff == 0.6f));
     INFO("off at intensity 0");
     settings.intensity = 0.0f;
     REQUIRE_FALSE(HasReflections(settings));
@@ -152,6 +150,18 @@ TEST_CASE("Reflections are on only when enabled with an intensity and a max dist
     settings.intensity = 1.0f;
     settings.maxDistance = 0.0f;
     REQUIRE_FALSE(HasReflections(settings));
+}
+
+TEST_CASE("A camera's reflections default to intensity 1, max distance 50, thickness 0.5 and cutoff 0.6",
+          "[renderer][ssr]")
+{
+    const Fenrir::Reflections reflections;
+    INFO("the ticket's defaults, off");
+    REQUIRE_FALSE(reflections.enabled);
+    REQUIRE(reflections.intensity == 1.0f);
+    REQUIRE(reflections.maxDistance == 50.0f);
+    REQUIRE(reflections.thickness == 0.5f);
+    REQUIRE(reflections.roughnessCutoff == 0.6f);
 }
 
 TEST_CASE("A floor's mirror ray runs on screen from its pixel up to where the reflected ray ends", "[renderer][ssr]")
@@ -246,15 +256,18 @@ TEST_CASE("A hit's confidence fades out over the last tenth of the view at each 
     REQUIRE(ReflectionEdgeFadeAt({-0.01f, 0.5f}) == 0.0f);
 }
 
-TEST_CASE("A hit's confidence fades out as the ray nears the max distance, and as it turns towards the camera",
-          "[renderer][ssr]")
+TEST_CASE("A hit's confidence fades out over the last fifth of the max distance", "[renderer][ssr]")
 {
     using Fenrir::Render::ReflectionDistanceFadeAt;
-    using Fenrir::Render::ReflectionTowardsCameraFadeAt;
     INFO("over the last fifth of a max distance of 50");
     REQUIRE(ReflectionDistanceFadeAt(40.0f, 50.0f) == 1.0f);
     REQUIRE(Close(ReflectionDistanceFadeAt(45.0f, 50.0f), 0.5f, 1e-5f));
     REQUIRE(ReflectionDistanceFadeAt(50.0f, 50.0f) == 0.0f);
+}
+
+TEST_CASE("A hit's confidence fades out as its ray turns towards the camera", "[renderer][ssr]")
+{
+    using Fenrir::Render::ReflectionTowardsCameraFadeAt;
     INFO("a ray away from the camera keeps it; one across the view half; one towards the camera none");
     REQUIRE(ReflectionTowardsCameraFadeAt({0.0f, 0.0f, -1.0f}) == 1.0f);
     REQUIRE(Close(ReflectionTowardsCameraFadeAt(glm::normalize(Vec3(1.0f, 0.0f, -0.05f))), 0.5f, 1e-3f));
@@ -278,6 +291,17 @@ TEST_CASE("A hit is reprojected into the previous frame's view", "[renderer][ssr
     REQUIRE(Close(moved.uv.y, 0.5f, 1e-5f));
     INFO("and a point above the centre is above it, +y down");
     REQUIRE(Fenrir::Render::ReprojectToPrevious(projection, {0.0f, 1.0f, -2.0f}).uv.y < 0.5f);
+    INFO("all of them on last frame's screen");
+    REQUIRE(still.onScreen);
+    REQUIRE(moved.onScreen);
+}
+
+TEST_CASE("A hit behind the previous frame's camera was off its screen", "[renderer][ssr]")
+{
+    // Straight behind the camera, the divide by a negative w would put it at the view's centre.
+    const auto behind = Fenrir::Render::ReprojectToPrevious(Projection(), {0.0f, 0.0f, 2.0f});
+    INFO("off screen, though its UV lands at " << behind.uv.x << ", " << behind.uv.y);
+    REQUIRE_FALSE(behind.onScreen);
 }
 
 TEST_CASE("A hit hidden last frame loses its confidence by how far in front the surface that hid it was",
@@ -298,9 +322,12 @@ TEST_CASE("A hit hidden last frame loses its confidence by how far in front the 
 TEST_CASE("Reflections fade out over the last tenth of roughness below the camera's cutoff", "[renderer][ssr]")
 {
     using Fenrir::Render::ReflectionRoughnessFadeAt;
+    INFO("a mirror and a surface 0.1 below the cutoff 0.6 reflect fully");
     REQUIRE(ReflectionRoughnessFadeAt(0.04f, 0.6f) == 1.0f);
     REQUIRE(ReflectionRoughnessFadeAt(0.5f, 0.6f) == 1.0f);
+    INFO("half way through the fade, half");
     REQUIRE(Close(ReflectionRoughnessFadeAt(0.55f, 0.6f), 0.5f, 1e-5f));
+    INFO("at the cutoff and above, none");
     REQUIRE(ReflectionRoughnessFadeAt(0.6f, 0.6f) == 0.0f);
     REQUIRE(ReflectionRoughnessFadeAt(0.9f, 0.6f) == 0.0f);
 }
@@ -408,12 +435,18 @@ TEST_CASE("The view block's reflectionInfo holds whether the view reflects, its 
     REQUIRE(ViewFloat(test, opaque, ReflectionInfoOffset + 4) == 0.75f);
     REQUIRE(ViewFloat(test, opaque, ReflectionInfoOffset + 8) == 0.5f);
     REQUIRE(ViewFloat(test, opaque, ReflectionInfoOffset + 12) == 10.0f);
+}
 
-    camera.reflections.enabled = false;
+TEST_CASE("A camera without reflections has no trace, and its reflectionInfo says so", "[renderer][ssr]")
+{
+    RendererTestApp test;
+    AddReflectingCamera(test).reflections.enabled = false;
+
     test.Frame();
     const std::vector<PassRecord> off = test.Passes();
-    INFO("off, no trace, and reflectionInfo says so");
+    INFO("no ReflectionTrace pass");
     REQUIRE(Labelled(off, "ReflectionTrace").empty());
+    INFO("and reflectionInfo.x 0");
     REQUIRE(ViewFloat(test, Labelled(off, "Opaque").at(0), ReflectionInfoOffset) == 0.0f);
 }
 

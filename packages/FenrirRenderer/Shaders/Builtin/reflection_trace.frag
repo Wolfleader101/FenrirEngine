@@ -15,7 +15,7 @@
 // disocclusion: how far in front of the hit, last frame, the surface last frame's pyramid holds there was. Pixels with
 // nothing drawn, or no hit, are 0.
 //
-// Core/ReflectionTrace mirrors every step on the CPU. Pixels count from the view's top-left corner, +y down (NDC +y
+// Core/ReflectionTrace mirrors the ray, the march, the fades, the reprojection and the disocclusion on the CPU. Pixels count from the view's top-left corner, +y down (NDC +y
 // at row 0); depth is reversed-Z, so a texel's nearest depth is its largest.
 #include "Fenrir/Normals.glsl"
 
@@ -209,7 +209,9 @@ void main()
     vec4 previousClip = trace.viewToPreviousClip * vec4(hitPosition, 1.0);
     vec3 previousNdc = previousClip.xyz / previousClip.w;
     vec2 previousUv = vec2(previousNdc.x * 0.5 + 0.5, 0.5 - previousNdc.y * 0.5);
-    bool onScreen = all(greaterThanEqual(previousUv, vec2(0.0))) && all(lessThanEqual(previousUv, vec2(1.0)));
+    // Behind last frame's camera, w is negative and the divide turns the point round onto the screen.
+    bool onScreen = previousClip.w > 0.0 && all(greaterThanEqual(previousUv, vec2(0.0))) &&
+                    all(lessThanEqual(previousUv, vec2(1.0)));
     float history = trace.settings.z > 0.0 && onScreen ? 1.0 : 0.0;
     ivec2 previousPixel = clamp(ivec2(previousUv * trace.size.xy), ivec2(0), ivec2(trace.size.xy) - 1);
     float previousDepth = texelFetch(previousPyramid, previousPixel, 0).r;

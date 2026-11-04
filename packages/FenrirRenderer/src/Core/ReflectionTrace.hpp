@@ -40,12 +40,6 @@ namespace Fenrir::Render
     /** @brief The perceptual roughness below the camera's roughnessCutoff at which reflections start to fade out. */
     inline constexpr float ReflectionRoughnessFade = 0.1f;
 
-    /**
-     * @brief Whether a view with `settings` gets reflections: enabled, with an intensity and a max distance above 0.
-     * Only then does it keep a history and pyramids, and add their passes and the trace.
-     */
-    [[nodiscard]] bool HasReflections(const ReflectionSettings& settings) noexcept;
-
     /** @brief A point on screen: in pixels from the top-left, and its reversed-Z depth. */
     struct ScreenPoint
     {
@@ -138,6 +132,8 @@ namespace Fenrir::Render
         Math::Vec2 uv{0.0f};
         /** @brief Its reversed-Z depth there. */
         float depth = 0.0f;
+        /** @brief Whether it was on that view's screen: in front of the camera, its UV within [0, 1]. */
+        bool onScreen = false;
     };
 
     /**

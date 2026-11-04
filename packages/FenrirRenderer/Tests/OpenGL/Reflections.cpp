@@ -64,7 +64,8 @@ namespace
         return camera;
     }
 
-    /** @brief The emissive board, 2 units square, standing on the floor `distance` along `facing` (-Z or +Z). */
+    /** @brief The emissive board, 2 units square, standing on the floor `distance` in front of the camera, or behind
+     * it when `behind`. */
     void AddBoard(GlScene& test, float distance, bool behind = false)
     {
         Fenrir::AssetStore& store = test.assets.Store();
@@ -135,6 +136,7 @@ TEST_CASE("GL: with reflections off, the mirror floor shows only the sky", "[ren
     const GlProbe::Image image = Settle(test);
     INFO("black under a black sky");
     REQUIRE(image.At(MirrorX, MirrorY)[0] < 1e-3f);
+    INFO("no GL error or other error was logged");
     REQUIRE(test.messages->errors.empty());
 }
 
@@ -152,6 +154,7 @@ TEST_CASE("GL: with the board behind the camera, the mirror floor shows only the
     REQUIRE(on[0] < 1e-3f);
     REQUIRE(off[2] > 0.25f);
     REQUIRE(Close(on[2], off[2], 1e-3f));
+    INFO("no GL error or other error was logged");
     REQUIRE(test.messages->errors.empty());
 }
 
@@ -173,6 +176,7 @@ TEST_CASE("GL: a floor rougher than the cutoff looks as it does with reflections
             REQUIRE(Close(on.At(MirrorX, y)[channel], off.At(MirrorX, y)[channel], 1e-3f));
         }
     }
+    INFO("no GL error or other error was logged");
     REQUIRE(test.messages->errors.empty());
 }
 
@@ -192,6 +196,7 @@ TEST_CASE("GL: a rect light whose board is drawn is not reflected twice", "[rend
     REQUIRE(off > 0.5f * BoardColour.r);
     REQUIRE(on < 1.3f * off);
     REQUIRE(on > 0.7f * off);
+    INFO("no GL error or other error was logged");
     REQUIRE(test.messages->errors.empty());
 }
 
@@ -210,6 +215,7 @@ TEST_CASE("GL: a rect light whose surface is not drawn keeps its specular under 
     const float off = Settle(test).At(MirrorX, MirrorY)[0];
     INFO("its specular and the reflection add: " << on << " against " << off);
     REQUIRE(on > 1.6f * off);
+    INFO("no GL error or other error was logged");
     REQUIRE(test.messages->errors.empty());
 }
 

@@ -981,8 +981,8 @@ namespace Fenrir::Render
         /** @brief Each copy's draw set group, by frame index modulo the copies. */
         std::vector<DrawGroup> m_drawGroups;
         /**
-         * @brief The view set's groups, by the view ring's buffer, slot, the occlusion and shadow textures and the
-         * cluster buffer, while all four live.
+         * @brief The view set's groups, by the view ring's buffer, slot, the occlusion and shadow textures, the
+         * cluster buffer and the reflection hits and history, while all six live.
          */
         BindingGroupCache<7> m_viewGroups;
         /** @brief The Output pass's binding group for each SceneColor texture, while the texture lives. */
