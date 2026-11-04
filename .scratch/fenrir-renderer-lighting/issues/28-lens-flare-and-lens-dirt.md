@@ -1,9 +1,9 @@
 # 28: Lens flare and lens dirt
 
-**What to build:** A screen-space lens flare and an optional lens-dirt texture, in `PostProcess` after the streaks (ADR-0057). Requested by the user while tuning ticket 20 against cyberpunk reference renders, 2026-11-02.
+**What to build:** A screen-space lens flare and an optional lens-dirt texture, in `PostProcess` after the streaks (ADR-0059). Requested by the user while tuning ticket 20 against cyberpunk reference renders, 2026-11-02.
 
 - **Ghosts and a halo** after John Chapman's pseudo lens flare: from a small bloom level (level 1 or 2), `ghostCount` ghosts sampled along the line through the view's centre, each fading with its distance from the centre, and a halo ring sampled towards the centre at `haloRadius`; each channel offset a little, so the ghosts fringe. Blurred once with the bloom filters at that level's size, and upsampled into the composite.
-- **Mixed into SceneColor as bloom is** (ADR-0057): SceneColor becomes (1 - `intensity`) of itself and `intensity` of the flare, so the flare moves light, never adds it. With no threshold, a bright sky ghosts as a veiling glare, as a real lens does; the intensity is small by design.
+- **Mixed into SceneColor as bloom is** (ADR-0059): SceneColor becomes (1 - `intensity`) of itself and `intensity` of the flare, so the flare moves light, never adds it. With no threshold, a bright sky ghosts as a veiling glare, as a real lens does; the intensity is small by design.
 - **Lens dirt:** an optional texture asset over the view, scaling bloom's and the flare's share where the lens is dirty, by `dirtIntensity`, with each pixel's share held at or below 1 so the mix stays a blend. Off when no texture is set.
 - `Camera` gains `lensFlare { intensity, ghostCount, ghostSpacing, haloRadius, haloWidth, chromaticOffset, dirt, dirtIntensity }`, off by default (intensity 0, which adds no pass).
 - The C# binding is regenerated from the header (`packages/FenrirRenderer/Scripting/api/`, `Managed/Fenrir.Renderer/Generated/`).

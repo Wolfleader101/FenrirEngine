@@ -1,6 +1,6 @@
 # 26: Parametric colour grading
 
-**What to build:** A per-camera colour grade in the Output pass, scene-referred and before the tonemap (ADR-0057), mirrored on the CPU as the tonemappers are. Requested by the user while tuning ticket 20 against cyberpunk reference renders, 2026-11-02: the neon city's look (teal shadows, magenta highlights, punchy contrast) cannot be reached by exposure and the tonemapper alone.
+**What to build:** A per-camera colour grade in the Output pass, scene-referred and before the tonemap (ADR-0059), mirrored on the CPU as the tonemappers are. Requested by the user while tuning ticket 20 against cyberpunk reference renders, 2026-11-02: the neon city's look (teal shadows, magenta highlights, punchy contrast) cannot be reached by exposure and the tonemapper alone.
 
 - **`Camera` gains `colourGrading`**, identity by default and skipped when it is identity. Its steps, in this order (settled in grilling, 2026-11-03):
   1. **White balance:** `temperature` and `tint`, a von Kries adaptation in LMS space (CAT02 or Bradford, named in the code) from the white they describe to D65, as Unity's and Unreal's white balance are. First, since it corrects the light source.
@@ -11,7 +11,7 @@
 - The grade runs after exposure (and the vignette, once ticket 25 lands), before the tonemapper, in `builtin:output` and in a CPU mirror beside `src/Core/Tonemapping.cpp` that follows the order step for step; a change to one is a change to both, and the GL tests hold the shader to the mirror.
 - The C# binding is regenerated from the header (`packages/FenrirRenderer/Scripting/api/`, `Managed/Fenrir.Renderer/Generated/`).
 - LightingDemo's panel gains temperature, tint, contrast, the two tints (colour pickers), balance and saturation; the neon city sets a grade that suits it.
-- **Not here** (ADR-0057's "Not yet"): 3D LUTs, which need 3D textures (`TextureKind` has none) and a way to author them; lift, gamma and gain, and shadows, midtones and highlights wheels.
+- **Not here** (ADR-0059's "Not yet"): 3D LUTs, which need 3D textures (`TextureKind` has none) and a way to author them; lift, gamma and gain, and shadows, midtones and highlights wheels.
 
 **Blocked by:** 20
 

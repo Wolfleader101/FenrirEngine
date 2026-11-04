@@ -1,9 +1,9 @@
 # 27: Anamorphic streaks
 
-**What to build:** Horizontal light streaks from bright pixels, as an anamorphic lens draws them, in `PostProcess` after bloom (ADR-0057). Requested by the user while tuning ticket 20 against cyberpunk reference renders, 2026-11-02: the neon signs and headlights want the long blue streaks of the genre.
+**What to build:** Horizontal light streaks from bright pixels, as an anamorphic lens draws them, in `PostProcess` after bloom (ADR-0059). Requested by the user while tuning ticket 20 against cyberpunk reference renders, 2026-11-02: the neon signs and headlights want the long blue streaks of the genre.
 
 - **A streak chain beside the bloom chain** (`src/Core/Bloom.cpp`): it starts from bloom's level 0, Karis-averaged already, and halves only the width at each level, the height staying level 0's, with a horizontal-only filter; then upsamples back with a horizontal tent, each level blended over the next by `length` as bloom's levels are by its radius. Variants of `bloom_downsample.frag` and `bloom_upsample.frag` (a key for the axis), or their own small shaders if a variant reads worse.
-- **Mixed into SceneColor as bloom is** (ADR-0057): SceneColor becomes (1 - `intensity`) of itself and `intensity` of the streak, multiplied by `tint` normalised to unit luminance, so streaks move light, never add it. With no threshold, everything streaks a little and only what is bright shows, as with bloom.
+- **Mixed into SceneColor as bloom is** (ADR-0059): SceneColor becomes (1 - `intensity`) of itself and `intensity` of the streak, multiplied by `tint` normalised to unit luminance, so streaks move light, never add it. With no threshold, everything streaks a little and only what is bright shows, as with bloom.
 - `Camera` gains `anamorphicStreaks { intensity, length, tint }`, off by default (intensity 0, which adds no pass). A view whose bloom is off still streaks: the chain then runs bloom's first downsample for itself.
 - The C# binding is regenerated from the header (`packages/FenrirRenderer/Scripting/api/`, `Managed/Fenrir.Renderer/Generated/`).
 - LightingDemo's panel gains the streaks' intensity and length; the neon city turns them on, tinted blue.
