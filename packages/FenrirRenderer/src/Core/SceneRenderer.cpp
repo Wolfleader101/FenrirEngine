@@ -718,6 +718,7 @@ namespace Fenrir::Render
         m_skyLighting = std::make_unique<SkyLighting>(m_device, m_logger);
         m_bloom = std::make_unique<BloomChain>(m_device, m_logger, m_samples);
         m_gtao = std::make_unique<Gtao>(m_device, m_logger, m_samples);
+        m_sceneHistory = std::make_unique<SceneHistory>(m_device, m_logger, m_samples);
         // The view set's groups bind a view block with its ambient occlusion, so the ring makes none of its own.
         m_viewBlocks =
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, false, sizeof(ViewBlock), "View");
@@ -837,6 +838,7 @@ namespace Fenrir::Render
         }
         m_skyLighting.reset();
         m_gtao.reset();
+        m_sceneHistory.reset();
         m_frameBlocks.reset();
         m_lightBlocks.reset();
         m_spotShadows.reset();
@@ -2460,6 +2462,9 @@ namespace Fenrir::Render
         m_skyLighting->AddPasses(graph, SkySourceOf(m_frame.lighting));
         if (m_frame.views.empty())
         {
+            // No camera keeps its reflection history.
+            m_sceneHistory->BeginFrame({});
+            m_sceneHistory->EndFrame();
             AddWindowClear(graph, frame);
             return;
         }
@@ -2569,6 +2574,7 @@ namespace Fenrir::Render
         const GraphResource spotAtlas = spotFrame.map;
         const GraphResource pointShadowCubes = pointFrame.map;
         m_gtao->BeginFrame(views.size());
+        m_sceneHistory->BeginFrame(views);
         m_clusterJobs->Reserve(views.size());
         m_backgroundBlocks->Reserve(views.size());
         m_outputBlocks->Reserve(views.size());
@@ -3022,6 +3028,10 @@ namespace Fenrir::Render
             const GraphResource occlusion = m_gtao->AddPasses(
                 graph, frameIndex,
                 {sceneDepth, sceneNormals, {rect.width, rect.height}, request.projection, request.ambientOcclusion});
+            // Its reflections' Hi-Z pyramid of the prepass's depth, after GTAO's passes, when the camera has them.
+            const HistoryView history =
+                m_sceneHistory->Import(graph, request, {rect.width, rect.height}, viewProjection);
+            m_sceneHistory->AddHiZPasses(graph, frameIndex, history, sceneDepth);
             graph.AddPass(
                 "Opaque", RenderStage::Opaque, QueueKind::Graphics,
                 [=](PassBuilder& pass) {
@@ -3130,6 +3140,9 @@ namespace Fenrir::Render
                     encoder.Draw({.vertexCount = 3});
                 });
 
+            // SceneColor kept for next frame's reflections before bloom glows over it: these passes are added before
+            // any view's bloom, so they run first in PostProcess.
+            m_sceneHistory->AddHistoryPasses(graph, frameIndex, history, sceneColour);
             blooms.push_back({sceneColour, {rect.width, rect.height}, request.bloom});
 
             // The first view into a target clears all of it; each later one draws over it, in its viewport only.
@@ -3167,6 +3180,7 @@ namespace Fenrir::Render
                 });
         }
         m_bloom->AddPasses(graph, frameIndex, blooms);
+        m_sceneHistory->EndFrame();
         if (!cleared.contains(AssetKey{}))
         {
             AddWindowClear(graph, frame);

@@ -64,6 +64,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/ImageReads.cpp
     src/Core/Gtao.hpp
     src/Core/Gtao.cpp
+    src/Core/SceneHistory.hpp
+    src/Core/SceneHistory.cpp
     src/Core/ShadowPool.hpp
     src/Core/ShadowPool.cpp
     src/Core/RenderFeature.hpp
@@ -163,6 +165,13 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBloomUpsample VERTEX Shader
 # GTAO (ADR-0049): the horizon search, whose MSAA variant reads sample 0 of the prepass's targets, and the DENOISE blur.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinGtao VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/gtao.frag KEYS DENOISE MSAA EMBED)
+# Screen-space reflections' inputs (ADR-0056): the Hi-Z pyramid, whose COPY variant copies SceneDepth into its level 0
+# (MSAA: sample 0 of a multisampled one), and the history colour, whose DOWNSAMPLE variant box-filters a level down
+# (MSAA: the copy resolves a multisampled SceneColor).
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinHiZ VERTEX Shaders/Builtin/fullscreen.vert
+                   FRAGMENT Shaders/Builtin/hi_z.frag KEYS COPY MSAA EMBED)
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinSceneHistory VERTEX Shaders/Builtin/fullscreen.vert
+                   FRAGMENT Shaders/Builtin/scene_history.frag KEYS DOWNSAMPLE MSAA EMBED)
 # Compute skinning (ADR-0050): each skinned mesh's vertices skinned once a frame, which every pass then draws rigidly.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinSkinning COMPUTE Shaders/Builtin/skinning.comp EMBED)
 # Light clustering (ADR-0049): each view's point, spot and rect lights listed in its clusters.

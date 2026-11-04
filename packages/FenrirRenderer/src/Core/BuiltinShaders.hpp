@@ -65,6 +65,13 @@ namespace Fenrir::Render
          * clusters (ADR-0049).
          */
         LightClusters,
+        /** @brief `builtin:hi-z`: a level of a view's Hi-Z pyramid, COPY level 0 from SceneDepth (ADR-0056). */
+        HiZ,
+        /**
+         * @brief `builtin:scene-history`: a level of a view's history colour, the base variant level 0 from SceneColor
+         * and DOWNSAMPLE each level below (ADR-0056).
+         */
+        SceneHistory,
     };
 
     /** @brief A built-in program's `builtin:` name and its embedded container's bytes. */

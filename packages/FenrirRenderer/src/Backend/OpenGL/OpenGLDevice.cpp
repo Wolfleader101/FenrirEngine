@@ -93,8 +93,8 @@ namespace Fenrir::Graphics
             }
         }
 
-        constexpr std::array<GLenum, 7> internalFormats{GL_RGBA8,   GL_SRGB8_ALPHA8, GL_RGBA16F, GL_DEPTH_COMPONENT32F,
-                                                        GL_RGBA32F, GL_R8,           GL_RG16F};
+        constexpr std::array<GLenum, 8> internalFormats{GL_RGBA8,   GL_SRGB8_ALPHA8, GL_RGBA16F, GL_DEPTH_COMPONENT32F,
+                                                        GL_RGBA32F, GL_R8,           GL_RG16F,   GL_R32F};
 
         /** @brief How WriteTexture's tightly packed texels of a format are laid out for GL. */
         struct UploadFormat
@@ -105,7 +105,7 @@ namespace Fenrir::Graphics
         };
 
         /** @brief The upload layout of each TextureFormat. */
-        constexpr std::array<UploadFormat, 7> uploadFormats{{
+        constexpr std::array<UploadFormat, 8> uploadFormats{{
             {GL_RGBA, GL_UNSIGNED_BYTE, 4},
             {GL_RGBA, GL_UNSIGNED_BYTE, 4},
             {GL_RGBA, GL_HALF_FLOAT, 8},
@@ -113,6 +113,7 @@ namespace Fenrir::Graphics
             {GL_RGBA, GL_FLOAT, 16},
             {GL_RED, GL_UNSIGNED_BYTE, 1},
             {GL_RG, GL_HALF_FLOAT, 4},
+            {GL_RED, GL_FLOAT, 4},
         }};
 
         /** @brief GL's wrap mode for each AddressMode. */
@@ -1036,8 +1037,19 @@ namespace Fenrir::Graphics
             const GLuint unit = GlBindingOf(command.set, group->indicesInKind[i]);
             if (group->kinds[i] == ShaderBindingKind::Texture)
             {
-                const GlTexture* texture = m_textures.Find(entry.texture);
+                GlTexture* texture = m_textures.Find(entry.texture);
                 const std::uint32_t* sampler = m_samplers.Find(entry.sampler);
+                // A binding of one level narrows the texture's levels to it, so drawing into another level is no
+                // feedback loop; the next binding of every level widens them again.
+                if (texture != nullptr && texture->name != 0 && texture->sampledLevel != entry.mipLevel)
+                {
+                    const std::uint32_t last = texture->desc.mipLevels - 1;
+                    const std::uint32_t base = entry.mipLevel ? std::min(*entry.mipLevel, last) : 0;
+                    gl.TextureParameteri(texture->name, GL_TEXTURE_BASE_LEVEL, static_cast<GLint>(base));
+                    gl.TextureParameteri(texture->name, GL_TEXTURE_MAX_LEVEL,
+                                         static_cast<GLint>(entry.mipLevel ? base : last));
+                    texture->sampledLevel = entry.mipLevel;
+                }
                 gl.BindTextureUnit(unit, texture != nullptr ? texture->name : 0);
                 gl.BindSampler(unit, sampler != nullptr ? *sampler : 0);
                 continue;
@@ -1277,20 +1289,21 @@ namespace Fenrir::Graphics
         return rect.y;
     }
 
-    OpenGLDevice::Texels OpenGLDevice::ReadTexels(TextureHandle texture)
+    OpenGLDevice::Texels OpenGLDevice::ReadTexels(TextureHandle texture, std::uint32_t mipLevel)
     {
         const GlTexture* found = m_textures.Find(texture);
         if (found == nullptr || found->name == 0 || found->desc.samples > 1 ||
-            found->desc.kind != TextureKind::Texture2D || found->desc.format == TextureFormat::Depth32Float)
+            found->desc.kind != TextureKind::Texture2D || found->desc.format == TextureFormat::Depth32Float ||
+            mipLevel >= found->desc.mipLevels)
         {
             return {};
         }
         Texels texels;
-        texels.width = found->desc.width;
-        texels.height = found->desc.height;
+        texels.width = std::max(found->desc.width >> mipLevel, 1u);
+        texels.height = std::max(found->desc.height >> mipLevel, 1u);
         texels.rgba.resize(std::size_t{texels.width} * texels.height * 4);
         // GL returns memory row 0 first, which an upper-left clip origin made the top row.
-        m_gl->GetTextureImage(found->name, 0, GL_RGBA, GL_FLOAT,
+        m_gl->GetTextureImage(found->name, static_cast<GLint>(mipLevel), GL_RGBA, GL_FLOAT,
                               static_cast<GLsizei>(texels.rgba.size() * sizeof(float)), texels.rgba.data());
         return texels;
     }

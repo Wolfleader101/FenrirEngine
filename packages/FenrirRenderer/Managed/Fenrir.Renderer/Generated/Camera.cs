@@ -43,6 +43,8 @@ public partial struct Camera : IComponent
     public Bloom Bloom = new();
     /// <summary>How nearby geometry darkens the sky's light in the view.</summary>
     public AmbientOcclusion AmbientOcclusion = new();
+    /// <summary>How smooth surfaces in the view mirror what is on screen.</summary>
+    public Reflections Reflections = new();
     /// <summary>What the view shows: its lit colour, or one of its inputs.</summary>
     public CameraDebugView DebugView = CameraDebugView.None;
 

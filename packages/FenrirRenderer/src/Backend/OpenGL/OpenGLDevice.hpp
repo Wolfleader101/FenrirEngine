@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -128,6 +129,11 @@ namespace Fenrir::Graphics
         {
             std::uint32_t name = 0;
             TextureDesc desc;
+            /**
+             * @brief The one mip level its base and maximum levels are set to, which a binding naming that level set;
+             * empty while they span every level.
+             */
+            std::optional<std::uint32_t> sampledLevel;
         };
 
         /**
@@ -265,8 +271,11 @@ namespace Fenrir::Graphics
         /** @brief Gives the current pipeline's vertex array the vertex and index buffers bound in the pass. */
         void BindVertexInput();
 
-        /** @brief For GlProbe: mip 0 of an offscreen colour texture as floats, top row first; empty if it cannot. */
-        [[nodiscard]] Texels ReadTexels(TextureHandle texture);
+        /**
+         * @brief For GlProbe: mip `mipLevel` of an offscreen colour texture as floats, top row first; empty if it
+         * cannot.
+         */
+        [[nodiscard]] Texels ReadTexels(TextureHandle texture, std::uint32_t mipLevel = 0);
         /** @brief For GlProbe: the GL name behind a live buffer, else 0. */
         [[nodiscard]] std::uint32_t GlName(BufferHandle buffer);
         /** @brief For GlProbe: the GL name behind a live texture, else 0. */

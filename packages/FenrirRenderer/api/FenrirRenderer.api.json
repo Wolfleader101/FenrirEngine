@@ -350,6 +350,23 @@
       "defaultKind": "m_perspective"
     },
     {
+      "name": "Fenrir::Reflections",
+      "category": "struct",
+      "role": "nested",
+      "size": 1,
+      "alignment": 1,
+      "doc": "A view's screen-space reflections (ADR-0056): what is on screen mirrored in smooth surfaces, from the previous frame's colour, over the sky's reflection. So far it keeps only what they read across frames, the view's colour before bloom and a hierarchical-Z pyramid of its depth; nothing is reflected yet.",
+      "fields": [
+        {
+          "name": "enabled",
+          "offset": 0,
+          "kind": "bool",
+          "default": false,
+          "doc": "Whether the view has them: off by default, and off costs nothing. On, the view keeps about 44 MB at 1920 x 1080 across frames."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::ImageTarget",
       "category": "struct",
       "role": "nested",
@@ -604,8 +621,16 @@
           "doc": "How nearby geometry darkens the sky's light in the view."
         },
         {
-          "name": "debugView",
+          "name": "reflections",
           "offset": 104,
+          "kind": "struct",
+          "type": "Fenrir::Reflections",
+          "default": {},
+          "doc": "How smooth surfaces in the view mirror what is on screen."
+        },
+        {
+          "name": "debugView",
+          "offset": 105,
           "kind": "enum",
           "type": "Fenrir::CameraDebugView",
           "default": "None",
