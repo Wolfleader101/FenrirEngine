@@ -881,6 +881,9 @@ namespace LightingDemo
             state.lighting.exposure = -0.5f;
             state.lighting.bloom = {0.3f, 0.85f};
             state.lighting.ambientOcclusion.radius = 1.5f;
+            // The wet streets mirror the glowing strips, boards and windows on screen. The signs' boards are drawn,
+            // so their rect lights keep visibleSurface, and their glints yield to the boards' reflections.
+            state.lighting.reflections.enabled = true;
             // Every light here is small against the dark: the sky is dim, so the neon and the lamps carry the scene.
             state.lighting.skyIntensity = 0.03f;
             // The city's own glow first; Poly Haven's overcast night (S) when fetched.
@@ -1003,6 +1006,12 @@ namespace LightingDemo
                 }
                 app.Logger()->Info("M: the streets are {}", state->puddles > 0.0f ? "wet" : "dry");
             }
+            if (keyboard.JustPressed(Fenrir::Key::R))
+            {
+                Fenrir::Reflections& reflections = state->lighting.reflections;
+                reflections.enabled = !reflections.enabled;
+                app.Logger()->Info("R: reflections are {}", reflections.enabled ? "on" : "off");
+            }
             bool clustered = state->clustered;
             if (keyboard.JustPressed(Fenrir::Key::C))
             {
@@ -1030,6 +1039,7 @@ namespace LightingDemo
                 ImGui::Checkbox("Vsync", &state->vsync);
                 ImGui::Checkbox("Traffic moving (N)", &state->moving);
                 ImGui::SliderFloat("Puddles (M)", &state->puddles, 0.0f, 1.0f);
+                ImGui::Checkbox("Reflections (R)", &state->lighting.reflections.enabled);
                 ImGui::SliderFloat("Lamp intensity", &state->lampIntensity, 0.0f, 150.0f);
                 ImGui::SliderFloat("Sign intensity", &state->signIntensity, 0.0f, 30.0f);
                 ImGui::SliderFloat("Headlight intensity", &state->headlightIntensity, 0.0f, 200.0f);
@@ -1073,12 +1083,15 @@ namespace LightingDemo
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
         scene.keyHelp = LightingKeyHelp(true) +
-                        " N: the traffic stopped or moving. M: the streets dry or wet. C: the lights clustered or not.";
-        // The traffic stopped and the streets dried, then through the debug views to the light clusters' heat and back,
-        // unclustered and clustered again, wet again and moving again, and the other sky where there is one.
+                        " N: the traffic stopped or moving. M: the streets dry or wet. R: reflections off or on. C: the "
+                        "lights clustered or not.";
+        // The traffic stopped and the streets dried, then through the debug views to the reflections' and back,
+        // unclustered and clustered again, wet again, reflections off and on again, moving again, and the other sky
+        // where there is one.
         scene.keys = {Fenrir::Key::N, Fenrir::Key::M, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G,
-                      Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::C, Fenrir::Key::C,
-                      Fenrir::Key::M, Fenrir::Key::N, Fenrir::Key::S};
+                      Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G,
+                      Fenrir::Key::C, Fenrir::Key::C, Fenrir::Key::M, Fenrir::Key::R, Fenrir::Key::R,
+                      Fenrir::Key::N, Fenrir::Key::S};
         // Above the middle of a street, a few metres up, looking down it between the towers.
         scene.camera.position = {StreetLine(2) - 1.5f, 3.5f, CityHalf - 10.0f};
         scene.camera.yaw = 0.0f;

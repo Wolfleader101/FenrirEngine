@@ -135,6 +135,10 @@ namespace Fenrir::Render
         SpotShadowAtlas,
         /** @brief Each lit pixel as the heat of how many lights its cluster lists (ADR-0049), or of every light. */
         LightClusters,
+        /** @brief Last frame's history at each reflection hit, times its confidence (ADR-0056); black without. */
+        Reflections,
+        /** @brief Each reflection hit's confidence as grey; black without reflections. */
+        ReflectionConfidence,
     };
 
     /**

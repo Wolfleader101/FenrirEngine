@@ -555,6 +555,17 @@ namespace Fenrir
          * cluster lists, on a log scale, exposed and tonemapped.
          */
         LightClusters,
+        /**
+         * @brief Its screen-space reflections (ADR-0056): at each pixel, the colour its mirror ray hit, from last
+         * frame, times how sure the hit is, exposed and tonemapped; black where nothing is reflected or the camera's
+         * reflections are off. It is what a mirror there would blend, sharp: a material's roughness blurs and fades it.
+         */
+        Reflections,
+        /**
+         * @brief How sure each pixel's reflection hit is, as grey from black (no hit) to white, with no exposure or
+         * tonemap; black where the camera's reflections are off.
+         */
+        ReflectionConfidence,
     };
 
     /**

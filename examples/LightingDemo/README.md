@@ -10,11 +10,14 @@ scene's hand checks are collected in one place after them, under Hand checks.
 ## The Lighting window
 
 Every scene shows the same ImGui window, Lighting (`src/LightingPanel.cpp`): the cameras' exposure (EV stops),
-tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius) and ambient occlusion (GTAO: on, which it is
-by default here, its radius and strength), the sun's shadows (on, their distance and their normal and slope biases,
+tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius), ambient occlusion (GTAO: on, which it is
+by default here, its radius and strength) and screen-space reflections (ADR-0056: on, off unless the scene turns them
+on, their intensity, max distance, thickness and roughness cutoff, and buttons for their two debug views), the sun's
+shadows (on, their distance and their normal and slope biases,
 given to every DirectionalLight in the scene), a debug view (the lit scene, the raw occlusion as grey, the shadow
-cascades tinted red, green, blue and yellow from the nearest, the shadow atlas, the spot shadow atlas, or the light
-clusters' heat: how many lights each pixel loops over, black none, 1 blue, 4 cyan, 16 green, 64 yellow and 256 red),
+cascades tinted red, green, blue and yellow from the nearest, the shadow atlas, the spot shadow atlas, the light
+clusters' heat: how many lights each pixel loops over, black none, 1 blue, 4 cyan, 16 green, 64 yellow and 256 red, the
+reflections: what each pixel's mirror ray hit times how sure it is, or that confidence as grey),
 and the sky: which panorama, its intensity and its rotation. It writes them to every camera in the scene each frame, the free-fly camera among them.
 Keys do the same, for the smoke runs and by hand: T the next tonemapper, E the next exposure (0, +1, +2, -1 EV), B bloom
 off or back on at its default, O ambient occlusion off or back on, G the next debug view, H the sun's shadows off or
@@ -98,8 +101,9 @@ right, lighting both halves of the room. Each shows as a thin glowing slab of it
 dark polished slab whose roughness rises smoothly from a near mirror (0.02) at its left edge to satin (0.5) at its
 right, slowly at first: 0.05 a quarter of the way across, 0.14 in the middle.
 Khronos's DamagedHelmet, FlightHelmet and SciFiHelmet stand on white plinths across the middle, fetched (ADR-0052);
-without them the plinths are bare and the scene says so on screen. The window's Scene part has each light's width,
-height, intensity and sidedness.
+without them the plinths are bare and the scene says so on screen. Screen-space reflections are on, so the polished
+floor mirrors the slabs, the plinths and the helmets as well as the lights' own glints, which give way to the slabs'
+reflections where they are on screen. The window's Scene part has each light's width, height, intensity and sidedness.
 
 | Keys | |
 | --- | --- |
@@ -259,8 +263,9 @@ but light nothing, so they add colour without a light's cost.
 The streets are Poly Haven's Asphalt 01, drawn by the demo's street shader (`shaders/street.vert`, `street.frag`):
 
 - **Puddles:** two octaves of value noise over the world position, cut at the panel's puddle share. In a puddle the
-  surface is smooth, level and darker. The signs mirror in it through the rect lights' LTC specular, the lamps and
-  headlights through GGX.
+  surface is smooth, level and darker. Screen-space reflections (ADR-0056, on here; R turns them off) mirror what is on
+  screen in it: the towers' edge strips, the sign boards, the stacked boards and the lit windows. Off screen the signs
+  still mirror through the rect lights' LTC specular, and the lamps and headlights through GGX.
 - **Damp asphalt** between the puddles has its roughness lowered, so the lights streak along the street.
 - **Edges:** at a puddle's edge, the asphalt's stones break the water first.
 
@@ -273,7 +278,7 @@ spill on the upper walls towards dusk.
 The window's Scene part has:
 
 - the frame time, the light and copy counts, and the last frame's draws and instances;
-- clustering, vsync (the main window's swap interval), the traffic and the puddles;
+- clustering, vsync (the main window's swap interval), the traffic, the puddles and reflections;
 - each kind of light's intensity.
 
 On an RTX 5080 at 1280 by 720 with 4x MSAA, in Release with vsync off, the panel's frame time (wall clock, smoothed
@@ -290,6 +295,7 @@ generated sky. Everything else is generated, and the scene says so on screen.
 | T, E, B, O, G, S | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the next sky. |
 | N | The traffic stopped or moving. |
 | M | The streets dry or wet again. |
+| R | Reflections off or on. |
 | C | The lights clustered or not. |
 
 | Key | What it does |
@@ -441,6 +447,12 @@ Hand checks, on OpenGL:
   strip of back wall just behind it too.
 - The helmets' metal shows the lights' shapes in its highlights; the room stays dark beyond the lights' ranges.
 - Without the fetched assets: bare plinths and an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
+- Reflections (ADR-0056): the polished floor shows the neon strip's, the panel's and the helmets' reflections, sharp
+  on the left where the floor is smooth and blurred towards the right where it is rough, gone past the roughness cutoff,
+  where the lights' own glints carry on. They fade at the screen's edge rather than cutting off. Each slab is reflected
+  once: no brighter double image where its light's glint and its reflection overlap. Turning reflections off in the
+  window brings back the glints alone; G to the reflections' view shows the mirrored slabs and helmets on black, and to
+  their confidence, the floor in grey, white where it is smooth and darkening towards the screen's edges.
 
 ### Asteroid ring
 
@@ -484,6 +496,11 @@ Hand checks, on OpenGL:
 - G to the light clusters' heat: no red (256 lights) anywhere along the streets.
 - Without the fetched assets: dark wet streets, the city and its lights, and an amber message naming
   `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
+- Reflections (ADR-0056), at night: the wet streets mirror the edge strips, sign boards and lit windows, streaked by
+  the puddles' edges and blurred on the damp asphalt. They fade at the screen's edge, and fall back to the signs' own
+  glints as they leave the screen. Driving cars leave no visible ghost at walking speed. R turns them off: the puddles
+  then show only the signs', lamps' and headlights' glints and the sky. G to the reflections' view shows the mirrored
+  city on black, to their confidence the puddles near white and the dry asphalt darker.
 
 ### Sponza
 

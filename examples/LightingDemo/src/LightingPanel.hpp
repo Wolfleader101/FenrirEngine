@@ -15,8 +15,8 @@ namespace Fenrir
 } // namespace Fenrir
 
 // The lighting panel every LightingDemo scene shows: an ImGui window for the cameras' exposure, tonemapper, bloom,
-// ambient occlusion and debug view, the sun's shadow and the scene's sky, with keys for the same, which the smoke runs
-// press.
+// ambient occlusion, reflections and debug view, the sun's shadow and the scene's sky, with keys for the same, which the
+// smoke runs press.
 namespace LightingDemo
 {
     /** @brief A panorama the panel can switch the scene's sky to, and the name it shows. */
@@ -36,9 +36,12 @@ namespace LightingDemo
         Fenrir::Bloom bloom;
         /** @brief Every camera's ambient occlusion, on in the demo; O turns it off and back on. */
         Fenrir::AmbientOcclusion ambientOcclusion{true};
+        /** @brief Every camera's screen-space reflections, off unless the scene turns them on. */
+        Fenrir::Reflections reflections;
         /**
          * @brief What the cameras show: the lit scene, their raw ambient occlusion, the sun's cascades as colours,
-         * its shadow atlas, the spot shadow atlas or the light clusters' heat; G steps through them.
+         * its shadow atlas, the spot shadow atlas, the light clusters' heat, their reflections or the reflections'
+         * confidence; G steps through them.
          */
         Fenrir::CameraDebugView debugView = Fenrir::CameraDebugView::None;
         /**
@@ -65,9 +68,9 @@ namespace LightingDemo
      * @brief Runs the panel for one frame, from a scene's `update`: applies its keys (T the next tonemapper, E the next
      * exposure, B bloom off or back on, O ambient occlusion off or back on, G the next debug view, H the sun's shadows
      * off or back on, S the next panorama), draws the "Lighting" ImGui window, with `sceneControls` drawn in it under
-     * the panel's own, then gives every Camera in `scene` the exposure, tonemapper, bloom, ambient occlusion and debug
-     * view, every DirectionalLight the shadow settings, and the scene's Sky the chosen panorama, its intensity and its
-     * rotation.
+     * the panel's own, then gives every Camera in `scene` the exposure, tonemapper, bloom, ambient occlusion,
+     * reflections and debug view, every DirectionalLight the shadow settings, and the scene's Sky the chosen panorama,
+     * its intensity and its rotation.
      */
     void RunLightingPanel(Fenrir::App& app, Fenrir::Scene& scene, LightingSettings& settings,
                           const std::function<void()>& sceneControls = {});

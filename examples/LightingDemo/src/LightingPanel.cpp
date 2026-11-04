@@ -33,13 +33,15 @@ namespace LightingDemo
             const char* name;
         };
         // In the order G steps through them, from the lit scene.
-        constexpr std::array<NamedDebugView, 6> DebugViews{
+        constexpr std::array<NamedDebugView, 8> DebugViews{
             {{Fenrir::CameraDebugView::None, "the lit scene"},
              {Fenrir::CameraDebugView::AmbientOcclusion, "the raw ambient occlusion"},
              {Fenrir::CameraDebugView::ShadowCascades, "the shadow cascades as colours"},
              {Fenrir::CameraDebugView::ShadowAtlas, "the shadow atlas"},
              {Fenrir::CameraDebugView::SpotShadowAtlas, "the spot shadow atlas"},
-             {Fenrir::CameraDebugView::LightClusters, "the light clusters' heat"}}};
+             {Fenrir::CameraDebugView::LightClusters, "the light clusters' heat"},
+             {Fenrir::CameraDebugView::Reflections, "the reflections"},
+             {Fenrir::CameraDebugView::ReflectionConfidence, "the reflections' confidence"}}};
 
         std::size_t DebugViewIndex(Fenrir::CameraDebugView view)
         {
@@ -147,6 +149,25 @@ namespace LightingDemo
                                ImGuiSliderFlags_Logarithmic);
             ImGui::SliderFloat("AO intensity", &settings.ambientOcclusion.intensity, 0.0f, 3.0f);
 
+            ImGui::SeparatorText("Reflections (SSR)");
+            ImGui::Checkbox("Reflections on", &settings.reflections.enabled);
+            ImGui::SliderFloat("SSR intensity", &settings.reflections.intensity, 0.0f, 1.0f);
+            ImGui::SliderFloat("Max distance", &settings.reflections.maxDistance, 1.0f, 200.0f, "%.0f",
+                               ImGuiSliderFlags_Logarithmic);
+            ImGui::SliderFloat("Thickness", &settings.reflections.thickness, 0.02f, 5.0f, "%.2f",
+                               ImGuiSliderFlags_Logarithmic);
+            ImGui::SliderFloat("Roughness cutoff", &settings.reflections.roughnessCutoff, 0.1f, 1.0f);
+            // The two debug views that show them, also in the Debug view list below.
+            const auto showButton = [&](const char* label, Fenrir::CameraDebugView view) {
+                if (ImGui::RadioButton(label, settings.debugView == view))
+                {
+                    settings.debugView = settings.debugView == view ? Fenrir::CameraDebugView::None : view;
+                }
+            };
+            showButton("Show reflections", Fenrir::CameraDebugView::Reflections);
+            ImGui::SameLine();
+            showButton("Show confidence", Fenrir::CameraDebugView::ReflectionConfidence);
+
             ImGui::SeparatorText("Sun shadows");
             ImGui::Checkbox("Shadows on", &settings.sunShadows.castShadows);
             ImGui::SliderFloat("Distance", &settings.sunShadows.shadowDistance, 5.0f, 2000.0f, "%.0f",
@@ -212,6 +233,7 @@ namespace LightingDemo
                 camera.tonemapper = settings.tonemapper;
                 camera.bloom = settings.bloom;
                 camera.ambientOcclusion = settings.ambientOcclusion;
+                camera.reflections = settings.reflections;
                 camera.debugView = settings.debugView;
             });
             const std::array<Fenrir::ComponentType, 1> suns{Fenrir::ComponentType::Native<Fenrir::DirectionalLight>()};
@@ -246,7 +268,7 @@ namespace LightingDemo
         std::string help =
             "T: the tonemapper (AgX, PBR Neutral, ACES, None). E: the exposure (0, +1, +2, -1 EV). B: "
             "bloom off or on. O: ambient occlusion off or on. G: the next debug view (occlusion, cascades, shadow "
-            "map, spot shadow atlas, light clusters). H: the sun's shadows off or on.";
+            "map, spot shadow atlas, light clusters, reflections, their confidence). H: the sun's shadows off or on.";
         if (panoramaSwitch)
         {
             help += " S: the next sky.";

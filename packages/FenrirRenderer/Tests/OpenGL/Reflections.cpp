@@ -3,12 +3,15 @@
 // metal floor of roughness 0 one unit below it, and an emissive red board 2 units tall standing on it 6 units away,
 // whose centre the floor mirrors at row 42 (where the line to its mirror image, 2 below it, crosses the floor). The
 // reflections show last frame's colour, so each probe runs a few frames first. Then a mirror floor under emissive
-// strips and a rect light, against its golden image.
+// strips and a rect light, against its golden image; and the camera's two reflection debug views (lighting ticket 31),
+// read from an image target against the hit target's confidence at the probed pixel.
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirMath/Math.hpp"
@@ -103,6 +106,67 @@ namespace
     bool Close(float a, float b, float tolerance)
     {
         return std::abs(a - b) <= tolerance;
+    }
+
+    /** @brief The linear value of an sRGB-encoded one. */
+    float Linear(float encoded)
+    {
+        return encoded <= 0.04045f ? encoded / 12.92f : std::pow((encoded + 0.055f) / 1.055f, 2.4f);
+    }
+
+    /** @brief What a camera's debug view drew: its image target, linear, and the hit target of its last frame. */
+    struct Shown
+    {
+        GlProbe::Image image;
+        GlProbe::Image hits;
+
+        [[nodiscard]] GlProbe::Pixel At(std::uint32_t x, std::uint32_t y) const
+        {
+            GlProbe::Pixel pixel = image.At(x, y);
+            for (int channel = 0; channel < 3; ++channel)
+            {
+                pixel[channel] = Linear(pixel[channel]);
+            }
+            return pixel;
+        }
+    };
+
+    /** @brief Points `camera` at a `Size` square image showing `view`, runs the probes' frames, and reads both back. */
+    Shown ShowDebugView(GlScene& test, Fenrir::Camera& camera, Fenrir::CameraDebugView view)
+    {
+        Fenrir::ImageData data;
+        data.width = Size;
+        data.height = Size;
+        const auto target = test.assets.Store().Add<Fenrir::Image>(std::move(data), Fenrir::AssetOwner::App());
+        camera.target = Fenrir::ImageTarget{target};
+        camera.debugView = view;
+        for (int frame = 0; frame < Frames; ++frame)
+        {
+            test.RunFrame();
+        }
+        Fenrir::Graphics::GraphicsDevice& device = Fenrir::RendererProbe::Device(test.renderer);
+        Shown shown{GlProbe::Read(device, Fenrir::RendererProbe::ImageTexture(test.renderer, target)), {}};
+        const auto hits = Fenrir::RendererProbe::ReflectionHits(test.renderer);
+        if (!hits.empty())
+        {
+            shown.hits = GlProbe::Read(device, hits.back());
+        }
+        return shown;
+    }
+
+    /** @brief The brightest channel of any pixel `shown` drew. */
+    float Brightest(const Shown& shown)
+    {
+        float brightest = 0.0f;
+        for (std::uint32_t y = 0; y < Size; ++y)
+        {
+            for (std::uint32_t x = 0; x < Size; ++x)
+            {
+                const GlProbe::Pixel pixel = shown.At(x, y);
+                brightest = std::max({brightest, pixel[0], pixel[1], pixel[2]});
+            }
+        }
+        return brightest;
     }
 } // namespace
 
@@ -290,4 +354,79 @@ TEST_CASE("A mirror floor under emissive strips and a rect light, reflections on
     REQUIRE(test.messages->errors.empty());
     RendererTest::RequireGolden("mirror-floor-reflections", test.ReadTarget(target), FENRIR_TEST_GOLDENS,
                                 FENRIR_TEST_GOLDEN_FAILURES);
+}
+
+TEST_CASE("GL: the Reflections debug view shows the reflected colour times its confidence, exposed and tonemapped",
+          "[renderer][gl][ssr]")
+{
+    const std::uint32_t msaa = GENERATE(1u, 4u);
+    GlScene test(msaa);
+    test.RequireOpenGL();
+    Fenrir::Camera& camera = AddRoom(test, true, 0.0f, {0.0f, 0.0f, 0.5f, 1.0f});
+    AddBoard(test, 6.0f);
+    // Exposed by a quarter and not tonemapped, the board's red 2 shows as 0.5 where the floor is sure of it.
+    camera.exposure = -2.0f;
+    camera.tonemapper = Fenrir::Tonemapper::None;
+
+    const Shown shown = ShowDebugView(test, camera, Fenrir::CameraDebugView::Reflections);
+    REQUIRE(shown.hits.width == Size);
+    const float confidence = shown.hits.At(MirrorX, MirrorY)[2];
+    const GlProbe::Pixel mirrored = shown.At(MirrorX, MirrorY);
+    INFO(msaa << " samples: the floor below the board shows its red by the confidence " << confidence << ": "
+              << mirrored[0] << ", " << mirrored[1] << ", " << mirrored[2]);
+    REQUIRE(confidence > 0.5f);
+    REQUIRE(Close(mirrored[0], 0.25f * BoardColour.r * confidence, 2e-2f));
+    REQUIRE(mirrored[1] < 1e-2f);
+    REQUIRE(mirrored[2] < 1e-2f);
+    INFO("the board itself reflects nothing, nor does the sky: black, not the sky's blue");
+    REQUIRE(Close(shown.hits.At(MirrorX, BoardY)[2], 0.0f, 1e-3f));
+    for (const std::uint32_t y : {BoardY, 2u})
+    {
+        const GlProbe::Pixel pixel = shown.At(MirrorX, y);
+        REQUIRE(std::max({pixel[0], pixel[1], pixel[2]}) < 1e-2f);
+    }
+    INFO("no GL error or other error was logged");
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("GL: the ReflectionConfidence debug view shows the hit's confidence as grey", "[renderer][gl][ssr]")
+{
+    GlScene test;
+    test.RequireOpenGL();
+    Fenrir::Camera& camera = AddRoom(test, true, 0.0f, Fenrir::Colour::Black);
+    AddBoard(test, 6.0f);
+
+    const Shown shown = ShowDebugView(test, camera, Fenrir::CameraDebugView::ReflectionConfidence);
+    REQUIRE(shown.hits.width == Size);
+    for (const std::uint32_t y : {MirrorY, BoardY, MirrorY + 6u})
+    {
+        const float confidence = shown.hits.At(MirrorX, y)[2];
+        const GlProbe::Pixel pixel = shown.At(MirrorX, y);
+        INFO("row " << y << ": grey " << pixel[0] << ", " << pixel[1] << ", " << pixel[2] << " for confidence "
+                    << confidence);
+        REQUIRE(Close(pixel[0], confidence, 1e-2f));
+        REQUIRE(Close(pixel[1], pixel[0], 1e-3f));
+        REQUIRE(Close(pixel[2], pixel[0], 1e-3f));
+    }
+    INFO("sure below the board, and nothing on the board itself");
+    REQUIRE(shown.At(MirrorX, MirrorY)[0] > 0.5f);
+    REQUIRE(shown.At(MirrorX, BoardY)[0] < 1e-2f);
+    INFO("no GL error or other error was logged");
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("GL: with reflections off, both reflection debug views are black", "[renderer][gl][ssr]")
+{
+    const Fenrir::CameraDebugView view =
+        GENERATE(Fenrir::CameraDebugView::Reflections, Fenrir::CameraDebugView::ReflectionConfidence);
+    GlScene test;
+    test.RequireOpenGL();
+    Fenrir::Camera& camera = AddRoom(test, false, 0.0f, {0.0f, 0.0f, 0.5f, 1.0f});
+    AddBoard(test, 6.0f);
+
+    const Shown shown = ShowDebugView(test, camera, view);
+    INFO("view " << static_cast<int>(view) << " is black everywhere");
+    REQUIRE(Brightest(shown) < 1e-3f);
+    INFO("no GL error or other error was logged");
+    REQUIRE(test.messages->errors.empty());
 }

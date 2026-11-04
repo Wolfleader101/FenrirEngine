@@ -774,6 +774,13 @@ namespace Fenrir::Render
         /** @brief The group binding `sceneColour` as Output's source in frame `frameIndex`, made while it lives. */
         [[nodiscard]] Graphics::BindingGroupHandle OutputGroup(Graphics::TextureHandle sceneColour,
                                                                std::uint64_t frameIndex);
+        /**
+         * @brief The group binding a view's reflection hits and history as Output's REFLECTIONS variant's sources in
+         * frame `frameIndex`, made while both live.
+         */
+        [[nodiscard]] Graphics::BindingGroupHandle ReflectionOutputGroup(Graphics::TextureHandle hits,
+                                                                         Graphics::TextureHandle history,
+                                                                         std::uint64_t frameIndex);
         /** @brief Adds the pass that clears the window to black, for a frame with no view into it. */
         static void AddWindowClear(RenderGraph& graph, const FrameContext& frame);
         void DestroyPipelinesOf(const ShaderEntry& shader);
@@ -900,13 +907,17 @@ namespace Fenrir::Render
         Graphics::BindingGroupLayoutHandle m_prepassMaskLayout;
         /** @brief Set 2 of the Output pass: the view's SceneColor and its sampler. */
         Graphics::BindingGroupLayoutHandle m_outputLayout;
-        /** @brief Set 1 of the Output pass: the Output block, the view's exposure and tonemapper. */
+        /** @brief Set 2 of Output's REFLECTIONS variant: the view's reflection hits and history. */
+        Graphics::BindingGroupLayoutHandle m_reflectionOutputLayout;
+        /** @brief Set 1 of the Output pass: the Output block, the view's exposure, tonemapper and grey channel. */
         Graphics::BindingGroupLayoutHandle m_outputBlockLayout;
         Graphics::PipelineHandle m_backgroundPipeline;
         Graphics::PipelineHandle m_skyPipeline;
         Graphics::PipelineHandle m_outputPipeline;
-        /** @brief Output's OCCLUSION variant, which draws a view's ambient occlusion as grey. */
+        /** @brief Output's OCCLUSION variant, which draws one channel of a texture as grey. */
         Graphics::PipelineHandle m_occlusionOutputPipeline;
+        /** @brief Output's REFLECTIONS variant, which draws last frame's history at a view's reflection hits. */
+        Graphics::PipelineHandle m_reflectionOutputPipeline;
 
         /** @brief The default textures, by DefaultTexture: white, black and the flat normal. */
         std::array<Graphics::TextureHandle, 3> m_defaultTextures{};
@@ -987,6 +998,8 @@ namespace Fenrir::Render
         BindingGroupCache<7> m_viewGroups;
         /** @brief The Output pass's binding group for each SceneColor texture, while the texture lives. */
         BindingGroupCache<1> m_outputGroups;
+        /** @brief The REFLECTIONS variant's binding group for each hit target and history, while both live. */
+        BindingGroupCache<2> m_reflectionOutputGroups;
 
         SceneFrame m_frame;
         std::vector<DrawnView> m_drawnViews;

@@ -182,9 +182,11 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinReflectionTrace VERTEX Shad
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinSkinning COMPUTE Shaders/Builtin/skinning.comp EMBED)
 # Light clustering (ADR-0049): each view's point, spot and rect lights listed in its clusters.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinLightClusters COMPUTE Shaders/Builtin/light_clusters.comp EMBED)
-# MSAA: the variant that resolves a multisampled SceneColor. OCCLUSION: the one that shows a view's ambient occlusion.
+# MSAA: the variant that resolves a multisampled SceneColor. OCCLUSION: the one that shows one channel of a texture as
+# grey (ambient occlusion, the shadow atlases, reflection confidence). REFLECTIONS: the one that shows a view's
+# reflections, last frame's history at its hits.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinOutput VERTEX Shaders/Builtin/fullscreen.vert
-                   FRAGMENT Shaders/Builtin/output.frag KEYS MSAA OCCLUSION EMBED)
+                   FRAGMENT Shaders/Builtin/output.frag KEYS MSAA OCCLUSION REFLECTIONS EMBED)
 # Debug drawing (ADR-0025): lines expanded to screen-space quads, solid triangles, and text from the SDF font atlas.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDebugLines VERTEX Shaders/Builtin/debug_lines.vert
                    FRAGMENT Shaders/Builtin/debug.frag EMBED)

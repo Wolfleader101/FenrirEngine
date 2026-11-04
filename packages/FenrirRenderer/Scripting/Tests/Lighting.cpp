@@ -121,7 +121,7 @@ namespace
         camera.bloom = {0.2f, 0.3f};
         camera.ambientOcclusion = {true, 0.8f, 1.7f};
         camera.reflections = {true, 0.75f, 30.0f, 0.25f, 0.45f};
-        camera.debugView = CameraDebugView::LightClusters;
+        camera.debugView = CameraDebugView::ReflectionConfidence;
         return camera;
     }
 } // namespace
@@ -136,6 +136,7 @@ TEST_CASE("Every lighting component round-trips between C++ and C#, field by fie
         perspective.projection = Perspective{1.1f, 0.25f};
         perspective.background = SceneBackground{};
         perspective.target = WindowTarget{WindowId{4}};
+        perspective.debugView = CameraDebugView::Reflections;
         RoundTrip(test, "Camera", perspective);
     }
     RoundTrip(test, "DirectionalLight", DirectionalLight{{0.9f, 0.8f, 0.7f, 0.6f}, 3.0f, false, 40.0f, 0.5f, 1.5f});
