@@ -25,7 +25,8 @@ Hand check: in the neon city at night, the wet streets mirror the edge strips, s
 Built 2026-11-04, stacked on ticket 30's `claude/zen-mcclintock-1d25cb` (#300, not yet merged). CTest passes 170/170
 on msvc-x64-debug, the GL suite and LightingDemo's null and OpenGL smoke runs included. The neon city has no golden
 image, so none changed. The hand checks, in the neon city and the showroom, are the user's: they are in LightingDemo's
-README under Hand checks. Decisions to review:
+README under Hand checks. Screenshots, with the fetched assets: `.scratch/fenrir-renderer-lighting/screenshots/31-ssr/`.
+Decisions to review:
 
 - **Both views are drawn by `Output`, not by `Opaque` through the include.** The include would show the sky where
   nothing opaque is drawn, and add a material's own emission or an unlit item's colour; `Output` sees only the hits.
