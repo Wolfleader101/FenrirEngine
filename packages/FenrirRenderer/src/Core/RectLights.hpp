@@ -33,6 +33,8 @@ namespace Fenrir::Render
         bool twoSided = false;
         /** @brief The distance from it at which its light has fallen to zero, in world units. */
         float range = 0.0f;
+        /** @brief Whether the scene draws its surface, so its specular yields to reflections of it (ADR-0056). */
+        bool visibleSurface = true;
     };
 
     /** @brief `light` as its light buffer record: kind Rect, facing -(right x up). */

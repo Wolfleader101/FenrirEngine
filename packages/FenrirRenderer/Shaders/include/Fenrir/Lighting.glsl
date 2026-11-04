@@ -19,6 +19,12 @@
 //
 // The shadow's biases take the face's own normal from the position's screen-space derivatives too.
 //
+// With the view's camera's reflections on (ADR-0056), last frame's colour at the pixel's traced hit replaces the sky's
+// prefiltered specular by the hit's confidence, times a fade to nothing as the roughness nears the camera's cutoff and
+// times its intensity; the history is sampled at the mip whose texels span the GGX lobe's cone at the ray's length.
+// Rect lights whose surface the scene draws yield their specular to it by the same share: the reflection shows that
+// surface. Off screen, or past the cutoff, the sky's specular and the lights' stay as they were.
+//
 // The shader still owns main, its inputs and its outputs; this is not a surface-function model.
 #ifndef FENRIR_LIGHTING_GLSL
 #define FENRIR_LIGHTING_GLSL
@@ -148,7 +154,7 @@ float FenrirLtcIntegral(FenrirLight light, vec3 position, mat3 toLobe)
     vec3 centre = light.position - position;
     // Behind the light: on the side it does not face.
     bool behind = dot(centre, light.direction) > 0.0;
-    if (behind && light.twoSided == 0u)
+    if (behind && (light.flags & FenrirLightTwoSided) == 0u)
     {
         return 0.0;
     }
@@ -251,6 +257,36 @@ float FenrirViewOcclusion()
     return texelFetch(fenrirAmbientOcclusion, min(ivec2(gl_FragCoord.xy), last), 0).r;
 }
 
+// The view's reflection hit (Fenrir/View.glsl) at this fragment's pixel; zero confidence where the view has none.
+vec4 FenrirReflectionHit()
+{
+    ivec2 last = textureSize(fenrirReflectionHits, 0) - 1;
+    return texelFetch(fenrirReflectionHits, min(ivec2(gl_FragCoord.xy), last), 0);
+}
+
+// How much of the reflection a surface of perceptual `roughness` takes: 1 up to 0.1 below the camera's cutoff, falling
+// to 0 at it, so rough surfaces keep the sky's specular, smoother than a blurred screen. Core/ReflectionTrace mirrors it.
+const float FenrirReflectionRoughnessFadeWidth = 0.1;
+float FenrirReflectionRoughnessFade(float roughness)
+{
+    return clamp((view.reflectionInfo.z - roughness) / FenrirReflectionRoughnessFadeWidth, 0.0, 1.0);
+}
+
+// The history's mip a reflection of perceptual `roughness` samples, a ray `rayLength` long off a surface `viewDepth` in
+// front of the camera: the level whose texels span the cone of GGX's lobe (Uludag's fit of its width) at that length,
+// seen where the mirror image is, the ray's length further away (an orthographic camera's texels are the same size at
+// every depth). Core/ReflectionTrace's ReflectionMip mirrors it.
+float FenrirReflectionMip(float roughness, float rayLength, float viewDepth)
+{
+    float a = roughness * roughness;
+    float power = 2.0 / max(a * a, 1e-6) - 2.0;
+    float cone = acos(pow(0.244, 1.0 / (power + 1.0)));
+    float footprint = 2.0 * rayLength * tan(cone);
+    float seenFrom = view.projection[3][3] > 0.5 ? 1.0 : max(viewDepth + rayLength, 1e-4);
+    float pixels = footprint * view.projection[1][1] * view.viewport.w * 0.5 / seenFrom;
+    return clamp(log2(max(pixels, 1.0)), 0.0, view.reflectionInfo.w);
+}
+
 // The lit colour of `surface` seen from the view's camera, linear HDR, with its alpha.
 vec4 FenrirLitColour(FenrirSurface surface)
 {
@@ -288,6 +324,23 @@ vec4 FenrirLitColour(FenrirSurface surface)
     vec3 rectSpecular = specularAlbedo * energyCompensation;
     vec3 rectDiffuse = (1.0 - specularAlbedo) * (1.0 - metallic) * base;
 
+    // The screen-space reflection (ADR-0056): how much of last frame's colour at the traced hit replaces the sky's
+    // specular, and that colour, blurred over the lobe's cone at the ray's length.
+    float reflection = 0.0;
+    vec3 reflected = vec3(0.0);
+    if (view.reflectionInfo.x > 0.0)
+    {
+        vec4 hit = FenrirReflectionHit();
+        reflection = clamp(hit.z * FenrirReflectionRoughnessFade(roughness) * view.reflectionInfo.y, 0.0, 1.0);
+        if (reflection > 0.0)
+        {
+            float viewDepth = -(view.view * vec4(surface.position, 1.0)).z;
+            reflected = textureLod(fenrirSceneHistory, hit.xy, FenrirReflectionMip(roughness, hit.w, viewDepth)).rgb;
+        }
+    }
+    // A rect light whose surface is drawn is in the reflection already: its specular yields by the same share.
+    vec3 rectSpecularShown = rectSpecular * (1.0 - reflection);
+
     // The point, spot and rect lights: those listed in the pixel's cluster (ADR-0049), or every one where the view
     // has no clusters, skipping each whose range does not reach the pixel.
     bool clustered = view.clusterInfo.x != 0u;
@@ -305,7 +358,8 @@ vec4 FenrirLitColour(FenrirSurface surface)
         FenrirLight light = fenrirLights.items[i];
         if (light.kind == FenrirLightRect)
         {
-            colour += FenrirRectLight(light, surface.position, n, v, nDotV, roughness, rectDiffuse, rectSpecular);
+            vec3 specular = (light.flags & FenrirLightVisibleSurface) != 0u ? rectSpecularShown : rectSpecular;
+            colour += FenrirRectLight(light, surface.position, n, v, nDotV, roughness, rectDiffuse, specular);
             continue;
         }
         vec3 toLight = light.position - surface.position;
@@ -347,9 +401,11 @@ vec4 FenrirLitColour(FenrirSurface surface)
     // ones less at grazing angles. The multiple-scattering share is diffuse-like, so it takes the ambient occlusion.
     float occlusion = min(clamp(surface.occlusion, 0.0, 1.0), FenrirViewOcclusion());
     float specularOcclusion = clamp(pow(nDotV + occlusion, exp2(-16.0 * a - 1.0)) - 1.0 + occlusion, 0.0, 1.0);
-    colour += (skyIrradiance * (skyDiffuse + skyMultiScatter) * occlusion +
-               skySpecular * skySingleScatter * specularOcclusion) *
-              frame.skyLight.x;
+    // The reflection takes the sky's specular's place by its share, through the same single-scattering share and
+    // specular occlusion; it is the scene's own colour, so the sky's intensity does not scale it.
+    vec3 specularLight = mix(skySpecular * frame.skyLight.x, reflected, reflection);
+    colour += skyIrradiance * (skyDiffuse + skyMultiScatter) * occlusion * frame.skyLight.x +
+              specularLight * skySingleScatter * specularOcclusion;
 
     colour += surface.emissive;
     if (view.shadowInfo.y != 0u)

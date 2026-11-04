@@ -163,9 +163,13 @@ struct Iris::StructMapping<Fenrir::Reflections>
 {
     static constexpr std::string_view typeName = "Fenrir.Renderer.Reflections";
     static constexpr auto fields = Iris::StructFields(
-        Iris::Field<bool>("Enabled", 0));
+        Iris::Field<bool>("Enabled", 0),
+        Iris::Field<float>("Intensity", 4),
+        Iris::Field<float>("MaxDistance", 8),
+        Iris::Field<float>("Thickness", 12),
+        Iris::Field<float>("RoughnessCutoff", 16));
 };
-static_assert(sizeof(Fenrir::Reflections) == 1 && alignof(Fenrir::Reflections) == 1,
+static_assert(sizeof(Fenrir::Reflections) == 20 && alignof(Fenrir::Reflections) == 4,
               "Fenrir::Reflections is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
@@ -253,9 +257,9 @@ struct Iris::StructMapping<Fenrir::Camera>
         Iris::Field<Fenrir::Bloom>("Bloom", 84),
         Iris::Field<Fenrir::AmbientOcclusion>("AmbientOcclusion", 92),
         Iris::Field<Fenrir::Reflections>("Reflections", 104),
-        Iris::Field<Fenrir::CameraDebugView>("DebugView", 105));
+        Iris::Field<Fenrir::CameraDebugView>("DebugView", 124));
 };
-static_assert(sizeof(Fenrir::Camera) == 108 && alignof(Fenrir::Camera) == 4,
+static_assert(sizeof(Fenrir::Camera) == 128 && alignof(Fenrir::Camera) == 4,
               "Fenrir::Camera is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
@@ -375,9 +379,10 @@ struct Iris::StructMapping<Fenrir::RectLight>
         Iris::Field<float>("Width", 20),
         Iris::Field<float>("Height", 24),
         Iris::Field<bool>("TwoSided", 28),
-        Iris::Field<float>("Range", 32));
+        Iris::Field<float>("Range", 32),
+        Iris::Field<bool>("VisibleSurface", 36));
 };
-static_assert(sizeof(Fenrir::RectLight) == 36 && alignof(Fenrir::RectLight) == 4,
+static_assert(sizeof(Fenrir::RectLight) == 40 && alignof(Fenrir::RectLight) == 4,
               "Fenrir::RectLight is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 

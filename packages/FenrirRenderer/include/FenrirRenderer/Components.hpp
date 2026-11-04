@@ -494,16 +494,33 @@ namespace Fenrir
 
     /**
      * @brief A view's screen-space reflections (ADR-0056): what is on screen mirrored in smooth surfaces, from the
-     * previous frame's colour, over the sky's reflection. So far it keeps only what they read across frames, the view's
-     * colour before bloom and a hierarchical-Z pyramid of its depth; nothing is reflected yet.
+     * previous frame's colour, over the sky's reflection. Each pixel's mirror ray is traced through a hierarchical-Z
+     * pyramid of the view's depth, from its vertex normal, and every material lighting through `Fenrir/Lighting.glsl`
+     * takes the colour it hit by how sure the hit is and how smooth the material is. They catch only what is on screen:
+     * what is off it, or hidden, falls back to the sky's reflection. They show last frame's colour, so a moving
+     * object's reflection trails it by a frame.
      */
     struct Reflections
     {
         /**
          * @brief Whether the view has them: off by default, and off costs nothing. On, the view keeps about 44 MB at
-         * 1920 x 1080 across frames.
+         * 1920 x 1080 across frames, and 17 MB more within each frame.
          */
         bool enabled = false;
+        /** @brief How much of a sure reflection replaces the sky's: 1 by default, 0 turns them off. */
+        float intensity = 1.0f;
+        /** @brief How far a mirror ray is traced, in world units: 50 by default. Reflections fade out towards it. */
+        float maxDistance = 50.0f;
+        /**
+         * @brief How far behind a surface, in view depth (world units), a ray may pass and still hit it: 0.5 by
+         * default. Thicker catches thin things seen edge on; thinner stops rays catching on what they pass behind.
+         */
+        float thickness = 0.5f;
+        /**
+         * @brief The roughness at and above which a surface reflects only the sky: 0.6 by default, fading in from 0.1
+         * below it, as a blurred screen is a worse reflection than the sky's own.
+         */
+        float roughnessCutoff = 0.6f;
     };
 
     /** @brief What a view shows instead of its lit colour, to look at one of its inputs. */
@@ -721,6 +738,12 @@ namespace Fenrir
         bool twoSided = false;
         /** @brief The distance from the rectangle, in world units, at which its light has fallen to zero. */
         float range = 10.0f;
+        /**
+         * @brief Whether the scene draws the light's surface, an emissive mesh where it is: true by default. Then, in a
+         * camera with reflections, its specular yields to the reflection of that surface where it is on screen, so it
+         * is not reflected twice. Set it false for a light with nothing drawn, which keeps its specular everywhere.
+         */
+        bool visibleSurface = true;
     };
 
     /** @brief A sky of one colour, which lights every surface with that colour from every side (ADR-0047). */

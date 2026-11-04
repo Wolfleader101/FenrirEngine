@@ -120,7 +120,7 @@ namespace
         camera.tonemapper = Tonemapper::Aces;
         camera.bloom = {0.2f, 0.3f};
         camera.ambientOcclusion = {true, 0.8f, 1.7f};
-        camera.reflections = {true};
+        camera.reflections = {true, 0.75f, 30.0f, 0.25f, 0.45f};
         camera.debugView = CameraDebugView::LightClusters;
         return camera;
     }
@@ -141,7 +141,7 @@ TEST_CASE("Every lighting component round-trips between C++ and C#, field by fie
     RoundTrip(test, "DirectionalLight", DirectionalLight{{0.9f, 0.8f, 0.7f, 0.6f}, 3.0f, false, 40.0f, 0.5f, 1.5f});
     RoundTrip(test, "PointLight", PointLight{{0.1f, 0.2f, 0.3f, 0.4f}, 5.0f, 12.0f, true, 0.25f, 3.0f});
     RoundTrip(test, "SpotLight", SpotLight{{0.4f, 0.3f, 0.2f, 0.1f}, 7.0f, 14.0f, 0.2f, 0.6f, true, 0.75f, 2.5f});
-    RoundTrip(test, "RectLight", RectLight{{0.5f, 0.6f, 0.7f, 0.8f}, 9.0f, 2.0f, 0.5f, true, 6.0f});
+    RoundTrip(test, "RectLight", RectLight{{0.5f, 0.6f, 0.7f, 0.8f}, 9.0f, 2.0f, 0.5f, true, 6.0f, false});
     RoundTrip(test, "MeshRenderer", MeshRenderer{AssetHandle<Mesh>{1, 2}, AssetHandle<Material>{3, 4}, false, false});
     RoundTrip(test, "InstancedMeshRenderer",
               InstancedMeshRenderer{AssetHandle<Mesh>{1, 2}, AssetHandle<Material>{3, 4},

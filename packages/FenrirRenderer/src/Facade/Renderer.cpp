@@ -445,6 +445,7 @@ namespace Fenrir
                 out.height = light.height;
                 out.twoSided = light.twoSided;
                 out.range = light.range;
+                out.visibleSurface = light.visibleSurface;
             });
         }
 
@@ -718,7 +719,9 @@ namespace Fenrir
                 view.bloom = {camera.bloom.intensity, camera.bloom.radius};
                 view.ambientOcclusion = {camera.ambientOcclusion.enabled, camera.ambientOcclusion.radius,
                                          camera.ambientOcclusion.intensity};
-                view.reflections = {camera.reflections.enabled};
+                view.reflections = {camera.reflections.enabled, camera.reflections.intensity,
+                                    camera.reflections.maxDistance, camera.reflections.thickness,
+                                    camera.reflections.roughnessCutoff};
                 view.camera = id;
                 view.debugView = ToCore(camera.debugView);
                 candidates.push_back(candidate);

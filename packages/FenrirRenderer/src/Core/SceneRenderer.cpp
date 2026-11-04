@@ -68,8 +68,13 @@ namespace Fenrir::Render
              * light indices.
              */
             std::array<std::uint32_t, 4> clusterInfo{};
+            /**
+             * @brief Its reflections (ADR-0056): x 1 when it has them; y their intensity; z their roughness cutoff;
+             * w the history's last mip.
+             */
+            Math::Vec4 reflectionInfo{0.0f};
         };
-        static_assert(sizeof(ViewBlock) == 640);
+        static_assert(sizeof(ViewBlock) == 656);
 
         /** @brief One draw record, as `Fenrir/Draw.glsl` declares it (std430). */
         struct DrawBlock
@@ -208,8 +213,9 @@ namespace Fenrir::Render
         // then the rect lights' two LTC tables; its storage blocks are the point, spot and rect lights (ADR-0048), as
         // many as the frame has, and the shadowed spot lights' records, with their atlas, then the shadowed point
         // lights' records, with the point shadow cubes (ADR-0050). Set 1's textures are the view's ambient occlusion
-        // (ADR-0049) and its sun's shadow atlas (ADR-0050); its storage block the view's light clusters (ADR-0049).
-        [[maybe_unused]] constexpr std::array<FixedBinding, 18> FixedBindings{{
+        // (ADR-0049), its sun's shadow atlas (ADR-0050), and its reflections' hit target and history (ADR-0056); its
+        // storage block the view's light clusters (ADR-0049).
+        [[maybe_unused]] constexpr std::array<FixedBinding, 20> FixedBindings{{
             {0, 0, ShaderBindingKind::UniformBuffer, sizeof(FrameBlock)},
             {0, 1, ShaderBindingKind::Texture, 0},
             {0, 2, ShaderBindingKind::Texture, 0},
@@ -225,6 +231,8 @@ namespace Fenrir::Render
             {1, 1, ShaderBindingKind::Texture, 0},
             {1, 2, ShaderBindingKind::Texture, 0},
             {1, 3, ShaderBindingKind::StorageBuffer, sizeof(std::uint32_t)},
+            {1, 4, ShaderBindingKind::Texture, 0},
+            {1, 5, ShaderBindingKind::Texture, 0},
             {3, 0, ShaderBindingKind::StorageBuffer, sizeof(DrawBlock)},
             {3, 1, ShaderBindingKind::StorageBuffer, sizeof(InstanceBlock)},
             {3, 2, ShaderBindingKind::StorageBuffer, sizeof(GpuBone)},
@@ -599,7 +607,9 @@ namespace Fenrir::Render
         m_viewLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer},
                                                            {1, ShaderBindingKind::Texture},
                                                            {2, ShaderBindingKind::Texture},
-                                                           {3, ShaderBindingKind::StorageBuffer}}},
+                                                           {3, ShaderBindingKind::StorageBuffer},
+                                                           {4, ShaderBindingKind::Texture},
+                                                           {5, ShaderBindingKind::Texture}}},
                                                          "View");
         m_outputBlockLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Output");
         m_drawLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::StorageBuffer},
@@ -719,6 +729,7 @@ namespace Fenrir::Render
         m_bloom = std::make_unique<BloomChain>(m_device, m_logger, m_samples);
         m_gtao = std::make_unique<Gtao>(m_device, m_logger, m_samples);
         m_sceneHistory = std::make_unique<SceneHistory>(m_device, m_logger, m_samples);
+        m_reflectionTrace = std::make_unique<ReflectionTrace>(m_device, m_logger, m_samples);
         // The view set's groups bind a view block with its ambient occlusion, so the ring makes none of its own.
         m_viewBlocks =
             std::make_unique<BlockRing>(m_device, BindingGroupLayoutHandle{}, false, sizeof(ViewBlock), "View");
@@ -838,6 +849,7 @@ namespace Fenrir::Render
         }
         m_skyLighting.reset();
         m_gtao.reset();
+        m_reflectionTrace.reset();
         m_sceneHistory.reset();
         m_frameBlocks.reset();
         m_lightBlocks.reset();
@@ -2392,8 +2404,17 @@ namespace Fenrir::Render
     }
 
     BindingGroupHandle SceneRenderer::ViewGroupFor(std::uint64_t frameIndex, std::size_t slot, TextureHandle occlusion,
-                                                   TextureHandle shadow, BufferHandle clusters)
+                                                   TextureHandle shadow, BufferHandle clusters,
+                                                   TextureHandle reflectionHits, TextureHandle sceneHistory)
     {
+        if (reflectionHits.IsEmpty())
+        {
+            reflectionHits = GetDefaultTexture(DefaultTexture::Black);
+        }
+        if (sceneHistory.IsEmpty())
+        {
+            sceneHistory = GetDefaultTexture(DefaultTexture::Black);
+        }
         if (shadow.IsEmpty())
         {
             shadow = m_noShadow;
@@ -2403,9 +2424,11 @@ namespace Fenrir::Render
             clusters = m_noClusters;
         }
         const BufferHandle buffer = m_viewBlocks->Buffer(frameIndex);
-        const BindingGroupCache<5>::Key key{
-            BindingGroupKeyPart::Of(buffer), BindingGroupKeyPart::Value(static_cast<std::uint32_t>(slot)),
-            BindingGroupKeyPart::Of(occlusion), BindingGroupKeyPart::Of(shadow), BindingGroupKeyPart::Of(clusters)};
+        const BindingGroupCache<7>::Key key{
+            BindingGroupKeyPart::Of(buffer),      BindingGroupKeyPart::Value(static_cast<std::uint32_t>(slot)),
+            BindingGroupKeyPart::Of(occlusion),   BindingGroupKeyPart::Of(shadow),
+            BindingGroupKeyPart::Of(clusters),    BindingGroupKeyPart::Of(reflectionHits),
+            BindingGroupKeyPart::Of(sceneHistory)};
         return m_viewGroups.Get(key, frameIndex, [&] {
             BindingGroupEntry block;
             block.binding = 0;
@@ -2423,7 +2446,17 @@ namespace Fenrir::Render
             BindingGroupEntry clusterLights;
             clusterLights.binding = 3;
             clusterLights.buffer = clusters;
-            return m_device.CreateBindingGroup({m_viewLayout, {block, texture, shadowAtlas, clusterLights}}, "View");
+            // The hits are read by texelFetch; the history trilinearly across its mips, for the cone's blur.
+            BindingGroupEntry hits;
+            hits.binding = 4;
+            hits.texture = reflectionHits;
+            hits.sampler = m_outputSampler;
+            BindingGroupEntry history;
+            history.binding = 5;
+            history.texture = sceneHistory;
+            history.sampler = m_outputSampler;
+            return m_device.CreateBindingGroup(
+                {m_viewLayout, {block, texture, shadowAtlas, clusterLights, hits, history}}, "View");
         });
     }
 
@@ -2575,6 +2608,7 @@ namespace Fenrir::Render
         const GraphResource pointShadowCubes = pointFrame.map;
         m_gtao->BeginFrame(views.size());
         m_sceneHistory->BeginFrame(views);
+        m_reflectionTrace->BeginFrame(views.size());
         m_clusterJobs->Reserve(views.size());
         m_backgroundBlocks->Reserve(views.size());
         m_outputBlocks->Reserve(views.size());
@@ -2854,6 +2888,12 @@ namespace Fenrir::Render
             viewBlock.clusterInfo = {clusterBuffer.IsEmpty() ? 0u : 1u,
                                      request.debugView == ViewDebug::LightClusters ? 1u : 0u,
                                      std::min(lightCount, MaxClusterLights), 0};
+            if (HasReflections(request.reflections))
+            {
+                viewBlock.reflectionInfo =
+                    Math::Vec4(1.0f, request.reflections.intensity, request.reflections.roughnessCutoff,
+                               static_cast<float>(MipCount(rect.width, rect.height) - 1));
+            }
             m_viewBlocks->Write(frameIndex, viewSlot, BytesOf(viewBlock));
             // Each cascade's own view block, which the casting items' vertex stages place them by.
             std::vector<BindingGroupHandle> cascadeGroups;
@@ -3032,6 +3072,10 @@ namespace Fenrir::Render
             const HistoryView history =
                 m_sceneHistory->Import(graph, request, {rect.width, rect.height}, viewProjection);
             m_sceneHistory->AddHiZPasses(graph, frameIndex, history, sceneDepth);
+            // Its mirror rays marched through that pyramid; Opaque samples the hits, and last frame's colour by them.
+            const GraphResource reflectionHits = m_reflectionTrace->AddPass(
+                graph, frameIndex, {sceneNormals, history, request.projection, request.view, request.reflections});
+            const GraphResource sceneHistory = reflectionHits.IsEmpty() ? GraphResource{} : history.history;
             graph.AddPass(
                 "Opaque", RenderStage::Opaque, QueueKind::Graphics,
                 [=](PassBuilder& pass) {
@@ -3042,21 +3086,18 @@ namespace Fenrir::Render
                     {
                         pass.Sample(image);
                     }
-                    if (!occlusion.IsEmpty())
+                    for (const GraphResource read :
+                         {occlusion, shadowAtlas, spotAtlas, pointShadowCubes, reflectionHits})
                     {
-                        pass.Sample(occlusion);
+                        if (!read.IsEmpty())
+                        {
+                            pass.Sample(read);
+                        }
                     }
-                    if (!shadowAtlas.IsEmpty())
+                    // Last frame's colour, which this frame's SceneHistory passes then replace.
+                    if (!sceneHistory.IsEmpty())
                     {
-                        pass.Sample(shadowAtlas);
-                    }
-                    if (!spotAtlas.IsEmpty())
-                    {
-                        pass.Sample(spotAtlas);
-                    }
-                    if (!pointShadowCubes.IsEmpty())
-                    {
-                        pass.Sample(pointShadowCubes);
+                        pass.SamplePrevious(sceneHistory);
                     }
                     if (!clusters.IsEmpty())
                     {
@@ -3065,15 +3106,16 @@ namespace Fenrir::Render
                     readSkinned(pass);
                 },
                 [this, draws, groups, opaqueRuns, frameGroup, drawGroup, skinned, viewport, occlusion, shadowAtlas,
-                 clusterBuffer, viewSlot](PassContext& context) {
+                 clusterBuffer, viewSlot, reflectionHits, sceneHistory](PassContext& context) {
+                    const auto textureOf = [&](GraphResource resource) {
+                        return resource.IsEmpty() ? TextureHandle{} : context.Texture(resource);
+                    };
                     const TextureHandle occlusionTexture =
                         occlusion.IsEmpty() ? GetDefaultTexture(DefaultTexture::White) : context.Texture(occlusion);
-                    const TextureHandle shadowTexture =
-                        shadowAtlas.IsEmpty() ? TextureHandle{} : context.Texture(shadowAtlas);
-                    RecordDraws(
-                        context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup,
-                        ViewGroupFor(context.FrameIndex(), viewSlot, occlusionTexture, shadowTexture, clusterBuffer),
-                        drawGroup, skinned, viewport, DrawPass::Main);
+                    RecordDraws(context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup,
+                                ViewGroupFor(context.FrameIndex(), viewSlot, occlusionTexture, textureOf(shadowAtlas),
+                                             clusterBuffer, textureOf(reflectionHits), textureOf(sceneHistory)),
+                                drawGroup, skinned, viewport, DrawPass::Main);
                 });
             if (!transparent->empty())
             {

@@ -19,6 +19,7 @@
 #include "Core/Gtao.hpp"
 #include "Core/LightClusters.hpp"
 #include "Core/PointShadows.hpp"
+#include "Core/ReflectionTrace.hpp"
 #include "Core/RenderFeature.hpp"
 #include "Core/SceneFrame.hpp"
 #include "Core/SceneHistory.hpp"
@@ -802,13 +803,17 @@ namespace Fenrir::Render
         [[nodiscard]] SkySource SkySourceOf(const SceneLighting& lighting) const;
         /**
          * @brief The view set's group for slot `slot` of frame `frameIndex`'s view blocks, with `occlusion` as its
-         * ambient occlusion, `shadow` as its shadow atlas (the map that lights everything when empty) and `clusters`
-         * as its light clusters (the buffer of one 0 when empty), made once while all four live.
+         * ambient occlusion, `shadow` as its shadow atlas (the map that lights everything when empty), `clusters` as
+         * its light clusters (the buffer of one 0 when empty), and `reflectionHits` and `sceneHistory` as its
+         * reflections' hit target and history (the black texture, zero confidence, when empty), made once while all
+         * six live.
          */
         [[nodiscard]] Graphics::BindingGroupHandle ViewGroupFor(std::uint64_t frameIndex, std::size_t slot,
                                                                 Graphics::TextureHandle occlusion,
                                                                 Graphics::TextureHandle shadow = {},
-                                                                Graphics::BufferHandle clusters = {});
+                                                                Graphics::BufferHandle clusters = {},
+                                                                Graphics::TextureHandle reflectionHits = {},
+                                                                Graphics::TextureHandle sceneHistory = {});
         /**
          * @brief Adds view `view`'s LightClusters pass over the frame's `lightCount` lights into its cluster buffer,
          * imported into `graph`, which the view's lit passes then read; returns that buffer and its resource, or empty
@@ -969,15 +974,17 @@ namespace Fenrir::Render
         std::unique_ptr<Gtao> m_gtao;
         /** @brief Each reflecting camera's history colour and Hi-Z pyramids, kept across frames, and their passes. */
         std::unique_ptr<SceneHistory> m_sceneHistory;
+        /** @brief The reflection trace of each view with reflections, after its HiZ passes. */
+        std::unique_ptr<ReflectionTrace> m_reflectionTrace;
         /** @brief Each copy's frame set group, by frame index modulo the copies. */
         std::vector<FrameGroup> m_frameGroups;
         /** @brief Each copy's draw set group, by frame index modulo the copies. */
         std::vector<DrawGroup> m_drawGroups;
         /**
-         * @brief The view set's groups, by the view ring's buffer, slot, the occlusion and shadow textures and the
-         * cluster buffer, while all four live.
+         * @brief The view set's groups, by the view ring's buffer, slot, the occlusion and shadow textures, the
+         * cluster buffer and the reflection hits and history, while all six live.
          */
-        BindingGroupCache<5> m_viewGroups;
+        BindingGroupCache<7> m_viewGroups;
         /** @brief The Output pass's binding group for each SceneColor texture, while the texture lives. */
         BindingGroupCache<1> m_outputGroups;
 

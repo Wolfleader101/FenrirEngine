@@ -53,7 +53,8 @@ namespace
                 const Vec3 w = glm::normalize(toCell);
                 const double atSurface = glm::dot(w, normal);
                 double atLight = glm::dot(-w, light.direction);
-                atLight = light.twoSided != 0 ? std::abs(atLight) : std::max(atLight, 0.0);
+                atLight = (light.flags & Fenrir::Render::LightFlag::TwoSided) != 0 ? std::abs(atLight)
+                                                                                   : std::max(atLight, 0.0);
                 if (atSurface > 0.0)
                 {
                     sum += atSurface * atLight / distanceSquared;
@@ -81,8 +82,8 @@ TEST_CASE("A rect light's record faces its entity's -Z and holds its half extent
     INFO("its half extents are half its width along right and half its height along up");
     REQUIRE(gpu.halfWidth == Vec3(2.0f, 0.0f, 0.0f));
     REQUIRE(gpu.halfHeight == Vec3(0.0f, 1.0f, 0.0f));
-    INFO("two-sided is 1");
-    REQUIRE(gpu.twoSided == 1u);
+    INFO("two-sided and drawn are its flags");
+    REQUIRE(gpu.flags == (Fenrir::Render::LightFlag::TwoSided | Fenrir::Render::LightFlag::VisibleSurface));
 }
 
 TEST_CASE("The LTC tables are 64 x 64 RGBA texels each", "[renderer][lights][rect]")

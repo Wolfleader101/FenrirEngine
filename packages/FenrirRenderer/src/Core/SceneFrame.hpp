@@ -102,7 +102,24 @@ namespace Fenrir::Render
     {
         /** @brief Whether the view keeps a history colour and Hi-Z pyramids, and adds their passes. */
         bool enabled = false;
+        /** @brief How much of the reflection replaces the sky's prefiltered specular, times its confidence. */
+        float intensity = 1.0f;
+        /** @brief How far a mirror ray is traced, in world units. */
+        float maxDistance = 50.0f;
+        /** @brief How far, in view depth, a ray may pass behind a surface and still hit it. */
+        float thickness = 0.5f;
+        /** @brief The perceptual roughness at and above which surfaces reflect nothing. */
+        float roughnessCutoff = 0.6f;
     };
+
+    /**
+     * @brief Whether a view with `settings` gets reflections: enabled, with an intensity and a max distance above 0.
+     * Only then does it keep a history and pyramids, and add their passes and the trace.
+     */
+    [[nodiscard]] inline bool HasReflections(const ReflectionSettings& settings) noexcept
+    {
+        return settings.enabled && settings.intensity > 0.0f && settings.maxDistance > 0.0f;
+    }
 
     /** @brief What a view's Output pass shows instead of its lit colour (Camera::debugView). */
     enum class ViewDebug : std::uint8_t

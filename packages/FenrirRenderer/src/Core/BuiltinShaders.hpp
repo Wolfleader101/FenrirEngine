@@ -72,6 +72,8 @@ namespace Fenrir::Render
          * and DOWNSAMPLE each level below (ADR-0056).
          */
         SceneHistory,
+        /** @brief `builtin:reflection-trace`: a view's mirror rays marched through its Hi-Z pyramid (ADR-0056). */
+        ReflectionTrace,
     };
 
     /** @brief A built-in program's `builtin:` name and its embedded container's bytes. */

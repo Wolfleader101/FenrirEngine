@@ -143,18 +143,28 @@ namespace Fenrir::Render
                     }
                 },
                 [this, pipeline, block, sources, viewport](PassContext& context) {
-                    std::array<Graphics::TextureHandle, Sources> textures;
-                    for (std::size_t i = 0; i < Sources; ++i)
-                    {
-                        textures[i] = context.Texture(sources[i]);
-                    }
-                    Graphics::PassEncoder& encoder = context.Encoder();
-                    encoder.SetViewport(viewport);
-                    encoder.SetPipeline(pipeline);
-                    encoder.SetBindingGroup(BlockSet, block);
-                    encoder.SetBindingGroup(SourceSet, SourceGroup(textures, context.FrameIndex()));
-                    encoder.Draw({.vertexCount = 3});
+                    Draw(context, pipeline, block, sources, viewport);
                 });
+        }
+
+        /**
+         * @brief Records, in a pass of the caller's own that samples `sources`, `pipeline`'s fullscreen triangle over
+         * `viewport` with `block` and `sources` bound: what AddPass's passes record.
+         */
+        void Draw(PassContext& context, Graphics::PipelineHandle pipeline, Graphics::BindingGroupHandle block,
+                  const std::array<GraphResource, Sources>& sources, Graphics::PixelRect viewport)
+        {
+            std::array<Graphics::TextureHandle, Sources> textures;
+            for (std::size_t i = 0; i < Sources; ++i)
+            {
+                textures[i] = context.Texture(sources[i]);
+            }
+            Graphics::PassEncoder& encoder = context.Encoder();
+            encoder.SetViewport(viewport);
+            encoder.SetPipeline(pipeline);
+            encoder.SetBindingGroup(BlockSet, block);
+            encoder.SetBindingGroup(SourceSet, SourceGroup(textures, context.FrameIndex()));
+            encoder.Draw({.vertexCount = 3});
         }
 
         /**

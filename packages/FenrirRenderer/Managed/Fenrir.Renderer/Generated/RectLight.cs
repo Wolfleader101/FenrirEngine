@@ -30,6 +30,12 @@ public partial struct RectLight : IComponent
     public bool TwoSided = false;
     /// <summary>The distance from the rectangle, in world units, at which its light has fallen to zero.</summary>
     public float Range = 10;
+    /// <summary>
+    /// Whether the scene draws the light's surface, an emissive mesh where it is: true by default. Then, in a camera
+    /// with reflections, its specular yields to the reflection of that surface where it is on screen, so it is not
+    /// reflected twice. Set it false for a light with nothing drawn, which keeps its specular everywhere.
+    /// </summary>
+    public bool VisibleSurface = true;
 
     public RectLight()
     {
