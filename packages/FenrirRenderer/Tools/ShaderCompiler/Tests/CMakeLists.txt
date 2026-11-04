@@ -19,6 +19,7 @@ fenrir_add_shaders(FenrirShaderCompilerTests PROGRAM Variants VERTEX fixtures/pl
 fenrir_add_shaders(FenrirShaderCompilerTests PROGRAM Material VERTEX fixtures/uv.vert
                    FRAGMENT fixtures/material.frag EMBED)
 fenrir_add_shaders(FenrirShaderCompilerTests PROGRAM TwoD VERTEX fixtures/twod.vert FRAGMENT fixtures/twod.frag EMBED)
+fenrir_add_shaders(FenrirShaderCompilerTests PROGRAM Compute COMPUTE fixtures/compute.comp EMBED)
 # The depfile fenrir_add_shaders has the tool write, which the Includes test reads.
 target_compile_definitions(FenrirShaderCompilerTests PRIVATE
     FENRIR_SHADER_TEST_DEPFILE="${CMAKE_CURRENT_BINARY_DIR}/shaders/Includes.fshader.d"
@@ -44,8 +45,8 @@ fenrir_shader_build_fails(LooseUniform plain.vert errors/loose_uniform.frag
     "errors/loose_uniform.frag:4: 'non-opaque uniforms outside a block'")
 fenrir_shader_build_fails(NoLocation plain.vert errors/no_location.frag
     "errors/no_location.frag:4: 'location' : SPIR-V requires location")
-fenrir_shader_build_fails(FiveTexturesInASet plain.vert errors/five_textures.frag
-    "errors/five_textures.frag: error: 'fifth' is texture 5 of set 2, but a set holds at most 4 bindings of a kind")
+fenrir_shader_build_fails(NineTexturesInASet plain.vert errors/nine_textures.frag
+    "errors/nine_textures.frag: error: 'ninth' is texture 9 of set 2, but a set holds at most 8 bindings of a kind")
 fenrir_shader_build_fails(PragmaUnknownMember plain.vert errors/pragma_unknown.frag
     "errors/pragma_unknown.frag:8: error: unknown member: 'tnit'")
 fenrir_shader_build_fails(PragmaMalformed plain.vert errors/pragma_malformed.frag

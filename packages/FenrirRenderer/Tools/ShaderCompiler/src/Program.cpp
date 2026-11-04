@@ -52,7 +52,8 @@ namespace Fenrir::ShaderCompiler
 
         const char* StageName(ShaderStage stage)
         {
-            return stage == ShaderStage::Vertex ? "vertex" : "fragment";
+            constexpr std::array<const char*, 3> names{"vertex", "fragment", "compute"};
+            return names.at(static_cast<std::size_t>(stage));
         }
 
         const char* TypeName(ShaderValueType type)
@@ -321,8 +322,12 @@ namespace Fenrir::ShaderCompiler
         {
             const int errorsBefore = diagnostics.ErrorCount();
             std::vector<StageBuild> stages;
-            for (const auto& [stage, path] :
-                 {std::pair(ShaderStage::Vertex, program.vertex), std::pair(ShaderStage::Fragment, program.fragment)})
+            std::vector<std::pair<ShaderStage, fs::path>> sources{{ShaderStage::Compute, program.compute}};
+            if (program.compute.empty())
+            {
+                sources = {{ShaderStage::Vertex, program.vertex}, {ShaderStage::Fragment, program.fragment}};
+            }
+            for (const auto& [stage, path] : sources)
             {
                 std::optional<CompiledStage> compiled =
                     CompileStage(stage, path, defines, program.includeDirs, read, diagnostics);

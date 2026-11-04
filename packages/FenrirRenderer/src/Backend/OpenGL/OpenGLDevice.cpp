@@ -7,6 +7,7 @@
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -29,8 +30,71 @@ namespace Fenrir::Graphics
         }
 
         /** @brief GL's internal format for each TextureFormat. */
-        constexpr std::array<GLenum, 6> internalFormats{
-            GL_RGBA8, GL_SRGB8_ALPHA8, GL_RGBA16F, GL_DEPTH_COMPONENT32F, GL_RGBA32F, GL_R8};
+        /** @brief The SPIR-V extension glslang names for a vertex stage writing gl_Layer. */
+        constexpr std::string_view LayerExtension = "SPV_EXT_shader_viewport_index_layer";
+        /** @brief NVIDIA's name for the same capability, all its GL drivers list. */
+        constexpr std::string_view NvLayerExtension = "SPV_NV_viewport_array2";
+
+        /** @brief A SPIR-V literal string: its bytes, nul-terminated, packed four to a word, little end first. */
+        std::vector<std::uint32_t> LiteralWords(std::string_view text)
+        {
+            std::vector<std::uint32_t> words(text.size() / 4 + 1, 0u);
+            for (std::size_t i = 0; i < text.size(); ++i)
+            {
+                words[i / 4] |= std::uint32_t{static_cast<unsigned char>(text[i])} << (8 * (i % 4));
+            }
+            return words;
+        }
+
+        /**
+         * @brief `spirv` with its OpExtension `from` naming `to` instead; empty when it has no such instruction. The
+         * instruction's word count follows the new name's length.
+         */
+        std::vector<std::uint32_t> WithExtensionRenamed(const std::vector<std::uint32_t>& spirv, std::string_view from,
+                                                        std::string_view to)
+        {
+            constexpr std::uint32_t OpExtension = 10;
+            constexpr std::size_t HeaderWords = 5;
+            const std::vector<std::uint32_t> wanted = LiteralWords(from);
+            std::size_t at = HeaderWords;
+            while (at < spirv.size())
+            {
+                const std::uint32_t count = spirv[at] >> 16;
+                if (count == 0 || at + count > spirv.size())
+                {
+                    return {};
+                }
+                if ((spirv[at] & 0xFFFFu) == OpExtension && count - 1 == wanted.size() &&
+                    std::equal(wanted.begin(), wanted.end(), spirv.begin() + static_cast<std::ptrdiff_t>(at) + 1))
+                {
+                    const std::vector<std::uint32_t> name = LiteralWords(to);
+                    std::vector<std::uint32_t> renamed(spirv.begin(), spirv.begin() + static_cast<std::ptrdiff_t>(at));
+                    renamed.push_back((static_cast<std::uint32_t>(name.size() + 1) << 16) | OpExtension);
+                    renamed.insert(renamed.end(), name.begin(), name.end());
+                    renamed.insert(renamed.end(), spirv.begin() + static_cast<std::ptrdiff_t>(at + count), spirv.end());
+                    return renamed;
+                }
+                at += count;
+            }
+            return {};
+        }
+
+        /** @brief A texture's layers: a cube's six faces, six for each of a cube array's cubes, else one. */
+        std::uint32_t LayersOf(const TextureDesc& desc) noexcept
+        {
+            switch (desc.kind)
+            {
+            case TextureKind::Cube:
+                return 6;
+            case TextureKind::CubeArray:
+                return 6 * std::max(desc.layers, 1u);
+            default:
+                return 1;
+            }
+        }
+
+        constexpr std::array<GLenum, 8> internalFormats{GL_RGBA8,   GL_SRGB8_ALPHA8, GL_RGBA16F, GL_DEPTH_COMPONENT32F,
+                                                        GL_RGBA32F, GL_R8,           GL_RG16F,   GL_R32F};
 
         /** @brief How WriteTexture's tightly packed texels of a format are laid out for GL. */
         struct UploadFormat
@@ -41,13 +105,15 @@ namespace Fenrir::Graphics
         };
 
         /** @brief The upload layout of each TextureFormat. */
-        constexpr std::array<UploadFormat, 6> uploadFormats{{
+        constexpr std::array<UploadFormat, 8> uploadFormats{{
             {GL_RGBA, GL_UNSIGNED_BYTE, 4},
             {GL_RGBA, GL_UNSIGNED_BYTE, 4},
             {GL_RGBA, GL_HALF_FLOAT, 8},
             {GL_DEPTH_COMPONENT, GL_FLOAT, 4},
             {GL_RGBA, GL_FLOAT, 16},
             {GL_RED, GL_UNSIGNED_BYTE, 1},
+            {GL_RG, GL_HALF_FLOAT, 4},
+            {GL_RED, GL_FLOAT, 4},
         }};
 
         /** @brief GL's wrap mode for each AddressMode. */
@@ -64,7 +130,8 @@ namespace Fenrir::Graphics
         }
 
         /** @brief GL's depth function for each CompareOp. */
-        constexpr std::array<GLenum, 5> compareFunctions{GL_ALWAYS, GL_LESS, GL_LEQUAL, GL_GREATER, GL_GEQUAL};
+        constexpr std::array<GLenum, 6> compareFunctions{GL_ALWAYS,  GL_LESS,   GL_LEQUAL,
+                                                         GL_GREATER, GL_GEQUAL, GL_EQUAL};
 
         /** @brief A vertex attribute format as GL's component count, type and normalisation. */
         struct AttributeFormat
@@ -267,6 +334,26 @@ namespace Fenrir::Graphics
         gl.Enable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
         gl.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
         gl.PixelStorei(GL_PACK_ALIGNMENT, 1);
+        // A vertex stage writing gl_Layer, as point shadows' instanced faces do, needs the driver to take it in SPIR-V:
+        // glslang names SPV_EXT_shader_viewport_index_layer, and NVIDIA's drivers list only SPV_NV_viewport_array2,
+        // whose capability is the same one, so a stage naming the first is renamed to the second for them.
+        GLint spirvExtensions = 0;
+        gl.GetIntegerv(GL_NUM_SPIR_V_EXTENSIONS, &spirvExtensions);
+        for (GLint i = 0; i < spirvExtensions; ++i)
+        {
+            const auto* name =
+                reinterpret_cast<const char*>(gl.GetStringi(GL_SPIR_V_EXTENSIONS, static_cast<GLuint>(i)));
+            const std::string_view extension = name != nullptr ? name : "";
+            if (extension == LayerExtension)
+            {
+                m_layerExtension = LayerExtension;
+            }
+            else if (extension == NvLayerExtension && m_layerExtension.empty())
+            {
+                m_layerExtension = NvLayerExtension;
+            }
+        }
+        m_features.vertexLayer = !m_layerExtension.empty();
 
         const PixelSize size = m_surface->GetPixelSize();
         TextureDesc backbuffer;
@@ -281,13 +368,19 @@ namespace Fenrir::Graphics
         const auto* renderer = reinterpret_cast<const char*>(gl.GetString(GL_RENDERER));
         const std::string_view versionView = versionText != nullptr ? versionText : "";
         const std::string_view rendererView = renderer != nullptr ? renderer : "";
-        m_logger->Info("OpenGL backend started: OpenGL {} on {}", versionView, rendererView);
+        m_logger->Info("OpenGL backend started: OpenGL {} on {}{}", versionView, rendererView,
+                       m_features.vertexLayer ? ", vertex stages writing gl_Layer" : "");
         return true;
     }
 
     std::uint32_t OpenGLDevice::FramesInFlight() const
     {
         return m_config.framesInFlight;
+    }
+
+    DeviceFeatures OpenGLDevice::Features() const
+    {
+        return m_features;
     }
 
     void OpenGLDevice::BeginFrame(std::uint64_t frameIndex)
@@ -338,6 +431,14 @@ namespace Fenrir::Graphics
             gl.TextureStorage2DMultisample(texture.name, static_cast<GLsizei>(desc.samples),
                                            internalFormats.at(IndexOf(desc.format)), width, height, GL_TRUE);
         }
+        else if (desc.kind == TextureKind::CubeArray)
+        {
+            // Six layers a cube.
+            gl.CreateTextures(GL_TEXTURE_CUBE_MAP_ARRAY, 1, &texture.name);
+            gl.TextureStorage3D(texture.name, static_cast<GLsizei>(desc.mipLevels),
+                                internalFormats.at(IndexOf(desc.format)), width, height,
+                                static_cast<GLsizei>(LayersOf(desc)));
+        }
         else
         {
             gl.CreateTextures(desc.kind == TextureKind::Cube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D, 1, &texture.name);
@@ -367,6 +468,12 @@ namespace Fenrir::Graphics
             GLfloat most = 1.0f;
             gl.GetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &most);
             gl.SamplerParameterf(sampler, GL_TEXTURE_MAX_ANISOTROPY, std::min(desc.maxAnisotropy, most));
+        }
+        if (desc.compare.has_value())
+        {
+            gl.SamplerParameteri(sampler, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+            gl.SamplerParameteri(sampler, GL_TEXTURE_COMPARE_FUNC,
+                                 static_cast<GLint>(compareFunctions.at(IndexOf(*desc.compare))));
         }
         if (!label.empty())
         {
@@ -423,70 +530,14 @@ namespace Fenrir::Graphics
             return {{}, "the shader variant lacks the GL SPIR-V of a vertex or a fragment stage"};
         }
 
-        GladGLContext& gl = *m_gl;
-        ProgramKey key{*vertex, *fragment};
-        auto program = m_programs.find(key);
+        std::string diagnostic;
+        const auto program = ProgramFor({*vertex, *fragment, {}}, label, diagnostic);
         if (program == m_programs.end())
         {
-            std::string diagnostic;
-            std::array<GLuint, 2> shaders{};
-            const std::array<std::pair<GLenum, const std::vector<std::uint32_t>*>, 2> stages{
-                {{GL_VERTEX_SHADER, vertex}, {GL_FRAGMENT_SHADER, fragment}}};
-            for (std::size_t i = 0; i < stages.size() && diagnostic.empty(); ++i)
-            {
-                const auto& [type, spirv] = stages[i];
-                shaders[i] = gl.CreateShader(type);
-                gl.ShaderBinary(1, &shaders[i], GL_SHADER_BINARY_FORMAT_SPIR_V, spirv->data(),
-                                static_cast<GLsizei>(spirv->size() * sizeof(std::uint32_t)));
-                gl.SpecializeShader(shaders[i], "main", 0, nullptr, nullptr);
-                GLint compiled = 0;
-                gl.GetShaderiv(shaders[i], GL_COMPILE_STATUS, &compiled);
-                if (compiled == 0)
-                {
-                    std::array<GLchar, 2048> log{};
-                    gl.GetShaderInfoLog(shaders[i], static_cast<GLsizei>(log.size()), nullptr, log.data());
-                    diagnostic = std::string(i == 0 ? "the vertex" : "the fragment") +
-                                 " stage could not be specialised: " + log.data();
-                }
-            }
-            GLuint name = 0;
-            if (diagnostic.empty())
-            {
-                name = gl.CreateProgram();
-                gl.AttachShader(name, shaders[0]);
-                gl.AttachShader(name, shaders[1]);
-                gl.LinkProgram(name);
-                gl.DetachShader(name, shaders[0]);
-                gl.DetachShader(name, shaders[1]);
-                GLint linked = 0;
-                gl.GetProgramiv(name, GL_LINK_STATUS, &linked);
-                if (linked == 0)
-                {
-                    std::array<GLchar, 2048> log{};
-                    gl.GetProgramInfoLog(name, static_cast<GLsizei>(log.size()), nullptr, log.data());
-                    diagnostic = std::string("the program could not be linked: ") + log.data();
-                    gl.DeleteProgram(name);
-                }
-            }
-            for (const GLuint shader : shaders)
-            {
-                if (shader != 0)
-                {
-                    gl.DeleteShader(shader);
-                }
-            }
-            if (!diagnostic.empty())
-            {
-                return {{}, std::move(diagnostic)};
-            }
-            if (!label.empty())
-            {
-                gl.ObjectLabel(GL_PROGRAM, name, static_cast<GLsizei>(label.size()), label.data());
-            }
-            program = m_programs.emplace(std::move(key), GlProgram{name, 0}).first;
+            return {{}, std::move(diagnostic)};
         }
-        ++program->second.users;
 
+        GladGLContext& gl = *m_gl;
         GlPipeline pipeline;
         pipeline.program = &program->first;
         pipeline.programName = program->second.name;
@@ -524,6 +575,113 @@ namespace Fenrir::Graphics
         return {m_pipelines.Add(std::move(pipeline)), {}};
     }
 
+    PipelineResult OpenGLDevice::CreateComputePipeline(const ComputePipelineDesc& desc, std::string_view label)
+    {
+        if (desc.shader == nullptr)
+        {
+            return {{}, "the pipeline names no shader variant"};
+        }
+        const std::vector<std::uint32_t>* compute = GlSpirvOf(*desc.shader, ShaderStage::Compute);
+        if (compute == nullptr)
+        {
+            return {{}, "the shader variant lacks the GL SPIR-V of a compute stage"};
+        }
+        std::string diagnostic;
+        const auto program = ProgramFor({{}, {}, *compute}, label, diagnostic);
+        if (program == m_programs.end())
+        {
+            return {{}, std::move(diagnostic)};
+        }
+        GlPipeline pipeline;
+        pipeline.program = &program->first;
+        pipeline.programName = program->second.name;
+        pipeline.compute = true;
+        return {m_pipelines.Add(std::move(pipeline)), {}};
+    }
+
+    std::map<OpenGLDevice::ProgramKey, OpenGLDevice::GlProgram>::iterator OpenGLDevice::ProgramFor(
+        ProgramKey key, std::string_view label, std::string& diagnostic)
+    {
+        auto program = m_programs.find(key);
+        if (program != m_programs.end())
+        {
+            ++program->second.users;
+            return program;
+        }
+        GladGLContext& gl = *m_gl;
+        // A graphics program's vertex and fragment stages, or a compute program's one stage.
+        std::vector<std::tuple<GLenum, const std::vector<std::uint32_t>*, const char*>> stages;
+        if (key.compute.empty())
+        {
+            stages = {{GL_VERTEX_SHADER, &key.vertex, "the vertex"},
+                      {GL_FRAGMENT_SHADER, &key.fragment, "the fragment"}};
+        }
+        else
+        {
+            stages = {{GL_COMPUTE_SHADER, &key.compute, "the compute"}};
+        }
+        std::vector<GLuint> shaders;
+        for (const auto& [type, written, name] : stages)
+        {
+            // The vertex-layer extension under the name the driver knows, where that is not glslang's.
+            std::vector<std::uint32_t> renamed;
+            if (!m_layerExtension.empty() && m_layerExtension != LayerExtension)
+            {
+                renamed = WithExtensionRenamed(*written, LayerExtension, m_layerExtension);
+            }
+            const std::vector<std::uint32_t>* spirv = renamed.empty() ? written : &renamed;
+            const GLuint shader = shaders.emplace_back(gl.CreateShader(type));
+            gl.ShaderBinary(1, &shader, GL_SHADER_BINARY_FORMAT_SPIR_V, spirv->data(),
+                            static_cast<GLsizei>(spirv->size() * sizeof(std::uint32_t)));
+            gl.SpecializeShader(shader, "main", 0, nullptr, nullptr);
+            GLint compiled = 0;
+            gl.GetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+            if (compiled == 0)
+            {
+                std::array<GLchar, 2048> log{};
+                gl.GetShaderInfoLog(shader, static_cast<GLsizei>(log.size()), nullptr, log.data());
+                diagnostic = std::string(name) + " stage could not be specialised: " + log.data();
+                break;
+            }
+        }
+        GLuint name = 0;
+        if (diagnostic.empty())
+        {
+            name = gl.CreateProgram();
+            for (const GLuint shader : shaders)
+            {
+                gl.AttachShader(name, shader);
+            }
+            gl.LinkProgram(name);
+            for (const GLuint shader : shaders)
+            {
+                gl.DetachShader(name, shader);
+            }
+            GLint linked = 0;
+            gl.GetProgramiv(name, GL_LINK_STATUS, &linked);
+            if (linked == 0)
+            {
+                std::array<GLchar, 2048> log{};
+                gl.GetProgramInfoLog(name, static_cast<GLsizei>(log.size()), nullptr, log.data());
+                diagnostic = std::string("the program could not be linked: ") + log.data();
+                gl.DeleteProgram(name);
+            }
+        }
+        for (const GLuint shader : shaders)
+        {
+            gl.DeleteShader(shader);
+        }
+        if (!diagnostic.empty())
+        {
+            return m_programs.end();
+        }
+        if (!label.empty())
+        {
+            gl.ObjectLabel(GL_PROGRAM, name, static_cast<GLsizei>(label.size()), label.data());
+        }
+        return m_programs.emplace(std::move(key), GlProgram{name, 1}).first;
+    }
+
     bool OpenGLDevice::WriteBuffer(BufferHandle buffer, std::size_t offset, std::span<const std::byte> bytes)
     {
         const GlBuffer* found = m_buffers.Find(buffer);
@@ -548,7 +706,7 @@ namespace Fenrir::Graphics
             return false;
         }
         const TextureDesc& desc = found->desc;
-        const std::uint32_t layers = desc.kind == TextureKind::Cube ? 6 : 1;
+        const std::uint32_t layers = LayersOf(desc);
         const std::uint32_t width = std::max(1u, desc.width >> mipLevel);
         const std::uint32_t height = std::max(1u, desc.height >> mipLevel);
         const UploadFormat upload = uploadFormats.at(IndexOf(desc.format));
@@ -562,7 +720,7 @@ namespace Fenrir::Graphics
             return false;
         }
         GladGLContext& gl = *m_gl;
-        if (desc.kind == TextureKind::Cube)
+        if (desc.kind != TextureKind::Texture2D)
         {
             gl.TextureSubImage3D(found->name, static_cast<GLint>(mipLevel), 0, 0, static_cast<GLint>(layer),
                                  static_cast<GLsizei>(width), static_cast<GLsizei>(height), 1, upload.format,
@@ -690,6 +848,17 @@ namespace Fenrir::Graphics
     {
         const PassDesc& pass = command.pass;
         m_replay = ReplayState{};
+        if (pass.queue == QueueKind::Compute)
+        {
+            // Dispatches only: no target to bind. What it writes as storage, later passes read as vertices or storage,
+            // which GL makes visible only after a barrier at its end.
+            m_replay.computing = true;
+            m_replay.storageWrites = std::ranges::any_of(
+                pass.uses, [](const PassResourceUse& use) { return use.usage == ResourceUsage::StorageWrite; });
+            m_gl->PushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, static_cast<GLsizei>(pass.label.size()),
+                                 pass.label.data());
+            return;
+        }
         m_replay.drawingToBackbuffer = pass.colour.size() == 1 && pass.colour.front().texture == m_backbuffer;
 
         GLuint framebuffer = 0;
@@ -702,7 +871,7 @@ namespace Fenrir::Graphics
         {
             for (const ColourAttachment& colour : pass.colour)
             {
-                const GlTexture* texture = m_textures.Find(colour.texture);
+                GlTexture* texture = m_textures.Find(colour.texture);
                 if (texture == nullptr || texture->name == 0)
                 {
                     m_logger->Error("OpenGL backend: pass '{}' draws into a stale texture or mixes in the backbuffer, "
@@ -711,7 +880,11 @@ namespace Fenrir::Graphics
                     m_replay.skipping = true;
                     return;
                 }
-                size = {texture->desc.width, texture->desc.height};
+                // Drawn into, a texture spans every level again, so the level drawn is inside its range; a binding of
+                // one level in this pass narrows it again before the draw.
+                SampleLevels(*texture, std::nullopt);
+                size = {std::max(texture->desc.width >> colour.mipLevel, 1u),
+                        std::max(texture->desc.height >> colour.mipLevel, 1u)};
             }
             if (pass.depth)
             {
@@ -772,6 +945,10 @@ namespace Fenrir::Graphics
             m_replay.skipping = false;
             return;
         }
+        if (m_replay.storageWrites)
+        {
+            m_gl->MemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+        }
         // A pipeline on the gamma path turned encoding off; every pass, and its clears, starts with it on.
         m_gl->Enable(GL_FRAMEBUFFER_SRGB);
         m_gl->PopDebugGroup();
@@ -789,6 +966,17 @@ namespace Fenrir::Graphics
         }
         GladGLContext& gl = *m_gl;
         gl.UseProgram(pipeline->programName);
+        if (pipeline->compute != m_replay.computing)
+        {
+            m_logger->Error("OpenGL backend: a {} pipeline was set in a {} pass; it runs nothing",
+                            pipeline->compute ? "compute" : "graphics", m_replay.computing ? "compute" : "graphics");
+            m_replay.pipeline = nullptr;
+            return;
+        }
+        if (pipeline->compute)
+        {
+            return;
+        }
         gl.BindVertexArray(pipeline->vertexArray);
         BindVertexInput();
 
@@ -852,8 +1040,14 @@ namespace Fenrir::Graphics
             const GLuint unit = GlBindingOf(command.set, group->indicesInKind[i]);
             if (group->kinds[i] == ShaderBindingKind::Texture)
             {
-                const GlTexture* texture = m_textures.Find(entry.texture);
+                GlTexture* texture = m_textures.Find(entry.texture);
                 const std::uint32_t* sampler = m_samplers.Find(entry.sampler);
+                // A binding of one level narrows the texture's levels to it, so drawing into another level is no
+                // feedback loop; the next binding of every level widens them again.
+                if (texture != nullptr && texture->name != 0)
+                {
+                    SampleLevels(*texture, entry.mipLevel);
+                }
                 gl.BindTextureUnit(unit, texture != nullptr ? texture->name : 0);
                 gl.BindSampler(unit, sampler != nullptr ? *sampler : 0);
                 continue;
@@ -916,7 +1110,7 @@ namespace Fenrir::Graphics
 
     void OpenGLDevice::Execute(const CmdDraw& command)
     {
-        if (m_replay.pipeline == nullptr)
+        if (m_replay.pipeline == nullptr || m_replay.pipeline->compute)
         {
             return;
         }
@@ -928,7 +1122,7 @@ namespace Fenrir::Graphics
 
     void OpenGLDevice::Execute(const CmdDrawIndexed& command)
     {
-        if (m_replay.pipeline == nullptr)
+        if (m_replay.pipeline == nullptr || m_replay.pipeline->compute)
         {
             return;
         }
@@ -942,9 +1136,13 @@ namespace Fenrir::Graphics
             command.firstInstance);
     }
 
-    void OpenGLDevice::Execute(const CmdDispatch&)
+    void OpenGLDevice::Execute(const CmdDispatch& command)
     {
-        m_logger->Error("OpenGL backend: a dispatch was submitted, but pipelines are graphics only so far");
+        if (m_replay.pipeline == nullptr || !m_replay.pipeline->compute)
+        {
+            return;
+        }
+        m_gl->DispatchCompute(command.groupsX, command.groupsY, command.groupsZ);
     }
 
     void OpenGLDevice::Execute(const CmdCopyBuffer& command)
@@ -983,14 +1181,28 @@ namespace Fenrir::Graphics
         gl.VertexArrayElementBuffer(pipeline->vertexArray, m_replay.indexBuffer.name);
     }
 
+    void OpenGLDevice::SampleLevels(GlTexture& texture, std::optional<std::uint32_t> level)
+    {
+        if (texture.sampledLevel == level)
+        {
+            return;
+        }
+        const std::uint32_t last = texture.desc.mipLevels - 1;
+        const std::uint32_t base = level ? std::min(*level, last) : 0;
+        m_gl->TextureParameteri(texture.name, GL_TEXTURE_BASE_LEVEL, static_cast<GLint>(base));
+        m_gl->TextureParameteri(texture.name, GL_TEXTURE_MAX_LEVEL, static_cast<GLint>(level ? base : last));
+        texture.sampledLevel = level;
+    }
+
     std::uint32_t OpenGLDevice::FramebufferFor(const PassDesc& pass)
     {
-        std::vector<std::uint32_t> names;
+        std::vector<FramebufferAttachment> names;
         for (const ColourAttachment& colour : pass.colour)
         {
-            names.push_back(m_textures.Find(colour.texture)->name);
+            names.push_back({m_textures.Find(colour.texture)->name, colour.mipLevel, colour.layer});
         }
-        names.push_back(pass.depth ? m_textures.Find(pass.depth->texture)->name : 0);
+        names.push_back({pass.depth ? m_textures.Find(pass.depth->texture)->name : 0, 0,
+                         pass.depth && pass.depth->layered ? LayeredAttachment : (pass.depth ? pass.depth->layer : 0)});
         if (const auto found = m_framebuffers.find(names); found != m_framebuffers.end())
         {
             return found->second;
@@ -1003,12 +1215,33 @@ namespace Fenrir::Graphics
         for (std::size_t i = 0; i + 1 < names.size(); ++i)
         {
             const auto attachment = static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i);
-            gl.NamedFramebufferTexture(framebuffer, attachment, names[i], 0);
+            const FramebufferAttachment& colour = names[i];
+            const auto level = static_cast<GLint>(colour.mipLevel);
+            // A cube or cube array texture's face is a layer of it; a 2D texture is attached whole.
+            if (m_textures.Find(pass.colour[i].texture)->desc.kind != TextureKind::Texture2D)
+            {
+                gl.NamedFramebufferTextureLayer(framebuffer, attachment, colour.name, level,
+                                                static_cast<GLint>(colour.layer));
+            }
+            else
+            {
+                gl.NamedFramebufferTexture(framebuffer, attachment, colour.name, level);
+            }
             drawBuffers.push_back(attachment);
         }
-        if (names.back() != 0)
+        if (const FramebufferAttachment& depth = names.back(); depth.name != 0)
         {
-            gl.NamedFramebufferTexture(framebuffer, GL_DEPTH_ATTACHMENT, names.back(), 0);
+            // A cube or cube array's single layer, or every layer of it (layered: each primitive's gl_Layer picks).
+            const bool hasLayers = m_textures.Find(pass.depth->texture)->desc.kind != TextureKind::Texture2D;
+            if (hasLayers && depth.layer != LayeredAttachment)
+            {
+                gl.NamedFramebufferTextureLayer(framebuffer, GL_DEPTH_ATTACHMENT, depth.name, 0,
+                                                static_cast<GLint>(depth.layer));
+            }
+            else
+            {
+                gl.NamedFramebufferTexture(framebuffer, GL_DEPTH_ATTACHMENT, depth.name, 0);
+            }
         }
         if (drawBuffers.empty())
         {
@@ -1031,7 +1264,7 @@ namespace Fenrir::Graphics
     {
         for (auto it = m_framebuffers.begin(); it != m_framebuffers.end();)
         {
-            if (std::ranges::find(it->first, name) != it->first.end())
+            if (std::ranges::find(it->first, name, &FramebufferAttachment::name) != it->first.end())
             {
                 m_gl->DeleteFramebuffers(1, &it->second);
                 it = m_framebuffers.erase(it);
@@ -1045,7 +1278,10 @@ namespace Fenrir::Graphics
 
     void OpenGLDevice::ReleasePipeline(GlPipeline& pipeline)
     {
-        m_gl->DeleteVertexArrays(1, &pipeline.vertexArray);
+        if (pipeline.vertexArray != 0)
+        {
+            m_gl->DeleteVertexArrays(1, &pipeline.vertexArray);
+        }
         const auto program = m_programs.find(*pipeline.program);
         if (program != m_programs.end() && --program->second.users == 0)
         {
@@ -1064,20 +1300,21 @@ namespace Fenrir::Graphics
         return rect.y;
     }
 
-    OpenGLDevice::Texels OpenGLDevice::ReadTexels(TextureHandle texture)
+    OpenGLDevice::Texels OpenGLDevice::ReadTexels(TextureHandle texture, std::uint32_t mipLevel)
     {
         const GlTexture* found = m_textures.Find(texture);
         if (found == nullptr || found->name == 0 || found->desc.samples > 1 ||
-            found->desc.kind != TextureKind::Texture2D || found->desc.format == TextureFormat::Depth32Float)
+            found->desc.kind != TextureKind::Texture2D || found->desc.format == TextureFormat::Depth32Float ||
+            mipLevel >= found->desc.mipLevels)
         {
             return {};
         }
         Texels texels;
-        texels.width = found->desc.width;
-        texels.height = found->desc.height;
+        texels.width = std::max(found->desc.width >> mipLevel, 1u);
+        texels.height = std::max(found->desc.height >> mipLevel, 1u);
         texels.rgba.resize(std::size_t{texels.width} * texels.height * 4);
         // GL returns memory row 0 first, which an upper-left clip origin made the top row.
-        m_gl->GetTextureImage(found->name, 0, GL_RGBA, GL_FLOAT,
+        m_gl->GetTextureImage(found->name, static_cast<GLint>(mipLevel), GL_RGBA, GL_FLOAT,
                               static_cast<GLsizei>(texels.rgba.size() * sizeof(float)), texels.rgba.data());
         return texels;
     }

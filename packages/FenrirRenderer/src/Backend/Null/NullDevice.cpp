@@ -28,6 +28,11 @@ namespace Fenrir::Graphics
         return m_config.framesInFlight;
     }
 
+    DeviceFeatures NullDevice::Features() const
+    {
+        return m_features;
+    }
+
     void NullDevice::BeginFrame(std::uint64_t frameIndex)
     {
         m_frameIndex = frameIndex;
@@ -73,6 +78,17 @@ namespace Fenrir::Graphics
     {
         // Any shader container is accepted: there is nothing to compile it for.
         NullPipeline pipeline{std::string(label), desc.samples, {}, desc.cull, desc.depth, desc.blend, desc.encodeSrgb};
+        if (desc.shader != nullptr)
+        {
+            pipeline.keys = desc.shader->keys;
+        }
+        return {m_pipelines.Add(std::move(pipeline)), {}};
+    }
+
+    PipelineResult NullDevice::CreateComputePipeline(const ComputePipelineDesc& desc, std::string_view label)
+    {
+        NullPipeline pipeline;
+        pipeline.label = std::string(label);
         if (desc.shader != nullptr)
         {
             pipeline.keys = desc.shader->keys;

@@ -1,10 +1,12 @@
 #include "StageCompiler.hpp"
 
+#include <array>
 #include <format>
 #include <fstream>
 #include <iterator>
 #include <map>
 #include <memory>
+#include <string_view>
 #include <utility>
 
 #include <SPIRV/GlslangToSpv.h>
@@ -100,7 +102,8 @@ namespace Fenrir::ShaderCompiler
         };
 
         // The engine's rules glslang leaves alone with Vulkan semantics: it gives a resource without `set` set 0, and
-        // compiles gl_InstanceIndex, which GL cannot express (its InstanceID leaves out the base instance).
+        // compiles gl_InstanceIndex, which means another index on GL (its InstanceID leaves out the base instance),
+        // outside Fenrir/Draw.glsl.
         class RuleChecker final : public glslang::TIntermTraverser
         {
           public:
@@ -127,9 +130,12 @@ namespace Fenrir::ShaderCompiler
                 const glslang::TQualifier& qualifier = symbol->getQualifier();
                 if (qualifier.builtIn == glslang::EbvInstanceIndex)
                 {
-                    Report("gl_InstanceIndex", symbol->getLoc(),
-                           "gl_InstanceIndex is refused: OpenGL has no equivalent (its instance ID leaves out the base "
-                           "instance). Index draws with gl_BaseInstance instead");
+                    if (!InDrawInclude(symbol->getLoc()))
+                    {
+                        Report("gl_InstanceIndex", symbol->getLoc(),
+                               "gl_InstanceIndex is refused: it counts from the base instance on Vulkan but from 0 on "
+                               "OpenGL. Read the draw's record with Fenrir/Draw.glsl's CurrentDraw() instead");
+                    }
                     return;
                 }
                 const bool resource =
@@ -169,6 +175,13 @@ namespace Fenrir::ShaderCompiler
             }
 
           private:
+            // Fenrir/Draw.glsl reads gl_InstanceIndex for every stage, and its GL copy makes it agree (RewriteForGl).
+            static bool InDrawInclude(const glslang::TSourceLoc& loc)
+            {
+                const char* file = loc.getFilenameStr();
+                return file != nullptr && std::string_view(file).ends_with("/Fenrir/Draw.glsl");
+            }
+
             static std::string ResourceName(const glslang::TIntermSymbol& symbol)
             {
                 const glslang::TType& type = symbol.getType();
@@ -252,7 +265,8 @@ namespace Fenrir::ShaderCompiler
         }
         read.insert(absolute);
 
-        const EShLanguage language = stage == ShaderStage::Vertex ? EShLangVertex : EShLangFragment;
+        constexpr std::array<EShLanguage, 3> languages{EShLangVertex, EShLangFragment, EShLangCompute};
+        const EShLanguage language = languages.at(static_cast<std::size_t>(stage));
         const char* sources[] = {source.c_str()};
         const char* names[] = {name.c_str()};
         const std::string preamble = Preamble(defines);

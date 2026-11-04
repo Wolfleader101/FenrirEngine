@@ -39,7 +39,7 @@ namespace Fenrir
     {
         // The words log messages use for each kind, in AssetKind's order.
         constexpr std::array<std::string_view, Detail::AssetKindCount> kindNames = {
-            "mesh", "image", "material", "shader", "model", "skeleton", "clip", "bone mask"};
+            "mesh", "image", "material", "shader", "model", "skeleton", "clip", "bone mask", "instance list"};
 
         std::string_view KindName(Detail::AssetKind kind)
         {
@@ -351,6 +351,10 @@ namespace Fenrir
             if (kind == Detail::AssetKind::BoneMask)
             {
                 return fail(LoadFailure::NoImporter, "a model file holds no bone masks");
+            }
+            if (kind == Detail::AssetKind::InstanceList)
+            {
+                return fail(LoadFailure::NoImporter, "a model file holds no instance lists");
             }
             if (kind == Detail::AssetKind::Model && resolved.labelled)
             {

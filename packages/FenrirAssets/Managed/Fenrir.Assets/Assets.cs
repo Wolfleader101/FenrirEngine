@@ -2,10 +2,11 @@ using Fenrir.Math;
 
 namespace Fenrir.Assets;
 
-// AddMesh, ReplaceMesh, AddRenderTarget, ResizeRenderTarget, AddImage and ReplaceImage are generated (Generated/Assets.cs,
-// from the natives' @facade marks in Scripting/src/AssetsScripting.cpp), each taking the owner the native takes. This part
-// holds what a description cannot say: the class doc, the generic methods over the kind-generic natives, and the overloads
-// that default the owner to the active scene.
+// AddMesh, ReplaceMesh, AddRenderTarget, ResizeRenderTarget, AddImage, ReplaceImage and the instance lists' add, replace
+// and reads are generated (Generated/Assets.cs, from the natives' @facade marks in Scripting/src/AssetsScripting.cpp), each
+// taking the owner the native takes. This part holds what a description cannot say: the class doc, the generic methods
+// over the kind-generic natives, and the overloads that default the owner to the active scene and an instance list's
+// colours to none.
 
 /// <summary>
 /// The asset store from C#: loading, adding, replacing and unloading assets, as FenrirAssets' <c>AssetStore</c> does in C++
@@ -62,4 +63,16 @@ public static partial class Assets
     /// <summary><see cref="AddImage(int, int, ReadOnlySpan{byte}, AssetOwner)"/> for the active scene.</summary>
     public static AssetHandle<Image> AddImage(int width, int height, ReadOnlySpan<byte> rgba8) =>
         AddImage(width, height, rgba8, AssetOwner.Scene);
+
+    /// <summary><see cref="AddInstanceList(ReadOnlySpan{Matrix4x4}, ReadOnlySpan{Colour}, AssetOwner)"/> for the active scene.</summary>
+    public static AssetHandle<InstanceList> AddInstanceList(ReadOnlySpan<Matrix4x4> transforms, ReadOnlySpan<Colour> colours) =>
+        AddInstanceList(transforms, colours, AssetOwner.Scene);
+
+    /// <summary>An instance list of white copies for the active scene: <see cref="AddInstanceList(ReadOnlySpan{Matrix4x4}, ReadOnlySpan{Colour}, AssetOwner)"/> with no colours.</summary>
+    public static AssetHandle<InstanceList> AddInstanceList(ReadOnlySpan<Matrix4x4> transforms) =>
+        AddInstanceList(transforms, [], AssetOwner.Scene);
+
+    /// <summary><see cref="ReplaceInstanceList(AssetHandle{InstanceList}, ReadOnlySpan{Matrix4x4}, ReadOnlySpan{Colour})"/> with no colours: every copy white.</summary>
+    public static bool ReplaceInstanceList(AssetHandle<InstanceList> list, ReadOnlySpan<Matrix4x4> transforms) =>
+        ReplaceInstanceList(list, transforms, []);
 }

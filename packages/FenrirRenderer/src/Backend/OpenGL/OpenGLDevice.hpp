@@ -1,10 +1,13 @@
 #pragma once
 
+#include <compare>
 #include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "Device/GraphicsDevice.hpp"
@@ -67,6 +70,8 @@ namespace Fenrir::Graphics
         OpenGLDevice& operator=(OpenGLDevice&&) = delete;
 
         [[nodiscard]] std::uint32_t FramesInFlight() const override;
+        /** @copydoc GraphicsDevice::Features Read from the context's SPIR-V extensions when the device starts. */
+        [[nodiscard]] DeviceFeatures Features() const override;
         void BeginFrame(std::uint64_t frameIndex) override;
 
         [[nodiscard]] BufferHandle CreateBuffer(const BufferDesc& desc, std::span<const std::byte> initial,
@@ -78,6 +83,8 @@ namespace Fenrir::Graphics
         [[nodiscard]] BindingGroupHandle CreateBindingGroup(const BindingGroupDesc& desc,
                                                             std::string_view label) override;
         [[nodiscard]] PipelineResult CreatePipeline(const PipelineDesc& desc, std::string_view label) override;
+        [[nodiscard]] PipelineResult CreateComputePipeline(const ComputePipelineDesc& desc,
+                                                           std::string_view label) override;
 
         bool WriteBuffer(BufferHandle buffer, std::size_t offset, std::span<const std::byte> bytes) override;
         /** @copydoc GraphicsDevice::WriteTexture Texels of the wrong size for that level are refused, logged. */
@@ -122,7 +129,28 @@ namespace Fenrir::Graphics
         {
             std::uint32_t name = 0;
             TextureDesc desc;
+            /**
+             * @brief The one mip level its base and maximum levels are set to, which a binding naming that level set;
+             * empty while they span every level.
+             */
+            std::optional<std::uint32_t> sampledLevel;
         };
+
+        /**
+         * @brief One attachment of a framebuffer: a texture's GL name, and the mip level and layer drawn into
+         * (LayeredAttachment for every layer).
+         */
+        struct FramebufferAttachment
+        {
+            std::uint32_t name = 0;
+            std::uint32_t mipLevel = 0;
+            std::uint32_t layer = 0;
+
+            friend auto operator<=>(const FramebufferAttachment&, const FramebufferAttachment&) = default;
+        };
+
+        /** @brief FramebufferAttachment::layer for a layered attachment, every layer at once. */
+        static constexpr std::uint32_t LayeredAttachment = ~0u;
 
         /** @brief A binding group with each entry's resource kind, read from its layout when it was made. */
         struct GlBindingGroup
@@ -133,11 +161,15 @@ namespace Fenrir::Graphics
             std::vector<std::uint32_t> indicesInKind;
         };
 
-        /** @brief The code of one program: the GL SPIR-V of its vertex and fragment stages. */
+        /**
+         * @brief The code of one program: the GL SPIR-V of its vertex and fragment stages, or of a compute program's
+         * one stage.
+         */
         struct ProgramKey
         {
             std::vector<std::uint32_t> vertex;
             std::vector<std::uint32_t> fragment;
+            std::vector<std::uint32_t> compute;
 
             friend auto operator<=>(const ProgramKey&, const ProgramKey&) = default;
         };
@@ -149,11 +181,15 @@ namespace Fenrir::Graphics
             std::uint32_t users = 0;
         };
 
-        /** @brief A pipeline: its program's code, the vertex array of its vertex input, and its fixed state. */
+        /**
+         * @brief A pipeline: its program's code, the vertex array of its vertex input, and its fixed state; a compute
+         * pipeline has only its program.
+         */
         struct GlPipeline
         {
             const ProgramKey* program = nullptr;
             std::uint32_t programName = 0;
+            bool compute = false;
             std::uint32_t vertexArray = 0;
             std::vector<std::uint32_t> strides;
             Topology topology = Topology::Triangles;
@@ -179,6 +215,9 @@ namespace Fenrir::Graphics
         {
             /** @brief Whether the pass is skipped, every command up to its end ignored: its targets are stale. */
             bool skipping = false;
+            /** @brief Whether the pass is a compute pass, and whether it declares storage writes. */
+            bool computing = false;
+            bool storageWrites = false;
             bool drawingToBackbuffer = false;
             std::uint32_t targetHeight = 0;
             const GlPipeline* pipeline = nullptr;
@@ -213,11 +252,22 @@ namespace Fenrir::Graphics
         void Execute(const CmdDispatch& command);
         void Execute(const CmdCopyBuffer& command);
 
+        /**
+         * @brief Sets the levels shaders sample of `texture`: only `level`, as its base and maximum, or every level
+         * when empty. Does nothing when they are already so.
+         */
+        void SampleLevels(GlTexture& texture, std::optional<std::uint32_t> level);
         /** @brief The framebuffer drawing into `pass`'s attachments, made the first time they are drawn into together.
          */
         std::uint32_t FramebufferFor(const PassDesc& pass);
         /** @brief Deletes the framebuffers that draw into the texture named `name`, as it is deleted. */
         void ForgetFramebuffers(std::uint32_t name);
+        /**
+         * @brief The linked program for `key`, counting one more user, made the first time; the map's end, with
+         * `diagnostic` saying why, when a stage cannot be specialised or the program not linked.
+         */
+        std::map<ProgramKey, GlProgram>::iterator ProgramFor(ProgramKey key, std::string_view label,
+                                                             std::string& diagnostic);
         /** @brief Lets go of a destroyed pipeline's GL objects, deleting its program once no pipeline uses it. */
         void ReleasePipeline(GlPipeline& pipeline);
         /** @brief `rect` from the target's top-left corner, in GL's window coordinates for the current pass. */
@@ -226,8 +276,11 @@ namespace Fenrir::Graphics
         /** @brief Gives the current pipeline's vertex array the vertex and index buffers bound in the pass. */
         void BindVertexInput();
 
-        /** @brief For GlProbe: mip 0 of an offscreen colour texture as floats, top row first; empty if it cannot. */
-        [[nodiscard]] Texels ReadTexels(TextureHandle texture);
+        /**
+         * @brief For GlProbe: mip `mipLevel` of an offscreen colour texture as floats, top row first; empty if it
+         * cannot.
+         */
+        [[nodiscard]] Texels ReadTexels(TextureHandle texture, std::uint32_t mipLevel = 0);
         /** @brief For GlProbe: the GL name behind a live buffer, else 0. */
         [[nodiscard]] std::uint32_t GlName(BufferHandle buffer);
         /** @brief For GlProbe: the GL name behind a live texture, else 0. */
@@ -243,6 +296,12 @@ namespace Fenrir::Graphics
         std::unique_ptr<GladGLContext> m_gl;
         /** @brief Whether Start succeeded, so the GL functions are loaded and there are GL objects to delete. */
         bool m_started = false;
+        DeviceFeatures m_features;
+        /**
+         * @brief The name under which the driver takes a vertex stage writing gl_Layer in SPIR-V: glslang's
+         * SPV_EXT_shader_viewport_index_layer, or NVIDIA's SPV_NV_viewport_array2; empty when it takes neither.
+         */
+        std::string_view m_layerExtension;
         std::uint64_t m_frameIndex = 0;
 
         ResourceTable<BufferHandle, GlBuffer> m_buffers;
@@ -254,8 +313,8 @@ namespace Fenrir::Graphics
         TextureHandle m_backbuffer;
 
         std::map<ProgramKey, GlProgram> m_programs;
-        /** @brief Framebuffers by the GL names of their colour attachments then depth (0 for none). */
-        std::map<std::vector<std::uint32_t>, std::uint32_t> m_framebuffers;
+        /** @brief Framebuffers by their colour attachments then depth (name 0 for none). */
+        std::map<std::vector<FramebufferAttachment>, std::uint32_t> m_framebuffers;
         ReplayState m_replay;
     };
 } // namespace Fenrir::Graphics

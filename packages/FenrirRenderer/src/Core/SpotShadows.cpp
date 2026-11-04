@@ -1,0 +1,108 @@
+#include "Core/SpotShadows.hpp"
+
+#include <algorithm>
+#include <cmath>
+
+#include "Core/Cascades.hpp"
+#include "Core/SceneFrame.hpp"
+
+namespace Fenrir::Render
+{
+    SpotAtlasGrid SpotAtlasGridOf(std::uint32_t budget) noexcept
+    {
+        if (budget == 0)
+        {
+            return {};
+        }
+        auto columns = static_cast<std::uint32_t>(std::ceil(std::sqrt(static_cast<double>(budget))));
+        // Exact for squares, whatever sqrt rounds them to.
+        while ((columns - 1) * (columns - 1) >= budget)
+        {
+            --columns;
+        }
+        return {columns, (budget + columns - 1) / columns};
+    }
+
+    SpotAtlasTile SpotAtlasTileOf(std::uint32_t tile, SpotAtlasGrid grid) noexcept
+    {
+        const std::uint32_t across = std::max(grid.columns, 1u);
+        return {tile % across, tile / across};
+    }
+
+    SpotShadow FitSpotShadow(const PunctualLight& light, std::uint32_t mapSize)
+    {
+        SpotShadow shadow;
+        const auto size = static_cast<float>(std::max(mapSize, 16u));
+        // The cone's edge with the filter's reach and a texel more inside each side of the tile, so a lookup at the
+        // cone's edge never filters past it.
+        const float spare = ShadowFilterRadius + 1.0f;
+        const float halfAngle = std::clamp(light.outerAngle, 1e-3f, MaxSpotShadowAngle);
+        const float halfTan = std::tan(halfAngle) * size / (size - 2.0f * spare);
+        shadow.texelScale = 2.0f * halfTan / size;
+        shadow.near = std::clamp(light.range / 200.0f, 1e-3f, 0.1f);
+        Math::Mat4 toLight(1.0f);
+        toLight[3] = Math::Vec4(-light.position, 1.0f);
+        shadow.view = LightRotation(light.direction) * toLight;
+        shadow.projection = ReversedZPerspective(2.0f * std::atan(halfTan), 1.0f, shadow.near);
+        shadow.viewProjection = shadow.projection * shadow.view;
+        return shadow;
+    }
+
+    Math::Mat4 SpotAtlasMatrix(const SpotShadow& shadow, std::uint32_t tile, SpotAtlasGrid grid)
+    {
+        // Clip x in [-w, w] across its tile, and clip +y up to v 0 at the tile's top (ADR-0016); z and w as drawn. The
+        // tile's offset multiplies w, so it survives the shader's divide by it.
+        const auto columns = static_cast<float>(std::max(grid.columns, 1u));
+        const auto rows = static_cast<float>(std::max(grid.rows, 1u));
+        const SpotAtlasTile at = SpotAtlasTileOf(tile, grid);
+        Math::Mat4 atlas(1.0f);
+        atlas[0][0] = 0.5f / columns;
+        atlas[1][1] = -0.5f / rows;
+        atlas[3][0] = (0.5f + static_cast<float>(at.column)) / columns;
+        atlas[3][1] = (0.5f + static_cast<float>(at.row)) / rows;
+        return atlas * shadow.viewProjection;
+    }
+
+    GpuSpotShadow ToGpuSpotShadow(const PunctualLight& light, const SpotShadow& shadow, std::uint32_t tile,
+                                  SpotAtlasGrid grid, std::uint32_t mapSize)
+    {
+        const auto columns = static_cast<float>(std::max(grid.columns, 1u));
+        const auto rows = static_cast<float>(std::max(grid.rows, 1u));
+        const auto size = static_cast<float>(std::max(mapSize, 1u));
+        const SpotAtlasTile at = SpotAtlasTileOf(tile, grid);
+        const auto column = static_cast<float>(at.column);
+        const auto row = static_cast<float>(at.row);
+        const Math::Vec2 texel(1.0f / (columns * size), 1.0f / (rows * size));
+        const Math::Vec2 reach = (ShadowFilterRadius + 1.0f) * texel;
+        const Math::Vec2 low = Math::Vec2(column / columns, row / rows) + reach;
+        const Math::Vec2 high = Math::Vec2((column + 1.0f) / columns, (row + 1.0f) / rows) - reach;
+
+        GpuSpotShadow gpu;
+        gpu.atlas = SpotAtlasMatrix(shadow, tile, grid);
+        gpu.bias = Math::Vec4(light.shadowNormalBias, light.shadowSlopeBias, shadow.texelScale, ShadowFilterRadius);
+        gpu.bounds = Math::Vec4(low, high);
+        return gpu;
+    }
+
+    SpotShadow SpotShadowKind::Fit(const PunctualLight& light, const ShadowBudgetConfig& config)
+    {
+        return FitSpotShadow(light, config.mapSize);
+    }
+
+    GpuSpotShadow SpotShadowKind::ToRecord(const PunctualLight& light, const SpotShadow& shadow, std::uint32_t tile,
+                                           const ShadowBudgetConfig& config)
+    {
+        return ToGpuSpotShadow(light, shadow, tile, SpotAtlasGridOf(config.budget), config.mapSize);
+    }
+
+    Graphics::TextureDesc SpotShadowKind::MapDesc(const ShadowBudgetConfig& config)
+    {
+        const SpotAtlasGrid grid = SpotAtlasGridOf(config.budget);
+        Graphics::TextureDesc desc;
+        desc.format = Graphics::TextureFormat::Depth32Float;
+        desc.width = grid.columns * config.mapSize;
+        desc.height = grid.rows * config.mapSize;
+        desc.usage = Graphics::TextureUsage::DepthAttachment | Graphics::TextureUsage::Sampled;
+        return desc;
+    }
+} // namespace Fenrir::Render

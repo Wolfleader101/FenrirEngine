@@ -182,7 +182,7 @@ namespace RendererDemo
             Fenrir::Entity light = entities.CreateEntity();
             light.AddComponent<Fenrir::Transform>().rot = YawPitch(0.5f, -0.9f);
             light.AddComponent<Fenrir::DirectionalLight>();
-            scene.AddResource<Fenrir::AmbientLight>();
+            scene.AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour{0.1f, 0.1f, 0.1f, 1.0f}});
 
             // The main view, a second view for the split layouts, an orthographic top-down minimap over them, and the
             // monitor's camera drawing into the image.

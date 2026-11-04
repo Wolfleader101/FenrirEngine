@@ -18,11 +18,16 @@ namespace Fenrir::Render
         Graphics::TextureUsage TextureUsageOf(ResourceUsage usage)
         {
             // Indexed by ResourceUsage, in its order.
-            constexpr std::array<Graphics::TextureUsage, 8> byUsage{
-                Graphics::TextureUsage::ColourAttachment, Graphics::TextureUsage::DepthAttachment,
-                Graphics::TextureUsage::DepthAttachment,  Graphics::TextureUsage::Sampled,
-                Graphics::TextureUsage::Storage,          Graphics::TextureUsage::Storage,
-                Graphics::TextureUsage::CopySource,       Graphics::TextureUsage::CopyDestination,
+            constexpr std::array<Graphics::TextureUsage, 9> byUsage{
+                Graphics::TextureUsage::ColourAttachment,
+                Graphics::TextureUsage::DepthAttachment,
+                Graphics::TextureUsage::DepthAttachment,
+                Graphics::TextureUsage::Sampled,
+                Graphics::TextureUsage::Storage,
+                Graphics::TextureUsage::Storage,
+                Graphics::TextureUsage::CopySource,
+                Graphics::TextureUsage::CopyDestination,
+                Graphics::TextureUsage::None,
             };
             return byUsage.at(static_cast<std::size_t>(usage));
         }
@@ -38,6 +43,8 @@ namespace Fenrir::Render
                 return Graphics::BufferUsage::CopySource;
             case ResourceUsage::CopyDestination:
                 return Graphics::BufferUsage::CopyDestination;
+            case ResourceUsage::VertexInput:
+                return Graphics::BufferUsage::Vertex;
             default:
                 return Graphics::BufferUsage::None;
             }
@@ -62,12 +69,33 @@ namespace Fenrir::Render
         access.clearColour = clear;
     }
 
+    void PassBuilder::ColourAttachmentLevel(GraphResource texture, std::uint32_t mipLevel, std::uint32_t layer)
+    {
+        Use(texture, ResourceUsage::ColourAttachment, false, true);
+        RenderGraph::Access& access = m_graph.m_passes[m_pass].accesses.back();
+        access.load = LoadOp::DontCare;
+        access.mipLevel = mipLevel;
+        access.layer = layer;
+    }
+
     void PassBuilder::DepthAttachment(GraphResource texture, LoadOp load, float clear)
     {
         Use(texture, ResourceUsage::DepthWrite, load == LoadOp::Load, true);
         RenderGraph::Access& access = m_graph.m_passes[m_pass].accesses.back();
         access.load = load;
         access.clearDepth = clear;
+    }
+
+    void PassBuilder::DepthAttachmentLayer(GraphResource texture, std::uint32_t layer, LoadOp load, float clear)
+    {
+        DepthAttachment(texture, load, clear);
+        m_graph.m_passes[m_pass].accesses.back().layer = layer;
+    }
+
+    void PassBuilder::LayeredDepthAttachment(GraphResource texture, LoadOp load, float clear)
+    {
+        DepthAttachment(texture, load, clear);
+        m_graph.m_passes[m_pass].accesses.back().layered = true;
     }
 
     void PassBuilder::DepthReadOnly(GraphResource texture)
@@ -81,6 +109,12 @@ namespace Fenrir::Render
         Use(texture, ResourceUsage::Sampled, true, false);
     }
 
+    void PassBuilder::SamplePrevious(GraphResource texture)
+    {
+        Use(texture, ResourceUsage::Sampled, true, false);
+        m_graph.m_passes[m_pass].accesses.back().previous = true;
+    }
+
     void PassBuilder::StorageRead(GraphResource resource)
     {
         Use(resource, ResourceUsage::StorageRead, true, false);
@@ -89,6 +123,11 @@ namespace Fenrir::Render
     void PassBuilder::StorageWrite(GraphResource resource)
     {
         Use(resource, ResourceUsage::StorageWrite, false, true);
+    }
+
+    void PassBuilder::VertexInput(GraphResource buffer)
+    {
+        Use(buffer, ResourceUsage::VertexInput, true, false);
     }
 
     void PassBuilder::CopySource(GraphResource resource)
@@ -199,10 +238,17 @@ namespace Fenrir::Render
             bool writes = false;
         };
         std::vector<std::vector<User>> users(m_resources.size());
+        // The passes reading each resource's contents from before the frame, which run before its first writer.
+        std::vector<std::vector<std::uint32_t>> previousReaders(m_resources.size());
         for (std::uint32_t pass : baseline)
         {
             for (const Access& access : m_passes[pass].accesses)
             {
+                if (access.previous)
+                {
+                    previousReaders[access.resource].push_back(pass);
+                    continue;
+                }
                 std::vector<User>& list = users[access.resource];
                 if (list.empty() || list.back().pass != pass)
                 {
@@ -222,12 +268,17 @@ namespace Fenrir::Render
                 ++waitingOn[to];
             }
         };
-        for (std::vector<User>& list : users)
+        for (std::size_t r = 0; r < users.size(); ++r)
         {
+            std::vector<User>& list = users[r];
             const auto firstWriter = std::find_if(list.begin(), list.end(), [](const User& u) { return u.writes; });
             if (firstWriter == list.end())
             {
                 continue;
+            }
+            for (const std::uint32_t reader : previousReaders[r])
+            {
+                addEdge(reader, firstWriter->pass);
             }
             std::rotate(list.begin(), firstWriter, list.end());
 
@@ -318,7 +369,12 @@ namespace Fenrir::Render
             for (const Access& access : pass.accesses)
             {
                 const Resource& resource = m_resources[access.resource];
-                if (access.reads && !written[access.resource] && !resource.imported)
+                if (access.previous && !resource.imported)
+                {
+                    compilation.errors.push_back("render pass " + pass.name + " reads what " + resource.name +
+                                                 " held before the frame, but it is transient");
+                }
+                else if (access.reads && !written[access.resource] && !resource.imported)
                 {
                     compilation.errors.push_back("render pass " + pass.name + " reads " + resource.name +
                                                  ", which nothing wrote");
@@ -402,12 +458,13 @@ namespace Fenrir::Render
             const Graphics::TextureHandle texture = textures[access.resource];
             if (access.usage == ResourceUsage::ColourAttachment)
             {
-                desc.colour.push_back({texture, access.load, access.clearColour});
+                desc.colour.push_back({texture, access.load, access.clearColour, access.mipLevel, access.layer});
             }
             else if (access.usage == ResourceUsage::DepthWrite || access.usage == ResourceUsage::DepthRead)
             {
-                desc.depth = Graphics::DepthAttachment{texture, access.load, access.clearDepth,
-                                                       access.usage == ResourceUsage::DepthRead};
+                desc.depth = Graphics::DepthAttachment{texture,           access.load,
+                                                       access.clearDepth, access.usage == ResourceUsage::DepthRead,
+                                                       access.layer,      access.layered};
             }
             desc.uses.push_back({texture, buffers[access.resource], access.usage});
         }

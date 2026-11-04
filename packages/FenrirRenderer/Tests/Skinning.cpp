@@ -158,9 +158,11 @@ TEST_CASE("Stats count one palette for two meshes and two cameras on one skeleto
     REQUIRE(test.messages->errors.empty());
 }
 
-TEST_CASE("A skinned draw uses its shader's SKINNED variant, and a rigid one does not", "[renderer][skinning]")
+TEST_CASE("With compute skinning off, a skinned draw uses its shader's SKINNED variant, and a rigid one does not",
+          "[renderer][skinning]")
 {
     SkinningTestApp test;
+    test.renderer.SetComputeSkinning(false);
     test.AddCamera({0.0f, 1.0f, 10.0f});
     test.AddRig({-2.0f, 0.0f, 0.0f});
     test.AddMeshRenderer(test.Mesh(), test.Material()).GetComponent<Fenrir::Transform>().pos = {2.0f, 0.0f, 0.0f};
@@ -193,7 +195,7 @@ TEST_CASE("Every skinned draw's palette range lies within the palette buffer", "
     REQUIRE(draws.size() == 9);
     for (const auto& draw : draws)
     {
-        const std::size_t entries = test.BindingBytes(draw, 1).size() / sizeof(RendererTest::PaletteRows);
+        const std::size_t entries = test.BindingBytes(draw, 2).size() / sizeof(RendererTest::PaletteRows);
         INFO("the offset plus the strip's two bones stays inside the buffer");
         REQUIRE(test.Record(draw).paletteOffset + 2 <= entries);
     }
@@ -363,10 +365,12 @@ TEST_CASE("A draw record's sign is -1 for a mirroring world matrix", "[renderer]
     REQUIRE(test.Record(draws[0]).worldSign == -1.0f);
 }
 
-TEST_CASE("A shader without SKINNED draws a skinned mesh with the fallback material's SKINNED variant, logged once",
+TEST_CASE("With compute skinning off, a shader without SKINNED draws a skinned mesh with the fallback material's "
+          "SKINNED variant, logged once",
           "[renderer][skinning]")
 {
     SkinningTestApp test;
+    test.renderer.SetComputeSkinning(false);
     test.AddCamera({0.0f, 1.0f, 10.0f});
     const Fenrir::Entity owner = test.AddSkeleton();
     // SampledPicture is built with no variant keys at all.
@@ -377,7 +381,9 @@ TEST_CASE("A shader without SKINNED draws a skinned mesh with the fallback mater
     test.Frame();
 
     const auto draws = test.Draws();
-    REQUIRE(draws.size() == 2);
+    INFO("both are one draw, merged as two instances of the fallback material (ADR-0051)");
+    REQUIRE(draws.size() == 1);
+    REQUIRE(draws.front().draw.instanceCount == 2);
     for (const auto& draw : draws)
     {
         INFO("drawn by the fallback program, skinned, with no material group");
@@ -414,7 +420,7 @@ TEST_CASE("A transparent skinned item is sorted by the centre of its skinned bou
     REQUIRE(test.Record(draws[1]).world[3].z == -10.0f);
 }
 
-TEST_CASE("The built-in programs' SKINNED variants read the palette at set 3, binding 1, in GpuBone's 48-byte layout",
+TEST_CASE("The built-in programs' SKINNED variants read the palette at set 3, binding 2, in GpuBone's 48-byte layout",
           "[renderer][skinning]")
 {
     SkinningTestApp test;
@@ -430,7 +436,7 @@ TEST_CASE("The built-in programs' SKINNED variants read the palette at set 3, bi
         REQUIRE(HasKey(read.container->keys, "SKINNED"));
         REQUIRE(variant != nullptr);
         const auto palette = std::find_if(variant->bindings.begin(), variant->bindings.end(),
-                                          [](const Fenrir::ShaderBinding& b) { return b.set == 3 && b.binding == 1; });
+                                          [](const Fenrir::ShaderBinding& b) { return b.set == 3 && b.binding == 2; });
         REQUIRE(palette != variant->bindings.end());
         INFO("a storage block whose reflected size is " << palette->size);
         REQUIRE(palette->kind == Fenrir::ShaderBindingKind::StorageBuffer);

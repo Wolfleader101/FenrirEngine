@@ -285,7 +285,7 @@ namespace Fenrir
             variant.stages.resize(in.Count(12));
             for (ShaderStageCode& stage : variant.stages)
             {
-                stage.stage = in.Enum(ShaderStage::Fragment, "stage");
+                stage.stage = in.Enum(ShaderStage::Compute, "stage");
                 stage.glSpirv = in.Words();
                 stage.spirv = in.Words();
             }

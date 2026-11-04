@@ -85,4 +85,48 @@ public static partial class Assets
     /// </returns>
     public static bool ReplaceImage(AssetHandle<Image> image, int width, int height, ReadOnlySpan<byte> rgba8) =>
         AssetsNative.ReplaceImage(in image, width, height, rgba8);
+
+    /// <summary>
+    /// Adds an instance list for `owner` (ADR-0051): one copy per transform, each relative to the entity whose
+    /// InstancedMeshRenderer draws it, coloured by `colours`, which is empty (every copy white) or holds one colour per
+    /// transform, linear. The data is copied.
+    /// </summary>
+    /// <returns>
+    /// The list; the empty handle (and an error logged) if there are colours but not one per transform; the C++ default
+    /// when the call did nothing.
+    /// </returns>
+    public static AssetHandle<InstanceList> AddInstanceList(ReadOnlySpan<Matrix4x4> transforms,
+                                                            ReadOnlySpan<Colour> colours, AssetOwner owner)
+    {
+        _ = AssetsNative.AddInstanceList(transforms, colours, owner, out AssetHandle<InstanceList> list);
+        return list;
+    }
+
+    /// <summary>
+    /// Swaps `list`'s copies for these transforms and colours, as AddInstanceList takes them, and bumps its revision,
+    /// so the renderer uploads it again before its next draw.
+    /// </summary>
+    /// <returns>
+    /// Whether it was replaced: false for a stale handle, or colours but not one per transform, which leave it
+    /// unchanged.
+    /// </returns>
+    public static bool ReplaceInstanceList(AssetHandle<InstanceList> list, ReadOnlySpan<Matrix4x4> transforms,
+                                           ReadOnlySpan<Colour> colours) =>
+        AssetsNative.ReplaceInstanceList(in list, transforms, colours);
+
+    /// <summary>Copies `list`'s transforms into `transforms`, as many as fit.</summary>
+    /// <returns>
+    /// How many copies the list holds, so a result larger than the span says how large a span would hold them all; zero
+    /// for a stale handle.
+    /// </returns>
+    public static int GetInstanceTransforms(AssetHandle<InstanceList> list, Span<Matrix4x4> transforms) =>
+        AssetsNative.GetInstanceTransforms(in list, transforms);
+
+    /// <summary>Copies `list`'s colours into `colours`, as many as fit.</summary>
+    /// <returns>
+    /// How many colours the list holds: as many as its transforms, or zero when every copy is white; zero for a stale
+    /// handle.
+    /// </returns>
+    public static int GetInstanceColours(AssetHandle<InstanceList> list, Span<Colour> colours) =>
+        AssetsNative.GetInstanceColours(in list, colours);
 }

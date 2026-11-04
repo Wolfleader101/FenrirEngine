@@ -6,7 +6,7 @@ using Fenrir.Scripting;
 
 namespace Fenrir.Renderer;
 
-/// <summary>A sky of one colour.</summary>
+/// <summary>A sky of one colour, which lights every surface with that colour from every side (ADR-0047).</summary>
 public partial struct ColourSky
 {
     /// <summary>Linear. A dark grey by default, the sky of a scene with none.</summary>

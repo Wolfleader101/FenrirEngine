@@ -25,7 +25,7 @@ public static class Looks
     // The materials made so far, one per colour; a handle the scene no longer holds (another scene's) is made again.
     private static readonly List<(Vector3 Colour, AssetHandle<Material> Material)> Made = [];
 
-    /// <summary>Gives the active scene a sun, an ambient light and the skybox as its Sky; logs an error if anything did not load.</summary>
+    /// <summary>Gives the active scene a sun and the skybox as its Sky, which lights it too; logs an error if anything did not load.</summary>
     public static void Begin(in SystemContext context, string scene)
     {
         Made.Clear();
@@ -45,7 +45,6 @@ public static class Looks
             Scale = Vector3.One,
         });
         sun.Add(new DirectionalLight());
-        Resources.Insert(new AmbientLight { Colour = new Colour(0.2f, 0.2f, 0.2f) });
         Resources.Insert((Sky)new CubemapSky { Cubemap = skybox });
     }
 

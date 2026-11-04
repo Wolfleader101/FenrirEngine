@@ -18,6 +18,7 @@
 #include "Facade/RendererState.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/ImageData.hpp"
+#include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/ShaderData.hpp"
 #include "FenrirAssets/SkeletonData.hpp"
@@ -59,6 +60,30 @@ namespace Fenrir
         Vsync FromDevice(Graphics::Vsync mode)
         {
             return static_cast<Vsync>(mode);
+        }
+
+        static_assert(static_cast<int>(Tonemapper::None) == static_cast<int>(Render::Tonemapper::None) &&
+                      static_cast<int>(Tonemapper::AgX) == static_cast<int>(Render::Tonemapper::AgX) &&
+                      static_cast<int>(Tonemapper::PbrNeutral) == static_cast<int>(Render::Tonemapper::PbrNeutral) &&
+                      static_cast<int>(Tonemapper::Aces) == static_cast<int>(Render::Tonemapper::Aces));
+
+        Render::Tonemapper ToCore(Tonemapper tonemapper)
+        {
+            return static_cast<Render::Tonemapper>(tonemapper);
+        }
+
+        /** @brief The core's copy of a camera's debug view: the same values in the same order. */
+        Render::ViewDebug ToCore(CameraDebugView debugView)
+        {
+            static_assert(static_cast<int>(CameraDebugView::ShadowAtlas) ==
+                              static_cast<int>(Render::ViewDebug::ShadowAtlas) &&
+                          static_cast<int>(CameraDebugView::SpotShadowAtlas) ==
+                              static_cast<int>(Render::ViewDebug::SpotShadowAtlas) &&
+                          static_cast<int>(CameraDebugView::LightClusters) ==
+                              static_cast<int>(Render::ViewDebug::LightClusters) &&
+                          static_cast<int>(CameraDebugView::ReflectionConfidence) ==
+                              static_cast<int>(Render::ViewDebug::ReflectionConfidence));
+            return static_cast<Render::ViewDebug>(debugView);
         }
 
         /** @brief Whether the shader's GPU side is ready: prepared now if it is new or changed. False if stale. */
@@ -210,6 +235,13 @@ namespace Fenrir
                     scene.ReleaseShader(key);
                 }
             }
+            for (const AssetKey key : scene.InstanceListKeys())
+            {
+                if (!store.IsValid(HandleOf<InstanceList>(key)))
+                {
+                    scene.ReleaseInstanceList(key);
+                }
+            }
             for (const AssetKey key : draw2D.ShaderKeys())
             {
                 if (!store.IsValid(HandleOf<Shader>(key)))
@@ -238,22 +270,63 @@ namespace Fenrir
                     scene.ReleaseCubemap(key);
                 }
             }
+            for (const AssetKey key : scene.PanoramaKeys())
+            {
+                if (!store.IsValid(HandleOf<Image>(key)))
+                {
+                    scene.ReleasePanorama(key);
+                }
+            }
         }
 
-        /** @brief What a view on the scene's background draws: the Sky's colour, or its prepared cubemap. */
+        /**
+         * @brief What a view on the scene's background draws: the Sky's colour, or its prepared cubemap or panorama,
+         * with the sky's intensity and rotation.
+         */
         struct SceneSky
         {
             Colour colour = ColourSky{}.colour;
-            AssetKey cubemap;
+            /** @brief The cubemap or panorama image; empty for a colour. */
+            AssetKey image;
+            float intensity = 1.0f;
+            float rotation = 0.0f;
         };
 
-        /**
-         * @brief The active scene's Sky, its cubemap prepared if it is new or changed. A cubemap that is empty, stale
-         * or not a cubemap with pixels gives the default ColourSky, logged once per handle.
-         */
-        SceneSky ReadSky(Detail::RendererState& state, const AssetStore& store, Scene& scene)
+        /** @brief Why a Sky's image cannot be drawn, for its warning; empty if it can. */
+        std::string SkyImageProblem(AssetHandle<Image> handle, const ImageData* data, SkyType type)
         {
-            const Sky* sky = scene.GetResource<Sky>();
+            const std::string_view kind = type == SkyType::Cubemap ? "cubemap" : "panorama";
+            if (handle.IsEmpty())
+            {
+                return std::format("no {}", kind);
+            }
+            if (data == nullptr)
+            {
+                return std::format("a stale {} ({})", kind, handle.index);
+            }
+            if (type == SkyType::Cubemap && (data->shape != ImageShape::Cubemap || data->pixels.empty()))
+            {
+                return std::format("image {}, which is not a cubemap with pixels", handle.index);
+            }
+            if (type == SkyType::Panorama &&
+                (data->shape != ImageShape::Flat || data->pixels.empty() || data->width != 2 * data->height))
+            {
+                return std::format("image {} ({} x {}) as a panorama, which must be a flat image with pixels twice as "
+                                   "wide as high",
+                                   handle.index, data->width, data->height);
+            }
+            return {};
+        }
+
+        /**
+         * @brief `sky`, the active scene's Sky or its SkyLight's (`resource` names which, for the log), its cubemap or
+         * panorama prepared if it is new or changed. A cubemap that is empty, stale or not a cubemap with pixels, or a
+         * panorama that is empty, stale or not a flat image with pixels twice as wide as high, gives the default
+         * ColourSky, logged once per handle. No sky gives the default ColourSky.
+         */
+        SceneSky ReadSky(Detail::RendererState& state, const AssetStore& store, const Sky* sky,
+                         std::string_view resource)
+        {
             if (sky == nullptr)
             {
                 return {};
@@ -262,35 +335,135 @@ namespace Fenrir
             {
                 return {sky->As<ColourSky>().colour, {}};
             }
-            const AssetHandle<Image> handle = sky->As<CubemapSky>().cubemap;
+            const bool cubemap = sky->Is<CubemapSky>();
+            const AssetHandle<Image> handle = cubemap ? sky->As<CubemapSky>().cubemap : sky->As<PanoramaSky>().image;
+            const float intensity = cubemap ? sky->As<CubemapSky>().intensity : sky->As<PanoramaSky>().intensity;
+            const float rotation = cubemap ? sky->As<CubemapSky>().rotation : sky->As<PanoramaSky>().rotation;
             const ImageData* data = store.TryGet(handle);
-            if (data == nullptr || data->shape != ImageShape::Cubemap || data->pixels.empty())
+            if (const std::string problem = SkyImageProblem(handle, data, sky->Type()); !problem.empty())
             {
-                if (state.skyCubemaps.ShouldLog(handle))
+                if (state.skyImages.ShouldLog(handle))
                 {
-                    state.app->Logger()->Warn(
-                        "FenrirRenderer: the active scene's Sky names {}, so it is drawn dark grey",
-                        handle.IsEmpty()  ? std::string("no cubemap")
-                        : data == nullptr ? std::format("a stale cubemap ({})", handle.index)
-                                          : std::format("image {}, which is not a cubemap with pixels", handle.index));
+                    state.app->Logger()->Warn("FenrirRenderer: the active scene's {} names {}, so it is dark grey",
+                                              resource, problem);
                 }
                 return {};
             }
             const std::uint32_t revision = store.Revision(handle);
-            if (!state.scene->IsCubemapCurrent(KeyOf(handle), revision))
+            if (cubemap && !state.scene->IsCubemapCurrent(KeyOf(handle), revision))
             {
                 state.scene->PrepareCubemap(KeyOf(handle), revision, *data);
             }
-            return {ColourSky{}.colour, KeyOf(handle)};
+            else if (!cubemap && !state.scene->IsPanoramaCurrent(KeyOf(handle), revision))
+            {
+                state.scene->PreparePanorama(KeyOf(handle), revision, *data);
+            }
+            return {ColourSky{}.colour, KeyOf(handle), intensity, rotation};
         }
 
-        /** @brief The active scene's light: the first DirectionalLight, warned once if there are more, and ambient. */
-        Render::SceneLighting ReadLighting(Detail::RendererState& state, Scene& scene)
+        /** @brief Whether a light of `colour` times `intensity` reaching `range` can light anything. */
+        bool CanLight(const Colour& colour, float intensity, float range)
+        {
+            return range > 0.0f && intensity > 0.0f && (colour.r > 0.0f || colour.g > 0.0f || colour.b > 0.0f);
+        }
+
+        /**
+         * @brief Every PointLight and SpotLight of `scene` that can light anything, at its entity's world position, a
+         * spot pointing along its world -Z (ADR-0048), into `lights`: points first, then spots.
+         */
+        void ReadPunctualLights(Scene& scene, std::vector<Render::PunctualLight>& lights)
+        {
+            EntityList& entities = scene.GetEntityList();
+            const std::array<ComponentType, 1> points{ComponentType::Native<PointLight>()};
+            entities.ForEachWith(points, [&](std::uint32_t id) {
+                const Entity entity = entities.GetEntity(id);
+                const PointLight& light = entity.GetComponent<PointLight>();
+                if (!CanLight(light.colour, light.intensity, light.range))
+                {
+                    return;
+                }
+                Render::PunctualLight& out = lights.emplace_back();
+                out.kind = Render::LightKind::Point;
+                out.position = Math::Vec3(GetWorldMatrix(entity)[3]);
+                out.colour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                out.range = light.range;
+                out.castShadows = light.castShadows;
+                out.shadowNormalBias = std::max(light.shadowNormalBias, 0.0f);
+                out.shadowSlopeBias = std::max(light.shadowSlopeBias, 0.0f);
+            });
+            const std::array<ComponentType, 1> spots{ComponentType::Native<SpotLight>()};
+            entities.ForEachWith(spots, [&](std::uint32_t id) {
+                const Entity entity = entities.GetEntity(id);
+                const SpotLight& light = entity.GetComponent<SpotLight>();
+                if (!CanLight(light.colour, light.intensity, light.range))
+                {
+                    return;
+                }
+                const Math::Mat4 world = GetWorldMatrix(entity);
+                Render::PunctualLight& out = lights.emplace_back();
+                out.kind = Render::LightKind::Spot;
+                out.position = Math::Vec3(world[3]);
+                out.direction = glm::normalize(-Math::Vec3(world[2]));
+                out.colour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                out.range = light.range;
+                out.innerAngle = light.innerAngle;
+                out.outerAngle = light.outerAngle;
+                out.castShadows = light.castShadows;
+                out.shadowNormalBias = std::max(light.shadowNormalBias, 0.0f);
+                out.shadowSlopeBias = std::max(light.shadowSlopeBias, 0.0f);
+            });
+        }
+
+        /**
+         * @brief Every RectLight of `scene` that can light anything, centred on its entity's world position and
+         * spanning its world X and Y, facing its world -Z (ADR-0048), into `lights`.
+         */
+        void ReadRectLights(Scene& scene, std::vector<Render::RectLight>& lights)
+        {
+            EntityList& entities = scene.GetEntityList();
+            const std::array<ComponentType, 1> rects{ComponentType::Native<RectLight>()};
+            entities.ForEachWith(rects, [&](std::uint32_t id) {
+                const Entity entity = entities.GetEntity(id);
+                const RectLight& light = entity.GetComponent<RectLight>();
+                if (!CanLight(light.colour, light.intensity, light.range) || light.width <= 0.0f ||
+                    light.height <= 0.0f)
+                {
+                    return;
+                }
+                const Math::Mat4 world = GetWorldMatrix(entity);
+                Render::RectLight& out = lights.emplace_back();
+                out.position = Math::Vec3(world[3]);
+                out.right = glm::normalize(Math::Vec3(world[0]));
+                // Square to the right, so a sheared parent leaves it a rectangle.
+                const Math::Vec3 up = Math::Vec3(world[1]);
+                out.up = glm::normalize(up - out.right * glm::dot(up, out.right));
+                // It faces -(right x up). Under a mirroring parent that is its world +Z, so turn its width round: the
+                // rectangle is the same, and it faces its world -Z.
+                if (glm::dot(glm::cross(out.up, out.right), Math::Vec3(world[2])) > 0.0f)
+                {
+                    out.right = -out.right;
+                }
+                out.colour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                out.width = light.width;
+                out.height = light.height;
+                out.twoSided = light.twoSided;
+                out.range = light.range;
+                out.visibleSurface = light.visibleSurface;
+            });
+        }
+
+        /**
+         * @brief The active scene's light: the first DirectionalLight, warned once if there are more, its point, spot
+         * and rect lights, and `sky`, the sky it is lit by (ADR-0047): its SkyLight's, else its Sky, whatever each
+         * camera's background.
+         */
+        Render::SceneLighting ReadLighting(Detail::RendererState& state, Scene& scene, const SceneSky& sky)
         {
             Render::SceneLighting lighting;
-            const AmbientLight ambient =
-                scene.GetResource<AmbientLight>() != nullptr ? *scene.GetResource<AmbientLight>() : AmbientLight{};
-            lighting.ambient = Math::Vec3(ambient.colour.r, ambient.colour.g, ambient.colour.b) * ambient.intensity;
+            lighting.sky = sky.image;
+            lighting.skyColour = Math::Vec3(sky.colour.r, sky.colour.g, sky.colour.b);
+            lighting.skyIntensity = sky.intensity;
+            lighting.skyRotation = sky.rotation;
 
             EntityList& entities = scene.GetEntityList();
             const std::array<ComponentType, 1> lights{ComponentType::Native<DirectionalLight>()};
@@ -306,6 +479,12 @@ namespace Fenrir
                 const Math::Mat4 world = GetWorldMatrix(entity);
                 lighting.lightDirection = glm::normalize(-Math::Vec3(world[2]));
                 lighting.lightColour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                // A light that lights nothing casts nothing (ADR-0050).
+                lighting.shadows.enabled = light.castShadows && light.shadowDistance > 0.0f &&
+                                           glm::dot(lighting.lightColour, lighting.lightColour) > 0.0f;
+                lighting.shadows.distance = light.shadowDistance;
+                lighting.shadows.normalBias = std::max(light.shadowNormalBias, 0.0f);
+                lighting.shadows.slopeBias = std::max(light.shadowSlopeBias, 0.0f);
             });
             if (found > 1 && !state.loggedLights)
             {
@@ -314,6 +493,8 @@ namespace Fenrir
                                           "is used",
                                           found);
             }
+            ReadPunctualLights(scene, lighting.lights);
+            ReadRectLights(scene, lighting.rectLights);
             return lighting;
         }
 
@@ -531,11 +712,21 @@ namespace Fenrir
                 else
                 {
                     view.background = sky.colour;
-                    view.sky = sky.cubemap;
+                    view.sky = sky.image;
                 }
                 view.target = KeyOf(resolved.image);
                 view.viewport = resolved.pixels;
                 view.drawDebug = camera.drawDebug;
+                view.exposure = camera.exposure;
+                view.tonemapper = ToCore(camera.tonemapper);
+                view.bloom = {camera.bloom.intensity, camera.bloom.radius};
+                view.ambientOcclusion = {camera.ambientOcclusion.enabled, camera.ambientOcclusion.radius,
+                                         camera.ambientOcclusion.intensity};
+                view.reflections = {camera.reflections.enabled, camera.reflections.intensity,
+                                    camera.reflections.maxDistance, camera.reflections.thickness,
+                                    camera.reflections.roughnessCutoff};
+                view.camera = id;
+                view.debugView = ToCore(camera.debugView);
                 candidates.push_back(candidate);
             });
 
@@ -775,8 +966,101 @@ namespace Fenrir
         }
 
         /**
-         * @brief The active scene's visible MeshRenderers as `frame`'s draws, preparing what they name, and the
-         * palettes their skinned draws read.
+         * @brief The material entity `id`'s renderer draws with, prepared: empty for the fallback material, logged once
+         * per handle.
+         */
+        AssetKey DrawnMaterial(Detail::RendererState& state, const AssetStore& store, std::uint32_t id,
+                               AssetHandle<Material> material)
+        {
+            if (PrepareMaterial(state, store, material))
+            {
+                return KeyOf(material);
+            }
+            if (state.fallbackMaterials.ShouldLog(material))
+            {
+                state.app->Logger()->Warn("FenrirRenderer: entity {} names {} material, so it is drawn with the "
+                                          "fallback material",
+                                          id, material.IsEmpty() ? "no" : "a stale");
+            }
+            return {};
+        }
+
+        /**
+         * @brief Prepares entity `id`'s mesh to draw, saying whether it could: false, logged once per handle, for a
+         * stale one.
+         */
+        bool PrepareDrawnMesh(Detail::RendererState& state, const AssetStore& store, std::uint32_t id,
+                              AssetHandle<Mesh> mesh)
+        {
+            if (PrepareMesh(*state.scene, store, mesh))
+            {
+                return true;
+            }
+            if (state.staleMeshes.ShouldLog(mesh))
+            {
+                state.app->Logger()->Warn("FenrirRenderer: entity {} names a stale mesh ({}), so it is not drawn", id,
+                                          mesh.index);
+            }
+            return false;
+        }
+
+        /**
+         * @brief The active scene's visible InstancedMeshRenderers as draws of their instance lists (ADR-0051),
+         * preparing what they name: each list uploaded when it is new or its revision has moved on.
+         */
+        void ReadInstancedDraws(Detail::RendererState& state, const AssetStore& store, Scene& scene,
+                                std::vector<Render::DrawRequest>& draws)
+        {
+            EntityList& entities = scene.GetEntityList();
+            const std::array<ComponentType, 1> renderers{ComponentType::Native<InstancedMeshRenderer>()};
+            entities.ForEachWith(renderers, [&](std::uint32_t id) {
+                const Entity entity = entities.GetEntity(id);
+                const InstancedMeshRenderer& renderer = entity.GetComponent<InstancedMeshRenderer>();
+                if (!renderer.visible || renderer.mesh.IsEmpty() || renderer.instances.IsEmpty() ||
+                    !PrepareDrawnMesh(state, store, id, renderer.mesh))
+                {
+                    return;
+                }
+                const InstanceListData* list = store.TryGet(renderer.instances);
+                if (list == nullptr)
+                {
+                    if (state.staleInstanceLists.ShouldLog(renderer.instances))
+                    {
+                        state.app->Logger()->Warn("FenrirRenderer: entity {} names a stale instance list ({}), so it "
+                                                  "is not drawn",
+                                                  id, renderer.instances.index);
+                    }
+                    return;
+                }
+                if (store.TryGet(renderer.mesh)->skin.has_value())
+                {
+                    if (state.skinnedListMeshes.ShouldLog(renderer.mesh))
+                    {
+                        state.app->Logger()->Warn("FenrirRenderer: entity {}'s InstancedMeshRenderer names mesh {}, "
+                                                  "which has skin data, so it is not drawn: instance lists draw rigid "
+                                                  "meshes only",
+                                                  id, renderer.mesh.index);
+                    }
+                    return;
+                }
+                const std::uint32_t revision = store.Revision(renderer.instances);
+                if (!state.scene->IsInstanceListCurrent(KeyOf(renderer.instances), revision))
+                {
+                    state.scene->PrepareInstanceList(KeyOf(renderer.instances), revision, *list);
+                }
+                Render::DrawRequest draw;
+                draw.mesh = KeyOf(renderer.mesh);
+                draw.material = DrawnMaterial(state, store, id, renderer.material);
+                draw.world = GetWorldMatrix(entity);
+                draw.instances = KeyOf(renderer.instances);
+                draw.castShadows = renderer.castShadows;
+                draws.push_back(draw);
+            });
+        }
+
+        /**
+         * @brief The active scene's visible MeshRenderers and InstancedMeshRenderers as `frame`'s draws, preparing what
+         * they name, and the palettes their skinned draws read.
          */
         void ReadDraws(Detail::RendererState& state, const AssetStore& store, Scene& scene, Render::SceneFrame& frame)
         {
@@ -793,28 +1077,14 @@ namespace Fenrir
                 {
                     return;
                 }
-                if (!PrepareMesh(*state.scene, store, renderer.mesh))
+                if (!PrepareDrawnMesh(state, store, id, renderer.mesh))
                 {
-                    if (state.staleMeshes.ShouldLog(renderer.mesh))
-                    {
-                        state.app->Logger()->Warn("FenrirRenderer: entity {} names a stale mesh ({}), so it is not "
-                                                  "drawn",
-                                                  id, renderer.mesh.index);
-                    }
                     return;
                 }
                 Render::DrawRequest draw;
                 draw.mesh = KeyOf(renderer.mesh);
-                if (PrepareMaterial(state, store, renderer.material))
-                {
-                    draw.material = KeyOf(renderer.material);
-                }
-                else if (state.fallbackMaterials.ShouldLog(renderer.material))
-                {
-                    state.app->Logger()->Warn("FenrirRenderer: entity {} names {} material, so it is drawn with the "
-                                              "fallback material",
-                                              id, renderer.material.IsEmpty() ? "no" : "a stale");
-                }
+                draw.material = DrawnMaterial(state, store, id, renderer.material);
+                draw.castShadows = renderer.castShadows;
                 const MeshData& data = *store.TryGet(renderer.mesh);
                 if (data.skin.has_value())
                 {
@@ -837,6 +1107,7 @@ namespace Fenrir
                 }
                 draws.push_back(draw);
             });
+            ReadInstancedDraws(state, store, scene, draws);
             // The compatibility verdicts of mesh entities no longer drawn skinned go.
             std::erase_if(state.skinPairings, [&](const auto& entry) { return !drawn.contains(entry.first); });
             frame.palettes = static_cast<std::uint32_t>(ranges.size());
@@ -980,8 +1251,13 @@ namespace Fenrir
             {
                 Scene& scene = app.GetActiveScene();
                 ReleaseStale(*state.scene, *state.draw2D, *store);
-                frame.lighting = ReadLighting(state, scene);
-                frame.views = ReadViews(state, *store, scene, ReadSky(state, *store, scene));
+                const SceneSky sky = ReadSky(state, *store, scene.GetResource<Sky>(), "Sky");
+                const SkyLight* skyLight = scene.GetResource<SkyLight>();
+                const SceneSky light = skyLight != nullptr ? ReadSky(state, *store, &skyLight->sky, "SkyLight") : sky;
+                frame.lighting = ReadLighting(state, scene, light);
+                frame.backgroundIntensity = sky.intensity;
+                frame.backgroundRotation = sky.rotation;
+                frame.views = ReadViews(state, *store, scene, sky);
                 ReadDraws(state, *store, scene, frame);
                 debug = ReadDebug(state, scene);
                 frame.time = static_cast<float>(state.time);
@@ -1009,11 +1285,13 @@ namespace Fenrir
             {
                 const Render::SceneStats scene = state.scene->TakeStats();
                 state.stats.draws = scene.draws;
+                state.stats.instances = scene.instances;
                 state.stats.passes = report.passesRun;
                 state.stats.uploads = scene.uploads;
                 state.stats.paletteBytesUploaded = scene.paletteBytes;
                 state.stats.distinctPalettesWritten = scene.palettes;
                 state.stats.skinnedDraws = scene.skinnedDraws;
+                state.stats.shadowDraws = scene.shadowDraws;
             }
         }
 
@@ -1183,8 +1461,16 @@ namespace Fenrir
             return Renderer(nullptr);
         }
         state->core = std::make_unique<Render::RendererCore>(std::move(made), *state->surface);
-        auto scene =
-            std::make_unique<Render::SceneRenderer>(state->core->Device(), *app.Logger(), SupportedMsaa(app, config));
+        // The scene renderer holds the cascade count and map size in range, and the shadow pools each map size to
+        // their kind's least.
+        const Render::CascadeConfig cascades{config.shadowCascades, config.shadowMapSize,
+                                             std::clamp(config.shadowSplitLambda, 0.0f, 1.0f)};
+        const Render::ShadowBudgetConfig spotShadows{config.spotShadowBudget, config.spotShadowMapSize};
+        const Render::ShadowBudgetConfig pointShadows{config.pointShadowBudget, config.pointShadowMapSize};
+        auto scene = std::make_unique<Render::SceneRenderer>(
+            state->core->Device(), *app.Logger(), SupportedMsaa(app, config), config.automaticInstancing,
+            config.computeSkinning, cascades, spotShadows, pointShadows);
+        scene->SetClusteredLights(config.clusteredLights);
         state->scene = scene.get();
         // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
         // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).
@@ -1228,6 +1514,46 @@ namespace Fenrir
             return Vsync::Off;
         }
         return FromDevice(m_state->core->Device().SetVsync(ToDevice(mode)));
+    }
+
+    void Renderer::SetAutomaticInstancing(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetAutomaticInstancing(on);
+        }
+    }
+
+    void Renderer::SetComputeSkinning(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetComputeSkinning(on);
+        }
+    }
+
+    void Renderer::SetClusteredLights(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetClusteredLights(on);
+        }
+    }
+
+    void Renderer::SetSpotShadowBudget(std::uint32_t budget)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetSpotShadowBudget(budget);
+        }
+    }
+
+    void Renderer::SetPointShadowBudget(std::uint32_t budget)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetPointShadowBudget(budget);
+        }
     }
 
     std::optional<Math::AABB> Renderer::GetWorldBounds(const Entity& entity) const
@@ -1404,6 +1730,31 @@ namespace Fenrir
     std::optional<Math::AABB> Renderer::GetWorldBounds(App& app, const Entity& entity)
     {
         return Renderer(InstalledState(app)).GetWorldBounds(entity);
+    }
+
+    void Renderer::SetAutomaticInstancing(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetAutomaticInstancing(on);
+    }
+
+    void Renderer::SetComputeSkinning(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetComputeSkinning(on);
+    }
+
+    void Renderer::SetClusteredLights(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetClusteredLights(on);
+    }
+
+    void Renderer::SetSpotShadowBudget(App& app, std::uint32_t budget)
+    {
+        Renderer(InstalledState(app)).SetSpotShadowBudget(budget);
+    }
+
+    void Renderer::SetPointShadowBudget(App& app, std::uint32_t budget)
+    {
+        Renderer(InstalledState(app)).SetPointShadowBudget(budget);
     }
 
     RendererStats Renderer::Stats(App& app)

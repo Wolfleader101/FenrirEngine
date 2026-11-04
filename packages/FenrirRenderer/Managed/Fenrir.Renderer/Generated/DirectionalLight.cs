@@ -10,6 +10,14 @@ namespace Fenrir.Renderer;
 /// The light shining along its entity's world -Z (ADR-0024). The renderer uses the first one in the active scene and
 /// warns once if there are more.
 /// </summary>
+/// <remarks>
+/// It casts shadows unless `castShadows` is off (ADR-0050): each camera gets cascaded shadow maps out to
+/// `shadowDistance`, up to RendererConfig::shadowCascades of them, split by RendererConfig::shadowSplitLambda, blended
+/// across their boundaries and fading out at the last. Each cascade is snapped to whole texels of its map, so its
+/// shadows hold still as the camera moves and turns. Edges are filtered by 16 rotated taps of hardware depth
+/// comparison. The biases trade shadow acne (speckled self-shadowing on lit faces) against peter-panning (shadows
+/// coming loose from their casters): raise them for acne, lower them for gaps.
+/// </remarks>
 [NativeComponent("Fenrir.Renderer.DirectionalLight")]
 public partial struct DirectionalLight : IComponent
 {
@@ -17,6 +25,23 @@ public partial struct DirectionalLight : IComponent
     public Colour Colour = new() { R = 1, G = 1, B = 1, A = 1 };
     /// <summary>A plain multiplier on the colour.</summary>
     public float Intensity = 1;
+    /// <summary>Whether it casts shadows: on by default.</summary>
+    public bool CastShadows = true;
+    /// <summary>
+    /// How far from each camera, along its view, its shadows reach, in world units: 100 by default. Past it, everything
+    /// is lit. The nearer it is, the sharper the shadows within it.
+    /// </summary>
+    public float ShadowDistance = 100;
+    /// <summary>
+    /// How far a lit point moves out along its normal before its shadow is looked up, in shadow-map texels (each
+    /// cascade's own size): 1 by default.
+    /// </summary>
+    public float ShadowNormalBias = 1;
+    /// <summary>
+    /// How far it moves towards the light, in texels per unit of slope (the tangent of the angle between its normal and
+    /// the light, held between 0.1 and 8): 2 by default.
+    /// </summary>
+    public float ShadowSlopeBias = 2;
 
     public DirectionalLight()
     {

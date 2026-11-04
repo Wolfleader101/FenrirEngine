@@ -8,4 +8,5 @@ public enum SkyType : byte
 {
     Colour = 0,
     Cubemap = 1,
+    Panorama = 2,
 }

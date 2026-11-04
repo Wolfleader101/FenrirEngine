@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -8,6 +9,8 @@
 
 #include "Backend/Null/NullDevice.hpp"
 #include "Core/RendererCore.hpp"
+#include "Core/SceneHistory.hpp"
+#include "Core/SceneRenderer.hpp"
 #include "Core/TransientPool.hpp"
 #include "Facade/RendererState.hpp"
 #include "FenrirRenderer/Renderer.hpp"
@@ -50,6 +53,12 @@ namespace Fenrir
         [[nodiscard]] static const std::vector<std::string>& StaleUses(const Graphics::GraphicsDevice& device)
         {
             return Null(device).m_staleUses;
+        }
+
+        /** @brief Sets what the null device behind `device` reports it can do, from the next frame's use of it. */
+        static void SetFeatures(Graphics::GraphicsDevice& device, Graphics::DeviceFeatures features)
+        {
+            dynamic_cast<Graphics::NullDevice&>(device).m_features = features;
         }
 
         /** @brief How many times the device presented. */
@@ -99,6 +108,29 @@ namespace Fenrir
             return TransientCount(core.m_transients);
         }
 
+        /** @brief One camera's reflection textures, kept across frames (ADR-0056). */
+        struct ReflectionTextures
+        {
+            /** @brief Its camera's entity id. */
+            std::uint32_t camera = 0;
+            Graphics::TextureHandle history;
+            /** @brief The pyramid the last frame drew, then last frame's other one. */
+            Graphics::TextureHandle pyramid;
+            Graphics::TextureHandle previousPyramid;
+        };
+
+        /** @brief Every camera's reflection textures the renderer keeps, by camera, on any backend. */
+        [[nodiscard]] static std::vector<ReflectionTextures> Reflections(const Renderer& renderer)
+        {
+            std::vector<ReflectionTextures> textures;
+            for (const auto& [camera, entry] : renderer.m_state->scene->m_sceneHistory->m_entries)
+            {
+                textures.push_back(
+                    {camera, entry.history, entry.pyramids.at(entry.current), entry.pyramids.at(1 - entry.current)});
+            }
+            return textures;
+        }
+
         /** @brief The renderer core a valid Renderer owner draws with. */
         [[nodiscard]] static Render::RendererCore& Core(const Renderer& renderer)
         {
@@ -142,6 +174,12 @@ namespace Fenrir
             return found == nullptr ? std::string() : found->label;
         }
 
+        /** @brief The label a buffer was made with. */
+        [[nodiscard]] static std::string Label(const Graphics::GraphicsDevice& device, Graphics::BufferHandle buffer)
+        {
+            const auto* found = const_cast<Graphics::NullDevice&>(Null(device)).m_buffers.Find(buffer);
+            return found == nullptr ? std::string() : found->label;
+        }
         /** @brief The label a texture was made with. */
         [[nodiscard]] static std::string Label(const Graphics::GraphicsDevice& device, Graphics::TextureHandle texture)
         {
@@ -233,25 +271,61 @@ namespace Fenrir
         }
 
         /**
-         * @brief The SceneColor texture of `width` by `height` pixels the last frame drew into, on any backend, for a
-         * frame with several views; any size when both are 0. Empty if there is none.
+         * @brief The view-space normal target the last frame's DepthPrepass drew into (the transient pool's RG16F
+         * texture, ADR-0049), on any backend; empty if there is none.
          */
-        [[nodiscard]] static Graphics::TextureHandle SceneColour(const Renderer& renderer, std::uint32_t width,
-                                                                 std::uint32_t height)
+        [[nodiscard]] static Graphics::TextureHandle SceneNormals(const Renderer& renderer)
         {
             const Render::RendererCore& core = Core(renderer);
-            // The set the last frame took from.
             for (const auto& entry : core.m_transients.m_sets.at(core.m_transients.m_current))
             {
                 const auto* desc = std::get_if<Graphics::TextureDesc>(&entry.desc);
-                if (desc != nullptr && desc->format == Graphics::TextureFormat::Rgba16Float &&
-                    (width == 0 || (desc->width == width && desc->height == height)) &&
+                if (desc != nullptr && desc->format == Graphics::TextureFormat::Rg16Float &&
                     core.m_device->IsLive(entry.texture))
                 {
                     return entry.texture;
                 }
             }
             return {};
+        }
+
+        /**
+         * @brief The reflection hit targets (ADR-0056) the last frame's ReflectionTrace passes drew into, one a
+         * reflecting view, in the order they ran, on any backend.
+         */
+        [[nodiscard]] static std::vector<Graphics::TextureHandle> ReflectionHits(const Renderer& renderer)
+        {
+            return renderer.m_state->scene->m_reflectionTrace->m_drawn;
+        }
+
+        /**
+         * @brief The SceneColor texture of `width` by `height` pixels the last frame drew into, on any backend, for a
+         * frame with several views; the largest when both are 0, since a view's bloom levels (RGBA16F too) are at most
+         * half its size. Empty if there is none. Reflection hit targets, RGBA16F at the view's size too, are passed
+         * over.
+         */
+        [[nodiscard]] static Graphics::TextureHandle SceneColour(const Renderer& renderer, std::uint32_t width,
+                                                                 std::uint32_t height)
+        {
+            const Render::RendererCore& core = Core(renderer);
+            const std::vector<Graphics::TextureHandle> hits = ReflectionHits(renderer);
+            Graphics::TextureHandle found;
+            std::uint64_t foundArea = 0;
+            // The set the last frame took from.
+            for (const auto& entry : core.m_transients.m_sets.at(core.m_transients.m_current))
+            {
+                const auto* desc = std::get_if<Graphics::TextureDesc>(&entry.desc);
+                const std::uint64_t area = desc == nullptr ? 0 : std::uint64_t{desc->width} * desc->height;
+                if (desc != nullptr && desc->format == Graphics::TextureFormat::Rgba16Float &&
+                    (width == 0 || (desc->width == width && desc->height == height)) && area > foundArea &&
+                    core.m_device->IsLive(entry.texture) &&
+                    std::find(hits.begin(), hits.end(), entry.texture) == hits.end())
+                {
+                    found = entry.texture;
+                    foundArea = area;
+                }
+            }
+            return found;
         }
     };
 } // namespace Fenrir

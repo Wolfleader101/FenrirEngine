@@ -1,9 +1,9 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 // RendererDemo's stripes shader: diagonal stripes of two colours scrolling with the frame's time, shaded by the
-// directional light with a simple wrap-around term. Lighting is the shader's own choice (ADR-0024), and its parameters
-// are its own MaterialParams block in set 2.
-#include "Fenrir/Frame.glsl"
+// directional light with a simple wrap-around term, plus the scene's Sky's diffuse light from Fenrir/Lighting.glsl.
+// Lighting is the shader's own choice (ADR-0024, ADR-0048), and its parameters are its own MaterialParams block in set 2.
+#include "Fenrir/Lighting.glsl"
 
 #pragma fenrir default(first, 0.9, 0.75, 0.1, 1.0)
 #pragma fenrir default(second, 0.05, 0.05, 0.05, 1.0)
@@ -29,5 +29,6 @@ void main()
     vec4 base = fract(phase) < 0.5 ? material.first : material.second;
     vec3 n = normalize(vNormal);
     float wrap = dot(n, -frame.lightDirection.xyz) * 0.5 + 0.5;
-    outColour = vec4(base.rgb * (frame.lightColour.rgb * wrap + frame.ambient.rgb), 1.0);
+    vec3 sky = FenrirSkyIrradiance(n) * frame.skyLight.x;
+    outColour = vec4(base.rgb * (frame.lightColour.rgb * wrap + sky), 1.0);
 }

@@ -4,7 +4,8 @@
 # own tests. The no-op rules (NoOps.cpp) are the rules tests, with no .NET; the model SpawnModel is given is loaded from
 # the same fixtures.
 fenrir_scripting_rules_tests(Renderer SOURCES NoOps.cpp)
-fenrir_scripting_tests(Renderer SOURCES RendererScriptingApp.hpp Shapes.cpp Drawing.cpp Picking.cpp SpawnModel.cpp)
+fenrir_scripting_tests(Renderer SOURCES RendererScriptingApp.hpp Shapes.cpp Drawing.cpp Picking.cpp SpawnModel.cpp
+    Lighting.cpp)
 fenrir_script_fixture(Renderer USES Input Assets)
 # RendererProbe, from the renderer's own tests, and the renderer's sources it reads.
 target_include_directories(FenrirRendererScriptingTests PRIVATE ../../Tests ../../src)

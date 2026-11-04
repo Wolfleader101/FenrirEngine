@@ -68,6 +68,23 @@ TEST_CASE("A shader container reads back as it was written", "[assets][shaders]"
     REQUIRE(Fenrir::WriteShaderContainer(*read.container) == bytes);
 }
 
+TEST_CASE("A compute program's container, its one stage a compute stage, reads back as it was written",
+          "[assets][shaders]")
+{
+    Fenrir::ShaderContainer written;
+    written.name = "HandMadeCompute";
+    Fenrir::ShaderVariant variant;
+    variant.stages.push_back({Fenrir::ShaderStage::Compute, {0x07230203u, 7u}, {0x07230203u, 8u}});
+    variant.bindings = {{1, 0, Fenrir::ShaderBindingKind::StorageBuffer, "Source", 4}};
+    written.variants.push_back(std::move(variant));
+
+    const Fenrir::ShaderContainerResult read = Fenrir::ReadShaderContainer(Fenrir::WriteShaderContainer(written));
+
+    INFO(read.diagnostic);
+    REQUIRE(read.Ok());
+    REQUIRE(*read.container == written);
+}
+
 TEST_CASE("A shader container starts with its magic and format version", "[assets][shaders]")
 {
     const std::vector<std::byte> bytes = Fenrir::WriteShaderContainer(HandMadeContainer());

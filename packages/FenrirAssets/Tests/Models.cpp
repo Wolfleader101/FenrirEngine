@@ -116,6 +116,8 @@ namespace
             parameters.push_back({"metallicRoughnessTexture", Type::Texture, {}, Fenrir::DefaultTexture::White});
             parameters.push_back({"normalTexture", Type::Texture, {}, Fenrir::DefaultTexture::Normal});
             parameters.push_back({"emissiveTexture", Type::Texture, {}, Fenrir::DefaultTexture::Black});
+            parameters.push_back({"emissiveStrength", Type::Float, {1.0f}});
+            parameters.push_back({"occlusionTexture", Type::Texture, {}, Fenrir::DefaultTexture::White});
         }
         Fenrir::ShaderContainer container;
         container.name = name;
@@ -244,6 +246,45 @@ TEST_CASE("Each format of the scene gives the same meshes", "[assets][models]")
     }
 }
 
+TEST_CASE("A model's tangents and their handedness are kept, and a mesh without them has no tangent stream",
+          "[assets][models]")
+{
+    // fixtures/models/make_fixtures.py's write_tangents: glTF writes the handedness in w, FBX a binormal it comes from.
+    const char* file = GENERATE("tangents.gltf", "tangents.fbx");
+    CAPTURE(file);
+    AssetsApp test;
+    const Fenrir::Model& model = LoadScene(test, file);
+    const auto meshOf = [&](const char* name) -> const Fenrir::MeshData& {
+        const Fenrir::ModelNode& node = FindNode(model, name);
+        REQUIRE(node.meshes.size() == 1);
+        const Fenrir::MeshData* mesh = test.store.TryGet(node.meshes[0].mesh);
+        REQUIRE(mesh != nullptr);
+        return *mesh;
+    };
+
+    const Fenrir::MeshData& plain = meshOf("Plain");
+    INFO("Plain's tangents run along +X with handedness +1, one per vertex");
+    REQUIRE(plain.tangents.size() == plain.positions.size());
+    for (const Fenrir::Math::Vec4& tangent : plain.tangents)
+    {
+        REQUIRE(Near(tangent, {1.0f, 0.0f, 0.0f, 1.0f}));
+    }
+
+    const Fenrir::MeshData& mirrored = meshOf("Mirrored");
+    INFO("Mirrored's U runs the other way: its tangents run along -X with handedness -1");
+    REQUIRE(mirrored.tangents.size() == mirrored.positions.size());
+    for (const Fenrir::Math::Vec4& tangent : mirrored.tangents)
+    {
+        REQUIRE(Near(tangent, {-1.0f, 0.0f, 0.0f, -1.0f}));
+    }
+
+    INFO("Bare has normals and UVs but no tangents in its file, and none are generated");
+    const Fenrir::MeshData& bare = meshOf("Bare");
+    REQUIRE(bare.normals.size() == bare.positions.size());
+    REQUIRE(bare.uv0.size() == bare.positions.size());
+    REQUIRE(bare.tangents.empty());
+}
+
 TEST_CASE("Each format of the scene maps its materials onto the built-ins", "[assets][models][materials]")
 {
     const Format format = GENERATE(gltf, glb, fbx, obj);
@@ -337,6 +378,59 @@ TEST_CASE("glTF's own defaults are written for factors a file leaves out", "[ass
     REQUIRE(Near(test.store.TryGetOverrideFloat(lost, "metallic").value(), 1.0f));
     REQUIRE(Near(test.store.TryGetOverrideFloat(lost, "roughness").value(), 1.0f));
     REQUIRE(Near(test.store.TryGetOverrideVector4(lost, "emissive").value(), {0.0f, 0.0f, 0.0f, 1.0f}));
+    INFO("and without KHR_materials_emissive_strength, an emissive strength of 1");
+    REQUIRE(Near(test.store.TryGetOverrideFloat(lost, "emissiveStrength").value(), 1.0f));
+}
+
+TEST_CASE("A glTF material's occlusion texture and emissive strength reach its material", "[assets][models][materials]")
+{
+    AssetsApp test;
+    RegisterStandIn(test, "builtin:lit", true);
+    const Fenrir::Model& model = LoadScene(test, "occlusion-emissive.gltf");
+    const AssetHandle<Fenrir::Material> shaded = model.materials.at(0);
+
+    INFO("the occlusion texture is the embedded 2x2 checker, read as linear data");
+    const std::optional<Fenrir::MaterialTexture> occlusion = test.store.TryGetTexture(shaded, "occlusionTexture");
+    REQUIRE(occlusion.has_value());
+    const Fenrir::ImageData* checker = test.store.TryGet(occlusion->image);
+    REQUIRE(checker != nullptr);
+    REQUIRE(checker->width == 2);
+    REQUIRE(checker->colourSpace == Fenrir::ColourSpace::Linear);
+    INFO("KHR_materials_emissive_strength's 4 is the emissive strength, and the emissive colour is the file's own");
+    REQUIRE(Near(test.store.TryGetFloat(shaded, "emissiveStrength").value(), 4.0f));
+    REQUIRE(Near(test.store.TryGetVector4(shaded, "emissive").value(), {0.5f, 0.25f, 1.0f, 1.0f}));
+    INFO("nothing was warned: both are built-in parameters");
+    REQUIRE(test.warnings->empty());
+}
+
+TEST_CASE("A glTF's KHR_lights_punctual point and spot lights reach their nodes, and a directional one is left out",
+          "[assets][models][lights]")
+{
+    AssetsApp test;
+    // lights.gltf, hand-written: three nodes, each carrying one light and nothing else.
+    const Fenrir::Model& model = LoadScene(test, "lights.gltf");
+
+    INFO("the point light keeps its colour, intensity and range");
+    const Fenrir::ModelNode& lamp = FindNode(model, "Lamp");
+    REQUIRE(lamp.light.has_value());
+    REQUIRE(lamp.light->kind == Fenrir::ModelLightKind::Point);
+    REQUIRE(Near(lamp.light->colour, {1.0f, 0.5f, 0.25f}));
+    REQUIRE(Near(lamp.light->intensity, 3.0f));
+    REQUIRE(Near(lamp.light->range, 7.0f));
+
+    INFO("the spot light keeps its cone, and its range is 0: the file gives none");
+    const Fenrir::ModelNode& torch = FindNode(model, "Torch");
+    REQUIRE(torch.light.has_value());
+    REQUIRE(torch.light->kind == Fenrir::ModelLightKind::Spot);
+    REQUIRE(Near(torch.light->colour, {1.0f, 1.0f, 1.0f}));
+    REQUIRE(Near(torch.light->intensity, 20.0f));
+    REQUIRE(Near(torch.light->range, 0.0f));
+    REQUIRE(Near(torch.light->innerAngle, 0.2f));
+    REQUIRE(Near(torch.light->outerAngle, 0.6f));
+
+    INFO("the directional light's node is kept, without a light, and the load says why");
+    REQUIRE_FALSE(FindNode(model, "Sun").light.has_value());
+    REQUIRE(Contains(*test.warnings, "directional light"));
 }
 
 TEST_CASE("Imported materials name the built-ins before the renderer registers them", "[assets][models][materials]")

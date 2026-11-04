@@ -95,6 +95,66 @@ TEST_CASE("A pass reading what a pass in a later stage writes runs after it", "[
     REQUIRE(Names(graph, compiled.order) == std::vector<std::string>{"Mirror Output", "Window Opaque", "Window Debug"});
 }
 
+TEST_CASE("A pass sampling what an imported texture held before the frame runs before a later stage writes it",
+          "[renderer][graph]")
+{
+    RenderGraph graph;
+    const GraphResource backbuffer = graph.ImportTexture("Backbuffer", TextureHandle{1, 1}, Target());
+    const GraphResource scene = graph.CreateTexture("SceneColor", Target());
+    const GraphResource history = graph.ImportTexture("SceneHistory", TextureHandle{2, 1}, Target());
+    // Opaque reflects last frame's colour, which a PostProcess pass then replaces with this frame's.
+    graph.AddPass(
+        "Opaque", RenderStage::Opaque, QueueKind::Graphics,
+        [&](PassBuilder& pass) {
+            pass.SamplePrevious(history);
+            pass.ColourAttachment(scene);
+        },
+        nullptr);
+    graph.AddPass(
+        "SceneHistory", RenderStage::PostProcess, QueueKind::Graphics,
+        [&](PassBuilder& pass) {
+            pass.Sample(scene);
+            pass.ColourAttachment(history);
+        },
+        nullptr);
+    graph.AddPass(
+        "Output", RenderStage::Output, QueueKind::Graphics,
+        [&](PassBuilder& pass) {
+            pass.Sample(scene);
+            pass.ColourAttachment(backbuffer);
+        },
+        nullptr);
+
+    const GraphCompilation compiled = graph.Compile();
+
+    INFO("no cycle: Opaque reads the old contents first, then the history is written");
+    REQUIRE(compiled.Ok());
+    REQUIRE(Names(graph, compiled.order) == std::vector<std::string>{"Opaque", "SceneHistory", "Output"});
+}
+
+TEST_CASE("Sampling what a transient held before the frame is an error", "[renderer][graph]")
+{
+    RenderGraph graph;
+    const GraphResource backbuffer = graph.ImportTexture("Backbuffer", TextureHandle{1, 1}, Target());
+    const GraphResource transient = graph.CreateTexture("Scratch", Target());
+    graph.AddPass(
+        "Opaque", RenderStage::Opaque, QueueKind::Graphics,
+        [&](PassBuilder& pass) {
+            pass.SamplePrevious(transient);
+            pass.ColourAttachment(backbuffer);
+        },
+        nullptr);
+    DrawOnto(graph, "Later", RenderStage::PostProcess, transient);
+
+    const GraphCompilation compiled = graph.Compile();
+
+    INFO("a transient holds nothing from before the frame: one error naming the pass and the resource");
+    REQUIRE_FALSE(compiled.Ok());
+    REQUIRE(compiled.errors.size() == 1);
+    REQUIRE(compiled.errors[0].find("Opaque") != std::string::npos);
+    REQUIRE(compiled.errors[0].find("Scratch") != std::string::npos);
+}
+
 TEST_CASE("A pass whose writes nothing reads is culled", "[renderer][graph]")
 {
     RenderGraph graph;

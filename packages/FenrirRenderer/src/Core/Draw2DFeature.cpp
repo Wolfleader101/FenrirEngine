@@ -10,7 +10,9 @@
 #include <string_view>
 #include <utility>
 
+#include "Core/BlockRing.hpp"
 #include "Core/FrameRingBuffer.hpp"
+#include "Core/UniformBlocks.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
 namespace Fenrir::Render
@@ -21,9 +23,6 @@ namespace Fenrir::Render
 
         /** @brief The binding set of a 2D shader's command: its parameter block, then its textures. */
         constexpr std::uint32_t CommandSet = 1;
-
-        /** @brief Uniform blocks are bound at multiples of this, the largest alignment GL implementations ask for. */
-        constexpr std::size_t UniformAlignment = 256;
 
         /** @brief The target block, as `Fenrir/2D.glsl` declares it (std140). */
         struct TargetBlock
@@ -52,8 +51,8 @@ namespace Fenrir::Render
             Graphics::BlendMode::None};
 
         /** @brief Each TextureFormat's name, for the log, in its order. */
-        constexpr std::array<std::string_view, 6> formatNames{"RGBA8", "RGBA8 sRGB", "RGBA16F",
-                                                              "depth", "RGBA32F",    "R8"};
+        constexpr std::array<std::string_view, 8> formatNames{"RGBA8",   "RGBA8 sRGB", "RGBA16F", "depth",
+                                                              "RGBA32F", "R8",         "RG16F",   "R32F"};
 
         /** @brief The default texture of the texture parameter `name`; white if the variant does not list it. */
         DefaultTexture DefaultOf(const ShaderVariant& variant, std::string_view name)
@@ -414,7 +413,7 @@ namespace Fenrir::Render
                     entry.offset = m_parameterBytes.size();
                     entry.size = block.size();
                     m_parameterBytes.insert(m_parameterBytes.end(), block.begin(), block.end());
-                    m_parameterBytes.resize(AlignUp(m_parameterBytes.size(), UniformAlignment));
+                    m_parameterBytes.resize(AlignUp(m_parameterBytes.size(), UniformBlockAlignment));
                     m_parameterEntries.push_back({m_pendingGroups.size(), group.entries.size()});
                 }
                 group.entries.push_back(entry);

@@ -26,6 +26,34 @@ namespace Fenrir
         AssetHandle<Material> material;
         /** @brief False hides this entity only; its children are drawn as their own MeshRenderers say. */
         bool visible = true;
+        /**
+         * @brief Whether it is drawn into shadow maps: the sun's cascades and the shadowed spot and point lights'
+         * (ADR-0050). Only an `Opaque` or `Masked` material casts, a Masked one cut out by its alpha cutoff;
+         * `AlphaBlend` and `Additive` ones never do.
+         */
+        bool castShadows = true;
+    };
+
+    /**
+     * @brief Draws one mesh with one material many times, once per transform of an instance list, with no entity per
+     * copy (ADR-0051). Each copy is drawn at the entity's world matrix times its own transform, its colour multiplying
+     * the material's base colour in builtin:lit and builtin:unlit. The renderer uploads the list when it is new or its
+     * revision has moved on, so a list that never changes uploads once, however far the entity moves.
+     *
+     * One draw a pass, whatever the count: never merged with other items, and never culled, copy by copy or whole. A
+     * transparent material sorts the whole list by the entity's world position. An empty or stale mesh or list is
+     * skipped (a stale one logged once per handle), as is a mesh with skin data; an empty or stale material draws with
+     * the fallback material, as a MeshRenderer's does.
+     */
+    struct InstancedMeshRenderer
+    {
+        AssetHandle<Mesh> mesh;
+        AssetHandle<Material> material;
+        AssetHandle<InstanceList> instances;
+        /** @brief Whether the copies are drawn into shadow maps, as a MeshRenderer's castShadows says. */
+        bool castShadows = true;
+        /** @brief False hides every copy; the entity's children are drawn as their own renderers say. */
+        bool visible = true;
     };
 
     /**
@@ -402,6 +430,145 @@ namespace Fenrir
     };
 
     /**
+     * @brief How a view's Output pass maps its linear HDR colour, after the exposure, into the [0, 1] its render target
+     * stores, which the target then encodes as sRGB (ADR-0049).
+     */
+    enum class Tonemapper : std::uint8_t
+    {
+        /** @brief Each channel clamped to [0, 1]: what is over 1 is lost. For tests and exact colours. */
+        None,
+        /**
+         * @brief AgX, as Blender and Filament fit it: bright colours desaturate towards white as they would on film,
+         * and mid grey shows a little brighter than with None. The default.
+         */
+        AgX,
+        /**
+         * @brief Khronos PBR Neutral: colours up to about 0.76 shown as they are (less a small offset in the darks),
+         * only the highlights compressed, so a material's base colour reads true.
+         */
+        PbrNeutral,
+        /** @brief ACES, through Stephen Hill's fit of its reference rendering and sRGB output: contrasty, saturated. */
+        Aces,
+    };
+
+    /**
+     * @brief A view's bloom (ADR-0049): the scene blurred over ever wider areas and mixed back in before the tonemap,
+     * so bright pixels bleed light into their surroundings. There is no threshold: everything blooms by the same
+     * share, and only what is bright shows it. The blur keeps the scene's energy, so bloom moves light, never adds it.
+     */
+    struct Bloom
+    {
+        /**
+         * @brief The share of the blur the view's colour is mixed with, from 0 to 1: 0.04 by default, a soft glow
+         * round what is several times brighter than its surroundings. 0 turns bloom off and costs nothing.
+         */
+        float intensity = 0.04f;
+        /**
+         * @brief How far the glow spreads, from 0 (the narrowest blur only, a few pixels) to 1 (the widest only, made
+         * at a sixty-fourth of the view's size). 0.7 by default.
+         */
+        float radius = 0.7f;
+    };
+
+    /**
+     * @brief A view's ambient occlusion (ADR-0049): ground-truth ambient occlusion (GTAO, after Intel's XeGTAO) from
+     * its depth prepass, darkening the sky's light where nearby geometry hides the sky from a surface, as in creases,
+     * corners and under objects resting on the ground. It darkens the sky's diffuse light, and its specular light by a
+     * specular occlusion made from it, never the directional, point, spot or rect lights. Transparent items take none.
+     */
+    struct AmbientOcclusion
+    {
+        /** @brief Whether the view has it: off by default, and off costs nothing. */
+        bool enabled = false;
+        /**
+         * @brief How far round a surface other surfaces occlude it, in world units (in the camera's own, if its entity
+         * is scaled): 0.5 by default. 0 or less turns it off.
+         */
+        float radius = 0.5f;
+        /**
+         * @brief How dark the occlusion is: 1 by default, 0 none (and no cost), and above 1 darker. It raises the
+         * occlusion to a power, so an unoccluded surface stays unoccluded however strong it is.
+         */
+        float intensity = 1.0f;
+    };
+
+    /**
+     * @brief A view's screen-space reflections (ADR-0056): what is on screen mirrored in smooth surfaces, from the
+     * previous frame's colour, over the sky's reflection. Each pixel's mirror ray is traced through a hierarchical-Z
+     * pyramid of the view's depth, from its vertex normal, and every material lighting through `Fenrir/Lighting.glsl`
+     * takes the colour it hit by how sure the hit is and how smooth the material is. They catch only what is on screen:
+     * what is off it, or hidden, falls back to the sky's reflection. They show last frame's colour, so a moving
+     * object's reflection trails it by a frame.
+     */
+    struct Reflections
+    {
+        /**
+         * @brief Whether the view has them: off by default, and off costs nothing. On, the view keeps about 44 MB at
+         * 1920 x 1080 across frames, and 17 MB more within each frame.
+         */
+        bool enabled = false;
+        /** @brief How much of a sure reflection replaces the sky's: 1 by default, 0 turns them off. */
+        float intensity = 1.0f;
+        /** @brief How far a mirror ray is traced, in world units: 50 by default. Reflections fade out towards it. */
+        float maxDistance = 50.0f;
+        /**
+         * @brief How far behind a surface, in view depth (world units), a ray may pass and still hit it: 0.5 by
+         * default. Thicker catches thin things seen edge on; thinner stops rays catching on what they pass behind.
+         */
+        float thickness = 0.5f;
+        /**
+         * @brief The roughness at and above which a surface reflects only the sky: 0.6 by default, fading in from 0.1
+         * below it, as a blurred screen is a worse reflection than the sky's own.
+         */
+        float roughnessCutoff = 0.6f;
+    };
+
+    /** @brief What a view shows instead of its lit colour, to look at one of its inputs. */
+    enum class CameraDebugView : std::uint8_t
+    {
+        /** @brief The lit scene, tonemapped: the default. */
+        None,
+        /**
+         * @brief Its ambient occlusion as grey, white unoccluded, with no exposure or tonemap; black where the camera's
+         * ambient occlusion is off.
+         */
+        AmbientOcclusion,
+        /**
+         * @brief Its lit colour, each pixel tinted by the sun's shadow cascade it reads (ADR-0050): red, green, blue
+         * and yellow from the nearest, untinted past the last or without shadows.
+         */
+        ShadowCascades,
+        /**
+         * @brief The sun's shadow atlas for this view as grey, its cascades side by side from the nearest, white
+         * nearest the sun, with no exposure or tonemap; black where nothing casts.
+         */
+        ShadowAtlas,
+        /**
+         * @brief The frame's spot shadow atlas as grey (ADR-0050), each shadowed spot light's tile along the rows from
+         * the top left, nearest the view first, white nearest its light, with no exposure or tonemap; black where no
+         * spot light casts.
+         */
+        SpotShadowAtlas,
+        /**
+         * @brief Each lit pixel as the heat of how many lights it loops over (ADR-0049), its cluster's or, unclustered,
+         * every light: black for none, then blue at 1, cyan at 4, green at 16, yellow at 64 and red at 256, the most a
+         * cluster lists, on a log scale, exposed and tonemapped.
+         */
+        LightClusters,
+        /**
+         * @brief Its screen-space reflections (ADR-0056): at each pixel, the colour its mirror ray hit, from last
+         * frame, times how sure the hit is, exposed and tonemapped; black where nothing is reflected or the camera's
+         * reflections are off. It is what a mirror there would blend, sharp: a material's roughness blurs and fades it.
+         */
+        Reflections,
+        /**
+         * @brief How sure each pixel's reflection hit is, as grey from black (no hit) to white, with no exposure or
+         * tonemap; black where the camera's reflections are off.
+         */
+        ReflectionConfidence,
+    };
+
+    /**
      * @brief Makes a view of the active scene from its entity, looking along the entity's local -Z with +Y up
      * (ADR-0026). Plain data. Every enabled camera in the active scene draws one view a frame, into its viewport of its
      * render target. Views into one target draw by `order`, lowest first, and ties by entity id, logged once. Each view
@@ -426,11 +593,33 @@ namespace Fenrir
          * belong to the window, not the view, and draw either way.
          */
         bool drawDebug = true;
+        /**
+         * @brief The view's exposure in EV stops: its Output pass multiplies the linear colour by 2^exposure before
+         * the tonemapper, so each +1 doubles it. 0 by default.
+         */
+        float exposure = 0.0f;
+        /** @brief How the view's Output pass maps its HDR colour into what its target stores (ADR-0049). */
+        Tonemapper tonemapper = Tonemapper::AgX;
+        /** @brief How the view's bright pixels bleed into their surroundings before the tonemap. */
+        Bloom bloom;
+        /** @brief How nearby geometry darkens the sky's light in the view. */
+        AmbientOcclusion ambientOcclusion;
+        /** @brief How smooth surfaces in the view mirror what is on screen. */
+        Reflections reflections;
+        /** @brief What the view shows: its lit colour, or one of its inputs. */
+        CameraDebugView debugView = CameraDebugView::None;
     };
 
     /**
      * @brief The light shining along its entity's world -Z (ADR-0024). The renderer uses the first one in the active
      * scene and warns once if there are more.
+     *
+     * It casts shadows unless `castShadows` is off (ADR-0050): each camera gets cascaded shadow maps out to
+     * `shadowDistance`, up to RendererConfig::shadowCascades of them, split by RendererConfig::shadowSplitLambda,
+     * blended across their boundaries and fading out at the last. Each cascade is snapped to whole texels of its map,
+     * so its shadows hold still as the camera moves and turns. Edges are filtered by 16 rotated taps of hardware
+     * depth comparison. The biases trade shadow acne (speckled self-shadowing on lit faces) against peter-panning
+     * (shadows coming loose from their casters): raise them for acne, lower them for gaps.
      */
     struct DirectionalLight
     {
@@ -438,21 +627,137 @@ namespace Fenrir
         Colour colour{1.0f, 1.0f, 1.0f, 1.0f};
         /** @brief A plain multiplier on the colour. */
         float intensity = 1.0f;
+        /** @brief Whether it casts shadows: on by default. */
+        bool castShadows = true;
+        /**
+         * @brief How far from each camera, along its view, its shadows reach, in world units: 100 by default. Past
+         * it, everything is lit. The nearer it is, the sharper the shadows within it.
+         */
+        float shadowDistance = 100.0f;
+        /**
+         * @brief How far a lit point moves out along its normal before its shadow is looked up, in shadow-map texels
+         * (each cascade's own size): 1 by default.
+         */
+        float shadowNormalBias = 1.0f;
+        /**
+         * @brief How far it moves towards the light, in texels per unit of slope (the tangent of the angle between its
+         * normal and the light, held between 0.1 and 8): 2 by default.
+         */
+        float shadowSlopeBias = 2.0f;
     };
 
     /**
-     * @brief The constant light every lit surface receives, a scene resource (ADR-0024). A scene without one is lit by
-     * a default AmbientLight, a dim grey.
+     * @brief A light shining from its entity's world position in every direction (ADR-0048), any number per scene. Its
+     * light falls with the square of the distance, windowed smoothly to zero at `range`: a white light of intensity 1
+     * one unit straight above a white rough face lights it about as a DirectionalLight of intensity 1 does, when its
+     * range is well past one unit. A light that can light nothing (range or intensity 0, or black) is skipped.
+     *
+     * With `castShadows` on it casts shadows (ADR-0050) while it is within RendererConfig::pointShadowBudget: each
+     * frame the shadowed point lights nearest to any camera keep them, each drawn into a cube of one shared cube array,
+     * as far as its range, and the rest light unshadowed, warned about once. Edges are filtered and biased as the
+     * DirectionalLight's are. A mesh round the light's position, such as a glowing bulb, shadows everything: turn that
+     * mesh's castShadows off.
      */
-    struct AmbientLight
+    struct PointLight
     {
-        /** @brief Linear. */
-        Colour colour{0.1f, 0.1f, 0.1f, 1.0f};
+        /** @brief Linear. White by default (Colour::White). */
+        Colour colour{1.0f, 1.0f, 1.0f, 1.0f};
         /** @brief A plain multiplier on the colour. */
         float intensity = 1.0f;
+        /** @brief The distance, in world units, at which the light has fallen to zero; nothing past it is lit. */
+        float range = 10.0f;
+        /**
+         * @brief Whether the light casts shadows: off by default. Only RendererConfig::pointShadowBudget of them do in
+         * a frame, the nearest to the cameras.
+         */
+        bool castShadows = false;
+        /**
+         * @brief How far a lit point moves out along its normal before its shadow is looked up, in shadow-map texels
+         * (whose size grows with the distance from the light): 1 by default.
+         */
+        float shadowNormalBias = 1.0f;
+        /**
+         * @brief How far it moves towards the light, in texels per unit of slope (the tangent of the angle between its
+         * normal and the light, held between 0.1 and 8): 2 by default.
+         */
+        float shadowSlopeBias = 2.0f;
     };
 
-    /** @brief A sky of one colour. */
+    /**
+     * @brief A light shining from its entity's world position along its world -Z in a cone (ADR-0048), any number per
+     * scene. It falls off with distance as a PointLight does, and across its cone smoothly from full inside
+     * `innerAngle` to none outside `outerAngle`, both measured from its axis. A light that can light nothing is
+     * skipped.
+     *
+     * With `castShadows` on it casts shadows (ADR-0050) while it is within RendererConfig::spotShadowBudget: each
+     * frame the shadowed spot lights nearest to any camera keep them, each drawn into a tile of one shared atlas
+     * through a perspective along its cone (held to 80 degrees off its axis), and the rest light unshadowed, warned
+     * about once. Edges are filtered and biased as the DirectionalLight's are. A mesh round the light's position, such
+     * as a glowing bulb, shadows all of its cone: turn that mesh's castShadows off.
+     */
+    struct SpotLight
+    {
+        /** @brief Linear. White by default (Colour::White). */
+        Colour colour{1.0f, 1.0f, 1.0f, 1.0f};
+        /** @brief A plain multiplier on the colour. */
+        float intensity = 1.0f;
+        /** @brief The distance, in world units, at which the light has fallen to zero; nothing past it is lit. */
+        float range = 10.0f;
+        /** @brief The angle off its axis, in radians, inside which the cone is fully lit: 0 by default, as glTF's. */
+        float innerAngle = 0.0f;
+        /** @brief The angle off its axis, in radians, outside which nothing is lit: 45 degrees by default, as glTF's.
+         */
+        float outerAngle = 0.785398163f;
+        /**
+         * @brief Whether the light casts shadows: off by default. Only RendererConfig::spotShadowBudget of them do in
+         * a frame, the nearest to the cameras.
+         */
+        bool castShadows = false;
+        /**
+         * @brief How far a lit point moves out along its normal before its shadow is looked up, in shadow-map texels
+         * (whose size grows with the distance from the light): 1 by default.
+         */
+        float shadowNormalBias = 1.0f;
+        /**
+         * @brief How far it moves towards the light, in texels per unit of slope (the tangent of the angle between its
+         * normal and the light, held between 0.1 and 8): 2 by default.
+         */
+        float shadowSlopeBias = 2.0f;
+    };
+
+    /**
+     * @brief A glowing rectangle centred on its entity, `width` along its world +X and `height` along its world +Y,
+     * shining from its face towards its world -Z (and from its back too when `twoSided`), any number per scene
+     * (ADR-0048). Its highlights take its shape, blurring with the surface's roughness: it is shaded with linearly
+     * transformed cosines, and casts no shadows. Its intensity is its radiance: a white rect light of intensity 1
+     * filling the view of a white rough face lights it about 1, and one subtending less lights it less, as the sky
+     * does. Its light is windowed smoothly to zero at `range` from the rectangle. The rectangle itself is not drawn:
+     * give it an emissive mesh to see it. A light that can light nothing (range, intensity, width or height 0, or
+     * black) is skipped.
+     */
+    struct RectLight
+    {
+        /** @brief Linear. White by default (Colour::White). */
+        Colour colour{1.0f, 1.0f, 1.0f, 1.0f};
+        /** @brief A plain multiplier on the colour. */
+        float intensity = 1.0f;
+        /** @brief Its size along its entity's world +X, in world units; the entity's scale does not stretch it. */
+        float width = 1.0f;
+        /** @brief Its size along its entity's world +Y, in world units. */
+        float height = 1.0f;
+        /** @brief Whether it shines from its back face as well as its front. */
+        bool twoSided = false;
+        /** @brief The distance from the rectangle, in world units, at which its light has fallen to zero. */
+        float range = 10.0f;
+        /**
+         * @brief Whether the scene draws the light's surface, an emissive mesh where it is: true by default. Then, in a
+         * camera with reflections, its specular yields to the reflection of that surface where it is on screen, so it
+         * is not reflected twice. Set it false for a light with nothing drawn, which keeps its specular everywhere.
+         */
+        bool visibleSurface = true;
+    };
+
+    /** @brief A sky of one colour, which lights every surface with that colour from every side (ADR-0047). */
     struct ColourSky
     {
         /** @brief Linear. A dark grey by default, the sky of a scene with none. */
@@ -466,6 +771,28 @@ namespace Fenrir
     struct CubemapSky
     {
         AssetHandle<Image> cubemap;
+        /** @brief A plain multiplier on what the sky draws. */
+        float intensity = 1.0f;
+        /**
+         * @brief How far the sky is turned about world +Y, in radians, counter-clockwise seen from above: a quarter
+         * turn brings what was ahead (-Z) round to the left (-X).
+         */
+        float rotation = 0.0f;
+    };
+
+    /**
+     * @brief A sky drawn from a panorama (ADR-0047): a flat image twice as wide as it is high wrapping the whole
+     * sphere, usually a linear HDR one such as an `.hdr` file. Its centre is ahead (-Z), its right half turns towards
+     * +X and its top row is straight up (+Y). The renderer turns it into a cube texture on the GPU once per image
+     * revision, then draws it as a CubemapSky.
+     */
+    struct PanoramaSky
+    {
+        AssetHandle<Image> image;
+        /** @brief A plain multiplier on what the sky draws. */
+        float intensity = 1.0f;
+        /** @brief How far the sky is turned about world +Y, in radians, as CubemapSky::rotation. */
+        float rotation = 0.0f;
     };
 
     /** @brief Which kind of sky a Sky holds. */
@@ -473,17 +800,24 @@ namespace Fenrir
     {
         Colour,
         Cubemap,
+        Panorama,
     };
 
     /**
-     * @brief What a scene shows where nothing was drawn, a scene resource beside AmbientLight (ADR-0026): exactly one
-     * of ColourSky and CubemapSky, by value, as FenrirPhysics' CollisionShape holds a shape. A scene without one has
-     * the default ColourSky, a dark grey. Each camera whose background is SceneBackground draws it; a ColourBackground
-     * overrides it for that camera's view.
+     * @brief What a scene shows where nothing was drawn, and the light every surface takes from all round it, a scene
+     * resource (ADR-0026, ADR-0047): exactly one of ColourSky, CubemapSky and PanoramaSky, by value, as FenrirPhysics'
+     * CollisionShape holds a shape. A scene without one has the default ColourSky, a dark grey. Each camera whose
+     * background is SceneBackground draws it; a ColourBackground replaces only what that camera's view draws behind
+     * the scene, and every view is lit by the scene's Sky.
      *
-     * A cubemap that is empty, stale or not a cubemap with pixels draws the default ColourSky instead, logged once.
-     * Assign a kind to change it (`sky = CubemapSky{cubemap}`); read it through the checked view. Reading it as a kind
-     * it does not hold asserts.
+     * The renderer filters a cubemap or panorama sky on the GPU into image-based lighting, once per image revision:
+     * its intensity scales the light, and its rotation turns it, without filtering again. A SkyLight lights the scene
+     * in its place, leaving it drawn.
+     *
+     * A cubemap that is empty, stale or not a cubemap with pixels, or a panorama that is empty, stale, or not a flat
+     * image with pixels twice as wide as high, draws the default ColourSky instead, logged once. Assign a kind to
+     * change it (`sky = PanoramaSky{image}`); read it through the checked view. Reading it as a kind it does not hold
+     * asserts.
      */
     class Sky
     {
@@ -503,13 +837,18 @@ namespace Fenrir
         {
         }
 
+        /** @brief A panorama. Implicit, so it can be assigned where a sky is wanted. */
+        Sky(PanoramaSky panorama) : m_type(SkyType::Panorama), m_panorama(panorama)
+        {
+        }
+
         /** @brief The kind held. */
         [[nodiscard]] SkyType Type() const
         {
             return m_type;
         }
 
-        /** @brief Whether the sky is a `T` (ColourSky or CubemapSky). */
+        /** @brief Whether the sky is a `T` (ColourSky, CubemapSky or PanoramaSky). */
         template <typename T>
         [[nodiscard]] bool Is() const
         {
@@ -540,10 +879,14 @@ namespace Fenrir
             {
                 return SkyType::Colour;
             }
+            else if constexpr (std::is_same_v<T, CubemapSky>)
+            {
+                return SkyType::Cubemap;
+            }
             else
             {
-                static_assert(std::is_same_v<T, CubemapSky>, "a Sky holds ColourSky or CubemapSky");
-                return SkyType::Cubemap;
+                static_assert(std::is_same_v<T, PanoramaSky>, "a Sky holds ColourSky, CubemapSky or PanoramaSky");
+                return SkyType::Panorama;
             }
         }
 
@@ -554,9 +897,13 @@ namespace Fenrir
             {
                 return self.m_colour;
             }
-            else
+            else if constexpr (TypeOf<T>() == SkyType::Cubemap)
             {
                 return self.m_cubemap;
+            }
+            else
+            {
+                return self.m_panorama;
             }
         }
 
@@ -564,6 +911,23 @@ namespace Fenrir
         union {
             ColourSky m_colour;
             CubemapSky m_cubemap;
+            PanoramaSky m_panorama;
         };
+    };
+
+    /**
+     * @brief What lights the scene from all round, when it is not the Sky drawn behind it, a scene resource (ADR-0047):
+     * a sky of any kind, used only for its light. A scene without one is lit by its Sky. A skybox chosen for how it
+     * looks can light the scene with a neutral ColourSky or a softer panorama instead of its own colours, as a
+     * camera's ColourBackground changes what is drawn and not the light. One sky lights the scene either way, so
+     * nothing is lit twice.
+     *
+     * Its sky is read as the Sky is: a cubemap or panorama that cannot be drawn lights with the default ColourSky,
+     * logged once, and its intensity and rotation scale and turn the light without filtering it again.
+     */
+    struct SkyLight
+    {
+        /** @brief The sky the scene is lit by: the default ColourSky, a dark grey, unless set. */
+        Sky sky;
     };
 } // namespace Fenrir
