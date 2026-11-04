@@ -99,14 +99,21 @@ namespace
         });
     }
 
-    /** @brief The texture the view group a pass bound at set 1 binds at `binding`. */
-    TextureHandle ViewTexture(const RendererTestApp& test, const PassRecord& pass, std::uint32_t binding)
+    /** @brief The texture the group a pass bound at `set` binds at `binding`. */
+    TextureHandle GroupTexture(const RendererTestApp& test, const PassRecord& pass, std::size_t set,
+                               std::uint32_t binding)
     {
-        const auto entries = RendererProbe::Entries(test.Device(), pass.groups.at(1));
+        const auto entries = RendererProbe::Entries(test.Device(), pass.groups.at(set));
         const auto found =
             std::find_if(entries.begin(), entries.end(), [&](const auto& e) { return e.binding == binding; });
         REQUIRE(found != entries.end());
         return found->texture;
+    }
+
+    /** @brief The texture the view group a pass bound at set 1 binds at `binding`. */
+    TextureHandle ViewTexture(const RendererTestApp& test, const PassRecord& pass, std::uint32_t binding)
+    {
+        return GroupTexture(test, pass, 1, binding);
     }
 
     /** @brief The float at byte `offset` of the view block a pass bound at set 1. */
@@ -139,11 +146,7 @@ namespace
     /** @brief The texture the material group an Output pass bound at set 2 binds at `binding`. */
     TextureHandle OutputTexture(const RendererTestApp& test, const PassRecord& pass, std::uint32_t binding)
     {
-        const auto entries = RendererProbe::Entries(test.Device(), pass.groups.at(2));
-        const auto found =
-            std::find_if(entries.begin(), entries.end(), [&](const auto& e) { return e.binding == binding; });
-        REQUIRE(found != entries.end());
-        return found->texture;
+        return GroupTexture(test, pass, 2, binding);
     }
 
     /** @brief The word at byte `offset` of the Output block an Output pass bound at set 1. */
@@ -501,11 +504,12 @@ TEST_CASE("A camera showing its reflections has Output draw last frame's history
     REQUIRE(Samples(output, history));
     REQUIRE(OutputTexture(test, output, 0) == hits);
     REQUIRE(OutputTexture(test, output, 1) == history);
-    INFO("and runs before the history is overwritten with this frame's colour");
     const std::vector<std::string> labels = Labels(passes);
     const auto outputAt = std::find(labels.begin(), labels.end(), "Output");
     const auto historyAt = std::find(labels.begin(), labels.end(), "SceneHistory");
+    INFO("the frame has SceneHistory passes");
     REQUIRE(historyAt != labels.end());
+    INFO("and Output runs before them, before the history is overwritten with this frame's colour");
     REQUIRE(outputAt < historyAt);
     INFO("no error was logged");
     REQUIRE(test.messages->errors.empty());
@@ -535,6 +539,7 @@ TEST_CASE("A camera showing its ambient occlusion has Output draw its red channe
     camera.debugView = Fenrir::CameraDebugView::AmbientOcclusion;
 
     test.Frame();
+    INFO("its block picks channel 0, where the occlusion is");
     REQUIRE(OutputUint(test, Labelled(test.Passes(), "Output").at(0), GreyChannelOffset) == 0u);
 }
 
@@ -549,8 +554,9 @@ TEST_CASE("A camera showing either reflection view with reflections off draws Ou
         camera.debugView = view;
         test.Frame();
         const std::vector<PassRecord> passes = test.Passes();
-        INFO("view " << static_cast<int>(view) << ": no trace, and Output binds the 1 x 1 black texture");
+        INFO("view " << static_cast<int>(view) << ": no trace");
         REQUIRE(Labelled(passes, "ReflectionTrace").empty());
+        INFO("and Output binds the 1 x 1 black texture");
         const TextureHandle shown = OutputTexture(test, Labelled(passes, "Output").at(0), 0);
         const auto desc = RendererProbe::Desc(test.Device(), shown);
         REQUIRE((desc.width == 1 && desc.height == 1));

@@ -8,11 +8,12 @@
 // grey debug views), the texture is single-sampled, and its `greyChannel` is drawn as grey as it is: no exposure, no
 // tonemap. With the REFLECTIONS key (CameraDebugView::Reflections, ADR-0056), it is the view's reflection hit target,
 // and the colour is last frame's history at each hit's UV, its sharpest level, times the hit's confidence: what a
-// mirror would blend, exposed and tonemapped. REFLECTIONS overrides the other keys.
+// mirror would blend, exposed and tonemapped. The hit target is read texel by texel, as Fenrir/Lighting.glsl reads it,
+// so neighbouring hits' UVs are never blended. REFLECTIONS overrides the other keys.
 
 #if defined(REFLECTIONS)
-// r, g: the hit's UV in last frame's view; b: its confidence.
-layout(set = 2, binding = 0) uniform sampler2D sceneColour;
+// r, g: the hit's UV in last frame's view; b: its confidence. At the view's size.
+layout(set = 2, binding = 0) uniform sampler2D reflectionHits;
 layout(set = 2, binding = 1) uniform sampler2D sceneHistory;
 #elif defined(MSAA) && !defined(OCCLUSION)
 layout(set = 2, binding = 0) uniform sampler2DMS sceneColour;
@@ -118,7 +119,8 @@ void main()
     // NDC +y is up and a texture's row 0 is its top row, on every backend (ADR-0016).
     vec2 uv = vec2(vNdc.x * 0.5 + 0.5, 0.5 - vNdc.y * 0.5);
 #if defined(REFLECTIONS)
-    vec4 hit = texture(sceneColour, uv);
+    ivec2 size = textureSize(reflectionHits, 0);
+    vec4 hit = texelFetch(reflectionHits, clamp(ivec2(uv * vec2(size)), ivec2(0), size - 1), 0);
     vec3 colour = hit.b > 0.0 ? textureLod(sceneHistory, hit.rg, 0.0).rgb * hit.b : vec3(0.0);
     outColour = vec4(Tonemap(colour * settings.exposureScale), 1.0);
 #elif defined(OCCLUSION)

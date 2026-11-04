@@ -369,6 +369,7 @@ TEST_CASE("GL: the Reflections debug view shows the reflected colour times its c
     camera.tonemapper = Fenrir::Tonemapper::None;
 
     const Shown shown = ShowDebugView(test, camera, Fenrir::CameraDebugView::Reflections);
+    INFO("the frame drew a hit target at the view's size");
     REQUIRE(shown.hits.width == Size);
     const float confidence = shown.hits.At(MirrorX, MirrorY)[2];
     const GlProbe::Pixel mirrored = shown.At(MirrorX, MirrorY);
@@ -376,10 +377,12 @@ TEST_CASE("GL: the Reflections debug view shows the reflected colour times its c
               << mirrored[0] << ", " << mirrored[1] << ", " << mirrored[2]);
     REQUIRE(confidence > 0.5f);
     REQUIRE(Close(mirrored[0], 0.25f * BoardColour.r * confidence, 2e-2f));
+    INFO("and only its red");
     REQUIRE(mirrored[1] < 1e-2f);
     REQUIRE(mirrored[2] < 1e-2f);
-    INFO("the board itself reflects nothing, nor does the sky: black, not the sky's blue");
+    INFO("the board itself reflects nothing");
     REQUIRE(Close(shown.hits.At(MirrorX, BoardY)[2], 0.0f, 1e-3f));
+    INFO("so it is black, as is the sky: black, not the sky's blue");
     for (const std::uint32_t y : {BoardY, 2u})
     {
         const GlProbe::Pixel pixel = shown.At(MirrorX, y);
@@ -397,6 +400,7 @@ TEST_CASE("GL: the ReflectionConfidence debug view shows the hit's confidence as
     AddBoard(test, 6.0f);
 
     const Shown shown = ShowDebugView(test, camera, Fenrir::CameraDebugView::ReflectionConfidence);
+    INFO("the frame drew a hit target at the view's size");
     REQUIRE(shown.hits.width == Size);
     for (const std::uint32_t y : {MirrorY, BoardY, MirrorY + 6u})
     {
