@@ -11,6 +11,7 @@ ADR-0024 lets a user shader be a whole fragment program, and puts the lighting i
 - **`Fenrir/Lighting.glsl`** declares a `FenrirSurface` (base colour, alpha, world normal, metallic, roughness, occlusion, emissive) and one function that returns the lit linear HDR colour of it: the directional light with its shadow, the point, spot and rect lights of the pixel's cluster with theirs, the sky's image-based lighting, and ambient occlusion. `builtin:lit` is its first user; a user shader fills a surface its own way and calls it.
 - **It is not a surface-function model.** The user shader still owns `main`, its inputs and its outputs, and may ignore the include. Forward rendering is what makes this cheap: there is no G-buffer to fill.
 - **Set 0, the frame, grows** to hold everything the include reads: the light buffer and cluster lists (ADR-0049), the shadow atlases and cascade data (ADR-0050), the sky's coefficients, prefiltered cubemap and BRDF lookup table (ADR-0047), and the view's ambient-occlusion texture. The renderer keeps declaring the same layout in C++ and checking it against reflection in debug builds.
+- *Amended by ADR-0056:* the include also blends screen-space reflections, last frame's colour at each pixel's traced hit, over the sky's prefiltered specular, from two new view-set bindings, and a rect light's specular yields to them where its surface is drawn.
 
 ## The lights
 
