@@ -101,6 +101,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/SpotShadows.hpp
     src/Core/SpotShadows.cpp
     src/Core/Skinning.cpp
+    src/Core/CameraEffects.hpp
+    src/Core/CameraEffects.cpp
     src/Core/ColourGrading.hpp
     src/Core/ColourGrading.cpp
     src/Core/Tonemapping.hpp
@@ -187,9 +189,10 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinSkinning COMPUTE Shaders/Bu
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinLightClusters COMPUTE Shaders/Builtin/light_clusters.comp EMBED)
 # MSAA: the variant that resolves a multisampled SceneColor. OCCLUSION: the one that shows one channel of a texture as
 # grey (ambient occlusion, the shadow atlases, reflection confidence). REFLECTIONS: the one that shows a view's
-# reflections, last frame's history at its hits.
+# reflections, last frame's history at its hits. ABERRATION: the one that reads each channel at its own point, a
+# camera's chromatic aberration (ADR-0059).
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinOutput VERTEX Shaders/Builtin/fullscreen.vert
-                   FRAGMENT Shaders/Builtin/output.frag KEYS MSAA OCCLUSION REFLECTIONS EMBED)
+                   FRAGMENT Shaders/Builtin/output.frag KEYS MSAA OCCLUSION REFLECTIONS ABERRATION EMBED)
 # Debug drawing (ADR-0025): lines expanded to screen-space quads, solid triangles, and text from the SDF font atlas.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDebugLines VERTEX Shaders/Builtin/debug_lines.vert
                    FRAGMENT Shaders/Builtin/debug.frag EMBED)

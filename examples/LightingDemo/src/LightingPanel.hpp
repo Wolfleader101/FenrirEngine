@@ -38,6 +38,10 @@ namespace LightingDemo
         Fenrir::AnamorphicStreaks anamorphicStreaks;
         /** @brief Every camera's colour grade, identity unless the scene sets one. */
         Fenrir::ColourGrading colourGrading;
+        /** @brief Every camera's chromatic aberration, vignette and film grain, off unless the scene turns them on. */
+        Fenrir::ChromaticAberration chromaticAberration;
+        Fenrir::Vignette vignette;
+        Fenrir::FilmGrain filmGrain;
         /** @brief Every camera's ambient occlusion, on in the demo; O turns it off and back on. */
         Fenrir::AmbientOcclusion ambientOcclusion{true};
         /** @brief Every camera's screen-space reflections, off unless the scene turns them on. */

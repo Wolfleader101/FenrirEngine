@@ -17,96 +17,16 @@
 #include "Core/Tonemapping.hpp"
 #include "GlScene.hpp"
 #include "GoldenImages.hpp"
+#include "GoldenScene.hpp"
 
 using Fenrir::GlProbe;
 using Fenrir::RendererProbe;
 using Fenrir::Math::Vec3;
+using GlTest::DrawGoldenScene;
 using GlTest::GlScene;
 
 namespace
 {
-    constexpr std::uint32_t Width = 96;
-    constexpr std::uint32_t Height = 64;
-
-    /** @brief An entity at `position`, scaled by `scale`, drawing `mesh` with `material`. */
-    void Place(GlScene& test, Fenrir::AssetHandle<Fenrir::Mesh> mesh, Fenrir::AssetHandle<Fenrir::Material> material,
-               Vec3 position, float scale)
-    {
-        Fenrir::Entity entity = test.app.GetActiveScene().GetEntityList().CreateEntity();
-        Fenrir::Transform& transform = entity.GetComponent<Fenrir::Transform>();
-        transform.pos = position;
-        transform.scale = Vec3(scale);
-        entity.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{mesh, material, true});
-    }
-
-    /** @brief A material on `shader` with base colour `colour`. */
-    Fenrir::AssetHandle<Fenrir::Material> Material(GlScene& test, const char* shader, Fenrir::Colour colour)
-    {
-        Fenrir::AssetStore& store = test.assets.Store();
-        const auto material = store.CreateMaterial(store.Load<Fenrir::Shader>(shader, Fenrir::AssetOwner::App()).handle,
-                                                   Fenrir::AssetOwner::App());
-        store.SetColour(material, "baseColour", colour);
-        return material;
-    }
-
-    /**
-     * @brief The golden scene, drawn by one camera through `tonemapper` at `exposure` EV into a 96 x 64 image, read
-     * back as it stores it. Above: a red dielectric, a white one and a gold metal sphere under a sun of intensity 4,
-     * whose highlights reach well over 1. Below: unlit orange patches from a quarter to eight times (1, 0.45, 0.1), one
-     * stop apart. Behind: a dark blue. Graded by `grading`, identity by default.
-     */
-    RendererTest::Rgba8Image DrawGoldenScene(Fenrir::Tonemapper tonemapper, float exposure,
-                                             const Fenrir::ColourGrading& grading = {})
-    {
-        GlScene test;
-        test.RequireOpenGL();
-        Fenrir::AssetStore& store = test.assets.Store();
-        Fenrir::ImageData data;
-        data.width = Width;
-        data.height = Height;
-        const auto image = store.Add<Fenrir::Image>(std::move(data), Fenrir::AssetOwner::App());
-        Fenrir::Camera& camera = test.AddCamera();
-        camera.target = Fenrir::ImageTarget{image};
-        camera.background = Fenrir::ColourBackground{Fenrir::Colour{0.02f, 0.03f, 0.06f, 1.0f}};
-        camera.tonemapper = tonemapper;
-        camera.exposure = exposure;
-        camera.colourGrading = grading;
-
-        // The sun travels down, back and to the right, from over the camera's left shoulder.
-        Fenrir::Entity sun = test.app.GetActiveScene().GetEntityList().CreateEntity();
-        sun.GetComponent<Fenrir::Transform>().rot =
-            Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(-30.0f), Vec3(0.0f, 1.0f, 0.0f)) *
-            Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(-40.0f), Vec3(1.0f, 0.0f, 0.0f));
-        sun.AddComponent<Fenrir::DirectionalLight>(Fenrir::DirectionalLight{Fenrir::Colour::White, 4.0f});
-        test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour{0.1f, 0.1f, 0.1f, 1.0f}});
-
-        const auto sphere = store.Add<Fenrir::Mesh>(RendererTest::Sphere(), Fenrir::AssetOwner::App());
-        const auto red = Material(test, "builtin:lit", Fenrir::Colour{0.8f, 0.05f, 0.05f, 1.0f});
-        store.SetFloat(red, "roughness", 0.3f);
-        const auto white = Material(test, "builtin:lit", Fenrir::Colour{0.9f, 0.9f, 0.9f, 1.0f});
-        store.SetFloat(white, "roughness", 0.6f);
-        const auto gold = Material(test, "builtin:lit", Fenrir::Colour{1.0f, 0.78f, 0.34f, 1.0f});
-        store.SetFloat(gold, "metallic", 1.0f);
-        store.SetFloat(gold, "roughness", 0.25f);
-        Place(test, sphere, red, Vec3(-1.6f, 0.5f, -4.0f), 1.3f);
-        Place(test, sphere, white, Vec3(0.0f, 0.5f, -4.0f), 1.3f);
-        Place(test, sphere, gold, Vec3(1.6f, 0.5f, -4.0f), 1.3f);
-
-        const auto patch = store.Add<Fenrir::Mesh>(RendererTest::Quad(0.8f), Fenrir::AssetOwner::App());
-        for (int stop = 0; stop < 6; ++stop)
-        {
-            const float scale = std::exp2(static_cast<float>(stop - 2));
-            const auto orange =
-                Material(test, "builtin:unlit", Fenrir::Colour{1.0f * scale, 0.45f * scale, 0.1f * scale, 1.0f});
-            Place(test, patch, orange, Vec3(-2.5f + static_cast<float>(stop), -1.35f, -4.0f), 1.0f);
-        }
-
-        test.RunFrame();
-        INFO("no GL error or other error was logged");
-        REQUIRE(test.messages->errors.empty());
-        return test.ReadTarget(image);
-    }
-
     /**
      * @brief A grade with every control off its default: warmer, a little magenta, more contrast, teal shadows and
      * magenta highlights split a stop under mid grey, a little more saturation and a CDL trim.
@@ -142,6 +62,12 @@ namespace
         settings.offset = grading.offset;
         settings.power = grading.power;
         return settings;
+    }
+
+    /** @brief Sets a camera's grade to NonTrivialGrade. */
+    void Graded(Fenrir::Camera& camera)
+    {
+        camera.colourGrading = NonTrivialGrade();
     }
 
     void RequireGolden(std::string_view name, const RendererTest::Rgba8Image& frame)
@@ -182,14 +108,14 @@ TEST_CASE("The lit scene through AgX two stops over matches its golden image", "
 
 TEST_CASE("The lit scene through AgX under a grade matches its golden image", "[renderer][gl][golden]")
 {
-    RequireGolden("tonemap-agx-graded", DrawGoldenScene(Fenrir::Tonemapper::AgX, 0.0f, NonTrivialGrade()));
+    RequireGolden("tonemap-agx-graded", DrawGoldenScene(Fenrir::Tonemapper::AgX, 0.0f, Graded));
 }
 
 TEST_CASE("A grade changes the lit scene", "[renderer][gl][golden]")
 {
     // Against the golden comparison itself, so a grade silently skipped fails here too.
     const RendererTest::Rgba8Image plain = DrawGoldenScene(Fenrir::Tonemapper::AgX, 0.0f);
-    const RendererTest::Rgba8Image graded = DrawGoldenScene(Fenrir::Tonemapper::AgX, 0.0f, NonTrivialGrade());
+    const RendererTest::Rgba8Image graded = DrawGoldenScene(Fenrir::Tonemapper::AgX, 0.0f, Graded);
     INFO("the graded scene matches the plain one under the golden comparison");
     REQUIRE_FALSE(RendererTest::CompareWithGolden(plain, graded).Matches({}));
 }

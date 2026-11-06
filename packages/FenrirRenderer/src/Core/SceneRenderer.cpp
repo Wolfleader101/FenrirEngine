@@ -194,9 +194,16 @@ namespace Fenrir::Render
             /** @brief The CDL's slope, and the saturation in w. */
             Math::Vec4 slope{1.0f};
             Math::Vec4 offset{0.0f};
+            /** @brief The CDL's power, and the chromatic aberration's intensity in w (ADR-0059). */
             Math::Vec4 power{1.0f, 1.0f, 1.0f, 0.0f};
+            /** @brief The vignette's intensity (0 skips it), radius, smoothness and roundness. */
+            Math::Vec4 vignette{0.0f};
+            /** @brief The film grain's intensity (0 skips it), response and size. */
+            Math::Vec3 grain{0.0f};
+            /** @brief The frame's index, low 32 bits, which the grain's noise is a hash of. */
+            std::uint32_t frameIndex = 0;
         };
-        static_assert(sizeof(OutputBlock) == 144);
+        static_assert(sizeof(OutputBlock) == 176);
 
         /** @brief A Masked material's depth prepass block, as `builtin:depth-prepass` declares it (std140). */
         struct PrepassMaskBlock
@@ -734,6 +741,12 @@ namespace Fenrir::Render
         constexpr std::array<std::string_view, 1> occlusion{"OCCLUSION"};
         m_occlusionOutputPipeline = MakeInternalPipeline(m_output, m_output.FindVariant(occlusion), m_outputLayout,
                                                          TextureFormat::Rgba8Srgb, false, 1, m_outputBlockLayout);
+        // Chromatic aberration reads each channel at its own point: with MSAA, three resolves.
+        constexpr std::array<std::string_view, 1> aberration{"ABERRATION"};
+        constexpr std::array<std::string_view, 2> msaaAberration{"MSAA", "ABERRATION"};
+        m_aberrationOutputPipeline = MakeInternalPipeline(
+            m_output, m_samples > 1 ? m_output.FindVariant(msaaAberration) : m_output.FindVariant(aberration),
+            m_outputLayout, TextureFormat::Rgba8Srgb, false, 1, m_outputBlockLayout);
         constexpr std::array<std::string_view, 1> reflections{"REFLECTIONS"};
         if (const ShaderVariant* variant = m_output.FindVariant(reflections))
         {
@@ -909,6 +922,7 @@ namespace Fenrir::Render
         m_device.Destroy(m_outputPipeline);
         m_device.Destroy(m_occlusionOutputPipeline);
         m_device.Destroy(m_reflectionOutputPipeline);
+        m_device.Destroy(m_aberrationOutputPipeline);
         m_device.Destroy(m_prepassMaskLayout);
         m_device.Destroy(m_backgroundLayout);
         m_device.Destroy(m_skyLayout);
@@ -2976,6 +2990,12 @@ namespace Fenrir::Render
                 outputBlock.offset = Math::Vec4(grade.offset, 0.0f);
                 outputBlock.power = Math::Vec4(grade.power, 0.0f);
             }
+            outputBlock.power.w = request.chromaticAberration.intensity;
+            outputBlock.vignette = Math::Vec4(request.vignette.intensity, request.vignette.radius,
+                                              request.vignette.smoothness, request.vignette.roundness);
+            outputBlock.grain =
+                Math::Vec3(request.filmGrain.intensity, request.filmGrain.response, request.filmGrain.size);
+            outputBlock.frameIndex = static_cast<std::uint32_t>(frameIndex);
             // The reflection hit target's confidence is its blue; every other grey view's value its red.
             outputBlock.greyChannel = request.debugView == ViewDebug::ReflectionConfidence ? 2u : 0u;
             m_outputBlocks->Write(frameIndex, v, BytesOf(outputBlock));
@@ -3272,8 +3292,12 @@ namespace Fenrir::Render
                                                           : sceneColour;
             const GraphResource shownHistory = showReflections && !shownBlack ? sceneHistory : GraphResource{};
             // Black is the 1 x 1 black texture, drawn as grey.
+            // Chromatic aberration's variant only when it moves something and its pipeline was made.
+            const bool aberrated =
+                request.chromaticAberration.intensity > 0.0f && !m_aberrationOutputPipeline.IsEmpty();
             const PipelineHandle outputPipeline = showGrey || shownBlack ? m_occlusionOutputPipeline
                                                   : showReflections      ? m_reflectionOutputPipeline
+                                                  : aberrated            ? m_aberrationOutputPipeline
                                                                          : m_outputPipeline;
             const TextureHandle black = GetDefaultTexture(DefaultTexture::Black);
             graph.AddPass(

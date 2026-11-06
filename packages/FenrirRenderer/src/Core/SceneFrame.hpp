@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 
+#include "Core/CameraEffects.hpp"
 #include "Core/ColourGrading.hpp"
 #include "Core/PunctualLights.hpp"
 #include "Core/RectLights.hpp"
@@ -188,6 +189,12 @@ namespace Fenrir::Render
         BloomSettings bloom;
         /** @brief How its `PostProcess` streaks mix into SceneColor after the bloom (Camera::anamorphicStreaks). */
         StreakSettings anamorphicStreaks;
+        /** @brief How far Output reads red and blue apart towards the corners (Camera::chromaticAberration). */
+        ChromaticAberrationSettings chromaticAberration;
+        /** @brief How Output darkens the exposed colour towards the corners (Camera::vignette). */
+        VignetteSettings vignette;
+        /** @brief The noise Output adds to the tonemapped colour (Camera::filmGrain). */
+        FilmGrainSettings filmGrain;
         /** @brief Its GTAO, which builtin:lit's sky light is darkened by in `Opaque` (Camera::ambientOcclusion). */
         AmbientOcclusionSettings ambientOcclusion;
         /** @brief Its screen-space reflections' history and pyramids (Camera::reflections). */

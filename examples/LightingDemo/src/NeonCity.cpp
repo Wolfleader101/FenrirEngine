@@ -891,6 +891,11 @@ namespace LightingDemo
             state.lighting.colourGrading.shadowTint = Fenrir::Colour{0.25f, 0.6f, 0.65f, 1.0f};
             state.lighting.colourGrading.highlightTint = Fenrir::Colour{0.85f, 0.4f, 0.75f, 1.0f};
             state.lighting.colourGrading.balance = 0.15f;
+            // A lens's touch: the corners fall off gently, signs near the edges fringe red and blue, and fine grain
+            // shimmers over the dark streets, kept from the bright signs by its response.
+            state.lighting.vignette = {0.3f, 0.45f, 0.6f, 1.0f};
+            state.lighting.chromaticAberration.intensity = 0.006f;
+            state.lighting.filmGrain = {0.04f, 0.8f, 1.0f};
             // The wet streets mirror the glowing strips, boards and windows on screen. The signs' boards are drawn,
             // so their rect lights keep visibleSurface, and their glints yield to the boards' reflections.
             state.lighting.reflections.enabled = true;

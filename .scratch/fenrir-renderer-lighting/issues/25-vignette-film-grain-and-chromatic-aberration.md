@@ -13,12 +13,14 @@
 
 **Touches:** `packages/FenrirRenderer/include/FenrirRenderer/`, `packages/FenrirRenderer/src/`, `packages/FenrirRenderer/Shaders/`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`, `packages/FenrirRenderer/Scripting/api/`, `packages/FenrirRenderer/Managed/`, `examples/LightingDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] CPU unit tests: the vignette's falloff is 1 at the centre and matches its closed form at the corners for both roundness extremes; the grain's hash is the same for the same pixel and frame and differs between frames.
-- [ ] GL pixel probes: with chromatic aberration, a white bar near the view's edge shows red outside and blue inside, and the centre pixel is unchanged; with the vignette, a flat grey view is darker at the corners by the CPU falloff; with each effect at 0, the frame matches the tonemap goldens exactly.
-- [ ] Golden images: each effect on its own over the tonemap test scene, grain at a fixed frame index.
+- [x] CPU unit tests: the vignette's falloff is 1 at the centre and matches its closed form at the corners for both roundness extremes; the grain's hash is the same for the same pixel and frame and differs between frames.
+- [x] GL pixel probes: with chromatic aberration, a white bar near the view's edge shows red outside and blue inside, and the centre pixel is unchanged; with the vignette, a flat grey view is darker at the corners by the CPU falloff; with each effect at 0, the frame matches the tonemap goldens exactly.
+- [x] Golden images: each effect on its own over the tonemap test scene, grain at a fixed frame index.
+
+Done as built (2026-11-06): roundness 0 is an ellipse in the view's own proportions (the falloff measured in each axis' own half-length), not a rectangle; the grain is added in a 2.2 gamma encoding of the tonemapped colour, its noise a PCG3D hash summed into a triangle on [-1, 1); the `Reflections` debug view, exposed and graded as the lit view is, takes the vignette and grain too but never the aberration. The GL probes also hold the grain to its CPU mirror pixel by pixel, and check that a grey debug view is unchanged by every effect.
 
 Hand check: in the neon city, the corners fall off gently, signs near the edge fringe red and blue, and grain shimmers over the dark streets without showing in the bright signs.
 
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

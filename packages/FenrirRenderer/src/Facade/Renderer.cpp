@@ -745,6 +745,10 @@ namespace Fenrir
                 view.colourGrading = ToCore(camera.colourGrading);
                 view.bloom = {camera.bloom.intensity, camera.bloom.radius};
                 view.anamorphicStreaks = ToCore(camera.anamorphicStreaks);
+                view.chromaticAberration = {camera.chromaticAberration.intensity};
+                view.vignette = {camera.vignette.intensity, camera.vignette.radius, camera.vignette.smoothness,
+                                 camera.vignette.roundness};
+                view.filmGrain = {camera.filmGrain.intensity, camera.filmGrain.response, camera.filmGrain.size};
                 view.ambientOcclusion = {camera.ambientOcclusion.enabled, camera.ambientOcclusion.radius,
                                          camera.ambientOcclusion.intensity};
                 view.reflections = {camera.reflections.enabled, camera.reflections.intensity,

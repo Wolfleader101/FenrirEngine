@@ -45,6 +45,12 @@ public partial struct Camera : IComponent
     public AnamorphicStreaks AnamorphicStreaks = new();
     /// <summary>The look of the view: its white balance, contrast, tints and saturation, before the tonemap.</summary>
     public ColourGrading ColourGrading = new();
+    /// <summary>How the view's colours fringe towards its corners, as it reads the scene.</summary>
+    public ChromaticAberration ChromaticAberration = new();
+    /// <summary>How the view darkens towards its corners, before the grade.</summary>
+    public Vignette Vignette = new();
+    /// <summary>The noise the view adds after its tonemap.</summary>
+    public FilmGrain FilmGrain = new();
     /// <summary>How nearby geometry darkens the sky's light in the view.</summary>
     public AmbientOcclusion AmbientOcclusion = new();
     /// <summary>How smooth surfaces in the view mirror what is on screen.</summary>
