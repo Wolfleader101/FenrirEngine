@@ -43,5 +43,6 @@ Done on `claude/lighting-26-colour-grading-231e55`, into `fenrir-camera-post-eff
   split four stops down from mid grey.
 - **Hand check, in part:** the neon city on OpenGL without the fetched assets
   (`screenshots/26-colour-grading/neon-city-graded.png`): teal in the shadowed street, magenta on the lit walls, the
-  signs unclipped and the street not crushed. Sweeping the white balance, contrast and balance by hand is left to the
-  user.
+  signs unclipped and the street not crushed. With the fetched assets, the same street with no grade, the neon city's
+  grade, 9500 K, 4200 K, and contrast 1.45 with saturation 1.25 (`neon-city-*.jpg` there, set by a temporary,
+  uncommitted switch). Sweeping the white balance, contrast and balance by hand is left to the user.
