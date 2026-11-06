@@ -13,7 +13,7 @@ Every scene shows the same ImGui window, Lighting (`src/LightingPanel.cpp`): the
 tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius), anamorphic streaks (ADR-0059: intensity
 and length; the tint is the scene's), colour grade (ADR-0059: white balance as a
 temperature and tint, contrast, the shadow and highlight tints and their balance, saturation, and a button for no
-grade), lens and film (ADR-0059: chromatic aberration, the vignette's intensity and radius, and film grain's
+grade), camera effects (ADR-0059: chromatic aberration, the vignette's intensity and radius, and film grain's
 intensity; the vignette's shape and the grain's response and size are the scene's), ambient occlusion (GTAO: on, which it is
 by default here, its radius and strength) and screen-space reflections (ADR-0056: on, off unless the scene turns them
 on, their intensity, max distance, thickness and roughness cutoff, and buttons for their two debug views), the sun's
@@ -506,7 +506,7 @@ Hand checks, on OpenGL:
 - The colour grade (ADR-0059): teal in the shadowed streets and magenta on the lit walls; No grade in the Lighting
   window takes them away. Warming and cooling the white balance, raising the contrast and moving the balance change
   the mood without clipping the signs or crushing the streets.
-- Lens and film (ADR-0059): the corners fall off gently, signs near the screen's edges fringe red outside and blue
+- Camera effects (ADR-0059): the corners fall off gently, signs near the screen's edges fringe red outside and blue
   inside, and fine grain shimmers over the dark streets without showing in the bright signs. Each at 0 in the
   Lighting window takes it away.
 - Without the fetched assets: dark wet streets, the city and its lights, and an amber message naming

@@ -95,6 +95,21 @@ namespace Fenrir
             return settings;
         }
 
+        Render::ChromaticAberrationSettings ToCore(const ChromaticAberration& aberration)
+        {
+            return {aberration.intensity};
+        }
+
+        Render::VignetteSettings ToCore(const Vignette& vignette)
+        {
+            return {vignette.intensity, vignette.radius, vignette.smoothness, vignette.roundness};
+        }
+
+        Render::FilmGrainSettings ToCore(const FilmGrain& grain)
+        {
+            return {grain.intensity, grain.response, grain.size};
+        }
+
         /** @brief The core's copy of a camera's debug view: the same values in the same order. */
         Render::ViewDebug ToCore(CameraDebugView debugView)
         {
@@ -745,10 +760,9 @@ namespace Fenrir
                 view.colourGrading = ToCore(camera.colourGrading);
                 view.bloom = {camera.bloom.intensity, camera.bloom.radius};
                 view.anamorphicStreaks = ToCore(camera.anamorphicStreaks);
-                view.chromaticAberration = {camera.chromaticAberration.intensity};
-                view.vignette = {camera.vignette.intensity, camera.vignette.radius, camera.vignette.smoothness,
-                                 camera.vignette.roundness};
-                view.filmGrain = {camera.filmGrain.intensity, camera.filmGrain.response, camera.filmGrain.size};
+                view.chromaticAberration = ToCore(camera.chromaticAberration);
+                view.vignette = ToCore(camera.vignette);
+                view.filmGrain = ToCore(camera.filmGrain);
                 view.ambientOcclusion = {camera.ambientOcclusion.enabled, camera.ambientOcclusion.radius,
                                          camera.ambientOcclusion.intensity};
                 view.reflections = {camera.reflections.enabled, camera.reflections.intensity,

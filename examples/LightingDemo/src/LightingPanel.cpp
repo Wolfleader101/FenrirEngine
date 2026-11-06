@@ -164,7 +164,7 @@ namespace LightingDemo
             }
 
             // Each effect's main setting; the vignette's shape and the grain's response and size are the scene's own.
-            ImGui::SeparatorText("Lens and film");
+            ImGui::SeparatorText("Camera effects");
             ImGui::SliderFloat("Chromatic aberration", &settings.chromaticAberration.intensity, 0.0f, 0.05f, "%.4f");
             ImGui::SliderFloat("Vignette", &settings.vignette.intensity, 0.0f, 1.0f);
             ImGui::SliderFloat("Vignette radius", &settings.vignette.radius, 0.0f, 1.0f);

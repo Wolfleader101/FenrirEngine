@@ -151,14 +151,18 @@ vec3 Grade(vec3 colour)
 // the centre, 1 at the corners, in halves of the view's height when round and in each axis' own halves when not.
 vec3 Vignette(vec3 colour, vec2 uv, vec2 size)
 {
-    if (settings.vignette.x <= 0.0)
+    float intensity = settings.vignette.x;
+    float radius = settings.vignette.y;
+    float smoothness = settings.vignette.z;
+    float roundness = settings.vignette.w;
+    if (intensity <= 0.0)
     {
         return colour;
     }
-    vec2 scale = vec2(1.0 + (size.x / size.y - 1.0) * settings.vignette.w, 1.0);
+    vec2 scale = vec2(1.0 + (size.x / size.y - 1.0) * roundness, 1.0);
     float distance = length((uv - 0.5) * scale) / length(0.5 * scale);
-    float edge = settings.vignette.y + max(settings.vignette.z, 1e-4);
-    return colour * (1.0 - settings.vignette.x * smoothstep(settings.vignette.y, edge, distance));
+    float edge = radius + max(smoothness, 1e-4);
+    return colour * (1.0 - intensity * smoothstep(radius, edge, distance));
 }
 
 // The grain's noise for one cell and frame: two uniforms from a PCG3D hash (Jarzynski and Olano 2020), summed into a
@@ -179,17 +183,20 @@ float GrainNoise(uvec2 cell, uint frame)
 // its encoded luminance by the response, the same in every channel.
 vec3 Grain(vec3 colour, vec2 uv, vec2 size)
 {
-    if (settings.grain.x <= 0.0)
+    float intensity = settings.grain.x;
+    float response = settings.grain.y;
+    float cellSize = settings.grain.z;
+    if (intensity <= 0.0)
     {
         return colour;
     }
     uvec2 pixel = uvec2(floor(uv * size));
-    uvec2 cell = uvec2(floor(vec2(pixel) / max(settings.grain.z, 1.0)));
+    uvec2 cell = uvec2(floor(vec2(pixel) / max(cellSize, 1.0)));
     float noise = GrainNoise(cell, settings.frameIndex);
     vec3 encoded = pow(max(colour, vec3(0.0)), vec3(1.0 / 2.2));
     float luminance = clamp(dot(encoded, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
-    float weight = 1.0 + (4.0 * luminance * (1.0 - luminance) - 1.0) * settings.grain.y;
-    return pow(clamp(encoded + settings.grain.x * weight * noise, 0.0, 1.0), vec3(2.2));
+    float weight = 1.0 + (4.0 * luminance * (1.0 - luminance) - 1.0) * response;
+    return pow(clamp(encoded + intensity * weight * noise, 0.0, 1.0), vec3(2.2));
 }
 
 vec3 Tonemap(vec3 colour)

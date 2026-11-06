@@ -49,7 +49,7 @@ public partial struct Camera : IComponent
     public ChromaticAberration ChromaticAberration = new();
     /// <summary>How the view darkens towards its corners, before the grade.</summary>
     public Vignette Vignette = new();
-    /// <summary>The noise the view adds after its tonemap.</summary>
+    /// <summary>The view's film grain, after its tonemap.</summary>
     public FilmGrain FilmGrain = new();
     /// <summary>How nearby geometry darkens the sky's light in the view.</summary>
     public AmbientOcclusion AmbientOcclusion = new();

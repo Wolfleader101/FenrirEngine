@@ -12,8 +12,9 @@
 
 namespace GlTest
 {
-    /** @brief The golden scene's size. */
+    /** @brief The golden scene's width, in pixels. */
     constexpr std::uint32_t GoldenWidth = 96;
+    /** @brief The golden scene's height, in pixels. */
     constexpr std::uint32_t GoldenHeight = 64;
 
     /** @brief An entity at `position`, scaled by `scale`, drawing `mesh` with `material`. */

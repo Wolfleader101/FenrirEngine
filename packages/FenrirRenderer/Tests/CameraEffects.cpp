@@ -186,7 +186,10 @@ TEST_CASE("The grain shows most in the mid-tones and least in black and white", 
     settings.intensity = 0.2f;
     settings.response = 1.0f;
     const float noise = Fenrir::Render::GrainNoise(3, 4, 7);
-    REQUIRE(noise != 0.0f);
+    {
+        INFO("the pixel's noise is 0, so it cannot show the grain's weight");
+        REQUIRE(noise != 0.0f);
+    }
     const Vec3 black = Fenrir::Render::ApplyFilmGrain(settings, Vec3(0.0f), 3, 4, 7);
     const Vec3 white = Fenrir::Render::ApplyFilmGrain(settings, Vec3(1.0f), 3, 4, 7);
     {

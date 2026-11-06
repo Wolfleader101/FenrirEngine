@@ -37,8 +37,9 @@ public enum CameraDebugView : byte
     LightClusters = 5,
     /// <summary>
     /// Its screen-space reflections (ADR-0056): at each pixel, the colour its mirror ray hit, from last frame, times
-    /// how sure the hit is, exposed and tonemapped; black where nothing is reflected or the camera's reflections are
-    /// off. It is what a mirror there would blend, sharp: a material's roughness blurs and fades it.
+    /// how sure the hit is, exposed, vignetted, graded, tonemapped and grained; black where nothing is reflected or the
+    /// camera's reflections are off. It is what a mirror there would blend, sharp: a material's roughness blurs and
+    /// fades it.
     /// </summary>
     Reflections = 6,
     /// <summary>

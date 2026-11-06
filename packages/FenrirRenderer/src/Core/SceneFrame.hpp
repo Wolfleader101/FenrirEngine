@@ -193,7 +193,7 @@ namespace Fenrir::Render
         ChromaticAberrationSettings chromaticAberration;
         /** @brief How Output darkens the exposed colour towards the corners (Camera::vignette). */
         VignetteSettings vignette;
-        /** @brief The noise Output adds to the tonemapped colour (Camera::filmGrain). */
+        /** @brief The film grain Output adds to the tonemapped colour (Camera::filmGrain). */
         FilmGrainSettings filmGrain;
         /** @brief Its GTAO, which builtin:lit's sky light is darkened by in `Opaque` (Camera::ambientOcclusion). */
         AmbientOcclusionSettings ambientOcclusion;

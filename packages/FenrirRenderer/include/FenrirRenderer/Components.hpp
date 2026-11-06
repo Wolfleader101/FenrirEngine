@@ -700,8 +700,9 @@ namespace Fenrir
         LightClusters,
         /**
          * @brief Its screen-space reflections (ADR-0056): at each pixel, the colour its mirror ray hit, from last
-         * frame, times how sure the hit is, exposed and tonemapped; black where nothing is reflected or the camera's
-         * reflections are off. It is what a mirror there would blend, sharp: a material's roughness blurs and fades it.
+         * frame, times how sure the hit is, exposed, vignetted, graded, tonemapped and grained; black where nothing is
+         * reflected or the camera's reflections are off. It is what a mirror there would blend, sharp: a material's
+         * roughness blurs and fades it.
          */
         Reflections,
         /**
@@ -753,7 +754,7 @@ namespace Fenrir
         ChromaticAberration chromaticAberration;
         /** @brief How the view darkens towards its corners, before the grade. */
         Vignette vignette;
-        /** @brief The noise the view adds after its tonemap. */
+        /** @brief The view's film grain, after its tonemap. */
         FilmGrain filmGrain;
         /** @brief How nearby geometry darkens the sky's light in the view. */
         AmbientOcclusion ambientOcclusion;

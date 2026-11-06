@@ -255,17 +255,32 @@ TEST_CASE("Film grain matches its CPU mirror for the frame it is drawn in", "[re
 
 TEST_CASE("With every effect at 0 the frame is the tonemap golden exactly", "[renderer][gl][golden]")
 {
-    // Every other setting off its default, so only the intensities keep the effects off.
+    // Every other setting off its default, so only the intensities keep the effects off: through each tonemapper and
+    // exposure the tonemap goldens cover, the same bytes as the plain frame, and its golden.
     const auto off = [](Fenrir::Camera& camera) {
         camera.chromaticAberration.intensity = 0.0f;
         camera.vignette = {0.0f, 0.1f, 0.2f, 0.3f};
         camera.filmGrain = {0.0f, 0.1f, 3.0f};
     };
-    const RendererTest::Rgba8Image plain = DrawGoldenScene(Fenrir::Tonemapper::AgX, 0.0f);
-    const RendererTest::Rgba8Image zeroed = DrawGoldenScene(Fenrir::Tonemapper::AgX, 0.0f, off);
-    RequireGolden("tonemap-agx", zeroed);
-    INFO("the frame with every effect at 0 differs from the plain frame in some byte");
-    REQUIRE(zeroed.rgba == plain.rgba);
+    struct Golden
+    {
+        std::string_view name;
+        Fenrir::Tonemapper tonemapper;
+        float exposure;
+    };
+    for (const Golden& golden :
+         {Golden{"tonemap-none", Fenrir::Tonemapper::None, 0.0f}, Golden{"tonemap-agx", Fenrir::Tonemapper::AgX, 0.0f},
+          Golden{"tonemap-pbr-neutral", Fenrir::Tonemapper::PbrNeutral, 0.0f},
+          Golden{"tonemap-aces", Fenrir::Tonemapper::Aces, 0.0f},
+          Golden{"tonemap-agx-minus-2ev", Fenrir::Tonemapper::AgX, -2.0f},
+          Golden{"tonemap-agx-plus-2ev", Fenrir::Tonemapper::AgX, 2.0f}})
+    {
+        const RendererTest::Rgba8Image plain = DrawGoldenScene(golden.tonemapper, golden.exposure);
+        const RendererTest::Rgba8Image zeroed = DrawGoldenScene(golden.tonemapper, golden.exposure, off);
+        RequireGolden(golden.name, zeroed);
+        INFO(golden.name << ": the frame with every effect at 0 differs from the plain frame in some byte");
+        REQUIRE(zeroed.rgba == plain.rgba);
+    }
 }
 
 TEST_CASE("A grey debug view shows its input without the camera's effects", "[renderer][gl][camera-effects]")
@@ -292,12 +307,18 @@ TEST_CASE("Each camera effect changes the lit scene", "[renderer][gl][golden]")
         return !RendererTest::CompareWithGolden(plain, DrawGoldenScene(Fenrir::Tonemapper::AgX, 0.0f, effect))
                     .Matches({});
     };
-    INFO("chromatic aberration left the scene as it was");
-    REQUIRE(changed(Aberrated));
-    INFO("the vignette left the scene as it was");
-    REQUIRE(changed(Vignetted));
-    INFO("film grain left the scene as it was");
-    REQUIRE(changed(Grained));
+    {
+        INFO("chromatic aberration left the scene as it was");
+        REQUIRE(changed(Aberrated));
+    }
+    {
+        INFO("the vignette left the scene as it was");
+        REQUIRE(changed(Vignetted));
+    }
+    {
+        INFO("film grain left the scene as it was");
+        REQUIRE(changed(Grained));
+    }
 }
 
 TEST_CASE("The lit scene through AgX with chromatic aberration matches its golden image", "[renderer][gl][golden]")
