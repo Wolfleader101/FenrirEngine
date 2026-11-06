@@ -190,6 +190,7 @@ TEST_CASE("A grade changes the lit scene", "[renderer][gl][golden]")
     // Against the golden comparison itself, so a grade silently skipped fails here too.
     const RendererTest::Rgba8Image plain = DrawGoldenScene(Fenrir::Tonemapper::AgX, 0.0f);
     const RendererTest::Rgba8Image graded = DrawGoldenScene(Fenrir::Tonemapper::AgX, 0.0f, NonTrivialGrade());
+    INFO("the graded scene matches the plain one under the golden comparison");
     REQUIRE_FALSE(RendererTest::CompareWithGolden(plain, graded).Matches({}));
 }
 
@@ -197,20 +198,20 @@ TEST_CASE("Output's colour grade matches its C++ mirror, through the tonemapper"
 {
     // As for the tonemappers below: a view of nothing but one flat linear colour, graded by each control on its own
     // and by all of them, after the exposure and before the tonemapper, against the mirror's colour sRGB-encoded.
-    std::array<Fenrir::ColourGrading, 8> gradings{};
+    std::array<Fenrir::ColourGrading, 9> gradings{};
     gradings[0].temperature = 4000.0f;
     gradings[1].temperature = 12000.0f;
-    gradings[1].tint = -0.4f;
-    gradings[2].contrast = 1.6f;
-    gradings[3].shadowTint = Fenrir::Colour{0.1f, 0.6f, 0.7f, 1.0f};
-    gradings[3].highlightTint = Fenrir::Colour{0.9f, 0.1f, 0.7f, 1.0f};
-    gradings[4] = gradings[3];
-    gradings[4].balance = -0.6f;
-    gradings[5].saturation = 0.3f;
-    gradings[6].slope = Vec3(1.2f, 1.0f, 0.8f);
-    gradings[6].offset = Vec3(0.02f, -0.05f, 0.1f);
-    gradings[6].power = Vec3(1.1f, 1.0f, 2.2f);
-    gradings[7] = NonTrivialGrade();
+    gradings[2].tint = -0.4f;
+    gradings[3].contrast = 1.6f;
+    gradings[4].shadowTint = Fenrir::Colour{0.1f, 0.6f, 0.7f, 1.0f};
+    gradings[4].highlightTint = Fenrir::Colour{0.9f, 0.1f, 0.7f, 1.0f};
+    gradings[5] = gradings[4];
+    gradings[5].balance = -0.6f;
+    gradings[6].saturation = 0.3f;
+    gradings[7].slope = Vec3(1.2f, 1.0f, 0.8f);
+    gradings[7].offset = Vec3(0.02f, -0.05f, 0.1f);
+    gradings[7].power = Vec3(1.1f, 1.0f, 2.2f);
+    gradings[8] = NonTrivialGrade();
     const std::array<Vec3, 4> colours{Vec3(0.18f), Vec3(0.02f, 0.015f, 0.01f), Vec3(4.0f, 1.0f, 0.25f),
                                       Vec3(0.05f, 0.4f, 1.5f)};
     // None at half a stop under shows the grade itself, clamped; AgX at a stop over, through a curve.

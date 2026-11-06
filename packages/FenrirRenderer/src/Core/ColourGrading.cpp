@@ -77,12 +77,14 @@ namespace Fenrir::Render
             return {x, -3.0 * x * x + 2.870 * x - 0.275};
         }
 
+        /** @brief CIE xy to CIE 1960 uv, where distances off the locus are measured. */
         glm::dvec2 XyToUv(glm::dvec2 xy)
         {
             const double d = -2.0 * xy.x + 12.0 * xy.y + 3.0;
             return {4.0 * xy.x / d, 6.0 * xy.y / d};
         }
 
+        /** @brief CIE 1960 uv back to CIE xy. */
         glm::dvec2 UvToXy(glm::dvec2 uv)
         {
             const double d = 2.0 * uv.x - 8.0 * uv.y + 4.0;

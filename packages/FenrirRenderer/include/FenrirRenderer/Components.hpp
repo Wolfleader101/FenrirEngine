@@ -498,7 +498,8 @@ namespace Fenrir
         float contrast = 1.0f;
         /**
          * @brief The tint the shadows take, linear: white by default, and any grey is none. Only its hue and
-         * saturation count, so it shifts hue and not brightness; the more saturated, the stronger.
+         * saturation count (it is scaled to unit luminance, so a grey keeps its brightness); the more saturated, the
+         * stronger.
          */
         Colour shadowTint{1.0f, 1.0f, 1.0f, 1.0f};
         /** @brief The tint the highlights take, as the shadows' does. */
@@ -515,10 +516,12 @@ namespace Fenrir
         float saturation = 1.0f;
         /**
          * @brief The ASC CDL, the final trim, per channel: each is multiplied by its slope, then its offset is added,
-         * then negatives are clamped and the result raised to its power (held at or above 0.001). Identity by default.
+         * then negatives are clamped and the result raised to its power. The slope, 1 in each channel by default.
          */
         Math::Vec3 slope{1.0f, 1.0f, 1.0f};
+        /** @brief The CDL's offset, added after the slope: 0 in each channel by default. */
         Math::Vec3 offset{0.0f, 0.0f, 0.0f};
+        /** @brief The CDL's power, held at or above 0.001: 1 in each channel by default. */
         Math::Vec3 power{1.0f, 1.0f, 1.0f};
     };
 

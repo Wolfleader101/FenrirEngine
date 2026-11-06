@@ -12,7 +12,7 @@ namespace Fenrir::Render
     {
         /** @brief The colour temperature, in kelvin, of the light the grade takes as white. */
         float temperature = 6500.0f;
-        /** @brief How far that white lies off the Planckian locus, in [-1, 1]: positive greener. */
+        /** @brief How far that white lies off the daylight locus, in [-1, 1]: positive greener. */
         float tint = 0.0f;
         /** @brief The slope in log2 around mid grey (0.18): 1 none. */
         float contrast = 1.0f;
@@ -40,15 +40,20 @@ namespace Fenrir::Render
     {
         /** @brief Linear Rec. 709 to itself, adapted from the settings' white to the one at 6500 K and no tint. */
         Math::Mat3 whiteBalance{1.0f};
+        /** @brief The slope in log2 around mid grey, at least 0. */
         float contrast = 1.0f;
         /** @brief The tints, each scaled to unit Rec. 709 luminance; white for a black tint. */
         Math::Vec3 shadowTint{1.0f};
         Math::Vec3 highlightTint{1.0f};
         /** @brief The split between the tints, in log2 stops from mid grey. */
         float split = 0.0f;
+        /** @brief How far each colour is from its luminance, at least 0. */
         float saturation = 1.0f;
+        /** @brief The CDL's slope per channel. */
         Math::Vec3 slope{1.0f};
+        /** @brief The CDL's offset per channel. */
         Math::Vec3 offset{0.0f};
+        /** @brief The CDL's power per channel, at least 0.001 (GLSL's pow(0, 0) is undefined). */
         Math::Vec3 power{1.0f};
     };
 

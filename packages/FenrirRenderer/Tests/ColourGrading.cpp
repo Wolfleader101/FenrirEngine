@@ -37,10 +37,15 @@ namespace
 TEST_CASE("The identity grade returns its input exactly", "[renderer][grading]")
 {
     const ColourGradingSettings identity;
-    REQUIRE(Fenrir::Render::IsIdentity(identity));
+    {
+        INFO("the default settings are the identity");
+        REQUIRE(Fenrir::Render::IsIdentity(identity));
+    }
     for (const Vec3 colour : {Vec3(0.0f), Vec3(0.18f), Vec3(4.0f, 1.0f, 0.25f), Vec3(-0.01f, 0.3f, 37.5f)})
     {
         const Vec3 graded = GradeColour(identity, colour);
+        INFO("(" << colour.r << ", " << colour.g << ", " << colour.b << ") came back as (" << graded.r << ", "
+                 << graded.g << ", " << graded.b << ")");
         REQUIRE(graded.r == colour.r);
         REQUIRE(graded.g == colour.g);
         REQUIRE(graded.b == colour.b);
@@ -49,6 +54,7 @@ TEST_CASE("The identity grade returns its input exactly", "[renderer][grading]")
 
 TEST_CASE("Any setting off its default makes the grade not identity", "[renderer][grading]")
 {
+    INFO("the settings changed in the failing line still count as the identity");
     const auto changed = [](auto change) {
         ColourGradingSettings settings;
         change(settings);
@@ -98,6 +104,7 @@ TEST_CASE("A white lit by the daylight the temperature names comes out grey", "[
         INFO(c.temperature << " K: its white became (" << graded.r << ", " << graded.g << ", " << graded.b << ")");
         REQUIRE(Near(graded, Vec3(mean), 2e-3f));
         // Von Kries keeps the white's luminance close; CAT02 does not keep it exactly.
+        INFO("its luminance became " << Luminance(graded));
         REQUIRE(std::abs(Luminance(graded) - 1.0f) < 0.05f);
     }
 }
@@ -110,6 +117,8 @@ TEST_CASE("A lower temperature cools the picture and a higher one warms it", "[r
     warm.temperature = 9000.0f;
     const Vec3 cooled = GradeColour(cool, Vec3(0.5f));
     const Vec3 warmed = GradeColour(warm, Vec3(0.5f));
+    INFO("grey at 4000 K became (" << cooled.r << ", " << cooled.g << ", " << cooled.b << "), at 9000 K (" << warmed.r
+                                   << ", " << warmed.g << ", " << warmed.b << ")");
     REQUIRE(cooled.b > cooled.r);
     REQUIRE(warmed.r > warmed.b);
 }
@@ -122,6 +131,8 @@ TEST_CASE("A positive tint names a greener white, so the picture moves to magent
     green.tint = -0.5f;
     const Vec3 a = GradeColour(magenta, Vec3(0.5f));
     const Vec3 b = GradeColour(green, Vec3(0.5f));
+    INFO("grey at tint 0.5 became (" << a.r << ", " << a.g << ", " << a.b << "), at -0.5 (" << b.r << ", " << b.g
+                                     << ", " << b.b << ")");
     REQUIRE(a.g < a.r);
     REQUIRE(a.g < a.b);
     REQUIRE(b.g > b.r);
@@ -200,6 +211,9 @@ TEST_CASE("A positive balance gives the highlights' tint more of the picture", "
     // At mid grey, the teal's green against the magenta's.
     const Vec3 shadowward = GradeColour(SplitToned(-0.5f), Vec3(0.18f));
     const Vec3 highlightward = GradeColour(SplitToned(0.5f), Vec3(0.18f));
+    INFO("mid grey at balance -0.5 became (" << shadowward.r << ", " << shadowward.g << ", " << shadowward.b
+                                             << "), at 0.5 (" << highlightward.r << ", " << highlightward.g << ", "
+                                             << highlightward.b << ")");
     REQUIRE(highlightward.g < shadowward.g);
     REQUIRE(highlightward.r > shadowward.r);
 }

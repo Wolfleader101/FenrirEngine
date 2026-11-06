@@ -1,16 +1,16 @@
 #version 460
 // The Output pass (ADR-0019, ADR-0049, ADR-0059): the view's linear HDR SceneColor scaled by its camera's exposure,
 // graded by its colour grade and mapped by its tonemapper into [0, 1], drawn into the view's viewport of its render
-// target. The window's backbuffer and image
-// targets are sRGB, so the write encodes it. With the MSAA key, SceneColor is multisampled and this resolves it: each
-// pixel is the mean of its samples, before the tonemap. The tonemappers and the grade are mirrored step for step in
-// C++ (src/Core/Tonemapping.cpp, src/Core/ColourGrading.cpp), which the CPU tests check against published values and
-// the GL tests hold this to; a change to one is a change to both. Matrices are written column by column. With the OCCLUSION key (a camera's
-// grey debug views), the texture is single-sampled, and its `greyChannel` is drawn as grey as it is: no exposure, no
-// tonemap. With the REFLECTIONS key (CameraDebugView::Reflections, ADR-0056), it is the view's reflection hit target,
-// and the colour is last frame's history at each hit's UV, its sharpest level, times the hit's confidence: what a
-// mirror would blend, exposed, graded and tonemapped. The hit target is read texel by texel, as Fenrir/Lighting.glsl reads it,
-// so neighbouring hits' UVs are never blended. REFLECTIONS overrides the other keys.
+// target. The window's backbuffer and image targets are sRGB, so the write encodes it. With the MSAA key, SceneColor
+// is multisampled and this resolves it: each pixel is the mean of its samples, before the tonemap. The tonemappers and
+// the grade are mirrored step for step in C++ (src/Core/Tonemapping.cpp, src/Core/ColourGrading.cpp), which the CPU
+// tests check against published values and the GL tests hold this to; a change to one is a change to both. Matrices
+// are written column by column. With the OCCLUSION key (a camera's grey debug views), the texture is single-sampled,
+// and its `greyChannel` is drawn as grey as it is: no exposure, no grade, no tonemap. With the REFLECTIONS key
+// (CameraDebugView::Reflections, ADR-0056), it is the view's reflection hit target, and the colour is last frame's
+// history at each hit's UV, its sharpest level, times the hit's confidence: what a mirror would blend, exposed, graded
+// and tonemapped. The hit target is read texel by texel, as Fenrir/Lighting.glsl reads it, so neighbouring hits' UVs
+// are never blended. REFLECTIONS overrides the other keys.
 
 #if defined(REFLECTIONS)
 // r, g: the hit's UV in last frame's view; b: its confidence. At the view's size.

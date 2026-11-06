@@ -31,8 +31,8 @@ public partial struct ColourGrading
     /// </summary>
     public float Contrast = 1;
     /// <summary>
-    /// The tint the shadows take, linear: white by default, and any grey is none. Only its hue and saturation count, so
-    /// it shifts hue and not brightness; the more saturated, the stronger.
+    /// The tint the shadows take, linear: white by default, and any grey is none. Only its hue and saturation count (it
+    /// is scaled to unit luminance, so a grey keeps its brightness); the more saturated, the stronger.
     /// </summary>
     public Colour ShadowTint = new() { R = 1, G = 1, B = 1, A = 1 };
     /// <summary>The tint the highlights take, as the shadows' does.</summary>
@@ -49,10 +49,12 @@ public partial struct ColourGrading
     public float Saturation = 1;
     /// <summary>
     /// The ASC CDL, the final trim, per channel: each is multiplied by its slope, then its offset is added, then
-    /// negatives are clamped and the result raised to its power (held at or above 0.001). Identity by default.
+    /// negatives are clamped and the result raised to its power. The slope, 1 in each channel by default.
     /// </summary>
     public Vector3 Slope = new(1, 1, 1);
+    /// <summary>The CDL's offset, added after the slope: 0 in each channel by default.</summary>
     public Vector3 Offset = new(0, 0, 0);
+    /// <summary>The CDL's power, held at or above 0.001: 1 in each channel by default.</summary>
     public Vector3 Power = new(1, 1, 1);
 
     public ColourGrading()
