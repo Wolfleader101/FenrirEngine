@@ -739,6 +739,9 @@ namespace Fenrir
                 view.tonemapper = ToCore(camera.tonemapper);
                 view.colourGrading = ToCore(camera.colourGrading);
                 view.bloom = {camera.bloom.intensity, camera.bloom.radius};
+                const Colour& streakTint = camera.anamorphicStreaks.tint;
+                view.anamorphicStreaks = {camera.anamorphicStreaks.intensity, camera.anamorphicStreaks.length,
+                                          Math::Vec3(streakTint.r, streakTint.g, streakTint.b)};
                 view.ambientOcclusion = {camera.ambientOcclusion.enabled, camera.ambientOcclusion.radius,
                                          camera.ambientOcclusion.intensity};
                 view.reflections = {camera.reflections.enabled, camera.reflections.intensity,

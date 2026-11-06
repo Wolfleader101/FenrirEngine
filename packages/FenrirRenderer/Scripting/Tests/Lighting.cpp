@@ -119,6 +119,7 @@ namespace
         camera.exposure = 1.5f;
         camera.tonemapper = Tonemapper::Aces;
         camera.bloom = {0.2f, 0.3f};
+        camera.anamorphicStreaks = {0.15f, 0.6f, {0.3f, 0.5f, 1.0f, 0.7f}};
         camera.colourGrading = {5000.0f,
                                 0.2f,
                                 1.3f,

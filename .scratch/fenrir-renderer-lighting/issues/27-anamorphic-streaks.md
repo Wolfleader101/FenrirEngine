@@ -12,13 +12,13 @@
 
 **Touches:** `packages/FenrirRenderer/include/FenrirRenderer/`, `packages/FenrirRenderer/src/`, `packages/FenrirRenderer/Shaders/`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`, `packages/FenrirRenderer/Scripting/api/`, `packages/FenrirRenderer/Managed/`, `examples/LightingDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] CPU unit tests: the streak levels' weights sum to 1 for every length, as `BloomLevelWeights` does; the normalised tint has unit luminance.
-- [ ] Null-backend probes: a view with streaks off adds no pass; with them on, its passes follow bloom's in `PostProcess`, and without bloom it runs one downsample of its own.
-- [ ] GL pixel probes: a bright point's streak reaches further horizontally than vertically by a wide margin; the frame's total energy, read back, is unchanged within the tolerance bloom's test uses.
-- [ ] A golden image of an emissive point over black with streaks on.
+- [x] CPU unit tests: the streak levels' weights sum to 1 for every length, as `BloomLevelWeights` does; the normalised tint has unit luminance.
+- [x] Null-backend probes: a view with streaks off adds no pass; with them on, its passes follow bloom's in `PostProcess`, and without bloom it runs one downsample of its own.
+- [x] GL pixel probes: a bright point's streak reaches further horizontally than vertically by a wide margin; the frame's total energy, read back, is unchanged within the tolerance bloom's test uses.
+- [x] A golden image of an emissive point over black with streaks on.
 
 Hand check: in the neon city, signs and headlights throw long, thin horizontal streaks in the tint, and dim surfaces show none.
 
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

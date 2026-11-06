@@ -880,6 +880,9 @@ namespace LightingDemo
             state.lighting.tonemapper = Fenrir::Tonemapper::PbrNeutral;
             state.lighting.exposure = -0.5f;
             state.lighting.bloom = {0.3f, 0.85f};
+            // The genre's long blue lines from the signs and headlights: anamorphic streaks, long and tinted blue,
+            // mixed in after the bloom.
+            state.lighting.anamorphicStreaks = {0.1f, 0.85f, Fenrir::Colour{0.3f, 0.5f, 1.0f, 1.0f}};
             state.lighting.ambientOcclusion.radius = 1.5f;
             // The grade of a cyberpunk night: teal shadows and magenta highlights, split a little under mid grey so the
             // magenta reaches the lit walls, with more contrast for the streets, and a slightly cool white balance.
@@ -1089,16 +1092,16 @@ namespace LightingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp = LightingKeyHelp(true) +
-                        " N: the traffic stopped or moving. M: the streets dry or wet. R: reflections off or on. C: the "
-                        "lights clustered or not.";
+        scene.keyHelp =
+            LightingKeyHelp(true) +
+            " N: the traffic stopped or moving. M: the streets dry or wet. R: reflections off or on. C: the "
+            "lights clustered or not.";
         // The traffic stopped and the streets dried, then through the debug views to the reflections' and back,
         // unclustered and clustered again, wet again, reflections off and on again, moving again, and the other sky
         // where there is one.
-        scene.keys = {Fenrir::Key::N, Fenrir::Key::M, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G,
-                      Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G,
-                      Fenrir::Key::C, Fenrir::Key::C, Fenrir::Key::M, Fenrir::Key::R, Fenrir::Key::R,
-                      Fenrir::Key::N, Fenrir::Key::S};
+        scene.keys = {Fenrir::Key::N, Fenrir::Key::M, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G,
+                      Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::C, Fenrir::Key::C,
+                      Fenrir::Key::M, Fenrir::Key::R, Fenrir::Key::R, Fenrir::Key::N, Fenrir::Key::S};
         // Above the middle of a street, a few metres up, looking down it between the towers.
         scene.camera.position = {StreetLine(2) - 1.5f, 3.5f, CityHalf - 10.0f};
         scene.camera.yaw = 0.0f;

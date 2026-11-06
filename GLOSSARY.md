@@ -528,6 +528,10 @@ A camera's look, set in its view's `Output` on the exposed scene colour before t
 Bright pixels bleeding light into their surroundings: a view's SceneColor blurred over ever wider areas and mixed back into it before `Output` by its camera's `bloom.intensity`, with no threshold, keeping the scene's energy (ADR-0049).
 *Avoid:* glow (what bloom looks like, not the effect), bright pass or threshold (there is none), lens flare (a different effect).
 
+**Anamorphic streaks**
+Bright pixels drawn out into long, thin horizontal lines, as an anamorphic lens draws them: a horizontal-only blur chain from bloom's first level, mixed into SceneColor after the bloom by its camera's `anamorphicStreaks.intensity`, times a tint at unit luminance, with no threshold, keeping the scene's energy (ADR-0059).
+*Avoid:* streak filter, star filter or starburst (a different, per-light effect), lens flare (ghosts and a halo, a different effect).
+
 **Punctual light**
 A `PointLight` or `SpotLight`: light from one point, falling with the square of the distance and windowed to zero at its `range`, any number per scene, written each frame into set 0's light buffer that `Fenrir/Lighting.glsl` loops over, by its pixel's light cluster (ADR-0048). The name is glTF's (`KHR_lights_punctual`).
 *Avoid:* local light, dynamic light (the sun moves too), area light (a rect light, which has a size).

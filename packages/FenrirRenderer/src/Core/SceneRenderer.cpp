@@ -3246,7 +3246,7 @@ namespace Fenrir::Render
             // SceneColor kept for next frame's reflections before bloom glows over it: these passes are added before
             // any view's bloom, so they run first in PostProcess.
             m_sceneHistory->AddHistoryPasses(graph, frameIndex, history, sceneColour);
-            blooms.push_back({sceneColour, {rect.width, rect.height}, request.bloom});
+            blooms.push_back({sceneColour, {rect.width, rect.height}, request.bloom, request.anamorphicStreaks});
 
             // The first view into a target clears all of it; each later one draws over it, in its viewport only.
             const LoadOp load = cleared.insert(request.target).second ? LoadOp::Clear : LoadOp::Load;
