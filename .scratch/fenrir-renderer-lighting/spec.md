@@ -113,12 +113,18 @@ Each ticket's tests follow the foundation's seams: the null backend through `Ren
 | 22 | C# for lighting, the sky, cameras, shadows and instancing | 21 |
 | 23 | Debug views of what the renderer shades with (requested in review of 16; needs triage) | 16 |
 | 24 | Atmospheric haze and sun shafts (requested in review of 16; needs triage) | 15, 16 |
+| 25 | Vignette, film grain and chromatic aberration (requested while tuning 20) | 27 |
+| 26 | Parametric colour grading with split toning (requested while tuning 20) | 20 |
+| 27 | Anamorphic streaks (requested while tuning 20) | 26 |
+| 28 | Lens flare and lens dirt (requested while tuning 20) | 25 |
 | 29 | Scene history colour and the Hi-Z pyramid (requested in review of 20) | 06, 11 |
 | 30 | Screen-space reflections: the trace and the lighting include's blend | 19, 29 |
 | 31 | Reflection debug views, LightingDemo's controls and the neon city's wet streets | 20, 30 |
 
 Every C++ ticket touches `packages/FenrirRenderer/src/` and its shaders, so most of them stack. C# waits for every C++ ticket, as in the animation spec; until ticket 22, `AmbientLight`'s C# mirror is a deprecated no-op. Screen-space reflections (29 to 31, settled in a grilling session on 2026-11-03) stack straight after 20, and the camera post-effects tickets (25 to 28) on top of them; ticket 22 has been built, so each of them regenerates FenrirRenderer's C# binding for its own fields and adds them to the scripting round trip.
 
+Tickets 25 to 28 are camera post effects, ordered round the tonemap by ADR-0059: streaks and the flare blend into SceneColor after bloom, and Output reads with chromatic aberration, then exposes, vignettes, grades, tonemaps and adds grain. They stack, in the order of how much each changes the look: 26, 27, 25, 28. Every one of them edits `Camera`, `SceneFrame`, LightingPanel and the neon city, and 25 and 26 both rewrite `builtin:output`'s block and `main()`, so side by side they would conflict in every shared file. They land on an integration branch off `main`, as this family's tickets did.
+
 ## Out of scope
 
-Deferred shading; physical light units; auto-exposure; reflection probes, planar reflections, and temporal accumulation or half-resolution tracing for screen-space reflections (ADR-0056); motion vectors; fog and volumetric light; PCSS and VSM; area-light shadows and disc, tube or sphere lights; clearcoat, sheen, transmission and anisotropy; GPU culling and indirect draws; LearnOpenGL's Blinn-Phong (the engine is already GGX).
+Deferred shading; physical light units; auto-exposure; reflection probes, planar reflections, and temporal accumulation or half-resolution tracing for screen-space reflections (ADR-0056); motion vectors; fog and volumetric light; PCSS and VSM; area-light shadows and disc, tube or sphere lights; clearcoat, sheen, transmission and anisotropy; GPU culling and indirect draws; 3D colour-grading LUTs, per-light starbursts, depth of field and motion blur (ADR-0059's "Not yet"); LearnOpenGL's Blinn-Phong (the engine is already GGX).
