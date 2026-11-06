@@ -38,7 +38,7 @@ Culling is two levels for this reason. The CPU culls entities by their world bou
 ## Not yet
 
 - **GPU-written instance lists**, a user pass in `Cull` writing a list's copies and count for the cull to read. It changes what an asset's revision means, so it is its own ADR.
-- **Cluster or meshlet culling and continuous LOD** (Nanite's approach), mesh shaders, GPU-written draw lists of whole items (the CPU still resolves materials and pipelines), LOD cross-fading, and occlusion culling of shadow views.
+- **Cluster or meshlet culling and continuous LOD** (Nanite's approach; `.scratch/fenrir-renderer/research/continuous-lod.md` says what it would take: a minimum viable form extends this ADR's cull pass with a cluster level through meshoptimizer's `clusterlod.h` and two more indirect commands, keeping the forward frame, and is worth taking only once a scene of large dense meshes shows discrete levels are not enough; the visibility-buffer form waits for a Vulkan backend), mesh shaders, GPU-written draw lists of whole items (the CPU still resolves materials and pipelines), LOD cross-fading, and occlusion culling of shadow views.
 
 ## Considered
 
