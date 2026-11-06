@@ -909,7 +909,10 @@ namespace Fenrir::Render
         Graphics::BindingGroupLayoutHandle m_outputLayout;
         /** @brief Set 2 of Output's REFLECTIONS variant: the view's reflection hits and history. */
         Graphics::BindingGroupLayoutHandle m_reflectionOutputLayout;
-        /** @brief Set 1 of the Output pass: the Output block, the view's exposure, tonemapper and grey channel. */
+        /**
+         * @brief Set 1 of the Output pass: the Output block, the view's exposure, colour grade, tonemapper and grey
+         * channel.
+         */
         Graphics::BindingGroupLayoutHandle m_outputBlockLayout;
         Graphics::PipelineHandle m_backgroundPipeline;
         Graphics::PipelineHandle m_skyPipeline;

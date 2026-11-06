@@ -72,6 +72,24 @@ namespace Fenrir
             return static_cast<Render::Tonemapper>(tonemapper);
         }
 
+        /** @brief The core's copy of a camera's colour grade: its tints as linear RGB, their alpha ignored. */
+        Render::ColourGradingSettings ToCore(const ColourGrading& grading)
+        {
+            Render::ColourGradingSettings settings;
+            settings.temperature = grading.temperature;
+            settings.tint = grading.tint;
+            settings.contrast = grading.contrast;
+            settings.shadowTint = Math::Vec3(grading.shadowTint.r, grading.shadowTint.g, grading.shadowTint.b);
+            settings.highlightTint =
+                Math::Vec3(grading.highlightTint.r, grading.highlightTint.g, grading.highlightTint.b);
+            settings.balance = grading.balance;
+            settings.saturation = grading.saturation;
+            settings.slope = grading.slope;
+            settings.offset = grading.offset;
+            settings.power = grading.power;
+            return settings;
+        }
+
         /** @brief The core's copy of a camera's debug view: the same values in the same order. */
         Render::ViewDebug ToCore(CameraDebugView debugView)
         {
@@ -719,6 +737,7 @@ namespace Fenrir
                 view.drawDebug = camera.drawDebug;
                 view.exposure = camera.exposure;
                 view.tonemapper = ToCore(camera.tonemapper);
+                view.colourGrading = ToCore(camera.colourGrading);
                 view.bloom = {camera.bloom.intensity, camera.bloom.radius};
                 view.ambientOcclusion = {camera.ambientOcclusion.enabled, camera.ambientOcclusion.radius,
                                          camera.ambientOcclusion.intensity};

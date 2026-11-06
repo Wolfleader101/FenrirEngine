@@ -10,7 +10,9 @@ scene's hand checks are collected in one place after them, under Hand checks.
 ## The Lighting window
 
 Every scene shows the same ImGui window, Lighting (`src/LightingPanel.cpp`): the cameras' exposure (EV stops),
-tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius), ambient occlusion (GTAO: on, which it is
+tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius), colour grade (ADR-0059: white balance as a
+temperature and tint, contrast, the shadow and highlight tints and their balance, saturation, and a button for no
+grade), ambient occlusion (GTAO: on, which it is
 by default here, its radius and strength) and screen-space reflections (ADR-0056: on, off unless the scene turns them
 on, their intensity, max distance, thickness and roughness cutoff, and buttons for their two debug views), the sun's
 shadows (on, their distance and their normal and slope biases,
@@ -271,8 +273,9 @@ The streets are Poly Haven's Asphalt 01, drawn by the demo's street shader (`sha
 
 The sky is the demo's own city glow (a dark blue zenith over a magenta and orange light-pollution glow from the
 horizon), or with S, Poly Haven's Kloppenheim 07 (Pure Sky), an overcast night lit from below by distant towns. Both
-are drawn at 0.03 intensity, and there is no sun. A strong, wide bloom (0.3 at radius 0.85), GTAO (1.5 m) and PBR
-Neutral finish it, at -0.5 EV. PBR Neutral keeps the neon saturated, where AgX (T) turns it pastel and lifts the dim
+are drawn at 0.03 intensity, and there is no sun. A strong, wide bloom (0.3 at radius 0.85), GTAO (1.5 m), a grade
+(6000 K, contrast 1.15, teal shadows and magenta highlights split a little under mid grey) and PBR Neutral finish it,
+at -0.5 EV. PBR Neutral keeps the neon saturated, where AgX (T) turns it pastel and lifts the dim
 spill on the upper walls towards dusk.
 
 The window's Scene part has:
@@ -494,6 +497,9 @@ Hand checks, on OpenGL:
 - Flying past a lit window, the room behind it shifts with parallax: its back wall, side walls, floor and ceiling
   light.
 - G to the light clusters' heat: no red (256 lights) anywhere along the streets.
+- The colour grade (ADR-0059): teal in the shadowed streets and magenta on the lit walls; No grade in the Lighting
+  window takes them away. Warming and cooling the white balance, raising the contrast and moving the balance change
+  the mood without clipping the signs or crushing the streets.
 - Without the fetched assets: dark wet streets, the city and its lights, and an amber message naming
   `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
 - Reflections (ADR-0056), at night: the wet streets mirror the edge strips, sign boards and lit windows, streaked by

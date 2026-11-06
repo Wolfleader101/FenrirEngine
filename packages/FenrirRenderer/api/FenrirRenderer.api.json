@@ -256,6 +256,118 @@
       ]
     },
     {
+      "name": "Fenrir::Math::Vec3",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 12,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::ColourGrading",
+      "category": "struct",
+      "role": "nested",
+      "size": 88,
+      "alignment": 4,
+      "doc": "A view's colour grade (ADR-0059): the look of the picture, set on the exposed scene colour before the tonemapper, in linear Rec. 709. So contrast and saturation act on scene values, mid grey stays put and the tonemapper still rolls off whatever the grade brightens, so a strong grade does not clip. Its steps run in this order: white balance, contrast, split toning, saturation, then the ASC CDL. Identity by default, and identity costs nothing.",
+      "fields": [
+        {
+          "name": "temperature",
+          "offset": 0,
+          "kind": "f32",
+          "default": 6500,
+          "doc": "The colour temperature, in kelvin, of the light the view takes as white: 6500 by default (D65, no change). A surface lit by daylight of this temperature comes out grey, so lower cools the picture and higher warms it. Held to 2500 to 25000."
+        },
+        {
+          "name": "tint",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0,
+          "doc": "How far off daylight that white lies, from -1 to 1: 0 by default. Positive names a greener light, so the picture moves to magenta; negative names a magenta one, so it moves to green."
+        },
+        {
+          "name": "contrast",
+          "offset": 8,
+          "kind": "f32",
+          "default": 1,
+          "doc": "The slope of the picture in stops around mid grey (0.18), which it keeps: 1 by default, above 1 more contrast, below 1 flatter, 0 all mid grey."
+        },
+        {
+          "name": "shadowTint",
+          "offset": 12,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          },
+          "doc": "The tint the shadows take, linear: white by default, and any grey is none. Only its hue and saturation count, so it shifts hue and not brightness; the more saturated, the stronger."
+        },
+        {
+          "name": "highlightTint",
+          "offset": 28,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          },
+          "doc": "The tint the highlights take, as the shadows' does."
+        },
+        {
+          "name": "balance",
+          "offset": 44,
+          "kind": "f32",
+          "default": 0,
+          "doc": "Where the shadows end and the highlights start, from -1 to 1: 0 by default, the split at mid grey. Positive moves it down by up to four stops, giving the highlights' tint more of the picture; negative up."
+        },
+        {
+          "name": "saturation",
+          "offset": 48,
+          "kind": "f32",
+          "default": 1,
+          "doc": "How far each colour is from grey of its luminance: 1 by default, 0 grey, above 1 more saturated. After split toning, so lowering it fades the tints too."
+        },
+        {
+          "name": "slope",
+          "offset": 52,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          },
+          "doc": "The ASC CDL, the final trim, per channel: each is multiplied by its slope, then its offset is added, then negatives are clamped and the result raised to its power (held at or above 0.001). Identity by default."
+        },
+        {
+          "name": "offset",
+          "offset": 64,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "power",
+          "offset": 76,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        }
+      ]
+    },
+    {
       "name": "Fenrir::Orthographic",
       "category": "struct",
       "role": "nested",
@@ -574,7 +686,7 @@
       "name": "Fenrir::Camera",
       "category": "struct",
       "role": "component",
-      "size": 128,
+      "size": 216,
       "alignment": 4,
       "doc": "Makes a view of the active scene from its entity, looking along the entity's local -Z with +Y up (ADR-0026). Plain data. Every enabled camera in the active scene draws one view a frame, into its viewport of its render target. Views into one target draw by `order`, lowest first, and ties by entity id, logged once. Each view has its own scene targets, and writes only its viewport.\n\nNot drawn, logged once: a camera targeting a window other than the main window, a viewport under one pixel, or a target image that is stale, empty or not a render target. A minimised window draws nothing. A window no camera draws into is cleared to black, logged once.",
       "fields": [
@@ -651,8 +763,16 @@
           "doc": "How the view's bright pixels bleed into their surroundings before the tonemap."
         },
         {
-          "name": "ambientOcclusion",
+          "name": "colourGrading",
           "offset": 92,
+          "kind": "struct",
+          "type": "Fenrir::ColourGrading",
+          "default": {},
+          "doc": "The look of the view: its white balance, contrast, tints and saturation, before the tonemap."
+        },
+        {
+          "name": "ambientOcclusion",
+          "offset": 180,
           "kind": "struct",
           "type": "Fenrir::AmbientOcclusion",
           "default": {},
@@ -660,7 +780,7 @@
         },
         {
           "name": "reflections",
-          "offset": 104,
+          "offset": 192,
           "kind": "struct",
           "type": "Fenrir::Reflections",
           "default": {},
@@ -668,7 +788,7 @@
         },
         {
           "name": "debugView",
-          "offset": 124,
+          "offset": 212,
           "kind": "enum",
           "type": "Fenrir::CameraDebugView",
           "default": "None",
@@ -854,13 +974,6 @@
           "doc": "False hides every copy; the entity's children are drawn as their own renderers say."
         }
       ]
-    },
-    {
-      "name": "Fenrir::Math::Vec3",
-      "category": "bound-type",
-      "role": "bound-type",
-      "size": 12,
-      "alignment": 4
     },
     {
       "name": "Fenrir::Math::AABB",

@@ -1,14 +1,15 @@
 #version 460
-// The Output pass (ADR-0019, ADR-0049): the view's linear HDR SceneColor scaled by its camera's exposure and mapped by
-// its tonemapper into [0, 1], drawn into the view's viewport of its render target. The window's backbuffer and image
+// The Output pass (ADR-0019, ADR-0049, ADR-0059): the view's linear HDR SceneColor scaled by its camera's exposure,
+// graded by its colour grade and mapped by its tonemapper into [0, 1], drawn into the view's viewport of its render
+// target. The window's backbuffer and image
 // targets are sRGB, so the write encodes it. With the MSAA key, SceneColor is multisampled and this resolves it: each
-// pixel is the mean of its samples, before the tonemap. The tonemappers are mirrored step for step in C++
-// (src/Core/Tonemapping.cpp), which the CPU tests check against published values and the GL tests hold this to; a
-// change to one is a change to both. Matrices are written column by column. With the OCCLUSION key (a camera's
+// pixel is the mean of its samples, before the tonemap. The tonemappers and the grade are mirrored step for step in
+// C++ (src/Core/Tonemapping.cpp, src/Core/ColourGrading.cpp), which the CPU tests check against published values and
+// the GL tests hold this to; a change to one is a change to both. Matrices are written column by column. With the OCCLUSION key (a camera's
 // grey debug views), the texture is single-sampled, and its `greyChannel` is drawn as grey as it is: no exposure, no
 // tonemap. With the REFLECTIONS key (CameraDebugView::Reflections, ADR-0056), it is the view's reflection hit target,
 // and the colour is last frame's history at each hit's UV, its sharpest level, times the hit's confidence: what a
-// mirror would blend, exposed and tonemapped. The hit target is read texel by texel, as Fenrir/Lighting.glsl reads it,
+// mirror would blend, exposed, graded and tonemapped. The hit target is read texel by texel, as Fenrir/Lighting.glsl reads it,
 // so neighbouring hits' UVs are never blended. REFLECTIONS overrides the other keys.
 
 #if defined(REFLECTIONS)
@@ -29,6 +30,20 @@ layout(set = 1, binding = 0, std140) uniform OutputData
     uint tonemapper;
     // With OCCLUSION, the channel drawn as grey: 0 red, 2 blue.
     uint greyChannel;
+    // Whether the colour is graded: 0 for an identity grade, which is skipped. The rest is Render::ColourGrade.
+    uint grade;
+    // Linear Rec. 709 to itself, from the white the camera names to D65.
+    mat3 whiteBalance;
+    // Each tint at unit luminance.
+    vec3 shadowTint;
+    float contrast;
+    vec3 highlightTint;
+    // The split between the tints, in stops from mid grey.
+    float split;
+    vec3 slope;
+    float saturation;
+    vec3 offset;
+    vec3 power;
 } settings;
 
 layout(location = 0) in vec2 vNdc;
@@ -99,6 +114,27 @@ vec3 Aces(vec3 colour)
     return clamp(outputMatrix * (a / b), 0.0, 1.0);
 }
 
+// The colour grade (ADR-0059), on the exposed linear colour: white balance, contrast in log2 around mid grey, split
+// toning by luminance in log2, saturation around luminance, then the ASC CDL with negatives clamped before its power.
+vec3 Grade(vec3 colour)
+{
+    if (settings.grade == 0u)
+    {
+        return colour;
+    }
+    const float midGrey = 0.18;
+    // How many stops either side of the split the shadow tint crosses into the highlight tint over.
+    const float splitWidth = 4.0;
+    const vec3 luminance = vec3(0.2126, 0.7152, 0.0722);
+    colour = settings.whiteBalance * colour;
+    colour = midGrey * pow(max(colour / midGrey, vec3(1e-10)), vec3(settings.contrast));
+    float stops = log2(max(dot(colour, luminance), 1e-10) / midGrey);
+    float highlight = smoothstep(settings.split - splitWidth, settings.split + splitWidth, stops);
+    colour *= mix(settings.shadowTint, settings.highlightTint, highlight);
+    colour = mix(vec3(dot(colour, luminance)), colour, settings.saturation);
+    return pow(max(colour * settings.slope + settings.offset, vec3(0.0)), settings.power);
+}
+
 vec3 Tonemap(vec3 colour)
 {
     switch (settings.tonemapper)
@@ -122,7 +158,7 @@ void main()
     ivec2 size = textureSize(reflectionHits, 0);
     vec4 hit = texelFetch(reflectionHits, clamp(ivec2(uv * vec2(size)), ivec2(0), size - 1), 0);
     vec3 colour = hit.b > 0.0 ? textureLod(sceneHistory, hit.rg, 0.0).rgb * hit.b : vec3(0.0);
-    outColour = vec4(Tonemap(colour * settings.exposureScale), 1.0);
+    outColour = vec4(Tonemap(Grade(colour * settings.exposureScale)), 1.0);
 #elif defined(OCCLUSION)
     outColour = vec4(vec3(texture(sceneColour, uv)[settings.greyChannel]), 1.0);
 #else
@@ -139,6 +175,6 @@ void main()
 #else
     vec3 colour = texture(sceneColour, uv).rgb;
 #endif
-    outColour = vec4(Tonemap(colour * settings.exposureScale), 1.0);
+    outColour = vec4(Tonemap(Grade(colour * settings.exposureScale)), 1.0);
 #endif
 }

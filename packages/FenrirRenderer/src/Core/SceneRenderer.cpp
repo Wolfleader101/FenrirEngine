@@ -1,6 +1,7 @@
 #include "Core/SceneRenderer.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <format>
@@ -9,6 +10,7 @@
 #include <variant>
 
 #include "Core/BuiltinShaders.hpp"
+#include "Core/ColourGrading.hpp"
 #include "Core/ImageReads.hpp"
 #include "Core/ImageUpload.hpp"
 #include "Core/Skinning.hpp"
@@ -179,9 +181,22 @@ namespace Fenrir::Render
             std::uint32_t tonemapper = 0;
             /** @brief The channel the OCCLUSION variant draws as grey: 0 red, 2 blue (reflection confidence). */
             std::uint32_t greyChannel = 0;
-            std::uint32_t padding0 = 0;
+            /** @brief 1 when the view's ColourGrade is applied, 0 for an identity grade (ADR-0059). */
+            std::uint32_t grade = 0;
+            /** @brief The grade's white balance, column by column, each padded to a vec4 as std140 lays out a mat3. */
+            std::array<Math::Vec4, 3> whiteBalance{Math::Vec4(1.0f, 0.0f, 0.0f, 0.0f),
+                                                   Math::Vec4(0.0f, 1.0f, 0.0f, 0.0f),
+                                                   Math::Vec4(0.0f, 0.0f, 1.0f, 0.0f)};
+            /** @brief The shadow tint, and the contrast in w. */
+            Math::Vec4 shadowTint{1.0f};
+            /** @brief The highlight tint, and the split in w. */
+            Math::Vec4 highlightTint{1.0f, 1.0f, 1.0f, 0.0f};
+            /** @brief The CDL's slope, and the saturation in w. */
+            Math::Vec4 slope{1.0f};
+            Math::Vec4 offset{0.0f};
+            Math::Vec4 power{1.0f, 1.0f, 1.0f, 0.0f};
         };
-        static_assert(sizeof(OutputBlock) == 16);
+        static_assert(sizeof(OutputBlock) == 144);
 
         /** @brief A Masked material's depth prepass block, as `builtin:depth-prepass` declares it (std140). */
         struct PrepassMaskBlock
@@ -2947,6 +2962,20 @@ namespace Fenrir::Render
             OutputBlock outputBlock;
             outputBlock.exposureScale = ExposureScale(request.exposure);
             outputBlock.tonemapper = static_cast<std::uint32_t>(request.tonemapper);
+            if (!IsIdentity(request.colourGrading))
+            {
+                const ColourGrade grade = BakeColourGrade(request.colourGrading);
+                outputBlock.grade = 1;
+                for (int c = 0; c < 3; ++c)
+                {
+                    outputBlock.whiteBalance[c] = Math::Vec4(grade.whiteBalance[c], 0.0f);
+                }
+                outputBlock.shadowTint = Math::Vec4(grade.shadowTint, grade.contrast);
+                outputBlock.highlightTint = Math::Vec4(grade.highlightTint, grade.split);
+                outputBlock.slope = Math::Vec4(grade.slope, grade.saturation);
+                outputBlock.offset = Math::Vec4(grade.offset, 0.0f);
+                outputBlock.power = Math::Vec4(grade.power, 0.0f);
+            }
             // The reflection hit target's confidence is its blue; every other grey view's value its red.
             outputBlock.greyChannel = request.debugView == ViewDebug::ReflectionConfidence ? 2u : 0u;
             m_outputBlocks->Write(frameIndex, v, BytesOf(outputBlock));

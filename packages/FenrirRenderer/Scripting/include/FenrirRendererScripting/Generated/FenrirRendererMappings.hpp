@@ -111,6 +111,30 @@ static_assert(sizeof(Fenrir::CameraDebugView) == 1 && alignof(Fenrir::CameraDebu
               "Fenrir::CameraDebugView is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
+static_assert(sizeof(Fenrir::Math::Vec3) == 12 && alignof(Fenrir::Math::Vec3) == 4,
+              "Fenrir::Math::Vec3 is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fenrir::ColourGrading>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.ColourGrading";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<float>("Temperature", 0),
+        Iris::Field<float>("Tint", 4),
+        Iris::Field<float>("Contrast", 8),
+        Iris::Field<Fenrir::Colour>("ShadowTint", 12),
+        Iris::Field<Fenrir::Colour>("HighlightTint", 28),
+        Iris::Field<float>("Balance", 44),
+        Iris::Field<float>("Saturation", 48),
+        Iris::Field<Fenrir::Math::Vec3>("Slope", 52),
+        Iris::Field<Fenrir::Math::Vec3>("Offset", 64),
+        Iris::Field<Fenrir::Math::Vec3>("Power", 76));
+};
+static_assert(sizeof(Fenrir::ColourGrading) == 88 && alignof(Fenrir::ColourGrading) == 4,
+              "Fenrir::ColourGrading is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
 template <>
 struct Iris::StructMapping<Fenrir::Orthographic>
 {
@@ -255,11 +279,12 @@ struct Iris::StructMapping<Fenrir::Camera>
         Iris::Field<float>("Exposure", 76),
         Iris::Field<Fenrir::Tonemapper>("Tonemapper", 80),
         Iris::Field<Fenrir::Bloom>("Bloom", 84),
-        Iris::Field<Fenrir::AmbientOcclusion>("AmbientOcclusion", 92),
-        Iris::Field<Fenrir::Reflections>("Reflections", 104),
-        Iris::Field<Fenrir::CameraDebugView>("DebugView", 124));
+        Iris::Field<Fenrir::ColourGrading>("ColourGrading", 92),
+        Iris::Field<Fenrir::AmbientOcclusion>("AmbientOcclusion", 180),
+        Iris::Field<Fenrir::Reflections>("Reflections", 192),
+        Iris::Field<Fenrir::CameraDebugView>("DebugView", 212));
 };
-static_assert(sizeof(Fenrir::Camera) == 128 && alignof(Fenrir::Camera) == 4,
+static_assert(sizeof(Fenrir::Camera) == 216 && alignof(Fenrir::Camera) == 4,
               "Fenrir::Camera is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
@@ -316,10 +341,6 @@ struct Iris::StructMapping<Fenrir::InstancedMeshRenderer>
 };
 static_assert(sizeof(Fenrir::InstancedMeshRenderer) == 28 && alignof(Fenrir::InstancedMeshRenderer) == 4,
               "Fenrir::InstancedMeshRenderer is not the layout FenrirRenderer.api.json describes: "
-              "regenerate the description, then this binding");
-
-static_assert(sizeof(Fenrir::Math::Vec3) == 12 && alignof(Fenrir::Math::Vec3) == 4,
-              "Fenrir::Math::Vec3 is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
 static_assert(sizeof(Fenrir::Math::Vec2) == 8 && alignof(Fenrir::Math::Vec2) == 4,
