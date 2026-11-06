@@ -2,10 +2,10 @@
 
 The user asked: "what would it take to move our shader language to Slang?" This file answers that for FenrirEngine as it stands. It covers what Slang offers today, what changes system by system and file by file, the ways to migrate, and whether ADR-0018's reasons for rejecting Slang still hold. It recommends a path but decides nothing: the decision belongs to a superseding ADR.
 
-Read on 2026-11-03. Two kinds of evidence are kept apart throughout:
+Read on 2026-11-03, and re-run on 2026-11-06 after the lighting and screen-space reflection work merged into `main`. Two kinds of evidence are kept apart throughout:
 
 - **Tested**: a throwaway prototype, run outside the engine's build (see [Appendix: the prototype](#appendix-the-prototype)). It used `slangc` 2026.17 (`2026.17-25-gc7954ebd1`), which ships in Vulkan SDK 1.4.363.0, and glslang, SPIRV-Tools and SPIRV-Cross from the same SDK. It also ran FenrirShaderCompiler's own `GlRewrite.cpp`, unchanged, built into a small driver. Nothing was loaded into a GL driver, so "valid" below means `spirv-val --target-env opengl4.5` accepts it. No GPU ran anything.
-- **Read**: Slang's upstream docs, source and releases, pinned in [What Slang offers now](#1-what-slang-offers-now). FenrirEngine's shaders and compiler are read at `origin/fenrir-renderer-lighting` @ `2b9cb165` (lighting PR #288, still open), where the current shader code lives.
+- **Read**: Slang's upstream docs, source and releases, pinned in [What Slang offers now](#1-what-slang-offers-now). FenrirEngine's shaders and compiler are read at `origin/main` @ `cf9d7d93`, which holds the lighting spec (PR #288), the screen-space reflections (ADR-0056, PRs #299 to #301) and the post-effects plan (ADR-0059). The first pass read the lighting branch at `2b9cb165`; the re-run on `main` compiled 67 stages instead of 64 and found the same results, with one new real example of trap 4.
 
 ## The short answer
 
@@ -13,7 +13,7 @@ FenrirEngine can move to Slang. The SPIR-V path that GL 4.6 takes survives the m
 
 1. **A new compiler front end.** `StageCompiler` (glslang plus an AST rule checker) and `Reflection` (SPIRV-Reflect) are rewritten on Slang's compilation and reflection API. `Program`'s variant loop, `GlRewrite`, the container and `fenrir_add_shaders` mostly stay.
 2. **A large dependency.** Slang is a shared library of roughly 25 MB (`slang-compiler.dll` in the SDK), plus a 6 MB glslang DLL if `-emit-spirv-via-glsl` is used. Today the tool links two small static libraries from submodules. Building Slang from source as a submodule is possible but heavy, so a pinned prebuilt release is the likelier choice.
-3. **Porting about 4,600 lines of GLSL.** That is 2,900 in the renderer (25 stages and 15 includes), 1,000 in the demos and about 740 in test fixtures. The includes become modules, and `#pragma fenrir default` becomes an attribute.
+3. **Porting about 5,100 lines of GLSL.** That is 3,300 in the renderer (28 stages and 16 includes), 1,000 in the demos and about 740 in test fixtures. The includes become modules, and `#pragma fenrir default` becomes an attribute.
 4. **Traps found by the prototype.** Each would have shipped wrong pixels or invalid SPIR-V silently:
    - Slang's default matrix layout reads every GLSL matrix transposed.
    - Its GLSL front end drops a vertex stage's `gl_Layer` write.
@@ -134,18 +134,18 @@ ADR-0018 cites `research/shader-languages`: `.scratch/fenrir-renderer/research/s
 
 ### 2.1 The shaders today
 
-Counted at `2b9cb165`:
+Counted at `main` @ `cf9d7d93`:
 
 | Group | Files | Lines | Notes |
 |---|---|---|---|
-| Built-in stages, `packages/FenrirRenderer/Shaders/Builtin/` | 25 | 1,613 | 21 vertex and fragment stages, plus `skinning.comp` (93) and `light_clusters.comp` (136); biggest are `gtao.frag` (299), `lit.frag` (140), `output.frag` (130), `bloom_downsample.frag` (114) |
-| Shared includes, `Shaders/include/Fenrir/` | 15 | 1,285 | `Lighting.glsl` 367, `Shadows.glsl` 227, `Draw.glsl` 128, `Frame.glsl` 116, `SkinMaths.glsl` 98, `Skinning.glsl` 59, `View.glsl` 57, `Brdf.glsl` 42, `CubeFaces.glsl` 38, `LightRecord.glsl` 37, `Normals.glsl` 32, `Clusters.glsl` 30, `Vertex.glsl` 22, `2D.glsl` 17, `SphericalHarmonics.glsl` 15 |
-| Demos | 16 | 1,021 | LightingDemo 911 (`facade.frag` 338), RendererDemo 82, AnimationDemo 28 |
+| Built-in stages, `packages/FenrirRenderer/Shaders/Builtin/` | 28 | 1,946 | 24 vertex and fragment stages, plus `skinning.comp` (93) and `light_clusters.comp` (136); biggest are `gtao.frag` (299), `reflection_trace.frag` (223), `output.frag` (144), `lit.frag` (140). ADR-0056 added `hi_z.frag` (47), `reflection_trace.frag` and `scene_history.frag` (48) |
+| Shared includes, `Shaders/include/Fenrir/` | 16 | 1,370 | `Lighting.glsl` 424, `Shadows.glsl` 227, `Draw.glsl` 128, `Frame.glsl` 116, `SkinMaths.glsl` 98, `View.glsl` 71, `Skinning.glsl` 59, `LightRecord.glsl` 43, `Brdf.glsl` 43, `CubeFaces.glsl` 38, `Normals.glsl` 32, `Clusters.glsl` 30, `Vertex.glsl` 22, `2D.glsl` 17, `SphericalHarmonics.glsl` 15, `Constants.glsl` 7 |
+| Demos | 17 | 1,016 | LightingDemo 906 (`facade.frag` 327), RendererDemo 82, AnimationDemo 28 |
 | Renderer test fixtures | 11 | 279 | `Tests/fixtures/`, `Tests/OpenGL/fixtures/` |
 | FenrirAssets test fixtures | 2 | 37 | `Tests/fixtures/shaders/` |
 | FenrirShaderCompiler test fixtures | 27 | 426 | 15 of them in `errors/`, which must fail to build |
 
-There are 22 `fenrir_add_shaders` calls for built-in programs (`packages/FenrirRenderer/CMakeLists.txt`). The variant keys in use are `ALPHA_MASK`, `SKINNED`, `POINT_SHADOW`, `CUBEMAP`, `MSAA`, `DENOISE`, `OCCLUSION`, `INPUT_SRGB`, `PREMULTIPLY` and `GAMMA`, at most three per program, so at most 8 variants. `builtin:lit` and `builtin:unlit` have 8 each.
+There are 24 `fenrir_add_shaders` calls for built-in programs (`packages/FenrirRenderer/CMakeLists.txt`). The variant keys in use are `ALPHA_MASK`, `SKINNED`, `POINT_SHADOW`, `CUBEMAP`, `MSAA`, `DENOISE`, `OCCLUSION`, `REFLECTIONS`, `COPY`, `DOWNSAMPLE`, `INPUT_SRGB`, `PREMULTIPLY` and `GAMMA`, at most three per program, so at most 8 variants. `builtin:lit`, `builtin:unlit`, `builtin:output` and `builtin:2d` have 8 each. The compiler tool, the container, `fenrir_add_shaders` and the golden-image comparison are unchanged between `2b9cb165` and `main`.
 
 C# never reaches the compiler. `Fenrir.Assets.Shaders` (`packages/FenrirAssets/Managed/Fenrir.Assets/Shaders.cs` and its generated part) reads a shader's material parameters from the container through FenrirAssets. Users' shaders reach the compiler only through `fenrir_add_shaders` in their CMake (`cmake/FenrirShaders.cmake`). The C# side therefore sees no change as long as the container's reflection model (parameters, types, defaults) stays the same.
 
@@ -193,7 +193,7 @@ Slang's SPIR-V differs from glslang's in instruction order, in which locals it k
 | 1 | **Matrices read transposed.** For GLSL input, Slang's default (`-matrix-layout-column-major`) decorates every matrix member `RowMajor`. glslang decorates them `ColMajor`. The multiply is still `OpMatrixTimesVector`, so `view.viewProjection * world` reads the C++ column-major bytes transposed. SPIRV-Cross decompiles Slang's version as `spvWorkaroundRowMajor(view.viewProjection) * world`. | `mat.vert` repro; `mesh.vert` (9 matrix members) | `-matrix-layout-row-major` (Slang's names are swapped relative to GLSL's) gives `ColMajor` and the same code as glslang. Tested on `mesh.vert` and the native `unlit` port. The flags are documented, but which SPIR-V decoration each gives is not (§1). |
 | 2 | **`gl_Layer` dropped.** A GLSL vertex stage's `gl_Layer = …` (`Draw.glsl`'s `POINT_SHADOW` path, ADR-0050) produces no `Layer` builtin and no store, with no diagnostic, at every SPIR-V version and in Slang's GLSL output too. | `layer.vert` repro; `mesh.vert -DPOINT_SHADOW` | Write it the Slang way: an `SV_RenderTargetArrayIndex` output. At SPIR-V 1.5 that gives `ShaderLayer` and a valid `Layer` store. At SPIR-V 1.0 it emits `Capability Geometry` without `ShaderViewportIndexLayerEXT`, and `spirv-val` rejects it. So either the GL path takes SPIR-V newer than 1.0 (untested on drivers), or the compiler patches the capability and extension as `GlRewrite` already patches builtins. |
 | 3 | **`DrawParameters` without its extension.** At `-profile spirv_1_0`, a stage reading `gl_BaseInstance` gets `OpCapability DrawParameters` but no `OpExtension "SPV_KHR_shader_draw_parameters"`. `spirv-val` rejects it for OpenGL 4.5 and for Vulkan 1.0. glslang emits both. | `mesh.vert` (every mesh program) | Same choice as trap 2: SPIR-V 1.3+ (where it is core), or have `GlRewrite` add the extension. A driver may not care, but the tool should not ship invalid SPIR-V. |
-| 4 | **Unused resources stripped, so binding points shift.** Slang drops resources a stage never reads; glslang keeps every declared one. `GlBindingsOf` numbers a binding by "how many bindings of its kind in its set have a lower binding number in this variant". A variant that declares set 0's textures at bindings 1 and 2 but reads only binding 2 would put it at GL point 0, while the renderer binds it at point 1 from its declared layout: the wrong texture, silently. `-preserve-params` did not keep them in GLSL mode. | `gap.frag` repro, run through `GlRewrite` | Take the variant's bindings from Slang's reflection, which lists every declared parameter (tested), not from the SPIR-V. Or change the flattening formula so it does not depend on which bindings a variant uses. |
+| 4 | **Unused resources stripped, so binding points shift.** Slang drops resources a stage never reads; glslang keeps every declared one. `GlBindingsOf` numbers a binding by "how many bindings of its kind in its set have a lower binding number in this variant". A variant that declares set 0's textures at bindings 1 and 2 but reads only binding 2 would put it at GL point 0, while the renderer binds it at point 1 from its declared layout: the wrong texture, silently. `-preserve-params` did not keep them in GLSL mode. It happens in real built-ins on `main`: `mesh.vert` declares set 1's five textures and buffers through `View.glsl` and reads none, and `scene_history.frag`'s variant without `DOWNSAMPLE` declares its `HistoryData` block and never reads it. Both were stripped. | `gap.frag` repro, run through `GlRewrite`; `mesh.vert` and `scene_history.frag` on `main` | Take the variant's bindings from Slang's reflection, which lists every declared parameter (tested), not from the SPIR-V. Or change the flattening formula so it does not depend on which bindings a variant uses. |
 | 5 | **Two GLSL constructs Slang's GLSL mode refuses.** `invariant gl_Position;` (`Vertex.glsl`, which ADR-0049's equal depth test relies on) and `mat4(mat3)` (`Draw.glsl`'s instance normal and cube-face turn). With both edited, all 64 non-error GLSL stages compiled. | all 64 stages | `mat4(mat3)` is spelled out by hand. `invariant` has no GLSL-mode spelling. Native Slang has no `invariant` keyword either (`invariant float4 pos : SV_Position` is a parse error; tested). The upstream docs read do not say how a Slang vertex stage marks `SV_Position` invariant. It needs an answer before the depth prepass can move: a `precise` qualifier, SPIR-V inline assembly, or the tool adding `Invariant` to the `Position` builtin, as `GlRewrite` already edits decorations. |
 | 6 | **Missing capability on cube arrays.** For `samplerCubeArrayShadow` (`Frame.glsl`'s point shadow cubes), Slang emits an arrayed `Cube` image without `OpCapability SampledCubeArray`. glslang declares it. `spirv-val` accepts both. | `lit.frag`, `cubearr.frag` | Watch for it on drivers. Strict Vulkan validation would want the capability. |
 
@@ -206,6 +206,8 @@ Slang's SPIR-V is also smaller, after its own dead-code elimination: `mesh.vert`
 - **ADR-0048:** amended. "One shared lighting include" becomes a module.
 - **ADR-0051:** amended. `Fenrir/Draw.glsl`, the spec constant `fenrirInstanceIndexExcludesBase` and the `gl_InstanceIndex` ban keep their meaning but are restated for a module.
 - **ADR-0049 and ADR-0050:** checked, not changed. The invariant position and the `gl_Layer` write must hold after the port.
+- **ADR-0056:** amended. The reflection blend lives in `Fenrir/Lighting.glsl`, and the view set's `fenrirReflectionHits` and `fenrirSceneHistory` are declared in `View.glsl`; both are restated for modules. Its three new programs port like the other fullscreen passes.
+- **ADR-0059:** checked. It plans lens effects and grading as more fullscreen passes, and names no GLSL file yet, so whichever language lands first for them is the one they are written in. If the port starts before lighting tickets 25 to 28, those tickets should write Slang.
 - **`packages/FenrirRenderer/README.md`:** "User shaders", which names `Fenrir/Vertex.glsl` and `invariant gl_Position`, and "Materials and built-in shaders".
 - **`cmake/FenrirShaders.cmake`'s header comment.**
 - **`GLOSSARY.md`:** "FenrirShaderCompiler" ("compiles GLSL to SPIR-V") and "Shader variant" ("`#define` keys").
@@ -215,7 +217,7 @@ Slang's SPIR-V is also smaller, after its own dead-code elimination: `mesh.vert`
 
 ### A. Big bang
 
-Replace glslang with Slang and port all 4,600 lines in one stack.
+Replace glslang with Slang and port all 5,100 lines in one stack.
 
 - **For:** one toolchain at every point, and no period with two front ends.
 - **Against:** every program changes at once. A wrong-pixel trap (1, 2 or 4) shows up as dozens of golden failures with no way to bisect by program. It also blocks every other renderer change while it lands, after a lighting spec that just added most of the shader code.
@@ -252,7 +254,7 @@ Rough tickets, each a stackable PR:
 6. **GL fix-ups:** either `GlRewrite` adds `SPV_KHR_shader_draw_parameters` and `ShaderViewportIndexLayerEXT` with its extension where Slang leaves them out, or the GL path moves past SPIR-V 1.0, after a driver test on NVIDIA, AMD, Intel and Mesa.
 7. **Modules for sets 0, 1 and 3:** `Fenrir.Frame`, `Fenrir.View` and `Fenrir.Draw` (with `CurrentDraw()` as the only way to the instance index, taken as `SV_VulkanInstanceID`, never `SV_InstanceID`, which already subtracts the base), with `Fenrir.Vertex`, `Fenrir.Normals` and `Fenrir.CubeFaces`.
 8. **Modules for lighting:** `Fenrir.Brdf`, `Fenrir.LightRecord`, `Fenrir.Clusters`, `Fenrir.SphericalHarmonics`, `Fenrir.Shadows` and `Fenrir.Lighting` (`FenrirSurface` could become a struct with methods; the BRDF pieces could become an interface).
-9. **Port the fullscreen and post programs:** `fullscreen.vert`, background, panorama, sky filtering, BRDF LUT, bloom, GTAO and output (about 800 lines).
+9. **Port the fullscreen and post programs:** `fullscreen.vert`, background, panorama, sky filtering, BRDF LUT, bloom, GTAO, Hi-Z, reflection trace, scene history and output (about 1,200 lines).
 10. **Port the mesh programs:** `mesh.vert`, unlit, lit, fallback, prepass and shadow, with `POINT_SHADOW` and `SKINNED`. This is where traps 2 and 5 (invariant) land.
 11. **Port compute, debug and 2D:** skinning, light clusters, debug lines, triangles and text, and 2D.
 12. **Port the demos and test fixtures:** LightingDemo, RendererDemo, AnimationDemo and the FenrirAssets and renderer fixtures.
@@ -305,15 +307,15 @@ What a superseding ADR would have to decide:
 
 ## Appendix: the prototype
 
-Everything ran in the session's scratchpad, outside the repository and its build. Inputs were `git archive origin/fenrir-renderer-lighting` (`2b9cb165`) of `packages/FenrirRenderer`, `packages/FenrirAssets`, `cmake` and the demos. Tools: Vulkan SDK 1.4.363.0's `slangc` 2026.17, `glslangValidator`, `spirv-val`, `spirv-dis` and `spirv-cross`.
+Everything ran in the session's scratchpad, outside the repository and its build. Inputs were `git archive` of `packages/FenrirRenderer`, `packages/FenrirAssets`, `cmake` and the demos, first at `origin/fenrir-renderer-lighting` (`2b9cb165`), then at `origin/main` (`cf9d7d93`); the numbers below are from the `main` run, which repeated every step. Tools: Vulkan SDK 1.4.363.0's `slangc` 2026.17, `glslangValidator`, `spirv-val`, `spirv-dis` and `spirv-cross`.
 
-1. **Every GLSL stage through Slang's GLSL mode.** All 64 stages, the 15 `errors/` fixtures left out, were compiled with:
+1. **Every GLSL stage through Slang's GLSL mode.** All 67 stages on `main`, the 15 `errors/` fixtures left out, were compiled with:
 
    ```
-   slangc <stage> -allow-glsl -lang glsl -stage <s> -entry main -target spirv -I <Shaders/include> -o out.spv
+   slangc <stage> -lang glsl -stage <s> -entry main -target spirv -profile spirv_1_0 -matrix-layout-row-major -I <Shaders/include> -o out.spv
    ```
 
-   51 compiled. The other 13 failed on `invariant gl_Position;` (`Vertex.glsl:11`) and `mat4(copy.normal)` (`Draw.glsl:118`). With those two lines edited in a copy, all 64 compiled. `mesh.vert -DPOINT_SHADOW` also needed `Draw.glsl`'s `mat4(turn)` spelled out.
+   54 compiled. The other 13, every vertex stage that includes `Vertex.glsl`, failed on `invariant gl_Position;` (`Vertex.glsl:11`), and `mesh.vert` also on `mat4(copy.normal)` (`Draw.glsl:118`). With those two lines edited in a copy, all 67 compiled. `mesh.vert -DPOINT_SHADOW` also needed `Draw.glsl`'s `mat4(turn)` spelled out. ADR-0056's `hi_z.frag`, `reflection_trace.frag` and `scene_history.frag` compiled as written.
 2. **SPIR-V version.** Slang's default output is SPIR-V 1.5, which `spirv-val --target-env vulkan1.0` rejects. `-profile spirv_1_0` gives 1.0 (with "profile implicitly upgraded" warnings for capabilities such as `spvImageQuery`).
 3. **Decorations compared with glslang** (a small `spirv-dis` parser):
    - sets, bindings, locations, `SpecId 61440`, combined image samplers, `OriginUpperLeft`, `VertexIndex`, `InstanceIndex` and `BaseInstance` match for `mesh.vert` and `lit.frag`;
@@ -321,8 +323,8 @@ Everything ran in the session's scratchpad, outside the repository and its build
    - matrix majorness differs (trap 1);
    - `Layer` is missing (trap 2);
    - unused resources are missing (trap 4).
-4. **`GlRewrite` on Slang's SPIR-V.** FenrirShaderCompiler's `GlRewrite.cpp` and `FenrirAssets/ShaderGlBindings.hpp`, unchanged, were built with clang++ into a 40-line driver. The driver reads SPIR-V and a binding list, calls `GlBindingsOf` and `RewriteForGl`, and writes the GL copy. For `builtin:lit` (`ALPHA_MASK`, `SKINNED`), `builtin:output` (`MSAA`, `OCCLUSION`) and `builtin:2d` (`GAMMA`), compiled by both compilers:
-   - every GL binding point present in both was identical;
+4. **`GlRewrite` on Slang's SPIR-V.** FenrirShaderCompiler's `GlRewrite.cpp` and `FenrirAssets/ShaderGlBindings.hpp`, unchanged, were built with clang++ into a 40-line driver. The driver reads SPIR-V and a binding list, calls `GlBindingsOf` and `RewriteForGl`, and writes the GL copy. For `builtin:lit` (`ALPHA_MASK`, `SKINNED`), `builtin:output` (`MSAA`, `OCCLUSION`; on `main` also `MSAA`, `REFLECTIONS`), `builtin:2d` (`GAMMA`), and on `main` `builtin:hi-z`, `builtin:reflection-trace` and `builtin:scene-history` (each with `MSAA`), compiled by both compilers:
+   - every GL binding point present in both was identical (`lit.frag` on `main`: 23 of 23);
    - the builtins and the spec constant were rewritten the same way;
    - Slang's copies passed `spirv-val --target-env opengl4.5`, except the vertex stage reading `gl_BaseInstance` (trap 3).
 5. **Native Slang.** A `Fenrir/View.slang` module (`[vk::binding]` globals) and an `unlit.slang` port using it:
