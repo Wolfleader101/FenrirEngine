@@ -88,14 +88,15 @@ namespace Fenrir::Render
      * already tamed:
      *
      * - **StreakDownsample**, once per level (StreakLevels): level 0 into a level at half its width and the same
-     * height, then each into the next at half the width again, with a horizontal-only filter (the `HORIZONTAL` variant
-     * of the downsample: three bilinear taps, two texels apart, weighted 1/4, 1/2 and 1/4). They run after bloom's
-     *   downsamples and before its upsamples, which blend the wider levels over level 0.
+     *   height, then each into the next at half the width again, with a horizontal-only filter (the `HORIZONTAL`
+     *   variant of the downsample: three bilinear taps, two texels apart, weighted 1/4, 1/2 and 1/4). They run after
+     *   bloom's downsamples and before its upsamples, which blend the wider levels over level 0.
      * - **StreakUpsample**, from the second narrowest level up to the first: the level below drawn into each with a
      *   horizontal tent (1 2 1, over 4), blended over it by `length` (StreakLevelWeights).
      * - **StreakComposite**, after BloomComposite: the first streak level drawn over SceneColor with the horizontal
      *   tent, times the tint at unit luminance, blended by the streaks' `intensity`. So SceneColor becomes
-     *   (1 - intensity) of itself and `intensity` of the streaks, and the streaks move light, never add it.
+     *   (1 - intensity) of itself and `intensity` of the streaks, and the streaks move light, never add it: exactly
+     *   so for grey light, while a coloured source times a coloured tint gains or loses a little luminance.
      *
      * A view whose bloom is off but whose streaks are on runs bloom's first downsample (a BloomDownsample pass) into a
      * level 0 of its own.

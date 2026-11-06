@@ -10,7 +10,8 @@ scene's hand checks are collected in one place after them, under Hand checks.
 ## The Lighting window
 
 Every scene shows the same ImGui window, Lighting (`src/LightingPanel.cpp`): the cameras' exposure (EV stops),
-tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius), anamorphic streaks (ADR-0059: intensity and length; the tint is the scene's), colour grade (ADR-0059: white balance as a
+tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius), anamorphic streaks (ADR-0059: intensity
+and length; the tint is the scene's), colour grade (ADR-0059: white balance as a
 temperature and tint, contrast, the shadow and highlight tints and their balance, saturation, and a button for no
 grade), ambient occlusion (GTAO: on, which it is
 by default here, its radius and strength) and screen-space reflections (ADR-0056: on, off unless the scene turns them
@@ -491,8 +492,8 @@ Hand checks, on OpenGL:
 - Neon streaks on the wet streets: the signs and headlights mirror in the puddles and smear along the damp asphalt
   between them. M dries the streets, and the streaks go.
 - The signs glow, with bloom round them; their light falls on the walls and sidewalks below them in their colour.
-- Anamorphic streaks: the signs and headlights throw long, thin horizontal lines, blue, and dim surfaces show none.
-  The Lighting window's streak intensity at 0 takes them away.
+- Anamorphic streaks: the signs and headlights throw long, thin horizontal lines, blue, and dim surfaces show
+  none. The Lighting window's streak intensity at 0 takes them away.
 - From high above, the skyline glows: edge-lit towers, coloured washes up their walls, beacons, and the glow behind.
 - The headlights light the road ahead of each car, and move with it.
 - The frame rate stays smooth flying down the streets with the free-fly camera; distant facades and signs do not

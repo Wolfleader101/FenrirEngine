@@ -101,7 +101,7 @@
             "b": 1,
             "a": 1
           },
-          "doc": "The streaks' colour, linear; only its hue counts, its brightness is ignored. White by default."
+          "doc": "The streaks' colour, linear, scaled to unit luminance: its hue and saturation count, its brightness is ignored. White by default."
         }
       ]
     },

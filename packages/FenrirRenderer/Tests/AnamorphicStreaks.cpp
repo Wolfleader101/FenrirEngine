@@ -146,6 +146,7 @@ TEST_CASE("A camera's streaks are off by default and add no pass", "[renderer][s
     RendererTestApp test;
     test.AddCamera();
     test.AddMeshRenderer(test.Mesh(), test.Material());
+    INFO("a camera's streak intensity is 0 by default");
     REQUIRE(Fenrir::Camera{}.anamorphicStreaks.intensity == 0.0f);
 
     test.Frame();

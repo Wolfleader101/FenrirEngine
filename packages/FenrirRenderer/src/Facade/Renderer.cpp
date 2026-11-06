@@ -73,6 +73,11 @@ namespace Fenrir
         }
 
         /** @brief The core's copy of a camera's colour grade: its tints as linear RGB, their alpha ignored. */
+        Render::StreakSettings ToCore(const AnamorphicStreaks& streaks)
+        {
+            return {streaks.intensity, streaks.length, Math::Vec3(streaks.tint.r, streaks.tint.g, streaks.tint.b)};
+        }
+
         Render::ColourGradingSettings ToCore(const ColourGrading& grading)
         {
             Render::ColourGradingSettings settings;
@@ -739,9 +744,7 @@ namespace Fenrir
                 view.tonemapper = ToCore(camera.tonemapper);
                 view.colourGrading = ToCore(camera.colourGrading);
                 view.bloom = {camera.bloom.intensity, camera.bloom.radius};
-                const Colour& streakTint = camera.anamorphicStreaks.tint;
-                view.anamorphicStreaks = {camera.anamorphicStreaks.intensity, camera.anamorphicStreaks.length,
-                                          Math::Vec3(streakTint.r, streakTint.g, streakTint.b)};
+                view.anamorphicStreaks = ToCore(camera.anamorphicStreaks);
                 view.ambientOcclusion = {camera.ambientOcclusion.enabled, camera.ambientOcclusion.radius,
                                          camera.ambientOcclusion.intensity};
                 view.reflections = {camera.reflections.enabled, camera.reflections.intensity,

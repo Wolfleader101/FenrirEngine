@@ -490,7 +490,10 @@ namespace Fenrir
          * only, reaching most of the way across the view). 0.75 by default.
          */
         float length = 0.75f;
-        /** @brief The streaks' colour, linear; only its hue counts, its brightness is ignored. White by default. */
+        /**
+         * @brief The streaks' colour, linear, scaled to unit luminance: its hue and saturation count, its brightness is
+         * ignored. White by default.
+         */
         Colour tint{1.0f, 1.0f, 1.0f, 1.0f};
     };
 

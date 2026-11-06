@@ -142,7 +142,7 @@ namespace LightingDemo
             ImGui::SliderFloat("Bloom intensity", &settings.bloom.intensity, 0.0f, 1.0f, "%.3f",
                                ImGuiSliderFlags_Logarithmic);
             ImGui::SliderFloat("Bloom radius", &settings.bloom.radius, 0.0f, 1.0f);
-            // The tint is the scene's own, kept at unit luminance by the renderer; only its hue shows.
+            // The streaks' tint is the scene's own; the renderer scales it to unit luminance.
             ImGui::SliderFloat("Streak intensity", &settings.anamorphicStreaks.intensity, 0.0f, 1.0f, "%.3f",
                                ImGuiSliderFlags_Logarithmic);
             ImGui::SliderFloat("Streak length", &settings.anamorphicStreaks.length, 0.0f, 1.0f);

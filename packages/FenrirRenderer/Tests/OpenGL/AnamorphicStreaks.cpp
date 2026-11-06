@@ -71,6 +71,7 @@ TEST_CASE("A bright spot's streak reaches far further across than up and down", 
     constexpr std::uint32_t c = Size / 2;
     // How far from the spot's centre, along its row or its column, the streak is still a thousandth of its peak.
     const float peak = Red(frame, c, c);
+    INFO("the spot's own pixels hold some of its streak");
     REQUIRE(peak > 0.0f);
     std::uint32_t across = 0;
     std::uint32_t upDown = 0;
@@ -113,11 +114,13 @@ TEST_CASE("Streaks keep a dim spot's energy, mixed in at any intensity and lengt
                 test.RequireOpenGL();
                 AddSpot(test, Value, intensity, length, bloom);
                 const GlProbe::Image frame = test.Frame(Size, Size);
+                INFO("no GL error or other error was logged");
                 REQUIRE(test.messages->errors.empty());
                 const double energy = Energy(frame);
                 INFO("bloom " << bloom << ", streaks at intensity " << intensity << " and length " << length
                               << ": the frame holds " << energy << " of the spot's " << spot);
                 REQUIRE(std::abs(energy - spot) < 0.01 * spot);
+                INFO("and the streak reaches 12 pixels across");
                 REQUIRE(Red(frame, Size / 2 + 12, Size / 2) > 0.0f);
             }
         }
@@ -132,6 +135,7 @@ TEST_CASE("A tinted streak keeps the frame's luminance", "[renderer][gl][streaks
     Fenrir::Camera& camera = AddSpot(test, Value, 0.5f, 0.7f, 0.0f);
     camera.anamorphicStreaks.tint = Fenrir::Colour{0.2f, 0.4f, 1.0f, 1.0f};
     const GlProbe::Image frame = test.Frame(Size, Size);
+    INFO("no GL error or other error was logged");
     REQUIRE(test.messages->errors.empty());
 
     double luminance = 0.0;

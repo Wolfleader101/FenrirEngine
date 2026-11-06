@@ -25,7 +25,8 @@ public partial struct AnamorphicStreaks
     /// </summary>
     public float Length = 0.75f;
     /// <summary>
-    /// The streaks' colour, linear; only its hue counts, its brightness is ignored. White by default.
+    /// The streaks' colour, linear, scaled to unit luminance: its hue and saturation count, its brightness is ignored.
+    /// White by default.
     /// </summary>
     public Colour Tint = new() { R = 1, G = 1, B = 1, A = 1 };
 
