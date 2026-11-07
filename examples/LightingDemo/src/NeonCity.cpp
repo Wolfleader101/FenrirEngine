@@ -881,6 +881,13 @@ namespace LightingDemo
             state.lighting.exposure = -0.5f;
             state.lighting.bloom = {0.3f, 0.85f};
             state.lighting.ambientOcclusion.radius = 1.5f;
+            // The grade of a cyberpunk night: teal shadows and magenta highlights, split a little under mid grey so the
+            // magenta reaches the lit walls, with more contrast for the streets, and a slightly cool white balance.
+            state.lighting.colourGrading.temperature = 6000.0f;
+            state.lighting.colourGrading.contrast = 1.15f;
+            state.lighting.colourGrading.shadowTint = Fenrir::Colour{0.25f, 0.6f, 0.65f, 1.0f};
+            state.lighting.colourGrading.highlightTint = Fenrir::Colour{0.85f, 0.4f, 0.75f, 1.0f};
+            state.lighting.colourGrading.balance = 0.15f;
             // The wet streets mirror the glowing strips, boards and windows on screen. The signs' boards are drawn,
             // so their rect lights keep visibleSurface, and their glints yield to the boards' reflections.
             state.lighting.reflections.enabled = true;

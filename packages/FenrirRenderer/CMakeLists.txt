@@ -101,6 +101,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/SpotShadows.hpp
     src/Core/SpotShadows.cpp
     src/Core/Skinning.cpp
+    src/Core/ColourGrading.hpp
+    src/Core/ColourGrading.cpp
     src/Core/Tonemapping.hpp
     src/Core/Tonemapping.cpp
     src/Core/TransientPool.hpp

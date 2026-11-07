@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 
+#include "Core/ColourGrading.hpp"
 #include "Core/PunctualLights.hpp"
 #include "Core/RectLights.hpp"
 #include "Core/Tonemapping.hpp"
@@ -170,6 +171,8 @@ namespace Fenrir::Render
         float exposure = 0.0f;
         /** @brief How Output maps the exposed colour into its target (Camera::tonemapper). */
         Tonemapper tonemapper = Tonemapper::AgX;
+        /** @brief How Output grades the exposed colour before its tonemapper (Camera::colourGrading). */
+        ColourGradingSettings colourGrading;
         /** @brief How its `PostProcess` bloom mixes into SceneColor (Camera::bloom). */
         BloomSettings bloom;
         /** @brief Its GTAO, which builtin:lit's sky light is darkened by in `Opaque` (Camera::ambientOcclusion). */

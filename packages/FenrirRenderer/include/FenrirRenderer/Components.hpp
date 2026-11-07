@@ -8,6 +8,7 @@
 #include "FenrirECS/Entity.hpp"
 #include "FenrirInput/InputTypes.hpp"
 #include "FenrirMath/Colour.hpp"
+#include "FenrirMath/Math.hpp"
 
 namespace Fenrir
 {
@@ -471,6 +472,60 @@ namespace Fenrir
     };
 
     /**
+     * @brief A view's colour grade (ADR-0059): the look of the picture, set on the exposed scene colour before the
+     * tonemapper, in linear Rec. 709. So contrast and saturation act on scene values, mid grey stays put and the
+     * tonemapper still rolls off whatever the grade brightens, so a strong grade does not clip. Its steps run in this
+     * order: white balance, contrast, split toning, saturation, then the ASC CDL. Identity by default, and identity
+     * costs nothing.
+     */
+    struct ColourGrading
+    {
+        /**
+         * @brief The colour temperature, in kelvin, of the light the view takes as white: 6500 by default (D65, no
+         * change). A surface lit by daylight of this temperature comes out grey, so lower cools the picture and higher
+         * warms it. Held to 2500 to 25000.
+         */
+        float temperature = 6500.0f;
+        /**
+         * @brief How far off daylight that white lies, from -1 to 1: 0 by default. Positive names a greener light, so
+         * the picture moves to magenta; negative names a magenta one, so it moves to green.
+         */
+        float tint = 0.0f;
+        /**
+         * @brief The slope of the picture in stops around mid grey (0.18), which it keeps: 1 by default, above 1 more
+         * contrast, below 1 flatter, 0 all mid grey.
+         */
+        float contrast = 1.0f;
+        /**
+         * @brief The tint the shadows take, linear: white by default, and any grey is none. Only its hue and
+         * saturation count (it is scaled to unit luminance, so a grey keeps its brightness); the more saturated, the
+         * stronger.
+         */
+        Colour shadowTint{1.0f, 1.0f, 1.0f, 1.0f};
+        /** @brief The tint the highlights take, as the shadows' does. */
+        Colour highlightTint{1.0f, 1.0f, 1.0f, 1.0f};
+        /**
+         * @brief Where the shadows end and the highlights start, from -1 to 1: 0 by default, the split at mid grey.
+         * Positive moves it down by up to four stops, giving the highlights' tint more of the picture; negative up.
+         */
+        float balance = 0.0f;
+        /**
+         * @brief How far each colour is from grey of its luminance: 1 by default, 0 grey, above 1 more saturated. After
+         * split toning, so lowering it fades the tints too.
+         */
+        float saturation = 1.0f;
+        /**
+         * @brief The ASC CDL, the final trim, per channel: each is multiplied by its slope, then its offset is added,
+         * then negatives are clamped and the result raised to its power. The slope, 1 in each channel by default.
+         */
+        Math::Vec3 slope{1.0f, 1.0f, 1.0f};
+        /** @brief The CDL's offset, added after the slope: 0 in each channel by default. */
+        Math::Vec3 offset{0.0f, 0.0f, 0.0f};
+        /** @brief The CDL's power, held at or above 0.001: 1 in each channel by default. */
+        Math::Vec3 power{1.0f, 1.0f, 1.0f};
+    };
+
+    /**
      * @brief A view's ambient occlusion (ADR-0049): ground-truth ambient occlusion (GTAO, after Intel's XeGTAO) from
      * its depth prepass, darkening the sky's light where nearby geometry hides the sky from a surface, as in creases,
      * corners and under objects resting on the ground. It darkens the sky's diffuse light, and its specular light by a
@@ -602,6 +657,8 @@ namespace Fenrir
         Tonemapper tonemapper = Tonemapper::AgX;
         /** @brief How the view's bright pixels bleed into their surroundings before the tonemap. */
         Bloom bloom;
+        /** @brief The look of the view: its white balance, contrast, tints and saturation, before the tonemap. */
+        ColourGrading colourGrading;
         /** @brief How nearby geometry darkens the sky's light in the view. */
         AmbientOcclusion ambientOcclusion;
         /** @brief How smooth surfaces in the view mirror what is on screen. */

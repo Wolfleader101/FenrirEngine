@@ -143,6 +143,22 @@ namespace LightingDemo
                                ImGuiSliderFlags_Logarithmic);
             ImGui::SliderFloat("Bloom radius", &settings.bloom.radius, 0.0f, 1.0f);
 
+            // The grade's tints are linear colours; only their hue and saturation count. The CDL is left to code.
+            ImGui::SeparatorText("Colour grade");
+            Fenrir::ColourGrading& grading = settings.colourGrading;
+            ImGui::SliderFloat("Temperature (K)", &grading.temperature, 2500.0f, 25000.0f, "%.0f",
+                               ImGuiSliderFlags_Logarithmic);
+            ImGui::SliderFloat("Tint", &grading.tint, -1.0f, 1.0f, "%+.2f");
+            ImGui::SliderFloat("Contrast", &grading.contrast, 0.25f, 2.5f, "%.2f", ImGuiSliderFlags_Logarithmic);
+            ImGui::ColorEdit3("Shadow tint", &grading.shadowTint.r, ImGuiColorEditFlags_Float);
+            ImGui::ColorEdit3("Highlight tint", &grading.highlightTint.r, ImGuiColorEditFlags_Float);
+            ImGui::SliderFloat("Balance", &grading.balance, -1.0f, 1.0f, "%+.2f");
+            ImGui::SliderFloat("Saturation", &grading.saturation, 0.0f, 2.0f);
+            if (ImGui::Button("No grade"))
+            {
+                grading = {};
+            }
+
             ImGui::SeparatorText("Ambient occlusion (GTAO)");
             ImGui::Checkbox("AO on", &settings.ambientOcclusion.enabled);
             ImGui::SliderFloat("AO radius", &settings.ambientOcclusion.radius, 0.05f, 3.0f, "%.2f",
@@ -232,6 +248,7 @@ namespace LightingDemo
                 camera.exposure = settings.exposure;
                 camera.tonemapper = settings.tonemapper;
                 camera.bloom = settings.bloom;
+                camera.colourGrading = settings.colourGrading;
                 camera.ambientOcclusion = settings.ambientOcclusion;
                 camera.reflections = settings.reflections;
                 camera.debugView = settings.debugView;

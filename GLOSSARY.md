@@ -518,7 +518,11 @@ A camera's brightness setting in EV stops, applied in its view's `Output` before
 
 **Tonemapper**
 How a view's `Output` maps its exposed HDR colour into the [0, 1] its render target stores: `AgX` (the default), `PbrNeutral`, `Aces`, or `None`, which clamps (ADR-0049).
-*Avoid:* tone curve, colour grading (a look applied on top, which FenrirRenderer does not have), tonemapping operator.
+*Avoid:* tone curve, colour grade (the look set before it), tonemapping operator.
+
+**Colour grade**
+A camera's look, set in its view's `Output` on the exposed scene colour before the tonemapper (`Camera::colourGrading`, ADR-0059): white balance, contrast around mid grey, split toning, saturation and the ASC CDL, in that order. Identity by default.
+*Avoid:* LUT (a baked look, not yet supported), colour correction, post-process volume (the settings live on `Camera`).
 
 **Bloom**
 Bright pixels bleeding light into their surroundings: a view's SceneColor blurred over ever wider areas and mixed back into it before `Output` by its camera's `bloom.intensity`, with no threshold, keeping the scene's energy (ADR-0049).
