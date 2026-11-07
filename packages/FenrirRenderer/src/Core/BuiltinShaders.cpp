@@ -18,6 +18,7 @@
 #include "FenrirShaders/BuiltinFallback.hpp"
 #include "FenrirShaders/BuiltinGtao.hpp"
 #include "FenrirShaders/BuiltinHiZ.hpp"
+#include "FenrirShaders/BuiltinLensFlare.hpp"
 #include "FenrirShaders/BuiltinLightClusters.hpp"
 #include "FenrirShaders/BuiltinLit.hpp"
 #include "FenrirShaders/BuiltinOutput.hpp"
@@ -40,9 +41,9 @@ namespace Fenrir::Render
             return std::as_bytes(std::span<const std::uint8_t, N>(embedded));
         }
 
-        const std::array<BuiltinShader, 23>& Table()
+        const std::array<BuiltinShader, 24>& Table()
         {
-            static const std::array<BuiltinShader, 23> table{{
+            static const std::array<BuiltinShader, 24> table{{
                 {BuiltinProgram::Unlit, "builtin:unlit", BytesOf(Shaders::BuiltinUnlit)},
                 {BuiltinProgram::Lit, "builtin:lit", BytesOf(Shaders::BuiltinLit)},
                 {BuiltinProgram::Fallback, "builtin:fallback", BytesOf(Shaders::BuiltinFallback)},
@@ -58,6 +59,7 @@ namespace Fenrir::Render
                 {BuiltinProgram::BrdfLut, "builtin:brdf-lut", BytesOf(Shaders::BuiltinBrdfLut)},
                 {BuiltinProgram::BloomDownsample, "builtin:bloom-downsample", BytesOf(Shaders::BuiltinBloomDownsample)},
                 {BuiltinProgram::BloomUpsample, "builtin:bloom-upsample", BytesOf(Shaders::BuiltinBloomUpsample)},
+                {BuiltinProgram::LensFlare, "builtin:lens-flare", BytesOf(Shaders::BuiltinLensFlare)},
                 {BuiltinProgram::DepthPrepass, "builtin:depth-prepass", BytesOf(Shaders::BuiltinDepthPrepass)},
                 {BuiltinProgram::Gtao, "builtin:gtao", BytesOf(Shaders::BuiltinGtao)},
                 {BuiltinProgram::Skinning, "builtin:skinning", BytesOf(Shaders::BuiltinSkinning)},

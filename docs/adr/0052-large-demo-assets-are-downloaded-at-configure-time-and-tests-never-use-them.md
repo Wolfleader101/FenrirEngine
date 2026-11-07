@@ -6,7 +6,7 @@ status: accepted
 
 The lighting demos need showcase models, scanned plants and rocks, and HDR panoramas: 100–200 MB that would bloat every clone, as the committed backpack and the old DemoApp textures already have (most of a 143 MB pack).
 
-- **`FENRIR_FETCH_DEMO_ASSETS`**, a CMake option off by default, downloads each asset at configure time from a pinned upstream URL (Khronos glTF-Sample-Assets, Poly Haven, Solar System Scope), checks its SHA-256, and caches it outside the build directory, so clean builds do not download again. One manifest lists every file with its URL, hash and licence.
+- **`FENRIR_FETCH_DEMO_ASSETS`**, a CMake option off by default, downloads each asset at configure time from a pinned upstream URL (Khronos glTF-Sample-Assets, Poly Haven, Solar System Scope, ambientCG), checks its SHA-256, and caches it outside the build directory, so clean builds do not download again. One manifest lists every file with its URL, hash and licence; a source that serves only zip archives, as ambientCG does, names the file's member of the archive, and only that member is kept.
 - *Amended by lighting ticket 16 (2026-11-01):* the forest clearing's Poly Haven trees take the fetched assets to
   about 790 MB, Fir Tree 01 alone 487 MB (its only tall CC0 conifer). The option stays off by default, so only those
   who fetch pay it; Fab (Megascans) assets, which need a login, are not fetched.

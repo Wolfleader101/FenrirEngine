@@ -1415,6 +1415,13 @@
       "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
       "sha256": "5244534e9cf5b606f2ff513aa00ddb161b0a4826ffd88a0d3bd03ac29247d198",
       "licence": "CC0-1.0"
+    },
+    {
+      "path": "ambientCG/SurfaceImperfections003_1K-JPG_Color.jpg",
+      "url": "https://ambientcg.com/get?file=SurfaceImperfections003_1K-JPG.zip",
+      "member": "SurfaceImperfections003_1K-JPG_Color.jpg",
+      "sha256": "ecc539355a36d35de9f4662160b8c46a0920fc30858dbd583a7f667dfb7625cd",
+      "licence": "CC0-1.0"
     }
   ]
 }

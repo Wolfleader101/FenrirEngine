@@ -498,6 +498,56 @@ namespace Fenrir
     };
 
     /**
+     * @brief A view's lens flare (ADR-0059), after John Chapman's pseudo lens flare: ghosts of the bright parts of the
+     * view, mirrored through its centre along the line from them, and a halo ring, each colour fringed apart, mixed in
+     * before the tonemap after the streaks. Like bloom there is no threshold: the flare is the view's own light read
+     * from elsewhere, so it moves light and never adds it, and a bright sky ghosts as a faint veiling glare as a real
+     * lens does. Off by default.
+     *
+     * A lens dirt image scales how much of the bloom and the flare each pixel takes where the lens is dirty, so a
+     * bright light lights up the smudges on it.
+     */
+    struct LensFlare
+    {
+        /**
+         * @brief The share of the flare the view's colour is mixed with, from 0 to 1. 0 by default, which turns it off
+         * and costs nothing; a few hundredths throw faint ghosts from lights.
+         */
+        float intensity = 0.0f;
+        /** @brief How many ghosts each bright point throws, from 0 to 8: 4 by default. */
+        std::uint32_t ghostCount = 4;
+        /**
+         * @brief How far apart the ghosts are along the line through the view's centre, as a share of the way from
+         * each pixel to the centre: 0.4 by default. Each ghost is read that much further along the line than the last,
+         * so ghosts past the centre land on the far side of it.
+         */
+        float ghostSpacing = 0.4f;
+        /**
+         * @brief The halo ring's radius, as a distance from the view's centre: 0 at the centre, 1 at the corners. 0.6
+         * by default. The ring shows what is bright near the centre.
+         */
+        float haloRadius = 0.6f;
+        /** @brief How far the halo reaches either side of its radius, in the same distance: 0.1 by default; 0 none. */
+        float haloWidth = 0.1f;
+        /**
+         * @brief How far red and blue are read apart in each ghost and the halo, in the same distance: 0.01 by
+         * default, so the ghosts fringe red outside and blue inside.
+         */
+        float chromaticOffset = 0.01f;
+        /**
+         * @brief A greyscale image of the dirt on the lens, stretched over the view; none by default. A flat image with
+         * pixels; anything else (a cubemap, a render target) has no dirt, logged once.
+         */
+        AssetHandle<Image> dirt;
+        /**
+         * @brief How much more of the bloom and the flare a pixel takes where the dirt is white: its share is
+         * multiplied by 1 + dirtIntensity times the dirt's brightness, held at or below 1, so the mix stays a blend. 1
+         * by default; 0 is no dirt. It needs no flare: dirt with the flare off scales the bloom alone.
+         */
+        float dirtIntensity = 1.0f;
+    };
+
+    /**
      * @brief A view's colour grade (ADR-0059): the look of the picture, set on the exposed scene colour before the
      * tonemapper, in linear Rec. 709. So contrast and saturation act on scene values, mid grey stays put and the
      * tonemapper still rolls off whatever the grade brightens, so a strong grade does not clip. Its steps run in this
@@ -748,6 +798,8 @@ namespace Fenrir
         Bloom bloom;
         /** @brief How the view's bright pixels draw out into horizontal lines before the tonemap, after bloom. */
         AnamorphicStreaks anamorphicStreaks;
+        /** @brief The view's ghosts, halo and lens dirt before the tonemap, after the streaks. */
+        LensFlare lensFlare;
         /** @brief The look of the view: its white balance, contrast, tints and saturation, before the tonemap. */
         ColourGrading colourGrading;
         /** @brief How the view's colours fringe towards its corners, as it reads the scene. */

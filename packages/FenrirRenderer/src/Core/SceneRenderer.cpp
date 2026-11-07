@@ -1024,6 +1024,7 @@ namespace Fenrir::Render
         desc.mipLevels = MipCount(image.width, image.height);
         desc.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
         entry.texture = m_device.CreateTexture(desc, "Material image");
+        entry.desc = desc;
 
         WriteWithMips(m_device, entry.texture, 0, desc.mipLevels, image.pixels, image.width, image.height,
                       CodecOf(image));
@@ -2890,6 +2891,23 @@ namespace Fenrir::Render
         // The targets drawn into so far: the first view into each clears it. The window's key is empty.
         std::set<AssetKey> cleared;
         std::vector<BloomView> blooms;
+        // The lens dirt images the views' bloom and flare composites read, each imported once.
+        std::map<AssetKey, GraphResource> dirtImages;
+        const auto lensDirt = [&](AssetKey key) {
+            const auto image = m_images.find(key);
+            if (key.IsEmpty() || image == m_images.end())
+            {
+                return GraphResource{};
+            }
+            if (const auto found = dirtImages.find(key); found != dirtImages.end())
+            {
+                return found->second;
+            }
+            const GraphResource resource =
+                graph.ImportTexture(std::format("Lens dirt {}", key.index), image->second.texture, image->second.desc);
+            dirtImages.emplace(key, resource);
+            return resource;
+        };
         for (std::size_t v = 0; v < views.size(); ++v)
         {
             const ViewRequest& request = views[v];
@@ -3266,7 +3284,12 @@ namespace Fenrir::Render
             // SceneColor kept for next frame's reflections before bloom glows over it: these passes are added before
             // any view's bloom, so they run first in PostProcess.
             m_sceneHistory->AddHistoryPasses(graph, frameIndex, history, sceneColour);
-            blooms.push_back({sceneColour, {rect.width, rect.height}, request.bloom, request.anamorphicStreaks});
+            blooms.push_back({sceneColour,
+                              {rect.width, rect.height},
+                              request.bloom,
+                              request.anamorphicStreaks,
+                              request.lensFlare,
+                              lensDirt(request.lensFlare.dirt)});
 
             // The first view into a target clears all of it; each later one draws over it, in its viewport only.
             const LoadOp load = cleared.insert(request.target).second ? LoadOp::Clear : LoadOp::Load;

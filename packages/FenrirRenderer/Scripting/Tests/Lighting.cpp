@@ -120,6 +120,7 @@ namespace
         camera.tonemapper = Tonemapper::Aces;
         camera.bloom = {0.2f, 0.3f};
         camera.anamorphicStreaks = {0.15f, 0.6f, {0.3f, 0.5f, 1.0f, 0.7f}};
+        camera.lensFlare = {0.04f, 6, 0.35f, 0.5f, 0.2f, 0.02f, AssetHandle<Image>{7, 8}, 2.5f};
         camera.colourGrading = {5000.0f,
                                 0.2f,
                                 1.3f,

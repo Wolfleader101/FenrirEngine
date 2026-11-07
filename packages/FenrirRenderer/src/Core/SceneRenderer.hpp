@@ -421,6 +421,8 @@ namespace Fenrir::Render
         {
             std::uint32_t revision = 0;
             Graphics::TextureHandle texture;
+            /** @brief What the texture was made with, which a pass that reads it imports it into the graph by. */
+            Graphics::TextureDesc desc;
         };
 
         /** @brief A prepared mesh: its streams back to back in one buffer, and its indices. */
