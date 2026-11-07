@@ -524,6 +524,18 @@ How a view's `Output` maps its exposed HDR colour into the [0, 1] its render tar
 A camera's look, set in its view's `Output` on the exposed scene colour before the tonemapper (`Camera::colourGrading`, ADR-0059): white balance, contrast around mid grey, split toning, saturation and the ASC CDL, in that order. Identity by default.
 *Avoid:* LUT (a baked look, not yet supported), colour correction, post-process volume (the settings live on `Camera`).
 
+**Chromatic aberration**
+Colour fringes towards a view's edges, as a lens bends each wavelength by its own amount: its `Output` reads each channel of SceneColor at its own point, red moved outwards and blue inwards by its camera's `chromaticAberration.intensity` of the half-diagonal at the corners, the centre as it is (ADR-0059).
+*Avoid:* colour fringing (what it looks like, not the effect), lateral colour, RGB split.
+
+**Vignette**
+A view darkened towards its corners, as a lens's falloff darkens them: its `Output` multiplies the exposed linear colour by a falloff from its centre before the colour grade and the tonemapper, set by its camera's `vignette` (ADR-0059).
+*Avoid:* lens shading, edge darkening.
+
+**Film grain**
+Noise its `Output` adds to a view after the tonemapper, in the range the viewer sees, weighted towards the mid-tones as film grain shows, and moving each frame: its camera's `filmGrain` (ADR-0059).
+*Avoid:* noise (alone), dither (a different thing, for banding).
+
 **Bloom**
 Bright pixels bleeding light into their surroundings: a view's SceneColor blurred over ever wider areas and mixed back into it before `Output` by its camera's `bloom.intensity`, with no threshold, keeping the scene's energy (ADR-0049).
 *Avoid:* glow (what bloom looks like, not the effect), bright pass or threshold (there is none), lens flare (a different effect).

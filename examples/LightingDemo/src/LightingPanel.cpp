@@ -163,6 +163,13 @@ namespace LightingDemo
                 grading = {};
             }
 
+            // Each effect's main setting; the vignette's shape and the grain's response and size are the scene's own.
+            ImGui::SeparatorText("Camera effects");
+            ImGui::SliderFloat("Chromatic aberration", &settings.chromaticAberration.intensity, 0.0f, 0.05f, "%.4f");
+            ImGui::SliderFloat("Vignette", &settings.vignette.intensity, 0.0f, 1.0f);
+            ImGui::SliderFloat("Vignette radius", &settings.vignette.radius, 0.0f, 1.0f);
+            ImGui::SliderFloat("Film grain", &settings.filmGrain.intensity, 0.0f, 0.2f, "%.3f");
+
             ImGui::SeparatorText("Ambient occlusion (GTAO)");
             ImGui::Checkbox("AO on", &settings.ambientOcclusion.enabled);
             ImGui::SliderFloat("AO radius", &settings.ambientOcclusion.radius, 0.05f, 3.0f, "%.2f",
@@ -254,6 +261,9 @@ namespace LightingDemo
                 camera.bloom = settings.bloom;
                 camera.anamorphicStreaks = settings.anamorphicStreaks;
                 camera.colourGrading = settings.colourGrading;
+                camera.chromaticAberration = settings.chromaticAberration;
+                camera.vignette = settings.vignette;
+                camera.filmGrain = settings.filmGrain;
                 camera.ambientOcclusion = settings.ambientOcclusion;
                 camera.reflections = settings.reflections;
                 camera.debugView = settings.debugView;

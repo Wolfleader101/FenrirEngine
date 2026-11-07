@@ -130,6 +130,9 @@ namespace
                                 {1.1f, 1.2f, 0.9f},
                                 {0.01f, 0.02f, 0.03f},
                                 {0.9f, 1.1f, 1.2f}};
+        camera.chromaticAberration = {0.02f};
+        camera.vignette = {0.4f, 0.3f, 0.6f, 0.2f};
+        camera.filmGrain = {0.05f, 0.5f, 2.0f};
         camera.ambientOcclusion = {true, 0.8f, 1.7f};
         camera.reflections = {true, 0.75f, 30.0f, 0.25f, 0.45f};
         camera.debugView = CameraDebugView::ReflectionConfidence;

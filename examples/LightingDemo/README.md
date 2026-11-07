@@ -13,7 +13,8 @@ Every scene shows the same ImGui window, Lighting (`src/LightingPanel.cpp`): the
 tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius), anamorphic streaks (ADR-0059: intensity
 and length; the tint is the scene's), colour grade (ADR-0059: white balance as a
 temperature and tint, contrast, the shadow and highlight tints and their balance, saturation, and a button for no
-grade), ambient occlusion (GTAO: on, which it is
+grade), camera effects (ADR-0059: chromatic aberration, the vignette's intensity and radius, and film grain's
+intensity; the vignette's shape and the grain's response and size are the scene's), ambient occlusion (GTAO: on, which it is
 by default here, its radius and strength) and screen-space reflections (ADR-0056: on, off unless the scene turns them
 on, their intensity, max distance, thickness and roughness cutoff, and buttons for their two debug views), the sun's
 shadows (on, their distance and their normal and slope biases,
@@ -276,7 +277,8 @@ The sky is the demo's own city glow (a dark blue zenith over a magenta and orang
 horizon), or with S, Poly Haven's Kloppenheim 07 (Pure Sky), an overcast night lit from below by distant towns. Both
 are drawn at 0.03 intensity, and there is no sun. A strong, wide bloom (0.3 at radius 0.85), long blue anamorphic streaks (0.1 at length 0.85) from the signs and
 headlights, GTAO (1.5 m), a grade
-(6000 K, contrast 1.15, teal shadows and magenta highlights split a little under mid grey) and PBR Neutral finish it,
+(6000 K, contrast 1.15, teal shadows and magenta highlights split a little under mid grey), a light vignette (0.3 from
+radius 0.45), a little chromatic aberration (0.006), fine film grain (0.04) and PBR Neutral finish it,
 at -0.5 EV. PBR Neutral keeps the neon saturated, where AgX (T) turns it pastel and lifts the dim
 spill on the upper walls towards dusk.
 
@@ -504,6 +506,9 @@ Hand checks, on OpenGL:
 - The colour grade (ADR-0059): teal in the shadowed streets and magenta on the lit walls; No grade in the Lighting
   window takes them away. Warming and cooling the white balance, raising the contrast and moving the balance change
   the mood without clipping the signs or crushing the streets.
+- Camera effects (ADR-0059): the corners fall off gently, signs near the screen's edges fringe red outside and blue
+  inside, and fine grain shimmers over the dark streets without showing in the bright signs. Each at 0 in the
+  Lighting window takes it away.
 - Without the fetched assets: dark wet streets, the city and its lights, and an amber message naming
   `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
 - Reflections (ADR-0056), at night: the wet streets mirror the edge strips, sign boards and lit windows, streaked by

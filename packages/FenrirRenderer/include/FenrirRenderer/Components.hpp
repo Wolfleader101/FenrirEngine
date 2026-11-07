@@ -552,6 +552,68 @@ namespace Fenrir
     };
 
     /**
+     * @brief A view's chromatic aberration (ADR-0059): each colour channel read from its own point as the Output pass
+     * reads the scene, red moved outwards and blue inwards, more the further from the centre, as a lens bends each
+     * wavelength by its own amount. Edges near the view's corners fringe red outside and blue inside; the centre is as
+     * it is. Off by default, and off costs nothing.
+     */
+    struct ChromaticAberration
+    {
+        /**
+         * @brief How far red and blue move apart at the view's corners, as a fraction of the distance from its centre
+         * to a corner: 0 by default, off. A few thousandths fringe the edges; a few hundredths split them.
+         */
+        float intensity = 0.0f;
+    };
+
+    /**
+     * @brief A view's vignette (ADR-0059): the exposed colour darkened towards the corners, as a lens's falloff
+     * darkens them, before the grade and the tonemap, so the tonemapper sees it. Off by default, and off costs
+     * nothing.
+     */
+    struct Vignette
+    {
+        /** @brief How much of the light the corners lose, from 0 to 1: 0 by default, off; 1 makes them black. */
+        float intensity = 0.0f;
+        /**
+         * @brief Where the darkening starts, as a distance from the view's centre: 0 at the centre, 1 at the corners.
+         * 0.5 by default.
+         */
+        float radius = 0.5f;
+        /**
+         * @brief How far past the radius, in the same distance, the darkening takes to reach its intensity: 0.5 by
+         * default. 0 is a hard edge.
+         */
+        float smoothness = 0.5f;
+        /**
+         * @brief The darkening's shape, from 0 to 1: 1 by default, a circle whatever the view's aspect; 0 an ellipse
+         * in the view's own proportions, reaching as far into the long sides as into the short ones.
+         */
+        float roundness = 1.0f;
+    };
+
+    /**
+     * @brief A view's film grain (ADR-0059): noise added after the tonemap, in the range the viewer sees, so its
+     * strength holds at any exposure. It shows most in the mid-tones and least in deep shadow and bright highlight,
+     * as film grain does, and it changes every frame. Off by default, and off costs nothing.
+     */
+    struct FilmGrain
+    {
+        /**
+         * @brief How far the grain moves a pixel's brightness, at most, as a fraction of the display's range: 0 by
+         * default, off. A few hundredths are fine grain.
+         */
+        float intensity = 0.0f;
+        /**
+         * @brief How much the grain is kept to the mid-tones, from 0 to 1: 0.8 by default. 0 grains every brightness
+         * alike; 1 leaves black and white untouched.
+         */
+        float response = 0.8f;
+        /** @brief The side of each grain, in pixels, at least 1: 1 by default. */
+        float size = 1.0f;
+    };
+
+    /**
      * @brief A view's ambient occlusion (ADR-0049): ground-truth ambient occlusion (GTAO, after Intel's XeGTAO) from
      * its depth prepass, darkening the sky's light where nearby geometry hides the sky from a surface, as in creases,
      * corners and under objects resting on the ground. It darkens the sky's diffuse light, and its specular light by a
@@ -638,8 +700,9 @@ namespace Fenrir
         LightClusters,
         /**
          * @brief Its screen-space reflections (ADR-0056): at each pixel, the colour its mirror ray hit, from last
-         * frame, times how sure the hit is, exposed and tonemapped; black where nothing is reflected or the camera's
-         * reflections are off. It is what a mirror there would blend, sharp: a material's roughness blurs and fades it.
+         * frame, times how sure the hit is, exposed, vignetted, graded, tonemapped and grained; black where nothing is
+         * reflected or the camera's reflections are off. It is what a mirror there would blend, sharp: a material's
+         * roughness blurs and fades it.
          */
         Reflections,
         /**
@@ -687,6 +750,12 @@ namespace Fenrir
         AnamorphicStreaks anamorphicStreaks;
         /** @brief The look of the view: its white balance, contrast, tints and saturation, before the tonemap. */
         ColourGrading colourGrading;
+        /** @brief How the view's colours fringe towards its corners, as it reads the scene. */
+        ChromaticAberration chromaticAberration;
+        /** @brief How the view darkens towards its corners, before the grade. */
+        Vignette vignette;
+        /** @brief The view's film grain, after its tonemap. */
+        FilmGrain filmGrain;
         /** @brief How nearby geometry darkens the sky's light in the view. */
         AmbientOcclusion ambientOcclusion;
         /** @brief How smooth surfaces in the view mirror what is on screen. */
