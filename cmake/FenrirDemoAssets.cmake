@@ -2,7 +2,10 @@
 #
 # Downloads a demo app's fetched assets at configure time (ADR-0052), for FENRIR_FETCH_DEMO_ASSETS. MANIFEST is a JSON
 # file, {"assets": [{"path", "url", "sha256", "licence"}, ...]}: each file's place in the cache, its pinned upstream URL,
-# its SHA-256 and its SPDX licence expression. Each file is kept at CACHE_DIR/<path>, outside the build directory, so a
+# its SHA-256 and its SPDX licence expression. An entry may also name a "member": then the URL is a zip archive, and the
+# file is that member of it, extracted, the archive itself not kept; the SHA-256 is still the file's, the member's, so a
+# cached file is checked the same way. An archive CMake cannot read stops configure with CMake's own error, and may
+# leave it and its extraction folder beside the file, which the next configure replaces. Each file is kept at CACHE_DIR/<path>, outside the build directory, so a
 # clean build does not download it again: a cached file whose SHA-256 matches is used as it is, and any other is
 # downloaded again. A download that fails, or whose SHA-256 is not the manifest's, fails configure naming the file, and
 # leaves nothing in the cache. Editing the manifest re-runs configure.
@@ -40,15 +43,33 @@ function(fenrir_fetch_demo_assets)
                 message(STATUS "FENRIR_FETCH_DEMO_ASSETS: the cached ${path} has changed; downloading it again")
             endif()
 
+            string(JSON member ERROR_VARIABLE whole GET "${manifest}" assets ${index} member)
             message(STATUS "FENRIR_FETCH_DEMO_ASSETS: downloading ${path} (${licence})")
             # Into a part file beside it, so an interrupted or wrong download never stands in the cache as the file.
             set(part "${file}.part")
-            file(DOWNLOAD "${url}" "${part}" STATUS status TLS_VERIFY ON)
+            set(download "${part}")
+            if(NOT whole)
+                set(download "${file}.archive")
+            endif()
+            file(DOWNLOAD "${url}" "${download}" STATUS status TLS_VERIFY ON)
             list(GET status 0 code)
             if(NOT code EQUAL 0)
                 list(GET status 1 reason)
-                file(REMOVE "${part}")
+                file(REMOVE "${download}")
                 message(FATAL_ERROR "FENRIR_FETCH_DEMO_ASSETS: ${path} did not download from ${url}: ${reason}")
+            endif()
+            if(NOT whole)
+                # The member alone, out of the archive into a folder of its own, then into the part file.
+                set(extracted "${file}.extracted")
+                file(REMOVE_RECURSE "${extracted}")
+                file(ARCHIVE_EXTRACT INPUT "${download}" DESTINATION "${extracted}" PATTERNS "${member}")
+                file(REMOVE "${download}")
+                if(NOT EXISTS "${extracted}/${member}")
+                    file(REMOVE_RECURSE "${extracted}")
+                    message(FATAL_ERROR "FENRIR_FETCH_DEMO_ASSETS: ${path}: the archive from ${url} has no ${member}")
+                endif()
+                file(RENAME "${extracted}/${member}" "${part}")
+                file(REMOVE_RECURSE "${extracted}")
             endif()
             file(SHA256 "${part}" actual)
             if(NOT actual STREQUAL expected)

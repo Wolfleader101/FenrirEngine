@@ -28,8 +28,9 @@ layout(set = 1, binding = 0, std140) uniform BloomData
     float blend;
     // 1 for the Karis average.
     uint karis;
-    // The upsample's tint (unused here).
+    // The upsample's tint and dirt intensity (unused here).
     vec3 tint;
+    float dirtIntensity;
 } bloom;
 
 layout(location = 0) in vec2 vNdc;

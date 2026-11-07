@@ -78,6 +78,21 @@ namespace Fenrir
             return {streaks.intensity, streaks.length, Math::Vec3(streaks.tint.r, streaks.tint.g, streaks.tint.b)};
         }
 
+        /** @brief The core's copy of a camera's lens flare, without its dirt, whose key ReadViews sets once prepared.
+         */
+        Render::LensFlareSettings ToCore(const LensFlare& flare)
+        {
+            Render::LensFlareSettings settings;
+            settings.intensity = flare.intensity;
+            settings.ghostCount = flare.ghostCount;
+            settings.ghostSpacing = flare.ghostSpacing;
+            settings.haloRadius = flare.haloRadius;
+            settings.haloWidth = flare.haloWidth;
+            settings.chromaticOffset = flare.chromaticOffset;
+            settings.dirtIntensity = flare.dirtIntensity;
+            return settings;
+        }
+
         Render::ColourGradingSettings ToCore(const ColourGrading& grading)
         {
             Render::ColourGradingSettings settings;
@@ -220,6 +235,37 @@ namespace Fenrir
             {
                 scene.PrepareImage(KeyOf(handle), revision, *data);
             }
+        }
+
+        /**
+         * @brief Whether a camera's lens dirt image is ready to read: a flat image with pixels, uploaded now if it is
+         * new or changed. Anything else (a cubemap, a render target, an image with no pixels) is no dirt, logged once.
+         */
+        bool PrepareLensDirt(Detail::RendererState& state, const AssetStore& store, AssetHandle<Image> handle)
+        {
+            const ImageData* data = store.TryGet(handle);
+            if (data == nullptr)
+            {
+                return false;
+            }
+            if (data->shape != ImageShape::Flat || data->pixels.empty())
+            {
+                if (state.loggedLensDirt.insert({handle.index, handle.generation}).second)
+                {
+                    state.app->Logger()->Warn("FenrirRenderer: a camera's lens dirt is image {}, which is {}, so the "
+                                              "camera has no lens dirt",
+                                              handle.index,
+                                              data->shape != ImageShape::Flat ? "a cubemap"
+                                                                              : "a render target or has no pixels");
+                }
+                return false;
+            }
+            const std::uint32_t revision = store.Revision(handle);
+            if (!state.scene->IsImageCurrent(KeyOf(handle), revision))
+            {
+                state.scene->PrepareImage(KeyOf(handle), revision, *data);
+            }
+            return true;
         }
 
         bool PrepareMaterial(Detail::RendererState& state, const AssetStore& store, AssetHandle<Material> handle)
@@ -760,6 +806,11 @@ namespace Fenrir
                 view.colourGrading = ToCore(camera.colourGrading);
                 view.bloom = {camera.bloom.intensity, camera.bloom.radius};
                 view.anamorphicStreaks = ToCore(camera.anamorphicStreaks);
+                view.lensFlare = ToCore(camera.lensFlare);
+                if (!camera.lensFlare.dirt.IsEmpty() && PrepareLensDirt(state, store, camera.lensFlare.dirt))
+                {
+                    view.lensFlare.dirt = KeyOf(camera.lensFlare.dirt);
+                }
                 view.chromaticAberration = ToCore(camera.chromaticAberration);
                 view.vignette = ToCore(camera.vignette);
                 view.filmGrain = ToCore(camera.filmGrain);

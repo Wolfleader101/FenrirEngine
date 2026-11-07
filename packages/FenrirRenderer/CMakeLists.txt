@@ -105,6 +105,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/CameraEffects.cpp
     src/Core/ColourGrading.hpp
     src/Core/ColourGrading.cpp
+    src/Core/LensFlare.hpp
+    src/Core/LensFlare.cpp
     src/Core/Tonemapping.hpp
     src/Core/Tonemapping.cpp
     src/Core/TransientPool.hpp
@@ -168,7 +170,11 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBrdfLut VERTEX Shaders/Buil
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBloomDownsample VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/bloom_downsample.frag KEYS MSAA HORIZONTAL EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBloomUpsample VERTEX Shaders/Builtin/fullscreen.vert
-                   FRAGMENT Shaders/Builtin/bloom_upsample.frag KEYS HORIZONTAL EMBED)
+                   FRAGMENT Shaders/Builtin/bloom_upsample.frag KEYS HORIZONTAL DIRT EMBED)
+# The lens flare (ADR-0059): ghosts and a halo from a bloom level, blurred and composited by the bloom programs above,
+# whose DIRT variant of the upsample scales the composites' share by a lens dirt image.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinLensFlare VERTEX Shaders/Builtin/fullscreen.vert
+                   FRAGMENT Shaders/Builtin/lens_flare.frag EMBED)
 # GTAO (ADR-0049): the horizon search, whose MSAA variant reads sample 0 of the prepass's targets, and the DENOISE blur.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinGtao VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/gtao.frag KEYS DENOISE MSAA EMBED)
@@ -207,10 +213,12 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM Builtin2D VERTEX Shaders/Builtin/2
 
 add_library(FenrirRenderer STATIC
     include/FenrirRenderer/Components.hpp
+    include/FenrirRenderer/LensDirt.hpp
     include/FenrirRenderer/Overlay.hpp
     include/FenrirRenderer/Renderer.hpp
     include/FenrirRenderer/SpawnModel.hpp
 
+    src/Facade/LensDirt.cpp
     src/Facade/Renderer.cpp
     src/Facade/RendererState.hpp
     src/Facade/SpawnModel.cpp

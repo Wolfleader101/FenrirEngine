@@ -6,14 +6,22 @@
 #include <imgui.h>
 
 #include "FenrirApp/App.hpp"
+#include "FenrirAssets/AssetStore.hpp"
 #include "FenrirECS/ComponentType.hpp"
 #include "FenrirInput/Input.hpp"
+#include "FenrirRenderer/LensDirt.hpp"
 #include "FenrirScene/Scene.hpp"
 
 namespace LightingDemo
 {
     namespace
     {
+        /** @brief The demo's generated lens dirt, an app resource (AddLensDirt). */
+        struct LensDirt
+        {
+            Fenrir::AssetHandle<Fenrir::Image> image;
+        };
+
         struct NamedTonemapper
         {
             Fenrir::Tonemapper tonemapper;
@@ -146,6 +154,10 @@ namespace LightingDemo
             ImGui::SliderFloat("Streak intensity", &settings.anamorphicStreaks.intensity, 0.0f, 1.0f, "%.3f",
                                ImGuiSliderFlags_Logarithmic);
             ImGui::SliderFloat("Streak length", &settings.anamorphicStreaks.length, 0.0f, 1.0f);
+            // The flare's ghosts and halo are the scene's own; the dirt scales the bloom's and the flare's share.
+            ImGui::SliderFloat("Flare intensity", &settings.lensFlare.intensity, 0.0f, 0.2f, "%.3f",
+                               ImGuiSliderFlags_Logarithmic);
+            ImGui::SliderFloat("Lens dirt", &settings.lensFlare.dirtIntensity, 0.0f, 10.0f, "%.2f");
 
             // The grade's tints are linear colours; only their hue and saturation count. The CDL is left to code.
             ImGui::SeparatorText("Colour grade");
@@ -250,8 +262,13 @@ namespace LightingDemo
             ImGui::End();
         }
 
-        void Apply(Fenrir::Scene& scene, const LightingSettings& settings)
+        void Apply(Fenrir::App& app, Fenrir::Scene& scene, const LightingSettings& settings)
         {
+            Fenrir::LensFlare lensFlare = settings.lensFlare;
+            if (const LensDirt* dirt = app.TryGetResource<LensDirt>(); dirt != nullptr && lensFlare.dirt.IsEmpty())
+            {
+                lensFlare.dirt = dirt->image;
+            }
             Fenrir::EntityList& entities = scene.GetEntityList();
             const std::array<Fenrir::ComponentType, 1> cameras{Fenrir::ComponentType::Native<Fenrir::Camera>()};
             entities.ForEachWith(cameras, [&](std::uint32_t id) {
@@ -260,6 +277,7 @@ namespace LightingDemo
                 camera.tonemapper = settings.tonemapper;
                 camera.bloom = settings.bloom;
                 camera.anamorphicStreaks = settings.anamorphicStreaks;
+                camera.lensFlare = lensFlare;
                 camera.colourGrading = settings.colourGrading;
                 camera.chromaticAberration = settings.chromaticAberration;
                 camera.vignette = settings.vignette;
@@ -295,6 +313,14 @@ namespace LightingDemo
         }
     } // namespace
 
+    void AddLensDirt(Fenrir::App& app)
+    {
+        // Half of 1080p is fine detail enough: the dirt shows only where bloom and the flare light it, softly.
+        Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
+        app.AddResource<LensDirt>(
+            LensDirt{store.Add<Fenrir::Image>(Fenrir::GenerateLensDirt(960, 540, 2077), Fenrir::AssetOwner::App())});
+    }
+
     std::string LightingKeyHelp(bool panoramaSwitch)
     {
         std::string help =
@@ -313,6 +339,6 @@ namespace LightingDemo
     {
         ApplyKeys(app, settings);
         DrawWindow(settings, sceneControls);
-        Apply(scene, settings);
+        Apply(app, scene, settings);
     }
 } // namespace LightingDemo

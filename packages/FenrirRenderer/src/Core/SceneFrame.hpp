@@ -98,6 +98,27 @@ namespace Fenrir::Render
         Math::Vec3 tint{1.0f};
     };
 
+    /** @brief A view's lens flare and lens dirt (ADR-0059), the core's copy of Camera::lensFlare. */
+    struct LensFlareSettings
+    {
+        /** @brief How much of the flare SceneColor is mixed with, in [0, 1]; 0 or less adds no pass. */
+        float intensity = 0.0f;
+        /** @brief How many ghosts each pixel reads, held to MaxGhosts. */
+        std::uint32_t ghostCount = 4;
+        /** @brief How much further along the line to the centre each ghost is read than the last. */
+        float ghostSpacing = 0.4f;
+        /** @brief The halo ring's radius, 1 at the corners. */
+        float haloRadius = 0.6f;
+        /** @brief How far the halo reaches either side of its radius; 0 or less has no halo. */
+        float haloWidth = 0.1f;
+        /** @brief How far red and blue are read apart in the ghosts and the halo, 1 the half-diagonal. */
+        float chromaticOffset = 0.01f;
+        /** @brief The lens dirt image, prepared with PrepareImage; empty, or not prepared, for none. */
+        AssetKey dirt;
+        /** @brief How much more of the bloom and the flare a pixel takes where the dirt is white; 0 or less none. */
+        float dirtIntensity = 1.0f;
+    };
+
     /** @brief A view's ambient occlusion (ADR-0049), the core's copy of Camera::ambientOcclusion. */
     struct AmbientOcclusionSettings
     {
@@ -189,6 +210,8 @@ namespace Fenrir::Render
         BloomSettings bloom;
         /** @brief How its `PostProcess` streaks mix into SceneColor after the bloom (Camera::anamorphicStreaks). */
         StreakSettings anamorphicStreaks;
+        /** @brief Its `PostProcess` ghosts and halo after the streaks, and its lens dirt (Camera::lensFlare). */
+        LensFlareSettings lensFlare;
         /** @brief How far Output reads red and blue apart towards the corners (Camera::chromaticAberration). */
         ChromaticAberrationSettings chromaticAberration;
         /** @brief How Output darkens the exposed colour towards the corners (Camera::vignette). */

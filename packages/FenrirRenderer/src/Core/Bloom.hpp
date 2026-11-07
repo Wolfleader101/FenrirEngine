@@ -67,6 +67,12 @@ namespace Fenrir::Render
          * added.
          */
         StreakSettings streaks;
+        /** @brief Its camera's lens flare, whose intensity is clamped to [0, 1] and ghosts to MaxGhosts as the passes
+         * are added.
+         */
+        LensFlareSettings flare;
+        /** @brief The lens dirt image the composites read, imported into the graph; empty for none. */
+        GraphResource dirt;
     };
 
     /**
@@ -98,13 +104,28 @@ namespace Fenrir::Render
      *   (1 - intensity) of itself and `intensity` of the streaks, and the streaks move light, never add it: exactly
      *   so for grey light, while a coloured source times a coloured tint gains or loses a little luminance.
      *
-     * A view whose bloom is off but whose streaks are on runs bloom's first downsample (a BloomDownsample pass) into a
-     * level 0 of its own.
+     * The lens flare (ADR-0059), John Chapman's pseudo lens flare, reads bloom's level 1 (FlareLevel):
+     *
+     * - **FlareGhosts**, after the streaks' downsamples and before bloom's upsamples, which blend the wider levels
+     *   over level 1, so the flare is the same with bloom on or off: `builtin:lens-flare`, the ghosts along the line
+     *   through the view's centre and the halo ring, each fringed, into a level of level 1's size, the pixel keeping
+     *   the rest of its own light (so a flat view is left as it is).
+     * - **FlareBlur**, after it: bloom's 13-tap downsample filter, without the Karis average, at the same size, into
+     *   another.
+     * - **FlareComposite**, after StreakComposite: that drawn over SceneColor with the tent filter, blended by the
+     *   flare's `intensity`, as BloomComposite is.
+     *
+     * A view whose bloom is off but whose streaks or flare are on runs bloom's first downsample (a BloomDownsample
+     * pass) into a level 0 of its own, and with the flare its second into a level 1.
+     *
+     * With lens dirt (an image, and a dirt intensity over 0), BloomComposite and FlareComposite are the upsample's
+     * `DIRT` variant, which also reads the dirt and multiplies the pass's share at each pixel by 1 + the dirt intensity
+     * times the dirt's luminance, held at or below 1 (LensDirtShare). The streaks take none of it.
      *
      * Every filter's weights sum to 1 and every source is mirrored at its edges, so the bloom holds the scene's energy,
      * less what the Karis average takes from fireflies (and a little where a level's side is odd). The levels are
      * transient RGBA16F textures. A view with an intensity of 0 or less, or under 2 pixels on a side, gets no bloom
-     * pass, and one with a streak intensity of 0 or less (the default) no streak pass.
+     * pass, and one with a streak or flare intensity of 0 or less (the defaults) no streak or flare pass.
      */
     class BloomChain
     {
@@ -126,8 +147,11 @@ namespace Fenrir::Render
 
         ShaderContainer m_downsample;
         ShaderContainer m_upsample;
+        ShaderContainer m_flare;
         /** @brief Every pass's block, source, sampler (mirrored at the edges, bilinear) and group. */
         FullscreenPasses<1> m_passes;
+        /** @brief The DIRT composites' blocks and sources: their level, then the dirt. */
+        FullscreenPasses<2> m_lensDirtPasses;
         /** @brief The first downsample, which reads SceneColor (its MSAA variant when SceneColor is multisampled). */
         Graphics::PipelineHandle m_firstDownsample;
         Graphics::PipelineHandle m_downsamplePipeline;
@@ -139,5 +163,14 @@ namespace Fenrir::Render
         Graphics::PipelineHandle m_streakDownsample;
         Graphics::PipelineHandle m_streakUpsample;
         Graphics::PipelineHandle m_streakComposite;
+        /**
+         * @brief The flare's ghosts and halo; its blur is m_downsamplePipeline, and its composite bloom's own
+         * (m_compositePipeline, or m_lensDirtComposite under lens dirt).
+         */
+        Graphics::PipelineHandle m_flareGhosts;
+        /** @brief The composite into SceneColor under lens dirt, at its samples, blended by the share the dirt
+         * raises.
+         */
+        Graphics::PipelineHandle m_lensDirtComposite;
     };
 } // namespace Fenrir::Render

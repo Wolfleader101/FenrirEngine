@@ -4,6 +4,7 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 #include "FenrirLogger/ConsoleLogger.hpp"
+#include "LightingPanel.hpp"
 #include "LightingScenes.hpp"
 
 int main()
@@ -25,5 +26,6 @@ int main()
     config.imguiOverlay = true;
 
     FenrirDemo::DemoScaffold demo = FenrirDemo::DemoScaffold::Install(app, std::move(config));
+    LightingDemo::AddLensDirt(app);
     return demo.Run();
 }

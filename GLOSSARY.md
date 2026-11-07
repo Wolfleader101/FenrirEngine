@@ -544,6 +544,14 @@ Bright pixels bleeding light into their surroundings: a view's SceneColor blurre
 Bright pixels drawn out into long, thin horizontal lines, as an anamorphic lens draws them: a horizontal-only blur chain from bloom's first level, mixed into SceneColor after the bloom by its camera's `anamorphicStreaks.intensity`, times a tint at unit luminance, with no threshold, keeping the scene's energy (ADR-0059).
 *Avoid:* streak filter, star filter or starburst (a different, per-light effect), lens flare (ghosts and a halo, a different effect).
 
+**Lens flare**
+Ghosts of a view's bright parts mirrored through its centre along the line from them, and a halo ring, each colour fringed apart, as light reflecting between a lens's elements draws them: John Chapman's pseudo lens flare, read from bloom's second level and mixed into SceneColor after the streaks by its camera's `lensFlare.intensity`, with no threshold, keeping a flat view as it is (ADR-0059).
+*Avoid:* starburst or sprite flare (per-light effects placed by a light's screen position, not built), glare (what a bright sky's flare looks like, not the effect).
+
+**Lens dirt**
+A greyscale image of the smudges and dust on a camera's lens, stretched over its view, which raises each pixel's share of the bloom and the lens flare where it is bright, so a bright light lights up the dirt: its camera's `lensFlare.dirt`, scaled by `lensFlare.dirtIntensity`, the share held at or below 1 so the mix stays a blend (ADR-0059).
+*Avoid:* dirt mask, lens texture.
+
 **Punctual light**
 A `PointLight` or `SpotLight`: light from one point, falling with the square of the distance and windowed to zero at its `range`, any number per scene, written each frame into set 0's light buffer that `Fenrir/Lighting.glsl` loops over, by its pixel's light cluster (ADR-0048). The name is glTF's (`KHR_lights_punctual`).
 *Avoid:* local light, dynamic light (the sun moves too), area light (a rect light, which has a size).

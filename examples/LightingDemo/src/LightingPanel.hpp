@@ -36,6 +36,11 @@ namespace LightingDemo
         Fenrir::Bloom bloom;
         /** @brief Every camera's anamorphic streaks, off unless the scene turns them on. */
         Fenrir::AnamorphicStreaks anamorphicStreaks;
+        /**
+         * @brief Every camera's lens flare, off unless the scene turns it on, and its lens dirt, none (an intensity of
+         * 0) unless the scene sets one. A scene that sets no dirt image gets the generated one (AddLensDirt).
+         */
+        Fenrir::LensFlare lensFlare{.dirtIntensity = 0.0f};
         /** @brief Every camera's colour grade, identity unless the scene sets one. */
         Fenrir::ColourGrading colourGrading;
         /** @brief Every camera's chromatic aberration, off unless the scene turns it on. */
@@ -67,6 +72,12 @@ namespace LightingDemo
         /** @brief Radians about world +Y. */
         float skyRotation = 0.0f;
     };
+
+    /**
+     * @brief Generates the demo's lens dirt (Fenrir::GenerateLensDirt) into an image the app owns, once, at startup:
+     * what every scene's cameras read for their dirt when the scene sets none of its own.
+     */
+    void AddLensDirt(Fenrir::App& app);
 
     /**
      * @brief The keys the panel answers, one line for a scene's help panel: T, E, B, O, G, H and, with more than one

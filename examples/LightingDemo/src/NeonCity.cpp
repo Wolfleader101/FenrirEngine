@@ -66,6 +66,8 @@ namespace LightingDemo
                                                          "asphalt_01/asphalt_01_nor_gl_2k.jpg",
                                                          "asphalt_01/asphalt_01_arm_2k.jpg"};
         constexpr const char* Panorama = "panoramas/kloppenheim_07_puresky_2k.hdr";
+        /** @brief ambientCG's Surface Imperfections 003 (CC0), read in greyscale as the dirt on the lens. */
+        constexpr const char* LensDirtMap = "ambientCG/SurfaceImperfections003_1K-JPG_Color.jpg";
         /**
          * @brief The facade shader's fetched textures, by its sampler names: Poly Haven's Concrete Tile Facade, Dark
          * Brick Wall and Exterior Wall Cladding, and whether each is linear data (normal and ARM maps) or colour.
@@ -883,6 +885,11 @@ namespace LightingDemo
             // The genre's long blue lines from the signs and headlights: anamorphic streaks, long and tinted blue,
             // mixed in after the bloom.
             state.lighting.anamorphicStreaks = {0.1f, 0.85f, Fenrir::Colour{0.3f, 0.5f, 1.0f, 1.0f}};
+            // A subtle lens flare after the streaks: faint, fringed ghosts across the view from the brightest signs,
+            // and the dirt on the lens lit up round them. The dirt is ambientCG's map when fetched, else the
+            // generated one every scene has (AddLensDirt).
+            state.lighting.lensFlare.intensity = 0.03f;
+            state.lighting.lensFlare.dirtIntensity = 3.0f;
             state.lighting.ambientOcclusion.radius = 1.5f;
             // The grade of a cyberpunk night: teal shadows and magenta highlights, split a little under mid grey so the
             // magenta reaches the lit walls, with more contrast for the streets, and a slightly cool white balance.
@@ -911,6 +918,14 @@ namespace LightingDemo
                 {
                     state.lighting.panoramas.push_back({"Kloppenheim 07 (2k)", image.handle});
                     fetched = true;
+                }
+            }
+            if (const std::optional<std::string> path = FetchedAsset(LensDirtMap))
+            {
+                if (const auto image = store.Load<Fenrir::Image>(*path, scene); image.Ok())
+                {
+                    // Its colour map is a dark, near-grey photo: read as linear, as the dirt's brightness is.
+                    state.lighting.lensFlare.dirt = AsLinear(store, scene, image.handle);
                 }
             }
             // Clustered and with vsync, whatever another scene left them as.
