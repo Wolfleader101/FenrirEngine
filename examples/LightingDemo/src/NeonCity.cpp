@@ -880,6 +880,9 @@ namespace LightingDemo
             state.lighting.tonemapper = Fenrir::Tonemapper::PbrNeutral;
             state.lighting.exposure = -0.5f;
             state.lighting.bloom = {0.3f, 0.85f};
+            // The genre's long blue lines from the signs and headlights: anamorphic streaks, long and tinted blue,
+            // mixed in after the bloom.
+            state.lighting.anamorphicStreaks = {0.1f, 0.85f, Fenrir::Colour{0.3f, 0.5f, 1.0f, 1.0f}};
             state.lighting.ambientOcclusion.radius = 1.5f;
             // The grade of a cyberpunk night: teal shadows and magenta highlights, split a little under mid grey so the
             // magenta reaches the lit walls, with more contrast for the streets, and a slightly cool white balance.

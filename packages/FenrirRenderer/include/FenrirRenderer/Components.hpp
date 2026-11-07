@@ -472,6 +472,32 @@ namespace Fenrir
     };
 
     /**
+     * @brief A view's anamorphic streaks (ADR-0059): bright pixels drawn out into long, thin horizontal lines, as an
+     * anamorphic lens draws them, mixed in before the tonemap after bloom. Like bloom there is no threshold:
+     * everything streaks by the same share, and only what is bright shows it. The streaks keep the scene's energy and
+     * the tint is taken at unit luminance, so they move light, never add it. Off by default; a view with bloom off
+     * still streaks.
+     */
+    struct AnamorphicStreaks
+    {
+        /**
+         * @brief The share of the streaks the view's colour is mixed with, from 0 to 1. 0 by default, which turns them
+         * off and costs nothing; a few hundredths draw long lines from lights and leave dim surfaces alone.
+         */
+        float intensity = 0.0f;
+        /**
+         * @brief How long the streaks are, from 0 (the shortest only, a few pixels either side) to 1 (the longest
+         * only, reaching most of the way across the view). 0.75 by default.
+         */
+        float length = 0.75f;
+        /**
+         * @brief The streaks' colour, linear, scaled to unit luminance: its hue and saturation count, its brightness is
+         * ignored. White by default.
+         */
+        Colour tint{1.0f, 1.0f, 1.0f, 1.0f};
+    };
+
+    /**
      * @brief A view's colour grade (ADR-0059): the look of the picture, set on the exposed scene colour before the
      * tonemapper, in linear Rec. 709. So contrast and saturation act on scene values, mid grey stays put and the
      * tonemapper still rolls off whatever the grade brightens, so a strong grade does not clip. Its steps run in this
@@ -657,6 +683,8 @@ namespace Fenrir
         Tonemapper tonemapper = Tonemapper::AgX;
         /** @brief How the view's bright pixels bleed into their surroundings before the tonemap. */
         Bloom bloom;
+        /** @brief How the view's bright pixels draw out into horizontal lines before the tonemap, after bloom. */
+        AnamorphicStreaks anamorphicStreaks;
         /** @brief The look of the view: its white balance, contrast, tints and saturation, before the tonemap. */
         ColourGrading colourGrading;
         /** @brief How nearby geometry darkens the sky's light in the view. */

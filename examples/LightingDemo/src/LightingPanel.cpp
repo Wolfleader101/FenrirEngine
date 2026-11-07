@@ -142,6 +142,10 @@ namespace LightingDemo
             ImGui::SliderFloat("Bloom intensity", &settings.bloom.intensity, 0.0f, 1.0f, "%.3f",
                                ImGuiSliderFlags_Logarithmic);
             ImGui::SliderFloat("Bloom radius", &settings.bloom.radius, 0.0f, 1.0f);
+            // The streaks' tint is the scene's own; the renderer scales it to unit luminance.
+            ImGui::SliderFloat("Streak intensity", &settings.anamorphicStreaks.intensity, 0.0f, 1.0f, "%.3f",
+                               ImGuiSliderFlags_Logarithmic);
+            ImGui::SliderFloat("Streak length", &settings.anamorphicStreaks.length, 0.0f, 1.0f);
 
             // The grade's tints are linear colours; only their hue and saturation count. The CDL is left to code.
             ImGui::SeparatorText("Colour grade");
@@ -248,6 +252,7 @@ namespace LightingDemo
                 camera.exposure = settings.exposure;
                 camera.tonemapper = settings.tonemapper;
                 camera.bloom = settings.bloom;
+                camera.anamorphicStreaks = settings.anamorphicStreaks;
                 camera.colourGrading = settings.colourGrading;
                 camera.ambientOcclusion = settings.ambientOcclusion;
                 camera.reflections = settings.reflections;

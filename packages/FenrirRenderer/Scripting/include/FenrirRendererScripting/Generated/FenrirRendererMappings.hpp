@@ -31,6 +31,19 @@ static_assert(sizeof(Fenrir::AmbientOcclusion) == 12 && alignof(Fenrir::AmbientO
               "Fenrir::AmbientOcclusion is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
+template <>
+struct Iris::StructMapping<Fenrir::AnamorphicStreaks>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.AnamorphicStreaks";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<float>("Intensity", 0),
+        Iris::Field<float>("Length", 4),
+        Iris::Field<Fenrir::Colour>("Tint", 8));
+};
+static_assert(sizeof(Fenrir::AnamorphicStreaks) == 24 && alignof(Fenrir::AnamorphicStreaks) == 4,
+              "Fenrir::AnamorphicStreaks is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
 static_assert(sizeof(Fenrir::AssetHandle<Fenrir::Image>) == 8 && alignof(Fenrir::AssetHandle<Fenrir::Image>) == 4,
               "Fenrir::AssetHandle<Fenrir::Image> is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
@@ -279,12 +292,13 @@ struct Iris::StructMapping<Fenrir::Camera>
         Iris::Field<float>("Exposure", 76),
         Iris::Field<Fenrir::Tonemapper>("Tonemapper", 80),
         Iris::Field<Fenrir::Bloom>("Bloom", 84),
-        Iris::Field<Fenrir::ColourGrading>("ColourGrading", 92),
-        Iris::Field<Fenrir::AmbientOcclusion>("AmbientOcclusion", 180),
-        Iris::Field<Fenrir::Reflections>("Reflections", 192),
-        Iris::Field<Fenrir::CameraDebugView>("DebugView", 212));
+        Iris::Field<Fenrir::AnamorphicStreaks>("AnamorphicStreaks", 92),
+        Iris::Field<Fenrir::ColourGrading>("ColourGrading", 116),
+        Iris::Field<Fenrir::AmbientOcclusion>("AmbientOcclusion", 204),
+        Iris::Field<Fenrir::Reflections>("Reflections", 216),
+        Iris::Field<Fenrir::CameraDebugView>("DebugView", 236));
 };
-static_assert(sizeof(Fenrir::Camera) == 216 && alignof(Fenrir::Camera) == 4,
+static_assert(sizeof(Fenrir::Camera) == 240 && alignof(Fenrir::Camera) == 4,
               "Fenrir::Camera is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 

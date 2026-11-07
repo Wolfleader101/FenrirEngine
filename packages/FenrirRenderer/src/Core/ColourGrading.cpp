@@ -31,17 +31,6 @@ namespace Fenrir::Render
             return tint.r == tint.g && tint.g == tint.b;
         }
 
-        /**
-         * @brief `tint`, negatives clamped, scaled to unit luminance, so it shifts hue and not brightness: white for
-         * grey, black or a tint with no luminance.
-         */
-        Vec3 Normalised(Vec3 tint)
-        {
-            tint = glm::max(tint, Vec3(0.0f));
-            const float luminance = Luminance(tint);
-            return IsGrey(tint) || luminance <= 0.0f ? Vec3(1.0f) : tint / luminance;
-        }
-
         /** @brief A matrix written row by row, as the papers print them. */
         glm::dmat3 Rows(glm::dvec3 r0, glm::dvec3 r1, glm::dvec3 r2)
         {
@@ -132,6 +121,13 @@ namespace Fenrir::Render
         }
     } // namespace
 
+    Vec3 UnitLuminanceTint(Vec3 tint) noexcept
+    {
+        tint = glm::max(tint, Vec3(0.0f));
+        const float luminance = Luminance(tint);
+        return IsGrey(tint) || luminance <= 0.0f ? Vec3(1.0f) : tint / luminance;
+    }
+
     bool IsIdentity(const ColourGradingSettings& settings) noexcept
     {
         return settings.temperature == 6500.0f && settings.tint == 0.0f && settings.contrast == 1.0f &&
@@ -144,8 +140,8 @@ namespace Fenrir::Render
         ColourGrade grade;
         grade.whiteBalance = WhiteBalance(settings.temperature, settings.tint);
         grade.contrast = std::max(settings.contrast, 0.0f);
-        grade.shadowTint = Normalised(settings.shadowTint);
-        grade.highlightTint = Normalised(settings.highlightTint);
+        grade.shadowTint = UnitLuminanceTint(settings.shadowTint);
+        grade.highlightTint = UnitLuminanceTint(settings.highlightTint);
         grade.split = -std::clamp(settings.balance, -1.0f, 1.0f) * BalanceStops;
         grade.saturation = std::max(settings.saturation, 0.0f);
         grade.slope = settings.slope;

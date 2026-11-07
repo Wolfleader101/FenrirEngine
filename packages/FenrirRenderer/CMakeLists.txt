@@ -161,11 +161,12 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinSkySpecular VERTEX Shaders/
                    FRAGMENT Shaders/Builtin/sky_specular.frag EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBrdfLut VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/brdf_lut.frag EMBED)
-# Bloom (ADR-0049): the 13-tap downsample, whose MSAA variant reads a multisampled SceneColor, and the tent upsample.
+# Bloom (ADR-0049): the 13-tap downsample, whose MSAA variant reads a multisampled SceneColor, and the tent upsample;
+# their HORIZONTAL variants are the anamorphic streaks' (ADR-0059).
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBloomDownsample VERTEX Shaders/Builtin/fullscreen.vert
-                   FRAGMENT Shaders/Builtin/bloom_downsample.frag KEYS MSAA EMBED)
+                   FRAGMENT Shaders/Builtin/bloom_downsample.frag KEYS MSAA HORIZONTAL EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBloomUpsample VERTEX Shaders/Builtin/fullscreen.vert
-                   FRAGMENT Shaders/Builtin/bloom_upsample.frag EMBED)
+                   FRAGMENT Shaders/Builtin/bloom_upsample.frag KEYS HORIZONTAL EMBED)
 # GTAO (ADR-0049): the horizon search, whose MSAA variant reads sample 0 of the prepass's targets, and the DENOISE blur.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinGtao VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/gtao.frag KEYS DENOISE MSAA EMBED)

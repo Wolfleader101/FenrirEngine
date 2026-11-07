@@ -86,6 +86,17 @@ namespace Fenrir::Render
         float radius = 0.7f;
     };
 
+    /** @brief A view's anamorphic streaks (ADR-0059), the core's copy of Camera::anamorphicStreaks. */
+    struct StreakSettings
+    {
+        /** @brief How much of the streaks SceneColor is mixed with, in [0, 1]; 0 or less adds no pass. */
+        float intensity = 0.0f;
+        /** @brief How long the streaks are, in [0, 1]: how much each longer level adds against the one above it. */
+        float length = 0.75f;
+        /** @brief Their colour, linear; normalised to unit luminance when the passes are added. */
+        Math::Vec3 tint{1.0f};
+    };
+
     /** @brief A view's ambient occlusion (ADR-0049), the core's copy of Camera::ambientOcclusion. */
     struct AmbientOcclusionSettings
     {
@@ -175,6 +186,8 @@ namespace Fenrir::Render
         ColourGradingSettings colourGrading;
         /** @brief How its `PostProcess` bloom mixes into SceneColor (Camera::bloom). */
         BloomSettings bloom;
+        /** @brief How its `PostProcess` streaks mix into SceneColor after the bloom (Camera::anamorphicStreaks). */
+        StreakSettings anamorphicStreaks;
         /** @brief Its GTAO, which builtin:lit's sky light is darkened by in `Opaque` (Camera::ambientOcclusion). */
         AmbientOcclusionSettings ambientOcclusion;
         /** @brief Its screen-space reflections' history and pyramids (Camera::reflections). */

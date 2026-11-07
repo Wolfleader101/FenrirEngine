@@ -29,6 +29,12 @@ namespace Fenrir::Render
         Math::Vec3 power{1.0f};
     };
 
+    /**
+     * @brief `tint`, negatives clamped, scaled to unit Rec. 709 luminance, so it shifts hue and not brightness: white
+     * for grey, black or a tint with no luminance. The grade's split-toning tints and the streaks' tint (ADR-0059).
+     */
+    [[nodiscard]] Math::Vec3 UnitLuminanceTint(Math::Vec3 tint) noexcept;
+
     /** @brief Whether `settings` change nothing, so Output skips the grade. */
     [[nodiscard]] bool IsIdentity(const ColourGradingSettings& settings) noexcept;
 

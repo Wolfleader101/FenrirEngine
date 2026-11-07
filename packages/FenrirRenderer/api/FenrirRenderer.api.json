@@ -35,6 +35,77 @@
       ]
     },
     {
+      "name": "Fenrir::Colour",
+      "category": "struct",
+      "role": "nested",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A colour as linear red, green, blue and alpha, each a float, usually in [0, 1] (ADR-0025). Debug draw, materials and lights take it, and the renderer packs it for vertices. Colours written as sRGB hex values, as colour pickers and art tools give them, are converted when made (FromSrgb). Default constructed, it is opaque white.",
+      "fields": [
+        {
+          "name": "r",
+          "offset": 0,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "g",
+          "offset": 4,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "b",
+          "offset": 8,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "a",
+          "offset": 12,
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::AnamorphicStreaks",
+      "category": "struct",
+      "role": "nested",
+      "size": 24,
+      "alignment": 4,
+      "doc": "A view's anamorphic streaks (ADR-0059): bright pixels drawn out into long, thin horizontal lines, as an anamorphic lens draws them, mixed in before the tonemap after bloom. Like bloom there is no threshold: everything streaks by the same share, and only what is bright shows it. The streaks keep the scene's energy and the tint is taken at unit luminance, so they move light, never add it. Off by default; a view with bloom off still streaks.",
+      "fields": [
+        {
+          "name": "intensity",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0,
+          "doc": "The share of the streaks the view's colour is mixed with, from 0 to 1. 0 by default, which turns them off and costs nothing; a few hundredths draw long lines from lights and leave dim surfaces alone."
+        },
+        {
+          "name": "length",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0.75,
+          "doc": "How long the streaks are, from 0 (the shortest only, a few pixels either side) to 1 (the longest only, reaching most of the way across the view). 0.75 by default."
+        },
+        {
+          "name": "tint",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          },
+          "doc": "The streaks' colour, linear, scaled to unit luminance: its hue and saturation count, its brightness is ignored. White by default."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::AssetHandle<Fenrir::Image>",
       "category": "bound-type",
       "role": "bound-type",
@@ -105,40 +176,6 @@
           "kind": "f32",
           "default": 0.7,
           "doc": "How far the glow spreads, from 0 (the narrowest blur only, a few pixels) to 1 (the widest only, made at a sixty-fourth of the view's size). 0.7 by default."
-        }
-      ]
-    },
-    {
-      "name": "Fenrir::Colour",
-      "category": "struct",
-      "role": "nested",
-      "size": 16,
-      "alignment": 4,
-      "doc": "A colour as linear red, green, blue and alpha, each a float, usually in [0, 1] (ADR-0025). Debug draw, materials and lights take it, and the renderer packs it for vertices. Colours written as sRGB hex values, as colour pickers and art tools give them, are converted when made (FromSrgb). Default constructed, it is opaque white.",
-      "fields": [
-        {
-          "name": "r",
-          "offset": 0,
-          "kind": "f32",
-          "default": 1
-        },
-        {
-          "name": "g",
-          "offset": 4,
-          "kind": "f32",
-          "default": 1
-        },
-        {
-          "name": "b",
-          "offset": 8,
-          "kind": "f32",
-          "default": 1
-        },
-        {
-          "name": "a",
-          "offset": 12,
-          "kind": "f32",
-          "default": 1
         }
       ]
     },
@@ -688,7 +725,7 @@
       "name": "Fenrir::Camera",
       "category": "struct",
       "role": "component",
-      "size": 216,
+      "size": 240,
       "alignment": 4,
       "doc": "Makes a view of the active scene from its entity, looking along the entity's local -Z with +Y up (ADR-0026). Plain data. Every enabled camera in the active scene draws one view a frame, into its viewport of its render target. Views into one target draw by `order`, lowest first, and ties by entity id, logged once. Each view has its own scene targets, and writes only its viewport.\n\nNot drawn, logged once: a camera targeting a window other than the main window, a viewport under one pixel, or a target image that is stale, empty or not a render target. A minimised window draws nothing. A window no camera draws into is cleared to black, logged once.",
       "fields": [
@@ -765,8 +802,16 @@
           "doc": "How the view's bright pixels bleed into their surroundings before the tonemap."
         },
         {
-          "name": "colourGrading",
+          "name": "anamorphicStreaks",
           "offset": 92,
+          "kind": "struct",
+          "type": "Fenrir::AnamorphicStreaks",
+          "default": {},
+          "doc": "How the view's bright pixels draw out into horizontal lines before the tonemap, after bloom."
+        },
+        {
+          "name": "colourGrading",
+          "offset": 116,
           "kind": "struct",
           "type": "Fenrir::ColourGrading",
           "default": {},
@@ -774,7 +819,7 @@
         },
         {
           "name": "ambientOcclusion",
-          "offset": 180,
+          "offset": 204,
           "kind": "struct",
           "type": "Fenrir::AmbientOcclusion",
           "default": {},
@@ -782,7 +827,7 @@
         },
         {
           "name": "reflections",
-          "offset": 192,
+          "offset": 216,
           "kind": "struct",
           "type": "Fenrir::Reflections",
           "default": {},
@@ -790,7 +835,7 @@
         },
         {
           "name": "debugView",
-          "offset": 212,
+          "offset": 236,
           "kind": "enum",
           "type": "Fenrir::CameraDebugView",
           "default": "None",
