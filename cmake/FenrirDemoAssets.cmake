@@ -4,7 +4,8 @@
 # file, {"assets": [{"path", "url", "sha256", "licence"}, ...]}: each file's place in the cache, its pinned upstream URL,
 # its SHA-256 and its SPDX licence expression. An entry may also name a "member": then the URL is a zip archive, and the
 # file is that member of it, extracted, the archive itself not kept; the SHA-256 is still the file's, the member's, so a
-# cached file is checked the same way. Each file is kept at CACHE_DIR/<path>, outside the build directory, so a
+# cached file is checked the same way. An archive CMake cannot read stops configure with CMake's own error, and may
+# leave it and its extraction folder beside the file, which the next configure replaces. Each file is kept at CACHE_DIR/<path>, outside the build directory, so a
 # clean build does not download it again: a cached file whose SHA-256 matches is used as it is, and any other is
 # downloaded again. A download that fails, or whose SHA-256 is not the manifest's, fails configure naming the file, and
 # leaves nothing in the cache. Editing the manifest re-runs configure.

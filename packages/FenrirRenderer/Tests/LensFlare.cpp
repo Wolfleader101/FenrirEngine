@@ -68,6 +68,7 @@ namespace
     std::vector<std::byte> BlockBytes(const RendererTestApp& test, const PassRecord& pass, std::size_t& at)
     {
         const auto entries = RendererProbe::Entries(test.Device(), pass.groups.at(1));
+        INFO("the pass " << pass.pass.label << " binds one block at set 1");
         REQUIRE(entries.size() == 1);
         at = entries[0].offset;
         return RendererProbe::Bytes(test.Device(), entries[0].buffer);
@@ -213,14 +214,18 @@ TEST_CASE("Lens dirt raises a pixel's share of bloom and the flare, never past 1
 
 TEST_CASE("The flare reads bloom's second level, or its first when the chain has one", "[renderer][flare]")
 {
+    INFO("a 1280 x 720 view's chain has six levels, and a 4 x 4 view's two: the flare reads level 1");
     REQUIRE(FlareLevel({1280, 720}) == 1);
     REQUIRE(FlareLevel({4, 4}) == 1);
+    INFO("a 2 x 3 view's chain has level 0 only, which the flare reads");
     REQUIRE(FlareLevel({2, 3}) == 0);
 }
 
-TEST_CASE("The generated lens dirt is greyscale, mostly clean, and the same for the same seed", "[renderer][flare]")
+TEST_CASE("The generated lens dirt is a mostly clean, greyscale, linear image of the size asked for",
+          "[renderer][flare]")
 {
     const Fenrir::ImageData dirt = Fenrir::GenerateLensDirt(256, 128, 7);
+    INFO("an RGBA8 linear image of 256 x 128, with every pixel's bytes");
     REQUIRE(dirt.width == 256);
     REQUIRE(dirt.height == 128);
     REQUIRE(dirt.format == Fenrir::ImageFormat::RGBA8);
@@ -248,9 +253,15 @@ TEST_CASE("The generated lens dirt is greyscale, mostly clean, and the same for 
     REQUIRE(mean > 0.02);
     REQUIRE(mean < 0.35);
     REQUIRE(bright > 0);
-    INFO("the same seed makes the same image, another seed another");
-    REQUIRE(Fenrir::GenerateLensDirt(256, 128, 7).pixels == dirt.pixels);
-    REQUIRE(Fenrir::GenerateLensDirt(256, 128, 8).pixels != dirt.pixels);
+}
+
+TEST_CASE("The generated lens dirt is the same for the same seed and another for another", "[renderer][flare]")
+{
+    const Fenrir::ImageData dirt = Fenrir::GenerateLensDirt(64, 32, 7);
+    INFO("seed 7 twice makes the same image");
+    REQUIRE(Fenrir::GenerateLensDirt(64, 32, 7).pixels == dirt.pixels);
+    INFO("seed 8 another");
+    REQUIRE(Fenrir::GenerateLensDirt(64, 32, 8).pixels != dirt.pixels);
 }
 
 TEST_CASE("A camera's lens flare is off by default and adds no pass", "[renderer][flare]")
@@ -264,6 +275,7 @@ TEST_CASE("A camera's lens flare is off by default and adds no pass", "[renderer
 
     test.Frame();
     const std::vector<std::string> labels = Labels(test.Passes());
+    INFO("no pass is a flare pass");
     REQUIRE(std::none_of(labels.begin(), labels.end(),
                          [](const std::string& label) { return label.rfind("Flare", 0) == 0; }));
     INFO("and bloom's composite is the plain one");
@@ -288,12 +300,14 @@ TEST_CASE("A camera's flare runs in PostProcess after its streaks, from bloom's 
     std::vector<std::string> expected{"BrdfLut", "DepthPrepass", "Opaque", "Background"};
     expected.insert(expected.end(), 6, "BloomDownsample");
     expected.insert(expected.end(), 8, "StreakDownsample");
+    expected.insert(expected.end(), {"FlareGhosts", "FlareBlur"});
     expected.insert(expected.end(), 5, "BloomUpsample");
     expected.emplace_back("BloomComposite");
     expected.insert(expected.end(), 7, "StreakUpsample");
     expected.emplace_back("StreakComposite");
-    expected.insert(expected.end(), {"FlareGhosts", "FlareBlur", "FlareComposite", "Output"});
-    INFO("the flare's three passes follow the streaks' composite");
+    expected.insert(expected.end(), {"FlareComposite", "Output"});
+    INFO("the ghosts and their blur read level 1 before bloom's upsamples blend over it, as the streaks' downsamples "
+         "read level 0; the flare's composite follows the streaks'");
     REQUIRE(Labels(passes) == expected);
 
     const TextureHandle sceneColour = RendererTest::Labelled(passes, "Opaque").at(0).pass.colour.at(0).texture;
@@ -397,7 +411,7 @@ TEST_CASE("Lens dirt makes bloom's and the flare's composites read the dirt imag
     REQUIRE(test.messages->errors.empty());
 }
 
-TEST_CASE("Lens dirt with the flare off scales bloom alone; with no intensity it is none", "[renderer][flare]")
+TEST_CASE("Lens dirt with the flare off scales bloom alone", "[renderer][flare]")
 {
     RendererTestApp test;
     Fenrir::Camera& camera = AddFlaringCamera(test, 0.0f);
@@ -411,8 +425,16 @@ TEST_CASE("Lens dirt with the flare off scales bloom alone; with no intensity it
     REQUIRE(
         RendererProbe::Keys(test.Device(), RendererTest::Labelled(test.Passes(), "BloomComposite").at(0).pipeline) ==
         std::vector<std::string>{"DIRT"});
+    REQUIRE(test.messages->errors.empty());
+}
 
+TEST_CASE("Lens dirt at an intensity of 0 is none", "[renderer][flare]")
+{
+    RendererTestApp test;
+    Fenrir::Camera& camera = AddFlaringCamera(test, 0.0f);
+    camera.lensFlare.dirt = AddDirt(test, 255);
     camera.lensFlare.dirtIntensity = 0.0f;
+
     test.Frame();
     INFO("a dirt intensity of 0 is the plain composite");
     REQUIRE(RendererProbe::Keys(test.Device(), RendererTest::Labelled(test.Passes(), "BloomComposite").at(0).pipeline)

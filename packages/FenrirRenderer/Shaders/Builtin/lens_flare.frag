@@ -3,8 +3,8 @@
 // `ghostCount` ghosts along the line from it through the view's centre, ghost i at i * `ghostSpacing` of the way to the
 // centre (past it once that passes 1), and a halo: the pixel `haloRadius` nearer the centre, where the pixel lies
 // within `haloWidth` of the ring at that radius. Distances are taken in the view's own proportions, as a share of the
-// centre-to-corner distance, so the halo is a circle. Each read takes red `chromaticOffset` further out from the centre
-// and blue as far in, so the ghosts fringe.
+// centre-to-corner distance, so the halo is a circle. Each read takes red `chromaticOffset` further along the pixel's
+// outward direction and blue as far back, so the ghosts fringe along the line through the centre.
 //
 // Each ghost's weight fades with its read point's distance from the centre, (1 - d)^2, and with how far it is
 // magnified, (1 - i spacing)^2 held to 1, as a magnified ghost spreads its light thinner; nothing is read from outside

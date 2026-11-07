@@ -18,7 +18,7 @@
 **Status:** resolved
 
 - [x] CPU unit tests: ghost positions along the line through the centre for a given count and spacing; the dirt-scaled share never exceeds 1. (`Tests/LensFlare.cpp`, with the shared dirt generator's.)
-- [x] Null-backend probes: a view with the flare off adds no pass; with it on, its passes follow the streaks' in `PostProcess`. The flare reads bloom's level 1 after bloom's upsamples (a view with bloom off downsamples to level 1 for it); with lens dirt, bloom's and the flare's composites take the upsample's `DIRT` variant, and dirt with the flare off scales the bloom alone.
+- [x] Null-backend probes: a view with the flare off adds no pass; with it on, its passes follow the streaks' in `PostProcess`. Only the flare's composite follows the streaks' composite: FlareGhosts and FlareBlur run after the streaks' downsamples and before bloom's upsamples, which would blend the wider levels over level 1, so the flare is the same with bloom on or off (a view with bloom off downsamples to level 1 for it); with lens dirt, bloom's and the flare's composites take the upsample's `DIRT` variant, and dirt with the flare off scales the bloom alone.
 - [x] GL pixel probes: a bright point off-centre makes a ghost on the opposite side of the centre; a dirt texture that is black leaves bloom as it was. (Also: a centred point lights the halo ring; white dirt doubles bloom's share.)
 - [x] Golden images: a bright point off-centre with the flare on, and with a dirt texture from the shared generator (never the fetched map). (`flare-emissive-point.png`, `flare-emissive-point-dirt.png`.)
 

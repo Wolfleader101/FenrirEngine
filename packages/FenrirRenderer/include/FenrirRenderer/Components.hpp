@@ -530,8 +530,8 @@ namespace Fenrir
         /** @brief How far the halo reaches either side of its radius, in the same distance: 0.1 by default; 0 none. */
         float haloWidth = 0.1f;
         /**
-         * @brief How far red and blue are read apart in each ghost and the halo, in the same distance: 0.01 by
-         * default, so the ghosts fringe red outside and blue inside.
+         * @brief How far red and blue are read apart in each ghost and the halo, along the line through the view's
+         * centre, in the same distance: 0.01 by default, so the ghosts fringe.
          */
         float chromaticOffset = 0.01f;
         /**

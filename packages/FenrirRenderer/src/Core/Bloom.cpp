@@ -138,7 +138,7 @@ namespace Fenrir::Render
     BloomChain::BloomChain(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
         : m_device(device),
           m_passes(device, logger, "Bloom", RenderStage::PostProcess, MirroredSampler(), sizeof(BloomBlock)),
-          m_dirtyPasses(device, logger, "Lens dirt", RenderStage::PostProcess, MirroredSampler(), sizeof(BloomBlock))
+          m_lensDirtPasses(device, logger, "Lens dirt", RenderStage::PostProcess, MirroredSampler(), sizeof(BloomBlock))
     {
         m_downsample = ReadBuiltin(BuiltinProgram::BloomDownsample, logger);
         m_upsample = ReadBuiltin(BuiltinProgram::BloomUpsample, logger);
@@ -172,8 +172,8 @@ namespace Fenrir::Render
         // The flare's ghosts, and the composite that also reads the lens dirt, at SceneColor's samples.
         m_flareGhosts = m_passes.MakePipeline(m_flare.FindVariant({}), m_flare.name, {TextureFormat::Rgba16Float});
         constexpr std::array<std::string_view, 1> dirt{"DIRT"};
-        m_dirtyComposite = m_dirtyPasses.MakePipeline(m_upsample.FindVariant(dirt), m_upsample.name,
-                                                      {TextureFormat::Rgba16Float}, BlendMode::Alpha, samples);
+        m_lensDirtComposite = m_lensDirtPasses.MakePipeline(m_upsample.FindVariant(dirt), m_upsample.name,
+                                                            {TextureFormat::Rgba16Float}, BlendMode::Alpha, samples);
     }
 
     BloomChain::~BloomChain()
@@ -186,7 +186,7 @@ namespace Fenrir::Render
         m_device.Destroy(m_streakUpsample);
         m_device.Destroy(m_streakComposite);
         m_device.Destroy(m_flareGhosts);
-        m_device.Destroy(m_dirtyComposite);
+        m_device.Destroy(m_lensDirtComposite);
     }
 
     void BloomChain::AddPasses(RenderGraph& graph, std::uint64_t frameIndex, std::span<const BloomView> views)
@@ -208,8 +208,8 @@ namespace Fenrir::Render
         const auto flares = [this](const BloomView& view) {
             return !m_flareGhosts.IsEmpty() && view.flare.intensity > 0.0f && BloomLevels(view.size) > 0;
         };
-        const auto dirty = [this](const BloomView& view) {
-            return !m_dirtyComposite.IsEmpty() && !view.dirt.IsEmpty() && view.flare.dirtIntensity > 0.0f;
+        const auto hasLensDirt = [this](const BloomView& view) {
+            return !m_lensDirtComposite.IsEmpty() && !view.dirt.IsEmpty() && view.flare.dirtIntensity > 0.0f;
         };
         // How many of bloom's levels a view downsamples to: all of them when it blooms, else down to the flare's level
         // when it flares, else level 0 for the streaks.
@@ -218,9 +218,9 @@ namespace Fenrir::Render
         };
         // Each view's passes take one block apiece: a downsample per level and, when it blooms, an upsample per level
         // but the last and its composite; the streaks' downsample per level, as many upsamples less one and their
-        // composite; and the flare's three. The composites under lens dirt take theirs from the dirty ring.
+        // composite; and the flare's three. The composites under lens dirt take theirs from the lens dirt ring.
         std::size_t slots = 0;
-        std::size_t dirtySlots = 0;
+        std::size_t lensDirtSlots = 0;
         for (const BloomView& view : views)
         {
             const bool bloom = blooms(view);
@@ -234,14 +234,14 @@ namespace Fenrir::Render
             slots += streaks(view) ? std::size_t{2} * StreakLevels(view.size) : 0;
             slots += flare ? 2 : 0;
             const std::size_t composites = (bloom ? 1 : 0) + (flare ? 1 : 0);
-            (dirty(view) ? dirtySlots : slots) += composites;
+            (hasLensDirt(view) ? lensDirtSlots : slots) += composites;
         }
         if (slots == 0)
         {
             return;
         }
         m_passes.Reserve(slots);
-        m_dirtyPasses.Reserve(dirtySlots);
+        m_lensDirtPasses.Reserve(lensDirtSlots);
 
         const auto addPass = [&](const char* name, PipelineHandle pipeline, GraphResource source, GraphResource target,
                                  LoadOp load, PixelSize sourceSize, PixelSize targetSize, float blend, bool karis,
@@ -255,13 +255,13 @@ namespace Fenrir::Render
         const auto addComposite = [&](const char* name, const BloomView& view, GraphResource source,
                                       PixelSize sourceSize, float intensity) {
             const PixelRect viewport{0, 0, view.size.width, view.size.height};
-            if (dirty(view))
+            if (hasLensDirt(view))
             {
-                const BindingGroupHandle block = m_dirtyPasses.Block(
+                const BindingGroupHandle block = m_lensDirtPasses.Block(
                     frameIndex,
                     BytesOf(BlockFor(sourceSize, intensity, false, Math::Vec3(1.0f), view.flare.dirtIntensity)));
-                m_dirtyPasses.AddPass(graph, name, m_dirtyComposite, block, {source, view.dirt}, {view.sceneColour},
-                                      LoadOp::Load, viewport);
+                m_lensDirtPasses.AddPass(graph, name, m_lensDirtComposite, block, {source, view.dirt},
+                                         {view.sceneColour}, LoadOp::Load, viewport);
                 return;
             }
             const BindingGroupHandle block =
@@ -320,6 +320,28 @@ namespace Fenrir::Render
                         StreakLevelSize(view.size, level), 1.0f, false);
             }
 
+            // The flare's ghosts and halo read level 1 before bloom's upsamples blend the wider levels over it, so the
+            // flare is the same with bloom on or off and at any bloom radius; then their blur.
+            GraphResource flareLevel;
+            const PixelSize flareSize = LevelSize(view.size, FlareLevel(view.size));
+            if (flare)
+            {
+                FlareBlock block;
+                block.ghostSpacing = view.flare.ghostSpacing;
+                block.haloRadius = view.flare.haloRadius;
+                block.haloWidth = view.flare.haloWidth;
+                block.chromaticOffset = view.flare.chromaticOffset;
+                block.ghostCount = std::min(view.flare.ghostCount, MaxGhosts);
+                block.aspect = static_cast<float>(view.size.width) / static_cast<float>(view.size.height);
+                const GraphResource ghosts = makeLevel("Flare", flareSize);
+                m_passes.AddPass(graph, "FlareGhosts", m_flareGhosts, m_passes.Block(frameIndex, BytesOf(block)),
+                                 {chain[FlareLevel(view.size)]}, {ghosts}, LoadOp::DontCare,
+                                 {0, 0, flareSize.width, flareSize.height});
+                flareLevel = makeLevel("Flare", flareSize);
+                addPass("FlareBlur", m_downsamplePipeline, ghosts, flareLevel, LoadOp::DontCare, flareSize, flareSize,
+                        1.0f, false);
+            }
+
             if (bloom)
             {
                 const float intensity = std::min(view.settings.intensity, 1.0f);
@@ -349,22 +371,7 @@ namespace Fenrir::Render
 
             if (flare)
             {
-                // The ghosts and halo from bloom's level 1, holding the bloom of the wider levels when the view blooms.
-                const std::uint32_t level = FlareLevel(view.size);
-                const PixelSize size = LevelSize(view.size, level);
-                FlareBlock block;
-                block.ghostSpacing = view.flare.ghostSpacing;
-                block.haloRadius = view.flare.haloRadius;
-                block.haloWidth = view.flare.haloWidth;
-                block.chromaticOffset = view.flare.chromaticOffset;
-                block.ghostCount = std::min(view.flare.ghostCount, MaxGhosts);
-                block.aspect = static_cast<float>(view.size.width) / static_cast<float>(view.size.height);
-                const GraphResource ghosts = makeLevel("Flare", size);
-                m_passes.AddPass(graph, "FlareGhosts", m_flareGhosts, m_passes.Block(frameIndex, BytesOf(block)),
-                                 {chain[level]}, {ghosts}, LoadOp::DontCare, {0, 0, size.width, size.height});
-                const GraphResource blurred = makeLevel("Flare", size);
-                addPass("FlareBlur", m_downsamplePipeline, ghosts, blurred, LoadOp::DontCare, size, size, 1.0f, false);
-                addComposite("FlareComposite", view, blurred, size, std::min(view.flare.intensity, 1.0f));
+                addComposite("FlareComposite", view, flareLevel, flareSize, std::min(view.flare.intensity, 1.0f));
             }
         }
     }

@@ -250,7 +250,7 @@ namespace Fenrir
             }
             if (data->shape != ImageShape::Flat || data->pixels.empty())
             {
-                if (state.loggedImages.insert({handle.index, handle.generation}).second)
+                if (state.loggedLensDirt.insert({handle.index, handle.generation}).second)
                 {
                     state.app->Logger()->Warn("FenrirRenderer: a camera's lens dirt is image {}, which is {}, so the "
                                               "camera has no lens dirt",
