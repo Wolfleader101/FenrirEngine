@@ -145,12 +145,14 @@ namespace Fenrir
     /**
      * @brief `mesh` with its levels of detail made by meshoptimizer (ADR-0057): each level aims at `settings.ratio` of
      * the previous level's triangles, and the chain stops at `settings.maxLevels`, when a level would start at or
-     * below `settings.minTriangles`, or when simplifying saves less than a tenth of the triangles. Normals and `uv0`
-     * weigh in the error where the mesh has them, and a vertex on an attribute seam (a position several vertices
-     * share) never moves, so seams stay where they were. Each level's `error` is meshoptimizer's error scaled to the
-     * mesh's local units, strictly growing. The mesh's own `indices` and each level come back reordered for the GPU's
-     * vertex cache; every stream, the submeshes, the bounds and the skin are kept as they were. A mesh with no
-     * triangles or with more than one submesh comes back with no levels.
+     * below `settings.minTriangles`, or when simplifying saves less than a tenth of the triangles. Where the mesh has
+     * normals or `uv0` they weigh in the error, and a vertex on an attribute seam (a position several vertices share)
+     * is locked so seams stay where they were; a mesh with neither simplifies by position alone. Each level's `error`
+     * is the sum, over the steps that led to it, of meshoptimizer's error scaled to the mesh's local units: a bound on
+     * its departure from full detail, strictly growing. The mesh's own `indices` and each
+     * level come back reordered for the GPU's vertex cache; every stream, the submeshes, the bounds and the skin are
+     * kept as they were. A mesh comes back unchanged, with no levels, when it has no whole triangles, an index past its
+     * positions, more than one submesh, or one submesh that does not cover all its indices.
      */
     [[nodiscard]] MeshData GenerateLods(const MeshData& mesh, const LodSettings& settings = {});
 } // namespace Fenrir

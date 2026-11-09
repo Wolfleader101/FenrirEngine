@@ -28,19 +28,19 @@ namespace Fenrir
             std::vector<unsigned int> remap(vertices);
             meshopt_generateVertexRemap(remap.data(), mesh.indices.data(), mesh.indices.size(), mesh.positions.data(),
                                         vertices, PositionStride);
-            std::vector<std::uint32_t> sharing(vertices, 0);
+            std::vector<std::uint32_t> verticesAtPosition(vertices, 0);
             for (std::size_t vertex = 0; vertex < vertices; ++vertex)
             {
                 // ~0u marks a vertex no index names, which no triangle can carry anywhere.
                 if (remap[vertex] != ~0u)
                 {
-                    ++sharing[remap[vertex]];
+                    ++verticesAtPosition[remap[vertex]];
                 }
             }
             std::vector<unsigned char> locks(vertices, 0);
             for (std::size_t vertex = 0; vertex < vertices; ++vertex)
             {
-                if (remap[vertex] != ~0u && sharing[remap[vertex]] > 1)
+                if (remap[vertex] != ~0u && verticesAtPosition[remap[vertex]] > 1)
                 {
                     locks[vertex] = meshopt_SimplifyVertex_Lock;
                 }
@@ -99,12 +99,20 @@ namespace Fenrir
     {
         MeshData result = mesh;
         result.lods.clear();
-        if (mesh.indices.size() < 3 || mesh.positions.empty() || mesh.submeshes.size() > 1)
+        const std::size_t vertices = mesh.positions.size();
+        // Nothing to simplify, or a mesh the store would refuse levels on (several submeshes) or refuse outright (an
+        // index past its vertices, which meshoptimizer would read past too). A lone submesh must cover every index,
+        // since reordering the indices for the vertex cache would otherwise scramble its range.
+        const bool coversAll =
+            mesh.submeshes.empty() || (mesh.submeshes.size() == 1 && mesh.submeshes.front().indexOffset == 0 &&
+                                       mesh.submeshes.front().indexCount == mesh.indices.size());
+        const bool inRange = std::all_of(mesh.indices.begin(), mesh.indices.end(),
+                                         [&](std::uint32_t index) { return index < vertices; });
+        if (mesh.indices.size() < 3 || mesh.indices.size() % 3 != 0 || vertices == 0 || !coversAll || !inRange)
         {
             return result;
         }
 
-        const std::size_t vertices = mesh.positions.size();
         const float* positions = &mesh.positions.front().x;
         result.indices = OptimisedForVertexCache(mesh.indices, vertices);
 
@@ -113,6 +121,8 @@ namespace Fenrir
             attributes.weights.empty() ? std::vector<unsigned char>{} : SeamLocks(mesh);
         const float scale = meshopt_simplifyScale(positions, vertices, PositionStride);
 
+        // The levels are reserved up front so `previous` stays valid as they are appended.
+        result.lods.reserve(settings.maxLevels);
         const std::vector<std::uint32_t>* previous = &result.indices;
         float previousError = 0.0f;
         for (std::uint32_t level = 0; level < settings.maxLevels; ++level)
@@ -157,9 +167,11 @@ namespace Fenrir
 
             MeshLod lod;
             lod.indices = OptimisedForVertexCache(simplified, vertices);
-            // A lossless level (duplicate triangles dropped, say) reports no error; the chain still has to grow.
-            lod.error =
-                std::max(relativeError * scale, std::nextafter(previousError, std::numeric_limits<float>::infinity()));
+            // The simplifier's error is this step's departure from the previous level, so the departure from full
+            // detail is at most the steps summed (meshoptimizer's README says to accumulate them for selection). A
+            // lossless step (duplicate triangles dropped, say) adds nothing; the chain still has to grow.
+            lod.error = std::max(previousError + relativeError * scale,
+                                 std::nextafter(previousError, std::numeric_limits<float>::infinity()));
             result.lods.push_back(std::move(lod));
             previous = &result.lods.back().indices;
             previousError = result.lods.back().error;

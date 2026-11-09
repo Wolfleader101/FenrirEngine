@@ -131,6 +131,7 @@ namespace
         float previousError = 0.0f;
         for (const MeshLod& lod : mesh.lods)
         {
+            INFO("each level is whole triangles, fewer than the level before, with a larger error, all in range");
             REQUIRE(lod.indices.size() % 3 == 0);
             REQUIRE(Triangles(lod.indices) < previousTriangles);
             REQUIRE(lod.error > previousError);
@@ -180,7 +181,8 @@ TEST_CASE("A subdivided sphere's levels fall in triangles and rise in error", "[
     SECTION("with normals and texture coordinates")
     {
         const MeshData result = Fenrir::GenerateLods(sphere);
-        INFO("the defaults make four levels of about half the triangles each");
+        INFO("the defaults make four levels: 2208 -> 1104 -> 552 -> 276 -> 138 triangles, each at most 55 % of the "
+             "last to leave the simplifier room to stop a few triangles short");
         REQUIRE(result.lods.size() == 4);
         RequireWellFormedChain(result);
         REQUIRE(Triangles(result.lods[0].indices) <= full * 11 / 20);
@@ -189,37 +191,64 @@ TEST_CASE("A subdivided sphere's levels fall in triangles and rise in error", "[
         INFO("the error is in the mesh's units: a unit sphere departs by less than its radius");
         REQUIRE(result.lods.back().error < 1.0f);
         REQUIRE(result.lods.back().error > 0.0f);
-
-        INFO("the full-detail indices are the same triangles, reordered for the vertex cache");
-        REQUIRE(result.indices.size() == sphere.indices.size());
-        REQUIRE(result.indices != sphere.indices);
-        REQUIRE(std::set<std::uint32_t>(result.indices.begin(), result.indices.end()) ==
-                std::set<std::uint32_t>(sphere.indices.begin(), sphere.indices.end()));
-
-        INFO("the streams, submeshes and bounds are as they were");
-        REQUIRE(result.positions == sphere.positions);
-        REQUIRE(result.normals == sphere.normals);
-        REQUIRE(result.uv0 == sphere.uv0);
-        REQUIRE(result.submeshes.size() == 1);
-        REQUIRE(result.submeshes[0].indexCount == sphere.submeshes[0].indexCount);
     }
 
     SECTION("with positions alone")
     {
         const MeshData result = Fenrir::GenerateLods(PositionsOnly(sphere));
+        INFO("without attributes the chain goes through meshopt_simplify and has the same shape");
         REQUIRE(result.lods.size() == 4);
         RequireWellFormedChain(result);
         REQUIRE(Triangles(result.lods[0].indices) <= full * 11 / 20);
     }
+}
 
-    SECTION("the chain passes the store's checks, and the store keeps it")
+TEST_CASE("A level's error is a distance in the mesh's units", "[assets][lods]")
+{
+    const MeshData sphere = UvSphere(24, 48);
+    MeshData larger = sphere;
+    for (Fenrir::Math::Vec3& position : larger.positions)
     {
-        AssetsApp test;
-        const auto handle = test.store.Add<Fenrir::Mesh>(Fenrir::GenerateLods(sphere), Fenrir::AssetOwner::App());
-        REQUIRE(test.store.IsValid(handle));
-        REQUIRE(test.errors->empty());
-        REQUIRE(test.store.TryGet(handle)->lods.size() == 4);
+        position *= 10.0f;
     }
+    const MeshData result = Fenrir::GenerateLods(sphere);
+    const MeshData largerResult = Fenrir::GenerateLods(larger);
+    REQUIRE(result.lods.size() == largerResult.lods.size());
+    for (std::size_t level = 0; level < result.lods.size(); ++level)
+    {
+        INFO("the same sphere ten times the size departs ten times as far, at level "
+             << level + 1 << " (within 5 %: float rounding can change the simplifier's collapse order)");
+        REQUIRE(largerResult.lods[level].error > 9.5f * result.lods[level].error);
+        REQUIRE(largerResult.lods[level].error < 10.5f * result.lods[level].error);
+    }
+}
+
+TEST_CASE("GenerateLods keeps the mesh and reorders its indices for the vertex cache", "[assets][lods]")
+{
+    const MeshData sphere = UvSphere(24, 48);
+    const MeshData result = Fenrir::GenerateLods(sphere);
+
+    INFO("the full-detail indices are as many as before, over the same vertices");
+    REQUIRE(result.indices.size() == sphere.indices.size());
+    REQUIRE(std::set<std::uint32_t>(result.indices.begin(), result.indices.end()) ==
+            std::set<std::uint32_t>(sphere.indices.begin(), sphere.indices.end()));
+
+    INFO("the streams, submeshes and bounds are as they were");
+    REQUIRE(result.positions == sphere.positions);
+    REQUIRE(result.normals == sphere.normals);
+    REQUIRE(result.uv0 == sphere.uv0);
+    REQUIRE(result.submeshes.size() == 1);
+    REQUIRE(result.submeshes[0].indexCount == sphere.submeshes[0].indexCount);
+}
+
+TEST_CASE("A generated chain passes the store's checks and is kept", "[assets][lods]")
+{
+    AssetsApp test;
+    const auto handle = test.store.Add<Fenrir::Mesh>(Fenrir::GenerateLods(UvSphere(24, 48)), Fenrir::AssetOwner::App());
+    INFO("the store accepts what GenerateLods makes, with no error logged");
+    REQUIRE(test.store.IsValid(handle));
+    REQUIRE(test.errors->empty());
+    REQUIRE(test.store.TryGet(handle)->lods.size() == 4);
 }
 
 TEST_CASE("The chain stops at each limit", "[assets][lods]")
@@ -231,6 +260,7 @@ TEST_CASE("The chain stops at each limit", "[assets][lods]")
         LodSettings settings;
         settings.maxLevels = 2;
         const MeshData result = Fenrir::GenerateLods(sphere, settings);
+        INFO("two levels asked for, two made, though the sphere could go further");
         REQUIRE(result.lods.size() == 2);
         RequireWellFormedChain(result);
     }
@@ -240,7 +270,8 @@ TEST_CASE("The chain stops at each limit", "[assets][lods]")
         settings.maxLevels = 10;
         settings.minTriangles = 400;
         const MeshData result = Fenrir::GenerateLods(sphere, settings);
-        INFO("2208 -> 1104 -> 552 -> 400 triangles, then the chain stops at the floor");
+        INFO("2208 -> 1104 -> 552 -> 400 triangles, then the chain stops at the floor; the last level may stop a "
+             "tenth short of its target, never below it");
         REQUIRE(result.lods.size() == 3);
         RequireWellFormedChain(result);
         REQUIRE(Triangles(result.lods.back().indices) >= 400);
@@ -250,18 +281,21 @@ TEST_CASE("The chain stops at each limit", "[assets][lods]")
     {
         LodSettings settings;
         settings.minTriangles = static_cast<std::uint32_t>(Triangles(sphere.indices));
+        INFO("the mesh is already at the floor, so there is no level to make");
         REQUIRE(Fenrir::GenerateLods(sphere, settings).lods.empty());
     }
     SECTION("a ratio that saves less than a tenth makes no levels")
     {
         LodSettings settings;
         settings.ratio = 0.95f;
+        INFO("a level aiming at 95 % of the triangles cannot save a tenth, so it is not worth a draw");
         REQUIRE(Fenrir::GenerateLods(sphere, settings).lods.empty());
     }
     SECTION("zero levels asked for is zero levels")
     {
         LodSettings settings;
         settings.maxLevels = 0;
+        INFO("maxLevels of 0 asks for full detail only");
         REQUIRE(Fenrir::GenerateLods(sphere, settings).lods.empty());
     }
 }
@@ -277,14 +311,34 @@ TEST_CASE("A cube has nothing to remove and gets no levels", "[assets][lods]")
     const MeshData flat = Fenrir::GenerateLods(FlatCube(), settings);
     REQUIRE(flat.lods.empty());
     REQUIRE(Triangles(flat.indices) == 12);
+}
 
-    INFO("a mesh with no triangles, or with more than one submesh, comes back unchanged with no levels");
+TEST_CASE("A mesh the store would refuse levels on comes back unchanged", "[assets][lods]")
+{
+    LodSettings settings;
+    settings.minTriangles = 1;
+
+    INFO("a mesh with no triangles has no levels");
     MeshData empty;
     REQUIRE(Fenrir::GenerateLods(empty).lods.empty());
+
+    INFO("a mesh with more than one submesh gets no levels and keeps its index order");
     MeshData twoSubmeshes = UvSphere(24, 48);
     twoSubmeshes.submeshes = {{0, 6, 0}, {6, 6, 1}};
     REQUIRE(Fenrir::GenerateLods(twoSubmeshes, settings).lods.empty());
     REQUIRE(Fenrir::GenerateLods(twoSubmeshes, settings).indices == twoSubmeshes.indices);
+
+    INFO("so does a lone submesh that covers only some of the indices, which reordering them would scramble");
+    MeshData partial = UvSphere(24, 48);
+    partial.submeshes = {{0, 6, 0}};
+    REQUIRE(Fenrir::GenerateLods(partial, settings).lods.empty());
+    REQUIRE(Fenrir::GenerateLods(partial, settings).indices == partial.indices);
+
+    INFO("and a mesh with an index past its positions, which the simplifier must never read");
+    MeshData broken = UvSphere(24, 48);
+    broken.indices[5] = static_cast<std::uint32_t>(broken.positions.size());
+    REQUIRE(Fenrir::GenerateLods(broken, settings).lods.empty());
+    REQUIRE(Fenrir::GenerateLods(broken, settings).indices == broken.indices);
 }
 
 TEST_CASE("A skinned mesh keeps its skin, streams and bone bounds through its levels", "[assets][lods][skins]")
@@ -301,6 +355,7 @@ TEST_CASE("A skinned mesh keeps its skin, streams and bone bounds through its le
     sphere.skin = skin;
 
     const MeshData result = Fenrir::GenerateLods(sphere);
+    INFO("the skinned sphere simplifies like any other");
     REQUIRE_FALSE(result.lods.empty());
     RequireWellFormedChain(result);
     INFO("the skin is the one given: a level indexes the same vertices, so it needs no skin of its own");
@@ -311,6 +366,7 @@ TEST_CASE("A skinned mesh keeps its skin, streams and bone bounds through its le
 
     AssetsApp test;
     const auto handle = test.store.Add<Fenrir::Mesh>(result, Fenrir::AssetOwner::App());
+    INFO("the store takes the skinned mesh with its levels");
     REQUIRE(test.store.IsValid(handle));
     const Fenrir::MeshSkin& stored = *test.store.TryGet(handle)->skin;
     INFO("the store computes the bone bounds over every vertex, as for a mesh with no levels");
@@ -325,10 +381,11 @@ TEST_CASE("UV seams stay where they were", "[assets][lods]")
 {
     const MeshData sphere = UvSphere(24, 48);
     const MeshData result = Fenrir::GenerateLods(sphere);
+    INFO("the sphere simplifies, so there are levels to look at");
     REQUIRE_FALSE(result.lods.empty());
 
-    const std::set<std::uint32_t> seam = SeamVertices(sphere, sphere.indices);
     INFO("the sphere's seam is the first and last column of each of its 23 rings");
+    const std::set<std::uint32_t> seam = SeamVertices(sphere, sphere.indices);
     REQUIRE(seam.size() == 2 * 23);
 
     INFO("every level names every seam vertex, so no triangle was collapsed across the seam");
@@ -345,6 +402,7 @@ TEST_CASE("Adding a mesh refuses a malformed level of detail, naming it", "[asse
     const auto refusal = [](MeshData mesh) {
         AssetsApp test;
         const auto handle = test.store.Add<Fenrir::Mesh>(std::move(mesh), Fenrir::AssetOwner::App());
+        INFO("the mesh is refused with one error");
         REQUIRE(handle.IsEmpty());
         REQUIRE(test.errors->size() == 1);
         return test.errors->front();
@@ -353,6 +411,7 @@ TEST_CASE("Adding a mesh refuses a malformed level of detail, naming it", "[asse
     SECTION("an index past the vertices")
     {
         MeshData mesh = SphereWithLevels();
+        INFO("the message names the level and the overrun");
         mesh.lods[1].indices[2] = static_cast<std::uint32_t>(mesh.positions.size());
         const std::string message = refusal(mesh);
         REQUIRE(message.find("level of detail 2") != std::string::npos);
@@ -361,6 +420,7 @@ TEST_CASE("Adding a mesh refuses a malformed level of detail, naming it", "[asse
     SECTION("a count that is not whole triangles")
     {
         MeshData mesh = SphereWithLevels();
+        INFO("the message names the level and the count");
         mesh.lods[0].indices.push_back(0);
         const std::string message = refusal(mesh);
         REQUIRE(message.find("level of detail 1") != std::string::npos);
@@ -369,6 +429,7 @@ TEST_CASE("Adding a mesh refuses a malformed level of detail, naming it", "[asse
     SECTION("an error that does not grow")
     {
         MeshData mesh = SphereWithLevels();
+        INFO("the message names both levels' errors");
         mesh.lods[1].error = mesh.lods[0].error;
         const std::string message = refusal(mesh);
         REQUIRE(message.find("level of detail 2") != std::string::npos);
@@ -377,12 +438,14 @@ TEST_CASE("Adding a mesh refuses a malformed level of detail, naming it", "[asse
     SECTION("a first level with no error")
     {
         MeshData mesh = SphereWithLevels();
+        INFO("level 1 must exceed level 0's error of 0");
         mesh.lods[0].error = 0.0f;
         REQUIRE(refusal(mesh).find("level of detail 1") != std::string::npos);
     }
     SECTION("levels on a mesh with more than one submesh")
     {
         MeshData mesh = SphereWithLevels();
+        INFO("the message counts the levels and the submeshes");
         mesh.submeshes = {{0, 6, 0}, {6, 6, 1}};
         const std::string message = refusal(mesh);
         REQUIRE(message.find("2 levels of detail") != std::string::npos);
@@ -394,6 +457,7 @@ TEST_CASE("Replace keeps good levels and refuses bad ones", "[assets][lods]")
 {
     AssetsApp test;
     const auto handle = test.store.Add<Fenrir::Mesh>(Triangle(), Fenrir::AssetOwner::App());
+    INFO("a mesh added with no levels has none");
     REQUIRE(test.store.TryGet(handle)->lods.empty());
 
     INFO("good levels replace the mesh and are kept as given");
