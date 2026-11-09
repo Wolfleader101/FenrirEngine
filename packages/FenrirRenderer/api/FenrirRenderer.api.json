@@ -455,6 +455,73 @@
       ]
     },
     {
+      "name": "Fenrir::LensFlare",
+      "category": "struct",
+      "role": "nested",
+      "size": 36,
+      "alignment": 4,
+      "doc": "A view's lens flare (ADR-0059), after John Chapman's pseudo lens flare: ghosts of the bright parts of the view, mirrored through its centre along the line from them, and a halo ring, each colour fringed apart, mixed in before the tonemap after the streaks. Like bloom there is no threshold: the flare is the view's own light read from elsewhere, so it moves light and never adds it, and a bright sky ghosts as a faint veiling glare as a real lens does. Off by default.\n\nA lens dirt image scales how much of the bloom and the flare each pixel takes where the lens is dirty, so a bright light lights up the smudges on it.",
+      "fields": [
+        {
+          "name": "intensity",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0,
+          "doc": "The share of the flare the view's colour is mixed with, from 0 to 1. 0 by default, which turns it off and costs nothing; a few hundredths throw faint ghosts from lights."
+        },
+        {
+          "name": "ghostCount",
+          "offset": 4,
+          "kind": "u32",
+          "default": 4,
+          "doc": "How many ghosts each bright point throws, from 0 to 8: 4 by default."
+        },
+        {
+          "name": "ghostSpacing",
+          "offset": 8,
+          "kind": "f32",
+          "default": 0.4,
+          "doc": "How far apart the ghosts are along the line through the view's centre, as a share of the way from each pixel to the centre: 0.4 by default. Each ghost is read that much further along the line than the last, so ghosts past the centre land on the far side of it."
+        },
+        {
+          "name": "haloRadius",
+          "offset": 12,
+          "kind": "f32",
+          "default": 0.6,
+          "doc": "The halo ring's radius, as a distance from the view's centre: 0 at the centre, 1 at the corners. 0.6 by default. The ring shows what is bright near the centre."
+        },
+        {
+          "name": "haloWidth",
+          "offset": 16,
+          "kind": "f32",
+          "default": 0.1,
+          "doc": "How far the halo reaches either side of its radius, in the same distance: 0.1 by default; 0 none."
+        },
+        {
+          "name": "chromaticOffset",
+          "offset": 20,
+          "kind": "f32",
+          "default": 0.01,
+          "doc": "How far red and blue are read apart in each ghost and the halo, in the same distance: 0.01 by default, so the ghosts fringe red outside and blue inside."
+        },
+        {
+          "name": "dirt",
+          "offset": 24,
+          "kind": "struct",
+          "type": "Fenrir::AssetHandle<Fenrir::Image>",
+          "default": {},
+          "doc": "A greyscale image of the dirt on the lens, stretched over the view; none by default. A flat image with pixels; anything else (a cubemap, a render target) has no dirt, logged once."
+        },
+        {
+          "name": "dirtIntensity",
+          "offset": 32,
+          "kind": "f32",
+          "default": 1,
+          "doc": "How much more of the bloom and the flare a pixel takes where the dirt is white: its share is multiplied by 1 + dirtIntensity times the dirt's brightness, held at or below 1, so the mix stays a blend. 1 by default; 0 is no dirt. It needs no flare: dirt with the flare off scales the bloom alone."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::Orthographic",
       "category": "struct",
       "role": "nested",
@@ -811,7 +878,7 @@
       "name": "Fenrir::Camera",
       "category": "struct",
       "role": "component",
-      "size": 272,
+      "size": 308,
       "alignment": 4,
       "doc": "Makes a view of the active scene from its entity, looking along the entity's local -Z with +Y up (ADR-0026). Plain data. Every enabled camera in the active scene draws one view a frame, into its viewport of its render target. Views into one target draw by `order`, lowest first, and ties by entity id, logged once. Each view has its own scene targets, and writes only its viewport.\n\nNot drawn, logged once: a camera targeting a window other than the main window, a viewport under one pixel, or a target image that is stale, empty or not a render target. A minimised window draws nothing. A window no camera draws into is cleared to black, logged once.",
       "fields": [
@@ -896,8 +963,16 @@
           "doc": "How the view's bright pixels draw out into horizontal lines before the tonemap, after bloom."
         },
         {
-          "name": "colourGrading",
+          "name": "lensFlare",
           "offset": 116,
+          "kind": "struct",
+          "type": "Fenrir::LensFlare",
+          "default": {},
+          "doc": "The view's ghosts, halo and lens dirt before the tonemap, after the streaks."
+        },
+        {
+          "name": "colourGrading",
+          "offset": 152,
           "kind": "struct",
           "type": "Fenrir::ColourGrading",
           "default": {},
@@ -905,7 +980,7 @@
         },
         {
           "name": "chromaticAberration",
-          "offset": 204,
+          "offset": 240,
           "kind": "struct",
           "type": "Fenrir::ChromaticAberration",
           "default": {},
@@ -913,7 +988,7 @@
         },
         {
           "name": "vignette",
-          "offset": 208,
+          "offset": 244,
           "kind": "struct",
           "type": "Fenrir::Vignette",
           "default": {},
@@ -921,7 +996,7 @@
         },
         {
           "name": "filmGrain",
-          "offset": 224,
+          "offset": 260,
           "kind": "struct",
           "type": "Fenrir::FilmGrain",
           "default": {},
@@ -929,7 +1004,7 @@
         },
         {
           "name": "ambientOcclusion",
-          "offset": 236,
+          "offset": 272,
           "kind": "struct",
           "type": "Fenrir::AmbientOcclusion",
           "default": {},
@@ -937,7 +1012,7 @@
         },
         {
           "name": "reflections",
-          "offset": 248,
+          "offset": 284,
           "kind": "struct",
           "type": "Fenrir::Reflections",
           "default": {},
@@ -945,7 +1020,7 @@
         },
         {
           "name": "debugView",
-          "offset": 268,
+          "offset": 304,
           "kind": "enum",
           "type": "Fenrir::CameraDebugView",
           "default": "None",

@@ -49,6 +49,8 @@ namespace Fenrir::Render
         BloomDownsample,
         /** @brief `builtin:bloom-upsample`: a bloom level tent-filtered up over the one above, or over SceneColor. */
         BloomUpsample,
+        /** @brief `builtin:lens-flare`: a lens flare's ghosts and halo from a bloom level (ADR-0059). */
+        LensFlare,
         /** @brief `builtin:depth-prepass`: the depth prepass's fragment stage, an item's view-space normal. */
         DepthPrepass,
         /** @brief `builtin:gtao`: a view's GTAO from its depth prepass, the horizon search and, DENOISE, the blur. */

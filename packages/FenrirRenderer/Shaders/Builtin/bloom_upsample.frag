@@ -7,8 +7,15 @@
 // With the HORIZONTAL key it is a StreakUpsample or StreakComposite pass (ADR-0059): the streak level below, at half
 // the target's width, filtered up with a horizontal tent (1 2 1, over 4) one source texel apart, and multiplied by
 // `tint`: the streaks' tint at unit luminance into SceneColor, and white into a level and in every bloom pass.
+// With the DIRT key it is a BloomComposite or FlareComposite pass under lens dirt (ADR-0059): its share of SceneColor,
+// the alpha, is multiplied by 1 + `dirtIntensity` times the dirt image's luminance at the pixel and held at or below 1,
+// so the mix stays a blend (LensDirtShare is its CPU mirror).
 
 layout(set = 2, binding = 0) uniform sampler2D source;
+#ifdef DIRT
+// The lens dirt, stretched over the view.
+layout(set = 2, binding = 1) uniform sampler2D dirt;
+#endif
 
 layout(set = 1, binding = 0, std140) uniform BloomData
 {
@@ -20,6 +27,8 @@ layout(set = 1, binding = 0, std140) uniform BloomData
     uint karis;
     // What the result is multiplied by.
     vec3 tint;
+    // How much more of the result a pixel takes where the dirt is white, with the DIRT key.
+    float dirtIntensity;
 } bloom;
 
 layout(location = 0) in vec2 vNdc;
@@ -42,5 +51,10 @@ void main()
     sum += Tap(uv, -1.0, -1.0) + Tap(uv, 1.0, -1.0) + Tap(uv, -1.0, 1.0) + Tap(uv, 1.0, 1.0);
     vec3 filtered = sum / 16.0;
 #endif
-    outColour = vec4(filtered * bloom.tint, bloom.blend);
+    float share = bloom.blend;
+#ifdef DIRT
+    float lensDirt = max(dot(texture(dirt, uv).rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0);
+    share = min(share * (1.0 + max(bloom.dirtIntensity, 0.0) * lensDirt), 1.0);
+#endif
+    outColour = vec4(filtered * bloom.tint, share);
 }

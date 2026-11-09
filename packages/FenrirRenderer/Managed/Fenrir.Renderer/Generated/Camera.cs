@@ -43,6 +43,8 @@ public partial struct Camera : IComponent
     public Bloom Bloom = new();
     /// <summary>How the view's bright pixels draw out into horizontal lines before the tonemap, after bloom.</summary>
     public AnamorphicStreaks AnamorphicStreaks = new();
+    /// <summary>The view's ghosts, halo and lens dirt before the tonemap, after the streaks.</summary>
+    public LensFlare LensFlare = new();
     /// <summary>The look of the view: its white balance, contrast, tints and saturation, before the tonemap.</summary>
     public ColourGrading ColourGrading = new();
     /// <summary>How the view's colours fringe towards its corners, as it reads the scene.</summary>
