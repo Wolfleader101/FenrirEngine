@@ -12,9 +12,7 @@ It amends ADR-0051 ("No per-instance culling yet"), ADR-0021 and ADR-0049, and s
 
 ## Prerequisite
 
-Lighting tickets 13 (`InstancedMeshRenderer` and instance lists) and 14 (compute skinning, which brings compute pipelines, dispatch and storage-buffer barriers to the GL backend) are merged into `fenrir-renderer-lighting`. The integration branch `fenrir-renderer-culling` is cut from it then. Ticket 06 touches only FenrirAssets and needs neither.
-
-Ticket 10 waits for all three shadow tickets (lighting 15, 17 and 18), so it is built once for every view kind. Ticket 11 shares its pyramid with lighting 29: whichever lands first builds the passes, the other extends them.
+Met: the lighting spec, its shadow tickets (15, 17 and 18) and the SSR tickets (29 to 31) are all on `main` (#288, #301). The integration branch `fenrir-renderer-culling` is cut from `main` at af185c65 (2026-11-09); each ticket's PR targets it, or the ticket branch it stacks on. Ticket 11 extends lighting 29's pyramid, already built, with the farthest-depth channel.
 
 ## Problem Statement
 
