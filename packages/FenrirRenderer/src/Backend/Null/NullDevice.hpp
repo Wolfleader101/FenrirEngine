@@ -118,7 +118,8 @@ namespace Fenrir::Graphics
         void Check(bool ok, const char* what);
         /**
          * @brief The checks a replay of an indirect draw would trip over: its buffer live with Indirect usage, the pass
-         * declaring IndirectRead on it, its commands inside the buffer and the index buffer bound at its start.
+         * declaring IndirectRead on it, its offset and stride whole words, its commands inside the buffer and the
+         * index buffer bound at its start.
          */
         void CheckIndirectDraw(const CmdDrawIndexedIndirect& draw, const PassDesc* pass, std::size_t indexOffset);
 

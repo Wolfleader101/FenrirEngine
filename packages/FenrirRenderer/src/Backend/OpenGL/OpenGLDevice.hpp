@@ -220,7 +220,10 @@ namespace Fenrir::Graphics
             bool skipping = false;
             /** @brief Whether the pass is a compute pass. */
             bool computing = false;
-            /** @brief The GL names of the buffers the pass declared `StorageWrite` on, pending a barrier at its end. */
+            /**
+             * @brief The GL names of the buffers the pass declared `StorageWrite` on: at its end they are the ones a
+             * later pass's reads need a barrier for.
+             */
             std::vector<std::uint32_t> storageWrites;
             bool drawingToBackbuffer = false;
             std::uint32_t targetHeight = 0;
@@ -266,6 +269,8 @@ namespace Fenrir::Graphics
          * them as issued for every such buffer, since a barrier covers all earlier writes.
          */
         void MakeVisible(std::uint32_t bits);
+        /** @brief The live buffer a declared use names, else null (for a texture's use too). */
+        [[nodiscard]] const GlBuffer* BufferOf(const PassResourceUse& use);
         void Execute(const CmdCopyBuffer& command);
 
         /**

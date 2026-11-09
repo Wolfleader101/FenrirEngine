@@ -225,6 +225,7 @@ namespace Fenrir::Graphics
         Check(declared, "an indirect draw reads a buffer its pass did not declare IndirectRead on");
         Check(draw.stride >= sizeof(DrawIndexedIndirectCommand) && draw.stride % 4 == 0,
               "an indirect draw's stride is under a command's size or not a multiple of four");
+        Check(draw.offset % 4 == 0, "an indirect draw's offset is not a multiple of four");
         Check(draw.offset + std::size_t{draw.drawCount} * draw.stride <= buffer->bytes.size(),
               "an indirect draw's commands run past the end of its buffer");
         // GL has no element-buffer offset to count each command's firstIndex from, so the index buffer is bound at its

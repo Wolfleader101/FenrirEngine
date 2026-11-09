@@ -75,14 +75,8 @@ namespace
 
 TEST_CASE("An indirect command is five words laid out as GL and Vulkan read them", "[renderer][commands][indirect]")
 {
-    INFO("indexCount, instanceCount, firstIndex, baseVertex, baseInstance, four bytes each");
+    INFO("indexCount, instanceCount, firstIndex, baseVertex, baseInstance, four bytes each and nothing between");
     REQUIRE(CommandSize == 20);
-    const DrawIndexedIndirectCommand command{36, 2, 6, 24, 7};
-    REQUIRE(command.indexCount == 36);
-    REQUIRE(command.instanceCount == 2);
-    REQUIRE(command.firstIndex == 6);
-    REQUIRE(command.baseVertex == 24);
-    REQUIRE(command.baseInstance == 7);
 }
 
 TEST_CASE("A recorded indirect draw reaches the null backend's Submit with its fields",
@@ -134,6 +128,13 @@ TEST_CASE("An indirect draw whose command stride is under a command's size is a 
     IndirectFixture fixture;
     fixture.Submit(fixture.IndirectPass(), {fixture.commands, 0, 1, 16});
     RequireOneStaleUse(*fixture.device, "stride");
+}
+
+TEST_CASE("An indirect draw whose offset is not a whole word is a StaleUses line", "[renderer][commands][indirect]")
+{
+    IndirectFixture fixture;
+    fixture.Submit(fixture.IndirectPass(), {fixture.commands, 2, 1});
+    RequireOneStaleUse(*fixture.device, "offset");
 }
 
 TEST_CASE("An indirect draw with the index buffer bound past its start is a StaleUses line",

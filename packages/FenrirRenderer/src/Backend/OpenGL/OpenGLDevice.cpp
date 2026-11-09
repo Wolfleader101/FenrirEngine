@@ -243,6 +243,18 @@ namespace Fenrir::Graphics
             return nullptr;
         }
 
+        /** @brief GL's primitive mode for a pipeline's topology. */
+        constexpr GLenum PrimitiveOf(Topology topology) noexcept
+        {
+            return topology == Topology::Lines ? GL_LINES : GL_TRIANGLES;
+        }
+
+        /** @brief GL's index type for an index format. */
+        constexpr GLenum IndexTypeOf(IndexFormat format) noexcept
+        {
+            return format == IndexFormat::UInt16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT;
+        }
+
         /**
          * @brief The memory barrier bits a read of a buffer written as storage by a shader needs, by how a pass
          * declares the read; 0 for a use that is no such read.
@@ -885,7 +897,7 @@ namespace Fenrir::Graphics
         // source, which GL makes visible only after a barrier before them: those passes' uses say which.
         for (const PassResourceUse& use : pass.uses)
         {
-            const GlBuffer* buffer = use.texture.IsEmpty() ? m_buffers.Find(use.buffer) : nullptr;
+            const GlBuffer* buffer = BufferOf(use);
             if (buffer != nullptr && use.usage == ResourceUsage::StorageWrite)
             {
                 m_replay.storageWrites.push_back(buffer->name);
@@ -1155,7 +1167,7 @@ namespace Fenrir::Graphics
         {
             return;
         }
-        m_gl->DrawArraysInstancedBaseInstance(m_replay.pipeline->topology == Topology::Lines ? GL_LINES : GL_TRIANGLES,
+        m_gl->DrawArraysInstancedBaseInstance(PrimitiveOf(m_replay.pipeline->topology),
                                               static_cast<GLint>(command.firstVertex),
                                               static_cast<GLsizei>(command.vertexCount),
                                               static_cast<GLsizei>(command.instanceCount), command.firstInstance);
@@ -1171,10 +1183,9 @@ namespace Fenrir::Graphics
         const std::size_t offset =
             m_replay.indexBuffer.offset + std::size_t{command.firstIndex} * (shortIndices ? 2u : 4u);
         m_gl->DrawElementsInstancedBaseVertexBaseInstance(
-            m_replay.pipeline->topology == Topology::Lines ? GL_LINES : GL_TRIANGLES,
-            static_cast<GLsizei>(command.indexCount), shortIndices ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT,
-            reinterpret_cast<const void*>(offset), static_cast<GLsizei>(command.instanceCount), command.baseVertex,
-            command.firstInstance);
+            PrimitiveOf(m_replay.pipeline->topology), static_cast<GLsizei>(command.indexCount),
+            IndexTypeOf(m_replay.indexFormat), reinterpret_cast<const void*>(offset),
+            static_cast<GLsizei>(command.instanceCount), command.baseVertex, command.firstInstance);
     }
 
     void OpenGLDevice::Execute(const CmdDrawIndexedIndirect& command)
@@ -1201,8 +1212,7 @@ namespace Fenrir::Graphics
         }
         GladGLContext& gl = *m_gl;
         gl.BindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer->name);
-        gl.MultiDrawElementsIndirect(m_replay.pipeline->topology == Topology::Lines ? GL_LINES : GL_TRIANGLES,
-                                     m_replay.indexFormat == IndexFormat::UInt16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT,
+        gl.MultiDrawElementsIndirect(PrimitiveOf(m_replay.pipeline->topology), IndexTypeOf(m_replay.indexFormat),
                                      reinterpret_cast<const void*>(command.offset),
                                      static_cast<GLsizei>(command.drawCount), static_cast<GLsizei>(command.stride));
     }
@@ -1239,7 +1249,7 @@ namespace Fenrir::Graphics
         GLbitfield wanted = 0;
         for (const PassResourceUse& use : pass.uses)
         {
-            const GlBuffer* buffer = use.texture.IsEmpty() ? m_buffers.Find(use.buffer) : nullptr;
+            const GlBuffer* buffer = BufferOf(use);
             if (buffer == nullptr)
             {
                 continue;
@@ -1252,6 +1262,11 @@ namespace Fenrir::Graphics
             wanted |= BarrierBitsOf(use.usage) & ~written->second;
         }
         MakeVisible(wanted);
+    }
+
+    const OpenGLDevice::GlBuffer* OpenGLDevice::BufferOf(const PassResourceUse& use)
+    {
+        return use.texture.IsEmpty() ? m_buffers.Find(use.buffer) : nullptr;
     }
 
     void OpenGLDevice::MakeVisible(std::uint32_t bits)
