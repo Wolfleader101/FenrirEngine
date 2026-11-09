@@ -39,7 +39,7 @@ Designed for, not built, because GL cannot use them:
 - **Memory aliasing of transients:** lifetimes are computed; nothing aliases.
 - **Async compute and copy queues:** passes carry a queue kind; all run in order on one queue.
 - **Parallel recording:** each pass has its own command list; one thread calls the record functions.
-- **Split barriers:** usage is declared per pass; the GL backend derives no barriers.
+- **Split barriers:** usage is declared per pass; the GL backend derives only the memory barrier a pass's declared reads of a buffer an earlier pass wrote as storage need (ADR-0050, ADR-0057).
 - **Pipeline caches:** pipelines are created through the device; nothing persists them.
 - **A render thread:** most engines render a frame behind on their own thread, and FenrirRenderer should eventually. The draw list is plain data built in one place, so it can become the snapshot a render thread consumes; the public API need not change.
 

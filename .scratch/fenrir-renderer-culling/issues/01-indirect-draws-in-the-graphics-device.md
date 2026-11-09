@@ -12,10 +12,14 @@
 
 **Touches:** `packages/FenrirRenderer/src/Device/`, `packages/FenrirRenderer/src/Backend/`, `packages/FenrirRenderer/Tests/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `RendererProbe` on null: a recorded indirect draw is in `Submitted` with its fields; a buffer without `Indirect` usage, an undeclared `IndirectRead`, and a range past the buffer's end each give a `StaleUses` line.
-- [ ] GL pixel probes: one multi-draw of two commands from a CPU-written buffer draws both meshes at their base instances' records; a command with zero instances draws nothing.
-- [ ] GL pixel probe: a compute dispatch that writes `instanceCount` before a pass that draws from it draws that many (the barrier holds).
+- [x] `RendererProbe` on null: a recorded indirect draw is in `Submitted` with its fields; a buffer without `Indirect` usage, an undeclared `IndirectRead`, and a range past the buffer's end each give a `StaleUses` line.
+- [x] GL pixel probes: one multi-draw of two commands from a CPU-written buffer draws both meshes at their base instances' records; a command with zero instances draws nothing.
+- [x] GL pixel probe: a compute dispatch that writes `instanceCount` before a pass that draws from it draws that many (the barrier holds).
 
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+
+## Comments
+
+- Built on branch `claude/culling-01-indirect-draws-e084e3`. One contract the ticket under-specified: GL cannot fold the bound index buffer's offset into the GPU's commands (there is no element-buffer offset), so an indirect draw's index buffer is bound at its start on every backend; the GL backend refuses an offset with an error and the null backend with a `StaleUses` line. The barriers are derived at each pass's begin from its declared uses over the buffers earlier passes wrote as storage, replacing the unconditional barrier at a compute pass's end.

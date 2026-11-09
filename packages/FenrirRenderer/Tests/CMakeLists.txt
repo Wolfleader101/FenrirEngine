@@ -20,7 +20,7 @@ add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp 
                                    BindingGroupCache.cpp
                                    AmbientOcclusion.cpp Instancing.cpp InstanceLists.cpp ComputeSkinning.cpp
                                    Cascades.cpp Shadows.cpp SpotShadows.cpp PointShadows.cpp ShadowPools.cpp
-                                   LightClusters.cpp SceneHistory.cpp ReflectionTrace.cpp
+                                   LightClusters.cpp SceneHistory.cpp ReflectionTrace.cpp IndirectDraws.cpp
                                    GoldenComparison.cpp DeviceTest.hpp DrawLists2D.hpp FakeSurface.hpp RecordingLogger.hpp
                                    RendererProbe.hpp RendererTestApp.hpp SkinningTestApp.hpp)
 target_include_directories(FenrirRendererTests PRIVATE ../src)
@@ -66,7 +66,7 @@ add_executable(FenrirRendererGlTests OpenGL/Clears.cpp OpenGL/Draws.cpp OpenGL/V
                                      OpenGL/Lights.cpp OpenGL/RectLights.cpp OpenGL/DepthPrepass.cpp
                                      OpenGL/AmbientOcclusion.cpp OpenGL/Instancing.cpp OpenGL/InstanceLists.cpp
                                      OpenGL/Shadows.cpp OpenGL/LightClusters.cpp OpenGL/SceneHistory.cpp
-                                     OpenGL/Reflections.cpp
+                                     OpenGL/Reflections.cpp OpenGL/IndirectDraws.cpp
                                      OpenGL/GlProbe.hpp OpenGL/GlScene.hpp OpenGL/GlTestApp.hpp
                                      DrawLists2D.hpp RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp
                                      SkinningTestApp.hpp)
@@ -82,6 +82,11 @@ fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlFullscreenFill VERTEX OpenGL/
                    FRAGMENT OpenGL/fixtures/fill.frag EMBED)
 fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlPositionFill VERTEX OpenGL/fixtures/position.vert
                    FRAGMENT OpenGL/fixtures/fill.frag EMBED)
+# Indirect draws (ADR-0057): a vertex stage placing each quad by its draw record through Fenrir/Draw.glsl, and a compute
+# program writing the commands' instance counts.
+fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlIndirectFill VERTEX OpenGL/fixtures/indirect.vert
+                   FRAGMENT OpenGL/fixtures/fill.frag EMBED)
+fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlIndirectCounts COMPUTE OpenGL/fixtures/indirect_counts.comp EMBED)
 fenrir_add_shaders(FenrirRendererGlTests PROGRAM SampledPicture VERTEX ../Shaders/Builtin/mesh.vert
                    FRAGMENT fixtures/sampled.frag EMBED)
 # A material set of a block and four textures, for the flattening formula's texture units.

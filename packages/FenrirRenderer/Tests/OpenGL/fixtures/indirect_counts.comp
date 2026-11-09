@@ -1,0 +1,24 @@
+#version 460
+// Writes each indirect command's instance count from the job, one invocation a command, as the cull pass will count
+// survivors into its commands (ADR-0057): the draw that follows reads what this wrote only after a barrier.
+
+layout(local_size_x = 1) in;
+
+layout(set = 0, binding = 0, std140) uniform CountJob
+{
+    // The instance count each command gets, by command.
+    uvec4 counts;
+} job;
+
+// The command buffer as words: five a command (Device/CommandList.hpp's DrawIndexedIndirectCommand), the instance count
+// the second.
+layout(set = 1, binding = 0, std430) buffer Commands
+{
+    uint words[];
+} commands;
+
+void main()
+{
+    uint command = gl_GlobalInvocationID.x;
+    commands.words[command * 5u + 1u] = job.counts[command];
+}

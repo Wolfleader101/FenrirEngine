@@ -66,7 +66,8 @@ uint FenrirCubeInstance()
 #endif
 
 // The record of the instance being drawn: the draw's base instance plus its instance index (over six, one a face,
-// under POINT_SHADOW).
+// under POINT_SHADOW). It holds for an indirect draw unchanged (ADR-0057): each command's baseInstance reaches
+// gl_BaseInstance as a direct draw's firstInstance does, on GL from the command the GPU read.
 uint FenrirDrawIndex()
 {
 #ifdef POINT_SHADOW
