@@ -161,19 +161,20 @@ namespace Fenrir::Render
 
         // The streaks' passes: the horizontal variants, the composite again at SceneColor's samples.
         constexpr std::array<std::string_view, 1> horizontal{"HORIZONTAL"};
-        m_streakDownsample = m_passes.MakePipeline(m_downsample.FindVariant(horizontal), m_downsample.name,
-                                                   {TextureFormat::Rgba16Float});
+        m_streakDownsamplePipeline = m_passes.MakePipeline(m_downsample.FindVariant(horizontal), m_downsample.name,
+                                                           {TextureFormat::Rgba16Float});
         const ShaderVariant* streakUpsample = m_upsample.FindVariant(horizontal);
-        m_streakUpsample =
+        m_streakUpsamplePipeline =
             m_passes.MakePipeline(streakUpsample, m_upsample.name, {TextureFormat::Rgba16Float}, BlendMode::Alpha);
-        m_streakComposite = m_passes.MakePipeline(streakUpsample, m_upsample.name, {TextureFormat::Rgba16Float},
-                                                  BlendMode::Alpha, samples);
+        m_streakCompositePipeline = m_passes.MakePipeline(streakUpsample, m_upsample.name, {TextureFormat::Rgba16Float},
+                                                          BlendMode::Alpha, samples);
 
         // The flare's ghosts, and the composite that also reads the lens dirt, at SceneColor's samples.
-        m_flareGhosts = m_passes.MakePipeline(m_flare.FindVariant({}), m_flare.name, {TextureFormat::Rgba16Float});
+        m_flareGhostsPipeline =
+            m_passes.MakePipeline(m_flare.FindVariant({}), m_flare.name, {TextureFormat::Rgba16Float});
         constexpr std::array<std::string_view, 1> dirt{"DIRT"};
-        m_lensDirtComposite = m_lensDirtPasses.MakePipeline(m_upsample.FindVariant(dirt), m_upsample.name,
-                                                            {TextureFormat::Rgba16Float}, BlendMode::Alpha, samples);
+        m_lensDirtCompositePipeline = m_lensDirtPasses.MakePipeline(
+            m_upsample.FindVariant(dirt), m_upsample.name, {TextureFormat::Rgba16Float}, BlendMode::Alpha, samples);
     }
 
     BloomChain::~BloomChain()
@@ -182,11 +183,11 @@ namespace Fenrir::Render
         m_device.Destroy(m_downsamplePipeline);
         m_device.Destroy(m_upsamplePipeline);
         m_device.Destroy(m_compositePipeline);
-        m_device.Destroy(m_streakDownsample);
-        m_device.Destroy(m_streakUpsample);
-        m_device.Destroy(m_streakComposite);
-        m_device.Destroy(m_flareGhosts);
-        m_device.Destroy(m_lensDirtComposite);
+        m_device.Destroy(m_streakDownsamplePipeline);
+        m_device.Destroy(m_streakUpsamplePipeline);
+        m_device.Destroy(m_streakCompositePipeline);
+        m_device.Destroy(m_flareGhostsPipeline);
+        m_device.Destroy(m_lensDirtCompositePipeline);
     }
 
     void BloomChain::AddPasses(RenderGraph& graph, std::uint64_t frameIndex, std::span<const BloomView> views)
@@ -196,20 +197,21 @@ namespace Fenrir::Render
         {
             return;
         }
-        const bool canStreak =
-            !m_streakDownsample.IsEmpty() && !m_streakUpsample.IsEmpty() && !m_streakComposite.IsEmpty();
+        const bool canStreak = !m_streakDownsamplePipeline.IsEmpty() && !m_streakUpsamplePipeline.IsEmpty() &&
+                               !m_streakCompositePipeline.IsEmpty();
 
         const auto blooms = [](const BloomView& view) {
             return view.settings.intensity > 0.0f && BloomLevels(view.size) > 0;
         };
         const auto streaks = [canStreak](const BloomView& view) {
-            return canStreak && view.streaks.intensity > 0.0f && StreakLevels(view.size) > 0;
+            return canStreak && view.anamorphicStreaks.intensity > 0.0f && StreakLevels(view.size) > 0;
         };
         const auto flares = [this](const BloomView& view) {
-            return !m_flareGhosts.IsEmpty() && view.flare.intensity > 0.0f && BloomLevels(view.size) > 0;
+            return !m_flareGhostsPipeline.IsEmpty() && view.lensFlare.intensity > 0.0f && BloomLevels(view.size) > 0;
         };
         const auto hasLensDirt = [this](const BloomView& view) {
-            return !m_lensDirtComposite.IsEmpty() && !view.dirt.IsEmpty() && view.flare.dirtIntensity > 0.0f;
+            return !m_lensDirtCompositePipeline.IsEmpty() && !view.dirt.IsEmpty() &&
+                   view.lensFlare.dirtIntensity > 0.0f;
         };
         // How many of bloom's levels a view downsamples to: all of them when it blooms, else down to the flare's level
         // when it flares, else level 0 for the streaks.
@@ -259,8 +261,8 @@ namespace Fenrir::Render
             {
                 const BindingGroupHandle block = m_lensDirtPasses.Block(
                     frameIndex,
-                    BytesOf(BlockFor(sourceSize, intensity, false, Math::Vec3(1.0f), view.flare.dirtIntensity)));
-                m_lensDirtPasses.AddPass(graph, name, m_lensDirtComposite, block, {source, view.dirt},
+                    BytesOf(BlockFor(sourceSize, intensity, false, Math::Vec3(1.0f), view.lensFlare.dirtIntensity)));
+                m_lensDirtPasses.AddPass(graph, name, m_lensDirtCompositePipeline, block, {source, view.dirt},
                                          {view.sceneColour}, LoadOp::Load, viewport);
                 return;
             }
@@ -314,7 +316,7 @@ namespace Fenrir::Render
             for (std::uint32_t level = 0; level < streakLevels; ++level)
             {
                 const bool first = level == 0;
-                addPass("StreakDownsample", m_streakDownsample, first ? chain[0] : streakChain[level - 1],
+                addPass("StreakDownsample", m_streakDownsamplePipeline, first ? chain[0] : streakChain[level - 1],
                         streakChain[level], LoadOp::DontCare,
                         first ? LevelSize(view.size, 0) : StreakLevelSize(view.size, level - 1),
                         StreakLevelSize(view.size, level), 1.0f, false);
@@ -327,16 +329,16 @@ namespace Fenrir::Render
             if (flare)
             {
                 FlareBlock block;
-                block.ghostSpacing = view.flare.ghostSpacing;
-                block.haloRadius = view.flare.haloRadius;
-                block.haloWidth = view.flare.haloWidth;
-                block.chromaticOffset = view.flare.chromaticOffset;
-                block.ghostCount = std::min(view.flare.ghostCount, MaxGhosts);
+                block.ghostSpacing = view.lensFlare.ghostSpacing;
+                block.haloRadius = view.lensFlare.haloRadius;
+                block.haloWidth = view.lensFlare.haloWidth;
+                block.chromaticOffset = view.lensFlare.chromaticOffset;
+                block.ghostCount = std::min(view.lensFlare.ghostCount, MaxGhosts);
                 block.aspect = static_cast<float>(view.size.width) / static_cast<float>(view.size.height);
                 const GraphResource ghosts = makeLevel("Flare", flareSize);
-                m_passes.AddPass(graph, "FlareGhosts", m_flareGhosts, m_passes.Block(frameIndex, BytesOf(block)),
-                                 {chain[FlareLevel(view.size)]}, {ghosts}, LoadOp::DontCare,
-                                 {0, 0, flareSize.width, flareSize.height});
+                m_passes.AddPass(graph, "FlareGhosts", m_flareGhostsPipeline,
+                                 m_passes.Block(frameIndex, BytesOf(block)), {chain[FlareLevel(view.size)]}, {ghosts},
+                                 LoadOp::DontCare, {0, 0, flareSize.width, flareSize.height});
                 flareLevel = makeLevel("Flare", flareSize);
                 addPass("FlareBlur", m_downsamplePipeline, ghosts, flareLevel, LoadOp::DontCare, flareSize, flareSize,
                         1.0f, false);
@@ -356,22 +358,22 @@ namespace Fenrir::Render
 
             if (streak)
             {
-                const float intensity = std::min(view.streaks.intensity, 1.0f);
-                const float length = std::clamp(view.streaks.length, 0.0f, 1.0f);
+                const float intensity = std::min(view.anamorphicStreaks.intensity, 1.0f);
+                const float length = std::clamp(view.anamorphicStreaks.length, 0.0f, 1.0f);
                 for (std::uint32_t level = streakLevels - 1; level-- > 0;)
                 {
-                    addPass("StreakUpsample", m_streakUpsample, streakChain[level + 1], streakChain[level],
+                    addPass("StreakUpsample", m_streakUpsamplePipeline, streakChain[level + 1], streakChain[level],
                             LoadOp::Load, StreakLevelSize(view.size, level + 1), StreakLevelSize(view.size, level),
                             length, false);
                 }
-                addPass("StreakComposite", m_streakComposite, streakChain[0], view.sceneColour, LoadOp::Load,
+                addPass("StreakComposite", m_streakCompositePipeline, streakChain[0], view.sceneColour, LoadOp::Load,
                         StreakLevelSize(view.size, 0), view.size, intensity, false,
-                        UnitLuminanceTint(view.streaks.tint));
+                        UnitLuminanceTint(view.anamorphicStreaks.tint));
             }
 
             if (flare)
             {
-                addComposite("FlareComposite", view, flareLevel, flareSize, std::min(view.flare.intensity, 1.0f));
+                addComposite("FlareComposite", view, flareLevel, flareSize, std::min(view.lensFlare.intensity, 1.0f));
             }
         }
     }

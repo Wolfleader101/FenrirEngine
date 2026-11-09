@@ -1,4 +1,5 @@
 #version 460
+#extension GL_GOOGLE_include_directive : require
 // The Output pass (ADR-0019, ADR-0049, ADR-0059): the view's linear HDR SceneColor scaled by its camera's exposure,
 // graded by its colour grade and mapped by its tonemapper into [0, 1], drawn into the view's viewport of its render
 // target. The window's backbuffer and image targets are sRGB, so the write encodes it. With the MSAA key, SceneColor
@@ -12,9 +13,11 @@
 // and tonemapped. The hit target is read texel by texel, as Fenrir/Lighting.glsl reads it, so neighbouring hits' UVs
 // are never blended. REFLECTIONS overrides the other keys. With the ABERRATION key (a camera's chromatic aberration),
 // each channel is read at its own point, red nearer the view's centre and blue further out, so red fringes outwards
-// and blue inwards; under MSAA each is resolved as the plain read is, three resolves instead of one. The vignette, a
+// and blue inwards; under MSAA red and blue are read between texels as the single-sampled sampler reads them, the
+// four texels round each resolved and blended bilinearly, nine resolves instead of one. The vignette, a
 // multiply after the exposure, and the film grain, after the tonemap, follow every variant but OCCLUSION, and are
 // mirrored in src/Core/CameraEffects.cpp as the grade is.
+#include "Fenrir/Constants.glsl"
 
 #if defined(REFLECTIONS)
 // r, g: the hit's UV in last frame's view; b: its confidence. At the view's size.
@@ -137,13 +140,12 @@ vec3 Grade(vec3 colour)
     const float midGrey = 0.18;
     // How many stops either side of the split the shadow tint crosses into the highlight tint over.
     const float splitWidth = 4.0;
-    const vec3 luminance = vec3(0.2126, 0.7152, 0.0722);
     colour = settings.whiteBalance * colour;
     colour = midGrey * pow(max(colour / midGrey, vec3(1e-10)), vec3(settings.contrast));
-    float stops = log2(max(dot(colour, luminance), 1e-10) / midGrey);
+    float stops = log2(max(dot(colour, FenrirLuminance), 1e-10) / midGrey);
     float highlight = smoothstep(settings.split - splitWidth, settings.split + splitWidth, stops);
     colour *= mix(settings.shadowTint, settings.highlightTint, highlight);
-    colour = mix(vec3(dot(colour, luminance)), colour, settings.saturation);
+    colour = mix(vec3(dot(colour, FenrirLuminance)), colour, settings.saturation);
     return pow(max(colour * settings.slope + settings.offset, vec3(0.0)), settings.power);
 }
 
@@ -194,7 +196,7 @@ vec3 Grain(vec3 colour, vec2 uv, vec2 size)
     uvec2 cell = uvec2(floor(vec2(pixel) / max(cellSize, 1.0)));
     float noise = GrainNoise(cell, settings.frameIndex);
     vec3 encoded = pow(max(colour, vec3(0.0)), vec3(1.0 / 2.2));
-    float luminance = clamp(dot(encoded, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    float luminance = clamp(dot(encoded, FenrirLuminance), 0.0, 1.0);
     float weight = 1.0 + (4.0 * luminance * (1.0 - luminance) - 1.0) * response;
     return pow(clamp(encoded + intensity * weight * noise, 0.0, 1.0), vec3(2.2));
 }
@@ -223,10 +225,10 @@ vec3 Finish(vec3 colour, vec2 uv, vec2 size)
 
 #if !defined(REFLECTIONS) && !defined(OCCLUSION)
 #ifdef MSAA
-// The mean of the samples of SceneColor's texel at `uv`: the resolve.
-vec3 Resolve(vec2 uv, ivec2 size)
+// The mean of the samples of SceneColor's `texel`, held to its edges: the resolve.
+vec3 ResolveTexel(ivec2 texel, ivec2 size)
 {
-    ivec2 texel = clamp(ivec2(uv * vec2(size)), ivec2(0), size - 1);
+    texel = clamp(texel, ivec2(0), size - 1);
     int samples = textureSamples(sceneColour);
     vec3 sum = vec3(0.0);
     for (int i = 0; i < samples; ++i)
@@ -235,6 +237,26 @@ vec3 Resolve(vec2 uv, ivec2 size)
     }
     return sum / float(samples);
 }
+
+// The resolve of SceneColor's texel at `uv`.
+vec3 Resolve(vec2 uv, ivec2 size)
+{
+    return ResolveTexel(ivec2(uv * vec2(size)), size);
+}
+
+#ifdef ABERRATION
+// SceneColor resolved at `uv` between texels, as the Output sampler reads a single-sampled SceneColor: the four
+// texels round it resolved and blended bilinearly, clamped at the edges.
+vec3 ResolveBilinear(vec2 uv, ivec2 size)
+{
+    vec2 position = uv * vec2(size) - 0.5;
+    ivec2 texel = ivec2(floor(position));
+    vec2 weight = position - floor(position);
+    vec3 top = mix(ResolveTexel(texel, size), ResolveTexel(texel + ivec2(1, 0), size), weight.x);
+    vec3 bottom = mix(ResolveTexel(texel + ivec2(0, 1), size), ResolveTexel(texel + ivec2(1, 1), size), weight.x);
+    return mix(top, bottom, weight.y);
+}
+#endif
 #endif
 
 // SceneColor at `uv`, resolved under MSAA.
@@ -246,6 +268,18 @@ vec3 Read(vec2 uv, ivec2 size)
     return texture(sceneColour, uv).rgb;
 #endif
 }
+
+#ifdef ABERRATION
+// SceneColor at `uv` between texels, as the sampler reads it, resolved under MSAA: where aberration reads red and blue.
+vec3 ReadBetween(vec2 uv, ivec2 size)
+{
+#ifdef MSAA
+    return ResolveBilinear(uv, size);
+#else
+    return texture(sceneColour, uv).rgb;
+#endif
+}
+#endif
 #endif
 
 void main()
@@ -268,8 +302,8 @@ void main()
 #ifdef ABERRATION
     // Red read nearer the centre shows further out; blue read further out shows nearer in.
     vec2 fromCentre = uv - 0.5;
-    vec3 colour = vec3(Read(0.5 + fromCentre * (1.0 - settings.aberration), size).r, Read(uv, size).g,
-                       Read(0.5 + fromCentre * (1.0 + settings.aberration), size).b);
+    vec3 colour = vec3(ReadBetween(0.5 + fromCentre * (1.0 - settings.aberration), size).r, Read(uv, size).g,
+                       ReadBetween(0.5 + fromCentre * (1.0 + settings.aberration), size).b);
 #else
     vec3 colour = Read(uv, size);
 #endif

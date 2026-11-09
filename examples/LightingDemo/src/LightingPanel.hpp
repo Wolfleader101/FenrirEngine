@@ -15,8 +15,8 @@ namespace Fenrir
 } // namespace Fenrir
 
 // The lighting panel every LightingDemo scene shows: an ImGui window for the cameras' exposure, tonemapper, bloom,
-// streaks, colour grade, ambient occlusion, reflections and debug view, the sun's shadow and the scene's sky, with keys
-// for the same, which the smoke runs press.
+// streaks, lens flare and dirt, chromatic aberration, vignette, film grain, colour grade, ambient occlusion,
+// reflections and debug view, the sun's shadow and the scene's sky, with keys for the same, which the smoke runs press.
 namespace LightingDemo
 {
     /** @brief A panorama the panel can switch the scene's sky to, and the name it shows. */
@@ -89,9 +89,10 @@ namespace LightingDemo
      * @brief Runs the panel for one frame, from a scene's `update`: applies its keys (T the next tonemapper, E the next
      * exposure, B bloom off or back on, O ambient occlusion off or back on, G the next debug view, H the sun's shadows
      * off or back on, S the next panorama), draws the "Lighting" ImGui window, with `sceneControls` drawn in it under
-     * the panel's own, then gives every Camera in `scene` the exposure, tonemapper, bloom, streaks, colour grade,
-     * ambient occlusion, reflections and debug view, every DirectionalLight the shadow settings, and the scene's Sky
-     * the chosen panorama, its intensity and its rotation.
+     * the panel's own, then gives every Camera in `scene` the exposure, tonemapper, bloom, streaks, lens flare and
+     * dirt, chromatic aberration, vignette, film grain, colour grade, ambient occlusion, reflections and debug view,
+     * every DirectionalLight the shadow settings, and the scene's Sky the chosen panorama, its intensity and its
+     * rotation.
      */
     void RunLightingPanel(Fenrir::App& app, Fenrir::Scene& scene, LightingSettings& settings,
                           const std::function<void()>& sceneControls = {});

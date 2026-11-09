@@ -88,7 +88,7 @@ namespace Fenrir::Render
     };
 
     /** @brief A view's anamorphic streaks (ADR-0059), the core's copy of Camera::anamorphicStreaks. */
-    struct StreakSettings
+    struct AnamorphicStreaksSettings
     {
         /** @brief How much of the streaks SceneColor is mixed with, in [0, 1]; 0 or less adds no pass. */
         float intensity = 0.0f;
@@ -209,7 +209,7 @@ namespace Fenrir::Render
         /** @brief How its `PostProcess` bloom mixes into SceneColor (Camera::bloom). */
         BloomSettings bloom;
         /** @brief How its `PostProcess` streaks mix into SceneColor after the bloom (Camera::anamorphicStreaks). */
-        StreakSettings anamorphicStreaks;
+        AnamorphicStreaksSettings anamorphicStreaks;
         /** @brief Its `PostProcess` ghosts and halo after the streaks, and its lens dirt (Camera::lensFlare). */
         LensFlareSettings lensFlare;
         /** @brief How far Output reads red and blue apart towards the corners (Camera::chromaticAberration). */

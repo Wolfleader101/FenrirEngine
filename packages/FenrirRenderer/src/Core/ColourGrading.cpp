@@ -19,12 +19,6 @@ namespace Fenrir::Render
         /** @brief How many stops from mid grey a balance of 1 moves the split. */
         constexpr float BalanceStops = 4.0f;
 
-        /** @brief Rec. 709 luminance. */
-        float Luminance(Vec3 colour)
-        {
-            return glm::dot(colour, Vec3(0.2126f, 0.7152f, 0.0722f));
-        }
-
         /** @brief Whether `tint` tints nothing: grey (any luminance), or black. */
         bool IsGrey(Vec3 tint)
         {
@@ -120,6 +114,11 @@ namespace Fenrir::Render
             return Math::Mat3(glm::inverse(toXyz) * glm::inverse(cat02) * scale * cat02 * toXyz);
         }
     } // namespace
+
+    float Luminance(Vec3 colour) noexcept
+    {
+        return glm::dot(colour, Vec3(0.2126f, 0.7152f, 0.0722f));
+    }
 
     Vec3 UnitLuminanceTint(Vec3 tint) noexcept
     {

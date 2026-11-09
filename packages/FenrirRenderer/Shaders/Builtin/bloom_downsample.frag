@@ -1,4 +1,5 @@
 #version 460
+#extension GL_GOOGLE_include_directive : require
 // A BloomDownsample pass (ADR-0049): its source, SceneColor or the bloom level above, filtered into a level at half its
 // size with Jimenez's 13-tap filter (CoD: Advanced Warfare, SIGGRAPH 2014). Each output pixel sits on a corner of its
 // source's texels; thirteen bilinear taps there and one and two texels out make five overlapping 2 x 2 boxes, the
@@ -13,6 +14,7 @@
 // into a level at half its width and the same height. Each output pixel sits on a corner between two source texels
 // across and on a texel's centre up and down; three bilinear taps there and two texels either side, weighted 1/4, 1/2
 // and 1/4, cover six texels of one row (1 1 2 2 1 1, over 8), so the weights sum to 1 and the level keeps the energy.
+#include "Fenrir/Constants.glsl"
 
 #ifdef MSAA
 layout(set = 2, binding = 0) uniform sampler2DMS source;
@@ -38,7 +40,7 @@ layout(location = 0) out vec4 outColour;
 
 float Luma(vec3 colour)
 {
-    return dot(colour, vec3(0.2126, 0.7152, 0.0722));
+    return dot(colour, FenrirLuminance);
 }
 
 #ifdef MSAA
