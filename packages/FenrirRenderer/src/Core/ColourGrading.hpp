@@ -29,6 +29,9 @@ namespace Fenrir::Render
         Math::Vec3 power{1.0f};
     };
 
+    /** @brief Rec. 709 luminance: what the grade, the tints and the film grain weigh a linear colour by. */
+    [[nodiscard]] float Luminance(Math::Vec3 colour) noexcept;
+
     /**
      * @brief `tint`, negatives clamped, scaled to unit Rec. 709 luminance, so it shifts hue and not brightness: white
      * for grey, black or a tint with no luminance. The grade's split-toning tints and the streaks' tint (ADR-0059).

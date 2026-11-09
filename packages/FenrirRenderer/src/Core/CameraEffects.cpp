@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "Core/ColourGrading.hpp"
+
 namespace Fenrir::Render
 {
     namespace
@@ -16,11 +18,6 @@ namespace Fenrir::Render
         {
             const float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
             return t * t * (3.0f - 2.0f * t);
-        }
-
-        float Luminance(Vec3 colour)
-        {
-            return 0.2126f * colour.r + 0.7152f * colour.g + 0.0722f * colour.b;
         }
     } // namespace
 

@@ -66,11 +66,11 @@ namespace Fenrir::Render
         /** @brief Its camera's anamorphic streaks, the intensity and length clamped to [0, 1] when the passes are
          * added.
          */
-        StreakSettings streaks;
+        AnamorphicStreaksSettings anamorphicStreaks;
         /** @brief Its camera's lens flare, whose intensity is clamped to [0, 1] and ghosts to MaxGhosts as the passes
          * are added.
          */
-        LensFlareSettings flare;
+        LensFlareSettings lensFlare;
         /** @brief The lens dirt image the composites read, imported into the graph; empty for none. */
         GraphResource dirt;
     };
@@ -139,7 +139,7 @@ namespace Fenrir::Render
         BloomChain(BloomChain&&) = delete;
         BloomChain& operator=(BloomChain&&) = delete;
 
-        /** @brief Adds the passes of every view in `views` that blooms or streaks, in frame `frameIndex`. */
+        /** @brief Adds the passes of every view in `views` that blooms, streaks or flares, in frame `frameIndex`. */
         void AddPasses(RenderGraph& graph, std::uint64_t frameIndex, std::span<const BloomView> views);
 
       private:
@@ -160,17 +160,17 @@ namespace Fenrir::Render
         /** @brief Into SceneColor, at its samples, blended by the intensity. */
         Graphics::PipelineHandle m_compositePipeline;
         /** @brief The streaks' horizontal-only downsample, upsample (blended by the length) and composite. */
-        Graphics::PipelineHandle m_streakDownsample;
-        Graphics::PipelineHandle m_streakUpsample;
-        Graphics::PipelineHandle m_streakComposite;
+        Graphics::PipelineHandle m_streakDownsamplePipeline;
+        Graphics::PipelineHandle m_streakUpsamplePipeline;
+        Graphics::PipelineHandle m_streakCompositePipeline;
         /**
          * @brief The flare's ghosts and halo; its blur is m_downsamplePipeline, and its composite bloom's own
-         * (m_compositePipeline, or m_lensDirtComposite under lens dirt).
+         * (m_compositePipeline, or m_lensDirtCompositePipeline under lens dirt).
          */
-        Graphics::PipelineHandle m_flareGhosts;
+        Graphics::PipelineHandle m_flareGhostsPipeline;
         /** @brief The composite into SceneColor under lens dirt, at its samples, blended by the share the dirt
          * raises.
          */
-        Graphics::PipelineHandle m_lensDirtComposite;
+        Graphics::PipelineHandle m_lensDirtCompositePipeline;
     };
 } // namespace Fenrir::Render

@@ -72,10 +72,16 @@ namespace Fenrir
             return static_cast<Render::Tonemapper>(tonemapper);
         }
 
-        /** @brief The core's copy of a camera's colour grade: its tints as linear RGB, their alpha ignored. */
-        Render::StreakSettings ToCore(const AnamorphicStreaks& streaks)
+        /** @brief A colour's linear RGB, its alpha ignored. */
+        Math::Vec3 ToLinearRgb(const Colour& colour)
         {
-            return {streaks.intensity, streaks.length, Math::Vec3(streaks.tint.r, streaks.tint.g, streaks.tint.b)};
+            return Math::Vec3(colour.r, colour.g, colour.b);
+        }
+
+        /** @brief The core's copy of a camera's anamorphic streaks: their tint as linear RGB, its alpha ignored. */
+        Render::AnamorphicStreaksSettings ToCore(const AnamorphicStreaks& streaks)
+        {
+            return {streaks.intensity, streaks.length, ToLinearRgb(streaks.tint)};
         }
 
         /** @brief The core's copy of a camera's lens flare, without its dirt, whose key ReadViews sets once prepared.
@@ -93,15 +99,15 @@ namespace Fenrir
             return settings;
         }
 
+        /** @brief The core's copy of a camera's colour grade: its tints as linear RGB, their alpha ignored. */
         Render::ColourGradingSettings ToCore(const ColourGrading& grading)
         {
             Render::ColourGradingSettings settings;
             settings.temperature = grading.temperature;
             settings.tint = grading.tint;
             settings.contrast = grading.contrast;
-            settings.shadowTint = Math::Vec3(grading.shadowTint.r, grading.shadowTint.g, grading.shadowTint.b);
-            settings.highlightTint =
-                Math::Vec3(grading.highlightTint.r, grading.highlightTint.g, grading.highlightTint.b);
+            settings.shadowTint = ToLinearRgb(grading.shadowTint);
+            settings.highlightTint = ToLinearRgb(grading.highlightTint);
             settings.balance = grading.balance;
             settings.saturation = grading.saturation;
             settings.slope = grading.slope;
@@ -469,7 +475,7 @@ namespace Fenrir
                 Render::PunctualLight& out = lights.emplace_back();
                 out.kind = Render::LightKind::Point;
                 out.position = Math::Vec3(GetWorldMatrix(entity)[3]);
-                out.colour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                out.colour = ToLinearRgb(light.colour) * light.intensity;
                 out.range = light.range;
                 out.castShadows = light.castShadows;
                 out.shadowNormalBias = std::max(light.shadowNormalBias, 0.0f);
@@ -488,7 +494,7 @@ namespace Fenrir
                 out.kind = Render::LightKind::Spot;
                 out.position = Math::Vec3(world[3]);
                 out.direction = glm::normalize(-Math::Vec3(world[2]));
-                out.colour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                out.colour = ToLinearRgb(light.colour) * light.intensity;
                 out.range = light.range;
                 out.innerAngle = light.innerAngle;
                 out.outerAngle = light.outerAngle;
@@ -527,7 +533,7 @@ namespace Fenrir
                 {
                     out.right = -out.right;
                 }
-                out.colour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                out.colour = ToLinearRgb(light.colour) * light.intensity;
                 out.width = light.width;
                 out.height = light.height;
                 out.twoSided = light.twoSided;
@@ -545,7 +551,7 @@ namespace Fenrir
         {
             Render::SceneLighting lighting;
             lighting.sky = sky.image;
-            lighting.skyColour = Math::Vec3(sky.colour.r, sky.colour.g, sky.colour.b);
+            lighting.skyColour = ToLinearRgb(sky.colour);
             lighting.skyIntensity = sky.intensity;
             lighting.skyRotation = sky.rotation;
 
@@ -562,7 +568,7 @@ namespace Fenrir
                 // It shines along its entity's world -Z.
                 const Math::Mat4 world = GetWorldMatrix(entity);
                 lighting.lightDirection = glm::normalize(-Math::Vec3(world[2]));
-                lighting.lightColour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                lighting.lightColour = ToLinearRgb(light.colour) * light.intensity;
                 // A light that lights nothing casts nothing (ADR-0050).
                 lighting.shadows.enabled = light.castShadows && light.shadowDistance > 0.0f &&
                                            glm::dot(lighting.lightColour, lighting.lightColour) > 0.0f;

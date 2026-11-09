@@ -193,9 +193,12 @@ namespace Fenrir::Render
             Math::Vec4 highlightTint{1.0f, 1.0f, 1.0f, 0.0f};
             /** @brief The CDL's slope, and the saturation in w. */
             Math::Vec4 slope{1.0f};
-            Math::Vec4 offset{0.0f};
-            /** @brief The CDL's power, and the chromatic aberration's intensity in w (ADR-0059). */
-            Math::Vec4 power{1.0f, 1.0f, 1.0f, 0.0f};
+            Math::Vec3 offset{0.0f};
+            float padding0 = 0.0f;
+            /** @brief The CDL's power. */
+            Math::Vec3 power{1.0f};
+            /** @brief The chromatic aberration's intensity (ADR-0059), which the ABERRATION variant reads. */
+            float aberration = 0.0f;
             /** @brief The vignette's intensity (0 skips it), radius, smoothness and roundness. */
             Math::Vec4 vignette{0.0f};
             /** @brief The film grain's intensity (0 skips it), response and size. */
@@ -741,7 +744,7 @@ namespace Fenrir::Render
         constexpr std::array<std::string_view, 1> occlusion{"OCCLUSION"};
         m_occlusionOutputPipeline = MakeInternalPipeline(m_output, m_output.FindVariant(occlusion), m_outputLayout,
                                                          TextureFormat::Rgba8Srgb, false, 1, m_outputBlockLayout);
-        // Chromatic aberration reads each channel at its own point: with MSAA, three resolves.
+        // Chromatic aberration reads each channel at its own point: with MSAA, red and blue each resolve four texels.
         constexpr std::array<std::string_view, 1> aberration{"ABERRATION"};
         constexpr std::array<std::string_view, 2> msaaAberration{"MSAA", "ABERRATION"};
         m_aberrationOutputPipeline = MakeInternalPipeline(
@@ -3005,10 +3008,10 @@ namespace Fenrir::Render
                 outputBlock.shadowTint = Math::Vec4(grade.shadowTint, grade.contrast);
                 outputBlock.highlightTint = Math::Vec4(grade.highlightTint, grade.split);
                 outputBlock.slope = Math::Vec4(grade.slope, grade.saturation);
-                outputBlock.offset = Math::Vec4(grade.offset, 0.0f);
-                outputBlock.power = Math::Vec4(grade.power, 0.0f);
+                outputBlock.offset = grade.offset;
+                outputBlock.power = grade.power;
             }
-            outputBlock.power.w = request.chromaticAberration.intensity;
+            outputBlock.aberration = request.chromaticAberration.intensity;
             outputBlock.vignette = Math::Vec4(request.vignette.intensity, request.vignette.radius,
                                               request.vignette.smoothness, request.vignette.roundness);
             outputBlock.grain =

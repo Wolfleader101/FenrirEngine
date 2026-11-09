@@ -1,9 +1,10 @@
 // The Output pass's chromatic aberration, vignette and film grain on OpenGL (ADR-0059, lighting ticket 25): pixel
-// probes of each effect against what it must do and against the C++ mirrors in Core/CameraEffects.hpp, the frame with
-// every effect at 0 against the tonemap goldens, and golden images of each effect alone over the tonemapping golden
-// scene (GoldenScene.hpp), compared with the committed PNGs in OpenGL/goldens under RendererTest::GoldenTolerance. Run
-// the GL tests with FENRIR_UPDATE_GOLDENS=1 to write the goldens again, after a change meant to alter them; look at
-// each before committing it.
+// probes of each effect against what it must do and against the C++ mirrors in Core/CameraEffects.hpp, the vignette,
+// the grade, the tonemapper and the grain together against the mirrors chained in ADR-0059's order, the frame with
+// every camera effect at 0 (streaks and lens flare too) against the tonemap goldens, and golden images of each effect
+// alone over the tonemapping golden scene (GoldenScene.hpp), compared with the committed PNGs in OpenGL/goldens under
+// RendererTest::GoldenTolerance. Run the GL tests with FENRIR_UPDATE_GOLDENS=1 to write the goldens again, after a
+// change meant to alter them; look at each before committing it.
 
 #include <algorithm>
 #include <cmath>
@@ -15,6 +16,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "Core/CameraEffects.hpp"
+#include "Core/ColourGrading.hpp"
 #include "Core/Tonemapping.hpp"
 #include "GlScene.hpp"
 #include "GoldenImages.hpp"
@@ -45,6 +47,23 @@ namespace
     Fenrir::Render::FilmGrainSettings ToCore(const Fenrir::FilmGrain& grain)
     {
         return {grain.intensity, grain.response, grain.size};
+    }
+
+    /** @brief The core's copy of `grading`, as the facade makes it. */
+    Fenrir::Render::ColourGradingSettings ToCore(const Fenrir::ColourGrading& grading)
+    {
+        Fenrir::Render::ColourGradingSettings settings;
+        settings.temperature = grading.temperature;
+        settings.tint = grading.tint;
+        settings.contrast = grading.contrast;
+        settings.shadowTint = Vec3(grading.shadowTint.r, grading.shadowTint.g, grading.shadowTint.b);
+        settings.highlightTint = Vec3(grading.highlightTint.r, grading.highlightTint.g, grading.highlightTint.b);
+        settings.balance = grading.balance;
+        settings.saturation = grading.saturation;
+        settings.slope = grading.slope;
+        settings.offset = grading.offset;
+        settings.power = grading.power;
+        return settings;
     }
 
     /** @brief A camera drawing into a new `width` x `height` image, its background `colour`, through None. */
@@ -165,6 +184,31 @@ TEST_CASE("Chromatic aberration fringes an edge red outside and blue inside", "[
     }
 }
 
+TEST_CASE("A fraction of a pixel of chromatic aberration fringes under MSAA as without it",
+          "[renderer][gl][camera-effects]")
+{
+    // 0.01 of the half-diagonal reads red about a quarter of a pixel nearer the centre at the bar's outer edge: read
+    // between texels, the pixel past the edge takes some of the bar's red, under MSAA as single-sampled. Snapped to
+    // whole texels it would take none. They differ a little, as MSAA smooths the bar's edge column itself.
+    float reds[2] = {0.0f, 0.0f};
+    for (std::size_t i = 0; i < 2; ++i)
+    {
+        const std::uint32_t msaa = i == 0 ? 1u : 4u;
+        const GlProbe::Image plain = AberrationFrame(msaa, 0.0f);
+        std::uint32_t outer = 0;
+        for (std::uint32_t x = 60; x < plain.width; ++x)
+        {
+            outer = plain.At(x, 31)[0] > 0.5f ? std::max(outer, x) : outer;
+        }
+        REQUIRE(plain.At(outer + 1, 31)[0] < 0.1f);
+        reds[i] = AberrationFrame(msaa, 0.01f).At(outer + 1, 31)[0];
+        INFO(msaa << " samples: the pixel past the bar's outer edge reads red " << reds[i]);
+        REQUIRE(reds[i] > 0.2f);
+    }
+    INFO("single-sampled red " << reds[0] << ", under MSAA " << reds[1]);
+    REQUIRE(std::abs(reds[0] - reds[1]) < 0.1f);
+}
+
 TEST_CASE("Chromatic aberration leaves the view's centre as it is", "[renderer][gl][camera-effects]")
 {
     for (const std::uint32_t msaa : {1u, 4u})
@@ -253,14 +297,68 @@ TEST_CASE("Film grain matches its CPU mirror for the frame it is drawn in", "[re
     }
 }
 
+TEST_CASE("The vignette, grade, tonemapper and grain together match their mirrors chained",
+          "[renderer][gl][camera-effects]")
+{
+    // A flat colour through every per-pixel step of Output at once, in ADR-0059's order: the exposure, the vignette's
+    // falloff, the grade, AgX and the grain for the pixel and the frame, each from its own C++ mirror, so a step
+    // applied out of order, twice or not at all shows at some pixel.
+    GlScene test;
+    test.RequireOpenGL();
+    Fenrir::Camera& camera = test.AddCamera();
+    const Vec3 colour(0.3f, 0.18f, 0.1f);
+    const auto image = FlatView(test, camera, 48, 32, Fenrir::Colour{colour.r, colour.g, colour.b, 1.0f});
+    camera.tonemapper = Fenrir::Tonemapper::AgX;
+    camera.exposure = 0.5f;
+    camera.vignette = {0.6f, 0.2f, 0.6f, 1.0f};
+    camera.colourGrading.temperature = 7500.0f;
+    camera.colourGrading.contrast = 1.3f;
+    camera.colourGrading.shadowTint = Fenrir::Colour{0.1f, 0.6f, 0.7f, 1.0f};
+    camera.colourGrading.highlightTint = Fenrir::Colour{0.9f, 0.3f, 0.7f, 1.0f};
+    camera.colourGrading.saturation = 1.15f;
+    camera.colourGrading.slope = Vec3(1.05f, 1.0f, 0.95f);
+    camera.filmGrain = {0.1f, 0.8f, 1.0f};
+    const auto frame = static_cast<std::uint32_t>(RendererProbe::Core(test.renderer).FrameIndex());
+    test.RunFrame();
+    const GlProbe::Image pixels =
+        GlProbe::Read(RendererProbe::Device(test.renderer), RendererProbe::ImageTexture(test.renderer, image));
+
+    for (const auto [x, y] : {std::pair{0u, 0u}, std::pair{47u, 31u}, std::pair{24u, 16u}, std::pair{10u, 25u},
+                              std::pair{40u, 5u}, std::pair{24u, 0u}})
+    {
+        const Vec2 uv((static_cast<float>(x) + 0.5f) / 48.0f, (static_cast<float>(y) + 0.5f) / 32.0f);
+        const float falloff = Fenrir::Render::VignetteFalloff(ToCore(camera.vignette), uv, 48.0f / 32.0f);
+        const Vec3 graded = Fenrir::Render::GradeColour(
+            ToCore(camera.colourGrading), colour * Fenrir::Render::ExposureScale(camera.exposure) * falloff);
+        const Vec3 expected = Fenrir::Render::ApplyFilmGrain(
+            ToCore(camera.filmGrain), Fenrir::Render::Tonemap(Fenrir::Render::Tonemapper::AgX, graded), x, y, frame);
+        const GlProbe::Pixel actual = pixels.At(x, y);
+        INFO("pixel (" << x << ", " << y << "): the GPU stored (" << actual[0] << ", " << actual[1] << ", " << actual[2]
+                       << "), the mirrors chained encode to (" << Encode(expected.r) << ", " << Encode(expected.g)
+                       << ", " << Encode(expected.b) << ")");
+        REQUIRE(GlProbe::Near(actual, {Encode(expected.r), Encode(expected.g), Encode(expected.b), 1.0f}));
+    }
+}
+
 TEST_CASE("With every effect at 0 the frame is the tonemap golden exactly", "[renderer][gl][golden]")
 {
-    // Every other setting off its default, so only the intensities keep the effects off: through each tonemapper and
-    // exposure the tonemap goldens cover, the same bytes as the plain frame, and its golden.
+    // Every other setting off its default, so only the intensities keep the effects off: the Output pass's effects
+    // and the PostProcess streaks and lens flare, through each tonemapper and exposure the tonemap goldens cover, the
+    // same bytes as the plain frame, and its golden.
     const auto off = [](Fenrir::Camera& camera) {
         camera.chromaticAberration.intensity = 0.0f;
         camera.vignette = {0.0f, 0.1f, 0.2f, 0.3f};
         camera.filmGrain = {0.0f, 0.1f, 3.0f};
+        camera.anamorphicStreaks.intensity = 0.0f;
+        camera.anamorphicStreaks.length = 0.3f;
+        camera.anamorphicStreaks.tint = Fenrir::Colour{0.2f, 0.4f, 1.0f, 1.0f};
+        camera.lensFlare.intensity = 0.0f;
+        camera.lensFlare.ghostCount = 7;
+        camera.lensFlare.ghostSpacing = 0.2f;
+        camera.lensFlare.haloRadius = 0.3f;
+        camera.lensFlare.haloWidth = 0.3f;
+        camera.lensFlare.chromaticOffset = 0.05f;
+        camera.lensFlare.dirtIntensity = 3.0f;
     };
     struct Golden
     {

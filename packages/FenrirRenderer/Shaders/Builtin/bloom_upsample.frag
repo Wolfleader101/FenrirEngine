@@ -1,4 +1,5 @@
 #version 460
+#extension GL_GOOGLE_include_directive : require
 // A BloomUpsample or BloomComposite pass (ADR-0049): the bloom level below, at half the target's size, filtered up with
 // a 3 x 3 tent (1 2 1 / 2 4 2 / 1 2 1, over 16) one source texel apart, as CoD: Advanced Warfare's does. The weights sum
 // to 1, so the energy is kept. The pipeline blends the result over its target by straight alpha: `blend` is the
@@ -10,6 +11,7 @@
 // With the DIRT key it is a BloomComposite or FlareComposite pass under lens dirt (ADR-0059): its share of SceneColor,
 // the alpha, is multiplied by 1 + `dirtIntensity` times the dirt image's luminance at the pixel and held at or below 1,
 // so the mix stays a blend (LensDirtShare is its CPU mirror).
+#include "Fenrir/Constants.glsl"
 
 layout(set = 2, binding = 0) uniform sampler2D source;
 #ifdef DIRT
@@ -53,7 +55,7 @@ void main()
 #endif
     float share = bloom.blend;
 #ifdef DIRT
-    float lensDirt = max(dot(texture(dirt, uv).rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0);
+    float lensDirt = max(dot(texture(dirt, uv).rgb, FenrirLuminance), 0.0);
     share = min(share * (1.0 + max(bloom.dirtIntensity, 0.0) * lensDirt), 1.0);
 #endif
     outColour = vec4(filtered * bloom.tint, share);
