@@ -34,3 +34,6 @@
 [submodule "examples/DemoScaffold/libs/imgui"]
 	path = examples/DemoScaffold/libs/imgui
 	url = https://github.com/ocornut/imgui
+[submodule "packages/FenrirAssets/libs/meshoptimizer"]
+	path = packages/FenrirAssets/libs/meshoptimizer
+	url = https://github.com/zeux/meshoptimizer

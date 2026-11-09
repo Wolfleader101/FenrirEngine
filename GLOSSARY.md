@@ -658,6 +658,10 @@ The asset a model file loads as: its whole node tree, bones included, pointing a
 An asset inside a model file, loadable on its own by label: `hero.fbx#Run`.
 *Avoid:* sub-resource, embedded asset.
 
+**Level of detail**
+One of a mesh's coarser triangle lists over its own vertex streams (`MeshLod`), with the greatest distance in local units by which it departs from full detail, its *error*. Level 0 is the mesh's own indices, with error 0; `MeshData::lods` holds the rest, coarser and with a larger error each. `GenerateLods` makes them through meshoptimizer; the renderer picks the coarsest whose error projects below a pixel threshold (ADR-0057).
+*Avoid:* LOD mesh (a level is not a mesh of its own), LOD group, mip (for geometry).
+
 ## FenrirEngine animation
 
 **FenrirSkeleton**

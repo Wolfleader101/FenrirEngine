@@ -71,6 +71,33 @@ namespace Fenrir
     };
 
     /**
+     * @brief One level of detail of a mesh (ADR-0057): a coarser triangle list over the mesh's own vertex streams, so
+     * every level shares the mesh's vertex buffer and a skinned mesh's levels share its skin.
+     */
+    struct MeshLod
+    {
+        /** @brief Indices into the mesh's vertex streams, three per triangle: fewer triangles than the level before. */
+        std::vector<std::uint32_t> indices;
+        /**
+         * @brief The greatest distance, in the mesh's local units, by which this level departs from full detail.
+         * Greater than the previous level's (level 0, the mesh's own `indices`, has error 0). The renderer projects it
+         * to pixels to choose a level.
+         */
+        float error = 0.0f;
+    };
+
+    /** @brief What `GenerateLods` aims for; the defaults suit most meshes. */
+    struct LodSettings
+    {
+        /** @brief The share of the previous level's triangles each level aims for. */
+        float ratio = 0.5f;
+        /** @brief How many levels to make at most, not counting the mesh's own full detail. */
+        std::uint32_t maxLevels = 4;
+        /** @brief No level is coarser than this many triangles; a level already at or below it is the last. */
+        std::uint32_t minTriangles = 32;
+    };
+
+    /**
      * @brief A mesh as plain CPU-side data (ADR-0021): vertex streams, indices and submeshes, built in code or
      * imported.
      *
@@ -104,5 +131,26 @@ namespace Fenrir
 
         /** @brief The skin section, for a skinned mesh: its vertices are then in skeleton bind space. */
         std::optional<MeshSkin> skin;
+
+        /**
+         * @brief The mesh's levels of detail (ADR-0057), coarsest last; empty for a mesh drawn at full detail only.
+         * Level 0 is `indices` itself, with error 0, and is not in the vector. The store refuses a level whose index
+         * count is not whole triangles, whose index reaches past the positions, or whose error is not greater than the
+         * previous level's, and refuses levels on a mesh with more than one submesh, since a level is one triangle
+         * list with no material ranges. `GenerateLods` makes them.
+         */
+        std::vector<MeshLod> lods;
     };
+
+    /**
+     * @brief `mesh` with its levels of detail made by meshoptimizer (ADR-0057): each level aims at `settings.ratio` of
+     * the previous level's triangles, and the chain stops at `settings.maxLevels`, when a level would start at or
+     * below `settings.minTriangles`, or when simplifying saves less than a tenth of the triangles. Normals and `uv0`
+     * weigh in the error where the mesh has them, and a vertex on an attribute seam (a position several vertices
+     * share) never moves, so seams stay where they were. Each level's `error` is meshoptimizer's error scaled to the
+     * mesh's local units, strictly growing. The mesh's own `indices` and each level come back reordered for the GPU's
+     * vertex cache; every stream, the submeshes, the bounds and the skin are kept as they were. A mesh with no
+     * triangles or with more than one submesh comes back with no levels.
+     */
+    [[nodiscard]] MeshData GenerateLods(const MeshData& mesh, const LodSettings& settings = {});
 } // namespace Fenrir

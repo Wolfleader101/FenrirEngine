@@ -12,9 +12,9 @@
 
 **Touches:** `packages/FenrirAssets/`, `.gitmodules`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] FenrirAssets unit tests: a subdivided sphere's chain has falling triangle counts and rising errors, every index in range, and stops at each limit; a cube (nothing to remove) gets no levels; a skinned mesh keeps its skin and bone bounds; UV seams stay where they were (no vertex moves across one).
-- [ ] FenrirAssets unit tests: the store refuses each malformed level above with a message naming it, and keeps good levels through `Replace`.
+- [x] FenrirAssets unit tests: a subdivided sphere's chain has falling triangle counts and rising errors, every index in range, and stops at each limit; a cube (nothing to remove) gets no levels; a skinned mesh keeps its skin and bone bounds; UV seams stay where they were (no vertex moves across one).
+- [x] FenrirAssets unit tests: the store refuses each malformed level above with a message naming it, and keeps good levels through `Replace`.
 
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

@@ -62,6 +62,38 @@ namespace Fenrir::Detail
             }
         }
 
+        if (!mesh.lods.empty() && mesh.submeshes.size() > 1)
+        {
+            return std::format("it has {} levels of detail and {} submeshes, and a level is one triangle list over a "
+                               "mesh with one submesh or none",
+                               mesh.lods.size(), mesh.submeshes.size());
+        }
+        float previousError = 0.0f;
+        for (std::size_t level = 0; level < mesh.lods.size(); ++level)
+        {
+            const MeshLod& lod = mesh.lods[level];
+            if (lod.indices.size() % 3 != 0)
+            {
+                return std::format("level of detail {}'s {} indices are not whole triangles", level + 1,
+                                   lod.indices.size());
+            }
+            for (std::size_t i = 0; i < lod.indices.size(); ++i)
+            {
+                if (lod.indices[i] >= vertices)
+                {
+                    return std::format("level of detail {}'s index {} is {}, past its {} vertices", level + 1, i,
+                                       lod.indices[i], vertices);
+                }
+            }
+            // Written as a negation so a NaN error is refused too.
+            if (!(lod.error > previousError))
+            {
+                return std::format("level of detail {}'s error {} is not greater than level {}'s {}", level + 1,
+                                   lod.error, level, previousError);
+            }
+            previousError = lod.error;
+        }
+
         mesh.bounds = {Math::Vec3(0.0f), Math::Vec3(0.0f)};
         if (!mesh.positions.empty())
         {
