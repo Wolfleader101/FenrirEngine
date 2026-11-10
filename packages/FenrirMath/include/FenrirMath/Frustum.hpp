@@ -6,28 +6,10 @@
 
 #include <glm/glm.hpp>
 
-#include "Math_fwd.hpp"
+#include "Math.hpp"
 
 namespace Fenrir::Math
 {
-    /** @brief A sphere: a centre and a radius. */
-    struct Sphere
-    {
-        Vec3 centre{0.0f};
-        float radius = 0.0f;
-    };
-
-    /**
-     * @brief The eight corners of `box`, bit 0 of the index picking max x over min x, bit 1 max y and bit 2 max z.
-     */
-    [[nodiscard]] std::array<Vec3, 8> Corners(const AABB& box);
-
-    /** @brief The box around both of `a` and `b`. */
-    [[nodiscard]] AABB Union(const AABB& a, const AABB& b);
-
-    /** @brief `box` moved by `matrix`: the box around its eight corners, each moved as a point. */
-    [[nodiscard]] AABB Moved(const AABB& box, const Mat4& matrix);
-
     /**
      * @brief The volume a view sees, as the planes that bound it in world space (ADR-0057): what the renderer culls
      * against, public so a game culls or streams its own chunks and cells by the same maths. Each plane is a `Vec4`

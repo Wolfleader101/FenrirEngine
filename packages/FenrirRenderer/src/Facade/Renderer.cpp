@@ -1560,13 +1560,13 @@ namespace Fenrir
             {
                 return std::nullopt;
             }
-            const Math::AABB local =
-                m_state->scene->IsInstanceListCurrent(Render::KeyOf(renderer.instances),
-                                                      store->Revision(renderer.instances))
-                    ? m_state->scene->InstanceListBounds(Render::KeyOf(renderer.instances), mesh->bounds)
-                          .value_or(Render::CopiesBounds(list->transforms, mesh->bounds))
-                    : Render::CopiesBounds(list->transforms, mesh->bounds);
-            return Math::Moved(local, GetWorldMatrix(entity));
+            std::optional<Math::AABB> local;
+            if (m_state->scene->IsInstanceListCurrent(KeyOf(renderer.instances), store->Revision(renderer.instances)))
+            {
+                local = m_state->scene->InstanceListBounds(KeyOf(renderer.instances), mesh->bounds);
+            }
+            return Math::Moved(local.value_or(Render::CopiesBounds(list->transforms, mesh->bounds)),
+                               GetWorldMatrix(entity));
         }
         if (!entity.HasComponent<MeshRenderer>())
         {

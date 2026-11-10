@@ -203,7 +203,8 @@ namespace Fenrir::Render
      * packed back to back with every other list's in one storage buffer, set 3 binding 1, made again whenever a list
      * is prepared or released, so a list that never changes is uploaded once. An item naming one is one draw of as many
      * instances as the list has copies, from its own record: `Fenrir/Draw.glsl` composes each copy's record from it.
-     * It never merges with other items, and is never culled.
+     * It never merges with other items. Its bounds, the box around every copy's mesh box, are computed when it is
+     * prepared (ADR-0057), and a transparent list outside a view's frustum is left out of that view as an item is.
      *
      * **Images** with pixels that materials name are prepared like assets: uploaded as 2D textures (RGBA8, sRGB or
      * linear as the image is, RGBA16F or RGBA32F) with every mip level made at upload, and bound with their texture
@@ -635,8 +636,8 @@ namespace Fenrir::Render
              * @brief What its record carries (ADR-0057): an item's world bounds, or an instance list's mesh's local
              * box.
              */
-            Math::AABB bounds{Math::Vec3(0.0f), Math::Vec3(0.0f)};
-            /** @brief The box it is culled by: `bounds` for an item, the box around every copy for a list. */
+            Math::AABB recordBounds{Math::Vec3(0.0f), Math::Vec3(0.0f)};
+            /** @brief The box it is culled by: `recordBounds` for an item, the box around every copy for a list. */
             Math::AABB worldBounds{Math::Vec3(0.0f), Math::Vec3(0.0f)};
             /**
              * @brief A compute-skinned draw's skinned vertices in the frame's skinned vertex buffer: the byte offset of
