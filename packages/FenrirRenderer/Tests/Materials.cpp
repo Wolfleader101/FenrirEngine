@@ -79,7 +79,7 @@ TEST_CASE("Opaque and masked items test the prepass's depth for equality; alpha-
 {
     RendererTestApp test;
     // Without bloom, whose passes Bloom.cpp checks.
-    test.AddCamera().GetComponent<Fenrir::Camera>().bloom.intensity = 0.0f;
+    test.AddCamera().GetComponent<Fenrir::Camera>().look.bloom.intensity = 0.0f;
     AddQuadAt(test, 0.0f, Blended(test, Fenrir::BlendMode::Opaque));
     AddQuadAt(test, 0.0f, Blended(test, Fenrir::BlendMode::Masked));
     AddQuadAt(test, 0.0f, Blended(test, Fenrir::BlendMode::AlphaBlend));

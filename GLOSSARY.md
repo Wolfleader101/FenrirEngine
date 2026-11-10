@@ -516,40 +516,44 @@ Where a view's output goes: a window, or an image asset made with a size but no 
 A camera's brightness setting in EV stops, applied in its view's `Output` before the tonemapper: the linear colour times 2^exposure, so each +1 doubles it (ADR-0049).
 *Avoid:* gain, brightness, EV (alone, as the setting's name).
 
+**Look**
+How a camera turns the scene's light into its picture, one plain value on it (`Camera::look`, a `CameraLook`, ADR-0059): its exposure, tonemapper, bloom, anamorphic streaks, lens flare and dirt, colour grade, chromatic aberration, vignette and film grain. Copying it gives another camera the same look.
+*Avoid:* post-process settings, post-process profile, camera effects (the effects are its parts), environment (Godot's word, which also holds the sky and fog).
+
 **Tonemapper**
 How a view's `Output` maps its exposed HDR colour into the [0, 1] its render target stores: `AgX` (the default), `PbrNeutral`, `Aces`, or `None`, which clamps (ADR-0049).
-*Avoid:* tone curve, colour grade (the look set before it), tonemapping operator.
+*Avoid:* tone curve, colour grade (the grade set before it), tonemapping operator.
 
 **Colour grade**
-A camera's look, set in its view's `Output` on the exposed scene colour before the tonemapper (`Camera::colourGrading`, ADR-0059): white balance, contrast around mid grey, split toning, saturation and the ASC CDL, in that order. Identity by default.
-*Avoid:* LUT (a baked look, not yet supported), colour correction, post-process volume (the settings live on `Camera`).
+The part of a camera's look set in its view's `Output` on the exposed scene colour before the tonemapper (`CameraLook::colourGrading`, ADR-0059): white balance, contrast around mid grey, split toning, saturation and the ASC CDL, in that order. Identity by default.
+*Avoid:* LUT (a baked look, not yet supported), colour correction, post-process volume (the settings live on `Camera::look`).
 
 **Chromatic aberration**
-Colour fringes towards a view's edges, as a lens bends each wavelength by its own amount: its `Output` reads each channel of SceneColor at its own point, red moved outwards and blue inwards by its camera's `chromaticAberration.intensity` of the half-diagonal at the corners, the centre as it is (ADR-0059).
+Colour fringes towards a view's edges, as a lens bends each wavelength by its own amount: its `Output` reads each channel of SceneColor at its own point, red moved outwards and blue inwards by its camera's `look.chromaticAberration.intensity` of the half-diagonal at the corners, the centre as it is (ADR-0059).
 *Avoid:* colour fringing (what it looks like, not the effect), lateral colour, RGB split.
 
 **Vignette**
-A view darkened towards its corners, as a lens's falloff darkens them: its `Output` multiplies the exposed linear colour by a falloff from its centre before the colour grade and the tonemapper, set by its camera's `vignette` (ADR-0059).
+A view darkened towards its corners, as a lens's falloff darkens them: its `Output` multiplies the exposed linear colour by a falloff from its centre before the colour grade and the tonemapper, set by its camera's `look.vignette` (ADR-0059).
 *Avoid:* lens shading, edge darkening.
 
 **Film grain**
-Noise its `Output` adds to a view after the tonemapper, in the range the viewer sees, weighted towards the mid-tones as film grain shows, and moving each frame: its camera's `filmGrain` (ADR-0059).
+Noise its `Output` adds to a view after the tonemapper, in the range the viewer sees, weighted towards the mid-tones as film grain shows, and moving each frame: its camera's `look.filmGrain` (ADR-0059).
 *Avoid:* noise (alone), dither (a different thing, for banding).
 
 **Bloom**
-Bright pixels bleeding light into their surroundings: a view's SceneColor blurred over ever wider areas and mixed back into it before `Output` by its camera's `bloom.intensity`, with no threshold, keeping the scene's energy (ADR-0049).
+Bright pixels bleeding light into their surroundings: a view's SceneColor blurred over ever wider areas and mixed back into it before `Output` by its camera's `look.bloom.intensity`, with no threshold, keeping the scene's energy (ADR-0049).
 *Avoid:* glow (what bloom looks like, not the effect), bright pass or threshold (there is none), lens flare (a different effect).
 
 **Anamorphic streaks**
-Bright pixels drawn out into long, thin horizontal lines, as an anamorphic lens draws them: a horizontal-only blur chain from bloom's first level, mixed into SceneColor after the bloom by its camera's `anamorphicStreaks.intensity`, times a tint at unit luminance, with no threshold, keeping the scene's energy (ADR-0059).
+Bright pixels drawn out into long, thin horizontal lines, as an anamorphic lens draws them: a horizontal-only blur chain from bloom's first level, mixed into SceneColor after the bloom by its camera's `look.anamorphicStreaks.intensity`, times a tint at unit luminance, with no threshold, keeping the scene's energy (ADR-0059).
 *Avoid:* streak filter, star filter or starburst (a different, per-light effect), lens flare (ghosts and a halo, a different effect).
 
 **Lens flare**
-Ghosts of a view's bright parts mirrored through its centre along the line from them, and a halo ring, each colour fringed apart, as light reflecting between a lens's elements draws them: John Chapman's pseudo lens flare, read from bloom's second level and mixed into SceneColor after the streaks by its camera's `lensFlare.intensity`, with no threshold, keeping a flat view as it is (ADR-0059).
+Ghosts of a view's bright parts mirrored through its centre along the line from them, and a halo ring, each colour fringed apart, as light reflecting between a lens's elements draws them: John Chapman's pseudo lens flare, read from bloom's second level and mixed into SceneColor after the streaks by its camera's `look.lensFlare.intensity`, with no threshold, keeping a flat view as it is (ADR-0059).
 *Avoid:* starburst or sprite flare (per-light effects placed by a light's screen position, not built), glare (what a bright sky's flare looks like, not the effect).
 
 **Lens dirt**
-A greyscale image of the smudges and dust on a camera's lens, stretched over its view, which raises each pixel's share of the bloom and the lens flare where it is bright, so a bright light lights up the dirt: its camera's `lensFlare.dirt`, scaled by `lensFlare.dirtIntensity`, the share held at or below 1 so the mix stays a blend (ADR-0059).
+A greyscale image of the smudges and dust on a camera's lens, stretched over its view, which raises each pixel's share of the bloom and the lens flare where it is bright, so a bright light lights up the dirt: its camera's `look.lensFlare.dirt`, scaled by `lensFlare.dirtIntensity`, the share held at or below 1 so the mix stays a blend (ADR-0059).
 *Avoid:* dirt mask, lens texture.
 
 **Punctual light**

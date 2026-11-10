@@ -81,8 +81,8 @@ namespace LightingDemo
             if (keyboard.JustPressed(Fenrir::Key::T))
             {
                 const NamedTonemapper& next =
-                    Tonemappers.at((TonemapperIndex(settings.tonemapper) + 1) % Tonemappers.size());
-                settings.tonemapper = next.tonemapper;
+                    Tonemappers.at((TonemapperIndex(settings.look.tonemapper) + 1) % Tonemappers.size());
+                settings.look.tonemapper = next.tonemapper;
                 app.Logger()->Info("T: the tonemapper is {}", next.name);
             }
             if (keyboard.JustPressed(Fenrir::Key::E))
@@ -91,18 +91,18 @@ namespace LightingDemo
                 std::size_t at = 0;
                 for (std::size_t i = 0; i < Exposures.size(); ++i)
                 {
-                    if (Exposures.at(i) == settings.exposure)
+                    if (Exposures.at(i) == settings.look.exposure)
                     {
                         at = i;
                     }
                 }
-                settings.exposure = Exposures.at((at + 1) % Exposures.size());
-                app.Logger()->Info("E: the exposure is {:+.0f} EV", settings.exposure);
+                settings.look.exposure = Exposures.at((at + 1) % Exposures.size());
+                app.Logger()->Info("E: the exposure is {:+.0f} EV", settings.look.exposure);
             }
             if (keyboard.JustPressed(Fenrir::Key::B))
             {
-                settings.bloom.intensity = settings.bloom.intensity > 0.0f ? 0.0f : Fenrir::Bloom{}.intensity;
-                app.Logger()->Info("B: bloom is {}", settings.bloom.intensity > 0.0f ? "on" : "off");
+                settings.look.bloom.intensity = settings.look.bloom.intensity > 0.0f ? 0.0f : Fenrir::Bloom{}.intensity;
+                app.Logger()->Info("B: bloom is {}", settings.look.bloom.intensity > 0.0f ? "on" : "off");
             }
             if (keyboard.JustPressed(Fenrir::Key::O))
             {
@@ -135,33 +135,33 @@ namespace LightingDemo
             ImGui::Begin("Lighting");
 
             ImGui::SeparatorText("Camera");
-            ImGui::SliderFloat("Exposure (EV)", &settings.exposure, -6.0f, 6.0f, "%+.1f");
-            if (ImGui::BeginCombo("Tonemapper", Tonemappers.at(TonemapperIndex(settings.tonemapper)).name))
+            ImGui::SliderFloat("Exposure (EV)", &settings.look.exposure, -6.0f, 6.0f, "%+.1f");
+            if (ImGui::BeginCombo("Tonemapper", Tonemappers.at(TonemapperIndex(settings.look.tonemapper)).name))
             {
                 for (const NamedTonemapper& choice : Tonemappers)
                 {
-                    if (ImGui::Selectable(choice.name, choice.tonemapper == settings.tonemapper))
+                    if (ImGui::Selectable(choice.name, choice.tonemapper == settings.look.tonemapper))
                     {
-                        settings.tonemapper = choice.tonemapper;
+                        settings.look.tonemapper = choice.tonemapper;
                     }
                 }
                 ImGui::EndCombo();
             }
-            ImGui::SliderFloat("Bloom intensity", &settings.bloom.intensity, 0.0f, 1.0f, "%.3f",
+            ImGui::SliderFloat("Bloom intensity", &settings.look.bloom.intensity, 0.0f, 1.0f, "%.3f",
                                ImGuiSliderFlags_Logarithmic);
-            ImGui::SliderFloat("Bloom radius", &settings.bloom.radius, 0.0f, 1.0f);
+            ImGui::SliderFloat("Bloom radius", &settings.look.bloom.radius, 0.0f, 1.0f);
             // The streaks' tint is the scene's own; the renderer scales it to unit luminance.
-            ImGui::SliderFloat("Streak intensity", &settings.anamorphicStreaks.intensity, 0.0f, 1.0f, "%.3f",
+            ImGui::SliderFloat("Streak intensity", &settings.look.anamorphicStreaks.intensity, 0.0f, 1.0f, "%.3f",
                                ImGuiSliderFlags_Logarithmic);
-            ImGui::SliderFloat("Streak length", &settings.anamorphicStreaks.length, 0.0f, 1.0f);
+            ImGui::SliderFloat("Streak length", &settings.look.anamorphicStreaks.length, 0.0f, 1.0f);
             // The flare's ghosts and halo are the scene's own; the dirt scales the bloom's and the flare's share.
-            ImGui::SliderFloat("Flare intensity", &settings.lensFlare.intensity, 0.0f, 0.2f, "%.3f",
+            ImGui::SliderFloat("Flare intensity", &settings.look.lensFlare.intensity, 0.0f, 0.2f, "%.3f",
                                ImGuiSliderFlags_Logarithmic);
-            ImGui::SliderFloat("Lens dirt", &settings.lensFlare.dirtIntensity, 0.0f, 10.0f, "%.2f");
+            ImGui::SliderFloat("Lens dirt", &settings.look.lensFlare.dirtIntensity, 0.0f, 10.0f, "%.2f");
 
             // The grade's tints are linear colours; only their hue and saturation count. The CDL is left to code.
             ImGui::SeparatorText("Colour grade");
-            Fenrir::ColourGrading& grading = settings.colourGrading;
+            Fenrir::ColourGrading& grading = settings.look.colourGrading;
             ImGui::SliderFloat("Temperature (K)", &grading.temperature, 2500.0f, 25000.0f, "%.0f",
                                ImGuiSliderFlags_Logarithmic);
             ImGui::SliderFloat("Tint", &grading.tint, -1.0f, 1.0f, "%+.2f");
@@ -177,10 +177,11 @@ namespace LightingDemo
 
             // Each effect's main setting; the vignette's shape and the grain's response and size are the scene's own.
             ImGui::SeparatorText("Camera effects");
-            ImGui::SliderFloat("Chromatic aberration", &settings.chromaticAberration.intensity, 0.0f, 0.05f, "%.4f");
-            ImGui::SliderFloat("Vignette", &settings.vignette.intensity, 0.0f, 1.0f);
-            ImGui::SliderFloat("Vignette radius", &settings.vignette.radius, 0.0f, 1.0f);
-            ImGui::SliderFloat("Film grain", &settings.filmGrain.intensity, 0.0f, 0.2f, "%.3f");
+            ImGui::SliderFloat("Chromatic aberration", &settings.look.chromaticAberration.intensity, 0.0f, 0.05f,
+                               "%.4f");
+            ImGui::SliderFloat("Vignette", &settings.look.vignette.intensity, 0.0f, 1.0f);
+            ImGui::SliderFloat("Vignette radius", &settings.look.vignette.radius, 0.0f, 1.0f);
+            ImGui::SliderFloat("Film grain", &settings.look.filmGrain.intensity, 0.0f, 0.2f, "%.3f");
 
             ImGui::SeparatorText("Ambient occlusion (GTAO)");
             ImGui::Checkbox("AO on", &settings.ambientOcclusion.enabled);
@@ -264,24 +265,16 @@ namespace LightingDemo
 
         void Apply(Fenrir::App& app, Fenrir::Scene& scene, const LightingSettings& settings)
         {
-            Fenrir::LensFlare lensFlare = settings.lensFlare;
-            if (const LensDirt* dirt = app.TryGetResource<LensDirt>(); dirt != nullptr && lensFlare.dirt.IsEmpty())
+            Fenrir::CameraLook look = settings.look;
+            if (const LensDirt* dirt = app.TryGetResource<LensDirt>(); dirt != nullptr && look.lensFlare.dirt.IsEmpty())
             {
-                lensFlare.dirt = dirt->image;
+                look.lensFlare.dirt = dirt->image;
             }
             Fenrir::EntityList& entities = scene.GetEntityList();
             const std::array<Fenrir::ComponentType, 1> cameras{Fenrir::ComponentType::Native<Fenrir::Camera>()};
             entities.ForEachWith(cameras, [&](std::uint32_t id) {
                 auto& camera = entities.GetEntity(id).GetComponent<Fenrir::Camera>();
-                camera.exposure = settings.exposure;
-                camera.tonemapper = settings.tonemapper;
-                camera.bloom = settings.bloom;
-                camera.anamorphicStreaks = settings.anamorphicStreaks;
-                camera.lensFlare = lensFlare;
-                camera.colourGrading = settings.colourGrading;
-                camera.chromaticAberration = settings.chromaticAberration;
-                camera.vignette = settings.vignette;
-                camera.filmGrain = settings.filmGrain;
+                camera.look = look;
                 camera.ambientOcclusion = settings.ambientOcclusion;
                 camera.reflections = settings.reflections;
                 camera.debugView = settings.debugView;

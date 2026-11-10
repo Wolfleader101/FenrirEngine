@@ -300,7 +300,7 @@ TEST_CASE("A mirror floor under emissive strips and a rect light, reflections on
     camera.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(-0.25f, Vec3(1.0f, 0.0f, 0.0f));
     Fenrir::Camera& view = camera.AddComponent<Fenrir::Camera>();
     view.target = Fenrir::ImageTarget{target};
-    view.bloom.intensity = 0.0f;
+    view.look.bloom.intensity = 0.0f;
     view.reflections.enabled = true;
     test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::ColourSky{{0.01f, 0.01f, 0.02f, 1.0f}});
 
@@ -365,8 +365,8 @@ TEST_CASE("GL: the Reflections debug view shows the reflected colour times its c
     Fenrir::Camera& camera = AddRoom(test, true, 0.0f, {0.0f, 0.0f, 0.5f, 1.0f});
     AddBoard(test, 6.0f);
     // Exposed by a quarter and not tonemapped, the board's red 2 shows as 0.5 where the floor is sure of it.
-    camera.exposure = -2.0f;
-    camera.tonemapper = Fenrir::Tonemapper::None;
+    camera.look.exposure = -2.0f;
+    camera.look.tonemapper = Fenrir::Tonemapper::None;
 
     const Shown shown = ShowDebugView(test, camera, Fenrir::CameraDebugView::Reflections);
     INFO("the frame drew a hit target at the view's size");

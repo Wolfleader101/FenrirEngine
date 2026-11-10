@@ -294,7 +294,7 @@ namespace LightingDemo
             AsteroidRingState state;
             state.lighting.panoramas.push_back(
                 {"Procedural starfield", store.Add<Fenrir::Image>(Starfield(2048), scene)});
-            state.lighting.bloom.intensity = 0.06f;
+            state.lighting.look.bloom.intensity = 0.06f;
             // The whole ring, from where the camera starts, so the planet's shadow falls across it (ADR-0050).
             state.lighting.sunShadows.shadowDistance = 200.0f;
 

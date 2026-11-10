@@ -5,8 +5,8 @@
 namespace Fenrir::Render
 {
     /**
-     * @brief A view's colour grade (ADR-0059), the core's copy of Camera::colourGrading: what the Output pass does to
-     * the exposed linear Rec. 709 colour before its tonemapper. Identity by default.
+     * @brief A view's colour grade (ADR-0059), the core's copy of CameraLook::colourGrading: what the Output pass does
+     * to the exposed linear Rec. 709 colour before its tonemapper. Identity by default.
      */
     struct ColourGradingSettings
     {

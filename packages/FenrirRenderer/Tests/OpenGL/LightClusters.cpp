@@ -32,7 +32,7 @@ namespace
     {
         Fenrir::Camera& camera = test.AddCamera();
         // The plain colour, so the probe compares the lights' sums rather than the tonemap's.
-        camera.tonemapper = Fenrir::Tonemapper::None;
+        camera.look.tonemapper = Fenrir::Tonemapper::None;
         Fenrir::Scene& scene = test.app.GetActiveScene();
         scene.AddResource<Fenrir::Sky>(Fenrir::ColourSky{{0.0f, 0.0f, 0.0f, 1.0f}});
         const auto material = test.AddQuad(20.0f, WallDistance, "builtin:lit", Fenrir::Colour::White);

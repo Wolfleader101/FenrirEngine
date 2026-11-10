@@ -68,7 +68,7 @@ TEST_CASE("The normal target holds the view-space normal builtin:lit shades with
     test.RequireOpenGL();
     // GlScene's camera, turned.
     Fenrir::Entity camera = test.app.GetActiveScene().GetEntityList().CreateEntity();
-    camera.AddComponent<Fenrir::Camera>().bloom.intensity = 0.0f;
+    camera.AddComponent<Fenrir::Camera>().look.bloom.intensity = 0.0f;
     camera.GetComponent<Fenrir::Transform>().rot = glm::angleAxis(cameraYaw, Vec3(0.0f, 1.0f, 0.0f));
     // In front of the turned camera, at distance 2 along its -Z.
     const Vec3 forward(-std::sin(cameraYaw), 0.0f, -std::cos(cameraYaw));
