@@ -12,9 +12,9 @@
 
 **Touches:** `packages/FenrirMath/`, `packages/FenrirRenderer/src/`, `packages/FenrirRenderer/Shaders/include/Fenrir/Draw.glsl`, `packages/FenrirRenderer/include/FenrirRenderer/`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`, `packages/FenrirRenderer/api/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] FenrirMath unit tests: planes of a known perspective and orthographic view; spheres and boxes inside, outside and straddling each plane; a long thin box the sphere keeps and the box test drops; a box under a non-uniform scale and a mirror; the derived sphere encloses every transformed corner.
-- [ ] `RendererProbe` on null: a transparent item behind the camera records no draw, one straddling the edge does; opaque items are all still drawn; a record's bounds bytes hold the expected box; an instance list's `GetWorldBounds` encloses every copy under a moved entity; `GetFrustum` matches the unit tests' planes for the camera.
+- [x] FenrirMath unit tests: planes of a known perspective and orthographic view; spheres and boxes inside, outside and straddling each plane; a long thin box the sphere keeps and the box test drops; a box under a non-uniform scale and a mirror; the derived sphere encloses every transformed corner.
+- [x] `RendererProbe` on null: a transparent item behind the camera records no draw, one straddling the edge does; opaque items are all still drawn; a record's bounds bytes hold the expected box; an instance list's `GetWorldBounds` encloses every copy under a moved entity; `GetFrustum` matches the unit tests' planes for the camera.
 
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

@@ -572,6 +572,10 @@ A component that lights the scene from its entity: a *directional light* (the su
 An asset holding the placements of many copies of one mesh, each a transform relative to the entity that draws them and an optional colour. An `InstancedMeshRenderer` draws one, with no entity per copy.
 *Avoid:* instance buffer, multimesh, batch.
 
+**Frustum**
+The volume a view sees, as the planes that bound it in world space: `Math::Frustum` (FenrirMath, public, ADR-0057), built from a reversed-Z view-projection, five planes for a perspective view whose far plane is at infinity and six for an orthographic one, with a sphere test and a box test that moves a box's eight corners by a matrix and keeps the box unless every corner is outside one plane. `Renderer::GetFrustum` gives a camera's; the renderer culls transparent items by it on the CPU, and the cull pass repeats its tests on the GPU.
+*Avoid:* view volume, clip volume, culling planes.
+
 **Indirect draw**
 A draw whose arguments the GPU reads from a buffer of commands (`DrawIndexedIndirectCommand`: index count, instance count, first index, base vertex, base instance) rather than from the command list: `CmdDrawIndexedIndirect` names the buffer, an offset, how many commands and their stride, and a pass declares `IndirectRead` on the buffer. The cull pass writes the commands a view draws (ADR-0057).
 *Avoid:* GPU draw, GPU-driven draw, draw call. A *multi-draw* is one indirect draw of many commands.

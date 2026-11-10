@@ -6,6 +6,7 @@
 
 #include "FenrirECS/Entity.hpp"
 #include "FenrirInput/InputTypes.hpp"
+#include "FenrirMath/Frustum.hpp"
 #include "FenrirMath/Math.hpp"
 #include "FenrirRenderer/Components.hpp"
 
@@ -235,8 +236,12 @@ namespace Fenrir
 
         /**
          * @brief The box around `entity`'s drawn mesh in world space, from the mesh's local bounds and the entity's
-         * world matrix now. Empty if the entity is not alive, has no MeshRenderer, its mesh does not resolve, or this
-         * owner is invalid.
+         * world matrix now. Empty if the entity is not alive, has neither a MeshRenderer nor an InstancedMeshRenderer,
+         * its mesh does not resolve, or this owner is invalid.
+         *
+         * An InstancedMeshRenderer's (ADR-0057) is the box around every copy of its list's mesh box, under the
+         * entity's world matrix: as the renderer computed it when it uploaded the list, or from the list now before
+         * its first frame. Empty for a list that does not resolve or has no copies.
          *
          * A skinned mesh's (ADR-0035) comes from its skeleton's pose now: each bone's box moved by the bone's palette
          * matrix, with the box of its unweighted vertices, under the skeleton entity's world matrix. It is
@@ -264,6 +269,13 @@ namespace Fenrir
         /** @brief Where `point` appears in `camera`'s target. Empty for a point behind the camera. */
         [[nodiscard]] std::optional<Math::Vec2> WorldToScreenPoint(const Entity& camera, Math::Vec3 point) const;
         /**
+         * @brief The volume `camera` sees now (ADR-0057), as its Math::Frustum in world space from its world matrix
+         * and its target's size: what the renderer culls its transparent items by, for a game that culls or streams
+         * its own entities by it. Empty as ScreenPointToRay's is: a stale entity, no Camera, or a camera that draws
+         * nothing.
+         */
+        [[nodiscard]] std::optional<Math::Frustum> GetFrustum(const Entity& camera) const;
+        /**
          * @brief The camera drawn last at `point` of `window`: the highest-order enabled camera in the active scene
          * whose viewport holds it, of equal orders the highest entity id. A null Entity if there is none, or the
          * window is not the main window.
@@ -290,6 +302,7 @@ namespace Fenrir
                                                                        Math::Vec2 point);
         [[nodiscard]] static std::optional<Math::Vec2> WorldToScreenPoint(App& app, const Entity& camera,
                                                                           Math::Vec3 point);
+        [[nodiscard]] static std::optional<Math::Frustum> GetFrustum(App& app, const Entity& camera);
         [[nodiscard]] static Entity CameraAt(App& app, WindowId window, Math::Vec2 point);
         /** @} */
 

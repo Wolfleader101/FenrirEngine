@@ -27,7 +27,7 @@ namespace
     constexpr GlProbe::Pixel Fill{0.2f, 0.6f, 0.4f, 1.0f};
     constexpr std::uint32_t CommandSize = sizeof(DrawIndexedIndirectCommand);
 
-    /** @brief Fenrir/Draw.glsl's DrawItem as std430 lays it: 160 bytes, the world matrix first. */
+    /** @brief Fenrir/Draw.glsl's DrawItem as std430 lays it: 192 bytes, the world matrix first. */
     struct DrawRecord
     {
         std::array<float, 16> world{};
@@ -37,8 +37,10 @@ namespace
         std::uint32_t instanceFirst = 0;
         std::uint32_t instanceCount = 0;
         std::array<float, 4> colour{1.0f, 1.0f, 1.0f, 1.0f};
+        std::array<float, 4> boundsMin{};
+        std::array<float, 4> boundsMax{};
     };
-    static_assert(sizeof(DrawRecord) == 160);
+    static_assert(sizeof(DrawRecord) == 192);
 
     /** @brief A record translating by (x, y) in clip space, an identity otherwise. */
     DrawRecord RecordAt(float x, float y)

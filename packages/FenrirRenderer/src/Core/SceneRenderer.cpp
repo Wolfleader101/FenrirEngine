@@ -90,10 +90,17 @@ namespace Fenrir::Render
             std::uint32_t instanceCount = 0;
             /** @brief Linear, multiplying the vertex colour: white for every record the CPU writes. */
             Math::Vec4 colour{1.0f};
+            /**
+             * @brief The item's box for culling (ADR-0057), xyz with w unused: for an item its world bounds, so a
+             * cull tests it under the identity; for an instance list its mesh's local bounds, moved by each copy.
+             */
+            Math::Vec4 boundsMin{0.0f};
+            Math::Vec4 boundsMax{0.0f};
         };
-        static_assert(sizeof(DrawBlock) == 160);
+        static_assert(sizeof(DrawBlock) == 192);
         static_assert(offsetof(DrawBlock, paletteOffset) == 128 && offsetof(DrawBlock, worldSign) == 132 &&
-                      offsetof(DrawBlock, instanceCount) == 140 && offsetof(DrawBlock, colour) == 144);
+                      offsetof(DrawBlock, instanceCount) == 140 && offsetof(DrawBlock, colour) == 144 &&
+                      offsetof(DrawBlock, boundsMin) == 160 && offsetof(DrawBlock, boundsMax) == 176);
 
         /** @brief One copy of an instance list, as `Fenrir/Draw.glsl`'s FenrirInstance declares it (std430). */
         struct InstanceBlock
@@ -1266,6 +1273,7 @@ namespace Fenrir::Render
             entry.boneCount = mesh.skin->boneCount;
         }
         entry.vertexCount = static_cast<std::uint32_t>(mesh.positions.size());
+        entry.bounds = mesh.bounds;
         if (!vertices.empty())
         {
             // A skinned mesh's is also builtin:skinning's source, read as storage (ADR-0050).
@@ -1580,11 +1588,14 @@ namespace Fenrir::Render
         return found != m_instanceLists.end() && found->second.revision == revision;
     }
 
-    void SceneRenderer::PrepareInstanceList(AssetKey key, std::uint32_t revision, const InstanceListData& list)
+    void SceneRenderer::PrepareInstanceList(AssetKey key, std::uint32_t revision, const InstanceListData& list,
+                                            const Math::AABB& meshBounds)
     {
         InstanceListEntry& entry = m_instanceLists[key];
         entry.revision = revision;
         entry.range.count = static_cast<std::uint32_t>(list.transforms.size());
+        entry.meshBounds = meshBounds;
+        entry.bounds = CopiesBounds(list.transforms, meshBounds);
         entry.records.resize(list.transforms.size() * sizeof(InstanceBlock));
         for (std::size_t i = 0; i < list.transforms.size(); ++i)
         {
@@ -1602,6 +1613,28 @@ namespace Fenrir::Render
         }
         m_instancesChanged = true;
         ++m_stats.uploads;
+    }
+
+    std::optional<Math::AABB> SceneRenderer::InstanceListBounds(AssetKey key, const Math::AABB& meshBounds)
+    {
+        const auto found = m_instanceLists.find(key);
+        if (found == m_instanceLists.end() || found->second.range.count == 0)
+        {
+            return std::nullopt;
+        }
+        InstanceListEntry& entry = found->second;
+        if (entry.meshBounds.min != meshBounds.min || entry.meshBounds.max != meshBounds.max)
+        {
+            // Another mesh than the list was uploaded with: its copies' transforms are read back from their records.
+            std::vector<Math::Mat4> transforms(entry.range.count);
+            for (std::size_t i = 0; i < transforms.size(); ++i)
+            {
+                std::memcpy(&transforms[i], entry.records.data() + (i * sizeof(InstanceBlock)), sizeof(Math::Mat4));
+            }
+            entry.meshBounds = meshBounds;
+            entry.bounds = CopiesBounds(transforms, meshBounds);
+        }
+        return entry.bounds;
     }
 
     void SceneRenderer::ReleaseInstanceList(AssetKey key)
@@ -2022,6 +2055,22 @@ namespace Fenrir::Render
             draw.pointShadow = pointShadow;
             draw.pointShadowLayered = pointShadowLayered;
             draw.instances = list == nullptr ? InstanceRange{} : list->range;
+            if (list == nullptr)
+            {
+                // The record carries the item's world bounds: its skinned bounds when the facade gave them (ADR-0035),
+                // else its mesh's box under its world matrix.
+                draw.bounds = request.bounds.value_or(Math::Moved(mesh->second.bounds, request.world));
+                draw.worldBounds = draw.bounds;
+            }
+            else
+            {
+                // An instance list's record carries the mesh's local box, which each copy moves; the list as a whole
+                // is culled by the box around every copy, under the entity's world matrix.
+                draw.bounds = mesh->second.bounds;
+                draw.worldBounds = Math::Moved(
+                    InstanceListBounds(request.instances, mesh->second.bounds).value_or(mesh->second.bounds),
+                    request.world);
+            }
             if (computeSkinned)
             {
                 const auto [skin, added] = skinIndex.try_emplace({&mesh->second, request.paletteOffset}, skins.size());
@@ -2600,6 +2649,8 @@ namespace Fenrir::Render
             block.worldSign = WorldSign(draw.world);
             block.instanceFirst = draw.instances.first;
             block.instanceCount = draw.instances.count;
+            block.boundsMin = Math::Vec4(draw.bounds.min, 0.0f);
+            block.boundsMax = Math::Vec4(draw.bounds.max, 0.0f);
             m_drawBlocks->Write(frameIndex, i, BytesOf(block));
         }
         // Every palette written again each frame (ADR-0035): nothing is kept across frames.
@@ -2621,11 +2672,6 @@ namespace Fenrir::Render
         m_stats.palettes = m_frame.palettes;
         const auto skinnedDraws = static_cast<std::uint32_t>(
             std::count_if(draws->begin(), draws->end(), [](const ResolvedDraw& draw) { return draw.skinned; }));
-        std::uint32_t instances = 0;
-        for (const ResolvedDraw& draw : *draws)
-        {
-            instances += std::max<std::uint32_t>(draw.instances.count, 1);
-        }
         const std::vector<ViewRequest>& views = m_frame.views;
         const ViewBlockSlots slots{views.size(), spotCount, pointCount};
         m_viewBlocks->Reserve(slots.Count());
@@ -3006,18 +3052,33 @@ namespace Fenrir::Render
             }
             m_drawnViews.push_back({v, sceneColour, sceneDepth, sceneNormals, shadowAtlas, viewGroup});
 
-            // Opaque items in draw-list order, and those of them in the depth prepass; transparent ones back to front
-            // by the view-space depth of their world origins, the farthest (most negative view z) first.
+            // Opaque items in draw-list order, and those of them in the depth prepass; transparent ones outside the
+            // view's frustum left out (ADR-0057), the rest back to front by the view-space depth of their sort points,
+            // the farthest (most negative view z) first.
             auto opaque = std::make_shared<std::vector<std::size_t>>();
             auto prepassed = std::make_shared<std::vector<std::size_t>>();
             auto transparent = std::make_shared<std::vector<std::size_t>>();
             // Each draw's set 2 in the prepass: a Masked item's prepass group, else its material group.
             auto prepassGroups = std::make_shared<std::vector<BindingGroupHandle>>(*groups);
             std::vector<float> depth(draws->size(), 0.0f);
+            const Math::Frustum frustum = Math::Frustum::FromViewProjection(request.projection * request.view);
+            std::uint32_t instances = 0;
             for (std::size_t i = 0; i < draws->size(); ++i)
             {
                 const ResolvedDraw& draw = (*draws)[i];
-                (draw.transparent ? *transparent : *opaque).push_back(i);
+                if (draw.transparent)
+                {
+                    if (!frustum.Intersects(draw.worldBounds))
+                    {
+                        continue;
+                    }
+                    transparent->push_back(i);
+                }
+                else
+                {
+                    opaque->push_back(i);
+                }
+                instances += std::max<std::uint32_t>(draw.instances.count, 1);
                 if (draw.prepass != nullptr)
                 {
                     prepassed->push_back(i);
@@ -3309,6 +3370,17 @@ namespace Fenrir::Render
         }
         return {static_cast<std::int32_t>(left), static_cast<std::int32_t>(top),
                 static_cast<std::uint32_t>(right - left), static_cast<std::uint32_t>(bottom - top)};
+    }
+
+    Math::AABB CopiesBounds(std::span<const Math::Mat4> copies, const Math::AABB& box)
+    {
+        std::optional<Math::AABB> bounds;
+        for (const Math::Mat4& copy : copies)
+        {
+            const Math::AABB moved = Math::Moved(box, copy);
+            bounds = bounds ? Math::Union(*bounds, moved) : moved;
+        }
+        return bounds.value_or(Math::AABB{Math::Vec3(0.0f), Math::Vec3(0.0f)});
     }
 
     Math::Mat4 ReversedZPerspective(float verticalFov, float aspect, float near)

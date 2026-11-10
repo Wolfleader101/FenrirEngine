@@ -36,6 +36,11 @@ struct DrawItem
     uint instanceCount;
     // Linear, which the built-in programs multiply the vertex colour by: white, or an instance list copy's colour.
     vec4 colour;
+    // The item's box for culling (ADR-0057), xyz, w unused: for a lone or merged item its mesh's bounds with world
+    // already applied (a skinned item's skinned bounds), so a cull tests it under the identity; for an instance list,
+    // the mesh's local bounds, which each copy's transform and world move.
+    vec4 boundsMin;
+    vec4 boundsMax;
 };
 
 // One copy of an instance list, relative to the drawing entity.
