@@ -44,7 +44,7 @@ layout(set = 3, binding = 2, std430) readonly buffer FenrirPalette
 } fenrirPalette;
 
 // The view's indirection (ADR-0057), or the one entry that says there is none.
-layout(set = 3, binding = 3, std430) readonly buffer VisibleData
+layout(set = 3, binding = 3, std430) readonly buffer IndirectionData
 {
     uvec2 entries[];
 } fenrirVisible;

@@ -173,22 +173,6 @@ namespace Fenrir::Render
         /** @brief builtin:light-clusters' work group size, one invocation a cluster. */
         constexpr std::uint32_t LightClustersGroupSize = 64;
 
-        /**
-         * @brief One entry of the frame's group table, as `builtin:cull` declares it (std430): a work group's run
-         * (ADR-0057) and which of its candidates the group culls.
-         */
-        struct CullGroupEntry
-        {
-            /** @brief The run's command in the view's command buffer. */
-            std::uint32_t command = 0;
-            /** @brief The run's first record: an instance list's one record, or the first of a merged run's. */
-            std::uint32_t record = 0;
-            /** @brief How many candidates the run has: a list's copies, or the merged run's items. */
-            std::uint32_t count = 0;
-            /** @brief The first candidate this group culls, within the run. */
-            std::uint32_t first = 0;
-        };
-        static_assert(sizeof(CullGroupEntry) == 16);
         /** @brief builtin:cull's work group size, one invocation a candidate; no group straddles two runs. */
         constexpr std::uint32_t CullGroupSize = 64;
 
@@ -201,12 +185,12 @@ namespace Fenrir::Render
         static_assert(sizeof(CullJobBlock) == 16);
 
         /** @brief One entry of a view's indirection, as `Fenrir/DrawRecord.glsl` lays it: a record and a copy. */
-        struct VisibleEntry
+        struct IndirectionEntry
         {
             std::uint32_t record = 0;
             std::uint32_t copy = 0;
         };
-        static_assert(sizeof(VisibleEntry) == 8);
+        static_assert(sizeof(IndirectionEntry) == 8);
         /** @brief `Fenrir/DrawRecord.glsl`'s FenrirNoCopy and FenrirNoIndirection. */
         constexpr std::uint32_t NoCopy = 0xFFFFFFFFu;
         constexpr std::uint32_t NoIndirection = 0xFFFFFFFFu;
@@ -308,7 +292,7 @@ namespace Fenrir::Render
             {3, 0, ShaderBindingKind::StorageBuffer, sizeof(DrawBlock)},
             {3, 1, ShaderBindingKind::StorageBuffer, sizeof(InstanceBlock)},
             {3, 2, ShaderBindingKind::StorageBuffer, sizeof(GpuBone)},
-            {3, 3, ShaderBindingKind::StorageBuffer, sizeof(VisibleEntry)},
+            {3, 3, ShaderBindingKind::StorageBuffer, sizeof(IndirectionEntry)},
         }};
 
         /** @brief The binding set of the material. */
@@ -654,6 +638,17 @@ namespace Fenrir::Render
         }
     } // namespace
 
+    void SceneRenderer::GrownRing::Reserve(GraphicsDevice& device, std::size_t bytes, BufferUsage usage,
+                                           std::string_view label)
+    {
+        if (ring != nullptr && bytes <= capacity)
+        {
+            return;
+        }
+        capacity = std::max(bytes, capacity * 2);
+        ring = std::make_unique<FrameRingBuffer>(device, BufferDesc{capacity, usage}, label);
+    }
+
     // ---- SceneRenderer ----
 
     SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples,
@@ -893,7 +888,7 @@ namespace Fenrir::Render
                 m_logger.Error("FenrirRenderer: no cull pipeline, so every pass draws directly: {}", made.diagnostic);
             }
         }
-        constexpr VisibleEntry noIndirection{NoIndirection, NoCopy};
+        constexpr IndirectionEntry noIndirection{NoIndirection, NoCopy};
         m_noIndirection = m_device.CreateBuffer({sizeof(noIndirection), BufferUsage::Storage}, BytesOf(noIndirection),
                                                 "No indirection");
         m_frameBlocks->Reserve(1);
@@ -984,9 +979,9 @@ namespace Fenrir::Render
         m_device.Destroy(m_noClusters);
         m_cullTargetGroups.Clear();
         m_cullJobs.reset();
-        m_cullTemplates.reset();
-        m_cullGroups.reset();
-        m_cullBuffers.clear();
+        m_cullTemplates.ring.reset();
+        m_cullGroups.ring.reset();
+        m_cullRings.clear();
         m_device.Destroy(m_noIndirection);
         m_device.Destroy(m_cullPipeline);
         m_device.Destroy(m_cullJobLayout);
@@ -2464,11 +2459,11 @@ namespace Fenrir::Render
     {
         const BufferHandle draws = m_drawBlocks->Buffer(frameIndex);
         const BufferHandle palette = m_paletteBlocks->Buffer(frameIndex);
-        const BufferHandle visible = indirection.IsEmpty() ? m_noIndirection : indirection;
+        const BufferHandle bound = indirection.IsEmpty() ? m_noIndirection : indirection;
         // One group per frame in flight's buffers and indirection (a view's, or none), kept while they all live: a
         // ring remaking its buffers, the instance lists packed again or a view's indirection grown makes a new one.
         return m_drawGroups.Get({BindingGroupKeyPart::Of(draws), BindingGroupKeyPart::Of(palette),
-                                 BindingGroupKeyPart::Of(m_instanceListBuffer), BindingGroupKeyPart::Of(visible)},
+                                 BindingGroupKeyPart::Of(m_instanceListBuffer), BindingGroupKeyPart::Of(bound)},
                                 frameIndex, [&] {
                                     BindingGroupEntry drawEntry;
                                     drawEntry.binding = 0;
@@ -2479,11 +2474,12 @@ namespace Fenrir::Render
                                     BindingGroupEntry paletteEntry;
                                     paletteEntry.binding = 2;
                                     paletteEntry.buffer = palette;
-                                    BindingGroupEntry visibleEntry;
-                                    visibleEntry.binding = 3;
-                                    visibleEntry.buffer = visible;
+                                    BindingGroupEntry indirectionEntry;
+                                    indirectionEntry.binding = 3;
+                                    indirectionEntry.buffer = bound;
                                     return m_device.CreateBindingGroup(
-                                        {m_drawLayout, {drawEntry, instanceEntry, paletteEntry, visibleEntry}}, "Draw");
+                                        {m_drawLayout, {drawEntry, instanceEntry, paletteEntry, indirectionEntry}},
+                                        "Draw");
                                 });
     }
 
@@ -2491,7 +2487,7 @@ namespace Fenrir::Render
                                                        const std::vector<ResolvedDraw>& draws,
                                                        const std::vector<DrawRun>& runs,
                                                        std::vector<DrawIndexedIndirectCommand>& templates,
-                                                       std::vector<std::array<std::uint32_t, 4>>& groups)
+                                                       std::vector<CullGroupEntry>& groups)
     {
         CullView cull;
         if (runs.empty() || m_cullPipeline.IsEmpty())
@@ -2511,7 +2507,10 @@ namespace Fenrir::Render
             templates.push_back({.indexCount = draw.mesh->indexCount, .baseInstance = candidates});
             for (std::uint32_t first = 0; first < count; first += CullGroupSize)
             {
-                groups.push_back({static_cast<std::uint32_t>(r), static_cast<std::uint32_t>(run.first), count, first});
+                groups.push_back({.command = static_cast<std::uint32_t>(r),
+                                  .record = static_cast<std::uint32_t>(run.first),
+                                  .count = count,
+                                  .first = first});
             }
             candidates += count;
         }
@@ -2523,65 +2522,44 @@ namespace Fenrir::Render
         // The view's command buffer and indirection, sized to this frame's runs and candidates, kept between frames and
         // grown as the room needs, a copy per frame in flight, so this frame's pass never writes what an earlier
         // frame's draws may still read.
-        if (m_cullBuffers.size() <= view)
+        if (m_cullRings.size() <= view)
         {
-            m_cullBuffers.resize(view + 1);
+            m_cullRings.resize(view + 1);
         }
-        CullBuffers& ring = m_cullBuffers[view];
+        CullRings& rings = m_cullRings[view];
         constexpr BufferUsage commandUsage =
             BufferUsage::Indirect | BufferUsage::Storage | BufferUsage::CopyDestination;
-        if (ring.commands == nullptr || cull.templateBytes > ring.commandCapacity)
-        {
-            ring.commandCapacity = std::max(cull.templateBytes, ring.commandCapacity * 2);
-            ring.commands = std::make_unique<FrameRingBuffer>(m_device, BufferDesc{ring.commandCapacity, commandUsage},
-                                                              "Cull commands");
-        }
-        const std::size_t indirectionBytes = std::size_t{candidates} * sizeof(VisibleEntry);
-        if (ring.indirection == nullptr || indirectionBytes > ring.indirectionCapacity)
-        {
-            ring.indirectionCapacity = std::max(indirectionBytes, ring.indirectionCapacity * 2);
-            ring.indirection = std::make_unique<FrameRingBuffer>(
-                m_device, BufferDesc{ring.indirectionCapacity, BufferUsage::Storage}, "Cull indirection");
-        }
-        cull.commands = ring.commands->Current(frameIndex);
-        cull.indirection = ring.indirection->Current(frameIndex);
-        cull.commandsResource = graph.ImportBuffer("CullCommands", cull.commands, {ring.commandCapacity, commandUsage});
+        rings.commands.Reserve(m_device, cull.templateBytes, commandUsage, "Cull commands");
+        rings.indirection.Reserve(m_device, std::size_t{candidates} * sizeof(IndirectionEntry), BufferUsage::Storage,
+                                  "Cull indirection");
+        cull.commands = rings.commands.ring->Current(frameIndex);
+        cull.indirection = rings.indirection.ring->Current(frameIndex);
+        cull.commandsResource =
+            graph.ImportBuffer("CullCommands", cull.commands, {rings.commands.capacity, commandUsage});
         cull.indirectionResource =
-            graph.ImportBuffer("CullIndirection", cull.indirection, {ring.indirectionCapacity, BufferUsage::Storage});
+            graph.ImportBuffer("CullIndirection", cull.indirection, {rings.indirection.capacity, BufferUsage::Storage});
         return cull;
     }
 
     void SceneRenderer::AddCullPasses(RenderGraph& graph, std::uint64_t frameIndex, const std::vector<CullView>& views,
                                       std::span<const DrawIndexedIndirectCommand> templates,
-                                      std::span<const std::array<std::uint32_t, 4>> groups)
+                                      std::span<const CullGroupEntry> groups)
     {
         if (templates.empty())
         {
             return;
         }
         // The frame's templates and group table, grown by doubling, a copy per frame in flight.
-        const std::size_t templateBytes = templates.size_bytes();
-        if (m_cullTemplates == nullptr || templateBytes > m_cullTemplateCapacity)
-        {
-            m_cullTemplateCapacity = std::max(templateBytes, m_cullTemplateCapacity * 2);
-            m_cullTemplates = std::make_unique<FrameRingBuffer>(
-                m_device, BufferDesc{m_cullTemplateCapacity, BufferUsage::CopySource}, "Cull templates");
-        }
-        const std::size_t groupBytes = groups.size_bytes();
-        if (m_cullGroups == nullptr || groupBytes > m_cullGroupCapacity)
-        {
-            m_cullGroupCapacity = std::max(groupBytes, m_cullGroupCapacity * 2);
-            m_cullGroups = std::make_unique<FrameRingBuffer>(
-                m_device, BufferDesc{m_cullGroupCapacity, BufferUsage::Storage}, "Cull groups");
-        }
-        const BufferHandle templateBuffer = m_cullTemplates->Current(frameIndex);
-        const BufferHandle groupBuffer = m_cullGroups->Current(frameIndex);
-        m_cullTemplates->Write(frameIndex, 0, std::as_bytes(templates));
-        m_cullGroups->Write(frameIndex, 0, std::as_bytes(groups));
+        m_cullTemplates.Reserve(m_device, templates.size_bytes(), BufferUsage::CopySource, "Cull templates");
+        m_cullGroups.Reserve(m_device, groups.size_bytes(), BufferUsage::Storage, "Cull groups");
+        const BufferHandle templateBuffer = m_cullTemplates.ring->Current(frameIndex);
+        const BufferHandle groupBuffer = m_cullGroups.ring->Current(frameIndex);
+        m_cullTemplates.ring->Write(frameIndex, 0, std::as_bytes(templates));
+        m_cullGroups.ring->Write(frameIndex, 0, std::as_bytes(groups));
         const GraphResource templateResource =
-            graph.ImportBuffer("CullTemplates", templateBuffer, {m_cullTemplateCapacity, BufferUsage::CopySource});
+            graph.ImportBuffer("CullTemplates", templateBuffer, {m_cullTemplates.capacity, BufferUsage::CopySource});
         const GraphResource groupResource =
-            graph.ImportBuffer("CullGroups", groupBuffer, {m_cullGroupCapacity, BufferUsage::Storage});
+            graph.ImportBuffer("CullGroups", groupBuffer, {m_cullGroups.capacity, BufferUsage::Storage});
         const BufferHandle records = m_drawBlocks->Buffer(frameIndex);
         const GraphResource recordResource = graph.ImportBuffer(
             "DrawRecords", records, {m_drawBlocks->Capacity() * m_drawBlocks->SlotSize(), BufferUsage::Storage});
@@ -3023,7 +3001,7 @@ namespace Fenrir::Render
         // Each view's cull pass (ADR-0057): its templates and groups are gathered here and uploaded after the views.
         std::vector<CullView> culls;
         std::vector<DrawIndexedIndirectCommand> cullTemplates;
-        std::vector<std::array<std::uint32_t, 4>> cullGroups;
+        std::vector<CullGroupEntry> cullGroups;
 
         if (spotCount > 0)
         {

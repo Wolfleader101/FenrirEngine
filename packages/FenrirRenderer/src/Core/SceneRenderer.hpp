@@ -9,6 +9,7 @@
 #include <set>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -90,13 +91,15 @@ namespace Fenrir::Render
          */
         Graphics::BindingGroupHandle viewGroup;
         /**
-         * @brief Its cull pass's buffers (ADR-0057): the indirect commands its DepthPrepass and Opaque passes draw
-         * from, one per run, and the indirection those draws' instances read; empty when it has no opaque runs.
+         * @brief Its cull pass's command buffer (ADR-0057), the indirect commands its DepthPrepass and Opaque passes
+         * draw from, one per run; empty when it has no opaque runs.
          */
         Graphics::BufferHandle cullCommands;
+        /** @brief Its cull pass's indirection, which those draws' instances read; empty when it has no opaque runs. */
         Graphics::BufferHandle cullIndirection;
-        /** @brief How many runs its cull pass counts into, and how many candidates it culls. */
+        /** @brief How many runs its cull pass counts into. */
         std::uint32_t cullRuns = 0;
+        /** @brief How many candidates its cull pass culls. */
         std::uint32_t cullCandidates = 0;
     };
 
@@ -713,32 +716,64 @@ namespace Fenrir::Render
             Graphics::BindingGroupHandle unshadowed;
         };
 
+        /**
+         * @brief One entry of the frame's group table, as `builtin:cull` declares it (std430, a uvec4): a work group's
+         * run (ADR-0057) and which of its candidates the group culls.
+         */
+        struct CullGroupEntry
+        {
+            /** @brief The run's command in the view's command buffer. */
+            std::uint32_t command = 0;
+            /** @brief The run's first record: an instance list's one record, or the first of a merged run's. */
+            std::uint32_t record = 0;
+            /** @brief How many candidates the run has: a list's copies, or the merged run's items. */
+            std::uint32_t count = 0;
+            /** @brief The first candidate this group culls, within the run. */
+            std::uint32_t first = 0;
+        };
+        static_assert(sizeof(CullGroupEntry) == 16, "a group table entry is a uvec4");
+
         /** @brief One view's cull pass this frame (ADR-0057): what it writes, and what its draws then read. */
         struct CullView
         {
-            /** @brief The view's command buffer and indirection; empty when the view has no opaque runs. */
+            /** @brief The view's command buffer; empty when the view has no opaque runs. */
             Graphics::BufferHandle commands;
+            /** @brief The view's indirection; empty when the view has no opaque runs. */
             Graphics::BufferHandle indirection;
+            /** @brief The two, imported into the frame's graph. */
             GraphResource commandsResource;
             GraphResource indirectionResource;
-            /** @brief Its templates' byte offset in the frame's template ring, and their size in bytes. */
+            /** @brief Its templates' byte offset in the frame's template ring. */
             std::size_t templateOffset = 0;
+            /** @brief Its templates' size in bytes. */
             std::size_t templateBytes = 0;
-            /** @brief Its first entry in the frame's group table, and how many it has: one dispatch of as many groups.
-             */
+            /** @brief Its first entry in the frame's group table. */
             std::uint32_t firstGroup = 0;
+            /** @brief How many group table entries it has: one dispatch of as many groups. */
             std::uint32_t groups = 0;
+            /** @brief How many runs it counts into. */
             std::uint32_t runs = 0;
+            /** @brief How many candidates it culls. */
             std::uint32_t candidates = 0;
         };
 
-        /** @brief A view's cull buffers, a copy per frame in flight each, and how many bytes each holds. */
-        struct CullBuffers
+        /** @brief A buffer ringed per frame in flight and grown by doubling when a frame needs more than it holds. */
+        struct GrownRing
         {
-            std::unique_ptr<FrameRingBuffer> commands;
-            std::size_t commandCapacity = 0;
-            std::unique_ptr<FrameRingBuffer> indirection;
-            std::size_t indirectionCapacity = 0;
+            std::unique_ptr<FrameRingBuffer> ring;
+            /** @brief Each copy's size in bytes. */
+            std::size_t capacity = 0;
+
+            /** @brief Makes the ring hold at least `bytes`, remaking its copies with `usage` when it does not. */
+            void Reserve(Graphics::GraphicsDevice& device, std::size_t bytes, Graphics::BufferUsage usage,
+                         std::string_view label);
+        };
+
+        /** @brief A view's cull rings: its command buffer and its indirection. */
+        struct CullRings
+        {
+            GrownRing commands;
+            GrownRing indirection;
         };
 
         /** @brief The pipeline drawing a mesh with the standard streams `streams` (StreamsOf's bits) has. */
@@ -832,14 +867,14 @@ namespace Fenrir::Render
         [[nodiscard]] CullView PrepareCull(RenderGraph& graph, std::uint64_t frameIndex, std::size_t view,
                                            const std::vector<ResolvedDraw>& draws, const std::vector<DrawRun>& runs,
                                            std::vector<Graphics::DrawIndexedIndirectCommand>& templates,
-                                           std::vector<std::array<std::uint32_t, 4>>& groups);
+                                           std::vector<CullGroupEntry>& groups);
         /**
          * @brief Uploads the frame's `templates` and `groups` into their rings and adds one `Cull` pass per view of
          * `views` that has runs: a copy of its templates over its command buffer, then one dispatch of `builtin:cull`.
          */
         void AddCullPasses(RenderGraph& graph, std::uint64_t frameIndex, const std::vector<CullView>& views,
                            std::span<const Graphics::DrawIndexedIndirectCommand> templates,
-                           std::span<const std::array<std::uint32_t, 4>> groups);
+                           std::span<const CullGroupEntry> groups);
         [[nodiscard]] Graphics::PipelineHandle MakeInternalPipeline(
             const ShaderContainer& container, const ShaderVariant* variant, Graphics::BindingGroupLayoutHandle layout,
             Graphics::TextureFormat colour, bool depthTested, std::uint32_t samples,
@@ -980,14 +1015,14 @@ namespace Fenrir::Render
         /** @brief Its sets: 0 the view's job block, 1 the frame's light buffer and the view's cluster buffer. */
         Graphics::BindingGroupLayoutHandle m_clusterJobLayout;
         Graphics::BindingGroupLayoutHandle m_clusterTargetLayout;
-        /** @brief `builtin:cull`, the Cull passes' compute program, and its pipeline; empty if it failed. */
+        /** @brief `builtin:cull`, the Cull passes' compute program. */
         ShaderContainer m_cull;
+        /** @brief Its pipeline; empty if it failed, and then every pass draws directly. */
         Graphics::PipelineHandle m_cullPipeline;
-        /**
-         * @brief Its sets: 0 the view's job block; 1 the frame's draw records and group table, and the view's command
-         * buffer and indirection.
-         */
+        /** @brief Its set 0: the view's job block. */
         Graphics::BindingGroupLayoutHandle m_cullJobLayout;
+        /** @brief Its set 1: the frame's draw records and group table, and the view's command buffer and indirection.
+         */
         Graphics::BindingGroupLayoutHandle m_cullTargetLayout;
 
         Graphics::BindingGroupLayoutHandle m_frameLayout;
@@ -1073,14 +1108,12 @@ namespace Fenrir::Render
         Graphics::BufferHandle m_noClusters;
         /** @brief Each Cull pass's job block, one uniform slot a view, bound at its set 0. */
         std::unique_ptr<BlockRing> m_cullJobs;
-        /** @brief The frame's command templates, one copy per frame in flight, which each Cull pass copies from. */
-        std::unique_ptr<FrameRingBuffer> m_cullTemplates;
-        std::size_t m_cullTemplateCapacity = 0;
-        /** @brief The frame's group table, one copy per frame in flight, which each Cull pass reads its groups of. */
-        std::unique_ptr<FrameRingBuffer> m_cullGroups;
-        std::size_t m_cullGroupCapacity = 0;
-        /** @brief Each view's cull buffers, by view index. */
-        std::vector<CullBuffers> m_cullBuffers;
+        /** @brief The frame's command templates, which each Cull pass copies its view's from. */
+        GrownRing m_cullTemplates;
+        /** @brief The frame's group table, which each Cull pass reads its view's groups of. */
+        GrownRing m_cullGroups;
+        /** @brief Each view's cull rings, by view index. */
+        std::vector<CullRings> m_cullRings;
         /**
          * @brief The buffer of one entry naming no record (`Fenrir/DrawRecord.glsl`'s FenrirNoIndirection) that the
          * draw group of every direct draw binds at set 3 binding 3.

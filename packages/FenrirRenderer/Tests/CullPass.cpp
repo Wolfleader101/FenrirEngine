@@ -32,7 +32,6 @@ using RendererTest::RendererTestApp;
 namespace
 {
     constexpr std::size_t CommandSize = sizeof(DrawIndexedIndirectCommand);
-    constexpr std::uint32_t NoCopy = 0xFFFFFFFFu;
 
     /** @brief `count` copies along +X, a unit apart. */
     Fenrir::InstanceListData Row(std::size_t count)
@@ -93,7 +92,7 @@ namespace
     /** @brief The `n`th word of command `command` of the command buffer bytes. */
     std::uint32_t Word(const std::vector<std::byte>& commands, std::size_t command, std::size_t n)
     {
-        return RendererTest::UintAt(commands, command * CommandSize + n * sizeof(std::uint32_t));
+        return RendererTest::CommandWord(commands, command * CommandSize, n);
     }
 
     /** @brief The buffer the camera's Cull pass counts into, its set 1 binding 2, and its indirection, binding 3. */
@@ -108,7 +107,7 @@ namespace
 
     /** @brief The buffer a draw's set 3 binds at binding 3: a view's indirection, or the one that says there is none.
      */
-    BufferHandle VisibleOf(const RendererTestApp& test, const std::array<BindingGroupHandle, 4>& groups)
+    BufferHandle DrawSetIndirection(const RendererTestApp& test, const std::array<BindingGroupHandle, 4>& groups)
     {
         return RendererTest::EntryAt(test.Device(), groups.at(3), 3).buffer;
     }
@@ -130,9 +129,10 @@ TEST_CASE("Each camera's Cull pass copies its templates and dispatches once, fir
     REQUIRE(std::ranges::count(passes, "Cull") == 1);
     REQUIRE(std::ranges::find(passes, "ShadowCascades") != passes.end());
     const std::vector<RecordedCull> culls = test.Culls();
+    INFO("one Cull pass for the one camera");
     REQUIRE(culls.size() == 1);
     const RecordedCull& cull = culls.front();
-    INFO("a compute pass of one copy and one dispatch");
+    INFO("a compute pass of one copy and one dispatch, running builtin:cull");
     REQUIRE(cull.pass.queue == QueueKind::Compute);
     REQUIRE(cull.copies.size() == 1);
     REQUIRE(cull.dispatches.size() == 1);
@@ -206,7 +206,8 @@ TEST_CASE("The templates and the group table describe a frame of one instance li
         REQUIRE(draw->draw.instanceCount == group.count);
         INFO("an instance list's record says its copies; an item's says none");
         const std::vector<std::byte> records = test.DrawBuffer(*draw);
-        const std::uint32_t listCopies = RendererTest::UintAt(records, std::size_t{group.record} * 192 + 140);
+        const std::uint32_t listCopies =
+            RendererTest::UintAt(records, std::size_t{group.record} * RendererTest::RecordSize + 140);
         REQUIRE(listCopies == (group.count == 10 ? 10u : 0u));
     }
     REQUIRE(commandIndices == std::set<std::uint32_t>{0, 1, 2});
@@ -274,8 +275,8 @@ TEST_CASE("DepthPrepass and Opaque draw the same runs, each one indirect draw of
         REQUIRE(opaque[r].draw.stride == CommandSize);
         INFO("with the same mesh, through the camera's own draw set, whose binding 3 is the camera's indirection");
         REQUIRE(prepass[r].indexBuffer == opaque[r].indexBuffer);
-        REQUIRE(VisibleOf(test, opaque[r].groups) == indirection);
-        REQUIRE(VisibleOf(test, prepass[r].groups) == indirection);
+        REQUIRE(DrawSetIndirection(test, opaque[r].groups) == indirection);
+        REQUIRE(DrawSetIndirection(test, prepass[r].groups) == indirection);
         INFO("both passes declare IndirectRead on the commands and StorageRead on the indirection");
         for (const RecordedIndirectDraw* draw : {&prepass[r], &opaque[r]})
         {
@@ -337,6 +338,7 @@ TEST_CASE("Two cameras each get their own Cull pass, command buffer and indirect
 
     test.Frame();
     const std::vector<RecordedCull> culls = test.Culls();
+    INFO("one Cull pass per camera, and the probe sees both views");
     REQUIRE(culls.size() == 2);
     const std::vector<RendererProbe::CullBuffers> probed = RendererProbe::Culls(test.renderer);
     REQUIRE(probed.size() == 2);
@@ -358,7 +360,7 @@ TEST_CASE("Two cameras each get their own Cull pass, command buffer and indirect
         CAPTURE(i);
         const RendererProbe::CullBuffers& view = probed[i / 3];
         REQUIRE(opaque[i].draw.buffer == view.commands);
-        REQUIRE(VisibleOf(test, opaque[i].groups) == view.indirection);
+        REQUIRE(DrawSetIndirection(test, opaque[i].groups) == view.indirection);
     }
     INFO("the group table holds each camera's groups, three apiece, from its job block's first group on");
     REQUIRE(RendererTest::GroupsOf(test.Device(), culls[0]).size() == 3);
@@ -412,14 +414,14 @@ TEST_CASE("Transparent items and the shadow passes draw directly, through the dr
     REQUIRE_FALSE(shadows.empty());
     for (const RecordedDraw* draw : {&transparent.front(), &shadows.front()})
     {
-        const BufferHandle visible = VisibleOf(test, draw->groups);
+        const BufferHandle visible = DrawSetIndirection(test, draw->groups);
         INFO("a direct draw's set 3 binds the one entry that says there is no indirection");
         REQUIRE(visible != indirection);
         REQUIRE(RendererProbe::Label(test.Device(), visible) == "No indirection");
-        REQUIRE(RendererTest::UintAt(RendererProbe::Bytes(test.Device(), visible), 0) == NoCopy);
+        REQUIRE(RendererTest::UintAt(RendererProbe::Bytes(test.Device(), visible), 0) == RendererTest::NoIndirection);
     }
     INFO("while Opaque's draws bind the camera's indirection");
-    REQUIRE(VisibleOf(test, test.IndirectDraws("Opaque").front().groups) == indirection);
+    REQUIRE(DrawSetIndirection(test, test.IndirectDraws("Opaque").front().groups) == indirection);
 }
 
 TEST_CASE("A frame with no opaque run has no Cull pass and no indirect draw", "[renderer][culling][cull-pass]")
@@ -431,9 +433,11 @@ TEST_CASE("A frame with no opaque run has no Cull pass and no indirect draw", "[
     test.AddMeshRenderer(test.Mesh(), blended);
 
     test.Frame();
+    INFO("nothing to cull: no Cull pass, no indirect draw, and the view's cull buffers stay empty");
     REQUIRE(test.Culls().empty());
     REQUIRE(test.IndirectDraws("Opaque").empty());
     REQUIRE(RendererProbe::Culls(test.renderer).front().commands.IsEmpty());
+    INFO("the transparent item still draws directly, and nothing was logged as an error");
     REQUIRE(test.Draws("Transparent").size() == 1);
     REQUIRE(test.messages->errors.empty());
 }

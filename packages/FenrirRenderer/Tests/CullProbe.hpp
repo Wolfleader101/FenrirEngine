@@ -27,6 +27,12 @@ namespace RendererTest
         return value;
     }
 
+    /** @brief `Fenrir/DrawRecord.glsl`'s FenrirNoCopy: an indirection entry's copy for a lone or merged item. */
+    constexpr std::uint32_t NoCopy = 0xFFFFFFFFu;
+    /** @brief `Fenrir/DrawRecord.glsl`'s FenrirNoIndirection: the first entry's record of the buffer that holds none.
+     */
+    constexpr std::uint32_t NoIndirection = 0xFFFFFFFFu;
+
     /** @brief One pass of a view's GPU cull (ADR-0057), as the device received it. */
     struct RecordedCull
     {

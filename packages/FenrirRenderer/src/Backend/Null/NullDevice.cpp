@@ -215,11 +215,10 @@ namespace Fenrir::Graphics
         {
             return;
         }
-        Check(copy.sourceOffset + copy.size <= source->bytes.size() &&
-                  copy.destinationOffset + copy.size <= destination->bytes.size(),
-              "a buffer copy runs past the end of its source or destination");
-        if (copy.sourceOffset + copy.size <= source->bytes.size() &&
-            copy.destinationOffset + copy.size <= destination->bytes.size())
+        const bool inside = copy.sourceOffset + copy.size <= source->bytes.size() &&
+                            copy.destinationOffset + copy.size <= destination->bytes.size();
+        Check(inside, "a buffer copy runs past the end of its source or destination");
+        if (inside)
         {
             std::copy_n(source->bytes.begin() + static_cast<std::ptrdiff_t>(copy.sourceOffset),
                         static_cast<std::ptrdiff_t>(copy.size),

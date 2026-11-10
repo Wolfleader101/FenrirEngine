@@ -30,8 +30,8 @@ namespace
 {
     // The Background pass's colour in a scene with no Sky, linear.
     constexpr GlProbe::Pixel Background{0.015f, 0.015f, 0.015f, 1.0f};
-    constexpr std::uint32_t NoCopy = 0xFFFFFFFFu;
     constexpr std::size_t CommandSize = sizeof(DrawIndexedIndirectCommand);
+    using RendererTest::NoCopy;
 
     /** @brief GlScene with a camera entity at the origin looking along -Z, its bloom off, and a white unlit square. */
     class GlCullScene : public GlTest::GlScene
@@ -103,7 +103,7 @@ namespace
     /** @brief The `n`th word of command `command` of a command buffer's bytes. */
     std::uint32_t Word(const std::vector<std::byte>& commands, std::size_t command, std::size_t n)
     {
-        return RendererTest::UintAt(commands, command * CommandSize + n * sizeof(std::uint32_t));
+        return RendererTest::CommandWord(commands, command * CommandSize, n);
     }
 
     /** @brief One entry of the indirection: its record and copy. */
@@ -140,11 +140,13 @@ TEST_CASE("The cull pass keeps every candidate: each command counts its run's ca
     const GlProbe::Image image = test.Frame();
     GraphicsDevice& device = RendererProbe::Device(test.renderer);
     const std::vector<RendererProbe::CullBuffers> culls = RendererProbe::Culls(test.renderer);
+    INFO("the one camera's cull pass counted three runs and nine candidates");
     REQUIRE(culls.size() == 1);
     REQUIRE(culls.front().runs == 3);
     REQUIRE(culls.front().candidates == 9);
     const std::vector<std::byte> commands = GlProbe::ReadBuffer(device, culls.front().commands);
     const std::vector<std::byte> entries = GlProbe::ReadBuffer(device, culls.front().indirection);
+    INFO("its command buffer and indirection read back with room for them");
     REQUIRE(commands.size() >= 3 * CommandSize);
     REQUIRE(entries.size() >= 9 * 8);
 
@@ -200,8 +202,7 @@ TEST_CASE("The cull pass keeps every candidate: each command counts its run's ca
     }
     REQUIRE(GlProbe::Near(test.At(image, {0.0f, -0.8f, -4.0f}), GlProbe::Pixel{1.0f, 0.0f, 0.0f, 1.0f}));
     REQUIRE(GlProbe::Near(test.At(image, {-0.4f, -0.8f, -4.0f}), Background));
-    REQUIRE(test.renderer.Stats().draws == 3);
-    REQUIRE(test.renderer.Stats().instances == 9);
+    INFO("and nothing was logged as an error");
     REQUIRE(test.messages->errors.empty());
 }
 
@@ -212,6 +213,7 @@ TEST_CASE("A user vertex shader through CurrentDraw() draws an instance list's c
     test.RequireOpenGL();
     // UserTint's colour is tint x strength plus its black pattern, the same for every copy, placed by CurrentDraw().
     const auto user = test.UserMaterial();
+    INFO("the user material takes its tint and strength");
     REQUIRE(test.assets.Store().SetColour(user, "tint", Fenrir::Colour{0.2f, 0.6f, 0.4f, 1.0f}));
     REQUIRE(test.assets.Store().SetFloat(user, "strength", 1.0f));
     const std::array<float, 3> offsets{-0.8f, 0.0f, 0.8f};

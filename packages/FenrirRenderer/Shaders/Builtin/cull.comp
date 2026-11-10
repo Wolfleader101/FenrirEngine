@@ -41,10 +41,10 @@ layout(set = 1, binding = 2, std430) buffer Commands
 } commands;
 
 // The view's indirection, Fenrir/Draw.glsl's fenrirVisible.
-layout(set = 1, binding = 3, std430) writeonly buffer Visible
+layout(set = 1, binding = 3, std430) writeonly buffer Indirection
 {
     uvec2 entries[];
-} visible;
+} indirection;
 
 void main()
 {
@@ -62,5 +62,5 @@ void main()
 
     uint command = group.x * 5u;
     uint slot = atomicAdd(commands.words[command + 1u], 1u);
-    visible.entries[commands.words[command + 4u] + slot] = uvec2(record, copy);
+    indirection.entries[commands.words[command + 4u] + slot] = uvec2(record, copy);
 }

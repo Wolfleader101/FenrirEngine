@@ -449,7 +449,7 @@ One step of the render graph: the resources it uses and how, a render stage, and
 *Avoid:* pass (alone, when a graphics device pass could be meant), render node.
 
 **Render stage**
-Where in the frame a render pass runs, from a fixed list: `Shadow`, `Opaque`, `Background`, `Transparent`, `Debug`, `PostProcess`, `Output`, `Overlay`.
+Where in the frame a render pass runs, from a fixed list: `Cull`, `Prepare`, `Skinning`, `Shadow`, `DepthPrepass`, `Opaque`, `Background`, `Transparent`, `Debug`, `PostProcess`, `Output`, `Overlay` (ADR-0049, ADR-0050, ADR-0057).
 *Avoid:* phase (a *phase* is FenrirApp's, such as `Render`), layer, queue.
 
 **Render feature**
@@ -609,7 +609,7 @@ A draw whose arguments the GPU reads from a buffer of commands (`DrawIndexedIndi
 *Avoid:* GPU draw, GPU-driven draw, draw call. A *multi-draw* is one indirect draw of many commands.
 
 **Cull pass**
-The compute pass, one per view and first in the frame (the `Cull` stage), that decides which of the view's *candidates*, its opaque and masked runs' items and instance list copies, are drawn (ADR-0057): it copies each run's *command template* (its indirect command with no instances) over the view's command buffer, then counts each candidate it keeps into its run's command and writes the candidate's entry into the view's *indirection*, one `(record, copy)` per instance drawn, which `Fenrir/Draw.glsl`'s `CurrentDraw()` reads at the instance's index. A *group table* entry per 64 candidates names a work group's run, so one dispatch culls the view.
+The compute pass, one per view and first in the frame (the `Cull` stage), that decides which of the view's *candidates*, its opaque and masked runs' items and instance list copies, are drawn (ADR-0057): it copies each run's *command template* (its indirect command with no instances) over the view's command buffer, then counts each candidate it keeps into its run's command and writes the candidate's entry into the view's *indirection*, one `(record, copy)` per instance drawn, declared in `Fenrir/Draw.glsl` as `fenrirVisible` and read by its `CurrentDraw()` at the instance's index. A *group table* entry per 64 candidates names a work group's run, so one dispatch culls the view.
 *Avoid:* culling shader, visibility buffer (that is another technique), compaction pass.
 
 **Shadow cascade**
