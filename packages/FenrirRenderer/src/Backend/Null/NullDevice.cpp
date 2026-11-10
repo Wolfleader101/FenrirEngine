@@ -49,7 +49,7 @@ namespace Fenrir::Graphics
     BufferHandle NullDevice::CreateBuffer(const BufferDesc& desc, std::span<const std::byte> initial,
                                           std::string_view label)
     {
-        NullBuffer buffer{std::vector<std::byte>(desc.size), std::string(label)};
+        NullBuffer buffer{std::vector<std::byte>(desc.size), desc.usage, std::string(label)};
         std::copy_n(initial.begin(), std::min(initial.size(), desc.size), buffer.bytes.begin());
         return m_buffers.Add(std::move(buffer));
     }
@@ -196,23 +196,58 @@ namespace Fenrir::Graphics
 
     void NullDevice::CheckLive(bool live, const char* what)
     {
-        if (!live)
+        Check(live, (std::string("a submitted command names a stale ") + what).c_str());
+    }
+
+    void NullDevice::Check(bool ok, const char* what)
+    {
+        if (!ok)
         {
-            m_staleUses.push_back("frame " + std::to_string(m_frameIndex) + ": a submitted command names a stale " +
-                                  what);
+            m_staleUses.push_back("frame " + std::to_string(m_frameIndex) + ": " + what);
         }
+    }
+
+    void NullDevice::CheckIndirectDraw(const CmdDrawIndexedIndirect& draw, const PassDesc* pass,
+                                       std::size_t indexOffset)
+    {
+        const NullBuffer* buffer = m_buffers.Find(draw.buffer);
+        CheckLive(buffer != nullptr, "indirect command buffer");
+        if (buffer == nullptr)
+        {
+            return;
+        }
+        Check(HasUsage(buffer->usage, BufferUsage::Indirect),
+              "an indirect draw reads a buffer made without Indirect usage");
+        const bool declared =
+            pass != nullptr && std::ranges::any_of(pass->uses, [&](const PassResourceUse& use) {
+                return use.texture.IsEmpty() && use.buffer == draw.buffer && use.usage == ResourceUsage::IndirectRead;
+            });
+        Check(declared, "an indirect draw reads a buffer its pass did not declare IndirectRead on");
+        Check(draw.stride >= sizeof(DrawIndexedIndirectCommand) && draw.stride % 4 == 0,
+              "an indirect draw's stride is under a command's size or not a multiple of four");
+        Check(draw.offset % 4 == 0, "an indirect draw's offset is not a multiple of four");
+        Check(draw.offset + std::size_t{draw.drawCount} * draw.stride <= buffer->bytes.size(),
+              "an indirect draw's commands run past the end of its buffer");
+        // GL has no element-buffer offset to count each command's firstIndex from, so the index buffer is bound at its
+        // start for every backend.
+        Check(indexOffset == 0, "an indirect draw's index buffer is bound past its start");
     }
 
     void NullDevice::Submit(const CommandList& list)
     {
-        // The bookkeeping a real backend's replay would trip over: every handle a command names must be live.
+        // The bookkeeping a real backend's replay would trip over: every handle a command names must be live, and an
+        // indirect draw must read commands its pass declared, inside a buffer made for them.
+        const PassDesc* pass = nullptr;
+        std::size_t indexOffset = 0;
         for (const Command& command : list.commands)
         {
             std::visit(
-                [this](const auto& cmd) {
+                [&](const auto& cmd) {
                     using T = std::decay_t<decltype(cmd)>;
                     if constexpr (std::is_same_v<T, CmdBeginPass>)
                     {
+                        pass = &cmd.pass;
+                        indexOffset = 0;
                         for (const ColourAttachment& colour : cmd.pass.colour)
                         {
                             CheckLive(m_textures.IsLive(colour.texture), "colour attachment");
@@ -236,9 +271,22 @@ namespace Fenrir::Graphics
                     {
                         CheckLive(m_groups.IsLive(cmd.group), "binding group");
                     }
-                    else if constexpr (std::is_same_v<T, CmdSetVertexBuffer> || std::is_same_v<T, CmdSetIndexBuffer>)
+                    else if constexpr (std::is_same_v<T, CmdEndPass>)
+                    {
+                        pass = nullptr;
+                    }
+                    else if constexpr (std::is_same_v<T, CmdSetVertexBuffer>)
                     {
                         CheckLive(m_buffers.IsLive(cmd.buffer), "buffer");
+                    }
+                    else if constexpr (std::is_same_v<T, CmdSetIndexBuffer>)
+                    {
+                        CheckLive(m_buffers.IsLive(cmd.buffer), "buffer");
+                        indexOffset = cmd.offset;
+                    }
+                    else if constexpr (std::is_same_v<T, CmdDrawIndexedIndirect>)
+                    {
+                        CheckIndirectDraw(cmd, pass, indexOffset);
                     }
                     else if constexpr (std::is_same_v<T, CmdCopyBuffer>)
                     {

@@ -572,6 +572,10 @@ A component that lights the scene from its entity: a *directional light* (the su
 An asset holding the placements of many copies of one mesh, each a transform relative to the entity that draws them and an optional colour. An `InstancedMeshRenderer` draws one, with no entity per copy.
 *Avoid:* instance buffer, multimesh, batch.
 
+**Indirect draw**
+A draw whose arguments the GPU reads from a buffer of commands (`DrawIndexedIndirectCommand`: index count, instance count, first index, base vertex, base instance) rather than from the command list: `CmdDrawIndexedIndirect` names the buffer, an offset, how many commands and their stride, and a pass declares `IndirectRead` on the buffer. The cull pass writes the commands a view draws (ADR-0057).
+*Avoid:* GPU draw, GPU-driven draw, draw call. A *multi-draw* is one indirect draw of many commands.
+
 **Shadow cascade**
 One of the directional light's shadow maps for one camera: an orthographic view along the light round a slice of the camera's view, nearer slices smaller and so sharper, out to the light's shadow distance. Each is a sphere snapped to whole texels, so its shadows hold still as the camera moves and turns (ADR-0050).
 *Avoid:* split (the depth where one cascade gives way to the next), CSM level, shadow LOD.

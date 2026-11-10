@@ -49,7 +49,10 @@ namespace Fenrir
             return Null(core).m_submitted;
         }
 
-        /** @brief One line per stale or empty handle a submitted command named. */
+        /**
+         * @brief One line per stale or empty handle a submitted command named, and per indirect draw that failed one
+         * of the null backend's checks (ADR-0057).
+         */
         [[nodiscard]] static const std::vector<std::string>& StaleUses(const Graphics::GraphicsDevice& device)
         {
             return Null(device).m_staleUses;

@@ -22,6 +22,8 @@ namespace Fenrir::Graphics
         Storage = 1u << 3,
         CopySource = 1u << 4,
         CopyDestination = 1u << 5,
+        /** @brief Read as indirect draw commands, DrawIndexedIndirectCommand records (ADR-0057). */
+        Indirect = 1u << 6,
     };
 
     /** @brief What a texture may be used as, as flags. */

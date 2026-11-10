@@ -50,8 +50,11 @@ namespace Fenrir::Graphics
      * @brief The OpenGL 4.6 backend (ADR-0016): emulates the graphics device's explicit shape with direct state access,
      * immutable storage, sampler objects, clip control and SPIR-V shaders, the GL copy of each shader variant
      * specialised and its bindings bound by GlBindingOf. One linked program serves every pipeline with the same vertex
-     * and fragment code. GL synchronises itself, so it derives no barriers, and a destroyed object's GL name is deleted
-     * when its slot is freed, `framesInFlight` frames later, as on every backend.
+     * and fragment code. GL synchronises its own commands, so the one barrier it derives is the memory barrier a
+     * shader's storage writes need before another pass reads them (ADR-0050, ADR-0057): each pass's declared uses say
+     * which buffers it reads and how, and a buffer an earlier pass wrote as `StorageWrite` gets the matching bits
+     * (`GL_COMMAND_BARRIER_BIT` for indirect commands) before the reading pass begins. A destroyed object's GL name is
+     * deleted when its slot is freed, `framesInFlight` frames later, as on every backend.
      *
      * Each pass sets the clip origin (spike lesson 3): upper-left for offscreen targets, so they are stored top row
      * first like uploaded images, and lower-left for passes drawing to the backbuffer, whose row 0 is the window's
@@ -215,9 +218,13 @@ namespace Fenrir::Graphics
         {
             /** @brief Whether the pass is skipped, every command up to its end ignored: its targets are stale. */
             bool skipping = false;
-            /** @brief Whether the pass is a compute pass, and whether it declares storage writes. */
+            /** @brief Whether the pass is a compute pass. */
             bool computing = false;
-            bool storageWrites = false;
+            /**
+             * @brief The GL names of the buffers the pass declared `StorageWrite` on: at its end they are the ones a
+             * later pass's reads need a barrier for.
+             */
+            std::vector<std::uint32_t> storageWrites;
             bool drawingToBackbuffer = false;
             std::uint32_t targetHeight = 0;
             const GlPipeline* pipeline = nullptr;
@@ -249,7 +256,21 @@ namespace Fenrir::Graphics
         void Execute(const CmdSetScissor& command);
         void Execute(const CmdDraw& command);
         void Execute(const CmdDrawIndexed& command);
+        void Execute(const CmdDrawIndexedIndirect& command);
         void Execute(const CmdDispatch& command);
+
+        /**
+         * @brief Issues the memory barrier `pass`'s declared reads of buffers earlier passes wrote as storage need, the
+         * bits each kind of read wants and no barrier when every bit is already issued since the write.
+         */
+        void BarrierBefore(const PassDesc& pass);
+        /**
+         * @brief Issues `bits` as a memory barrier if a buffer a shader wrote as storage still wants them, and records
+         * them as issued for every such buffer, since a barrier covers all earlier writes.
+         */
+        void MakeVisible(std::uint32_t bits);
+        /** @brief The live buffer a declared use names, else null (for a texture's use too). */
+        [[nodiscard]] const GlBuffer* BufferOf(const PassResourceUse& use);
         void Execute(const CmdCopyBuffer& command);
 
         /**
@@ -316,5 +337,11 @@ namespace Fenrir::Graphics
         /** @brief Framebuffers by their colour attachments then depth (name 0 for none). */
         std::map<std::vector<FramebufferAttachment>, std::uint32_t> m_framebuffers;
         ReplayState m_replay;
+        /**
+         * @brief Each buffer a pass wrote as storage, by GL name, with the memory barrier bits issued since: a later
+         * pass reading it with a kind of read whose bits are not among them gets a barrier first. Written again, its
+         * bits start over; deleted, it is forgotten.
+         */
+        std::map<std::uint32_t, std::uint32_t> m_storageWritten;
     };
 } // namespace Fenrir::Graphics
