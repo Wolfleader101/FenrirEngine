@@ -188,6 +188,16 @@ namespace PhysicsTest
         return Fenrir::GetWorldTransform(entity).pos;
     }
 
+    /** Whether `a`'s body touches `b`'s now, as of the last step. */
+    inline bool Touching(PhysicsApp& test, const Fenrir::Entity& a, const Fenrir::Entity& b)
+    {
+        bool touching = false;
+        Fenrir::PhysicsWorld::Of(test.app.GetActiveScene())->ForEachContact(a, [&](const Fenrir::Contact& contact) {
+            touching = touching || contact.otherBody == b;
+        });
+        return touching;
+    }
+
     // A frame a little under a third of a tick: ticks land on different frames, with varied fractions left over.
     inline constexpr double shortFrame = tick * 0.3;
 

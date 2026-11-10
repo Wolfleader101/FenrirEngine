@@ -314,13 +314,36 @@ namespace Fenrir
     };
 
     /**
+     * @brief Puts a body in a collision group: two bodies whose groups are equal and not 0 never touch, whatever their
+     * layers allow. Optional: a body without one, or with `group` 0, is in no group.
+     *
+     * A group only removes contact the layers allow, and a body is in one group. Game code picks the integer (the
+     * parts of a ragdoll might share their skeleton entity's id); groups are compared within one physics world.
+     *
+     * It is read from the body's entity, as a CollisionFilter is, and one on a child collider of a compound body is
+     * ignored. On a CharacterBody's entity it applies to the character's moves and to its body, so neither meets the
+     * bodies of its group. A trigger reads the one on its own entity (not its body's), and reports no body of its
+     * group. A Joint's `collideConnected` still decides for its two bodies when they are in different groups.
+     *
+     * Queries ignore it: QueryFilter::ignoreBody and the layers are what make a query skip a body. Edits take effect
+     * on the next tick: a touching pair that stops colliding gets a ContactEnd, and a pair that collides again is
+     * woken and gets a ContactBegin.
+     */
+    struct CollisionGroup
+    {
+        /** @brief The group the body is in, any integer game code picks; 0 is no group. */
+        std::uint32_t group = 0;
+    };
+
+    /**
      * @brief Makes the entity's collider a trigger: it reports what overlaps it (TriggerEnter, TriggerExit) and never
      * pushes anything.
      *
      * A trigger follows its entity's world transform, so one under a moving body moves with it, and is in the layers
-     * of a CollisionFilter on its own entity (not its body's). It sees static, kinematic and dynamic bodies, sleeping
-     * ones included, but not other triggers. A RigidBody on the trigger's own entity gets no solid collider from it.
-     * A trigger is never part of a compound body, and ignores the body it is beneath (it would always be inside it).
+     * of a CollisionFilter and the group of a CollisionGroup on its own entity (not its body's). It sees static,
+     * kinematic and dynamic bodies, sleeping ones included, but not other triggers. A RigidBody on the trigger's own
+     * entity gets no solid collider from it. A trigger is never part of a compound body, and ignores the body it is
+     * beneath (it would always be inside it).
      */
     struct Trigger
     {

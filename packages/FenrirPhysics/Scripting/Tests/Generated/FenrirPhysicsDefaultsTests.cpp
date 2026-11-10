@@ -83,6 +83,12 @@ TEST_CASE("C#'s new CollisionFilter() has C++'s Fenrir::CollisionFilter{} defaul
     CheckDefaults<Fenrir::CollisionFilter>(Fenrir::ScriptingProbe::Component(app.scripting), "CollisionFilter");
 }
 
+TEST_CASE("C#'s new CollisionGroup() has C++'s Fenrir::CollisionGroup{} defaults, field by field", "[physics][scripting][bindings]")
+{
+    Fenrir::Testing::PhysicsScriptingApp app;
+    CheckDefaults<Fenrir::CollisionGroup>(Fenrir::ScriptingProbe::Component(app.scripting), "CollisionGroup");
+}
+
 TEST_CASE("C#'s new Contact() has C++'s Fenrir::Contact{} defaults, field by field", "[physics][scripting][bindings]")
 {
     Fenrir::Testing::PhysicsScriptingApp app;

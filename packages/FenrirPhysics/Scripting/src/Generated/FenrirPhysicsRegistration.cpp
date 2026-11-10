@@ -19,6 +19,7 @@ namespace Fenrir::Generated
                 Fenrir::MakeComponent<Fenrir::CharacterBody>("Fenrir.Physics.CharacterBody"),
                 Fenrir::MakeComponent<Fenrir::Collider>("Fenrir.Physics.Collider"),
                 Fenrir::MakeComponent<Fenrir::CollisionFilter>("Fenrir.Physics.CollisionFilter"),
+                Fenrir::MakeComponent<Fenrir::CollisionGroup>("Fenrir.Physics.CollisionGroup"),
                 Fenrir::MakeComponent<Fenrir::ContactEvents>("Fenrir.Physics.ContactEvents"),
                 Fenrir::MakeComponent<Fenrir::Joint>("Fenrir.Physics.Joint"),
                 Fenrir::MakeComponent<Fenrir::PhysicsMaterial>("Fenrir.Physics.PhysicsMaterial"),

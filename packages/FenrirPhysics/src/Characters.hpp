@@ -45,9 +45,10 @@ namespace Fenrir::Detail
          * the backend character of each enabled one that can have one and has none. */
         void Make();
 
-        /** @brief Edits, after the bodies', in entity order: its entity's PhysicsMaterial and CollisionFilter
-         * given to its body if they changed; a character Poses finds moved since physics last put it somewhere is
-         * teleported there (a moved parent included), and one it finds turned is turned. Neither sweeps. */
+        /** @brief Edits, after the bodies', in entity order: its entity's PhysicsMaterial, CollisionFilter and
+         * collision group given to its body if they changed; a character Poses finds moved since physics last put it
+         * somewhere is teleported there (a moved parent included), and one it finds turned is turned. Neither sweeps.
+         */
         void PushEdits();
 
         /** @brief Moves, before the step: applies each character's shape edit if it fits, then moves it by its
@@ -85,9 +86,10 @@ namespace Fenrir::Detail
             Backend::CharacterMoved moved;
             CollisionShape shape;
             Math::Vec3 scale = Math::Vec3(1.0f);
-            // Its entity's PhysicsMaterial and CollisionFilter as last applied to its body.
+            // Its entity's PhysicsMaterial, CollisionFilter and collision group as last applied to its body.
             PhysicsMaterial material;
             CollisionFilter filter;
+            std::uint32_t group = 0;
             // The Collider's shape or scale does not fit yet: the character keeps `shape` and tries again each move.
             bool shapeBlocked = false;
         };

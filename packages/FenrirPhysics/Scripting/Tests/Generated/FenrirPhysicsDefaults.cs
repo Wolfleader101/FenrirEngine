@@ -12,6 +12,7 @@ public static class Defaults
     public static global::Fenrir.Physics.CollisionShape CollisionShape() => new();
     public static global::Fenrir.Physics.Collider Collider() => new();
     public static global::Fenrir.Physics.CollisionFilter CollisionFilter() => new();
+    public static global::Fenrir.Physics.CollisionGroup CollisionGroup() => new();
     public static global::Fenrir.Physics.Contact Contact() => new();
     public static global::Fenrir.Physics.ContactBegin ContactBegin() => new();
     public static global::Fenrir.Physics.ContactEnd ContactEnd() => new();

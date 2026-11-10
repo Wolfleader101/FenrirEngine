@@ -52,8 +52,9 @@ public partial struct Joint : IComponent
     public bool Enabled = true;
     /// <summary>
     /// Whether the two bodies collide with each other. While the joint is enabled, false keeps every solid collider of
-    /// one from colliding with the other's; true leaves them to their CollisionFilters, which it never overrides. Only
-    /// the two bodies named: in a chain, bodies two apart still collide. Triggers and queries ignore it. A live edit.
+    /// one from colliding with the other's; true leaves them to their CollisionFilters and CollisionGroups, which it
+    /// never overrides. Only the two bodies named: in a chain, bodies two apart still collide. Triggers and queries
+    /// ignore it. A live edit.
     /// </summary>
     public bool CollideConnected = false;
     /// <summary>

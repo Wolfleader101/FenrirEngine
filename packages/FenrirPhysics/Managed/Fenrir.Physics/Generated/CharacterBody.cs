@@ -68,10 +68,12 @@ namespace Fenrir.Physics;
 /// collider: triggers report it during the step, `QueryFilter::ignoreBody` skips it, and hits carry no character flag.
 /// Its entity's CollisionFilter filters both what meets it and its own moves, under the one symmetric rule, so a
 /// character ignoring a layer walks through that layer's bodies, and those bodies, triggers and queries pass through
-/// it; its entity's PhysicsMaterial is what bodies hitting or resting on it feel, and never changes how it moves. Edits
-/// to either apply from the next tick. Characters block each other and neither pushes the other: one standing on
-/// another rides it (`state.groundBody` names it), and one standing on this character never holds it down, so a jump
-/// lifts it. In entity order, a character's move meets the others where their last moves left them.
+/// it; its entity's PhysicsMaterial is what bodies hitting or resting on it feel, and never changes how it moves. Its
+/// entity's CollisionGroup applies to both as well: neither its moves nor its body meet a body of its group, though
+/// triggers outside the group and queries still find it. Edits to any of the three apply from the next tick. Characters
+/// block each other and neither pushes the other: one standing on another rides it (`state.groundBody` names it), and
+/// one standing on this character never holds it down, so a jump lifts it. In entity order, a character's move meets
+/// the others where their last moves left them.
 /// </remarks>
 [NativeComponent("Fenrir.Physics.CharacterBody")]
 public partial struct CharacterBody : IComponent

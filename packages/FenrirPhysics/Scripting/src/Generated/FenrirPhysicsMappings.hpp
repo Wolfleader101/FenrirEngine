@@ -201,6 +201,17 @@ static_assert(sizeof(Fenrir::CollisionFilter) == 8 && alignof(Fenrir::CollisionF
               "regenerate the description, then this binding");
 
 template <>
+struct Iris::StructMapping<Fenrir::CollisionGroup>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.CollisionGroup";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<std::uint32_t>("Group", 0));
+};
+static_assert(sizeof(Fenrir::CollisionGroup) == 4 && alignof(Fenrir::CollisionGroup) == 4,
+              "Fenrir::CollisionGroup is not the layout FenrirPhysics.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
 struct Iris::StructMapping<Fenrir::Contact>
 {
     static constexpr std::string_view typeName = "Fenrir.Physics.Contact";

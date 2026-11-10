@@ -253,17 +253,6 @@ TEST_CASE("Repairing a joint still overloaded breaks it again, with another even
     REQUIRE_FALSE(JointOf(chain.joints[0]).enabled);
 }
 
-namespace
-{
-    /** Whether `a`'s body touches `b`'s now, as of the last step. */
-    bool Touching(PhysicsApp& test, const Entity& a, const Entity& b)
-    {
-        bool touching = false;
-        World(test).ForEachContact(a, [&](const Contact& contact) { touching = touching || contact.otherBody == b; });
-        return touching;
-    }
-} // namespace
-
 TEST_CASE("A broken joint's bodies collide again from the next step", "[physics][joints][breaking][collide]")
 {
     PhysicsApp test;

@@ -263,17 +263,6 @@ TEST_CASE("A joint that goes inactive reads a zeroed state", "[physics][joints][
     REQUIRE(state.relative.position == Math::Vec3(0.0f));
 }
 
-namespace
-{
-    /** Whether `a`'s body touches `b`'s now, as of the last step. */
-    bool Touching(PhysicsApp& test, const Entity& a, const Entity& b)
-    {
-        bool touching = false;
-        World(test).ForEachContact(a, [&](const Contact& contact) { touching = touching || contact.otherBody == b; });
-        return touching;
-    }
-} // namespace
-
 TEST_CASE("An inactive joint excludes no collisions", "[physics][joints][inactive][collide]")
 {
     PhysicsApp test;

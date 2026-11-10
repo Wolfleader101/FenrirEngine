@@ -21,6 +21,7 @@ private-members = ["Fenrir::Entity"]
 "Fenrir::Collider" = "component"
 "Fenrir::PhysicsMaterial" = "component"
 "Fenrir::CollisionFilter" = "component"
+"Fenrir::CollisionGroup" = "component"
 "Fenrir::Trigger" = "component"
 "Fenrir::ContactEvents" = "component"
 "Fenrir::Joint" = "component"

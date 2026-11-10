@@ -85,8 +85,8 @@ namespace Fenrir::Detail
         void Apply(const Rebuild& rebuild);
 
         /** @brief Pushes the edits game code made to each made body's components and world transform since the last
-         * step of `dt` seconds: motion, shape, material, filter, pose (a kinematic body moved, any other teleported)
-         * and velocity. */
+         * step of `dt` seconds: motion, shape, material, filter, collision group, pose (a kinematic body moved, any
+         * other teleported) and velocity. */
         void PushEdits(float dt);
 
         /** @brief Queues a push of `entity`'s body for the next step; nothing for a handle to an entity no longer
@@ -156,6 +156,7 @@ namespace Fenrir::Detail
             std::vector<Part> parts;
             PhysicsMaterial material;
             CollisionFilter filter;
+            std::uint32_t group;
             Math::Vec3 linearVelocity;
             Math::Vec3 angularVelocity;
         };

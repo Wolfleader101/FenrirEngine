@@ -407,7 +407,7 @@ One of 32 groups a body belongs to (it may belong to several). With its *collisi
 *Avoid:* channel, group (a *collision group*, bodies that ignore each other, is a separate idea).
 
 **Collision group**
-`CollisionGroup`: an optional component on a body entity holding one plain integer game code picks; bodies with the same non-zero group never touch each other, whatever their layers allow, and 0 is no group. A character body's applies to its move; a trigger's is its own entity's. Queries ignore it (physics map ticket "How do general collision groups work?").
+`CollisionGroup`: an optional component on a body entity holding one plain integer game code picks; bodies with the same non-zero group never touch each other, whatever their layers allow, and 0 is no group. A character body's applies to its moves and to its body; a trigger's is its own entity's. Queries ignore it (physics map ticket "How do general collision groups work?").
 *Avoid:* ignore list, exclusion, sub-group, collision exception (Godot's), layer (a *collision layer* decides who may touch; a group removes contact the layers allow).
 
 ## FenrirEngine rendering
