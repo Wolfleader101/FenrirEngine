@@ -35,6 +35,77 @@
       ]
     },
     {
+      "name": "Fenrir::Colour",
+      "category": "struct",
+      "role": "nested",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A colour as linear red, green, blue and alpha, each a float, usually in [0, 1] (ADR-0025). Debug draw, materials and lights take it, and the renderer packs it for vertices. Colours written as sRGB hex values, as colour pickers and art tools give them, are converted when made (FromSrgb). Default constructed, it is opaque white.",
+      "fields": [
+        {
+          "name": "r",
+          "offset": 0,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "g",
+          "offset": 4,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "b",
+          "offset": 8,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "a",
+          "offset": 12,
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::AnamorphicStreaks",
+      "category": "struct",
+      "role": "nested",
+      "size": 24,
+      "alignment": 4,
+      "doc": "A view's anamorphic streaks (ADR-0059): bright pixels drawn out into long, thin horizontal lines, as an anamorphic lens draws them, mixed in before the tonemap after bloom. Like bloom there is no threshold: everything streaks by the same share, and only what is bright shows it. The streaks keep the scene's energy and the tint is taken at unit luminance, so they move light, never add it. Off by default; a view with bloom off still streaks.",
+      "fields": [
+        {
+          "name": "intensity",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0,
+          "doc": "The share of the streaks the view's colour is mixed with, from 0 to 1. 0 by default, which turns them off and costs nothing; a few hundredths draw long lines from lights and leave dim surfaces alone."
+        },
+        {
+          "name": "length",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0.75,
+          "doc": "How long the streaks are, from 0 (the shortest only, a few pixels either side) to 1 (the longest only, reaching most of the way across the view). 0.75 by default."
+        },
+        {
+          "name": "tint",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          },
+          "doc": "The streaks' colour, linear, scaled to unit luminance: its hue and saturation count, its brightness is ignored. White by default."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::AssetHandle<Fenrir::Image>",
       "category": "bound-type",
       "role": "bound-type",
@@ -105,40 +176,6 @@
           "kind": "f32",
           "default": 0.7,
           "doc": "How far the glow spreads, from 0 (the narrowest blur only, a few pixels) to 1 (the widest only, made at a sixty-fourth of the view's size). 0.7 by default."
-        }
-      ]
-    },
-    {
-      "name": "Fenrir::Colour",
-      "category": "struct",
-      "role": "nested",
-      "size": 16,
-      "alignment": 4,
-      "doc": "A colour as linear red, green, blue and alpha, each a float, usually in [0, 1] (ADR-0025). Debug draw, materials and lights take it, and the renderer packs it for vertices. Colours written as sRGB hex values, as colour pickers and art tools give them, are converted when made (FromSrgb). Default constructed, it is opaque white.",
-      "fields": [
-        {
-          "name": "r",
-          "offset": 0,
-          "kind": "f32",
-          "default": 1
-        },
-        {
-          "name": "g",
-          "offset": 4,
-          "kind": "f32",
-          "default": 1
-        },
-        {
-          "name": "b",
-          "offset": 8,
-          "kind": "f32",
-          "default": 1
-        },
-        {
-          "name": "a",
-          "offset": 12,
-          "kind": "f32",
-          "default": 1
         }
       ]
     },
@@ -246,12 +283,241 @@
         {
           "name": "Reflections",
           "value": 6,
-          "doc": "Its screen-space reflections (ADR-0056): at each pixel, the colour its mirror ray hit, from last frame, times how sure the hit is, exposed and tonemapped; black where nothing is reflected or the camera's reflections are off. It is what a mirror there would blend, sharp: a material's roughness blurs and fades it."
+          "doc": "Its screen-space reflections (ADR-0056): at each pixel, the colour its mirror ray hit, from last frame, times how sure the hit is, exposed, vignetted, graded, tonemapped and grained; black where nothing is reflected or the camera's reflections are off. It is what a mirror there would blend, sharp: a material's roughness blurs and fades it."
         },
         {
           "name": "ReflectionConfidence",
           "value": 7,
           "doc": "How sure each pixel's reflection hit is, as grey from black (no hit) to white, with no exposure or tonemap; black where the camera's reflections are off."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ChromaticAberration",
+      "category": "struct",
+      "role": "nested",
+      "size": 4,
+      "alignment": 4,
+      "doc": "A view's chromatic aberration (ADR-0059): each colour channel read from its own point as the Output pass reads the scene, red moved outwards and blue inwards, more the further from the centre, as a lens bends each wavelength by its own amount. Edges near the view's corners fringe red outside and blue inside; the centre is as it is. Off by default, and off costs nothing.",
+      "fields": [
+        {
+          "name": "intensity",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0,
+          "doc": "How far red and blue move apart at the view's corners, as a fraction of the distance from its centre to a corner: 0 by default, off. A few thousandths fringe the edges; a few hundredths split them."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Math::Vec3",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 12,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::ColourGrading",
+      "category": "struct",
+      "role": "nested",
+      "size": 88,
+      "alignment": 4,
+      "doc": "A view's colour grade (ADR-0059): the look of the picture, set on the exposed scene colour before the tonemapper, in linear Rec. 709. So contrast and saturation act on scene values, mid grey stays put and the tonemapper still rolls off whatever the grade brightens, so a strong grade does not clip. Its steps run in this order: white balance, contrast, split toning, saturation, then the ASC CDL. Identity by default, and identity costs nothing.",
+      "fields": [
+        {
+          "name": "temperature",
+          "offset": 0,
+          "kind": "f32",
+          "default": 6500,
+          "doc": "The colour temperature, in kelvin, of the light the view takes as white: 6500 by default (D65, no change). A surface lit by daylight of this temperature comes out grey, so lower cools the picture and higher warms it. Held to 2500 to 25000."
+        },
+        {
+          "name": "tint",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0,
+          "doc": "How far off daylight that white lies, from -1 to 1: 0 by default. Positive names a greener light, so the picture moves to magenta; negative names a magenta one, so it moves to green."
+        },
+        {
+          "name": "contrast",
+          "offset": 8,
+          "kind": "f32",
+          "default": 1,
+          "doc": "The slope of the picture in stops around mid grey (0.18), which it keeps: 1 by default, above 1 more contrast, below 1 flatter, 0 all mid grey."
+        },
+        {
+          "name": "shadowTint",
+          "offset": 12,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          },
+          "doc": "The tint the shadows take, linear: white by default, and any grey is none. Only its hue and saturation count (it is scaled to unit luminance, so a grey keeps its brightness); the more saturated, the stronger."
+        },
+        {
+          "name": "highlightTint",
+          "offset": 28,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          },
+          "doc": "The tint the highlights take, as the shadows' does."
+        },
+        {
+          "name": "balance",
+          "offset": 44,
+          "kind": "f32",
+          "default": 0,
+          "doc": "Where the shadows end and the highlights start, from -1 to 1: 0 by default, the split at mid grey. Positive moves it down by up to four stops, giving the highlights' tint more of the picture; negative up."
+        },
+        {
+          "name": "saturation",
+          "offset": 48,
+          "kind": "f32",
+          "default": 1,
+          "doc": "How far each colour is from grey of its luminance: 1 by default, 0 grey, above 1 more saturated. After split toning, so lowering it fades the tints too."
+        },
+        {
+          "name": "slope",
+          "offset": 52,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          },
+          "doc": "The ASC CDL, the final trim, per channel: each is multiplied by its slope, then its offset is added, then negatives are clamped and the result raised to its power. The slope, 1 in each channel by default."
+        },
+        {
+          "name": "offset",
+          "offset": 64,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "doc": "The CDL's offset, added after the slope: 0 in each channel by default."
+        },
+        {
+          "name": "power",
+          "offset": 76,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          },
+          "doc": "The CDL's power, held at or above 0.001: 1 in each channel by default."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::FilmGrain",
+      "category": "struct",
+      "role": "nested",
+      "size": 12,
+      "alignment": 4,
+      "doc": "A view's film grain (ADR-0059): noise added after the tonemap, in the range the viewer sees, so its strength holds at any exposure. It shows most in the mid-tones and least in deep shadow and bright highlight, as film grain does, and it changes every frame. Off by default, and off costs nothing.",
+      "fields": [
+        {
+          "name": "intensity",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0,
+          "doc": "How far the grain moves a pixel's brightness, at most, as a fraction of the display's range: 0 by default, off. A few hundredths are fine grain."
+        },
+        {
+          "name": "response",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0.8,
+          "doc": "How much the grain is kept to the mid-tones, from 0 to 1: 0.8 by default. 0 grains every brightness alike; 1 leaves black and white untouched."
+        },
+        {
+          "name": "size",
+          "offset": 8,
+          "kind": "f32",
+          "default": 1,
+          "doc": "The side of each grain, in pixels, at least 1: 1 by default."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::LensFlare",
+      "category": "struct",
+      "role": "nested",
+      "size": 36,
+      "alignment": 4,
+      "doc": "A view's lens flare (ADR-0059), after John Chapman's pseudo lens flare: ghosts of the bright parts of the view, mirrored through its centre along the line from them, and a halo ring, each colour fringed apart, mixed in before the tonemap after the streaks. Like bloom there is no threshold: the flare is the view's own light read from elsewhere, so it moves light and never adds it, and a bright sky ghosts as a faint veiling glare as a real lens does. Off by default.\n\nA lens dirt image scales how much of the bloom and the flare each pixel takes where the lens is dirty, so a bright light lights up the smudges on it.",
+      "fields": [
+        {
+          "name": "intensity",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0,
+          "doc": "The share of the flare the view's colour is mixed with, from 0 to 1. 0 by default, which turns it off and costs nothing; a few hundredths throw faint ghosts from lights."
+        },
+        {
+          "name": "ghostCount",
+          "offset": 4,
+          "kind": "u32",
+          "default": 4,
+          "doc": "How many ghosts each bright point throws, from 0 to 8: 4 by default."
+        },
+        {
+          "name": "ghostSpacing",
+          "offset": 8,
+          "kind": "f32",
+          "default": 0.4,
+          "doc": "How far apart the ghosts are along the line through the view's centre, as a share of the way from each pixel to the centre: 0.4 by default. Each ghost is read that much further along the line than the last, so ghosts past the centre land on the far side of it."
+        },
+        {
+          "name": "haloRadius",
+          "offset": 12,
+          "kind": "f32",
+          "default": 0.6,
+          "doc": "The halo ring's radius, as a distance from the view's centre: 0 at the centre, 1 at the corners. 0.6 by default. The ring shows what is bright near the centre."
+        },
+        {
+          "name": "haloWidth",
+          "offset": 16,
+          "kind": "f32",
+          "default": 0.1,
+          "doc": "How far the halo reaches either side of its radius, in the same distance: 0.1 by default; 0 none."
+        },
+        {
+          "name": "chromaticOffset",
+          "offset": 20,
+          "kind": "f32",
+          "default": 0.01,
+          "doc": "How far red and blue are read apart in each ghost and the halo, in the same distance: 0.01 by default, so the ghosts fringe red outside and blue inside."
+        },
+        {
+          "name": "dirt",
+          "offset": 24,
+          "kind": "struct",
+          "type": "Fenrir::AssetHandle<Fenrir::Image>",
+          "default": {},
+          "doc": "A greyscale image of the dirt on the lens, stretched over the view; none by default. A flat image with pixels; anything else (a cubemap, a render target) has no dirt, logged once."
+        },
+        {
+          "name": "dirtIntensity",
+          "offset": 32,
+          "kind": "f32",
+          "default": 1,
+          "doc": "How much more of the bloom and the flare a pixel takes where the dirt is white: its share is multiplied by 1 + dirtIntensity times the dirt's brightness, held at or below 1, so the mix stays a blend. 1 by default; 0 is no dirt. It needs no flare: dirt with the flare off scales the bloom alone."
         }
       ]
     },
@@ -571,10 +837,48 @@
       ]
     },
     {
+      "name": "Fenrir::Vignette",
+      "category": "struct",
+      "role": "nested",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A view's vignette (ADR-0059): the exposed colour darkened towards the corners, as a lens's falloff darkens them, before the grade and the tonemap, so the tonemapper sees it. Off by default, and off costs nothing.",
+      "fields": [
+        {
+          "name": "intensity",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0,
+          "doc": "How much of the light the corners lose, from 0 to 1: 0 by default, off; 1 makes them black."
+        },
+        {
+          "name": "radius",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0.5,
+          "doc": "Where the darkening starts, as a distance from the view's centre: 0 at the centre, 1 at the corners. 0.5 by default."
+        },
+        {
+          "name": "smoothness",
+          "offset": 8,
+          "kind": "f32",
+          "default": 0.5,
+          "doc": "How far past the radius, in the same distance, the darkening takes to reach its intensity: 0.5 by default. 0 is a hard edge."
+        },
+        {
+          "name": "roundness",
+          "offset": 12,
+          "kind": "f32",
+          "default": 1,
+          "doc": "The darkening's shape, from 0 to 1: 1 by default, a circle whatever the view's aspect; 0 an ellipse in the view's own proportions, reaching as far into the long sides as into the short ones."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::Camera",
       "category": "struct",
       "role": "component",
-      "size": 128,
+      "size": 308,
       "alignment": 4,
       "doc": "Makes a view of the active scene from its entity, looking along the entity's local -Z with +Y up (ADR-0026). Plain data. Every enabled camera in the active scene draws one view a frame, into its viewport of its render target. Views into one target draw by `order`, lowest first, and ties by entity id, logged once. Each view has its own scene targets, and writes only its viewport.\n\nNot drawn, logged once: a camera targeting a window other than the main window, a viewport under one pixel, or a target image that is stale, empty or not a render target. A minimised window draws nothing. A window no camera draws into is cleared to black, logged once.",
       "fields": [
@@ -651,8 +955,56 @@
           "doc": "How the view's bright pixels bleed into their surroundings before the tonemap."
         },
         {
-          "name": "ambientOcclusion",
+          "name": "anamorphicStreaks",
           "offset": 92,
+          "kind": "struct",
+          "type": "Fenrir::AnamorphicStreaks",
+          "default": {},
+          "doc": "How the view's bright pixels draw out into horizontal lines before the tonemap, after bloom."
+        },
+        {
+          "name": "lensFlare",
+          "offset": 116,
+          "kind": "struct",
+          "type": "Fenrir::LensFlare",
+          "default": {},
+          "doc": "The view's ghosts, halo and lens dirt before the tonemap, after the streaks."
+        },
+        {
+          "name": "colourGrading",
+          "offset": 152,
+          "kind": "struct",
+          "type": "Fenrir::ColourGrading",
+          "default": {},
+          "doc": "The look of the view: its white balance, contrast, tints and saturation, before the tonemap."
+        },
+        {
+          "name": "chromaticAberration",
+          "offset": 240,
+          "kind": "struct",
+          "type": "Fenrir::ChromaticAberration",
+          "default": {},
+          "doc": "How the view's colours fringe towards its corners, as it reads the scene."
+        },
+        {
+          "name": "vignette",
+          "offset": 244,
+          "kind": "struct",
+          "type": "Fenrir::Vignette",
+          "default": {},
+          "doc": "How the view darkens towards its corners, before the grade."
+        },
+        {
+          "name": "filmGrain",
+          "offset": 260,
+          "kind": "struct",
+          "type": "Fenrir::FilmGrain",
+          "default": {},
+          "doc": "The view's film grain, after its tonemap."
+        },
+        {
+          "name": "ambientOcclusion",
+          "offset": 272,
           "kind": "struct",
           "type": "Fenrir::AmbientOcclusion",
           "default": {},
@@ -660,7 +1012,7 @@
         },
         {
           "name": "reflections",
-          "offset": 104,
+          "offset": 284,
           "kind": "struct",
           "type": "Fenrir::Reflections",
           "default": {},
@@ -668,7 +1020,7 @@
         },
         {
           "name": "debugView",
-          "offset": 124,
+          "offset": 304,
           "kind": "enum",
           "type": "Fenrir::CameraDebugView",
           "default": "None",
@@ -854,13 +1206,6 @@
           "doc": "False hides every copy; the entity's children are drawn as their own renderers say."
         }
       ]
-    },
-    {
-      "name": "Fenrir::Math::Vec3",
-      "category": "bound-type",
-      "role": "bound-type",
-      "size": 12,
-      "alignment": 4
     },
     {
       "name": "Fenrir::Math::AABB",

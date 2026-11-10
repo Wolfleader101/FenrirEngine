@@ -432,6 +432,8 @@ namespace Fenrir::Render
         {
             std::uint32_t revision = 0;
             Graphics::TextureHandle texture;
+            /** @brief What the texture was made with, which a pass that reads it imports it into the graph by. */
+            Graphics::TextureDesc desc;
         };
 
         /** @brief A prepared mesh: its streams back to back in one buffer, and its indices. */
@@ -933,7 +935,10 @@ namespace Fenrir::Render
         Graphics::BindingGroupLayoutHandle m_outputLayout;
         /** @brief Set 2 of Output's REFLECTIONS variant: the view's reflection hits and history. */
         Graphics::BindingGroupLayoutHandle m_reflectionOutputLayout;
-        /** @brief Set 1 of the Output pass: the Output block, the view's exposure, tonemapper and grey channel. */
+        /**
+         * @brief Set 1 of the Output pass: the Output block, the view's exposure, vignette, colour grade, tonemapper,
+         * film grain, chromatic aberration and grey channel.
+         */
         Graphics::BindingGroupLayoutHandle m_outputBlockLayout;
         Graphics::PipelineHandle m_backgroundPipeline;
         Graphics::PipelineHandle m_skyPipeline;
@@ -942,6 +947,8 @@ namespace Fenrir::Render
         Graphics::PipelineHandle m_occlusionOutputPipeline;
         /** @brief Output's REFLECTIONS variant, which draws last frame's history at a view's reflection hits. */
         Graphics::PipelineHandle m_reflectionOutputPipeline;
+        /** @brief Output's ABERRATION variant (MSAA too with MSAA), which reads each channel at its own point. */
+        Graphics::PipelineHandle m_aberrationOutputPipeline;
 
         /** @brief The default textures, by DefaultTexture: white, black and the flat normal. */
         std::array<Graphics::TextureHandle, 3> m_defaultTextures{};

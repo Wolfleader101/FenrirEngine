@@ -1,7 +1,7 @@
-// The lighting spec from C# (ticket 22): every component and scene resource the lighting tickets added or grew
-// round-trips between C++ and C#, field by field, both ways through the ECS, with every field off its default; an
-// instance list made in C# draws as one instanced draw and draws again when C# replaces it; C# reads RendererStats
-// whole, and every count in its place; and C#'s shadow budgets decide which lights draw shadows.
+// The lighting spec from C# (ticket 22, and ticket 26's colour grade): every component and scene resource the lighting
+// tickets added or grew round-trips between C++ and C#, field by field, both ways through the ECS, with every field off
+// its default; an instance list made in C# draws as one instanced draw and draws again when C# replaces it; C# reads
+// RendererStats whole, and every count in its place; and C#'s shadow budgets decide which lights draw shadows.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -119,6 +119,21 @@ namespace
         camera.exposure = 1.5f;
         camera.tonemapper = Tonemapper::Aces;
         camera.bloom = {0.2f, 0.3f};
+        camera.anamorphicStreaks = {0.15f, 0.6f, {0.3f, 0.5f, 1.0f, 0.7f}};
+        camera.lensFlare = {0.04f, 6, 0.35f, 0.5f, 0.2f, 0.02f, AssetHandle<Image>{7, 8}, 2.5f};
+        camera.colourGrading = {5000.0f,
+                                0.2f,
+                                1.3f,
+                                {0.1f, 0.6f, 0.7f, 0.9f},
+                                {0.9f, 0.1f, 0.7f, 0.8f},
+                                0.4f,
+                                0.8f,
+                                {1.1f, 1.2f, 0.9f},
+                                {0.01f, 0.02f, 0.03f},
+                                {0.9f, 1.1f, 1.2f}};
+        camera.chromaticAberration = {0.02f};
+        camera.vignette = {0.4f, 0.3f, 0.6f, 0.2f};
+        camera.filmGrain = {0.05f, 0.5f, 2.0f};
         camera.ambientOcclusion = {true, 0.8f, 1.7f};
         camera.reflections = {true, 0.75f, 30.0f, 0.25f, 0.45f};
         camera.debugView = CameraDebugView::ReflectionConfidence;

@@ -1,8 +1,9 @@
-// The Output pass's exposure and tonemappers on OpenGL (ADR-0049): flat colours through each tonemapper held to the C++
-// mirror in Core/Tonemapping.hpp, and golden images: one lit scene with highlights well over 1, drawn into an image
-// target through each tonemapper and at three exposures, and compared with the committed PNG in OpenGL/goldens under
-// RendererTest::GoldenTolerance. Run the GL tests with FENRIR_UPDATE_GOLDENS=1 to write the goldens again, after a
-// change meant to alter them; look at each before committing it.
+// The Output pass's exposure, colour grade and tonemappers on OpenGL (ADR-0049, ADR-0059): flat colours through each
+// tonemapper, and through each control of the grade, held to the C++ mirrors in Core/Tonemapping.hpp and
+// Core/ColourGrading.hpp, and golden images: one lit scene with highlights well over 1, drawn into an image target
+// through each tonemapper, at three exposures and under one grade, and compared with the committed PNG in
+// OpenGL/goldens under RendererTest::GoldenTolerance. Run the GL tests with FENRIR_UPDATE_GOLDENS=1 to write the
+// goldens again, after a change meant to alter them; look at each before committing it.
 
 #include <array>
 #include <cmath>
@@ -12,95 +13,61 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "Core/ColourGrading.hpp"
 #include "Core/Tonemapping.hpp"
 #include "GlScene.hpp"
 #include "GoldenImages.hpp"
+#include "GoldenScene.hpp"
 
 using Fenrir::GlProbe;
 using Fenrir::RendererProbe;
 using Fenrir::Math::Vec3;
+using GlTest::DrawGoldenScene;
 using GlTest::GlScene;
 
 namespace
 {
-    constexpr std::uint32_t Width = 96;
-    constexpr std::uint32_t Height = 64;
-
-    /** @brief An entity at `position`, scaled by `scale`, drawing `mesh` with `material`. */
-    void Place(GlScene& test, Fenrir::AssetHandle<Fenrir::Mesh> mesh, Fenrir::AssetHandle<Fenrir::Material> material,
-               Vec3 position, float scale)
-    {
-        Fenrir::Entity entity = test.app.GetActiveScene().GetEntityList().CreateEntity();
-        Fenrir::Transform& transform = entity.GetComponent<Fenrir::Transform>();
-        transform.pos = position;
-        transform.scale = Vec3(scale);
-        entity.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{mesh, material, true});
-    }
-
-    /** @brief A material on `shader` with base colour `colour`. */
-    Fenrir::AssetHandle<Fenrir::Material> Material(GlScene& test, const char* shader, Fenrir::Colour colour)
-    {
-        Fenrir::AssetStore& store = test.assets.Store();
-        const auto material = store.CreateMaterial(store.Load<Fenrir::Shader>(shader, Fenrir::AssetOwner::App()).handle,
-                                                   Fenrir::AssetOwner::App());
-        store.SetColour(material, "baseColour", colour);
-        return material;
-    }
-
     /**
-     * @brief The golden scene, drawn by one camera through `tonemapper` at `exposure` EV into a 96 x 64 image, read
-     * back as it stores it. Above: a red dielectric, a white one and a gold metal sphere under a sun of intensity 4,
-     * whose highlights reach well over 1. Below: unlit orange patches from a quarter to eight times (1, 0.45, 0.1), one
-     * stop apart. Behind: a dark blue.
+     * @brief A grade with every control off its default: warmer, a little magenta, more contrast, teal shadows and
+     * magenta highlights split a stop under mid grey, a little more saturation and a CDL trim.
      */
-    RendererTest::Rgba8Image DrawGoldenScene(Fenrir::Tonemapper tonemapper, float exposure)
+    Fenrir::ColourGrading NonTrivialGrade()
     {
-        GlScene test;
-        test.RequireOpenGL();
-        Fenrir::AssetStore& store = test.assets.Store();
-        Fenrir::ImageData data;
-        data.width = Width;
-        data.height = Height;
-        const auto image = store.Add<Fenrir::Image>(std::move(data), Fenrir::AssetOwner::App());
-        Fenrir::Camera& camera = test.AddCamera();
-        camera.target = Fenrir::ImageTarget{image};
-        camera.background = Fenrir::ColourBackground{Fenrir::Colour{0.02f, 0.03f, 0.06f, 1.0f}};
-        camera.tonemapper = tonemapper;
-        camera.exposure = exposure;
+        Fenrir::ColourGrading grading;
+        grading.temperature = 7500.0f;
+        grading.tint = 0.15f;
+        grading.contrast = 1.3f;
+        grading.shadowTint = Fenrir::Colour{0.1f, 0.6f, 0.7f, 1.0f};
+        grading.highlightTint = Fenrir::Colour{0.9f, 0.3f, 0.7f, 1.0f};
+        grading.balance = 0.25f;
+        grading.saturation = 1.15f;
+        grading.slope = Vec3(1.05f, 1.0f, 0.95f);
+        grading.offset = Vec3(0.0f, 0.0f, 0.005f);
+        grading.power = Vec3(1.0f, 1.05f, 1.0f);
+        return grading;
+    }
 
-        // The sun travels down, back and to the right, from over the camera's left shoulder.
-        Fenrir::Entity sun = test.app.GetActiveScene().GetEntityList().CreateEntity();
-        sun.GetComponent<Fenrir::Transform>().rot =
-            Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(-30.0f), Vec3(0.0f, 1.0f, 0.0f)) *
-            Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(-40.0f), Vec3(1.0f, 0.0f, 0.0f));
-        sun.AddComponent<Fenrir::DirectionalLight>(Fenrir::DirectionalLight{Fenrir::Colour::White, 4.0f});
-        test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour{0.1f, 0.1f, 0.1f, 1.0f}});
+    /** @brief The core's copy of `grading`, as the facade makes it. */
+    Fenrir::Render::ColourGradingSettings ToCore(const Fenrir::ColourGrading& grading)
+    {
+        Fenrir::Render::ColourGradingSettings settings;
+        settings.temperature = grading.temperature;
+        settings.tint = grading.tint;
+        settings.contrast = grading.contrast;
+        settings.shadowTint = Vec3(grading.shadowTint.r, grading.shadowTint.g, grading.shadowTint.b);
+        settings.highlightTint = Vec3(grading.highlightTint.r, grading.highlightTint.g, grading.highlightTint.b);
+        settings.balance = grading.balance;
+        settings.saturation = grading.saturation;
+        settings.slope = grading.slope;
+        settings.offset = grading.offset;
+        settings.power = grading.power;
+        return settings;
+    }
 
-        const auto sphere = store.Add<Fenrir::Mesh>(RendererTest::Sphere(), Fenrir::AssetOwner::App());
-        const auto red = Material(test, "builtin:lit", Fenrir::Colour{0.8f, 0.05f, 0.05f, 1.0f});
-        store.SetFloat(red, "roughness", 0.3f);
-        const auto white = Material(test, "builtin:lit", Fenrir::Colour{0.9f, 0.9f, 0.9f, 1.0f});
-        store.SetFloat(white, "roughness", 0.6f);
-        const auto gold = Material(test, "builtin:lit", Fenrir::Colour{1.0f, 0.78f, 0.34f, 1.0f});
-        store.SetFloat(gold, "metallic", 1.0f);
-        store.SetFloat(gold, "roughness", 0.25f);
-        Place(test, sphere, red, Vec3(-1.6f, 0.5f, -4.0f), 1.3f);
-        Place(test, sphere, white, Vec3(0.0f, 0.5f, -4.0f), 1.3f);
-        Place(test, sphere, gold, Vec3(1.6f, 0.5f, -4.0f), 1.3f);
-
-        const auto patch = store.Add<Fenrir::Mesh>(RendererTest::Quad(0.8f), Fenrir::AssetOwner::App());
-        for (int stop = 0; stop < 6; ++stop)
-        {
-            const float scale = std::exp2(static_cast<float>(stop - 2));
-            const auto orange =
-                Material(test, "builtin:unlit", Fenrir::Colour{1.0f * scale, 0.45f * scale, 0.1f * scale, 1.0f});
-            Place(test, patch, orange, Vec3(-2.5f + static_cast<float>(stop), -1.35f, -4.0f), 1.0f);
-        }
-
-        test.RunFrame();
-        INFO("no GL error or other error was logged");
-        REQUIRE(test.messages->errors.empty());
-        return test.ReadTarget(image);
+    /** @brief Sets a camera's grade to NonTrivialGrade. */
+    void Graded(Fenrir::Camera& camera)
+    {
+        camera.colourGrading = NonTrivialGrade();
     }
 
     void RequireGolden(std::string_view name, const RendererTest::Rgba8Image& frame)
@@ -137,6 +104,90 @@ TEST_CASE("The lit scene through AgX two stops under matches its golden image", 
 TEST_CASE("The lit scene through AgX two stops over matches its golden image", "[renderer][gl][golden]")
 {
     RequireGolden("tonemap-agx-plus-2ev", DrawGoldenScene(Fenrir::Tonemapper::AgX, 2.0f));
+}
+
+TEST_CASE("The lit scene through AgX under a grade matches its golden image", "[renderer][gl][golden]")
+{
+    RequireGolden("tonemap-agx-graded", DrawGoldenScene(Fenrir::Tonemapper::AgX, 0.0f, Graded));
+}
+
+TEST_CASE("A grade changes the lit scene", "[renderer][gl][golden]")
+{
+    // Against the golden comparison itself, so a grade silently skipped fails here too.
+    const RendererTest::Rgba8Image plain = DrawGoldenScene(Fenrir::Tonemapper::AgX, 0.0f);
+    const RendererTest::Rgba8Image graded = DrawGoldenScene(Fenrir::Tonemapper::AgX, 0.0f, Graded);
+    INFO("the graded scene matches the plain one under the golden comparison");
+    REQUIRE_FALSE(RendererTest::CompareWithGolden(plain, graded).Matches({}));
+}
+
+TEST_CASE("Output's colour grade matches its C++ mirror, through the tonemapper", "[renderer][gl][grading]")
+{
+    // As for the tonemappers below: a view of nothing but one flat linear colour, graded by each control on its own
+    // and by all of them, after the exposure and before the tonemapper, against the mirror's colour sRGB-encoded.
+    std::array<Fenrir::ColourGrading, 9> gradings{};
+    gradings[0].temperature = 4000.0f;
+    gradings[1].temperature = 12000.0f;
+    gradings[2].tint = -0.4f;
+    gradings[3].contrast = 1.6f;
+    gradings[4].shadowTint = Fenrir::Colour{0.1f, 0.6f, 0.7f, 1.0f};
+    gradings[4].highlightTint = Fenrir::Colour{0.9f, 0.1f, 0.7f, 1.0f};
+    gradings[5] = gradings[4];
+    gradings[5].balance = -0.6f;
+    gradings[6].saturation = 0.3f;
+    gradings[7].slope = Vec3(1.2f, 1.0f, 0.8f);
+    gradings[7].offset = Vec3(0.02f, -0.05f, 0.1f);
+    gradings[7].power = Vec3(1.1f, 1.0f, 2.2f);
+    gradings[8] = NonTrivialGrade();
+    const std::array<Vec3, 4> colours{Vec3(0.18f), Vec3(0.02f, 0.015f, 0.01f), Vec3(4.0f, 1.0f, 0.25f),
+                                      Vec3(0.05f, 0.4f, 1.5f)};
+    // None at half a stop under shows the grade itself, clamped; AgX at a stop over, through a curve.
+    struct Mapping
+    {
+        Fenrir::Tonemapper tonemapper;
+        float exposure;
+    };
+    constexpr std::array<Mapping, 2> mappings{Mapping{Fenrir::Tonemapper::None, -0.5f},
+                                              Mapping{Fenrir::Tonemapper::AgX, 1.0f}};
+    const auto encode = [](float linear) {
+        return linear <= 0.0031308f ? linear * 12.92f : 1.055f * std::pow(linear, 1.0f / 2.4f) - 0.055f;
+    };
+    for (std::size_t g = 0; g < gradings.size(); ++g)
+    {
+        for (const Vec3 colour : colours)
+        {
+            for (const Mapping& mapping : mappings)
+            {
+                GlScene test;
+                test.RequireOpenGL();
+                Fenrir::ImageData data;
+                data.width = 4;
+                data.height = 4;
+                const auto image = test.assets.Store().Add<Fenrir::Image>(std::move(data), Fenrir::AssetOwner::App());
+                Fenrir::Camera& camera = test.AddCamera();
+                camera.target = Fenrir::ImageTarget{image};
+                camera.background = Fenrir::ColourBackground{Fenrir::Colour{colour.r, colour.g, colour.b, 1.0f}};
+                camera.tonemapper = mapping.tonemapper;
+                camera.exposure = mapping.exposure;
+                camera.colourGrading = gradings[g];
+
+                test.RunFrame();
+                const GlProbe::Image pixels = GlProbe::Read(RendererProbe::Device(test.renderer),
+                                                            RendererProbe::ImageTexture(test.renderer, image));
+
+                const Vec3 graded = Fenrir::Render::GradeColour(
+                    ToCore(gradings[g]), colour * Fenrir::Render::ExposureScale(mapping.exposure));
+                const Vec3 expected =
+                    Fenrir::Render::Tonemap(static_cast<Fenrir::Render::Tonemapper>(mapping.tonemapper), graded);
+                const GlProbe::Pixel actual = pixels.At(2, 2);
+                INFO("grading " << g << ", tonemapper " << static_cast<int>(mapping.tonemapper) << ", colour ("
+                                << colour.r << ", " << colour.g << ", " << colour.b << ") at " << mapping.exposure
+                                << " EV: the GPU stored (" << actual[0] << ", " << actual[1] << ", " << actual[2]
+                                << "), the mirror encodes to (" << encode(expected.r) << ", " << encode(expected.g)
+                                << ", " << encode(expected.b) << ")");
+                REQUIRE(GlProbe::Near(actual, {encode(expected.r), encode(expected.g), encode(expected.b), 1.0f}));
+            }
+        }
+    }
 }
 
 TEST_CASE("Output's tonemappers and exposure match their C++ mirror", "[renderer][gl][tonemapping]")

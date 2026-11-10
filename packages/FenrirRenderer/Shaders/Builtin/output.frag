@@ -1,15 +1,23 @@
 #version 460
-// The Output pass (ADR-0019, ADR-0049): the view's linear HDR SceneColor scaled by its camera's exposure and mapped by
-// its tonemapper into [0, 1], drawn into the view's viewport of its render target. The window's backbuffer and image
-// targets are sRGB, so the write encodes it. With the MSAA key, SceneColor is multisampled and this resolves it: each
-// pixel is the mean of its samples, before the tonemap. The tonemappers are mirrored step for step in C++
-// (src/Core/Tonemapping.cpp), which the CPU tests check against published values and the GL tests hold this to; a
-// change to one is a change to both. Matrices are written column by column. With the OCCLUSION key (a camera's
-// grey debug views), the texture is single-sampled, and its `greyChannel` is drawn as grey as it is: no exposure, no
-// tonemap. With the REFLECTIONS key (CameraDebugView::Reflections, ADR-0056), it is the view's reflection hit target,
-// and the colour is last frame's history at each hit's UV, its sharpest level, times the hit's confidence: what a
-// mirror would blend, exposed and tonemapped. The hit target is read texel by texel, as Fenrir/Lighting.glsl reads it,
-// so neighbouring hits' UVs are never blended. REFLECTIONS overrides the other keys.
+#extension GL_GOOGLE_include_directive : require
+// The Output pass (ADR-0019, ADR-0049, ADR-0059): the view's linear HDR SceneColor scaled by its camera's exposure,
+// graded by its colour grade and mapped by its tonemapper into [0, 1], drawn into the view's viewport of its render
+// target. The window's backbuffer and image targets are sRGB, so the write encodes it. With the MSAA key, SceneColor
+// is multisampled and this resolves it: each pixel is the mean of its samples, before the tonemap. The tonemappers and
+// the grade are mirrored step for step in C++ (src/Core/Tonemapping.cpp, src/Core/ColourGrading.cpp), which the CPU
+// tests check against published values and the GL tests hold this to; a change to one is a change to both. Matrices
+// are written column by column. With the OCCLUSION key (a camera's grey debug views), the texture is single-sampled,
+// and its `greyChannel` is drawn as grey as it is: no exposure, no grade, no tonemap. With the REFLECTIONS key
+// (CameraDebugView::Reflections, ADR-0056), it is the view's reflection hit target, and the colour is last frame's
+// history at each hit's UV, its sharpest level, times the hit's confidence: what a mirror would blend, exposed, graded
+// and tonemapped. The hit target is read texel by texel, as Fenrir/Lighting.glsl reads it, so neighbouring hits' UVs
+// are never blended. REFLECTIONS overrides the other keys. With the ABERRATION key (a camera's chromatic aberration),
+// each channel is read at its own point, red nearer the view's centre and blue further out, so red fringes outwards
+// and blue inwards; under MSAA red and blue are read between texels as the single-sampled sampler reads them, the
+// four texels round each resolved and blended bilinearly, nine resolves instead of one. The vignette, a
+// multiply after the exposure, and the film grain, after the tonemap, follow every variant but OCCLUSION, and are
+// mirrored in src/Core/CameraEffects.cpp as the grade is.
+#include "Fenrir/Constants.glsl"
 
 #if defined(REFLECTIONS)
 // r, g: the hit's UV in last frame's view; b: its confidence. At the view's size.
@@ -29,6 +37,28 @@ layout(set = 1, binding = 0, std140) uniform OutputData
     uint tonemapper;
     // With OCCLUSION, the channel drawn as grey: 0 red, 2 blue.
     uint greyChannel;
+    // Whether the colour is graded: 0 for an identity grade, which is skipped. The rest is Render::ColourGrade.
+    uint grade;
+    // Linear Rec. 709 to itself, from the white the camera names to D65.
+    mat3 whiteBalance;
+    // Each tint at unit luminance.
+    vec3 shadowTint;
+    float contrast;
+    vec3 highlightTint;
+    // The split between the tints, in stops from mid grey.
+    float split;
+    vec3 slope;
+    float saturation;
+    vec3 offset;
+    vec3 power;
+    // With ABERRATION, how far red and blue are read apart, as a fraction of the half-diagonal at the corners.
+    float aberration;
+    // The vignette's intensity (0 off), radius, smoothness and roundness.
+    vec4 vignette;
+    // The grain's intensity (0 off), response and size, in pixels.
+    vec3 grain;
+    // The frame's index, which the grain's noise is a hash of with each cell.
+    uint frameIndex;
 } settings;
 
 layout(location = 0) in vec2 vNdc;
@@ -99,6 +129,78 @@ vec3 Aces(vec3 colour)
     return clamp(outputMatrix * (a / b), 0.0, 1.0);
 }
 
+// The colour grade (ADR-0059), on the exposed linear colour: white balance, contrast in log2 around mid grey, split
+// toning by luminance in log2, saturation around luminance, then the ASC CDL with negatives clamped before its power.
+vec3 Grade(vec3 colour)
+{
+    if (settings.grade == 0u)
+    {
+        return colour;
+    }
+    const float midGrey = 0.18;
+    // How many stops either side of the split the shadow tint crosses into the highlight tint over.
+    const float splitWidth = 4.0;
+    colour = settings.whiteBalance * colour;
+    colour = midGrey * pow(max(colour / midGrey, vec3(1e-10)), vec3(settings.contrast));
+    float stops = log2(max(dot(colour, FenrirLuminance), 1e-10) / midGrey);
+    float highlight = smoothstep(settings.split - splitWidth, settings.split + splitWidth, stops);
+    colour *= mix(settings.shadowTint, settings.highlightTint, highlight);
+    colour = mix(vec3(dot(colour, FenrirLuminance)), colour, settings.saturation);
+    return pow(max(colour * settings.slope + settings.offset, vec3(0.0)), settings.power);
+}
+
+// The vignette (ADR-0059): 1 - intensity x smoothstep(radius, radius + smoothness, d), where d is the distance from
+// the centre, 1 at the corners, in halves of the view's height when round and in each axis' own halves when not.
+vec3 Vignette(vec3 colour, vec2 uv, vec2 size)
+{
+    float intensity = settings.vignette.x;
+    float radius = settings.vignette.y;
+    float smoothness = settings.vignette.z;
+    float roundness = settings.vignette.w;
+    if (intensity <= 0.0)
+    {
+        return colour;
+    }
+    vec2 scale = vec2(1.0 + (size.x / size.y - 1.0) * roundness, 1.0);
+    float distance = length((uv - 0.5) * scale) / length(0.5 * scale);
+    float edge = radius + max(smoothness, 1e-4);
+    return colour * (1.0 - intensity * smoothstep(radius, edge, distance));
+}
+
+// The grain's noise for one cell and frame: two uniforms from a PCG3D hash (Jarzynski and Olano 2020), summed into a
+// triangle on [-1, 1).
+float GrainNoise(uvec2 cell, uint frame)
+{
+    uvec3 v = uvec3(cell, frame) * 1664525u + 1013904223u;
+    v.x += v.y * v.z;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v ^= v >> 16u;
+    v.x += v.y * v.z;
+    v.y += v.z * v.x;
+    return float((v.x >> 8u) + (v.y >> 8u)) * (1.0 / 16777216.0) - 1.0;
+}
+
+// Film grain (ADR-0059), on the tonemapped colour: added in a 2.2 gamma encoding, weighted towards the mid-tones of
+// its encoded luminance by the response, the same in every channel.
+vec3 Grain(vec3 colour, vec2 uv, vec2 size)
+{
+    float intensity = settings.grain.x;
+    float response = settings.grain.y;
+    float cellSize = settings.grain.z;
+    if (intensity <= 0.0)
+    {
+        return colour;
+    }
+    uvec2 pixel = uvec2(floor(uv * size));
+    uvec2 cell = uvec2(floor(vec2(pixel) / max(cellSize, 1.0)));
+    float noise = GrainNoise(cell, settings.frameIndex);
+    vec3 encoded = pow(max(colour, vec3(0.0)), vec3(1.0 / 2.2));
+    float luminance = clamp(dot(encoded, FenrirLuminance), 0.0, 1.0);
+    float weight = 1.0 + (4.0 * luminance * (1.0 - luminance) - 1.0) * response;
+    return pow(clamp(encoded + intensity * weight * noise, 0.0, 1.0), vec3(2.2));
+}
+
 vec3 Tonemap(vec3 colour)
 {
     switch (settings.tonemapper)
@@ -114,6 +216,72 @@ vec3 Tonemap(vec3 colour)
     }
 }
 
+// The exposed colour through the vignette, the grade, the tonemapper and the grain, in ADR-0059's order.
+vec3 Finish(vec3 colour, vec2 uv, vec2 size)
+{
+    colour = Vignette(colour * settings.exposureScale, uv, size);
+    return Grain(Tonemap(Grade(colour)), uv, size);
+}
+
+#if !defined(REFLECTIONS) && !defined(OCCLUSION)
+#ifdef MSAA
+// The mean of the samples of SceneColor's `texel`, held to its edges: the resolve.
+vec3 ResolveTexel(ivec2 texel, ivec2 size)
+{
+    texel = clamp(texel, ivec2(0), size - 1);
+    int samples = textureSamples(sceneColour);
+    vec3 sum = vec3(0.0);
+    for (int i = 0; i < samples; ++i)
+    {
+        sum += texelFetch(sceneColour, texel, i).rgb;
+    }
+    return sum / float(samples);
+}
+
+// The resolve of SceneColor's texel at `uv`.
+vec3 Resolve(vec2 uv, ivec2 size)
+{
+    return ResolveTexel(ivec2(uv * vec2(size)), size);
+}
+
+#ifdef ABERRATION
+// SceneColor resolved at `uv` between texels, as the Output sampler reads a single-sampled SceneColor: the four
+// texels round it resolved and blended bilinearly, clamped at the edges.
+vec3 ResolveBilinear(vec2 uv, ivec2 size)
+{
+    vec2 position = uv * vec2(size) - 0.5;
+    ivec2 texel = ivec2(floor(position));
+    vec2 weight = position - floor(position);
+    vec3 top = mix(ResolveTexel(texel, size), ResolveTexel(texel + ivec2(1, 0), size), weight.x);
+    vec3 bottom = mix(ResolveTexel(texel + ivec2(0, 1), size), ResolveTexel(texel + ivec2(1, 1), size), weight.x);
+    return mix(top, bottom, weight.y);
+}
+#endif
+#endif
+
+// SceneColor at `uv`, resolved under MSAA.
+vec3 Read(vec2 uv, ivec2 size)
+{
+#ifdef MSAA
+    return Resolve(uv, size);
+#else
+    return texture(sceneColour, uv).rgb;
+#endif
+}
+
+#ifdef ABERRATION
+// SceneColor at `uv` between texels, as the sampler reads it, resolved under MSAA: where aberration reads red and blue.
+vec3 ReadBetween(vec2 uv, ivec2 size)
+{
+#ifdef MSAA
+    return ResolveBilinear(uv, size);
+#else
+    return texture(sceneColour, uv).rgb;
+#endif
+}
+#endif
+#endif
+
 void main()
 {
     // NDC +y is up and a texture's row 0 is its top row, on every backend (ADR-0016).
@@ -122,23 +290,23 @@ void main()
     ivec2 size = textureSize(reflectionHits, 0);
     vec4 hit = texelFetch(reflectionHits, clamp(ivec2(uv * vec2(size)), ivec2(0), size - 1), 0);
     vec3 colour = hit.b > 0.0 ? textureLod(sceneHistory, hit.rg, 0.0).rgb * hit.b : vec3(0.0);
-    outColour = vec4(Tonemap(colour * settings.exposureScale), 1.0);
+    outColour = vec4(Finish(colour, uv, vec2(size)), 1.0);
 #elif defined(OCCLUSION)
     outColour = vec4(vec3(texture(sceneColour, uv)[settings.greyChannel]), 1.0);
 #else
 #ifdef MSAA
     ivec2 size = textureSize(sceneColour);
-    ivec2 texel = clamp(ivec2(uv * vec2(size)), ivec2(0), size - 1);
-    int samples = textureSamples(sceneColour);
-    vec3 sum = vec3(0.0);
-    for (int i = 0; i < samples; ++i)
-    {
-        sum += texelFetch(sceneColour, texel, i).rgb;
-    }
-    vec3 colour = sum / float(samples);
 #else
-    vec3 colour = texture(sceneColour, uv).rgb;
+    ivec2 size = textureSize(sceneColour, 0);
 #endif
-    outColour = vec4(Tonemap(colour * settings.exposureScale), 1.0);
+#ifdef ABERRATION
+    // Red read nearer the centre shows further out; blue read further out shows nearer in.
+    vec2 fromCentre = uv - 0.5;
+    vec3 colour = vec3(ReadBetween(0.5 + fromCentre * (1.0 - settings.aberration), size).r, Read(uv, size).g,
+                       ReadBetween(0.5 + fromCentre * (1.0 + settings.aberration), size).b);
+#else
+    vec3 colour = Read(uv, size);
+#endif
+    outColour = vec4(Finish(colour, uv, vec2(size)), 1.0);
 #endif
 }

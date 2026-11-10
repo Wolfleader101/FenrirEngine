@@ -10,7 +10,13 @@ scene's hand checks are collected in one place after them, under Hand checks.
 ## The Lighting window
 
 Every scene shows the same ImGui window, Lighting (`src/LightingPanel.cpp`): the cameras' exposure (EV stops),
-tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius), ambient occlusion (GTAO: on, which it is
+tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius), anamorphic streaks (ADR-0059: intensity
+and length; the tint is the scene's), the lens flare's intensity and the lens dirt's (ADR-0059; the ghosts and halo
+are the scene's, and a scene that sets no dirt image reads the one the demo generates at startup with
+`Fenrir::GenerateLensDirt`), colour grade (ADR-0059: white balance as a
+temperature and tint, contrast, the shadow and highlight tints and their balance, saturation, and a button for no
+grade), camera effects (ADR-0059: chromatic aberration, the vignette's intensity and radius, and film grain's
+intensity; the vignette's shape and the grain's response and size are the scene's), ambient occlusion (GTAO: on, which it is
 by default here, its radius and strength) and screen-space reflections (ADR-0056: on, off unless the scene turns them
 on, their intensity, max distance, thickness and roughness cutoff, and buttons for their two debug views), the sun's
 shadows (on, their distance and their normal and slope biases,
@@ -271,8 +277,12 @@ The streets are Poly Haven's Asphalt 01, drawn by the demo's street shader (`sha
 
 The sky is the demo's own city glow (a dark blue zenith over a magenta and orange light-pollution glow from the
 horizon), or with S, Poly Haven's Kloppenheim 07 (Pure Sky), an overcast night lit from below by distant towns. Both
-are drawn at 0.03 intensity, and there is no sun. A strong, wide bloom (0.3 at radius 0.85), GTAO (1.5 m) and PBR
-Neutral finish it, at -0.5 EV. PBR Neutral keeps the neon saturated, where AgX (T) turns it pastel and lifts the dim
+are drawn at 0.03 intensity, and there is no sun. A strong, wide bloom (0.3 at radius 0.85), long blue anamorphic streaks (0.1 at length 0.85) from the signs and
+headlights, a subtle lens flare (0.03) with lens dirt (3), ambientCG's Surface Imperfections 003 read in greyscale
+when fetched and the generated dirt otherwise, GTAO (1.5 m), a grade
+(6000 K, contrast 1.15, teal shadows and magenta highlights split a little under mid grey), a light vignette (0.3 from
+radius 0.45), a little chromatic aberration (0.006), fine film grain (0.04) and PBR Neutral finish it,
+at -0.5 EV. PBR Neutral keeps the neon saturated, where AgX (T) turns it pastel and lifts the dim
 spill on the upper walls towards dusk.
 
 The window's Scene part has:
@@ -487,6 +497,11 @@ Hand checks, on OpenGL:
 - Neon streaks on the wet streets: the signs and headlights mirror in the puddles and smear along the damp asphalt
   between them. M dries the streets, and the streaks go.
 - The signs glow, with bloom round them; their light falls on the walls and sidewalks below them in their colour.
+- Anamorphic streaks: the signs and headlights throw long, thin horizontal lines, blue, and dim surfaces show
+  none. The Lighting window's streak intensity at 0 takes them away.
+- Lens flare: turning towards a bright sign throws faint coloured ghosts across the view, on the far side of its
+  centre, and lights up the dirt on the lens round the sign. The flare intensity at 0 takes the ghosts away, and the
+  lens dirt at 0 the smudges.
 - From high above, the skyline glows: edge-lit towers, coloured washes up their walls, beacons, and the glow behind.
 - The headlights light the road ahead of each car, and move with it.
 - The frame rate stays smooth flying down the streets with the free-fly camera; distant facades and signs do not
@@ -494,6 +509,12 @@ Hand checks, on OpenGL:
 - Flying past a lit window, the room behind it shifts with parallax: its back wall, side walls, floor and ceiling
   light.
 - G to the light clusters' heat: no red (256 lights) anywhere along the streets.
+- The colour grade (ADR-0059): teal in the shadowed streets and magenta on the lit walls; No grade in the Lighting
+  window takes them away. Warming and cooling the white balance, raising the contrast and moving the balance change
+  the mood without clipping the signs or crushing the streets.
+- Camera effects (ADR-0059): the corners fall off gently, signs near the screen's edges fringe red outside and blue
+  inside, and fine grain shimmers over the dark streets without showing in the bright signs. Each at 0 in the
+  Lighting window takes it away.
 - Without the fetched assets: dark wet streets, the city and its lights, and an amber message naming
   `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
 - Reflections (ADR-0056), at night: the wet streets mirror the edge strips, sign boards and lit windows, streaked by

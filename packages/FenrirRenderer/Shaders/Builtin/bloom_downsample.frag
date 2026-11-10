@@ -1,4 +1,5 @@
 #version 460
+#extension GL_GOOGLE_include_directive : require
 // A BloomDownsample pass (ADR-0049): its source, SceneColor or the bloom level above, filtered into a level at half its
 // size with Jimenez's 13-tap filter (CoD: Advanced Warfare, SIGGRAPH 2014). Each output pixel sits on a corner of its
 // source's texels; thirteen bilinear taps there and one and two texels out make five overlapping 2 x 2 boxes, the
@@ -9,6 +10,11 @@
 // which keeps its energy. With the MSAA key it is a multisampled SceneColor: the 6 x 6 texels under the taps are each
 // the mean of their samples, read with texelFetch and mirrored at the edges as the sampler mirrors, and the taps
 // averaged from them as bilinear taps would be.
+// With the HORIZONTAL key it is a StreakDownsample pass (ADR-0059): bloom's level 0 or the streak level above, filtered
+// into a level at half its width and the same height. Each output pixel sits on a corner between two source texels
+// across and on a texel's centre up and down; three bilinear taps there and two texels either side, weighted 1/4, 1/2
+// and 1/4, cover six texels of one row (1 1 2 2 1 1, over 8), so the weights sum to 1 and the level keeps the energy.
+#include "Fenrir/Constants.glsl"
 
 #ifdef MSAA
 layout(set = 2, binding = 0) uniform sampler2DMS source;
@@ -24,6 +30,9 @@ layout(set = 1, binding = 0, std140) uniform BloomData
     float blend;
     // 1 for the Karis average.
     uint karis;
+    // The upsample's tint and dirt intensity (unused here).
+    vec3 tint;
+    float dirtIntensity;
 } bloom;
 
 layout(location = 0) in vec2 vNdc;
@@ -31,7 +40,7 @@ layout(location = 0) out vec4 outColour;
 
 float Luma(vec3 colour)
 {
-    return dot(colour, vec3(0.2126, 0.7152, 0.0722));
+    return dot(colour, FenrirLuminance);
 }
 
 #ifdef MSAA
@@ -90,6 +99,9 @@ void main()
 #else
     centre = uv;
 #endif
+#ifdef HORIZONTAL
+    outColour = vec4(0.25 * Tap(-2, 0) + 0.5 * Tap(0, 0) + 0.25 * Tap(2, 0), 1.0);
+#else
     vec3 a = Tap(-2, -2), b = Tap(0, -2), c = Tap(2, -2);
     vec3 d = Tap(-2, 0), e = Tap(0, 0), f = Tap(2, 0);
     vec3 g = Tap(-2, 2), h = Tap(0, 2), i = Tap(2, 2);
@@ -111,4 +123,5 @@ void main()
         total += weight;
     }
     outColour = vec4(sum / total, 1.0);
+#endif
 }

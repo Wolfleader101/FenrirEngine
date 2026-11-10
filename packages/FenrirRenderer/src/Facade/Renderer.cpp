@@ -72,6 +72,65 @@ namespace Fenrir
             return static_cast<Render::Tonemapper>(tonemapper);
         }
 
+        /** @brief A colour's linear RGB, its alpha ignored. */
+        Math::Vec3 ToLinearRgb(const Colour& colour)
+        {
+            return Math::Vec3(colour.r, colour.g, colour.b);
+        }
+
+        /** @brief The core's copy of a camera's anamorphic streaks: their tint as linear RGB, its alpha ignored. */
+        Render::AnamorphicStreaksSettings ToCore(const AnamorphicStreaks& streaks)
+        {
+            return {streaks.intensity, streaks.length, ToLinearRgb(streaks.tint)};
+        }
+
+        /** @brief The core's copy of a camera's lens flare, without its dirt, whose key ReadViews sets once prepared.
+         */
+        Render::LensFlareSettings ToCore(const LensFlare& flare)
+        {
+            Render::LensFlareSettings settings;
+            settings.intensity = flare.intensity;
+            settings.ghostCount = flare.ghostCount;
+            settings.ghostSpacing = flare.ghostSpacing;
+            settings.haloRadius = flare.haloRadius;
+            settings.haloWidth = flare.haloWidth;
+            settings.chromaticOffset = flare.chromaticOffset;
+            settings.dirtIntensity = flare.dirtIntensity;
+            return settings;
+        }
+
+        /** @brief The core's copy of a camera's colour grade: its tints as linear RGB, their alpha ignored. */
+        Render::ColourGradingSettings ToCore(const ColourGrading& grading)
+        {
+            Render::ColourGradingSettings settings;
+            settings.temperature = grading.temperature;
+            settings.tint = grading.tint;
+            settings.contrast = grading.contrast;
+            settings.shadowTint = ToLinearRgb(grading.shadowTint);
+            settings.highlightTint = ToLinearRgb(grading.highlightTint);
+            settings.balance = grading.balance;
+            settings.saturation = grading.saturation;
+            settings.slope = grading.slope;
+            settings.offset = grading.offset;
+            settings.power = grading.power;
+            return settings;
+        }
+
+        Render::ChromaticAberrationSettings ToCore(const ChromaticAberration& aberration)
+        {
+            return {aberration.intensity};
+        }
+
+        Render::VignetteSettings ToCore(const Vignette& vignette)
+        {
+            return {vignette.intensity, vignette.radius, vignette.smoothness, vignette.roundness};
+        }
+
+        Render::FilmGrainSettings ToCore(const FilmGrain& grain)
+        {
+            return {grain.intensity, grain.response, grain.size};
+        }
+
         /** @brief The core's copy of a camera's debug view: the same values in the same order. */
         Render::ViewDebug ToCore(CameraDebugView debugView)
         {
@@ -182,6 +241,37 @@ namespace Fenrir
             {
                 scene.PrepareImage(KeyOf(handle), revision, *data);
             }
+        }
+
+        /**
+         * @brief Whether a camera's lens dirt image is ready to read: a flat image with pixels, uploaded now if it is
+         * new or changed. Anything else (a cubemap, a render target, an image with no pixels) is no dirt, logged once.
+         */
+        bool PrepareLensDirt(Detail::RendererState& state, const AssetStore& store, AssetHandle<Image> handle)
+        {
+            const ImageData* data = store.TryGet(handle);
+            if (data == nullptr)
+            {
+                return false;
+            }
+            if (data->shape != ImageShape::Flat || data->pixels.empty())
+            {
+                if (state.loggedLensDirt.insert({handle.index, handle.generation}).second)
+                {
+                    state.app->Logger()->Warn("FenrirRenderer: a camera's lens dirt is image {}, which is {}, so the "
+                                              "camera has no lens dirt",
+                                              handle.index,
+                                              data->shape != ImageShape::Flat ? "a cubemap"
+                                                                              : "a render target or has no pixels");
+                }
+                return false;
+            }
+            const std::uint32_t revision = store.Revision(handle);
+            if (!state.scene->IsImageCurrent(KeyOf(handle), revision))
+            {
+                state.scene->PrepareImage(KeyOf(handle), revision, *data);
+            }
+            return true;
         }
 
         bool PrepareMaterial(Detail::RendererState& state, const AssetStore& store, AssetHandle<Material> handle)
@@ -385,7 +475,7 @@ namespace Fenrir
                 Render::PunctualLight& out = lights.emplace_back();
                 out.kind = Render::LightKind::Point;
                 out.position = Math::Vec3(GetWorldMatrix(entity)[3]);
-                out.colour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                out.colour = ToLinearRgb(light.colour) * light.intensity;
                 out.range = light.range;
                 out.castShadows = light.castShadows;
                 out.shadowNormalBias = std::max(light.shadowNormalBias, 0.0f);
@@ -404,7 +494,7 @@ namespace Fenrir
                 out.kind = Render::LightKind::Spot;
                 out.position = Math::Vec3(world[3]);
                 out.direction = glm::normalize(-Math::Vec3(world[2]));
-                out.colour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                out.colour = ToLinearRgb(light.colour) * light.intensity;
                 out.range = light.range;
                 out.innerAngle = light.innerAngle;
                 out.outerAngle = light.outerAngle;
@@ -443,7 +533,7 @@ namespace Fenrir
                 {
                     out.right = -out.right;
                 }
-                out.colour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                out.colour = ToLinearRgb(light.colour) * light.intensity;
                 out.width = light.width;
                 out.height = light.height;
                 out.twoSided = light.twoSided;
@@ -461,7 +551,7 @@ namespace Fenrir
         {
             Render::SceneLighting lighting;
             lighting.sky = sky.image;
-            lighting.skyColour = Math::Vec3(sky.colour.r, sky.colour.g, sky.colour.b);
+            lighting.skyColour = ToLinearRgb(sky.colour);
             lighting.skyIntensity = sky.intensity;
             lighting.skyRotation = sky.rotation;
 
@@ -478,7 +568,7 @@ namespace Fenrir
                 // It shines along its entity's world -Z.
                 const Math::Mat4 world = GetWorldMatrix(entity);
                 lighting.lightDirection = glm::normalize(-Math::Vec3(world[2]));
-                lighting.lightColour = Math::Vec3(light.colour.r, light.colour.g, light.colour.b) * light.intensity;
+                lighting.lightColour = ToLinearRgb(light.colour) * light.intensity;
                 // A light that lights nothing casts nothing (ADR-0050).
                 lighting.shadows.enabled = light.castShadows && light.shadowDistance > 0.0f &&
                                            glm::dot(lighting.lightColour, lighting.lightColour) > 0.0f;
@@ -719,7 +809,17 @@ namespace Fenrir
                 view.drawDebug = camera.drawDebug;
                 view.exposure = camera.exposure;
                 view.tonemapper = ToCore(camera.tonemapper);
+                view.colourGrading = ToCore(camera.colourGrading);
                 view.bloom = {camera.bloom.intensity, camera.bloom.radius};
+                view.anamorphicStreaks = ToCore(camera.anamorphicStreaks);
+                view.lensFlare = ToCore(camera.lensFlare);
+                if (!camera.lensFlare.dirt.IsEmpty() && PrepareLensDirt(state, store, camera.lensFlare.dirt))
+                {
+                    view.lensFlare.dirt = KeyOf(camera.lensFlare.dirt);
+                }
+                view.chromaticAberration = ToCore(camera.chromaticAberration);
+                view.vignette = ToCore(camera.vignette);
+                view.filmGrain = ToCore(camera.filmGrain);
                 view.ambientOcclusion = {camera.ambientOcclusion.enabled, camera.ambientOcclusion.radius,
                                          camera.ambientOcclusion.intensity};
                 view.reflections = {camera.reflections.enabled, camera.reflections.intensity,
