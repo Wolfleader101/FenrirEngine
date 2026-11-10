@@ -35,6 +35,7 @@ add_library(FenrirAssets STATIC
     src/Materials.cpp
     src/ModelLoading.cpp
     src/ModelData.cpp
+    src/MeshLods.cpp
     src/SpawnNodes.cpp
 
     src/Importers/ImageImporter.hpp
@@ -46,7 +47,7 @@ add_library(FenrirAssets STATIC
     src/Importers/Ufbx/UfbxModelImporter.cpp
 )
 
-target_link_libraries(FenrirAssets PUBLIC FenrirApp FenrirScene FenrirMath FenrirShaderContainer PRIVATE FenrirStbImage FenrirCgltf FenrirUfbx)
+target_link_libraries(FenrirAssets PUBLIC FenrirApp FenrirScene FenrirMath FenrirShaderContainer PRIVATE FenrirStbImage FenrirCgltf FenrirUfbx meshoptimizer)
 
 target_include_directories(FenrirAssets PUBLIC include PRIVATE src)
 
