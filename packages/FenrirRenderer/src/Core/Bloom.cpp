@@ -149,10 +149,10 @@ namespace Fenrir::Render
                         view.lensFlare.dirtIntensity > 0.0f;
         plan.levels = plan.bloom ? BloomLevels(view.size) : plan.flare ? FlareLevel(view.size) + 1 : 1;
         plan.streakLevels = plan.streaks ? StreakLevels(view.size) : 0;
-        plan.slots = plan.levels + (plan.bloom ? plan.levels - 1 : 0) + std::size_t{2} * plan.streakLevels +
-                     (plan.flare ? 2 : 0);
+        plan.blocks = plan.levels + (plan.bloom ? plan.levels - 1 : 0) + std::size_t{2} * plan.streakLevels +
+                      (plan.flare ? 2 : 0);
         const std::size_t composites = (plan.bloom ? 1 : 0) + (plan.flare ? 1 : 0);
-        (plan.lensDirt ? plan.lensDirtSlots : plan.slots) += composites;
+        (plan.lensDirt ? plan.lensDirtBlocks : plan.blocks) += composites;
         return plan;
     }
 
@@ -230,8 +230,8 @@ namespace Fenrir::Render
         for (const BloomView& view : views)
         {
             plans.push_back(PlanBloom(view, pipelines));
-            slots += plans.back().slots;
-            lensDirtSlots += plans.back().lensDirtSlots;
+            slots += plans.back().blocks;
+            lensDirtSlots += plans.back().lensDirtBlocks;
         }
         if (slots == 0)
         {

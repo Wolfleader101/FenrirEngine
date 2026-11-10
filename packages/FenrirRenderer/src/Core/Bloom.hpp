@@ -106,12 +106,13 @@ namespace Fenrir::Render
         /** @brief How many streak levels it downsamples and upsamples; 0 without streaks. */
         std::uint32_t streakLevels = 0;
         /**
-         * @brief How many blocks its passes take: a downsample per level and, when it blooms, an upsample per level
-         * but the last and its composite; the streaks' downsample per level, as many upsamples less one and their
-         * composite; and the flare's three. The composites under lens dirt take theirs from `lensDirtSlots`.
+         * @brief How many blocks its passes take from the plain ring: a downsample per level and, when it blooms, an
+         * upsample per level but the last and its composite; the streaks' downsample per level, as many upsamples less
+         * one and their composite; and the flare's three, but for its composite under lens dirt.
          */
-        std::size_t slots = 0;
-        std::size_t lensDirtSlots = 0;
+        std::size_t blocks = 0;
+        /** @brief How many its composites under lens dirt take from the lens dirt ring: bloom's and the flare's. */
+        std::size_t lensDirtBlocks = 0;
 
         /** @brief Whether the view runs any pass. */
         [[nodiscard]] bool Runs() const noexcept

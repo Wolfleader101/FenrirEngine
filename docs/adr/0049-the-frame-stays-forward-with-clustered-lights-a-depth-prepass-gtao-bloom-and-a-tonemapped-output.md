@@ -15,6 +15,7 @@ The lighting family could have moved opaque drawing to deferred shading, as Lear
 - **Bloom** is in `PostProcess`: Jimenez's 13-tap downsample and tent upsample (CoD: Advanced Warfare), no threshold, mixed into `SceneColor` by `Camera`'s `bloom.intensity` (0.04 by default) before the tonemap. `bloom.radius` (0.7 by default) weighs the wider levels against the narrower, rather than setting the tent's width, so the levels' weights sum to 1 and the bloom keeps the scene's energy; sources are mirrored at their edges for the same reason.
 - *Amended by ADR-0056:* with a camera's reflections on, `DepthPrepass` also builds a Hi-Z pyramid of the prepass's depth and traces each pixel's mirror ray through it, and `PostProcess` first keeps `SceneColor`, before bloom, as the view's history for the next frame's reflections.
 - **`Output` tonemaps.** `Camera` gains `exposure`, in EV stops (0 by default, each +1 doubling), and a `tonemapper`: `None` (the old clamp), `AgX` (the default), `PbrNeutral` (Khronos PBR Neutral) or `Aces` (fitted). Reinhard is not offered. Auto-exposure is left for later. ADR-0019's placeholder clamp is gone.
+- *Amended by ADR-0059:* the exposure, the tonemapper and the bloom, with the camera's other post effects, are one value on the camera, `Camera::look` (a `CameraLook`): `look.exposure`, `look.tonemapper`, `look.bloom`.
 
 ## Testing
 

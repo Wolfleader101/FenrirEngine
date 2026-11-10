@@ -172,7 +172,6 @@ namespace Fenrir::Render
             Math::Vec4 colour;
         };
 
-        /** @brief The Output block, as `builtin:output` declares it at set 1 (std140). */
         /**
          * @brief The bits of builtin:output's `effects` (ADR-0059): its per-pixel arithmetic effects, each set only
          * when the effect is on, so an effect that is off costs a uniform branch. An effect that changes what Output
@@ -182,6 +181,7 @@ namespace Fenrir::Render
         constexpr std::uint32_t OutputVignette = 2;
         constexpr std::uint32_t OutputGrain = 4;
 
+        /** @brief The Output block, as `builtin:output` declares it at set 1 (std140). */
         struct OutputBlock
         {
             /** @brief 2^exposure (ADR-0049). */
