@@ -516,13 +516,17 @@ Where a view's output goes: a window, or an image asset made with a size but no 
 A camera's brightness setting in EV stops, applied in its view's `Output` before the tonemapper: the linear colour times 2^exposure, so each +1 doubles it (ADR-0049).
 *Avoid:* gain, brightness, EV (alone, as the setting's name).
 
+**Look**
+How a camera turns the scene's light into its picture, one plain value on it (`Camera::look`, a `CameraLook`, ADR-0059): its exposure, tonemapper, bloom, anamorphic streaks, lens flare and dirt, colour grade, chromatic aberration, vignette and film grain. Copying it gives another camera the same look.
+*Avoid:* post-process settings, post-process profile, camera effects (the effects are its parts), environment (Godot's word, which also holds the sky and fog).
+
 **Tonemapper**
 How a view's `Output` maps its exposed HDR colour into the [0, 1] its render target stores: `AgX` (the default), `PbrNeutral`, `Aces`, or `None`, which clamps (ADR-0049).
-*Avoid:* tone curve, colour grade (the look set before it), tonemapping operator.
+*Avoid:* tone curve, colour grade (the grade set before it), tonemapping operator.
 
 **Colour grade**
-A camera's look, set in its view's `Output` on the exposed scene colour before the tonemapper (`Camera::colourGrading`, ADR-0059): white balance, contrast around mid grey, split toning, saturation and the ASC CDL, in that order. Identity by default.
-*Avoid:* LUT (a baked look, not yet supported), colour correction, post-process volume (the settings live on `Camera`).
+The part of a camera's look set in its view's `Output` on the exposed scene colour before the tonemapper (`CameraLook::colourGrading`, ADR-0059): white balance, contrast around mid grey, split toning, saturation and the ASC CDL, in that order. Identity by default.
+*Avoid:* LUT (a baked look, not yet supported), colour correction, post-process volume (the settings live on `Camera::look`).
 
 **Chromatic aberration**
 Colour fringes towards a view's edges, as a lens bends each wavelength by its own amount: its `Output` reads each channel of SceneColor at its own point, red moved outwards and blue inwards by its camera's `chromaticAberration.intensity` of the half-diagonal at the corners, the centre as it is (ADR-0059).

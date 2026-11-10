@@ -339,8 +339,8 @@ TEST_CASE("Each camera's exposure and tonemapper reach its view's Output pass", 
     // Left: the defaults. Right: two stops over, through PBR Neutral.
     AddCamera(test, 0, {0.0f, 0.0f, 0.5f, 1.0f});
     Fenrir::Camera& right = AddCamera(test, 1, {0.5f, 0.0f, 0.5f, 1.0f}).GetComponent<Fenrir::Camera>();
-    right.exposure = 2.0f;
-    right.tonemapper = Fenrir::Tonemapper::PbrNeutral;
+    right.look.exposure = 2.0f;
+    right.look.tonemapper = Fenrir::Tonemapper::PbrNeutral;
 
     test.Frame();
     const std::vector<PassRecord> outputs = RendererTest::Labelled(test.Passes(), "Output");
@@ -363,8 +363,8 @@ TEST_CASE("Changing a camera's tonemapper changes its Output pass's from the nex
     RendererTestApp test;
     Fenrir::Entity entity = AddCamera(test, 0);
     test.Frame();
-    entity.GetComponent<Fenrir::Camera>().tonemapper = Fenrir::Tonemapper::Aces;
-    entity.GetComponent<Fenrir::Camera>().exposure = -1.0f;
+    entity.GetComponent<Fenrir::Camera>().look.tonemapper = Fenrir::Tonemapper::Aces;
+    entity.GetComponent<Fenrir::Camera>().look.exposure = -1.0f;
 
     test.Frame();
     const std::vector<PassRecord> outputs = RendererTest::Labelled(test.Passes(), "Output");

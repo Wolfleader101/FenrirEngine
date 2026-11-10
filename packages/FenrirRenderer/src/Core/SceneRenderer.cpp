@@ -2995,11 +2995,11 @@ namespace Fenrir::Render
                 Math::Vec4(request.background.r, request.background.g, request.background.b, request.background.a)};
             m_backgroundBlocks->Write(frameIndex, v, BytesOf(backgroundBlock));
             OutputBlock outputBlock;
-            outputBlock.exposureScale = ExposureScale(request.exposure);
-            outputBlock.tonemapper = static_cast<std::uint32_t>(request.tonemapper);
-            if (!IsIdentity(request.colourGrading))
+            outputBlock.exposureScale = ExposureScale(request.look.exposure);
+            outputBlock.tonemapper = static_cast<std::uint32_t>(request.look.tonemapper);
+            if (!IsIdentity(request.look.colourGrading))
             {
-                const ColourGrade grade = BakeColourGrade(request.colourGrading);
+                const ColourGrade grade = BakeColourGrade(request.look.colourGrading);
                 outputBlock.grade = 1;
                 for (int c = 0; c < 3; ++c)
                 {
@@ -3011,11 +3011,11 @@ namespace Fenrir::Render
                 outputBlock.offset = grade.offset;
                 outputBlock.power = grade.power;
             }
-            outputBlock.aberration = request.chromaticAberration.intensity;
-            outputBlock.vignette = Math::Vec4(request.vignette.intensity, request.vignette.radius,
-                                              request.vignette.smoothness, request.vignette.roundness);
-            outputBlock.grain =
-                Math::Vec3(request.filmGrain.intensity, request.filmGrain.response, request.filmGrain.size);
+            outputBlock.aberration = request.look.chromaticAberration.intensity;
+            outputBlock.vignette = Math::Vec4(request.look.vignette.intensity, request.look.vignette.radius,
+                                              request.look.vignette.smoothness, request.look.vignette.roundness);
+            outputBlock.grain = Math::Vec3(request.look.filmGrain.intensity, request.look.filmGrain.response,
+                                           request.look.filmGrain.size);
             outputBlock.frameIndex = static_cast<std::uint32_t>(frameIndex);
             // The reflection hit target's confidence is its blue; every other grey view's value its red.
             outputBlock.greyChannel = request.debugView == ViewDebug::ReflectionConfidence ? 2u : 0u;
@@ -3289,10 +3289,10 @@ namespace Fenrir::Render
             m_sceneHistory->AddHistoryPasses(graph, frameIndex, history, sceneColour);
             blooms.push_back({sceneColour,
                               {rect.width, rect.height},
-                              request.bloom,
-                              request.anamorphicStreaks,
-                              request.lensFlare,
-                              lensDirt(request.lensFlare.dirt)});
+                              request.look.bloom,
+                              request.look.anamorphicStreaks,
+                              request.look.lensFlare,
+                              lensDirt(request.look.lensFlare.dirt)});
 
             // The first view into a target clears all of it; each later one draws over it, in its viewport only.
             const LoadOp load = cleared.insert(request.target).second ? LoadOp::Clear : LoadOp::Load;
@@ -3320,7 +3320,7 @@ namespace Fenrir::Render
             // Black is the 1 x 1 black texture, drawn as grey.
             // Chromatic aberration's variant only when it moves something and its pipeline was made.
             const bool aberrated =
-                request.chromaticAberration.intensity > 0.0f && !m_aberrationOutputPipeline.IsEmpty();
+                request.look.chromaticAberration.intensity > 0.0f && !m_aberrationOutputPipeline.IsEmpty();
             const PipelineHandle outputPipeline = showGrey || shownBlack ? m_occlusionOutputPipeline
                                                   : showReflections      ? m_reflectionOutputPipeline
                                                   : aberrated            ? m_aberrationOutputPipeline

@@ -141,7 +141,7 @@ TEST_CASE("A polished floor of three roughnesses reflecting a panel, a neon stri
     camera.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(-0.25f, Vec3(1.0f, 0.0f, 0.0f));
     Fenrir::Camera& view = camera.AddComponent<Fenrir::Camera>();
     view.target = Fenrir::ImageTarget{target};
-    view.bloom.intensity = 0.0f;
+    view.look.bloom.intensity = 0.0f;
     test.app.GetActiveScene().AddResource<Fenrir::Sky>(Fenrir::ColourSky{{0.0f, 0.0f, 0.0f, 1.0f}});
 
     const auto quad = store.Add<Fenrir::Mesh>(RendererTest::Quad(1.0f), Fenrir::AssetOwner::App());

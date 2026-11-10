@@ -58,7 +58,7 @@ namespace GlTest
         Fenrir::Camera& AddCamera()
         {
             Fenrir::Camera& camera = app.GetActiveScene().GetEntityList().CreateEntity().AddComponent<Fenrir::Camera>();
-            camera.bloom.intensity = 0.0f;
+            camera.look.bloom.intensity = 0.0f;
             return camera;
         }
 

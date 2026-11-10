@@ -8,7 +8,7 @@ namespace Fenrir::Render
 {
     /**
      * @brief How a view's Output pass maps its linear HDR colour into the [0, 1] its target stores (ADR-0049): the
-     * core's copy of Camera::tonemapper. The values are the numbers builtin:output switches on.
+     * core's copy of CameraLook::tonemapper. The values are the numbers builtin:output switches on.
      */
     enum class Tonemapper : std::uint8_t
     {

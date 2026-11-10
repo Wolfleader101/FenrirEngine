@@ -217,7 +217,7 @@ TEST_CASE("A camera at bloom intensity 0 loses its bloom passes while another ca
           "[renderer][bloom]")
 {
     RendererTestApp test;
-    AddTwoCameras(test).bloom.intensity = 0.0f;
+    AddTwoCameras(test).look.bloom.intensity = 0.0f;
 
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
@@ -233,7 +233,7 @@ TEST_CASE("A camera at bloom intensity 0 loses its bloom passes while another ca
 TEST_CASE("A camera at bloom intensity 0 draws the frame as it was without bloom", "[renderer][bloom]")
 {
     RendererTestApp test;
-    test.AddCamera().GetComponent<Fenrir::Camera>().bloom.intensity = 0.0f;
+    test.AddCamera().GetComponent<Fenrir::Camera>().look.bloom.intensity = 0.0f;
     test.AddMeshRenderer(test.Mesh(), test.Material());
 
     test.Frame();
@@ -246,15 +246,15 @@ TEST_CASE("A camera's bloom intensity and radius reach its passes, clamped to [0
 {
     RendererTestApp test;
     Fenrir::Camera& camera = test.AddCamera().GetComponent<Fenrir::Camera>();
-    camera.bloom.intensity = 0.25f;
-    camera.bloom.radius = 0.4f;
+    camera.look.bloom.intensity = 0.25f;
+    camera.look.bloom.radius = 0.4f;
     test.Frame();
     INFO("the composite blends by the intensity, each upsample by the radius");
     REQUIRE(Near(BlockOf(test, RendererTest::Labelled(test.Passes(), "BloomComposite").at(0)).blend, 0.25f));
     REQUIRE(Near(BlockOf(test, RendererTest::Labelled(test.Passes(), "BloomUpsample").at(0)).blend, 0.4f));
 
-    camera.bloom.intensity = 3.0f;
-    camera.bloom.radius = -1.0f;
+    camera.look.bloom.intensity = 3.0f;
+    camera.look.bloom.radius = -1.0f;
     test.Frame();
     INFO("an intensity over 1 mixes in the bloom alone; a radius under 0 keeps each level to itself");
     REQUIRE(Near(BlockOf(test, RendererTest::Labelled(test.Passes(), "BloomComposite").at(0)).blend, 1.0f));

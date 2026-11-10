@@ -209,13 +209,14 @@ namespace RendererDemo
             if (keyboard.JustPressed(Fenrir::Key::T) && state->camera.IsValid())
             {
                 state->tonemapper = (state->tonemapper + 1) % Tonemappers.size();
-                state->camera.GetComponent<Fenrir::Camera>().tonemapper = Tonemappers.at(state->tonemapper).tonemapper;
+                state->camera.GetComponent<Fenrir::Camera>().look.tonemapper =
+                    Tonemappers.at(state->tonemapper).tonemapper;
                 app.Logger()->Info("T: the camera's tonemapper is {}", Tonemappers.at(state->tonemapper).name);
             }
             if (keyboard.JustPressed(Fenrir::Key::E) && state->camera.IsValid())
             {
                 state->exposure = (state->exposure + 1) % Exposures.size();
-                state->camera.GetComponent<Fenrir::Camera>().exposure = Exposures.at(state->exposure);
+                state->camera.GetComponent<Fenrir::Camera>().look.exposure = Exposures.at(state->exposure);
                 app.Logger()->Info("E: the camera's exposure is {:+.0f} EV", Exposures.at(state->exposure));
             }
         }

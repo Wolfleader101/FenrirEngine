@@ -67,7 +67,7 @@ namespace
     /** @brief Sets a camera's grade to NonTrivialGrade. */
     void Graded(Fenrir::Camera& camera)
     {
-        camera.colourGrading = NonTrivialGrade();
+        camera.look.colourGrading = NonTrivialGrade();
     }
 
     void RequireGolden(std::string_view name, const RendererTest::Rgba8Image& frame)
@@ -166,9 +166,9 @@ TEST_CASE("Output's colour grade matches its C++ mirror, through the tonemapper"
                 Fenrir::Camera& camera = test.AddCamera();
                 camera.target = Fenrir::ImageTarget{image};
                 camera.background = Fenrir::ColourBackground{Fenrir::Colour{colour.r, colour.g, colour.b, 1.0f}};
-                camera.tonemapper = mapping.tonemapper;
-                camera.exposure = mapping.exposure;
-                camera.colourGrading = gradings[g];
+                camera.look.tonemapper = mapping.tonemapper;
+                camera.look.exposure = mapping.exposure;
+                camera.look.colourGrading = gradings[g];
 
                 test.RunFrame();
                 const GlProbe::Image pixels = GlProbe::Read(RendererProbe::Device(test.renderer),
@@ -216,8 +216,8 @@ TEST_CASE("Output's tonemappers and exposure match their C++ mirror", "[renderer
                 Fenrir::Camera& camera = test.AddCamera();
                 camera.target = Fenrir::ImageTarget{image};
                 camera.background = Fenrir::ColourBackground{Fenrir::Colour{colour.r, colour.g, colour.b, 1.0f}};
-                camera.tonemapper = tonemapper;
-                camera.exposure = exposure;
+                camera.look.tonemapper = tonemapper;
+                camera.look.exposure = exposure;
 
                 test.RunFrame();
                 const GlProbe::Image pixels = GlProbe::Read(RendererProbe::Device(test.renderer),

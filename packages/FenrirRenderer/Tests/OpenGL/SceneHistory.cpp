@@ -26,7 +26,7 @@ namespace
         Fenrir::Camera& camera = test.AddCamera();
         camera.projection = Fenrir::Orthographic{static_cast<float>(Size), Near, Far};
         camera.background = Fenrir::ColourBackground{Fenrir::Colour::Black};
-        camera.bloom.intensity = bloom;
+        camera.look.bloom.intensity = bloom;
         camera.reflections.enabled = true;
         return camera;
     }

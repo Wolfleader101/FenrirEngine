@@ -166,7 +166,7 @@ TEST_CASE("GTAO darkens the sky's light in an inside corner, and never the sun's
         sun.AddComponent<Fenrir::DirectionalLight>();
     }
     Fenrir::Camera& camera = test.AddCamera();
-    camera.tonemapper = Fenrir::Tonemapper::None;
+    camera.look.tonemapper = Fenrir::Tonemapper::None;
 
     const GlProbe::Image without = test.Frame();
     camera.ambientOcclusion.enabled = true;
@@ -204,7 +204,7 @@ TEST_CASE("The sphere grid on a floor against a wall with GTAO matches its golde
     const auto target = store.Add<Fenrir::Image>(std::move(data), Fenrir::AssetOwner::App());
     Fenrir::Entity cameraEntity = test.app.GetActiveScene().GetEntityList().CreateEntity();
     Fenrir::Camera& camera = cameraEntity.AddComponent<Fenrir::Camera>();
-    camera.bloom.intensity = 0.0f;
+    camera.look.bloom.intensity = 0.0f;
     camera.target = Fenrir::ImageTarget{target};
     camera.ambientOcclusion.enabled = true;
     // A little above the grid, looking down at it.
