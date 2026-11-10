@@ -2059,14 +2059,14 @@ namespace Fenrir::Render
             {
                 // The record carries the item's world bounds: its skinned bounds when the facade gave them (ADR-0035),
                 // else its mesh's box under its world matrix.
-                draw.bounds = request.bounds.value_or(Math::Moved(mesh->second.bounds, request.world));
-                draw.worldBounds = draw.bounds;
+                draw.recordBounds = request.bounds.value_or(Math::Moved(mesh->second.bounds, request.world));
+                draw.worldBounds = draw.recordBounds;
             }
             else
             {
                 // An instance list's record carries the mesh's local box, which each copy moves; the list as a whole
                 // is culled by the box around every copy, under the entity's world matrix.
-                draw.bounds = mesh->second.bounds;
+                draw.recordBounds = mesh->second.bounds;
                 draw.worldBounds = Math::Moved(
                     InstanceListBounds(request.instances, mesh->second.bounds).value_or(mesh->second.bounds),
                     request.world);
@@ -2649,8 +2649,8 @@ namespace Fenrir::Render
             block.worldSign = WorldSign(draw.world);
             block.instanceFirst = draw.instances.first;
             block.instanceCount = draw.instances.count;
-            block.boundsMin = Math::Vec4(draw.bounds.min, 0.0f);
-            block.boundsMax = Math::Vec4(draw.bounds.max, 0.0f);
+            block.boundsMin = Math::Vec4(draw.recordBounds.min, 0.0f);
+            block.boundsMax = Math::Vec4(draw.recordBounds.max, 0.0f);
             m_drawBlocks->Write(frameIndex, i, BytesOf(block));
         }
         // Every palette written again each frame (ADR-0035): nothing is kept across frames.

@@ -111,6 +111,7 @@ TEST_CASE("An orthographic view has six planes, its far plane among them", "[mat
 {
     const Frustum frustum =
         Frustum::FromViewProjection(Orthographic(2.0f, 1.0f, 1.0f, 10.0f) * ViewAt({0.0f, 2.0f, 0.0f}));
+    INFO("an orthographic view's far plane has a normal, so it is the sixth plane");
     REQUIRE(frustum.Planes().size() == 6);
     // x in [-1, 1], y in [1, 3] about the camera at y = 2, z in [-10, -1].
     const std::array<Vec4, 6> expected{Vec4(1.0f, 0.0f, 0.0f, 1.0f),   Vec4(-1.0f, 0.0f, 0.0f, 1.0f),
@@ -149,6 +150,7 @@ TEST_CASE("A sphere is dropped only when it is wholly beyond one plane, of eithe
     }
 
     const Frustum perspective = PerspectiveFrustum();
+    INFO("a sphere in the middle of the perspective view is kept");
     REQUIRE(perspective.Intersects(Sphere{{0.0f, 0.0f, -5.0f}, 0.5f}));
     // At z = -5 the side planes are 5 from the axis; a centre 0.8 past one is 0.8 / sqrt 2 = 0.57 beyond it, 0.4 past
     // is 0.28 beyond it. The near plane is at z = -1.
@@ -173,6 +175,7 @@ TEST_CASE("A sphere is dropped only when it is wholly beyond one plane, of eithe
 TEST_CASE("A box is dropped only when all eight corners are beyond one plane", "[math][frustum]")
 {
     const Frustum orthographic = OrthographicFrustum();
+    INFO("a unit box in the middle of the orthographic view is kept");
     REQUIRE(orthographic.Intersects(UnitBoxAt({0.0f, 0.0f, -5.0f})));
     // Unit boxes centred 0.6 beyond a plane have every corner past it; centred 0.3 beyond, half their corners.
     const std::array<Straddle, 6> orthographicCases{{
@@ -192,6 +195,7 @@ TEST_CASE("A box is dropped only when all eight corners are beyond one plane", "
     }
 
     const Frustum perspective = PerspectiveFrustum();
+    INFO("a unit box in the middle of the perspective view is kept");
     REQUIRE(perspective.Intersects(UnitBoxAt({0.0f, 0.0f, -5.0f})));
     // At z = -5 a side plane is 5 from the axis, at z = -4.5 it is 4.5: a unit box centred 6.1 past the axis has its
     // nearest corner at 5.6 past, beyond the plane at every depth it spans; one centred 5.4 past has corners inside.
@@ -268,9 +272,8 @@ TEST_CASE("The sphere of a box under a matrix encloses every moved corner", "[ma
     }
 }
 
-TEST_CASE("Moved is the box about a box's corners under a matrix, and Union the box about two", "[math][frustum]")
+TEST_CASE("Moved is the box about a box's corners under a matrix", "[math][frustum]")
 {
-    const AABB unit = UnitBoxAt(Vec3(0.0f));
     // A quarter turn about z of a unit box 3 along x: it lies along y.
     const Mat4 turned = glm::rotate(glm::scale(glm::translate(Mat4(1.0f), {1.0f, 2.0f, 3.0f}), {1.0f, 1.0f, 1.0f}),
                                     std::numbers::pi_v<float> * 0.5f, {0.0f, 0.0f, 1.0f});
@@ -278,8 +281,11 @@ TEST_CASE("Moved is the box about a box's corners under a matrix, and Union the 
     INFO("the moved box spans y from 0.5 to 3.5 about (1, 2, 3), and x and z half a unit each way");
     REQUIRE(glm::length(moved.min - Vec3(0.5f, 0.5f, 2.5f)) < 1e-5f);
     REQUIRE(glm::length(moved.max - Vec3(1.5f, 3.5f, 3.5f)) < 1e-5f);
+}
 
-    const AABB both = Fenrir::Math::Union(unit, UnitBoxAt({4.0f, 0.0f, 0.0f}));
+TEST_CASE("Union is the box about two boxes", "[math][frustum]")
+{
+    const AABB both = Fenrir::Math::Union(UnitBoxAt(Vec3(0.0f)), UnitBoxAt({4.0f, 0.0f, 0.0f}));
     INFO("the union of unit boxes at the origin and at x = 4 runs from -0.5 to 4.5 along x");
     REQUIRE(both.min == Vec3(-0.5f));
     REQUIRE(both.max == Vec3(4.5f, 0.5f, 0.5f));

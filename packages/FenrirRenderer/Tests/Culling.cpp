@@ -25,9 +25,6 @@ using RendererTest::RendererTestApp;
 
 namespace
 {
-    constexpr std::size_t RecordSize = 192;
-    constexpr std::size_t BoundsOffset = 160;
-
     /** @brief A material on builtin:lit with `mode`. */
     Fenrir::AssetHandle<Fenrir::Material> Blended(RendererTestApp& test, Fenrir::BlendMode mode)
     {
@@ -58,25 +55,11 @@ namespace
         return list;
     }
 
-    /** @brief The box in a draw's record of the draw buffer (set 3 binding 0, `Fenrir/Draw.glsl`'s boundsMin and max).
+    /** @brief The box in a draw's record of the draw buffer: `Fenrir/Draw.glsl`'s boundsMin at 160, boundsMax at 176.
      */
     AABB RecordBounds(const RendererTestApp& test, const RecordedDraw& draw)
     {
-        for (const Fenrir::Graphics::BindingGroupEntry& entry :
-             Fenrir::RendererProbe::Entries(test.Device(), draw.groups.at(3)))
-        {
-            if (entry.binding == 0)
-            {
-                const std::vector<std::byte> bytes = Fenrir::RendererProbe::Bytes(test.Device(), entry.buffer);
-                const std::size_t at = std::size_t{draw.draw.firstInstance} * RecordSize + BoundsOffset;
-                return {{RendererTest::FloatAt(bytes, at), RendererTest::FloatAt(bytes, at + 4),
-                         RendererTest::FloatAt(bytes, at + 8)},
-                        {RendererTest::FloatAt(bytes, at + 16), RendererTest::FloatAt(bytes, at + 20),
-                         RendererTest::FloatAt(bytes, at + 24)}};
-            }
-        }
-        FAIL("the draw bound no draw buffer at set 3 binding 0");
-        return {};
+        return {test.RecordVec3(draw, 160), test.RecordVec3(draw, 176)};
     }
 
     bool Near(const Vec3& a, const Vec3& b, float tolerance = 1e-4f)
@@ -136,6 +119,7 @@ TEST_CASE("A transparent item outside the camera's frustum is not drawn, while o
     REQUIRE(opaqueInstances == 4);
     INFO("the stats count the four opaque items and the two transparent ones drawn");
     REQUIRE(test.renderer.Stats().instances == 6);
+    INFO("and the frame logs no error");
     REQUIRE(test.messages->errors.empty());
 }
 
@@ -151,6 +135,7 @@ TEST_CASE("Transparent items that survive the cull are still drawn back to front
 
     test.Frame();
     const std::vector<RecordedDraw> transparent = test.Draws("Transparent");
+    INFO("the three cubes in front of the camera are drawn, the one behind it is not");
     REQUIRE(transparent.size() == 3);
     INFO("the farthest first: z = -4, then -1, then 2");
     REQUIRE(Near(test.DrawPosition(transparent[0]), {0.0f, 0.0f, -4.0f}));
@@ -174,6 +159,7 @@ TEST_CASE("An item's draw record carries its mesh's box under its world matrix, 
 
     test.Frame();
     const std::vector<RecordedDraw> draws = test.Draws("Opaque");
+    INFO("the cube and the instance list are a draw each");
     REQUIRE(draws.size() == 2);
     for (const RecordedDraw& draw : draws)
     {
@@ -234,6 +220,7 @@ TEST_CASE("GetFrustum is the camera's five planes under its infinite far plane",
     const Fenrir::Entity camera = test.AddCamera();
     test.Frame();
     const std::optional<Fenrir::Math::Frustum> frustum = test.renderer.GetFrustum(camera);
+    INFO("a camera that draws has a frustum");
     REQUIRE(frustum.has_value());
     INFO("a perspective camera with an infinite far plane has five planes");
     REQUIRE(frustum->Planes().size() == 5);
