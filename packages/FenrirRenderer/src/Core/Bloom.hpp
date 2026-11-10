@@ -75,6 +75,54 @@ namespace Fenrir::Render
         GraphResource dirt;
     };
 
+    /** @brief Which of the bloom chain's optional parts its pipelines could make: a part without them never runs. */
+    struct BloomPipelines
+    {
+        bool streaks = true;
+        bool flare = true;
+        bool lensDirt = true;
+    };
+
+    /**
+     * @brief What the bloom chain runs for one view this frame, decided once from its settings, its size and the
+     * chain's pipelines (PlanBloom): which parts, how many levels each, and how many blocks their passes take.
+     * BloomChain::AddPasses reserves its blocks and adds its passes by it.
+     */
+    struct BloomPlan
+    {
+        /** @brief An intensity over 0, and a view at least 2 pixels on a side. */
+        bool bloom = false;
+        /** @brief An intensity over 0, the streaks' pipelines, and at least one streak level. */
+        bool streaks = false;
+        /** @brief An intensity over 0, the flare's pipeline, and at least one bloom level. */
+        bool flare = false;
+        /** @brief Whether the composites into SceneColor (bloom's and the flare's) read the lens dirt. */
+        bool lensDirt = false;
+        /**
+         * @brief How many of bloom's levels the view downsamples: all of them when it blooms, else down to the
+         * flare's level when it flares, else level 0 for the streaks; 0 when it runs nothing.
+         */
+        std::uint32_t levels = 0;
+        /** @brief How many streak levels it downsamples and upsamples; 0 without streaks. */
+        std::uint32_t streakLevels = 0;
+        /**
+         * @brief How many blocks its passes take: a downsample per level and, when it blooms, an upsample per level
+         * but the last and its composite; the streaks' downsample per level, as many upsamples less one and their
+         * composite; and the flare's three. The composites under lens dirt take theirs from `lensDirtSlots`.
+         */
+        std::size_t slots = 0;
+        std::size_t lensDirtSlots = 0;
+
+        /** @brief Whether the view runs any pass. */
+        [[nodiscard]] bool Runs() const noexcept
+        {
+            return bloom || streaks || flare;
+        }
+    };
+
+    /** @brief What the bloom chain runs for `view`, with the optional parts `pipelines` makes. */
+    [[nodiscard]] BloomPlan PlanBloom(const BloomView& view, BloomPipelines pipelines) noexcept;
+
     /**
      * @brief Physically based bloom (ADR-0049), as CoD: Advanced Warfare's (Jimenez, SIGGRAPH 2014): render graph
      * passes of the `PostProcess` stage for each view, which mix a blur of its whole SceneColor back into it before

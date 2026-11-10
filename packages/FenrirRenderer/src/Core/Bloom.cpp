@@ -135,6 +135,27 @@ namespace Fenrir::Render
         return BloomLevelWeights(length, levels);
     }
 
+    BloomPlan PlanBloom(const BloomView& view, BloomPipelines pipelines) noexcept
+    {
+        BloomPlan plan;
+        plan.bloom = view.settings.intensity > 0.0f && BloomLevels(view.size) > 0;
+        plan.streaks = pipelines.streaks && view.anamorphicStreaks.intensity > 0.0f && StreakLevels(view.size) > 0;
+        plan.flare = pipelines.flare && view.lensFlare.intensity > 0.0f && BloomLevels(view.size) > 0;
+        if (!plan.Runs())
+        {
+            return plan;
+        }
+        plan.lensDirt = (plan.bloom || plan.flare) && pipelines.lensDirt && !view.dirt.IsEmpty() &&
+                        view.lensFlare.dirtIntensity > 0.0f;
+        plan.levels = plan.bloom ? BloomLevels(view.size) : plan.flare ? FlareLevel(view.size) + 1 : 1;
+        plan.streakLevels = plan.streaks ? StreakLevels(view.size) : 0;
+        plan.slots = plan.levels + (plan.bloom ? plan.levels - 1 : 0) + std::size_t{2} * plan.streakLevels +
+                     (plan.flare ? 2 : 0);
+        const std::size_t composites = (plan.bloom ? 1 : 0) + (plan.flare ? 1 : 0);
+        (plan.lensDirt ? plan.lensDirtSlots : plan.slots) += composites;
+        return plan;
+    }
+
     BloomChain::BloomChain(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
         : m_device(device),
           m_passes(device, logger, "Bloom", RenderStage::PostProcess, MirroredSampler(), sizeof(BloomBlock)),
@@ -197,46 +218,20 @@ namespace Fenrir::Render
         {
             return;
         }
-        const bool canStreak = !m_streakDownsamplePipeline.IsEmpty() && !m_streakUpsamplePipeline.IsEmpty() &&
-                               !m_streakCompositePipeline.IsEmpty();
-
-        const auto blooms = [](const BloomView& view) {
-            return view.settings.intensity > 0.0f && BloomLevels(view.size) > 0;
-        };
-        const auto streaks = [canStreak](const BloomView& view) {
-            return canStreak && view.anamorphicStreaks.intensity > 0.0f && StreakLevels(view.size) > 0;
-        };
-        const auto flares = [this](const BloomView& view) {
-            return !m_flareGhostsPipeline.IsEmpty() && view.lensFlare.intensity > 0.0f && BloomLevels(view.size) > 0;
-        };
-        const auto hasLensDirt = [this](const BloomView& view) {
-            return !m_lensDirtCompositePipeline.IsEmpty() && !view.dirt.IsEmpty() &&
-                   view.lensFlare.dirtIntensity > 0.0f;
-        };
-        // How many of bloom's levels a view downsamples to: all of them when it blooms, else down to the flare's level
-        // when it flares, else level 0 for the streaks.
-        const auto downsampled = [&](const BloomView& view) {
-            return blooms(view) ? BloomLevels(view.size) : flares(view) ? FlareLevel(view.size) + 1 : 1;
-        };
-        // Each view's passes take one block apiece: a downsample per level and, when it blooms, an upsample per level
-        // but the last and its composite; the streaks' downsample per level, as many upsamples less one and their
-        // composite; and the flare's three. The composites under lens dirt take theirs from the lens dirt ring.
+        BloomPipelines pipelines;
+        pipelines.streaks = !m_streakDownsamplePipeline.IsEmpty() && !m_streakUpsamplePipeline.IsEmpty() &&
+                            !m_streakCompositePipeline.IsEmpty();
+        pipelines.flare = !m_flareGhostsPipeline.IsEmpty();
+        pipelines.lensDirt = !m_lensDirtCompositePipeline.IsEmpty();
+        std::vector<BloomPlan> plans;
+        plans.reserve(views.size());
         std::size_t slots = 0;
         std::size_t lensDirtSlots = 0;
         for (const BloomView& view : views)
         {
-            const bool bloom = blooms(view);
-            const bool flare = flares(view);
-            if (!bloom && !streaks(view) && !flare)
-            {
-                continue;
-            }
-            const std::uint32_t levels = downsampled(view);
-            slots += levels + (bloom ? levels - 1 : 0);
-            slots += streaks(view) ? std::size_t{2} * StreakLevels(view.size) : 0;
-            slots += flare ? 2 : 0;
-            const std::size_t composites = (bloom ? 1 : 0) + (flare ? 1 : 0);
-            (hasLensDirt(view) ? lensDirtSlots : slots) += composites;
+            plans.push_back(PlanBloom(view, pipelines));
+            slots += plans.back().slots;
+            lensDirtSlots += plans.back().lensDirtSlots;
         }
         if (slots == 0)
         {
@@ -254,10 +249,10 @@ namespace Fenrir::Render
                              {0, 0, targetSize.width, targetSize.height});
         };
         // A composite into SceneColor: under lens dirt, the DIRT variant reading the dirt too.
-        const auto addComposite = [&](const char* name, const BloomView& view, GraphResource source,
-                                      PixelSize sourceSize, float intensity) {
+        const auto addComposite = [&](const char* name, const BloomView& view, const BloomPlan& plan,
+                                      GraphResource source, PixelSize sourceSize, float intensity) {
             const PixelRect viewport{0, 0, view.size.width, view.size.height};
-            if (hasLensDirt(view))
+            if (plan.lensDirt)
             {
                 const BindingGroupHandle block = m_lensDirtPasses.Block(
                     frameIndex,
@@ -280,19 +275,18 @@ namespace Fenrir::Render
             return graph.CreateTexture(name, desc);
         };
 
-        for (const BloomView& view : views)
+        for (std::size_t v = 0; v < views.size(); ++v)
         {
-            const bool bloom = blooms(view);
-            const bool streak = streaks(view);
-            const bool flare = flares(view);
-            if (!bloom && !streak && !flare)
+            const BloomView& view = views[v];
+            const BloomPlan& plan = plans[v];
+            if (!plan.Runs())
             {
                 continue;
             }
 
             // Bloom's downsamples, or only those the streaks and the flare read when the view does not bloom: each
             // covers its whole level, so nothing is loaded.
-            const std::uint32_t levels = downsampled(view);
+            const std::uint32_t levels = plan.levels;
             std::vector<GraphResource> chain;
             for (std::uint32_t level = 0; level < levels; ++level)
             {
@@ -307,7 +301,7 @@ namespace Fenrir::Render
             }
 
             // The streaks' downsamples read level 0 before bloom's upsamples blend the wider levels over it.
-            const std::uint32_t streakLevels = streak ? StreakLevels(view.size) : 0;
+            const std::uint32_t streakLevels = plan.streakLevels;
             std::vector<GraphResource> streakChain;
             for (std::uint32_t level = 0; level < streakLevels; ++level)
             {
@@ -326,7 +320,7 @@ namespace Fenrir::Render
             // flare is the same with bloom on or off and at any bloom radius; then their blur.
             GraphResource flareLevel;
             const PixelSize flareSize = LevelSize(view.size, FlareLevel(view.size));
-            if (flare)
+            if (plan.flare)
             {
                 FlareBlock block;
                 block.ghostSpacing = view.lensFlare.ghostSpacing;
@@ -344,7 +338,7 @@ namespace Fenrir::Render
                         1.0f, false);
             }
 
-            if (bloom)
+            if (plan.bloom)
             {
                 const float intensity = std::min(view.settings.intensity, 1.0f);
                 const float radius = std::clamp(view.settings.radius, 0.0f, 1.0f);
@@ -353,10 +347,10 @@ namespace Fenrir::Render
                     addPass("BloomUpsample", m_upsamplePipeline, chain[level + 1], chain[level], LoadOp::Load,
                             LevelSize(view.size, level + 1), LevelSize(view.size, level), radius, false);
                 }
-                addComposite("BloomComposite", view, chain[0], LevelSize(view.size, 0), intensity);
+                addComposite("BloomComposite", view, plan, chain[0], LevelSize(view.size, 0), intensity);
             }
 
-            if (streak)
+            if (plan.streaks)
             {
                 const float intensity = std::min(view.anamorphicStreaks.intensity, 1.0f);
                 const float length = std::clamp(view.anamorphicStreaks.length, 0.0f, 1.0f);
@@ -371,9 +365,10 @@ namespace Fenrir::Render
                         UnitLuminanceTint(view.anamorphicStreaks.tint));
             }
 
-            if (flare)
+            if (plan.flare)
             {
-                addComposite("FlareComposite", view, flareLevel, flareSize, std::min(view.lensFlare.intensity, 1.0f));
+                addComposite("FlareComposite", view, plan, flareLevel, flareSize,
+                             std::min(view.lensFlare.intensity, 1.0f));
             }
         }
     }

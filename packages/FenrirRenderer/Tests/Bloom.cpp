@@ -1,6 +1,6 @@
-// Bloom (ADR-0049): how many levels a view's chain has and what each adds, on the CPU; and on the null backend (the
-// spec's seam 1), each view's BloomDownsample, BloomUpsample and BloomComposite passes in PostProcess, their blocks,
-// blending and samples, and none at intensity 0.
+// Bloom (ADR-0049): how many levels a view's chain has, what each adds and what each view's plan runs, on the CPU;
+// and on the null backend (the spec's seam 1), each view's BloomDownsample, BloomUpsample and BloomComposite passes in
+// PostProcess, their blocks, blending and samples, and none at intensity 0.
 
 #include <algorithm>
 #include <cmath>
@@ -22,6 +22,10 @@ using Fenrir::Graphics::ResourceUsage;
 using Fenrir::Graphics::TextureHandle;
 using Fenrir::Render::BloomLevels;
 using Fenrir::Render::BloomLevelWeights;
+using Fenrir::Render::BloomPipelines;
+using Fenrir::Render::BloomPlan;
+using Fenrir::Render::BloomView;
+using Fenrir::Render::PlanBloom;
 using RendererTest::PassRecord;
 using RendererTest::RendererTestApp;
 
@@ -109,6 +113,95 @@ TEST_CASE("The bloom levels' weights fall by the radius and sum to one", "[rende
     REQUIRE(Near(std::accumulate(weights.begin(), weights.end(), 0.0f), 1.0f, 1e-5f));
     INFO("a radius outside [0, 1] is clamped");
     REQUIRE(BloomLevelWeights(2.0f, 2) == std::vector<float>{0.0f, 1.0f});
+}
+
+TEST_CASE("A view's bloom plan runs only the parts it turns on, with a block for each of their passes",
+          "[renderer][bloom]")
+{
+    // 256 x 128: six bloom levels (128 down to 4 on the shorter side), seven streak levels (level 0's 128 wide down to
+    // 2), and the flare at level 1.
+    const auto viewOf = [](float bloom, float streaks, float flare) {
+        BloomView view;
+        view.size = {256, 128};
+        view.settings.intensity = bloom;
+        view.anamorphicStreaks.intensity = streaks;
+        view.lensFlare.intensity = flare;
+        return view;
+    };
+    const BloomPipelines every;
+
+    {
+        INFO("nothing on runs nothing and takes no block");
+        const BloomPlan plan = PlanBloom(viewOf(0.0f, 0.0f, 0.0f), every);
+        REQUIRE_FALSE(plan.Runs());
+        REQUIRE(plan.levels == 0);
+        REQUIRE(plan.slots == 0);
+    }
+    {
+        INFO("bloom alone: six downsamples, five upsamples and its composite");
+        const BloomPlan plan = PlanBloom(viewOf(0.04f, 0.0f, 0.0f), every);
+        REQUIRE(plan.bloom);
+        REQUIRE_FALSE(plan.streaks);
+        REQUIRE_FALSE(plan.flare);
+        REQUIRE(plan.levels == 6);
+        REQUIRE(plan.streakLevels == 0);
+        REQUIRE(plan.slots == 12);
+        REQUIRE(plan.lensDirtSlots == 0);
+    }
+    {
+        INFO("the streaks without bloom: bloom's first downsample, then seven streak levels down and back up");
+        const BloomPlan plan = PlanBloom(viewOf(0.0f, 0.1f, 0.0f), every);
+        REQUIRE_FALSE(plan.bloom);
+        REQUIRE(plan.streaks);
+        REQUIRE(plan.levels == 1);
+        REQUIRE(plan.streakLevels == 7);
+        REQUIRE(plan.slots == 1 + 14);
+    }
+    {
+        INFO("the flare without bloom: bloom's downsamples down to level 1, its ghosts, blur and composite");
+        const BloomPlan plan = PlanBloom(viewOf(0.0f, 0.0f, 0.03f), every);
+        REQUIRE(plan.flare);
+        REQUIRE(plan.levels == 2);
+        REQUIRE(plan.slots == 2 + 3);
+    }
+    {
+        INFO("lens dirt moves bloom's and the flare's composites to the dirt's blocks, never the streaks'");
+        BloomView view = viewOf(0.04f, 0.1f, 0.03f);
+        view.dirt.id = 3;
+        const BloomPlan plan = PlanBloom(view, every);
+        REQUIRE(plan.lensDirt);
+        REQUIRE(plan.slots == 6 + 5 + 14 + 2);
+        REQUIRE(plan.lensDirtSlots == 2);
+    }
+    {
+        INFO("lens dirt with only the streaks on has no composite to read it");
+        BloomView view = viewOf(0.0f, 0.1f, 0.0f);
+        view.dirt.id = 3;
+        REQUIRE_FALSE(PlanBloom(view, every).lensDirt);
+        INFO("nor with a dirt intensity of 0");
+        view = viewOf(0.04f, 0.0f, 0.0f);
+        view.dirt.id = 3;
+        view.lensFlare.dirtIntensity = 0.0f;
+        REQUIRE_FALSE(PlanBloom(view, every).lensDirt);
+    }
+    {
+        INFO("a part whose pipelines the chain could not make never runs, and dirt without its own falls back");
+        BloomView view = viewOf(0.04f, 0.1f, 0.03f);
+        view.dirt.id = 3;
+        const BloomPlan plan = PlanBloom(view, BloomPipelines{false, false, false});
+        REQUIRE(plan.bloom);
+        REQUIRE_FALSE(plan.streaks);
+        REQUIRE_FALSE(plan.flare);
+        REQUIRE_FALSE(plan.lensDirt);
+        REQUIRE(plan.slots == 12);
+        REQUIRE(plan.lensDirtSlots == 0);
+    }
+    {
+        INFO("a view under 2 pixels on a side runs nothing, whatever it turns on");
+        BloomView view = viewOf(1.0f, 1.0f, 1.0f);
+        view.size = {1, 1};
+        REQUIRE_FALSE(PlanBloom(view, every).Runs());
+    }
 }
 
 TEST_CASE("A camera's bloom runs in PostProcess, down the chain and back up into SceneColor", "[renderer][bloom]")
