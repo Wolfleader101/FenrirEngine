@@ -134,6 +134,30 @@ namespace Fenrir
             return textures;
         }
 
+        /**
+         * @brief One view's cull pass buffers (ADR-0057), as the last frame left them: the indirect commands its
+         * DepthPrepass and Opaque passes drew from and the indirection their instances read, and how many runs and
+         * candidates the pass counted; empty handles for a view with no opaque runs.
+         */
+        struct CullBuffers
+        {
+            Graphics::BufferHandle commands;
+            Graphics::BufferHandle indirection;
+            std::uint32_t runs = 0;
+            std::uint32_t candidates = 0;
+        };
+
+        /** @brief Every view the last frame drew, in the order their passes were added, with its cull buffers. */
+        [[nodiscard]] static std::vector<CullBuffers> Culls(const Renderer& renderer)
+        {
+            std::vector<CullBuffers> culls;
+            for (const Render::DrawnView& view : renderer.m_state->scene->DrawnViews())
+            {
+                culls.push_back({view.cullCommands, view.cullIndirection, view.cullRuns, view.cullCandidates});
+            }
+            return culls;
+        }
+
         /** @brief The renderer core a valid Renderer owner draws with. */
         [[nodiscard]] static Render::RendererCore& Core(const Renderer& renderer)
         {

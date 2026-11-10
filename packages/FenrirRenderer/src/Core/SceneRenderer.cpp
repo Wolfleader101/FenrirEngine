@@ -173,6 +173,44 @@ namespace Fenrir::Render
         /** @brief builtin:light-clusters' work group size, one invocation a cluster. */
         constexpr std::uint32_t LightClustersGroupSize = 64;
 
+        /**
+         * @brief One entry of the frame's group table, as `builtin:cull` declares it (std430): a work group's run
+         * (ADR-0057) and which of its candidates the group culls.
+         */
+        struct CullGroupEntry
+        {
+            /** @brief The run's command in the view's command buffer. */
+            std::uint32_t command = 0;
+            /** @brief The run's first record: an instance list's one record, or the first of a merged run's. */
+            std::uint32_t record = 0;
+            /** @brief How many candidates the run has: a list's copies, or the merged run's items. */
+            std::uint32_t count = 0;
+            /** @brief The first candidate this group culls, within the run. */
+            std::uint32_t first = 0;
+        };
+        static_assert(sizeof(CullGroupEntry) == 16);
+        /** @brief builtin:cull's work group size, one invocation a candidate; no group straddles two runs. */
+        constexpr std::uint32_t CullGroupSize = 64;
+
+        /** @brief A Cull pass's job block, as `builtin:cull` declares it (std140). */
+        struct CullJobBlock
+        {
+            /** @brief The view's first entry in the group table, how many it has, and two unused words. */
+            std::array<std::uint32_t, 4> groups{};
+        };
+        static_assert(sizeof(CullJobBlock) == 16);
+
+        /** @brief One entry of a view's indirection, as `Fenrir/DrawRecord.glsl` lays it: a record and a copy. */
+        struct VisibleEntry
+        {
+            std::uint32_t record = 0;
+            std::uint32_t copy = 0;
+        };
+        static_assert(sizeof(VisibleEntry) == 8);
+        /** @brief `Fenrir/DrawRecord.glsl`'s FenrirNoCopy and FenrirNoIndirection. */
+        constexpr std::uint32_t NoCopy = 0xFFFFFFFFu;
+        constexpr std::uint32_t NoIndirection = 0xFFFFFFFFu;
+
         /** @brief The background block, as `builtin:background` declares it (std140). */
         struct BackgroundBlock
         {
@@ -247,8 +285,9 @@ namespace Fenrir::Render
         // many as the frame has, and the shadowed spot lights' records, with their atlas, then the shadowed point
         // lights' records, with the point shadow cubes (ADR-0050). Set 1's textures are the view's ambient occlusion
         // (ADR-0049), its sun's shadow atlas (ADR-0050), and its reflections' hit target and history (ADR-0056); its
-        // storage block the view's light clusters (ADR-0049).
-        [[maybe_unused]] constexpr std::array<FixedBinding, 20> FixedBindings{{
+        // storage block the view's light clusters (ADR-0049). Set 3's fourth storage block is the view's indirection
+        // (ADR-0057).
+        [[maybe_unused]] constexpr std::array<FixedBinding, 21> FixedBindings{{
             {0, 0, ShaderBindingKind::UniformBuffer, sizeof(FrameBlock)},
             {0, 1, ShaderBindingKind::Texture, 0},
             {0, 2, ShaderBindingKind::Texture, 0},
@@ -269,6 +308,7 @@ namespace Fenrir::Render
             {3, 0, ShaderBindingKind::StorageBuffer, sizeof(DrawBlock)},
             {3, 1, ShaderBindingKind::StorageBuffer, sizeof(InstanceBlock)},
             {3, 2, ShaderBindingKind::StorageBuffer, sizeof(GpuBone)},
+            {3, 3, ShaderBindingKind::StorageBuffer, sizeof(VisibleEntry)},
         }};
 
         /** @brief The binding set of the material. */
@@ -621,8 +661,8 @@ namespace Fenrir::Render
                                  ShadowBudgetConfig spotShadows, ShadowBudgetConfig pointShadows)
         : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1)),
           m_automaticInstancing(automaticInstancing), m_computeSkinning(computeSkinning), m_cascades(cascades),
-          m_clusterTargetGroups(device), m_skyGroups(device), m_viewGroups(device), m_outputGroups(device),
-          m_reflectionOutputGroups(device)
+          m_clusterTargetGroups(device), m_cullTargetGroups(device), m_skyGroups(device), m_drawGroups(device),
+          m_viewGroups(device), m_outputGroups(device), m_reflectionOutputGroups(device)
     {
         m_cascades.count = std::clamp(m_cascades.count, 1u, MaxCascades);
         m_cascades.mapSize = std::max(m_cascades.mapSize, 1u);
@@ -648,7 +688,8 @@ namespace Fenrir::Render
         m_outputBlockLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Output");
         m_drawLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::StorageBuffer},
                                                            {1, ShaderBindingKind::StorageBuffer},
-                                                           {2, ShaderBindingKind::StorageBuffer}}},
+                                                           {2, ShaderBindingKind::StorageBuffer},
+                                                           {3, ShaderBindingKind::StorageBuffer}}},
                                                          "Draw");
 
         // The default textures (ADR-0024): 1x1 white, black and the flat tangent-space normal, linear.
@@ -833,6 +874,28 @@ namespace Fenrir::Render
         constexpr std::array<std::uint32_t, 4> noClusters{};
         m_noClusters = m_device.CreateBuffer({sizeof(noClusters), BufferUsage::Storage},
                                              std::as_bytes(std::span(noClusters)), "No light clusters");
+        // GPU culling (ADR-0057): without its pipeline, every pass draws directly, as before it.
+        m_cullJobLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Cull job");
+        m_cullTargetLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::StorageBuffer},
+                                                                 {1, ShaderBindingKind::StorageBuffer},
+                                                                 {2, ShaderBindingKind::StorageBuffer},
+                                                                 {3, ShaderBindingKind::StorageBuffer}}},
+                                                               "Cull target");
+        m_cullJobs = std::make_unique<BlockRing>(m_device, m_cullJobLayout, false, sizeof(CullJobBlock), "Cull jobs");
+        m_cull = ReadBuiltin(BuiltinProgram::Cull, m_logger);
+        if (const ShaderVariant* variant = BaseVariant(m_cull))
+        {
+            PipelineResult made =
+                m_device.CreateComputePipeline({variant, {m_cullJobLayout, m_cullTargetLayout, {}, {}}}, "Cull");
+            m_cullPipeline = made.pipeline;
+            if (m_cullPipeline.IsEmpty())
+            {
+                m_logger.Error("FenrirRenderer: no cull pipeline, so every pass draws directly: {}", made.diagnostic);
+            }
+        }
+        constexpr VisibleEntry noIndirection{NoIndirection, NoCopy};
+        m_noIndirection = m_device.CreateBuffer({sizeof(noIndirection), BufferUsage::Storage}, BytesOf(noIndirection),
+                                                "No indirection");
         m_frameBlocks->Reserve(1);
         m_lightBlocks->Reserve(1);
     }
@@ -883,10 +946,7 @@ namespace Fenrir::Render
         m_outputGroups.Clear();
         m_reflectionOutputGroups.Clear();
         m_viewGroups.Clear();
-        for (const DrawGroup& group : m_drawGroups)
-        {
-            m_device.Destroy(group.group);
-        }
+        m_drawGroups.Clear();
         for (const FrameGroup& group : m_frameGroups)
         {
             if (group.unshadowed != group.group)
@@ -922,6 +982,15 @@ namespace Fenrir::Render
         m_clusterJobs.reset();
         m_clusterBuffers.clear();
         m_device.Destroy(m_noClusters);
+        m_cullTargetGroups.Clear();
+        m_cullJobs.reset();
+        m_cullTemplates.reset();
+        m_cullGroups.reset();
+        m_cullBuffers.clear();
+        m_device.Destroy(m_noIndirection);
+        m_device.Destroy(m_cullPipeline);
+        m_device.Destroy(m_cullJobLayout);
+        m_device.Destroy(m_cullTargetLayout);
         m_device.Destroy(m_lightClustersPipeline);
         m_device.Destroy(m_clusterJobLayout);
         m_device.Destroy(m_clusterTargetLayout);
@@ -2176,17 +2245,23 @@ namespace Fenrir::Render
                                     const std::vector<BindingGroupHandle>& groups, const std::vector<DrawRun>& runs,
                                     BindingGroupHandle frameGroup, BindingGroupHandle viewGroup,
                                     BindingGroupHandle drawGroup, BufferHandle skinned, PixelRect viewport,
-                                    DrawPass pass) const
+                                    DrawPass pass, BufferHandle commands) const
     {
         encoder.SetViewport(viewport);
         const PipelineEntry* current = nullptr;
         BindingGroupHandle material;
-        for (const DrawRun& run : runs)
+        for (std::size_t r = 0; r < runs.size(); ++r)
         {
+            const DrawRun& run = runs[r];
             const std::size_t i = run.first;
             const ResolvedDraw& draw = draws[i];
             const BindingGroupHandle group = groups[i];
             const PipelineEntry* pipeline = PipelineOf(draw, pass);
+            if (pipeline == nullptr)
+            {
+                // Not drawn in this pass (an item with no prepass draw): its command stays in the view's buffer.
+                continue;
+            }
             const bool newPipeline = pipeline != current;
             if (newPipeline)
             {
@@ -2222,6 +2297,13 @@ namespace Fenrir::Render
                 }
             }
             encoder.SetIndexBuffer(draw.mesh->indices, IndexFormat::UInt32);
+            if (!commands.IsEmpty())
+            {
+                // The run's command, counted into by the view's cull pass (ADR-0057): its instances read the view's
+                // indirection from the command's base instance, which Fenrir/Draw.glsl composes as a direct draw's.
+                encoder.DrawIndexedIndirect({.buffer = commands, .offset = r * sizeof(DrawIndexedIndirectCommand)});
+                continue;
+            }
             // Each item reads its own record of the draw buffer, by its place in the draw list; an instance list's
             // copies all read its one record, which Fenrir/Draw.glsl composes with each copy's. Drawing a point light's
             // cube faces as instances, each is six, one a face.
@@ -2378,31 +2460,183 @@ namespace Fenrir::Render
         return {buffer, resource};
     }
 
-    BindingGroupHandle SceneRenderer::DrawGroupFor(std::uint64_t frameIndex)
+    BindingGroupHandle SceneRenderer::DrawGroupFor(std::uint64_t frameIndex, BufferHandle indirection)
     {
         const BufferHandle draws = m_drawBlocks->Buffer(frameIndex);
         const BufferHandle palette = m_paletteBlocks->Buffer(frameIndex);
-        // One group per copy, made again when either ring has remade its buffers, or the instance lists were packed.
-        const std::size_t copies = std::max<std::size_t>(m_device.FramesInFlight(), 1);
-        m_drawGroups.resize(copies);
-        DrawGroup& group = m_drawGroups[static_cast<std::size_t>(frameIndex % copies)];
-        if (group.group.IsEmpty() || group.draws != draws || group.palette != palette ||
-            group.instanceLists != m_instanceListBuffer)
+        const BufferHandle visible = indirection.IsEmpty() ? m_noIndirection : indirection;
+        // One group per frame in flight's buffers and indirection (a view's, or none), kept while they all live: a
+        // ring remaking its buffers, the instance lists packed again or a view's indirection grown makes a new one.
+        return m_drawGroups.Get({BindingGroupKeyPart::Of(draws), BindingGroupKeyPart::Of(palette),
+                                 BindingGroupKeyPart::Of(m_instanceListBuffer), BindingGroupKeyPart::Of(visible)},
+                                frameIndex, [&] {
+                                    BindingGroupEntry drawEntry;
+                                    drawEntry.binding = 0;
+                                    drawEntry.buffer = draws;
+                                    BindingGroupEntry instanceEntry;
+                                    instanceEntry.binding = 1;
+                                    instanceEntry.buffer = m_instanceListBuffer;
+                                    BindingGroupEntry paletteEntry;
+                                    paletteEntry.binding = 2;
+                                    paletteEntry.buffer = palette;
+                                    BindingGroupEntry visibleEntry;
+                                    visibleEntry.binding = 3;
+                                    visibleEntry.buffer = visible;
+                                    return m_device.CreateBindingGroup(
+                                        {m_drawLayout, {drawEntry, instanceEntry, paletteEntry, visibleEntry}}, "Draw");
+                                });
+    }
+
+    SceneRenderer::CullView SceneRenderer::PrepareCull(RenderGraph& graph, std::uint64_t frameIndex, std::size_t view,
+                                                       const std::vector<ResolvedDraw>& draws,
+                                                       const std::vector<DrawRun>& runs,
+                                                       std::vector<DrawIndexedIndirectCommand>& templates,
+                                                       std::vector<std::array<std::uint32_t, 4>>& groups)
+    {
+        CullView cull;
+        if (runs.empty() || m_cullPipeline.IsEmpty())
         {
-            m_device.Destroy(group.group);
-            BindingGroupEntry drawEntry;
-            drawEntry.binding = 0;
-            drawEntry.buffer = draws;
-            BindingGroupEntry paletteEntry;
-            paletteEntry.binding = 2;
-            paletteEntry.buffer = palette;
-            BindingGroupEntry instanceEntry;
-            instanceEntry.binding = 1;
-            instanceEntry.buffer = m_instanceListBuffer;
-            group = {draws, palette, m_instanceListBuffer,
-                     m_device.CreateBindingGroup({m_drawLayout, {drawEntry, paletteEntry, instanceEntry}}, "Draw")};
+            return cull;
         }
-        return group.group;
+        // Each run's template, with no instances until the pass counts them, and the base instance where its region
+        // of the indirection starts; and its groups, each culling up to 64 of its candidates, so none straddles runs.
+        cull.templateOffset = templates.size() * sizeof(DrawIndexedIndirectCommand);
+        cull.firstGroup = static_cast<std::uint32_t>(groups.size());
+        std::uint32_t candidates = 0;
+        for (std::size_t r = 0; r < runs.size(); ++r)
+        {
+            const DrawRun& run = runs[r];
+            const ResolvedDraw& draw = draws[run.first];
+            const std::uint32_t count = draw.instances.count == 0 ? run.count : draw.instances.count;
+            templates.push_back({.indexCount = draw.mesh->indexCount, .baseInstance = candidates});
+            for (std::uint32_t first = 0; first < count; first += CullGroupSize)
+            {
+                groups.push_back({static_cast<std::uint32_t>(r), static_cast<std::uint32_t>(run.first), count, first});
+            }
+            candidates += count;
+        }
+        cull.runs = static_cast<std::uint32_t>(runs.size());
+        cull.candidates = candidates;
+        cull.templateBytes = runs.size() * sizeof(DrawIndexedIndirectCommand);
+        cull.groups = static_cast<std::uint32_t>(groups.size()) - cull.firstGroup;
+
+        // The view's command buffer and indirection, sized to this frame's runs and candidates, kept between frames and
+        // grown as the room needs, a copy per frame in flight, so this frame's pass never writes what an earlier
+        // frame's draws may still read.
+        if (m_cullBuffers.size() <= view)
+        {
+            m_cullBuffers.resize(view + 1);
+        }
+        CullBuffers& ring = m_cullBuffers[view];
+        constexpr BufferUsage commandUsage =
+            BufferUsage::Indirect | BufferUsage::Storage | BufferUsage::CopyDestination;
+        if (ring.commands == nullptr || cull.templateBytes > ring.commandCapacity)
+        {
+            ring.commandCapacity = std::max(cull.templateBytes, ring.commandCapacity * 2);
+            ring.commands = std::make_unique<FrameRingBuffer>(m_device, BufferDesc{ring.commandCapacity, commandUsage},
+                                                              "Cull commands");
+        }
+        const std::size_t indirectionBytes = std::size_t{candidates} * sizeof(VisibleEntry);
+        if (ring.indirection == nullptr || indirectionBytes > ring.indirectionCapacity)
+        {
+            ring.indirectionCapacity = std::max(indirectionBytes, ring.indirectionCapacity * 2);
+            ring.indirection = std::make_unique<FrameRingBuffer>(
+                m_device, BufferDesc{ring.indirectionCapacity, BufferUsage::Storage}, "Cull indirection");
+        }
+        cull.commands = ring.commands->Current(frameIndex);
+        cull.indirection = ring.indirection->Current(frameIndex);
+        cull.commandsResource = graph.ImportBuffer("CullCommands", cull.commands, {ring.commandCapacity, commandUsage});
+        cull.indirectionResource =
+            graph.ImportBuffer("CullIndirection", cull.indirection, {ring.indirectionCapacity, BufferUsage::Storage});
+        return cull;
+    }
+
+    void SceneRenderer::AddCullPasses(RenderGraph& graph, std::uint64_t frameIndex, const std::vector<CullView>& views,
+                                      std::span<const DrawIndexedIndirectCommand> templates,
+                                      std::span<const std::array<std::uint32_t, 4>> groups)
+    {
+        if (templates.empty())
+        {
+            return;
+        }
+        // The frame's templates and group table, grown by doubling, a copy per frame in flight.
+        const std::size_t templateBytes = templates.size_bytes();
+        if (m_cullTemplates == nullptr || templateBytes > m_cullTemplateCapacity)
+        {
+            m_cullTemplateCapacity = std::max(templateBytes, m_cullTemplateCapacity * 2);
+            m_cullTemplates = std::make_unique<FrameRingBuffer>(
+                m_device, BufferDesc{m_cullTemplateCapacity, BufferUsage::CopySource}, "Cull templates");
+        }
+        const std::size_t groupBytes = groups.size_bytes();
+        if (m_cullGroups == nullptr || groupBytes > m_cullGroupCapacity)
+        {
+            m_cullGroupCapacity = std::max(groupBytes, m_cullGroupCapacity * 2);
+            m_cullGroups = std::make_unique<FrameRingBuffer>(
+                m_device, BufferDesc{m_cullGroupCapacity, BufferUsage::Storage}, "Cull groups");
+        }
+        const BufferHandle templateBuffer = m_cullTemplates->Current(frameIndex);
+        const BufferHandle groupBuffer = m_cullGroups->Current(frameIndex);
+        m_cullTemplates->Write(frameIndex, 0, std::as_bytes(templates));
+        m_cullGroups->Write(frameIndex, 0, std::as_bytes(groups));
+        const GraphResource templateResource =
+            graph.ImportBuffer("CullTemplates", templateBuffer, {m_cullTemplateCapacity, BufferUsage::CopySource});
+        const GraphResource groupResource =
+            graph.ImportBuffer("CullGroups", groupBuffer, {m_cullGroupCapacity, BufferUsage::Storage});
+        const BufferHandle records = m_drawBlocks->Buffer(frameIndex);
+        const GraphResource recordResource = graph.ImportBuffer(
+            "DrawRecords", records, {m_drawBlocks->Capacity() * m_drawBlocks->SlotSize(), BufferUsage::Storage});
+        m_cullJobs->Reserve(views.size());
+
+        for (std::size_t v = 0; v < views.size(); ++v)
+        {
+            const CullView& cull = views[v];
+            if (cull.commands.IsEmpty())
+            {
+                continue;
+            }
+            const CullJobBlock job{{cull.firstGroup, cull.groups, 0, 0}};
+            m_cullJobs->Write(frameIndex, v, BytesOf(job));
+            const BindingGroupHandle targetGroup = m_cullTargetGroups.Get(
+                {BindingGroupKeyPart::Of(records), BindingGroupKeyPart::Of(groupBuffer),
+                 BindingGroupKeyPart::Of(cull.commands), BindingGroupKeyPart::Of(cull.indirection)},
+                frameIndex, [&] {
+                    std::array<BindingGroupEntry, 4> entries;
+                    for (std::uint32_t binding = 0; binding < entries.size(); ++binding)
+                    {
+                        entries.at(binding).binding = binding;
+                    }
+                    entries[0].buffer = records;
+                    entries[1].buffer = groupBuffer;
+                    entries[2].buffer = cull.commands;
+                    entries[3].buffer = cull.indirection;
+                    return m_device.CreateBindingGroup({m_cullTargetLayout, {entries.begin(), entries.end()}},
+                                                       "Cull target");
+                });
+            // The templates over the view's commands, then one dispatch over its groups; the view's DepthPrepass and
+            // Opaque passes declare reading both results, which the backend's barriers follow (ADR-0057).
+            graph.AddPass(
+                "Cull", RenderStage::Cull, QueueKind::Compute,
+                [=](PassBuilder& pass) {
+                    pass.CopySource(templateResource);
+                    pass.CopyDestination(cull.commandsResource);
+                    pass.StorageRead(groupResource);
+                    pass.StorageRead(recordResource);
+                    pass.StorageWrite(cull.commandsResource);
+                    pass.StorageWrite(cull.indirectionResource);
+                },
+                [pipeline = m_cullPipeline, jobGroup = m_cullJobs->Group(frameIndex, v), targetGroup, templateBuffer,
+                 cull](PassContext& context) {
+                    PassEncoder& encoder = context.Encoder();
+                    encoder.CopyBuffer({.source = templateBuffer,
+                                        .sourceOffset = cull.templateOffset,
+                                        .destination = cull.commands,
+                                        .size = cull.templateBytes});
+                    encoder.SetPipeline(pipeline);
+                    encoder.SetBindingGroup(0, jobGroup);
+                    encoder.SetBindingGroup(1, targetGroup);
+                    encoder.Dispatch({.groupsX = cull.groups});
+                });
+        }
     }
 
     const SceneRenderer::FrameGroup& SceneRenderer::FrameGroupFor(std::uint64_t frameIndex)
@@ -2784,7 +3018,12 @@ namespace Fenrir::Render
         const FrameGroup& frameGroups = FrameGroupFor(frameIndex);
         const BindingGroupHandle frameGroup = frameGroups.group;
         const BindingGroupHandle unshadowedFrame = frameGroups.unshadowed;
+        // The draw set of every direct draw (the shadow and transparent passes), with no indirection (ADR-0057).
         const BindingGroupHandle drawGroup = DrawGroupFor(frameIndex);
+        // Each view's cull pass (ADR-0057): its templates and groups are gathered here and uploaded after the views.
+        std::vector<CullView> culls;
+        std::vector<DrawIndexedIndirectCommand> cullTemplates;
+        std::vector<std::array<std::uint32_t, 4>> cullGroups;
 
         if (spotCount > 0)
         {
@@ -3120,13 +3359,11 @@ namespace Fenrir::Render
                 shadowDesc.usage = TextureUsage::DepthAttachment | TextureUsage::Sampled;
                 shadowAtlas = graph.CreateTexture("ShadowAtlas", shadowDesc);
             }
-            m_drawnViews.push_back({v, sceneColour, sceneDepth, sceneNormals, shadowAtlas, viewGroup});
 
-            // Opaque items in draw-list order, and those of them in the depth prepass; transparent ones outside the
-            // view's frustum left out (ADR-0057), the rest back to front by the view-space depth of their sort points,
-            // the farthest (most negative view z) first.
+            // Opaque items in draw-list order; transparent ones outside the view's frustum left out (ADR-0057), the
+            // rest back to front by the view-space depth of their sort points, the farthest (most negative view z)
+            // first.
             auto opaque = std::make_shared<std::vector<std::size_t>>();
-            auto prepassed = std::make_shared<std::vector<std::size_t>>();
             auto transparent = std::make_shared<std::vector<std::size_t>>();
             // Each draw's set 2 in the prepass: a Masked item's prepass group, else its material group.
             auto prepassGroups = std::make_shared<std::vector<BindingGroupHandle>>(*groups);
@@ -3149,10 +3386,6 @@ namespace Fenrir::Render
                     opaque->push_back(i);
                 }
                 instances += std::max<std::uint32_t>(draw.instances.count, 1);
-                if (draw.prepass != nullptr)
-                {
-                    prepassed->push_back(i);
-                }
                 if (draw.prepassMasked)
                 {
                     (*prepassGroups)[i] = PrepassGroup(*draw.material, replaced[v]);
@@ -3162,10 +3395,23 @@ namespace Fenrir::Render
             std::stable_sort(transparent->begin(), transparent->end(),
                              [&](std::size_t a, std::size_t b) { return depth[a] < depth[b]; });
             // Matching opaque and masked items merge into instanced draws (ADR-0051); transparent ones stay single,
-            // in their depth order.
-            auto prepassRuns =
-                std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *prepassGroups, *prepassed, DrawPass::Prepass));
+            // in their depth order. The opaque runs are the view's cull pass's candidates (ADR-0057): DepthPrepass and
+            // Opaque draw each by its command in the view's command buffer, the prepass skipping the runs it has no
+            // pipeline for, reading the view's indirection through the view's own draw set.
             auto opaqueRuns = std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *groups, *opaque, DrawPass::Main));
+            const CullView cull = PrepareCull(graph, frameIndex, v, *draws, *opaqueRuns, cullTemplates, cullGroups);
+            culls.push_back(cull);
+            m_drawnViews.push_back({v, sceneColour, sceneDepth, sceneNormals, shadowAtlas, viewGroup, cull.commands,
+                                    cull.indirection, cull.runs, cull.candidates});
+            const BindingGroupHandle viewDrawGroup =
+                cull.indirection.IsEmpty() ? drawGroup : DrawGroupFor(frameIndex, cull.indirection);
+            const auto readCulled = [cull](PassBuilder& pass) {
+                if (!cull.commands.IsEmpty())
+                {
+                    pass.IndirectRead(cull.commandsResource);
+                    pass.StorageRead(cull.indirectionResource);
+                }
+            };
 
             if (!shadowAtlas.IsEmpty())
             {
@@ -3221,11 +3467,12 @@ namespace Fenrir::Render
                         pass.Sample(image);
                     }
                     readSkinned(pass);
+                    readCulled(pass);
                 },
-                [this, draws, prepassGroups, prepassRuns, frameGroup, viewGroup, drawGroup, skinned,
-                 viewport](PassContext& context) {
-                    RecordDraws(context.Encoder(), *draws, *prepassGroups, *prepassRuns, frameGroup, viewGroup,
-                                drawGroup, skinned, viewport, DrawPass::Prepass);
+                [this, draws, prepassGroups, opaqueRuns, frameGroup, viewGroup, viewDrawGroup, skinned, viewport,
+                 commands = cull.commands](PassContext& context) {
+                    RecordDraws(context.Encoder(), *draws, *prepassGroups, *opaqueRuns, frameGroup, viewGroup,
+                                viewDrawGroup, skinned, viewport, DrawPass::Prepass, commands);
                 });
             // GTAO from the prepass's depth and normals, when the camera has it; Opaque samples what it makes.
             const GraphResource occlusion = m_gtao->AddPasses(
@@ -3267,9 +3514,11 @@ namespace Fenrir::Render
                         pass.StorageRead(clusters);
                     }
                     readSkinned(pass);
+                    readCulled(pass);
                 },
-                [this, draws, groups, opaqueRuns, frameGroup, drawGroup, skinned, viewport, occlusion, shadowAtlas,
-                 clusterBuffer, viewSlot, reflectionHits, sceneHistory](PassContext& context) {
+                [this, draws, groups, opaqueRuns, frameGroup, viewDrawGroup, skinned, viewport, occlusion, shadowAtlas,
+                 clusterBuffer, viewSlot, reflectionHits, sceneHistory,
+                 commands = cull.commands](PassContext& context) {
                     const auto textureOf = [&](GraphResource resource) {
                         return resource.IsEmpty() ? TextureHandle{} : context.Texture(resource);
                     };
@@ -3278,7 +3527,7 @@ namespace Fenrir::Render
                     RecordDraws(context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup,
                                 ViewGroupFor(context.FrameIndex(), viewSlot, occlusionTexture, textureOf(shadowAtlas),
                                              clusterBuffer, textureOf(reflectionHits), textureOf(sceneHistory)),
-                                drawGroup, skinned, viewport, DrawPass::Main);
+                                viewDrawGroup, skinned, viewport, DrawPass::Main, commands);
                 });
             if (!transparent->empty())
             {
@@ -3414,6 +3663,7 @@ namespace Fenrir::Render
                     encoder.Draw({.vertexCount = 3});
                 });
         }
+        AddCullPasses(graph, frameIndex, culls, cullTemplates, cullGroups);
         m_bloom->AddPasses(graph, frameIndex, blooms);
         m_sceneHistory->EndFrame();
         if (!cleared.contains(AssetKey{}))

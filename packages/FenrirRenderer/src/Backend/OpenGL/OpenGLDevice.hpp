@@ -304,6 +304,9 @@ namespace Fenrir::Graphics
         [[nodiscard]] Texels ReadTexels(TextureHandle texture, std::uint32_t mipLevel = 0);
         /** @brief For GlProbe: the GL name behind a live buffer, else 0. */
         [[nodiscard]] std::uint32_t GlName(BufferHandle buffer);
+        /** @brief For GlProbe: every byte of a live buffer as GL holds it now, waiting for the GPU; empty for a stale
+         * one. */
+        [[nodiscard]] std::vector<std::byte> ReadBuffer(BufferHandle buffer);
         /** @brief For GlProbe: the GL name behind a live texture, else 0. */
         [[nodiscard]] std::uint32_t GlName(TextureHandle texture);
         /** @brief For GlProbe: whether `name` is a GL buffer object, as GL sees it now. */

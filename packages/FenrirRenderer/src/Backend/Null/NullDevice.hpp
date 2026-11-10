@@ -122,6 +122,11 @@ namespace Fenrir::Graphics
          * index buffer bound at its start.
          */
         void CheckIndirectDraw(const CmdDrawIndexedIndirect& draw, const PassDesc* pass, std::size_t indexOffset);
+        /**
+         * @brief Applies a buffer copy to the bytes it keeps, so a copied buffer reads as the GPU's would; one past
+         * either buffer's end is a StaleUses line instead.
+         */
+        void CopyBytes(const CmdCopyBuffer& copy);
 
         DeviceConfig m_config;
         /** @brief What Features reports: everything, unless RendererProbe turned some off. */

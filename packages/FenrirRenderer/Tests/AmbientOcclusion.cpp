@@ -115,7 +115,7 @@ TEST_CASE("A default camera's view has no GTAO pass", "[renderer][gtao]")
     test.Frame();
     INFO("the prepass, the scene and Output only");
     REQUIRE(Labels(test.Passes()) ==
-            std::vector<std::string>{"BrdfLut", "DepthPrepass", "Opaque", "Background", "Output"});
+            std::vector<std::string>{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background", "Output"});
 }
 
 TEST_CASE("A camera with ambient occlusion at intensity 0 has no GTAO pass", "[renderer][gtao]")
@@ -135,8 +135,9 @@ TEST_CASE("GTAO's passes run between a camera's DepthPrepass and Opaque", "[rend
 
     test.Frame();
     INFO("the horizon search, then two denoise passes, before Opaque");
-    REQUIRE(Labels(test.Passes()) == std::vector<std::string>{"BrdfLut", "DepthPrepass", "GtaoHorizons", "GtaoDenoise",
-                                                              "GtaoDenoise", "Opaque", "Background", "Output"});
+    REQUIRE(Labels(test.Passes()) == std::vector<std::string>{"Cull", "BrdfLut", "DepthPrepass", "GtaoHorizons",
+                                                              "GtaoDenoise", "GtaoDenoise", "Opaque", "Background",
+                                                              "Output"});
 }
 
 TEST_CASE("GTAO's horizon search reads the prepass's depth and normals into an occlusion and an edge target",
@@ -285,7 +286,7 @@ TEST_CASE("A camera showing its ambient occlusion has Output draw it, and the li
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
     INFO("nothing reads SceneColor, so Opaque and Background go");
-    REQUIRE(Labels(passes) == std::vector<std::string>{"BrdfLut", "DepthPrepass", "GtaoHorizons", "GtaoDenoise",
+    REQUIRE(Labels(passes) == std::vector<std::string>{"Cull", "BrdfLut", "DepthPrepass", "GtaoHorizons", "GtaoDenoise",
                                                        "GtaoDenoise", "Output"});
     INFO("Output samples the view's occlusion");
     REQUIRE(Samples(Labelled(passes, "Output").at(0), Labelled(passes, "GtaoDenoise").at(1).pass.colour.at(0).texture));
@@ -300,7 +301,7 @@ TEST_CASE("A camera showing its ambient occlusion with it off draws Output alone
 
     test.Frame();
     INFO("it shows black: Output, sampling nothing of the frame's");
-    REQUIRE(Labels(test.Passes()) == std::vector<std::string>{"BrdfLut", "Output"});
+    REQUIRE(Labels(test.Passes()) == std::vector<std::string>{"Cull", "BrdfLut", "Output"});
     INFO("no error was logged");
     REQUIRE(test.messages->errors.empty());
 }

@@ -105,9 +105,10 @@ TEST_CASE("The depth prepass draws exactly the opaque and masked items, in Opaqu
     {
         REQUIRE(std::ranges::find(prepassed, draw.draw.firstInstance) == prepassed.end());
     }
-    INFO("DepthPrepass runs after the sky's lookup table, before Opaque");
-    REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)).at(1) == "DepthPrepass");
-    REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)).at(2) == "Opaque");
+    INFO("DepthPrepass runs after the view's cull and the sky's lookup table, before Opaque");
+    REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)).at(0) == "Cull");
+    REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)).at(2) == "DepthPrepass");
+    REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)).at(3) == "Opaque");
     INFO("nothing was logged as an error");
     REQUIRE(test.messages->errors.empty());
 }

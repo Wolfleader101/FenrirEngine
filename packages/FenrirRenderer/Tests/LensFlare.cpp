@@ -297,7 +297,7 @@ TEST_CASE("A camera's flare runs in PostProcess after its streaks, from bloom's 
 
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
-    std::vector<std::string> expected{"BrdfLut", "DepthPrepass", "Opaque", "Background"};
+    std::vector<std::string> expected{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background"};
     expected.insert(expected.end(), 6, "BloomDownsample");
     expected.insert(expected.end(), 8, "StreakDownsample");
     expected.insert(expected.end(), {"FlareGhosts", "FlareBlur"});
@@ -358,7 +358,7 @@ TEST_CASE("A camera with bloom off still flares, running bloom's first two downs
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
     INFO("two downsamples of SceneColor down to level 1, then the flare's passes; no bloom upsample or composite");
-    REQUIRE(Labels(passes) == std::vector<std::string>{"BrdfLut", "DepthPrepass", "Opaque", "Background",
+    REQUIRE(Labels(passes) == std::vector<std::string>{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background",
                                                        "BloomDownsample", "BloomDownsample", "FlareGhosts", "FlareBlur",
                                                        "FlareComposite", "Output"});
     REQUIRE(Samples(RendererTest::Labelled(passes, "FlareGhosts").at(0),

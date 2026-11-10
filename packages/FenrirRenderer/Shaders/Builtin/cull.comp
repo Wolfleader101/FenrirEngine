@@ -1,0 +1,66 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+// builtin:cull (ADR-0057): one view's cull pass. Each run the view draws (a merged run of matching items, an instance
+// list, or a lone item as a run of one) has a command in the view's command buffer, copied from its template before
+// this runs with no instances, and a region of the view's indirection starting at the command's base instance. Each
+// work group culls up to 64 candidates of one run, the group table saying which run and which candidates, so no group
+// straddles two runs and one dispatch culls the view. A candidate that is kept is counted into its command's instance
+// count with an atomic, and its entry, uvec2(record, copy), written at the slot the count gave it: the order within a
+// run varies frame to frame, which an opaque pass behind a depth prepass does not show, and tests compare sets.
+//
+// This pass keeps every candidate (culling ticket 03); the frustum test comes next (ticket 04).
+#include "Fenrir/DrawRecord.glsl"
+
+layout(local_size_x = 64) in;
+
+// The view's job.
+layout(set = 0, binding = 0, std140) uniform CullJob
+{
+    // x: the view's first entry in the group table; y: how many groups it has. zw unused.
+    uvec4 groups;
+} job;
+
+// The frame's draw records, Fenrir/Draw.glsl's draws.
+layout(set = 1, binding = 0, std430) readonly buffer Records
+{
+    DrawItem items[];
+} records;
+
+// The frame's group table: per work group, x its run's command in the view's command buffer, y the run's first record
+// (an instance list's one record), z how many candidates the run has, w the first of them this group culls.
+layout(set = 1, binding = 1, std430) readonly buffer Groups
+{
+    uvec4 entries[];
+} groups;
+
+// The view's command buffer as words, five a command (Device/CommandList.hpp's DrawIndexedIndirectCommand): the
+// instance count the second, the base instance the fifth.
+layout(set = 1, binding = 2, std430) buffer Commands
+{
+    uint words[];
+} commands;
+
+// The view's indirection, Fenrir/Draw.glsl's fenrirVisible.
+layout(set = 1, binding = 3, std430) writeonly buffer Visible
+{
+    uvec2 entries[];
+} visible;
+
+void main()
+{
+    uvec4 group = groups.entries[job.groups.x + gl_WorkGroupID.x];
+    uint candidate = group.w + gl_LocalInvocationID.x;
+    if (candidate >= group.z)
+    {
+        return;
+    }
+    DrawItem first = records.items[group.y];
+    // A merged run's candidates are consecutive records; an instance list's are its copies, all of its one record.
+    bool list = first.instanceCount != 0u;
+    uint record = list ? group.y : group.y + candidate;
+    uint copy = list ? first.instanceFirst + candidate : FenrirNoCopy;
+
+    uint command = group.x * 5u;
+    uint slot = atomicAdd(commands.words[command + 1u], 1u);
+    visible.entries[commands.words[command + 4u] + slot] = uvec2(record, copy);
+}

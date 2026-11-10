@@ -207,6 +207,26 @@ namespace Fenrir::Graphics
         }
     }
 
+    void NullDevice::CopyBytes(const CmdCopyBuffer& copy)
+    {
+        const NullBuffer* source = m_buffers.Find(copy.source);
+        NullBuffer* destination = m_buffers.Find(copy.destination);
+        if (source == nullptr || destination == nullptr)
+        {
+            return;
+        }
+        Check(copy.sourceOffset + copy.size <= source->bytes.size() &&
+                  copy.destinationOffset + copy.size <= destination->bytes.size(),
+              "a buffer copy runs past the end of its source or destination");
+        if (copy.sourceOffset + copy.size <= source->bytes.size() &&
+            copy.destinationOffset + copy.size <= destination->bytes.size())
+        {
+            std::copy_n(source->bytes.begin() + static_cast<std::ptrdiff_t>(copy.sourceOffset),
+                        static_cast<std::ptrdiff_t>(copy.size),
+                        destination->bytes.begin() + static_cast<std::ptrdiff_t>(copy.destinationOffset));
+        }
+    }
+
     void NullDevice::CheckIndirectDraw(const CmdDrawIndexedIndirect& draw, const PassDesc* pass,
                                        std::size_t indexOffset)
     {
@@ -291,6 +311,7 @@ namespace Fenrir::Graphics
                     else if constexpr (std::is_same_v<T, CmdCopyBuffer>)
                     {
                         CheckLive(m_buffers.IsLive(cmd.source) && m_buffers.IsLive(cmd.destination), "buffer");
+                        CopyBytes(cmd);
                     }
                 },
                 command);
