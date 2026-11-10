@@ -1,7 +1,7 @@
 # What is a data asset: its type model, its name, and how C++ and C# define one?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 01, 09
 
 ## Question
