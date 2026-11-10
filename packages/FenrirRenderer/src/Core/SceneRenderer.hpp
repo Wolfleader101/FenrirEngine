@@ -57,6 +57,12 @@ namespace Fenrir::Render
          * instance list.
          */
         std::uint32_t instances = 0;
+        /**
+         * @brief Items and instance list copies the cull passes kept and the GPU drew (ADR-0057), summed over views,
+         * from the most recent frame whose command buffers have been read back: the frame `FramesInFlight` frames
+         * ago, usually two behind `instances`. Unchanged by a frame that read nothing back.
+         */
+        std::uint32_t instancesDrawn = 0;
         /** @brief Meshes, images, material blocks and instance lists uploaded since the last call. */
         std::uint32_t uploads = 0;
         /** @brief Bytes written into the last frame's palette buffer. */
@@ -102,6 +108,29 @@ namespace Fenrir::Render
         /** @brief How many candidates its cull pass culls. */
         std::uint32_t cullCandidates = 0;
     };
+
+    /**
+     * @brief What a camera's cull kept of the frame culling was frozen in (ADR-0057): the planes and position its
+     * views cull against while frozen, however the camera has moved since, and the volume's corners for drawing it.
+     */
+    struct FrozenCull
+    {
+        /** @brief The camera's entity id, as ViewRequest::camera names it. */
+        std::uint32_t camera = 0;
+        /** @brief The planes the camera's views cull against, as its frustum was when frozen. */
+        Math::Frustum frustum;
+        /** @brief Where the camera was when frozen, for what chooses by distance from it. */
+        Math::Vec3 position{0.0f};
+        /**
+         * @brief The frozen volume's corners in world space, the near four then the far four, each in the order
+         * bottom-left, bottom-right, top-left, top-right; a perspective view's far plane, at infinity, is drawn
+         * FrozenFarDistance along each corner's ray instead.
+         */
+        std::array<Math::Vec3, 8> corners{};
+    };
+
+    /** @brief How far along its rays a frozen perspective frustum's far end is drawn, in world units. */
+    constexpr float FrozenFarDistance = 100.0f;
 
     /**
      * @brief The render feature that draws the scene (ADR-0019, ADR-0023, ADR-0024): the GPU side of the meshes,
@@ -225,7 +254,12 @@ namespace Fenrir::Render
      * The job block carries the view's planes (Math::Frustum), and the pass keeps a candidate whose sphere and then
      * whose box's eight corners may be inside them, as Math::Frustum tests them; with GPU culling off it gets no
      * planes and keeps every candidate. Before the runs form, a draw whose world bounds are outside the view's frustum
-     * is left out of the view altogether, opaque or transparent.
+     * is left out of the view altogether, opaque or transparent. At the frame's end a `CullReadback` pass copies
+     * every view's command buffer into the frame's slot of a readback ring (a copy per frame in flight), and each
+     * frame reads the slot the frame `FramesInFlight` ago filled, summing its commands' instance counts into
+     * SceneStats::instancesDrawn. With culling frozen (SetCullingFrozen), each camera's views keep culling, on the
+     * CPU and in the pass, against the frustum the camera had when it was frozen while drawing from where it is now
+     * (FrozenCulls, which DebugFeature draws the edges of).
      *
      * **Instance lists** (ADR-0051) are prepared like assets: each copy's transform, normal matrix and colour, kept
      * packed back to back with every other list's in one storage buffer, set 3 binding 1, made again whenever a list
@@ -376,6 +410,33 @@ namespace Fenrir::Render
         void SetGpuCulling(bool on) noexcept
         {
             m_gpuCulling = on;
+        }
+
+        /**
+         * @brief Freezes culling from the next frame (ADR-0057): each camera then keeps culling against the frustum
+         * and position it has in that frame, however it moves after, so flying out shows what was kept; off, every
+         * camera culls by where it is again and the frozen frustums are forgotten.
+         */
+        void SetCullingFrozen(bool on)
+        {
+            m_cullingFrozen = on;
+            if (!on)
+            {
+                m_frozenCulls.clear();
+            }
+        }
+
+        /** @brief Whether culling is frozen. */
+        [[nodiscard]] bool IsCullingFrozen() const noexcept
+        {
+            return m_cullingFrozen;
+        }
+
+        /** @brief Each camera's frozen cull, in the order their first frozen frames drew them; empty when not frozen.
+         */
+        [[nodiscard]] const std::vector<FrozenCull>& FrozenCulls() const noexcept
+        {
+            return m_frozenCulls;
         }
 
         /**
@@ -790,6 +851,22 @@ namespace Fenrir::Render
             GrownRing indirection;
         };
 
+        /**
+         * @brief One slot of the cull readback ring (ADR-0057): every view's command buffer of one frame, copied
+         * back to back in the frame's template order, which the CPU reads once that frame has left flight.
+         */
+        struct CullReadback
+        {
+            /** @brief Made with CopyDestination | Readback; empty until a frame with runs fills the slot. */
+            Graphics::BufferHandle buffer;
+            /** @brief Its size in bytes, grown by doubling when a frame needs more. */
+            std::size_t capacity = 0;
+            /** @brief The frame whose commands it holds; none before its first. */
+            std::optional<std::uint64_t> frame;
+            /** @brief How many commands that frame copied into it, over every view. */
+            std::uint32_t commands = 0;
+        };
+
         /** @brief The pipeline drawing a mesh with the standard streams `streams` (StreamsOf's bits) has. */
         [[nodiscard]] const PipelineEntry& MeshPipeline(const ShaderEntry& shader, const VariantEntry& variant,
                                                         std::uint32_t streams, BlendMode blend, bool doubleSided,
@@ -890,6 +967,22 @@ namespace Fenrir::Render
         void AddCullPasses(RenderGraph& graph, std::uint64_t frameIndex, const std::vector<CullView>& views,
                            std::span<const Graphics::DrawIndexedIndirectCommand> templates,
                            std::span<const CullGroupEntry> groups);
+        /**
+         * @brief Sums the instance counts of the commands the frame `FramesInFlight` before `frameIndex` copied into
+         * its readback slot into SceneStats::instancesDrawn, if that frame filled it and the device lets it be read.
+         */
+        void ReadCulled(std::uint64_t frameIndex);
+        /**
+         * @brief Adds the frame's `CullReadback` pass, last in the frame: a copy of each view's command buffer into
+         * the frame's slot of the readback ring, at its templates' offset, the slot grown to hold `commandBytes`.
+         */
+        void AddCullReadback(RenderGraph& graph, std::uint64_t frameIndex, const std::vector<CullView>& views,
+                             std::size_t commandBytes);
+        /**
+         * @brief The frustum view `request` culls against: `frustum`, the view's own, or, frozen, the one its camera
+         * had when frozen, kept from this frame if the camera has none yet.
+         */
+        [[nodiscard]] const Math::Frustum& CullFrustumOf(const ViewRequest& request, const Math::Frustum& frustum);
         [[nodiscard]] Graphics::PipelineHandle MakeInternalPipeline(
             const ShaderContainer& container, const ShaderVariant* variant, Graphics::BindingGroupLayoutHandle layout,
             Graphics::TextureFormat colour, bool depthTested, std::uint32_t samples,
@@ -1133,6 +1226,11 @@ namespace Fenrir::Render
         GrownRing m_cullGroups;
         /** @brief Each view's cull rings, by view index. */
         std::vector<CullRings> m_cullRings;
+        /** @brief The cull readback ring, a slot per frame in flight, by frame index modulo the slots. */
+        std::vector<CullReadback> m_cullReadbacks;
+        /** @brief Whether culling is frozen (SetCullingFrozen), and each camera's frozen cull while it is. */
+        bool m_cullingFrozen = false;
+        std::vector<FrozenCull> m_frozenCulls;
         /**
          * @brief The buffer of one entry naming no record (`Fenrir/DrawRecord.glsl`'s FenrirNoIndirection) that the
          * draw group of every direct draw binds at set 3 binding 3.

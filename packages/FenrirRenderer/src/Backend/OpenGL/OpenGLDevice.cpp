@@ -443,8 +443,13 @@ namespace Fenrir::Graphics
         GladGLContext& gl = *m_gl;
         GlBuffer buffer;
         buffer.size = desc.size;
+        buffer.usage = desc.usage;
+        buffer.writtenFrame = m_frameIndex;
         gl.CreateBuffers(1, &buffer.name);
-        gl.NamedBufferStorage(buffer.name, static_cast<GLsizeiptr>(desc.size), nullptr, GL_DYNAMIC_STORAGE_BIT);
+        // A buffer the CPU reads back is a hint to keep it where the client can read it.
+        const GLbitfield flags =
+            GL_DYNAMIC_STORAGE_BIT | (HasUsage(desc.usage, BufferUsage::Readback) ? GL_CLIENT_STORAGE_BIT : 0);
+        gl.NamedBufferStorage(buffer.name, static_cast<GLsizeiptr>(desc.size), nullptr, flags);
         if (!initial.empty())
         {
             gl.NamedBufferSubData(buffer.name, 0, static_cast<GLsizeiptr>(initial.size()), initial.data());
@@ -722,7 +727,7 @@ namespace Fenrir::Graphics
 
     bool OpenGLDevice::WriteBuffer(BufferHandle buffer, std::size_t offset, std::span<const std::byte> bytes)
     {
-        const GlBuffer* found = m_buffers.Find(buffer);
+        GlBuffer* found = m_buffers.Find(buffer);
         if (found == nullptr)
         {
             return false;
@@ -737,6 +742,33 @@ namespace Fenrir::Graphics
             }
             m_gl->NamedBufferSubData(found->name, static_cast<GLintptr>(offset), static_cast<GLsizeiptr>(bytes.size()),
                                      bytes.data());
+        }
+        found->writtenFrame = m_frameIndex;
+        return true;
+    }
+
+    bool OpenGLDevice::ReadBuffer(BufferHandle buffer, std::size_t offset, std::span<std::byte> bytes)
+    {
+        const GlBuffer* found = m_buffers.Find(buffer);
+        if (found == nullptr || !HasUsage(found->usage, BufferUsage::Readback) || offset + bytes.size() > found->size)
+        {
+            return false;
+        }
+        // Refused until the writing frame has left flight: GL would otherwise wait for its commands here.
+        if (found->writtenFrame + m_config.framesInFlight > m_frameIndex)
+        {
+            return false;
+        }
+        if (!bytes.empty())
+        {
+            // A read after a shader wrote the buffer needs the same barrier a copy does; a copy's write needs none.
+            const auto written = m_storageWritten.find(found->name);
+            if (written != m_storageWritten.end())
+            {
+                MakeVisible(GL_BUFFER_UPDATE_BARRIER_BIT & ~written->second);
+            }
+            m_gl->GetNamedBufferSubData(found->name, static_cast<GLintptr>(offset),
+                                        static_cast<GLsizeiptr>(bytes.size()), bytes.data());
         }
         return true;
     }
@@ -897,10 +929,11 @@ namespace Fenrir::Graphics
         // source, which GL makes visible only after a barrier before them: those passes' uses say which.
         for (const PassResourceUse& use : pass.uses)
         {
-            const GlBuffer* buffer = BufferOf(use);
+            GlBuffer* buffer = BufferOf(use);
             if (buffer != nullptr && use.usage == ResourceUsage::StorageWrite)
             {
                 m_replay.storageWrites.push_back(buffer->name);
+                buffer->writtenFrame = m_frameIndex;
             }
         }
         if (pass.queue == QueueKind::Compute)
@@ -1229,7 +1262,7 @@ namespace Fenrir::Graphics
     void OpenGLDevice::Execute(const CmdCopyBuffer& command)
     {
         const GlBuffer* source = m_buffers.Find(command.source);
-        const GlBuffer* destination = m_buffers.Find(command.destination);
+        GlBuffer* destination = m_buffers.Find(command.destination);
         if (source == nullptr || destination == nullptr)
         {
             m_logger->Error("OpenGL backend: a buffer copy names a stale buffer");
@@ -1238,6 +1271,7 @@ namespace Fenrir::Graphics
         m_gl->CopyNamedBufferSubData(source->name, destination->name, static_cast<GLintptr>(command.sourceOffset),
                                      static_cast<GLintptr>(command.destinationOffset),
                                      static_cast<GLsizeiptr>(command.size));
+        destination->writtenFrame = m_frameIndex;
     }
 
     void OpenGLDevice::BarrierBefore(const PassDesc& pass)
@@ -1264,7 +1298,7 @@ namespace Fenrir::Graphics
         MakeVisible(wanted);
     }
 
-    const OpenGLDevice::GlBuffer* OpenGLDevice::BufferOf(const PassResourceUse& use)
+    OpenGLDevice::GlBuffer* OpenGLDevice::BufferOf(const PassResourceUse& use)
     {
         return use.texture.IsEmpty() ? m_buffers.Find(use.buffer) : nullptr;
     }
@@ -1448,7 +1482,7 @@ namespace Fenrir::Graphics
         return found != nullptr ? found->name : 0;
     }
 
-    std::vector<std::byte> OpenGLDevice::ReadBuffer(BufferHandle buffer)
+    std::vector<std::byte> OpenGLDevice::ReadBufferNow(BufferHandle buffer)
     {
         const GlBuffer* found = m_buffers.Find(buffer);
         if (found == nullptr || found->name == 0)

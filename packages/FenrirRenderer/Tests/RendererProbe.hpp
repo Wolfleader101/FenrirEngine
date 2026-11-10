@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -156,6 +157,34 @@ namespace Fenrir
                 culls.push_back({view.cullCommands, view.cullIndirection, view.cullRuns, view.cullCandidates});
             }
             return culls;
+        }
+
+        /**
+         * @brief One slot of the cull readback ring (ADR-0057): its buffer, which frame's command buffers it holds,
+         * and how many commands that frame copied into it.
+         */
+        struct CullReadbackSlot
+        {
+            Graphics::BufferHandle buffer;
+            std::optional<std::uint64_t> frame;
+            std::uint32_t commands = 0;
+        };
+
+        /** @brief The cull readback ring's slots, by frame index modulo their count, on any backend. */
+        [[nodiscard]] static std::vector<CullReadbackSlot> CullReadbacks(const Renderer& renderer)
+        {
+            std::vector<CullReadbackSlot> slots;
+            for (const auto& slot : renderer.m_state->scene->m_cullReadbacks)
+            {
+                slots.push_back({slot.buffer, slot.frame, slot.commands});
+            }
+            return slots;
+        }
+
+        /** @brief Each camera's frozen cull while culling is frozen (ADR-0057), on any backend. */
+        [[nodiscard]] static const std::vector<Render::FrozenCull>& FrozenCulls(const Renderer& renderer)
+        {
+            return renderer.m_state->scene->FrozenCulls();
         }
 
         /** @brief The renderer core a valid Renderer owner draws with. */

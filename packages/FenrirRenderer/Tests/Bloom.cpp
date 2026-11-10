@@ -74,6 +74,7 @@ namespace
         labels.insert(labels.end(), levels - 1, "BloomUpsample");
         labels.emplace_back("BloomComposite");
         labels.emplace_back("Output");
+        labels.emplace_back("CullReadback");
         return labels;
     }
 
@@ -238,8 +239,8 @@ TEST_CASE("A camera at bloom intensity 0 draws the frame as it was without bloom
 
     test.Frame();
     INFO("no bloom pass between Background and Output");
-    REQUIRE(Labels(test.Passes()) ==
-            std::vector<std::string>{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background", "Output"});
+    REQUIRE(Labels(test.Passes()) == std::vector<std::string>{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background",
+                                                              "Output", "CullReadback"});
 }
 
 TEST_CASE("A camera's bloom intensity and radius reach its passes, clamped to [0, 1]", "[renderer][bloom]")

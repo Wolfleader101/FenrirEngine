@@ -488,14 +488,15 @@ struct Iris::StructMapping<Fenrir::RendererStats>
     static constexpr auto fields = Iris::StructFields(
         Iris::Field<std::uint32_t>("Draws", 0),
         Iris::Field<std::uint32_t>("Instances", 4),
-        Iris::Field<std::uint32_t>("Passes", 8),
-        Iris::Field<std::uint32_t>("Uploads", 12),
-        Iris::Field<std::uint32_t>("PaletteBytesUploaded", 16),
-        Iris::Field<std::uint32_t>("DistinctPalettesWritten", 20),
-        Iris::Field<std::uint32_t>("SkinnedDraws", 24),
-        Iris::Field<std::uint32_t>("ShadowDraws", 28));
+        Iris::Field<std::uint32_t>("InstancesDrawn", 8),
+        Iris::Field<std::uint32_t>("Passes", 12),
+        Iris::Field<std::uint32_t>("Uploads", 16),
+        Iris::Field<std::uint32_t>("PaletteBytesUploaded", 20),
+        Iris::Field<std::uint32_t>("DistinctPalettesWritten", 24),
+        Iris::Field<std::uint32_t>("SkinnedDraws", 28),
+        Iris::Field<std::uint32_t>("ShadowDraws", 32));
 };
-static_assert(sizeof(Fenrir::RendererStats) == 32 && alignof(Fenrir::RendererStats) == 4,
+static_assert(sizeof(Fenrir::RendererStats) == 36 && alignof(Fenrir::RendererStats) == 4,
               "Fenrir::RendererStats is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 

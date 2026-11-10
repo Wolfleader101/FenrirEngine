@@ -49,7 +49,7 @@ namespace Fenrir::Graphics
     BufferHandle NullDevice::CreateBuffer(const BufferDesc& desc, std::span<const std::byte> initial,
                                           std::string_view label)
     {
-        NullBuffer buffer{std::vector<std::byte>(desc.size), desc.usage, std::string(label)};
+        NullBuffer buffer{std::vector<std::byte>(desc.size), desc.usage, std::string(label), m_frameIndex};
         std::copy_n(initial.begin(), std::min(initial.size(), desc.size), buffer.bytes.begin());
         return m_buffers.Add(std::move(buffer));
     }
@@ -109,6 +109,26 @@ namespace Fenrir::Graphics
             std::copy_n(bytes.begin(), std::min(bytes.size(), found->bytes.size() - offset),
                         found->bytes.begin() + static_cast<std::ptrdiff_t>(offset));
         }
+        found->writtenFrame = m_frameIndex;
+        return true;
+    }
+
+    bool NullDevice::ReadBuffer(BufferHandle buffer, std::size_t offset, std::span<std::byte> bytes)
+    {
+        const NullBuffer* found = m_buffers.Find(buffer);
+        if (found == nullptr || !HasUsage(found->usage, BufferUsage::Readback) ||
+            offset + bytes.size() > found->bytes.size())
+        {
+            return false;
+        }
+        // The frame that wrote it has left flight once framesInFlight frames have begun since it, as a destroyed
+        // slot's wait is counted; a read before then would wait on the GPU, so it is refused instead.
+        if (found->writtenFrame + m_config.framesInFlight > m_frameIndex)
+        {
+            return false;
+        }
+        std::copy_n(found->bytes.begin() + static_cast<std::ptrdiff_t>(offset),
+                    static_cast<std::ptrdiff_t>(bytes.size()), bytes.begin());
         return true;
     }
 
@@ -224,6 +244,7 @@ namespace Fenrir::Graphics
                         static_cast<std::ptrdiff_t>(copy.size),
                         destination->bytes.begin() + static_cast<std::ptrdiff_t>(copy.destinationOffset));
         }
+        destination->writtenFrame = m_frameIndex;
     }
 
     void NullDevice::CheckIndirectDraw(const CmdDrawIndexedIndirect& draw, const PassDesc* pass,
@@ -280,6 +301,14 @@ namespace Fenrir::Graphics
                             CheckLive(use.texture.IsEmpty() ? m_buffers.IsLive(use.buffer)
                                                             : m_textures.IsLive(use.texture),
                                       "resource in a pass's declared uses");
+                            // A dispatch writes no bytes here, but the frame still counts as writing the buffer.
+                            NullBuffer* written = use.texture.IsEmpty() && use.usage == ResourceUsage::StorageWrite
+                                                      ? m_buffers.Find(use.buffer)
+                                                      : nullptr;
+                            if (written != nullptr)
+                            {
+                                written->writtenFrame = m_frameIndex;
+                            }
                         }
                     }
                     else if constexpr (std::is_same_v<T, CmdSetPipeline>)

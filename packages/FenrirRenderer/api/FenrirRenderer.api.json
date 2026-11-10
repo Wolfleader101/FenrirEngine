@@ -1463,7 +1463,7 @@
       "name": "Fenrir::RendererStats",
       "category": "struct",
       "role": "shared-struct",
-      "size": 32,
+      "size": 36,
       "alignment": 4,
       "doc": "What the renderer did in its last drawn frame (ADR-0023).",
       "fields": [
@@ -1482,43 +1482,50 @@
           "doc": "MeshRenderers drawn, one per item per view, however many draws they took, and the copies of each InstancedMeshRenderer's instance list, one per copy per view."
         },
         {
-          "name": "passes",
+          "name": "instancesDrawn",
           "offset": 8,
+          "kind": "u32",
+          "default": 0,
+          "doc": "MeshRenderers and instance list copies the GPU drew after each camera's cull pass (ADR-0057), summed over cameras, read back from the most recent frame that has left flight: usually two frames behind `instances`, the candidates this frame submitted. 0 until a frame has been read back."
+        },
+        {
+          "name": "passes",
+          "offset": 12,
           "kind": "u32",
           "default": 0,
           "doc": "Render passes run."
         },
         {
           "name": "uploads",
-          "offset": 12,
+          "offset": 16,
           "kind": "u32",
           "default": 0,
           "doc": "Assets uploaded to the GPU by the prepare step: a mesh, a material's parameter block, or an instance list."
         },
         {
           "name": "paletteBytesUploaded",
-          "offset": 16,
+          "offset": 20,
           "kind": "u32",
           "default": 0,
           "doc": "Bytes copied into the frame's palette buffer: every skeleton palette the frame's draws read."
         },
         {
           "name": "distinctPalettesWritten",
-          "offset": 20,
+          "offset": 24,
           "kind": "u32",
           "default": 0,
           "doc": "Skeleton palettes written, one per skeleton and pose however many meshes and views draw it (ADR-0035)."
         },
         {
           "name": "skinnedDraws",
-          "offset": 24,
+          "offset": 28,
           "kind": "u32",
           "default": 0,
           "doc": "Skinned MeshRenderers drawn, one per item per view; part of `instances`."
         },
         {
           "name": "shadowDraws",
-          "offset": 28,
+          "offset": 32,
           "kind": "u32",
           "default": 0,
           "doc": "Draws into the sun's shadow cascades and the spot lights' shadow tiles (ADR-0050): one per run of matching casting items, merged as in `draws`, per cascade of each view, per shadowed spot light, and per shadowed point light (six times over for items whose shader draws its six faces one at a time)."

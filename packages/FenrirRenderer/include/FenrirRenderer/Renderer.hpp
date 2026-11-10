@@ -141,6 +141,12 @@ namespace Fenrir
          * InstancedMeshRenderer's instance list, one per copy per view.
          */
         std::uint32_t instances = 0;
+        /**
+         * @brief MeshRenderers and instance list copies the GPU drew after each camera's cull pass (ADR-0057),
+         * summed over cameras, read back from the most recent frame that has left flight: usually two frames behind
+         * `instances`, the candidates this frame submitted. 0 until a frame has been read back.
+         */
+        std::uint32_t instancesDrawn = 0;
         /** @brief Render passes run. */
         std::uint32_t passes = 0;
         /**
@@ -235,6 +241,14 @@ namespace Fenrir
         void SetGpuCulling(bool on);
 
         /**
+         * @brief Freezes culling from the next frame (ADR-0057): each camera then keeps culling, on the CPU and in its
+         * cull pass, against the frustum it has in that frame, while it draws from wherever it moves to, so flying
+         * out of the frozen volume shows what was kept; the Debug stage draws the frozen frustum's edges. Off, every
+         * camera culls by where it is again. An invalid owner does nothing.
+         */
+        void SetCullingFrozen(bool on);
+
+        /**
          * @brief Sets how many SpotLights may cast shadows (RendererConfig::spotShadowBudget, ADR-0050) from the next
          * frame, which makes the spot shadow atlas again at the new budget's size. An invalid owner does nothing.
          */
@@ -310,6 +324,7 @@ namespace Fenrir
         static void SetComputeSkinning(App& app, bool on);
         static void SetClusteredLights(App& app, bool on);
         static void SetGpuCulling(App& app, bool on);
+        static void SetCullingFrozen(App& app, bool on);
         static void SetSpotShadowBudget(App& app, std::uint32_t budget);
         static void SetPointShadowBudget(App& app, std::uint32_t budget);
         [[nodiscard]] static std::optional<Math::Ray> ScreenPointToRay(App& app, const Entity& camera,

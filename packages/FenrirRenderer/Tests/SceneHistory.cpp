@@ -164,8 +164,8 @@ TEST_CASE("A default camera has no reflection pass or texture", "[renderer][ssr]
     INFO("reflections are off by default");
     REQUIRE_FALSE(Fenrir::Camera{}.reflections.enabled);
     INFO("the prepass, the scene and Output only");
-    REQUIRE(Labels(test.Passes()) ==
-            std::vector<std::string>{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background", "Output"});
+    REQUIRE(Labels(test.Passes()) == std::vector<std::string>{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background",
+                                                              "Output", "CullReadback"});
     INFO("and nothing kept for it");
     REQUIRE(RendererProbe::Reflections(test.renderer).empty());
 }
@@ -182,6 +182,7 @@ TEST_CASE("A reflecting camera's HiZ passes follow its prepass and its SceneHist
     expected.insert(expected.end(), {"ReflectionTrace", "Opaque", "Background"});
     expected.insert(expected.end(), 11, "SceneHistory");
     expected.emplace_back("Output");
+    expected.emplace_back("CullReadback");
     INFO("one HiZ and one SceneHistory pass per level of a 1280 x 720 chain, and the trace between");
     REQUIRE(Labels(test.Passes()) == expected);
 }

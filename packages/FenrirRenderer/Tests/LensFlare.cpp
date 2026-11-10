@@ -305,7 +305,7 @@ TEST_CASE("A camera's flare runs in PostProcess after its streaks, from bloom's 
     expected.emplace_back("BloomComposite");
     expected.insert(expected.end(), 7, "StreakUpsample");
     expected.emplace_back("StreakComposite");
-    expected.insert(expected.end(), {"FlareComposite", "Output"});
+    expected.insert(expected.end(), {"FlareComposite", "Output", "CullReadback"});
     INFO("the ghosts and their blur read level 1 before bloom's upsamples blend over it, as the streaks' downsamples "
          "read level 0; the flare's composite follows the streaks'");
     REQUIRE(Labels(passes) == expected);
@@ -360,7 +360,7 @@ TEST_CASE("A camera with bloom off still flares, running bloom's first two downs
     INFO("two downsamples of SceneColor down to level 1, then the flare's passes; no bloom upsample or composite");
     REQUIRE(Labels(passes) == std::vector<std::string>{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background",
                                                        "BloomDownsample", "BloomDownsample", "FlareGhosts", "FlareBlur",
-                                                       "FlareComposite", "Output"});
+                                                       "FlareComposite", "Output", "CullReadback"});
     REQUIRE(Samples(RendererTest::Labelled(passes, "FlareGhosts").at(0),
                     RendererTest::Labelled(passes, "BloomDownsample").at(1).pass.colour.at(0).texture));
     INFO("an intensity over 1 mixes in the flare alone, and the ghost count is held to MaxGhosts");

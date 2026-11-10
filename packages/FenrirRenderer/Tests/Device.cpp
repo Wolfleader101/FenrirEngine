@@ -2,6 +2,8 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
+#include <span>
 #include <vector>
 
 #include "Device/GraphicsDevice.hpp"
@@ -183,4 +185,72 @@ TEST_CASE("A submitted command naming a stale handle is reported", "[renderer][d
     REQUIRE(RendererProbe::StaleUses(*device).size() == 1);
     INFO("the live backbuffer attachment is not");
     REQUIRE(RendererProbe::StaleUses(*device).front().find("buffer") != std::string::npos);
+}
+
+TEST_CASE("A readback buffer reads back what was written or copied into it only once that frame has left flight",
+          "[renderer][device][culling]")
+{
+    auto device = CreateNullDevice({.framesInFlight = 2});
+    device->BeginFrame(0);
+    const BufferHandle readback =
+        device->CreateBuffer({16, BufferUsage::CopyDestination | BufferUsage::Readback}, {}, "Readback");
+    const std::array<std::uint32_t, 4> written{1, 2, 3, 4};
+    REQUIRE(device->WriteBuffer(readback, 0, std::as_bytes(std::span(written))));
+    std::array<std::uint32_t, 4> read{};
+    const auto readAll = [&] { return device->ReadBuffer(readback, 0, std::as_writable_bytes(std::span(read))); };
+
+    INFO("in the frame it was written, and the next, that frame may still be in flight: refused, reading nothing");
+    REQUIRE_FALSE(readAll());
+    device->BeginFrame(1);
+    REQUIRE_FALSE(readAll());
+    REQUIRE(read == std::array<std::uint32_t, 4>{});
+    device->BeginFrame(2);
+    INFO("two frames later, it reads what was written");
+    REQUIRE(readAll());
+    REQUIRE(read == written);
+    INFO("a part of it from an offset, never a range past its end");
+    std::array<std::uint32_t, 2> tail{};
+    REQUIRE(device->ReadBuffer(readback, 8, std::as_writable_bytes(std::span(tail))));
+    REQUIRE(tail == std::array<std::uint32_t, 2>{3, 4});
+    REQUIRE_FALSE(device->ReadBuffer(readback, 8, std::as_writable_bytes(std::span(read))));
+
+    INFO("a copy into it in frame 2 counts as frame 2 writing it: refused until frame 4, which reads the copy");
+    const std::array<std::uint32_t, 4> copied{5, 6, 7, 8};
+    const BufferHandle source = device->CreateBuffer({16, BufferUsage::CopySource}, std::as_bytes(std::span(copied)));
+    CommandList list;
+    {
+        PassEncoder pass(list, Pass("Copy"));
+        pass.CopyBuffer({.source = source, .destination = readback, .size = 16});
+    }
+    device->Submit(list);
+    device->BeginFrame(3);
+    REQUIRE_FALSE(readAll());
+    device->BeginFrame(4);
+    REQUIRE(readAll());
+    REQUIRE(read == copied);
+
+    INFO("a pass declaring StorageWrite on it counts as writing it too, though a dispatch leaves its bytes as they "
+         "were on the null backend");
+    CommandList dispatch;
+    {
+        PassDesc pass = Pass("Dispatch");
+        pass.queue = QueueKind::Compute;
+        pass.uses.push_back({{}, readback, ResourceUsage::StorageWrite});
+        PassEncoder encoder(dispatch, pass);
+        encoder.Dispatch({.groupsX = 1});
+    }
+    device->Submit(dispatch);
+    device->BeginFrame(5);
+    REQUIRE_FALSE(readAll());
+    device->BeginFrame(6);
+    REQUIRE(readAll());
+    REQUIRE(read == copied);
+
+    INFO("a buffer made without Readback usage is refused however long ago it was written, as is a stale handle");
+    const BufferHandle plain = device->CreateBuffer({16, BufferUsage::Storage}, std::as_bytes(std::span(written)));
+    device->BeginFrame(9);
+    REQUIRE_FALSE(device->ReadBuffer(plain, 0, std::as_writable_bytes(std::span(read))));
+    REQUIRE(device->Destroy(readback));
+    REQUIRE_FALSE(readAll());
+    REQUIRE(RendererProbe::StaleUses(*device).empty());
 }

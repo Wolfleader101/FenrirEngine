@@ -12,10 +12,10 @@
 
 **Touches:** `packages/FenrirRenderer/src/`, `packages/FenrirRenderer/include/FenrirRenderer/`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`, `packages/FenrirRenderer/api/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `RendererProbe` on null: `ReadBuffer` before the writing frame leaves flight fails and reads nothing; after, it returns the written bytes; each camera's command buffer is copied into the readback ring once a frame.
-- [ ] GL: `instancesDrawn` for the seeded scene of ticket 03 equals the CPU count, `FramesInFlight` frames after it was drawn.
-- [ ] `RendererProbe` on null: while frozen, the cull pass's uploaded planes stay those of the frozen camera as the camera moves, and the view's matrices do not; unfreezing restores them.
+- [x] `RendererProbe` on null: `ReadBuffer` before the writing frame leaves flight fails and reads nothing; after, it returns the written bytes; each camera's command buffer is copied into the readback ring once a frame.
+- [x] GL: `instancesDrawn` for the seeded scene of ticket 03 equals the CPU count, `FramesInFlight` frames after it was drawn.
+- [x] `RendererProbe` on null: while frozen, the cull pass's uploaded planes stay those of the frozen camera as the camera moves, and the view's matrices do not; unfreezing restores them.
 
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
