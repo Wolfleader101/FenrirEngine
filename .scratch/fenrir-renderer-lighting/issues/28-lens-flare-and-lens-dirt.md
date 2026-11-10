@@ -15,13 +15,15 @@
 
 **Touches:** `packages/FenrirRenderer/include/FenrirRenderer/`, `packages/FenrirRenderer/src/`, `packages/FenrirRenderer/Shaders/`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`, `packages/FenrirRenderer/Scripting/api/`, `packages/FenrirRenderer/Managed/`, `examples/LightingDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] CPU unit tests: ghost positions along the line through the centre for a given count and spacing; the dirt-scaled share never exceeds 1.
-- [ ] Null-backend probes: a view with the flare off adds no pass; with it on, its passes follow the streaks' in `PostProcess`.
-- [ ] GL pixel probes: a bright point off-centre makes a ghost on the opposite side of the centre; a dirt texture that is black leaves bloom as it was.
-- [ ] Golden images: a bright point off-centre with the flare on, and with a dirt texture from the shared generator (never the fetched map).
+- [x] CPU unit tests: ghost positions along the line through the centre for a given count and spacing; the dirt-scaled share never exceeds 1. (`Tests/LensFlare.cpp`, with the shared dirt generator's.)
+- [x] Null-backend probes: a view with the flare off adds no pass; with it on, its passes follow the streaks' in `PostProcess`. Only the flare's composite follows the streaks' composite: FlareGhosts and FlareBlur run after the streaks' downsamples and before bloom's upsamples, which would blend the wider levels over level 1, so the flare is the same with bloom on or off (a view with bloom off downsamples to level 1 for it); with lens dirt, bloom's and the flare's composites take the upsample's `DIRT` variant, and dirt with the flare off scales the bloom alone.
+- [x] GL pixel probes: a bright point off-centre makes a ghost on the opposite side of the centre; a dirt texture that is black leaves bloom as it was. (Also: a centred point lights the halo ring; white dirt doubles bloom's share.)
+- [x] Golden images: a bright point off-centre with the flare on, and with a dirt texture from the shared generator (never the fetched map). (`flare-emissive-point.png`, `flare-emissive-point-dirt.png`.)
 
 Hand check: in the neon city, turning towards a bright sign throws faint coloured ghosts across the view and lights up the dirt on the lens.
 
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+
+Notes: the fetched map is ambientCG's `SurfaceImperfections003` (its 1K colour map, read as linear), chosen over `Smear008` in the neon city: Smear008's maps are an even mid grey that raises the bloom everywhere, where Surface Imperfections is a mostly clean lens with streaky smudges. ambientCG serves only zip archives, so a fetched-assets entry may now name a `member` of a zip (`cmake/FenrirDemoAssets.cmake`, ADR-0052). A ghost is weighted by its fade and by how far it is magnified, and the pixel keeps the rest of its own light, so a flat view is left as it is; this keeps ADR-0059's "moves light, never adds it" for a flat view and leaves a point source's ghosts free to gain or lose a little.

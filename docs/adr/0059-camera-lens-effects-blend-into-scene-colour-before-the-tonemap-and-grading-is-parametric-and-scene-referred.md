@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Camera lens effects blend into SceneColor before the tonemap, and grading is parametric and scene-referred

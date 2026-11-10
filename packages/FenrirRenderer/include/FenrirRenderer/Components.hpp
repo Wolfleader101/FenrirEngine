@@ -8,6 +8,7 @@
 #include "FenrirECS/Entity.hpp"
 #include "FenrirInput/InputTypes.hpp"
 #include "FenrirMath/Colour.hpp"
+#include "FenrirMath/Math.hpp"
 
 namespace Fenrir
 {
@@ -471,6 +472,198 @@ namespace Fenrir
     };
 
     /**
+     * @brief A view's anamorphic streaks (ADR-0059): bright pixels drawn out into long, thin horizontal lines, as an
+     * anamorphic lens draws them, mixed in before the tonemap after bloom. Like bloom there is no threshold:
+     * everything streaks by the same share, and only what is bright shows it. The streaks keep the scene's energy and
+     * the tint is taken at unit luminance, so they move light, never add it. Off by default; a view with bloom off
+     * still streaks.
+     */
+    struct AnamorphicStreaks
+    {
+        /**
+         * @brief The share of the streaks the view's colour is mixed with, from 0 to 1. 0 by default, which turns them
+         * off and costs nothing; a few hundredths draw long lines from lights and leave dim surfaces alone.
+         */
+        float intensity = 0.0f;
+        /**
+         * @brief How long the streaks are, from 0 (the shortest only, a few pixels either side) to 1 (the longest
+         * only, reaching most of the way across the view). 0.75 by default.
+         */
+        float length = 0.75f;
+        /**
+         * @brief The streaks' colour, linear, scaled to unit luminance: its hue and saturation count, its brightness is
+         * ignored. White by default.
+         */
+        Colour tint{1.0f, 1.0f, 1.0f, 1.0f};
+    };
+
+    /**
+     * @brief A view's lens flare (ADR-0059), after John Chapman's pseudo lens flare: ghosts of the bright parts of the
+     * view, mirrored through its centre along the line from them, and a halo ring, each colour fringed apart, mixed in
+     * before the tonemap after the streaks. Like bloom there is no threshold: the flare is the view's own light read
+     * from elsewhere, so it moves light and never adds it, and a bright sky ghosts as a faint veiling glare as a real
+     * lens does. Off by default.
+     *
+     * A lens dirt image scales how much of the bloom and the flare each pixel takes where the lens is dirty, so a
+     * bright light lights up the smudges on it.
+     */
+    struct LensFlare
+    {
+        /**
+         * @brief The share of the flare the view's colour is mixed with, from 0 to 1. 0 by default, which turns it off
+         * and costs nothing; a few hundredths throw faint ghosts from lights.
+         */
+        float intensity = 0.0f;
+        /** @brief How many ghosts each bright point throws, from 0 to 8: 4 by default. */
+        std::uint32_t ghostCount = 4;
+        /**
+         * @brief How far apart the ghosts are along the line through the view's centre, as a share of the way from
+         * each pixel to the centre: 0.4 by default. Each ghost is read that much further along the line than the last,
+         * so ghosts past the centre land on the far side of it.
+         */
+        float ghostSpacing = 0.4f;
+        /**
+         * @brief The halo ring's radius, as a distance from the view's centre: 0 at the centre, 1 at the corners. 0.6
+         * by default. The ring shows what is bright near the centre.
+         */
+        float haloRadius = 0.6f;
+        /** @brief How far the halo reaches either side of its radius, in the same distance: 0.1 by default; 0 none. */
+        float haloWidth = 0.1f;
+        /**
+         * @brief How far red and blue are read apart in each ghost and the halo, along the line through the view's
+         * centre, in the same distance: 0.01 by default, so the ghosts fringe.
+         */
+        float chromaticOffset = 0.01f;
+        /**
+         * @brief A greyscale image of the dirt on the lens, stretched over the view; none by default. A flat image with
+         * pixels; anything else (a cubemap, a render target) has no dirt, logged once.
+         */
+        AssetHandle<Image> dirt;
+        /**
+         * @brief How much more of the bloom and the flare a pixel takes where the dirt is white: its share is
+         * multiplied by 1 + dirtIntensity times the dirt's brightness, held at or below 1, so the mix stays a blend. 1
+         * by default; 0 is no dirt. It needs no flare: dirt with the flare off scales the bloom alone.
+         */
+        float dirtIntensity = 1.0f;
+    };
+
+    /**
+     * @brief A view's colour grade (ADR-0059): the look of the picture, set on the exposed scene colour before the
+     * tonemapper, in linear Rec. 709. So contrast and saturation act on scene values, mid grey stays put and the
+     * tonemapper still rolls off whatever the grade brightens, so a strong grade does not clip. Its steps run in this
+     * order: white balance, contrast, split toning, saturation, then the ASC CDL. Identity by default, and identity
+     * costs nothing.
+     */
+    struct ColourGrading
+    {
+        /**
+         * @brief The colour temperature, in kelvin, of the light the view takes as white: 6500 by default (D65, no
+         * change). A surface lit by daylight of this temperature comes out grey, so lower cools the picture and higher
+         * warms it. Held to 2500 to 25000.
+         */
+        float temperature = 6500.0f;
+        /**
+         * @brief How far off daylight that white lies, from -1 to 1: 0 by default. Positive names a greener light, so
+         * the picture moves to magenta; negative names a magenta one, so it moves to green.
+         */
+        float tint = 0.0f;
+        /**
+         * @brief The slope of the picture in stops around mid grey (0.18), which it keeps: 1 by default, above 1 more
+         * contrast, below 1 flatter, 0 all mid grey.
+         */
+        float contrast = 1.0f;
+        /**
+         * @brief The tint the shadows take, linear: white by default, and any grey is none. Only its hue and
+         * saturation count (it is scaled to unit luminance, so a grey keeps its brightness); the more saturated, the
+         * stronger.
+         */
+        Colour shadowTint{1.0f, 1.0f, 1.0f, 1.0f};
+        /** @brief The tint the highlights take, as the shadows' does. */
+        Colour highlightTint{1.0f, 1.0f, 1.0f, 1.0f};
+        /**
+         * @brief Where the shadows end and the highlights start, from -1 to 1: 0 by default, the split at mid grey.
+         * Positive moves it down by up to four stops, giving the highlights' tint more of the picture; negative up.
+         */
+        float balance = 0.0f;
+        /**
+         * @brief How far each colour is from grey of its luminance: 1 by default, 0 grey, above 1 more saturated. After
+         * split toning, so lowering it fades the tints too.
+         */
+        float saturation = 1.0f;
+        /**
+         * @brief The ASC CDL, the final trim, per channel: each is multiplied by its slope, then its offset is added,
+         * then negatives are clamped and the result raised to its power. The slope, 1 in each channel by default.
+         */
+        Math::Vec3 slope{1.0f, 1.0f, 1.0f};
+        /** @brief The CDL's offset, added after the slope: 0 in each channel by default. */
+        Math::Vec3 offset{0.0f, 0.0f, 0.0f};
+        /** @brief The CDL's power, held at or above 0.001: 1 in each channel by default. */
+        Math::Vec3 power{1.0f, 1.0f, 1.0f};
+    };
+
+    /**
+     * @brief A view's chromatic aberration (ADR-0059): each colour channel read from its own point as the Output pass
+     * reads the scene, red moved outwards and blue inwards, more the further from the centre, as a lens bends each
+     * wavelength by its own amount. Edges near the view's corners fringe red outside and blue inside; the centre is as
+     * it is. Off by default, and off costs nothing.
+     */
+    struct ChromaticAberration
+    {
+        /**
+         * @brief How far red and blue move apart at the view's corners, as a fraction of the distance from its centre
+         * to a corner: 0 by default, off. A few thousandths fringe the edges; a few hundredths split them.
+         */
+        float intensity = 0.0f;
+    };
+
+    /**
+     * @brief A view's vignette (ADR-0059): the exposed colour darkened towards the corners, as a lens's falloff
+     * darkens them, before the grade and the tonemap, so the tonemapper sees it. Off by default, and off costs
+     * nothing.
+     */
+    struct Vignette
+    {
+        /** @brief How much of the light the corners lose, from 0 to 1: 0 by default, off; 1 makes them black. */
+        float intensity = 0.0f;
+        /**
+         * @brief Where the darkening starts, as a distance from the view's centre: 0 at the centre, 1 at the corners.
+         * 0.5 by default.
+         */
+        float radius = 0.5f;
+        /**
+         * @brief How far past the radius, in the same distance, the darkening takes to reach its intensity: 0.5 by
+         * default. 0 is a hard edge.
+         */
+        float smoothness = 0.5f;
+        /**
+         * @brief The darkening's shape, from 0 to 1: 1 by default, a circle whatever the view's aspect; 0 an ellipse
+         * in the view's own proportions, reaching as far into the long sides as into the short ones.
+         */
+        float roundness = 1.0f;
+    };
+
+    /**
+     * @brief A view's film grain (ADR-0059): noise added after the tonemap, in the range the viewer sees, so its
+     * strength holds at any exposure. It shows most in the mid-tones and least in deep shadow and bright highlight,
+     * as film grain does, and it changes every frame. Off by default, and off costs nothing.
+     */
+    struct FilmGrain
+    {
+        /**
+         * @brief How far the grain moves a pixel's brightness, at most, as a fraction of the display's range: 0 by
+         * default, off. A few hundredths are fine grain.
+         */
+        float intensity = 0.0f;
+        /**
+         * @brief How much the grain is kept to the mid-tones, from 0 to 1: 0.8 by default. 0 grains every brightness
+         * alike; 1 leaves black and white untouched.
+         */
+        float response = 0.8f;
+        /** @brief The side of each grain, in pixels, at least 1: 1 by default. */
+        float size = 1.0f;
+    };
+
+    /**
      * @brief A view's ambient occlusion (ADR-0049): ground-truth ambient occlusion (GTAO, after Intel's XeGTAO) from
      * its depth prepass, darkening the sky's light where nearby geometry hides the sky from a surface, as in creases,
      * corners and under objects resting on the ground. It darkens the sky's diffuse light, and its specular light by a
@@ -557,8 +750,9 @@ namespace Fenrir
         LightClusters,
         /**
          * @brief Its screen-space reflections (ADR-0056): at each pixel, the colour its mirror ray hit, from last
-         * frame, times how sure the hit is, exposed and tonemapped; black where nothing is reflected or the camera's
-         * reflections are off. It is what a mirror there would blend, sharp: a material's roughness blurs and fades it.
+         * frame, times how sure the hit is, exposed, vignetted, graded, tonemapped and grained; black where nothing is
+         * reflected or the camera's reflections are off. It is what a mirror there would blend, sharp: a material's
+         * roughness blurs and fades it.
          */
         Reflections,
         /**
@@ -602,6 +796,18 @@ namespace Fenrir
         Tonemapper tonemapper = Tonemapper::AgX;
         /** @brief How the view's bright pixels bleed into their surroundings before the tonemap. */
         Bloom bloom;
+        /** @brief How the view's bright pixels draw out into horizontal lines before the tonemap, after bloom. */
+        AnamorphicStreaks anamorphicStreaks;
+        /** @brief The view's ghosts, halo and lens dirt before the tonemap, after the streaks. */
+        LensFlare lensFlare;
+        /** @brief The look of the view: its white balance, contrast, tints and saturation, before the tonemap. */
+        ColourGrading colourGrading;
+        /** @brief How the view's colours fringe towards its corners, as it reads the scene. */
+        ChromaticAberration chromaticAberration;
+        /** @brief How the view darkens towards its corners, before the grade. */
+        Vignette vignette;
+        /** @brief The view's film grain, after its tonemap. */
+        FilmGrain filmGrain;
         /** @brief How nearby geometry darkens the sky's light in the view. */
         AmbientOcclusion ambientOcclusion;
         /** @brief How smooth surfaces in the view mirror what is on screen. */

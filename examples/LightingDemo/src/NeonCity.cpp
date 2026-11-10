@@ -66,6 +66,8 @@ namespace LightingDemo
                                                          "asphalt_01/asphalt_01_nor_gl_2k.jpg",
                                                          "asphalt_01/asphalt_01_arm_2k.jpg"};
         constexpr const char* Panorama = "panoramas/kloppenheim_07_puresky_2k.hdr";
+        /** @brief ambientCG's Surface Imperfections 003 (CC0), read in greyscale as the dirt on the lens. */
+        constexpr const char* LensDirtMap = "ambientCG/SurfaceImperfections003_1K-JPG_Color.jpg";
         /**
          * @brief The facade shader's fetched textures, by its sampler names: Poly Haven's Concrete Tile Facade, Dark
          * Brick Wall and Exterior Wall Cladding, and whether each is linear data (normal and ARM maps) or colour.
@@ -880,7 +882,27 @@ namespace LightingDemo
             state.lighting.tonemapper = Fenrir::Tonemapper::PbrNeutral;
             state.lighting.exposure = -0.5f;
             state.lighting.bloom = {0.3f, 0.85f};
+            // The genre's long blue lines from the signs and headlights: anamorphic streaks, long and tinted blue,
+            // mixed in after the bloom.
+            state.lighting.anamorphicStreaks = {0.1f, 0.85f, Fenrir::Colour{0.3f, 0.5f, 1.0f, 1.0f}};
+            // A subtle lens flare after the streaks: faint, fringed ghosts across the view from the brightest signs,
+            // and the dirt on the lens lit up round them. The dirt is ambientCG's map when fetched, else the
+            // generated one every scene has (AddLensDirt).
+            state.lighting.lensFlare.intensity = 0.03f;
+            state.lighting.lensFlare.dirtIntensity = 3.0f;
             state.lighting.ambientOcclusion.radius = 1.5f;
+            // The grade of a cyberpunk night: teal shadows and magenta highlights, split a little under mid grey so the
+            // magenta reaches the lit walls, with more contrast for the streets, and a slightly cool white balance.
+            state.lighting.colourGrading.temperature = 6000.0f;
+            state.lighting.colourGrading.contrast = 1.15f;
+            state.lighting.colourGrading.shadowTint = Fenrir::Colour{0.25f, 0.6f, 0.65f, 1.0f};
+            state.lighting.colourGrading.highlightTint = Fenrir::Colour{0.85f, 0.4f, 0.75f, 1.0f};
+            state.lighting.colourGrading.balance = 0.15f;
+            // A lens's touch: the corners fall off gently, signs near the edges fringe red and blue, and fine grain
+            // shimmers over the dark streets, kept from the bright signs by its response.
+            state.lighting.vignette = {0.3f, 0.45f, 0.6f, 1.0f};
+            state.lighting.chromaticAberration.intensity = 0.006f;
+            state.lighting.filmGrain = {0.04f, 0.8f, 1.0f};
             // The wet streets mirror the glowing strips, boards and windows on screen. The signs' boards are drawn,
             // so their rect lights keep visibleSurface, and their glints yield to the boards' reflections.
             state.lighting.reflections.enabled = true;
@@ -896,6 +918,14 @@ namespace LightingDemo
                 {
                     state.lighting.panoramas.push_back({"Kloppenheim 07 (2k)", image.handle});
                     fetched = true;
+                }
+            }
+            if (const std::optional<std::string> path = FetchedAsset(LensDirtMap))
+            {
+                if (const auto image = store.Load<Fenrir::Image>(*path, scene); image.Ok())
+                {
+                    // Its colour map is a dark, near-grey photo: read as linear, as the dirt's brightness is.
+                    state.lighting.lensFlare.dirt = AsLinear(store, scene, image.handle);
                 }
             }
             // Clustered and with vsync, whatever another scene left them as.

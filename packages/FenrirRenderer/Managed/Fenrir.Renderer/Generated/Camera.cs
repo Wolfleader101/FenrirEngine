@@ -41,6 +41,18 @@ public partial struct Camera : IComponent
     public Tonemapper Tonemapper = Tonemapper.AgX;
     /// <summary>How the view's bright pixels bleed into their surroundings before the tonemap.</summary>
     public Bloom Bloom = new();
+    /// <summary>How the view's bright pixels draw out into horizontal lines before the tonemap, after bloom.</summary>
+    public AnamorphicStreaks AnamorphicStreaks = new();
+    /// <summary>The view's ghosts, halo and lens dirt before the tonemap, after the streaks.</summary>
+    public LensFlare LensFlare = new();
+    /// <summary>The look of the view: its white balance, contrast, tints and saturation, before the tonemap.</summary>
+    public ColourGrading ColourGrading = new();
+    /// <summary>How the view's colours fringe towards its corners, as it reads the scene.</summary>
+    public ChromaticAberration ChromaticAberration = new();
+    /// <summary>How the view darkens towards its corners, before the grade.</summary>
+    public Vignette Vignette = new();
+    /// <summary>The view's film grain, after its tonemap.</summary>
+    public FilmGrain FilmGrain = new();
     /// <summary>How nearby geometry darkens the sky's light in the view.</summary>
     public AmbientOcclusion AmbientOcclusion = new();
     /// <summary>How smooth surfaces in the view mirror what is on screen.</summary>

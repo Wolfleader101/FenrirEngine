@@ -14,7 +14,8 @@ add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp 
                                    FrameRing.cpp Frames.cpp OpenGLStart.cpp Drawing.cpp Preparing.cpp RendererFrames.cpp
                                    Cameras.cpp Picking.cpp Materials.cpp SpawnModel.cpp Sky.cpp DebugFont.cpp
                                    DebugDrawing.cpp Overlay.cpp Draw2D.cpp Skinning.cpp SkinningMaths.cpp
-                                   SphericalHarmonics.cpp SkyLighting.cpp SkyImages.cpp Tonemapping.cpp Brdf.cpp Bloom.cpp
+                                   SphericalHarmonics.cpp SkyLighting.cpp SkyImages.cpp Tonemapping.cpp ColourGrading.cpp CameraEffects.cpp Brdf.cpp
+                                   Bloom.cpp AnamorphicStreaks.cpp LensFlare.cpp
                                    PunctualLights.cpp LightRecords.cpp ImageReads.cpp Lights.cpp RectLights.cpp
                                    DepthPrepass.cpp OctahedralNormals.cpp
                                    BindingGroupCache.cpp
@@ -63,11 +64,12 @@ add_executable(FenrirRendererGlTests OpenGL/Clears.cpp OpenGL/Draws.cpp OpenGL/V
                                      OpenGL/Vsync.cpp OpenGL/Scenes.cpp OpenGL/Targets.cpp OpenGL/Materials.cpp
                                      OpenGL/Sky.cpp OpenGL/Debug.cpp OpenGL/Overlay.cpp OpenGL/Skinning.cpp
                                      OpenGL/Tonemapping.cpp OpenGL/NormalMaps.cpp OpenGL/SkyLighting.cpp OpenGL/Bloom.cpp
+                                     OpenGL/AnamorphicStreaks.cpp OpenGL/CameraEffects.cpp OpenGL/LensFlare.cpp
                                      OpenGL/Lights.cpp OpenGL/RectLights.cpp OpenGL/DepthPrepass.cpp
                                      OpenGL/AmbientOcclusion.cpp OpenGL/Instancing.cpp OpenGL/InstanceLists.cpp
                                      OpenGL/Shadows.cpp OpenGL/LightClusters.cpp OpenGL/SceneHistory.cpp
                                      OpenGL/Reflections.cpp
-                                     OpenGL/GlProbe.hpp OpenGL/GlScene.hpp OpenGL/GlTestApp.hpp
+                                     OpenGL/GlProbe.hpp OpenGL/GlScene.hpp OpenGL/GlTestApp.hpp OpenGL/GoldenScene.hpp
                                      DrawLists2D.hpp RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp
                                      SkinningTestApp.hpp)
 target_include_directories(FenrirRendererGlTests PRIVATE . ../src)

@@ -1,6 +1,7 @@
 #include "Core/SceneRenderer.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <format>
@@ -9,6 +10,7 @@
 #include <variant>
 
 #include "Core/BuiltinShaders.hpp"
+#include "Core/ColourGrading.hpp"
 #include "Core/ImageReads.hpp"
 #include "Core/ImageUpload.hpp"
 #include "Core/Skinning.hpp"
@@ -179,9 +181,32 @@ namespace Fenrir::Render
             std::uint32_t tonemapper = 0;
             /** @brief The channel the OCCLUSION variant draws as grey: 0 red, 2 blue (reflection confidence). */
             std::uint32_t greyChannel = 0;
-            std::uint32_t padding0 = 0;
+            /** @brief 1 when the view's ColourGrade is applied, 0 for an identity grade (ADR-0059). */
+            std::uint32_t grade = 0;
+            /** @brief The grade's white balance, column by column, each padded to a vec4 as std140 lays out a mat3. */
+            std::array<Math::Vec4, 3> whiteBalance{Math::Vec4(1.0f, 0.0f, 0.0f, 0.0f),
+                                                   Math::Vec4(0.0f, 1.0f, 0.0f, 0.0f),
+                                                   Math::Vec4(0.0f, 0.0f, 1.0f, 0.0f)};
+            /** @brief The shadow tint, and the contrast in w. */
+            Math::Vec4 shadowTint{1.0f};
+            /** @brief The highlight tint, and the split in w. */
+            Math::Vec4 highlightTint{1.0f, 1.0f, 1.0f, 0.0f};
+            /** @brief The CDL's slope, and the saturation in w. */
+            Math::Vec4 slope{1.0f};
+            Math::Vec3 offset{0.0f};
+            float padding0 = 0.0f;
+            /** @brief The CDL's power. */
+            Math::Vec3 power{1.0f};
+            /** @brief The chromatic aberration's intensity (ADR-0059), which the ABERRATION variant reads. */
+            float aberration = 0.0f;
+            /** @brief The vignette's intensity (0 skips it), radius, smoothness and roundness. */
+            Math::Vec4 vignette{0.0f};
+            /** @brief The film grain's intensity (0 skips it), response and size. */
+            Math::Vec3 grain{0.0f};
+            /** @brief The frame's index, low 32 bits, which the grain's noise is a hash of. */
+            std::uint32_t frameIndex = 0;
         };
-        static_assert(sizeof(OutputBlock) == 16);
+        static_assert(sizeof(OutputBlock) == 176);
 
         /** @brief A Masked material's depth prepass block, as `builtin:depth-prepass` declares it (std140). */
         struct PrepassMaskBlock
@@ -719,6 +744,12 @@ namespace Fenrir::Render
         constexpr std::array<std::string_view, 1> occlusion{"OCCLUSION"};
         m_occlusionOutputPipeline = MakeInternalPipeline(m_output, m_output.FindVariant(occlusion), m_outputLayout,
                                                          TextureFormat::Rgba8Srgb, false, 1, m_outputBlockLayout);
+        // Chromatic aberration reads each channel at its own point: with MSAA, red and blue each resolve four texels.
+        constexpr std::array<std::string_view, 1> aberration{"ABERRATION"};
+        constexpr std::array<std::string_view, 2> msaaAberration{"MSAA", "ABERRATION"};
+        m_aberrationOutputPipeline = MakeInternalPipeline(
+            m_output, m_samples > 1 ? m_output.FindVariant(msaaAberration) : m_output.FindVariant(aberration),
+            m_outputLayout, TextureFormat::Rgba8Srgb, false, 1, m_outputBlockLayout);
         constexpr std::array<std::string_view, 1> reflections{"REFLECTIONS"};
         if (const ShaderVariant* variant = m_output.FindVariant(reflections))
         {
@@ -894,6 +925,7 @@ namespace Fenrir::Render
         m_device.Destroy(m_outputPipeline);
         m_device.Destroy(m_occlusionOutputPipeline);
         m_device.Destroy(m_reflectionOutputPipeline);
+        m_device.Destroy(m_aberrationOutputPipeline);
         m_device.Destroy(m_prepassMaskLayout);
         m_device.Destroy(m_backgroundLayout);
         m_device.Destroy(m_skyLayout);
@@ -995,6 +1027,7 @@ namespace Fenrir::Render
         desc.mipLevels = MipCount(image.width, image.height);
         desc.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
         entry.texture = m_device.CreateTexture(desc, "Material image");
+        entry.desc = desc;
 
         WriteWithMips(m_device, entry.texture, 0, desc.mipLevels, image.pixels, image.width, image.height,
                       CodecOf(image));
@@ -2861,6 +2894,23 @@ namespace Fenrir::Render
         // The targets drawn into so far: the first view into each clears it. The window's key is empty.
         std::set<AssetKey> cleared;
         std::vector<BloomView> blooms;
+        // The lens dirt images the views' bloom and flare composites read, each imported once.
+        std::map<AssetKey, GraphResource> dirtImages;
+        const auto lensDirt = [&](AssetKey key) {
+            const auto image = m_images.find(key);
+            if (key.IsEmpty() || image == m_images.end())
+            {
+                return GraphResource{};
+            }
+            if (const auto found = dirtImages.find(key); found != dirtImages.end())
+            {
+                return found->second;
+            }
+            const GraphResource resource =
+                graph.ImportTexture(std::format("Lens dirt {}", key.index), image->second.texture, image->second.desc);
+            dirtImages.emplace(key, resource);
+            return resource;
+        };
         for (std::size_t v = 0; v < views.size(); ++v)
         {
             const ViewRequest& request = views[v];
@@ -2947,6 +2997,26 @@ namespace Fenrir::Render
             OutputBlock outputBlock;
             outputBlock.exposureScale = ExposureScale(request.exposure);
             outputBlock.tonemapper = static_cast<std::uint32_t>(request.tonemapper);
+            if (!IsIdentity(request.colourGrading))
+            {
+                const ColourGrade grade = BakeColourGrade(request.colourGrading);
+                outputBlock.grade = 1;
+                for (int c = 0; c < 3; ++c)
+                {
+                    outputBlock.whiteBalance[c] = Math::Vec4(grade.whiteBalance[c], 0.0f);
+                }
+                outputBlock.shadowTint = Math::Vec4(grade.shadowTint, grade.contrast);
+                outputBlock.highlightTint = Math::Vec4(grade.highlightTint, grade.split);
+                outputBlock.slope = Math::Vec4(grade.slope, grade.saturation);
+                outputBlock.offset = grade.offset;
+                outputBlock.power = grade.power;
+            }
+            outputBlock.aberration = request.chromaticAberration.intensity;
+            outputBlock.vignette = Math::Vec4(request.vignette.intensity, request.vignette.radius,
+                                              request.vignette.smoothness, request.vignette.roundness);
+            outputBlock.grain =
+                Math::Vec3(request.filmGrain.intensity, request.filmGrain.response, request.filmGrain.size);
+            outputBlock.frameIndex = static_cast<std::uint32_t>(frameIndex);
             // The reflection hit target's confidence is its blue; every other grey view's value its red.
             outputBlock.greyChannel = request.debugView == ViewDebug::ReflectionConfidence ? 2u : 0u;
             m_outputBlocks->Write(frameIndex, v, BytesOf(outputBlock));
@@ -3217,7 +3287,12 @@ namespace Fenrir::Render
             // SceneColor kept for next frame's reflections before bloom glows over it: these passes are added before
             // any view's bloom, so they run first in PostProcess.
             m_sceneHistory->AddHistoryPasses(graph, frameIndex, history, sceneColour);
-            blooms.push_back({sceneColour, {rect.width, rect.height}, request.bloom});
+            blooms.push_back({sceneColour,
+                              {rect.width, rect.height},
+                              request.bloom,
+                              request.anamorphicStreaks,
+                              request.lensFlare,
+                              lensDirt(request.lensFlare.dirt)});
 
             // The first view into a target clears all of it; each later one draws over it, in its viewport only.
             const LoadOp load = cleared.insert(request.target).second ? LoadOp::Clear : LoadOp::Load;
@@ -3243,8 +3318,12 @@ namespace Fenrir::Render
                                                           : sceneColour;
             const GraphResource shownHistory = showReflections && !shownBlack ? sceneHistory : GraphResource{};
             // Black is the 1 x 1 black texture, drawn as grey.
+            // Chromatic aberration's variant only when it moves something and its pipeline was made.
+            const bool aberrated =
+                request.chromaticAberration.intensity > 0.0f && !m_aberrationOutputPipeline.IsEmpty();
             const PipelineHandle outputPipeline = showGrey || shownBlack ? m_occlusionOutputPipeline
                                                   : showReflections      ? m_reflectionOutputPipeline
+                                                  : aberrated            ? m_aberrationOutputPipeline
                                                                          : m_outputPipeline;
             const TextureHandle black = GetDefaultTexture(DefaultTexture::Black);
             graph.AddPass(

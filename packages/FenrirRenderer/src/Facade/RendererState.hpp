@@ -118,6 +118,8 @@ namespace Fenrir::Detail
         std::set<std::pair<std::uint32_t, std::uint32_t>> loggedTies;
         /** @brief Images materials name that cannot be sampled as a 2D texture, by index and generation. */
         std::set<std::pair<std::uint32_t, std::uint32_t>> loggedImages;
+        /** @brief The images a camera's lens dirt names that are not flat images with pixels, warned of once. */
+        std::set<std::pair<std::uint32_t, std::uint32_t>> loggedLensDirt;
         /** @brief Sky cubemaps and panoramas that cannot be drawn: empty, stale, or the wrong shape. */
         StaleHandleLog skyImages;
         /** @brief Windows the renderer does not draw that overlay submissions named, by id. */

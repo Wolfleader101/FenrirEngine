@@ -15,8 +15,8 @@ namespace Fenrir
 } // namespace Fenrir
 
 // The lighting panel every LightingDemo scene shows: an ImGui window for the cameras' exposure, tonemapper, bloom,
-// ambient occlusion, reflections and debug view, the sun's shadow and the scene's sky, with keys for the same, which the
-// smoke runs press.
+// streaks, lens flare and dirt, chromatic aberration, vignette, film grain, colour grade, ambient occlusion,
+// reflections and debug view, the sun's shadow and the scene's sky, with keys for the same, which the smoke runs press.
 namespace LightingDemo
 {
     /** @brief A panorama the panel can switch the scene's sky to, and the name it shows. */
@@ -34,6 +34,21 @@ namespace LightingDemo
         Fenrir::Tonemapper tonemapper = Fenrir::Tonemapper::AgX;
         /** @brief Every camera's bloom; B sets its intensity to 0 and back. */
         Fenrir::Bloom bloom;
+        /** @brief Every camera's anamorphic streaks, off unless the scene turns them on. */
+        Fenrir::AnamorphicStreaks anamorphicStreaks;
+        /**
+         * @brief Every camera's lens flare, off unless the scene turns it on, and its lens dirt, none (an intensity of
+         * 0) unless the scene sets one. A scene that sets no dirt image gets the generated one (AddLensDirt).
+         */
+        Fenrir::LensFlare lensFlare{.dirtIntensity = 0.0f};
+        /** @brief Every camera's colour grade, identity unless the scene sets one. */
+        Fenrir::ColourGrading colourGrading;
+        /** @brief Every camera's chromatic aberration, off unless the scene turns it on. */
+        Fenrir::ChromaticAberration chromaticAberration;
+        /** @brief Every camera's vignette, off unless the scene turns it on. */
+        Fenrir::Vignette vignette;
+        /** @brief Every camera's film grain, off unless the scene turns it on. */
+        Fenrir::FilmGrain filmGrain;
         /** @brief Every camera's ambient occlusion, on in the demo; O turns it off and back on. */
         Fenrir::AmbientOcclusion ambientOcclusion{true};
         /** @brief Every camera's screen-space reflections, off unless the scene turns them on. */
@@ -59,6 +74,12 @@ namespace LightingDemo
     };
 
     /**
+     * @brief Generates the demo's lens dirt (Fenrir::GenerateLensDirt) into an image the app owns, once, at startup:
+     * what every scene's cameras read for their dirt when the scene sets none of its own.
+     */
+    void AddLensDirt(Fenrir::App& app);
+
+    /**
      * @brief The keys the panel answers, one line for a scene's help panel: T, E, B, O, G, H and, with more than one
      * panorama, S.
      */
@@ -68,9 +89,10 @@ namespace LightingDemo
      * @brief Runs the panel for one frame, from a scene's `update`: applies its keys (T the next tonemapper, E the next
      * exposure, B bloom off or back on, O ambient occlusion off or back on, G the next debug view, H the sun's shadows
      * off or back on, S the next panorama), draws the "Lighting" ImGui window, with `sceneControls` drawn in it under
-     * the panel's own, then gives every Camera in `scene` the exposure, tonemapper, bloom, ambient occlusion,
-     * reflections and debug view, every DirectionalLight the shadow settings, and the scene's Sky the chosen panorama,
-     * its intensity and its rotation.
+     * the panel's own, then gives every Camera in `scene` the exposure, tonemapper, bloom, streaks, lens flare and
+     * dirt, chromatic aberration, vignette, film grain, colour grade, ambient occlusion, reflections and debug view,
+     * every DirectionalLight the shadow settings, and the scene's Sky the chosen panorama, its intensity and its
+     * rotation.
      */
     void RunLightingPanel(Fenrir::App& app, Fenrir::Scene& scene, LightingSettings& settings,
                           const std::function<void()>& sceneControls = {});

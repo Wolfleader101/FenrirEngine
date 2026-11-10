@@ -101,6 +101,12 @@ add_library(FenrirRendererCore STATIC
     src/Core/SpotShadows.hpp
     src/Core/SpotShadows.cpp
     src/Core/Skinning.cpp
+    src/Core/CameraEffects.hpp
+    src/Core/CameraEffects.cpp
+    src/Core/ColourGrading.hpp
+    src/Core/ColourGrading.cpp
+    src/Core/LensFlare.hpp
+    src/Core/LensFlare.cpp
     src/Core/Tonemapping.hpp
     src/Core/Tonemapping.cpp
     src/Core/TransientPool.hpp
@@ -159,11 +165,16 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinSkySpecular VERTEX Shaders/
                    FRAGMENT Shaders/Builtin/sky_specular.frag EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBrdfLut VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/brdf_lut.frag EMBED)
-# Bloom (ADR-0049): the 13-tap downsample, whose MSAA variant reads a multisampled SceneColor, and the tent upsample.
+# Bloom (ADR-0049): the 13-tap downsample, whose MSAA variant reads a multisampled SceneColor, and the tent upsample;
+# their HORIZONTAL variants are the anamorphic streaks' (ADR-0059).
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBloomDownsample VERTEX Shaders/Builtin/fullscreen.vert
-                   FRAGMENT Shaders/Builtin/bloom_downsample.frag KEYS MSAA EMBED)
+                   FRAGMENT Shaders/Builtin/bloom_downsample.frag KEYS MSAA HORIZONTAL EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBloomUpsample VERTEX Shaders/Builtin/fullscreen.vert
-                   FRAGMENT Shaders/Builtin/bloom_upsample.frag EMBED)
+                   FRAGMENT Shaders/Builtin/bloom_upsample.frag KEYS HORIZONTAL DIRT EMBED)
+# The lens flare (ADR-0059): ghosts and a halo from a bloom level, blurred and composited by the bloom programs above,
+# whose DIRT variant of the upsample scales the composites' share by a lens dirt image.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinLensFlare VERTEX Shaders/Builtin/fullscreen.vert
+                   FRAGMENT Shaders/Builtin/lens_flare.frag EMBED)
 # GTAO (ADR-0049): the horizon search, whose MSAA variant reads sample 0 of the prepass's targets, and the DENOISE blur.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinGtao VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/gtao.frag KEYS DENOISE MSAA EMBED)
@@ -184,9 +195,10 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinSkinning COMPUTE Shaders/Bu
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinLightClusters COMPUTE Shaders/Builtin/light_clusters.comp EMBED)
 # MSAA: the variant that resolves a multisampled SceneColor. OCCLUSION: the one that shows one channel of a texture as
 # grey (ambient occlusion, the shadow atlases, reflection confidence). REFLECTIONS: the one that shows a view's
-# reflections, last frame's history at its hits.
+# reflections, last frame's history at its hits. ABERRATION: the one that reads each channel at its own point, a
+# camera's chromatic aberration (ADR-0059).
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinOutput VERTEX Shaders/Builtin/fullscreen.vert
-                   FRAGMENT Shaders/Builtin/output.frag KEYS MSAA OCCLUSION REFLECTIONS EMBED)
+                   FRAGMENT Shaders/Builtin/output.frag KEYS MSAA OCCLUSION REFLECTIONS ABERRATION EMBED)
 # Debug drawing (ADR-0025): lines expanded to screen-space quads, solid triangles, and text from the SDF font atlas.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDebugLines VERTEX Shaders/Builtin/debug_lines.vert
                    FRAGMENT Shaders/Builtin/debug.frag EMBED)
@@ -201,10 +213,12 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM Builtin2D VERTEX Shaders/Builtin/2
 
 add_library(FenrirRenderer STATIC
     include/FenrirRenderer/Components.hpp
+    include/FenrirRenderer/LensDirt.hpp
     include/FenrirRenderer/Overlay.hpp
     include/FenrirRenderer/Renderer.hpp
     include/FenrirRenderer/SpawnModel.hpp
 
+    src/Facade/LensDirt.cpp
     src/Facade/Renderer.cpp
     src/Facade/RendererState.hpp
     src/Facade/SpawnModel.cpp

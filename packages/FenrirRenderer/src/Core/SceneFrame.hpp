@@ -5,6 +5,8 @@
 #include <optional>
 #include <vector>
 
+#include "Core/CameraEffects.hpp"
+#include "Core/ColourGrading.hpp"
 #include "Core/PunctualLights.hpp"
 #include "Core/RectLights.hpp"
 #include "Core/Tonemapping.hpp"
@@ -83,6 +85,38 @@ namespace Fenrir::Render
         float intensity = 0.04f;
         /** @brief How far the bloom spreads, in [0, 1]: how much each wider level adds against the one above it. */
         float radius = 0.7f;
+    };
+
+    /** @brief A view's anamorphic streaks (ADR-0059), the core's copy of Camera::anamorphicStreaks. */
+    struct AnamorphicStreaksSettings
+    {
+        /** @brief How much of the streaks SceneColor is mixed with, in [0, 1]; 0 or less adds no pass. */
+        float intensity = 0.0f;
+        /** @brief How long the streaks are, in [0, 1]: how much each longer level adds against the one above it. */
+        float length = 0.75f;
+        /** @brief Their colour, linear; normalised to unit luminance when the passes are added. */
+        Math::Vec3 tint{1.0f};
+    };
+
+    /** @brief A view's lens flare and lens dirt (ADR-0059), the core's copy of Camera::lensFlare. */
+    struct LensFlareSettings
+    {
+        /** @brief How much of the flare SceneColor is mixed with, in [0, 1]; 0 or less adds no pass. */
+        float intensity = 0.0f;
+        /** @brief How many ghosts each pixel reads, held to MaxGhosts. */
+        std::uint32_t ghostCount = 4;
+        /** @brief How much further along the line to the centre each ghost is read than the last. */
+        float ghostSpacing = 0.4f;
+        /** @brief The halo ring's radius, 1 at the corners. */
+        float haloRadius = 0.6f;
+        /** @brief How far the halo reaches either side of its radius; 0 or less has no halo. */
+        float haloWidth = 0.1f;
+        /** @brief How far red and blue are read apart in the ghosts and the halo, 1 the half-diagonal. */
+        float chromaticOffset = 0.01f;
+        /** @brief The lens dirt image, prepared with PrepareImage; empty, or not prepared, for none. */
+        AssetKey dirt;
+        /** @brief How much more of the bloom and the flare a pixel takes where the dirt is white; 0 or less none. */
+        float dirtIntensity = 1.0f;
     };
 
     /** @brief A view's ambient occlusion (ADR-0049), the core's copy of Camera::ambientOcclusion. */
@@ -170,8 +204,20 @@ namespace Fenrir::Render
         float exposure = 0.0f;
         /** @brief How Output maps the exposed colour into its target (Camera::tonemapper). */
         Tonemapper tonemapper = Tonemapper::AgX;
+        /** @brief How Output grades the exposed colour before its tonemapper (Camera::colourGrading). */
+        ColourGradingSettings colourGrading;
         /** @brief How its `PostProcess` bloom mixes into SceneColor (Camera::bloom). */
         BloomSettings bloom;
+        /** @brief How its `PostProcess` streaks mix into SceneColor after the bloom (Camera::anamorphicStreaks). */
+        AnamorphicStreaksSettings anamorphicStreaks;
+        /** @brief Its `PostProcess` ghosts and halo after the streaks, and its lens dirt (Camera::lensFlare). */
+        LensFlareSettings lensFlare;
+        /** @brief How far Output reads red and blue apart towards the corners (Camera::chromaticAberration). */
+        ChromaticAberrationSettings chromaticAberration;
+        /** @brief How Output darkens the exposed colour towards the corners (Camera::vignette). */
+        VignetteSettings vignette;
+        /** @brief The film grain Output adds to the tonemapped colour (Camera::filmGrain). */
+        FilmGrainSettings filmGrain;
         /** @brief Its GTAO, which builtin:lit's sky light is darkened by in `Opaque` (Camera::ambientOcclusion). */
         AmbientOcclusionSettings ambientOcclusion;
         /** @brief Its screen-space reflections' history and pyramids (Camera::reflections). */
