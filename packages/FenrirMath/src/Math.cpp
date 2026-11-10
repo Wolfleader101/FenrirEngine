@@ -374,6 +374,36 @@ namespace Fenrir::Math
         return glm::conjugate(quat);
     }
 
+    std::array<Vec3, 8> Corners(const AABB& box)
+    {
+        std::array<Vec3, 8> corners;
+        for (std::size_t corner = 0; corner < corners.size(); ++corner)
+        {
+            corners[corner] = Vec3((corner & 1) != 0 ? box.max.x : box.min.x, (corner & 2) != 0 ? box.max.y : box.min.y,
+                                   (corner & 4) != 0 ? box.max.z : box.min.z);
+        }
+        return corners;
+    }
+
+    AABB Union(const AABB& a, const AABB& b)
+    {
+        return {glm::min(a.min, b.min), glm::max(a.max, b.max)};
+    }
+
+    AABB Moved(const AABB& box, const Mat4& matrix)
+    {
+        AABB moved;
+        bool first = true;
+        for (const Vec3& corner : Corners(box))
+        {
+            const Vec3 point(matrix * Vec4(corner, 1.0f));
+            moved.min = first ? point : glm::min(moved.min, point);
+            moved.max = first ? point : glm::max(moved.max, point);
+            first = false;
+        }
+        return moved;
+    }
+
     bool RayAABBIntersect(const Ray& ray, const AABB& aabb, const Mat4& transformMatrix)
     {
         Vec3 minWorld = MultiplyPoint(aabb.min, transformMatrix);

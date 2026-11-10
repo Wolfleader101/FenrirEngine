@@ -339,6 +339,9 @@ namespace RendererTest
         return value;
     }
 
+    /** @brief The bytes of one record of the draw buffer (set 3 binding 0, `Fenrir/Draw.glsl`'s `DrawItem`, std430). */
+    constexpr std::size_t RecordSize = 192;
+
     /** @brief The renderer on the null backend in an App with FenrirAssets and no window (the spec's seam 1). */
     inline Fenrir::RendererConfig NullBackend()
     {
@@ -483,23 +486,35 @@ namespace RendererTest
             return {};
         }
 
-        /**
-         * @brief The world position of the item a draw drew: column 3 of the world matrix in its record of the draw
-         * buffer (set 3, binding 0; 192 bytes a record, `Fenrir/Draw.glsl`).
-         */
-        [[nodiscard]] Fenrir::Math::Vec3 DrawPosition(const RecordedDraw& draw) const
+        /** @brief The bytes of the draw buffer a draw bound at set 3 binding 0; empty when it bound none. */
+        [[nodiscard]] std::vector<std::byte> DrawBuffer(const RecordedDraw& draw) const
         {
             for (const Fenrir::Graphics::BindingGroupEntry& entry :
                  Fenrir::RendererProbe::Entries(Device(), draw.groups.at(3)))
             {
                 if (entry.binding == 0)
                 {
-                    const std::vector<std::byte> bytes = Fenrir::RendererProbe::Bytes(Device(), entry.buffer);
-                    const std::size_t at = std::size_t{draw.draw.firstInstance} * 192 + 48;
-                    return {FloatAt(bytes, at), FloatAt(bytes, at + 4), FloatAt(bytes, at + 8)};
+                    return Fenrir::RendererProbe::Bytes(Device(), entry.buffer);
                 }
             }
-            return Fenrir::Math::Vec3(0.0f);
+            return {};
+        }
+
+        /** @brief The three floats at byte `offset` of a draw's record of the draw buffer (its first instance's). */
+        [[nodiscard]] Fenrir::Math::Vec3 RecordVec3(const RecordedDraw& draw, std::size_t offset) const
+        {
+            const std::vector<std::byte> bytes = DrawBuffer(draw);
+            const std::size_t at = std::size_t{draw.draw.firstInstance} * RecordSize + offset;
+            return {FloatAt(bytes, at), FloatAt(bytes, at + 4), FloatAt(bytes, at + 8)};
+        }
+
+        /**
+         * @brief The world position of the item a draw drew: column 3 of the world matrix in its record of the draw
+         * buffer (`Fenrir/Draw.glsl`).
+         */
+        [[nodiscard]] Fenrir::Math::Vec3 DrawPosition(const RecordedDraw& draw) const
+        {
+            return RecordVec3(draw, 48);
         }
 
         /** @brief An image asset owned by the app. */
