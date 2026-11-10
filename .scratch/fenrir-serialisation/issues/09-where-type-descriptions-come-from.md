@@ -1,7 +1,7 @@
 # Where do the type descriptions that read and write files come from?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 04, 08
 
 ## Question
