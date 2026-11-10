@@ -294,9 +294,19 @@ namespace Fenrir::Render
         void ReleaseTarget(AssetKey key);
 
         [[nodiscard]] bool IsInstanceListCurrent(AssetKey key, std::uint32_t revision) const;
-        /** @brief An instance list's copies, uploaded into the instance-list buffer before the next frame's draws. */
-        void PrepareInstanceList(AssetKey key, std::uint32_t revision, const InstanceListData& list);
+        /**
+         * @brief An instance list's copies, uploaded into the instance-list buffer before the next frame's draws, and
+         * its bounds, the box around every copy's `meshBounds` (the box of the mesh it draws), computed now.
+         */
+        void PrepareInstanceList(AssetKey key, std::uint32_t revision, const InstanceListData& list,
+                                 const Math::AABB& meshBounds);
         void ReleaseInstanceList(AssetKey key);
+        /**
+         * @brief The box around every copy of a prepared instance list's mesh box `meshBounds`, in the drawing
+         * entity's local space (ADR-0057): as computed when the list was uploaded, or again now for a mesh box other
+         * than the one it was uploaded with. Empty for a list not prepared or with no copies.
+         */
+        [[nodiscard]] std::optional<Math::AABB> InstanceListBounds(AssetKey key, const Math::AABB& meshBounds);
 
         /** @brief The keys with GPU resources, for the facade to release those that went stale. */
         [[nodiscard]] std::vector<AssetKey> TargetKeys() const;
@@ -440,6 +450,8 @@ namespace Fenrir::Render
             std::uint32_t vertexCount = 0;
             /** @brief A skinned mesh's vertex buffer as builtin:skinning reads it, its set 1; else empty. */
             Graphics::BindingGroupHandle skinSource;
+            /** @brief The mesh's local bounds (ADR-0021), which its draws' records carry (ADR-0057). */
+            Math::AABB bounds{Math::Vec3(0.0f), Math::Vec3(0.0f)};
         };
 
         /** @brief An instance list's copies in the instance-list buffer: its first record and how many; 0 for none. */
@@ -455,6 +467,10 @@ namespace Fenrir::Render
             std::uint32_t revision = 0;
             std::vector<std::byte> records;
             InstanceRange range;
+            /** @brief The mesh box `bounds` was computed with. */
+            Math::AABB meshBounds{Math::Vec3(0.0f), Math::Vec3(0.0f)};
+            /** @brief The box around every copy's mesh box, in the drawing entity's local space (ADR-0057). */
+            Math::AABB bounds{Math::Vec3(0.0f), Math::Vec3(0.0f)};
         };
 
         /** @brief A prepared render target image: its texture and size. */
@@ -615,6 +631,13 @@ namespace Fenrir::Render
             const PipelineEntry* pointShadowLayered = nullptr;
             /** @brief An instance list's copies; none for one item. */
             InstanceRange instances;
+            /**
+             * @brief What its record carries (ADR-0057): an item's world bounds, or an instance list's mesh's local
+             * box.
+             */
+            Math::AABB bounds{Math::Vec3(0.0f), Math::Vec3(0.0f)};
+            /** @brief The box it is culled by: `bounds` for an item, the box around every copy for a list. */
+            Math::AABB worldBounds{Math::Vec3(0.0f), Math::Vec3(0.0f)};
             /**
              * @brief A compute-skinned draw's skinned vertices in the frame's skinned vertex buffer: the byte offset of
              * its positions, followed by its normals and its tangents. Empty for every other draw.

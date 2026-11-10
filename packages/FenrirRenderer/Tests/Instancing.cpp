@@ -115,7 +115,8 @@ TEST_CASE("Masked items merge, and transparent items stay one draw each", "[rend
     test.AddCamera();
     const auto mesh = test.Mesh();
     AddRow(test, 10, mesh, Blended(test, Fenrir::BlendMode::Masked));
-    AddRow(test, 10, mesh, Blended(test, Fenrir::BlendMode::AlphaBlend), 100.0f);
+    // Inside the camera's frustum: a transparent item outside it is not drawn at all (ADR-0057).
+    AddRow(test, 10, mesh, Blended(test, Fenrir::BlendMode::AlphaBlend), -5.0f);
 
     test.Frame();
     INFO("the masked items are one draw in the prepass and in Opaque");

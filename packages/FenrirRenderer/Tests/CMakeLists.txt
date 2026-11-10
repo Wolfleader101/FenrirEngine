@@ -18,7 +18,7 @@ add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp 
                                    PunctualLights.cpp LightRecords.cpp ImageReads.cpp Lights.cpp RectLights.cpp
                                    DepthPrepass.cpp OctahedralNormals.cpp
                                    BindingGroupCache.cpp
-                                   AmbientOcclusion.cpp Instancing.cpp InstanceLists.cpp ComputeSkinning.cpp
+                                   AmbientOcclusion.cpp Instancing.cpp InstanceLists.cpp Culling.cpp ComputeSkinning.cpp
                                    Cascades.cpp Shadows.cpp SpotShadows.cpp PointShadows.cpp ShadowPools.cpp
                                    LightClusters.cpp SceneHistory.cpp ReflectionTrace.cpp IndirectDraws.cpp
                                    GoldenComparison.cpp DeviceTest.hpp DrawLists2D.hpp FakeSurface.hpp RecordingLogger.hpp

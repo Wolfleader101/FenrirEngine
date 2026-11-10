@@ -3,6 +3,7 @@
 #include <compare>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
 
 #include "Core/PunctualLights.hpp"
@@ -12,6 +13,7 @@
 #include "Device/GraphicsSurface.hpp"
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirMath/Colour.hpp"
+#include "FenrirMath/Frustum.hpp"
 #include "FenrirMath/Math.hpp"
 
 namespace Fenrir::Render
@@ -68,6 +70,12 @@ namespace Fenrir::Render
          * centre of its skinned bounds.
          */
         std::optional<Math::Vec3> sortPoint;
+        /**
+         * @brief The item's world bounds when the facade knows them better than its mesh's box under `world`: a
+         * skinned item's skinned bounds (ADR-0035). Empty for that box. Its draw record carries them, and a
+         * transparent item is culled by them (ADR-0057). Not read for an instance list, whose bounds the core keeps.
+         */
+        std::optional<Math::AABB> bounds;
         /**
          * @brief Whether it is drawn into the sun's shadow cascades and the spot and point lights' shadow maps
          * (ADR-0050): an `Opaque` or `Masked` one only, a Masked one cut out by its alpha cutoff as the depth prepass
@@ -276,6 +284,12 @@ namespace Fenrir::Render
      * `height * aspect` wide, centred on the view axis, with depth 1 at `near` and 0 at `far` in front of the camera.
      */
     [[nodiscard]] Math::Mat4 ReversedZOrthographic(float height, float aspect, float near, float far);
+
+    /**
+     * @brief The box around `box` under each of `copies` (ADR-0057): an instance list's bounds in its drawing entity's
+     * local space, for the box of the mesh it draws. The zero box at the origin for no copies.
+     */
+    [[nodiscard]] Math::AABB CopiesBounds(std::span<const Math::Mat4> copies, const Math::AABB& box);
 
     /**
      * @brief The pixels of a target `size` that a normalised viewport (fractions from the top-left) covers: its edges

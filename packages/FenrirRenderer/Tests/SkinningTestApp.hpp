@@ -179,7 +179,7 @@ namespace RendererTest
         }
 
         /** @brief The bytes of one record of the draw buffer (`Fenrir/Draw.glsl`'s `DrawItem`). */
-        static constexpr std::size_t RecordSize = 160;
+        static constexpr std::size_t RecordSize = 192;
 
       private:
         Fenrir::AssetHandle<Fenrir::Skeleton> m_skeleton;

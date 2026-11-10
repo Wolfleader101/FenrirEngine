@@ -161,8 +161,9 @@ TEST_CASE("A storage block ending in a runtime array is reflected one record lon
         variant.bindings, [](const Fenrir::ShaderBinding& b) { return b.set == 3 && b.binding == 0; });
     REQUIRE(draws != variant.bindings.end());
 
-    INFO("DrawData holds DrawItem items[]: two mat4s, a uint, a float, two uints and a vec4, 160 bytes in std430");
-    REQUIRE(draws->size == 160);
+    INFO("DrawData holds DrawItem items[]: two mat4s, a uint, a float, two uints and three vec4s, 192 bytes in "
+         "std430");
+    REQUIRE(draws->size == 192);
 }
 
 TEST_CASE("The vertex stage's inputs are reflected by location", "[shader-compiler][reflection]")
