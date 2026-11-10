@@ -682,6 +682,22 @@ One node of FenrirUI's tree: it has a parent, children, classes, a resolved styl
 An element tree of its own with the 2D target it draws into and its scale rule. A window's overlay, an image and a quad in the world each hold their own.
 *Avoid:* canvas, document (markup loads into a root, it is not the root), screen.
 
+**Control**
+A built-in element with behaviour of its own, such as a button, slider, scroll view or text entry, styled by the default stylesheet a game replaces.
+*Avoid:* widget, component (an ECS term), element (the general node).
+
+**Markup document**
+A file of element tags, attributes and includes that loads into a UI root as elements. It carries structure and ids, never logic or bindings.
+*Avoid:* layout file (layout is what Yoga computes), template (an include is a file, not a parameterised template), UXML, RML, XAML.
+
+**Stylesheet**
+A file of CSS rules, custom properties, keyframes and font faces that FenrirUI matches against elements to resolve their style.
+*Avoid:* theme (Godot's resource; the default stylesheet is the engine's only theme opinion), SCSS, USS, skin.
+
+**Scale rule**
+How a UI root maps its UI units to its target's logical units: by default so that 1080 UI units span the target's pixel height, or one to one with the target's logical units.
+*Avoid:* DPI scale (the window's content scale, one of its inputs), zoom, reference resolution.
+
 **FenrirAssets**
 The engine's asset package: loads files into plain CPU-side data and owns it behind asset handles. It has no GPU code; FenrirRenderer and animation each turn its data into their own form (ADR-0021).
 *Avoid:* resource manager, asset server, asset database (cooking and an editor database are out of scope).
