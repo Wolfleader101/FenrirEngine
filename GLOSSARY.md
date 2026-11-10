@@ -682,6 +682,10 @@ One node of FenrirUI's tree: it has a parent, children, classes, a resolved styl
 An element tree of its own with the 2D target it draws into and its scale rule. A window's overlay, an image and a quad in the world each hold their own.
 *Avoid:* canvas, document (markup loads into a root, it is not the root), screen.
 
+**Element id**
+`ElementId`: an index and a version naming one element of a UI root, stale once the element is removed. It is not an entity.
+*Avoid:* handle (Iris's term), node id, entity.
+
 **Control**
 A built-in element with behaviour of its own, such as a button, slider, scroll view or text entry, styled by the default stylesheet a game replaces.
 *Avoid:* widget, component (an ECS term), element (the general node).
