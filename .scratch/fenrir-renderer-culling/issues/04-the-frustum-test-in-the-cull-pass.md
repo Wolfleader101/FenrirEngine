@@ -4,7 +4,7 @@
 
 - **Two tests per candidate**, both from ticket 02's record box: the derived sphere against the camera's planes (uploaded with the pass; an instance list's box is moved by the entity's world matrix and the copy's transform, a lone or merged item's by the identity), and for a candidate that passes, the eight transformed corners, kept unless every corner is outside one plane. The shader's tests mirror `Math::Frustum`'s exactly, so the FenrirMath unit tests are the oracle.
 - **The coarse cull on the CPU** (spec "Culling", ADR-0057): a lone item, a merged run or an instance list whose world bounds (`ResolvedDraw::worldBounds`, ticket 02) are outside a view's `Math::Frustum` is left out of that view's candidates before the pass, as transparent items already are; it is the switch below's other half, so a view with `gpuCulling` off still culls by entity.
-- **`RendererConfig::gpuCulling`** (on) and `Renderer::SetGpuCulling`: off, the pass accepts every candidate, as ticket 03's did, so the indirection and draws are unchanged in shape. The API description gains the field (generated output only).
+- **`RendererConfig::gpuCulling`** (on) and `Renderer::SetGpuCulling`: off, the pass accepts every candidate, as ticket 03's did, so the indirection and draws are unchanged in shape. The API description gains the field (generated output only) if `RendererConfig` is a described type; it is not (see Comments), so the description does not change for it.
 
 **Blocked by:** 03
 

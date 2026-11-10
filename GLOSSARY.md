@@ -601,7 +601,7 @@ An asset holding the placements of many copies of one mesh, each a transform rel
 *Avoid:* instance buffer, multimesh, batch.
 
 **Frustum**
-The volume a view sees, as the planes that bound it in world space: `Math::Frustum` (FenrirMath, public, ADR-0057), built from a reversed-Z view-projection, five planes for a perspective view whose far plane is at infinity and six for an orthographic one, with a sphere test and a box test that moves a box's eight corners by a matrix and keeps the box unless every corner is outside one plane. `Renderer::GetFrustum` gives a camera's; the renderer culls transparent items by it on the CPU, and the cull pass repeats its tests on the GPU.
+The volume a view sees, as the planes that bound it in world space: `Math::Frustum` (FenrirMath, public, ADR-0057), built from a reversed-Z view-projection, five planes for a perspective view whose far plane is at infinity and six for an orthographic one, with a sphere test and a box test that moves a box's eight corners by a matrix and keeps the box unless every corner is outside one plane. `Renderer::GetFrustum` gives a camera's; the renderer leaves every item or instance list whose world bounds are outside it out of the view on the CPU, and the cull pass repeats its tests on the GPU over each remaining opaque or masked copy (`RendererConfig::gpuCulling` turns that half off).
 *Avoid:* view volume, clip volume, culling planes.
 
 **Indirect draw**

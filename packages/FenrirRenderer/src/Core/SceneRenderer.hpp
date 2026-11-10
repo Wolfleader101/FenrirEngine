@@ -879,7 +879,8 @@ namespace Fenrir::Render
          * the pass itself.
          */
         [[nodiscard]] CullView PrepareCull(RenderGraph& graph, std::uint64_t frameIndex, std::size_t view,
-                                           const std::vector<ResolvedDraw>& draws, const std::vector<DrawRun>& runs,
+                                           const Math::Frustum& frustum, const std::vector<ResolvedDraw>& draws,
+                                           const std::vector<DrawRun>& runs,
                                            std::vector<Graphics::DrawIndexedIndirectCommand>& templates,
                                            std::vector<CullGroupEntry>& groups);
         /**
@@ -1138,8 +1139,8 @@ namespace Fenrir::Render
          */
         Graphics::BufferHandle m_noIndirection;
         /**
-         * @brief builtin:cull's set 1 groups, by the draw buffer, the group table, the command buffer and the
-         * indirection, while all four live.
+         * @brief builtin:cull's set 1 groups, by the draw buffer, the group table, the command buffer, the
+         * indirection and the instance lists, while all five live.
          */
         BindingGroupCache<5> m_cullTargetGroups;
         /** @brief builtin:light-clusters' set 1 groups, by the light buffer and the cluster buffer, while both live. */

@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstring>
 #include <format>
+#include <span>
 #include <string_view>
 #include <type_traits>
 #include <variant>
@@ -2496,12 +2497,14 @@ namespace Fenrir::Render
     }
 
     SceneRenderer::CullView SceneRenderer::PrepareCull(RenderGraph& graph, std::uint64_t frameIndex, std::size_t view,
+                                                       const Math::Frustum& frustum,
                                                        const std::vector<ResolvedDraw>& draws,
                                                        const std::vector<DrawRun>& runs,
                                                        std::vector<DrawIndexedIndirectCommand>& templates,
                                                        std::vector<CullGroupEntry>& groups)
     {
         CullView cull;
+        cull.frustum = frustum;
         if (runs.empty() || m_cullPipeline.IsEmpty())
         {
             return cull;
@@ -3403,8 +3406,8 @@ namespace Fenrir::Render
             // Opaque draw each by its command in the view's command buffer, the prepass skipping the runs it has no
             // pipeline for, reading the view's indirection through the view's own draw set.
             auto opaqueRuns = std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *groups, *opaque, DrawPass::Main));
-            CullView cull = PrepareCull(graph, frameIndex, v, *draws, *opaqueRuns, cullTemplates, cullGroups);
-            cull.frustum = frustum;
+            const CullView cull =
+                PrepareCull(graph, frameIndex, v, frustum, *draws, *opaqueRuns, cullTemplates, cullGroups);
             culls.push_back(cull);
             m_drawnViews.push_back({v, sceneColour, sceneDepth, sceneNormals, shadowAtlas, viewGroup, cull.commands,
                                     cull.indirection, cull.runs, cull.candidates});

@@ -19,8 +19,8 @@ layout(local_size_x = 64) in;
 // The view's job.
 layout(set = 0, binding = 0, std140) uniform CullJob
 {
-    // x: the view's first entry in the group table; y: how many groups it has; z: how many of planes are the view's,
-    // 0 to keep every candidate. w unused.
+    // x: the view's first entry in the group table; y: how many groups it has; z: how many of the planes below are
+    // the view's, 0 to keep every candidate. w unused.
     uvec4 groups;
     // The view's planes in world space, vec4(n, d) with n the unit normal pointing inward: a point p is inside when
     // dot(n, p) + d >= 0. Five for a camera (no far plane), six for an orthographic view.

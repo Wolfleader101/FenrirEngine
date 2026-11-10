@@ -300,6 +300,7 @@ TEST_CASE(
     test.Frame();
     // The oracle: the same test on the CPU, over the same box, world matrix and copies.
     const std::optional<Fenrir::Math::Frustum> frustum = test.renderer.GetFrustum(test.camera);
+    INFO("the camera has a frustum once a frame has resolved it");
     REQUIRE(frustum.has_value());
     const Fenrir::Math::AABB box = test.assets.Store().TryGet(test.square)->bounds;
     const Fenrir::Math::Mat4 world = Fenrir::GetWorldMatrix(entity);
@@ -337,12 +338,17 @@ TEST_CASE(
     const std::vector<std::byte> entries = GlProbe::ReadBuffer(device, culls.front().indirection);
     std::set<std::uint32_t> listCopies;
     std::uint32_t itemsKept = 0;
+    std::multiset<std::uint32_t> itemCounts;
     std::set<Entry> all;
     for (std::size_t command = 0; command < 3; ++command)
     {
         const std::uint32_t count = Word(commands, command, 1);
         const std::uint32_t base = Word(commands, command, 4);
         CAPTURE(command, count, base);
+        if (count == 0 || EntryOf(entries, base).second == NoCopy)
+        {
+            itemCounts.insert(count);
+        }
         for (std::uint32_t i = base; i < base + count; ++i)
         {
             const Entry entry = EntryOf(entries, i);
@@ -362,8 +368,10 @@ TEST_CASE(
     }
     INFO("the list's region holds exactly the copies the CPU keeps (the one list's copies start at 0 in the buffer)");
     REQUIRE(listCopies == expected);
-    INFO("and every lone square the CPU kept, its box under the identity, the GPU kept too");
+    INFO("and every lone square the CPU kept, its box under the identity, the GPU kept too: the merged run counts "
+         "them and the red square's run counts one");
     REQUIRE(itemsKept == lonesKept + 1);
+    REQUIRE(itemCounts == std::multiset<std::uint32_t>{lonesKept, 1});
     REQUIRE(test.messages->errors.empty());
 }
 
@@ -402,6 +410,7 @@ TEST_CASE("Long thin copies tangent to the frustum are dropped by their corners 
     REQUIRE(bySphere == 5);
     REQUIRE(byBox == 2);
     const std::vector<RendererProbe::CullBuffers> culls = RendererProbe::Culls(test.renderer);
+    INFO("the one camera's pass culls the list's five bars as one run");
     REQUIRE(culls.size() == 1);
     REQUIRE(culls.front().runs == 1);
     REQUIRE(culls.front().candidates == 5);

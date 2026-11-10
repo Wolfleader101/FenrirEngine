@@ -116,6 +116,7 @@ namespace
         const BindingGroupEntry job = RendererTest::EntryAt(test.Device(), cull.job, 0);
         const std::vector<std::byte> bytes = RendererProbe::Bytes(test.Device(), job.buffer);
         const std::uint32_t count = RendererTest::UintAt(bytes, job.offset + 8);
+        INFO("a job names at most the six planes it has room for");
         REQUIRE(count <= 6);
         std::vector<Fenrir::Math::Vec4> planes(count);
         REQUIRE(job.offset + 16 + count * sizeof(Fenrir::Math::Vec4) <= bytes.size());
@@ -517,6 +518,7 @@ TEST_CASE("The job block carries the camera's planes each frame, which change as
     test.Frame();
     const std::vector<Fenrir::Math::Vec4> first = JobPlanes(test, test.Culls().at(0));
     const std::optional<Fenrir::Math::Frustum> frustum = test.renderer.GetFrustum(camera);
+    INFO("the camera has a frustum once a frame has resolved it");
     REQUIRE(frustum.has_value());
     INFO("five planes for the camera, each as Math::Frustum gives it");
     REQUIRE(first.size() == 5);
@@ -526,12 +528,6 @@ TEST_CASE("The job block carries the camera's planes each frame, which change as
         CAPTURE(p);
         REQUIRE(Near(first[p], frustum->Planes()[p]));
     }
-    INFO("the pass declares reading the instance lists, set 1 binding 4, which a list's copies are tested from");
-    const RecordedCull cull = test.Culls().at(0);
-    const BufferHandle copies = RendererTest::EntryAt(test.Device(), cull.target, 4).buffer;
-    REQUIRE(RendererProbe::Label(test.Device(), copies) == "Instance lists");
-    REQUIRE(Declares(cull.pass.uses, copies, ResourceUsage::StorageRead));
-
     camera.GetComponent<Fenrir::Transform>().pos = {3.0f, 1.0f, 5.0f};
     camera.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(0.5f, Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f));
     test.Frame();
@@ -555,6 +551,22 @@ TEST_CASE("The job block carries the camera's planes each frame, which change as
     test.Frame();
     REQUIRE(JobPlanes(test, test.Culls().at(0)).size() == 5);
     REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("The Cull pass binds the instance lists at set 1 binding 4 and declares reading them",
+          "[renderer][culling][cull-pass][frustum]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    AddThreeRuns(test);
+
+    test.Frame();
+    const RecordedCull cull = test.Culls().at(0);
+    const BufferHandle copies = RendererTest::EntryAt(test.Device(), cull.target, 4).buffer;
+    INFO("binding 4 is the packed instance lists, which a list's copies are tested from");
+    REQUIRE(RendererProbe::Label(test.Device(), copies) == "Instance lists");
+    INFO("and the pass declares reading them");
+    REQUIRE(Declares(cull.pass.uses, copies, ResourceUsage::StorageRead));
 }
 
 TEST_CASE("An entity outside the camera is left out of the view's candidates on the CPU, with GPU culling on or off",
