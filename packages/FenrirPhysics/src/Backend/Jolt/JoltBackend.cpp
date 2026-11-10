@@ -1466,15 +1466,15 @@ namespace Fenrir::Backend
             {
                 const JPH::BodyID id = ToJolt(body);
                 std::uint32_t& count = excludedPairsOf[id.GetIndex()];
-                if (excludes && count++ == 0)
+                if (excludes ? count++ != 0 : --count != 0)
                 {
-                    SetJoltGroup(id, GroupOf(id));
+                    continue;
                 }
-                else if (!excludes && --count == 0)
+                if (!excludes)
                 {
                     excludedPairsOf.erase(id.GetIndex());
-                    SetJoltGroup(id, GroupOf(id));
                 }
+                SetJoltGroup(id, GroupOf(id));
             }
         }
 
@@ -1662,11 +1662,8 @@ namespace Fenrir::Backend
             }
             ids[i] = BodyId{body->GetID().GetIndexAndSequenceNumber()};
             created.push_back(body->GetID());
-            // Its index is known only now. A new body is in no excluded pair.
-            if (desc.group != 0)
-            {
-                body->SetCollisionGroup(JPH::CollisionGroup(m_impl->joinedPairs, body->GetID().GetIndex(), desc.group));
-            }
+            // After it is created: its Jolt group holds its index.
+            m_impl->SetJoltGroup(body->GetID(), desc.group);
         }
         if (created.empty())
         {
@@ -2164,12 +2161,13 @@ namespace Fenrir::Backend
             return contacts;
         }
 
-        // A character's moves meet only the bodies its own body may collide with: none of its collision group. `inner`
-        // is its body's Jolt group, asked as Jolt asks it of two bodies.
+        // A character's moves meet only the bodies its own body may collide with: none of its collision group. It
+        // holds its body's Jolt group as it is now, and asks it as Jolt asks it of two bodies.
         class CharacterGroupFilter final : public JPH::BodyFilter
         {
           public:
-            explicit CharacterGroupFilter(const JPH::CollisionGroup& inner) : m_inner(inner)
+            CharacterGroupFilter(const JPH::BodyInterface& bodies, const JPH::CharacterVirtual& character)
+                : m_inner(bodies.GetCollisionGroup(character.GetInnerBodyID()))
             {
             }
 
@@ -2239,7 +2237,7 @@ namespace Fenrir::Backend
                                                      CharacterListener::Other{character.GetPtr(), JPH::Vec3::sZero()});
             const CharacterBroadPhaseFilter broadPhase(m_impl->objectVsBroadPhase, settings->mInnerBodyLayer);
             const JPH::DefaultObjectLayerFilter layer(m_impl->objectPairs, settings->mInnerBodyLayer);
-            const CharacterGroupFilter group(m_impl->Bodies().GetCollisionGroup(inner));
+            const CharacterGroupFilter group(m_impl->Bodies(), *character);
             character->RefreshContacts(broadPhase, layer, group, {}, m_impl->tempAllocator);
 
             std::uint32_t index;
@@ -2312,7 +2310,7 @@ namespace Fenrir::Backend
         update.mWalkStairsStepUp = move.stepHeight * up;
         const CharacterBroadPhaseFilter broadPhase(m_impl->objectVsBroadPhase, slot.layer);
         const JPH::DefaultObjectLayerFilter layer(m_impl->objectPairs, slot.layer);
-        const CharacterGroupFilter group(m_impl->Bodies().GetCollisionGroup(character.GetInnerBodyID()));
+        const CharacterGroupFilter group(m_impl->Bodies(), character);
         const JPH::RVec3 start = character.GetPosition();
         character.ExtendedUpdate(dt, m_impl->system.GetGravity(), update, broadPhase, layer, group, {},
                                  m_impl->tempAllocator);
@@ -2428,7 +2426,7 @@ namespace Fenrir::Backend
         // Otherwise the next move starts from the contacts where it was: stuck to a floor it left, say.
         const CharacterBroadPhaseFilter broadPhase(m_impl->objectVsBroadPhase, slot.layer);
         const JPH::DefaultObjectLayerFilter layer(m_impl->objectPairs, slot.layer);
-        const CharacterGroupFilter group(m_impl->Bodies().GetCollisionGroup(character.GetInnerBodyID()));
+        const CharacterGroupFilter group(m_impl->Bodies(), character);
         character.RefreshContacts(broadPhase, layer, group, {}, m_impl->tempAllocator);
     }
 
@@ -2479,7 +2477,7 @@ namespace Fenrir::Backend
         const float allowed = 1.5f * m_impl->system.GetPhysicsSettings().mPenetrationSlop;
         const CharacterBroadPhaseFilter broadPhase(m_impl->objectVsBroadPhase, slot.layer);
         const JPH::DefaultObjectLayerFilter layer(m_impl->objectPairs, slot.layer);
-        const CharacterGroupFilter group(m_impl->Bodies().GetCollisionGroup(character.GetInnerBodyID()));
+        const CharacterGroupFilter group(m_impl->Bodies(), character);
         if (!character.SetShape(made, allowed, broadPhase, layer, group, {}, m_impl->tempAllocator))
         {
             character.SetPosition(before);

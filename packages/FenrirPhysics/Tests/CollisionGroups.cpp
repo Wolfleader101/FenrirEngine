@@ -184,6 +184,7 @@ TEST_CASE("Boxes in different collision groups stack", "[physics][groups]")
 
     INFO("the upper box landed on the lower one: it is at y = " << PositionOf(stack.upper).y);
     REQUIRE(PositionOf(stack.upper).y == Approx(onBox).margin(2.0f * restSlop));
+    INFO("resting on it, the two are in contact");
     REQUIRE(Touching(test, stack.upper, stack.lower));
 }
 
@@ -238,6 +239,7 @@ TEST_CASE("A collision group never adds contact the layers forbid", "[physics][g
          "contact back: it fell through to y = "
          << PositionOf(upper).y);
     REQUIRE(PositionOf(upper).y == Approx(onGround).margin(restSlop));
+    INFO("inside each other, the two are not in contact");
     REQUIRE_FALSE(Touching(test, upper, lower));
 }
 
@@ -285,6 +287,7 @@ TEST_CASE("Bodies in a character's collision group fall through the character", 
     INFO("the character stands on the ground, not lifted by the box inside it: its centre is at y = "
          << PositionOf(character).y);
     REQUIRE(PositionOf(character).y == Approx(0.5f).margin(restSlop));
+    INFO("the ground the character names is not the box of its group lying inside it");
     REQUIRE(character.GetComponent<CharacterBody>().state.groundBody != mate);
 }
 
@@ -323,9 +326,9 @@ TEST_CASE("A trigger in a collision group does not fire for the bodies of its gr
 
     log.Run(test, 90);
 
-    INFO("both balls fell through the zone, and only the one of another group entered it: got " << log.enters.size()
-                                                                                                << " enters");
+    INFO("the ball of the trigger's group fell through the zone: it is at y = " << PositionOf(mate).y);
     REQUIRE(PositionOf(mate).y < 1.0f);
+    INFO("only the ball of another group entered it: got " << log.enters.size() << " enters");
     REQUIRE(log.enters.size() == 1);
     REQUIRE(log.enters[0].trigger == zone);
     REQUIRE(log.enters[0].otherBody == other);
@@ -516,11 +519,13 @@ namespace
     constexpr int chainCount = 8;
     constexpr float chainSpacing = 0.25f;
 
-    /** Where the links of a row of hanging chains are 2 s after their bottom links are kicked along the row. Each
-     * link is 0.6 long on 0.5 spacing, so neighbours in a chain overlap, kept apart only by their joints; the chains
-     * hang 0.25 apart and alternate between two groups, so a swinging chain hits the next and passes through the one
-     * after it. */
-    std::vector<Math::Vec3> SwingGroupedChains(bool useWorkerThreads)
+    constexpr int linkCount = 8;
+
+    /** Where the links of a row of hanging chains are 2 s after the bottom link of every other chain is kicked
+     * towards the next chain. Each link is 0.6 long on 0.5 spacing, so neighbours in a chain overlap, kept apart only
+     * by their joints; the chains hang 0.25 apart. If `grouped`, each kicked chain shares a group with the chain it
+     * swings into, and passes through it; otherwise each chain is in a group of its own, and hits it. */
+    std::vector<Math::Vec3> SwingChains(bool useWorkerThreads, bool grouped = true)
     {
         PhysicsConfig config = StepPosesOnly();
         config.useWorkerThreads = useWorkerThreads;
@@ -531,12 +536,12 @@ namespace
         {
             const Math::Vec3 hook(chainSpacing * static_cast<float>(c), 10.0f, 0.0f);
             Entity above;
-            for (int i = 0; i < 8; ++i)
+            for (int i = 0; i < linkCount; ++i)
             {
                 const Math::Vec3 top = hook - Math::Vec3(0.0f, linkSpacing * static_cast<float>(i), 0.0f);
                 Entity link = AddBody(test.Entities(), top - Math::Vec3(0.0f, linkSpacing / 2.0f, 0.0f),
                                       BoxShape{Math::Vec3(0.1f, linkHalf, 0.1f)});
-                Group(link, 1u + static_cast<std::uint32_t>(c % 2));
+                Group(link, 1u + static_cast<std::uint32_t>(grouped ? c / 2 : c));
                 Join(test, link, above, top, BallJoint{});
                 links.push_back(link);
                 above = link;
@@ -544,7 +549,7 @@ namespace
             bottoms.push_back(above);
         }
         test.Run(0.2);
-        for (std::size_t c = 0; c < bottoms.size(); ++c)
+        for (std::size_t c = 0; c < bottoms.size(); c += 2)
         {
             World(test).AddImpulse(bottoms[c], Math::Vec3(3.0f + 0.5f * static_cast<float>(c), 0.0f, 0.0f));
         }
@@ -566,14 +571,18 @@ namespace
 TEST_CASE("Grouped and jointed bodies end bit for bit the same in two runs, on one thread or many",
           "[physics][groups][joints]")
 {
-    const std::vector<Math::Vec3> single = SwingGroupedChains(false);
+    const std::vector<Math::Vec3> single = SwingChains(false);
 
-    INFO("the chains swung");
-    REQUIRE(std::abs(single.back().x - chainSpacing * static_cast<float>(chainCount - 1)) > 0.05f);
+    // The bottom link of the first chain, which was kicked from x = 0.
+    INFO("the kicked chains swung");
+    REQUIRE(std::abs(single[linkCount - 1].x) > 0.05f);
+    INFO("the groups decided what met: with every chain in a group of its own, the kicked chains hit their "
+         "neighbours and the links end elsewhere");
+    REQUIRE_FALSE(BitIdentical(single, SwingChains(false, false)));
     INFO("a second run on one thread agrees bit for bit with the first");
-    REQUIRE(BitIdentical(single, SwingGroupedChains(false)));
+    REQUIRE(BitIdentical(single, SwingChains(false)));
     INFO("a run on the worker threads agrees bit for bit with one on one thread");
-    REQUIRE(BitIdentical(single, SwingGroupedChains(true)));
+    REQUIRE(BitIdentical(single, SwingChains(true)));
     INFO("and so does a second run on the worker threads");
-    REQUIRE(BitIdentical(single, SwingGroupedChains(true)));
+    REQUIRE(BitIdentical(single, SwingChains(true)));
 }
