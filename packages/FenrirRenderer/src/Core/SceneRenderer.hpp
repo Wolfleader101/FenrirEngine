@@ -9,6 +9,7 @@
 #include <set>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -89,6 +90,17 @@ namespace Fenrir::Render
          * white texture as its ambient occlusion and no shadow.
          */
         Graphics::BindingGroupHandle viewGroup;
+        /**
+         * @brief Its cull pass's command buffer (ADR-0057), the indirect commands its DepthPrepass and Opaque passes
+         * draw from, one per run; empty when it has no opaque runs.
+         */
+        Graphics::BufferHandle cullCommands;
+        /** @brief Its cull pass's indirection, which those draws' instances read; empty when it has no opaque runs. */
+        Graphics::BufferHandle cullIndirection;
+        /** @brief How many runs its cull pass counts into. */
+        std::uint32_t cullRuns = 0;
+        /** @brief How many candidates its cull pass culls. */
+        std::uint32_t cullCandidates = 0;
     };
 
     /**
@@ -198,6 +210,19 @@ namespace Fenrir::Render
      * draws keep its own `SKINNED` variant, a shader without the key still draws skinned meshes as the fallback
      * material (whose draws are compute-skinned), and with compute skinning off, or without the compute pipeline, every
      * skinned draw skins in its vertex stage as before.
+     *
+     * **GPU culling** (ADR-0057): every view's opaque and masked runs (merged items, instance lists, and lone items as
+     * runs of one) are candidates of a `Cull` compute pass per view, first in the frame, running `builtin:cull`: the
+     * renderer writes each run's command template (its mesh's index count, no instances, and the base instance where
+     * the run's region of the view's indirection starts) and group table entries (one per 64 candidates, naming the
+     * run) into the frame's rings; the pass copies the templates over the view's command buffer and one dispatch
+     * appends each candidate it keeps, `(record, copy)`, to its run's region, counting it into the command with an
+     * atomic. `DepthPrepass` and `Opaque` then draw each run with one indirect draw of its command, declaring
+     * `IndirectRead` on the commands and `StorageRead` on the indirection, which set 3 binding 3 binds for them
+     * (`Fenrir/Draw.glsl`'s `CurrentDraw()` reads it), so there is one draw group per view and frame in flight; every
+     * other pass binds the buffer that says there is no indirection and draws directly, as before. The per-view
+     * buffers are sized to the frame's runs and candidates, kept between frames and ring-buffered per frame in flight.
+     * The pass keeps every candidate for now: the frustum test is culling ticket 04.
      *
      * **Instance lists** (ADR-0051) are prepared like assets: each copy's transform, normal matrix and colour, kept
      * packed back to back with every other list's in one storage buffer, set 3 binding 1, made again whenever a list
@@ -692,15 +717,63 @@ namespace Fenrir::Render
         };
 
         /**
-         * @brief One frame in flight's draw set binding group (set 3), for the draw, palette and instance-list
-         * buffers it was made with.
+         * @brief One entry of the frame's group table, as `builtin:cull` declares it (std430, a uvec4): a work group's
+         * run (ADR-0057) and which of its candidates the group culls.
          */
-        struct DrawGroup
+        struct CullGroupEntry
         {
-            Graphics::BufferHandle draws;
-            Graphics::BufferHandle palette;
-            Graphics::BufferHandle instanceLists;
-            Graphics::BindingGroupHandle group;
+            /** @brief The run's command in the view's command buffer. */
+            std::uint32_t command = 0;
+            /** @brief The run's first record: an instance list's one record, or the first of a merged run's. */
+            std::uint32_t record = 0;
+            /** @brief How many candidates the run has: a list's copies, or the merged run's items. */
+            std::uint32_t count = 0;
+            /** @brief The first candidate this group culls, within the run. */
+            std::uint32_t first = 0;
+        };
+        static_assert(sizeof(CullGroupEntry) == 16, "a group table entry is a uvec4");
+
+        /** @brief One view's cull pass this frame (ADR-0057): what it writes, and what its draws then read. */
+        struct CullView
+        {
+            /** @brief The view's command buffer; empty when the view has no opaque runs. */
+            Graphics::BufferHandle commands;
+            /** @brief The view's indirection; empty when the view has no opaque runs. */
+            Graphics::BufferHandle indirection;
+            /** @brief The two, imported into the frame's graph. */
+            GraphResource commandsResource;
+            GraphResource indirectionResource;
+            /** @brief Its templates' byte offset in the frame's template ring. */
+            std::size_t templateOffset = 0;
+            /** @brief Its templates' size in bytes. */
+            std::size_t templateBytes = 0;
+            /** @brief Its first entry in the frame's group table. */
+            std::uint32_t firstGroup = 0;
+            /** @brief How many group table entries it has: one dispatch of as many groups. */
+            std::uint32_t groups = 0;
+            /** @brief How many runs it counts into. */
+            std::uint32_t runs = 0;
+            /** @brief How many candidates it culls. */
+            std::uint32_t candidates = 0;
+        };
+
+        /** @brief A buffer ringed per frame in flight and grown by doubling when a frame needs more than it holds. */
+        struct GrownRing
+        {
+            std::unique_ptr<FrameRingBuffer> ring;
+            /** @brief Each copy's size in bytes. */
+            std::size_t capacity = 0;
+
+            /** @brief Makes the ring hold at least `bytes`, remaking its copies with `usage` when it does not. */
+            void Reserve(Graphics::GraphicsDevice& device, std::size_t bytes, Graphics::BufferUsage usage,
+                         std::string_view label);
+        };
+
+        /** @brief A view's cull rings: its command buffer and its indirection. */
+        struct CullRings
+        {
+            GrownRing commands;
+            GrownRing indirection;
         };
 
         /** @brief The pipeline drawing a mesh with the standard streams `streams` (StreamsOf's bits) has. */
@@ -776,13 +849,32 @@ namespace Fenrir::Render
                                                   const std::vector<std::size_t>& order, DrawPass pass) const;
         /**
          * @brief Records `runs` of `draws` into a pass, binding each one's pipeline (`pass`'s), groups and streams, a
-         * compute-skinned draw's first three from `skinned`, and drawing each run's instances.
+         * compute-skinned draw's first three from `skinned`, and drawing each run's instances: directly, or, with
+         * `commands`, the view's command buffer a cull pass counted into (ADR-0057), as one indirect draw of the
+         * command at the run's index. A run with no pipeline for `pass` is skipped, its command left in place.
          */
         void RecordDraws(Graphics::PassEncoder& encoder, const std::vector<ResolvedDraw>& draws,
                          const std::vector<Graphics::BindingGroupHandle>& groups, const std::vector<DrawRun>& runs,
                          Graphics::BindingGroupHandle frameGroup, Graphics::BindingGroupHandle viewGroup,
                          Graphics::BindingGroupHandle drawGroup, Graphics::BufferHandle skinned,
-                         Graphics::PixelRect viewport, DrawPass pass) const;
+                         Graphics::PixelRect viewport, DrawPass pass, Graphics::BufferHandle commands = {}) const;
+        /**
+         * @brief Sizes view `view`'s command buffer and indirection for `runs` of `draws` this frame (ADR-0057),
+         * imports them into `graph`, and appends the runs' command templates and group table entries to `templates` and
+         * `groups`, the frame's; empty buffers, with nothing appended, when there are no runs. AddCullPasses then adds
+         * the pass itself.
+         */
+        [[nodiscard]] CullView PrepareCull(RenderGraph& graph, std::uint64_t frameIndex, std::size_t view,
+                                           const std::vector<ResolvedDraw>& draws, const std::vector<DrawRun>& runs,
+                                           std::vector<Graphics::DrawIndexedIndirectCommand>& templates,
+                                           std::vector<CullGroupEntry>& groups);
+        /**
+         * @brief Uploads the frame's `templates` and `groups` into their rings and adds one `Cull` pass per view of
+         * `views` that has runs: a copy of its templates over its command buffer, then one dispatch of `builtin:cull`.
+         */
+        void AddCullPasses(RenderGraph& graph, std::uint64_t frameIndex, const std::vector<CullView>& views,
+                           std::span<const Graphics::DrawIndexedIndirectCommand> templates,
+                           std::span<const CullGroupEntry> groups);
         [[nodiscard]] Graphics::PipelineHandle MakeInternalPipeline(
             const ShaderContainer& container, const ShaderVariant* variant, Graphics::BindingGroupLayoutHandle layout,
             Graphics::TextureFormat colour, bool depthTested, std::uint32_t samples,
@@ -856,10 +948,11 @@ namespace Fenrir::Render
             RenderGraph& graph, std::uint64_t frameIndex, std::size_t view, const ViewRequest& request,
             std::uint32_t lightCount, ClusterDepths depths);
         /**
-         * @brief The draw set's group for frame `frameIndex`: its copies of the draw and palette buffers, and the
-         * instance-list buffer.
+         * @brief The draw set's group for frame `frameIndex`: its copies of the draw and palette buffers, the
+         * instance-list buffer, and `indirection` at binding 3, a view's or (empty) the buffer that says there is none.
          */
-        [[nodiscard]] Graphics::BindingGroupHandle DrawGroupFor(std::uint64_t frameIndex);
+        [[nodiscard]] Graphics::BindingGroupHandle DrawGroupFor(std::uint64_t frameIndex,
+                                                                Graphics::BufferHandle indirection = {});
         [[nodiscard]] std::uint32_t NextId();
 
         Graphics::GraphicsDevice& m_device;
@@ -922,6 +1015,15 @@ namespace Fenrir::Render
         /** @brief Its sets: 0 the view's job block, 1 the frame's light buffer and the view's cluster buffer. */
         Graphics::BindingGroupLayoutHandle m_clusterJobLayout;
         Graphics::BindingGroupLayoutHandle m_clusterTargetLayout;
+        /** @brief `builtin:cull`, the Cull passes' compute program. */
+        ShaderContainer m_cull;
+        /** @brief Its pipeline; empty if it failed, and then every pass draws directly. */
+        Graphics::PipelineHandle m_cullPipeline;
+        /** @brief Its set 0: the view's job block. */
+        Graphics::BindingGroupLayoutHandle m_cullJobLayout;
+        /** @brief Its set 1: the frame's draw records and group table, and the view's command buffer and indirection.
+         */
+        Graphics::BindingGroupLayoutHandle m_cullTargetLayout;
 
         Graphics::BindingGroupLayoutHandle m_frameLayout;
         Graphics::BindingGroupLayoutHandle m_viewLayout;
@@ -1004,6 +1106,24 @@ namespace Fenrir::Render
         std::vector<ClusterBuffers> m_clusterBuffers;
         /** @brief The buffer of one 0 that view blocks without clusters bind at set 1 binding 3. */
         Graphics::BufferHandle m_noClusters;
+        /** @brief Each Cull pass's job block, one uniform slot a view, bound at its set 0. */
+        std::unique_ptr<BlockRing> m_cullJobs;
+        /** @brief The frame's command templates, which each Cull pass copies its view's from. */
+        GrownRing m_cullTemplates;
+        /** @brief The frame's group table, which each Cull pass reads its view's groups of. */
+        GrownRing m_cullGroups;
+        /** @brief Each view's cull rings, by view index. */
+        std::vector<CullRings> m_cullRings;
+        /**
+         * @brief The buffer of one entry naming no record (`Fenrir/DrawRecord.glsl`'s FenrirNoIndirection) that the
+         * draw group of every direct draw binds at set 3 binding 3.
+         */
+        Graphics::BufferHandle m_noIndirection;
+        /**
+         * @brief builtin:cull's set 1 groups, by the draw buffer, the group table, the command buffer and the
+         * indirection, while all four live.
+         */
+        BindingGroupCache<4> m_cullTargetGroups;
         /** @brief builtin:light-clusters' set 1 groups, by the light buffer and the cluster buffer, while both live. */
         BindingGroupCache<2> m_clusterTargetGroups;
         /** @brief The Background pass's group of each Sky cube texture it draws, while the texture lives. */
@@ -1020,8 +1140,11 @@ namespace Fenrir::Render
         std::unique_ptr<ReflectionTrace> m_reflectionTrace;
         /** @brief Each copy's frame set group, by frame index modulo the copies. */
         std::vector<FrameGroup> m_frameGroups;
-        /** @brief Each copy's draw set group, by frame index modulo the copies. */
-        std::vector<DrawGroup> m_drawGroups;
+        /**
+         * @brief The draw set's groups, by the draw buffer, the palette, the instance-list buffer and the indirection,
+         * while all four live.
+         */
+        BindingGroupCache<4> m_drawGroups;
         /**
          * @brief The view set's groups, by the view ring's buffer, slot, the occlusion and shadow textures, the
          * cluster buffer and the reflection hits and history, while all six live.

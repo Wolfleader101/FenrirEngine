@@ -234,7 +234,10 @@ namespace
         Fenrir::Graphics::CmdDispatch dispatch;
     };
 
-    /** @brief Every dispatch of the last frame, in order, with its job block as the device holds it. */
+    /**
+     * @brief Every dispatch of the last frame's LightClusters passes, in order, with its job block as the device holds
+     * it; the Cull passes' dispatches (ADR-0057) are not among them.
+     */
     std::vector<ClusterDispatch> Dispatches(const RendererTestApp& test)
     {
         using namespace Fenrir::Graphics;
@@ -242,13 +245,18 @@ namespace
         for (const CommandList& list : RendererProbe::Submitted(test.renderer))
         {
             std::array<BindingGroupHandle, 4> groups{};
+            bool clustering = false;
             for (const Command& command : list.commands)
             {
-                if (const auto* group = std::get_if<CmdSetBindingGroup>(&command))
+                if (const auto* begin = std::get_if<CmdBeginPass>(&command))
+                {
+                    clustering = begin->pass.label == "LightClusters";
+                }
+                else if (const auto* group = std::get_if<CmdSetBindingGroup>(&command))
                 {
                     groups.at(group->set) = group->group;
                 }
-                else if (const auto* dispatch = std::get_if<CmdDispatch>(&command))
+                else if (const auto* dispatch = std::get_if<CmdDispatch>(&command); dispatch != nullptr && clustering)
                 {
                     ClusterDispatch recorded{{}, groups, *dispatch};
                     const std::vector<BindingGroupEntry> entries = RendererProbe::Entries(test.Device(), groups[0]);

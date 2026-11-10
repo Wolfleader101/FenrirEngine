@@ -168,7 +168,7 @@ TEST_CASE("A camera's streaks run in PostProcess beside its bloom, from bloom's 
     const std::vector<PassRecord> passes = test.Passes();
     INFO("the streaks' downsamples read bloom's level 0 before bloom's upsamples blend over it; the rest of their "
          "passes follow bloom's composite");
-    std::vector<std::string> expected{"BrdfLut", "DepthPrepass", "Opaque", "Background"};
+    std::vector<std::string> expected{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background"};
     expected.insert(expected.end(), 6, "BloomDownsample");
     expected.insert(expected.end(), 8, "StreakDownsample");
     expected.insert(expected.end(), 5, "BloomUpsample");
@@ -255,7 +255,7 @@ TEST_CASE("A camera with bloom off still streaks, running bloom's first downsamp
 
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
-    std::vector<std::string> expected{"BrdfLut", "DepthPrepass", "Opaque", "Background", "BloomDownsample"};
+    std::vector<std::string> expected{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background", "BloomDownsample"};
     expected.insert(expected.end(), 8, "StreakDownsample");
     expected.insert(expected.end(), 7, "StreakUpsample");
     expected.emplace_back("StreakComposite");

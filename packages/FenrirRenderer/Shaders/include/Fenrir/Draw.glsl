@@ -2,8 +2,11 @@
 // one record per drawn item; an instanced draw of matching items (ADR-0051) reads them from its base instance on, one
 // per instance. Binding 1 holds the copies of every InstancedMeshRenderer's instance list (ADR-0051): such a draw has
 // one record, at its base instance, which CurrentDraw composes with each instance's copy. Binding 2 is the skinning
-// palette, which Fenrir/Skinning.glsl declares (ADR-0035). The instance-list buffer is declared beside the records, which
-// CurrentDraw reads with it, so every program reading one reads both: GL numbers a program's storage blocks in the
+// palette, which Fenrir/Skinning.glsl reads (ADR-0035). Binding 3 is the view's indirection (ADR-0057): for a draw a
+// cull pass wrote, one entry per instance naming its record and, for an instance list's copy, the copy, which
+// CurrentDraw reads at FenrirDrawIndex() and composes as before; bound to the buffer that holds no indirection, the
+// draw is direct and each instance's record is found as above. Every buffer is declared here, whichever a program
+// reads, so every program reading one reads them all in the same order: GL numbers a program's storage blocks in the
 // order of their bindings, and the palette stays the third whichever program declares it.
 //
 // Under POINT_SHADOW (ADR-0050), the variant a point light's shadow draws its casters with where the device lets a
@@ -15,47 +18,36 @@
 #ifndef FENRIR_DRAW_GLSL
 #define FENRIR_DRAW_GLSL
 
+#include "Fenrir/DrawRecord.glsl"
+#include "Fenrir/SkinMaths.glsl"
+
 #ifdef POINT_SHADOW
 #extension GL_ARB_shader_viewport_layer_array : require
 #include "Fenrir/CubeFaces.glsl"
 #include "Fenrir/View.glsl"
 #endif
 
-struct DrawItem
-{
-    // Local to world; for a skinned item, its skeleton entity's world matrix.
-    mat4 world;
-    // The inverse transpose of world, for normals and tangents.
-    mat4 normal;
-    // A skinned item's first palette entry, in bones (Fenrir/Skinning.glsl).
-    uint paletteOffset;
-    // The sign of world's determinant: -1 when it mirrors, else 1, for tangent handedness.
-    float worldSign;
-    // An instance list's first copy at binding 1, and how many copies it draws; 0 copies for every other item.
-    uint instanceFirst;
-    uint instanceCount;
-    // Linear, which the built-in programs multiply the vertex colour by: white, or an instance list copy's colour.
-    vec4 colour;
-    // The item's box for culling (ADR-0057), xyz, w unused: for a lone or merged item its mesh's bounds with world
-    // already applied (a skinned item's skinned bounds), so a cull tests it under the identity; for an instance list,
-    // the mesh's local bounds, which each copy's transform and world move.
-    vec4 boundsMin;
-    vec4 boundsMax;
-};
-
-// One copy of an instance list, relative to the drawing entity.
-struct FenrirInstance
-{
-    mat4 transform;
-    // The inverse transpose of transform's 3x3.
-    mat3 normal;
-    vec4 colour;
-};
-
 layout(set = 3, binding = 0, std430) readonly buffer DrawData
 {
     DrawItem items[];
 } draws;
+
+layout(set = 3, binding = 1, std430) readonly buffer InstanceData
+{
+    FenrirInstance copies[];
+} fenrirInstances;
+
+// The frame's skinning palette (ADR-0035), which Fenrir/Skinning.glsl indexes from a skinned item's paletteOffset.
+layout(set = 3, binding = 2, std430) readonly buffer FenrirPalette
+{
+    FenrirBone bones[];
+} fenrirPalette;
+
+// The view's indirection (ADR-0057), or the one entry that says there is none.
+layout(set = 3, binding = 3, std430) readonly buffer IndirectionData
+{
+    uvec2 entries[];
+} fenrirVisible;
 
 // Written per backend: Vulkan's instance index counts from the base instance, GL's (its InstanceId) from 0. The
 // compiler turns this on in each stage's GL copy and leaves it off in the Vulkan one. Shaders outside this file may not
@@ -70,9 +62,11 @@ uint FenrirCubeInstance()
 }
 #endif
 
-// The record of the instance being drawn: the draw's base instance plus its instance index (over six, one a face,
-// under POINT_SHADOW). It holds for an indirect draw unchanged (ADR-0057): each command's baseInstance reaches
-// gl_BaseInstance as a direct draw's firstInstance does, on GL from the command the GPU read.
+// The instance being drawn: the draw's base instance plus its instance index (over six, one a face, under
+// POINT_SHADOW). For a direct draw it is the instance's record; for an indirect draw a cull pass wrote (ADR-0057) it is
+// the instance's entry in the view's indirection, which names the record. It holds for an indirect draw unchanged:
+// each command's baseInstance reaches gl_BaseInstance as a direct draw's firstInstance does, on GL from the command the
+// GPU read.
 uint FenrirDrawIndex()
 {
 #ifdef POINT_SHADOW
@@ -81,11 +75,6 @@ uint FenrirDrawIndex()
     return uint(gl_InstanceIndex) + (fenrirInstanceIndexExcludesBase ? uint(gl_BaseInstance) : 0u);
 #endif
 }
-
-layout(set = 3, binding = 1, std430) readonly buffer InstanceData
-{
-    FenrirInstance copies[];
-} fenrirInstances;
 
 #ifdef POINT_SHADOW
 // `item` turned into its instance's cube face, about the light at the view block's camera position, whose view block
@@ -107,27 +96,47 @@ DrawItem FenrirCubeFaceOf(DrawItem item)
 #endif
 
 // The record of the item this instance is drawing. An instance list's draw has one record for all its copies: this
-// instance's copy is composed into it, its transform after the entity's world matrix.
+// instance's copy is composed into it, its transform after the entity's world matrix. Which record and copy: for a
+// direct draw, the record at FenrirDrawIndex(), or the one at the base instance composed with the copy FenrirDrawIndex()
+// counts to from it; for an indirect draw, what the indirection's entry at FenrirDrawIndex() names.
 DrawItem CurrentDraw()
 {
-    DrawItem first = draws.items[gl_BaseInstance];
-    if (first.instanceCount == 0u)
+    uint index = FenrirDrawIndex();
+    uint record;
+    uint copy;
+    if (fenrirVisible.entries[0].x == FenrirNoIndirection)
     {
-#ifdef POINT_SHADOW
-        return FenrirCubeFaceOf(draws.items[FenrirDrawIndex()]);
-#else
-        return draws.items[FenrirDrawIndex()];
-#endif
+        DrawItem first = draws.items[gl_BaseInstance];
+        if (first.instanceCount == 0u)
+        {
+            record = index;
+            copy = FenrirNoCopy;
+        }
+        else
+        {
+            record = uint(gl_BaseInstance);
+            copy = first.instanceFirst + index - uint(gl_BaseInstance);
+        }
     }
-    FenrirInstance copy = fenrirInstances.copies[first.instanceFirst + FenrirDrawIndex() - uint(gl_BaseInstance)];
-    first.world = first.world * copy.transform;
-    first.normal = first.normal * mat4(copy.normal);
-    first.worldSign *= determinant(mat3(copy.transform)) < 0.0 ? -1.0 : 1.0;
-    first.colour *= copy.colour;
+    else
+    {
+        uvec2 entry = fenrirVisible.entries[index];
+        record = entry.x;
+        copy = entry.y;
+    }
+    DrawItem item = draws.items[record];
+    if (copy != FenrirNoCopy)
+    {
+        FenrirInstance instance = fenrirInstances.copies[copy];
+        item.world = item.world * instance.transform;
+        item.normal = item.normal * mat4(instance.normal);
+        item.worldSign *= determinant(mat3(instance.transform)) < 0.0 ? -1.0 : 1.0;
+        item.colour *= instance.colour;
+    }
 #ifdef POINT_SHADOW
-    return FenrirCubeFaceOf(first);
+    return FenrirCubeFaceOf(item);
 #else
-    return first;
+    return item;
 #endif
 }
 

@@ -128,6 +128,11 @@ namespace Fenrir::Render
         Use(resource, ResourceUsage::StorageWrite, false, true);
     }
 
+    void PassBuilder::IndirectRead(GraphResource buffer)
+    {
+        Use(buffer, ResourceUsage::IndirectRead, true, false);
+    }
+
     void PassBuilder::VertexInput(GraphResource buffer)
     {
         Use(buffer, ResourceUsage::VertexInput, true, false);

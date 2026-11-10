@@ -22,8 +22,9 @@ add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp 
                                    AmbientOcclusion.cpp Instancing.cpp InstanceLists.cpp Culling.cpp ComputeSkinning.cpp
                                    Cascades.cpp Shadows.cpp SpotShadows.cpp PointShadows.cpp ShadowPools.cpp
                                    LightClusters.cpp SceneHistory.cpp ReflectionTrace.cpp IndirectDraws.cpp
-                                   GoldenComparison.cpp DeviceTest.hpp DrawLists2D.hpp FakeSurface.hpp RecordingLogger.hpp
-                                   RendererProbe.hpp RendererTestApp.hpp SkinningTestApp.hpp)
+                                   CullPass.cpp
+                                   GoldenComparison.cpp CullProbe.hpp DeviceTest.hpp DrawLists2D.hpp FakeSurface.hpp
+                                   RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp SkinningTestApp.hpp)
 target_include_directories(FenrirRendererTests PRIVATE ../src)
 # The OpenGL backend too, for the cases where it cannot start: they need no GPU.
 # FenrirSkeleton as the skinning source the skinned tests draw from: the tests link it, the renderer never does
@@ -68,10 +69,10 @@ add_executable(FenrirRendererGlTests OpenGL/Clears.cpp OpenGL/Draws.cpp OpenGL/V
                                      OpenGL/Lights.cpp OpenGL/RectLights.cpp OpenGL/DepthPrepass.cpp
                                      OpenGL/AmbientOcclusion.cpp OpenGL/Instancing.cpp OpenGL/InstanceLists.cpp
                                      OpenGL/Shadows.cpp OpenGL/LightClusters.cpp OpenGL/SceneHistory.cpp
-                                     OpenGL/Reflections.cpp OpenGL/IndirectDraws.cpp
+                                     OpenGL/Reflections.cpp OpenGL/IndirectDraws.cpp OpenGL/CullPass.cpp
                                      OpenGL/GlProbe.hpp OpenGL/GlScene.hpp OpenGL/GlTestApp.hpp OpenGL/GoldenScene.hpp
-                                     DrawLists2D.hpp RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp
-                                     SkinningTestApp.hpp)
+                                     CullProbe.hpp DrawLists2D.hpp RecordingLogger.hpp RendererProbe.hpp
+                                     RendererTestApp.hpp SkinningTestApp.hpp)
 target_include_directories(FenrirRendererGlTests PRIVATE . ../src)
 target_link_libraries(FenrirRendererGlTests PRIVATE FenrirRenderer FenrirRendererCore FenrirRendererOpenGL FenrirWindow
                                                     FenrirApp FenrirDebugDraw FenrirSkeleton FenrirRendererGoldenImages
@@ -89,6 +90,8 @@ fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlPositionFill VERTEX OpenGL/fi
 fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlIndirectFill VERTEX OpenGL/fixtures/indirect.vert
                    FRAGMENT OpenGL/fixtures/fill.frag EMBED)
 fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlIndirectCounts COMPUTE OpenGL/fixtures/indirect_counts.comp EMBED)
+# The user shader fixture, for the cull pass's indirection through a user vertex stage (ADR-0057).
+fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlUserTint VERTEX fixtures/user.vert FRAGMENT fixtures/user.frag EMBED)
 fenrir_add_shaders(FenrirRendererGlTests PROGRAM SampledPicture VERTEX ../Shaders/Builtin/mesh.vert
                    FRAGMENT fixtures/sampled.frag EMBED)
 # A material set of a block and four textures, for the flattening formula's texture units.

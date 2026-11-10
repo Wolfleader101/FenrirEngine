@@ -120,7 +120,7 @@ TEST_CASE("A camera's bloom runs in PostProcess, down the chain and back up into
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
     INFO("after the scene and before Output: six downsamples, five upsamples, and the composite");
-    std::vector<std::string> expected{"BrdfLut"};
+    std::vector<std::string> expected{"Cull", "BrdfLut"};
     const std::vector<std::string> view = ViewPasses(6);
     expected.insert(expected.end(), view.begin(), view.end());
     REQUIRE(Labels(passes) == expected);
@@ -239,7 +239,7 @@ TEST_CASE("A camera at bloom intensity 0 draws the frame as it was without bloom
     test.Frame();
     INFO("no bloom pass between Background and Output");
     REQUIRE(Labels(test.Passes()) ==
-            std::vector<std::string>{"BrdfLut", "DepthPrepass", "Opaque", "Background", "Output"});
+            std::vector<std::string>{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background", "Output"});
 }
 
 TEST_CASE("A camera's bloom intensity and radius reach its passes, clamped to [0, 1]", "[renderer][bloom]")

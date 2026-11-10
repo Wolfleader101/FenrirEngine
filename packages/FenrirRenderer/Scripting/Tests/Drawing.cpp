@@ -25,7 +25,7 @@ namespace
     // The first draw of the last frame's Opaque pass, after making sure there is exactly one.
     RecordedDraw OnlyOpaqueDraw(const RendererScriptingApp& test)
     {
-        const std::vector<RecordedDraw> draws = DrawsIn(test.Submitted(), "Opaque");
+        const std::vector<RecordedDraw> draws = DrawsIn(test, "Opaque");
         INFO("The frame should draw exactly the one MeshRenderer");
         REQUIRE(draws.size() == 1);
         return draws[0];

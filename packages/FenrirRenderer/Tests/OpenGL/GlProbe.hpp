@@ -61,6 +61,13 @@ namespace Fenrir
             return Gl(device).GlName(texture);
         }
 
+        /** @brief Every byte of a live buffer as GL holds it, after the GPU's writes to it; empty for a stale one. */
+        [[nodiscard]] static std::vector<std::byte> ReadBuffer(Graphics::GraphicsDevice& device,
+                                                               Graphics::BufferHandle buffer)
+        {
+            return Gl(device).ReadBuffer(buffer);
+        }
+
         /** @brief Whether GL still has a buffer object called `name`. */
         [[nodiscard]] static bool IsGlBuffer(Graphics::GraphicsDevice& device, std::uint32_t name)
         {

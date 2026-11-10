@@ -205,7 +205,7 @@ TEST_CASE("An instance list made in C# draws as one instanced draw of its copies
         REQUIRE(data->transforms.size() == 5);
         REQUIRE(data->colours.size() == 5);
     }
-    const std::vector<RecordedDraw> opaque = DrawsIn(test.Submitted(), "Opaque");
+    const std::vector<RecordedDraw> opaque = DrawsIn(test, "Opaque");
     INFO("The Opaque pass should hold one draw of C#'s five copies");
     REQUIRE(opaque.size() == 1);
     REQUIRE(opaque.front().draw.instanceCount == 5);
@@ -226,7 +226,7 @@ TEST_CASE("An instance list C# replaces is uploaded again and draws its new copi
         REQUIRE(test.Call<bool>(InstanceListCallsType, "Replace", 8));
     }
     test.Frame();
-    const std::vector<RecordedDraw> opaque = DrawsIn(test.Submitted(), "Opaque");
+    const std::vector<RecordedDraw> opaque = DrawsIn(test, "Opaque");
     INFO("The Opaque pass should draw the replaced list's eight copies, uploaded again at revision 2");
     REQUIRE(opaque.size() == 1);
     REQUIRE(opaque.front().draw.instanceCount == 8);

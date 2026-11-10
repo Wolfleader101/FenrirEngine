@@ -67,7 +67,7 @@ namespace
         BindingGroupHandle draws;
         BufferHandle vertices;
         BufferHandle indices;
-        /** @brief The storage layout of set 3, for a compute pipeline's command buffer as well. */
+        /** @brief The storage layout of set 3, its four blocks as Fenrir/Draw.glsl declares them. */
         BindingGroupLayoutHandle storageLayout;
         BindingGroupLayoutHandle uniformLayout;
     };
@@ -76,8 +76,11 @@ namespace
     {
         IndirectScene scene;
         scene.uniformLayout = device.CreateBindingGroupLayout({{{0, Fenrir::ShaderBindingKind::UniformBuffer}}});
-        scene.storageLayout = device.CreateBindingGroupLayout(
-            {{{0, Fenrir::ShaderBindingKind::StorageBuffer}, {1, Fenrir::ShaderBindingKind::StorageBuffer}}});
+        // Fenrir/Draw.glsl declares set 3's four storage blocks whichever a program reads (ADR-0057).
+        scene.storageLayout = device.CreateBindingGroupLayout({{{0, Fenrir::ShaderBindingKind::StorageBuffer},
+                                                                {1, Fenrir::ShaderBindingKind::StorageBuffer},
+                                                                {2, Fenrir::ShaderBindingKind::StorageBuffer},
+                                                                {3, Fenrir::ShaderBindingKind::StorageBuffer}}});
         const Fenrir::ShaderContainer container = GlTest::ReadContainer(Fenrir::Shaders::GlIndirectFill);
         PipelineDesc desc;
         desc.shader = &container.variants.at(0);
@@ -104,15 +107,24 @@ namespace
         const std::array<DrawRecord, 2> records{RecordAt(-0.5f, 0.5f), RecordAt(0.5f, -0.5f)};
         const BufferHandle recordBuffer = device.CreateBuffer({sizeof(records), BufferUsage::Storage},
                                                               std::as_bytes(std::span(records)), "Draw records");
-        // Fenrir/Draw.glsl declares the instance-list copies beside the records; no record draws any.
+        // Fenrir/Draw.glsl declares the instance-list copies and the palette beside the records, which no record here
+        // draws from, and the indirection at binding 3: one entry naming no record says these draws are direct, each
+        // instance its own record (ADR-0057).
         const BufferHandle copies = device.CreateBuffer({128, BufferUsage::Storage}, {}, "Instance copies");
-        BindingGroupEntry recordEntry;
-        recordEntry.binding = 0;
-        recordEntry.buffer = recordBuffer;
-        BindingGroupEntry copyEntry;
-        copyEntry.binding = 1;
-        copyEntry.buffer = copies;
-        scene.draws = device.CreateBindingGroup({scene.storageLayout, {recordEntry, copyEntry}});
+        const BufferHandle palette = device.CreateBuffer({48, BufferUsage::Storage}, {}, "Palette");
+        constexpr std::array<std::uint32_t, 2> noIndirection{0xFFFFFFFFu, 0xFFFFFFFFu};
+        const BufferHandle visible = device.CreateBuffer({sizeof(noIndirection), BufferUsage::Storage},
+                                                         std::as_bytes(std::span(noIndirection)), "No indirection");
+        std::array<BindingGroupEntry, 4> entries;
+        for (std::uint32_t binding = 0; binding < entries.size(); ++binding)
+        {
+            entries.at(binding).binding = binding;
+        }
+        entries[0].buffer = recordBuffer;
+        entries[1].buffer = copies;
+        entries[2].buffer = palette;
+        entries[3].buffer = visible;
+        scene.draws = device.CreateBindingGroup({scene.storageLayout, {entries.begin(), entries.end()}});
 
         // A quad of side 1 about the origin, twice, so a base vertex of 4 draws the second copy.
         const std::array<float, 16> quad{-0.5f, -0.5f, 0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f,

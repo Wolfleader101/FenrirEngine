@@ -1448,6 +1448,20 @@ namespace Fenrir::Graphics
         return found != nullptr ? found->name : 0;
     }
 
+    std::vector<std::byte> OpenGLDevice::ReadBuffer(BufferHandle buffer)
+    {
+        const GlBuffer* found = m_buffers.Find(buffer);
+        if (found == nullptr || found->name == 0)
+        {
+            return {};
+        }
+        // Reading back waits for every command that writes the buffer, a compute pass's included.
+        std::vector<std::byte> bytes(found->size);
+        m_gl->MemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
+        m_gl->GetNamedBufferSubData(found->name, 0, static_cast<GLsizeiptr>(bytes.size()), bytes.data());
+        return bytes;
+    }
+
     std::uint32_t OpenGLDevice::GlName(TextureHandle texture)
     {
         const GlTexture* found = m_textures.Find(texture);

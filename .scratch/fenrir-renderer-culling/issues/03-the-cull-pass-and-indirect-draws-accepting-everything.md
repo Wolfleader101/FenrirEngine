@@ -13,10 +13,14 @@
 
 **Touches:** `packages/FenrirRenderer/src/`, `packages/FenrirRenderer/Shaders/`, `packages/FenrirRenderer/Tools/ShaderCompiler/`, `packages/FenrirRenderer/include/FenrirRenderer/`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `RendererProbe` on null: one copy and one dispatch per camera per frame, in `Cull` before `Shadow`; the templates and group table bytes for a frame of one instance list, one merged run and one lone item; the prepass and `Opaque` record the same indirect draws, one per run, from the camera's buffer; two cameras each get their own buffers; 100k copies are still one draw per pass; an instance list wholly behind the camera writes no template and no draw for it, and one straddling the edge does.
-- [ ] GL readback: every candidate's `(record, copy)` is in the indirection, as a set, and each run's `instanceCount` is its candidate count.
-- [ ] GL pixel probes and golden images: every existing scene is unchanged, copies included, under a moved entity and with per-instance colour; a user vertex shader through `CurrentDraw()` draws its copies.
+- [x] `RendererProbe` on null: one copy and one dispatch per camera per frame, in `Cull` before `Shadow`; the templates and group table bytes for a frame of one instance list, one merged run and one lone item; the prepass and `Opaque` record the same indirect draws, one per run, from the camera's buffer; two cameras each get their own buffers; 100k copies are still one draw per pass; an instance list wholly behind the camera writes no template and no draw for it, and one straddling the edge does. (The coarse CPU cull those last two check moved to ticket 04 with #313, so here every run is a candidate for every camera and they are tested there.)
+- [x] GL readback: every candidate's `(record, copy)` is in the indirection, as a set, and each run's `instanceCount` is its candidate count.
+- [x] GL pixel probes and golden images: every existing scene is unchanged, copies included, under a moved entity and with per-instance colour; a user vertex shader through `CurrentDraw()` draws its copies.
 
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+
+## Comments
+
+Built 2026-11-10 (culling 03). As #313 moved the coarse CPU cull of opaque candidates to ticket 04, this ticket makes every opaque and masked run a candidate for every camera; the "Candidates" bullet's CPU cull and the two checklist items about an instance list behind the camera are ticket 04's. Decisions the ticket left open: the group table entry is `uvec4(command, record, count, first)`, 16 bytes, one per 64 candidates; the Cull pass's set 0 is a job block (`uvec4(firstGroup, groupCount, 0, 0)`) and its set 1 the frame's records and group table, the view's commands and indirection, its own layout rather than the draw set's; a direct draw's set 3 binds a one-entry buffer whose record is `0xFFFFFFFF` at binding 3, which `CurrentDraw()` reads to take the direct path, so the shadow and transparent passes are untouched; `Draw.glsl` now declares the palette itself (`Skinning.glsl` reads it) so set 3's four storage blocks are numbered alike in every program; the null backend applies `CmdCopyBuffer` to the bytes it keeps, so the templates are observable after the copy; the test harness resolves an indirect draw through the Cull pass's group table into the direct draw it stands for, so the existing draw tests read as before.
