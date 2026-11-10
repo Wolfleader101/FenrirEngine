@@ -173,6 +173,15 @@ namespace Fenrir::Render
         };
 
         /** @brief The Output block, as `builtin:output` declares it at set 1 (std140). */
+        /**
+         * @brief The bits of builtin:output's `effects` (ADR-0059): its per-pixel arithmetic effects, each set only
+         * when the effect is on, so an effect that is off costs a uniform branch. An effect that changes what Output
+         * reads is a variant instead (ABERRATION).
+         */
+        constexpr std::uint32_t OutputGrade = 1;
+        constexpr std::uint32_t OutputVignette = 2;
+        constexpr std::uint32_t OutputGrain = 4;
+
         struct OutputBlock
         {
             /** @brief 2^exposure (ADR-0049). */
@@ -181,8 +190,8 @@ namespace Fenrir::Render
             std::uint32_t tonemapper = 0;
             /** @brief The channel the OCCLUSION variant draws as grey: 0 red, 2 blue (reflection confidence). */
             std::uint32_t greyChannel = 0;
-            /** @brief 1 when the view's ColourGrade is applied, 0 for an identity grade (ADR-0059). */
-            std::uint32_t grade = 0;
+            /** @brief The Output* effect bits the view applies: none by default. */
+            std::uint32_t effects = 0;
             /** @brief The grade's white balance, column by column, each padded to a vec4 as std140 lays out a mat3. */
             std::array<Math::Vec4, 3> whiteBalance{Math::Vec4(1.0f, 0.0f, 0.0f, 0.0f),
                                                    Math::Vec4(0.0f, 1.0f, 0.0f, 0.0f),
@@ -199,9 +208,9 @@ namespace Fenrir::Render
             Math::Vec3 power{1.0f};
             /** @brief The chromatic aberration's intensity (ADR-0059), which the ABERRATION variant reads. */
             float aberration = 0.0f;
-            /** @brief The vignette's intensity (0 skips it), radius, smoothness and roundness. */
+            /** @brief With OutputVignette, the vignette's intensity, radius, smoothness and roundness. */
             Math::Vec4 vignette{0.0f};
-            /** @brief The film grain's intensity (0 skips it), response and size. */
+            /** @brief With OutputGrain, the film grain's intensity, response and size. */
             Math::Vec3 grain{0.0f};
             /** @brief The frame's index, low 32 bits, which the grain's noise is a hash of. */
             std::uint32_t frameIndex = 0;
@@ -3000,7 +3009,7 @@ namespace Fenrir::Render
             if (!IsIdentity(request.look.colourGrading))
             {
                 const ColourGrade grade = BakeColourGrade(request.look.colourGrading);
-                outputBlock.grade = 1;
+                outputBlock.effects |= OutputGrade;
                 for (int c = 0; c < 3; ++c)
                 {
                     outputBlock.whiteBalance[c] = Math::Vec4(grade.whiteBalance[c], 0.0f);
@@ -3012,10 +3021,18 @@ namespace Fenrir::Render
                 outputBlock.power = grade.power;
             }
             outputBlock.aberration = request.look.chromaticAberration.intensity;
-            outputBlock.vignette = Math::Vec4(request.look.vignette.intensity, request.look.vignette.radius,
-                                              request.look.vignette.smoothness, request.look.vignette.roundness);
-            outputBlock.grain = Math::Vec3(request.look.filmGrain.intensity, request.look.filmGrain.response,
-                                           request.look.filmGrain.size);
+            if (request.look.vignette.intensity > 0.0f)
+            {
+                outputBlock.effects |= OutputVignette;
+                outputBlock.vignette = Math::Vec4(request.look.vignette.intensity, request.look.vignette.radius,
+                                                  request.look.vignette.smoothness, request.look.vignette.roundness);
+            }
+            if (request.look.filmGrain.intensity > 0.0f)
+            {
+                outputBlock.effects |= OutputGrain;
+                outputBlock.grain = Math::Vec3(request.look.filmGrain.intensity, request.look.filmGrain.response,
+                                               request.look.filmGrain.size);
+            }
             outputBlock.frameIndex = static_cast<std::uint32_t>(frameIndex);
             // The reflection hit target's confidence is its blue; every other grey view's value its red.
             outputBlock.greyChannel = request.debugView == ViewDebug::ReflectionConfidence ? 2u : 0u;
