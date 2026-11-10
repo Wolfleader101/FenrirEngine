@@ -81,8 +81,7 @@ namespace
     }
 } // namespace
 
-TEST_CASE("A transparent item outside the camera's frustum is not drawn, while one straddling its edge and every "
-          "opaque item are",
+TEST_CASE("An item outside the camera's frustum is not drawn, transparent or opaque, while one straddling its edge is",
           "[renderer][culling]")
 {
     RendererTestApp test;
@@ -110,15 +109,19 @@ TEST_CASE("A transparent item outside the camera's frustum is not drawn, while o
                                                << ") is inside the view");
         REQUIRE((Near(position, {5.3f, 0.0f, 0.0f}) || Near(position, Vec3(0.0f))));
     }
-    INFO("Opaque draws all four opaque cubes: nothing culls them on the CPU");
+    INFO("Opaque draws the same two cubes: the coarse cull on the CPU drops the two outside before the cull pass");
     std::uint32_t opaqueInstances = 0;
     for (const RecordedDraw& draw : test.Draws("Opaque"))
     {
         opaqueInstances += draw.draw.instanceCount;
+        const Vec3 position = test.DrawPosition(draw);
+        INFO("the opaque item drawn at (" << position.x << ", " << position.y << ", " << position.z
+                                          << ") is inside the view");
+        REQUIRE((Near(position, {5.3f, 0.0f, 0.0f}) || Near(position, Vec3(0.0f))));
     }
-    REQUIRE(opaqueInstances == 4);
-    INFO("the stats count the four opaque items and the two transparent ones drawn");
-    REQUIRE(test.renderer.Stats().instances == 6);
+    REQUIRE(opaqueInstances == 2);
+    INFO("the stats count the two opaque items and the two transparent ones drawn");
+    REQUIRE(test.renderer.Stats().instances == 4);
     INFO("and the frame logs no error");
     REQUIRE(test.messages->errors.empty());
 }
@@ -155,7 +158,8 @@ TEST_CASE("An item's draw record carries its mesh's box under its world matrix, 
     Fenrir::Entity instanced = test.ActiveScene().GetEntityList().CreateEntity();
     instanced.AddComponent<Fenrir::InstancedMeshRenderer>(
         Fenrir::InstancedMeshRenderer{test.Mesh(), material, list, true, true});
-    instanced.GetComponent<Fenrir::Transform>().pos = {10.0f, 0.0f, 0.0f};
+    // In view, as the cube is: an entity outside the camera's frustum is not drawn (ADR-0057).
+    instanced.GetComponent<Fenrir::Transform>().pos = {-3.0f, 0.0f, 0.0f};
 
     test.Frame();
     const std::vector<RecordedDraw> draws = test.Draws("Opaque");

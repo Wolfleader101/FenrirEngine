@@ -222,7 +222,10 @@ namespace Fenrir::Render
      * (`Fenrir/Draw.glsl`'s `CurrentDraw()` reads it), so there is one draw group per view and frame in flight; every
      * other pass binds the buffer that says there is no indirection and draws directly, as before. The per-view
      * buffers are sized to the frame's runs and candidates, kept between frames and ring-buffered per frame in flight.
-     * The pass keeps every candidate for now: the frustum test is culling ticket 04.
+     * The job block carries the view's planes (Math::Frustum), and the pass keeps a candidate whose sphere and then
+     * whose box's eight corners may be inside them, as Math::Frustum tests them; with GPU culling off it gets no
+     * planes and keeps every candidate. Before the runs form, a draw whose world bounds are outside the view's frustum
+     * is left out of the view altogether, opaque or transparent.
      *
      * **Instance lists** (ADR-0051) are prepared like assets: each copy's transform, normal matrix and colour, kept
      * packed back to back with every other list's in one storage buffer, set 3 binding 1, made again whenever a list
@@ -364,6 +367,15 @@ namespace Fenrir::Render
         void SetClusteredLights(bool on) noexcept
         {
             m_clusteredLights = on;
+        }
+
+        /**
+         * @brief Whether each view's cull pass tests its candidates against the view's planes from the next frame
+         * (ADR-0057); off, it keeps every candidate, and only the coarse cull by entity on the CPU culls.
+         */
+        void SetGpuCulling(bool on) noexcept
+        {
+            m_gpuCulling = on;
         }
 
         /**
@@ -755,6 +767,8 @@ namespace Fenrir::Render
             std::uint32_t runs = 0;
             /** @brief How many candidates it culls. */
             std::uint32_t candidates = 0;
+            /** @brief The view's planes, which the pass tests each candidate against (ADR-0057). */
+            Math::Frustum frustum;
         };
 
         /** @brief A buffer ringed per frame in flight and grown by doubling when a frame needs more than it holds. */
@@ -865,7 +879,8 @@ namespace Fenrir::Render
          * the pass itself.
          */
         [[nodiscard]] CullView PrepareCull(RenderGraph& graph, std::uint64_t frameIndex, std::size_t view,
-                                           const std::vector<ResolvedDraw>& draws, const std::vector<DrawRun>& runs,
+                                           const Math::Frustum& frustum, const std::vector<ResolvedDraw>& draws,
+                                           const std::vector<DrawRun>& runs,
                                            std::vector<Graphics::DrawIndexedIndirectCommand>& templates,
                                            std::vector<CullGroupEntry>& groups);
         /**
@@ -965,6 +980,8 @@ namespace Fenrir::Render
         bool m_computeSkinning;
         /** @brief RendererConfig::clusteredLights: whether views with lights get a LightClusters pass. */
         bool m_clusteredLights = true;
+        /** @brief RendererConfig::gpuCulling: whether each view's cull pass gets the view's planes. */
+        bool m_gpuCulling = true;
         /** @brief How each view's sun cascades are made (RendererConfig's shadow members). */
         CascadeConfig m_cascades;
 
@@ -981,6 +998,8 @@ namespace Fenrir::Render
          * one zeroed record when there are none.
          */
         Graphics::BufferHandle m_instanceListBuffer;
+        /** @brief Its size in bytes. */
+        std::size_t m_instanceListBytes = 0;
         /** @brief Whether a list was prepared or released since the instance-list buffer was packed. */
         bool m_instancesChanged = true;
         /** @brief The samplers made for material parameters, by description. */
@@ -1120,10 +1139,10 @@ namespace Fenrir::Render
          */
         Graphics::BufferHandle m_noIndirection;
         /**
-         * @brief builtin:cull's set 1 groups, by the draw buffer, the group table, the command buffer and the
-         * indirection, while all four live.
+         * @brief builtin:cull's set 1 groups, by the draw buffer, the group table, the command buffer, the
+         * indirection and the instance lists, while all five live.
          */
-        BindingGroupCache<4> m_cullTargetGroups;
+        BindingGroupCache<5> m_cullTargetGroups;
         /** @brief builtin:light-clusters' set 1 groups, by the light buffer and the cluster buffer, while both live. */
         BindingGroupCache<2> m_clusterTargetGroups;
         /** @brief The Background pass's group of each Sky cube texture it draws, while the texture lives. */

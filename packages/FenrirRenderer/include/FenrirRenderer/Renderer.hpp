@@ -85,6 +85,13 @@ namespace Fenrir
          * Renderer::SetClusteredLights.
          */
         bool clusteredLights = true;
+        /**
+         * @brief Whether each camera's cull pass drops the opaque and masked copies outside its frustum on the GPU
+         * (ADR-0057): each candidate's bounding sphere, then its box's eight corners, against the camera's planes;
+         * off, the pass keeps every candidate, for comparison, and only the coarse cull of whole entities on the CPU
+         * culls. Changeable later with Renderer::SetGpuCulling.
+         */
+        bool gpuCulling = true;
         /** @brief How many shadow cascades the DirectionalLight has per camera (ADR-0050): 1 to 4, 4 by default. */
         std::uint32_t shadowCascades = 4;
         /**
@@ -222,6 +229,12 @@ namespace Fenrir
         void SetClusteredLights(bool on);
 
         /**
+         * @brief Turns the GPU frustum test (RendererConfig::gpuCulling, ADR-0057) on or off from the next frame. An
+         * invalid owner does nothing.
+         */
+        void SetGpuCulling(bool on);
+
+        /**
          * @brief Sets how many SpotLights may cast shadows (RendererConfig::spotShadowBudget, ADR-0050) from the next
          * frame, which makes the spot shadow atlas again at the new budget's size. An invalid owner does nothing.
          */
@@ -296,6 +309,7 @@ namespace Fenrir
         static void SetAutomaticInstancing(App& app, bool on);
         static void SetComputeSkinning(App& app, bool on);
         static void SetClusteredLights(App& app, bool on);
+        static void SetGpuCulling(App& app, bool on);
         static void SetSpotShadowBudget(App& app, std::uint32_t budget);
         static void SetPointShadowBudget(App& app, std::uint32_t budget);
         [[nodiscard]] static std::optional<Math::Ray> ScreenPointToRay(App& app, const Entity& camera,

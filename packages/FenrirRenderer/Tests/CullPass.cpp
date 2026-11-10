@@ -1,14 +1,18 @@
-// The cull pass on the null backend through App::RunFrame (ADR-0057, culling ticket 03): each camera's Cull pass, first
-// in the frame, copies its runs' command templates over its command buffer and dispatches builtin:cull once over its
-// group table; DepthPrepass and Opaque then draw each run with one indirect draw of its command, reading the camera's
-// indirection through the draw set, while every other pass draws directly. The null backend runs no compute, so what
-// it shows is the templates, the group table and the draws, never the survivors.
+// The cull pass on the null backend through App::RunFrame (ADR-0057, culling tickets 03 and 04): each camera's Cull
+// pass, first in the frame, copies its runs' command templates over its command buffer and dispatches builtin:cull
+// once over its group table, its job block carrying the camera's planes; DepthPrepass and Opaque then draw each run
+// with one indirect draw of its command, reading the camera's indirection through the draw set, while every other pass
+// draws directly. An entity outside the camera is no candidate at all. The null backend runs no compute, so what it
+// shows is the templates, the group table, the planes and the draws, never the survivors.
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -19,6 +23,7 @@
 #include "Device/CommandList.hpp"
 #include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/ShaderData.hpp"
+#include "FenrirMath/Frustum.hpp"
 #include "RendererTestApp.hpp"
 
 using Fenrir::RendererProbe;
@@ -103,6 +108,33 @@ namespace
     BufferHandle IndirectionOf(const RendererTestApp& test, const RecordedCull& cull)
     {
         return RendererTest::EntryAt(test.Device(), cull.target, 3).buffer;
+    }
+
+    /** @brief The planes a Cull pass's job block carries, as many as its count says (0 with GPU culling off). */
+    std::vector<Fenrir::Math::Vec4> JobPlanes(const RendererTestApp& test, const RecordedCull& cull)
+    {
+        const BindingGroupEntry job = RendererTest::EntryAt(test.Device(), cull.job, 0);
+        const std::vector<std::byte> bytes = RendererProbe::Bytes(test.Device(), job.buffer);
+        const std::uint32_t count = RendererTest::UintAt(bytes, job.offset + 8);
+        INFO("a job names at most the six planes it has room for");
+        REQUIRE(count <= 6);
+        std::vector<Fenrir::Math::Vec4> planes(count);
+        REQUIRE(job.offset + 16 + count * sizeof(Fenrir::Math::Vec4) <= bytes.size());
+        std::memcpy(planes.data(), bytes.data() + job.offset + 16, count * sizeof(Fenrir::Math::Vec4));
+        return planes;
+    }
+
+    /** @brief Whether two planes are the same to a millionth. */
+    bool Near(const Fenrir::Math::Vec4& a, const Fenrir::Math::Vec4& b)
+    {
+        for (int i = 0; i < 4; ++i)
+        {
+            if (std::abs(a[i] - b[i]) > 1e-6f)
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** @brief The buffer a draw's set 3 binds at binding 3: a view's indirection, or the one that says there is none.
@@ -473,4 +505,96 @@ TEST_CASE("A camera's cull buffers are kept between frames, ringed per frame in 
     REQUIRE(grown.candidates == 1010);
     REQUIRE(RendererProbe::StaleUses(test.Device()).empty());
     REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("The job block carries the camera's planes each frame, which change as the camera moves, and none with GPU "
+          "culling off",
+          "[renderer][culling][cull-pass][frustum]")
+{
+    RendererTestApp test;
+    Fenrir::Entity camera = test.AddCamera();
+    AddThreeRuns(test);
+
+    test.Frame();
+    const std::vector<Fenrir::Math::Vec4> first = JobPlanes(test, test.Culls().at(0));
+    const std::optional<Fenrir::Math::Frustum> frustum = test.renderer.GetFrustum(camera);
+    INFO("the camera has a frustum once a frame has resolved it");
+    REQUIRE(frustum.has_value());
+    INFO("five planes for the camera, each as Math::Frustum gives it");
+    REQUIRE(first.size() == 5);
+    REQUIRE(first.size() == frustum->Planes().size());
+    for (std::size_t p = 0; p < first.size(); ++p)
+    {
+        CAPTURE(p);
+        REQUIRE(Near(first[p], frustum->Planes()[p]));
+    }
+    camera.GetComponent<Fenrir::Transform>().pos = {3.0f, 1.0f, 5.0f};
+    camera.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(0.5f, Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f));
+    test.Frame();
+    const std::vector<Fenrir::Math::Vec4> moved = JobPlanes(test, test.Culls().at(0));
+    const std::optional<Fenrir::Math::Frustum> movedFrustum = test.renderer.GetFrustum(camera);
+    REQUIRE(movedFrustum.has_value());
+    INFO("the moved camera's planes are uploaded, and differ from the first frame's");
+    REQUIRE(moved.size() == 5);
+    for (std::size_t p = 0; p < moved.size(); ++p)
+    {
+        CAPTURE(p);
+        REQUIRE(Near(moved[p], movedFrustum->Planes()[p]));
+        REQUIRE_FALSE(Near(moved[p], first[p]));
+    }
+
+    test.renderer.SetGpuCulling(false);
+    test.Frame();
+    INFO("with GPU culling off the job has no planes, so the pass keeps every candidate");
+    REQUIRE(JobPlanes(test, test.Culls().at(0)).empty());
+    test.renderer.SetGpuCulling(true);
+    test.Frame();
+    REQUIRE(JobPlanes(test, test.Culls().at(0)).size() == 5);
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("The Cull pass binds the instance lists at set 1 binding 4 and declares reading them",
+          "[renderer][culling][cull-pass][frustum]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    AddThreeRuns(test);
+
+    test.Frame();
+    const RecordedCull cull = test.Culls().at(0);
+    const BufferHandle copies = RendererTest::EntryAt(test.Device(), cull.target, 4).buffer;
+    INFO("binding 4 is the packed instance lists, which a list's copies are tested from");
+    REQUIRE(RendererProbe::Label(test.Device(), copies) == "Instance lists");
+    INFO("and the pass declares reading them");
+    REQUIRE(Declares(cull.pass.uses, copies, ResourceUsage::StorageRead));
+}
+
+TEST_CASE("An entity outside the camera is left out of the view's candidates on the CPU, with GPU culling on or off",
+          "[renderer][culling][cull-pass][frustum]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    const auto cube = test.Mesh();
+    const auto material = test.Material();
+    // In view: a cube at the origin and a row of ten whose first copies are in view; out of it: a cube far along +X
+    // and a row wholly behind the camera.
+    test.AddMeshRenderer(cube, material);
+    AddList(test, 10, cube, material);
+    test.AddMeshRenderer(cube, material).GetComponent<Fenrir::Transform>().pos = {100.0f, 0.0f, 0.0f};
+    AddList(test, 4, cube, material).GetComponent<Fenrir::Transform>().pos = {0.0f, 0.0f, 20.0f};
+
+    for (const bool gpu : {true, false})
+    {
+        CAPTURE(gpu);
+        test.renderer.SetGpuCulling(gpu);
+        test.Frame();
+        const RendererProbe::CullBuffers probed = RendererProbe::Culls(test.renderer).front();
+        INFO("the cube in view and the row reaching it are the candidates: two runs, eleven candidates");
+        REQUIRE(probed.runs == 2);
+        REQUIRE(probed.candidates == 11);
+        REQUIRE(test.IndirectDraws("Opaque").size() == 2);
+        REQUIRE(test.renderer.Stats().draws == 2);
+        REQUIRE(test.renderer.Stats().instances == 11);
+    }
+    REQUIRE(RendererProbe::StaleUses(test.Device()).empty());
 }

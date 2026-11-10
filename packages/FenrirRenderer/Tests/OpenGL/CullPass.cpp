@@ -1,13 +1,16 @@
-// The cull pass on OpenGL (ADR-0057, culling ticket 03), read back from the camera's command buffer and indirection:
-// with every candidate kept, each run's command counts its candidates and its region of the indirection holds each
-// candidate's (record, copy) once, in whatever order the atomics gave them; and the draws through the indirection land
-// where direct draws did, a user vertex shader's copies through CurrentDraw() among them.
+// The cull pass on OpenGL (ADR-0057, culling tickets 03 and 04), read back from the camera's command buffer and
+// indirection: each run's command counts the candidates the pass kept and its region of the indirection holds each
+// kept candidate's (record, copy) once, in whatever order the atomics gave them, the kept ones exactly those
+// Math::Frustum keeps on the CPU over the same scene; and the draws through the indirection land where direct draws
+// did, a user vertex shader's copies through CurrentDraw() among them, the same with GPU culling off.
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <random>
 #include <set>
 #include <span>
 #include <utility>
@@ -18,6 +21,8 @@
 #include "Device/CommandList.hpp"
 #include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/ShaderData.hpp"
+#include "FenrirECS/WorldTransform.hpp"
+#include "FenrirMath/Frustum.hpp"
 #include "FenrirShaders/GlUserTint.hpp"
 #include "GlScene.hpp"
 
@@ -115,16 +120,28 @@ namespace
         return {RendererTest::UintAt(entries, std::size_t{i} * 8),
                 RendererTest::UintAt(entries, std::size_t{i} * 8 + 4)};
     }
+
+    /** @brief A bar `length` along X and `height` along Y, facing +Z, about the origin: a long thin box. */
+    Fenrir::MeshData Bar(float length, float height)
+    {
+        Fenrir::MeshData mesh;
+        const float w = length * 0.5f;
+        const float h = height * 0.5f;
+        mesh.positions = {Vec3(-w, -h, 0.0f), Vec3(w, -h, 0.0f), Vec3(w, h, 0.0f), Vec3(-w, h, 0.0f)};
+        mesh.normals = {Vec3(0, 0, 1), Vec3(0, 0, 1), Vec3(0, 0, 1), Vec3(0, 0, 1)};
+        mesh.indices = {0, 1, 2, 0, 2, 3};
+        return mesh;
+    }
 } // namespace
 
-TEST_CASE("The cull pass keeps every candidate: each command counts its run's candidates, and its region of the "
-          "indirection holds each (record, copy) once",
+TEST_CASE("The cull pass keeps every candidate in view: each command counts its run's candidates, and its region of "
+          "the indirection holds each (record, copy) once",
           "[renderer][gl][culling][cull-pass]")
 {
     GlCullScene test;
     test.RequireOpenGL();
     // One instance list of five copies, three squares that merge into one run, and one lone square in a material of
-    // its own: nine candidates in three runs.
+    // its own, all in view: nine candidates in three runs, every one kept.
     const std::array<float, 5> offsets{-1.6f, -0.8f, 0.0f, 0.8f, 1.6f};
     test.AddList(offsets, {0.0f, 0.8f, -4.0f}, test.white);
     for (const float x : {-0.8f, 0.0f, 0.8f})
@@ -233,5 +250,241 @@ TEST_CASE("A user vertex shader through CurrentDraw() draws an instance list's c
         REQUIRE(GlProbe::Near(test.At(image, {x + 0.4f, 0.6f, -4.0f}), Background));
     }
     REQUIRE(test.renderer.Stats().instances == 4);
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE(
+    "The cull pass keeps exactly the copies Math::Frustum keeps: each run's count and the indirection's set match "
+    "the CPU oracle over a seeded random scene",
+    "[renderer][gl][culling][cull-pass][frustum]")
+{
+    GlCullScene test;
+    test.RequireOpenGL();
+    // One list of 150 squares scattered around and behind the camera, each turned and scaled, under an entity that is
+    // itself moved and turned; eight lone white squares that merge into one run, some of them off screen; and a red
+    // one in front. The CPU keeps the list whole (its union reaches the view) and drops each lone square outside the
+    // view by its own box, so the GPU's work shows in the list's count and set, and the lone squares in the totals.
+    std::mt19937 random(23);
+    std::uniform_real_distribution<float> across(-8.0f, 8.0f);
+    std::uniform_real_distribution<float> along(-10.0f, 4.0f);
+    std::uniform_real_distribution<float> angle(0.0f, 6.28f);
+    std::uniform_real_distribution<float> scale(0.5f, 2.0f);
+    Fenrir::InstanceListData list;
+    for (int i = 0; i < 150; ++i)
+    {
+        const Fenrir::Math::Mat4 placed =
+            Fenrir::Math::Translate(Fenrir::Math::Mat4(1.0f), {across(random), across(random), along(random)});
+        const Fenrir::Math::Mat4 turned =
+            glm::mat4_cast(Fenrir::Math::AngleAxis(angle(random), glm::normalize(Vec3(0.3f, 1.0f, 0.5f))));
+        list.transforms.push_back(placed * turned * glm::scale(Fenrir::Math::Mat4(1.0f), Vec3(scale(random))));
+    }
+    const std::vector<Fenrir::Math::Mat4> copies = list.transforms;
+    const auto handle = test.assets.Store().Add<Fenrir::InstanceList>(std::move(list), Fenrir::AssetOwner::App());
+    Fenrir::Entity entity = test.app.GetActiveScene().GetEntityList().CreateEntity();
+    entity.GetComponent<Fenrir::Transform>().pos = {0.3f, -0.2f, -1.0f};
+    entity.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(0.4f, Vec3(0.0f, 1.0f, 0.0f));
+    entity.AddComponent<Fenrir::InstancedMeshRenderer>(
+        Fenrir::InstancedMeshRenderer{test.square, test.white, handle, true, true});
+    std::vector<Vec3> lone;
+    for (int i = 0; i < 8; ++i)
+    {
+        lone.push_back({across(random), across(random), along(random)});
+        test.AddSquare(lone.back(), test.white);
+    }
+    const auto red = test.assets.Store().CreateMaterial(
+        test.assets.Store().Load<Fenrir::Shader>("builtin:unlit", Fenrir::AssetOwner::App()).handle,
+        Fenrir::AssetOwner::App());
+    test.assets.Store().SetColour(red, "baseColour", Fenrir::Colour{1.0f, 0.0f, 0.0f, 1.0f});
+    test.AddSquare({0.0f, 0.0f, -3.0f}, red);
+
+    test.Frame();
+    // The oracle: the same test on the CPU, over the same box, world matrix and copies.
+    const std::optional<Fenrir::Math::Frustum> frustum = test.renderer.GetFrustum(test.camera);
+    INFO("the camera has a frustum once a frame has resolved it");
+    REQUIRE(frustum.has_value());
+    const Fenrir::Math::AABB box = test.assets.Store().TryGet(test.square)->bounds;
+    const Fenrir::Math::Mat4 world = Fenrir::GetWorldMatrix(entity);
+    std::set<std::uint32_t> expected;
+    for (std::uint32_t i = 0; i < copies.size(); ++i)
+    {
+        if (frustum->Intersects(box, world * copies[i]))
+        {
+            expected.insert(i);
+        }
+    }
+    std::uint32_t lonesKept = 0;
+    for (const Vec3& position : lone)
+    {
+        if (frustum->Intersects(Fenrir::Math::Moved(box, Fenrir::Math::Translate(Fenrir::Math::Mat4(1.0f), position))))
+        {
+            ++lonesKept;
+        }
+    }
+    INFO("the scene is a real test: some copies and some lone squares are outside the view, and some inside");
+    REQUIRE(expected.size() > 20);
+    REQUIRE(expected.size() < 130);
+    REQUIRE(lonesKept > 0);
+    REQUIRE(lonesKept < 8);
+
+    const std::vector<RendererProbe::CullBuffers> culls = RendererProbe::Culls(test.renderer);
+    REQUIRE(culls.size() == 1);
+    INFO("the CPU dropped the lone squares outside the view before the pass: the list, the kept lone squares and the "
+         "red one are the candidates, in three runs");
+    REQUIRE(culls.front().runs == 3);
+    REQUIRE(culls.front().candidates == 150 + lonesKept + 1);
+    REQUIRE(test.renderer.Stats().instances == 150 + lonesKept + 1);
+    GraphicsDevice& device = RendererProbe::Device(test.renderer);
+    const std::vector<std::byte> commands = GlProbe::ReadBuffer(device, culls.front().commands);
+    const std::vector<std::byte> entries = GlProbe::ReadBuffer(device, culls.front().indirection);
+    std::set<std::uint32_t> listCopies;
+    std::uint32_t itemsKept = 0;
+    std::multiset<std::uint32_t> itemCounts;
+    std::set<Entry> all;
+    for (std::size_t command = 0; command < 3; ++command)
+    {
+        const std::uint32_t count = Word(commands, command, 1);
+        const std::uint32_t base = Word(commands, command, 4);
+        CAPTURE(command, count, base);
+        if (count == 0 || EntryOf(entries, base).second == NoCopy)
+        {
+            itemCounts.insert(count);
+        }
+        for (std::uint32_t i = base; i < base + count; ++i)
+        {
+            const Entry entry = EntryOf(entries, i);
+            INFO("entry " << i << " is (" << entry.first << ", " << entry.second << "), kept once");
+            REQUIRE(all.insert(entry).second);
+            if (entry.second == NoCopy)
+            {
+                ++itemsKept;
+            }
+            else
+            {
+                INFO("the list's run counts what it kept");
+                REQUIRE(count == expected.size());
+                listCopies.insert(entry.second);
+            }
+        }
+    }
+    INFO("the list's region holds exactly the copies the CPU keeps (the one list's copies start at 0 in the buffer)");
+    REQUIRE(listCopies == expected);
+    INFO("and every lone square the CPU kept, its box under the identity, the GPU kept too: the merged run counts "
+         "them and the red square's run counts one");
+    REQUIRE(itemsKept == lonesKept + 1);
+    REQUIRE(itemCounts == std::multiset<std::uint32_t>{lonesKept, 1});
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("Long thin copies tangent to the frustum are dropped by their corners where their spheres alone would keep "
+          "them",
+          "[renderer][gl][culling][cull-pass][frustum]")
+{
+    GlCullScene test;
+    test.RequireOpenGL();
+    // Bars twenty units long and a tenth tall: three behind the camera a few units, whose spheres of radius ten reach
+    // past it into the view, and two in front, which keep the list a candidate.
+    const auto bar = test.assets.Store().Add<Fenrir::Mesh>(Bar(20.0f, 0.1f), Fenrir::AssetOwner::App());
+    Fenrir::InstanceListData list;
+    for (const float z : {1.0f, 2.0f, 3.0f, -4.0f, -6.0f})
+    {
+        list.transforms.push_back(Fenrir::Math::Translate(Fenrir::Math::Mat4(1.0f), {0.0f, 0.0f, z}));
+    }
+    const std::vector<Fenrir::Math::Mat4> copies = list.transforms;
+    const auto handle = test.assets.Store().Add<Fenrir::InstanceList>(std::move(list), Fenrir::AssetOwner::App());
+    Fenrir::Entity entity = test.app.GetActiveScene().GetEntityList().CreateEntity();
+    entity.AddComponent<Fenrir::InstancedMeshRenderer>(
+        Fenrir::InstancedMeshRenderer{bar, test.white, handle, true, true});
+
+    test.Frame();
+    const std::optional<Fenrir::Math::Frustum> frustum = test.renderer.GetFrustum(test.camera);
+    REQUIRE(frustum.has_value());
+    const Fenrir::Math::AABB box = test.assets.Store().TryGet(bar)->bounds;
+    std::uint32_t bySphere = 0;
+    std::uint32_t byBox = 0;
+    for (const Fenrir::Math::Mat4& copy : copies)
+    {
+        bySphere += frustum->Intersects(Fenrir::Math::Frustum::SphereOf(box, copy)) ? 1 : 0;
+        byBox += frustum->Intersects(box, copy) ? 1 : 0;
+    }
+    INFO("the spheres keep every bar, the corners only the two in front");
+    REQUIRE(bySphere == 5);
+    REQUIRE(byBox == 2);
+    const std::vector<RendererProbe::CullBuffers> culls = RendererProbe::Culls(test.renderer);
+    INFO("the one camera's pass culls the list's five bars as one run");
+    REQUIRE(culls.size() == 1);
+    REQUIRE(culls.front().runs == 1);
+    REQUIRE(culls.front().candidates == 5);
+    const std::vector<std::byte> commands =
+        GlProbe::ReadBuffer(RendererProbe::Device(test.renderer), culls.front().commands);
+    INFO("the pass kept the two by their corners");
+    REQUIRE(Word(commands, 0, 1) == byBox);
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("Copies inside and straddling the frustum's edges draw at their transforms and colours under a moved entity, "
+          "and the frame is the same with GPU culling off",
+          "[renderer][gl][culling][cull-pass][frustum]")
+{
+    GlCullScene test;
+    test.RequireOpenGL();
+    test.RunFrame();
+    const std::optional<Fenrir::Math::Frustum> frustum = test.renderer.GetFrustum(test.camera);
+    REQUIRE(frustum.has_value());
+    // Where the right plane crosses y = 0 at z = -4: the view's right edge there.
+    const Fenrir::Math::Vec4 right = frustum->Planes()[1];
+    const float edge = (4.0f * right.z - right.w) / right.x;
+    INFO("the right edge at four units is a little over two units out: " << edge);
+    REQUIRE(edge > 2.0f);
+    REQUIRE(edge < 3.0f);
+    // Five copies, placed in world space then expressed under the entity, which is moved and turned about Z so each
+    // square draws turned at its place: red and green inside, blue straddling the right edge (its centre a tenth
+    // inside it, its turned corners a quarter past it), one wholly past the edge and one behind the camera.
+    Fenrir::Entity entity = test.app.GetActiveScene().GetEntityList().CreateEntity();
+    entity.GetComponent<Fenrir::Transform>().pos = {0.5f, -0.3f, 0.0f};
+    entity.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(0.3f, Vec3(0.0f, 0.0f, 1.0f));
+    const Fenrir::Math::Mat4 world = Fenrir::GetWorldMatrix(entity);
+    const std::array<Vec3, 5> places{Vec3(-1.0f, 0.5f, -4.0f), Vec3(0.0f, -0.5f, -4.0f), Vec3(edge - 0.1f, 0.0f, -4.0f),
+                                     Vec3(edge + 1.0f, 0.0f, -4.0f), Vec3(0.0f, 0.0f, 2.0f)};
+    Fenrir::InstanceListData list;
+    for (const Vec3& place : places)
+    {
+        list.transforms.push_back(glm::inverse(world) * Fenrir::Math::Translate(Fenrir::Math::Mat4(1.0f), place) *
+                                  glm::mat4_cast(entity.GetComponent<Fenrir::Transform>().rot));
+    }
+    list.colours = {Fenrir::Colour{1.0f, 0.0f, 0.0f, 1.0f}, Fenrir::Colour{0.0f, 1.0f, 0.0f, 1.0f},
+                    Fenrir::Colour{0.0f, 0.0f, 1.0f, 1.0f}, Fenrir::Colour::White, Fenrir::Colour::White};
+    const auto handle = test.assets.Store().Add<Fenrir::InstanceList>(std::move(list), Fenrir::AssetOwner::App());
+    entity.AddComponent<Fenrir::InstancedMeshRenderer>(
+        Fenrir::InstancedMeshRenderer{test.square, test.white, handle, true, true});
+
+    const GlProbe::Image culled = test.Frame();
+    INFO("the pass kept the three copies that reach the view");
+    const std::vector<RendererProbe::CullBuffers> culls = RendererProbe::Culls(test.renderer);
+    REQUIRE(culls.size() == 1);
+    REQUIRE(culls.front().candidates == 5);
+    GraphicsDevice& device = RendererProbe::Device(test.renderer);
+    REQUIRE(Word(GlProbe::ReadBuffer(device, culls.front().commands), 0, 1) == 3);
+    INFO("each kept copy shows its colour at its place, and nothing beside it");
+    REQUIRE(GlProbe::Near(test.At(culled, places[0]), GlProbe::Pixel{1.0f, 0.0f, 0.0f, 1.0f}));
+    REQUIRE(GlProbe::Near(test.At(culled, places[1]), GlProbe::Pixel{0.0f, 1.0f, 0.0f, 1.0f}));
+    REQUIRE(GlProbe::Near(test.At(culled, places[2]), GlProbe::Pixel{0.0f, 0.0f, 1.0f, 1.0f}));
+    REQUIRE(GlProbe::Near(test.At(culled, places[0] + Vec3(0.0f, 0.5f, 0.0f)), Background));
+    REQUIRE(GlProbe::Near(test.At(culled, places[1] + Vec3(0.5f, 0.0f, 0.0f)), Background));
+
+    test.renderer.SetGpuCulling(false);
+    const GlProbe::Image direct = test.Frame();
+    INFO("with GPU culling off the pass keeps every copy");
+    REQUIRE(Word(GlProbe::ReadBuffer(device, RendererProbe::Culls(test.renderer).front().commands), 0, 1) == 5);
+    INFO("and the frame is the same, pixel for pixel");
+    REQUIRE(direct.width == culled.width);
+    REQUIRE(direct.height == culled.height);
+    for (std::uint32_t y = 0; y < culled.height; ++y)
+    {
+        for (std::uint32_t x = 0; x < culled.width; ++x)
+        {
+            CAPTURE(x, y);
+            REQUIRE(GlProbe::Near(direct.At(x, y), culled.At(x, y)));
+        }
+    }
     REQUIRE(test.messages->errors.empty());
 }

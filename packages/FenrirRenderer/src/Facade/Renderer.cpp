@@ -1553,6 +1553,7 @@ namespace Fenrir
             state->core->Device(), *app.Logger(), SupportedMsaa(app, config), config.automaticInstancing,
             config.computeSkinning, cascades, spotShadows, pointShadows);
         scene->SetClusteredLights(config.clusteredLights);
+        scene->SetGpuCulling(config.gpuCulling);
         state->scene = scene.get();
         // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
         // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).
@@ -1619,6 +1620,14 @@ namespace Fenrir
         if (m_state != nullptr)
         {
             m_state->scene->SetClusteredLights(on);
+        }
+    }
+
+    void Renderer::SetGpuCulling(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetGpuCulling(on);
         }
     }
 
@@ -1868,6 +1877,11 @@ namespace Fenrir
     void Renderer::SetClusteredLights(App& app, bool on)
     {
         Renderer(InstalledState(app)).SetClusteredLights(on);
+    }
+
+    void Renderer::SetGpuCulling(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetGpuCulling(on);
     }
 
     void Renderer::SetSpotShadowBudget(App& app, std::uint32_t budget)

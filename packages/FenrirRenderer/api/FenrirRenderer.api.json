@@ -502,7 +502,7 @@
           "offset": 20,
           "kind": "f32",
           "default": 0.01,
-          "doc": "How far red and blue are read apart in each ghost and the halo, in the same distance: 0.01 by default, so the ghosts fringe red outside and blue inside."
+          "doc": "How far red and blue are read apart in each ghost and the halo, along the line through the view's centre, in the same distance: 0.01 by default, so the ghosts fringe."
         },
         {
           "name": "dirt",
@@ -1168,7 +1168,7 @@
       "role": "component",
       "size": 28,
       "alignment": 4,
-      "doc": "Draws one mesh with one material many times, once per transform of an instance list, with no entity per copy (ADR-0051). Each copy is drawn at the entity's world matrix times its own transform, its colour multiplying the material's base colour in builtin:lit and builtin:unlit. The renderer uploads the list when it is new or its revision has moved on, so a list that never changes uploads once, however far the entity moves.\n\nOne draw a pass, whatever the count: never merged with other items, and never culled, copy by copy or whole. A transparent material sorts the whole list by the entity's world position. An empty or stale mesh or list is skipped (a stale one logged once per handle), as is a mesh with skin data; an empty or stale material draws with the fallback material, as a MeshRenderer's does.",
+      "doc": "Draws one mesh with one material many times, once per transform of an instance list, with no entity per copy (ADR-0051). Each copy is drawn at the entity's world matrix times its own transform, its colour multiplying the material's base colour in builtin:lit and builtin:unlit. The renderer uploads the list when it is new or its revision has moved on, so a list that never changes uploads once, however far the entity moves.\n\nOne draw a pass, whatever the count: never merged with other items. Its world bounds are the box around every copy's mesh box (ADR-0057; Renderer::GetWorldBounds), by which a camera it is wholly outside of leaves the whole list out; an opaque or masked list's copies are then culled one by one in the camera's cull pass, and a transparent list is sorted whole by the entity's world position. An empty or stale mesh or list is skipped (a stale one logged once per handle), as is a mesh with skin data; an empty or stale material draws with the fallback material, as a MeshRenderer's does.",
       "fields": [
         {
           "name": "mesh",

@@ -16,14 +16,18 @@ using RendererTest::RendererTestApp;
 
 namespace
 {
-    /** @brief `count` MeshRenderers of `mesh` and `material`, along +X a unit apart from `x`. */
+    /**
+     * @brief `count` MeshRenderers of `mesh` and `material`, along -Z a unit apart at `x`: in front of the camera at
+     * (0, 0, 5), which has no far plane, so every one is inside its frustum, whatever the count (ADR-0057's coarse
+     * cull leaves an item outside the view out of its draws).
+     */
     void AddRow(RendererTestApp& test, std::size_t count, Fenrir::AssetHandle<Fenrir::Mesh> mesh,
                 Fenrir::AssetHandle<Fenrir::Material> material, float x = 0.0f)
     {
         for (std::size_t i = 0; i < count; ++i)
         {
             Fenrir::Entity entity = test.AddMeshRenderer(mesh, material);
-            entity.GetComponent<Fenrir::Transform>().pos = {x + static_cast<float>(i), 0.0f, 0.0f};
+            entity.GetComponent<Fenrir::Transform>().pos = {x, 0.0f, -static_cast<float>(i)};
         }
     }
 
@@ -84,8 +88,8 @@ TEST_CASE("A different material or mesh splits a run, and each run starts at its
     test.AddCamera();
     const auto mesh = test.Mesh();
     AddRow(test, 300, mesh, test.Material());
-    AddRow(test, 200, mesh, test.Material(), 1000.0f);
-    AddRow(test, 100, test.Mesh(), test.Material("builtin:unlit"), 2000.0f);
+    AddRow(test, 200, mesh, test.Material(), 1.0f);
+    AddRow(test, 100, test.Mesh(), test.Material("builtin:unlit"), 2.0f);
 
     test.Frame();
     const std::vector<RecordedDraw> opaque = test.Draws("Opaque");
@@ -115,8 +119,8 @@ TEST_CASE("Masked items merge, and transparent items stay one draw each", "[rend
     test.AddCamera();
     const auto mesh = test.Mesh();
     AddRow(test, 10, mesh, Blended(test, Fenrir::BlendMode::Masked));
-    // Inside the camera's frustum: a transparent item outside it is not drawn at all (ADR-0057).
-    AddRow(test, 10, mesh, Blended(test, Fenrir::BlendMode::AlphaBlend), -5.0f);
+    // Inside the camera's frustum: an item outside it is not drawn at all (ADR-0057).
+    AddRow(test, 10, mesh, Blended(test, Fenrir::BlendMode::AlphaBlend), -2.0f);
 
     test.Frame();
     INFO("the masked items are one draw in the prepass and in Opaque");
