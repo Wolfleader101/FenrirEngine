@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <format>
 #include <string_view>
@@ -179,10 +180,19 @@ namespace Fenrir::Render
         /** @brief A Cull pass's job block, as `builtin:cull` declares it (std140). */
         struct CullJobBlock
         {
-            /** @brief The view's first entry in the group table, how many it has, and two unused words. */
+            /**
+             * @brief The view's first entry in the group table, how many it has, how many of `planes` are the view's
+             * (0 keeps every candidate: RendererConfig::gpuCulling off), and an unused word.
+             */
             std::array<std::uint32_t, 4> groups{};
+            /**
+             * @brief The view's planes (Math::Frustum::Planes, world space, `vec4(n, d)`, inside when
+             * `dot(n, p) + d >= 0`): five for a camera, six for an orthographic view; the rest unused.
+             */
+            std::array<Math::Vec4, 6> planes{};
         };
-        static_assert(sizeof(CullJobBlock) == 16);
+        static_assert(sizeof(CullJobBlock) == 112);
+        static_assert(offsetof(CullJobBlock, planes) == 16);
 
         /** @brief One entry of a view's indirection, as `Fenrir/DrawRecord.glsl` lays it: a record and a copy. */
         struct IndirectionEntry
@@ -874,7 +884,8 @@ namespace Fenrir::Render
         m_cullTargetLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::StorageBuffer},
                                                                  {1, ShaderBindingKind::StorageBuffer},
                                                                  {2, ShaderBindingKind::StorageBuffer},
-                                                                 {3, ShaderBindingKind::StorageBuffer}}},
+                                                                 {3, ShaderBindingKind::StorageBuffer},
+                                                                 {4, ShaderBindingKind::StorageBuffer}}},
                                                                "Cull target");
         m_cullJobs = std::make_unique<BlockRing>(m_device, m_cullJobLayout, false, sizeof(CullJobBlock), "Cull jobs");
         m_cull = ReadBuiltin(BuiltinProgram::Cull, m_logger);
@@ -1774,6 +1785,7 @@ namespace Fenrir::Render
         }
         m_device.Destroy(m_instanceListBuffer);
         m_instanceListBuffer = m_device.CreateBuffer({packed.size(), BufferUsage::Storage}, packed, "Instance lists");
+        m_instanceListBytes = packed.size();
         m_instancesChanged = false;
     }
 
@@ -2563,6 +2575,8 @@ namespace Fenrir::Render
         const BufferHandle records = m_drawBlocks->Buffer(frameIndex);
         const GraphResource recordResource = graph.ImportBuffer(
             "DrawRecords", records, {m_drawBlocks->Capacity() * m_drawBlocks->SlotSize(), BufferUsage::Storage});
+        const GraphResource copiesResource =
+            graph.ImportBuffer("InstanceLists", m_instanceListBuffer, {m_instanceListBytes, BufferUsage::Storage});
         m_cullJobs->Reserve(views.size());
 
         for (std::size_t v = 0; v < views.size(); ++v)
@@ -2572,13 +2586,22 @@ namespace Fenrir::Render
             {
                 continue;
             }
-            const CullJobBlock job{{cull.firstGroup, cull.groups, 0, 0}};
+            // The view's planes go with the job, or none when GPU culling is off, so the pass keeps every candidate
+            // and the draws keep their shape for comparison.
+            CullJobBlock job{{cull.firstGroup, cull.groups, 0, 0}};
+            if (m_gpuCulling)
+            {
+                const std::span<const Math::Vec4> planes = cull.frustum.Planes();
+                job.groups[2] = static_cast<std::uint32_t>(planes.size());
+                std::ranges::copy(planes, job.planes.begin());
+            }
             m_cullJobs->Write(frameIndex, v, BytesOf(job));
             const BindingGroupHandle targetGroup = m_cullTargetGroups.Get(
                 {BindingGroupKeyPart::Of(records), BindingGroupKeyPart::Of(groupBuffer),
-                 BindingGroupKeyPart::Of(cull.commands), BindingGroupKeyPart::Of(cull.indirection)},
+                 BindingGroupKeyPart::Of(cull.commands), BindingGroupKeyPart::Of(cull.indirection),
+                 BindingGroupKeyPart::Of(m_instanceListBuffer)},
                 frameIndex, [&] {
-                    std::array<BindingGroupEntry, 4> entries;
+                    std::array<BindingGroupEntry, 5> entries;
                     for (std::uint32_t binding = 0; binding < entries.size(); ++binding)
                     {
                         entries.at(binding).binding = binding;
@@ -2587,6 +2610,7 @@ namespace Fenrir::Render
                     entries[1].buffer = groupBuffer;
                     entries[2].buffer = cull.commands;
                     entries[3].buffer = cull.indirection;
+                    entries[4].buffer = m_instanceListBuffer;
                     return m_device.CreateBindingGroup({m_cullTargetLayout, {entries.begin(), entries.end()}},
                                                        "Cull target");
                 });
@@ -2599,6 +2623,7 @@ namespace Fenrir::Render
                     pass.CopyDestination(cull.commandsResource);
                     pass.StorageRead(groupResource);
                     pass.StorageRead(recordResource);
+                    pass.StorageRead(copiesResource);
                     pass.StorageWrite(cull.commandsResource);
                     pass.StorageWrite(cull.indirectionResource);
                 },
@@ -3338,9 +3363,10 @@ namespace Fenrir::Render
                 shadowAtlas = graph.CreateTexture("ShadowAtlas", shadowDesc);
             }
 
-            // Opaque items in draw-list order; transparent ones outside the view's frustum left out (ADR-0057), the
-            // rest back to front by the view-space depth of their sort points, the farthest (most negative view z)
-            // first.
+            // Opaque items in draw-list order and transparent ones back to front by the view-space depth of their sort
+            // points, the farthest (most negative view z) first; either kind outside the view's frustum, by its world
+            // bounds (a list's the box around every copy), is left out of the view (ADR-0057): the coarse cull by
+            // entity, which the cull pass then refines by copy.
             auto opaque = std::make_shared<std::vector<std::size_t>>();
             auto transparent = std::make_shared<std::vector<std::size_t>>();
             // Each draw's set 2 in the prepass: a Masked item's prepass group, else its material group.
@@ -3351,12 +3377,12 @@ namespace Fenrir::Render
             for (std::size_t i = 0; i < draws->size(); ++i)
             {
                 const ResolvedDraw& draw = (*draws)[i];
+                if (!frustum.Intersects(draw.worldBounds))
+                {
+                    continue;
+                }
                 if (draw.transparent)
                 {
-                    if (!frustum.Intersects(draw.worldBounds))
-                    {
-                        continue;
-                    }
                     transparent->push_back(i);
                 }
                 else
@@ -3377,7 +3403,8 @@ namespace Fenrir::Render
             // Opaque draw each by its command in the view's command buffer, the prepass skipping the runs it has no
             // pipeline for, reading the view's indirection through the view's own draw set.
             auto opaqueRuns = std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *groups, *opaque, DrawPass::Main));
-            const CullView cull = PrepareCull(graph, frameIndex, v, *draws, *opaqueRuns, cullTemplates, cullGroups);
+            CullView cull = PrepareCull(graph, frameIndex, v, *draws, *opaqueRuns, cullTemplates, cullGroups);
+            cull.frustum = frustum;
             culls.push_back(cull);
             m_drawnViews.push_back({v, sceneColour, sceneDepth, sceneNormals, shadowAtlas, viewGroup, cull.commands,
                                     cull.indirection, cull.runs, cull.candidates});

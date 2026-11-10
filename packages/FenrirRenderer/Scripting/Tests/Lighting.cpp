@@ -269,7 +269,7 @@ TEST_CASE("Every RendererStats count crosses between C++ and C# in its own place
 TEST_CASE("The spot shadow budget C# sets decides whether a shadowed spot light draws shadows", "[renderer][scripting]")
 {
     RendererScriptingApp test;
-    // A casting mesh at (1, 2, 3) and a camera at (0, 0, 5), and a spot light behind the mesh pointing at it along -Z.
+    // A casting mesh at (1, 2, 3) and a camera at (1, 2, 5), and a spot light behind the mesh pointing at it along -Z.
     test.Call<void>(SceneBuilderType, "Arm");
     test.ApplyChanges();
     Entity spot = test.Entities().CreateEntity();
@@ -295,7 +295,7 @@ TEST_CASE("The point shadow budget C# sets decides whether a shadowed point ligh
           "[renderer][scripting]")
 {
     RendererScriptingApp test;
-    // A casting mesh at (1, 2, 3) and a camera at (0, 0, 5), and a point light just behind the mesh.
+    // A casting mesh at (1, 2, 3) and a camera at (1, 2, 5), and a point light just behind the mesh.
     test.Call<void>(SceneBuilderType, "Arm");
     test.ApplyChanges();
     Entity point = test.Entities().CreateEntity();

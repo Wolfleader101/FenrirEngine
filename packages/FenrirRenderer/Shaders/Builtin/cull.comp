@@ -8,7 +8,10 @@
 // count with an atomic, and its entry, uvec2(record, copy), written at the slot the count gave it: the order within a
 // run varies frame to frame, which an opaque pass behind a depth prepass does not show, and tests compare sets.
 //
-// This pass keeps every candidate (culling ticket 03); the frustum test comes next (ticket 04).
+// A candidate is kept when its box may be inside the view's planes, tested as FenrirMath's Math::Frustum tests it
+// (culling ticket 04): first the sphere around the box, dropped when it is wholly outside one plane, then the box's
+// eight corners, dropped only when every corner is outside one plane. A job with no planes keeps every candidate
+// (RendererConfig::gpuCulling off).
 #include "Fenrir/DrawRecord.glsl"
 
 layout(local_size_x = 64) in;
@@ -16,8 +19,12 @@ layout(local_size_x = 64) in;
 // The view's job.
 layout(set = 0, binding = 0, std140) uniform CullJob
 {
-    // x: the view's first entry in the group table; y: how many groups it has. zw unused.
+    // x: the view's first entry in the group table; y: how many groups it has; z: how many of planes are the view's,
+    // 0 to keep every candidate. w unused.
     uvec4 groups;
+    // The view's planes in world space, vec4(n, d) with n the unit normal pointing inward: a point p is inside when
+    // dot(n, p) + d >= 0. Five for a camera (no far plane), six for an orthographic view.
+    vec4 planes[6];
 } job;
 
 // The frame's draw records, Fenrir/Draw.glsl's draws.
@@ -46,6 +53,55 @@ layout(set = 1, binding = 3, std430) writeonly buffer Indirection
     uvec2 entries[];
 } indirection;
 
+// The instance lists' copies, Fenrir/Draw.glsl's binding 1 of set 3, which a list's candidate is one of.
+layout(set = 1, binding = 4, std430) readonly buffer Copies
+{
+    FenrirInstance copies[];
+} lists;
+
+// Whether the box boundsMin..boundsMax under transform may be inside the job's planes: Math::Frustum::Intersects(box,
+// transform) after Intersects(Math::Frustum::SphereOf(box, transform)), the same arithmetic in the same order.
+bool Visible(vec3 boundsMin, vec3 boundsMax, mat4 transform)
+{
+    const uint planeCount = min(job.groups.z, 6u);
+    // The sphere around the box: its centre moved, its half-diagonal scaled by the largest axis scale.
+    const vec3 centre = (boundsMin + boundsMax) * 0.5;
+    const float halfDiagonal = length(boundsMax - boundsMin) * 0.5;
+    const float scale = max(max(length(transform[0].xyz), length(transform[1].xyz)), length(transform[2].xyz));
+    const vec3 sphereCentre = (transform * vec4(centre, 1.0)).xyz;
+    const float radius = halfDiagonal * scale;
+    for (uint p = 0u; p < planeCount; ++p)
+    {
+        const vec4 plane = job.planes[p];
+        if (dot(plane.xyz, sphereCentre) + plane.w < -radius)
+        {
+            return false;
+        }
+    }
+    // The eight corners in Math::Corners' order: bit 0 of the index picks max x, bit 1 max y, bit 2 max z.
+    vec4 corners[8];
+    for (uint c = 0u; c < 8u; ++c)
+    {
+        const vec3 corner = vec3((c & 1u) != 0u ? boundsMax.x : boundsMin.x, (c & 2u) != 0u ? boundsMax.y : boundsMin.y,
+                                 (c & 4u) != 0u ? boundsMax.z : boundsMin.z);
+        corners[c] = vec4((transform * vec4(corner, 1.0)).xyz, 1.0);
+    }
+    for (uint p = 0u; p < planeCount; ++p)
+    {
+        const vec4 plane = job.planes[p];
+        bool allOutside = true;
+        for (uint c = 0u; c < 8u && allOutside; ++c)
+        {
+            allOutside = dot(plane, corners[c]) < 0.0;
+        }
+        if (allOutside)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 void main()
 {
     uvec4 group = groups.entries[job.groups.x + gl_WorkGroupID.x];
@@ -59,6 +115,15 @@ void main()
     bool list = first.instanceCount != 0u;
     uint record = list ? group.y : group.y + candidate;
     uint copy = list ? first.instanceFirst + candidate : FenrirNoCopy;
+
+    // An item's box already has its world matrix applied, so it is tested under the identity; a list's is the mesh's
+    // local box, moved by the entity's world matrix and the copy's transform.
+    DrawItem item = list ? first : records.items[record];
+    mat4 transform = list ? item.world * lists.copies[copy].transform : mat4(1.0);
+    if (!Visible(item.boundsMin.xyz, item.boundsMax.xyz, transform))
+    {
+        return;
+    }
 
     uint command = group.x * 5u;
     uint slot = atomicAdd(commands.words[command + 1u], 1u);
