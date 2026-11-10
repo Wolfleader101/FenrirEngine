@@ -1,0 +1,37 @@
+---
+status: proposed
+---
+
+# The painter records into DrawList2D with analytic shapes and tessellated paths in one fat vertex, and DrawList2D gains offscreen groups
+
+ADR-0027 left a painter for later: "A future FenrirPainter / FenrirUI: produces 2D draw data", above the plain-data `DrawList2D` and below any UI. Research on 2026-11-10 (`.scratch/fenrir-ui/research/painter-api-designs.md`) compared Skia, NanoVG, Vello, Dear ImGui, Unity's Painter2D, Godot, Flutter/Impeller, ThorVG, Rive and Blend2D, and measured `DrawList2D` against the contracts that hand a host triangles. It already matches ImGui's and RmlUi's and exceeds them with a pipeline table, four texture slots, blend modes and colour spaces; what it lacks against NanoVG's is a per-call paint block, stencil-then-cover for concave fills, an offscreen layer and a transformed scissor. This ADR decides where the painter sits, which of those four it closes and how, and the painter's GPU technique. Settled in a grilling session on 2026-11-10.
+
+## The painter sits above DrawList2D and fills it
+
+**FenrirPainter is a package that records into `DrawList2D` with its own shaders and vertex layout; FenrirDraw2D stays plain data.** The dependencies of ADR-0027 hold: painter and UI → FenrirDraw2D ← FenrirRenderer. Folding paths, paint state and text into FenrirDraw2D would make the data package know fonts, transforms and tessellation, and every other producer (ImGui's glue, a C# script filling vertices) would carry that weight.
+
+## The four gaps
+
+1. **A per-call paint block: no change.** A gradient's matrix, extents, feather and two colours, or an image pattern, is under 80 bytes; it fits the 128 parameter bytes a command carries, and fits better in the vertex (below), where it costs no command break.
+2. **Stencil-then-cover for concave fills: closed, not taken.** The graphics device has no stencil attachment (the window surface is made with no depth, stencil or MSAA, and the device's pipeline state has no stencil). Concave fills are triangulated on the CPU (ear clipping) with a one-pixel anti-aliasing fringe, as ImGui and NanoVG's convex path do. A path with self-intersections or holes is split by winding on the CPU first.
+3. **An offscreen group: `DrawList2D` gains it.** Opacity groups, blur, drop shadows, masks and backdrop filters need "draw these commands into a texture, then draw that texture with a paint", which no arrangement of vertices expresses. A draw list gains a **begin-group** command (the group's size in local units, its pixel format) and an **end-group** command (how the group's image is composited: opacity, blend mode, a filter shader with parameters, or as a mask over the commands that follow). The renderer's 2D render feature realises a group in a transient image it allocates for the frame, draws the enclosed commands into it as a 2D target of its own (so the group is the first **image 2D target** ADR-0027 planned), and the end-group command draws the image as the painter's shader directs. Groups nest.
+4. **A transformed scissor: in the shader, not the scissor.** The command's hardware scissor stays axis-aligned and rectangular, and the window overlay realises it as ADR-0027 says. Rounded, rotated and nested clips are evaluated per pixel in the painter's shader from clip data the painter writes into each vertex: one clip rectangle with corner radii under one transform, the innermost of the clip stack, with the hardware scissor set to its bounds. A clip the shader cannot express (an arbitrary path, or several rounded clips whose intersection is not one rounded rectangle) uses a mask group (gap 3).
+
+## The technique: analytic shapes plus tessellated paths, in one fat vertex
+
+Three families fit a stencil-less device. CPU triangles with fringes for everything (ImGui, NanoVG) re-tessellate every shape at every size, spend many vertices on a rounded rectangle or a gradient, and lose their anti-aliasing when the list is scaled, which world-space UI does. Everything analytic in the fragment shader (s&box's `ui_cssbox_batched`, Slate's `RoundedBox`) is crisp at any scale and batches a whole panel into one draw, but an arbitrary path then needs its segments in buffers and a per-pixel scan, which is the hard part. **The painter is the hybrid.** Rectangles, rounded rectangles with per-corner radii, borders with per-side widths, box shadows, circles, arcs, rings and gradients, which are the bulk of any UI, are each one quad whose pixels are evaluated analytically in the fragment shader; arbitrary paths, strokes with joins and caps, polygons and dashes are tessellated on the CPU with a fringe. Two fragment variants of one painter shader, one vertex layout.
+
+**The per-shape data travels in the vertex.** Each vertex carries its position, UV and colour as `Vertex2D` does, and then the shape it belongs to: its rectangle, corner radii, border widths and colours, the paint (kind, matrix, extents, feather, second colour, image slot) and the clip (rectangle, radii, transform). Four vertices a quad, of the order of 80 to 96 bytes each, and a whole panel's boxes with one texture are one command. The alternatives, one command per shape with the shape in its parameter bytes, or an instance table in a storage buffer, cost a draw per box or a notion `DrawList2D` does not have. Text is textured quads with the glyph atlas in a texture slot, through the same vertex.
+
+**The painter's pipelines blend premultiplied alpha** (`BlendMode2D::PremultipliedAlpha`), because a group's image is composited back and a straight-alpha composite of anti-aliased edges fringes dark. Which blend space the UI uses on the window is decided with the authoring model, not here.
+
+## Targets
+
+**The image 2D target is in scope**, because groups need it, and with it a UI drawn into an `Image` asset any material samples. **The world-space target is specified and built last**: a quad in the scene drawing a list whose scissor and clips are realised in the shader, which the fat vertex already carries, and whose text wants the SDF mode of ADR-0062. Both were planned by ADR-0027 and this ADR does not change their shape.
+
+## Considered
+
+- **Extending FenrirDraw2D into the painter.** Rejected above: the data package would know fonts and tessellation, and every other producer would carry it.
+- **A stencil attachment for the overlay**, so NanoVG's concave fill and Unity's stencil masks work. It changes the window surface and every 2D target for one technique, and CPU triangulation of concave paths is what ImGui ships; a UI's concave paths are few.
+- **A storage-buffer instance table, as s&box's batcher keeps.** It would need `DrawList2D` to describe buffers beyond vertices and indices, and the device to bind them per command; the fat vertex carries the same data through the contract that exists, at four copies a quad, which for UI sizes is small.
+- **Vello-style compute rasterisation.** Exact coverage and no tessellation, but a frame's UI through compute passes with hoped-for buffer sizes, for a device whose first backend is GL; the research notes the field is still moving there.

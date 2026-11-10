@@ -660,7 +660,27 @@ Where FenrirRenderer's 2D render feature draws a 2D draw list, supplying the tra
 The integer a 2D draw list is submitted to a window's overlay with: layers draw lowest first, and debug screen text draws above them all.
 *Avoid:* z-order, render stage (`Overlay` is the stage they all draw in), sort key.
 
-## FenrirEngine assets
+**Offscreen group**
+A run of a 2D draw list's commands drawn into an image of their own and then composited back as one: with an opacity, a blend mode, a filter, or as a mask (ADR-0060). Groups nest.
+*Avoid:* layer (an overlay layer is an ordering integer; Skia's and Vello's "layer" is this), render pass, surface.
+
+## FenrirEngine painting and UI
+
+**Painter**
+The recording API of FenrirPainter: a value that takes paths, shapes, images and text with a paint, a transform and a clip, and appends them to one 2D draw list. It keeps nothing between frames.
+*Avoid:* canvas, draw context, graphics (a `Graphics` in other engines draws straight to the GPU).
+
+**Paint**
+How a fill or a stroke is coloured: a solid colour, a gradient or an image, with its own transform.
+*Avoid:* brush (XAML's word for the same), shader (an asset here), style (a stylesheet's).
+
+**Element**
+One node of FenrirUI's tree: it has a parent, children, classes, a resolved style and a laid-out rectangle, and it is what markup tags and stylesheet selectors name.
+*Avoid:* panel (s&box's word, and a container here), widget, control (a built-in element with behaviour, such as a button), node (an ECS entity's scene word).
+
+**UI root**
+An element tree of its own with the 2D target it draws into and its scale rule. A window's overlay, an image and a quad in the world each hold their own.
+*Avoid:* canvas, document (markup loads into a root, it is not the root), screen.
 
 **FenrirAssets**
 The engine's asset package: loads files into plain CPU-side data and owns it behind asset handles. It has no GPU code; FenrirRenderer and animation each turn its data into their own form (ADR-0021).
