@@ -877,7 +877,7 @@ TEST_CASE("While culling is frozen each view's Debug pass draws the frozen frust
         const Fenrir::Math::Vec3 near = frozen.corners.at(corner);
         const Fenrir::Math::Vec3 far = frozen.corners.at(corner + 4);
         REQUIRE(std::abs(near.z - (5.0f - 0.1f)) < 1e-3f);
-        REQUIRE(std::abs(glm::length(far - frozen.position) - Fenrir::Render::FrozenFarDistance) < 1e-2f);
+        REQUIRE(std::abs(glm::length(far - frozen.position) - 100.0f) < 1e-2f);
         REQUIRE(glm::length(glm::cross(far - frozen.position, near - frozen.position)) < 1e-2f);
     }
     test.renderer.SetCullingFrozen(false);

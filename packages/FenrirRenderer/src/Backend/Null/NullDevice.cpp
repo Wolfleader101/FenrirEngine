@@ -121,9 +121,8 @@ namespace Fenrir::Graphics
         {
             return false;
         }
-        // The frame that wrote it has left flight once framesInFlight frames have begun since it, as a destroyed
-        // slot's wait is counted; a read before then would wait on the GPU, so it is refused instead.
-        if (found->writtenFrame + m_config.framesInFlight > m_frameIndex)
+        // A read before the writing frame has left flight would wait on a GPU, so it is refused instead.
+        if (!HasLeftFlight(found->writtenFrame, m_config.framesInFlight, m_frameIndex))
         {
             return false;
         }

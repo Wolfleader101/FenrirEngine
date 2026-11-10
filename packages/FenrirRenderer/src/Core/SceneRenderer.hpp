@@ -60,7 +60,8 @@ namespace Fenrir::Render
         /**
          * @brief Items and instance list copies the cull passes kept and the GPU drew (ADR-0057), summed over views,
          * from the most recent frame whose command buffers have been read back: the frame `FramesInFlight` frames
-         * ago, usually two behind `instances`. Unchanged by a frame that read nothing back.
+         * ago, usually two behind `instances`; 0 when that frame had no run. Unchanged by a frame whose slot that frame
+         * did not fill.
          */
         std::uint32_t instancesDrawn = 0;
         /** @brief Meshes, images, material blocks and instance lists uploaded since the last call. */
@@ -424,12 +425,6 @@ namespace Fenrir::Render
             {
                 m_frozenCulls.clear();
             }
-        }
-
-        /** @brief Whether culling is frozen. */
-        [[nodiscard]] bool IsCullingFrozen() const noexcept
-        {
-            return m_cullingFrozen;
         }
 
         /** @brief Each camera's frozen cull, in the order their first frozen frames drew them; empty when not frozen.
@@ -1228,8 +1223,9 @@ namespace Fenrir::Render
         std::vector<CullRings> m_cullRings;
         /** @brief The cull readback ring, a slot per frame in flight, by frame index modulo the slots. */
         std::vector<CullReadback> m_cullReadbacks;
-        /** @brief Whether culling is frozen (SetCullingFrozen), and each camera's frozen cull while it is. */
+        /** @brief Whether culling is frozen (SetCullingFrozen). */
         bool m_cullingFrozen = false;
+        /** @brief Each camera's frozen cull while culling is frozen, in the order their first frozen frames came. */
         std::vector<FrozenCull> m_frozenCulls;
         /**
          * @brief The buffer of one entry naming no record (`Fenrir/DrawRecord.glsl`'s FenrirNoIndirection) that the

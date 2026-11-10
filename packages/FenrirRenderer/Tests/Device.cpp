@@ -245,12 +245,25 @@ TEST_CASE("A readback buffer reads back what was written or copied into it only 
     device->BeginFrame(6);
     REQUIRE(readAll());
     REQUIRE(read == copied);
-
-    INFO("a buffer made without Readback usage is refused however long ago it was written, as is a stale handle");
-    const BufferHandle plain = device->CreateBuffer({16, BufferUsage::Storage}, std::as_bytes(std::span(written)));
-    device->BeginFrame(9);
-    REQUIRE_FALSE(device->ReadBuffer(plain, 0, std::as_writable_bytes(std::span(read))));
-    REQUIRE(device->Destroy(readback));
-    REQUIRE_FALSE(readAll());
     REQUIRE(RendererProbe::StaleUses(*device).empty());
+}
+
+TEST_CASE("A buffer made without Readback usage, and a stale handle, are refused a read back however long ago they "
+          "were written",
+          "[renderer][device][culling]")
+{
+    auto device = CreateNullDevice({.framesInFlight = 2});
+    device->BeginFrame(0);
+    const std::array<std::uint32_t, 4> written{1, 2, 3, 4};
+    const BufferHandle plain = device->CreateBuffer({16, BufferUsage::Storage}, std::as_bytes(std::span(written)));
+    const BufferHandle readback =
+        device->CreateBuffer({16, BufferUsage::Readback}, std::as_bytes(std::span(written)), "Readback");
+    REQUIRE(device->Destroy(readback));
+    device->BeginFrame(5);
+    std::array<std::uint32_t, 4> read{};
+    INFO("Storage alone is no readback");
+    REQUIRE_FALSE(device->ReadBuffer(plain, 0, std::as_writable_bytes(std::span(read))));
+    INFO("a destroyed buffer is stale, whatever it held");
+    REQUIRE_FALSE(device->ReadBuffer(readback, 0, std::as_writable_bytes(std::span(read))));
+    REQUIRE(read == std::array<std::uint32_t, 4>{});
 }

@@ -755,7 +755,7 @@ namespace Fenrir::Graphics
             return false;
         }
         // Refused until the writing frame has left flight: GL would otherwise wait for its commands here.
-        if (found->writtenFrame + m_config.framesInFlight > m_frameIndex)
+        if (!HasLeftFlight(found->writtenFrame, m_config.framesInFlight, m_frameIndex))
         {
             return false;
         }

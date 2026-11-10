@@ -2658,7 +2658,7 @@ namespace Fenrir::Render
             return;
         }
         // The slot this frame will fill again holds the frame FramesInFlight ago, the most recent to have left
-        // flight; a frame that drew nothing, or whose slot was lost, leaves the last count standing.
+        // flight; one with no runs counts 0, and a slot that frame did not fill leaves the last count standing.
         const CullReadback& readback = m_cullReadbacks[static_cast<std::size_t>(frameIndex % slots)];
         if (readback.frame != frameIndex - slots)
         {

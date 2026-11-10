@@ -118,8 +118,9 @@ namespace Fenrir::Graphics
          * @brief Reads `bytes.size()` bytes from `offset` of a live buffer made with `BufferUsage::Readback` into
          * `bytes`, as the GPU left them (ADR-0057). Allowed only once the frame that last wrote the buffer (a
          * WriteBuffer, a copy into it, or a pass declaring StorageWrite on it) has left flight, `FramesInFlight`
-         * frames after it began, so it never waits on the GPU. False, reading nothing, before then, for a stale
-         * handle, a buffer without Readback usage, or a range past the buffer's end.
+         * frames after it began, so it does not wait on a GPU that keeps within its frames in flight (a backend
+         * with no fence, such as GL, would wait on one that has fallen further behind). False, reading nothing,
+         * before then, for a stale handle, a buffer without Readback usage, or a range past the buffer's end.
          */
         virtual bool ReadBuffer(BufferHandle buffer, std::size_t offset, std::span<std::byte> bytes) = 0;
 
@@ -178,6 +179,16 @@ namespace Fenrir::Graphics
 
       protected:
         GraphicsDevice() = default;
+
+        /**
+         * @brief ReadBuffer's rule for every backend: whether a buffer last written in frame `writtenFrame` may be
+         * read in frame `frameIndex` with `framesInFlight` frames in flight, as a destroyed slot is freed.
+         */
+        [[nodiscard]] static constexpr bool HasLeftFlight(std::uint64_t writtenFrame, std::uint32_t framesInFlight,
+                                                          std::uint64_t frameIndex) noexcept
+        {
+            return writtenFrame + framesInFlight <= frameIndex;
+        }
     };
 
     /**

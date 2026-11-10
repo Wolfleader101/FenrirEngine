@@ -128,7 +128,10 @@ namespace Fenrir
         std::uint32_t pointShadowMapSize = 512;
     };
 
-    /** @brief What the renderer did in its last drawn frame (ADR-0023). */
+    /**
+     * @brief What the renderer did in its last drawn frame (ADR-0023), except `instancesDrawn`, read back from the
+     * most recent frame that has left flight (ADR-0057).
+     */
     struct RendererStats
     {
         /**
@@ -277,7 +280,10 @@ namespace Fenrir
          */
         [[nodiscard]] std::optional<Math::AABB> GetWorldBounds(const Entity& entity) const;
 
-        /** @brief What the last drawn frame did; zeros before the first and for an invalid owner. */
+        /**
+         * @brief What the last drawn frame did (`instancesDrawn` what the most recent frame out of flight drew);
+         * zeros before the first and for an invalid owner.
+         */
         [[nodiscard]] RendererStats Stats() const;
 
         /** @name Picking
