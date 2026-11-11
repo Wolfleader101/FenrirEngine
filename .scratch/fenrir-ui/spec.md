@@ -254,9 +254,9 @@ One session, branch and PR per ticket, into `fenrir-ui` or the previous ticket's
 
 | # | Ticket | Blocked by | Branch | PR |
 |---|---|---|---|---|
-| 01 | [Offscreen groups in `DrawList2D` and the renderer's image 2D target](issues/01-offscreen-groups-and-the-image-2d-target.md) | none | `ui/01-offscreen-groups-and-the-image-2d-target` | |
+| 01 | [Offscreen groups in `DrawList2D` and the renderer's image 2D target](issues/01-offscreen-groups-and-the-image-2d-target.md) | none | `ui/01-offscreen-groups-and-the-image-2d-target` | [#327](https://github.com/Wolfleader101/FenrirEngine/pull/327) |
 | 02 | [FenrirText: fonts, shaping, paragraphs and bitmap atlases](issues/02-fenrirtext-fonts-shaping-paragraphs-and-bitmap-atlases.md) | none | `ui/02-fenrirtext-fonts-shaping-paragraphs-and-bitmap-atlases` | |
-| 03 | [FenrirPainter: analytic shapes, paints and clips in the fat vertex](issues/03-fenrirpainter-analytic-shapes-paints-and-clips.md) | none | `ui/03-fenrirpainter-analytic-shapes-paints-and-clips` | |
+| 03 | [FenrirPainter: analytic shapes, paints and clips in the fat vertex](issues/03-fenrirpainter-analytic-shapes-paints-and-clips.md) | none | `ui/03-fenrirpainter-analytic-shapes-paints-and-clips` | [#326](https://github.com/Wolfleader101/FenrirEngine/pull/326) |
 | 04 | [Painter paths and strokes](issues/04-painter-paths-and-strokes.md) | 03 | `ui/04-painter-paths-and-strokes` | |
 | 05 | [Painter groups, filters, masks and backdrop blur](issues/05-painter-groups-filters-masks-and-backdrop-blur.md) | 01, 03 | `ui/05-painter-groups-filters-masks-and-backdrop-blur` | |
 | 06 | [Painter text](issues/06-painter-text.md) | 02, 03 | `ui/06-painter-text` | |
