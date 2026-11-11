@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Opaque draws are culled per view on the GPU into indirect draws, and meshes carry LODs chosen by projected error
