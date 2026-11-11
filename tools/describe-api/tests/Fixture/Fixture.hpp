@@ -177,6 +177,8 @@ namespace Fixture
         std::uint8_t zeros[3] = {};
         /** @brief A std::array is the C array it holds: the same kind, with its braces elided or not. */
         std::array<float, 2> pair = {3.0f, 4.0f};
+        std::array<std::int16_t, 2> wrapped{{5, 6}};
+        std::array<std::uint8_t, 2> blank = {};
         std::array<Spring, 2> coils{};
         void* userData = nullptr;
         const Body* next = nullptr;

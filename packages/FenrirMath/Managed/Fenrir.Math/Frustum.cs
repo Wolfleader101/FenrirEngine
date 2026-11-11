@@ -41,7 +41,7 @@ public partial struct Frustum
         Span<Vector4> corners = stackalloc Vector4[8];
         for (int corner = 0; corner < 8; ++corner)
         {
-            // Corner bits pick each axis's minimum or maximum, as Math::Corners orders them.
+            // The bits pick each axis's minimum or maximum in Math::Corners' order, so this is C++'s test corner for corner.
             var local = new Vector4((corner & 1) != 0 ? box.Max.X : box.Min.X, (corner & 2) != 0 ? box.Max.Y : box.Min.Y,
                                     (corner & 4) != 0 ? box.Max.Z : box.Min.Z, 1);
             Vector4 moved = transform.Column0 * local.X + transform.Column1 * local.Y + transform.Column2 * local.Z +
