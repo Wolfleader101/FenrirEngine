@@ -35,7 +35,7 @@ namespace
         GlOcclusionScene()
         {
             camera = app.GetActiveScene().GetEntityList().CreateEntity();
-            camera.AddComponent<Fenrir::Camera>().bloom.intensity = 0.0f;
+            camera.AddComponent<Fenrir::Camera>().look.bloom.intensity = 0.0f;
             Fenrir::AssetStore& store = assets.Store();
             white = store.CreateMaterial(store.Load<Fenrir::Shader>("builtin:unlit", Fenrir::AssetOwner::App()).handle,
                                          Fenrir::AssetOwner::App());

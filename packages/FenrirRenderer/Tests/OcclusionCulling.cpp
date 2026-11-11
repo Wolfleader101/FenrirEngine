@@ -110,7 +110,7 @@ namespace
     /** @brief A camera with its bloom off, so the frame has the scene's passes alone, over the three runs. */
     void AddCameraAndThreeRuns(RendererTestApp& test)
     {
-        test.AddCamera().GetComponent<Fenrir::Camera>().bloom.intensity = 0.0f;
+        test.AddCamera().GetComponent<Fenrir::Camera>().look.bloom.intensity = 0.0f;
         AddThreeRuns(test);
     }
 
