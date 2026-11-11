@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstddef>
 #include <numbers>
+#include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -125,6 +126,31 @@ TEST_CASE("An orthographic view has six planes, its far plane among them", "[mat
                       << expected[i].z << ", " << expected[i].w << ")");
         REQUIRE(Near(plane, expected[i]));
     }
+}
+
+TEST_CASE("A frustum made from planes keeps them in order, so a view can be left open on one side", "[math][frustum]")
+{
+    const Frustum orthographic =
+        Frustum::FromViewProjection(Orthographic(2.0f, 1.0f, 1.0f, 10.0f) * ViewAt({0.0f, 2.0f, 0.0f}));
+    // The orthographic view's planes but its near one: open towards the camera, closed at z = -10.
+    std::vector<Vec4> planes(orthographic.Planes().begin(), orthographic.Planes().end());
+    planes.erase(planes.begin() + 4);
+    const Frustum open = Frustum::FromPlanes(planes);
+    INFO("five planes, in the order given");
+    REQUIRE(open.Planes().size() == 5);
+    for (std::size_t i = 0; i < planes.size(); ++i)
+    {
+        REQUIRE(Near(open.Planes()[i], planes[i]));
+    }
+    INFO("a sphere behind the camera, which the near plane dropped, is kept; one past the far plane is still dropped");
+    REQUIRE_FALSE(orthographic.Intersects(Sphere{{0.0f, 2.0f, 3.0f}, 1.0f}));
+    REQUIRE(open.Intersects(Sphere{{0.0f, 2.0f, 3.0f}, 1.0f}));
+    REQUIRE_FALSE(open.Intersects(Sphere{{0.0f, 2.0f, -12.0f}, 1.0f}));
+    INFO("more than six planes are cut to six, and none make an empty frustum that keeps everything");
+    std::vector<Vec4> seven(7, Vec4(0.0f, 0.0f, 1.0f, 0.0f));
+    REQUIRE(Frustum::FromPlanes(seven).Planes().size() == 6);
+    REQUIRE(Frustum::FromPlanes({}).Planes().empty());
+    REQUIRE(Frustum::FromPlanes({}).Intersects(Sphere{{0.0f, 0.0f, 100.0f}, 1.0f}));
 }
 
 TEST_CASE("A sphere is dropped only when it is wholly beyond one plane, of either kind of view", "[math][frustum]")

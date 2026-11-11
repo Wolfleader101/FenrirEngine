@@ -136,6 +136,25 @@ namespace RendererTest
         return groups;
     }
 
+    /** @brief The bytes of one entry of the frame's level table, as `builtin:cull` reads it (five words). */
+    constexpr std::size_t LevelEntrySize = 20;
+
+    /**
+     * @brief How many instances each kept candidate of the run at `command` of a Cull pass draws as, from the frame's
+     * level table (the pass's set 1 binding 5) at the view's first entry (the job block's fourth word) plus the
+     * command: six for a point light's instanced faces, else one.
+     */
+    inline std::uint32_t InstancesPerCandidate(const Fenrir::Graphics::GraphicsDevice& device, const RecordedCull& cull,
+                                               std::uint32_t command)
+    {
+        using Fenrir::RendererProbe;
+        const Fenrir::Graphics::BindingGroupEntry job = EntryAt(device, cull.job, 0);
+        const std::vector<std::byte> jobBytes = RendererProbe::Bytes(device, job.buffer);
+        const std::uint32_t firstLevel = UintAt(jobBytes, job.offset + 12);
+        const std::vector<std::byte> levels = RendererProbe::Bytes(device, EntryAt(device, cull.target, 5).buffer);
+        return UintAt(levels, (std::size_t{firstLevel} + command) * LevelEntrySize + 16);
+    }
+
     /** @brief The `n`th 32-bit word of a draw command's bytes at `offset` of `bytes`. */
     inline std::uint32_t CommandWord(const std::vector<std::byte>& bytes, std::size_t offset, std::size_t n)
     {
@@ -145,8 +164,9 @@ namespace RendererTest
     /**
      * @brief The draw an indirect draw of `command` stands for, read through the frame's Cull passes as the GPU would
      * draw it with every candidate kept (ADR-0057): the command's index count, first index and base vertex, the run's
-     * candidates as its instances, and the run's first record as its first instance, so a draw's record is found as a
-     * direct draw's is. The device must be the null backend, which applied the templates' copy. An occlusion
+     * candidates as its instances (six each for a point light's instanced faces), and the run's first record as its
+     * first instance, so a draw's record is found as a direct draw's is. The device must be the null backend, which
+     * applied the templates' copy. An occlusion
      * phase two draw (its command past the phase's count, which the group table does not name) resolves to nothing,
      * so DrawsIn reads a view as its first phase drew it, and IndirectDrawsIn shows both phases' draws.
      */
@@ -169,7 +189,9 @@ namespace RendererTest
                 if (group.command == index)
                 {
                     return Fenrir::Graphics::CmdDrawIndexed{
-                        CommandWord(commands, command.offset, 0), group.count, CommandWord(commands, command.offset, 2),
+                        CommandWord(commands, command.offset, 0),
+                        group.count * InstancesPerCandidate(device, cull, index),
+                        CommandWord(commands, command.offset, 2),
                         static_cast<std::int32_t>(CommandWord(commands, command.offset, 3)), group.record};
                 }
             }

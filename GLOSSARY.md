@@ -620,6 +620,10 @@ Dropping, per camera, the candidates wholly behind what the camera already sees 
 A camera's pyramid of depth (ADR-0056, ADR-0057): an RG32F texture at the view's size with a full mip chain, red the nearest and green the farthest reversed-Z depth of each texel's footprint, level 0 the prepass's depth (the nearest and the farthest of each pixel's samples under MSAA) and each level below the largest nearest and the smallest farthest of the 2 x 2 texels above it, the third row or column folded into the last texel where a level's side is odd. Built by `HiZ` fragment passes, one a level: after the prepass's first phase for *occlusion culling*, and again from the complete depth for a reflecting camera's `ReflectionTrace`, which marches its nearest depth; a reflecting camera keeps two, swapping each frame, so last frame's survives.
 *Avoid:* depth mipmap, HZB (write it out), Z-buffer pyramid.
 
+**Shadow view**
+One cascade of a camera's sun shadow, one shadowed spot light's atlas tile, or one shadowed point light's cube, as a view of the *cull pass* (ADR-0057): each gets a cull of its own over the *shadow candidates* (the opaque and masked runs whose renderer casts), against the light's volume rather than a camera's frustum (a cascade's box with its near plane left open, `Core/ShadowViews.hpp`'s `CascadeCullVolume`; a spot light's cone; a point light's range sphere, `WithinRange`), choosing each caster's *level of detail* by the camera the shadows are for, never by the light, and the shadow passes draw from its command buffer. A point light's six faces draw from its one cull. Shadow views never cull by occlusion.
+*Avoid:* light view, shadow camera, light frustum (a point light has none).
+
 **Shadow cascade**
 One of the directional light's shadow maps for one camera: an orthographic view along the light round a slice of the camera's view, nearer slices smaller and so sharper, out to the light's shadow distance. Each is a sphere snapped to whole texels, so its shadows hold still as the camera moves and turns (ADR-0050).
 *Avoid:* split (the depth where one cascade gives way to the next), CSM level, shadow LOD.

@@ -34,6 +34,16 @@ namespace Fenrir::Math
         return frustum;
     }
 
+    Frustum Frustum::FromPlanes(std::span<const Vec4> planes)
+    {
+        Frustum frustum;
+        for (const Vec4& plane : planes.first(std::min(planes.size(), frustum.m_planes.size())))
+        {
+            frustum.m_planes[frustum.m_count++] = plane;
+        }
+        return frustum;
+    }
+
     bool Frustum::Intersects(const Sphere& sphere) const noexcept
     {
         for (const Vec4& plane : Planes())

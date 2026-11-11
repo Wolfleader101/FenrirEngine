@@ -29,6 +29,12 @@
 // It writes the result as the candidate's visibility for next frame, and counts the visible candidates phase one did
 // not draw into the second set of commands, the job's command offset on, which the prepass draws after phase one's and
 // Opaque with them. A job of phase 0 is the one phase of a view without occlusion culling.
+//
+// A shadow view (culling ticket 10) runs one phase against the light's volume: a cascade's box open towards the light,
+// a spot light's cone, or a point light's range sphere (the job's sphere, tested after the planes as
+// Core/ShadowViews.hpp's WithinRange tests it on the CPU: the candidate's sphere against it, then the world box about
+// its moved corners), choosing levels by the camera the shadows are for, never by the light. A point light's six faces
+// drawn as instances count six instances a kept candidate (the level table's instances), one entry for all six.
 #include "Fenrir/DrawRecord.glsl"
 
 layout(local_size_x = 64) in;
@@ -61,6 +67,8 @@ layout(set = 0, binding = 0, std140) uniform CullJob
     vec4 screen;
     // World to clip space, which the screen rectangle is taken in.
     mat4 viewProjection;
+    // xyz: the centre of the sphere the view culls against as well, a point light's range; w: its radius, 0 for none.
+    vec4 sphere;
 } job;
 
 // The frame's draw records, Fenrir/Draw.glsl's draws.
@@ -96,13 +104,15 @@ layout(set = 1, binding = 4, std430) readonly buffer Copies
 } lists;
 
 // The frame's level table: per command template, in the templates' order, the level's error in its mesh's local units,
-// which level of its run's it is, how many levels the run has, and the run's first candidate's index in the view.
+// which level of its run's it is, how many levels the run has, the run's first candidate's index in the view, and how
+// many instances each kept candidate draws as (six for a point light's instanced faces, else one).
 struct CullLevel
 {
     float error;
     uint level;
     uint levels;
     uint firstCandidate;
+    uint instances;
 };
 layout(set = 1, binding = 5, std430) readonly buffer Levels
 {
@@ -119,7 +129,8 @@ layout(set = 1, binding = 6, std430) buffer Visibility
 layout(set = 1, binding = 7) uniform sampler2D pyramid;
 
 // Whether the box boundsMin..boundsMax under transform may be inside the job's planes: Math::Frustum::Intersects(box,
-// transform) after Intersects(Math::Frustum::SphereOf(box, transform)), the same arithmetic in the same order.
+// transform) after Intersects(Math::Frustum::SphereOf(box, transform)), the same arithmetic in the same order; and,
+// with a sphere in the job, inside it too: ShadowViews.hpp's WithinRange.
 // The largest scale transform applies along any of its axes: what the mesh's lengths are scaled by.
 float LargestScale(mat4 transform)
 {
@@ -197,6 +208,29 @@ bool Visible(vec3 boundsMin, vec3 boundsMax, mat4 transform)
             allOutside = dot(plane, corners[c]) < 0.0;
         }
         if (allOutside)
+        {
+            return false;
+        }
+    }
+    if (job.sphere.w > 0.0)
+    {
+        // The candidate's sphere against the range, then the world box about its moved corners: the nearest point of
+        // that box to the range's centre must be within the radius.
+        const vec3 toCentre = sphereCentre - job.sphere.xyz;
+        const float reach = radius + job.sphere.w;
+        if (dot(toCentre, toCentre) > reach * reach)
+        {
+            return false;
+        }
+        vec3 lowest = corners[0].xyz;
+        vec3 highest = corners[0].xyz;
+        for (uint c = 1u; c < 8u; ++c)
+        {
+            lowest = min(lowest, corners[c].xyz);
+            highest = max(highest, corners[c].xyz);
+        }
+        const vec3 away = clamp(job.sphere.xyz, lowest, highest) - job.sphere.xyz;
+        if (dot(away, away) > job.sphere.w * job.sphere.w)
         {
             return false;
         }
@@ -305,7 +339,10 @@ void main()
         return;
     }
 
+    // Counted as the run's instances per candidate (six for a point light's instanced faces, one entry for all six:
+    // Fenrir/Draw.glsl reads it at the instance index over six), at the slot the count gave it.
+    const uint instances = max(run.instances, 1u);
     uint command = (group.x + uint(level) + (phase == 2u ? job.occlusion.z : 0u)) * 5u;
-    uint slot = atomicAdd(commands.words[command + 1u], 1u);
+    uint slot = atomicAdd(commands.words[command + 1u], instances) / instances;
     indirection.entries[commands.words[command + 4u] + slot] = uvec2(record, copy);
 }

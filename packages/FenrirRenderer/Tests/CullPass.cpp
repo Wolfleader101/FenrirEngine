@@ -165,13 +165,14 @@ TEST_CASE("Each camera's Cull pass copies its templates and dispatches once, fir
 
     test.Frame();
     const std::vector<std::string> passes = RendererTest::PassesIn(RendererProbe::Submitted(test.renderer));
-    INFO("the Cull pass runs first, before ShadowCascades, DepthPrepass and Opaque");
+    INFO("the Cull passes run first, before ShadowCascades, DepthPrepass and Opaque: the camera's, then one per "
+         "cascade of its sun shadow (ticket 10)");
     REQUIRE(passes.front() == "Cull");
-    REQUIRE(std::ranges::count(passes, "Cull") == 1);
+    REQUIRE(std::ranges::count(passes, "Cull") == 5);
     REQUIRE(std::ranges::find(passes, "ShadowCascades") != passes.end());
     const std::vector<RecordedCull> culls = test.Culls();
-    INFO("one Cull pass for the one camera");
-    REQUIRE(culls.size() == 1);
+    INFO("the camera's Cull pass comes first of the five");
+    REQUIRE(culls.size() == 5);
     const RecordedCull& cull = culls.front();
     INFO("a compute pass of one copy and one dispatch, running builtin:cull");
     REQUIRE(cull.pass.queue == QueueKind::Compute);
@@ -435,7 +436,8 @@ TEST_CASE("A hundred thousand copies are still one draw per pass, culled by 1563
     REQUIRE(test.renderer.Stats().instances == 100000);
 }
 
-TEST_CASE("Transparent items and the shadow passes draw directly, through the draw set with no indirection",
+TEST_CASE("Transparent items draw directly, through the draw set with no indirection, while the shadow passes draw "
+          "through their own view's (ticket 10)",
           "[renderer][culling][cull-pass]")
 {
     RendererTestApp test(RendererTest::OcclusionOff());
@@ -453,16 +455,19 @@ TEST_CASE("Transparent items and the shadow passes draw directly, through the dr
     const std::vector<RecordedDraw> shadows = test.Draws("ShadowCascades");
     REQUIRE(transparent.size() == 1);
     REQUIRE_FALSE(shadows.empty());
-    for (const RecordedDraw* draw : {&transparent.front(), &shadows.front()})
-    {
-        const BufferHandle visible = DrawSetIndirection(test, draw->groups);
-        INFO("a direct draw's set 3 binds the one entry that says there is no indirection");
-        REQUIRE(visible != indirection);
-        REQUIRE(RendererProbe::Label(test.Device(), visible) == "No indirection");
-        REQUIRE(RendererTest::UintAt(RendererProbe::Bytes(test.Device(), visible), 0) == RendererTest::NoIndirection);
-    }
+    const BufferHandle visible = DrawSetIndirection(test, transparent.front().groups);
+    INFO("a direct draw's set 3 binds the one entry that says there is no indirection");
+    REQUIRE(visible != indirection);
+    REQUIRE(RendererProbe::Label(test.Device(), visible) == "No indirection");
+    REQUIRE(RendererTest::UintAt(RendererProbe::Bytes(test.Device(), visible), 0) == RendererTest::NoIndirection);
     INFO("while Opaque's draws bind the camera's indirection");
     REQUIRE(DrawSetIndirection(test, test.IndirectDraws("Opaque").front().groups) == indirection);
+    INFO("and a shadow draw binds its cascade's own indirection, not the camera's and not the empty one");
+    const BufferHandle shadowVisible = DrawSetIndirection(test, shadows.front().groups);
+    REQUIRE(shadowVisible != indirection);
+    REQUIRE(shadowVisible != visible);
+    REQUIRE(std::ranges::any_of(RendererProbe::ShadowCulls(test.renderer),
+                                [&](const auto& view) { return view.cullIndirection == shadowVisible; }));
 }
 
 TEST_CASE("A frame with no opaque run has no Cull pass and no indirect draw", "[renderer][culling][cull-pass]")
