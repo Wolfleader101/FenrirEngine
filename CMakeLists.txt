@@ -104,6 +104,8 @@ add_subdirectory(packages/FenrirDebugDraw)
 if(FENRIR_ENABLE_RENDERER)
     add_subdirectory(packages/FenrirWindow)
     add_subdirectory(packages/FenrirRenderer)
+    # It builds its shader with fenrir_add_shaders, and its tests draw through the renderer.
+    add_subdirectory(packages/FenrirPainter)
 endif()
 
 if(FENRIR_ENABLE_PHYSICS)

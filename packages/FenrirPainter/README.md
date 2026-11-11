@@ -1,0 +1,30 @@
+# FenrirPainter
+
+The painter (ADR-0060): a value over one `DrawList2D` that records analytic shapes, paints and clips through its own shader, `builtin:painter`, and its own fat vertex. FenrirDraw2D learns nothing about either; the renderer draws the list as it draws any other. The recording depends on FenrirDraw2D (with the FenrirAssets types it carries: asset handles, samplers, image data) and FenrirMath; `Painting::Install`, which registers the shader with the asset store, also needs FenrirApp. It is built with `FENRIR_ENABLE_RENDERER`, whose `fenrir_add_shaders` builds the shader. Paths and strokes, offscreen groups and text come in later tickets of the FenrirUI spec (`.scratch/fenrir-ui/spec.md`).
+
+## Installing
+
+`Painting::Install(app)` (after FenrirAssets' `Assets::Install`) registers `builtin:painter` with the asset store, as ADR-0027 lets a UI bring its shaders; `GetShader()` is its handle, or load it by name. With no asset store it logs why and the owner's `IsValid()` is false.
+
+## Painting
+
+`FenrirPainter/Painter.hpp`. Make a `Painter` over each frame's list with a `PainterConfig`: the shader, the root scale (logical units per UI unit), the root's blend space (`Gamma` for a UI on the window overlay, `Linear` in an image or the world, ADR-0065), pixel snapping with the target's pixels per unit, the index width, and the stop texture. It keeps nothing between frames.
+
+- **Draws**, each one quad: `DrawRect`, `DrawRoundedRect` (per-corner radii, scaled down together when they do not fit, as CSS does), `DrawBorder` (per-side widths and colours, split at the corners' diagonals), `DrawShadow` (offset, blur, spread, outset or inset), `DrawCircle`, `DrawArc` (a band with flat ends; a whole turn is a ring), `DrawRing`, and `DrawImage` (stretched, or nine-sliced into nine quads whose seams are not anti-aliased).
+- **Paint**, per call (`FenrirPainter/Paint.hpp`): a `Colour`, a `LinearGradient` (two points, stops, pad or repeat), a `RadialGradient` (centre, radius, focal point, stops) or an `ImagePattern` (image, sampler, rectangle, tint), each with its own `Transform2D`. Colours are `Colour`s with straight alpha; the vertex holds them sRGB-encoded and premultiplied, and the pipeline's input colour space is sRGB.
+- **Stops**: two travel in the vertex. More need a `StopTexture`, the caller's, kept across frames: each frame the painter adds a row per distinct set of stops, and before the list is drawn the caller writes them, `store.Replace(stops.GetImage(), stops.TakeImageData())`. Without one, or with it full, a gradient uses its first and last stops.
+- **State**: `Save` and `Restore` push and pop the transform (`Translate`, `Scale`, `Rotate`, `Concat`, applied before the current one) and the clip (`ClipRect`, `ClipRoundedRect`, under the current transform). The command's hardware scissor is the clip stack's intersected bounds; the innermost clip is evaluated per pixel with its radii and rotation, and two axis-aligned sharp rectangle clips are met exactly. Clips the shader cannot express as one rounded rectangle, a path or several rounded clips, wait for the mask group of a later ticket.
+
+## The fat vertex and the shader
+
+`PainterVertex` (`FenrirPainter/PainterVertex.hpp`), 140 bytes: the position, the paint's coordinate (`uv`, the paint's transform already applied), the point in the shape's and the clip's own spaces, the shape's and the clip's half sizes and radii, the shape's numbers (border widths, shadow parameters, arc angles, ring radii), the paint's numbers (focal point, stop offsets or stop row), two colours, four border colours, and the shape kind, paint kind, flags and image slot. `PainterVertexLayout()` describes it in fifteen attributes, and `PainterPipeline()` is the painter's pipeline description: `builtin:painter`, `PremultipliedAlpha`, sRGB input, the root's blend space.
+
+`builtin:painter` (`Shaders/painter.vert`, `Shaders/painter.frag`) evaluates each quad's shape as a signed distance in its own space, anti-aliased over one pixel measured by the derivatives, so it stays crisp under any scale or rotation; its `GAMMA` variant is the one the `Gamma` blend space draws with. Set 1 holds no parameter block, then the image (slot 0) and the stop texture (slot 1).
+
+**Batching**: consecutive draws with the same scissor and texture slots extend one command; a texture in a slot the command already filled with another, a scissor change, or an offscreen group's begin or end between them starts another. With 16-bit indices a command past 65535 vertices starts another with a base vertex; `IndexType2D::UInt32` never needs to.
+
+## Tests
+
+With `FENRIR_BUILD_TESTS`: `FenrirPainterTests` checks what each draw appends to a list (shape data, premultiplied colours, gradients' stops and transforms, the stop texture's rows, nine-slice quads, the clip stack's scissor and vertex clip, batching and index rollover), and, on the renderer's null backend, that `Painting::Install` registers the shader and that the painter's pipeline makes one device pipeline, cached by value, with a variant for each blend space. `FenrirPainterGlTests` (CTest label `gl`, skipped without a display or an OpenGL 4.6 core context) paints a rounded rectangle, a radial gradient and a bordered box into an image 2D target (`ImageTargets2D`, ADR-0060) through the renderer on OpenGL and reads back their centres and edges.
+
+RendererDemo's Painter scene (`examples/RendererDemo/README.md`) shows every draw on the window overlay.
