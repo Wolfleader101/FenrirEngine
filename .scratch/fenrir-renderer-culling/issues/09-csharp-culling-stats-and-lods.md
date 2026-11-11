@@ -17,6 +17,8 @@
 
 - [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
 
+## Comments
+
 Built 2026-11-11 on the integration branch (ticket 10's #325 had merged). Decisions to review:
 
 - **The natives are the setters and `GetFrustum`.** `Renderer.SetGpuCulling`, `SetOcclusionCulling` (not named here, but

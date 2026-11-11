@@ -10,6 +10,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -51,6 +52,7 @@ namespace
         test.Frame();
         test.Frame();
         const std::uint32_t camera = test.Call<std::uint32_t>(SceneBuilderType, "CameraEntity");
+        INFO("The scene builder should have made its camera");
         REQUIRE(test.Entities().HasEntity(camera));
         return test.Entities().GetEntity(camera);
     }
@@ -65,6 +67,7 @@ namespace
     JobBlock FirstJob(RendererScriptingApp& test)
     {
         const std::vector<RendererTest::RecordedCull> culls = RendererTest::CullsIn(test.Submitted());
+        INFO("The last frame should have run a Cull pass for the camera");
         REQUIRE_FALSE(culls.empty());
         const Graphics::BindingGroupEntry job = RendererTest::EntryAt(test.Device(), culls.front().job, 0);
         return {RendererProbe::Bytes(test.Device(), job.buffer), job.offset};
@@ -90,24 +93,10 @@ namespace
         return RendererTest::CullsIn(test.Submitted()).size();
     }
 
-    // Whether two frustums hold the same planes, bit for bit.
-    bool SamePlanes(const Math::Frustum& expected, const Math::Frustum& actual)
+    // Whether two frustums hold the same planes and count, bit for bit.
+    bool SameFrustum(const Math::Frustum& expected, const Math::Frustum& actual)
     {
-        if (expected.Planes().size() != actual.Planes().size())
-        {
-            return false;
-        }
-        for (std::size_t p = 0; p < expected.Planes().size(); ++p)
-        {
-            for (int c = 0; c < 4; ++c)
-            {
-                if (!Exactly(expected.Planes()[p][c], actual.Planes()[p][c]))
-                {
-                    return false;
-                }
-            }
-        }
-        return true;
+        return Iris::FieldDifferences(expected, actual, {}).empty();
     }
 } // namespace
 
@@ -197,6 +186,7 @@ TEST_CASE("The level-of-detail thresholds C# sets reach the job block from the n
     REQUIRE(test.Call<bool>(CullingCallsType, "LodSelection", 1.0f, 0.0f));
     test.Frame();
     const auto [error, minimum] = JobLod(test);
+    INFO("The defaults set again from C# are back in the job block");
     REQUIRE(Exactly(error, 1.0f));
     REQUIRE(Exactly(minimum, 0.0f));
 }
@@ -207,8 +197,11 @@ TEST_CASE("The frustum C# reads is the camera's, plane for plane, and crosses ba
     RendererScriptingApp test;
     const Entity camera = BuildScene(test);
     const std::optional<Math::Frustum> expected = Renderer::GetFrustum(test.Get(), camera);
-    REQUIRE(expected.has_value());
-    REQUIRE(expected->Planes().size() == 5);
+    {
+        INFO("C++ should have the perspective camera's five-plane frustum to compare with");
+        REQUIRE(expected.has_value());
+        REQUIRE(expected->Planes().size() == 5);
+    }
     {
         INFO("C# finds the camera's frustum");
         REQUIRE(test.Call<bool>(CullingCallsType, "HasFrustum", camera.GetId()));
@@ -216,7 +209,7 @@ TEST_CASE("The frustum C# reads is the camera's, plane for plane, and crosses ba
     const Math::Frustum read = test.Call<Math::Frustum>(CullingCallsType, "GetFrustum", camera.GetId());
     {
         INFO("The frustum C# read differs from C++'s:" << Differences(*expected, read));
-        REQUIRE(SamePlanes(*expected, read));
+        REQUIRE(SameFrustum(*expected, read));
         REQUIRE(test.Call<int>(CullingCallsType, "PlaneCount", *expected) == 5);
     }
     {
@@ -231,7 +224,7 @@ TEST_CASE("The frustum C# reads is the camera's, plane for plane, and crosses ba
         const Math::Frustum orthographic = test.Call<Math::Frustum>(CullingCallsType, "GetFrustum", camera.GetId());
         INFO("An orthographic camera's frustum has six planes in C# too");
         REQUIRE(orthographic.Planes().size() == 6);
-        REQUIRE(SamePlanes(*Renderer::GetFrustum(test.Get(), camera), orthographic));
+        REQUIRE(SameFrustum(*Renderer::GetFrustum(test.Get(), camera), orthographic));
     }
     const Entity plain = test.Entities().CreateEntity();
     {
