@@ -8,6 +8,7 @@ namespace AssetsScriptFixture;
 /// </summary>
 public static class Defaults
 {
+    public static global::Fenrir.Assets.LodSettings LodSettings() => new();
     public static global::Fenrir.Assets.SamplerDescription SamplerDescription() => new();
     public static global::Fenrir.Assets.MaterialTexture MaterialTexture() => new();
     public static global::Fenrir.Assets.ShaderParameter ShaderParameter() => new();

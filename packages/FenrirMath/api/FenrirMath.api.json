@@ -68,6 +68,45 @@
       ]
     },
     {
+      "name": "Fenrir::Math::Vec4",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 16,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::Math::Frustum",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 104,
+      "alignment": 8,
+      "doc": "The volume a view sees, as the planes that bound it in world space (ADR-0057): what the renderer culls against, public so a game culls or streams its own chunks and cells by the same maths. Each plane is a `Vec4` whose xyz is its unit normal pointing into the volume and whose w is its distance, so a point `p` is on the inside of it when `dot(xyz, p) + w >= 0`.",
+      "fields": [
+        {
+          "name": "m_planes",
+          "offset": 0,
+          "kind": "array",
+          "elementKind": "struct",
+          "elementType": "Fenrir::Math::Vec4",
+          "length": 6,
+          "default": [
+            {},
+            {},
+            {},
+            {},
+            {},
+            {}
+          ]
+        },
+        {
+          "name": "m_count",
+          "offset": 96,
+          "kind": "u64",
+          "default": 0
+        }
+      ]
+    },
+    {
       "name": "Fenrir::Math::Mat4",
       "category": "bound-type",
       "role": "bound-type",
@@ -116,13 +155,6 @@
       "category": "bound-type",
       "role": "bound-type",
       "size": 8,
-      "alignment": 4
-    },
-    {
-      "name": "Fenrir::Math::Vec4",
-      "category": "bound-type",
-      "role": "bound-type",
-      "size": 16,
       "alignment": 4
     }
   ]

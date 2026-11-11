@@ -23,6 +23,8 @@ set(expected
     "C\\+\\+ saw a burst of 5 sparks sent from C#\\."
     # Sparks.cs: Expired, the event only C# defines.
     "Spark [0-9]+ burnt out\\."
+    # Culling.cs: the renderer's GPU culling switched off from C#, and what the cull passes drew read from C#.
+    "G: GPU culling off; [0-9]+ of [0-9]+ instances drawn\\."
 )
 foreach(line IN LISTS expected)
     if(NOT log MATCHES "${line}")

@@ -157,8 +157,8 @@ namespace ScriptingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Showcase";
-        scene.keyHelp = "R: reverse the boxes' spin. Space: a burst of sparks.";
-        scene.keys = {Fenrir::Key::R, Fenrir::Key::Space};
+        scene.keyHelp = "R: reverse the boxes' spin. Space: a burst of sparks. G: GPU culling off or on.";
+        scene.keys = {Fenrir::Key::R, Fenrir::Key::Space, Fenrir::Key::G};
         scene.camera.position = {0.0f, 4.0f, 16.0f};
         scene.spawn = Spawn;
         return scene;

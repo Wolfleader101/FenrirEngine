@@ -417,6 +417,10 @@ static_assert(sizeof(Fenrir::InstancedMeshRenderer) == 28 && alignof(Fenrir::Ins
               "Fenrir::InstancedMeshRenderer is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
+static_assert(sizeof(Fenrir::Math::Vec4) == 16 && alignof(Fenrir::Math::Vec4) == 4,
+              "Fenrir::Math::Vec4 is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
 static_assert(sizeof(Fenrir::Math::Vec2) == 8 && alignof(Fenrir::Math::Vec2) == 4,
               "Fenrir::Math::Vec2 is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");

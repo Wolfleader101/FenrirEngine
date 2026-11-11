@@ -37,7 +37,7 @@ public partial struct RendererStats
     /// <summary>
     /// `instancesDrawn` by the occlusion culling phase each was drawn in (ADR-0057): the first entry the MeshRenderers
     /// and copies drawn as visible last frame (every survivor of a camera without occlusion culling), the second those
-    /// drawn after the depth pyramid test showed them, so the two sum to `instancesDrawn`.
+    /// drawn after the Hi-Z pyramid test showed them, so the two sum to `instancesDrawn`.
     /// </summary>
     public DrawnByPhaseArray DrawnByPhase;
     /// <summary>Render passes run.</summary>
