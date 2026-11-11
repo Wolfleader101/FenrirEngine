@@ -92,6 +92,19 @@ namespace Fenrir
          * culls. Changeable later with Renderer::SetGpuCulling.
          */
         bool gpuCulling = true;
+        /**
+         * @brief How many pixels a level of detail's error may project to (ADR-0057): each camera's cull pass draws
+         * each copy of a mesh with levels (`MeshData::lods`) at the coarsest level whose error, scaled by the copy's
+         * largest axis scale and projected at its distance from the camera, is under this; 1 by default, so no level
+         * departs from full detail by a pixel. With `gpuCulling` off every copy draws level 0, for comparison.
+         */
+        float lodErrorPixels = 1.0f;
+        /**
+         * @brief The pixels a copy's bounding sphere's radius must project to for the cull pass to draw it at all
+         * (ADR-0057): smaller copies are dropped as if outside the camera. 0 by default, dropping none; off with
+         * `gpuCulling` off.
+         */
+        float minProjectedPixels = 0.0f;
         /** @brief How many shadow cascades the DirectionalLight has per camera (ADR-0050): 1 to 4, 4 by default. */
         std::uint32_t shadowCascades = 4;
         /**
@@ -129,8 +142,8 @@ namespace Fenrir
     };
 
     /**
-     * @brief What the renderer did in its last drawn frame (ADR-0023), except `instancesDrawn`, read back from the
-     * most recent frame that has left flight (ADR-0057).
+     * @brief What the renderer did in its last drawn frame (ADR-0023), except `instancesDrawn` and `drawnByLod`, read
+     * back from the most recent frame that has left flight (ADR-0057).
      */
     struct RendererStats
     {
@@ -150,6 +163,12 @@ namespace Fenrir
          * `instances`, the candidates this frame submitted. 0 until a frame has been read back.
          */
         std::uint32_t instancesDrawn = 0;
+        /**
+         * @brief `instancesDrawn` by the level of detail each was drawn at (ADR-0057): entry `i` the MeshRenderers
+         * and copies drawn at level `i` of their mesh (level 0 its full detail), the last entry those drawn at that
+         * level or any coarser, so the entries sum to `instancesDrawn`.
+         */
+        std::uint32_t drawnByLod[8] = {};
         /** @brief Render passes run. */
         std::uint32_t passes = 0;
         /**

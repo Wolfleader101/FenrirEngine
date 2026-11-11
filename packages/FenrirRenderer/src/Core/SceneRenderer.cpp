@@ -183,7 +183,8 @@ namespace Fenrir::Render
         {
             /**
              * @brief The view's first entry in the group table, how many it has, how many of `planes` are the view's
-             * (0 keeps every candidate: RendererConfig::gpuCulling off), and an unused word.
+             * (0 keeps every candidate: RendererConfig::gpuCulling off), and the view's first template's index in the
+             * frame's level table.
              */
             std::array<std::uint32_t, 4> groups{};
             /**
@@ -191,9 +192,20 @@ namespace Fenrir::Render
              * `dot(n, p) + d >= 0`): five for a camera, six for an orthographic view; the rest unused.
              */
             std::array<Math::Vec4, 6> planes{};
+            /** @brief The camera's position (LodView::position) and, in w, its LodView::pixelsPerUnit. */
+            Math::Vec4 camera{};
+            /**
+             * @brief The level selection's settings: the error pixels a level must be under, the pixels a copy's
+             * radius must reach (0 for none), the near distance (LodView::near), and 1 for a perspective view, 0 for
+             * an orthographic one (LodView::perspective). The first two are 0 with GPU culling off: level 0, nothing
+             * dropped.
+             */
+            Math::Vec4 lod{};
         };
-        static_assert(sizeof(CullJobBlock) == 112);
+        static_assert(sizeof(CullJobBlock) == 144);
         static_assert(offsetof(CullJobBlock, planes) == 16);
+        static_assert(offsetof(CullJobBlock, camera) == 112);
+        static_assert(offsetof(CullJobBlock, lod) == 128);
 
         /** @brief One entry of a view's indirection, as `Fenrir/DrawRecord.glsl` lays it: a record and a copy. */
         struct IndirectionEntry
@@ -886,7 +898,8 @@ namespace Fenrir::Render
                                                                  {1, ShaderBindingKind::StorageBuffer},
                                                                  {2, ShaderBindingKind::StorageBuffer},
                                                                  {3, ShaderBindingKind::StorageBuffer},
-                                                                 {4, ShaderBindingKind::StorageBuffer}}},
+                                                                 {4, ShaderBindingKind::StorageBuffer},
+                                                                 {5, ShaderBindingKind::StorageBuffer}}},
                                                                "Cull target");
         m_cullJobs = std::make_unique<BlockRing>(m_device, m_cullJobLayout, false, sizeof(CullJobBlock), "Cull jobs");
         m_cull = ReadBuiltin(BuiltinProgram::Cull, m_logger);
@@ -992,6 +1005,7 @@ namespace Fenrir::Render
         m_cullTargetGroups.Clear();
         m_cullJobs.reset();
         m_cullTemplates.ring.reset();
+        m_cullLevels.ring.reset();
         m_cullGroups.ring.reset();
         m_cullRings.clear();
         for (const CullReadback& readback : m_cullReadbacks)
@@ -1403,8 +1417,18 @@ namespace Fenrir::Render
         }
         if (!mesh.indices.empty())
         {
-            const std::span<const std::byte> indices = std::as_bytes(std::span(mesh.indices));
-            entry.indices = m_device.CreateBuffer({indices.size(), BufferUsage::Index}, indices, "Mesh indices");
+            // Level 0 then each coarser level back to back, so a run's commands draw any level from the one buffer,
+            // each from its first index (ADR-0057).
+            std::vector<std::uint32_t> indices = mesh.indices;
+            entry.levels.push_back({0, static_cast<std::uint32_t>(mesh.indices.size()), 0.0f});
+            for (const MeshLod& lod : mesh.lods)
+            {
+                entry.levels.push_back({static_cast<std::uint32_t>(indices.size()),
+                                        static_cast<std::uint32_t>(lod.indices.size()), lod.error});
+                indices.insert(indices.end(), lod.indices.begin(), lod.indices.end());
+            }
+            const std::span<const std::byte> bytes = std::as_bytes(std::span(indices));
+            entry.indices = m_device.CreateBuffer({bytes.size(), BufferUsage::Index}, bytes, "Mesh indices");
             entry.indexCount = static_cast<std::uint32_t>(mesh.indices.size());
         }
         ++m_stats.uploads;
@@ -2263,16 +2287,20 @@ namespace Fenrir::Render
         encoder.SetViewport(viewport);
         const PipelineEntry* current = nullptr;
         BindingGroupHandle material;
-        for (std::size_t r = 0; r < runs.size(); ++r)
+        // Each run's commands in the view's buffer: one per level of detail of its mesh, as PrepareCull laid them.
+        std::uint32_t command = 0;
+        for (const DrawRun& run : runs)
         {
-            const DrawRun& run = runs[r];
             const std::size_t i = run.first;
             const ResolvedDraw& draw = draws[i];
             const BindingGroupHandle group = groups[i];
+            const auto levels = static_cast<std::uint32_t>(draw.mesh->levels.size());
+            const std::uint32_t firstCommand = command;
+            command += levels;
             const PipelineEntry* pipeline = PipelineOf(draw, pass);
             if (pipeline == nullptr)
             {
-                // Not drawn in this pass (an item with no prepass draw): its command stays in the view's buffer.
+                // Not drawn in this pass (an item with no prepass draw): its commands stay in the view's buffer.
                 continue;
             }
             const bool newPipeline = pipeline != current;
@@ -2312,9 +2340,12 @@ namespace Fenrir::Render
             encoder.SetIndexBuffer(draw.mesh->indices, IndexFormat::UInt32);
             if (!commands.IsEmpty())
             {
-                // The run's command, counted into by the view's cull pass (ADR-0057): its instances read the view's
-                // indirection from the command's base instance, which Fenrir/Draw.glsl composes as a direct draw's.
-                encoder.DrawIndexedIndirect({.buffer = commands, .offset = r * sizeof(DrawIndexedIndirectCommand)});
+                // The run's commands, one per level of detail, counted into by the view's cull pass (ADR-0057), as
+                // one multi-draw: each command's instances read the view's indirection from its base instance, which
+                // Fenrir/Draw.glsl composes as a direct draw's.
+                encoder.DrawIndexedIndirect({.buffer = commands,
+                                             .offset = firstCommand * sizeof(DrawIndexedIndirectCommand),
+                                             .drawCount = levels});
                 continue;
             }
             // Each item reads its own record of the draw buffer, by its place in the draw list; an instance list's
@@ -2502,41 +2533,56 @@ namespace Fenrir::Render
     }
 
     SceneRenderer::CullView SceneRenderer::PrepareCull(RenderGraph& graph, std::uint64_t frameIndex, std::size_t view,
-                                                       const Math::Frustum& frustum,
+                                                       const Math::Frustum& frustum, const LodView& lod,
                                                        const std::vector<ResolvedDraw>& draws,
                                                        const std::vector<DrawRun>& runs,
                                                        std::vector<DrawIndexedIndirectCommand>& templates,
+                                                       std::vector<CullLevelEntry>& levels,
                                                        std::vector<CullGroupEntry>& groups)
     {
         CullView cull;
         cull.frustum = frustum;
+        cull.lod = lod;
         if (runs.empty() || m_cullPipeline.IsEmpty())
         {
             return cull;
         }
-        // Each run's template, with no instances until the pass counts them, and the base instance where its region
-        // of the indirection starts; and its groups, each culling up to 64 of its candidates, so none straddles runs.
+        // Each run's templates, one per level of detail of its mesh, contiguous, with no instances until the pass
+        // counts them, and the base instance where the level's region of the indirection starts, each region sized
+        // for the whole run, as any copy may land in any level; and its groups, each culling up to 64 of its
+        // candidates, so none straddles runs.
         cull.templateOffset = templates.size() * sizeof(DrawIndexedIndirectCommand);
+        cull.firstTemplate = static_cast<std::uint32_t>(templates.size());
         cull.firstGroup = static_cast<std::uint32_t>(groups.size());
         std::uint32_t candidates = 0;
-        for (std::size_t r = 0; r < runs.size(); ++r)
+        std::uint32_t entries = 0;
+        for (const DrawRun& run : runs)
         {
-            const DrawRun& run = runs[r];
             const ResolvedDraw& draw = draws[run.first];
             const std::uint32_t count = draw.instances.count == 0 ? run.count : draw.instances.count;
-            templates.push_back({.indexCount = draw.mesh->indexCount, .baseInstance = candidates});
+            const auto command = static_cast<std::uint32_t>(templates.size()) - cull.firstTemplate;
+            const auto levelCount = static_cast<std::uint32_t>(draw.mesh->levels.size());
+            for (std::uint32_t level = 0; level < levelCount; ++level)
+            {
+                const MeshLevel& meshLevel = draw.mesh->levels[level];
+                templates.push_back({.indexCount = meshLevel.indexCount,
+                                     .firstIndex = meshLevel.firstIndex,
+                                     .baseInstance = entries + level * count});
+                levels.push_back({.error = meshLevel.error, .level = level, .levels = levelCount});
+            }
             for (std::uint32_t first = 0; first < count; first += CullGroupSize)
             {
-                groups.push_back({.command = static_cast<std::uint32_t>(r),
+                groups.push_back({.command = command,
                                   .record = static_cast<std::uint32_t>(run.first),
                                   .count = count,
                                   .first = first});
             }
             candidates += count;
+            entries += count * levelCount;
         }
         cull.runs = static_cast<std::uint32_t>(runs.size());
         cull.candidates = candidates;
-        cull.templateBytes = runs.size() * sizeof(DrawIndexedIndirectCommand);
+        cull.templateBytes = (templates.size() - cull.firstTemplate) * sizeof(DrawIndexedIndirectCommand);
         cull.groups = static_cast<std::uint32_t>(groups.size()) - cull.firstGroup;
 
         // The view's command buffer and indirection, sized to this frame's runs and candidates, kept between frames and
@@ -2550,7 +2596,7 @@ namespace Fenrir::Render
         constexpr BufferUsage commandUsage =
             BufferUsage::Indirect | BufferUsage::Storage | BufferUsage::CopyDestination;
         rings.commands.Reserve(m_device, cull.templateBytes, commandUsage, "Cull commands");
-        rings.indirection.Reserve(m_device, std::size_t{candidates} * sizeof(IndirectionEntry), BufferUsage::Storage,
+        rings.indirection.Reserve(m_device, std::size_t{entries} * sizeof(IndirectionEntry), BufferUsage::Storage,
                                   "Cull indirection");
         cull.commands = rings.commands.ring->Current(frameIndex);
         cull.indirection = rings.indirection.ring->Current(frameIndex);
@@ -2563,21 +2609,26 @@ namespace Fenrir::Render
 
     void SceneRenderer::AddCullPasses(RenderGraph& graph, std::uint64_t frameIndex, const std::vector<CullView>& views,
                                       std::span<const DrawIndexedIndirectCommand> templates,
-                                      std::span<const CullGroupEntry> groups)
+                                      std::span<const CullLevelEntry> levels, std::span<const CullGroupEntry> groups)
     {
         if (templates.empty())
         {
             return;
         }
-        // The frame's templates and group table, grown by doubling, a copy per frame in flight.
+        // The frame's templates, level table and group table, grown by doubling, a copy per frame in flight.
         m_cullTemplates.Reserve(m_device, templates.size_bytes(), BufferUsage::CopySource, "Cull templates");
+        m_cullLevels.Reserve(m_device, levels.size_bytes(), BufferUsage::Storage, "Cull levels");
         m_cullGroups.Reserve(m_device, groups.size_bytes(), BufferUsage::Storage, "Cull groups");
         const BufferHandle templateBuffer = m_cullTemplates.ring->Current(frameIndex);
+        const BufferHandle levelBuffer = m_cullLevels.ring->Current(frameIndex);
         const BufferHandle groupBuffer = m_cullGroups.ring->Current(frameIndex);
         m_cullTemplates.ring->Write(frameIndex, 0, std::as_bytes(templates));
+        m_cullLevels.ring->Write(frameIndex, 0, std::as_bytes(levels));
         m_cullGroups.ring->Write(frameIndex, 0, std::as_bytes(groups));
         const GraphResource templateResource =
             graph.ImportBuffer("CullTemplates", templateBuffer, {m_cullTemplates.capacity, BufferUsage::CopySource});
+        const GraphResource levelResource =
+            graph.ImportBuffer("CullLevels", levelBuffer, {m_cullLevels.capacity, BufferUsage::Storage});
         const GraphResource groupResource =
             graph.ImportBuffer("CullGroups", groupBuffer, {m_cullGroups.capacity, BufferUsage::Storage});
         const BufferHandle records = m_drawBlocks->Buffer(frameIndex);
@@ -2594,22 +2645,26 @@ namespace Fenrir::Render
             {
                 continue;
             }
-            // The view's planes go with the job, or none when GPU culling is off, so the pass keeps every candidate
-            // and the draws keep their shape for comparison.
-            CullJobBlock job{{cull.firstGroup, cull.groups, 0, 0}};
+            // The view's planes go with the job, or none when GPU culling is off, so the pass keeps every candidate,
+            // draws every copy at level 0 and the draws keep their shape for comparison.
+            CullJobBlock job{{cull.firstGroup, cull.groups, 0, cull.firstTemplate}};
+            job.camera = Math::Vec4(cull.lod.position, cull.lod.pixelsPerUnit);
+            job.lod = Math::Vec4(0.0f, 0.0f, cull.lod.near, cull.lod.perspective ? 1.0f : 0.0f);
             if (m_gpuCulling)
             {
                 const std::span<const Math::Vec4> planes = cull.frustum.Planes();
                 job.groups[2] = static_cast<std::uint32_t>(planes.size());
                 std::ranges::copy(planes, job.planes.begin());
+                job.lod.x = m_lodErrorPixels;
+                job.lod.y = m_minProjectedPixels;
             }
             m_cullJobs->Write(frameIndex, v, BytesOf(job));
             const BindingGroupHandle targetGroup = m_cullTargetGroups.Get(
                 {BindingGroupKeyPart::Of(records), BindingGroupKeyPart::Of(groupBuffer),
                  BindingGroupKeyPart::Of(cull.commands), BindingGroupKeyPart::Of(cull.indirection),
-                 BindingGroupKeyPart::Of(m_instanceListBuffer)},
+                 BindingGroupKeyPart::Of(m_instanceListBuffer), BindingGroupKeyPart::Of(levelBuffer)},
                 frameIndex, [&] {
-                    std::array<BindingGroupEntry, 5> entries;
+                    std::array<BindingGroupEntry, 6> entries;
                     for (std::uint32_t binding = 0; binding < entries.size(); ++binding)
                     {
                         entries.at(binding).binding = binding;
@@ -2619,6 +2674,7 @@ namespace Fenrir::Render
                     entries[2].buffer = cull.commands;
                     entries[3].buffer = cull.indirection;
                     entries[4].buffer = m_instanceListBuffer;
+                    entries[5].buffer = levelBuffer;
                     return m_device.CreateBindingGroup({m_cullTargetLayout, {entries.begin(), entries.end()}},
                                                        "Cull target");
                 });
@@ -2630,6 +2686,7 @@ namespace Fenrir::Render
                     pass.CopySource(templateResource);
                     pass.CopyDestination(cull.commandsResource);
                     pass.StorageRead(groupResource);
+                    pass.StorageRead(levelResource);
                     pass.StorageRead(recordResource);
                     pass.StorageRead(copiesResource);
                     pass.StorageWrite(cull.commandsResource);
@@ -2670,21 +2727,30 @@ namespace Fenrir::Render
             return;
         }
         std::uint32_t drawn = 0;
-        for (const DrawIndexedIndirectCommand& command : commands)
+        std::array<std::uint32_t, LodLevelsCounted> byLod{};
+        for (std::size_t c = 0; c < commands.size(); ++c)
         {
-            drawn += command.instanceCount;
+            drawn += commands[c].instanceCount;
+            byLod.at(std::min<std::size_t>(readback.levels.at(c), LodLevelsCounted - 1)) += commands[c].instanceCount;
         }
         m_stats.instancesDrawn = drawn;
+        m_stats.drawnByLod = byLod;
     }
 
     void SceneRenderer::AddCullReadback(RenderGraph& graph, std::uint64_t frameIndex,
-                                        const std::vector<CullView>& views, std::size_t commandBytes)
+                                        const std::vector<CullView>& views, std::span<const CullLevelEntry> levels)
     {
         const std::size_t slots = std::max<std::size_t>(m_device.FramesInFlight(), 1);
         m_cullReadbacks.resize(slots);
         CullReadback& readback = m_cullReadbacks[static_cast<std::size_t>(frameIndex % slots)];
         readback.frame = frameIndex;
-        readback.commands = static_cast<std::uint32_t>(commandBytes / sizeof(DrawIndexedIndirectCommand));
+        readback.commands = static_cast<std::uint32_t>(levels.size());
+        readback.levels.clear();
+        for (const CullLevelEntry& level : levels)
+        {
+            readback.levels.push_back(level.level);
+        }
+        const std::size_t commandBytes = levels.size() * sizeof(DrawIndexedIndirectCommand);
         if (commandBytes == 0)
         {
             return;
@@ -2728,17 +2794,17 @@ namespace Fenrir::Render
             });
     }
 
-    const Math::Frustum& SceneRenderer::CullFrustumOf(const ViewRequest& request, const Math::Frustum& frustum)
+    SceneRenderer::CullCamera SceneRenderer::CullCameraOf(const ViewRequest& request, const Math::Frustum& frustum)
     {
         if (!m_cullingFrozen)
         {
-            return frustum;
+            return {frustum, request.position};
         }
         for (const FrozenCull& frozen : m_frozenCulls)
         {
             if (frozen.camera == request.camera)
             {
-                return frozen.frustum;
+                return {frozen.frustum, frozen.position};
             }
         }
         // The camera's first frozen frame keeps what it sees now, its corners unprojected from clip space: the near
@@ -2760,7 +2826,7 @@ namespace Fenrir::Render
                           glm::normalize(frozen.corners.at(corner) - request.position) * FrozenFarDistance;
         }
         m_frozenCulls.push_back(frozen);
-        return m_frozenCulls.back().frustum;
+        return {frozen.frustum, frozen.position};
     }
 
     const SceneRenderer::FrameGroup& SceneRenderer::FrameGroupFor(std::uint64_t frameIndex)
@@ -3148,6 +3214,7 @@ namespace Fenrir::Render
         // Each view's cull pass (ADR-0057): its templates and groups are gathered here and uploaded after the views.
         std::vector<CullView> culls;
         std::vector<DrawIndexedIndirectCommand> cullTemplates;
+        std::vector<CullLevelEntry> cullLevels;
         std::vector<CullGroupEntry> cullGroups;
 
         if (spotCount > 0)
@@ -3494,8 +3561,11 @@ namespace Fenrir::Render
             // Each draw's set 2 in the prepass: a Masked item's prepass group, else its material group.
             auto prepassGroups = std::make_shared<std::vector<BindingGroupHandle>>(*groups);
             std::vector<float> depth(draws->size(), 0.0f);
-            const Math::Frustum frustum =
-                CullFrustumOf(request, Math::Frustum::FromViewProjection(request.projection * request.view));
+            const CullCamera cullCamera =
+                CullCameraOf(request, Math::Frustum::FromViewProjection(request.projection * request.view));
+            const Math::Frustum& frustum = cullCamera.frustum;
+            // What the pass chooses levels of detail by (ADR-0057): the camera's position, frozen with the planes.
+            const LodView lod = LodViewOf(request.projection, request.viewport.height, cullCamera.position);
             std::uint32_t instances = 0;
             for (std::size_t i = 0; i < draws->size(); ++i)
             {
@@ -3523,11 +3593,12 @@ namespace Fenrir::Render
                              [&](std::size_t a, std::size_t b) { return depth[a] < depth[b]; });
             // Matching opaque and masked items merge into instanced draws (ADR-0051); transparent ones stay single,
             // in their depth order. The opaque runs are the view's cull pass's candidates (ADR-0057): DepthPrepass and
-            // Opaque draw each by its command in the view's command buffer, the prepass skipping the runs it has no
-            // pipeline for, reading the view's indirection through the view's own draw set.
+            // Opaque draw each by its commands in the view's command buffer, one per level of detail, the prepass
+            // skipping the runs it has no pipeline for, reading the view's indirection through the view's own draw
+            // set.
             auto opaqueRuns = std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *groups, *opaque, DrawPass::Main));
-            const CullView cull =
-                PrepareCull(graph, frameIndex, v, frustum, *draws, *opaqueRuns, cullTemplates, cullGroups);
+            const CullView cull = PrepareCull(graph, frameIndex, v, frustum, lod, *draws, *opaqueRuns, cullTemplates,
+                                              cullLevels, cullGroups);
             culls.push_back(cull);
             m_drawnViews.push_back({v, sceneColour, sceneDepth, sceneNormals, shadowAtlas, viewGroup, cull.commands,
                                     cull.indirection, cull.runs, cull.candidates});
@@ -3791,8 +3862,8 @@ namespace Fenrir::Render
                     encoder.Draw({.vertexCount = 3});
                 });
         }
-        AddCullPasses(graph, frameIndex, culls, cullTemplates, cullGroups);
-        AddCullReadback(graph, frameIndex, culls, cullTemplates.size() * sizeof(DrawIndexedIndirectCommand));
+        AddCullPasses(graph, frameIndex, culls, cullTemplates, cullLevels, cullGroups);
+        AddCullReadback(graph, frameIndex, culls, cullLevels);
         m_bloom->AddPasses(graph, frameIndex, blooms);
         m_sceneHistory->EndFrame();
         if (!cleared.contains(AssetKey{}))

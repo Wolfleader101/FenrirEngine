@@ -106,6 +106,7 @@ add_library(FenrirRendererCore STATIC
     src/Core/ColourGrading.hpp
     src/Core/ColourGrading.cpp
     src/Core/LensFlare.hpp
+    src/Core/LevelOfDetail.hpp
     src/Core/LensFlare.cpp
     src/Core/Tonemapping.hpp
     src/Core/Tonemapping.cpp

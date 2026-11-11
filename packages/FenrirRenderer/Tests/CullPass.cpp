@@ -1,11 +1,14 @@
 // The cull pass on the null backend through App::RunFrame (ADR-0057, culling tickets 03 and 04): each camera's Cull
 // pass, first in the frame, copies its runs' command templates over its command buffer and dispatches builtin:cull
 // once over its group table, its job block carrying the camera's planes; DepthPrepass and Opaque then draw each run
-// with one indirect draw of its command, reading the camera's indirection through the draw set, while every other pass
+// with one indirect draw of its commands, one per level of detail of its mesh, reading the camera's indirection
+// through the draw set, while every other pass
 // draws directly. An entity outside the camera is no candidate at all. The null backend runs no compute, so what it
 // shows is the templates, the group table, the planes and the draws, never the survivors. Ticket 05: a CullReadback
 // pass copies each camera's commands into the frame's slot of the readback ring, read FramesInFlight frames later into
-// instancesDrawn, and frozen culling keeps each camera's planes while its matrices follow it.
+// instancesDrawn, and frozen culling keeps each camera's planes while its matrices follow it. Ticket 07: a mesh with
+// levels of detail uploads them into one index buffer, each run gets a template per level, the job block carries the
+// camera's position and projection for choosing one, and drawnByLod sums the readback by level.
 
 #include <algorithm>
 #include <cmath>
@@ -14,6 +17,7 @@
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <numbers>
 #include <optional>
 #include <set>
 #include <span>
@@ -23,6 +27,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "Core/LevelOfDetail.hpp"
 #include "Device/CommandList.hpp"
 #include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/ShaderData.hpp"
@@ -884,5 +889,197 @@ TEST_CASE("While culling is frozen each view's Debug pass draws the frozen frust
     test.Frame();
     INFO("unfrozen, the edges go with the Debug pass");
     REQUIRE(DebugDraws(test).empty());
+    REQUIRE(test.messages->errors.empty());
+}
+
+namespace
+{
+    /** @brief The cube with two hand-made coarser levels: its first four triangles at error 0.1, its first two at 0.25.
+     */
+    Fenrir::MeshData ThreeLevelCube()
+    {
+        Fenrir::MeshData mesh = RendererTest::Cube();
+        mesh.lods.push_back({{mesh.indices.begin(), mesh.indices.begin() + 12}, 0.1f});
+        mesh.lods.push_back({{mesh.indices.begin(), mesh.indices.begin() + 6}, 0.25f});
+        return mesh;
+    }
+
+    /** @brief The float at byte `offset` of `bytes`. */
+    float FloatAt(const std::vector<std::byte>& bytes, std::size_t offset)
+    {
+        float value = 0.0f;
+        REQUIRE(offset + sizeof(value) <= bytes.size());
+        std::memcpy(&value, std::span(bytes).subspan(offset).data(), sizeof(value));
+        return value;
+    }
+
+    /** @brief A Cull pass's job block's camera (xyz, pixels per unit in w) and lod vectors, at 112 and 128 bytes. */
+    std::array<Fenrir::Math::Vec4, 2> JobLod(const RendererTestApp& test, const RecordedCull& cull)
+    {
+        const BindingGroupEntry job = RendererTest::EntryAt(test.Device(), cull.job, 0);
+        const std::vector<std::byte> bytes = RendererProbe::Bytes(test.Device(), job.buffer);
+        std::array<Fenrir::Math::Vec4, 2> vectors{};
+        for (std::size_t v = 0; v < 2; ++v)
+        {
+            for (int i = 0; i < 4; ++i)
+            {
+                vectors.at(v)[i] = FloatAt(bytes, job.offset + 112 + v * 16 + static_cast<std::size_t>(i) * 4);
+            }
+        }
+        return vectors;
+    }
+} // namespace
+
+TEST_CASE("A mesh of three levels uploads one index buffer of all three, writes three templates per run with their "
+          "first indices, and both passes draw each run as one multi-draw of three commands",
+          "[renderer][culling][lod]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    const Fenrir::MeshData data = ThreeLevelCube();
+    const auto mesh = test.Mesh(data);
+    const auto material = test.Material();
+    AddList(test, 10, mesh, material);
+    test.AddMeshRenderer(mesh, material);
+
+    test.Frame();
+    const std::vector<RecordedIndirectDraw> opaque = test.IndirectDraws("Opaque");
+    const std::vector<RecordedIndirectDraw> prepass = test.IndirectDraws("DepthPrepass");
+    INFO("one index buffer holds level 0's 36 indices, then level 1's 12, then level 2's 6");
+    REQUIRE(opaque.size() == 2);
+    const std::vector<std::byte> indices = RendererProbe::Bytes(test.Device(), opaque.front().indexBuffer);
+    REQUIRE(indices.size() == 54 * sizeof(std::uint32_t));
+    for (std::size_t i = 0; i < 36; ++i)
+    {
+        REQUIRE(RendererTest::UintAt(indices, i * 4) == data.indices[i]);
+    }
+    for (std::size_t i = 0; i < 12; ++i)
+    {
+        REQUIRE(RendererTest::UintAt(indices, (36 + i) * 4) == data.lods[0].indices[i]);
+    }
+    for (std::size_t i = 0; i < 6; ++i)
+    {
+        REQUIRE(RendererTest::UintAt(indices, (48 + i) * 4) == data.lods[1].indices[i]);
+    }
+
+    const RecordedCull cull = test.Culls().at(0);
+    const std::vector<std::byte> commands = RendererProbe::Bytes(test.Device(), CommandsOf(test, cull));
+    std::vector<CullGroup> groups = RendererTest::GroupsOf(test.Device(), cull);
+    INFO("two runs, each group naming its run's first command: 0 for one run, 3 for the other");
+    REQUIRE(groups.size() == 2);
+    std::ranges::sort(groups, [](const CullGroup& a, const CullGroup& b) { return a.command < b.command; });
+    REQUIRE(groups[0].command == 0);
+    REQUIRE(groups[1].command == 3);
+    std::uint32_t regionStart = 0;
+    for (const CullGroup& group : groups)
+    {
+        CAPTURE(group.command, group.count);
+        INFO("the run's three templates draw level 0, 1 and 2: their index counts and first indices, no instances");
+        const std::array<std::pair<std::uint32_t, std::uint32_t>, 3> levels{{{36, 0}, {12, 36}, {6, 48}}};
+        for (std::uint32_t level = 0; level < 3; ++level)
+        {
+            CAPTURE(level);
+            const std::size_t command = group.command + level;
+            REQUIRE(Word(commands, command, 0) == levels.at(level).first);
+            REQUIRE(Word(commands, command, 1) == 0);
+            REQUIRE(Word(commands, command, 2) == levels.at(level).second);
+            REQUIRE(Word(commands, command, 3) == 0);
+            INFO("and each level's region of the indirection is the whole run's candidates long");
+            REQUIRE(Word(commands, command, 4) == regionStart + level * group.count);
+        }
+        regionStart += 3 * group.count;
+    }
+    INFO("the indirection holds a region per level: 33 entries of eight bytes");
+    REQUIRE(RendererProbe::Bytes(test.Device(), IndirectionOf(test, cull)).size() >= 33 * 8);
+    INFO("each pass draws each run as one indirect draw of three commands from its first, the same in both");
+    REQUIRE(prepass.size() == 2);
+    for (std::size_t r = 0; r < 2; ++r)
+    {
+        CAPTURE(r);
+        REQUIRE(prepass[r].draw == opaque[r].draw);
+        REQUIRE(opaque[r].draw.drawCount == 3);
+        REQUIRE(opaque[r].draw.stride == CommandSize);
+        REQUIRE(opaque[r].draw.offset % (3 * CommandSize) == 0);
+    }
+    REQUIRE(opaque[0].draw.offset != opaque[1].draw.offset);
+    INFO("read through the group table, the draws still cover the eleven candidates");
+    std::uint32_t instances = 0;
+    for (const RecordedDraw& draw : test.Draws("Opaque"))
+    {
+        instances += draw.draw.instanceCount;
+    }
+    REQUIRE(instances == 11);
+    INFO("the readback slot holds the six commands, and the null backend's checks of the multi-draws pass");
+    REQUIRE(RendererProbe::CullReadbacks(test.renderer).front().commands == 6);
+    REQUIRE(RendererProbe::StaleUses(test.Device()).empty());
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("The job block carries the camera's position and pixels per unit, the level selection's pixels with GPU "
+          "culling on and zeros with it off, and the frozen position while frozen",
+          "[renderer][culling][lod][frozen]")
+{
+    RendererTestApp test;
+    Fenrir::Entity camera = test.AddCamera();
+    AddThreeRuns(test);
+
+    test.Frame();
+    // The null camera: at (0, 0, 5), 720 pixels high with a 60 degree field of view, so a unit at distance 1 covers
+    // 360 / tan(30 deg) pixels, and its near plane a tenth away.
+    const float pixelsPerUnit = 360.0f / std::tan(std::numbers::pi_v<float> / 6.0f);
+    std::array<Fenrir::Math::Vec4, 2> job = JobLod(test, test.Culls().at(0));
+    INFO("the camera's position, and pixels per unit in w");
+    REQUIRE(Near(job[0], Fenrir::Math::Vec4(0.0f, 0.0f, 5.0f, pixelsPerUnit)));
+    INFO("a pixel of error, no least size, the near plane, and a perspective view");
+    REQUIRE(Near(job[1], Fenrir::Math::Vec4(1.0f, 0.0f, 0.1f, 1.0f)));
+
+    test.renderer.SetGpuCulling(false);
+    test.Frame();
+    job = JobLod(test, test.Culls().at(0));
+    INFO("with GPU culling off, no error is allowed under the threshold, so every copy draws level 0, and nothing "
+         "is dropped for its size");
+    REQUIRE(Near(job[0], Fenrir::Math::Vec4(0.0f, 0.0f, 5.0f, pixelsPerUnit)));
+    REQUIRE(Near(job[1], Fenrir::Math::Vec4(0.0f, 0.0f, 0.1f, 1.0f)));
+
+    test.renderer.SetGpuCulling(true);
+    test.renderer.SetCullingFrozen(true);
+    test.Frame();
+    camera.GetComponent<Fenrir::Transform>().pos = {3.0f, 0.0f, 5.0f};
+    test.Frame();
+    INFO("frozen, the job keeps the position the camera froze at as it moves");
+    REQUIRE(Near(JobLod(test, test.Culls().at(0))[0], Fenrir::Math::Vec4(0.0f, 0.0f, 5.0f, pixelsPerUnit)));
+    test.renderer.SetCullingFrozen(false);
+    test.Frame();
+    INFO("unfrozen, it follows the camera again");
+    REQUIRE(Near(JobLod(test, test.Culls().at(0))[0], Fenrir::Math::Vec4(3.0f, 0.0f, 5.0f, pixelsPerUnit)));
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("drawnByLod sums the counts read back by each command's level of detail, and with instancesDrawn",
+          "[renderer][culling][lod][readback]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    const auto mesh = test.Mesh(ThreeLevelCube());
+    const auto material = test.Material();
+    AddList(test, 10, mesh, material);
+    test.AddMeshRenderer(mesh, material);
+
+    test.Frame();
+    // The null backend runs no compute, so the counts are written here as the pass would have left them: of the
+    // list's ten copies, four at level 0, three at level 1 and two at level 2, and the lone cube at level 1.
+    const BufferHandle slot = RendererProbe::CullReadbacks(test.renderer).front().buffer;
+    for (const auto [command, count] : {std::pair{0, 4u}, std::pair{1, 3u}, std::pair{2, 2u}, std::pair{4, 1u}})
+    {
+        const std::uint32_t kept = count;
+        REQUIRE(test.Device().WriteBuffer(slot, static_cast<std::size_t>(command) * CommandSize + 4,
+                                          std::as_bytes(std::span(&kept, 1))));
+    }
+    test.Frame();
+    test.Frame();
+    INFO("two frames later: ten drawn, four at level 0, four at level 1, two at level 2 and none coarser");
+    const Fenrir::RendererStats stats = test.renderer.Stats();
+    REQUIRE(stats.instancesDrawn == 10);
+    REQUIRE(std::ranges::equal(stats.drawnByLod, std::array<std::uint32_t, 8>{4, 4, 2, 0, 0, 0, 0, 0}));
     REQUIRE(test.messages->errors.empty());
 }
