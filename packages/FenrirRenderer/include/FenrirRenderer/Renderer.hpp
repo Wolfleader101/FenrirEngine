@@ -271,6 +271,14 @@ namespace Fenrir
         void SetCullingFrozen(bool on);
 
         /**
+         * @brief Sets the level-of-detail thresholds (RendererConfig::lodErrorPixels and minProjectedPixels,
+         * ADR-0057) from the next frame: each copy of a mesh with levels draws at the coarsest level whose projected
+         * error is under `lodErrorPixels` pixels, and a copy whose projected radius is under `minProjectedPixels` is
+         * dropped, 0 dropping none. An invalid owner does nothing.
+         */
+        void SetLodSelection(float lodErrorPixels, float minProjectedPixels);
+
+        /**
          * @brief Sets how many SpotLights may cast shadows (RendererConfig::spotShadowBudget, ADR-0050) from the next
          * frame, which makes the spot shadow atlas again at the new budget's size. An invalid owner does nothing.
          */
@@ -350,6 +358,7 @@ namespace Fenrir
         static void SetClusteredLights(App& app, bool on);
         static void SetGpuCulling(App& app, bool on);
         static void SetCullingFrozen(App& app, bool on);
+        static void SetLodSelection(App& app, float lodErrorPixels, float minProjectedPixels);
         static void SetSpotShadowBudget(App& app, std::uint32_t budget);
         static void SetPointShadowBudget(App& app, std::uint32_t budget);
         [[nodiscard]] static std::optional<Math::Ray> ScreenPointToRay(App& app, const Entity& camera,

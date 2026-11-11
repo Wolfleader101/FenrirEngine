@@ -397,6 +397,35 @@ TEST_CASE("UV seams stay where they were", "[assets][lods]")
     REQUIRE(Triangles(result.lods.back().indices) < Triangles(sphere.indices) / 4);
 }
 
+TEST_CASE("With lockSeams off the chain goes on past the seam that stops the locked one", "[assets][lods]")
+{
+    const MeshData sphere = UvSphere(24, 48);
+    Fenrir::LodSettings settings;
+    settings.maxLevels = 8;
+    settings.minTriangles = 4;
+    const MeshData locked = Fenrir::GenerateLods(sphere, settings);
+    settings.lockSeams = false;
+    const MeshData unlocked = Fenrir::GenerateLods(sphere, settings);
+    INFO("the sphere simplifies either way, so there are chains to compare");
+    REQUIRE_FALSE(locked.lods.empty());
+    REQUIRE_FALSE(unlocked.lods.empty());
+
+    const std::set<std::uint32_t> seam = SeamVertices(sphere, sphere.indices);
+    INFO("the unlocked chain's last level names fewer of the seam's 46 vertices: the seam shortened along itself");
+    const std::set<std::uint32_t> left = SeamVertices(sphere, unlocked.lods.back().indices);
+    REQUIRE(left.size() < seam.size());
+    INFO("but only seam vertices, since a seam's two sides collapse together: no vertex crossed to the other side");
+    REQUIRE(std::includes(seam.begin(), seam.end(), left.begin(), left.end()));
+    INFO("and with the seam free the chain reaches fewer triangles than the locked chain, which stalls on it");
+    REQUIRE(Triangles(unlocked.lods.back().indices) < Triangles(locked.lods.back().indices));
+    for (const MeshLod& lod : unlocked.lods)
+    {
+        INFO("every level still indexes the sphere's own vertices");
+        REQUIRE(std::all_of(lod.indices.begin(), lod.indices.end(),
+                            [&](std::uint32_t index) { return index < sphere.positions.size(); }));
+    }
+}
+
 TEST_CASE("Adding a mesh refuses a malformed level of detail, naming it", "[assets][lods]")
 {
     const auto refusal = [](MeshData mesh) {

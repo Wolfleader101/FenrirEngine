@@ -117,8 +117,9 @@ namespace Fenrir
         result.indices = OptimisedForVertexCache(mesh.indices, vertices);
 
         const Attributes attributes = CollectAttributes(mesh);
+        // Unlocked, the simplifier's own seam rule holds: a seam's two sides collapse together or not at all.
         const std::vector<unsigned char> locks =
-            attributes.weights.empty() ? std::vector<unsigned char>{} : SeamLocks(mesh);
+            attributes.weights.empty() || !settings.lockSeams ? std::vector<unsigned char>{} : SeamLocks(mesh);
         const float scale = meshopt_simplifyScale(positions, vertices, PositionStride);
 
         // The levels are reserved up front so `previous` stays valid as they are appended.
@@ -153,8 +154,8 @@ namespace Fenrir
                 count = meshopt_simplifyWithAttributes(
                     simplified.data(), previous->data(), previous->size(), positions, vertices, PositionStride,
                     attributes.values.data(), attributes.weights.size() * sizeof(float), attributes.weights.data(),
-                    attributes.weights.size(), locks.data(), targetTriangles * 3, std::numeric_limits<float>::max(), 0,
-                    &relativeError);
+                    attributes.weights.size(), locks.empty() ? nullptr : locks.data(), targetTriangles * 3,
+                    std::numeric_limits<float>::max(), 0, &relativeError);
             }
             simplified.resize(count);
 

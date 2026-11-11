@@ -95,6 +95,13 @@ namespace Fenrir
         std::uint32_t maxLevels = 4;
         /** @brief No level is coarser than this many triangles; a level already at or below it is the last. */
         std::uint32_t minTriangles = 32;
+        /**
+         * @brief Whether every vertex on an attribute seam (a position several vertices share: a hard edge, a UV
+         * island's border) is locked where it is. Off, meshoptimizer still keeps a seam's two sides together, so no
+         * crack opens, but the seam itself may collapse along its length: a mesh of many small UV islands, such as a
+         * scanned rock, stalls at a few hundred triangles locked and goes on to a few dozen unlocked.
+         */
+        bool lockSeams = true;
     };
 
     /**
@@ -146,8 +153,9 @@ namespace Fenrir
      * @brief `mesh` with its levels of detail made by meshoptimizer (ADR-0057): each level aims at `settings.ratio` of
      * the previous level's triangles, and the chain stops at `settings.maxLevels`, when a level would start at or
      * below `settings.minTriangles`, or when simplifying saves less than a tenth of the triangles. Where the mesh has
-     * normals or `uv0` they weigh in the error, and a vertex on an attribute seam (a position several vertices share)
-     * is locked so seams stay where they were; a mesh with neither simplifies by position alone. Each level's `error`
+     * normals or `uv0` they weigh in the error, and with `settings.lockSeams` a vertex on an attribute seam (a position
+     * several vertices share) is locked so seams stay where they were; a mesh with neither simplifies by position
+     * alone. Each level's `error`
      * is the sum, over the steps that led to it, of meshoptimizer's error scaled to the mesh's local units: a bound on
      * its departure from full detail, strictly growing. The mesh's own `indices` and each
      * level come back reordered for the GPU's vertex cache; every stream, the submeshes, the bounds and the skin are

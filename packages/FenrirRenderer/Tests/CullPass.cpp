@@ -1055,6 +1055,26 @@ TEST_CASE("The job block carries the camera's position and pixels per unit, the 
     REQUIRE(test.messages->errors.empty());
 }
 
+TEST_CASE("SetLodSelection changes the job block's two thresholds from the next frame", "[renderer][culling][lod]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    AddThreeRuns(test);
+
+    test.Frame();
+    INFO("installed with the config's defaults: a pixel of error and no least size");
+    REQUIRE(Near(JobLod(test, test.Culls().at(0))[1], Fenrir::Math::Vec4(1.0f, 0.0f, 0.1f, 1.0f)));
+    test.renderer.SetLodSelection(2.5f, 3.0f);
+    test.Frame();
+    INFO("the next frame's job carries the new thresholds, with the near plane and the projection as they were");
+    REQUIRE(Near(JobLod(test, test.Culls().at(0))[1], Fenrir::Math::Vec4(2.5f, 3.0f, 0.1f, 1.0f)));
+    INFO("the App& static answers as the owner");
+    Fenrir::Renderer::SetLodSelection(test.app, 0.5f, 0.0f);
+    test.Frame();
+    REQUIRE(Near(JobLod(test, test.Culls().at(0))[1], Fenrir::Math::Vec4(0.5f, 0.0f, 0.1f, 1.0f)));
+    REQUIRE(test.messages->errors.empty());
+}
+
 TEST_CASE("drawnByLod sums the counts read back by each command's level of detail, and with instancesDrawn",
           "[renderer][culling][lod][readback]")
 {
