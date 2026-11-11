@@ -994,6 +994,11 @@ namespace Fenrir::Render
         m_cullTemplates.ring.reset();
         m_cullGroups.ring.reset();
         m_cullRings.clear();
+        for (const CullReadback& readback : m_cullReadbacks)
+        {
+            m_device.Destroy(readback.buffer);
+        }
+        m_cullReadbacks.clear();
         m_device.Destroy(m_noIndirection);
         m_device.Destroy(m_cullPipeline);
         m_device.Destroy(m_cullJobLayout);
@@ -2645,6 +2650,119 @@ namespace Fenrir::Render
         }
     }
 
+    void SceneRenderer::ReadCulled(std::uint64_t frameIndex)
+    {
+        const std::size_t slots = std::max<std::size_t>(m_device.FramesInFlight(), 1);
+        if (m_cullReadbacks.size() != slots || frameIndex < slots)
+        {
+            return;
+        }
+        // The slot this frame will fill again holds the frame FramesInFlight ago, the most recent to have left
+        // flight; one with no runs counts 0, and a slot that frame did not fill leaves the last count standing.
+        const CullReadback& readback = m_cullReadbacks[static_cast<std::size_t>(frameIndex % slots)];
+        if (readback.frame != frameIndex - slots)
+        {
+            return;
+        }
+        std::vector<DrawIndexedIndirectCommand> commands(readback.commands);
+        if (!commands.empty() && !m_device.ReadBuffer(readback.buffer, 0, std::as_writable_bytes(std::span(commands))))
+        {
+            return;
+        }
+        std::uint32_t drawn = 0;
+        for (const DrawIndexedIndirectCommand& command : commands)
+        {
+            drawn += command.instanceCount;
+        }
+        m_stats.instancesDrawn = drawn;
+    }
+
+    void SceneRenderer::AddCullReadback(RenderGraph& graph, std::uint64_t frameIndex,
+                                        const std::vector<CullView>& views, std::size_t commandBytes)
+    {
+        const std::size_t slots = std::max<std::size_t>(m_device.FramesInFlight(), 1);
+        m_cullReadbacks.resize(slots);
+        CullReadback& readback = m_cullReadbacks[static_cast<std::size_t>(frameIndex % slots)];
+        readback.frame = frameIndex;
+        readback.commands = static_cast<std::uint32_t>(commandBytes / sizeof(DrawIndexedIndirectCommand));
+        if (commandBytes == 0)
+        {
+            return;
+        }
+        // The slot was read at the frame's start, so it can be made again now without losing a frame's count.
+        constexpr BufferUsage usage = BufferUsage::CopyDestination | BufferUsage::Readback;
+        if (readback.buffer.IsEmpty() || readback.capacity < commandBytes)
+        {
+            m_device.Destroy(readback.buffer);
+            readback.capacity = std::max(commandBytes, readback.capacity * 2);
+            readback.buffer = m_device.CreateBuffer({readback.capacity, usage}, {}, "Cull readback");
+        }
+        const GraphResource resource = graph.ImportBuffer("CullReadback", readback.buffer, {readback.capacity, usage});
+        // Each view's commands at its templates' offset, so the slot reads as the frame's template ring did, with
+        // the counts the passes left: last in the frame, after every pass that reads the commands.
+        std::vector<CullView> copied;
+        for (const CullView& cull : views)
+        {
+            if (!cull.commands.IsEmpty())
+            {
+                copied.push_back(cull);
+            }
+        }
+        graph.AddPass(
+            "CullReadback", RenderStage::Overlay, QueueKind::Compute,
+            [=](PassBuilder& pass) {
+                for (const CullView& cull : copied)
+                {
+                    pass.CopySource(cull.commandsResource);
+                }
+                pass.CopyDestination(resource);
+            },
+            [copied, destination = readback.buffer](PassContext& context) {
+                for (const CullView& cull : copied)
+                {
+                    context.Encoder().CopyBuffer({.source = cull.commands,
+                                                  .destination = destination,
+                                                  .destinationOffset = cull.templateOffset,
+                                                  .size = cull.templateBytes});
+                }
+            });
+    }
+
+    const Math::Frustum& SceneRenderer::CullFrustumOf(const ViewRequest& request, const Math::Frustum& frustum)
+    {
+        if (!m_cullingFrozen)
+        {
+            return frustum;
+        }
+        for (const FrozenCull& frozen : m_frozenCulls)
+        {
+            if (frozen.camera == request.camera)
+            {
+                return frozen.frustum;
+            }
+        }
+        // The camera's first frozen frame keeps what it sees now, its corners unprojected from clip space: the near
+        // ones at depth 1, the far ones at depth 0, or, for a perspective view whose far plane is at infinity (w of 0
+        // there), a fixed way along each near corner's ray from the camera.
+        FrozenCull frozen{request.camera, frustum, request.position};
+        const Math::Mat4 inverse = glm::inverse(request.projection * request.view);
+        for (std::size_t corner = 0; corner < 4; ++corner)
+        {
+            const float x = (corner & 1) != 0 ? 1.0f : -1.0f;
+            const float y = (corner & 2) != 0 ? 1.0f : -1.0f;
+            const Math::Vec4 near = inverse * Math::Vec4(x, y, 1.0f, 1.0f);
+            const Math::Vec4 far = inverse * Math::Vec4(x, y, 0.0f, 1.0f);
+            frozen.corners.at(corner) = Math::Vec3(near) / near.w;
+            frozen.corners.at(corner + 4) =
+                std::abs(far.w) > 1e-6f
+                    ? Math::Vec3(far) / far.w
+                    : request.position +
+                          glm::normalize(frozen.corners.at(corner) - request.position) * FrozenFarDistance;
+        }
+        m_frozenCulls.push_back(frozen);
+        return m_frozenCulls.back().frustum;
+    }
+
     const SceneRenderer::FrameGroup& SceneRenderer::FrameGroupFor(std::uint64_t frameIndex)
     {
         const BufferHandle block = m_frameBlocks->Buffer(frameIndex);
@@ -2842,6 +2960,7 @@ namespace Fenrir::Render
         m_stats.skinnedDraws = 0;
         m_stats.shadowDraws = 0;
         m_drawnViews.clear();
+        ReadCulled(frame.frameIndex);
         PackInstanceLists();
         m_skyImages->AddPasses(graph);
         m_skyLighting->AddPasses(graph, SkySourceOf(m_frame.lighting));
@@ -3369,13 +3488,14 @@ namespace Fenrir::Render
             // Opaque items in draw-list order and transparent ones back to front by the view-space depth of their sort
             // points, the farthest (most negative view z) first; either kind outside the view's frustum, by its world
             // bounds (a list's the box around every copy), is left out of the view (ADR-0057): the coarse cull by
-            // entity, which the cull pass then refines by copy.
+            // entity, which the cull pass then refines by copy. Frozen, the frustum is the camera's when it froze.
             auto opaque = std::make_shared<std::vector<std::size_t>>();
             auto transparent = std::make_shared<std::vector<std::size_t>>();
             // Each draw's set 2 in the prepass: a Masked item's prepass group, else its material group.
             auto prepassGroups = std::make_shared<std::vector<BindingGroupHandle>>(*groups);
             std::vector<float> depth(draws->size(), 0.0f);
-            const Math::Frustum frustum = Math::Frustum::FromViewProjection(request.projection * request.view);
+            const Math::Frustum frustum =
+                CullFrustumOf(request, Math::Frustum::FromViewProjection(request.projection * request.view));
             std::uint32_t instances = 0;
             for (std::size_t i = 0; i < draws->size(); ++i)
             {
@@ -3672,6 +3792,7 @@ namespace Fenrir::Render
                 });
         }
         AddCullPasses(graph, frameIndex, culls, cullTemplates, cullGroups);
+        AddCullReadback(graph, frameIndex, culls, cullTemplates.size() * sizeof(DrawIndexedIndirectCommand));
         m_bloom->AddPasses(graph, frameIndex, blooms);
         m_sceneHistory->EndFrame();
         if (!cleared.contains(AssetKey{}))

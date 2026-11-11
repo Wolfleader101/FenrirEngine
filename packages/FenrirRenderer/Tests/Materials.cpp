@@ -115,9 +115,9 @@ TEST_CASE("Opaque and masked items test the prepass's depth for equality; alpha-
     REQUIRE(std::count(blends.begin(), blends.end(), BlendMode::Alpha) == 1);
     REQUIRE(std::count(blends.begin(), blends.end(), BlendMode::Additive) == 1);
     INFO("Transparent runs after Background, before Output");
-    REQUIRE(
-        RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)) ==
-        std::vector<std::string>{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background", "Transparent", "Output"});
+    REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)) ==
+            std::vector<std::string>{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background", "Transparent", "Output",
+                                     "CullReadback"});
     INFO("nothing was logged as an error");
     REQUIRE(test.messages->errors.empty());
 }

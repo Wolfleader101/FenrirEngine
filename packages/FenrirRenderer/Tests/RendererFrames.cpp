@@ -102,7 +102,7 @@ TEST_CASE("Stats report the last frame's draws, passes and uploads", "[renderer]
     REQUIRE(stats.instances == 2);
     INFO("one view runs Cull, DepthPrepass, Opaque, Background, its bloom's six downsamples, five upsamples and "
          "composite, and Output, after the first frame's BRDF lookup table");
-    REQUIRE(stats.passes == 18);
+    REQUIRE(stats.passes == 19);
     INFO("the shared mesh and material were each uploaded once");
     REQUIRE(stats.uploads == 2);
 }

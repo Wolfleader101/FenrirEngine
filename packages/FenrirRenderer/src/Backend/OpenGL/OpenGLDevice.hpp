@@ -90,6 +90,8 @@ namespace Fenrir::Graphics
                                                            std::string_view label) override;
 
         bool WriteBuffer(BufferHandle buffer, std::size_t offset, std::span<const std::byte> bytes) override;
+        /** @copydoc GraphicsDevice::ReadBuffer Reads with glGetNamedBufferSubData. */
+        bool ReadBuffer(BufferHandle buffer, std::size_t offset, std::span<std::byte> bytes) override;
         /** @copydoc GraphicsDevice::WriteTexture Texels of the wrong size for that level are refused, logged. */
         bool WriteTexture(TextureHandle texture, std::uint32_t mipLevel, std::uint32_t layer,
                           std::span<const std::byte> texels) override;
@@ -125,6 +127,10 @@ namespace Fenrir::Graphics
         {
             std::uint32_t name = 0;
             std::size_t size = 0;
+            BufferUsage usage = BufferUsage::None;
+            /** @brief The frame it was made, last written, copied into or declared StorageWrite in: ReadBuffer waits
+             * it out. */
+            std::uint64_t writtenFrame = 0;
         };
 
         /** @brief A GL texture: its name (0 for the backbuffer, the default framebuffer) and what it was made as. */
@@ -270,7 +276,7 @@ namespace Fenrir::Graphics
          */
         void MakeVisible(std::uint32_t bits);
         /** @brief The live buffer a declared use names, else null (for a texture's use too). */
-        [[nodiscard]] const GlBuffer* BufferOf(const PassResourceUse& use);
+        [[nodiscard]] GlBuffer* BufferOf(const PassResourceUse& use);
         void Execute(const CmdCopyBuffer& command);
 
         /**
@@ -304,9 +310,11 @@ namespace Fenrir::Graphics
         [[nodiscard]] Texels ReadTexels(TextureHandle texture, std::uint32_t mipLevel = 0);
         /** @brief For GlProbe: the GL name behind a live buffer, else 0. */
         [[nodiscard]] std::uint32_t GlName(BufferHandle buffer);
-        /** @brief For GlProbe: every byte of a live buffer as GL holds it now, waiting for the GPU; empty for a stale
-         * one. */
-        [[nodiscard]] std::vector<std::byte> ReadBuffer(BufferHandle buffer);
+        /**
+         * @brief For GlProbe: every byte of a live buffer as GL holds it now, whatever its usage, waiting for the GPU
+         * as ReadBuffer never does; empty for a stale one.
+         */
+        [[nodiscard]] std::vector<std::byte> ReadBufferNow(BufferHandle buffer);
         /** @brief For GlProbe: the GL name behind a live texture, else 0. */
         [[nodiscard]] std::uint32_t GlName(TextureHandle texture);
         /** @brief For GlProbe: whether `name` is a GL buffer object, as GL sees it now. */

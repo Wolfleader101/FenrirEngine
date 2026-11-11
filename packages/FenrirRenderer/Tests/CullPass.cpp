@@ -3,7 +3,9 @@
 // once over its group table, its job block carrying the camera's planes; DepthPrepass and Opaque then draw each run
 // with one indirect draw of its command, reading the camera's indirection through the draw set, while every other pass
 // draws directly. An entity outside the camera is no candidate at all. The null backend runs no compute, so what it
-// shows is the templates, the group table, the planes and the draws, never the survivors.
+// shows is the templates, the group table, the planes and the draws, never the survivors. Ticket 05: a CullReadback
+// pass copies each camera's commands into the frame's slot of the readback ring, read FramesInFlight frames later into
+// instancesDrawn, and frozen culling keeps each camera's planes while its matrices follow it.
 
 #include <algorithm>
 #include <cmath>
@@ -14,6 +16,7 @@
 #include <iterator>
 #include <optional>
 #include <set>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -597,4 +600,289 @@ TEST_CASE("An entity outside the camera is left out of the view's candidates on 
         REQUIRE(test.renderer.Stats().instances == 11);
     }
     REQUIRE(RendererProbe::StaleUses(test.Device()).empty());
+}
+
+namespace
+{
+    /** @brief The last frame's CullReadback pass: its declared uses and its copies. */
+    struct RecordedReadback
+    {
+        PassDesc pass;
+        std::vector<CmdCopyBuffer> copies;
+    };
+
+    /** @brief The CullReadback passes the device received last frame, in order. */
+    std::vector<RecordedReadback> ReadbacksOf(const RendererTestApp& test)
+    {
+        std::vector<RecordedReadback> readbacks;
+        bool inPass = false;
+        for (const CommandList& list : RendererProbe::Submitted(test.renderer))
+        {
+            for (const Command& command : list.commands)
+            {
+                if (const auto* begin = std::get_if<CmdBeginPass>(&command))
+                {
+                    inPass = begin->pass.label == "CullReadback";
+                    if (inPass)
+                    {
+                        readbacks.push_back({begin->pass, {}});
+                    }
+                }
+                else if (const auto* copy = std::get_if<CmdCopyBuffer>(&command); inPass && copy != nullptr)
+                {
+                    readbacks.back().copies.push_back(*copy);
+                }
+            }
+        }
+        return readbacks;
+    }
+
+    /** @brief The view block bytes a draw's set 1 binds: its matrices first (view, projection, viewProjection). */
+    std::vector<std::byte> ViewMatrices(const RendererTestApp& test, const RecordedIndirectDraw& draw)
+    {
+        const BindingGroupEntry block = RendererTest::EntryAt(test.Device(), draw.groups.at(1), 0);
+        const std::vector<std::byte> bytes = RendererProbe::Bytes(test.Device(), block.buffer);
+        constexpr std::size_t matrices = 3 * sizeof(Fenrir::Math::Mat4);
+        REQUIRE(block.offset + matrices <= bytes.size());
+        return {bytes.begin() + static_cast<std::ptrdiff_t>(block.offset),
+                bytes.begin() + static_cast<std::ptrdiff_t>(block.offset + matrices)};
+    }
+
+    /** @brief Whether every plane of `a` is Near its counterpart in `b`. */
+    bool SamePlanes(const std::vector<Fenrir::Math::Vec4>& a, std::span<const Fenrir::Math::Vec4> b)
+    {
+        if (a.size() != b.size())
+        {
+            return false;
+        }
+        for (std::size_t p = 0; p < a.size(); ++p)
+        {
+            if (!Near(a[p], b[p]))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** @brief The last frame's Debug passes' non-indexed draws, each with the pipeline it drew with. */
+    std::vector<std::pair<PipelineHandle, CmdDraw>> DebugDraws(const RendererTestApp& test)
+    {
+        std::vector<std::pair<PipelineHandle, CmdDraw>> draws;
+        bool inDebug = false;
+        PipelineHandle pipeline;
+        for (const CommandList& list : RendererProbe::Submitted(test.renderer))
+        {
+            for (const Command& command : list.commands)
+            {
+                if (const auto* begin = std::get_if<CmdBeginPass>(&command))
+                {
+                    inDebug = begin->pass.label == "Debug";
+                }
+                else if (const auto* set = std::get_if<CmdSetPipeline>(&command))
+                {
+                    pipeline = set->pipeline;
+                }
+                else if (const auto* draw = std::get_if<CmdDraw>(&command); inDebug && draw != nullptr)
+                {
+                    draws.emplace_back(pipeline, *draw);
+                }
+            }
+        }
+        return draws;
+    }
+} // namespace
+
+TEST_CASE("Each camera's command buffer is copied into the frame's slot of the readback ring once a frame, last in "
+          "the frame",
+          "[renderer][culling][readback]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    test.AddCamera({0.0f, 0.0f, 10.0f}).GetComponent<Fenrir::Camera>().viewport = {0.5f, 0.0f, 0.5f, 1.0f};
+    AddThreeRuns(test);
+
+    test.Frame();
+    const std::vector<std::string> passes = RendererTest::PassesIn(RendererProbe::Submitted(test.renderer));
+    INFO("one CullReadback pass, after both cameras' Output passes");
+    REQUIRE(std::ranges::count(passes, "CullReadback") == 1);
+    const auto readbackAt = std::ranges::find(passes, "CullReadback") - passes.begin();
+    const auto lastOutputAt = passes.rend() - std::ranges::find(passes.rbegin(), passes.rend(), "Output") - 1;
+    REQUIRE(readbackAt > lastOutputAt);
+    const std::vector<RecordedReadback> readbacks = ReadbacksOf(test);
+    REQUIRE(readbacks.size() == 1);
+    const RecordedReadback& readback = readbacks.front();
+    const std::vector<RendererProbe::CullBuffers> culls = RendererProbe::Culls(test.renderer);
+    REQUIRE(culls.size() == 2);
+    INFO("one copy per camera: its three commands, from its command buffer, at its templates' offset in the slot");
+    REQUIRE(readback.copies.size() == 2);
+    const BufferHandle slot = readback.copies.front().destination;
+    REQUIRE(RendererProbe::Label(test.Device(), slot) == "Cull readback");
+    for (std::size_t c = 0; c < 2; ++c)
+    {
+        CAPTURE(c);
+        REQUIRE(readback.copies[c].source == culls[c].commands);
+        REQUIRE(readback.copies[c].sourceOffset == 0);
+        REQUIRE(readback.copies[c].destination == slot);
+        REQUIRE(readback.copies[c].destinationOffset == c * 3 * CommandSize);
+        REQUIRE(readback.copies[c].size == 3 * CommandSize);
+        INFO("the pass declares reading each command buffer as a copy's source");
+        REQUIRE(Declares(readback.pass.uses, culls[c].commands, ResourceUsage::CopySource));
+    }
+    REQUIRE(Declares(readback.pass.uses, slot, ResourceUsage::CopyDestination));
+    INFO("the ring has a slot per frame in flight, this frame's holding the six commands");
+    const std::vector<RendererProbe::CullReadbackSlot> slots = RendererProbe::CullReadbacks(test.renderer);
+    REQUIRE(slots.size() == test.Device().FramesInFlight());
+    REQUIRE(slots.front().buffer == slot);
+    REQUIRE(slots.front().frame == 0);
+    REQUIRE(slots.front().commands == 6);
+    INFO("the slot holds the templates the null backend copied: six commands with no instances yet");
+    const std::vector<std::byte> bytes = RendererProbe::Bytes(test.Device(), slot);
+    REQUIRE(bytes.size() >= 6 * CommandSize);
+    for (std::size_t command = 0; command < 6; ++command)
+    {
+        CAPTURE(command);
+        REQUIRE(Word(bytes, command, 0) > 0);
+        REQUIRE(Word(bytes, command, 1) == 0);
+    }
+
+    test.Frame();
+    INFO("the next frame fills the next slot, and the one after comes back to the first");
+    REQUIRE(ReadbacksOf(test).front().copies.front().destination != slot);
+    test.Frame();
+    REQUIRE(ReadbacksOf(test).front().copies.front().destination == slot);
+    REQUIRE(RendererProbe::CullReadbacks(test.renderer).front().frame == 2);
+    REQUIRE(RendererProbe::StaleUses(test.Device()).empty());
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("instancesDrawn is the sum of the instance counts read back from the frame FramesInFlight frames ago",
+          "[renderer][culling][readback]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    AddThreeRuns(test);
+
+    test.Frame();
+    INFO("no frame has left flight: nothing drawn yet, fourteen candidates submitted");
+    REQUIRE(test.renderer.Stats().instancesDrawn == 0);
+    REQUIRE(test.renderer.Stats().instances == 14);
+    // The null backend runs no compute, so the counts the slot holds are written here as the pass would have left
+    // them: 7 of the list's 10, 2 of the merged 3, and the lone quad.
+    const BufferHandle slot = RendererProbe::CullReadbacks(test.renderer).front().buffer;
+    for (const auto [command, count] : {std::pair{0, 7u}, std::pair{1, 2u}, std::pair{2, 1u}})
+    {
+        const std::uint32_t kept = count;
+        REQUIRE(test.Device().WriteBuffer(slot, static_cast<std::size_t>(command) * CommandSize + 4,
+                                          std::as_bytes(std::span(&kept, 1))));
+    }
+
+    test.Frame();
+    INFO("one frame later the first frame may still be in flight: still nothing");
+    REQUIRE(test.renderer.Stats().instancesDrawn == 0);
+    test.Frame();
+    INFO("two frames later the first frame's counts are read: ten drawn of the fourteen submitted");
+    REQUIRE(test.renderer.Stats().instancesDrawn == 10);
+    REQUIRE(test.renderer.Stats().instances == 14);
+    test.Frame();
+    INFO("the frame after reads the second frame's slot, whose counts the null backend left at zero");
+    REQUIRE(test.renderer.Stats().instancesDrawn == 0);
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("While culling is frozen the job's planes stay the frozen camera's as it moves, its view's matrices do not, "
+          "and unfreezing restores them",
+          "[renderer][culling][frozen]")
+{
+    RendererTestApp test;
+    Fenrir::Entity camera = test.AddCamera();
+    AddThreeRuns(test);
+
+    test.Frame();
+    test.renderer.SetCullingFrozen(true);
+    test.Frame();
+    const std::vector<Fenrir::Math::Vec4> frozen = JobPlanes(test, test.Culls().at(0));
+    const std::optional<Fenrir::Math::Frustum> atFreeze = test.renderer.GetFrustum(camera);
+    REQUIRE(atFreeze.has_value());
+    INFO("the frame the freeze took hold in culls by the camera's own planes");
+    REQUIRE(SamePlanes(frozen, atFreeze->Planes()));
+    const std::vector<std::byte> matricesAtFreeze = ViewMatrices(test, test.IndirectDraws("Opaque").front());
+    const std::vector<RendererProbe::CullBuffers> before = RendererProbe::Culls(test.renderer);
+
+    // The camera moves and turns to face +X, away from every item.
+    camera.GetComponent<Fenrir::Transform>().pos = {3.0f, 1.0f, 5.0f};
+    camera.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(1.5f, Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f));
+    test.Frame();
+    const std::optional<Fenrir::Math::Frustum> moved = test.renderer.GetFrustum(camera);
+    REQUIRE(moved.has_value());
+    REQUIRE_FALSE(SamePlanes(frozen, moved->Planes()));
+    INFO("moved, the job still carries the frozen planes, not the camera's now");
+    REQUIRE(SamePlanes(JobPlanes(test, test.Culls().at(0)), atFreeze->Planes()));
+    INFO("while the view's matrices follow the camera");
+    const std::vector<RecordedIndirectDraw> opaque = test.IndirectDraws("Opaque");
+    REQUIRE_FALSE(opaque.empty());
+    REQUIRE(ViewMatrices(test, opaque.front()) != matricesAtFreeze);
+    INFO("and the coarse cull keeps every entity the frozen frustum keeps, though the camera looks away from them");
+    REQUIRE(RendererProbe::Culls(test.renderer).front().candidates == before.front().candidates);
+    REQUIRE(RendererProbe::Culls(test.renderer).front().runs == 3);
+    INFO("the probe sees the one camera's frozen cull, with its frustum and the position it froze at");
+    const std::vector<Fenrir::Render::FrozenCull>& culls = RendererProbe::FrozenCulls(test.renderer);
+    REQUIRE(culls.size() == 1);
+    REQUIRE(culls.front().camera == camera.GetId());
+    REQUIRE(SamePlanes(frozen, culls.front().frustum.Planes()));
+    REQUIRE(culls.front().position == Fenrir::Math::Vec3(0.0f, 0.0f, 5.0f));
+
+    test.renderer.SetCullingFrozen(false);
+    test.Frame();
+    INFO("unfrozen, the coarse cull drops every entity behind the camera: no candidates, so no Cull pass");
+    REQUIRE(RendererProbe::Culls(test.renderer).front().candidates == 0);
+    REQUIRE(test.Culls().empty());
+    REQUIRE(RendererProbe::FrozenCulls(test.renderer).empty());
+    camera.GetComponent<Fenrir::Transform>().pos = {1.0f, 0.0f, 5.0f};
+    camera.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(0.0f, Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f));
+    test.Frame();
+    const std::optional<Fenrir::Math::Frustum> back = test.renderer.GetFrustum(camera);
+    REQUIRE(back.has_value());
+    INFO("turned back, the job carries the camera's planes where it is now, not the frozen ones");
+    REQUIRE(SamePlanes(JobPlanes(test, test.Culls().at(0)), back->Planes()));
+    REQUIRE_FALSE(SamePlanes(frozen, back->Planes()));
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("While culling is frozen each view's Debug pass draws the frozen frustum's twelve edges on top",
+          "[renderer][culling][frozen]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    AddThreeRuns(test);
+
+    test.Frame();
+    INFO("with nothing to draw, there is no Debug pass");
+    REQUIRE(std::ranges::count(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)), "Debug") == 0);
+    test.renderer.SetCullingFrozen(true);
+    test.Frame();
+    test.Frame();
+    INFO("frozen, the Debug pass draws one batch of lines: twelve edges, six vertices each, not depth tested");
+    const std::vector<std::pair<PipelineHandle, CmdDraw>> draws = DebugDraws(test);
+    REQUIRE(draws.size() == 1);
+    REQUIRE(draws.front().second.vertexCount == 12 * 6);
+    REQUIRE(RendererProbe::Label(test.Device(), draws.front().first) == "BuiltinDebugLines");
+    REQUIRE_FALSE(RendererProbe::State(test.Device(), draws.front().first).depth.test);
+    INFO("the frozen corners are on the camera's near plane, a tenth in front of it, and a hundred units out along "
+         "the same rays, since a perspective view has no far plane");
+    const Fenrir::Render::FrozenCull& frozen = RendererProbe::FrozenCulls(test.renderer).front();
+    for (std::size_t corner = 0; corner < 4; ++corner)
+    {
+        CAPTURE(corner);
+        const Fenrir::Math::Vec3 near = frozen.corners.at(corner);
+        const Fenrir::Math::Vec3 far = frozen.corners.at(corner + 4);
+        REQUIRE(std::abs(near.z - (5.0f - 0.1f)) < 1e-3f);
+        REQUIRE(std::abs(glm::length(far - frozen.position) - 100.0f) < 1e-2f);
+        REQUIRE(glm::length(glm::cross(far - frozen.position, near - frozen.position)) < 1e-2f);
+    }
+    test.renderer.SetCullingFrozen(false);
+    test.Frame();
+    INFO("unfrozen, the edges go with the Debug pass");
+    REQUIRE(DebugDraws(test).empty());
+    REQUIRE(test.messages->errors.empty());
 }

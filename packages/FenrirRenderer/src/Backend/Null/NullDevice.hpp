@@ -45,6 +45,11 @@ namespace Fenrir::Graphics
                                                            std::string_view label) override;
 
         bool WriteBuffer(BufferHandle buffer, std::size_t offset, std::span<const std::byte> bytes) override;
+        /**
+         * @copydoc GraphicsDevice::ReadBuffer What WriteBuffer or a copy last put there: a dispatch writes nothing, so
+         * bytes only a dispatch wrote read as zeros.
+         */
+        bool ReadBuffer(BufferHandle buffer, std::size_t offset, std::span<std::byte> bytes) override;
         bool WriteTexture(TextureHandle texture, std::uint32_t mipLevel, std::uint32_t layer,
                           std::span<const std::byte> texels) override;
 
@@ -83,6 +88,9 @@ namespace Fenrir::Graphics
             std::vector<std::byte> bytes;
             BufferUsage usage = BufferUsage::None;
             std::string label;
+            /** @brief The frame it was made, last written, copied into or declared StorageWrite in: ReadBuffer waits
+             * it out. */
+            std::uint64_t writtenFrame = 0;
         };
 
         /** @brief What a binding group binds, and its label, for RendererProbe. */

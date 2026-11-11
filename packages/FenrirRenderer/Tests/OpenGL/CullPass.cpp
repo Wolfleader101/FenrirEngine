@@ -2,7 +2,8 @@
 // indirection: each run's command counts the candidates the pass kept and its region of the indirection holds each
 // kept candidate's (record, copy) once, in whatever order the atomics gave them, the kept ones exactly those
 // Math::Frustum keeps on the CPU over the same scene; and the draws through the indirection land where direct draws
-// did, a user vertex shader's copies through CurrentDraw() among them, the same with GPU culling off.
+// did, a user vertex shader's copies through CurrentDraw() among them, the same with GPU culling off; and the counts
+// read back FramesInFlight frames later into instancesDrawn are the oracle's.
 
 #include <algorithm>
 #include <array>
@@ -132,6 +133,57 @@ namespace
         mesh.indices = {0, 1, 2, 0, 2, 3};
         return mesh;
     }
+
+    /** @brief The seeded scene: the list's copies (relative to its entity), the lone squares' positions and the entity.
+     */
+    struct SeededScene
+    {
+        std::vector<Fenrir::Math::Mat4> copies;
+        std::vector<Vec3> lone;
+        Fenrir::Entity entity;
+    };
+
+    /**
+     * @brief One list of 150 squares scattered around and behind the camera, each turned and scaled, under an entity
+     * that is itself moved and turned; eight lone white squares that merge into one run, some of them off screen; and
+     * a red one in front. Seeded, so every run of it is the same scene.
+     */
+    SeededScene AddSeededScene(GlCullScene& test)
+    {
+        std::mt19937 random(23);
+        std::uniform_real_distribution<float> across(-8.0f, 8.0f);
+        std::uniform_real_distribution<float> along(-10.0f, 4.0f);
+        std::uniform_real_distribution<float> angle(0.0f, 6.28f);
+        std::uniform_real_distribution<float> scale(0.5f, 2.0f);
+        Fenrir::InstanceListData list;
+        for (int i = 0; i < 150; ++i)
+        {
+            const Fenrir::Math::Mat4 placed =
+                Fenrir::Math::Translate(Fenrir::Math::Mat4(1.0f), {across(random), across(random), along(random)});
+            const Fenrir::Math::Mat4 turned =
+                glm::mat4_cast(Fenrir::Math::AngleAxis(angle(random), glm::normalize(Vec3(0.3f, 1.0f, 0.5f))));
+            list.transforms.push_back(placed * turned * glm::scale(Fenrir::Math::Mat4(1.0f), Vec3(scale(random))));
+        }
+        SeededScene scene;
+        scene.copies = list.transforms;
+        const auto handle = test.assets.Store().Add<Fenrir::InstanceList>(std::move(list), Fenrir::AssetOwner::App());
+        scene.entity = test.app.GetActiveScene().GetEntityList().CreateEntity();
+        scene.entity.GetComponent<Fenrir::Transform>().pos = {0.3f, -0.2f, -1.0f};
+        scene.entity.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(0.4f, Vec3(0.0f, 1.0f, 0.0f));
+        scene.entity.AddComponent<Fenrir::InstancedMeshRenderer>(
+            Fenrir::InstancedMeshRenderer{test.square, test.white, handle, true, true});
+        for (int i = 0; i < 8; ++i)
+        {
+            scene.lone.push_back({across(random), across(random), along(random)});
+            test.AddSquare(scene.lone.back(), test.white);
+        }
+        const auto red = test.assets.Store().CreateMaterial(
+            test.assets.Store().Load<Fenrir::Shader>("builtin:unlit", Fenrir::AssetOwner::App()).handle,
+            Fenrir::AssetOwner::App());
+        test.assets.Store().SetColour(red, "baseColour", Fenrir::Colour{1.0f, 0.0f, 0.0f, 1.0f});
+        test.AddSquare({0.0f, 0.0f, -3.0f}, red);
+        return scene;
+    }
 } // namespace
 
 TEST_CASE("The cull pass keeps every candidate in view: each command counts its run's candidates, and its region of "
@@ -260,42 +312,9 @@ TEST_CASE(
 {
     GlCullScene test;
     test.RequireOpenGL();
-    // One list of 150 squares scattered around and behind the camera, each turned and scaled, under an entity that is
-    // itself moved and turned; eight lone white squares that merge into one run, some of them off screen; and a red
-    // one in front. The CPU keeps the list whole (its union reaches the view) and drops each lone square outside the
-    // view by its own box, so the GPU's work shows in the list's count and set, and the lone squares in the totals.
-    std::mt19937 random(23);
-    std::uniform_real_distribution<float> across(-8.0f, 8.0f);
-    std::uniform_real_distribution<float> along(-10.0f, 4.0f);
-    std::uniform_real_distribution<float> angle(0.0f, 6.28f);
-    std::uniform_real_distribution<float> scale(0.5f, 2.0f);
-    Fenrir::InstanceListData list;
-    for (int i = 0; i < 150; ++i)
-    {
-        const Fenrir::Math::Mat4 placed =
-            Fenrir::Math::Translate(Fenrir::Math::Mat4(1.0f), {across(random), across(random), along(random)});
-        const Fenrir::Math::Mat4 turned =
-            glm::mat4_cast(Fenrir::Math::AngleAxis(angle(random), glm::normalize(Vec3(0.3f, 1.0f, 0.5f))));
-        list.transforms.push_back(placed * turned * glm::scale(Fenrir::Math::Mat4(1.0f), Vec3(scale(random))));
-    }
-    const std::vector<Fenrir::Math::Mat4> copies = list.transforms;
-    const auto handle = test.assets.Store().Add<Fenrir::InstanceList>(std::move(list), Fenrir::AssetOwner::App());
-    Fenrir::Entity entity = test.app.GetActiveScene().GetEntityList().CreateEntity();
-    entity.GetComponent<Fenrir::Transform>().pos = {0.3f, -0.2f, -1.0f};
-    entity.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(0.4f, Vec3(0.0f, 1.0f, 0.0f));
-    entity.AddComponent<Fenrir::InstancedMeshRenderer>(
-        Fenrir::InstancedMeshRenderer{test.square, test.white, handle, true, true});
-    std::vector<Vec3> lone;
-    for (int i = 0; i < 8; ++i)
-    {
-        lone.push_back({across(random), across(random), along(random)});
-        test.AddSquare(lone.back(), test.white);
-    }
-    const auto red = test.assets.Store().CreateMaterial(
-        test.assets.Store().Load<Fenrir::Shader>("builtin:unlit", Fenrir::AssetOwner::App()).handle,
-        Fenrir::AssetOwner::App());
-    test.assets.Store().SetColour(red, "baseColour", Fenrir::Colour{1.0f, 0.0f, 0.0f, 1.0f});
-    test.AddSquare({0.0f, 0.0f, -3.0f}, red);
+    // The CPU keeps the list whole (its union reaches the view) and drops each lone square outside the view by its own
+    // box, so the GPU's work shows in the list's count and set, and the lone squares in the totals.
+    const auto [copies, lone, entity] = AddSeededScene(test);
 
     test.Frame();
     // The oracle: the same test on the CPU, over the same box, world matrix and copies.
@@ -487,4 +506,89 @@ TEST_CASE("Copies inside and straddling the frustum's edges draw at their transf
         }
     }
     REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("instancesDrawn equals the CPU oracle's count for the seeded scene, FramesInFlight frames after it was drawn",
+          "[renderer][gl][culling][cull-pass][readback]")
+{
+    GlCullScene test;
+    test.RequireOpenGL();
+    // Every frame of the still scene draws the same count.
+    const auto [copies, lone, entity] = AddSeededScene(test);
+
+    test.RunFrame();
+    const std::optional<Fenrir::Math::Frustum> frustum = test.renderer.GetFrustum(test.camera);
+    REQUIRE(frustum.has_value());
+    const Fenrir::Math::AABB box = test.assets.Store().TryGet(test.square)->bounds;
+    const Fenrir::Math::Mat4 world = Fenrir::GetWorldMatrix(entity);
+    std::uint32_t expected = 1;
+    for (const Fenrir::Math::Mat4& copy : copies)
+    {
+        expected += frustum->Intersects(box, world * copy) ? 1 : 0;
+    }
+    for (const Vec3& position : lone)
+    {
+        expected +=
+            frustum->Intersects(Fenrir::Math::Moved(box, Fenrir::Math::Translate(Fenrir::Math::Mat4(1.0f), position)))
+                ? 1
+                : 0;
+    }
+    INFO("the oracle keeps some of the scene and drops some: " << expected << " of "
+                                                               << copies.size() + lone.size() + 1);
+    REQUIRE(expected > 20);
+    REQUIRE(expected < copies.size() + lone.size());
+    const std::uint32_t candidates = test.renderer.Stats().instances;
+    REQUIRE(candidates > expected);
+
+    const std::uint32_t frames = RendererProbe::Device(test.renderer).FramesInFlight();
+    INFO("until FramesInFlight frames have followed the first, no frame has left flight: nothing read back");
+    REQUIRE(test.renderer.Stats().instancesDrawn == 0);
+    for (std::uint32_t frame = 1; frame < frames; ++frame)
+    {
+        test.RunFrame();
+        REQUIRE(test.renderer.Stats().instancesDrawn == 0);
+    }
+    test.RunFrame();
+    INFO("then the first frame's commands are read back: the GPU drew what the oracle keeps, of the candidates "
+         "submitted");
+    REQUIRE(test.renderer.Stats().instancesDrawn == expected);
+    REQUIRE(test.renderer.Stats().instances == candidates);
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("Frozen, the GPU keeps drawing what the frozen camera saw after the camera turns away, and the frustum's "
+          "edges draw with no error",
+          "[renderer][gl][culling][frozen]")
+{
+    GlCullScene test;
+    test.RequireOpenGL();
+    const std::array<float, 3> offsets{-0.8f, 0.0f, 0.8f};
+    test.AddList(offsets, {0.0f, 0.0f, -4.0f}, test.white);
+    const std::uint32_t frames = RendererProbe::Device(test.renderer).FramesInFlight();
+    for (std::uint32_t frame = 0; frame <= frames; ++frame)
+    {
+        test.RunFrame();
+    }
+    INFO("the three copies in view are drawn");
+    REQUIRE(test.renderer.Stats().instancesDrawn == 3);
+
+    test.renderer.SetCullingFrozen(true);
+    test.RunFrame();
+    test.camera.GetComponent<Fenrir::Transform>().rot = Fenrir::Math::AngleAxis(3.0f, Vec3(0.0f, 1.0f, 0.0f));
+    for (std::uint32_t frame = 0; frame <= frames; ++frame)
+    {
+        test.RunFrame();
+    }
+    INFO("turned away, the camera's pass still keeps the three, drawn off screen, and the edges drew without error");
+    REQUIRE(test.renderer.Stats().instances == 3);
+    REQUIRE(test.renderer.Stats().instancesDrawn == 3);
+    REQUIRE(test.messages->errors.empty());
+    test.renderer.SetCullingFrozen(false);
+    for (std::uint32_t frame = 0; frame <= frames; ++frame)
+    {
+        test.RunFrame();
+    }
+    INFO("unfrozen, the list behind the camera is no candidate and nothing is drawn");
+    REQUIRE(test.renderer.Stats().instances == 0);
+    REQUIRE(test.renderer.Stats().instancesDrawn == 0);
 }

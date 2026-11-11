@@ -24,6 +24,8 @@ namespace Fenrir::Graphics
         CopyDestination = 1u << 5,
         /** @brief Read as indirect draw commands, DrawIndexedIndirectCommand records (ADR-0057). */
         Indirect = 1u << 6,
+        /** @brief Read back by the CPU with GraphicsDevice::ReadBuffer once its writing frame has left flight. */
+        Readback = 1u << 7,
     };
 
     /** @brief What a texture may be used as, as flags. */

@@ -74,6 +74,32 @@ namespace Fenrir::Render
             return encode(colour.r) | (encode(colour.g) << 8u) | (encode(colour.b) << 16u) | (alpha << 24u);
         }
 
+        /** @brief The colour the frozen frustums' edges are drawn in, linear: amber. */
+        constexpr Colour FrozenEdgeColour{1.0f, 0.6f, 0.05f, 1.0f};
+
+        /**
+         * @brief The twelve edges of each frozen cull's volume (ADR-0057), two pixels wide and drawn over everything,
+         * so they show from inside the volume and from outside it alike.
+         */
+        DebugLines FrozenEdges(const std::vector<FrozenCull>& frozen)
+        {
+            // Corners: near 0-3 then far 4-7, each quad bottom-left, bottom-right, top-left, top-right.
+            constexpr std::array<std::array<std::size_t, 2>, 12> edges{
+                {{0, 1}, {1, 3}, {3, 2}, {2, 0}, {4, 5}, {5, 7}, {7, 6}, {6, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7}}};
+            DebugLines lines;
+            lines.depth = DebugDepth::OnTop;
+            lines.thickness = 2.0f;
+            for (const FrozenCull& cull : frozen)
+            {
+                for (const auto& [from, to] : edges)
+                {
+                    lines.vertices.push_back({cull.corners.at(from), FrozenEdgeColour});
+                    lines.vertices.push_back({cull.corners.at(to), FrozenEdgeColour});
+                }
+            }
+            return lines;
+        }
+
         template <typename T>
         std::span<const std::byte> BytesOf(const std::vector<T>& values)
         {
@@ -268,22 +294,35 @@ namespace Fenrir::Render
     void DebugFeature::AddPasses(RenderGraph& graph, const FrameContext& frame)
     {
         const std::vector<DrawnView>& drawn = m_scene.DrawnViews();
-        if (m_frame.Empty() || drawn.empty())
+        const std::vector<FrozenCull>& frozen = m_scene.FrozenCulls();
+        if ((m_frame.Empty() && frozen.empty()) || drawn.empty())
         {
             return;
         }
         const std::vector<ViewRequest>& requests = m_scene.Frame().views;
         const std::uint64_t frameIndex = frame.frameIndex;
 
-        // Every line and triangle once a frame, the depth-tested ones first, so each depth mode is one draw.
+        // Every line and triangle once a frame, the depth-tested ones first, so each depth mode is one draw; the
+        // frozen frustums' edges (ADR-0057) are a batch of the renderer's own.
+        std::vector<const DebugLines*> lineBatches;
+        for (const DebugLines& batch : m_frame.lines)
+        {
+            lineBatches.push_back(&batch);
+        }
+        const DebugLines frozenEdges = FrozenEdges(frozen);
+        if (!frozen.empty())
+        {
+            lineBatches.push_back(&frozenEdges);
+        }
         std::vector<LineRecord> lines;
         std::vector<TriangleVertex> triangles;
         std::array<std::uint32_t, 2> lineCounts{};
         std::array<std::uint32_t, 2> triangleCounts{};
         for (const DebugDepth depth : {DebugDepth::Tested, DebugDepth::OnTop})
         {
-            for (const DebugLines& batch : m_frame.lines)
+            for (const DebugLines* batchOf : lineBatches)
             {
+                const DebugLines& batch = *batchOf;
                 if (batch.depth != depth)
                 {
                     continue;

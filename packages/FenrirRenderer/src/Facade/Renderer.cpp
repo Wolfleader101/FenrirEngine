@@ -1368,6 +1368,7 @@ namespace Fenrir
                 const Render::SceneStats scene = state.scene->TakeStats();
                 state.stats.draws = scene.draws;
                 state.stats.instances = scene.instances;
+                state.stats.instancesDrawn = scene.instancesDrawn;
                 state.stats.passes = report.passesRun;
                 state.stats.uploads = scene.uploads;
                 state.stats.paletteBytesUploaded = scene.paletteBytes;
@@ -1631,6 +1632,14 @@ namespace Fenrir
         }
     }
 
+    void Renderer::SetCullingFrozen(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetCullingFrozen(on);
+        }
+    }
+
     void Renderer::SetSpotShadowBudget(std::uint32_t budget)
     {
         if (m_state != nullptr)
@@ -1882,6 +1891,11 @@ namespace Fenrir
     void Renderer::SetGpuCulling(App& app, bool on)
     {
         Renderer(InstalledState(app)).SetGpuCulling(on);
+    }
+
+    void Renderer::SetCullingFrozen(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetCullingFrozen(on);
     }
 
     void Renderer::SetSpotShadowBudget(App& app, std::uint32_t budget)

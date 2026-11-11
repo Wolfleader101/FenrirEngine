@@ -18,6 +18,12 @@ public partial struct RendererStats
     /// InstancedMeshRenderer's instance list, one per copy per view.
     /// </summary>
     public uint Instances;
+    /// <summary>
+    /// MeshRenderers and instance list copies the GPU drew after each camera's cull pass (ADR-0057), summed over
+    /// cameras, read back from the most recent frame that has left flight: usually two frames behind `instances`, the
+    /// candidates this frame submitted. 0 until a frame has been read back.
+    /// </summary>
+    public uint InstancesDrawn;
     /// <summary>Render passes run.</summary>
     public uint Passes;
     /// <summary>
