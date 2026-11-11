@@ -133,6 +133,10 @@
         {
           "name": "InstanceList",
           "value": 8
+        },
+        {
+          "name": "Font",
+          "value": 9
         }
       ]
     },

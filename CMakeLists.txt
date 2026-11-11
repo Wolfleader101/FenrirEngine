@@ -11,6 +11,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(FENRIR_ENABLE_SCRIPTING "Build the Iris .NET hosting library (packages/Iris)" OFF)
 option(FENRIR_ENABLE_PHYSICS "Build FenrirPhysics and JoltPhysics (the packages/FenrirPhysics/libs/JoltPhysics submodule)" ON)
 option(FENRIR_ENABLE_ASSETS "Build FenrirAssets with cgltf, ufbx and stb (the packages/FenrirAssets/libs submodules)" ON)
+option(FENRIR_ENABLE_TEXT "Build FenrirText with FreeType, HarfBuzz, SheenBidi and libunibreak (the packages/FenrirText/libs submodules)" ON)
 option(FENRIR_ENABLE_RENDERER "Build FenrirWindow and SDL3 (the packages/FenrirWindow/libs/SDL submodule), and FenrirRenderer's FenrirShaderCompiler with glslang and SPIRV-Reflect, the renderer core with its graphics device, null backend and OpenGL backend (with the checked-in glad loader), and FenrirRenderer's ECS facade" ON)
 option(FENRIR_BUILD_TESTS "Build the package tests (Catch2: the libs/catch2 submodule, or an installed Catch2 v3)" OFF)
 option(FENRIR_BUILD_EXAMPLES "Build the demo apps on the demo scaffold (examples/; with the renderer only)" ON)
@@ -32,6 +33,11 @@ include(cmake/FenrirDemoAssets.cmake)
 # The renderer draws assets, so it cannot be built without them.
 if(FENRIR_ENABLE_RENDERER AND NOT FENRIR_ENABLE_ASSETS)
     message(FATAL_ERROR "FENRIR_ENABLE_RENDERER needs FENRIR_ENABLE_ASSETS: turn assets on, or the renderer off.")
+endif()
+
+# Text reads fonts from the asset store and keeps its atlases there.
+if(FENRIR_ENABLE_TEXT AND NOT FENRIR_ENABLE_ASSETS)
+    message(FATAL_ERROR "FENRIR_ENABLE_TEXT needs FENRIR_ENABLE_ASSETS: turn assets on, or text off.")
 endif()
 
 # fenrir_add_shaders(), for the engine's shaders and users' alike. Defined before any package, so a package's tests can
@@ -89,6 +95,9 @@ if(FENRIR_ENABLE_ASSETS)
     add_subdirectory(packages/FenrirDraw2D)
     add_subdirectory(packages/FenrirSkeleton)
     add_subdirectory(packages/FenrirAnimation)
+endif()
+if(FENRIR_ENABLE_TEXT)
+    add_subdirectory(packages/FenrirText)
 endif()
 # Always built: it links no library (ADR-0025).
 add_subdirectory(packages/FenrirDebugDraw)

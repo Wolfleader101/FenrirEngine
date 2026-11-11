@@ -711,7 +711,7 @@ The engine's asset package: loads files into plain CPU-side data and owns it beh
 *Avoid:* resource manager, asset server, asset database (cooking and an editor database are out of scope).
 
 **Asset**
-One piece of plain data FenrirAssets holds: a mesh, image, material, skeleton, clip, shader container or model, loaded from a file or added from code.
+One piece of plain data FenrirAssets holds: a mesh, image, material, skeleton, clip, font, shader container or model, loaded from a file or added from code.
 *Avoid:* resource (Iris and physics use it otherwise), file.
 
 **Asset handle**

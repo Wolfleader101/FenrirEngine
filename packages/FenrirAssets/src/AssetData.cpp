@@ -1,10 +1,15 @@
+#include <algorithm>
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <format>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirAssets/FontData.hpp"
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
@@ -122,6 +127,26 @@ namespace Fenrir::Detail
         {
             return std::format("it has {} colours for {} transforms: give one colour per transform, or none",
                                list.colours.size(), list.transforms.size());
+        }
+        return {};
+    }
+
+    std::string PrepareAsset(FontData& font, AssetWarnings&)
+    {
+        // The sfnt version tags a TrueType or OpenType file, or a collection of them, starts with.
+        constexpr std::array<std::array<std::uint8_t, 4>, 4> tags = {{
+            {0x00, 0x01, 0x00, 0x00},
+            {'O', 'T', 'T', 'O'},
+            {'t', 'r', 'u', 'e'},
+            {'t', 't', 'c', 'f'},
+        }};
+        const bool tagged = font.bytes.size() >= 4 && std::ranges::any_of(tags, [&](const auto& tag) {
+                                return std::ranges::equal(std::span(font.bytes).first(4), tag, {},
+                                                          [](std::byte b) { return static_cast<std::uint8_t>(b); });
+                            });
+        if (!tagged)
+        {
+            return std::format("its {} bytes do not start as a TrueType or OpenType file does", font.bytes.size());
         }
         return {};
     }
