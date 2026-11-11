@@ -9,7 +9,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Clip>",
@@ -17,7 +17,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Image>",
@@ -25,7 +25,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::InstanceList>",
@@ -33,7 +33,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Material>",
@@ -41,7 +41,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Mesh>",
@@ -49,7 +49,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Model>",
@@ -57,7 +57,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Shader>",
@@ -65,7 +65,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Skeleton>",
@@ -73,7 +73,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::SamplerFilter",

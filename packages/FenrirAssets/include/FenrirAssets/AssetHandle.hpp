@@ -20,6 +20,7 @@ namespace Fenrir
     struct Clip;
     struct BoneMask;
     struct InstanceList;
+    struct Font;
     /** @} */
 
     struct MeshData;
@@ -30,6 +31,7 @@ namespace Fenrir
     struct ClipData;
     struct BoneMaskData;
     struct InstanceListData;
+    struct FontData;
 
     namespace Detail
     {
@@ -45,10 +47,11 @@ namespace Fenrir
             Clip,
             BoneMask,
             InstanceList,
+            Font,
         };
 
         /** @brief How many kinds of asset the store holds. */
-        inline constexpr std::size_t AssetKindCount = 9;
+        inline constexpr std::size_t AssetKindCount = 10;
 
         /** @brief What an asset name resolves to: its data type, its kind and the word log messages use for it. */
         template <typename T>
@@ -125,6 +128,14 @@ namespace Fenrir
             static constexpr AssetKind kind = AssetKind::InstanceList;
             static constexpr std::string_view name = "instance list";
         };
+
+        template <>
+        struct AssetTraits<Font>
+        {
+            using Data = FontData;
+            static constexpr AssetKind kind = AssetKind::Font;
+            static constexpr std::string_view name = "font";
+        };
     } // namespace Detail
 
     /** @brief The data an asset handle of `T` resolves to: `AssetData<Mesh>` is `MeshData`. */
@@ -133,10 +144,10 @@ namespace Fenrir
 
     /**
      * @brief Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`,
-     * `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset
-     * was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value.
-     * Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users
-     * skip it. A default-made handle is empty and never resolves.
+     * `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the
+     * asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a
+     * value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and
+     * users skip it. A default-made handle is empty and never resolves.
      */
     template <typename T>
     struct AssetHandle

@@ -34,3 +34,15 @@
 [submodule "examples/DemoScaffold/libs/imgui"]
 	path = examples/DemoScaffold/libs/imgui
 	url = https://github.com/ocornut/imgui
+[submodule "packages/FenrirText/libs/freetype"]
+	path = packages/FenrirText/libs/freetype
+	url = https://github.com/freetype/freetype
+[submodule "packages/FenrirText/libs/SheenBidi"]
+	path = packages/FenrirText/libs/SheenBidi
+	url = https://github.com/Tehreer/SheenBidi
+[submodule "packages/FenrirText/libs/libunibreak"]
+	path = packages/FenrirText/libs/libunibreak
+	url = https://github.com/adah1972/libunibreak
+[submodule "packages/FenrirText/libs/harfbuzz"]
+	path = packages/FenrirText/libs/harfbuzz
+	url = https://github.com/harfbuzz/harfbuzz
