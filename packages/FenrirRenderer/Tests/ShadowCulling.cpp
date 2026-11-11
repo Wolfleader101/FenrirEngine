@@ -207,8 +207,8 @@ namespace
         });
     }
 
-    /** @brief A cube that casts, one that does not, and the camera and sun over them; the hidden cube's entity. */
-    Fenrir::Entity AddCasterAndHidden(RendererTestApp& test)
+    /** @brief A cube that casts at x = -1, one that does not at x = 1, and the camera and sun over them. */
+    void AddCasterAndHidden(RendererTestApp& test)
     {
         test.AddCamera();
         AddSun(test);
@@ -218,7 +218,6 @@ namespace
         Fenrir::Entity hidden = test.AddMeshRenderer(cube, lit);
         hidden.GetComponent<Fenrir::Transform>().pos = {1.0f, 0.0f, 0.0f};
         hidden.GetComponent<Fenrir::MeshRenderer>().castShadows = false;
-        return hidden;
     }
 } // namespace
 
@@ -232,6 +231,7 @@ TEST_CASE("A cascade's cull volume keeps a caster between the light and the casc
     const Mat4 projection = Fenrir::Render::ReversedZPerspective(Fov, Aspect, Near);
     const std::vector<Fenrir::Render::Cascade> cascades =
         Fenrir::Render::FitCascades(Mat4(1.0f), projection, Vec3(0.0f, -1.0f, 0.0f), 20.0f, {4, 2048, 0.75f});
+    INFO("the sun shadow fits four cascades");
     REQUIRE(cascades.size() == 4);
     const Fenrir::Render::Cascade& cascade = cascades.front();
     const Fenrir::Math::Frustum closed = Fenrir::Math::Frustum::FromViewProjection(cascade.viewProjection);
@@ -285,7 +285,7 @@ TEST_CASE("A point light's range sphere keeps a box whose nearest point is withi
     const Mat4 doubled = glm::scale(identity, Vec3(2.0f));
     REQUIRE(WithinRange({{3.0f, 0.0f, 0.0f}, 2.0f}, unit, doubled));
     REQUIRE_FALSE(WithinRange({{3.0f, 0.0f, 0.0f}, 1.99f}, unit, doubled));
-    INFO("a range of 0 keeps nothing but a box about its centre");
+    INFO("a range of 0 keeps nothing but a box about its centre (the pass itself reads 0 as no sphere)");
     REQUIRE_FALSE(WithinRange({{3.0f, 0.0f, 0.0f}, 0.0f}, unit, identity));
     REQUIRE(WithinRange({{0.0f, 0.0f, 0.0f}, 0.0f}, unit, identity));
 }
@@ -370,14 +370,14 @@ TEST_CASE("RendererProbe on null: a cascade's job carries its box's five planes 
         const RecordedCull& cull = CullOf(test, culls, view.cullCommands);
         const std::vector<Vec4> planes = JobPlanes(test, cull);
         INFO("the job's planes are the probe's, in order");
-        REQUIRE(planes.size() == view.frustum.Planes().size());
+        REQUIRE(planes.size() == view.volume.frustum.Planes().size());
         for (std::size_t p = 0; p < planes.size(); ++p)
         {
-            REQUIRE(Near4(planes[p], view.frustum.Planes()[p]));
+            REQUIRE(Near4(planes[p], view.volume.frustum.Planes()[p]));
         }
         const Vec4 sphere = JobVec4(test, cull, 240);
         INFO("and its sphere is the probe's");
-        REQUIRE(Near4(sphere, Vec4(view.sphere.centre, view.sphere.radius)));
+        REQUIRE(Near4(sphere, Vec4(view.volume.sphere.centre, view.volume.sphere.radius)));
         switch (view.kind)
         {
         case ShadowViewKind::Cascade: {
@@ -405,16 +405,16 @@ TEST_CASE("RendererProbe on null: a cascade's job carries its box's five planes 
             REQUIRE(pairs == 4);
             const Vec3 sun = glm::normalize(Vec3(0.3f, -1.0f, -0.4f));
             REQUIRE(glm::dot(Vec3(planes[unpaired]), sun) < -0.999f);
-            REQUIRE(view.sphere.radius == 0.0f);
+            REQUIRE(view.volume.sphere.radius == 0.0f);
             break;
         }
         case ShadowViewKind::Spot: {
             INFO("the cone's five planes (an infinite perspective), keeping a point down the light and not one above");
             REQUIRE(planes.size() == 5);
-            REQUIRE(view.frustum.Intersects(Fenrir::Math::Sphere{{0.0f, 1.0f, 0.0f}, 0.1f}));
-            REQUIRE_FALSE(view.frustum.Intersects(Fenrir::Math::Sphere{{0.0f, 5.0f, 0.0f}, 0.1f}));
-            REQUIRE_FALSE(view.frustum.Intersects(Fenrir::Math::Sphere{{6.0f, 2.5f, 0.0f}, 0.1f}));
-            REQUIRE(view.sphere.radius == 0.0f);
+            REQUIRE(view.volume.frustum.Intersects(Fenrir::Math::Sphere{{0.0f, 1.0f, 0.0f}, 0.1f}));
+            REQUIRE_FALSE(view.volume.frustum.Intersects(Fenrir::Math::Sphere{{0.0f, 5.0f, 0.0f}, 0.1f}));
+            REQUIRE_FALSE(view.volume.frustum.Intersects(Fenrir::Math::Sphere{{6.0f, 2.5f, 0.0f}, 0.1f}));
+            REQUIRE(view.volume.sphere.radius == 0.0f);
             break;
         }
         case ShadowViewKind::Point: {
@@ -427,21 +427,31 @@ TEST_CASE("RendererProbe on null: a cascade's job carries its box's five planes 
     }
 }
 
+namespace
+{
+    /** @brief Two cameras, a sun, a cube, a spot light and a point light: every kind of shadow view, twice over. */
+    void AddTwoCameraScene(RendererTestApp& test)
+    {
+        test.AddCamera();
+        test.AddCamera({0.0f, 0.0f, 10.0f}).GetComponent<Fenrir::Camera>().viewport = {0.5f, 0.0f, 0.5f, 1.0f};
+        AddSun(test);
+        test.AddMeshRenderer(test.Mesh(), test.Material());
+        AddSpotLight(test, {0.0f, 3.0f, 0.0f});
+        AddPointLight(test, {-2.0f, 3.0f, 1.0f});
+    }
+} // namespace
+
 TEST_CASE("RendererProbe on null: every shadow view chooses levels by its camera, a spot or point light by the first "
-          "camera drawn, and GPU culling off sends no planes and no sphere",
+          "camera drawn",
           "[renderer][culling][shadow-views][lod]")
 {
     RendererTestApp test(RendererTest::OcclusionOff());
-    Fenrir::Entity camera = test.AddCamera();
-    test.AddCamera({0.0f, 0.0f, 10.0f}).GetComponent<Fenrir::Camera>().viewport = {0.5f, 0.0f, 0.5f, 1.0f};
-    AddSun(test);
-    test.AddMeshRenderer(test.Mesh(), test.Material());
-    AddSpotLight(test, {0.0f, 3.0f, 0.0f});
-    AddPointLight(test, {-2.0f, 3.0f, 1.0f});
+    AddTwoCameraScene(test);
 
     test.Frame();
-    std::vector<RecordedCull> culls = test.Culls();
+    const std::vector<RecordedCull> culls = test.Culls();
     const std::vector<RendererProbe::CullBuffers> cameras = RendererProbe::Culls(test.renderer);
+    INFO("both cameras were culled");
     REQUIRE(cameras.size() == 2);
     const Vec4 firstCamera = JobVec4(test, CullOf(test, culls, cameras[0].commands), 112);
     const Vec4 secondCamera = JobVec4(test, CullOf(test, culls, cameras[1].commands), 112);
@@ -454,27 +464,42 @@ TEST_CASE("RendererProbe on null: every shadow view chooses levels by its camera
     {
         CAPTURE(static_cast<int>(view.kind), view.view, view.index);
         const RecordedCull& cull = CullOf(test, culls, view.cullCommands);
+        INFO("a cascade names its camera; a spot or point light names none, being every camera's");
+        REQUIRE(view.view.has_value() == (view.kind == ShadowViewKind::Cascade));
         INFO("a cascade's job has its camera's position and projection; a spot or point light's the first camera's");
-        const Vec4 expected = view.kind == ShadowViewKind::Cascade && view.view == 1 ? secondCamera : firstCamera;
+        const Vec4 expected = view.view == 1 ? secondCamera : firstCamera;
         REQUIRE(Near4(JobVec4(test, cull, 112), expected));
         INFO("with the error pixels, near distance and perspective flag the camera's cull has");
         REQUIRE(Near4(JobVec4(test, cull, 128), firstLod));
+        INFO("and the probe's level view is that camera's");
         REQUIRE(view.lod.position == Vec3(expected));
     }
+}
 
+TEST_CASE("RendererProbe on null: with GPU culling off a shadow view's job carries no planes, no sphere and no error "
+          "allowed, so every caster draws at level 0",
+          "[renderer][culling][shadow-views][lod]")
+{
+    RendererTestApp test(RendererTest::OcclusionOff());
+    AddTwoCameraScene(test);
     test.renderer.SetGpuCulling(false);
+
     test.Frame();
-    culls = test.Culls();
-    for (const DrawnShadowView& view : RendererProbe::ShadowCulls(test.renderer))
+    const std::vector<RecordedCull> culls = test.Culls();
+    const std::vector<DrawnShadowView>& views = RendererProbe::ShadowCulls(test.renderer);
+    INFO("the shadow views are culled all the same, through the same passes");
+    REQUIRE(views.size() == 10);
+    for (const DrawnShadowView& view : views)
     {
         CAPTURE(static_cast<int>(view.kind), view.view, view.index);
         const RecordedCull& cull = CullOf(test, culls, view.cullCommands);
-        INFO("off, the job keeps every caster at level 0: no planes, a sphere of radius 0 and no error allowed");
+        INFO("no planes");
         REQUIRE(JobPlanes(test, cull).empty());
+        INFO("a sphere of radius 0");
         REQUIRE(JobVec4(test, cull, 240).w == 0.0f);
+        INFO("and no error allowed, so level 0");
         REQUIRE(JobVec4(test, cull, 128).x == 0.0f);
     }
-    (void)camera;
 }
 
 TEST_CASE("RendererProbe on null: a renderer with castShadows off is a candidate of the camera's cull and of no shadow "
@@ -482,12 +507,13 @@ TEST_CASE("RendererProbe on null: a renderer with castShadows off is a candidate
           "[renderer][culling][shadow-views]")
 {
     RendererTestApp test(RendererTest::OcclusionOff());
-    Fenrir::Entity hidden = AddCasterAndHidden(test);
+    AddCasterAndHidden(test);
     AddSpotLight(test, {0.0f, 3.0f, 0.0f});
     AddPointLight(test, {-2.0f, 3.0f, 0.0f});
 
     test.Frame();
     const std::vector<RecordedDraw> opaque = test.Draws("Opaque");
+    INFO("Opaque draws both cubes as one merged run of two");
     REQUIRE(opaque.size() == 1);
     REQUIRE(opaque.front().draw.instanceCount == 2);
     const std::vector<RecordedCull> culls = test.Culls();
@@ -521,7 +547,6 @@ TEST_CASE("RendererProbe on null: a renderer with castShadows off is a candidate
         REQUIRE_FALSE(shadowRecords.contains(hiddenRecord));
         REQUIRE(cameraRecords.contains(*shadowRecords.begin()));
     }
-    (void)hidden;
 }
 
 TEST_CASE("RendererProbe on null: the shadow passes draw each run indirectly from their view's command buffer through "
@@ -593,8 +618,10 @@ TEST_CASE("RendererProbe on null: a point light's six faces draw from one comman
 
         test.Frame();
         const std::vector<DrawnShadowView>& views = RendererProbe::ShadowCulls(test.renderer);
+        INFO("one shadow view, the point light's");
         REQUIRE(views.size() == 1);
         const std::vector<RecordedIndirectDraw> draws = test.IndirectDraws("PointShadows");
+        INFO("one indirect draw from its command buffer");
         REQUIRE(draws.size() == 1);
         REQUIRE(draws.front().draw.buffer == views.front().cullCommands);
         INFO("the level table says each kept candidate counts six, which the resolved draw shows");
@@ -641,11 +668,13 @@ TEST_CASE("RendererProbe on null: a point light's six faces draw from one comman
 
         test.Frame();
         const std::vector<DrawnShadowView>& views = RendererProbe::ShadowCulls(test.renderer);
+        INFO("one shadow view over both runs, two candidates");
         REQUIRE(views.size() == 1);
         REQUIRE(views.front().cullRuns == 2);
         REQUIRE(views.front().cullCandidates == 2);
         const std::vector<RecordedIndirectDraw> instanced = test.IndirectDraws("PointShadows");
         const std::vector<RecordedIndirectDraw> faced = test.IndirectDraws("PointShadowFaces");
+        INFO("one instanced draw, and a face at a time for the other run");
         REQUIRE(instanced.size() == 1);
         REQUIRE(faced.size() == CubeFaceCount);
         INFO("the lit cube's command is the first, drawn six a candidate; the user shader's the second, one a face");

@@ -138,6 +138,10 @@ namespace RendererTest
 
     /** @brief The bytes of one entry of the frame's level table, as `builtin:cull` reads it (five words). */
     constexpr std::size_t LevelEntrySize = 20;
+    /** @brief Where a level table entry's instances per candidate sit in it: its fifth word. */
+    constexpr std::size_t LevelInstancesOffset = 16;
+    /** @brief Where a job block's first level table entry sits in it: the fourth word of its `groups`. */
+    constexpr std::size_t JobFirstLevelOffset = 12;
 
     /**
      * @brief How many instances each kept candidate of the run at `command` of a Cull pass draws as, from the frame's
@@ -150,9 +154,9 @@ namespace RendererTest
         using Fenrir::RendererProbe;
         const Fenrir::Graphics::BindingGroupEntry job = EntryAt(device, cull.job, 0);
         const std::vector<std::byte> jobBytes = RendererProbe::Bytes(device, job.buffer);
-        const std::uint32_t firstLevel = UintAt(jobBytes, job.offset + 12);
+        const std::uint32_t firstLevel = UintAt(jobBytes, job.offset + JobFirstLevelOffset);
         const std::vector<std::byte> levels = RendererProbe::Bytes(device, EntryAt(device, cull.target, 5).buffer);
-        return UintAt(levels, (std::size_t{firstLevel} + command) * LevelEntrySize + 16);
+        return UintAt(levels, (std::size_t{firstLevel} + command) * LevelEntrySize + LevelInstancesOffset);
     }
 
     /** @brief The `n`th 32-bit word of a draw command's bytes at `offset` of `bytes`. */

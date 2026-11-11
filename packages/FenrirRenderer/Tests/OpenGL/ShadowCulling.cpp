@@ -161,8 +161,9 @@ namespace
     /** @brief Whether a shadow view's candidate of `box` under `transform` is inside its volume: planes and sphere. */
     bool Inside(const DrawnShadowView& view, const Fenrir::Math::AABB& box, const Fenrir::Math::Mat4& transform)
     {
-        return view.frustum.Intersects(box, transform) &&
-               (view.sphere.radius <= 0.0f || Fenrir::Render::WithinRange(view.sphere, box, transform));
+        const Fenrir::Render::CullVolume& volume = view.volume;
+        return volume.frustum.Intersects(box, transform) &&
+               (volume.sphere.radius <= 0.0f || Fenrir::Render::WithinRange(volume.sphere, box, transform));
     }
 
     /** @brief Whether two LodViews are the same to a part in a million. */
@@ -217,6 +218,7 @@ namespace
         GraphicsDevice& device = RendererProbe::Device(test.renderer);
         const std::vector<std::byte> commands = GlProbe::ReadBuffer(device, view.cullCommands);
         const std::vector<std::byte> entries = GlProbe::ReadBuffer(device, view.cullIndirection);
+        INFO("its command buffer holds the four commands: the list's three levels and the lone squares' one");
         REQUIRE(commands.size() >= 4 * CommandSize);
         // Which commands are the list's three levels: the one whose base instance is followed by one 150 entries on
         // (each level's region is the whole list long), and the next two; the other is the lone squares' run.
@@ -229,6 +231,7 @@ namespace
                 break;
             }
         }
+        INFO("the list's three level commands are found by their regions, each 150 entries long");
         REQUIRE(first.has_value());
         const std::size_t loneCommand = *first == 0 ? 3 : 0;
         for (std::uint32_t level = 0; level < 3; ++level)
@@ -280,8 +283,8 @@ TEST_CASE("Each cascade's cull keeps exactly the casters its open box keeps on t
         REQUIRE(view.kind == ShadowViewKind::Cascade);
         REQUIRE(view.view == 0);
         INFO("its planes are five: the box's sides and its far plane, open towards the sun");
-        REQUIRE(view.frustum.Planes().size() == 5);
-        REQUIRE(view.sphere.radius == 0.0f);
+        REQUIRE(view.volume.frustum.Planes().size() == 5);
+        REQUIRE(view.volume.sphere.radius == 0.0f);
         const std::size_t kept = CheckView(test, view, scene, 1);
         least = std::min(least, kept);
         most = std::max(most, kept);
@@ -323,13 +326,13 @@ TEST_CASE("A spot light's cone and a point light's range sphere keep exactly the
     REQUIRE(views[0].kind == ShadowViewKind::Spot);
     REQUIRE(views[1].kind == ShadowViewKind::Point);
     INFO("the spot light's cone is five planes and no sphere");
-    REQUIRE(views[0].frustum.Planes().size() == 5);
-    REQUIRE(views[0].sphere.radius == 0.0f);
+    REQUIRE(views[0].volume.frustum.Planes().size() == 5);
+    REQUIRE(views[0].volume.sphere.radius == 0.0f);
     const std::size_t spotKept = CheckView(test, views[0], scene, 1);
     INFO("the point light's volume is its range sphere alone, at its position");
-    REQUIRE(views[1].frustum.Planes().empty());
-    REQUIRE(glm::length(views[1].sphere.centre - Vec3(-1.0f, 0.5f, -4.0f)) < 1e-5f);
-    REQUIRE(views[1].sphere.radius == 4.0f);
+    REQUIRE(views[1].volume.frustum.Planes().empty());
+    REQUIRE(glm::length(views[1].volume.sphere.centre - Vec3(-1.0f, 0.5f, -4.0f)) < 1e-5f);
+    REQUIRE(views[1].volume.sphere.radius == 4.0f);
     // Where the GPU draws the six faces as instances, each survivor counts six; without that, a face at a time, one.
     const bool instanced = RendererProbe::Device(test.renderer).Features().vertexLayer;
     const std::size_t pointKept = CheckView(test, views[1], scene, instanced ? 6u : 1u);

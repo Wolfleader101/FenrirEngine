@@ -3402,13 +3402,13 @@ namespace Fenrir::Render
         std::size_t shadowJob = views.size() * 2;
         // A shadow view's cull (ADR-0057): one phase against the light's volume, never by occlusion, choosing levels
         // by `lod`, the camera's, and its draws through its own draw set, or directly without a cull pipeline.
-        const auto cullShadowView = [&](ShadowViewKind kind, std::size_t view, std::uint32_t index,
+        const auto cullShadowView = [&](ShadowViewKind kind, std::optional<std::size_t> view, std::uint32_t index,
                                         const CullVolume& volume, const LodView& lod,
                                         const std::vector<DrawRun>& runs) {
             const CullView cull = PrepareCull(graph, frameIndex, shadowRing++, volume, lod, *draws, runs, cullFrame,
                                               nullptr, cullTemplates, cullLevels, cullPhases, cullGroups);
-            m_drawnShadowViews.push_back({kind, view, index, cull.frustum, cull.sphere, cull.lod, cull.commands,
-                                          cull.indirection, cull.runs, cull.candidates});
+            m_drawnShadowViews.push_back(
+                {kind, view, index, volume, cull.lod, cull.commands, cull.indirection, cull.runs, cull.candidates});
             if (!cull.commands.IsEmpty())
             {
                 AddCullPass(graph, frameIndex, cullFrame, cull, CullPhase::Single, shadowJob++, RenderStage::Cull);
@@ -3418,7 +3418,9 @@ namespace Fenrir::Render
         const auto shadowDrawGroup = [&](const CullView& cull) {
             return cull.indirection.IsEmpty() ? drawGroup : DrawGroupFor(frameIndex, cull.indirection);
         };
-        const auto readShadowCulled = [](PassBuilder& pass, const CullView& cull) {
+        // What a pass drawing from a view's cull declares: the commands it reads and the indirection its instances
+        // read.
+        const auto declareCulled = [](PassBuilder& pass, const CullView& cull) {
             if (!cull.commands.IsEmpty())
             {
                 pass.IndirectRead(cull.commandsResource);
@@ -3467,7 +3469,7 @@ namespace Fenrir::Render
                 tileGroups.push_back(ViewGroupFor(frameIndex, slots.Tile(t), GetDefaultTexture(DefaultTexture::White)));
                 tiles.push_back(tile);
                 // Its cull (ADR-0057): the casters against its cone's planes, at the levels the cameras see them.
-                spotCulls.push_back(cullShadowView(ShadowViewKind::Spot, 0, t,
+                spotCulls.push_back(cullShadowView(ShadowViewKind::Spot, std::nullopt, t,
                                                    {Math::Frustum::FromViewProjection(shadow.viewProjection), {}},
                                                    shadowLod, *spotRuns));
                 spotDrawGroups.push_back(shadowDrawGroup(spotCulls.back()));
@@ -3481,7 +3483,7 @@ namespace Fenrir::Render
                     readSkinned(pass);
                     for (const CullView& cull : spotCulls)
                     {
-                        readShadowCulled(pass, cull);
+                        declareCulled(pass, cull);
                     }
                 },
                 [this, draws, spotGroups, spotRuns, unshadowedFrame, tileGroups, tiles, spotCulls, spotDrawGroups,
@@ -3558,7 +3560,7 @@ namespace Fenrir::Render
                     faceGroups.push_back(ViewGroupFor(frameIndex, slots.Face(c, f), white));
                 }
                 // Its cull (ADR-0057): the casters against its range sphere, once for all six faces.
-                pointCulls.push_back(cullShadowView(ShadowViewKind::Point, 0, c,
+                pointCulls.push_back(cullShadowView(ShadowViewKind::Point, std::nullopt, c,
                                                     {Math::Frustum{}, Math::Sphere{light.position, light.range}},
                                                     shadowLod, pointRuns));
                 pointDrawGroups.push_back(shadowDrawGroup(pointCulls.back()));
@@ -3574,7 +3576,7 @@ namespace Fenrir::Render
                         readSkinned(pass);
                         for (const CullView& cull : pointCulls)
                         {
-                            readShadowCulled(pass, cull);
+                            declareCulled(pass, cull);
                         }
                     },
                     [this, draws, pointGroups, layeredRuns, unshadowedFrame, cubeGroups, face, pointCulls,
@@ -3602,7 +3604,7 @@ namespace Fenrir::Render
                         [=](PassBuilder& pass) {
                             pass.DepthAttachmentLayer(pointShadowCubes, layer, load, 0.0f);
                             readSkinned(pass);
-                            readShadowCulled(pass, cull);
+                            declareCulled(pass, cull);
                         },
                         [this, draws, pointGroups, facedRuns, unshadowedFrame, faceGroup, face, cubeDrawGroup, skinned,
                          commands = cull.commands, layeredCommands](PassContext& context) {
@@ -3859,13 +3861,7 @@ namespace Fenrir::Render
             }
             const BindingGroupHandle viewDrawGroup =
                 cull.indirection.IsEmpty() ? drawGroup : DrawGroupFor(frameIndex, cull.indirection);
-            const auto readCulled = [cull](PassBuilder& pass) {
-                if (!cull.commands.IsEmpty())
-                {
-                    pass.IndirectRead(cull.commandsResource);
-                    pass.StorageRead(cull.indirectionResource);
-                }
-            };
+            const auto readCulled = [cull, declareCulled](PassBuilder& pass) { declareCulled(pass, cull); };
 
             if (!shadowAtlas.IsEmpty())
             {
@@ -3904,7 +3900,7 @@ namespace Fenrir::Render
                         readSkinned(pass);
                         for (const CullView& cull : cascadeCulls)
                         {
-                            readShadowCulled(pass, cull);
+                            declareCulled(pass, cull);
                         }
                     },
                     [this, draws, shadowGroups, shadowRuns, frameGroup, cascadeGroups, cascadeCulls, cascadeDrawGroups,

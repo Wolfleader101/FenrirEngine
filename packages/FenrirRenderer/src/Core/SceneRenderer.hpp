@@ -129,6 +129,17 @@ namespace Fenrir::Render
         std::uint32_t cullCommandsPerPhase = 0;
     };
 
+    /**
+     * @brief What a view's cull pass tests its candidates against (ADR-0057): its planes (a camera's five, a cascade's
+     * five with the near one left open, a spot light's five, or none) and a sphere (a point light's range, radius 0
+     * for none). A candidate must pass both.
+     */
+    struct CullVolume
+    {
+        Math::Frustum frustum;
+        Math::Sphere sphere;
+    };
+
     /** @brief Which kind of shadow a shadow view draws (ADR-0050). */
     enum class ShadowViewKind : std::uint8_t
     {
@@ -146,15 +157,14 @@ namespace Fenrir::Render
      */
     struct DrawnShadowView
     {
+        /** @brief Which kind of shadow it draws. */
         ShadowViewKind kind = ShadowViewKind::Cascade;
-        /** @brief A cascade's camera's place in SceneFrame::views; 0 for a spot or point light. */
-        std::size_t view = 0;
+        /** @brief A cascade's camera's place in SceneFrame::views; none for a spot or point light, shared by all. */
+        std::optional<std::size_t> view;
         /** @brief The cascade's index, the spot light's tile or the point light's cube. */
         std::uint32_t index = 0;
-        /** @brief The planes the pass tested the casters against, and the sphere (a point light's range; else radius
-         * 0). */
-        Math::Frustum frustum;
-        Math::Sphere sphere;
+        /** @brief The planes and sphere its pass tested the casters against. */
+        CullVolume volume;
         /** @brief What its pass chose levels by: the camera's, never the light's. */
         LodView lod;
         /** @brief Its command buffer and indirection, as DrawnView's; empty when it had no casting runs. */
@@ -308,8 +318,9 @@ namespace Fenrir::Render
      * the camera; SelectLod), counting it into that command with an atomic. `DepthPrepass` and `Opaque` then draw
      * each run with one multi-draw of its level commands, declaring
      * `IndirectRead` on the commands and `StorageRead` on the indirection, which set 3 binding 3 binds for them
-     * (`Fenrir/Draw.glsl`'s `CurrentDraw()` reads it), so there is one draw group per view and frame in flight; every
-     * other pass binds the buffer that says there is no indirection and draws directly, as before. The per-view
+     * (`Fenrir/Draw.glsl`'s `CurrentDraw()` reads it), so there is one draw group per view and frame in flight; the
+     * shadow passes draw from their shadow views' buffers the same way, and the transparent passes bind the buffer
+     * that says there is no indirection and draw directly, as before. The per-view
      * buffers are sized to the frame's runs and candidates, kept between frames and ring-buffered per frame in flight.
      * The job block carries the view's planes (Math::Frustum), and the pass keeps a candidate whose sphere and then
      * whose box's eight corners may be inside them, as Math::Frustum tests them; with GPU culling off it gets no
@@ -985,17 +996,6 @@ namespace Fenrir::Render
             HistoryView history;
             /** @brief World to clip space, which the second phase takes screen rectangles in. */
             Math::Mat4 viewProjection{1.0f};
-        };
-
-        /**
-         * @brief What a view's cull pass tests its candidates against (ADR-0057): its planes (a camera's five, a
-         * cascade's five with the near one left open, a spot light's five, or none) and a sphere (a point light's
-         * range, radius 0 for none). A candidate must pass both.
-         */
-        struct CullVolume
-        {
-            Math::Frustum frustum;
-            Math::Sphere sphere;
         };
 
         /** @brief What a view's cull pass needs for its occlusion phase (ADR-0057). */

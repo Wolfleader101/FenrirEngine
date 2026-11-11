@@ -146,11 +146,17 @@ TEST_CASE("A frustum made from planes keeps them in order, so a view can be left
     REQUIRE_FALSE(orthographic.Intersects(Sphere{{0.0f, 2.0f, 3.0f}, 1.0f}));
     REQUIRE(open.Intersects(Sphere{{0.0f, 2.0f, 3.0f}, 1.0f}));
     REQUIRE_FALSE(open.Intersects(Sphere{{0.0f, 2.0f, -12.0f}, 1.0f}));
-    INFO("more than six planes are cut to six, and none make an empty frustum that keeps everything");
-    std::vector<Vec4> seven(7, Vec4(0.0f, 0.0f, 1.0f, 0.0f));
-    REQUIRE(Frustum::FromPlanes(seven).Planes().size() == 6);
+}
+
+TEST_CASE("A frustum made from no planes keeps everything, and one from more than six keeps the first six",
+          "[math][frustum]")
+{
+    INFO("no planes: nothing to be outside of");
     REQUIRE(Frustum::FromPlanes({}).Planes().empty());
     REQUIRE(Frustum::FromPlanes({}).Intersects(Sphere{{0.0f, 0.0f, 100.0f}, 1.0f}));
+    INFO("seven planes: the six there is room for");
+    const std::vector<Vec4> seven(7, Vec4(0.0f, 0.0f, 1.0f, 0.0f));
+    REQUIRE(Frustum::FromPlanes(seven).Planes().size() == 6);
 }
 
 TEST_CASE("A sphere is dropped only when it is wholly beyond one plane, of either kind of view", "[math][frustum]")

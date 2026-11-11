@@ -341,7 +341,7 @@ void main()
 
     // Counted as the run's instances per candidate (six for a point light's instanced faces, one entry for all six:
     // Fenrir/Draw.glsl reads it at the instance index over six), at the slot the count gave it.
-    const uint instances = max(run.instances, 1u);
+    const uint instances = run.instances;
     uint command = (group.x + uint(level) + (phase == 2u ? job.occlusion.z : 0u)) * 5u;
     uint slot = atomicAdd(commands.words[command + 1u], instances) / instances;
     indirection.entries[commands.words[command + 4u] + slot] = uvec2(record, copy);
