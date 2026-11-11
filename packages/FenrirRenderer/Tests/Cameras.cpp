@@ -71,11 +71,15 @@ namespace
         }
         return textures;
     }
-    /** @brief What an Output pass's block at set 1 holds: the exposure's scale, 2^EV, and the tonemapper's number. */
+    /**
+     * @brief What an Output pass's block at set 1 holds: the exposure's scale, 2^EV, the tonemapper's number, and the
+     * bits of the per-pixel effects it applies (1 the grade, 2 the vignette, 4 the grain).
+     */
     struct OutputSettings
     {
         float scale = 0.0f;
         std::uint32_t tonemapper = 0;
+        std::uint32_t effects = 0;
     };
 
     /** @brief The block an Output pass binds at set 1, as builtin:output declares it. */
@@ -88,6 +92,7 @@ namespace
         OutputSettings settings;
         settings.scale = RendererTest::FloatAt(bytes, at);
         settings.tonemapper = RendererTest::UintAt(bytes, at + 4);
+        settings.effects = RendererTest::UintAt(bytes, at + 12);
         return settings;
     }
 } // namespace
@@ -339,8 +344,8 @@ TEST_CASE("Each camera's exposure and tonemapper reach its view's Output pass", 
     // Left: the defaults. Right: two stops over, through PBR Neutral.
     AddCamera(test, 0, {0.0f, 0.0f, 0.5f, 1.0f});
     Fenrir::Camera& right = AddCamera(test, 1, {0.5f, 0.0f, 0.5f, 1.0f}).GetComponent<Fenrir::Camera>();
-    right.exposure = 2.0f;
-    right.tonemapper = Fenrir::Tonemapper::PbrNeutral;
+    right.look.exposure = 2.0f;
+    right.look.tonemapper = Fenrir::Tonemapper::PbrNeutral;
 
     test.Frame();
     const std::vector<PassRecord> outputs = RendererTest::Labelled(test.Passes(), "Output");
@@ -357,14 +362,48 @@ TEST_CASE("Each camera's exposure and tonemapper reach its view's Output pass", 
     REQUIRE(rightSettings.tonemapper == 2);
 }
 
+TEST_CASE("Output's block sets an effect's bit only while the effect is on", "[renderer][cameras][camera-effects]")
+{
+    // One camera per case, left to right: the default look; the grade and the vignette on; the grain on, and the
+    // vignette at 0 with its other settings off their defaults; every one on.
+    RendererTestApp test;
+    AddCamera(test, 0, {0.0f, 0.0f, 0.25f, 1.0f});
+    Fenrir::Entity graded = AddCamera(test, 1, {0.25f, 0.0f, 0.25f, 1.0f});
+    Fenrir::Entity grained = AddCamera(test, 2, {0.5f, 0.0f, 0.25f, 1.0f});
+    Fenrir::Entity every = AddCamera(test, 3, {0.75f, 0.0f, 0.25f, 1.0f});
+    Fenrir::CameraLook& gradedLook = graded.GetComponent<Fenrir::Camera>().look;
+    gradedLook.colourGrading.contrast = 1.2f;
+    gradedLook.vignette.intensity = 0.4f;
+    Fenrir::CameraLook& grainedLook = grained.GetComponent<Fenrir::Camera>().look;
+    grainedLook.filmGrain.intensity = 0.05f;
+    grainedLook.vignette = {0.0f, 0.1f, 0.2f, 0.3f};
+    Fenrir::CameraLook& everyLook = every.GetComponent<Fenrir::Camera>().look;
+    everyLook.colourGrading.saturation = 0.8f;
+    everyLook.vignette.intensity = 0.4f;
+    everyLook.filmGrain.intensity = 0.05f;
+
+    test.Frame();
+    const std::vector<PassRecord> outputs = RendererTest::Labelled(test.Passes(), "Output");
+    REQUIRE(outputs.size() == 4);
+    // 1 the grade, 2 the vignette, 4 the grain, as builtin:output's Effect* bits.
+    INFO("the default look applies none");
+    REQUIRE(SettingsOf(test, outputs[0]).effects == 0u);
+    INFO("a grade off identity and a vignette over 0 set theirs");
+    REQUIRE(SettingsOf(test, outputs[1]).effects == (1u | 2u));
+    INFO("grain over 0 sets its own; a vignette at 0 sets none, whatever its other settings");
+    REQUIRE(SettingsOf(test, outputs[2]).effects == 4u);
+    INFO("every effect on sets every bit");
+    REQUIRE(SettingsOf(test, outputs[3]).effects == (1u | 2u | 4u));
+}
+
 TEST_CASE("Changing a camera's tonemapper changes its Output pass's from the next frame",
           "[renderer][cameras][tonemapping]")
 {
     RendererTestApp test;
     Fenrir::Entity entity = AddCamera(test, 0);
     test.Frame();
-    entity.GetComponent<Fenrir::Camera>().tonemapper = Fenrir::Tonemapper::Aces;
-    entity.GetComponent<Fenrir::Camera>().exposure = -1.0f;
+    entity.GetComponent<Fenrir::Camera>().look.tonemapper = Fenrir::Tonemapper::Aces;
+    entity.GetComponent<Fenrir::Camera>().look.exposure = -1.0f;
 
     test.Frame();
     const std::vector<PassRecord> outputs = RendererTest::Labelled(test.Passes(), "Output");

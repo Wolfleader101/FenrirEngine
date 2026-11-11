@@ -57,8 +57,8 @@ namespace GlTest
         Fenrir::Camera& camera = test.AddCamera();
         camera.target = Fenrir::ImageTarget{image};
         camera.background = Fenrir::ColourBackground{Fenrir::Colour{0.02f, 0.03f, 0.06f, 1.0f}};
-        camera.tonemapper = tonemapper;
-        camera.exposure = exposure;
+        camera.look.tonemapper = tonemapper;
+        camera.look.exposure = exposure;
         if (setUp)
         {
             setUp(camera);

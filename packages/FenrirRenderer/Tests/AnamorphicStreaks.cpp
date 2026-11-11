@@ -87,7 +87,7 @@ namespace
     Fenrir::Camera& AddStreakingCamera(RendererTestApp& test, float intensity)
     {
         Fenrir::Camera& camera = test.AddCamera().GetComponent<Fenrir::Camera>();
-        camera.anamorphicStreaks.intensity = intensity;
+        camera.look.anamorphicStreaks.intensity = intensity;
         test.AddMeshRenderer(test.Mesh(), test.Material());
         return camera;
     }
@@ -147,7 +147,7 @@ TEST_CASE("A camera's streaks are off by default and add no pass", "[renderer][s
     test.AddCamera();
     test.AddMeshRenderer(test.Mesh(), test.Material());
     INFO("a camera's streak intensity is 0 by default");
-    REQUIRE(Fenrir::Camera{}.anamorphicStreaks.intensity == 0.0f);
+    REQUIRE(Fenrir::Camera{}.look.anamorphicStreaks.intensity == 0.0f);
 
     test.Frame();
     const std::vector<std::string> labels = Labels(test.Passes());
@@ -162,7 +162,7 @@ TEST_CASE("A camera's streaks run in PostProcess beside its bloom, from bloom's 
 {
     RendererTestApp test;
     Fenrir::Camera& camera = AddStreakingCamera(test, 0.1f);
-    camera.anamorphicStreaks.length = 0.6f;
+    camera.look.anamorphicStreaks.length = 0.6f;
 
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
@@ -234,7 +234,7 @@ TEST_CASE("The streak composite carries the camera's tint at unit luminance, and
 {
     RendererTestApp test;
     Fenrir::Camera& camera = AddStreakingCamera(test, 3.0f);
-    camera.anamorphicStreaks.tint = Fenrir::Colour{0.2f, 0.4f, 1.0f, 1.0f};
+    camera.look.anamorphicStreaks.tint = Fenrir::Colour{0.2f, 0.4f, 1.0f, 1.0f};
 
     test.Frame();
     const BloomBlock block = BlockOf(test, RendererTest::Labelled(test.Passes(), "StreakComposite").at(0));
@@ -252,7 +252,7 @@ TEST_CASE("A camera with bloom off still streaks, running bloom's first downsamp
 {
     RendererTestApp test;
     Fenrir::Camera& camera = AddStreakingCamera(test, 0.1f);
-    camera.bloom.intensity = 0.0f;
+    camera.look.bloom.intensity = 0.0f;
 
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
@@ -283,7 +283,7 @@ TEST_CASE("Each view streaks by its own camera's settings", "[renderer][streaks]
     Fenrir::Camera& right = test.AddCamera().GetComponent<Fenrir::Camera>();
     right.viewport = {0.5f, 0.0f, 0.5f, 1.0f};
     right.order = 1;
-    right.anamorphicStreaks.intensity = 0.2f;
+    right.look.anamorphicStreaks.intensity = 0.2f;
     test.AddMeshRenderer(test.Mesh(), test.Material());
 
     test.Frame();

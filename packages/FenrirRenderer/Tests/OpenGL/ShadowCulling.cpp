@@ -434,9 +434,9 @@ TEST_CASE("A caster above and behind the camera, outside its view but inside a c
     eye.GetComponent<Fenrir::Transform>().rot =
         Fenrir::Math::AngleAxis(Fenrir::Math::DegToRad(-90.0f), Vec3(1.0f, 0.0f, 0.0f));
     Fenrir::Camera& camera = eye.AddComponent<Fenrir::Camera>();
-    camera.bloom.intensity = 0.0f;
+    camera.look.bloom.intensity = 0.0f;
     camera.target = Fenrir::ImageTarget{target};
-    camera.tonemapper = Fenrir::Tonemapper::None;
+    camera.look.tonemapper = Fenrir::Tonemapper::None;
 
     test.RunFrame();
     INFO("no GL error or other error was logged");

@@ -29,26 +29,12 @@ namespace LightingDemo
     /** @brief What the panel and its keys have set, kept in each scene's own scene resource. */
     struct LightingSettings
     {
-        /** @brief Every camera's exposure, in EV stops. */
-        float exposure = 0.0f;
-        Fenrir::Tonemapper tonemapper = Fenrir::Tonemapper::AgX;
-        /** @brief Every camera's bloom; B sets its intensity to 0 and back. */
-        Fenrir::Bloom bloom;
-        /** @brief Every camera's anamorphic streaks, off unless the scene turns them on. */
-        Fenrir::AnamorphicStreaks anamorphicStreaks;
         /**
-         * @brief Every camera's lens flare, off unless the scene turns it on, and its lens dirt, none (an intensity of
-         * 0) unless the scene sets one. A scene that sets no dirt image gets the generated one (AddLensDirt).
+         * @brief Every camera's look: E steps its exposure, T its tonemapper, and B sets its bloom's intensity to 0 and
+         * back. Its effects are off unless the scene turns them on, and its lens dirt is none (an intensity of 0)
+         * unless the scene sets one; a scene that sets no dirt image gets the generated one (AddLensDirt).
          */
-        Fenrir::LensFlare lensFlare{.dirtIntensity = 0.0f};
-        /** @brief Every camera's colour grade, identity unless the scene sets one. */
-        Fenrir::ColourGrading colourGrading;
-        /** @brief Every camera's chromatic aberration, off unless the scene turns it on. */
-        Fenrir::ChromaticAberration chromaticAberration;
-        /** @brief Every camera's vignette, off unless the scene turns it on. */
-        Fenrir::Vignette vignette;
-        /** @brief Every camera's film grain, off unless the scene turns it on. */
-        Fenrir::FilmGrain filmGrain;
+        Fenrir::CameraLook look{.lensFlare = {.dirtIntensity = 0.0f}};
         /** @brief Every camera's ambient occlusion, on in the demo; O turns it off and back on. */
         Fenrir::AmbientOcclusion ambientOcclusion{true};
         /** @brief Every camera's screen-space reflections, off unless the scene turns them on. */

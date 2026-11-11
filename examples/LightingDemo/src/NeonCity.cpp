@@ -879,30 +879,30 @@ namespace LightingDemo
             CityState state;
             // PBR Neutral keeps the neon saturated where AgX turns it pastel; T still steps to AgX. A strong, wide
             // bloom spreads each sign's colour round it, and -0.5 EV keeps the dim spill on the upper walls at night.
-            state.lighting.tonemapper = Fenrir::Tonemapper::PbrNeutral;
-            state.lighting.exposure = -0.5f;
-            state.lighting.bloom = {0.3f, 0.85f};
+            state.lighting.look.tonemapper = Fenrir::Tonemapper::PbrNeutral;
+            state.lighting.look.exposure = -0.5f;
+            state.lighting.look.bloom = {0.3f, 0.85f};
             // The genre's long blue lines from the signs and headlights: anamorphic streaks, long and tinted blue,
             // mixed in after the bloom.
-            state.lighting.anamorphicStreaks = {0.1f, 0.85f, Fenrir::Colour{0.3f, 0.5f, 1.0f, 1.0f}};
+            state.lighting.look.anamorphicStreaks = {0.1f, 0.85f, Fenrir::Colour{0.3f, 0.5f, 1.0f, 1.0f}};
             // A subtle lens flare after the streaks: faint, fringed ghosts across the view from the brightest signs,
             // and the dirt on the lens lit up round them. The dirt is ambientCG's map when fetched, else the
             // generated one every scene has (AddLensDirt).
-            state.lighting.lensFlare.intensity = 0.03f;
-            state.lighting.lensFlare.dirtIntensity = 3.0f;
+            state.lighting.look.lensFlare.intensity = 0.03f;
+            state.lighting.look.lensFlare.dirtIntensity = 3.0f;
             state.lighting.ambientOcclusion.radius = 1.5f;
             // The grade of a cyberpunk night: teal shadows and magenta highlights, split a little under mid grey so the
             // magenta reaches the lit walls, with more contrast for the streets, and a slightly cool white balance.
-            state.lighting.colourGrading.temperature = 6000.0f;
-            state.lighting.colourGrading.contrast = 1.15f;
-            state.lighting.colourGrading.shadowTint = Fenrir::Colour{0.25f, 0.6f, 0.65f, 1.0f};
-            state.lighting.colourGrading.highlightTint = Fenrir::Colour{0.85f, 0.4f, 0.75f, 1.0f};
-            state.lighting.colourGrading.balance = 0.15f;
+            state.lighting.look.colourGrading.temperature = 6000.0f;
+            state.lighting.look.colourGrading.contrast = 1.15f;
+            state.lighting.look.colourGrading.shadowTint = Fenrir::Colour{0.25f, 0.6f, 0.65f, 1.0f};
+            state.lighting.look.colourGrading.highlightTint = Fenrir::Colour{0.85f, 0.4f, 0.75f, 1.0f};
+            state.lighting.look.colourGrading.balance = 0.15f;
             // A lens's touch: the corners fall off gently, signs near the edges fringe red and blue, and fine grain
             // shimmers over the dark streets, kept from the bright signs by its response.
-            state.lighting.vignette = {0.3f, 0.45f, 0.6f, 1.0f};
-            state.lighting.chromaticAberration.intensity = 0.006f;
-            state.lighting.filmGrain = {0.04f, 0.8f, 1.0f};
+            state.lighting.look.vignette = {0.3f, 0.45f, 0.6f, 1.0f};
+            state.lighting.look.chromaticAberration.intensity = 0.006f;
+            state.lighting.look.filmGrain = {0.04f, 0.8f, 1.0f};
             // The wet streets mirror the glowing strips, boards and windows on screen. The signs' boards are drawn,
             // so their rect lights keep visibleSurface, and their glints yield to the boards' reflections.
             state.lighting.reflections.enabled = true;
@@ -925,7 +925,7 @@ namespace LightingDemo
                 if (const auto image = store.Load<Fenrir::Image>(*path, scene); image.Ok())
                 {
                     // Its colour map is a dark, near-grey photo: read as linear, as the dirt's brightness is.
-                    state.lighting.lensFlare.dirt = AsLinear(store, scene, image.handle);
+                    state.lighting.look.lensFlare.dirt = AsLinear(store, scene, image.handle);
                 }
             }
             // Clustered and with vsync, whatever another scene left them as.
@@ -1112,16 +1112,16 @@ namespace LightingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp = LightingKeyHelp(true) +
-                        " N: the traffic stopped or moving. M: the streets dry or wet. R: reflections off or on. C: the "
-                        "lights clustered or not.";
+        scene.keyHelp =
+            LightingKeyHelp(true) +
+            " N: the traffic stopped or moving. M: the streets dry or wet. R: reflections off or on. C: the "
+            "lights clustered or not.";
         // The traffic stopped and the streets dried, then through the debug views to the reflections' and back,
         // unclustered and clustered again, wet again, reflections off and on again, moving again, and the other sky
         // where there is one.
-        scene.keys = {Fenrir::Key::N, Fenrir::Key::M, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G,
-                      Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G,
-                      Fenrir::Key::C, Fenrir::Key::C, Fenrir::Key::M, Fenrir::Key::R, Fenrir::Key::R,
-                      Fenrir::Key::N, Fenrir::Key::S};
+        scene.keys = {Fenrir::Key::N, Fenrir::Key::M, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G,
+                      Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::C, Fenrir::Key::C,
+                      Fenrir::Key::M, Fenrir::Key::R, Fenrir::Key::R, Fenrir::Key::N, Fenrir::Key::S};
         // Above the middle of a street, a few metres up, looking down it between the towers.
         scene.camera.position = {StreetLine(2) - 1.5f, 3.5f, CityHalf - 10.0f};
         scene.camera.yaw = 0.0f;

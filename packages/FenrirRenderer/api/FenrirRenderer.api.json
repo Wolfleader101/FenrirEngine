@@ -522,6 +522,155 @@
       ]
     },
     {
+      "name": "Fenrir::Tonemapper",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How a view's Output pass maps its linear HDR colour, after the exposure, into the [0, 1] its render target stores, which the target then encodes as sRGB (ADR-0049).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "None",
+          "value": 0,
+          "doc": "Each channel clamped to [0, 1]: what is over 1 is lost. For tests and exact colours."
+        },
+        {
+          "name": "AgX",
+          "value": 1,
+          "doc": "AgX, as Blender and Filament fit it: bright colours desaturate towards white as they would on film, and mid grey shows a little brighter than with None. The default."
+        },
+        {
+          "name": "PbrNeutral",
+          "value": 2,
+          "doc": "Khronos PBR Neutral: colours up to about 0.76 shown as they are (less a small offset in the darks), only the highlights compressed, so a material's base colour reads true."
+        },
+        {
+          "name": "Aces",
+          "value": 3,
+          "doc": "ACES, through Stephen Hill's fit of its reference rendering and sRGB output: contrasty, saturated."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Vignette",
+      "category": "struct",
+      "role": "nested",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A view's vignette (ADR-0059): the exposed colour darkened towards the corners, as a lens's falloff darkens them, before the grade and the tonemap, so the tonemapper sees it. Off by default, and off costs nothing.",
+      "fields": [
+        {
+          "name": "intensity",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0,
+          "doc": "How much of the light the corners lose, from 0 to 1: 0 by default, off; 1 makes them black."
+        },
+        {
+          "name": "radius",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0.5,
+          "doc": "Where the darkening starts, as a distance from the view's centre: 0 at the centre, 1 at the corners. 0.5 by default."
+        },
+        {
+          "name": "smoothness",
+          "offset": 8,
+          "kind": "f32",
+          "default": 0.5,
+          "doc": "How far past the radius, in the same distance, the darkening takes to reach its intensity: 0.5 by default. 0 is a hard edge."
+        },
+        {
+          "name": "roundness",
+          "offset": 12,
+          "kind": "f32",
+          "default": 1,
+          "doc": "The darkening's shape, from 0 to 1: 1 by default, a circle whatever the view's aspect; 0 an ellipse in the view's own proportions, reaching as far into the long sides as into the short ones."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::CameraLook",
+      "category": "struct",
+      "role": "nested",
+      "size": 196,
+      "alignment": 4,
+      "doc": "How a view turns the scene's light into its picture (ADR-0059): its exposure, the lens's effects, its colour grade, its tonemapper and its film. Plain data, one value: copy it to give another camera the same look. Every effect is off by default, and off costs nothing; the defaults keep the exposure at 0 EV, AgX and a light bloom. In the frame they run in ADR-0059's order: bloom, streaks and the flare in `PostProcess`, then in Output chromatic aberration as the scene is read, the exposure, the vignette, the grade, the tonemapper and the grain.",
+      "fields": [
+        {
+          "name": "exposure",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0,
+          "doc": "The view's exposure in EV stops: its Output pass multiplies the linear colour by 2^exposure before the tonemapper, so each +1 doubles it. 0 by default."
+        },
+        {
+          "name": "tonemapper",
+          "offset": 4,
+          "kind": "enum",
+          "type": "Fenrir::Tonemapper",
+          "default": "AgX",
+          "doc": "How the view's Output pass maps its HDR colour into what its target stores (ADR-0049)."
+        },
+        {
+          "name": "bloom",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::Bloom",
+          "default": {},
+          "doc": "How the view's bright pixels bleed into their surroundings before the tonemap."
+        },
+        {
+          "name": "anamorphicStreaks",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fenrir::AnamorphicStreaks",
+          "default": {},
+          "doc": "How the view's bright pixels draw out into horizontal lines before the tonemap, after bloom."
+        },
+        {
+          "name": "lensFlare",
+          "offset": 40,
+          "kind": "struct",
+          "type": "Fenrir::LensFlare",
+          "default": {},
+          "doc": "The view's ghosts, halo and lens dirt before the tonemap, after the streaks."
+        },
+        {
+          "name": "colourGrading",
+          "offset": 76,
+          "kind": "struct",
+          "type": "Fenrir::ColourGrading",
+          "default": {},
+          "doc": "The view's white balance, contrast, tints and saturation, before the tonemap."
+        },
+        {
+          "name": "chromaticAberration",
+          "offset": 164,
+          "kind": "struct",
+          "type": "Fenrir::ChromaticAberration",
+          "default": {},
+          "doc": "How the view's colours fringe towards its corners, as it reads the scene."
+        },
+        {
+          "name": "vignette",
+          "offset": 168,
+          "kind": "struct",
+          "type": "Fenrir::Vignette",
+          "default": {},
+          "doc": "How the view darkens towards its corners, before the grade."
+        },
+        {
+          "name": "filmGrain",
+          "offset": 184,
+          "kind": "struct",
+          "type": "Fenrir::FilmGrain",
+          "default": {},
+          "doc": "The view's film grain, after its tonemap."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::Orthographic",
       "category": "struct",
       "role": "nested",
@@ -773,36 +922,6 @@
       "defaultKind": "m_window"
     },
     {
-      "name": "Fenrir::Tonemapper",
-      "category": "enum",
-      "size": 1,
-      "alignment": 1,
-      "doc": "How a view's Output pass maps its linear HDR colour, after the exposure, into the [0, 1] its render target stores, which the target then encodes as sRGB (ADR-0049).",
-      "underlying": "u8",
-      "values": [
-        {
-          "name": "None",
-          "value": 0,
-          "doc": "Each channel clamped to [0, 1]: what is over 1 is lost. For tests and exact colours."
-        },
-        {
-          "name": "AgX",
-          "value": 1,
-          "doc": "AgX, as Blender and Filament fit it: bright colours desaturate towards white as they would on film, and mid grey shows a little brighter than with None. The default."
-        },
-        {
-          "name": "PbrNeutral",
-          "value": 2,
-          "doc": "Khronos PBR Neutral: colours up to about 0.76 shown as they are (less a small offset in the darks), only the highlights compressed, so a material's base colour reads true."
-        },
-        {
-          "name": "Aces",
-          "value": 3,
-          "doc": "ACES, through Stephen Hill's fit of its reference rendering and sRGB output: contrasty, saturated."
-        }
-      ]
-    },
-    {
       "name": "Fenrir::Viewport",
       "category": "struct",
       "role": "nested",
@@ -833,44 +952,6 @@
           "offset": 12,
           "kind": "f32",
           "default": 1
-        }
-      ]
-    },
-    {
-      "name": "Fenrir::Vignette",
-      "category": "struct",
-      "role": "nested",
-      "size": 16,
-      "alignment": 4,
-      "doc": "A view's vignette (ADR-0059): the exposed colour darkened towards the corners, as a lens's falloff darkens them, before the grade and the tonemap, so the tonemapper sees it. Off by default, and off costs nothing.",
-      "fields": [
-        {
-          "name": "intensity",
-          "offset": 0,
-          "kind": "f32",
-          "default": 0,
-          "doc": "How much of the light the corners lose, from 0 to 1: 0 by default, off; 1 makes them black."
-        },
-        {
-          "name": "radius",
-          "offset": 4,
-          "kind": "f32",
-          "default": 0.5,
-          "doc": "Where the darkening starts, as a distance from the view's centre: 0 at the centre, 1 at the corners. 0.5 by default."
-        },
-        {
-          "name": "smoothness",
-          "offset": 8,
-          "kind": "f32",
-          "default": 0.5,
-          "doc": "How far past the radius, in the same distance, the darkening takes to reach its intensity: 0.5 by default. 0 is a hard edge."
-        },
-        {
-          "name": "roundness",
-          "offset": 12,
-          "kind": "f32",
-          "default": 1,
-          "doc": "The darkening's shape, from 0 to 1: 1 by default, a circle whatever the view's aspect; 0 an ellipse in the view's own proportions, reaching as far into the long sides as into the short ones."
         }
       ]
     },
@@ -932,75 +1013,12 @@
           "doc": "Whether the view draws the scene's debug shapes and world text (ADR-0025). Screen text and messages belong to the window, not the view, and draw either way."
         },
         {
-          "name": "exposure",
+          "name": "look",
           "offset": 76,
-          "kind": "f32",
-          "default": 0,
-          "doc": "The view's exposure in EV stops: its Output pass multiplies the linear colour by 2^exposure before the tonemapper, so each +1 doubles it. 0 by default."
-        },
-        {
-          "name": "tonemapper",
-          "offset": 80,
-          "kind": "enum",
-          "type": "Fenrir::Tonemapper",
-          "default": "AgX",
-          "doc": "How the view's Output pass maps its HDR colour into what its target stores (ADR-0049)."
-        },
-        {
-          "name": "bloom",
-          "offset": 84,
           "kind": "struct",
-          "type": "Fenrir::Bloom",
+          "type": "Fenrir::CameraLook",
           "default": {},
-          "doc": "How the view's bright pixels bleed into their surroundings before the tonemap."
-        },
-        {
-          "name": "anamorphicStreaks",
-          "offset": 92,
-          "kind": "struct",
-          "type": "Fenrir::AnamorphicStreaks",
-          "default": {},
-          "doc": "How the view's bright pixels draw out into horizontal lines before the tonemap, after bloom."
-        },
-        {
-          "name": "lensFlare",
-          "offset": 116,
-          "kind": "struct",
-          "type": "Fenrir::LensFlare",
-          "default": {},
-          "doc": "The view's ghosts, halo and lens dirt before the tonemap, after the streaks."
-        },
-        {
-          "name": "colourGrading",
-          "offset": 152,
-          "kind": "struct",
-          "type": "Fenrir::ColourGrading",
-          "default": {},
-          "doc": "The look of the view: its white balance, contrast, tints and saturation, before the tonemap."
-        },
-        {
-          "name": "chromaticAberration",
-          "offset": 240,
-          "kind": "struct",
-          "type": "Fenrir::ChromaticAberration",
-          "default": {},
-          "doc": "How the view's colours fringe towards its corners, as it reads the scene."
-        },
-        {
-          "name": "vignette",
-          "offset": 244,
-          "kind": "struct",
-          "type": "Fenrir::Vignette",
-          "default": {},
-          "doc": "How the view darkens towards its corners, before the grade."
-        },
-        {
-          "name": "filmGrain",
-          "offset": 260,
-          "kind": "struct",
-          "type": "Fenrir::FilmGrain",
-          "default": {},
-          "doc": "The view's film grain, after its tonemap."
+          "doc": "How the view turns the scene's light into its picture: exposure, lens, grade, tonemap and film."
         },
         {
           "name": "ambientOcclusion",

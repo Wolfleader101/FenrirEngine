@@ -131,6 +131,22 @@ namespace Fenrir
             return {grain.intensity, grain.response, grain.size};
         }
 
+        /** @brief The core's copy of a camera's look, without its lens dirt, whose key ReadViews sets once prepared. */
+        Render::LookSettings ToCore(const CameraLook& look)
+        {
+            Render::LookSettings settings;
+            settings.exposure = look.exposure;
+            settings.tonemapper = ToCore(look.tonemapper);
+            settings.colourGrading = ToCore(look.colourGrading);
+            settings.bloom = {look.bloom.intensity, look.bloom.radius};
+            settings.anamorphicStreaks = ToCore(look.anamorphicStreaks);
+            settings.lensFlare = ToCore(look.lensFlare);
+            settings.chromaticAberration = ToCore(look.chromaticAberration);
+            settings.vignette = ToCore(look.vignette);
+            settings.filmGrain = ToCore(look.filmGrain);
+            return settings;
+        }
+
         /** @brief The core's copy of a camera's debug view: the same values in the same order. */
         Render::ViewDebug ToCore(CameraDebugView debugView)
         {
@@ -807,19 +823,12 @@ namespace Fenrir
                 view.target = KeyOf(resolved.image);
                 view.viewport = resolved.pixels;
                 view.drawDebug = camera.drawDebug;
-                view.exposure = camera.exposure;
-                view.tonemapper = ToCore(camera.tonemapper);
-                view.colourGrading = ToCore(camera.colourGrading);
-                view.bloom = {camera.bloom.intensity, camera.bloom.radius};
-                view.anamorphicStreaks = ToCore(camera.anamorphicStreaks);
-                view.lensFlare = ToCore(camera.lensFlare);
-                if (!camera.lensFlare.dirt.IsEmpty() && PrepareLensDirt(state, store, camera.lensFlare.dirt))
+                view.look = ToCore(camera.look);
+                const AssetHandle<Image>& dirt = camera.look.lensFlare.dirt;
+                if (!dirt.IsEmpty() && PrepareLensDirt(state, store, dirt))
                 {
-                    view.lensFlare.dirt = KeyOf(camera.lensFlare.dirt);
+                    view.look.lensFlare.dirt = KeyOf(dirt);
                 }
-                view.chromaticAberration = ToCore(camera.chromaticAberration);
-                view.vignette = ToCore(camera.vignette);
-                view.filmGrain = ToCore(camera.filmGrain);
                 view.ambientOcclusion = {camera.ambientOcclusion.enabled, camera.ambientOcclusion.radius,
                                          camera.ambientOcclusion.intensity};
                 view.reflections = {camera.reflections.enabled, camera.reflections.intensity,

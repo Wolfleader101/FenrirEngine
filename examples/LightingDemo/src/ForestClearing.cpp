@@ -872,8 +872,8 @@ namespace LightingDemo
             // Shadows across the clearing and into the trees round it, whose 17-metre crowns throw them far.
             state.lighting.sunShadows.shadowDistance = 70.0f;
             state.lighting.ambientOcclusion.radius = 1.0f;
-            state.lighting.bloom.intensity = 0.06f;
-            state.lighting.exposure = -0.5f;
+            state.lighting.look.bloom.intensity = 0.06f;
+            state.lighting.look.exposure = -0.5f;
             if (const std::optional<std::string> path = FetchedAsset(Panorama))
             {
                 if (const auto image = store.Load<Fenrir::Image>(*path, scene); image.Ok())

@@ -406,6 +406,10 @@ How much a tyre is sliding over the ground rather than rolling. Along the wheel,
 One of 32 groups a body belongs to (it may belong to several). With its *collision mask*, the layers it collides with, it decides which bodies can touch: two touch only when each one's mask includes a layer of the other.
 *Avoid:* channel, group (a *collision group*, bodies that ignore each other, is a separate idea).
 
+**Collision group**
+`CollisionGroup`: an optional component on a body entity holding one plain integer game code picks; bodies with the same non-zero group never touch each other, whatever their layers allow, and 0 is no group. A character body's applies to its move; a trigger's is its own entity's. Queries ignore it (physics map ticket "How do general collision groups work?").
+*Avoid:* ignore list, exclusion, sub-group, collision exception (Godot's), layer (a *collision layer* decides who may touch; a group removes contact the layers allow).
+
 ## FenrirEngine rendering
 
 **Graphics API**
@@ -516,40 +520,44 @@ Where a view's output goes: a window, or an image asset made with a size but no 
 A camera's brightness setting in EV stops, applied in its view's `Output` before the tonemapper: the linear colour times 2^exposure, so each +1 doubles it (ADR-0049).
 *Avoid:* gain, brightness, EV (alone, as the setting's name).
 
+**Look**
+How a camera turns the scene's light into its picture, one plain value on it (`Camera::look`, a `CameraLook`, ADR-0059): its exposure, tonemapper, bloom, anamorphic streaks, lens flare and dirt, colour grade, chromatic aberration, vignette and film grain. Copying it gives another camera the same look.
+*Avoid:* post-process settings, post-process profile, camera effects (the effects are its parts), environment (Godot's word, which also holds the sky and fog).
+
 **Tonemapper**
 How a view's `Output` maps its exposed HDR colour into the [0, 1] its render target stores: `AgX` (the default), `PbrNeutral`, `Aces`, or `None`, which clamps (ADR-0049).
-*Avoid:* tone curve, colour grade (the look set before it), tonemapping operator.
+*Avoid:* tone curve, colour grade (the grade set before it), tonemapping operator.
 
 **Colour grade**
-A camera's look, set in its view's `Output` on the exposed scene colour before the tonemapper (`Camera::colourGrading`, ADR-0059): white balance, contrast around mid grey, split toning, saturation and the ASC CDL, in that order. Identity by default.
-*Avoid:* LUT (a baked look, not yet supported), colour correction, post-process volume (the settings live on `Camera`).
+The part of a camera's look set in its view's `Output` on the exposed scene colour before the tonemapper (`CameraLook::colourGrading`, ADR-0059): white balance, contrast around mid grey, split toning, saturation and the ASC CDL, in that order. Identity by default.
+*Avoid:* LUT (a baked look, not yet supported), colour correction, post-process volume (the settings live on `Camera::look`).
 
 **Chromatic aberration**
-Colour fringes towards a view's edges, as a lens bends each wavelength by its own amount: its `Output` reads each channel of SceneColor at its own point, red moved outwards and blue inwards by its camera's `chromaticAberration.intensity` of the half-diagonal at the corners, the centre as it is (ADR-0059).
+Colour fringes towards a view's edges, as a lens bends each wavelength by its own amount: its `Output` reads each channel of SceneColor at its own point, red moved outwards and blue inwards by its camera's `look.chromaticAberration.intensity` of the half-diagonal at the corners, the centre as it is (ADR-0059).
 *Avoid:* colour fringing (what it looks like, not the effect), lateral colour, RGB split.
 
 **Vignette**
-A view darkened towards its corners, as a lens's falloff darkens them: its `Output` multiplies the exposed linear colour by a falloff from its centre before the colour grade and the tonemapper, set by its camera's `vignette` (ADR-0059).
+A view darkened towards its corners, as a lens's falloff darkens them: its `Output` multiplies the exposed linear colour by a falloff from its centre before the colour grade and the tonemapper, set by its camera's `look.vignette` (ADR-0059).
 *Avoid:* lens shading, edge darkening.
 
 **Film grain**
-Noise its `Output` adds to a view after the tonemapper, in the range the viewer sees, weighted towards the mid-tones as film grain shows, and moving each frame: its camera's `filmGrain` (ADR-0059).
+Noise its `Output` adds to a view after the tonemapper, in the range the viewer sees, weighted towards the mid-tones as film grain shows, and moving each frame: its camera's `look.filmGrain` (ADR-0059).
 *Avoid:* noise (alone), dither (a different thing, for banding).
 
 **Bloom**
-Bright pixels bleeding light into their surroundings: a view's SceneColor blurred over ever wider areas and mixed back into it before `Output` by its camera's `bloom.intensity`, with no threshold, keeping the scene's energy (ADR-0049).
+Bright pixels bleeding light into their surroundings: a view's SceneColor blurred over ever wider areas and mixed back into it before `Output` by its camera's `look.bloom.intensity`, with no threshold, keeping the scene's energy (ADR-0049).
 *Avoid:* glow (what bloom looks like, not the effect), bright pass or threshold (there is none), lens flare (a different effect).
 
 **Anamorphic streaks**
-Bright pixels drawn out into long, thin horizontal lines, as an anamorphic lens draws them: a horizontal-only blur chain from bloom's first level, mixed into SceneColor after the bloom by its camera's `anamorphicStreaks.intensity`, times a tint at unit luminance, with no threshold, keeping the scene's energy (ADR-0059).
+Bright pixels drawn out into long, thin horizontal lines, as an anamorphic lens draws them: a horizontal-only blur chain from bloom's first level, mixed into SceneColor after the bloom by its camera's `look.anamorphicStreaks.intensity`, times a tint at unit luminance, with no threshold, keeping the scene's energy (ADR-0059).
 *Avoid:* streak filter, star filter or starburst (a different, per-light effect), lens flare (ghosts and a halo, a different effect).
 
 **Lens flare**
-Ghosts of a view's bright parts mirrored through its centre along the line from them, and a halo ring, each colour fringed apart, as light reflecting between a lens's elements draws them: John Chapman's pseudo lens flare, read from bloom's second level and mixed into SceneColor after the streaks by its camera's `lensFlare.intensity`, with no threshold, keeping a flat view as it is (ADR-0059).
+Ghosts of a view's bright parts mirrored through its centre along the line from them, and a halo ring, each colour fringed apart, as light reflecting between a lens's elements draws them: John Chapman's pseudo lens flare, read from bloom's second level and mixed into SceneColor after the streaks by its camera's `look.lensFlare.intensity`, with no threshold, keeping a flat view as it is (ADR-0059).
 *Avoid:* starburst or sprite flare (per-light effects placed by a light's screen position, not built), glare (what a bright sky's flare looks like, not the effect).
 
 **Lens dirt**
-A greyscale image of the smudges and dust on a camera's lens, stretched over its view, which raises each pixel's share of the bloom and the lens flare where it is bright, so a bright light lights up the dirt: its camera's `lensFlare.dirt`, scaled by `lensFlare.dirtIntensity`, the share held at or below 1 so the mix stays a blend (ADR-0059).
+A greyscale image of the smudges and dust on a camera's lens, stretched over its view, which raises each pixel's share of the bloom and the lens flare where it is bright, so a bright light lights up the dirt: its camera's `look.lensFlare.dirt`, scaled by `lensFlare.dirtIntensity`, the share held at or below 1 so the mix stays a blend (ADR-0059).
 *Avoid:* dirt mask, lens texture.
 
 **Punctual light**
@@ -680,7 +688,47 @@ Where FenrirRenderer's 2D render feature draws a 2D draw list, supplying the tra
 The integer a 2D draw list is submitted to a window's overlay with: layers draw lowest first, and debug screen text draws above them all.
 *Avoid:* z-order, render stage (`Overlay` is the stage they all draw in), sort key.
 
-## FenrirEngine assets
+**Offscreen group**
+A run of a 2D draw list's commands drawn into an image of their own and then composited back as one: with an opacity, a blend mode, a filter, or as a mask (ADR-0060). Groups nest.
+*Avoid:* layer (an overlay layer is an ordering integer; Skia's and Vello's "layer" is this), render pass, surface.
+
+## FenrirEngine painting and UI
+
+**Painter**
+The recording API of FenrirPainter: a value that takes paths, shapes, images and text with a paint, a transform and a clip, and appends them to one 2D draw list. It keeps nothing between frames.
+*Avoid:* canvas, draw context, graphics (a `Graphics` in other engines draws straight to the GPU).
+
+**Paint**
+How a fill or a stroke is coloured: a solid colour, a gradient or an image, with its own transform.
+*Avoid:* brush (XAML's word for the same), shader (an asset here), style (a stylesheet's).
+
+**Element**
+One node of FenrirUI's tree: it has a parent, children, classes, a resolved style and a laid-out rectangle, and it is what markup tags and stylesheet selectors name.
+*Avoid:* panel (s&box's word, and a container here), widget, control (a built-in element with behaviour, such as a button), node (an ECS entity's scene word).
+
+**UI root**
+An element tree of its own with the 2D target it draws into and its scale rule. A window's overlay, an image and a quad in the world each hold their own.
+*Avoid:* canvas, document (markup loads into a root, it is not the root), screen.
+
+**Element id**
+`ElementId`: an index and a version naming one element of a UI root, stale once the element is removed. It is not an entity.
+*Avoid:* handle (Iris's term), node id, entity.
+
+**Control**
+A built-in element with behaviour of its own, such as a button, slider, scroll view or text entry, styled by the default stylesheet a game replaces.
+*Avoid:* widget, component (an ECS term), element (the general node).
+
+**Markup document**
+A file of element tags, attributes and includes that loads into a UI root as elements. It carries structure and ids, never logic or bindings.
+*Avoid:* layout file (layout is what Yoga computes), template (an include is a file, not a parameterised template), UXML, RML, XAML.
+
+**Stylesheet**
+A file of CSS rules, custom properties, keyframes and font faces that FenrirUI matches against elements to resolve their style.
+*Avoid:* theme (Godot's resource; the default stylesheet is the engine's only theme opinion), SCSS, USS, skin.
+
+**Scale rule**
+How a UI root maps its UI units to its target's logical units: by default so that 1080 UI units span the target's pixel height, or one to one with the target's logical units.
+*Avoid:* DPI scale (the window's content scale, one of its inputs), zoom, reference resolution.
 
 **FenrirAssets**
 The engine's asset package: loads files into plain CPU-side data and owns it behind asset handles. It has no GPU code; FenrirRenderer and animation each turn its data into their own form (ADR-0021).
@@ -828,8 +876,36 @@ A number FenrirSkeleton advances whenever a skeleton instance's final pose chang
 A per-bone scale, default 1, that gameplay sets on a skeleton instance to say how much its pose override entries count, apart from the entries themselves; set per bone or over a subtree, latest assignment winning (ADR-0038).
 *Avoid:* blend weight (pose blending's), physics weight, influence.
 
+**Ragdoll**
+`Ragdoll`: a component on a skeleton entity (one per skeleton) naming the collision group, root body and state of the ragdoll bodies that follow and drive its bones. The bodies and the joints between them are ordinary rigid bodies and joints (ADR-0053).
+*Avoid:* rig, physics asset, physical skeleton.
+
+**Ragdoll body**
+`RagdollBody`: a component on a rigid body entity naming its ragdoll, the bone it follows and drives by name, and the body's offset from that bone. Kinematic while the ragdoll follows its skeleton, it is the character's hit box: a hit names the body entity, and game code reads the bone name from it (ADR-0053).
+*Avoid:* part (Jolt's), physical bone (Godot's), hitbox component.
+
+**Ragdoll description**
+`RagdollDescription`: the plain-data value a ragdoll is built from: its *ragdoll parts* (each a bone name, a parent, a collision shape, an offset, a mass, a joint kind and a strength scale) and the ragdoll's defaults. Derived from a skeleton and a *humanoid bone map* by `DescribeHumanoid`, or filled by hand, then spawned by `BuildRagdoll` (physics map ticket "From what description is a ragdoll built, and with which bodies, joints, motors and strengths?").
+*Avoid:* physics asset, rig definition, wizard.
+
+**Humanoid bone map**
+`HumanoidBones`: named slots (hips, spine, chest, head, and each side's upper arm, lower arm, hand, upper leg, lower leg, foot) that game code fills with a rig's bone names, any of them empty. The ragdoll derivation never guesses a slot from a name.
+*Avoid:* avatar (Unity's), retarget map.
+
+**Stature**
+A skeleton's head-to-foot distance in its rest pose, which the ragdoll derivation sizes capsule radii and leaf parts from, because bone lengths (a short spine bone) do not scale a body's girth.
+*Avoid:* height (an entity's), scale.
+
+**Strength**
+How hard a powered ragdoll's motors drive towards the base pose: one value in [0, 1] on the ragdoll, scaled per part, that the glue turns into each motor's maximum torque, frequency and damping, so it means the same on every rig.
+*Avoid:* stiffness, blend weight (an *override weight* is how much the simulated pose shows, not how hard it is driven).
+
+**Ragdoll mode**
+`RagdollMode`: whether a ragdoll's bodies are *following* (kinematic, moved each tick to the simulation pose), *simulating* (dynamic, writing pose overrides) or *powered* (dynamic, motors driving towards the base pose); set on the ragdoll and overridable per body, and applied by the glue to motion types and motors (ADR-0054). A *partial ragdoll* is a simulating subtree under a following parent.
+*Avoid:* kinematic ragdoll, active ragdoll, blend in/out, physics blend weight.
+
 **Ragdoll glue**
-App code, or a package the physics map's ragdoll spec defines, that joins a ragdoll's bodies to a skeleton: it writes body poses in as pose overrides and reads the base pose for motor targets, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038).
+FenrirRagdoll's systems, which join a ragdoll's bodies to its skeleton: each tick they move following bodies to the simulation pose, and each frame they write simulating bodies' poses in as pose overrides and read the base pose for motor targets, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038, ADR-0040, ADR-0053).
 *Avoid:* ragdoll system, physics animation.
 
 **Skinned mesh**

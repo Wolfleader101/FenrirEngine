@@ -129,7 +129,7 @@ namespace
     Fenrir::Camera& AddReflectingCamera(RendererTestApp& test)
     {
         Fenrir::Camera& camera = test.AddCamera().GetComponent<Fenrir::Camera>();
-        camera.bloom.intensity = 0.0f;
+        camera.look.bloom.intensity = 0.0f;
         camera.reflections.enabled = true;
         test.AddMeshRenderer(test.Mesh(), test.Material());
         return camera;

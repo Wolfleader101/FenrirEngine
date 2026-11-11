@@ -86,7 +86,7 @@ namespace Fenrir::Render
         bool castShadows = true;
     };
 
-    /** @brief A view's bloom (ADR-0049), the core's copy of Camera::bloom. */
+    /** @brief A view's bloom (ADR-0049), the core's copy of CameraLook::bloom. */
     struct BloomSettings
     {
         /** @brief How much of the bloom SceneColor is mixed with, in [0, 1]; 0 or less adds no pass. */
@@ -95,7 +95,7 @@ namespace Fenrir::Render
         float radius = 0.7f;
     };
 
-    /** @brief A view's anamorphic streaks (ADR-0059), the core's copy of Camera::anamorphicStreaks. */
+    /** @brief A view's anamorphic streaks (ADR-0059), the core's copy of CameraLook::anamorphicStreaks. */
     struct AnamorphicStreaksSettings
     {
         /** @brief How much of the streaks SceneColor is mixed with, in [0, 1]; 0 or less adds no pass. */
@@ -106,7 +106,7 @@ namespace Fenrir::Render
         Math::Vec3 tint{1.0f};
     };
 
-    /** @brief A view's lens flare and lens dirt (ADR-0059), the core's copy of Camera::lensFlare. */
+    /** @brief A view's lens flare and lens dirt (ADR-0059), the core's copy of CameraLook::lensFlare. */
     struct LensFlareSettings
     {
         /** @brief How much of the flare SceneColor is mixed with, in [0, 1]; 0 or less adds no pass. */
@@ -183,6 +183,29 @@ namespace Fenrir::Render
         ReflectionConfidence,
     };
 
+    /** @brief A view's look (ADR-0059), the core's copy of Camera::look. */
+    struct LookSettings
+    {
+        /** @brief The view's exposure in EV stops (CameraLook::exposure): Output scales by 2^exposure. */
+        float exposure = 0.0f;
+        /** @brief How Output maps the exposed colour into its target (CameraLook::tonemapper). */
+        Tonemapper tonemapper = Tonemapper::AgX;
+        /** @brief How Output grades the exposed colour before its tonemapper (CameraLook::colourGrading). */
+        ColourGradingSettings colourGrading;
+        /** @brief How its `PostProcess` bloom mixes into SceneColor (CameraLook::bloom). */
+        BloomSettings bloom;
+        /** @brief How its `PostProcess` streaks mix into SceneColor after the bloom (CameraLook::anamorphicStreaks). */
+        AnamorphicStreaksSettings anamorphicStreaks;
+        /** @brief Its `PostProcess` ghosts and halo after the streaks, and its lens dirt (CameraLook::lensFlare). */
+        LensFlareSettings lensFlare;
+        /** @brief How far Output reads red and blue apart towards the corners (CameraLook::chromaticAberration). */
+        ChromaticAberrationSettings chromaticAberration;
+        /** @brief How Output darkens the exposed colour towards the corners (CameraLook::vignette). */
+        VignetteSettings vignette;
+        /** @brief The film grain Output adds to the tonemapped colour (CameraLook::filmGrain). */
+        FilmGrainSettings filmGrain;
+    };
+
     /**
      * @brief One camera's view of the scene (ADR-0026): drawn into its own scene targets at its viewport's size, then
      * written by Output into its viewport of its render target.
@@ -208,24 +231,8 @@ namespace Fenrir::Render
         Graphics::PixelRect viewport;
         /** @brief Whether the view draws the scene's debug drawing in its `Debug` stage (Camera::drawDebug). */
         bool drawDebug = true;
-        /** @brief The view's exposure in EV stops (Camera::exposure): Output scales by 2^exposure. */
-        float exposure = 0.0f;
-        /** @brief How Output maps the exposed colour into its target (Camera::tonemapper). */
-        Tonemapper tonemapper = Tonemapper::AgX;
-        /** @brief How Output grades the exposed colour before its tonemapper (Camera::colourGrading). */
-        ColourGradingSettings colourGrading;
-        /** @brief How its `PostProcess` bloom mixes into SceneColor (Camera::bloom). */
-        BloomSettings bloom;
-        /** @brief How its `PostProcess` streaks mix into SceneColor after the bloom (Camera::anamorphicStreaks). */
-        AnamorphicStreaksSettings anamorphicStreaks;
-        /** @brief Its `PostProcess` ghosts and halo after the streaks, and its lens dirt (Camera::lensFlare). */
-        LensFlareSettings lensFlare;
-        /** @brief How far Output reads red and blue apart towards the corners (Camera::chromaticAberration). */
-        ChromaticAberrationSettings chromaticAberration;
-        /** @brief How Output darkens the exposed colour towards the corners (Camera::vignette). */
-        VignetteSettings vignette;
-        /** @brief The film grain Output adds to the tonemapped colour (Camera::filmGrain). */
-        FilmGrainSettings filmGrain;
+        /** @brief Its `PostProcess` effects and Output's exposure, grade, tonemapper and grain (Camera::look). */
+        LookSettings look;
         /** @brief Its GTAO, which builtin:lit's sky light is darkened by in `Opaque` (Camera::ambientOcclusion). */
         AmbientOcclusionSettings ambientOcclusion;
         /** @brief Its screen-space reflections' history and pyramids (Camera::reflections). */

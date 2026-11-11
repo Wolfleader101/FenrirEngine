@@ -83,7 +83,7 @@ namespace
     Fenrir::Camera& AddReflectingCamera(RendererTestApp& test)
     {
         Fenrir::Camera& camera = test.AddCamera().GetComponent<Fenrir::Camera>();
-        camera.bloom.intensity = 0.0f;
+        camera.look.bloom.intensity = 0.0f;
         camera.reflections.enabled = true;
         test.AddMeshRenderer(test.Mesh(), test.Material());
         return camera;
@@ -210,7 +210,7 @@ TEST_CASE("A Hi-Z level of an odd size keeps the farthest depth of the folded ro
 TEST_CASE("A default camera builds its pyramid once for occlusion culling, keeping no history", "[renderer][ssr]")
 {
     RendererTestApp test;
-    test.AddCamera().GetComponent<Fenrir::Camera>().bloom.intensity = 0.0f;
+    test.AddCamera().GetComponent<Fenrir::Camera>().look.bloom.intensity = 0.0f;
     test.AddMeshRenderer(test.Mesh(), test.Material());
 
     test.Frame();
@@ -250,7 +250,7 @@ TEST_CASE("The HiZ passes follow GTAO's, and the SceneHistory passes come before
     RendererTestApp test;
     Fenrir::Camera& camera = AddReflectingCamera(test);
     camera.ambientOcclusion.enabled = true;
-    camera.bloom.intensity = 0.5f;
+    camera.look.bloom.intensity = 0.5f;
 
     test.Frame();
     const std::vector<std::string> labels = Labels(test.Passes());
@@ -363,7 +363,7 @@ TEST_CASE("Each reflecting camera keeps its own history, its pyramids swapping e
     Fenrir::Camera& right = test.AddCamera().GetComponent<Fenrir::Camera>();
     right.viewport = {0.5f, 0.0f, 0.5f, 1.0f};
     right.order = 1;
-    right.bloom.intensity = 0.0f;
+    right.look.bloom.intensity = 0.0f;
     right.reflections.enabled = true;
 
     test.Frame();
@@ -396,7 +396,7 @@ TEST_CASE("A camera's reflection textures are freed when it goes or turns them o
     RendererTestApp test;
     Fenrir::Entity reflecting = test.AddCamera();
     Fenrir::Camera& camera = reflecting.GetComponent<Fenrir::Camera>();
-    camera.bloom.intensity = 0.0f;
+    camera.look.bloom.intensity = 0.0f;
     camera.reflections.enabled = true;
     test.AddMeshRenderer(test.Mesh(), test.Material());
     // Whether every texture `kept` names is live.

@@ -59,11 +59,11 @@ namespace
         Fenrir::Camera& left = test.AddCamera().GetComponent<Fenrir::Camera>();
         left.viewport = {0.0f, 0.0f, 0.5f, 1.0f};
         left.ambientOcclusion.enabled = true;
-        left.bloom.intensity = 0.0f;
+        left.look.bloom.intensity = 0.0f;
         Fenrir::Camera& right = test.AddCamera().GetComponent<Fenrir::Camera>();
         right.viewport = {0.5f, 0.0f, 0.5f, 1.0f};
         right.order = 1;
-        right.bloom.intensity = 0.0f;
+        right.look.bloom.intensity = 0.0f;
         test.AddMeshRenderer(test.Mesh(), test.Material());
         return left;
     }
@@ -73,7 +73,7 @@ namespace
     Fenrir::Camera& AddOccludedCamera(RendererTestApp& test)
     {
         Fenrir::Camera& camera = test.AddCamera().GetComponent<Fenrir::Camera>();
-        camera.bloom.intensity = 0.0f;
+        camera.look.bloom.intensity = 0.0f;
         camera.ambientOcclusion = {true, 0.75f, 2.0f};
         test.AddMeshRenderer(test.Mesh(), test.Material());
         return camera;
@@ -109,7 +109,7 @@ TEST_CASE("Ambient occlusion is on only when enabled with a radius and an intens
 TEST_CASE("A default camera's view has no GTAO pass", "[renderer][gtao]")
 {
     RendererTestApp test;
-    test.AddCamera().GetComponent<Fenrir::Camera>().bloom.intensity = 0.0f;
+    test.AddCamera().GetComponent<Fenrir::Camera>().look.bloom.intensity = 0.0f;
     test.AddMeshRenderer(test.Mesh(), test.Material());
 
     test.Frame();

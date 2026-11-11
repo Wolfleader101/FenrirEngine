@@ -38,8 +38,8 @@ namespace
         Fenrir::Camera& camera = test.AddCamera();
         camera.projection = Fenrir::Orthographic{static_cast<float>(Size), 0.1f, 100.0f};
         camera.background = Fenrir::ColourBackground{Fenrir::Colour::Black};
-        camera.bloom.intensity = intensity;
-        camera.bloom.radius = radius;
+        camera.look.bloom.intensity = intensity;
+        camera.look.bloom.radius = radius;
         test.AddQuad(2.0f, 1.0f, "builtin:unlit", Fenrir::Colour{value, value, value, 1.0f});
         return camera;
     }
@@ -147,8 +147,8 @@ TEST_CASE("Under MSAA bloom resolves SceneColor and still keeps the spot's energ
     // dim tails show in the 8-bit sRGB target and nothing reaches 1.
     Fenrir::Camera& camera = AddSpot(test, Value, 1.0f, 0.7f);
     camera.target = Fenrir::ImageTarget{image};
-    camera.tonemapper = Fenrir::Tonemapper::None;
-    camera.exposure = 6.0f;
+    camera.look.tonemapper = Fenrir::Tonemapper::None;
+    camera.look.exposure = 6.0f;
     test.RunFrame();
     INFO("no GL error or other error was logged");
     REQUIRE(test.messages->errors.empty());
@@ -179,7 +179,7 @@ TEST_CASE("An emissive sphere glowing with bloom matches its golden image", "[re
     const auto image = store.Add<Fenrir::Image>(std::move(data), Fenrir::AssetOwner::App());
     // The default camera's bloom and AgX, over a dark blue.
     Fenrir::Camera& camera = test.AddCamera();
-    camera.bloom = Fenrir::Bloom{};
+    camera.look.bloom = Fenrir::Bloom{};
     camera.target = Fenrir::ImageTarget{image};
     camera.background = Fenrir::ColourBackground{Fenrir::Colour{0.01f, 0.012f, 0.02f, 1.0f}};
 
@@ -241,7 +241,7 @@ TEST_CASE("builtin:lit never writes past SceneColor's largest value", "[renderer
     test.RequireOpenGL();
     Fenrir::Camera& camera = test.AddCamera();
     camera.projection = Fenrir::Orthographic{static_cast<float>(Size), 0.1f, 100.0f};
-    camera.tonemapper = Fenrir::Tonemapper::None;
+    camera.look.tonemapper = Fenrir::Tonemapper::None;
     const auto material = test.AddQuad(static_cast<float>(Size), 1.0f, "builtin:lit", Fenrir::Colour::Black);
     test.assets.Store().SetColour(material, "emissive", Fenrir::Colour::White);
     test.assets.Store().SetFloat(material, "emissiveStrength", 1.0e6f);
