@@ -61,6 +61,12 @@ namespace LightingDemo
                                                         "moon_rock_07/moon_rock_07_1k.gltf"};
         constexpr const char* PlanetTexture = "planets/2k_jupiter.jpg";
 
+        /**
+         * @brief How a rock's levels are made: halving to seven levels and about fifty triangles, the coarsest the
+         * specks that are most of the ring, with its UV seams free to collapse (a scanned rock's islands lock it at a
+         * few hundred triangles otherwise).
+         */
+        constexpr Fenrir::LodSettings RockLods{0.5f, 7, 32, false};
         /** @brief The level-of-detail errors L steps through, in pixels; the renderer's default first. */
         constexpr std::array<float, 4> LodErrorSteps{1.0f, 2.0f, 4.0f, 0.5f};
 
@@ -111,7 +117,7 @@ namespace LightingDemo
         {
             if (const Fenrir::MeshData* data = store.TryGet(mesh))
             {
-                store.Replace(mesh, Fenrir::GenerateLods(*data));
+                store.Replace(mesh, Fenrir::GenerateLods(*data, RockLods));
             }
         }
 
