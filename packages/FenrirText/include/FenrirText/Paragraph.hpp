@@ -42,12 +42,15 @@ namespace Fenrir
      */
     struct GlyphRun
     {
+        /** @brief The font the glyphs are from. */
         AssetHandle<Font> font;
         /** @brief The font size in pixels. */
         float size = 0.0f;
         /** @brief The atlas page the glyphs' rectangles are on. */
         AssetHandle<Image> page;
+        /** @brief The run's text style's colour. */
         Colour colour;
+        /** @brief The run's text style's decoration, drawn from the metrics below. */
         TextDecoration decoration = TextDecoration::None;
         /** @brief The line, an index into Paragraph::Lines. */
         std::uint32_t line = 0;
@@ -103,6 +106,7 @@ namespace Fenrir
     class Paragraph
     {
       public:
+        /** @brief A paragraph with no text, in the default paragraph style. */
         Paragraph();
         ~Paragraph();
         Paragraph(const Paragraph&) = delete;
@@ -119,7 +123,10 @@ namespace Fenrir
         /** @brief Removes all text. */
         void Clear();
 
+        /** @brief Sets how the lines are laid out; the next Layout lays out again if it differs. */
         void SetStyle(const ParagraphStyle& style);
+
+        /** @brief How the lines are laid out. */
         [[nodiscard]] const ParagraphStyle& Style() const noexcept;
 
         /** @brief The text, every run's in order. */
@@ -134,7 +141,10 @@ namespace Fenrir
         /** @brief The laid-out text's extent: its widest line's width and its lines' height, in pixels. */
         [[nodiscard]] Math::Vec2 Size() const noexcept;
 
+        /** @brief The laid-out lines, top to bottom; empty before Layout and for no text. */
         [[nodiscard]] std::span<const LineMetrics> Lines() const noexcept;
+
+        /** @brief The glyph runs, line by line and left to right within a line; empty before Layout. */
         [[nodiscard]] std::span<const GlyphRun> Runs() const noexcept;
 
         /**

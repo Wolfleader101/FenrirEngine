@@ -33,7 +33,7 @@ FenrirAssets's `Font` asset is a TrueType or OpenType file's bytes (`.ttf`, `.ot
 1. White space is collapsed or kept (`WhiteSpace`, as CSS's `white-space`).
 2. The text is split into items by style, bidi level (SheenBidi), script (SheenBidi's script locator) and face (per grapheme, the first face of the chain that has all of it).
 3. Each item is shaped by HarfBuzz, with kerning and ligatures; letter spacing turns ligatures off.
-4. Lines break greedily at libunibreak's UAX#14 opportunities within the width (`UnlimitedWidth` for none); trailing spaces hang. `maxLines` and `ellipsis` cut the text, the ellipsis in the face and style the text ends in.
+4. Lines break greedily at libunibreak's UAX#14 opportunities within the width (`UnlimitedWidth` for none); trailing spaces hang. Lines are cut from the shaped items, not shaped again, so a break inside an item measures and draws its glyphs as they were shaped across it; breaks fall at spaces almost always, where nothing joins. `maxLines` and `ellipsis` cut the text, the ellipsis in the face and style the text ends in.
 5. Each line is ordered by SheenBidi's line runs, aligned, and given a line box: its faces' ascent and descent, or `lineHeight` times its largest size, with the extra split above and below.
 6. Glyphs are rasterised into the atlases on first use and placed at quarter-pixel pen positions.
 

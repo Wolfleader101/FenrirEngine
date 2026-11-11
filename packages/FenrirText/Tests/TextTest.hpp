@@ -89,6 +89,12 @@ namespace TextTest
         }
     };
 
+    // `text` as the UTF-8 a std::string holds: u8 literals are UTF-8 whatever the compiler's execution character set.
+    inline std::string Utf8(std::u8string_view text)
+    {
+        return {reinterpret_cast<const char*>(text.data()), text.size()};
+    }
+
     // A style in `family` at `size` pixels.
     inline Fenrir::TextStyle Style(std::string family, float size = 16.0f)
     {

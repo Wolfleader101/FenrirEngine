@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "FenrirText/GlyphAtlas.hpp"
@@ -145,6 +146,31 @@ TEST_CASE("An atlas refuses a rectangle larger than its biggest page", "[text][a
     Fenrir::GlyphAtlas atlas(test.store, {16, 32, 1});
     INFO("a 40-pixel square cannot fit a 32-pixel page");
     REQUIRE_FALSE(atlas.Add(40, 40, Coverage(40, 40, 1)).has_value());
-    INFO("coverage of the wrong size is refused");
+}
+
+TEST_CASE("An atlas refuses coverage of the wrong size", "[text][atlas]")
+{
+    TextApp test;
+    Fenrir::GlyphAtlas atlas(test.store, {16, 32, 1});
+    INFO("twelve bytes for a 4 by 4 rectangle are refused");
     REQUIRE_FALSE(atlas.Add(4, 4, Coverage(3, 4, 1)).has_value());
+}
+
+TEST_CASE("An atlas assigned another's unloads the pages it held", "[text][atlas]")
+{
+    TextApp test;
+    Fenrir::GlyphAtlas kept(test.store, {16, 16, 0});
+    Fenrir::GlyphAtlas given(test.store, {16, 16, 0});
+    REQUIRE(kept.Add(4, 4, Coverage(4, 4, 1)).has_value());
+    REQUIRE(given.Add(4, 4, Coverage(4, 4, 2)).has_value());
+    const Fenrir::AssetHandle<Fenrir::Image> old = kept.Pages()[0];
+    const Fenrir::AssetHandle<Fenrir::Image> taken = given.Pages()[0];
+
+    kept = std::move(given);
+    INFO("the page the atlas held is freed, not leaked");
+    REQUIRE_FALSE(test.store.IsValid(old));
+    INFO("it now holds the other atlas's page");
+    REQUIRE(kept.Pages().size() == 1);
+    REQUIRE(kept.Pages()[0] == taken);
+    REQUIRE(test.store.IsValid(taken));
 }

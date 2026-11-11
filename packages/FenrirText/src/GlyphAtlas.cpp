@@ -130,6 +130,24 @@ namespace Fenrir
 
     GlyphAtlas::~GlyphAtlas()
     {
+        UnloadPages();
+    }
+
+    GlyphAtlas::GlyphAtlas(GlyphAtlas&&) noexcept = default;
+
+    GlyphAtlas& GlyphAtlas::operator=(GlyphAtlas&& other) noexcept
+    {
+        if (this != &other)
+        {
+            // The pages this atlas held end with it, as they would in its destructor.
+            UnloadPages();
+            m_state = std::move(other.m_state);
+        }
+        return *this;
+    }
+
+    void GlyphAtlas::UnloadPages()
+    {
         if (m_state)
         {
             for (const AssetHandle<Image> page : m_state->pages)
@@ -138,9 +156,6 @@ namespace Fenrir
             }
         }
     }
-
-    GlyphAtlas::GlyphAtlas(GlyphAtlas&&) noexcept = default;
-    GlyphAtlas& GlyphAtlas::operator=(GlyphAtlas&&) noexcept = default;
 
     std::optional<AtlasRegion> GlyphAtlas::Add(std::uint32_t width, std::uint32_t height,
                                                std::span<const std::byte> coverage)

@@ -28,7 +28,9 @@ namespace Fenrir
     /** @brief Where an atlas put a rectangle: its page, and the region on that page, padding excluded. */
     struct AtlasRegion
     {
+        /** @brief The page, an index into GlyphAtlas::Pages. */
         std::uint32_t page = 0;
+        /** @brief The rectangle on the page, in pixels. */
         ImageRegion region;
 
         friend constexpr bool operator==(const AtlasRegion&, const AtlasRegion&) = default;
@@ -47,11 +49,13 @@ namespace Fenrir
      * the newest page takes rectangles. FenrirText keeps one per face and pixel size; it is public so that its packing
      * can be tested and so that other coverage (icons) can be packed alike.
      *
-     * Main thread only, as the asset store is. The store must outlive the atlas, which unloads its pages when it ends.
+     * Main thread only, as the asset store is. The store must outlive the atlas, which unloads its pages when it ends
+     * or is assigned another's.
      */
     class GlyphAtlas
     {
       public:
+        /** @brief An atlas with no pages yet, keeping its pages in `store`; the first Add opens one. */
         GlyphAtlas(AssetStore& store, GlyphAtlasConfig config = {});
         ~GlyphAtlas();
         GlyphAtlas(const GlyphAtlas&) = delete;
@@ -69,6 +73,8 @@ namespace Fenrir
         [[nodiscard]] std::span<const AssetHandle<Image>> Pages() const noexcept;
 
       private:
+        void UnloadPages();
+
         std::unique_ptr<Detail::GlyphAtlasState> m_state;
     };
 } // namespace Fenrir

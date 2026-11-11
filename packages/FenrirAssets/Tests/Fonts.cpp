@@ -27,7 +27,7 @@ TEST_CASE("A font file loads as its bytes, at revision 1", "[assets][fonts]")
     REQUIRE(test.store.Load<Fenrir::Font>("fonts/tagged.ttf", Fenrir::AssetOwner::App()).handle == loaded.handle);
 }
 
-TEST_CASE("A file that does not start as a font does fails to load as one", "[assets][fonts]")
+TEST_CASE("A file without a font's sfnt tag fails to load as a font", "[assets][fonts]")
 {
     AssetsApp test;
     const Fenrir::LoadResult<Fenrir::Font> loaded =

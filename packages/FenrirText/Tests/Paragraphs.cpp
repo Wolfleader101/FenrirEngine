@@ -15,6 +15,7 @@ using TextTest::FullFont;
 using TextTest::Glyphs;
 using TextTest::Style;
 using TextTest::TextApp;
+using TextTest::Utf8;
 
 namespace
 {
@@ -79,10 +80,10 @@ TEST_CASE("An Arabic run is shaped and ordered right to left", "[text][paragraph
     TextApp test;
     test.Register("Amiri", FullFont("Amiri-Regular.ttf"));
     // Salaam: seen, lam, alef, meem, two bytes each.
-    const Fenrir::Paragraph paragraph = Laid(test, "سلام", Style("Amiri", 40.0f), 400.0f);
+    const Fenrir::Paragraph paragraph = Laid(test, Utf8(u8"\u0633\u0644\u0627\u0645"), Style("Amiri", 40.0f), 400.0f);
 
     const std::vector<std::uint32_t> clusters = Clusters(paragraph);
-    const Fenrir::Paragraph alone = Laid(test, "س", Style("Amiri", 40.0f), 400.0f);
+    const Fenrir::Paragraph alone = Laid(test, Utf8(u8"\u0633"), Style("Amiri", 40.0f), 400.0f);
     INFO("seen joined to lam takes its initial form, another glyph than seen alone");
     REQUIRE(Glyphs(paragraph).back().cluster == 0);
     REQUIRE(Glyphs(paragraph).back().glyph != Glyphs(alone).front().glyph);
@@ -103,7 +104,7 @@ TEST_CASE("A mixed-direction line keeps each run's order", "[text][paragraph][bi
     TextApp test;
     test.Register("Amiri", FullFont("Amiri-Regular.ttf"));
     // "ab ", then salaam (bytes 3 to 10), then " cd" (c at byte 12).
-    const std::string text = "ab سلام cd";
+    const std::string text = Utf8(u8"ab \u0633\u0644\u0627\u0645 cd");
     const Fenrir::Paragraph paragraph = Laid(test, text, Style("Amiri", 30.0f), Fenrir::UnlimitedWidth);
 
     INFO("in a left-to-right paragraph the Latin before the Arabic is left of it, and the Latin after is right of it");
@@ -129,12 +130,13 @@ TEST_CASE("A Devanagari conjunct shapes to one glyph", "[text][paragraph][shapin
     TextApp test;
     test.Register("Devanagari", FullFont("NotoSansDevanagari-Regular.ttf"));
     // Ka, virama, ssa: the conjunct kssa.
-    const Fenrir::Paragraph paragraph = Laid(test, "क्ष", Style("Devanagari", 32.0f), Fenrir::UnlimitedWidth);
+    const Fenrir::Paragraph paragraph =
+        Laid(test, Utf8(u8"\u0915\u094D\u0937"), Style("Devanagari", 32.0f), Fenrir::UnlimitedWidth);
     INFO("the three characters draw as one glyph, of the cluster at byte 0");
     REQUIRE(Clusters(paragraph) == std::vector<std::uint32_t>{0});
 
     // Ka and the vowel sign i, which is drawn before the consonant it follows.
-    const Fenrir::Paragraph ki = Laid(test, "कि", Style("Devanagari", 32.0f), Fenrir::UnlimitedWidth);
+    const Fenrir::Paragraph ki = Laid(test, Utf8(u8"\u0915\u093F"), Style("Devanagari", 32.0f), Fenrir::UnlimitedWidth);
     const std::vector<Fenrir::PositionedGlyph> glyphs = Glyphs(ki);
     INFO("ki draws two glyphs of one cluster");
     REQUIRE(glyphs.size() == 2);
@@ -280,7 +282,8 @@ TEST_CASE("Hit testing in right-to-left text finds each character's leading edge
     TextApp test;
     test.Register("Amiri", FullFont("Amiri-Regular.ttf"));
     // Beh, teh, theh: three letters that join but form no ligature, two bytes each.
-    const Fenrir::Paragraph paragraph = Laid(test, "بتث", Style("Amiri", 40.0f), Fenrir::UnlimitedWidth);
+    const Fenrir::Paragraph paragraph =
+        Laid(test, Utf8(u8"\u0628\u062A\u062B"), Style("Amiri", 40.0f), Fenrir::UnlimitedWidth);
     for (std::uint32_t i = 0; i < 6; i += 2)
     {
         const std::vector<Fenrir::Rect2D> boxes = paragraph.RangeRects(i, i + 2);
@@ -300,7 +303,7 @@ TEST_CASE("Grapheme boundaries keep combining marks and joined emoji with their 
     Fenrir::Paragraph paragraph;
     // e and a combining acute (bytes 0 to 2), x (byte 3), then a family emoji joined by zero-width joiners (bytes 4 to
     // 21), then y.
-    paragraph.SetText("éx\U0001F468‍\U0001F469‍\U0001F467y", Style("default"));
+    paragraph.SetText(Utf8(u8"e\u0301x\U0001F468\u200D\U0001F469\u200D\U0001F467y"), Style("default"));
     INFO("e with its accent is one grapheme, the joined family another");
     REQUIRE(std::vector<std::uint32_t>(paragraph.GraphemeBoundaries().begin(), paragraph.GraphemeBoundaries().end()) ==
             std::vector<std::uint32_t>{0, 3, 4, 22, 23});

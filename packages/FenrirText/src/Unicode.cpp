@@ -52,20 +52,26 @@ namespace Fenrir::Detail
         }
         else
         {
-            return {U'�', 1};
+            return {U'\uFFFD', 1};
         }
         if (at + length > text.size())
         {
-            return {U'�', 1};
+            return {U'\uFFFD', 1};
         }
         for (std::uint32_t i = 1; i < length; ++i)
         {
             const std::uint8_t next = byte(at + i);
             if ((next & 0xC0) != 0x80)
             {
-                return {U'�', 1};
+                return {U'\uFFFD', 1};
             }
             codepoint = (codepoint << 6) | (next & 0x3Fu);
+        }
+        // Overlong forms, surrogates and values past U+10FFFF are malformed, as libunibreak reads them.
+        constexpr char32_t smallest[] = {0, 0, 0x80, 0x800, 0x10000};
+        if (codepoint < smallest[length] || (codepoint >= 0xD800 && codepoint <= 0xDFFF) || codepoint > 0x10FFFF)
+        {
+            return {U'\uFFFD', 1};
         }
         return {codepoint, length};
     }

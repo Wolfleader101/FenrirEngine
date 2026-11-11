@@ -6,6 +6,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -21,6 +22,9 @@
 
 namespace Fenrir::Detail
 {
+    /** @brief A number no font library's generation has had yet. */
+    [[nodiscard]] std::uint64_t NextGeneration();
+
     /** @brief A glyph rasterised at one quarter-pixel offset: where it is in the atlas, and its bitmap's bearing. */
     struct RasterisedGlyph
     {
@@ -90,8 +94,11 @@ namespace Fenrir::Detail
         FT_Library library = nullptr;
         AssetHandle<Font> defaultFont;
         std::map<std::string, FontFamily, std::less<>> families;
-        /** @brief Bumped by every change to the families, so laid-out paragraphs know to lay out again. */
-        std::uint64_t generation = 1;
+        /**
+         * @brief Unique among every library's, and renewed by every change to the families (NextGeneration), so a
+         * laid-out paragraph knows to lay out again when its families changed or it is given another library.
+         */
+        std::uint64_t generation = NextGeneration();
         /** @brief Each opened font's bytes, copied from its asset: FreeType reads a memory face in place. */
         std::map<std::uint64_t, std::shared_ptr<const std::vector<std::byte>>> bytes;
         /** @brief By font and size in quarter pixels. */
@@ -110,8 +117,11 @@ namespace Fenrir::Detail
         [[nodiscard]] std::optional<AssetHandle<Font>> Nearest(const FontFamily& family, std::uint16_t weight,
                                                                FontStyle style) const;
 
-        /** @brief The fonts that failed to open, so each is logged once. */
-        std::map<std::uint64_t, bool> failed;
+        /**
+         * @brief The fonts and sizes that failed to open, so each is logged once: by font and size in quarter pixels,
+         * size zero for a font that opens at no size.
+         */
+        std::set<std::pair<std::uint64_t, std::uint32_t>> failed;
     };
 
     /** @brief `size` rounded to a quarter pixel, in quarter pixels, at least one. */

@@ -31,7 +31,6 @@ namespace Fenrir
             bool dirty = true;
             bool laidOut = false;
             float width = 0.0f;
-            const FontLibraryState* library = nullptr;
             std::uint64_t generation = 0;
 
             std::vector<LineMetrics> lines;
@@ -74,6 +73,12 @@ namespace Fenrir
             float advance = 0.0f;
             bool hidden = false;
         };
+
+        // Odd bidi levels read right to left (UAX#9).
+        bool IsRightToLeft(std::uint8_t level)
+        {
+            return (level & 1u) != 0;
+        }
 
         bool SameWidth(float a, float b)
         {
@@ -177,14 +182,13 @@ namespace Fenrir
     {
         Detail::ParagraphLayout& layout = *m_layout;
         Detail::FontLibraryState& library = fonts.State();
-        if (!layout.dirty && layout.laidOut && layout.library == &library && layout.generation == library.generation &&
+        if (!layout.dirty && layout.laidOut && layout.generation == library.generation &&
             SameWidth(layout.width, width))
         {
             return false;
         }
         layout.dirty = false;
         layout.laidOut = true;
-        layout.library = &library;
         layout.generation = library.generation;
         layout.width = width;
         layout.lines.clear();
@@ -247,25 +251,19 @@ namespace Fenrir
                                                                                     : SBLevel{SBLevelDefaultLTR};
         std::vector<SBParagraphRef> bidiParagraphs;
         std::vector<std::uint8_t> levels(n, 0);
+        std::vector<std::uint32_t> paragraphAt(n, 0);
         for (std::uint32_t offset = 0; offset < n;)
         {
             SBParagraphRef bidi = SBAlgorithmCreateParagraph(algorithm, offset, n - offset, baseLevel);
             const auto length = static_cast<std::uint32_t>(SBParagraphGetLength(bidi));
             const SBLevel* paragraphLevels = SBParagraphGetLevelsPtr(bidi);
             std::copy(paragraphLevels, paragraphLevels + length, levels.begin() + offset);
+            std::fill(paragraphAt.begin() + offset, paragraphAt.begin() + std::min(n, offset + length),
+                      static_cast<std::uint32_t>(bidiParagraphs.size()));
             bidiParagraphs.push_back(bidi);
             offset += std::max(length, 1u);
         }
-        const auto paragraphOf = [&](std::uint32_t at) -> SBParagraphRef {
-            for (SBParagraphRef bidi : bidiParagraphs)
-            {
-                if (at < SBParagraphGetOffset(bidi) + SBParagraphGetLength(bidi))
-                {
-                    return bidi;
-                }
-            }
-            return bidiParagraphs.back();
-        };
+        const auto paragraphOf = [&](std::uint32_t at) { return bidiParagraphs[paragraphAt[at]]; };
 
         // Scripts per byte, common and inherited characters taking their neighbours' (SheenBidi's script locator).
         std::vector<hb_script_t> scripts(n, HB_SCRIPT_COMMON);
@@ -356,7 +354,7 @@ namespace Fenrir
         {
             const bool split = items.empty() || styleAt[i] != items.back().style || levels[i] != items.back().level ||
                                scripts[i] != items.back().script || faceAt[i] != items.back().face ||
-                               paragraphOf(i) != paragraphOf(items.back().begin);
+                               paragraphAt[i] != paragraphAt[items.back().begin];
             if (split)
             {
                 items.push_back({i, i + 1, styleAt[i], levels[i], scripts[i], faceAt[i], {}});
@@ -379,7 +377,7 @@ namespace Fenrir
                 continue;
             }
             const TextStyle& style = m_runs[item.style].style;
-            item.glyphs = Shape(buffer, shaped, item.begin, item.end, (item.level & 1u) != 0, item.script,
+            item.glyphs = Shape(buffer, shaped, item.begin, item.end, IsRightToLeft(item.level), item.script,
                                 style.letterSpacing, *item.face);
             for (ShapedGlyph& glyph : item.glyphs)
             {
@@ -457,24 +455,24 @@ namespace Fenrir
                 ellipsisItem.face = faceAt[last];
                 ellipsisItem.level = SBParagraphGetBaseLevel(paragraphOf(begin));
                 const TextStyle& style = m_runs[ellipsisItem.style].style;
-                std::string mark = "…";
+                std::string mark = "\xE2\x80\xA6"; // U+2026 in UTF-8
                 for (const AssetHandle<Font> font : chainOf(ellipsisItem.style))
                 {
                     Detail::SizedFace* face = library.Face(font, style.size);
-                    if (face != nullptr && face->Has(U'…'))
+                    if (face != nullptr && face->Has(U'\u2026'))
                     {
                         ellipsisItem.face = face;
                         break;
                     }
                 }
-                if (ellipsisItem.face != nullptr && !ellipsisItem.face->Has(U'…'))
+                if (ellipsisItem.face != nullptr && !ellipsisItem.face->Has(U'\u2026'))
                 {
                     mark = "...";
                 }
                 if (ellipsisItem.face != nullptr)
                 {
                     ellipsis = Shape(buffer, mark, 0, static_cast<std::uint32_t>(mark.size()),
-                                     (ellipsisItem.level & 1u) != 0, HB_SCRIPT_COMMON, 0.0f, *ellipsisItem.face);
+                                     IsRightToLeft(ellipsisItem.level), HB_SCRIPT_COMMON, 0.0f, *ellipsisItem.face);
                 }
                 float ellipsisWidth = 0.0f;
                 for (const ShapedGlyph& glyph : ellipsis)
@@ -516,7 +514,7 @@ namespace Fenrir
             const std::uint32_t content = contentEnd(begin, end);
             LaidLine line;
             SBParagraphRef bidi = paragraphOf(begin);
-            line.rightToLeft = (SBParagraphGetBaseLevel(bidi) & 1u) != 0;
+            line.rightToLeft = IsRightToLeft(SBParagraphGetBaseLevel(bidi));
             float x = 0.0f;
             const auto placeEllipsis = [&] {
                 for (const ShapedGlyph& glyph : ellipsis)
@@ -539,7 +537,7 @@ namespace Fenrir
                 {
                     const auto runBegin = static_cast<std::uint32_t>(runs[r].offset);
                     const auto runEnd = static_cast<std::uint32_t>(runs[r].offset + runs[r].length);
-                    const bool rtl = (runs[r].level & 1u) != 0;
+                    const bool rtl = IsRightToLeft(runs[r].level);
                     // The run's items, in visual order.
                     std::vector<const Item*> runItems;
                     for (const Item& item : items)
@@ -598,14 +596,9 @@ namespace Fenrir
                                 x1 = seen ? std::max(x1, right) : right;
                                 seen = true;
                             }
-                            std::vector<std::uint32_t> inside;
-                            for (const std::uint32_t boundary : m_graphemes)
-                            {
-                                if (boundary >= clusters[c] && boundary < clusterEnd)
-                                {
-                                    inside.push_back(boundary);
-                                }
-                            }
+                            const auto from = std::ranges::lower_bound(m_graphemes, clusters[c]);
+                            const auto upTo = std::ranges::lower_bound(m_graphemes, clusterEnd);
+                            std::vector<std::uint32_t> inside(from, std::max(from, upTo));
                             if (inside.empty())
                             {
                                 inside.push_back(clusters[c]);
@@ -710,6 +703,11 @@ namespace Fenrir
                 }
                 if (placed.hidden || item.face == nullptr)
                 {
+                    // Spaces draw nothing, but a run they fall in reaches over them, for its decoration.
+                    if (run != nullptr)
+                    {
+                        run->width = left + placed.x + placed.advance - run->left;
+                    }
                     continue;
                 }
                 const Detail::RasterisedGlyph& glyph = library.Glyph(*item.face, placed.shaped->glyph, quarter);
@@ -727,7 +725,7 @@ namespace Fenrir
                     next.colour = style.colour;
                     next.decoration = style.decoration;
                     next.line = static_cast<std::uint32_t>(l);
-                    next.rightToLeft = (item.level & 1u) != 0;
+                    next.rightToLeft = IsRightToLeft(item.level);
                     next.left = left + placed.x;
                     next.baseline = baseline;
                     next.underlineOffset = item.face->underlineOffset;

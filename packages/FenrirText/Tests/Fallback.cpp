@@ -76,6 +76,11 @@ TEST_CASE("A family's nearest face by style and weight is tried first", "[text][
     REQUIRE(test.fonts.FaceChain("Noto", 600, Fenrir::FontStyle::Normal).front() == bold);
     INFO("300 takes the regular face");
     REQUIRE(test.fonts.FaceChain("Noto", 300, Fenrir::FontStyle::Normal).front() == regular);
+    INFO("700 asked of faces at 650 and 900 takes 900: from 400 up a heavier face beats a nearer lighter one");
+    Fenrir::FontLibrary other(test.store);
+    other.AddFace("Spread", regular, 650);
+    other.AddFace("Spread", bold, 900);
+    REQUIRE(other.FaceChain("Spread", Fenrir::FontWeightBold, Fenrir::FontStyle::Normal).front() == bold);
     INFO("an italic asked of a family with none takes its upright faces");
     REQUIRE(test.fonts.FaceChain("Noto", Fenrir::FontWeightBold, Fenrir::FontStyle::Italic).front() == bold);
 }

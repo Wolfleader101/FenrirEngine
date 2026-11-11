@@ -76,7 +76,7 @@ namespace Fenrir
         Normal,
         /** @brief Collapsed as Normal, on one line. */
         NoWrap,
-        /** @brief Every space is kept, newlines break lines, and lines never wrap. */
+        /** @brief Every space is kept (a tab as one space), newlines break lines, and lines never wrap. */
         Pre,
         /** @brief Kept as Pre, and lines wrap at the width. */
         PreWrap,
@@ -94,6 +94,7 @@ namespace Fenrir
     /** @brief How a paragraph's lines are laid out. */
     struct ParagraphStyle
     {
+        /** @brief Where the lines sit across the width. */
         TextAlign align = TextAlign::Start;
         /**
          * @brief A line's height as a multiple of its largest font size; zero means its fonts' own height (ascent,
@@ -107,7 +108,9 @@ namespace Fenrir
          * with an ellipsis, `…`, in the style there.
          */
         bool ellipsis = false;
+        /** @brief How spaces, tabs and newlines are treated. */
         WhiteSpace whiteSpace = WhiteSpace::Normal;
+        /** @brief The base direction, which Start and End alignment follow. */
         TextDirection direction = TextDirection::Auto;
 
         friend bool operator==(const ParagraphStyle&, const ParagraphStyle&) = default;

@@ -19,4 +19,4 @@
 - [x] Atlas tests: packing reports non-overlapping rectangles, growth doubles then pages, uploads cover exactly the dirty rectangles.
 - [x] Fallback tests: a missing glyph falls through the family's list to the embedded face; a missing family resolves to the embedded face.
 - [ ] CI builds the submodules on every platform the build-and-test workflow runs (read it before claiming).
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

@@ -73,8 +73,8 @@ namespace Fenrir
         /**
          * @brief The faces text in `family` at `weight` and `style` is tried in, in order: the family's nearest face,
          * each fallback family's nearest face, and the default face last, each once. The nearest face is the one of the
-         * style asked for, if the family has any, of the nearest weight (heavier first from 400 up, lighter first
-         * below, as CSS's font matching).
+         * style asked for, if the family has any, of the nearest weight: from 400 up the nearest heavier face, else
+         * the nearest lighter, and below 400 the other way round, as CSS's font matching.
          */
         [[nodiscard]] std::vector<AssetHandle<Font>> FaceChain(std::string_view family, std::uint16_t weight,
                                                                FontStyle style) const;
@@ -82,13 +82,12 @@ namespace Fenrir
         /** @brief The pages of the atlas of `font` at `size` pixels; empty if nothing at that size was laid out yet. */
         [[nodiscard]] std::span<const AssetHandle<Image>> AtlasPages(AssetHandle<Font> font, float size) const;
 
-        /** @brief The store the fonts are read from and the atlases' pages live in. */
-        [[nodiscard]] AssetStore& Store() const noexcept;
+      private:
+        friend class Paragraph;
 
-        /** @brief FenrirText's own: the opened faces and atlases a paragraph lays out with. */
+        // The opened faces and atlases a paragraph lays out with.
         [[nodiscard]] Detail::FontLibraryState& State() const noexcept;
 
-      private:
         std::unique_ptr<Detail::FontLibraryState> m_state;
     };
 } // namespace Fenrir

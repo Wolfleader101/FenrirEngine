@@ -1,6 +1,7 @@
 #include "FenrirText/FontLibrary.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -17,6 +18,12 @@ namespace Fenrir
 {
     namespace Detail
     {
+        std::uint64_t NextGeneration()
+        {
+            static std::atomic<std::uint64_t> next{1};
+            return next++;
+        }
+
         std::uint32_t QuarterPixels(float size)
         {
             if (!std::isfinite(size) || size < 0.25f)
@@ -66,12 +73,13 @@ namespace Fenrir
             {
                 return found->second.get();
             }
-            if (failed.contains(key))
+            // Size zero stands for the whole font: no size of it opens.
+            if (failed.contains({key, 0}) || failed.contains({key, quarters}))
             {
                 return nullptr;
             }
-            const auto fail = [&](const char* why) -> SizedFace* {
-                failed.emplace(key, true);
+            const auto fail = [&](const char* why, bool everySize) -> SizedFace* {
+                failed.insert({key, everySize ? 0u : quarters});
                 store->Logger().Error("FenrirText could not open a font: {}", why);
                 return nullptr;
             };
@@ -83,7 +91,7 @@ namespace Fenrir
                 if (data == nullptr)
                 {
                     bytes.erase(key);
-                    return fail("its handle is empty or stale");
+                    return fail("its handle is empty or stale", true);
                 }
                 fontBytes = std::make_shared<const std::vector<std::byte>>(data->bytes);
             }
@@ -94,12 +102,12 @@ namespace Fenrir
             if (FT_New_Memory_Face(library, reinterpret_cast<const FT_Byte*>(fontBytes->data()),
                                    static_cast<FT_Long>(fontBytes->size()), 0, &sized->face) != 0)
             {
-                return fail("FreeType cannot read it");
+                return fail("FreeType cannot read it", true);
             }
             // 26.6 fixed point at 72 dots an inch, so a point is a pixel: the size in sixty-fourths of a pixel.
             if (FT_Set_Char_Size(sized->face, 0, static_cast<FT_F26Dot6>(quarters) * 16, 72, 72) != 0)
             {
-                return fail("FreeType cannot size it");
+                return fail("FreeType cannot size it at this size", false);
             }
             sized->shaper = hb_ft_font_create_referenced(sized->face);
             // Shaped from unhinted outlines, so advances are exact and glyphs land at quarter pixels; the hinting is
@@ -181,10 +189,11 @@ namespace Fenrir
                 {
                     continue;
                 }
-                // Heavier faces first from 400 up, lighter below (CSS's font matching): the wrong side costs more.
+                // CSS's font matching, simplified: from 400 up the nearest heavier face, else the nearest lighter;
+                // below 400 the other way round. Every face on the wrong side ranks after every face on the right one.
                 const int difference = static_cast<int>(face.weight) - static_cast<int>(weight);
                 const bool wrongSide = weight >= FontWeightNormal ? difference < 0 : difference > 0;
-                const int distance = std::abs(difference) * 2 + (wrongSide ? 1 : 0);
+                const int distance = std::abs(difference) + (wrongSide ? 1000 : 0);
                 if (best == nullptr || distance < bestDistance)
                 {
                     best = &face;
@@ -208,6 +217,8 @@ namespace Fenrir
         FontData font;
         font.bytes.resize(std::size(Resources::DefaultFont));
         std::memcpy(font.bytes.data(), Resources::DefaultFont, font.bytes.size());
+        // A second library over the same store adds the same bytes under the same name, which keeps the first one's
+        // handle (AddBuiltin replaces): both share the one asset.
         m_state->defaultFont = store.AddBuiltin<Font>("builtin:default-font", std::move(font));
         AddFace(DefaultFamily, m_state->defaultFont);
     }
@@ -220,13 +231,13 @@ namespace Fenrir
         std::erase_if(entry.faces,
                       [&](const Detail::RegisteredFace& face) { return face.weight == weight && face.style == style; });
         entry.faces.push_back({font, weight, style});
-        ++m_state->generation;
+        m_state->generation = Detail::NextGeneration();
     }
 
     void FontLibrary::SetFallbacks(std::string_view family, std::vector<std::string> fallbacks)
     {
         m_state->families[std::string(family)].fallbacks = std::move(fallbacks);
-        ++m_state->generation;
+        m_state->generation = Detail::NextGeneration();
     }
 
     AssetHandle<Font> FontLibrary::DefaultFont() const noexcept
@@ -267,11 +278,6 @@ namespace Fenrir
             return {};
         }
         return found->second->atlas.Pages();
-    }
-
-    AssetStore& FontLibrary::Store() const noexcept
-    {
-        return *m_state->store;
     }
 
     Detail::FontLibraryState& FontLibrary::State() const noexcept
