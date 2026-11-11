@@ -1642,6 +1642,14 @@ namespace Fenrir
         }
     }
 
+    void Renderer::SetLodSelection(float lodErrorPixels, float minProjectedPixels)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetLodSelection(lodErrorPixels, minProjectedPixels);
+        }
+    }
+
     void Renderer::SetSpotShadowBudget(std::uint32_t budget)
     {
         if (m_state != nullptr)
@@ -1898,6 +1906,11 @@ namespace Fenrir
     void Renderer::SetCullingFrozen(App& app, bool on)
     {
         Renderer(InstalledState(app)).SetCullingFrozen(on);
+    }
+
+    void Renderer::SetLodSelection(App& app, float lodErrorPixels, float minProjectedPixels)
+    {
+        Renderer(InstalledState(app)).SetLodSelection(lodErrorPixels, minProjectedPixels);
     }
 
     void Renderer::SetSpotShadowBudget(App& app, std::uint32_t budget)

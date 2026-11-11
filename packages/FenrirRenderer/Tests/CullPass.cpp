@@ -1042,6 +1042,11 @@ TEST_CASE("The job block carries the camera's position and pixels per unit, the 
     REQUIRE(Near(job[1], Fenrir::Math::Vec4(0.0f, 0.0f, 0.1f, 1.0f)));
 
     test.renderer.SetGpuCulling(true);
+    test.renderer.SetLodSelection(2.5f, 3.0f);
+    test.Frame();
+    INFO("SetLodSelection changes the two thresholds from the next frame, leaving the near plane and the projection");
+    REQUIRE(Near(JobLod(test, test.Culls().at(0))[1], Fenrir::Math::Vec4(2.5f, 3.0f, 0.1f, 1.0f)));
+    test.renderer.SetLodSelection(1.0f, 0.0f);
     test.renderer.SetCullingFrozen(true);
     test.Frame();
     camera.GetComponent<Fenrir::Transform>().pos = {3.0f, 0.0f, 5.0f};
