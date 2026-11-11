@@ -34,6 +34,7 @@ namespace Fenrir
         /** @brief Rows of `image`, which holds `rows` of them (made from Blank). */
         explicit StopTexture(AssetHandle<Image> image, std::uint32_t rows = 64);
 
+        /** @brief The image the rows are written into, which gradients' commands bind. */
         [[nodiscard]] AssetHandle<Image> GetImage() const noexcept
         {
             return m_image;

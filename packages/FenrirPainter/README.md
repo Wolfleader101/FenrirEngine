@@ -1,6 +1,6 @@
 # FenrirPainter
 
-The painter (ADR-0060): a value over one `DrawList2D` that records analytic shapes, paints and clips through its own shader, `builtin:painter`, and its own fat vertex. FenrirDraw2D learns nothing about either; the renderer draws the list as it draws any other. The recording depends on FenrirDraw2D and FenrirMath only; `Painting::Install`, which registers the shader, also needs FenrirApp. It is built with `FENRIR_ENABLE_RENDERER`, whose `fenrir_add_shaders` builds the shader. Paths and strokes, offscreen groups and text come in later tickets of the FenrirUI spec (`.scratch/fenrir-ui/spec.md`).
+The painter (ADR-0060): a value over one `DrawList2D` that records analytic shapes, paints and clips through its own shader, `builtin:painter`, and its own fat vertex. FenrirDraw2D learns nothing about either; the renderer draws the list as it draws any other. The recording depends on FenrirDraw2D (with the FenrirAssets types it carries: asset handles, samplers, image data) and FenrirMath; `Painting::Install`, which registers the shader with the asset store, also needs FenrirApp. It is built with `FENRIR_ENABLE_RENDERER`, whose `fenrir_add_shaders` builds the shader. Paths and strokes, offscreen groups and text come in later tickets of the FenrirUI spec (`.scratch/fenrir-ui/spec.md`).
 
 ## Installing
 

@@ -71,22 +71,43 @@ TEST_CASE("Colours are encoded to sRGB and premultiplied in the vertex", "[paint
     REQUIRE(vertices[8].colour == 0u);
 }
 
-TEST_CASE("A rounded rectangle carries its corner radii, scaled down together when they do not fit",
-          "[painter][shapes]")
+TEST_CASE("A rounded rectangle carries its corner radii", "[painter][shapes]")
 {
     Fenrir::DrawList2D list;
     Fenrir::Painter painter(list, PainterTest::Config());
 
     painter.DrawRoundedRect({0, 0, 100, 50}, {1, 2, 3, 4}, Colour::White);
+
+    const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
+    INFO("a rounded rectangle with radii 1, 2, 3, 4: top-left, top-right, bottom-right, bottom-left");
+    REQUIRE(PainterTest::ShapeOf(vertices[0]) == Fenrir::ShapeKind::RoundedRectangle);
+    REQUIRE(Near(vertices[0].radii, Vec4(1, 2, 3, 4)));
+}
+
+TEST_CASE("Corner radii too large for their side are scaled down together", "[painter][shapes]")
+{
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, PainterTest::Config());
+
     // 40 + 40 down each 50-unit side is too much: every radius is scaled by 50 / 80.
     painter.DrawRoundedRect({0, 0, 100, 50}, Fenrir::CornerRadii::All(40), Colour::White);
 
     const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
-    INFO("the radii, top-left, top-right, bottom-right, bottom-left");
-    REQUIRE(PainterTest::ShapeOf(vertices[0]) == Fenrir::ShapeKind::RoundedRectangle);
-    REQUIRE(Near(vertices[0].radii, Vec4(1, 2, 3, 4)));
-    INFO("radii larger than the rectangle allows are scaled down together");
-    REQUIRE(Near(vertices[4].radii, Vec4(25, 25, 25, 25)));
+    INFO("radius 40 on every corner of a 100 by 50 rectangle becomes 25");
+    REQUIRE(Near(vertices[0].radii, Vec4(25, 25, 25, 25)));
+}
+
+TEST_CASE("A lone corner radius reaches at most half the rectangle's shorter side", "[painter][shapes]")
+{
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, PainterTest::Config());
+
+    // 20 fits beside the bottom-left's 0 down the 20-unit side, but a circular corner of 20 would overrun the box.
+    painter.DrawRoundedRect({0, 0, 100, 20}, {20, 0, 0, 0}, Colour::White);
+
+    const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
+    INFO("the top-left radius is capped at 10, the others stay sharp");
+    REQUIRE(Near(vertices[0].radii, Vec4(10, 0, 0, 0)));
 }
 
 TEST_CASE("A border carries its widths and colours per side", "[painter][shapes]")
@@ -115,7 +136,7 @@ TEST_CASE("A border carries its widths and colours per side", "[painter][shapes]
                                                                       Rgba8(255, 255, 255, 255)});
 }
 
-TEST_CASE("An outset shadow's quad covers its blur, spread and offset; an inset one only its box", "[painter][shapes]")
+TEST_CASE("An outset shadow's quad reaches past its offset, spread and blur", "[painter][shapes]")
 {
     Fenrir::DrawList2D list;
     Fenrir::Painter painter(list, PainterTest::Config());
@@ -123,53 +144,83 @@ TEST_CASE("An outset shadow's quad covers its blur, spread and offset; an inset 
     outset.offset = {5, 6};
     outset.blur = 10;
     outset.spread = 2;
-    Fenrir::Shadow inset = outset;
-    inset.inset = true;
 
     painter.DrawShadow({0, 0, 100, 50}, Fenrir::CornerRadii::All(4), outset);
-    painter.DrawShadow({0, 0, 100, 50}, Fenrir::CornerRadii::All(4), inset);
 
     const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
-    REQUIRE(vertices.size() == 8);
-    INFO("a shadow of the box's half size, its blur, spread and offset in the shape numbers");
+    REQUIRE(vertices.size() == 4);
+    INFO("a shadow of the box's half size, its blur, spread and offset in the shape numbers, not inset");
     REQUIRE(PainterTest::ShapeOf(vertices[0]) == Fenrir::ShapeKind::Shadow);
     REQUIRE(Near(vertices[0].halfSize, Vec2(50, 25)));
     REQUIRE(Near(vertices[0].shape, Vec4(10, 2, 5, 6)));
     REQUIRE(vertices[0].colour == Rgba8(0, 0, 0, 255));
     REQUIRE_FALSE(PainterTest::HasFlag(vertices[0], Fenrir::PainterFlags::Inset));
     // Blur 10 is a standard deviation of 5, which the quad covers three times over: 50 + 5 + 2 + 15 + 1 to the right.
-    INFO("the outset quad reaches past the offset, spread and three standard deviations of blur");
+    INFO("the quad reaches past the offset, spread and three standard deviations of blur, plus the margin");
     REQUIRE(Near(vertices[2].local, Vec2(73, 49)));
     REQUIRE(Near(vertices[0].local, Vec2(-63, -37)));
-    INFO("the inset shadow is flagged and its quad is the box's");
-    REQUIRE(PainterTest::HasFlag(vertices[4], Fenrir::PainterFlags::Inset));
-    REQUIRE(Near(vertices[6].local, Vec2(51, 26)));
 }
 
-TEST_CASE("Circles, arcs and rings carry their radii and angles", "[painter][shapes]")
+TEST_CASE("An inset shadow is flagged and its quad covers only its box", "[painter][shapes]")
+{
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, PainterTest::Config());
+    Fenrir::Shadow inset;
+    inset.offset = {5, 6};
+    inset.blur = 10;
+    inset.spread = 2;
+    inset.inset = true;
+
+    painter.DrawShadow({0, 0, 100, 50}, Fenrir::CornerRadii::All(4), inset);
+
+    const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
+    INFO("the inset flag is set, and the quad is the 100 by 50 box with its one-unit margin");
+    REQUIRE(PainterTest::HasFlag(vertices[0], Fenrir::PainterFlags::Inset));
+    REQUIRE(Near(vertices[0].local, Vec2(-51, -26)));
+    REQUIRE(Near(vertices[2].local, Vec2(51, 26)));
+}
+
+TEST_CASE("A circle is centred on its centre with its radius as half size", "[painter][shapes]")
+{
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, PainterTest::Config());
+
+    painter.DrawCircle({50, 40}, 10, Colour::White);
+
+    const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
+    INFO("a circle of half size (10, 10), its quad's corner one unit past (40, 30)");
+    REQUIRE(PainterTest::ShapeOf(vertices[0]) == Fenrir::ShapeKind::Circle);
+    REQUIRE(Near(vertices[0].halfSize, Vec2(10, 10)));
+    REQUIRE(Near(vertices[0].position, Vec2(39, 29)));
+}
+
+TEST_CASE("An arc carries its radius, width, middle angle and half its sweep", "[painter][shapes]")
 {
     Fenrir::DrawList2D list;
     Fenrir::Painter painter(list, PainterTest::Config());
     constexpr float Pi = std::numbers::pi_v<float>;
 
-    painter.DrawCircle({50, 40}, 10, Colour::White);
     painter.DrawArc({50, 40}, 20, 0.0f, Pi / 2.0f, 4, Colour::White);
+
+    const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
+    INFO("a quarter-turn arc from angle 0: middle and half sweep a pi/4 each; its quad covers the outer edge, 22");
+    REQUIRE(PainterTest::ShapeOf(vertices[0]) == Fenrir::ShapeKind::Arc);
+    REQUIRE(Near(vertices[0].shape, Vec4(20, 4, Pi / 4.0f, Pi / 4.0f)));
+    REQUIRE(Near(vertices[0].halfSize, Vec2(22, 22)));
+}
+
+TEST_CASE("A ring carries its outer and inner radii", "[painter][shapes]")
+{
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, PainterTest::Config());
+
     painter.DrawRing({50, 40}, 30, 25, Colour::White);
 
     const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
-    REQUIRE(vertices.size() == 12);
-    INFO("a circle is centred on its centre with its radius as half size");
-    REQUIRE(PainterTest::ShapeOf(vertices[0]) == Fenrir::ShapeKind::Circle);
-    REQUIRE(Near(vertices[0].halfSize, Vec2(10, 10)));
-    REQUIRE(Near(vertices[0].position, Vec2(39, 29)));
-    INFO("an arc carries its radius, width, middle angle and half its sweep; its quad covers the outer edge");
-    REQUIRE(PainterTest::ShapeOf(vertices[4]) == Fenrir::ShapeKind::Arc);
-    REQUIRE(Near(vertices[4].shape, Vec4(20, 4, Pi / 4.0f, Pi / 4.0f)));
-    REQUIRE(Near(vertices[4].halfSize, Vec2(22, 22)));
-    INFO("a ring carries its outer and inner radii");
-    REQUIRE(PainterTest::ShapeOf(vertices[8]) == Fenrir::ShapeKind::Ring);
-    REQUIRE(Near(vertices[8].shape, Vec4(30, 25, 0, 0)));
-    REQUIRE(Near(vertices[8].halfSize, Vec2(30, 30)));
+    INFO("a ring of radii 30 and 25, its quad over the outer circle");
+    REQUIRE(PainterTest::ShapeOf(vertices[0]) == Fenrir::ShapeKind::Ring);
+    REQUIRE(Near(vertices[0].shape, Vec4(30, 25, 0, 0)));
+    REQUIRE(Near(vertices[0].halfSize, Vec2(30, 30)));
 }
 
 TEST_CASE("An arc of a whole turn is a ring", "[painter][shapes]")

@@ -645,8 +645,8 @@ Debug text stacked in a corner of the window, newest first, which a later messag
 ## FenrirEngine 2D drawing
 
 **FenrirDraw2D**
-The engine's package of 2D draw data: plain data with no GPU code, knowing no renderer or UI. UI libraries and a future painter produce it; FenrirRenderer draws it (ADR-0027).
-*Avoid:* UI renderer, canvas (a future painter's surface), ImGui backend.
+The engine's package of 2D draw data: plain data with no GPU code, knowing no renderer or UI. UI libraries and FenrirPainter's painter produce it; FenrirRenderer draws it (ADR-0027).
+*Avoid:* UI renderer, canvas (other engines' painter surface), ImGui backend.
 
 **2D draw list**
 `DrawList2D`: one batch of 2D drawing as plain data: vertex and index bytes, 2D pipeline descriptions, and commands with textures, a scissor and an index range, in local logical coordinates. The same list can be shown on screen, in a texture or in the world; the target decides where.

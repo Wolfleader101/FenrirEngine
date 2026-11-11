@@ -216,7 +216,8 @@ void main()
         float sigma = max(vShape.x, 0.0) * 0.5;
         float spread = (flags & Inset) != 0u ? -vShape.y : vShape.y;
         vec2 shadowHalf = max(halfSize + spread, vec2(0.0));
-        vec4 shadowRadii = max(vRadii + spread, vec4(0.0));
+        // A sharp corner stays sharp as the shadow grows or shrinks, as CSS keeps it.
+        vec4 shadowRadii = mix(vec4(0.0), max(vRadii + spread, vec4(0.0)), greaterThan(vRadii, vec4(0.0)));
         float shadow = Blurred(RoundedBox(p - vShape.zw, shadowHalf, shadowRadii), sigma, px);
         float box = Coverage(RoundedBox(p, halfSize, vRadii), px);
         // Outset, outside the box only; inset, inside it only, where the moved and shrunk box does not reach.

@@ -54,25 +54,27 @@ namespace Fenrir
     class Painter
     {
       public:
+        /** @brief A painter appending to `list`, with the painter's pipeline added to its table. */
         Painter(DrawList2D& list, const PainterConfig& config);
 
-        /** @name State
-         * Save pushes the transform and clip, Restore pops them; a Restore with nothing saved does nothing.
-         * @{
-         */
+        /** @brief Pushes the transform and the clip. */
         void Save();
+        /** @brief Pops the transform and the clip Save pushed last; with nothing saved, does nothing. */
         void Restore();
-        /** @} */
 
         /** @name Transform
-         * Each applies before the current transform, in UI units, as a canvas does.
+         * Each applies before the current transform, in UI units, as Skia's and the browser's 2D APIs do.
          * @{
          */
+        /** @brief Moves what is drawn next by `offset`. */
         void Translate(Math::Vec2 offset);
+        /** @brief Scales what is drawn next by `factors`, about the current origin. */
         void Scale(Math::Vec2 factors);
-        /** @brief Clockwise on screen (Y is down). */
+        /** @brief Turns what is drawn next by `radians` about the current origin, clockwise on screen (Y is down). */
         void Rotate(float radians);
+        /** @brief Applies `transform` before the current one. */
         void Concat(const Transform2D& transform);
+        /** @brief The current transform, from UI units before it to UI units after it (the root scale not included). */
         [[nodiscard]] const Transform2D& GetTransform() const noexcept;
         /** @} */
 
@@ -83,7 +85,9 @@ namespace Fenrir
          * Outside the scissor nothing is appended.
          * @{
          */
+        /** @brief Clips to `rect` under the current transform. */
         void ClipRect(const Rect2D& rect);
+        /** @brief Clips to `rect` with corners rounded by `radii` (scaled down together to fit). */
         void ClipRoundedRect(const Rect2D& rect, const CornerRadii& radii);
         /** @} */
 
@@ -91,6 +95,7 @@ namespace Fenrir
          * Each appends one quad (a nine-slice image, nine), anti-aliased over one pixel by the shader.
          * @{
          */
+        /** @brief `rect` filled with `paint`. */
         void DrawRect(const Rect2D& rect, const Paint& paint);
         /** @brief Radii larger than the rectangle allows are scaled down together, as CSS does. */
         void DrawRoundedRect(const Rect2D& rect, const CornerRadii& radii, const Paint& paint);
@@ -98,6 +103,7 @@ namespace Fenrir
         void DrawBorder(const Rect2D& rect, const CornerRadii& radii, const Border& border);
         /** @brief The box shadow of the rounded rectangle `rect`. */
         void DrawShadow(const Rect2D& rect, const CornerRadii& radii, const Shadow& shadow);
+        /** @brief The disc of `radius` about `centre`, filled with `paint`. */
         void DrawCircle(Math::Vec2 centre, float radius, const Paint& paint);
         /**
          * @brief A band `width` wide centred on the circle of `radius`, from `startRadians` clockwise through
@@ -112,6 +118,14 @@ namespace Fenrir
         /** @} */
 
       private:
+        /** @brief The paint's part of a quad: its transform into paint space and the textures it samples. */
+        struct PaintSetup
+        {
+            Transform2D toPaint;
+            std::optional<TextureSlot2D> image;
+            std::optional<TextureSlot2D> stops;
+        };
+
         struct Clip
         {
             /** @brief From local logical units to the clip's space, its centre at the origin. */
@@ -148,17 +162,21 @@ namespace Fenrir
         [[nodiscard]] float Margin() const;
         /** @brief A quad of `kind` over `rect`, reaching the margin past it. */
         [[nodiscard]] Quad Box(const Rect2D& rect, ShapeKind kind) const;
+        /** @brief A square quad of `kind` over the circle of `radius` about `centre`. */
+        [[nodiscard]] Quad Square(Math::Vec2 centre, float radius, ShapeKind kind) const;
+        /** @brief Intersects the clip stack with `rect` and its radii under the current transform. */
         void SetClip(const Rect2D& rect, const CornerRadii& radii);
+        /** @brief `rect` with its edges on whole pixels, when snapping is on and the transform axis-aligned. */
         [[nodiscard]] Rect2D Snap(const Rect2D& rect) const;
         /** @brief Sets the quad's paint and emits it, unless the paint has nothing to draw. */
         void DrawShape(Quad quad, const Paint& paint);
-        void Emit(const Quad& quad, const Transform2D& toPaint, std::optional<TextureSlot2D> image,
-                  std::optional<TextureSlot2D> stops);
+        /** @brief Appends the quad's four vertices and six indices, its paint set up by `paint`. */
+        void Emit(const Quad& quad, const PaintSetup& paint);
         /**
          * @brief Makes room for one quad needing `image` and `stops` in the command it extends or starts; returns the
          * quad's first vertex counted from the command's base vertex.
          */
-        [[nodiscard]] std::uint32_t BeginQuad(std::optional<TextureSlot2D> image, std::optional<TextureSlot2D> stops);
+        [[nodiscard]] std::uint32_t BeginQuad(const PaintSetup& paint);
 
         DrawList2D& m_list;
         PainterConfig m_config;

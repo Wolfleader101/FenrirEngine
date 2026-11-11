@@ -66,7 +66,7 @@ namespace Fenrir
         Math::Vec2 local{0.0f};
         /** @brief The vertex in the clip's space, the clip's centre at the origin. */
         Math::Vec2 clipPoint{0.0f};
-        /** @brief Half the shape's width and height (a circle's, arc's or ring's outer radius twice). */
+        /** @brief Half the shape's width and height; for a circle, arc or ring, its outer radius in both. */
         Math::Vec2 halfSize{0.0f};
         /** @brief Half the clip rectangle's width and height. */
         Math::Vec2 clipHalfSize{0.0f};

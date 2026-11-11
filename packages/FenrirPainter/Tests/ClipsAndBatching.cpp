@@ -60,7 +60,37 @@ TEST_CASE("A rectangle clip is the command's scissor and the vertex's clip", "[p
     REQUIRE(Near(vertices[0].clipRadii, Vec4(0)));
 }
 
-TEST_CASE("Nested clips intersect their bounds in the scissor and keep the innermost per pixel", "[painter][clips]")
+TEST_CASE("Two axis-aligned rectangle clips meet exactly, in the scissor and in the vertex", "[painter][clips]")
+{
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, PainterTest::Config());
+
+    painter.ClipRect({0, 0, 100, 100});
+    painter.ClipRect({50, 20, 100, 30});
+    painter.DrawRect({0, 0, 10, 10}, Colour::White);
+
+    INFO("the scissor and the vertex's clip are both (50, 20) to (100, 50)");
+    REQUIRE(Near(*list.commands.at(0).scissor, Rect2D{50, 20, 50, 30}));
+    REQUIRE(Near(PainterTest::Vertices(list)[0].clipHalfSize, Vec2(25, 15)));
+}
+
+TEST_CASE("A draw whose clips' bounds do not meet appends nothing", "[painter][clips]")
+{
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, PainterTest::Config());
+
+    painter.ClipRect({50, 20, 50, 30});
+    // A quarter turn about the origin: the rounded clip (10, 10, 20, 40) lands on (-50, 10) to (-10, 30).
+    painter.Rotate(std::numbers::pi_v<float> / 2.0f);
+    painter.ClipRoundedRect({10, 10, 20, 40}, Fenrir::CornerRadii::All(3));
+    painter.DrawRect({0, 0, 10, 10}, Colour::White);
+
+    INFO("the scissor is empty, so the list has no command and no vertex");
+    REQUIRE(list.commands.empty());
+    REQUIRE(list.vertices.empty());
+}
+
+TEST_CASE("Restore brings back the clip that was saved, and then none", "[painter][clips]")
 {
     Fenrir::DrawList2D list;
     Fenrir::Painter painter(list, PainterTest::Config());
@@ -69,30 +99,19 @@ TEST_CASE("Nested clips intersect their bounds in the scissor and keep the inner
     painter.ClipRect({0, 0, 100, 100});
     painter.Save();
     painter.ClipRect({50, 20, 100, 30});
-    painter.DrawRect({0, 0, 10, 10}, Colour::White);
-    painter.Save();
-    // A quarter turn about the origin: the rounded clip (10, 10, 20, 40) lands on (-50, 10) to (-10, 30).
-    painter.Rotate(std::numbers::pi_v<float> / 2.0f);
-    painter.ClipRoundedRect({10, 10, 20, 40}, Fenrir::CornerRadii::All(3));
-    painter.DrawRect({0, 0, 10, 10}, Colour::White);
-    painter.Restore();
     painter.Restore();
     painter.DrawRect({0, 0, 10, 10}, Colour::White);
     painter.Restore();
     painter.DrawRect({0, 0, 10, 10}, Colour::White);
 
-    INFO("three draws appended, in three commands: the rotated clip's draw appended nothing");
-    REQUIRE(list.commands.size() == 3);
     const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
-    REQUIRE(vertices.size() == 12);
-    INFO("two axis-aligned rectangle clips are their exact intersection, in the scissor and in the vertex");
-    REQUIRE(Near(*list.commands[0].scissor, Rect2D{50, 20, 50, 30}));
-    REQUIRE(Near(vertices[0].clipHalfSize, Vec2(25, 15)));
-    INFO("Restore brings back the outer clip, and then none");
-    REQUIRE(Near(*list.commands[1].scissor, Rect2D{0, 0, 100, 100}));
-    REQUIRE(Near(vertices[4].clipHalfSize, Vec2(50, 50)));
-    REQUIRE(list.commands[2].scissor == std::nullopt);
-    REQUIRE_FALSE(PainterTest::HasFlag(vertices[8], Fenrir::PainterFlags::Clipped));
+    REQUIRE(list.commands.size() == 2);
+    INFO("the first draw is clipped by the outer clip alone");
+    REQUIRE(Near(*list.commands[0].scissor, Rect2D{0, 0, 100, 100}));
+    REQUIRE(Near(vertices[0].clipHalfSize, Vec2(50, 50)));
+    INFO("the second by nothing");
+    REQUIRE(list.commands[1].scissor == std::nullopt);
+    REQUIRE_FALSE(PainterTest::HasFlag(vertices[4], Fenrir::PainterFlags::Clipped));
 }
 
 TEST_CASE("A rotated rounded clip is the vertex's clip, with its radii, under its transform", "[painter][clips]")
@@ -119,32 +138,53 @@ TEST_CASE("A rotated rounded clip is the vertex's clip, with its radii, under it
     REQUIRE(Near(vertices[0].clipPoint, Vec2(-6, -6), 1e-3f));
 }
 
-TEST_CASE("Same-state draws share one command; a texture or scissor change starts another", "[painter][batching]")
+TEST_CASE("Draws with the same state share one command and one pipeline", "[painter][batching]")
 {
     Fenrir::DrawList2D list;
     Fenrir::Painter painter(list, PainterTest::Config());
 
     painter.DrawRect({0, 0, 10, 10}, Colour::White);
     painter.DrawRoundedRect({0, 0, 10, 10}, Fenrir::CornerRadii::All(2), Colour::Red);
-    // The first image fills the image slot no draw of the command used yet.
+    // The image fills the image slot no draw of the command used yet; the circle after it samples nothing.
     painter.DrawImage({0, 0, 10, 10}, Image(First));
     painter.DrawCircle({5, 5}, 5, Colour::Blue);
     painter.DrawImage({0, 0, 10, 10}, Image(First));
-    painter.DrawImage({0, 0, 10, 10}, Image(Second));
-    painter.ClipRect({0, 0, 5, 5});
-    painter.DrawImage({0, 0, 10, 10}, Image(Second));
-    painter.DrawRect({0, 0, 10, 10}, Colour::White);
 
-    INFO("five draws in one command, then the second image, then the clip");
-    REQUIRE(list.commands.size() == 3);
+    INFO("five quads, 30 indices, in one command binding the image, with the painter's one pipeline");
+    REQUIRE(list.commands.size() == 1);
     REQUIRE(list.commands[0].indexCount == 30);
     REQUIRE(list.commands[0].textures.at(0).image == First);
-    REQUIRE(list.commands[1].indexCount == 6);
-    REQUIRE(list.commands[1].textures.at(0).image == Second);
-    REQUIRE(list.commands[2].indexCount == 12);
-    REQUIRE(list.commands[2].scissor.has_value());
-    INFO("one pipeline for them all");
     REQUIRE(list.pipelines.size() == 1);
+}
+
+TEST_CASE("A different image in a filled slot starts another command", "[painter][batching]")
+{
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, PainterTest::Config());
+
+    painter.DrawImage({0, 0, 10, 10}, Image(First));
+    painter.DrawImage({0, 0, 10, 10}, Image(Second));
+
+    INFO("one command for each image, each binding its own");
+    REQUIRE(list.commands.size() == 2);
+    REQUIRE(list.commands[0].textures.at(0).image == First);
+    REQUIRE(list.commands[1].textures.at(0).image == Second);
+    REQUIRE(list.commands[1].indexCount == 6);
+}
+
+TEST_CASE("A scissor change starts another command", "[painter][batching]")
+{
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, PainterTest::Config());
+
+    painter.DrawRect({0, 0, 10, 10}, Colour::White);
+    painter.ClipRect({0, 0, 5, 5});
+    painter.DrawRect({0, 0, 10, 10}, Colour::White);
+
+    INFO("the unclipped draw and the clipped one in commands of their own, the second with the scissor");
+    REQUIRE(list.commands.size() == 2);
+    REQUIRE(list.commands[0].scissor == std::nullopt);
+    REQUIRE(list.commands[1].scissor.has_value());
 }
 
 TEST_CASE("Sixteen-bit indices roll over into a new command with a base vertex past 65535 vertices",

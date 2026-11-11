@@ -47,32 +47,38 @@ namespace PainterTest
         return indices;
     }
 
+    /** @brief Whether `a` is within `tolerance` of `b`. */
     inline bool Near(float a, float b, float tolerance = 1e-4f)
     {
         return std::abs(a - b) <= tolerance;
     }
 
+    /** @brief Whether each component of `a` is within `tolerance` of `b`'s. */
     inline bool Near(Fenrir::Math::Vec2 a, Fenrir::Math::Vec2 b, float tolerance = 1e-4f)
     {
         return Near(a.x, b.x, tolerance) && Near(a.y, b.y, tolerance);
     }
 
+    /** @brief Whether each component of `a` is within `tolerance` of `b`'s. */
     inline bool Near(Fenrir::Math::Vec4 a, Fenrir::Math::Vec4 b, float tolerance = 1e-4f)
     {
         return Near(a.x, b.x, tolerance) && Near(a.y, b.y, tolerance) && Near(a.z, b.z, tolerance) &&
                Near(a.w, b.w, tolerance);
     }
 
+    /** @brief The vertex's shape kind. */
     inline Fenrir::ShapeKind ShapeOf(const Fenrir::PainterVertex& vertex)
     {
         return static_cast<Fenrir::ShapeKind>(vertex.kinds[0]);
     }
 
+    /** @brief The vertex's paint kind. */
     inline Fenrir::PaintKind PaintOf(const Fenrir::PainterVertex& vertex)
     {
         return static_cast<Fenrir::PaintKind>(vertex.kinds[1]);
     }
 
+    /** @brief Whether the vertex has the PainterFlags bit `flag`. */
     inline bool HasFlag(const Fenrir::PainterVertex& vertex, std::uint8_t flag)
     {
         return (vertex.kinds[2] & flag) != 0;

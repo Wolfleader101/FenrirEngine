@@ -1,7 +1,7 @@
 # FenrirPainter: the painter (ADR-0060), which records analytic shapes, paints and clips into a FenrirDraw2D draw list
-# through its own shader, builtin:painter, and fat vertex. The recording depends on FenrirDraw2D and FenrirMath only;
-# Painting::Install, which registers the shader with the asset store (ADR-0027 lets a UI bring its shaders), also needs
-# FenrirApp. Built with FENRIR_ENABLE_RENDERER, whose fenrir_add_shaders builds the shader.
+# through its own shader, builtin:painter, and fat vertex. The recording depends on FenrirDraw2D (and the FenrirAssets
+# types it carries) and FenrirMath; Painting::Install, which registers the shader with the asset store (ADR-0027 lets a
+# UI bring its shaders), also needs FenrirApp. Built with FENRIR_ENABLE_RENDERER, whose fenrir_add_shaders builds it.
 add_library(FenrirPainter STATIC
     src/Painter.cpp
     src/PainterVertex.cpp

@@ -19,13 +19,13 @@ namespace Fenrir
         constexpr std::uint32_t MaxVertices16 = 65536;
         constexpr float TwoPi = 2.0f * std::numbers::pi_v<float>;
 
-        /** @brief The paint's part of a quad: its transform into paint space and the textures it samples. */
-        struct PaintSetup
+        /** @brief An image paint in the vertex: its kind, the slot it is sampled from, and its tint. */
+        void SetImagePaint(PainterVertex& vertex, const Colour& tint)
         {
-            Transform2D toPaint;
-            std::optional<TextureSlot2D> image;
-            std::optional<TextureSlot2D> stops;
-        };
+            vertex.kinds[1] = static_cast<std::uint8_t>(PaintKind::Image);
+            vertex.kinds[3] = PainterImageSlot;
+            vertex.colour = PainterDetail::PackColour(tint);
+        }
 
         Math::Vec2 Centre(const Rect2D& rect)
         {
@@ -79,7 +79,11 @@ namespace Fenrir
             fit(rect.width, r.w + r.z);
             fit(rect.height, r.x + r.w);
             fit(rect.height, r.y + r.z);
-            return r * factor;
+            // A circular corner reaches at most half the shorter side, or the shader's box would bulge.
+            const float most = std::max(std::min(rect.width, rect.height) * 0.5f, 0.0f);
+            const Math::Vec4 scaled = r * factor;
+            return {std::min(scaled.x, most), std::min(scaled.y, most), std::min(scaled.z, most),
+                    std::min(scaled.w, most)};
         }
 
         /** @brief The stops sorted by offset, which gradients assume. */
@@ -95,7 +99,7 @@ namespace Fenrir
          * of the stop texture when there are more and it has room. False when there is nothing to draw.
          */
         bool SetStops(PainterVertex& vertex, const std::vector<GradientStop>& stops, GradientSpread spread,
-                      StopTexture* texture, PaintSetup& setup)
+                      StopTexture* texture, std::optional<TextureSlot2D>& stopsSlot)
         {
             if (stops.empty())
             {
@@ -112,7 +116,7 @@ namespace Fenrir
                 {
                     vertex.kinds[2] |= PainterFlags::StopRow;
                     vertex.extents.z = *row;
-                    setup.stops = TextureSlot2D{texture->GetImage(), LinearClamp2D};
+                    stopsSlot = TextureSlot2D{texture->GetImage(), LinearClamp2D};
                     return true;
                 }
             }
@@ -244,12 +248,12 @@ namespace Fenrir
         return {min.x, min.y, max.x - min.x, max.y - min.y};
     }
 
-    std::uint32_t Painter::BeginQuad(std::optional<TextureSlot2D> image, std::optional<TextureSlot2D> stops)
+    std::uint32_t Painter::BeginQuad(const PaintSetup& paint)
     {
         const std::uint32_t stride = sizeof(PainterVertex);
         const std::size_t indexSize = m_config.indexType == IndexType2D::UInt16 ? 2 : 4;
         const std::array<std::pair<std::size_t, std::optional<TextureSlot2D>>, 2> wanted{
-            {{PainterImageSlot, image}, {PainterStopSlot, stops}}};
+            {{PainterImageSlot, paint.image}, {PainterStopSlot, paint.stops}}};
 
         bool extend = m_command && *m_command + 1 == m_list.commands.size();
         if (extend)
@@ -302,8 +306,7 @@ namespace Fenrir
         return first;
     }
 
-    void Painter::Emit(const Quad& quad, const Transform2D& toPaint, std::optional<TextureSlot2D> image,
-                       std::optional<TextureSlot2D> stops)
+    void Painter::Emit(const Quad& quad, const PaintSetup& paint)
     {
         if (m_state.scissor && (m_state.scissor->width <= 0.0f || m_state.scissor->height <= 0.0f))
         {
@@ -318,7 +321,7 @@ namespace Fenrir
             vertex.clipRadii = m_state.clip->radii;
         }
 
-        const std::uint32_t first = BeginQuad(image, stops);
+        const std::uint32_t first = BeginQuad(paint);
         const std::array<Math::Vec2, 4> corners{quad.min, Math::Vec2(quad.max.x, quad.min.y), quad.max,
                                                 Math::Vec2(quad.min.x, quad.max.y)};
         std::array<PainterVertex, 4> vertices{};
@@ -328,7 +331,7 @@ namespace Fenrir
             vertices[i] = vertex;
             vertices[i].local = corners[i];
             vertices[i].position = toLogical.Apply(point);
-            vertices[i].uv = toPaint.Apply(point);
+            vertices[i].uv = paint.toPaint.Apply(point);
             if (m_state.clip)
             {
                 vertices[i].clipPoint = m_state.clip->toClip.Apply(vertices[i].position);
@@ -372,7 +375,7 @@ namespace Fenrir
                         along.origin = {-Math::Dot(value.start, d) / length2, 0.0f};
                     }
                     setup.toPaint = along * value.transform.Inverse();
-                    draw = SetStops(vertex, value.stops, value.spread, m_config.stops, setup);
+                    draw = SetStops(vertex, value.stops, value.spread, m_config.stops, setup.stops);
                 }
                 else if constexpr (std::is_same_v<T, RadialGradient>)
                 {
@@ -389,13 +392,11 @@ namespace Fenrir
                     }
                     vertex.extents.x = focal.x;
                     vertex.extents.y = focal.y;
-                    draw = SetStops(vertex, value.stops, value.spread, m_config.stops, setup);
+                    draw = SetStops(vertex, value.stops, value.spread, m_config.stops, setup.stops);
                 }
                 else
                 {
-                    vertex.kinds[1] = static_cast<std::uint8_t>(PaintKind::Image);
-                    vertex.kinds[3] = PainterImageSlot;
-                    vertex.colour = PainterDetail::PackColour(value.tint);
+                    SetImagePaint(vertex, value.tint);
                     const Rect2D& rect = value.rect;
                     const Math::Vec2 size{rect.width != 0.0f ? rect.width : 1.0f,
                                           rect.height != 0.0f ? rect.height : 1.0f};
@@ -407,7 +408,7 @@ namespace Fenrir
             paint);
         if (draw)
         {
-            Emit(quad, setup.toPaint, setup.image, setup.stops);
+            Emit(quad, setup);
         }
     }
 
@@ -421,6 +422,11 @@ namespace Fenrir
         quad.max = quad.vertex.halfSize + Math::Vec2(margin);
         quad.vertex.kinds[0] = static_cast<std::uint8_t>(kind);
         return quad;
+    }
+
+    Painter::Quad Painter::Square(Math::Vec2 centre, float radius, ShapeKind kind) const
+    {
+        return Box({centre.x - radius, centre.y - radius, radius * 2.0f, radius * 2.0f}, kind);
     }
 
     void Painter::DrawRect(const Rect2D& rect, const Paint& paint)
@@ -444,7 +450,7 @@ namespace Fenrir
         quad.vertex.shape = {border.widths.top, border.widths.right, border.widths.bottom, border.widths.left};
         quad.vertex.borderColours = {PainterDetail::PackColour(border.top), PainterDetail::PackColour(border.right),
                                      PainterDetail::PackColour(border.bottom), PainterDetail::PackColour(border.left)};
-        Emit(quad, {}, std::nullopt, std::nullopt);
+        Emit(quad, {});
     }
 
     void Painter::DrawShadow(const Rect2D& rect, const CornerRadii& radii, const Shadow& shadow)
@@ -466,7 +472,7 @@ namespace Fenrir
             quad.min = shadow.offset - reach - Math::Vec2(margin);
             quad.max = shadow.offset + reach + Math::Vec2(margin);
         }
-        Emit(quad, {}, std::nullopt, std::nullopt);
+        Emit(quad, {});
     }
 
     void Painter::DrawCircle(Math::Vec2 centre, float radius, const Paint& paint)
@@ -475,7 +481,7 @@ namespace Fenrir
         {
             return;
         }
-        DrawShape(Box({centre.x - radius, centre.y - radius, radius * 2.0f, radius * 2.0f}, ShapeKind::Circle), paint);
+        DrawShape(Square(centre, radius, ShapeKind::Circle), paint);
     }
 
     void Painter::DrawArc(Math::Vec2 centre, float radius, float startRadians, float sweepRadians, float width,
@@ -497,7 +503,7 @@ namespace Fenrir
         {
             return;
         }
-        Quad quad = Box({centre.x - outer, centre.y - outer, outer * 2.0f, outer * 2.0f}, ShapeKind::Arc);
+        Quad quad = Square(centre, outer, ShapeKind::Arc);
         quad.vertex.shape = {radius, width, startRadians + sweepRadians * 0.5f, sweepRadians * 0.5f};
         DrawShape(quad, paint);
     }
@@ -508,8 +514,7 @@ namespace Fenrir
         {
             return;
         }
-        Quad quad = Box({centre.x - outerRadius, centre.y - outerRadius, outerRadius * 2.0f, outerRadius * 2.0f},
-                        ShapeKind::Ring);
+        Quad quad = Square(centre, outerRadius, ShapeKind::Ring);
         quad.vertex.shape = {outerRadius, std::max(innerRadius, 0.0f), 0.0f, 0.0f};
         DrawShape(quad, paint);
     }
@@ -572,17 +577,16 @@ namespace Fenrir
                 const Math::Vec2 max{xs[column + 1] + (margin - right), ys[row + 1] + (margin - bottom)};
                 quad.min = min - quad.centre;
                 quad.max = max - quad.centre;
-                quad.vertex.kinds[1] = static_cast<std::uint8_t>(PaintKind::Image);
-                quad.vertex.kinds[3] = PainterImageSlot;
-                quad.vertex.colour = PainterDetail::PackColour(image.tint);
+                SetImagePaint(quad.vertex, image.tint);
 
                 const float su = (us[column + 1] - us[column]) / width;
                 const float sv = (vs[row + 1] - vs[row]) / height;
-                Transform2D toPaint;
-                toPaint.x = {su, 0.0f};
-                toPaint.y = {0.0f, sv};
-                toPaint.origin = {us[column] - xs[column] * su, vs[row] - ys[row] * sv};
-                Emit(quad, toPaint, texture, std::nullopt);
+                PaintSetup piece;
+                piece.toPaint.x = {su, 0.0f};
+                piece.toPaint.y = {0.0f, sv};
+                piece.toPaint.origin = {us[column] - xs[column] * su, vs[row] - ys[row] * sv};
+                piece.image = texture;
+                Emit(quad, piece);
             }
         }
     }

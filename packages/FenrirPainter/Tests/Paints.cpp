@@ -140,31 +140,53 @@ TEST_CASE("The stop texture's row holds the gradient's colours, premultiplied", 
     REQUIRE(stops.RowCount() == 0);
 }
 
-TEST_CASE("Without a stop texture, or with it full, a gradient uses its first and last stops", "[painter][paints]")
+namespace
 {
-    Fenrir::DrawList2D list;
-    Fenrir::StopTexture full(Picture, 1);
-    const std::vector<Fenrir::GradientStop> other{{0.0f, Colour::Black}, {0.5f, Colour::Red}, {1.0f, Colour::Black}};
-    REQUIRE(full.AddRow(other).has_value());
-    Fenrir::LinearGradient three = RedToBlue();
-    three.stops.push_back({1.0f, Colour::White});
-
-    Fenrir::Painter plain(list, PainterTest::Config());
-    plain.DrawRect({0, 0, 100, 10}, three);
-    Fenrir::PainterConfig config = PainterTest::Config();
-    config.stops = &full;
-    Fenrir::Painter painter(list, config);
-    painter.DrawRect({0, 0, 100, 10}, three);
-
-    const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
-    for (const std::size_t first : {0u, 4u})
+    /** @brief Red at 0.25, blue at 0.75 and white at 1: one stop more than the vertex holds. */
+    Fenrir::LinearGradient ThreeStops()
     {
-        INFO("vertex " << first << ": red at 0.25 to white at 1, no stop row");
+        Fenrir::LinearGradient three = RedToBlue();
+        three.stops.push_back({1.0f, Colour::White});
+        return three;
+    }
+
+    /** @brief Checks the quad from `first` holds the three stops' ends, red at 0.25 to white at 1, with no stop row. */
+    void RequireEndStops(const std::vector<Fenrir::PainterVertex>& vertices, std::size_t first)
+    {
+        INFO("red at 0.25 to white at 1 in the vertex, no stop row");
         REQUIRE_FALSE(PainterTest::HasFlag(vertices[first], Fenrir::PainterFlags::StopRow));
         REQUIRE(vertices[first].colour == Rgba8(255, 0, 0, 255));
         REQUIRE(vertices[first].colour2 == Rgba8(255, 255, 255, 255));
         REQUIRE(Near(Vec2(vertices[first].extents.z, vertices[first].extents.w), Vec2(0.25f, 1.0f)));
     }
+} // namespace
+
+TEST_CASE("Without a stop texture, a gradient of more than two stops uses its first and last", "[painter][paints]")
+{
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, PainterTest::Config());
+
+    painter.DrawRect({0, 0, 100, 10}, ThreeStops());
+
+    RequireEndStops(PainterTest::Vertices(list), 0);
+}
+
+TEST_CASE("With its stop texture full, a gradient of more than two stops uses its first and last", "[painter][paints]")
+{
+    Fenrir::DrawList2D list;
+    Fenrir::StopTexture full(Picture, 1);
+    const std::vector<Fenrir::GradientStop> other{{0.0f, Colour::Black}, {0.5f, Colour::Red}, {1.0f, Colour::Black}};
+    INFO("another gradient takes the texture's one row");
+    REQUIRE(full.AddRow(other).has_value());
+    Fenrir::PainterConfig config = PainterTest::Config();
+    config.stops = &full;
+    Fenrir::Painter painter(list, config);
+
+    painter.DrawRect({0, 0, 100, 10}, ThreeStops());
+
+    RequireEndStops(PainterTest::Vertices(list), 0);
+    INFO("the full texture took no row for it");
+    REQUIRE(full.RowCount() == 1);
 }
 
 TEST_CASE("An image into a rectangle is one quad over the whole image, with its sampler", "[painter][paints]")

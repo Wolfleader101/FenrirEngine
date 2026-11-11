@@ -24,7 +24,9 @@ namespace Fenrir
         Math::Vec2 y{0.0f, 1.0f};
         Math::Vec2 origin{0.0f, 0.0f};
 
+        /** @brief A move by `offset`. */
         [[nodiscard]] static Transform2D Translation(Math::Vec2 offset);
+        /** @brief A scale by `factors` about the origin. */
         [[nodiscard]] static Transform2D Scaling(Math::Vec2 factors);
         /** @brief A rotation by `radians`, clockwise on screen (Y is down). */
         [[nodiscard]] static Transform2D Rotation(float radians);
@@ -53,6 +55,7 @@ namespace Fenrir
         float bottomRight = 0.0f;
         float bottomLeft = 0.0f;
 
+        /** @brief `radius` on every corner. */
         [[nodiscard]] static constexpr CornerRadii All(float radius)
         {
             return {radius, radius, radius, radius};
@@ -69,6 +72,7 @@ namespace Fenrir
         float bottom = 0.0f;
         float left = 0.0f;
 
+        /** @brief `value` on every side. */
         [[nodiscard]] static constexpr Sides All(float value)
         {
             return {value, value, value, value};
@@ -150,6 +154,7 @@ namespace Fenrir
         Colour bottom;
         Colour left;
 
+        /** @brief One `width` and `colour` on every side. */
         [[nodiscard]] static Border Uniform(float width, Colour colour)
         {
             return {Sides::All(width), colour, colour, colour, colour};
