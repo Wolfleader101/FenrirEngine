@@ -29,6 +29,13 @@ namespace Fenrir::Math
          */
         [[nodiscard]] static Frustum FromViewProjection(const Mat4& viewProjection);
 
+        /**
+         * @brief The volume bounded by `planes`, at most six, each a `Vec4` of its unit inward normal and distance as
+         * Planes gives them: for a volume made from another's planes, such as a shadow cascade's left open towards
+         * its light (ADR-0057). Planes past the sixth are left out.
+         */
+        [[nodiscard]] static Frustum FromPlanes(std::span<const Vec4> planes);
+
         /** @brief Its planes, in FromViewProjection's order. */
         [[nodiscard]] std::span<const Vec4> Planes() const noexcept
         {

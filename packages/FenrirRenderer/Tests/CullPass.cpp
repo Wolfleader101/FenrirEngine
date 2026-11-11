@@ -2,14 +2,15 @@
 // pass, first in the frame, copies its runs' command templates over its command buffer and dispatches builtin:cull
 // once over its group table, its job block carrying the camera's planes; DepthPrepass and Opaque then draw each run
 // with one indirect draw of its commands, one per level of detail of its mesh, reading the camera's indirection
-// through the draw set, while every other pass
-// draws directly. An entity outside the camera is no candidate at all. The null backend runs no compute, so what it
-// shows is the templates, the group table, the planes and the draws, never the survivors. Ticket 05: a CullReadback
-// pass copies each camera's commands into the frame's slot of the readback ring, read FramesInFlight frames later into
-// instancesDrawn, and frozen culling keeps each camera's planes while its matrices follow it. Ticket 07: a mesh with
-// levels of detail uploads them into one index buffer, each run gets a template per level, the job block carries the
-// camera's position and projection for choosing one, and drawnByLod sums the readback by level. Every test here runs
-// with occlusion culling off (ticket 11): the one-phase layout is its subject, and OcclusionCulling.cpp has the two.
+// through the draw set, while the transparent passes draw directly (the shadow passes draw from their own shadow
+// views' buffers, ticket 10, ShadowCulling.cpp). An entity outside the camera is no candidate at all. The null backend
+// runs no compute, so what it shows is the templates, the group table, the planes and the draws, never the survivors.
+// Ticket 05: a CullReadback pass copies each camera's commands into the frame's slot of the readback ring, read
+// FramesInFlight frames later into instancesDrawn, and frozen culling keeps each camera's planes while its matrices
+// follow it. Ticket 07: a mesh with levels of detail uploads them into one index buffer, each run gets a template per
+// level, the job block carries the camera's position and projection for choosing one, and drawnByLod sums the readback
+// by level. Every test here runs with occlusion culling off (ticket 11): the one-phase layout is its subject, and
+// OcclusionCulling.cpp has the two.
 
 #include <algorithm>
 #include <cmath>
@@ -165,13 +166,14 @@ TEST_CASE("Each camera's Cull pass copies its templates and dispatches once, fir
 
     test.Frame();
     const std::vector<std::string> passes = RendererTest::PassesIn(RendererProbe::Submitted(test.renderer));
-    INFO("the Cull pass runs first, before ShadowCascades, DepthPrepass and Opaque");
+    INFO("the Cull passes run first, before ShadowCascades, DepthPrepass and Opaque: the camera's, then one per "
+         "cascade of its sun shadow (ticket 10)");
     REQUIRE(passes.front() == "Cull");
-    REQUIRE(std::ranges::count(passes, "Cull") == 1);
+    REQUIRE(std::ranges::count(passes, "Cull") == 5);
     REQUIRE(std::ranges::find(passes, "ShadowCascades") != passes.end());
     const std::vector<RecordedCull> culls = test.Culls();
-    INFO("one Cull pass for the one camera");
-    REQUIRE(culls.size() == 1);
+    INFO("the camera's Cull pass comes first of the five");
+    REQUIRE(culls.size() == 5);
     const RecordedCull& cull = culls.front();
     INFO("a compute pass of one copy and one dispatch, running builtin:cull");
     REQUIRE(cull.pass.queue == QueueKind::Compute);
@@ -435,7 +437,8 @@ TEST_CASE("A hundred thousand copies are still one draw per pass, culled by 1563
     REQUIRE(test.renderer.Stats().instances == 100000);
 }
 
-TEST_CASE("Transparent items and the shadow passes draw directly, through the draw set with no indirection",
+TEST_CASE("Transparent items draw directly, through the draw set with no indirection, while the shadow passes draw "
+          "through their own view's (ticket 10)",
           "[renderer][culling][cull-pass]")
 {
     RendererTestApp test(RendererTest::OcclusionOff());
@@ -453,16 +456,19 @@ TEST_CASE("Transparent items and the shadow passes draw directly, through the dr
     const std::vector<RecordedDraw> shadows = test.Draws("ShadowCascades");
     REQUIRE(transparent.size() == 1);
     REQUIRE_FALSE(shadows.empty());
-    for (const RecordedDraw* draw : {&transparent.front(), &shadows.front()})
-    {
-        const BufferHandle visible = DrawSetIndirection(test, draw->groups);
-        INFO("a direct draw's set 3 binds the one entry that says there is no indirection");
-        REQUIRE(visible != indirection);
-        REQUIRE(RendererProbe::Label(test.Device(), visible) == "No indirection");
-        REQUIRE(RendererTest::UintAt(RendererProbe::Bytes(test.Device(), visible), 0) == RendererTest::NoIndirection);
-    }
+    const BufferHandle visible = DrawSetIndirection(test, transparent.front().groups);
+    INFO("a direct draw's set 3 binds the one entry that says there is no indirection");
+    REQUIRE(visible != indirection);
+    REQUIRE(RendererProbe::Label(test.Device(), visible) == "No indirection");
+    REQUIRE(RendererTest::UintAt(RendererProbe::Bytes(test.Device(), visible), 0) == RendererTest::NoIndirection);
     INFO("while Opaque's draws bind the camera's indirection");
     REQUIRE(DrawSetIndirection(test, test.IndirectDraws("Opaque").front().groups) == indirection);
+    INFO("and a shadow draw binds its cascade's own indirection, not the camera's and not the empty one");
+    const BufferHandle shadowVisible = DrawSetIndirection(test, shadows.front().groups);
+    REQUIRE(shadowVisible != indirection);
+    REQUIRE(shadowVisible != visible);
+    REQUIRE(std::ranges::any_of(RendererProbe::ShadowCulls(test.renderer),
+                                [&](const auto& view) { return view.cullIndirection == shadowVisible; }));
 }
 
 TEST_CASE("A frame with no opaque run has no Cull pass and no indirect draw", "[renderer][culling][cull-pass]")

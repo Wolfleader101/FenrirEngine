@@ -22,7 +22,7 @@ add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp 
                                    AmbientOcclusion.cpp Instancing.cpp InstanceLists.cpp Culling.cpp ComputeSkinning.cpp
                                    Cascades.cpp Shadows.cpp SpotShadows.cpp PointShadows.cpp ShadowPools.cpp
                                    LightClusters.cpp SceneHistory.cpp ReflectionTrace.cpp IndirectDraws.cpp
-                                   CullPass.cpp LevelOfDetail.cpp OcclusionCulling.cpp
+                                   CullPass.cpp LevelOfDetail.cpp OcclusionCulling.cpp ShadowCulling.cpp
                                    GoldenComparison.cpp CullProbe.hpp DeviceTest.hpp DrawLists2D.hpp FakeSurface.hpp
                                    RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp SkinningTestApp.hpp)
 target_include_directories(FenrirRendererTests PRIVATE ../src)
@@ -70,7 +70,7 @@ add_executable(FenrirRendererGlTests OpenGL/Clears.cpp OpenGL/Draws.cpp OpenGL/V
                                      OpenGL/AmbientOcclusion.cpp OpenGL/Instancing.cpp OpenGL/InstanceLists.cpp
                                      OpenGL/Shadows.cpp OpenGL/LightClusters.cpp OpenGL/SceneHistory.cpp
                                      OpenGL/Reflections.cpp OpenGL/IndirectDraws.cpp OpenGL/CullPass.cpp
-                                     OpenGL/OcclusionCulling.cpp
+                                     OpenGL/OcclusionCulling.cpp OpenGL/ShadowCulling.cpp
                                      OpenGL/GlProbe.hpp OpenGL/GlScene.hpp OpenGL/GlTestApp.hpp OpenGL/GoldenScene.hpp
                                      CullProbe.hpp DrawLists2D.hpp RecordingLogger.hpp RendererProbe.hpp
                                      RendererTestApp.hpp SkinningTestApp.hpp)

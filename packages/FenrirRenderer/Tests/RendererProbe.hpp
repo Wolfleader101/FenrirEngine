@@ -169,6 +169,16 @@ namespace Fenrir
         }
 
         /**
+         * @brief Every shadow view the last frame culled (ADR-0057): each camera's cascades, each shadowed spot and
+         * point light, in the order their cull passes were added, with the volume each tested, what it chose levels
+         * by, and its cull buffers, on any backend.
+         */
+        [[nodiscard]] static const std::vector<Render::DrawnShadowView>& ShadowCulls(const Renderer& renderer)
+        {
+            return renderer.m_state->scene->DrawnShadowViews();
+        }
+
+        /**
          * @brief One slot of the cull readback ring (ADR-0057): its buffer, which frame's command buffers it holds,
          * and how many commands that frame copied into it.
          */

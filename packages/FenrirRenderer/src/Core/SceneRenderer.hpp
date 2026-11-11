@@ -130,6 +130,51 @@ namespace Fenrir::Render
     };
 
     /**
+     * @brief What a view's cull pass tests its candidates against (ADR-0057): its planes (a camera's five, a cascade's
+     * five with the near one left open, a spot light's five, or none) and a sphere (a point light's range, radius 0
+     * for none). A candidate must pass both.
+     */
+    struct CullVolume
+    {
+        Math::Frustum frustum;
+        Math::Sphere sphere;
+    };
+
+    /** @brief Which kind of shadow a shadow view draws (ADR-0050). */
+    enum class ShadowViewKind : std::uint8_t
+    {
+        /** @brief One cascade of a camera's sun shadow. */
+        Cascade,
+        /** @brief One shadowed spot light's tile of the spot shadow atlas. */
+        Spot,
+        /** @brief One shadowed point light's cube: its six faces from one cull. */
+        Point,
+    };
+
+    /**
+     * @brief A shadow view the scene renderer culled this frame (ADR-0057): a cascade, a shadowed spot light or a
+     * shadowed point light, with what its cull pass tested against and chose levels by, and what its draws read.
+     */
+    struct DrawnShadowView
+    {
+        /** @brief Which kind of shadow it draws. */
+        ShadowViewKind kind = ShadowViewKind::Cascade;
+        /** @brief A cascade's camera's place in SceneFrame::views; none for a spot or point light, shared by all. */
+        std::optional<std::size_t> view;
+        /** @brief The cascade's index, the spot light's tile or the point light's cube. */
+        std::uint32_t index = 0;
+        /** @brief The planes and sphere its pass tested the casters against. */
+        CullVolume volume;
+        /** @brief What its pass chose levels by: the camera's, never the light's. */
+        LodView lod;
+        /** @brief Its command buffer and indirection, as DrawnView's; empty when it had no casting runs. */
+        Graphics::BufferHandle cullCommands;
+        Graphics::BufferHandle cullIndirection;
+        std::uint32_t cullRuns = 0;
+        std::uint32_t cullCandidates = 0;
+    };
+
+    /**
      * @brief What a camera's cull kept of the frame culling was frozen in (ADR-0057): the planes and position its
      * views cull against while frozen, however the camera has moved since, and the volume's corners for drawing it.
      */
@@ -273,8 +318,9 @@ namespace Fenrir::Render
      * the camera; SelectLod), counting it into that command with an atomic. `DepthPrepass` and `Opaque` then draw
      * each run with one multi-draw of its level commands, declaring
      * `IndirectRead` on the commands and `StorageRead` on the indirection, which set 3 binding 3 binds for them
-     * (`Fenrir/Draw.glsl`'s `CurrentDraw()` reads it), so there is one draw group per view and frame in flight; every
-     * other pass binds the buffer that says there is no indirection and draws directly, as before. The per-view
+     * (`Fenrir/Draw.glsl`'s `CurrentDraw()` reads it), so there is one draw group per view and frame in flight; the
+     * shadow passes draw from their shadow views' buffers the same way, and the transparent passes bind the buffer
+     * that says there is no indirection and draw directly, as before. The per-view
      * buffers are sized to the frame's runs and candidates, kept between frames and ring-buffered per frame in flight.
      * The job block carries the view's planes (Math::Frustum), and the pass keeps a candidate whose sphere and then
      * whose box's eight corners may be inside them, as Math::Frustum tests them; with GPU culling off it gets no
@@ -517,6 +563,12 @@ namespace Fenrir::Render
         [[nodiscard]] const std::vector<DrawnView>& DrawnViews() const noexcept
         {
             return m_drawnViews;
+        }
+
+        /** @brief The shadow views the last AddPasses culled, in the order their cull passes were added. */
+        [[nodiscard]] const std::vector<DrawnShadowView>& DrawnShadowViews() const noexcept
+        {
+            return m_drawnShadowViews;
         }
 
         /** @brief The layout of the view block's binding groups (set 1). */
@@ -875,8 +927,9 @@ namespace Fenrir::Render
         static_assert(sizeof(CullGroupEntry) == 16, "a group table entry is a uvec4");
 
         /**
-         * @brief One entry of the frame's level table, as `builtin:cull` declares it (std430, four words): one per
-         * command template, in the templates' order, saying which level of its run's mesh the command draws.
+         * @brief One entry of the frame's level table, as `builtin:cull` declares it (std430, five words): one per
+         * command template, in the templates' order, saying which level of its run's mesh the command draws and how
+         * many instances each kept candidate draws as.
          */
         struct CullLevelEntry
         {
@@ -888,8 +941,13 @@ namespace Fenrir::Render
             std::uint32_t levels = 0;
             /** @brief The run's first candidate's index among the view's, where its visibility words start. */
             std::uint32_t firstCandidate = 0;
+            /**
+             * @brief How many instances the command draws for each candidate the pass keeps (DrawRun::instances): six
+             * for a point light's cube faces drawn as instances, else one.
+             */
+            std::uint32_t instances = 1;
         };
-        static_assert(sizeof(CullLevelEntry) == 16, "a level table entry is four words");
+        static_assert(sizeof(CullLevelEntry) == 20, "a level table entry is five words");
 
         /** @brief One view's cull pass this frame (ADR-0057): what it writes, and what its draws then read. */
         struct CullView
@@ -919,6 +977,11 @@ namespace Fenrir::Render
             std::uint32_t candidates = 0;
             /** @brief The view's planes, which the pass tests each candidate against (ADR-0057). */
             Math::Frustum frustum;
+            /**
+             * @brief The view's range sphere, a point light's, which the pass tests each candidate against too;
+             * radius 0 for none.
+             */
+            Math::Sphere sphere;
             /** @brief How many phases the pass runs: 2 with occlusion culling, else 1. */
             std::uint32_t phases = 1;
             /** @brief How many commands each phase has: the second phase's start in the command buffer. */
@@ -1100,6 +1163,12 @@ namespace Fenrir::Render
         {
             std::size_t first = 0;
             std::uint32_t count = 1;
+            /**
+             * @brief How many instances each item or copy of the run draws as: six in a point light's instanced faces
+             * pass (DrawPass::PointShadowLayered, one a face), else one. A cull pass counts a kept candidate as that
+             * many (ADR-0057).
+             */
+            std::uint32_t instances = 1;
         };
 
         /**
@@ -1125,8 +1194,9 @@ namespace Fenrir::Render
                          std::uint32_t commandOffset = 0) const;
         /**
          * @brief Reserves the frame's cull rings for the most templates, level entries and groups `views` views of
-         * `draws` could take (every opaque draw a run of its own, in two phases), writes nothing yet, and imports them
-         * into `graph` with the draw records and the instance lists; empty when no draw is opaque.
+         * `draws` could take (every opaque draw a run of its own, in two phases; `views` counts the cameras and the
+         * shadow views, whose casters are among the draws), writes nothing yet, and imports them into `graph` with
+         * the draw records and the instance lists; empty when no draw is opaque.
          */
         [[nodiscard]] CullFrame BeginCullFrame(RenderGraph& graph, std::uint64_t frameIndex, std::size_t views,
                                                const std::vector<ResolvedDraw>& draws);
@@ -1135,13 +1205,13 @@ namespace Fenrir::Render
          * imports them into `graph`, and appends the runs' command templates, one per run and level of detail, their
          * level table entries and their group table entries to `templates`, `levels` and `groups`, the frame's; empty
          * buffers, with nothing appended, when there are no runs or the frame has no cull buffers. The pass culls
-         * against `frustum` and chooses levels by `lod`. With `occlusion`, the templates and level entries are
-         * appended twice, a set per phase, `phases` recording each template's, and the view's visibility words are
-         * sized and kept, marked stale when the runs' identities or counts differ from last frame's. AddCullPass then
-         * adds each phase's pass.
+         * against `volume` and chooses levels by `lod`. A shadow view's `view` index follows the cameras'. With
+         * `occlusion`, the templates and level entries are appended twice, a set per phase, `phases` recording each
+         * template's, and the view's visibility words are sized and kept, marked stale when the runs' identities or
+         * counts differ from last frame's. AddCullPass then adds each phase's pass.
          */
         [[nodiscard]] CullView PrepareCull(RenderGraph& graph, std::uint64_t frameIndex, std::size_t view,
-                                           const Math::Frustum& frustum, const LodView& lod,
+                                           const CullVolume& volume, const LodView& lod,
                                            const std::vector<ResolvedDraw>& draws, const std::vector<DrawRun>& runs,
                                            const CullFrame& frame, const CullOcclusion* occlusion,
                                            std::vector<Graphics::DrawIndexedIndirectCommand>& templates,
@@ -1437,7 +1507,7 @@ namespace Fenrir::Render
         GrownRing m_cullLevels;
         /** @brief The frame's group table, which each Cull pass reads its view's groups of. */
         GrownRing m_cullGroups;
-        /** @brief Each view's cull rings, by view index. */
+        /** @brief Each view's cull rings, by view index: the cameras', then the frame's shadow views'. */
         std::vector<CullRings> m_cullRings;
         /** @brief The cull readback ring, a slot per frame in flight, by frame index modulo the slots. */
         std::vector<CullReadback> m_cullReadbacks;
@@ -1491,6 +1561,8 @@ namespace Fenrir::Render
 
         SceneFrame m_frame;
         std::vector<DrawnView> m_drawnViews;
+        /** @brief The shadow views the last AddPasses culled, in the order their cull passes were added. */
+        std::vector<DrawnShadowView> m_drawnShadowViews;
         SceneStats m_stats;
         /** @brief The missing vertex streams already logged, by mesh and vertex location. */
         std::set<std::pair<AssetKey, std::uint32_t>> m_loggedStreams;

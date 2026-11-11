@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstring>
 #include <format>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <type_traits>
@@ -15,6 +16,7 @@
 #include "Core/ColourGrading.hpp"
 #include "Core/ImageReads.hpp"
 #include "Core/ImageUpload.hpp"
+#include "Core/ShadowViews.hpp"
 #include "Core/Skinning.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
@@ -212,14 +214,20 @@ namespace Fenrir::Render
             Math::Vec4 screen{};
             /** @brief World to clip space, which the second phase takes each box's screen rectangle in. */
             Math::Mat4 viewProjection{1.0f};
+            /**
+             * @brief A point light's range sphere (CullView::sphere): its centre and, in w, its radius, 0 for a view
+             * with none, or with GPU culling off.
+             */
+            Math::Vec4 sphere{};
         };
-        static_assert(sizeof(CullJobBlock) == 240);
+        static_assert(sizeof(CullJobBlock) == 256);
         static_assert(offsetof(CullJobBlock, planes) == 16);
         static_assert(offsetof(CullJobBlock, camera) == 112);
         static_assert(offsetof(CullJobBlock, lod) == 128);
         static_assert(offsetof(CullJobBlock, occlusion) == 144);
         static_assert(offsetof(CullJobBlock, screen) == 160);
         static_assert(offsetof(CullJobBlock, viewProjection) == 176);
+        static_assert(offsetof(CullJobBlock, sphere) == 240);
 
         /** @brief One entry of a view's indirection, as `Fenrir/DrawRecord.glsl` lays it: a record and a copy. */
         struct IndirectionEntry
@@ -2281,6 +2289,8 @@ namespace Fenrir::Render
                                                               DrawPass pass) const
     {
         const auto pipelineOf = [&](std::size_t i) { return PipelineOf(draws[i], pass); };
+        // Drawing a point light's cube faces as instances, each item or copy is six, one a face.
+        const std::uint32_t instances = pass == DrawPass::PointShadowLayered ? CubeFaceCount : 1u;
         std::vector<DrawRun> runs;
         for (const std::size_t i : order)
         {
@@ -2299,7 +2309,7 @@ namespace Fenrir::Render
                     continue;
                 }
             }
-            runs.push_back({i, 1});
+            runs.push_back({i, 1, instances});
         }
         return runs;
     }
@@ -2377,12 +2387,11 @@ namespace Fenrir::Render
             }
             // Each item reads its own record of the draw buffer, by its place in the draw list; an instance list's
             // copies all read its one record, which Fenrir/Draw.glsl composes with each copy's. Drawing a point light's
-            // cube faces as instances, each is six, one a face.
+            // cube faces as instances, each is six, one a face (the run's instances).
             const std::uint32_t instances = draw.instances.count == 0 ? run.count : draw.instances.count;
-            encoder.DrawIndexed(
-                {.indexCount = draw.mesh->indexCount,
-                 .instanceCount = pass == DrawPass::PointShadowLayered ? instances * CubeFaceCount : instances,
-                 .firstInstance = static_cast<std::uint32_t>(i)});
+            encoder.DrawIndexed({.indexCount = draw.mesh->indexCount,
+                                 .instanceCount = instances * run.instances,
+                                 .firstInstance = static_cast<std::uint32_t>(i)});
         }
     }
 
@@ -2606,13 +2615,14 @@ namespace Fenrir::Render
     }
 
     SceneRenderer::CullView SceneRenderer::PrepareCull(
-        RenderGraph& graph, std::uint64_t frameIndex, std::size_t view, const Math::Frustum& frustum,
-        const LodView& lod, const std::vector<ResolvedDraw>& draws, const std::vector<DrawRun>& runs,
-        const CullFrame& frame, const CullOcclusion* occlusion, std::vector<DrawIndexedIndirectCommand>& templates,
+        RenderGraph& graph, std::uint64_t frameIndex, std::size_t view, const CullVolume& volume, const LodView& lod,
+        const std::vector<ResolvedDraw>& draws, const std::vector<DrawRun>& runs, const CullFrame& frame,
+        const CullOcclusion* occlusion, std::vector<DrawIndexedIndirectCommand>& templates,
         std::vector<CullLevelEntry>& levels, std::vector<std::uint32_t>& phases, std::vector<CullGroupEntry>& groups)
     {
         CullView cull;
-        cull.frustum = frustum;
+        cull.frustum = volume.frustum;
+        cull.sphere = volume.sphere;
         cull.lod = lod;
         if (runs.empty() || frame.IsEmpty())
         {
@@ -2657,7 +2667,8 @@ namespace Fenrir::Render
                     levels.push_back({.error = meshLevel.error,
                                       .level = level,
                                       .levels = levelCount,
-                                      .firstCandidate = firstCandidate});
+                                      .firstCandidate = firstCandidate,
+                                      .instances = run.instances});
                     phases.push_back(set);
                 }
                 if (set == 0)
@@ -2751,6 +2762,7 @@ namespace Fenrir::Render
         job.lod = Math::Vec4(0.0f, 0.0f, cull.lod.near, cull.lod.perspective ? 1.0f : 0.0f);
         if (m_gpuCulling)
         {
+            job.sphere = Math::Vec4(cull.sphere.centre, cull.sphere.radius);
             const std::span<const Math::Vec4> planes = cull.frustum.Planes();
             job.groups[2] = static_cast<std::uint32_t>(planes.size());
             std::ranges::copy(planes, job.planes.begin());
@@ -3162,6 +3174,7 @@ namespace Fenrir::Render
         m_stats.skinnedDraws = 0;
         m_stats.shadowDraws = 0;
         m_drawnViews.clear();
+        m_drawnShadowViews.clear();
         ReadCulled(frame.frameIndex);
         PackInstanceLists();
         m_skyImages->AddPasses(graph);
@@ -3357,8 +3370,64 @@ namespace Fenrir::Render
         std::vector<CullLevelEntry> cullLevels;
         std::vector<std::uint32_t> cullPhases;
         std::vector<CullGroupEntry> cullGroups;
-        const CullFrame cullFrame = BeginCullFrame(graph, frameIndex, views.size(), *draws);
-        m_cullJobs->Reserve(views.size() * 2);
+        // What each camera culls against and chooses levels of detail by (ADR-0057): its own frustum and position,
+        // or, frozen, the ones it had when it froze. Found before the shadow passes, since a shadow view chooses
+        // levels by its camera: a cascade's, or, for a spot or point light's map, every camera's, the first drawn
+        // this frame.
+        std::vector<CullCamera> cullCameras(views.size());
+        std::vector<LodView> cameraLods(views.size());
+        std::optional<LodView> firstCameraLod;
+        for (std::size_t v = 0; v < views.size(); ++v)
+        {
+            const ViewRequest& request = views[v];
+            if (!request.target.IsEmpty() && !m_targets.contains(request.target))
+            {
+                continue;
+            }
+            cullCameras[v] =
+                CullCameraOf(request, Math::Frustum::FromViewProjection(request.projection * request.view));
+            cameraLods[v] = LodViewOf(request.projection, request.viewport.height, cullCameras[v].position);
+            if (!firstCameraLod)
+            {
+                firstCameraLod = cameraLods[v];
+            }
+        }
+        // The shadow views the frame can have (ADR-0057): each camera's cascades, and each shadowed spot and point
+        // light; each gets cull rings of its own after the cameras', and a job slot after the cameras' two.
+        const std::size_t cascadeViews = views.size() * std::clamp(m_cascades.count, 1u, MaxCascades);
+        const std::size_t shadowViews = cascadeViews + spotCount + pointCount;
+        const CullFrame cullFrame = BeginCullFrame(graph, frameIndex, views.size() + shadowViews, *draws);
+        m_cullJobs->Reserve(views.size() * 2 + shadowViews);
+        std::size_t shadowRing = views.size();
+        std::size_t shadowJob = views.size() * 2;
+        // A shadow view's cull (ADR-0057): one phase against the light's volume, never by occlusion, choosing levels
+        // by `lod`, the camera's, and its draws through its own draw set, or directly without a cull pipeline.
+        const auto cullShadowView = [&](ShadowViewKind kind, std::optional<std::size_t> view, std::uint32_t index,
+                                        const CullVolume& volume, const LodView& lod,
+                                        const std::vector<DrawRun>& runs) {
+            const CullView cull = PrepareCull(graph, frameIndex, shadowRing++, volume, lod, *draws, runs, cullFrame,
+                                              nullptr, cullTemplates, cullLevels, cullPhases, cullGroups);
+            m_drawnShadowViews.push_back(
+                {kind, view, index, volume, cull.lod, cull.commands, cull.indirection, cull.runs, cull.candidates});
+            if (!cull.commands.IsEmpty())
+            {
+                AddCullPass(graph, frameIndex, cullFrame, cull, CullPhase::Single, shadowJob++, RenderStage::Cull);
+            }
+            return cull;
+        };
+        const auto shadowDrawGroup = [&](const CullView& cull) {
+            return cull.indirection.IsEmpty() ? drawGroup : DrawGroupFor(frameIndex, cull.indirection);
+        };
+        // What a pass drawing from a view's cull declares: the commands it reads and the indirection its instances
+        // read.
+        const auto declareCulled = [](PassBuilder& pass, const CullView& cull) {
+            if (!cull.commands.IsEmpty())
+            {
+                pass.IndirectRead(cull.commandsResource);
+                pass.StorageRead(cull.indirectionResource);
+            }
+        };
+        const LodView shadowLod = firstCameraLod.value_or(LodView{});
 
         if (spotCount > 0)
         {
@@ -3381,6 +3450,8 @@ namespace Fenrir::Render
             // by.
             std::vector<BindingGroupHandle> tileGroups;
             std::vector<PixelRect> tiles;
+            std::vector<CullView> spotCulls;
+            std::vector<BindingGroupHandle> spotDrawGroups;
             for (std::uint32_t t = 0; t < spotCount; ++t)
             {
                 const SpotShadow& shadow = spotFrame.shadows[t];
@@ -3397,21 +3468,30 @@ namespace Fenrir::Render
                 m_viewBlocks->Write(frameIndex, slots.Tile(t), BytesOf(tileBlock));
                 tileGroups.push_back(ViewGroupFor(frameIndex, slots.Tile(t), GetDefaultTexture(DefaultTexture::White)));
                 tiles.push_back(tile);
+                // Its cull (ADR-0057): the casters against its cone's planes, at the levels the cameras see them.
+                spotCulls.push_back(cullShadowView(ShadowViewKind::Spot, std::nullopt, t,
+                                                   {Math::Frustum::FromViewProjection(shadow.viewProjection), {}},
+                                                   shadowLod, *spotRuns));
+                spotDrawGroups.push_back(shadowDrawGroup(spotCulls.back()));
             }
             // Every shadowed spot light into its tile of the atlas, in one pass, binding the frame group that does not
-            // read the atlas it draws.
+            // read the atlas it draws, each tile's draws from its cull's commands.
             graph.AddPass(
                 "SpotShadows", RenderStage::Shadow, QueueKind::Graphics,
                 [=](PassBuilder& pass) {
                     pass.DepthAttachment(spotAtlas, LoadOp::Clear, 0.0f);
                     readSkinned(pass);
+                    for (const CullView& cull : spotCulls)
+                    {
+                        declareCulled(pass, cull);
+                    }
                 },
-                [this, draws, spotGroups, spotRuns, unshadowedFrame, tileGroups, tiles, drawGroup,
+                [this, draws, spotGroups, spotRuns, unshadowedFrame, tileGroups, tiles, spotCulls, spotDrawGroups,
                  skinned](PassContext& context) {
                     for (std::size_t t = 0; t < tiles.size(); ++t)
                     {
                         RecordDraws(context.Encoder(), *draws, *spotGroups, *spotRuns, unshadowedFrame, tileGroups[t],
-                                    drawGroup, skinned, tiles[t], DrawPass::Shadow);
+                                    spotDrawGroups[t], skinned, tiles[t], DrawPass::Shadow, spotCulls[t].commands);
                     }
                 });
             m_stats.shadowDraws += static_cast<std::uint32_t>(spotRuns->size() * tiles.size());
@@ -3439,6 +3519,17 @@ namespace Fenrir::Render
                 RunsOf(*draws, *pointGroups, layered, DrawPass::PointShadowLayered));
             auto facedRuns =
                 std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *pointGroups, faced, DrawPass::PointShadow));
+            // One cull per light over both (ADR-0057): the instanced runs' commands first, six instances a kept
+            // candidate, then the faced runs', which each face's pass draws from the same buffer.
+            std::vector<DrawRun> pointRuns(*layeredRuns);
+            pointRuns.insert(pointRuns.end(), facedRuns->begin(), facedRuns->end());
+            std::uint32_t layeredCommands = 0;
+            for (const DrawRun& run : *layeredRuns)
+            {
+                layeredCommands += static_cast<std::uint32_t>((*draws)[run.first].mesh->levels.size());
+            }
+            std::vector<CullView> pointCulls;
+            std::vector<BindingGroupHandle> pointDrawGroups;
             // Each light's view blocks: one from the light, not turned, naming its cube for the instanced faces, and
             // one per face. The camera is the light, its range in w, which builtin:shadow's POINT_SHADOW variant reads.
             const PixelRect face{0, 0, faceSize, faceSize};
@@ -3468,6 +3559,11 @@ namespace Fenrir::Render
                     m_viewBlocks->Write(frameIndex, slots.Face(c, f), BytesOf(blockFor(shadow.faceViews.at(f))));
                     faceGroups.push_back(ViewGroupFor(frameIndex, slots.Face(c, f), white));
                 }
+                // Its cull (ADR-0057): the casters against its range sphere, once for all six faces.
+                pointCulls.push_back(cullShadowView(ShadowViewKind::Point, std::nullopt, c,
+                                                    {Math::Frustum{}, Math::Sphere{light.position, light.range}},
+                                                    shadowLod, pointRuns));
+                pointDrawGroups.push_back(shadowDrawGroup(pointCulls.back()));
             }
             // The instanced faces of every shadowed point light, in one pass attaching every layer, binding the frame
             // group that does not read the cubes it draws.
@@ -3478,13 +3574,18 @@ namespace Fenrir::Render
                     [=](PassBuilder& pass) {
                         pass.LayeredDepthAttachment(pointShadowCubes, LoadOp::Clear, 0.0f);
                         readSkinned(pass);
-                    },
-                    [this, draws, pointGroups, layeredRuns, unshadowedFrame, cubeGroups, face, drawGroup,
-                     skinned](PassContext& context) {
-                        for (const BindingGroupHandle cube : cubeGroups)
+                        for (const CullView& cull : pointCulls)
                         {
-                            RecordDraws(context.Encoder(), *draws, *pointGroups, *layeredRuns, unshadowedFrame, cube,
-                                        drawGroup, skinned, face, DrawPass::PointShadowLayered);
+                            declareCulled(pass, cull);
+                        }
+                    },
+                    [this, draws, pointGroups, layeredRuns, unshadowedFrame, cubeGroups, face, pointCulls,
+                     pointDrawGroups, skinned](PassContext& context) {
+                        for (std::size_t c = 0; c < cubeGroups.size(); ++c)
+                        {
+                            RecordDraws(context.Encoder(), *draws, *pointGroups, *layeredRuns, unshadowedFrame,
+                                        cubeGroups[c], pointDrawGroups[c], skinned, face, DrawPass::PointShadowLayered,
+                                        pointCulls[c].commands);
                         }
                     });
                 m_stats.shadowDraws += static_cast<std::uint32_t>(layeredRuns->size() * pointCount);
@@ -3496,16 +3597,19 @@ namespace Fenrir::Render
                 for (std::uint32_t layer = 0; layer < pointCount * CubeFaceCount; ++layer)
                 {
                     const BindingGroupHandle faceGroup = faceGroups[layer];
+                    const CullView& cull = pointCulls[layer / CubeFaceCount];
+                    const BindingGroupHandle cubeDrawGroup = pointDrawGroups[layer / CubeFaceCount];
                     graph.AddPass(
                         "PointShadowFaces", RenderStage::Shadow, QueueKind::Graphics,
                         [=](PassBuilder& pass) {
                             pass.DepthAttachmentLayer(pointShadowCubes, layer, load, 0.0f);
                             readSkinned(pass);
+                            declareCulled(pass, cull);
                         },
-                        [this, draws, pointGroups, facedRuns, unshadowedFrame, faceGroup, face, drawGroup,
-                         skinned](PassContext& context) {
+                        [this, draws, pointGroups, facedRuns, unshadowedFrame, faceGroup, face, cubeDrawGroup, skinned,
+                         commands = cull.commands, layeredCommands](PassContext& context) {
                             RecordDraws(context.Encoder(), *draws, *pointGroups, *facedRuns, unshadowedFrame, faceGroup,
-                                        drawGroup, skinned, face, DrawPass::PointShadow);
+                                        cubeDrawGroup, skinned, face, DrawPass::PointShadow, commands, layeredCommands);
                         });
                 }
                 m_stats.shadowDraws += static_cast<std::uint32_t>(facedRuns->size() * pointCount * CubeFaceCount);
@@ -3704,11 +3808,9 @@ namespace Fenrir::Render
             // Each draw's set 2 in the prepass: a Masked item's prepass group, else its material group.
             auto prepassGroups = std::make_shared<std::vector<BindingGroupHandle>>(*groups);
             std::vector<float> depth(draws->size(), 0.0f);
-            const CullCamera cullCamera =
-                CullCameraOf(request, Math::Frustum::FromViewProjection(request.projection * request.view));
-            const Math::Frustum& frustum = cullCamera.frustum;
+            const Math::Frustum& frustum = cullCameras[v].frustum;
             // What the pass chooses levels of detail by (ADR-0057): the camera's position, frozen with the planes.
-            const LodView lod = LodViewOf(request.projection, request.viewport.height, cullCamera.position);
+            const LodView& lod = cameraLods[v];
             std::uint32_t instances = 0;
             for (std::size_t i = 0; i < draws->size(); ++i)
             {
@@ -3745,7 +3847,7 @@ namespace Fenrir::Render
             const HistoryView history =
                 m_sceneHistory->Import(graph, request, {rect.width, rect.height}, viewProjection, occlusionCulling);
             const CullOcclusion cullOcclusion{history, viewProjection};
-            const CullView cull = PrepareCull(graph, frameIndex, v, frustum, lod, *draws, *opaqueRuns, cullFrame,
+            const CullView cull = PrepareCull(graph, frameIndex, v, {frustum, {}}, lod, *draws, *opaqueRuns, cullFrame,
                                               occlusionCulling && !history.IsEmpty() ? &cullOcclusion : nullptr,
                                               cullTemplates, cullLevels, cullPhases, cullGroups);
             culls.push_back(cull);
@@ -3759,13 +3861,7 @@ namespace Fenrir::Render
             }
             const BindingGroupHandle viewDrawGroup =
                 cull.indirection.IsEmpty() ? drawGroup : DrawGroupFor(frameIndex, cull.indirection);
-            const auto readCulled = [cull](PassBuilder& pass) {
-                if (!cull.commands.IsEmpty())
-                {
-                    pass.IndirectRead(cull.commandsResource);
-                    pass.StorageRead(cull.indirectionResource);
-                }
-            };
+            const auto readCulled = [cull, declareCulled](PassBuilder& pass) { declareCulled(pass, cull); };
 
             if (!shadowAtlas.IsEmpty())
             {
@@ -3782,7 +3878,17 @@ namespace Fenrir::Render
                 auto shadowRuns =
                     std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *shadowGroups, casters, DrawPass::Shadow));
                 const std::uint32_t mapSize = m_cascades.mapSize;
-                // Every cascade into its tile of the atlas, in one pass.
+                // Each cascade's cull (ADR-0057): the casters against its box's sides and far plane, open towards the
+                // light, at the levels this camera sees them.
+                std::vector<CullView> cascadeCulls;
+                std::vector<BindingGroupHandle> cascadeDrawGroups;
+                for (std::uint32_t c = 0; c < cascadeCount; ++c)
+                {
+                    cascadeCulls.push_back(cullShadowView(ShadowViewKind::Cascade, v, c,
+                                                          {CascadeCullVolume(cascades[c]), {}}, lod, *shadowRuns));
+                    cascadeDrawGroups.push_back(shadowDrawGroup(cascadeCulls.back()));
+                }
+                // Every cascade into its tile of the atlas, in one pass, each from its cull's commands.
                 graph.AddPass(
                     "ShadowCascades", RenderStage::Shadow, QueueKind::Graphics,
                     [=](PassBuilder& pass) {
@@ -3792,14 +3898,19 @@ namespace Fenrir::Render
                             pass.Sample(image);
                         }
                         readSkinned(pass);
+                        for (const CullView& cull : cascadeCulls)
+                        {
+                            declareCulled(pass, cull);
+                        }
                     },
-                    [this, draws, shadowGroups, shadowRuns, frameGroup, cascadeGroups, drawGroup, skinned,
-                     mapSize](PassContext& context) {
+                    [this, draws, shadowGroups, shadowRuns, frameGroup, cascadeGroups, cascadeCulls, cascadeDrawGroups,
+                     skinned, mapSize](PassContext& context) {
                         for (std::size_t c = 0; c < cascadeGroups.size(); ++c)
                         {
                             const PixelRect tile{static_cast<std::int32_t>(c * mapSize), 0, mapSize, mapSize};
                             RecordDraws(context.Encoder(), *draws, *shadowGroups, *shadowRuns, frameGroup,
-                                        cascadeGroups[c], drawGroup, skinned, tile, DrawPass::Shadow);
+                                        cascadeGroups[c], cascadeDrawGroups[c], skinned, tile, DrawPass::Shadow,
+                                        cascadeCulls[c].commands);
                         }
                     });
                 m_stats.shadowDraws += static_cast<std::uint32_t>(shadowRuns->size() * cascadeGroups.size());
