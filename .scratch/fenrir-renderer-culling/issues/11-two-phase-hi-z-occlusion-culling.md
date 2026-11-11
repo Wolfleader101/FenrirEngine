@@ -32,4 +32,4 @@ Hand check: the neon city and Sponza are faster with it on; no copy pops in a fr
 - The render graph gained `PassBuilder::StorageReadPrevious`, the buffer twin of `SamplePrevious`: phase one reads last frame's words before phase two writes them, which a plain read would order after the write and close a cycle. The device gained `TextureFormat::Rg32Float`.
 - The frame's template, level table and group table rings are now reserved before the views, for the most the frame's draws could take, so each view's passes bind them in registration order (the second cull between the first prepass and the second); they are written after the views as before.
 - `examples/LightingDemo/` is touched beyond the Touches line, as ticket 08's note asked: the asteroid ring's panel and keys gained the occlusion switch (V) and the `drawnByPhase` line.
-- The `/code-review` findings are fixed in the branch's later commits.
+- The `/code-review` findings (a 2D draw-list format table missing the new format, two stale doc statements, the run identity and the occlusion inputs as types, a phase enum, test cases split and their checks given messages) are fixed in the branch's second commit.

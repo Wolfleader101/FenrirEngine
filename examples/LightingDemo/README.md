@@ -151,7 +151,7 @@ draws at level 0, for comparison), occlusion culling (`Renderer::SetOcclusionCul
 frustum draws, those the planet or the station hide too), freezing culling (`Renderer::SetCullingFrozen`: flying out of
 the frozen volume shows only what it kept, inside the frozen frustum's amber edges), the level-of-detail error in pixels
 (`Renderer::SetLodSelection`), how many copies drew at each level (`RendererStats::drawnByLod`) and how many each
-occlusion phase drew (`RendererStats::drawnByPhase`: visible last frame, then shown by the depth pyramid). The four are
+occlusion phase drew (`RendererStats::drawnByPhase`: visible last frame, then shown by the Hi-Z pyramid). The four are
 the renderer's, like merging, and the scene sets them back to on, on, following and a pixel each time it spawns.
 
 | Keys | |

@@ -2638,8 +2638,8 @@ namespace Fenrir::Render
             candidates += count;
         }
         cull.commandsPerPhase = perPhase;
-        std::vector<std::uint64_t> order;
-        for (std::uint32_t phase = 0; phase < cull.phases; ++phase)
+        std::vector<CullRunIdentity> order;
+        for (std::uint32_t set = 0; set < cull.phases; ++set)
         {
             std::uint32_t firstCandidate = 0;
             for (const DrawRun& run : runs)
@@ -2658,9 +2658,9 @@ namespace Fenrir::Render
                                       .level = level,
                                       .levels = levelCount,
                                       .firstCandidate = firstCandidate});
-                    phases.push_back(phase);
+                    phases.push_back(set);
                 }
-                if (phase == 0)
+                if (set == 0)
                 {
                     for (std::uint32_t first = 0; first < count; first += CullGroupSize)
                     {
@@ -2669,11 +2669,9 @@ namespace Fenrir::Render
                                           .count = count,
                                           .first = first});
                     }
-                    // A run's candidates keep their visibility while the same draws (by place in the draw list,
-                    // mesh and list) draw the same count at the same place in the view's order.
-                    order.push_back((std::uint64_t{run.first} << 32) | count);
-                    order.push_back((std::uint64_t{draw.instances.first} << 32) |
-                                    static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(draw.mesh)));
+                    // A run's candidates keep their visibility while the same run draws the same count at the same
+                    // place in the view's order.
+                    order.push_back({static_cast<std::uint32_t>(run.first), count, draw.instances.first, draw.mesh});
                 }
                 firstCandidate += count;
                 entries += count * levelCount;
@@ -2726,10 +2724,7 @@ namespace Fenrir::Render
         cull.visibilityStale = stale;
         cull.visibilityResource =
             graph.ImportBuffer("CullVisibility", cull.visibility, {rings.visibilityCapacity, BufferUsage::Storage});
-        cull.pyramid = occlusion->pyramid;
-        cull.pyramidResource = occlusion->pyramidResource;
-        cull.pyramidMips = occlusion->mips;
-        cull.size = occlusion->size;
+        cull.history = occlusion->history;
         cull.viewProjection = occlusion->viewProjection;
         return cull;
     }
@@ -2747,7 +2742,7 @@ namespace Fenrir::Render
     }
 
     void SceneRenderer::AddCullPass(RenderGraph& graph, std::uint64_t frameIndex, const CullFrame& frame,
-                                    const CullView& cull, std::uint32_t phase, std::size_t jobSlot, RenderStage stage)
+                                    const CullView& cull, CullPhase phase, std::size_t jobSlot, RenderStage stage)
     {
         // The view's planes go with the job, or none when GPU culling is off, so the pass keeps every candidate,
         // draws every copy at level 0 and the draws keep their shape for comparison.
@@ -2762,14 +2757,16 @@ namespace Fenrir::Render
             job.lod.x = m_lodErrorPixels;
             job.lod.y = m_minProjectedPixels;
         }
-        const bool twoPhase = phase != 0;
-        job.occlusion = {phase, cull.visibilityStale ? 1u : 0u, cull.commandsPerPhase, cull.pyramidMips};
-        job.screen = Math::Vec4(static_cast<float>(cull.size.width), static_cast<float>(cull.size.height), 0.0f, 0.0f);
+        const bool twoPhase = phase != CullPhase::Single;
+        job.occlusion = {static_cast<std::uint32_t>(phase), cull.visibilityStale ? 1u : 0u, cull.commandsPerPhase,
+                         cull.history.mips};
+        job.screen = Math::Vec4(static_cast<float>(cull.history.size.width),
+                                static_cast<float>(cull.history.size.height), 0.0f, 0.0f);
         job.viewProjection = cull.viewProjection;
         m_cullJobs->Write(frameIndex, jobSlot, BytesOf(job));
         // A view with one phase binds a word the pass never reads and the default texture it never samples.
         const BufferHandle visibility = twoPhase ? cull.visibility : m_noVisibility;
-        const TextureHandle pyramid = twoPhase ? cull.pyramid : GetDefaultTexture(DefaultTexture::Black);
+        const TextureHandle pyramid = twoPhase ? cull.history.pyramidTexture : GetDefaultTexture(DefaultTexture::Black);
         const BindingGroupHandle targetGroup = m_cullTargetGroups.Get(
             {BindingGroupKeyPart::Of(frame.records), BindingGroupKeyPart::Of(frame.groups),
              BindingGroupKeyPart::Of(cull.commands), BindingGroupKeyPart::Of(cull.indirection),
@@ -2797,7 +2794,7 @@ namespace Fenrir::Render
         // groups; the view's DepthPrepass and Opaque passes declare reading both results, which the backend's
         // barriers follow (ADR-0057). The second phase reads the visibility phase one read and writes it for next
         // frame, and samples the pyramid built from the first phase's depth.
-        const bool copies = phase != 2;
+        const bool copies = phase != CullPhase::Second;
         graph.AddPass(
             "Cull", stage, QueueKind::Compute,
             [=](PassBuilder& pass) {
@@ -2812,16 +2809,16 @@ namespace Fenrir::Render
                 pass.StorageRead(frame.copiesResource);
                 pass.StorageWrite(cull.commandsResource);
                 pass.StorageWrite(cull.indirectionResource);
-                if (phase == 1)
+                if (phase == CullPhase::First)
                 {
                     // Last frame's words, which the second phase then overwrites.
                     pass.StorageReadPrevious(cull.visibilityResource);
                 }
-                else if (phase == 2)
+                else if (phase == CullPhase::Second)
                 {
                     pass.StorageRead(cull.visibilityResource);
                     pass.StorageWrite(cull.visibilityResource);
-                    pass.Sample(cull.pyramidResource);
+                    pass.Sample(cull.history.pyramid);
                 }
             },
             [pipeline = m_cullPipeline, jobGroup = m_cullJobs->Group(frameIndex, jobSlot), targetGroup,
@@ -3747,8 +3744,7 @@ namespace Fenrir::Render
             // latter its history; kept across frames by its camera.
             const HistoryView history =
                 m_sceneHistory->Import(graph, request, {rect.width, rect.height}, viewProjection, occlusionCulling);
-            const CullOcclusion cullOcclusion{history.pyramidTexture, history.pyramid, history.mips, history.size,
-                                              viewProjection};
+            const CullOcclusion cullOcclusion{history, viewProjection};
             const CullView cull = PrepareCull(graph, frameIndex, v, frustum, lod, *draws, *opaqueRuns, cullFrame,
                                               occlusionCulling && !history.IsEmpty() ? &cullOcclusion : nullptr,
                                               cullTemplates, cullLevels, cullPhases, cullGroups);
@@ -3758,7 +3754,8 @@ namespace Fenrir::Render
             if (!cull.commands.IsEmpty())
             {
                 // The one phase, or the first: first in the frame.
-                AddCullPass(graph, frameIndex, cullFrame, cull, cull.phases == 2 ? 1 : 0, 2 * v, RenderStage::Cull);
+                AddCullPass(graph, frameIndex, cullFrame, cull, cull.phases == 2 ? CullPhase::First : CullPhase::Single,
+                            2 * v, RenderStage::Cull);
             }
             const BindingGroupHandle viewDrawGroup =
                 cull.indirection.IsEmpty() ? drawGroup : DrawGroupFor(frameIndex, cull.indirection);
@@ -3816,8 +3813,8 @@ namespace Fenrir::Render
             // Depth and normals first (ADR-0049), so Opaque shades each pixel once, by equal depth: the first phase's
             // survivors, then, after the pyramid is built from them and the second phase has tested the rest against
             // it, the second phase's (ADR-0057), loaded over the first's.
-            const auto addPrepass = [&](std::uint32_t phase) {
-                const bool first = phase == 0;
+            const auto addPrepass = [&](std::uint32_t set) {
+                const bool first = set == 0;
                 graph.AddPass(
                     "DepthPrepass", RenderStage::DepthPrepass, QueueKind::Graphics,
                     [=](PassBuilder& pass) {
@@ -3848,7 +3845,8 @@ namespace Fenrir::Render
             if (cull.phases == 2)
             {
                 m_sceneHistory->AddHiZPasses(graph, frameIndex, history, sceneDepth);
-                AddCullPass(graph, frameIndex, cullFrame, cull, 2, 2 * v + 1, RenderStage::DepthPrepass);
+                AddCullPass(graph, frameIndex, cullFrame, cull, CullPhase::Second, 2 * v + 1,
+                            RenderStage::DepthPrepass);
                 addPrepass(1);
             }
             // GTAO from the prepass's depth and normals, when the camera has it; Opaque samples what it makes.
@@ -3906,10 +3904,10 @@ namespace Fenrir::Render
                         ViewGroupFor(context.FrameIndex(), viewSlot, gtao, textureOf(shadowAtlas), clusterBuffer,
                                      textureOf(reflectionHits), textureOf(sceneHistory));
                     // Both phases' survivors (ADR-0057): the second phase's commands follow the first's.
-                    for (std::uint32_t phase = 0; phase < phases; ++phase)
+                    for (std::uint32_t set = 0; set < phases; ++set)
                     {
                         RecordDraws(context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup, shadedView,
-                                    viewDrawGroup, skinned, viewport, DrawPass::Main, commands, phase * perPhase);
+                                    viewDrawGroup, skinned, viewport, DrawPass::Main, commands, set * perPhase);
                     }
                 });
             if (!transparent->empty())

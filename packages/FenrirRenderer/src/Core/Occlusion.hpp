@@ -81,36 +81,51 @@ namespace Fenrir::Render
     };
 
     /**
-     * @brief The texels of a level `levelSize` texels across that `rect` touches: from the texel holding its top-left
-     * to the last texel its bottom-right reaches into, never past the level's edge.
+     * @brief The texels of level `level` of a pyramid over a `size` view that `rect` touches: from the texel holding
+     * its top-left pixel to the last texel its bottom-right pixel reaches into, never past the level's edge. A level's
+     * texel k covers the pixels from k times its side (2 to the level) on, the last texel on a side taking the
+     * remainder (ReduceHiZ folds it in), so the texels come from pixels shifted by the level, not from the level's
+     * size.
      */
-    [[nodiscard]] inline TexelRange TexelsOf(const ScreenRect& rect, Graphics::PixelSize levelSize)
+    [[nodiscard]] inline TexelRange TexelsOf(const ScreenRect& rect, Graphics::PixelSize size, std::uint32_t level)
     {
-        const Math::Vec2 scale(static_cast<float>(levelSize.width), static_cast<float>(levelSize.height));
+        const Graphics::PixelSize levelSize = MipSize(size, level);
+        const Math::Vec2 pixels(static_cast<float>(size.width), static_cast<float>(size.height));
+        const float side = std::exp2(static_cast<float>(level));
         const glm::uvec2 last(levelSize.width - 1, levelSize.height - 1);
         TexelRange range;
-        range.lo = glm::min(glm::uvec2(glm::floor(rect.min * scale)), last);
-        range.hi = glm::min(glm::uvec2(glm::max(glm::ceil(rect.max * scale) - 1.0f, Math::Vec2(range.lo))), last);
+        range.lo = glm::min(glm::uvec2(glm::floor(rect.min * pixels / side)), last);
+        range.hi =
+            glm::min(glm::uvec2(glm::max(glm::ceil(rect.max * pixels / side) - 1.0f, Math::Vec2(range.lo))), last);
         return range;
     }
 
     /**
-     * @brief Whether a candidate of screen rectangle `rect` is wholly behind what `level` (a pyramid level of
-     * `levelSize` texels, top row first) holds: its nearest point is farther than the farthest depth of every texel
-     * it touches. A texel holding nothing has a farthest depth of 0, which hides nothing.
+     * @brief How much nearer than a candidate's nearest corner a pyramid's farthest depth must be to hide it, as a
+     * factor of the depth (reversed-Z, larger nearer): a flat candidate facing the camera that phase one drew has its
+     * own depth in the pyramid, which the rasteriser and the corner's projection may place an ulp apart.
      */
-    [[nodiscard]] inline bool IsHidden(const ScreenRect& rect, std::span<const HiZTexel> level,
-                                       Graphics::PixelSize levelSize)
+    constexpr float HiddenMargin = 1.0f + 1.0f / 65536.0f;
+
+    /**
+     * @brief Whether a candidate of screen rectangle `rect` is wholly behind what `texels` (level `level` of a pyramid
+     * over a `size` view, top row first) holds: its nearest point is farther, by more than HiddenMargin, than the
+     * farthest depth of every texel it touches. A texel holding nothing has a farthest depth of 0, which hides
+     * nothing.
+     */
+    [[nodiscard]] inline bool IsHidden(const ScreenRect& rect, std::span<const HiZTexel> texels,
+                                       Graphics::PixelSize size, std::uint32_t level)
     {
-        const TexelRange texels = TexelsOf(rect, levelSize);
+        const TexelRange range = TexelsOf(rect, size, level);
+        const std::uint32_t width = MipSize(size, level).width;
         float farthest = 1.0f;
-        for (std::uint32_t y = texels.lo.y; y <= texels.hi.y; ++y)
+        for (std::uint32_t y = range.lo.y; y <= range.hi.y; ++y)
         {
-            for (std::uint32_t x = texels.lo.x; x <= texels.hi.x; ++x)
+            for (std::uint32_t x = range.lo.x; x <= range.hi.x; ++x)
             {
-                farthest = std::min(farthest, level[std::size_t{y} * levelSize.width + x].farthest);
+                farthest = std::min(farthest, texels[std::size_t{y} * width + x].farthest);
             }
         }
-        return rect.nearest < farthest;
+        return rect.nearest * HiddenMargin < farthest;
     }
 } // namespace Fenrir::Render
