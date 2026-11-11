@@ -13,10 +13,10 @@
 
 **Touches:** `packages/FenrirText/`, `packages/FenrirAssets/include/FenrirAssets/`, `packages/FenrirAssets/src/`, `packages/CMakeLists.txt`, `CMakeLists.txt`, `.gitmodules`, `README.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Paragraph tests with HarfBuzz's test fonts and the embedded face: Latin kerning and ligatures, an Arabic run shaped and ordered right-to-left, mixed-direction lines, Devanagari conjuncts, wrapping at a width, ellipsis, alignment, line metrics, character rectangles and hit testing round-trip, grapheme boundaries over combining marks.
-- [ ] Atlas tests: packing reports non-overlapping rectangles, growth doubles then pages, uploads cover exactly the dirty rectangles.
-- [ ] Fallback tests: a missing glyph falls through the family's list to the embedded face; a missing family resolves to the embedded face.
+- [x] Paragraph tests with HarfBuzz's test fonts and the embedded face: Latin kerning and ligatures, an Arabic run shaped and ordered right-to-left, mixed-direction lines, Devanagari conjuncts, wrapping at a width, ellipsis, alignment, line metrics, character rectangles and hit testing round-trip, grapheme boundaries over combining marks.
+- [x] Atlas tests: packing reports non-overlapping rectangles, growth doubles then pages, uploads cover exactly the dirty rectangles.
+- [x] Fallback tests: a missing glyph falls through the family's list to the embedded face; a missing family resolves to the embedded face.
 - [ ] CI builds the submodules on every platform the build-and-test workflow runs (read it before claiming).
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
