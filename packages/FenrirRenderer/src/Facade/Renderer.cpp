@@ -1369,6 +1369,7 @@ namespace Fenrir
                 state.stats.draws = scene.draws;
                 state.stats.instances = scene.instances;
                 state.stats.instancesDrawn = scene.instancesDrawn;
+                std::ranges::copy(scene.drawnByLod, std::begin(state.stats.drawnByLod));
                 state.stats.passes = report.passesRun;
                 state.stats.uploads = scene.uploads;
                 state.stats.paletteBytesUploaded = scene.paletteBytes;
@@ -1555,6 +1556,7 @@ namespace Fenrir
             config.computeSkinning, cascades, spotShadows, pointShadows);
         scene->SetClusteredLights(config.clusteredLights);
         scene->SetGpuCulling(config.gpuCulling);
+        scene->SetLodSelection(config.lodErrorPixels, config.minProjectedPixels);
         state->scene = scene.get();
         // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
         // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).

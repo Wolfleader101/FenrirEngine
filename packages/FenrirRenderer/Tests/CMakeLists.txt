@@ -22,7 +22,7 @@ add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp 
                                    AmbientOcclusion.cpp Instancing.cpp InstanceLists.cpp Culling.cpp ComputeSkinning.cpp
                                    Cascades.cpp Shadows.cpp SpotShadows.cpp PointShadows.cpp ShadowPools.cpp
                                    LightClusters.cpp SceneHistory.cpp ReflectionTrace.cpp IndirectDraws.cpp
-                                   CullPass.cpp
+                                   CullPass.cpp LevelOfDetail.cpp
                                    GoldenComparison.cpp CullProbe.hpp DeviceTest.hpp DrawLists2D.hpp FakeSurface.hpp
                                    RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp SkinningTestApp.hpp)
 target_include_directories(FenrirRendererTests PRIVATE ../src)

@@ -13,13 +13,13 @@
 
 **Touches:** `packages/FenrirRenderer/src/`, `packages/FenrirRenderer/Shaders/`, `packages/FenrirRenderer/include/FenrirRenderer/`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`, `packages/FenrirRenderer/api/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] CPU unit tests: `SelectLod` picks level 0 inside the sphere, coarser levels further out, never past the last, and a scaled copy switches further away than an unscaled one; with `minProjectedPixels` set, a far copy is dropped and the same copy is kept with it 0.
-- [ ] `RendererProbe` on null: a mesh of three levels uploads one index buffer of all three, writes three templates per run with their first indices, and records multi-draws of three commands in both the prepass and `Opaque`.
-- [ ] GL readback: copies of a three-level mesh in a line away from the camera land in the levels `SelectLod` gives, exactly.
-- [ ] GL pixel probes: a hand-made mesh whose level 1 is a different shape (a box whose coarse level is a smaller box) draws its level 1 when far and level 0 when near; with `gpuCulling` off it draws level 0 at both.
+- [x] CPU unit tests: `SelectLod` picks level 0 inside the sphere, coarser levels further out, never past the last, and a scaled copy switches further away than an unscaled one; with `minProjectedPixels` set, a far copy is dropped and the same copy is kept with it 0.
+- [x] `RendererProbe` on null: a mesh of three levels uploads one index buffer of all three, writes three templates per run with their first indices, and records multi-draws of three commands in both the prepass and `Opaque`.
+- [x] GL readback: copies of a three-level mesh in a line away from the camera land in the levels `SelectLod` gives, exactly.
+- [x] GL pixel probes: a hand-made mesh whose level 1 is a different shape (a box whose coarse level is a smaller box) draws its level 1 when far and level 0 when near; with `gpuCulling` off it draws level 0 at both.
 
 Hand check: in the asteroid ring with generated levels, pops between levels are not noticeable at the default `lodErrorPixels`.
 
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

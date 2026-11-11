@@ -3,10 +3,12 @@
 // kept candidate's (record, copy) once, in whatever order the atomics gave them, the kept ones exactly those
 // Math::Frustum keeps on the CPU over the same scene; and the draws through the indirection land where direct draws
 // did, a user vertex shader's copies through CurrentDraw() among them, the same with GPU culling off; and the counts
-// read back FramesInFlight frames later into instancesDrawn are the oracle's.
+// read back FramesInFlight frames later into instancesDrawn are the oracle's. Ticket 07: copies of a mesh with levels
+// of detail land in the levels SelectLod gives, and a level of a different shape shows in the pixels.
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -19,6 +21,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "Core/LevelOfDetail.hpp"
 #include "Device/CommandList.hpp"
 #include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/ShaderData.hpp"
@@ -30,6 +33,7 @@
 using Fenrir::GlProbe;
 using Fenrir::RendererProbe;
 using Fenrir::Math::Vec3;
+using Fenrir::Render::SelectLod;
 using namespace Fenrir::Graphics;
 
 namespace
@@ -591,4 +595,165 @@ TEST_CASE("Frozen, the GPU keeps drawing what the frozen camera saw after the ca
     INFO("unfrozen, the list behind the camera is no candidate and nothing is drawn");
     REQUIRE(test.renderer.Stats().instances == 0);
     REQUIRE(test.renderer.Stats().instancesDrawn == 0);
+}
+
+namespace
+{
+    /** @brief The white square with two hand-made coarser levels, the same triangles at errors of 0.02 and 0.08. */
+    Fenrir::MeshData ThreeLevelSquare()
+    {
+        Fenrir::MeshData mesh = RendererTest::Quad(0.4f, 0.0f);
+        mesh.lods.push_back({mesh.indices, 0.02f});
+        mesh.lods.push_back({mesh.indices, 0.08f});
+        return mesh;
+    }
+
+    /**
+     * @brief A square of side 0.4 whose level 1 is a square of side 0.16 about the same centre, at error 0.03: the
+     * coarse level is a different shape, so which level drew shows in the pixels around the small square.
+     */
+    Fenrir::MeshData TwoShapeSquare()
+    {
+        Fenrir::MeshData mesh = RendererTest::Quad(0.4f, 0.0f);
+        const Fenrir::MeshData inner = RendererTest::Quad(0.16f, 0.0f);
+        mesh.positions.insert(mesh.positions.end(), inner.positions.begin(), inner.positions.end());
+        mesh.normals.insert(mesh.normals.end(), inner.normals.begin(), inner.normals.end());
+        mesh.lods.push_back({{4, 5, 6, 4, 6, 7}, 0.03f});
+        return mesh;
+    }
+
+    /** @brief What SelectLod sees of the test camera: at the origin, `GlScene::Size` pixels high, perspective. */
+    Fenrir::Render::LodView LodViewOf(const GlCullScene& test)
+    {
+        const Fenrir::Perspective& perspective =
+            test.camera.GetComponent<Fenrir::Camera>().projection.As<Fenrir::Perspective>();
+        return {test.camera.GetComponent<Fenrir::Transform>().pos,
+                0.5f * static_cast<float>(GlTest::GlScene::Size) / std::tan(perspective.verticalFov * 0.5f),
+                perspective.near, true};
+    }
+} // namespace
+
+TEST_CASE("Copies of a three-level mesh in a line away from the camera land in the levels SelectLod gives, exactly, "
+          "and drawnByLod reads them back",
+          "[renderer][gl][culling][lod][readback]")
+{
+    GlCullScene test;
+    test.RequireOpenGL();
+    const Fenrir::MeshData data = ThreeLevelSquare();
+    const auto mesh = test.assets.Store().Add<Fenrir::Mesh>(data, Fenrir::AssetOwner::App());
+    // Twelve copies a unit apart along -Z, from one unit out to twelve, under an entity at the origin.
+    Fenrir::InstanceListData list;
+    for (int i = 1; i <= 12; ++i)
+    {
+        list.transforms.push_back(
+            Fenrir::Math::Translate(Fenrir::Math::Mat4(1.0f), {0.0f, 0.0f, -static_cast<float>(i)}));
+    }
+    const std::vector<Fenrir::Math::Mat4> copies = list.transforms;
+    const auto handle = test.assets.Store().Add<Fenrir::InstanceList>(std::move(list), Fenrir::AssetOwner::App());
+    test.app.GetActiveScene().GetEntityList().CreateEntity().AddComponent<Fenrir::InstancedMeshRenderer>(
+        Fenrir::InstancedMeshRenderer{mesh, test.white, handle, true, true});
+
+    test.RunFrame();
+    // The oracle: the levels' errors, the mesh's box and each copy's transform, under the camera as the test knows it.
+    const std::vector<float> errors{0.0f, data.lods[0].error, data.lods[1].error};
+    const Fenrir::Math::AABB box = test.assets.Store().TryGet(mesh)->bounds;
+    const Fenrir::Render::LodView view = LodViewOf(test);
+    std::array<std::set<std::uint32_t>, 3> expected;
+    for (std::uint32_t copy = 0; copy < copies.size(); ++copy)
+    {
+        const std::optional<std::uint32_t> level = SelectLod(errors, box, copies[copy], view, 1.0f);
+        REQUIRE(level.has_value());
+        expected.at(*level).insert(copy);
+    }
+    INFO("the line crosses both switches: " << expected[0].size() << ", " << expected[1].size() << " and "
+                                            << expected[2].size() << " copies at levels 0, 1 and 2");
+    REQUIRE_FALSE(expected[0].empty());
+    REQUIRE_FALSE(expected[1].empty());
+    REQUIRE_FALSE(expected[2].empty());
+
+    const std::vector<RendererProbe::CullBuffers> culls = RendererProbe::Culls(test.renderer);
+    REQUIRE(culls.size() == 1);
+    REQUIRE(culls.front().candidates == 12);
+    GraphicsDevice& device = RendererProbe::Device(test.renderer);
+    const std::vector<std::byte> commands = GlProbe::ReadBuffer(device, culls.front().commands);
+    const std::vector<std::byte> entries = GlProbe::ReadBuffer(device, culls.front().indirection);
+    REQUIRE(commands.size() >= 3 * CommandSize);
+    for (std::uint32_t level = 0; level < 3; ++level)
+    {
+        CAPTURE(level);
+        INFO("the level's command counts exactly the copies the oracle puts at it");
+        REQUIRE(Word(commands, level, 1) == expected.at(level).size());
+        INFO("and its region of the indirection holds exactly those copies, each once");
+        std::set<std::uint32_t> kept;
+        const std::uint32_t base = Word(commands, level, 4);
+        REQUIRE(base == level * 12);
+        for (std::uint32_t i = 0; i < Word(commands, level, 1); ++i)
+        {
+            const Entry entry = EntryOf(entries, base + i);
+            REQUIRE(entry.second != NoCopy);
+            REQUIRE(kept.insert(entry.second).second);
+        }
+        REQUIRE(kept == expected.at(level));
+    }
+
+    const std::uint32_t frames = device.FramesInFlight();
+    for (std::uint32_t frame = 0; frame < frames; ++frame)
+    {
+        test.RunFrame();
+    }
+    INFO("read back FramesInFlight frames later, drawnByLod counts the same per level, summing to instancesDrawn");
+    const Fenrir::RendererStats stats = test.renderer.Stats();
+    REQUIRE(stats.instancesDrawn == 12);
+    REQUIRE(std::ranges::equal(
+        stats.drawnByLod, std::array<std::uint32_t, 8>{static_cast<std::uint32_t>(expected[0].size()),
+                                                       static_cast<std::uint32_t>(expected[1].size()),
+                                                       static_cast<std::uint32_t>(expected[2].size()), 0, 0, 0, 0, 0}));
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A mesh whose level 1 is a smaller square draws its level 1 when far and level 0 when near, and level 0 at "
+          "both with GPU culling off",
+          "[renderer][gl][culling][lod]")
+{
+    GlCullScene test;
+    test.RequireOpenGL();
+    const auto mesh = test.assets.Store().Add<Fenrir::Mesh>(TwoShapeSquare(), Fenrir::AssetOwner::App());
+    // Two of it in one run: level 1's error of 0.03 units projects under a pixel from 1.66 units out, so the near one,
+    // 1.25 from the camera to its sphere, draws at full detail and the far one, 2.78 away, at level 1.
+    const Vec3 near(-0.3f, 0.0f, -1.5f);
+    const Vec3 far(0.6f, 0.0f, -3.0f);
+    for (const Vec3& place : {near, far})
+    {
+        Fenrir::Entity entity = test.app.GetActiveScene().GetEntityList().CreateEntity();
+        entity.GetComponent<Fenrir::Transform>().pos = place;
+        entity.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{mesh, test.white, true});
+    }
+    // A point 0.14 units from each centre: inside the large square, outside the small one.
+    const Vec3 beside(0.14f, 0.0f, 0.0f);
+    constexpr GlProbe::Pixel White{1.0f, 1.0f, 1.0f, 1.0f};
+
+    const GlProbe::Image culled = test.Frame();
+    GraphicsDevice& device = RendererProbe::Device(test.renderer);
+    const std::vector<RendererProbe::CullBuffers> culls = RendererProbe::Culls(test.renderer);
+    REQUIRE(culls.size() == 1);
+    REQUIRE(culls.front().runs == 1);
+    INFO("the run's level 0 command counts the near square and its level 1 command the far one");
+    std::vector<std::byte> commands = GlProbe::ReadBuffer(device, culls.front().commands);
+    REQUIRE(Word(commands, 0, 1) == 1);
+    REQUIRE(Word(commands, 1, 1) == 1);
+    INFO("both centres are white; beside the near centre the large square shows, beside the far one nothing does");
+    REQUIRE(GlProbe::Near(test.At(culled, near), White));
+    REQUIRE(GlProbe::Near(test.At(culled, far), White));
+    REQUIRE(GlProbe::Near(test.At(culled, near + beside), White));
+    REQUIRE(GlProbe::Near(test.At(culled, far + beside), Background));
+
+    test.renderer.SetGpuCulling(false);
+    const GlProbe::Image direct = test.Frame();
+    INFO("with GPU culling off both squares draw at level 0, so the large square shows beside both centres");
+    commands = GlProbe::ReadBuffer(device, RendererProbe::Culls(test.renderer).front().commands);
+    REQUIRE(Word(commands, 0, 1) == 2);
+    REQUIRE(Word(commands, 1, 1) == 0);
+    REQUIRE(GlProbe::Near(test.At(direct, near + beside), White));
+    REQUIRE(GlProbe::Near(test.At(direct, far + beside), White));
+    REQUIRE(test.messages->errors.empty());
 }

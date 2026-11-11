@@ -1,8 +1,9 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 // builtin:cull (ADR-0057): one view's cull pass. Each run the view draws (a merged run of matching items, an instance
-// list, or a lone item as a run of one) has a command in the view's command buffer, copied from its template before
-// this runs with no instances, and a region of the view's indirection starting at the command's base instance. Each
+// list, or a lone item as a run of one) has a command per level of detail in the view's command buffer, copied from
+// its templates before this runs with no instances, and a region of the view's indirection per command starting at the
+// command's base instance. Each
 // work group culls up to 64 candidates of one run, the group table saying which run and which candidates, so no group
 // straddles two runs and one dispatch culls the view. A candidate that is kept is counted into its command's instance
 // count with an atomic, and its entry, uvec2(record, copy), written at the slot the count gave it: the order within a
@@ -12,6 +13,12 @@
 // (culling ticket 04): first the sphere around the box, dropped when it is wholly outside one plane, then the box's
 // eight corners, dropped only when every corner is outside one plane. A job with no planes keeps every candidate
 // (RendererConfig::gpuCulling off).
+//
+// A kept candidate is counted into one of its run's commands, one per level of detail of its mesh, contiguous from the
+// group's command (culling ticket 07): the coarsest level whose error, scaled by the candidate's largest axis scale and
+// projected at its distance from the camera (to the nearest point of its sphere), is under the job's error pixels, as
+// Core/LevelOfDetail.hpp's SelectLod chooses it on the CPU; a candidate whose radius projects under the job's least
+// pixels is dropped first. The job's error pixels are 0 with GPU culling off, so every candidate draws level 0.
 #include "Fenrir/DrawRecord.glsl"
 
 layout(local_size_x = 64) in;
@@ -20,11 +27,18 @@ layout(local_size_x = 64) in;
 layout(set = 0, binding = 0, std140) uniform CullJob
 {
     // x: the view's first entry in the group table; y: how many groups it has; z: how many of the planes below are
-    // the view's, 0 to keep every candidate. w unused.
+    // the view's, 0 to keep every candidate; w: the view's first command's entry in the level table.
     uvec4 groups;
     // The view's planes in world space, vec4(n, d) with n the unit normal pointing inward: a point p is inside when
     // dot(n, p) + d >= 0. Five for a camera (no far plane), six for an orthographic view.
     vec4 planes[6];
+    // xyz: the camera's position in world space (where it was when frozen, frozen); w: how many pixels one unit covers
+    // at distance 1.
+    vec4 camera;
+    // x: the pixels a level's projected error must be under to be drawn; y: the pixels a candidate's projected radius
+    // must reach to be drawn, 0 for any; z: the near plane's distance, the least a perspective view projects by;
+    // w: 1 for a perspective view, 0 for an orthographic one, which projects the same at any distance.
+    vec4 lod;
 } job;
 
 // The frame's draw records, Fenrir/Draw.glsl's draws.
@@ -33,7 +47,7 @@ layout(set = 1, binding = 0, std430) readonly buffer Records
     DrawItem items[];
 } records;
 
-// The frame's group table: per work group, x its run's command in the view's command buffer, y the run's first record
+// The frame's group table: per work group, x its run's first command in the view's command buffer, y the run's first record
 // (an instance list's one record), z how many candidates the run has, w the first of them this group culls.
 layout(set = 1, binding = 1, std430) readonly buffer Groups
 {
@@ -59,17 +73,69 @@ layout(set = 1, binding = 4, std430) readonly buffer Copies
     FenrirInstance copies[];
 } lists;
 
+// The frame's level table: per command template, in the templates' order, the level's error in its mesh's local units,
+// which level of its run's it is, and how many levels the run has (the rest of each entry unused).
+struct CullLevel
+{
+    float error;
+    uint level;
+    uint levels;
+    uint pad;
+};
+layout(set = 1, binding = 5, std430) readonly buffer Levels
+{
+    CullLevel entries[];
+} levels;
+
 // Whether the box boundsMin..boundsMax under transform may be inside the job's planes: Math::Frustum::Intersects(box,
 // transform) after Intersects(Math::Frustum::SphereOf(box, transform)), the same arithmetic in the same order.
+// The largest scale transform applies along any of its axes: what the mesh's lengths are scaled by.
+float LargestScale(mat4 transform)
+{
+    return max(max(length(transform[0].xyz), length(transform[1].xyz)), length(transform[2].xyz));
+}
+
+// The sphere around the box boundsMin..boundsMax under transform, Math::Frustum::SphereOf: its centre moved, its
+// half-diagonal scaled by the largest axis scale.
+vec4 SphereOf(vec3 boundsMin, vec3 boundsMax, mat4 transform)
+{
+    const vec3 centre = (boundsMin + boundsMax) * 0.5;
+    const float halfDiagonal = length(boundsMax - boundsMin) * 0.5;
+    return vec4((transform * vec4(centre, 1.0)).xyz, halfDiagonal * LargestScale(transform));
+}
+
+// How many pixels a length covers at a distance from the camera: LevelOfDetail.hpp's ProjectedPixels.
+float ProjectedPixels(float len, float distance)
+{
+    return len * job.camera.w / (job.lod.w != 0.0 ? max(distance, job.lod.z) : 1.0);
+}
+
+// Which of a run's levelCount levels, whose table entries start at first, a candidate of sphere (centre, radius) and
+// largest axis scale `scale` draws: LevelOfDetail.hpp's SelectLod. -1 when its radius projects too small to draw.
+int SelectLevel(uint first, uint levelCount, vec4 sphere, float scale)
+{
+    // The distance to the sphere's nearest point, 0 inside it.
+    const float distance = max(length(sphere.xyz - job.camera.xyz) - sphere.w, 0.0);
+    if (job.lod.y > 0.0 && ProjectedPixels(sphere.w, distance) < job.lod.y)
+    {
+        return -1;
+    }
+    for (uint level = levelCount - 1u; level > 0u; --level)
+    {
+        if (ProjectedPixels(levels.entries[first + level].error * scale, distance) < job.lod.x)
+        {
+            return int(level);
+        }
+    }
+    return 0;
+}
+
 bool Visible(vec3 boundsMin, vec3 boundsMax, mat4 transform)
 {
     const uint planeCount = min(job.groups.z, 6u);
-    // The sphere around the box: its centre moved, its half-diagonal scaled by the largest axis scale.
-    const vec3 centre = (boundsMin + boundsMax) * 0.5;
-    const float halfDiagonal = length(boundsMax - boundsMin) * 0.5;
-    const float scale = max(max(length(transform[0].xyz), length(transform[1].xyz)), length(transform[2].xyz));
-    const vec3 sphereCentre = (transform * vec4(centre, 1.0)).xyz;
-    const float radius = halfDiagonal * scale;
+    const vec4 sphere = SphereOf(boundsMin, boundsMax, transform);
+    const vec3 sphereCentre = sphere.xyz;
+    const float radius = sphere.w;
     for (uint p = 0u; p < planeCount; ++p)
     {
         const vec4 plane = job.planes[p];
@@ -124,8 +190,16 @@ void main()
     {
         return;
     }
+    // Which of the run's commands it is counted into: its level of detail's, or none at all.
+    const uint firstLevel = job.groups.w + group.x;
+    const int level = SelectLevel(firstLevel, levels.entries[firstLevel].levels,
+                                  SphereOf(item.boundsMin.xyz, item.boundsMax.xyz, transform), LargestScale(transform));
+    if (level < 0)
+    {
+        return;
+    }
 
-    uint command = group.x * 5u;
+    uint command = (group.x + uint(level)) * 5u;
     uint slot = atomicAdd(commands.words[command + 1u], 1u);
     indirection.entries[commands.words[command + 4u] + slot] = uvec2(record, copy);
 }
