@@ -41,6 +41,11 @@ namespace Fenrir::Generated
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::Stats, 2>::Call>("Fenrir.Renderer.RendererNative.Stats"),
                 Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::SetSpotShadowBudget>("Fenrir.Renderer.RendererNative.SetSpotShadowBudget"),
                 Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::SetPointShadowBudget>("Fenrir.Renderer.RendererNative.SetPointShadowBudget"),
+                Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::SetGpuCulling>("Fenrir.Renderer.RendererNative.SetGpuCulling"),
+                Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::SetOcclusionCulling>("Fenrir.Renderer.RendererNative.SetOcclusionCulling"),
+                Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::SetCullingFrozen>("Fenrir.Renderer.RendererNative.SetCullingFrozen"),
+                Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::SetLodSelection>("Fenrir.Renderer.RendererNative.SetLodSelection"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::GetFrustum, 3>::Call>("Fenrir.Renderer.RendererNative.GetFrustum"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::SpawnModel, 4>::Call>("Fenrir.Renderer.RendererNative.SpawnModel"),
             };
         }

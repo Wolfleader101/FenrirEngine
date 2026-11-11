@@ -402,7 +402,9 @@ internal sealed class Binding
     };
 
     /// <summary>The C# name of an array field's storage type, nested in its struct.</summary>
-    public static string ArrayTypeName(string fieldName) => fieldName + "Array";
+    // Upper-cased first, so a private field's lower-case name gives its public storage struct a C# type name.
+    public static string ArrayTypeName(string fieldName) =>
+        char.ToUpperInvariant(fieldName[0]) + fieldName[1..] + "Array";
 
     // Finds the type each binding in `uses` mirrors among the described ones: one binding's at most, with the layout that
     // binding describes, never one this binding selects, excludes or binds as a bound type.

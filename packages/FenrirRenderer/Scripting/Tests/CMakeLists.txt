@@ -5,7 +5,7 @@
 # the same fixtures.
 fenrir_scripting_rules_tests(Renderer SOURCES NoOps.cpp)
 fenrir_scripting_tests(Renderer SOURCES RendererScriptingApp.hpp Shapes.cpp Drawing.cpp Picking.cpp SpawnModel.cpp
-    Lighting.cpp)
+    Lighting.cpp Culling.cpp)
 fenrir_script_fixture(Renderer USES Input Assets)
 # RendererProbe, from the renderer's own tests, and the renderer's sources it reads.
 target_include_directories(FenrirRendererScriptingTests PRIVATE ../../Tests ../../src)
