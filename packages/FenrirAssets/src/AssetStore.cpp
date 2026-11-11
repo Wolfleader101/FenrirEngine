@@ -1,6 +1,7 @@
 #include "FenrirAssets/AssetStore.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <format>
 #include <fstream>
@@ -39,7 +40,7 @@ namespace Fenrir
     {
         // The words log messages use for each kind, in AssetKind's order.
         constexpr std::array<std::string_view, Detail::AssetKindCount> kindNames = {
-            "mesh", "image", "material", "shader", "model", "skeleton", "clip", "bone mask", "instance list"};
+            "mesh", "image", "material", "shader", "model", "skeleton", "clip", "bone mask", "instance list", "font"};
 
         std::string_view KindName(Detail::AssetKind kind)
         {
@@ -106,6 +107,16 @@ namespace Fenrir
             bool labelled = false;
             std::string key;
         };
+
+        // Whether `file` is named as a TrueType or OpenType font is, by its extension in any case.
+        bool IsFontFile(const std::filesystem::path& file)
+        {
+            std::string extension = file.extension().string();
+            std::ranges::transform(extension, extension.begin(), [](char c) {
+                return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            });
+            return extension == ".ttf" || extension == ".otf" || extension == ".ttc";
+        }
 
         AssetPath Resolve(const std::filesystem::path& root, std::string_view path)
         {
@@ -240,6 +251,7 @@ namespace Fenrir
             record.data.reset();
             record.revision = 0;
             record.owners.clear();
+            record.imageUpdates.clear();
             if (!record.key.empty())
             {
                 table.byKey.erase(record.key);
@@ -356,6 +368,10 @@ namespace Fenrir
             {
                 return fail(LoadFailure::NoImporter, "a model file holds no instance lists");
             }
+            if (kind == Detail::AssetKind::Font)
+            {
+                return fail(LoadFailure::NoImporter, "a model file holds no fonts");
+            }
             if (kind == Detail::AssetKind::Model && resolved.labelled)
             {
                 return fail(LoadFailure::LabelNotFound,
@@ -388,6 +404,30 @@ namespace Fenrir
             Detail::AssetRecord& record = table.records[found->second];
             Detail::AddOwner(record, Detail::OwnerIdOf(m_state, owner));
             return {found->second, record.generation};
+        }
+        if (kind == Detail::AssetKind::Font)
+        {
+            if (!IsFontFile(resolved.file))
+            {
+                return fail(LoadFailure::NoImporter, "fonts load from .ttf, .otf and .ttc files");
+            }
+            if (resolved.labelled)
+            {
+                return fail(LoadFailure::LabelNotFound,
+                            "a font file has no sub-asset called '" + resolved.label + "', or any other");
+            }
+            FontData font;
+            if (!Detail::ReadAssetFile(resolved.file, font.bytes))
+            {
+                return fail(LoadFailure::ImportFailed, "the file could not be read");
+            }
+            Detail::AssetWarnings warnings;
+            if (std::string problem = Detail::PrepareAsset(font, warnings); !problem.empty())
+            {
+                return fail(LoadFailure::ImportFailed, std::move(problem));
+            }
+            Detail::AssetBox data(new FontData(std::move(font)), &Detail::DestroyAssetData<FontData>);
+            return Detail::InsertAsset(table, std::move(data), Detail::OwnerIdOf(m_state, owner), resolved.key);
         }
         if (kind != Detail::AssetKind::Image)
         {
@@ -440,6 +480,7 @@ namespace Fenrir
         if (replacing)
         {
             ++record.revision;
+            record.imageUpdates.clear();
             if (kind == Detail::AssetKind::Shader)
             {
                 WarnOverridesShaderLacks({slot.index, slot.generation});
@@ -501,6 +542,7 @@ namespace Fenrir
         }
         record->data = std::move(data);
         ++record->revision;
+        record->imageUpdates.clear();
         if (kind == Detail::AssetKind::Shader)
         {
             WarnOverridesShaderLacks({slot.index, slot.generation});

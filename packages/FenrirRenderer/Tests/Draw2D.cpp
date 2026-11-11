@@ -61,7 +61,7 @@ namespace
         /** @brief Draws `list` on layer 0 at `contentScale` in one frame. */
         void Draw(Fenrir::DrawList2D list, float contentScale = 1.0f)
         {
-            Fenrir::Render::OverlayFrame frame;
+            Fenrir::Render::Frame2D frame;
             frame.submissions.push_back({0, std::move(list)});
             frame.contentScale = contentScale;
             draw2D->SetFrame(std::move(frame));

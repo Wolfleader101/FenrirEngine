@@ -29,7 +29,7 @@ TEST_CASE("A rectangle is one quad of four vertices and two triangles, its shape
     const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
     INFO("one command of six indices over four vertices, drawn with the painter's pipeline");
     REQUIRE(list.commands.size() == 1);
-    REQUIRE(list.commands[0].indexCount == 6);
+    REQUIRE(PainterTest::Draw(list, 0).indexCount == 6);
     REQUIRE(vertices.size() == 4);
     REQUIRE(list.pipelines.size() == 1);
     REQUIRE(list.pipelines[0] == Fenrir::PainterPipeline(PainterTest::Shader, Fenrir::BlendSpace2D::Linear));
@@ -290,16 +290,16 @@ TEST_CASE("The painter appends after what a list holds, aligned to its own verte
     list.AppendIndices(std::span<const std::uint16_t>(indices));
     Fenrir::PipelineDescription2D other;
     other.vertexLayout = Fenrir::Vertex2DLayout();
-    list.commands.push_back({.pipeline = list.AddPipeline(other), .indexCount = 6});
+    list.commands.push_back(Fenrir::DrawCommand2D{.pipeline = list.AddPipeline(other), .indexCount = 6});
 
     Fenrir::Painter painter(list, PainterTest::Config());
     painter.DrawRect({0, 0, 10, 10}, Colour::White);
 
     INFO("the painter's command reads its vertices from vertex 1 of its stride, after the padded 80 bytes");
     REQUIRE(list.commands.size() == 2);
-    REQUIRE(list.commands[1].baseVertex == 1);
-    REQUIRE(list.commands[1].indexOffset == 6);
-    REQUIRE(list.commands[1].pipeline == 1);
+    REQUIRE(PainterTest::Draw(list, 1).baseVertex == 1);
+    REQUIRE(PainterTest::Draw(list, 1).indexOffset == 6);
+    REQUIRE(PainterTest::Draw(list, 1).pipeline == 1);
     REQUIRE(list.vertices.size() == 5 * sizeof(Fenrir::PainterVertex));
     REQUIRE(PainterTest::Vertices(list, 1).at(0).halfSize == Vec2(5, 5));
 }

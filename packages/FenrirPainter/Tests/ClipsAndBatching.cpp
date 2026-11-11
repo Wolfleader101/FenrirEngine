@@ -49,8 +49,8 @@ TEST_CASE("A rectangle clip is the command's scissor and the vertex's clip", "[p
 
     REQUIRE(list.commands.size() == 1);
     INFO("the scissor is the clip in logical units, at root scale 2");
-    REQUIRE(list.commands[0].scissor.has_value());
-    REQUIRE(Near(*list.commands[0].scissor, Rect2D{20, 20, 100, 40}));
+    REQUIRE(PainterTest::Draw(list, 0).scissor.has_value());
+    REQUIRE(Near(*PainterTest::Draw(list, 0).scissor, Rect2D{20, 20, 100, 40}));
     const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
     // The clip's centre is (70, 40) in logical units; the quad's corner (-0.5, -0.5) in UI units is (-1, -1).
     INFO("the vertex carries the clip, centred on its own centre, in logical units");
@@ -70,7 +70,7 @@ TEST_CASE("Two axis-aligned rectangle clips meet exactly, in the scissor and in 
     painter.DrawRect({0, 0, 10, 10}, Colour::White);
 
     INFO("the scissor and the vertex's clip are both (50, 20) to (100, 50)");
-    REQUIRE(Near(*list.commands.at(0).scissor, Rect2D{50, 20, 50, 30}));
+    REQUIRE(Near(*PainterTest::Draw(list, 0).scissor, Rect2D{50, 20, 50, 30}));
     REQUIRE(Near(PainterTest::Vertices(list)[0].clipHalfSize, Vec2(25, 15)));
 }
 
@@ -107,10 +107,10 @@ TEST_CASE("Restore brings back the clip that was saved, and then none", "[painte
     const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
     REQUIRE(list.commands.size() == 2);
     INFO("the first draw is clipped by the outer clip alone");
-    REQUIRE(Near(*list.commands[0].scissor, Rect2D{0, 0, 100, 100}));
+    REQUIRE(Near(*PainterTest::Draw(list, 0).scissor, Rect2D{0, 0, 100, 100}));
     REQUIRE(Near(vertices[0].clipHalfSize, Vec2(50, 50)));
     INFO("the second by nothing");
-    REQUIRE(list.commands[1].scissor == std::nullopt);
+    REQUIRE(PainterTest::Draw(list, 1).scissor == std::nullopt);
     REQUIRE_FALSE(PainterTest::HasFlag(vertices[4], Fenrir::PainterFlags::Clipped));
 }
 
@@ -128,7 +128,7 @@ TEST_CASE("A rotated rounded clip is the vertex's clip, with its radii, under it
 
     REQUIRE(list.commands.size() == 1);
     INFO("the scissor is the outer clip met by the rotated clip's bounds");
-    REQUIRE(Near(*list.commands[0].scissor, Rect2D{-20, 40, 40, 20}));
+    REQUIRE(Near(*PainterTest::Draw(list, 0).scissor, Rect2D{-20, 40, 40, 20}));
     const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
     INFO("the vertex's clip is the rounded one, its half size and radii in its own unrotated space");
     REQUIRE(Near(vertices[0].clipHalfSize, Vec2(10, 20)));
@@ -152,8 +152,8 @@ TEST_CASE("Draws with the same state share one command and one pipeline", "[pain
 
     INFO("five quads, 30 indices, in one command binding the image, with the painter's one pipeline");
     REQUIRE(list.commands.size() == 1);
-    REQUIRE(list.commands[0].indexCount == 30);
-    REQUIRE(list.commands[0].textures.at(0).image == First);
+    REQUIRE(PainterTest::Draw(list, 0).indexCount == 30);
+    REQUIRE(PainterTest::Draw(list, 0).textures.at(0).image == First);
     REQUIRE(list.pipelines.size() == 1);
 }
 
@@ -167,9 +167,9 @@ TEST_CASE("A different image in a filled slot starts another command", "[painter
 
     INFO("one command for each image, each binding its own");
     REQUIRE(list.commands.size() == 2);
-    REQUIRE(list.commands[0].textures.at(0).image == First);
-    REQUIRE(list.commands[1].textures.at(0).image == Second);
-    REQUIRE(list.commands[1].indexCount == 6);
+    REQUIRE(PainterTest::Draw(list, 0).textures.at(0).image == First);
+    REQUIRE(PainterTest::Draw(list, 1).textures.at(0).image == Second);
+    REQUIRE(PainterTest::Draw(list, 1).indexCount == 6);
 }
 
 TEST_CASE("A scissor change starts another command", "[painter][batching]")
@@ -183,8 +183,24 @@ TEST_CASE("A scissor change starts another command", "[painter][batching]")
 
     INFO("the unclipped draw and the clipped one in commands of their own, the second with the scissor");
     REQUIRE(list.commands.size() == 2);
-    REQUIRE(list.commands[0].scissor == std::nullopt);
-    REQUIRE(list.commands[1].scissor.has_value());
+    REQUIRE(PainterTest::Draw(list, 0).scissor == std::nullopt);
+    REQUIRE(PainterTest::Draw(list, 1).scissor.has_value());
+}
+
+TEST_CASE("A draw after an offscreen group starts its own command", "[painter][batching]")
+{
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, PainterTest::Config());
+
+    painter.DrawRect({0, 0, 10, 10}, Colour::White);
+    list.BeginGroup({0, 0, 10, 10});
+    list.EndGroup();
+    painter.DrawRect({0, 0, 10, 10}, Colour::White);
+
+    INFO("the draw, the group's begin and end, and a new draw: the first draw is not extended past the group");
+    REQUIRE(list.commands.size() == 4);
+    REQUIRE(PainterTest::Draw(list, 0).indexCount == 6);
+    REQUIRE(PainterTest::Draw(list, 3).indexCount == 6);
 }
 
 TEST_CASE("Sixteen-bit indices roll over into a new command with a base vertex past 65535 vertices",
@@ -201,11 +217,11 @@ TEST_CASE("Sixteen-bit indices roll over into a new command with a base vertex p
 
     INFO("16384 quads in the first command, the 16385th in a second from vertex 65536");
     REQUIRE(list.commands.size() == 2);
-    REQUIRE(list.commands[0].indexCount == 16384u * 6u);
-    REQUIRE(list.commands[0].baseVertex == 0);
-    REQUIRE(list.commands[1].indexCount == 6);
-    REQUIRE(list.commands[1].baseVertex == 65536);
-    REQUIRE(list.commands[1].indexOffset == 16384u * 6u);
+    REQUIRE(PainterTest::Draw(list, 0).indexCount == 16384u * 6u);
+    REQUIRE(PainterTest::Draw(list, 0).baseVertex == 0);
+    REQUIRE(PainterTest::Draw(list, 1).indexCount == 6);
+    REQUIRE(PainterTest::Draw(list, 1).baseVertex == 65536);
+    REQUIRE(PainterTest::Draw(list, 1).indexOffset == 16384u * 6u);
     const std::vector<std::uint16_t> indices = PainterTest::Indices16(list);
     INFO("the last command's indices count from its base vertex");
     REQUIRE(indices[16384u * 6u] == 0);
@@ -226,7 +242,7 @@ TEST_CASE("With 32-bit indices one command takes any number of vertices", "[pain
 
     INFO("one command, its pipeline on 32-bit indices");
     REQUIRE(list.commands.size() == 1);
-    REQUIRE(list.commands[0].indexCount == 16385u * 6u);
+    REQUIRE(PainterTest::Draw(list, 0).indexCount == 16385u * 6u);
     REQUIRE(list.pipelines.at(0).indexType == Fenrir::IndexType2D::UInt32);
     REQUIRE(list.indices.size() == 16385u * 6u * 4u);
 }

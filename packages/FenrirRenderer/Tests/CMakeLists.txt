@@ -13,7 +13,7 @@ target_link_libraries(FenrirRendererGoldenImages PUBLIC Catch2::Catch2 PRIVATE F
 add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp CommandLists.cpp RenderGraph.cpp
                                    FrameRing.cpp Frames.cpp OpenGLStart.cpp Drawing.cpp Preparing.cpp RendererFrames.cpp
                                    Cameras.cpp Picking.cpp Materials.cpp SpawnModel.cpp Sky.cpp DebugFont.cpp
-                                   DebugDrawing.cpp Overlay.cpp Draw2D.cpp Skinning.cpp SkinningMaths.cpp
+                                   DebugDrawing.cpp Overlay.cpp Draw2D.cpp Groups2D.cpp Skinning.cpp SkinningMaths.cpp
                                    SphericalHarmonics.cpp SkyLighting.cpp SkyImages.cpp Tonemapping.cpp ColourGrading.cpp CameraEffects.cpp Brdf.cpp
                                    Bloom.cpp AnamorphicStreaks.cpp LensFlare.cpp
                                    PunctualLights.cpp LightRecords.cpp ImageReads.cpp Lights.cpp RectLights.cpp

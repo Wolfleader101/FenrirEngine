@@ -7,6 +7,7 @@
 #include <numbers>
 #include <span>
 #include <type_traits>
+#include <variant>
 
 #include "Colours.hpp"
 #include "FenrirPainter/StopTexture.hpp"
@@ -255,10 +256,14 @@ namespace Fenrir
         const std::array<std::pair<std::size_t, std::optional<TextureSlot2D>>, 2> wanted{
             {{PainterImageSlot, paint.image}, {PainterStopSlot, paint.stops}}};
 
-        bool extend = m_command && *m_command + 1 == m_list.commands.size();
+        // Only a draw this painter made, still the list's last, is extended: never past a group's begin or end.
+        const DrawCommand2D* last = m_command && *m_command + 1 == m_list.commands.size()
+                                        ? std::get_if<DrawCommand2D>(&m_list.commands[*m_command])
+                                        : nullptr;
+        bool extend = last != nullptr;
         if (extend)
         {
-            const Command2D& command = m_list.commands[*m_command];
+            const DrawCommand2D& command = *last;
             extend = command.scissor == m_state.scissor;
             if (m_config.indexType == IndexType2D::UInt16 && m_commandVertices + 4 > MaxVertices16)
             {
@@ -279,7 +284,7 @@ namespace Fenrir
         {
             m_list.vertices.resize((m_list.vertices.size() + stride - 1) / stride * stride);
             m_list.indices.resize((m_list.indices.size() + indexSize - 1) / indexSize * indexSize);
-            Command2D& command = m_list.commands.emplace_back();
+            auto& command = std::get<DrawCommand2D>(m_list.commands.emplace_back(DrawCommand2D{}));
             command.pipeline = m_pipeline;
             command.scissor = m_state.scissor;
             command.indexOffset = static_cast<std::uint32_t>(m_list.indices.size() / indexSize);
@@ -288,7 +293,7 @@ namespace Fenrir
             m_commandVertices = 0;
         }
 
-        Command2D& command = m_list.commands[*m_command];
+        auto& command = std::get<DrawCommand2D>(m_list.commands[*m_command]);
         for (const auto& [slot, texture] : wanted)
         {
             if (texture)

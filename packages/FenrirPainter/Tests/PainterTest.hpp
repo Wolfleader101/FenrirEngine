@@ -4,7 +4,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <variant>
 #include <vector>
+
+#include <catch2/catch_test_macros.hpp>
 
 #include "FenrirDraw2D/DrawList2D.hpp"
 #include "FenrirPainter/Painter.hpp"
@@ -37,6 +40,15 @@ namespace PainterTest
         std::memcpy(vertices.data(), list.vertices.data() + first * sizeof(Fenrir::PainterVertex),
                     vertices.size() * sizeof(Fenrir::PainterVertex));
         return vertices;
+    }
+
+    /** @brief The list's command `index`, which the painter only ever appends as a draw. */
+    inline const Fenrir::DrawCommand2D& Draw(const Fenrir::DrawList2D& list, std::size_t index)
+    {
+        INFO("command " << index << " is a draw");
+        REQUIRE(index < list.commands.size());
+        REQUIRE(std::holds_alternative<Fenrir::DrawCommand2D>(list.commands[index]));
+        return std::get<Fenrir::DrawCommand2D>(list.commands[index]);
     }
 
     /** @brief The list's index bytes read as 16-bit indices. */

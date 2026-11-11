@@ -104,9 +104,9 @@ TEST_CASE("A gradient of more than two stops reads a row of the stop texture", "
     REQUIRE(Near(vertices[4].extents.z, 0.125f));
     INFO("the command binds the stop texture in its slot, the image slot left empty");
     REQUIRE(list.commands.size() == 1);
-    REQUIRE(list.commands[0].textures.size() == 2);
-    REQUIRE(list.commands[0].textures[Fenrir::PainterStopSlot].image == Picture);
-    REQUIRE(list.commands[0].textures[Fenrir::PainterImageSlot].image.IsEmpty());
+    REQUIRE(PainterTest::Draw(list, 0).textures.size() == 2);
+    REQUIRE(PainterTest::Draw(list, 0).textures[Fenrir::PainterStopSlot].image == Picture);
+    REQUIRE(PainterTest::Draw(list, 0).textures[Fenrir::PainterImageSlot].image.IsEmpty());
 }
 
 TEST_CASE("The stop texture's row holds the gradient's colours, premultiplied", "[painter][paints]")
@@ -212,8 +212,8 @@ TEST_CASE("An image into a rectangle is one quad over the whole image, with its 
     REQUIRE(Near(vertices[0].uv, Vec2(-0.05f, -0.025f)));
     REQUIRE(Near(vertices[2].uv, Vec2(1.05f, 1.025f)));
     INFO("the command binds the image with the sampler");
-    REQUIRE(list.commands.at(0).textures.size() == 1);
-    REQUIRE(list.commands[0].textures[0] == Fenrir::TextureSlot2D{Picture, image.sampler});
+    REQUIRE(PainterTest::Draw(list, 0).textures.size() == 1);
+    REQUIRE(PainterTest::Draw(list, 0).textures[0] == Fenrir::TextureSlot2D{Picture, image.sampler});
 }
 
 TEST_CASE("A nine-slice image is nine quads whose corners keep their size", "[painter][paints]")
@@ -230,7 +230,7 @@ TEST_CASE("A nine-slice image is nine quads whose corners keep their size", "[pa
     INFO("nine quads in one command");
     REQUIRE(vertices.size() == 36);
     REQUIRE(list.commands.size() == 1);
-    REQUIRE(list.commands[0].indexCount == 54);
+    REQUIRE(PainterTest::Draw(list, 0).indexCount == 54);
     // Row by row, left to right: the top-left corner is (0, 0) to (4, 8) in the rectangle and (0, 0) to (4/32, 8/16) of
     // the image (left 4, top 8). Only the image's outer edges are anti-aliased: a piece's quad ends at its seams, where
     // its shape runs on one unit so the seam is fully covered from both sides.
@@ -266,5 +266,5 @@ TEST_CASE("An image pattern paint maps its rectangle to the image", "[painter][p
     INFO("a circle painted with the image, its quad's corner (10, 10) at uv (1, 1)");
     REQUIRE(PainterTest::PaintOf(vertices[0]) == Fenrir::PaintKind::Image);
     REQUIRE(Near(vertices[0].uv, Vec2(1, 1)));
-    REQUIRE(list.commands.at(0).textures.at(0).sampler.wrapU == Fenrir::SamplerWrap::Repeat);
+    REQUIRE(PainterTest::Draw(list, 0).textures.at(0).sampler.wrapU == Fenrir::SamplerWrap::Repeat);
 }

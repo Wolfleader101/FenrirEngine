@@ -215,7 +215,11 @@ namespace Fenrir::Render
     class RenderGraph
     {
       public:
-        /** @brief Brings in a texture made outside the graph, such as the backbuffer or a camera's image target. */
+        /**
+         * @brief Brings in a texture made outside the graph, such as the backbuffer or a camera's image target. A
+         * texture already imported this frame gives back the resource it was imported as, so the passes of every
+         * feature that uses it are ordered by those uses.
+         */
         GraphResource ImportTexture(std::string name, Graphics::TextureHandle texture,
                                     const Graphics::TextureDesc& desc);
         /** @brief Brings in a buffer made outside the graph. */

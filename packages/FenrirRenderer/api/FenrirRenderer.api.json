@@ -111,7 +111,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::InstanceList>",
@@ -119,7 +119,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Material>",
@@ -127,7 +127,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Mesh>",
@@ -135,7 +135,7 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask` or `InstanceList`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
       "name": "Fenrir::BackgroundType",
@@ -1481,7 +1481,7 @@
       "name": "Fenrir::RendererStats",
       "category": "struct",
       "role": "shared-struct",
-      "size": 32,
+      "size": 48,
       "alignment": 4,
       "doc": "What the renderer did in its last drawn frame (ADR-0023).",
       "fields": [
@@ -1540,6 +1540,34 @@
           "kind": "u32",
           "default": 0,
           "doc": "Draws into the sun's shadow cascades and the spot lights' shadow tiles (ADR-0050): one per run of matching casting items, merged as in `draws`, per cascade of each view, per shadowed spot light, and per shadowed point light (six times over for items whose shader draws its six faces one at a time)."
+        },
+        {
+          "name": "lists2D",
+          "offset": 32,
+          "kind": "u32",
+          "default": 0,
+          "doc": "2D draw lists drawn, on the overlay and into image 2D targets; skipped lists are not counted."
+        },
+        {
+          "name": "commands2D",
+          "offset": 36,
+          "kind": "u32",
+          "default": 0,
+          "doc": "The commands of those lists, draws and the begins and ends of offscreen groups alike."
+        },
+        {
+          "name": "groups2D",
+          "offset": 40,
+          "kind": "u32",
+          "default": 0,
+          "doc": "Offscreen groups drawn into a transient image (ADR-0060)."
+        },
+        {
+          "name": "transientImageBytes2D",
+          "offset": 44,
+          "kind": "u32",
+          "default": 0,
+          "doc": "The bytes of those groups' transient images, four a pixel."
         }
       ]
     },

@@ -1,37 +1,29 @@
 // builtin:painter on OpenGL (the spec's GL check): a rounded rectangle, a radial gradient and a bordered box painted
-// into a small offscreen image by the renderer core's 2D render feature, as the renderer's own overlay GL tests draw,
-// and read back at their centres and edges. The target is linear RGBA16F, cleared transparent, and the root's blend
-// space Linear, so a pixel is the shader's premultiplied linear output; the expected values are worked by hand.
+// into an image 2D target (ADR-0060) through the renderer's ImageTargets2D, and read back at their centres and edges.
+// The image is linear RGBA8, cleared transparent each frame it is drawn, and the root's blend space Linear, so a pixel
+// is the shader's premultiplied linear output to 8 bits; the expected values are worked by hand.
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <memory>
-#include <span>
 #include <utility>
-#include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "Core/Draw2DFeature.hpp"
-#include "Core/RendererCore.hpp"
-#include "Core/SceneRenderer.hpp"
 #include "FenrirPainter/Painter.hpp"
-#include "FenrirShaders/BuiltinPainter.hpp"
-#include "GlProbe.hpp"
-#include "GlTestApp.hpp"
-#include "RecordingLogger.hpp"
+#include "FenrirPainter/Painting.hpp"
+#include "FenrirRenderer/ImageTargets2D.hpp"
+#include "GlScene.hpp"
 
 using Fenrir::Colour;
 using Fenrir::GlProbe;
-using Fenrir::Graphics::TextureFormat;
 
 namespace
 {
-    constexpr std::uint32_t Size = GlTest::TargetSize;
-    /** @brief The asset key builtin:painter is prepared under. */
-    constexpr Fenrir::Render::AssetKey PainterKey{1, 1};
-    /** @brief Beside the hand-worked colours, the error function's and the 16-bit float's error. */
+    constexpr std::uint32_t Size = 64;
+    /** @brief Beside the hand-worked colours: 8-bit storage and the shader's anti-aliasing. */
     constexpr float Tolerance = 0.01f;
+    constexpr GlProbe::Pixel Transparent{0.0f, 0.0f, 0.0f, 0.0f};
 
     /** @brief An sRGB-encoded channel decoded to linear. */
     float Decode(float srgb)
@@ -40,74 +32,45 @@ namespace
     }
 
     /**
-     * @brief The renderer core on the GL tests' device, with the 2D render feature and builtin:painter prepared,
-     * drawing a list into a Size-square RGBA16F image cleared to transparent black.
+     * @brief The renderer on OpenGL with builtin:painter registered, painting into a Size-square linear image 2D
+     * target and reading it back.
      */
     class GlPainter
     {
       public:
         GlPainter()
         {
-            gl.RequireOpenGL();
-            core = std::make_unique<Fenrir::Render::RendererCore>(std::move(gl.device), gl.surface);
-            auto scene = std::make_unique<Fenrir::Render::SceneRenderer>(core->Device(), logger);
-            auto feature = std::make_unique<Fenrir::Render::Draw2DFeature>(core->Device(), logger, *scene);
-            draw2D = feature.get();
-            core->AddFeature(std::move(scene));
-            core->AddFeature(std::move(feature));
-            Fenrir::ShaderData shader;
-            const auto bytes = std::as_bytes(std::span(Fenrir::Shaders::BuiltinPainter));
-            shader.bytes.assign(bytes.begin(), bytes.end());
-            draw2D->PrepareShader(PainterKey, 1, shader);
+            scene.RequireOpenGL();
+            Fenrir::ImageData data;
+            data.width = Size;
+            data.height = Size;
+            data.colourSpace = Fenrir::ColourSpace::Linear;
+            image = scene.assets.Store().Add<Fenrir::Image>(std::move(data), Fenrir::AssetOwner::App());
         }
 
         /** @brief A painter config on builtin:painter, Linear. */
-        static Fenrir::PainterConfig Config()
+        [[nodiscard]] Fenrir::PainterConfig Config() const
         {
             Fenrir::PainterConfig config;
-            config.shader = {PainterKey.index, PainterKey.generation};
+            config.shader = painting.GetShader();
             return config;
         }
 
-        /** @brief Draws `list` into a fresh target and reads it back. */
+        /** @brief Draws `list` into the image in one frame and reads the image back. */
         GlProbe::Image Draw(Fenrir::DrawList2D list)
         {
-            using namespace Fenrir::Graphics;
-            TextureDesc desc;
-            desc.format = TextureFormat::Rgba16Float;
-            desc.width = Size;
-            desc.height = Size;
-            desc.usage = TextureUsage::ColourAttachment | TextureUsage::Sampled;
-            const TextureHandle target = core->Device().CreateTexture(desc, "Painter test target");
-            CommandList clear;
-            {
-                PassDesc pass;
-                pass.label = "Clear";
-                pass.colour.push_back({target, LoadOp::Clear, {0.0f, 0.0f, 0.0f, 0.0f}});
-                pass.uses.push_back({target, {}, ResourceUsage::ColourAttachment});
-                PassEncoder encoder(clear, pass);
-            }
-            core->Device().Submit(clear);
-
-            Fenrir::Render::OverlayFrame frame;
-            frame.submissions.push_back({0, std::move(list)});
-            frame.target = target;
-            frame.targetDesc = desc;
-            draw2D->SetFrame(std::move(frame));
-            const Fenrir::Render::FrameReport report = core->RenderFrame();
-            INFO("the frame was drawn");
-            REQUIRE(report.drawn);
-            return GlProbe::Read(core->Device(), target);
+            scene.app.GetResource<Fenrir::ImageTargets2D>().Submit(image, std::move(list));
+            scene.RunFrame();
+            const Fenrir::Graphics::TextureHandle texture = Fenrir::RendererProbe::ImageTexture(scene.renderer, image);
+            INFO("the renderer made the image's texture");
+            REQUIRE_FALSE(texture.IsEmpty());
+            return GlProbe::Read(Fenrir::RendererProbe::Device(scene.renderer), texture);
         }
 
-        GlTest::GlTestApp gl;
-        std::shared_ptr<RendererTest::LoggedMessages> messages = std::make_shared<RendererTest::LoggedMessages>();
-        RendererTest::RecordingLogger logger{messages};
-        std::unique_ptr<Fenrir::Render::RendererCore> core;
-        Fenrir::Render::Draw2DFeature* draw2D = nullptr;
+        GlTest::GlScene scene;
+        Fenrir::Painting painting{Fenrir::Painting::Install(scene.app)};
+        Fenrir::AssetHandle<Fenrir::Image> image;
     };
-
-    constexpr GlProbe::Pixel Transparent{0.0f, 0.0f, 0.0f, 0.0f};
 } // namespace
 
 TEST_CASE("A rounded rectangle is solid inside, half covered on an edge through pixel centres, and cut at its corners",
@@ -115,7 +78,7 @@ TEST_CASE("A rounded rectangle is solid inside, half covered on an edge through 
 {
     GlPainter test;
     Fenrir::DrawList2D list;
-    Fenrir::Painter painter(list, GlPainter::Config());
+    Fenrir::Painter painter(list, test.Config());
     // Its left edge runs through the centres of column 8, so they are half covered.
     painter.DrawRoundedRect({8.5f, 8.5f, 47.0f, 47.0f}, Fenrir::CornerRadii::All(12), Colour::Red);
 
@@ -129,14 +92,14 @@ TEST_CASE("A rounded rectangle is solid inside, half covered on an edge through 
     INFO("nothing outside it, nor in the rounded-off corner");
     REQUIRE(GlProbe::Near(image.At(6, 32), Transparent, Tolerance));
     REQUIRE(GlProbe::Near(image.At(10, 10), Transparent, Tolerance));
-    REQUIRE(test.messages->errors.empty());
+    REQUIRE(test.scene.messages->errors.empty());
 }
 
 TEST_CASE("A radial gradient blends from its centre out to its radius", "[painter][gl]")
 {
     GlPainter test;
     Fenrir::DrawList2D list;
-    Fenrir::Painter painter(list, GlPainter::Config());
+    Fenrir::Painter painter(list, test.Config());
     Fenrir::RadialGradient gradient;
     gradient.centre = {32, 32};
     gradient.radius = 32;
@@ -158,14 +121,14 @@ TEST_CASE("A radial gradient blends from its centre out to its radius", "[painte
     REQUIRE(GlProbe::Near(image.At(1, 32), expected(1), Tolerance));
     INFO("and black past the radius, in the corner, padded");
     REQUIRE(GlProbe::Near(image.At(1, 1), {0.0f, 0.0f, 0.0f, 1.0f}, Tolerance));
-    REQUIRE(test.messages->errors.empty());
+    REQUIRE(test.scene.messages->errors.empty());
 }
 
 TEST_CASE("A bordered box shows each side's colour over its fill, and nothing outside", "[painter][gl]")
 {
     GlPainter test;
     Fenrir::DrawList2D list;
-    Fenrir::Painter painter(list, GlPainter::Config());
+    Fenrir::Painter painter(list, test.Config());
     Fenrir::Border border = Fenrir::Border::Uniform(4, Colour::White);
     border.top = Colour::Red;
     border.left = Colour::Green;
@@ -184,5 +147,5 @@ TEST_CASE("A bordered box shows each side's colour over its fill, and nothing ou
     INFO("the fill again just inside the border, and nothing just outside the box");
     REQUIRE(GlProbe::Near(image.At(20, 32), {0.0f, 0.0f, 1.0f, 1.0f}, Tolerance));
     REQUIRE(GlProbe::Near(image.At(15, 32), Transparent, Tolerance));
-    REQUIRE(test.messages->errors.empty());
+    REQUIRE(test.scene.messages->errors.empty());
 }

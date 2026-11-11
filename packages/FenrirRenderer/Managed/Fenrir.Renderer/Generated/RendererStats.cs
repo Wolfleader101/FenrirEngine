@@ -38,4 +38,12 @@ public partial struct RendererStats
     /// light (six times over for items whose shader draws its six faces one at a time).
     /// </summary>
     public uint ShadowDraws;
+    /// <summary>2D draw lists drawn, on the overlay and into image 2D targets; skipped lists are not counted.</summary>
+    public uint Lists2D;
+    /// <summary>The commands of those lists, draws and the begins and ends of offscreen groups alike.</summary>
+    public uint Commands2D;
+    /// <summary>Offscreen groups drawn into a transient image (ADR-0060).</summary>
+    public uint Groups2D;
+    /// <summary>The bytes of those groups' transient images, four a pixel.</summary>
+    public uint TransientImageBytes2D;
 }

@@ -6,7 +6,9 @@
 
 namespace Fenrir
 {
-    /** @brief How an image's pixels are stored. Every format has four channels: red, green, blue and alpha. */
+    /**
+     * @brief How an image's pixels are stored. Every format but R8 has four channels: red, green, blue and alpha.
+     */
     enum class ImageFormat : std::uint8_t
     {
         /** @brief One byte per channel. */
@@ -15,6 +17,11 @@ namespace Fenrir
         RGBA16F,
         /** @brief One float per channel. */
         RGBA32F,
+        /**
+         * @brief One byte, a single linear channel: coverage, such as FenrirText's glyph atlases (ADR-0062). Its colour
+         * space is ignored. Appended last, so the other formats keep their values.
+         */
+        R8,
     };
 
     /** @brief How an image's red, green and blue values are encoded; alpha is always linear. */
@@ -44,6 +51,10 @@ namespace Fenrir
         {
             return 16;
         }
+        if (format == ImageFormat::R8)
+        {
+            return 1;
+        }
         return format == ImageFormat::RGBA16F ? 8 : 4;
     }
 
@@ -66,7 +77,8 @@ namespace Fenrir
         ImageFormat format = ImageFormat::RGBA8;
         /**
          * @brief How the colours are encoded. Set by whoever makes the image; an image loaded from a file is sRGB
-         * unless it is HDR, which is linear, until its first use says otherwise. A render target is sRGB.
+         * unless it is HDR, which is linear, until its first use says otherwise. A camera's render target is sRGB; an
+         * image 2D target's may be linear.
          */
         ColourSpace colourSpace = ColourSpace::Srgb;
         /** @brief One picture, or six cubemap faces. */

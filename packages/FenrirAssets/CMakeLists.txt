@@ -12,6 +12,7 @@ add_library(FenrirAssets STATIC
     include/FenrirAssets/AssetStore.hpp
     include/FenrirAssets/BoneMaskData.hpp
     include/FenrirAssets/ClipData.hpp
+    include/FenrirAssets/FontData.hpp
     include/FenrirAssets/ImageData.hpp
     include/FenrirAssets/InstanceListData.hpp
     include/FenrirAssets/MaterialData.hpp
@@ -32,6 +33,7 @@ add_library(FenrirAssets STATIC
     src/SkinPreparation.cpp
     src/CubemapLoading.hpp
     src/CubemapLoading.cpp
+    src/ImageEdits.cpp
     src/Materials.cpp
     src/ModelLoading.cpp
     src/ModelData.cpp

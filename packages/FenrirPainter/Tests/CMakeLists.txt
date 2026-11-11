@@ -1,8 +1,8 @@
 # FenrirPainter's tests. FenrirPainterTests: the painter by what it appends to a 2D draw list (the spec's seam 2), and
 # its shader and pipeline on the renderer's null backend (seam 4), read back through the renderer tests' RendererProbe
-# and RendererTestApp. FenrirPainterGlTests: builtin:painter's pixels on OpenGL, read back through the renderer GL
-# tests' GlProbe; without a display or an OpenGL 4.6 core context every test reports skipped. Labelled gl: Windows CI
-# runs the null tests only.
+# and RendererTestApp. FenrirPainterGlTests: builtin:painter's pixels on OpenGL, painted into an image 2D target and
+# read back through the renderer GL tests' GlScene and GlProbe; without a display or an OpenGL 4.6 core context every
+# test reports skipped. Labelled gl: Windows CI runs the null tests only.
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
@@ -20,9 +20,10 @@ add_test(NAME FenrirPainter COMMAND FenrirPainterTests)
 add_executable(FenrirPainterGlTests OpenGL/PainterPixels.cpp)
 target_include_directories(FenrirPainterGlTests PRIVATE "${renderer_tests}" "${renderer_tests}/OpenGL" "${renderer_src}")
 target_link_libraries(FenrirPainterGlTests PRIVATE FenrirPainter FenrirRenderer FenrirRendererCore FenrirRendererOpenGL
-                                                   FenrirWindow FenrirApp Catch2::Catch2WithMain)
-# The painter's own shader, embedded for the 2D render feature to prepare.
-fenrir_add_shaders(FenrirPainterGlTests PROGRAM BuiltinPainter VERTEX ../Shaders/painter.vert
-                   FRAGMENT ../Shaders/painter.frag KEYS GAMMA EMBED)
+                                                   FenrirWindow FenrirApp FenrirRendererGoldenImages
+                                                   Catch2::Catch2WithMain)
+# RendererTestApp's material shader, which GlScene's helpers name.
+fenrir_add_shaders(FenrirPainterGlTests PROGRAM SampledPicture VERTEX "${renderer_src}/../Shaders/Builtin/mesh.vert"
+                   FRAGMENT "${renderer_tests}/fixtures/sampled.frag" EMBED)
 add_test(NAME FenrirPainter-GL COMMAND FenrirPainterGlTests)
 set_tests_properties(FenrirPainter-GL PROPERTIES SKIP_RETURN_CODE 4 TIMEOUT 300 LABELS gl)
