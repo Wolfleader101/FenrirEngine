@@ -7,6 +7,7 @@
 #include <optional>
 #include <span>
 
+#include "Core/Cascades.hpp"
 #include "FenrirMath/Frustum.hpp"
 #include "FenrirMath/Math.hpp"
 
@@ -31,6 +32,21 @@ namespace Fenrir::Render
         /** @brief Whether the camera projects by distance; an orthographic one covers the same pixels at any. */
         bool perspective = true;
     };
+
+    /**
+     * @brief What a view whose camera is at `position` and projects with `projection` (ReversedZPerspective or
+     * ReversedZOrthographic) into a viewport `viewportHeight` pixels high chooses levels by.
+     */
+    [[nodiscard]] inline LodView LodViewOf(const Math::Mat4& projection, std::uint32_t viewportHeight,
+                                           Math::Vec3 position)
+    {
+        // A perspective projection scales y by 1 / tan(fov / 2), an orthographic one by 2 / height, and clip space
+        // spans two units over the viewport's height; only a perspective projection (w = -z) divides by distance.
+        return {.position = position,
+                .pixelsPerUnit = projection[1][1] * 0.5f * static_cast<float>(viewportHeight),
+                .near = DepthRangeOf(projection).near,
+                .perspective = projection[2][3] != 0.0f};
+    }
 
     /** @brief How many pixels `length` world units cover at `distance` from `view`'s camera. */
     [[nodiscard]] inline float ProjectedPixels(const LodView& view, float length, float distance) noexcept

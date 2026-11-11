@@ -1,7 +1,8 @@
 // The cull pass on the null backend through App::RunFrame (ADR-0057, culling tickets 03 and 04): each camera's Cull
 // pass, first in the frame, copies its runs' command templates over its command buffer and dispatches builtin:cull
 // once over its group table, its job block carrying the camera's planes; DepthPrepass and Opaque then draw each run
-// with one indirect draw of its command, reading the camera's indirection through the draw set, while every other pass
+// with one indirect draw of its commands, one per level of detail of its mesh, reading the camera's indirection
+// through the draw set, while every other pass
 // draws directly. An entity outside the camera is no candidate at all. The null backend runs no compute, so what it
 // shows is the templates, the group table, the planes and the draws, never the survivors. Ticket 05: a CullReadback
 // pass copies each camera's commands into the frame's slot of the readback ring, read FramesInFlight frames later into

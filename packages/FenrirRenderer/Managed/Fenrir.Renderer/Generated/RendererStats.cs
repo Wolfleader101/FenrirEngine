@@ -7,8 +7,8 @@ using Fenrir.Scripting;
 namespace Fenrir.Renderer;
 
 /// <summary>
-/// What the renderer did in its last drawn frame (ADR-0023), except `instancesDrawn`, read back from the most recent
-/// frame that has left flight (ADR-0057).
+/// What the renderer did in its last drawn frame (ADR-0023), except `instancesDrawn` and `drawnByLod`, read back from
+/// the most recent frame that has left flight (ADR-0057).
 /// </summary>
 public partial struct RendererStats
 {

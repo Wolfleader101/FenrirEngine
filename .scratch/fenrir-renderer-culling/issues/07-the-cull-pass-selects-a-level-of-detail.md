@@ -20,6 +20,6 @@
 - [x] GL readback: copies of a three-level mesh in a line away from the camera land in the levels `SelectLod` gives, exactly.
 - [x] GL pixel probes: a hand-made mesh whose level 1 is a different shape (a box whose coarse level is a smaller box) draws its level 1 when far and level 0 when near; with `gpuCulling` off it draws level 0 at both.
 
-Hand check: in the asteroid ring with generated levels, pops between levels are not noticeable at the default `lodErrorPixels`.
+Hand check: in the asteroid ring with generated levels, pops between levels are not noticeable at the default `lodErrorPixels` (possible once ticket 08 gives the ring its levels).
 
 - [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

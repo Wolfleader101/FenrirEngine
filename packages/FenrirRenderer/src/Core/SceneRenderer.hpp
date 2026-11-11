@@ -252,11 +252,14 @@ namespace Fenrir::Render
      *
      * **GPU culling** (ADR-0057): every view's opaque and masked runs (merged items, instance lists, and lone items as
      * runs of one) are candidates of a `Cull` compute pass per view, first in the frame, running `builtin:cull`: the
-     * renderer writes each run's command template (its mesh's index count, no instances, and the base instance where
-     * the run's region of the view's indirection starts) and group table entries (one per 64 candidates, naming the
-     * run) into the frame's rings; the pass copies the templates over the view's command buffer and one dispatch
-     * appends each candidate it keeps, `(record, copy)`, to its run's region, counting it into the command with an
-     * atomic. `DepthPrepass` and `Opaque` then draw each run with one indirect draw of its command, declaring
+     * renderer writes each run's command templates, one per level of detail of its mesh (the level's index count
+     * and first index, no instances, and the base instance where the level's region of the view's indirection
+     * starts, each region the whole run long), their level table entries (the level's error) and group table entries
+     * (one per 64 candidates, naming the run) into the frame's rings; the pass copies the templates over the view's
+     * command buffer and one dispatch appends each candidate it keeps, `(record, copy)`, to the region of the level
+     * it chooses for it (the coarsest whose error projects under `lodErrorPixels` at the candidate's distance from
+     * the camera; SelectLod), counting it into that command with an atomic. `DepthPrepass` and `Opaque` then draw
+     * each run with one multi-draw of its level commands, declaring
      * `IndirectRead` on the commands and `StorageRead` on the indirection, which set 3 binding 3 binds for them
      * (`Fenrir/Draw.glsl`'s `CurrentDraw()` reads it), so there is one draw group per view and frame in flight; every
      * other pass binds the buffer that says there is no indirection and draws directly, as before. The per-view
@@ -999,8 +1002,9 @@ namespace Fenrir::Render
         /**
          * @brief Records `runs` of `draws` into a pass, binding each one's pipeline (`pass`'s), groups and streams, a
          * compute-skinned draw's first three from `skinned`, and drawing each run's instances: directly, or, with
-         * `commands`, the view's command buffer a cull pass counted into (ADR-0057), as one indirect draw of the
-         * command at the run's index. A run with no pipeline for `pass` is skipped, its command left in place.
+         * `commands`, the view's command buffer a cull pass counted into (ADR-0057), as one multi-draw of the run's
+         * commands, one per level of detail of its mesh, from the run's first. A run with no pipeline for `pass` is
+         * skipped, its commands left in place.
          */
         void RecordDraws(Graphics::PassEncoder& encoder, const std::vector<ResolvedDraw>& draws,
                          const std::vector<Graphics::BindingGroupHandle>& groups, const std::vector<DrawRun>& runs,
@@ -1314,7 +1318,7 @@ namespace Fenrir::Render
         Graphics::BufferHandle m_noIndirection;
         /**
          * @brief builtin:cull's set 1 groups, by the draw buffer, the group table, the command buffer, the
-         * indirection and the instance lists, while all five live.
+         * indirection, the instance lists and the level table, while all six live.
          */
         BindingGroupCache<6> m_cullTargetGroups;
         /** @brief builtin:light-clusters' set 1 groups, by the light buffer and the cluster buffer, while both live. */

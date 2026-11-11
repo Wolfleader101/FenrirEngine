@@ -59,7 +59,8 @@ TEST_CASE("SelectLod picks coarser levels further out, switching where each erro
     REQUIRE(SelectLod(Errors, UnitBox, At(5.2f), View, 1.0f) == 1);
     INFO("past level 2's: level 2");
     REQUIRE(SelectLod(Errors, UnitBox, At(5.4f), View, 1.0f) == 2);
-    INFO("a stricter threshold keeps full detail further out: half a pixel doubles each switch distance");
+    INFO("a stricter threshold keeps full detail further out: half a pixel doubles each switch distance past the "
+         "sphere, so level 1 starts at d = 3.08");
     REQUIRE(SelectLod(Errors, UnitBox, At(2.1f), View, 0.5f) == 0);
     REQUIRE(SelectLod(Errors, UnitBox, At(3.2f), View, 0.5f) == 1);
 }

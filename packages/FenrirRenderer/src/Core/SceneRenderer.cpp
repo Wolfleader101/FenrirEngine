@@ -3564,13 +3564,8 @@ namespace Fenrir::Render
             const CullCamera cullCamera =
                 CullCameraOf(request, Math::Frustum::FromViewProjection(request.projection * request.view));
             const Math::Frustum& frustum = cullCamera.frustum;
-            // What the pass chooses levels of detail by (ADR-0057): the camera's position (frozen with the planes),
-            // and how its projection turns a length at a distance into pixels.
-            const LodView lod{.position = cullCamera.position,
-                              .pixelsPerUnit =
-                                  request.projection[1][1] * 0.5f * static_cast<float>(request.viewport.height),
-                              .near = DepthRangeOf(request.projection).near,
-                              .perspective = request.projection[2][3] != 0.0f};
+            // What the pass chooses levels of detail by (ADR-0057): the camera's position, frozen with the planes.
+            const LodView lod = LodViewOf(request.projection, request.viewport.height, cullCamera.position);
             std::uint32_t instances = 0;
             for (std::size_t i = 0; i < draws->size(); ++i)
             {
@@ -3598,8 +3593,9 @@ namespace Fenrir::Render
                              [&](std::size_t a, std::size_t b) { return depth[a] < depth[b]; });
             // Matching opaque and masked items merge into instanced draws (ADR-0051); transparent ones stay single,
             // in their depth order. The opaque runs are the view's cull pass's candidates (ADR-0057): DepthPrepass and
-            // Opaque draw each by its command in the view's command buffer, the prepass skipping the runs it has no
-            // pipeline for, reading the view's indirection through the view's own draw set.
+            // Opaque draw each by its commands in the view's command buffer, one per level of detail, the prepass
+            // skipping the runs it has no pipeline for, reading the view's indirection through the view's own draw
+            // set.
             auto opaqueRuns = std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *groups, *opaque, DrawPass::Main));
             const CullView cull = PrepareCull(graph, frameIndex, v, frustum, lod, *draws, *opaqueRuns, cullTemplates,
                                               cullLevels, cullGroups);
