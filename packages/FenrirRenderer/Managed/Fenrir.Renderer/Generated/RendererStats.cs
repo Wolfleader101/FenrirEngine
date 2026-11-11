@@ -34,6 +34,12 @@ public partial struct RendererStats
     /// coarser, so the entries sum to `instancesDrawn`.
     /// </summary>
     public DrawnByLodArray DrawnByLod;
+    /// <summary>
+    /// `instancesDrawn` by the occlusion culling phase each was drawn in (ADR-0057): the first entry the MeshRenderers
+    /// and copies drawn as visible last frame (every survivor of a camera without occlusion culling), the second those
+    /// drawn after the depth pyramid test showed them, so the two sum to `instancesDrawn`.
+    /// </summary>
+    public DrawnByPhaseArray DrawnByPhase;
     /// <summary>Render passes run.</summary>
     public uint Passes;
     /// <summary>
@@ -61,6 +67,16 @@ public partial struct RendererStats
     {
         /// <summary>How many elements it holds: the C++ array's length.</summary>
         public const int Length = 8;
+
+        private uint _element;
+    }
+
+    /// <summary>The storage of <see cref="DrawnByPhase"/>: <see cref="Length"/> elements.</summary>
+    [InlineArray(2)]
+    public struct DrawnByPhaseArray
+    {
+        /// <summary>How many elements it holds: the C++ array's length.</summary>
+        public const int Length = 2;
 
         private uint _element;
     }

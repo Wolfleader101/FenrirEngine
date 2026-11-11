@@ -73,6 +73,12 @@ namespace Fenrir::Render
          * level `i`, the last entry those at its level or coarser, so the entries sum to `instancesDrawn`.
          */
         std::array<std::uint32_t, LodLevelsCounted> drawnByLod{};
+        /**
+         * @brief `instancesDrawn` by the occlusion phase each was drawn in (ADR-0057): the first entry those drawn as
+         * visible last frame (every survivor of a view without occlusion culling), the second those drawn after the
+         * pyramid test showed them; the two sum to `instancesDrawn`.
+         */
+        std::array<std::uint32_t, 2> drawnByPhase{};
         /** @brief Meshes, images, material blocks and instance lists uploaded since the last call. */
         std::uint32_t uploads = 0;
         /** @brief Bytes written into the last frame's palette buffer. */
@@ -117,6 +123,10 @@ namespace Fenrir::Render
         std::uint32_t cullRuns = 0;
         /** @brief How many candidates its cull pass culls. */
         std::uint32_t cullCandidates = 0;
+        /** @brief How many phases its cull pass ran: 2 with occlusion culling, else 1. */
+        std::uint32_t cullPhases = 1;
+        /** @brief How many commands each phase has: the second phase's start in the command buffer. */
+        std::uint32_t cullCommandsPerPhase = 0;
     };
 
     /**
@@ -267,12 +277,20 @@ namespace Fenrir::Render
      * The job block carries the view's planes (Math::Frustum), and the pass keeps a candidate whose sphere and then
      * whose box's eight corners may be inside them, as Math::Frustum tests them; with GPU culling off it gets no
      * planes and keeps every candidate. Before the runs form, a draw whose world bounds are outside the view's frustum
-     * is left out of the view altogether, opaque or transparent. At the frame's end a `CullReadback` pass copies
+     * is left out of the view altogether, opaque or transparent. With occlusion culling (SetOcclusionCulling, on by
+     * default; never while frozen or with GPU culling off) the pass runs in two phases over the same groups, with a
+     * word of visibility per candidate kept between frames in the view's cull rings while the view's candidates keep
+     * their order: phase one, in the `Cull` stage, keeps the candidates visible last frame, counted into a first set
+     * of commands the `DepthPrepass` pass draws; `HiZ` passes then build the view's pyramid (SceneHistory) from that
+     * depth, and phase two, a second `Cull` pass in the `DepthPrepass` stage, tests every candidate inside the planes
+     * against it by its box's screen rectangle (Core/Occlusion.hpp), writes the result as next frame's visibility,
+     * and counts what phase one did not draw into a second set of commands, which a second `DepthPrepass` pass draws
+     * after the first's and `Opaque` draws with the first's. At the frame's end a `CullReadback` pass copies
      * every view's command buffer into the frame's slot of a readback ring (a copy per frame in flight), and each
      * frame reads the slot the frame `FramesInFlight` ago filled, summing its commands' instance counts into
-     * SceneStats::instancesDrawn. With culling frozen (SetCullingFrozen), each camera's views keep culling, on the
-     * CPU and in the pass, against the frustum the camera had when it was frozen while drawing from where it is now
-     * (FrozenCulls, which DebugFeature draws the edges of).
+     * SceneStats::instancesDrawn, by level and by phase. With culling frozen (SetCullingFrozen), each camera's views
+     * keep culling, on the CPU and in the pass, against the frustum the camera had when it was frozen while drawing
+     * from where it is now (FrozenCulls, which DebugFeature draws the edges of).
      *
      * **Instance lists** (ADR-0051) are prepared like assets: each copy's transform, normal matrix and colour, kept
      * packed back to back with every other list's in one storage buffer, set 3 binding 1, made again whenever a list
@@ -423,6 +441,16 @@ namespace Fenrir::Render
         void SetGpuCulling(bool on) noexcept
         {
             m_gpuCulling = on;
+        }
+
+        /**
+         * @brief Whether each camera's cull pass runs its second, occlusion phase from the next frame (ADR-0057):
+         * candidates hidden behind what was visible last frame are not drawn. Off, one phase keeps everything inside
+         * the planes. Shadow views never cull by occlusion.
+         */
+        void SetOcclusionCulling(bool on) noexcept
+        {
+            m_occlusionCulling = on;
         }
 
         /**
@@ -856,8 +884,8 @@ namespace Fenrir::Render
             std::uint32_t level = 0;
             /** @brief How many levels the run has: as many commands, from its first. */
             std::uint32_t levels = 0;
-            /** @brief Unused. */
-            std::uint32_t pad = 0;
+            /** @brief The run's first candidate's index among the view's, where its visibility words start. */
+            std::uint32_t firstCandidate = 0;
         };
         static_assert(sizeof(CullLevelEntry) == 16, "a level table entry is four words");
 
@@ -889,6 +917,56 @@ namespace Fenrir::Render
             std::uint32_t candidates = 0;
             /** @brief The view's planes, which the pass tests each candidate against (ADR-0057). */
             Math::Frustum frustum;
+            /** @brief How many phases the pass runs: 2 with occlusion culling, else 1. */
+            std::uint32_t phases = 1;
+            /** @brief How many commands each phase has: the second phase's start in the command buffer. */
+            std::uint32_t commandsPerPhase = 0;
+            /** @brief The view's visibility words, one a candidate, kept between frames; empty with one phase. */
+            Graphics::BufferHandle visibility;
+            GraphResource visibilityResource;
+            /** @brief Whether the words are stale (the candidates changed), so every candidate counts as visible. */
+            bool visibilityStale = false;
+            /** @brief The view's Hi-Z pyramid, which phase two reads; empty with one phase. */
+            Graphics::TextureHandle pyramid;
+            GraphResource pyramidResource;
+            /** @brief The pyramid's level count and level 0's size. */
+            std::uint32_t pyramidMips = 0;
+            Graphics::PixelSize size;
+            /** @brief World to clip space, which phase two takes screen rectangles in. */
+            Math::Mat4 viewProjection{1.0f};
+        };
+
+        /** @brief What a view's cull pass needs for its occlusion phase (ADR-0057). */
+        struct CullOcclusion
+        {
+            Graphics::TextureHandle pyramid;
+            GraphResource pyramidResource;
+            std::uint32_t mips = 0;
+            Graphics::PixelSize size;
+            Math::Mat4 viewProjection{1.0f};
+        };
+
+        /**
+         * @brief The frame's cull buffers, reserved and imported before the views so every view's passes can bind
+         * them: the template, level table and group table rings, the draw records and the instance lists.
+         */
+        struct CullFrame
+        {
+            Graphics::BufferHandle templates;
+            Graphics::BufferHandle levels;
+            Graphics::BufferHandle groups;
+            Graphics::BufferHandle records;
+            GraphResource templatesResource;
+            GraphResource levelsResource;
+            GraphResource groupsResource;
+            GraphResource recordsResource;
+            GraphResource copiesResource;
+
+            /** @brief Whether the frame can have no cull pass: no opaque draw at all. */
+            [[nodiscard]] bool IsEmpty() const noexcept
+            {
+                return templates.IsEmpty();
+            }
         };
 
         /** @brief A buffer ringed per frame in flight and grown by doubling when a frame needs more than it holds. */
@@ -903,11 +981,18 @@ namespace Fenrir::Render
                          std::string_view label);
         };
 
-        /** @brief A view's cull rings: its command buffer and its indirection. */
+        /**
+         * @brief A view's cull rings: its command buffer and its indirection, and its visibility words (one buffer,
+         * read and written by the pass alone, so never ringed) with the candidate order they were written for.
+         */
         struct CullRings
         {
             GrownRing commands;
             GrownRing indirection;
+            Graphics::BufferHandle visibility;
+            std::size_t visibilityCapacity = 0;
+            /** @brief Each run's identity and candidate count the words were last written for, in order. */
+            std::vector<std::uint64_t> order;
         };
 
         /**
@@ -926,6 +1011,8 @@ namespace Fenrir::Render
             std::uint32_t commands = 0;
             /** @brief Each of those commands' level of detail, in the slot's order, for summing by level. */
             std::vector<std::uint32_t> levels;
+            /** @brief Each of those commands' occlusion phase, 0 or 1, in the slot's order, for summing by phase. */
+            std::vector<std::uint32_t> phases;
         };
 
         /** @brief The pipeline drawing a mesh with the standard streams `streams` (StreamsOf's bits) has. */
@@ -1010,40 +1097,57 @@ namespace Fenrir::Render
                          const std::vector<Graphics::BindingGroupHandle>& groups, const std::vector<DrawRun>& runs,
                          Graphics::BindingGroupHandle frameGroup, Graphics::BindingGroupHandle viewGroup,
                          Graphics::BindingGroupHandle drawGroup, Graphics::BufferHandle skinned,
-                         Graphics::PixelRect viewport, DrawPass pass, Graphics::BufferHandle commands = {}) const;
+                         Graphics::PixelRect viewport, DrawPass pass, Graphics::BufferHandle commands = {},
+                         std::uint32_t commandOffset = 0) const;
+        /**
+         * @brief Reserves the frame's cull rings for the most templates, level entries and groups `views` views of
+         * `draws` could take (every opaque draw a run of its own, in two phases), writes nothing yet, and imports them
+         * into `graph` with the draw records and the instance lists; empty when no draw is opaque.
+         */
+        [[nodiscard]] CullFrame BeginCullFrame(RenderGraph& graph, std::uint64_t frameIndex, std::size_t views,
+                                               const std::vector<ResolvedDraw>& draws);
         /**
          * @brief Sizes view `view`'s command buffer and indirection for `runs` of `draws` this frame (ADR-0057),
          * imports them into `graph`, and appends the runs' command templates, one per run and level of detail, their
          * level table entries and their group table entries to `templates`, `levels` and `groups`, the frame's; empty
-         * buffers, with nothing appended, when there are no runs. The pass culls against `frustum` and chooses levels
-         * by `lod`. AddCullPasses then adds the pass itself.
+         * buffers, with nothing appended, when there are no runs or the frame has no cull buffers. The pass culls
+         * against `frustum` and chooses levels by `lod`. With `occlusion`, the templates and level entries are
+         * appended twice, a set per phase, `phases` recording each template's, and the view's visibility words are
+         * sized and kept, marked stale when the runs' identities or counts differ from last frame's. AddCullPass then
+         * adds each phase's pass.
          */
         [[nodiscard]] CullView PrepareCull(RenderGraph& graph, std::uint64_t frameIndex, std::size_t view,
                                            const Math::Frustum& frustum, const LodView& lod,
                                            const std::vector<ResolvedDraw>& draws, const std::vector<DrawRun>& runs,
+                                           const CullFrame& frame, const CullOcclusion* occlusion,
                                            std::vector<Graphics::DrawIndexedIndirectCommand>& templates,
-                                           std::vector<CullLevelEntry>& levels, std::vector<CullGroupEntry>& groups);
+                                           std::vector<CullLevelEntry>& levels, std::vector<std::uint32_t>& phases,
+                                           std::vector<CullGroupEntry>& groups);
         /**
-         * @brief Uploads the frame's `templates`, `levels` and `groups` into their rings and adds one `Cull` pass per
-         * view of `views` that has runs: a copy of its templates over its command buffer, then one dispatch of
-         * `builtin:cull`.
+         * @brief Adds one `Cull` pass for phase `phase` (0: the one phase without occlusion culling, 1 or 2 with it)
+         * of `cull`, a view with runs, its job at slot `jobSlot` of the frame's job ring: for phase 0 or 1, a copy of
+         * the view's templates over its command buffer, then one dispatch of `builtin:cull` over its groups; for
+         * phase 2, in `stage`, the dispatch alone, sampling the view's pyramid.
          */
-        void AddCullPasses(RenderGraph& graph, std::uint64_t frameIndex, const std::vector<CullView>& views,
-                           std::span<const Graphics::DrawIndexedIndirectCommand> templates,
-                           std::span<const CullLevelEntry> levels, std::span<const CullGroupEntry> groups);
+        void AddCullPass(RenderGraph& graph, std::uint64_t frameIndex, const CullFrame& frame, const CullView& cull,
+                         std::uint32_t phase, std::size_t jobSlot, RenderStage stage);
+        /** @brief Writes the frame's `templates`, `levels` and `groups` into the rings BeginCullFrame reserved. */
+        void WriteCullTables(std::uint64_t frameIndex, std::span<const Graphics::DrawIndexedIndirectCommand> templates,
+                             std::span<const CullLevelEntry> levels, std::span<const CullGroupEntry> groups);
         /**
          * @brief Sums the instance counts of the commands the frame `FramesInFlight` before `frameIndex` copied into
-         * its readback slot into SceneStats::instancesDrawn, and by each command's level of detail into
-         * SceneStats::drawnByLod, if that frame filled it and the device lets it be read.
+         * its readback slot into SceneStats::instancesDrawn, by each command's level of detail into
+         * SceneStats::drawnByLod and by its phase into SceneStats::drawnByPhase, if that frame filled it and the
+         * device lets it be read.
          */
         void ReadCulled(std::uint64_t frameIndex);
         /**
          * @brief Adds the frame's `CullReadback` pass, last in the frame: a copy of each view's command buffer into
          * the frame's slot of the readback ring, at its templates' offset, the slot grown to hold one command per
-         * entry of `levels`, the frame's level table, which says each command's level.
+         * entry of `levels`, the frame's level table, which says each command's level, `phases` each one's phase.
          */
         void AddCullReadback(RenderGraph& graph, std::uint64_t frameIndex, const std::vector<CullView>& views,
-                             std::span<const CullLevelEntry> levels);
+                             std::span<const CullLevelEntry> levels, std::span<const std::uint32_t> phases);
         /** @brief What a view culls against and chooses levels of detail from (ADR-0057). */
         struct CullCamera
         {
@@ -1148,6 +1252,8 @@ namespace Fenrir::Render
         bool m_clusteredLights = true;
         /** @brief RendererConfig::gpuCulling: whether each view's cull pass gets the view's planes. */
         bool m_gpuCulling = true;
+        /** @brief RendererConfig::occlusionCulling: whether each view's cull pass runs its second phase. */
+        bool m_occlusionCulling = true;
         /** @brief The pixels a level's projected error must be under to be drawn (SetLodSelection). */
         float m_lodErrorPixels = 1.0f;
         /** @brief The pixels a copy's projected radius must reach to be drawn; 0 drops none (SetLodSelection). */
@@ -1210,9 +1316,13 @@ namespace Fenrir::Render
         Graphics::PipelineHandle m_cullPipeline;
         /** @brief Its set 0: the view's job block. */
         Graphics::BindingGroupLayoutHandle m_cullJobLayout;
-        /** @brief Its set 1: the frame's draw records and group table, and the view's command buffer and indirection.
+        /**
+         * @brief Its set 1: the frame's draw records, group table, instance lists and level table, the view's command
+         * buffer, indirection and visibility words, and its pyramid.
          */
         Graphics::BindingGroupLayoutHandle m_cullTargetLayout;
+        /** @brief The sampler the pass reads the pyramid through: nearest, clamped, every read a texelFetch. */
+        Graphics::SamplerHandle m_cullSampler;
 
         Graphics::BindingGroupLayoutHandle m_frameLayout;
         Graphics::BindingGroupLayoutHandle m_viewLayout;
@@ -1318,9 +1428,12 @@ namespace Fenrir::Render
         Graphics::BufferHandle m_noIndirection;
         /**
          * @brief builtin:cull's set 1 groups, by the draw buffer, the group table, the command buffer, the
-         * indirection, the instance lists and the level table, while all six live.
+         * indirection, the instance lists, the level table, the visibility words and the pyramid, while all eight
+         * live.
          */
-        BindingGroupCache<6> m_cullTargetGroups;
+        BindingGroupCache<8> m_cullTargetGroups;
+        /** @brief The one-word buffer a view with one phase binds as its visibility, which the pass never reads. */
+        Graphics::BufferHandle m_noVisibility;
         /** @brief builtin:light-clusters' set 1 groups, by the light buffer and the cluster buffer, while both live. */
         BindingGroupCache<2> m_clusterTargetGroups;
         /** @brief The Background pass's group of each Sky cube texture it draws, while the texture lives. */

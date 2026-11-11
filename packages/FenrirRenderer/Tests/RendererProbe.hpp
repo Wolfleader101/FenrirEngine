@@ -112,18 +112,22 @@ namespace Fenrir
             return TransientCount(core.m_transients);
         }
 
-        /** @brief One camera's reflection textures, kept across frames (ADR-0056). */
+        /**
+         * @brief One camera's pyramid and reflection textures, kept across frames (ADR-0056, ADR-0057): a camera that
+         * only culls by occlusion has the pyramid alone.
+         */
         struct ReflectionTextures
         {
             /** @brief Its camera's entity id. */
             std::uint32_t camera = 0;
+            /** @brief Empty without reflections. */
             Graphics::TextureHandle history;
-            /** @brief The pyramid the last frame drew, then last frame's other one. */
+            /** @brief The pyramid the last frame drew, then last frame's other one (empty without reflections). */
             Graphics::TextureHandle pyramid;
             Graphics::TextureHandle previousPyramid;
         };
 
-        /** @brief Every camera's reflection textures the renderer keeps, by camera, on any backend. */
+        /** @brief Every camera's pyramid and reflection textures the renderer keeps, by camera, on any backend. */
         [[nodiscard]] static std::vector<ReflectionTextures> Reflections(const Renderer& renderer)
         {
             std::vector<ReflectionTextures> textures;
@@ -146,6 +150,10 @@ namespace Fenrir
             Graphics::BufferHandle indirection;
             std::uint32_t runs = 0;
             std::uint32_t candidates = 0;
+            /** @brief How many phases the pass ran: 2 with occlusion culling, else 1. */
+            std::uint32_t phases = 1;
+            /** @brief How many commands each phase has: the second phase's first command's index. */
+            std::uint32_t commandsPerPhase = 0;
         };
 
         /** @brief Every view the last frame drew, in the order their passes were added, with its cull buffers. */
@@ -154,7 +162,8 @@ namespace Fenrir
             std::vector<CullBuffers> culls;
             for (const Render::DrawnView& view : renderer.m_state->scene->DrawnViews())
             {
-                culls.push_back({view.cullCommands, view.cullIndirection, view.cullRuns, view.cullCandidates});
+                culls.push_back({view.cullCommands, view.cullIndirection, view.cullRuns, view.cullCandidates,
+                                 view.cullPhases, view.cullCommandsPerPhase});
             }
             return culls;
         }

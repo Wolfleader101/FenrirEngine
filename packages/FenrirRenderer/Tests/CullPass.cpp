@@ -8,7 +8,8 @@
 // pass copies each camera's commands into the frame's slot of the readback ring, read FramesInFlight frames later into
 // instancesDrawn, and frozen culling keeps each camera's planes while its matrices follow it. Ticket 07: a mesh with
 // levels of detail uploads them into one index buffer, each run gets a template per level, the job block carries the
-// camera's position and projection for choosing one, and drawnByLod sums the readback by level.
+// camera's position and projection for choosing one, and drawnByLod sums the readback by level. Every test here runs
+// with occlusion culling off (ticket 11): the one-phase layout is its subject, and OcclusionCulling.cpp has the two.
 
 #include <algorithm>
 #include <cmath>
@@ -157,7 +158,7 @@ TEST_CASE("Each camera's Cull pass copies its templates and dispatches once, fir
           "passes",
           "[renderer][culling][cull-pass]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     AddSun(test);
     AddThreeRuns(test);
@@ -206,7 +207,7 @@ TEST_CASE("Each camera's Cull pass copies its templates and dispatches once, fir
 TEST_CASE("The templates and the group table describe a frame of one instance list, one merged run and one lone item",
           "[renderer][culling][cull-pass]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     AddThreeRuns(test);
 
@@ -260,7 +261,7 @@ TEST_CASE("The templates and the group table describe a frame of one instance li
 TEST_CASE("A run of more than 64 candidates is several groups of its own, none straddling another run",
           "[renderer][culling][cull-pass]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     const auto cube = test.Mesh();
     AddList(test, 130, cube, test.Material());
@@ -290,7 +291,7 @@ TEST_CASE("A run of more than 64 candidates is several groups of its own, none s
 TEST_CASE("DepthPrepass and Opaque draw the same runs, each one indirect draw of its command from the camera's buffer",
           "[renderer][culling][cull-pass]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     AddThreeRuns(test);
 
@@ -341,7 +342,7 @@ TEST_CASE("DepthPrepass and Opaque draw the same runs, each one indirect draw of
 TEST_CASE("An item with no prepass draw keeps its command in the camera's buffer, which only Opaque draws",
           "[renderer][culling][cull-pass]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     // A Masked material on a shader with no base colour (the user shader fixture, UserTint) cannot be cut out in the
     // prepass, so Opaque writes its depth.
@@ -371,7 +372,7 @@ TEST_CASE("An item with no prepass draw keeps its command in the camera's buffer
 
 TEST_CASE("Two cameras each get their own Cull pass, command buffer and indirection", "[renderer][culling][cull-pass]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     test.AddCamera({0.0f, 0.0f, 10.0f}).GetComponent<Fenrir::Camera>().viewport = {0.5f, 0.0f, 0.5f, 1.0f};
     AddThreeRuns(test);
@@ -412,7 +413,7 @@ TEST_CASE("Two cameras each get their own Cull pass, command buffer and indirect
 TEST_CASE("A hundred thousand copies are still one draw per pass, culled by 1563 groups",
           "[renderer][culling][cull-pass]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     AddList(test, 100000, test.Mesh(), test.Material());
 
@@ -437,7 +438,7 @@ TEST_CASE("A hundred thousand copies are still one draw per pass, culled by 1563
 TEST_CASE("Transparent items and the shadow passes draw directly, through the draw set with no indirection",
           "[renderer][culling][cull-pass]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     AddSun(test);
     const auto cube = test.Mesh();
@@ -466,7 +467,7 @@ TEST_CASE("Transparent items and the shadow passes draw directly, through the dr
 
 TEST_CASE("A frame with no opaque run has no Cull pass and no indirect draw", "[renderer][culling][cull-pass]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     const auto blended = test.Material();
     test.Store().SetBlendMode(blended, Fenrir::BlendMode::AlphaBlend);
@@ -485,7 +486,7 @@ TEST_CASE("A frame with no opaque run has no Cull pass and no indirect draw", "[
 TEST_CASE("A camera's cull buffers are kept between frames, ringed per frame in flight, and grown when the frame needs",
           "[renderer][culling][cull-pass]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     const auto cube = test.Mesh();
     const auto material = test.Material();
@@ -519,7 +520,7 @@ TEST_CASE("The job block carries the camera's planes each frame, which change as
           "culling off",
           "[renderer][culling][cull-pass][frustum]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     Fenrir::Entity camera = test.AddCamera();
     AddThreeRuns(test);
 
@@ -564,7 +565,7 @@ TEST_CASE("The job block carries the camera's planes each frame, which change as
 TEST_CASE("The Cull pass binds the instance lists at set 1 binding 4 and declares reading them",
           "[renderer][culling][cull-pass][frustum]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     AddThreeRuns(test);
 
@@ -580,7 +581,7 @@ TEST_CASE("The Cull pass binds the instance lists at set 1 binding 4 and declare
 TEST_CASE("An entity outside the camera is left out of the view's candidates on the CPU, with GPU culling on or off",
           "[renderer][culling][cull-pass][frustum]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     const auto cube = test.Mesh();
     const auto material = test.Material();
@@ -702,7 +703,7 @@ TEST_CASE("Each camera's command buffer is copied into the frame's slot of the r
           "the frame",
           "[renderer][culling][readback]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     test.AddCamera({0.0f, 0.0f, 10.0f}).GetComponent<Fenrir::Camera>().viewport = {0.5f, 0.0f, 0.5f, 1.0f};
     AddThreeRuns(test);
@@ -764,7 +765,7 @@ TEST_CASE("Each camera's command buffer is copied into the frame's slot of the r
 TEST_CASE("instancesDrawn is the sum of the instance counts read back from the frame FramesInFlight frames ago",
           "[renderer][culling][readback]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     AddThreeRuns(test);
 
@@ -799,7 +800,7 @@ TEST_CASE("While culling is frozen the job's planes stay the frozen camera's as 
           "and unfreezing restores them",
           "[renderer][culling][frozen]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     Fenrir::Entity camera = test.AddCamera();
     AddThreeRuns(test);
 
@@ -857,7 +858,7 @@ TEST_CASE("While culling is frozen the job's planes stay the frozen camera's as 
 TEST_CASE("While culling is frozen each view's Debug pass draws the frozen frustum's twelve edges on top",
           "[renderer][culling][frozen]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     AddThreeRuns(test);
 
@@ -934,7 +935,7 @@ TEST_CASE("A mesh of three levels uploads one index buffer of all three, writes 
           "first indices, and both passes draw each run as one multi-draw of three commands",
           "[renderer][culling][lod]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     const Fenrir::MeshData data = ThreeLevelCube();
     const auto mesh = test.Mesh(data);
@@ -1019,7 +1020,7 @@ TEST_CASE("The job block carries the camera's position and pixels per unit, the 
           "culling on and zeros with it off, and the frozen position while frozen",
           "[renderer][culling][lod][frozen]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     Fenrir::Entity camera = test.AddCamera();
     AddThreeRuns(test);
 
@@ -1057,7 +1058,7 @@ TEST_CASE("The job block carries the camera's position and pixels per unit, the 
 
 TEST_CASE("SetLodSelection changes the job block's two thresholds from the next frame", "[renderer][culling][lod]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     AddThreeRuns(test);
 
@@ -1078,7 +1079,7 @@ TEST_CASE("SetLodSelection changes the job block's two thresholds from the next 
 TEST_CASE("drawnByLod sums the counts read back by each command's level of detail, and with instancesDrawn",
           "[renderer][culling][lod][readback]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::OcclusionOff());
     test.AddCamera();
     const auto mesh = test.Mesh(ThreeLevelCube());
     const auto material = test.Material();

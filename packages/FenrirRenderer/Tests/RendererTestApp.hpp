@@ -418,6 +418,36 @@ namespace RendererTest
     }
 
     /**
+     * @brief The null backend with occlusion culling off (ADR-0057), so a camera's cull pass has its one phase and
+     * its prepass one draw per run, as the tests of the frustum test and the readback read them; occlusion culling's
+     * own tests keep it on.
+     */
+    inline Fenrir::RendererConfig OcclusionOff()
+    {
+        Fenrir::RendererConfig config = NullBackend();
+        config.occlusionCulling = false;
+        return config;
+    }
+
+    /**
+     * @brief `labels` with occlusion culling's passes (ADR-0057) after its first "DepthPrepass": the HiZ passes of a
+     * `mips`-level pyramid (11 for the 1280 x 720 window), the second Cull pass and the second DepthPrepass pass.
+     */
+    inline std::vector<std::string> WithOcclusion(std::vector<std::string> labels, std::size_t mips = 11)
+    {
+        const auto prepass = std::find(labels.begin(), labels.end(), "DepthPrepass");
+        if (prepass == labels.end())
+        {
+            return labels;
+        }
+        std::vector<std::string> added(mips, "HiZ");
+        added.emplace_back("Cull");
+        added.emplace_back("DepthPrepass");
+        labels.insert(prepass + 1, added.begin(), added.end());
+        return labels;
+    }
+
+    /**
      * @brief An App with FenrirAssets and the Renderer on the null backend, run one frame at a time, with helpers to
      * spawn what the renderer draws.
      */

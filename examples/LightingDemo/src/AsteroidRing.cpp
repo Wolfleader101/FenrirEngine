@@ -82,21 +82,24 @@ namespace LightingDemo
         };
 
         /**
-         * @brief The renderer's culling as the panel and keys set it (ADR-0057): the GPU test, the freeze and the
-         * level-of-detail error. The renderer's, like merging, so a change is applied once, not every frame.
+         * @brief The renderer's culling as the panel and keys set it (ADR-0057): the GPU test, occlusion culling, the
+         * freeze and the level-of-detail error. The renderer's, like merging, so a change is applied once, not every
+         * frame.
          */
         struct CullingControls
         {
             bool gpuCulling = true;
+            bool occlusion = true;
             bool frozen = false;
             float lodErrorPixels = LodErrorSteps.front();
 
             friend bool operator==(const CullingControls&, const CullingControls&) = default;
 
-            /** @brief Sets all three on the renderer; setting one again as it is changes nothing. */
+            /** @brief Sets all four on the renderer; setting one again as it is changes nothing. */
             void Apply(Fenrir::App& app) const
             {
                 Fenrir::Renderer::SetGpuCulling(app, gpuCulling);
+                Fenrir::Renderer::SetOcclusionCulling(app, occlusion);
                 Fenrir::Renderer::SetCullingFrozen(app, frozen);
                 // No least size: a rock that projects under a pixel still draws, at its coarsest level.
                 Fenrir::Renderer::SetLodSelection(app, lodErrorPixels, 0.0f);
@@ -474,6 +477,11 @@ namespace LightingDemo
                 culling.gpuCulling = !culling.gpuCulling;
                 app.Logger()->Info("C: GPU culling {}", culling.gpuCulling ? "on" : "off");
             }
+            if (keyboard.JustPressed(Fenrir::Key::V))
+            {
+                culling.occlusion = !culling.occlusion;
+                app.Logger()->Info("V: occlusion culling {}", culling.occlusion ? "on" : "off");
+            }
             if (keyboard.JustPressed(Fenrir::Key::F))
             {
                 culling.frozen = !culling.frozen;
@@ -504,12 +512,15 @@ namespace LightingDemo
                             state->frameTime > 0.0f ? 1.0f / state->frameTime : 0.0f);
                 ImGui::SeparatorText("Culling");
                 ImGui::Checkbox("GPU culling (C)", &culling.gpuCulling);
+                ImGui::Checkbox("Occlusion culling (V)", &culling.occlusion);
                 ImGui::Checkbox("Freeze culling (F)", &culling.frozen);
                 ImGui::SliderFloat("Level-of-detail error, pixels (L)", &culling.lodErrorPixels, 0.25f, 8.0f, "%.2f",
                                    ImGuiSliderFlags_Logarithmic);
                 ImGui::Text("Drawn by level: %u  %u  %u  %u  %u  %u  %u  %u", stats.drawnByLod[0], stats.drawnByLod[1],
                             stats.drawnByLod[2], stats.drawnByLod[3], stats.drawnByLod[4], stats.drawnByLod[5],
                             stats.drawnByLod[6], stats.drawnByLod[7]);
+                ImGui::Text("Drawn by phase: %u visible last frame, %u shown by the depth pyramid",
+                            stats.drawnByPhase[0], stats.drawnByPhase[1]);
                 ImGui::TextUnformatted("Drawn is what the GPU kept, two frames behind; off, every copy draws level 0.");
             });
 
@@ -548,15 +559,15 @@ namespace LightingDemo
         scene.keyHelp =
             LightingKeyHelp(false) +
             " N: 10k, 50k or 100k ring rocks. I: automatic instancing on or off. R: the ring turning. C: GPU "
-            "culling off or on. F: culling frozen or following. L: the next level-of-detail error (1, 2, 4, "
-            "0.5 pixels).";
+            "culling off or on. V: occlusion culling off or on. F: culling frozen or following. L: the next "
+            "level-of-detail error (1, 2, 4, 0.5 pixels).";
         // G through every debug view (the occlusion, the cascades, the shadow atlas, back), with the sun's shadows off
-        // and on again (H) between; then culling off and on, frozen and following, and L round its four errors, each
-        // control left as it started for the scenes after.
+        // and on again (H) between; then culling off and on, occlusion culling off and on, frozen and following, and L
+        // round its four errors, each control left as it started for the scenes after.
         scene.keys = {Fenrir::Key::T, Fenrir::Key::B, Fenrir::Key::I, Fenrir::Key::N, Fenrir::Key::I, Fenrir::Key::R,
                       Fenrir::Key::N, Fenrir::Key::N, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::H,
-                      Fenrir::Key::G, Fenrir::Key::H, Fenrir::Key::C, Fenrir::Key::C, Fenrir::Key::F, Fenrir::Key::F,
-                      Fenrir::Key::L, Fenrir::Key::L, Fenrir::Key::L, Fenrir::Key::L};
+                      Fenrir::Key::G, Fenrir::Key::H, Fenrir::Key::C, Fenrir::Key::C, Fenrir::Key::V, Fenrir::Key::V,
+                      Fenrir::Key::F, Fenrir::Key::F, Fenrir::Key::L, Fenrir::Key::L, Fenrir::Key::L, Fenrir::Key::L};
         // Beyond the station, looking past it and the field across the ring to the planet.
         scene.camera.position = {74.0f, 9.0f, 34.0f};
         scene.camera.yaw = 1.08f;

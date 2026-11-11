@@ -147,10 +147,12 @@ The window's Scene part has the ring's count (cutting each list to its share, wh
 again), the merging switch (Renderer::SetAutomaticInstancing: the renderer's, so the other scenes keep it as it was left), the
 ring turning, and the last frame's draws, instances, what the GPU drew of them (`RendererStats::instancesDrawn`, two
 frames behind) and uploads. Its Culling part (ADR-0057) has the GPU test (`Renderer::SetGpuCulling`; off, every copy
-draws at level 0, for comparison), freezing culling (`Renderer::SetCullingFrozen`: flying out of the frozen volume shows
-only what it kept, inside the frozen frustum's amber edges), the level-of-detail error in pixels
-(`Renderer::SetLodSelection`) and how many copies drew at each level (`RendererStats::drawnByLod`). The three are the
-renderer's, like merging, and the scene sets them back to on, following and a pixel each time it spawns.
+draws at level 0, for comparison), occlusion culling (`Renderer::SetOcclusionCulling`; off, every copy inside the
+frustum draws, those the planet or the station hide too), freezing culling (`Renderer::SetCullingFrozen`: flying out of
+the frozen volume shows only what it kept, inside the frozen frustum's amber edges), the level-of-detail error in pixels
+(`Renderer::SetLodSelection`), how many copies drew at each level (`RendererStats::drawnByLod`) and how many each
+occlusion phase drew (`RendererStats::drawnByPhase`: visible last frame, then shown by the depth pyramid). The four are
+the renderer's, like merging, and the scene sets them back to on, on, following and a pixel each time it spawns.
 
 | Keys | |
 | --- | --- |
@@ -159,6 +161,7 @@ renderer's, like merging, and the scene sets them back to on, following and a pi
 | I | Automatic instancing off or back on: the field's 5,000 rocks become 5,000 draws, and back to a handful. |
 | R | The ring turning or still. |
 | C | GPU culling off or back on. |
+| V | Occlusion culling off or back on: off, the rocks behind the planet draw too, and Drawn rises. |
 | F | Culling frozen where the camera is, or following it again. |
 | L | The next level-of-detail error: 1, 2, 4 or 0.5 pixels. |
 

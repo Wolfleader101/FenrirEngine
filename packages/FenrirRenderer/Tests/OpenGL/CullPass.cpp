@@ -43,12 +43,17 @@ namespace
     constexpr std::size_t CommandSize = sizeof(DrawIndexedIndirectCommand);
     using RendererTest::NoCopy;
 
-    /** @brief GlScene with a camera entity at the origin looking along -Z, its bloom off, and a white unlit square. */
+    /**
+     * @brief GlScene with a camera entity at the origin looking along -Z, its bloom off, and a white unlit square,
+     * culling by the frustum alone: occlusion culling (ticket 11, OcclusionCulling.cpp) would hide the copies behind
+     * others from the second frame on, which these tests' oracles do not model.
+     */
     class GlCullScene : public GlTest::GlScene
     {
       public:
         GlCullScene()
         {
+            renderer.SetOcclusionCulling(false);
             camera = app.GetActiveScene().GetEntityList().CreateEntity();
             camera.AddComponent<Fenrir::Camera>().bloom.intensity = 0.0f;
             Fenrir::AssetStore& store = assets.Store();

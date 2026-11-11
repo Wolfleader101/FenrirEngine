@@ -19,6 +19,16 @@
 // projected at its distance from the camera (to the nearest point of its sphere), is under the job's error pixels, as
 // Core/LevelOfDetail.hpp's SelectLod chooses it on the CPU; a candidate whose radius projects under the job's least
 // pixels is dropped first. The job's error pixels are 0 with GPU culling off, so every candidate draws level 0.
+//
+// Occlusion culling (culling ticket 11) runs the pass twice a view, in two phases over the same groups, with a word of
+// visibility per candidate kept between frames. Phase one keeps only the candidates visible last frame (every one when
+// the job says the words are stale), counted into the first set of commands, which the depth prepass draws; the view's
+// Hi-Z pyramid is then built from that depth. Phase two tests every candidate inside the planes against the pyramid
+// (Core/Occlusion.hpp's ScreenRectOf, PyramidLevelOf and IsHidden on the CPU): its box's screen rectangle, at the level
+// whose texels cover it in at most 2 x 2, against the farthest depth there; a box straddling the near plane is kept.
+// It writes the result as the candidate's visibility for next frame, and counts the visible candidates phase one did
+// not draw into the second set of commands, the job's command offset on, which the prepass draws after phase one's and
+// Opaque with them. A job of phase 0 is the one phase of a view without occlusion culling.
 #include "Fenrir/DrawRecord.glsl"
 
 layout(local_size_x = 64) in;
@@ -39,6 +49,14 @@ layout(set = 0, binding = 0, std140) uniform CullJob
     // must reach to be drawn, 0 for any; z: the near plane's distance, the least a perspective view projects by;
     // w: 1 for a perspective view, 0 for an orthographic one, which projects the same at any distance.
     vec4 lod;
+    // x: the phase, 0 for the one phase of a view without occlusion culling, 1 for the first, 2 for the second;
+    // y: 1 when the visibility words are stale, so every candidate counts as visible last frame; z: how many
+    // commands after a run's first its second-phase command is; w: how many levels the pyramid has.
+    uvec4 occlusion;
+    // xy: the view's size in pixels, the pyramid's level 0.
+    vec4 screen;
+    // World to clip space, which the screen rectangle is taken in.
+    mat4 viewProjection;
 } job;
 
 // The frame's draw records, Fenrir/Draw.glsl's draws.
@@ -74,18 +92,27 @@ layout(set = 1, binding = 4, std430) readonly buffer Copies
 } lists;
 
 // The frame's level table: per command template, in the templates' order, the level's error in its mesh's local units,
-// which level of its run's it is, and how many levels the run has (the rest of each entry unused).
+// which level of its run's it is, how many levels the run has, and the run's first candidate's index in the view.
 struct CullLevel
 {
     float error;
     uint level;
     uint levels;
-    uint pad;
+    uint firstCandidate;
 };
 layout(set = 1, binding = 5, std430) readonly buffer Levels
 {
     CullLevel entries[];
 } levels;
+
+// The view's visibility, a word per candidate kept between frames: 1 when phase two last found it visible.
+layout(set = 1, binding = 6, std430) buffer Visibility
+{
+    uint entries[];
+} visibility;
+
+// The view's Hi-Z pyramid: red the nearest depth of each texel's footprint, green the farthest, reversed-Z.
+layout(set = 1, binding = 7) uniform sampler2D pyramid;
 
 // Whether the box boundsMin..boundsMax under transform may be inside the job's planes: Math::Frustum::Intersects(box,
 // transform) after Intersects(Math::Frustum::SphereOf(box, transform)), the same arithmetic in the same order.
@@ -130,6 +157,14 @@ int SelectLevel(uint first, uint levelCount, vec4 sphere, float scale)
     return 0;
 }
 
+// The corner c of the box boundsMin..boundsMax, in Math::Corners' order: bit 0 of the index picks max x, bit 1 max y,
+// bit 2 max z.
+vec3 CornerOf(vec3 boundsMin, vec3 boundsMax, uint c)
+{
+    return vec3((c & 1u) != 0u ? boundsMax.x : boundsMin.x, (c & 2u) != 0u ? boundsMax.y : boundsMin.y,
+                (c & 4u) != 0u ? boundsMax.z : boundsMin.z);
+}
+
 bool Visible(vec3 boundsMin, vec3 boundsMax, mat4 transform)
 {
     const uint planeCount = min(job.groups.z, 6u);
@@ -144,13 +179,10 @@ bool Visible(vec3 boundsMin, vec3 boundsMax, mat4 transform)
             return false;
         }
     }
-    // The eight corners in Math::Corners' order: bit 0 of the index picks max x, bit 1 max y, bit 2 max z.
     vec4 corners[8];
     for (uint c = 0u; c < 8u; ++c)
     {
-        const vec3 corner = vec3((c & 1u) != 0u ? boundsMax.x : boundsMin.x, (c & 2u) != 0u ? boundsMax.y : boundsMin.y,
-                                 (c & 4u) != 0u ? boundsMax.z : boundsMin.z);
-        corners[c] = vec4((transform * vec4(corner, 1.0)).xyz, 1.0);
+        corners[c] = vec4((transform * vec4(CornerOf(boundsMin, boundsMax, c), 1.0)).xyz, 1.0);
     }
     for (uint p = 0u; p < planeCount; ++p)
     {
@@ -166,6 +198,49 @@ bool Visible(vec3 boundsMin, vec3 boundsMax, mat4 transform)
         }
     }
     return true;
+}
+
+// Whether the box boundsMin..boundsMax under transform is wholly behind what the pyramid holds: Occlusion.hpp's
+// ScreenRectOf, PyramidLevelOf, TexelsOf and IsHidden. Its corners' screen rectangle (texture coordinates, y down
+// from the top) and nearest depth; a corner at or in front of the near plane keeps it. The level is the one halving
+// the rectangle's longer side, in pixels, to at most a texel, so it touches at most 2 x 2 texels, whose smallest
+// farthest depth it must reach to show.
+bool Hidden(vec3 boundsMin, vec3 boundsMax, mat4 transform)
+{
+    const mat4 clipFrom = job.viewProjection * transform;
+    vec2 ndcMin = vec2(1e30);
+    vec2 ndcMax = vec2(-1e30);
+    float nearest = 0.0;
+    for (uint c = 0u; c < 8u; ++c)
+    {
+        const vec4 clip = clipFrom * vec4(CornerOf(boundsMin, boundsMax, c), 1.0);
+        if (clip.w <= 0.0 || clip.z > clip.w)
+        {
+            return false;
+        }
+        const vec3 ndc = clip.xyz / clip.w;
+        ndcMin = min(ndcMin, ndc.xy);
+        ndcMax = max(ndcMax, ndc.xy);
+        nearest = max(nearest, ndc.z);
+    }
+    const vec2 uvMin = clamp(vec2(ndcMin.x * 0.5 + 0.5, 0.5 - ndcMax.y * 0.5), 0.0, 1.0);
+    const vec2 uvMax = clamp(vec2(ndcMax.x * 0.5 + 0.5, 0.5 - ndcMin.y * 0.5), 0.0, 1.0);
+    const vec2 pixels = (uvMax - uvMin) * job.screen.xy;
+    const float longest = max(max(pixels.x, pixels.y), 1.0);
+    const int level = clamp(int(ceil(log2(longest))), 0, int(job.occlusion.w) - 1);
+    const vec2 scale = vec2(textureSize(pyramid, level));
+    const ivec2 last = ivec2(scale) - 1;
+    const ivec2 lo = min(ivec2(floor(uvMin * scale)), last);
+    const ivec2 hi = min(max(ivec2(ceil(uvMax * scale)) - 1, lo), last);
+    float farthest = 1.0;
+    for (int y = lo.y; y <= hi.y; ++y)
+    {
+        for (int x = lo.x; x <= hi.x; ++x)
+        {
+            farthest = min(farthest, texelFetch(pyramid, ivec2(x, y), level).g);
+        }
+    }
+    return nearest < farthest;
 }
 
 void main()
@@ -186,20 +261,43 @@ void main()
     // local box, moved by the entity's world matrix and the copy's transform.
     DrawItem item = list ? first : records.items[record];
     mat4 transform = list ? item.world * lists.copies[copy].transform : mat4(1.0);
-    if (!Visible(item.boundsMin.xyz, item.boundsMax.xyz, transform))
+    const uint firstLevel = job.groups.w + group.x;
+    const CullLevel run = levels.entries[firstLevel];
+
+    // Which phase this is, and whether phase one drew (or draws) the candidate: visible last frame, or every
+    // candidate while the words are stale.
+    const uint phase = job.occlusion.x;
+    const uint slotIndex = run.firstCandidate + candidate;
+    const bool wasVisible = phase == 0u || job.occlusion.y != 0u || visibility.entries[slotIndex] != 0u;
+    if (phase == 1u && !wasVisible)
+    {
+        return;
+    }
+    const bool inView = Visible(item.boundsMin.xyz, item.boundsMax.xyz, transform);
+    if (phase == 2u)
+    {
+        // Every candidate's visibility is decided here, phase one's included, so one that something has since hidden
+        // leaves phase one next frame; only those phase one did not draw are drawn now.
+        const bool visible = inView && !Hidden(item.boundsMin.xyz, item.boundsMax.xyz, transform);
+        visibility.entries[slotIndex] = visible ? 1u : 0u;
+        if (!visible || wasVisible)
+        {
+            return;
+        }
+    }
+    else if (!inView)
     {
         return;
     }
     // Which of the run's commands it is counted into: its level of detail's, or none at all.
-    const uint firstLevel = job.groups.w + group.x;
-    const int level = SelectLevel(firstLevel, levels.entries[firstLevel].levels,
+    const int level = SelectLevel(firstLevel, run.levels,
                                   SphereOf(item.boundsMin.xyz, item.boundsMax.xyz, transform), LargestScale(transform));
     if (level < 0)
     {
         return;
     }
 
-    uint command = (group.x + uint(level)) * 5u;
+    uint command = (group.x + uint(level) + (phase == 2u ? job.occlusion.z : 0u)) * 5u;
     uint slot = atomicAdd(commands.words[command + 1u], 1u);
     indirection.entries[commands.words[command + 4u] + slot] = uvec2(record, copy);
 }

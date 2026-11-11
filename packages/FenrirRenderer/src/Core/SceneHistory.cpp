@@ -39,10 +39,10 @@ namespace Fenrir::Render
         return {halved(size.width), halved(size.height)};
     }
 
-    std::vector<float> ReduceHiZ(std::span<const float> level, PixelSize size)
+    std::vector<HiZTexel> ReduceHiZ(std::span<const HiZTexel> level, PixelSize size)
     {
         const PixelSize next = MipSize(size, 1);
-        std::vector<float> reduced(std::size_t{next.width} * next.height, 0.0f);
+        std::vector<HiZTexel> reduced(std::size_t{next.width} * next.height);
         // As builtin:hi-z: two texels a side, three for the last texel on a side whose source is odd.
         const auto extent = [](std::uint32_t at, std::uint32_t target, std::uint32_t source) {
             return 2u + (at + 1 == target ? source & 1u : 0u);
@@ -51,17 +51,19 @@ namespace Fenrir::Render
         {
             for (std::uint32_t x = 0; x < next.width; ++x)
             {
-                float nearest = 0.0f;
+                HiZTexel texel{0.0f, 1.0f};
                 for (std::uint32_t dy = 0; dy < extent(y, next.height, size.height); ++dy)
                 {
                     for (std::uint32_t dx = 0; dx < extent(x, next.width, size.width); ++dx)
                     {
                         const std::uint32_t sx = std::min(2 * x + dx, size.width - 1);
                         const std::uint32_t sy = std::min(2 * y + dy, size.height - 1);
-                        nearest = std::max(nearest, level[std::size_t{sy} * size.width + sx]);
+                        const HiZTexel& source = level[std::size_t{sy} * size.width + sx];
+                        texel.nearest = std::max(texel.nearest, source.nearest);
+                        texel.farthest = std::min(texel.farthest, source.farthest);
                     }
                 }
-                reduced[std::size_t{y} * next.width + x] = nearest;
+                reduced[std::size_t{y} * next.width + x] = texel;
             }
         }
         return reduced;
@@ -75,16 +77,16 @@ namespace Fenrir::Render
     {
         m_hiZProgram = ReadBuiltin(BuiltinProgram::HiZ, logger);
         m_historyProgram = ReadBuiltin(BuiltinProgram::SceneHistory, logger);
-        // Under MSAA the copies read the multisampled scene targets: sample 0 of depth, every sample of colour.
+        // Under MSAA the copies read the multisampled scene targets: every sample of depth and of colour.
         const bool msaa = m_samples > 1;
         constexpr std::array<std::string_view, 1> copy{"COPY"};
         constexpr std::array<std::string_view, 2> copyMsaa{"COPY", "MSAA"};
         constexpr std::array<std::string_view, 1> msaaOnly{"MSAA"};
         constexpr std::array<std::string_view, 1> downsample{"DOWNSAMPLE"};
         m_hiZCopy = m_hiZPasses.MakePipeline(msaa ? m_hiZProgram.FindVariant(copyMsaa) : m_hiZProgram.FindVariant(copy),
-                                             m_hiZProgram.name, {TextureFormat::R32Float});
+                                             m_hiZProgram.name, {TextureFormat::Rg32Float});
         m_hiZReduce =
-            m_hiZPasses.MakePipeline(m_hiZProgram.FindVariant({}), m_hiZProgram.name, {TextureFormat::R32Float});
+            m_hiZPasses.MakePipeline(m_hiZProgram.FindVariant({}), m_hiZProgram.name, {TextureFormat::Rg32Float});
         m_historyCopy = m_historyPasses.MakePipeline(msaa ? m_historyProgram.FindVariant(msaaOnly)
                                                           : m_historyProgram.FindVariant({}),
                                                      m_historyProgram.name, {TextureFormat::Rgba16Float});
@@ -104,16 +106,21 @@ namespace Fenrir::Render
         m_device.Destroy(m_historyDownsample);
     }
 
-    void SceneHistory::BeginFrame(std::span<const ViewRequest> views)
+    void SceneHistory::BeginFrame(std::span<const ViewRequest> views, bool occlusion)
     {
-        // Each pass draws one level, with its own block of sizes.
-        std::size_t levels = 0;
+        // Each pass draws one level, with its own block of sizes: a pyramid is built twice when occlusion culling
+        // may want the first build and reflections the second.
+        std::size_t pyramidLevels = 0;
+        std::size_t historyLevels = 0;
         for (const ViewRequest& view : views)
         {
-            levels += HasReflections(view.reflections) ? MipCount(view.viewport.width, view.viewport.height) : 0;
+            const bool reflections = HasReflections(view.reflections);
+            const std::uint32_t levels = MipCount(view.viewport.width, view.viewport.height);
+            pyramidLevels += (reflections || occlusion) ? levels * (occlusion ? 2 : 1) : 0;
+            historyLevels += reflections ? levels : 0;
         }
-        m_hiZPasses.Reserve(levels);
-        m_historyPasses.Reserve(levels);
+        m_hiZPasses.Reserve(pyramidLevels);
+        m_historyPasses.Reserve(historyLevels);
         for (auto& [camera, entry] : m_entries)
         {
             entry.seen = false;
@@ -121,9 +128,10 @@ namespace Fenrir::Render
     }
 
     HistoryView SceneHistory::Import(RenderGraph& graph, const ViewRequest& view, PixelSize size,
-                                     const Math::Mat4& viewProjection)
+                                     const Math::Mat4& viewProjection, bool occlusion)
     {
-        if (!HasReflections(view.reflections) || size.width == 0 || size.height == 0 || m_hiZCopy.IsEmpty() ||
+        const bool reflections = HasReflections(view.reflections);
+        if ((!reflections && !occlusion) || size.width == 0 || size.height == 0 || m_hiZCopy.IsEmpty() ||
             m_hiZReduce.IsEmpty() || m_historyCopy.IsEmpty() || m_historyDownsample.IsEmpty())
         {
             return {};
@@ -135,32 +143,42 @@ namespace Fenrir::Render
         }
         entry.seen = true;
 
-        // Made, or remade at a new size or samples, the textures hold nothing of last frame.
+        // Made, or remade at a new size or samples, or when the camera starts or stops reflecting, the textures hold
+        // nothing of last frame. A camera that only culls by occlusion keeps one pyramid and no history.
         const TextureDesc historyDesc = ChainDesc(TextureFormat::Rgba16Float, size);
-        const TextureDesc pyramidDesc = ChainDesc(TextureFormat::R32Float, size);
-        const bool fresh = entry.history.IsEmpty() || entry.historyDesc != historyDesc;
+        const TextureDesc pyramidDesc = ChainDesc(TextureFormat::Rg32Float, size);
+        const bool fresh =
+            entry.pyramids[0].IsEmpty() || entry.pyramidDesc != pyramidDesc || entry.history.IsEmpty() == reflections;
         if (fresh)
         {
             Destroy(entry);
-            entry.history = m_device.CreateTexture(historyDesc, "Scene history");
-            entry.pyramids = {m_device.CreateTexture(pyramidDesc, "Hi-Z pyramid"),
-                              m_device.CreateTexture(pyramidDesc, "Hi-Z pyramid")};
+            entry.pyramids[0] = m_device.CreateTexture(pyramidDesc, "Hi-Z pyramid");
+            if (reflections)
+            {
+                entry.history = m_device.CreateTexture(historyDesc, "Scene history");
+                entry.pyramids[1] = m_device.CreateTexture(pyramidDesc, "Hi-Z pyramid");
+            }
             entry.historyDesc = historyDesc;
             entry.pyramidDesc = pyramidDesc;
             entry.current = 0;
             entry.viewProjection = viewProjection;
         }
-        else
+        else if (reflections)
         {
             entry.current = 1 - entry.current;
         }
 
         HistoryView frame;
-        frame.history = graph.ImportTexture("SceneHistory", entry.history, historyDesc);
         frame.pyramid = graph.ImportTexture("HiZ", entry.pyramids.at(entry.current), pyramidDesc);
-        frame.previousPyramid = graph.ImportTexture("PreviousHiZ", entry.pyramids.at(1 - entry.current), pyramidDesc);
+        frame.pyramidTexture = entry.pyramids.at(entry.current);
+        if (reflections)
+        {
+            frame.history = graph.ImportTexture("SceneHistory", entry.history, historyDesc);
+            frame.previousPyramid =
+                graph.ImportTexture("PreviousHiZ", entry.pyramids.at(1 - entry.current), pyramidDesc);
+        }
         frame.size = size;
-        frame.mips = historyDesc.mipLevels;
+        frame.mips = pyramidDesc.mipLevels;
         frame.previousViewProjection = entry.viewProjection;
         frame.valid = !fresh;
         entry.viewProjection = viewProjection;
@@ -179,7 +197,7 @@ namespace Fenrir::Render
     void SceneHistory::AddHistoryPasses(RenderGraph& graph, std::uint64_t frameIndex, const HistoryView& view,
                                         GraphResource sceneColour)
     {
-        if (!view.IsEmpty())
+        if (view.HasReflections())
         {
             AddChain(m_historyPasses, graph, frameIndex, "SceneHistory", m_historyCopy, m_historyDownsample,
                      sceneColour, view.history, view);

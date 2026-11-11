@@ -123,6 +123,12 @@ namespace Fenrir::Render
         Use(resource, ResourceUsage::StorageRead, true, false);
     }
 
+    void PassBuilder::StorageReadPrevious(GraphResource buffer)
+    {
+        Use(buffer, ResourceUsage::StorageRead, true, false);
+        m_graph.m_passes[m_pass].accesses.back().previous = true;
+    }
+
     void PassBuilder::StorageWrite(GraphResource resource)
     {
         Use(resource, ResourceUsage::StorageWrite, false, true);
