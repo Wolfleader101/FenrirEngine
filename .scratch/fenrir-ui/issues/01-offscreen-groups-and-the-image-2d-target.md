@@ -11,9 +11,9 @@
 
 **Touches:** `packages/FenrirDraw2D/`, `packages/FenrirRenderer/src/Core/Draw2DFeature.cpp`, `packages/FenrirRenderer/src/Core/Draw2DFeature.hpp`, `packages/FenrirRenderer/src/Facade/`, `packages/FenrirRenderer/include/FenrirRenderer/`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] FenrirDraw2D tests: a list with nested groups round-trips its commands; the union's defaults; the header still reaches no GL, SDL, window or renderer.
-- [ ] Null-backend tests: a list submitted to an image target produces one pass into an image of the right size and encoding; a list with two nested groups produces two transient images, three passes and two composite draws in the right order; an unbalanced list is skipped and logged once; a depth-9 group is logged and drawn flat.
-- [ ] GL test (skipped without a display): a group at half opacity over a solid background reads back the blended colour; an image target read back holds what was drawn.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] FenrirDraw2D tests: a list with nested groups round-trips its commands; the union's defaults; the header still reaches no GL, SDL, window or renderer.
+- [x] Null-backend tests: a list submitted to an image target produces one pass into an image of the right size and encoding; a list with two nested groups produces two transient images, three passes and two composite draws in the right order; an unbalanced list is skipped and logged once; a depth-9 group is logged and drawn flat.
+- [x] GL test (skipped without a display): a group at half opacity over a solid background reads back the blended colour; an image target read back holds what was drawn.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

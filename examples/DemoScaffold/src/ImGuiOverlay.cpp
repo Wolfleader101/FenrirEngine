@@ -473,7 +473,7 @@ namespace FenrirDemo::Detail
                     {
                         continue;
                     }
-                    Fenrir::Command2D draw;
+                    Fenrir::DrawCommand2D draw;
                     draw.pipeline = pipelineIndex;
                     draw.textures.push_back({ImageOf(command.GetTexID())});
                     draw.scissor = Fenrir::Rect2D{left, top, right - left, bottom - top};

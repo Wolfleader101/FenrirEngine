@@ -66,7 +66,8 @@ namespace Fenrir
         ImageFormat format = ImageFormat::RGBA8;
         /**
          * @brief How the colours are encoded. Set by whoever makes the image; an image loaded from a file is sRGB
-         * unless it is HDR, which is linear, until its first use says otherwise. A render target is sRGB.
+         * unless it is HDR, which is linear, until its first use says otherwise. A camera's render target is sRGB; an
+         * image 2D target's may be linear.
          */
         ColourSpace colourSpace = ColourSpace::Srgb;
         /** @brief One picture, or six cubemap faces. */

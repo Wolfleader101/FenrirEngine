@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <variant>
 #include <vector>
 
 #include "FenrirAssets/AssetHandle.hpp"
@@ -21,6 +22,8 @@ namespace Fenrir
     inline constexpr std::size_t MaxTextureSlots2D = 4;
     /** @brief The most parameter bytes a 2D command may carry. */
     inline constexpr std::size_t MaxParameterBytes2D = 128;
+    /** @brief How deep offscreen groups nest (ADR-0060). A group deeper is logged once and its commands draw flat. */
+    inline constexpr std::size_t MaxGroupDepth2D = 8;
     /** @} */
 
     /** @brief How a 2D pipeline's pixels combine with the target's, colour and alpha factors set apart (ADR-0027). */
@@ -135,7 +138,7 @@ namespace Fenrir
     };
 
     /** @brief One draw of a 2D draw list: a range of its indices, drawn with one of its pipelines. */
-    struct Command2D
+    struct DrawCommand2D
     {
         /** @brief The index of its pipeline in DrawList2D::pipelines. */
         std::uint32_t pipeline = 0;
@@ -156,13 +159,102 @@ namespace Fenrir
          * laid out as its reflection says (std140); the rest of the block keeps its parameter defaults.
          */
         std::vector<std::byte> parameters;
+
+        friend bool operator==(const DrawCommand2D&, const DrawCommand2D&) = default;
     };
+
+    /** @brief How an offscreen group's image stores its pixels. RGBA8 premultiplied is the only one in this version. */
+    enum class GroupFormat2D : std::uint8_t
+    {
+        /** @brief Four bytes a pixel, its colour premultiplied by its alpha in linear space and stored sRGB-encoded. */
+        Rgba8Premultiplied,
+    };
+
+    /**
+     * @brief Begins an offscreen group (ADR-0060): the commands up to its EndGroup2D draw into an image of their own,
+     * which the end-group command then composites over what is under it as one. Groups nest, MaxGroupDepth2D deep.
+     */
+    struct BeginGroup2D
+    {
+        /**
+         * @brief The group's extent in local units, in the list's coordinates. Its image covers these bounds in the
+         * target's pixels rounded outwards (and clamped to the target); nothing outside them is drawn, and a group
+         * whose bounds cover no pixel draws nothing.
+         */
+        Rect2D bounds;
+        /** @brief How the group's image stores its pixels. */
+        GroupFormat2D format = GroupFormat2D::Rgba8Premultiplied;
+
+        friend bool operator==(const BeginGroup2D&, const BeginGroup2D&) = default;
+    };
+
+    /** @brief How an offscreen group's premultiplied image combines with what is under it. */
+    enum class GroupBlend2D : std::uint8_t
+    {
+        /** @brief Drawn over: RGB and alpha `One` / `OneMinusSrcAlpha`. */
+        Normal,
+        /** @brief Added: RGB `One` / `One`; alpha `Zero` / `One`, so the target's alpha is kept. */
+        Additive,
+    };
+
+    /** @brief The filter an offscreen group's image is drawn through when it is composited. */
+    enum class GroupFilter2D : std::uint8_t
+    {
+        /** @brief The image as it is. */
+        None,
+        /** @brief A Gaussian blur of `radius` local units. */
+        Blur,
+        /** @brief The image's alpha, blurred by `radius`, tinted `shadowColour` and drawn `offset` away, under it. */
+        DropShadow,
+    };
+
+    /**
+     * @brief Ends the innermost open offscreen group and says how its image is composited: at an opacity, with a blend
+     * mode, through a filter, or, with `mask`, not drawn at all but masking the commands that follow up to the next
+     * EndMask2D.
+     */
+    struct EndGroup2D
+    {
+        /** @brief Multiplies the image's colour and alpha, 0 to 1. */
+        float opacity = 1.0f;
+        /** @brief How the image combines with what is under it. */
+        GroupBlend2D blend = GroupBlend2D::Normal;
+        /** @brief What the image is drawn through. */
+        GroupFilter2D filter = GroupFilter2D::None;
+        /** @brief The Blur's and the DropShadow's radius, in local units. */
+        float radius = 0.0f;
+        /** @brief Where the DropShadow is drawn from the image, in local units. */
+        Math::Vec2 offset{0.0f};
+        /** @brief The DropShadow's colour, linear and straight alpha. */
+        Math::Vec4 shadowColour{0.0f, 0.0f, 0.0f, 1.0f};
+        /**
+         * @brief With `true` the image is not drawn: the commands after this one, up to the next EndMask2D at the same
+         * depth, have their colour multiplied by its alpha. Opacity, blend and filter are not used.
+         */
+        bool mask = false;
+
+        friend bool operator==(const EndGroup2D&, const EndGroup2D&) = default;
+    };
+
+    /** @brief Ends the commands a mask group (EndGroup2D::mask) masks. */
+    struct EndMask2D
+    {
+        friend bool operator==(const EndMask2D&, const EndMask2D&) = default;
+    };
+
+    /**
+     * @brief One command of a 2D draw list, a tagged union: a draw, or the begin or end of an offscreen group or of a
+     * mask's reach (ADR-0060). A default command is a draw. A list whose groups and masks do not balance (an end with
+     * nothing open, or something still open at its end) is logged once by the renderer and skipped whole.
+     */
+    using Command2D = std::variant<DrawCommand2D, BeginGroup2D, EndGroup2D, EndMask2D>;
 
     /**
      * @brief A 2D draw list (ADR-0027): one batch of 2D drawing as plain data, which any UI library, painter or
      * language can fill: vertex and index bytes, a table of 2D pipeline descriptions, and commands in the order they
-     * draw. Vertices and scissors are in local 2D coordinates, logical units from the top-left with Y down, the units
-     * of FenrirInput's mouse. A draw list never says where it is shown; the 2D target decides.
+     * draw, runs of them in offscreen groups (ADR-0060). Vertices and scissors are in local 2D coordinates, logical
+     * units from the top-left with Y down, the units of FenrirInput's mouse. A draw list never says where it is shown;
+     * the 2D target decides.
      */
     struct DrawList2D
     {
@@ -183,6 +275,18 @@ namespace Fenrir
             }
             pipelines.push_back(pipeline);
             return static_cast<std::uint32_t>(pipelines.size() - 1);
+        }
+
+        /** @brief Appends a command beginning an offscreen group over `bounds`, in local units. */
+        void BeginGroup(const Rect2D& bounds, GroupFormat2D format = GroupFormat2D::Rgba8Premultiplied)
+        {
+            commands.emplace_back(BeginGroup2D{bounds, format});
+        }
+
+        /** @brief Appends a command ending the innermost open offscreen group, composited as `composite` says. */
+        void EndGroup(const EndGroup2D& composite = {})
+        {
+            commands.emplace_back(composite);
         }
 
         /** @brief Appends `values`' bytes to the vertex bytes; returns the first one's vertex number at `T`'s size. */

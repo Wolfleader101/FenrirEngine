@@ -260,7 +260,7 @@ TEST_CASE("Every RendererStats count crosses between C++ and C# in its own place
 {
     // A frame on the null backend leaves the skinning counts zero, so each count is given a value of its own here.
     RendererScriptingApp test;
-    const RendererStats stats{1, 2, 3, 4, 5, 6, 7, 8};
+    const RendererStats stats{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
     const RendererStats echoed = test.Call<RendererStats>(RoundTripCallsType, "EchoStats", stats);
     INFO("RendererStats C++ passed C# come back with these counts changed:" << Differences(stats, echoed));
     REQUIRE(Iris::FieldDifferences(stats, echoed, taggedUnions).empty());
