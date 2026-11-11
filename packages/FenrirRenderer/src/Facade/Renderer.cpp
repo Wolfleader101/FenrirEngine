@@ -1370,6 +1370,7 @@ namespace Fenrir
                 state.stats.instances = scene.instances;
                 state.stats.instancesDrawn = scene.instancesDrawn;
                 std::ranges::copy(scene.drawnByLod, std::begin(state.stats.drawnByLod));
+                std::ranges::copy(scene.drawnByPhase, std::begin(state.stats.drawnByPhase));
                 state.stats.passes = report.passesRun;
                 state.stats.uploads = scene.uploads;
                 state.stats.paletteBytesUploaded = scene.paletteBytes;
@@ -1556,6 +1557,7 @@ namespace Fenrir
             config.computeSkinning, cascades, spotShadows, pointShadows);
         scene->SetClusteredLights(config.clusteredLights);
         scene->SetGpuCulling(config.gpuCulling);
+        scene->SetOcclusionCulling(config.occlusionCulling);
         scene->SetLodSelection(config.lodErrorPixels, config.minProjectedPixels);
         state->scene = scene.get();
         // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
@@ -1631,6 +1633,14 @@ namespace Fenrir
         if (m_state != nullptr)
         {
             m_state->scene->SetGpuCulling(on);
+        }
+    }
+
+    void Renderer::SetOcclusionCulling(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetOcclusionCulling(on);
         }
     }
 
@@ -1901,6 +1911,11 @@ namespace Fenrir
     void Renderer::SetGpuCulling(App& app, bool on)
     {
         Renderer(InstalledState(app)).SetGpuCulling(on);
+    }
+
+    void Renderer::SetOcclusionCulling(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetOcclusionCulling(on);
     }
 
     void Renderer::SetCullingFrozen(App& app, bool on)

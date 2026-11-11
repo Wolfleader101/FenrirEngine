@@ -104,6 +104,12 @@ namespace Fenrir::Render
         void SamplePrevious(GraphResource texture);
         /** @brief Reads `resource` as storage in a shader. */
         void StorageRead(GraphResource resource);
+        /**
+         * @brief Reads what the imported `buffer` held before this frame's passes wrote it, as storage in a shader,
+         * so this pass runs before every pass that writes it: SamplePrevious for a buffer (ADR-0057: the cull
+         * pass's first phase reads the visibility words its second phase writes). An error on a transient.
+         */
+        void StorageReadPrevious(GraphResource buffer);
         /** @brief Reads `buffer` as the commands of its indirect draws (ADR-0057). */
         void IndirectRead(GraphResource buffer);
         /** @brief Writes `resource` as storage in a shader. */

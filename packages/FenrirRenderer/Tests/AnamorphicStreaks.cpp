@@ -177,7 +177,7 @@ TEST_CASE("A camera's streaks run in PostProcess beside its bloom, from bloom's 
     expected.emplace_back("StreakComposite");
     expected.emplace_back("Output");
     expected.emplace_back("CullReadback");
-    REQUIRE(Labels(passes) == expected);
+    REQUIRE(Labels(passes) == RendererTest::WithOcclusion(expected));
 
     const TextureHandle sceneColour = RendererTest::Labelled(passes, "Opaque").at(0).pass.colour.at(0).texture;
     const TextureHandle bloomLevel0 = RendererTest::Labelled(passes, "BloomDownsample").at(0).pass.colour.at(0).texture;
@@ -263,7 +263,7 @@ TEST_CASE("A camera with bloom off still streaks, running bloom's first downsamp
     expected.emplace_back("Output");
     expected.emplace_back("CullReadback");
     INFO("one downsample of SceneColor into a level 0, then the streaks' passes; no bloom upsample or composite");
-    REQUIRE(Labels(passes) == expected);
+    REQUIRE(Labels(passes) == RendererTest::WithOcclusion(expected));
 
     const PassRecord level0 = RendererTest::Labelled(passes, "BloomDownsample").at(0);
     const TextureHandle sceneColour = RendererTest::Labelled(passes, "Opaque").at(0).pass.colour.at(0).texture;

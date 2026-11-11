@@ -105,10 +105,13 @@ TEST_CASE("The depth prepass draws exactly the opaque and masked items, in Opaqu
     {
         REQUIRE(std::ranges::find(prepassed, draw.draw.firstInstance) == prepassed.end());
     }
-    INFO("DepthPrepass runs after the view's cull and the sky's lookup table, before Opaque");
-    REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)).at(0) == "Cull");
-    REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)).at(2) == "DepthPrepass");
-    REQUIRE(RendererTest::PassesIn(RendererProbe::Submitted(test.renderer)).at(3) == "Opaque");
+    INFO("DepthPrepass runs after the view's cull and the sky's lookup table, before Opaque; its second phase "
+         "(ADR-0057) follows the pyramid and the second cull");
+    const std::vector<std::string> passes = RendererTest::PassesIn(RendererProbe::Submitted(test.renderer));
+    REQUIRE(passes.at(0) == "Cull");
+    REQUIRE(passes.at(2) == "DepthPrepass");
+    const auto last = std::find(passes.rbegin(), passes.rend(), "DepthPrepass").base();
+    REQUIRE(*last == "Opaque");
     INFO("nothing was logged as an error");
     REQUIRE(test.messages->errors.empty());
 }
@@ -158,8 +161,14 @@ TEST_CASE("The prepass clears SceneDepth and an RG16F normal target at the view'
     const std::vector<PassRecord> prepass = RendererTest::Labelled(passes, "DepthPrepass");
     const std::vector<PassRecord> opaque = RendererTest::Labelled(passes, "Opaque");
 
-    REQUIRE(prepass.size() == 1);
+    INFO("the prepass runs twice, once per occlusion phase (ADR-0057), the second loading what the first drew");
+    REQUIRE(prepass.size() == 2);
     REQUIRE(opaque.size() == 1);
+    REQUIRE(prepass[1].pass.colour.at(0).texture == prepass[0].pass.colour.at(0).texture);
+    REQUIRE(prepass[1].pass.colour.at(0).load == LoadOp::Load);
+    REQUIRE(prepass[1].pass.depth.has_value());
+    REQUIRE(prepass[1].pass.depth->texture == prepass[0].pass.depth->texture);
+    REQUIRE(prepass[1].pass.depth->load == LoadOp::Load);
     INFO("the prepass draws into one colour target, the normals, cleared to 0");
     REQUIRE(prepass[0].pass.colour.size() == 1);
     const Fenrir::Graphics::TextureDesc normals = RendererProbe::Desc(test.Device(), prepass[0].pass.colour[0].texture);

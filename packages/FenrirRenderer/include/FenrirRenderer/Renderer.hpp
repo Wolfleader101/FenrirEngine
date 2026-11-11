@@ -93,6 +93,14 @@ namespace Fenrir
          */
         bool gpuCulling = true;
         /**
+         * @brief Whether each camera's cull pass also drops the copies hidden behind others (ADR-0057): what was
+         * visible last frame is drawn into the depth prepass first, a depth pyramid is built from it, and the rest
+         * are tested against it before they are drawn, so a copy wholly behind a wall costs no shading. Off, every
+         * copy inside the frustum is drawn, for comparison; off with `gpuCulling` off. Shadow views never cull by
+         * occlusion. Changeable later with Renderer::SetOcclusionCulling.
+         */
+        bool occlusionCulling = true;
+        /**
          * @brief How many pixels a level of detail's error may project to (ADR-0057): each camera's cull pass draws
          * each copy of a mesh with levels (`MeshData::lods`) at the coarsest level whose error, scaled by the copy's
          * largest axis scale and projected at its distance from the camera, is under this; 1 by default, so no level
@@ -169,6 +177,13 @@ namespace Fenrir
          * level or any coarser, so the entries sum to `instancesDrawn`.
          */
         std::uint32_t drawnByLod[8] = {};
+        /**
+         * @brief `instancesDrawn` by the occlusion culling phase each was drawn in (ADR-0057): the first entry the
+         * MeshRenderers and copies drawn as visible last frame (every survivor of a camera without occlusion
+         * culling), the second those drawn after the depth pyramid test showed them, so the two sum to
+         * `instancesDrawn`.
+         */
+        std::uint32_t drawnByPhase[2] = {};
         /** @brief Render passes run. */
         std::uint32_t passes = 0;
         /**
@@ -261,6 +276,13 @@ namespace Fenrir
          * invalid owner does nothing.
          */
         void SetGpuCulling(bool on);
+
+        /**
+         * @brief Turns occlusion culling (RendererConfig::occlusionCulling, ADR-0057) on or off from the next frame:
+         * on, each camera's cull pass runs a second phase that drops the copies hidden behind what was visible last
+         * frame. An invalid owner does nothing.
+         */
+        void SetOcclusionCulling(bool on);
 
         /**
          * @brief Freezes culling from the next frame (ADR-0057): each camera then keeps culling, on the CPU and in its
@@ -357,6 +379,7 @@ namespace Fenrir
         static void SetComputeSkinning(App& app, bool on);
         static void SetClusteredLights(App& app, bool on);
         static void SetGpuCulling(App& app, bool on);
+        static void SetOcclusionCulling(App& app, bool on);
         static void SetCullingFrozen(App& app, bool on);
         static void SetLodSelection(App& app, float lodErrorPixels, float minProjectedPixels);
         static void SetSpotShadowBudget(App& app, std::uint32_t budget);

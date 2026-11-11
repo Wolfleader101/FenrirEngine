@@ -146,7 +146,9 @@ namespace RendererTest
      * @brief The draw an indirect draw of `command` stands for, read through the frame's Cull passes as the GPU would
      * draw it with every candidate kept (ADR-0057): the command's index count, first index and base vertex, the run's
      * candidates as its instances, and the run's first record as its first instance, so a draw's record is found as a
-     * direct draw's is. The device must be the null backend, which applied the templates' copy.
+     * direct draw's is. The device must be the null backend, which applied the templates' copy. An occlusion
+     * phase two draw (its command past the phase's count, which the group table does not name) resolves to nothing,
+     * so DrawsIn reads a view as its first phase drew it, and IndirectDrawsIn shows both phases' draws.
      */
     inline std::optional<Fenrir::Graphics::CmdDrawIndexed> ResolveIndirect(
         const Fenrir::Graphics::GraphicsDevice& device, const std::vector<RecordedCull>& culls,
