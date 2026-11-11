@@ -62,6 +62,7 @@ namespace
         std::uint32_t Count(std::size_t command)
         {
             const std::vector<RendererProbe::CullBuffers> culls = RendererProbe::Culls(renderer);
+            INFO("the one camera has cull buffers");
             REQUIRE(culls.size() == 1);
             const std::vector<std::byte> commands =
                 GlProbe::ReadBuffer(RendererProbe::Device(renderer), culls.front().commands);
@@ -72,6 +73,7 @@ namespace
     /** @brief Whether every pixel of `a` is within GlProbe's tolerance of `b`'s. */
     void RequireSame(const GlProbe::Image& a, const GlProbe::Image& b)
     {
+        INFO("both frames are the window's size");
         REQUIRE(a.width == b.width);
         REQUIRE(a.height == b.height);
         for (std::uint32_t y = 0; y < a.height; ++y)
@@ -102,8 +104,9 @@ TEST_CASE("GL: a square wholly behind a wall is not drawn in the second phase on
     Fenrir::Entity hidden = test.AddSquare({0.0f, 0.0f, -4.0f});
 
     test.RunFrame();
-    INFO("the first frame's words are stale, so both draw in the first phase and the second phase draws nothing");
+    INFO("the one run has one command a phase");
     REQUIRE(RendererProbe::Culls(test.renderer).front().commandsPerPhase == 1);
+    INFO("the first frame's words are stale, so both draw in the first phase and the second phase draws nothing");
     REQUIRE(test.Count(0) == 2);
     REQUIRE(test.Count(1) == 0);
 
@@ -131,6 +134,7 @@ TEST_CASE("GL: a square wholly behind a wall is not drawn in the second phase on
     INFO("and leaves the first phase the frame after");
     REQUIRE(test.Count(0) == 1);
     REQUIRE(test.Count(1) == 0);
+    INFO("nothing was logged as an error");
     REQUIRE(test.messages->errors.empty());
 }
 
@@ -157,6 +161,7 @@ TEST_CASE("GL: drawnByPhase reads back how many each phase drew, FramesInFlight 
     REQUIRE(stats.instancesDrawn == 2);
     REQUIRE(stats.drawnByPhase[0] == 1);
     REQUIRE(stats.drawnByPhase[1] == 1);
+    INFO("nothing was logged as an error");
     REQUIRE(test.messages->errors.empty());
 }
 
@@ -203,6 +208,7 @@ TEST_CASE("GL: frames with occlusion culling on and off are the same, pixel for 
         INFO("the culled frame shows what the direct one shows");
         RequireSame(culled, direct);
     }
+    INFO("nothing was logged as an error");
     REQUIRE(test.messages->errors.empty());
 }
 
@@ -233,6 +239,7 @@ TEST_CASE("GL: each level of a camera's Hi-Z pyramid holds the farthest depth it
     test.RunFrame();
     test.RunFrame();
     const auto kept = RendererProbe::Reflections(test.renderer);
+    INFO("the one camera keeps a pyramid");
     REQUIRE(kept.size() == 1);
     GraphicsDevice& device = RendererProbe::Device(test.renderer);
     const auto level = [&](std::uint32_t mip) { return GlProbe::Read(device, kept[0].pyramid, mip); };
@@ -262,5 +269,6 @@ TEST_CASE("GL: each level of a camera's Hi-Z pyramid holds the farthest depth it
     REQUIRE((last.width == 1 && last.height == 1));
     REQUIRE(Close(last.At(0, 0)[0], near, 1e-5f));
     REQUIRE(last.At(0, 0)[1] == 0.0f);
+    INFO("nothing was logged as an error");
     REQUIRE(test.messages->errors.empty());
 }

@@ -33,6 +33,10 @@
 
 layout(local_size_x = 64) in;
 
+// How much nearer than a candidate's nearest corner the pyramid's farthest depth must be to hide it, as a factor of
+// the depth (reversed-Z, so larger is nearer): Occlusion.hpp's HiddenMargin.
+const float HiddenMargin = 1.0 + 1.0 / 65536.0;
+
 // The view's job.
 layout(set = 0, binding = 0, std140) uniform CullJob
 {
@@ -204,7 +208,9 @@ bool Visible(vec3 boundsMin, vec3 boundsMax, mat4 transform)
 // ScreenRectOf, PyramidLevelOf, TexelsOf and IsHidden. Its corners' screen rectangle (texture coordinates, y down
 // from the top) and nearest depth; a corner at or in front of the near plane keeps it. The level is the one halving
 // the rectangle's longer side, in pixels, to at most a texel, so it touches at most 2 x 2 texels, whose smallest
-// farthest depth it must reach to show.
+// farthest depth it must reach to show. A level's texel k covers the pixels from k times its side on (hi_z.frag
+// folds the remainder into the last texel), so the texels are found from pixels shifted by the level, as the
+// reflection trace's CellOf finds them, not from the level's texture size.
 bool Hidden(vec3 boundsMin, vec3 boundsMax, mat4 transform)
 {
     const mat4 clipFrom = job.viewProjection * transform;
@@ -228,10 +234,10 @@ bool Hidden(vec3 boundsMin, vec3 boundsMax, mat4 transform)
     const vec2 pixels = (uvMax - uvMin) * job.screen.xy;
     const float longest = max(max(pixels.x, pixels.y), 1.0);
     const int level = clamp(int(ceil(log2(longest))), 0, int(job.occlusion.w) - 1);
-    const vec2 scale = vec2(textureSize(pyramid, level));
-    const ivec2 last = ivec2(scale) - 1;
-    const ivec2 lo = min(ivec2(floor(uvMin * scale)), last);
-    const ivec2 hi = min(max(ivec2(ceil(uvMax * scale)) - 1, lo), last);
+    const float side = exp2(float(level));
+    const ivec2 last = textureSize(pyramid, level) - 1;
+    const ivec2 lo = min(ivec2(floor(uvMin * job.screen.xy / side)), last);
+    const ivec2 hi = min(max(ivec2(ceil(uvMax * job.screen.xy / side)) - 1, lo), last);
     float farthest = 1.0;
     for (int y = lo.y; y <= hi.y; ++y)
     {
@@ -240,7 +246,9 @@ bool Hidden(vec3 boundsMin, vec3 boundsMax, mat4 transform)
             farthest = min(farthest, texelFetch(pyramid, ivec2(x, y), level).g);
         }
     }
-    return nearest < farthest;
+    // Behind by more than rounding: a flat candidate facing the camera that phase one drew has its own depth in the
+    // pyramid, which the rasteriser and this projection may place an ulp apart.
+    return nearest * HiddenMargin < farthest;
 }
 
 void main()
