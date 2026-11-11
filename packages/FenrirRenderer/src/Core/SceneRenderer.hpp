@@ -209,7 +209,8 @@ namespace Fenrir::Render
      * linear as the image is, RGBA16F or RGBA32F) with every mip level made at upload, and bound with their texture
      * parameter's sampler, one sampler per distinct description.
      *
-     * **Render target images** (ADR-0026) are prepared like assets, as RGBA8 sRGB textures of their image's size. A
+     * **Render target images** (ADR-0026) are prepared like assets, as RGBA8 textures of their image's size, sRGB, or
+     * linear for an image 2D target's linear image (ADR-0060). A
      * material texture parameter naming one binds it, and a view whose draws sample an image another view draws is
      * ordered after it by the graph. A view whose draws sample its own target, or an image whose views would have to
      * wait on it (a cycle, broken in the views' order), gets the parameter's default texture there, logged once.
@@ -289,8 +290,12 @@ namespace Fenrir::Render
         void ReleasePanorama(AssetKey key);
 
         [[nodiscard]] bool IsTargetCurrent(AssetKey key, std::uint32_t revision) const;
-        /** @brief A render target image: an RGBA8 sRGB texture of `size` that views draw into and materials sample. */
-        void PrepareTarget(AssetKey key, std::uint32_t revision, Graphics::PixelSize size);
+        /**
+         * @brief A render target image: an RGBA8 texture of `size`, sRGB unless `format` says linear (Rgba8Unorm), that
+         * views and image 2D targets draw into and materials sample.
+         */
+        void PrepareTarget(AssetKey key, std::uint32_t revision, Graphics::PixelSize size,
+                           Graphics::TextureFormat format = Graphics::TextureFormat::Rgba8Srgb);
         void ReleaseTarget(AssetKey key);
 
         [[nodiscard]] bool IsInstanceListCurrent(AssetKey key, std::uint32_t revision) const;
@@ -459,12 +464,13 @@ namespace Fenrir::Render
             InstanceRange range;
         };
 
-        /** @brief A prepared render target image: its texture and size. */
+        /** @brief A prepared render target image: its texture, size and format. */
         struct TargetEntry
         {
             std::uint32_t revision = 0;
             Graphics::TextureHandle texture;
             Graphics::PixelSize size;
+            Graphics::TextureFormat format = Graphics::TextureFormat::Rgba8Srgb;
         };
 
         /** @brief A material texture parameter naming an image, and what was bound for it. */

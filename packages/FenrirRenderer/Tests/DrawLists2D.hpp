@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <variant>
 #include <vector>
 
 #include "FenrirDraw2D/DrawList2D.hpp"
@@ -33,8 +34,8 @@ namespace RendererTest
      * @brief Appends a quad from `min` to `max` (local units) of one colour to `list`, six 16-bit indices, and a
      * command drawing it with pipeline `pipeline`; returns the command.
      */
-    inline Fenrir::Command2D& AddQuad(Fenrir::DrawList2D& list, std::uint32_t pipeline, Fenrir::Math::Vec2 min,
-                                      Fenrir::Math::Vec2 max, std::uint32_t colour = 0xFFFFFFFFu)
+    inline Fenrir::DrawCommand2D& AddQuad(Fenrir::DrawList2D& list, std::uint32_t pipeline, Fenrir::Math::Vec2 min,
+                                          Fenrir::Math::Vec2 max, std::uint32_t colour = 0xFFFFFFFFu)
     {
         const std::array<Fenrir::Vertex2D, 4> corners{{
             {{min.x, min.y}, {0.0f, 0.0f}, colour},
@@ -46,7 +47,7 @@ namespace RendererTest
         const std::array<std::uint16_t, 6> indices{
             first, static_cast<std::uint16_t>(first + 2), static_cast<std::uint16_t>(first + 1),
             first, static_cast<std::uint16_t>(first + 3), static_cast<std::uint16_t>(first + 2)};
-        Fenrir::Command2D& command = list.commands.emplace_back();
+        auto& command = std::get<Fenrir::DrawCommand2D>(list.commands.emplace_back());
         command.pipeline = pipeline;
         command.indexOffset = list.AppendIndices(std::span<const std::uint16_t>(indices));
         command.indexCount = 6;

@@ -64,7 +64,7 @@ namespace RendererDemo
                                                             {{right, lower}, {0.0f, 0.0f}, bottom},
                                                             {{rect.x, lower}, {0.0f, 0.0f}, bottom}}};
             constexpr std::array<std::uint16_t, 6> indices{0, 1, 2, 0, 2, 3};
-            Fenrir::Command2D command;
+            Fenrir::DrawCommand2D command;
             command.pipeline = pipeline;
             command.baseVertex =
                 static_cast<std::int32_t>(list.AppendVertices(std::span<const Fenrir::Vertex2D>(vertices)));

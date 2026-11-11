@@ -14,7 +14,7 @@ Game code makes a view with a `Camera` component on an entity, oriented by the e
 
 ## Render targets are ordinary image assets
 
-- **A camera's `target` is a window or an `AssetHandle<Image>`.** The main window is the default. An image target is a FenrirAssets `ImageData` with a size and format but no pixels, made through the store like any image (ADR-0021). Its format is RGBA8 sRGB, which is what `Output` writes to a window.
+- **A camera's `target` is a window or an `AssetHandle<Image>`.** The main window is the default. An image target is a FenrirAssets `ImageData` with a size and format but no pixels, made through the store like any image (ADR-0021). Its format is RGBA8 sRGB, which is what `Output` writes to a window. *Amended 2026-11-11 (FenrirUI ticket 01):* an image 2D target (ADR-0060) draws 2D draw lists into the same render target images, which for it may be RGBA8 linear too; a camera still draws into sRGB ones only.
 - **Sampled like any texture.** A material's texture parameter, or a UI library's overlay (such as an editor's scene view), names the same handle. The render graph orders the view that writes it before any pass that reads it (ADR-0019). A view whose own draws sample its target gets the default texture for them instead, and the renderer logs it once.
 - **Resized through the store.** `Replace` with a new size bumps the revision, and the renderer recreates the GPU texture, as for any changed asset.
 - **Why:** this is Bevy's model. One handle type serves every texture use, so materials, the overlay and C# need nothing new. A GPU-only resource in an asset store that otherwise holds CPU data is the cost. A view never writes into a texture that the store doesn't know about.

@@ -131,7 +131,7 @@ Fenrir::PipelineDescription2D pipeline;
 pipeline.shader = store.Load<Fenrir::Shader>("builtin:2d", Fenrir::AssetOwner::App()).handle;
 pipeline.vertexLayout = Fenrir::Vertex2DLayout(); // the ImGui layout: position, UV, RGBA8 colour
 const std::uint32_t index = list.AddPipeline(pipeline);
-// ... AppendVertices, AppendIndices, then a Command2D per draw naming `index`, its indices, textures and scissor
+// ... AppendVertices, AppendIndices, then a DrawCommand2D per draw naming `index`, its indices, textures and scissor
 app.GetResource<Fenrir::Overlay>().Submit(Fenrir::Window::MainWindow(), 0, std::move(list));
 ```
 
@@ -142,6 +142,25 @@ app.GetResource<Fenrir::Overlay>().Submit(Fenrir::Window::MainWindow(), 0, std::
 - **Shaders:** 2D shaders take set 0 from the target (`Fenrir/2D.glsl`: `localToClip`, pixel size, content scale) and set 1 per command, laid out from the shader's reflection: a `MaterialParams` block at binding 0 (its parameter defaults with the command's up to 128 parameter bytes written over its start), then up to 4 textures, slot by slot in binding order. A texture slot's image is prepared as a material's is (a render target image binds its texture); a missing or stale one binds the texture's parameter default. The renderer picks the variant from the description: a shader with the keys gets `INPUT_SRGB` for sRGB vertex colours, `PREMULTIPLY` for `PremultipliedAlpha` and `GAMMA` for the gamma path.
 - **`builtin:2d`:** the vertex colour times the slot-0 texture (white with none), on the ImGui layout. It decodes sRGB vertex colours, treats colours and texels as straight alpha, and premultiplies in linear for `PremultipliedAlpha`. On the gamma path it works in sRGB-encoded values: sRGB colours as given, linear ones encoded, texels (decoded on sampling) encoded again.
 - **Skipped, each reason logged once:** a command with more than 4 texture slots or 128 parameter bytes, or a pipeline index or index range outside its list; a list whose pipeline names a stale shader or one that is not a 2D shader; and a submission to a window the renderer does not draw (only the main window, for now), logged once per window.
+
+## The image 2D target and offscreen groups
+
+A 2D draw list can be drawn into an image asset through the `ImageTargets2D` app resource (`FenrirRenderer/ImageTargets2D.hpp`, ADR-0060), and a run of any list's commands can be drawn into an image of its own and composited back as one, an offscreen group (FenrirDraw2D's `BeginGroup2D` and `EndGroup2D`).
+
+```cpp
+Fenrir::ImageData target; // a render target: flat RGBA8, a size, no pixels
+target.width = 512;
+target.height = 256;
+target.colourSpace = Fenrir::ColourSpace::Linear; // or Srgb, the default
+const auto image = store.Add<Fenrir::Image>(std::move(target), Fenrir::AssetOwner::App());
+app.GetResource<Fenrir::ImageTargets2D>().Submit(image, std::move(list));
+```
+
+- **When:** `Submit(image, list)` any time before `Render`, from any system; the renderer draws the submissions that frame and clears them after it. A frame that submits to an image clears it to transparent, then draws its lists in submission order; one that submits nothing leaves it as it was. A submission to an empty or stale handle, or to an image that is not a render target, is dropped and logged once per image.
+- **The target:** one `Image 2D` pass per image, its local coordinates the image's pixels from its top-left, Y down, at a content scale of 1, with no depth and no culling and the scissor the hardware's, as on the window. The image's texture is RGBA8, sRGB (encoding on write) or linear as its colour space says; the `Gamma` blend space is allowed only on an sRGB image. Premultiplied alpha is kept as drawn.
+- **Then any image asset:** a material's texture parameter or a 2D command's texture slot samples what was drawn. The image's pass runs before the views and the overlay that sample it (the graph orders them), images in the order of their first submission; a list sampling an image drawn later reads what it held before, and one sampling its own image binds the slot's default texture there, logged once. A camera draws into sRGB render targets only (its Output writes sRGB), so a camera targeting a linear image is not drawn, logged as for any image that is not a render target.
+- **Groups,** on the overlay and on image 2D targets alike: a group's commands draw into a transient image, sRGB RGBA8 premultiplied, from the graph's pool (keyed by size and format), covering the group's bounds in the target's pixels rounded outwards and clamped to the enclosing group's or the target's, cleared to transparent, in a `Group 2D` pass of its own whose local coordinates are the list's. Its end-group command then draws the image over the enclosing target as one quad through `builtin:2d`'s textured path, at the composite's opacity, drawn over (`Normal`) or added (`Additive`). Inner groups draw first. A group with nothing drawn in it, or covering no pixel, draws nothing and takes no image. Groups nest 8 deep; a deeper one is logged once and drawn flat into the group around it. A list whose groups do not balance is logged once and skipped. Filters (blur, drop shadow) and masks are declared but not realised yet: a filter is logged once and its group drawn plainly, and a mask group is logged once and draws nothing.
+- **`RendererStats`** counts the frame's 2D lists drawn (`lists2D`), their commands of every kind (`commands2D`), the groups drawn into transient images (`groups2D`) and those images' bytes (`transientImageBytes2D`).
 
 ## Skinning
 
