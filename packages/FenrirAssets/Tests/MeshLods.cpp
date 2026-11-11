@@ -397,7 +397,7 @@ TEST_CASE("UV seams stay where they were", "[assets][lods]")
     REQUIRE(Triangles(result.lods.back().indices) < Triangles(sphere.indices) / 4);
 }
 
-TEST_CASE("With lockSeams off a seam collapses along itself and the chain goes further", "[assets][lods]")
+TEST_CASE("With lockSeams off the chain goes on past the seam that stops the locked one", "[assets][lods]")
 {
     const MeshData sphere = UvSphere(24, 48);
     Fenrir::LodSettings settings;
@@ -406,6 +406,7 @@ TEST_CASE("With lockSeams off a seam collapses along itself and the chain goes f
     const MeshData locked = Fenrir::GenerateLods(sphere, settings);
     settings.lockSeams = false;
     const MeshData unlocked = Fenrir::GenerateLods(sphere, settings);
+    INFO("the sphere simplifies either way, so there are chains to compare");
     REQUIRE_FALSE(locked.lods.empty());
     REQUIRE_FALSE(unlocked.lods.empty());
 
@@ -419,6 +420,7 @@ TEST_CASE("With lockSeams off a seam collapses along itself and the chain goes f
     REQUIRE(Triangles(unlocked.lods.back().indices) < Triangles(locked.lods.back().indices));
     for (const MeshLod& lod : unlocked.lods)
     {
+        INFO("every level still indexes the sphere's own vertices");
         REQUIRE(std::all_of(lod.indices.begin(), lod.indices.end(),
                             [&](std::uint32_t index) { return index < sphere.positions.size(); }));
     }

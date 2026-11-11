@@ -62,11 +62,11 @@ namespace LightingDemo
         constexpr const char* PlanetTexture = "planets/2k_jupiter.jpg";
 
         /**
-         * @brief How a rock's levels are made: halving to seven levels and about fifty triangles, the coarsest the
-         * specks that are most of the ring, with its UV seams free to collapse (a scanned rock's islands lock it at a
-         * few hundred triangles otherwise).
+         * @brief How a rock's levels are made: halving to seven levels and 32 to 52 triangles, the coarsest the specks
+         * that are most of the ring, with its UV seams free to collapse (a scanned rock's islands lock it at a few
+         * hundred triangles otherwise).
          */
-        constexpr Fenrir::LodSettings RockLods{0.5f, 7, 32, false};
+        constexpr Fenrir::LodSettings RockLods{.ratio = 0.5f, .maxLevels = 7, .minTriangles = 32, .lockSeams = false};
         /** @brief The level-of-detail errors L steps through, in pixels; the renderer's default first. */
         constexpr std::array<float, 4> LodErrorSteps{1.0f, 2.0f, 4.0f, 0.5f};
 
@@ -79,6 +79,28 @@ namespace LightingDemo
             Fenrir::AssetHandle<Fenrir::Mesh> mesh;
             Fenrir::AssetHandle<Fenrir::Material> material;
             float toMetre = 1.0f;
+        };
+
+        /**
+         * @brief The renderer's culling as the panel and keys set it (ADR-0057): the GPU test, the freeze and the
+         * level-of-detail error. The renderer's, like merging, so a change is applied once, not every frame.
+         */
+        struct CullingControls
+        {
+            bool gpuCulling = true;
+            bool frozen = false;
+            float lodErrorPixels = LodErrorSteps.front();
+
+            friend bool operator==(const CullingControls&, const CullingControls&) = default;
+
+            /** @brief Sets all three on the renderer; setting one again as it is changes nothing. */
+            void Apply(Fenrir::App& app) const
+            {
+                Fenrir::Renderer::SetGpuCulling(app, gpuCulling);
+                Fenrir::Renderer::SetCullingFrozen(app, frozen);
+                // No least size: a rock that projects under a pixel still draws, at its coarsest level.
+                Fenrir::Renderer::SetLodSelection(app, lodErrorPixels, 0.0f);
+            }
         };
 
         /** @brief The ring's lists and what the panel and keys have set, kept as a scene resource. */
@@ -96,13 +118,7 @@ namespace LightingDemo
             bool fetched = false;
             bool merging = true;
             bool spinning = true;
-            /**
-             * @brief The renderer's culling as the panel and keys last set it (ADR-0057): the GPU test, the freeze and
-             * the level-of-detail error.
-             */
-            bool gpuCulling = true;
-            bool frozen = false;
-            float lodErrorPixels = LodErrorSteps.front();
+            CullingControls culling;
             float angle = 0.0f;
             /** @brief The frame time, smoothed over about a second, in seconds. */
             float frameTime = 0.0f;
@@ -420,9 +436,7 @@ namespace LightingDemo
             SpawnStation(store, scene, cube.handle);
             // Culling as the panel starts: on, not frozen and at the renderer's default error, whatever another visit
             // left them as.
-            Fenrir::Renderer::SetGpuCulling(app, state.gpuCulling);
-            Fenrir::Renderer::SetCullingFrozen(app, state.frozen);
-            Fenrir::Renderer::SetLodSelection(app, state.lodErrorPixels, 0.0f);
+            state.culling.Apply(app);
             scene.AddResource<AsteroidRingState>(std::move(state));
         }
 
@@ -454,27 +468,25 @@ namespace LightingDemo
             {
                 state->spinning = !state->spinning;
             }
-            bool gpuCulling = state->gpuCulling;
-            bool frozen = state->frozen;
-            float lodErrorPixels = state->lodErrorPixels;
+            CullingControls culling = state->culling;
             if (keyboard.JustPressed(Fenrir::Key::C))
             {
-                gpuCulling = !gpuCulling;
-                app.Logger()->Info("C: GPU culling {}", gpuCulling ? "on" : "off");
+                culling.gpuCulling = !culling.gpuCulling;
+                app.Logger()->Info("C: GPU culling {}", culling.gpuCulling ? "on" : "off");
             }
             if (keyboard.JustPressed(Fenrir::Key::F))
             {
-                frozen = !frozen;
-                app.Logger()->Info("F: culling {}", frozen ? "frozen" : "following the camera");
+                culling.frozen = !culling.frozen;
+                app.Logger()->Info("F: culling {}", culling.frozen ? "frozen" : "following the camera");
             }
             if (keyboard.JustPressed(Fenrir::Key::L))
             {
                 // From a slider value between the steps, the first step.
-                const auto step = std::find(LodErrorSteps.begin(), LodErrorSteps.end(), lodErrorPixels);
+                const auto step = std::find(LodErrorSteps.begin(), LodErrorSteps.end(), culling.lodErrorPixels);
                 const auto next =
                     step == LodErrorSteps.end() || step + 1 == LodErrorSteps.end() ? LodErrorSteps.begin() : step + 1;
-                lodErrorPixels = *next;
-                app.Logger()->Info("L: a level of detail may depart by {} pixels", lodErrorPixels);
+                culling.lodErrorPixels = *next;
+                app.Logger()->Info("L: a level of detail may depart by {} pixels", culling.lodErrorPixels);
             }
 
             const Fenrir::RendererStats stats = Fenrir::Renderer::Stats(app);
@@ -491,9 +503,9 @@ namespace LightingDemo
                 ImGui::Text("Frame: %.2f ms (%.0f fps)", state->frameTime * 1000.0f,
                             state->frameTime > 0.0f ? 1.0f / state->frameTime : 0.0f);
                 ImGui::SeparatorText("Culling");
-                ImGui::Checkbox("GPU culling (C)", &gpuCulling);
-                ImGui::Checkbox("Freeze culling (F)", &frozen);
-                ImGui::SliderFloat("LOD error, pixels (L)", &lodErrorPixels, 0.25f, 8.0f, "%.2f",
+                ImGui::Checkbox("GPU culling (C)", &culling.gpuCulling);
+                ImGui::Checkbox("Freeze culling (F)", &culling.frozen);
+                ImGui::SliderFloat("Level-of-detail error, pixels (L)", &culling.lodErrorPixels, 0.25f, 8.0f, "%.2f",
                                    ImGuiSliderFlags_Logarithmic);
                 ImGui::Text("Drawn by level: %u  %u  %u  %u  %u  %u  %u  %u", stats.drawnByLod[0], stats.drawnByLod[1],
                             stats.drawnByLod[2], stats.drawnByLod[3], stats.drawnByLod[4], stats.drawnByLod[5],
@@ -502,22 +514,10 @@ namespace LightingDemo
             });
 
             Fenrir::Renderer::SetAutomaticInstancing(app, state->merging);
-            // Culling is the renderer's, like merging, so it is set when the panel or a key changes it.
-            if (gpuCulling != state->gpuCulling)
+            if (culling != state->culling)
             {
-                state->gpuCulling = gpuCulling;
-                Fenrir::Renderer::SetGpuCulling(app, gpuCulling);
-            }
-            if (frozen != state->frozen)
-            {
-                state->frozen = frozen;
-                Fenrir::Renderer::SetCullingFrozen(app, frozen);
-            }
-            if (lodErrorPixels != state->lodErrorPixels)
-            {
-                state->lodErrorPixels = lodErrorPixels;
-                // No least size: a rock that projects under a pixel still draws, at its coarsest level.
-                Fenrir::Renderer::SetLodSelection(app, lodErrorPixels, 0.0f);
+                state->culling = culling;
+                culling.Apply(app);
             }
             // A new count cuts each list again: Replace bumps its revision, so the renderer uploads it once more.
             if (state->count != state->listedCount && !state->handles.empty())

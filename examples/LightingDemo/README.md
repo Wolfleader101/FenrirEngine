@@ -123,7 +123,7 @@ A planet forty metres across, in Solar System Scope's Jupiter texture, ringed fr
 of three Poly Haven moon-rock kinds (ADR-0051): one InstancedMeshRenderer each, on children of one ring entity, so the
 ring is three draws a pass however many rocks it holds, its copies each turned, scaled, squashed and tinted at random.
 Poly Haven's rocks have 3,300 to 6,800 triangles each. Each kind loads at full detail and `GenerateLods` (ADR-0057)
-makes its levels once at spawn, halving to seven levels and about fifty triangles with its UV seams free to collapse
+makes its levels once at spawn, halving to seven levels and 32 to 52 triangles with its UV seams free to collapse
 (`LodSettings::lockSeams` off: a scanned rock's islands lock the chain at a few hundred triangles otherwise), and the
 ring and the field draw the same mesh. The cull pass drops the copies outside the camera and draws each of the rest at
 the coarsest level whose error projects under a pixel, so the specks that are most of the ring are a few dozen
@@ -491,8 +491,9 @@ Hand checks, on OpenGL:
   `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
 - The planet's shadow darkens the ring's far side behind it, its edge sliding over the rocks as the ring turns, and the
   field's rocks shadow one another.
-- With culling and levels on (ADR-0057) the full-detail ring is at least as fast as the clustered ring was (about 9 ms
-  on the RTX 5080), and the field's rocks beside the camera keep their detail. Looking across the ring from the start,
+- With culling and levels on (ADR-0057) the full-detail ring is no slower than the clustered ring it replaces on the
+  same build (the clustered ring's 9 ms predates lighting tickets 25 to 31's post effects; 12.2 ms here), and the
+  field's rocks beside the camera keep their detail. Looking across the ring from the start,
   Drawn equals Instances and most copies draw at the coarsest levels; looking along the ring from inside it, Drawn
   falls to about a fifth. C off puts every copy at level 0 and the frame time up about eightfold.
 - At the default error of a pixel, no pop shows as the ring turns or the camera flies along it; L to 4 pixels makes the
