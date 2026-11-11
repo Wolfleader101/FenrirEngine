@@ -147,8 +147,8 @@ namespace Fenrir::Render
         // nothing of last frame. A camera that only culls by occlusion keeps one pyramid and no history.
         const TextureDesc historyDesc = ChainDesc(TextureFormat::Rgba16Float, size);
         const TextureDesc pyramidDesc = ChainDesc(TextureFormat::Rg32Float, size);
-        const bool fresh =
-            entry.pyramids[0].IsEmpty() || entry.pyramidDesc != pyramidDesc || entry.history.IsEmpty() == reflections;
+        const bool reflectionsChanged = entry.history.IsEmpty() == reflections;
+        const bool fresh = entry.pyramids[0].IsEmpty() || entry.pyramidDesc != pyramidDesc || reflectionsChanged;
         if (fresh)
         {
             Destroy(entry);

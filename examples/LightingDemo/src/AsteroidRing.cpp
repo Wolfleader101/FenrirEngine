@@ -519,7 +519,7 @@ namespace LightingDemo
                 ImGui::Text("Drawn by level: %u  %u  %u  %u  %u  %u  %u  %u", stats.drawnByLod[0], stats.drawnByLod[1],
                             stats.drawnByLod[2], stats.drawnByLod[3], stats.drawnByLod[4], stats.drawnByLod[5],
                             stats.drawnByLod[6], stats.drawnByLod[7]);
-                ImGui::Text("Drawn by phase: %u visible last frame, %u shown by the depth pyramid",
+                ImGui::Text("Drawn by phase: %u visible last frame, %u shown by the Hi-Z pyramid",
                             stats.drawnByPhase[0], stats.drawnByPhase[1]);
                 ImGui::TextUnformatted("Drawn is what the GPU kept, two frames behind; off, every copy draws level 0.");
             });

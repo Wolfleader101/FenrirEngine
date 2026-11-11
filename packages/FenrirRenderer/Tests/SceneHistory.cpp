@@ -344,7 +344,7 @@ TEST_CASE("Under MSAA the reflection copies read the multisampled scene targets"
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
     const auto keys = [&](const PassRecord& pass) { return RendererProbe::Keys(test.Device(), pass.pipeline); };
-    INFO("HiZ's copy reads sample 0 of SceneDepth through its MSAA variant");
+    INFO("HiZ's copy reads every sample of SceneDepth, the nearest and the farthest, through its MSAA variant");
     REQUIRE(keys(Labelled(passes, "HiZ").at(0)) == std::vector<std::string>{"COPY", "MSAA"});
     INFO("SceneHistory's copy averages SceneColor's samples through its MSAA variant");
     REQUIRE(keys(Labelled(passes, "SceneHistory").at(0)) == std::vector<std::string>{"MSAA"});

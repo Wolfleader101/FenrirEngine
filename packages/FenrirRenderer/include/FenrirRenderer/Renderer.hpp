@@ -94,7 +94,7 @@ namespace Fenrir
         bool gpuCulling = true;
         /**
          * @brief Whether each camera's cull pass also drops the copies hidden behind others (ADR-0057): what was
-         * visible last frame is drawn into the depth prepass first, a depth pyramid is built from it, and the rest
+         * visible last frame is drawn into the depth prepass first, a Hi-Z pyramid is built from it, and the rest
          * are tested against it before they are drawn, so a copy wholly behind a wall costs no shading. Off, every
          * copy inside the frustum is drawn, for comparison; off with `gpuCulling` off. Shadow views never cull by
          * occlusion. Changeable later with Renderer::SetOcclusionCulling.
@@ -180,7 +180,7 @@ namespace Fenrir
         /**
          * @brief `instancesDrawn` by the occlusion culling phase each was drawn in (ADR-0057): the first entry the
          * MeshRenderers and copies drawn as visible last frame (every survivor of a camera without occlusion
-         * culling), the second those drawn after the depth pyramid test showed them, so the two sum to
+         * culling), the second those drawn after the Hi-Z pyramid test showed them, so the two sum to
          * `instancesDrawn`.
          */
         std::uint32_t drawnByPhase[2] = {};

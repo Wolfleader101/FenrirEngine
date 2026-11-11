@@ -232,11 +232,13 @@ namespace Fenrir::Render
      * texture there. A view showing its occlusion (`ViewRequest::showOcclusion`) has Output draw that texture as grey
      * instead of SceneColor, so the passes only SceneColor needs are culled; it shows black without the passes.
      *
-     * **Reflection inputs** (ADR-0056): a view whose camera has reflections keeps, under its camera's entity id, a
-     * history colour and two Hi-Z pyramids across frames (SceneHistory): its HiZ passes after GTAO's draw this frame's
-     * pyramid from SceneDepth, and its SceneHistory passes, the first of `PostProcess`, copy SceneColor before bloom.
-     * They write textures kept outside the graph, so they are never culled, and keep the passes SceneColor needs even
-     * when Output shows grey. A camera with no such view in a frame has its textures freed.
+     * **The Hi-Z pyramid and the reflection inputs** (ADR-0056, ADR-0057): every view keeps, under its camera's
+     * entity id, a Hi-Z pyramid across frames (SceneHistory), which its HiZ passes draw from SceneDepth after the
+     * prepass's first phase, for the cull pass's second; a view whose camera has reflections keeps a history colour
+     * and a second pyramid too: its HiZ passes after GTAO's draw the pyramid again from the complete depth, and its
+     * SceneHistory passes, the first of `PostProcess`, copy SceneColor before bloom. They write textures kept outside
+     * the graph, so they are never culled, and keep the passes SceneColor needs even when Output shows grey. A camera
+     * with no such view in a frame has its textures freed.
      *
      * **Variants** (ADR-0024): the renderer picks the keys. A `Masked` material draws with its shader's `ALPHA_MASK`
      * variant if the shader has the key, its `MaterialData::alphaCutoff` written into the variant's `alphaCutoff` block
@@ -923,27 +925,49 @@ namespace Fenrir::Render
             std::uint32_t commandsPerPhase = 0;
             /** @brief The view's visibility words, one a candidate, kept between frames; empty with one phase. */
             Graphics::BufferHandle visibility;
+            /** @brief The words, imported into the frame's graph. */
             GraphResource visibilityResource;
             /** @brief Whether the words are stale (the candidates changed), so every candidate counts as visible. */
             bool visibilityStale = false;
-            /** @brief The view's Hi-Z pyramid, which phase two reads; empty with one phase. */
-            Graphics::TextureHandle pyramid;
-            GraphResource pyramidResource;
-            /** @brief The pyramid's level count and level 0's size. */
-            std::uint32_t pyramidMips = 0;
-            Graphics::PixelSize size;
-            /** @brief World to clip space, which phase two takes screen rectangles in. */
+            /** @brief The view's Hi-Z pyramid, which the second phase reads, and its size; empty with one phase. */
+            HistoryView history;
+            /** @brief World to clip space, which the second phase takes screen rectangles in. */
             Math::Mat4 viewProjection{1.0f};
         };
 
         /** @brief What a view's cull pass needs for its occlusion phase (ADR-0057). */
         struct CullOcclusion
         {
-            Graphics::TextureHandle pyramid;
-            GraphResource pyramidResource;
-            std::uint32_t mips = 0;
-            Graphics::PixelSize size;
+            /** @brief The view's Hi-Z pyramid (and, reflecting, its history), imported this frame. */
+            HistoryView history;
+            /** @brief World to clip space, which the second phase takes screen rectangles in. */
             Math::Mat4 viewProjection{1.0f};
+        };
+
+        /**
+         * @brief Which phase a `Cull` pass runs (ADR-0057), as `builtin:cull`'s job names it: the one phase of a view
+         * without occlusion culling, or the first (what was visible last frame) or the second (the pyramid test) of a
+         * view with it.
+         */
+        enum class CullPhase : std::uint32_t
+        {
+            Single = 0,
+            First = 1,
+            Second = 2,
+        };
+
+        /**
+         * @brief What makes a run the same run as last frame's, for keeping its candidates' visibility (ADR-0057): its
+         * first draw's place in the draw list, its candidate count, its instance list's first copy and its mesh.
+         */
+        struct CullRunIdentity
+        {
+            std::uint32_t first = 0;
+            std::uint32_t count = 0;
+            std::uint32_t listFirst = 0;
+            const MeshEntry* mesh = nullptr;
+
+            friend bool operator==(const CullRunIdentity&, const CullRunIdentity&) = default;
         };
 
         /**
@@ -991,8 +1015,8 @@ namespace Fenrir::Render
             GrownRing indirection;
             Graphics::BufferHandle visibility;
             std::size_t visibilityCapacity = 0;
-            /** @brief Each run's identity and candidate count the words were last written for, in order. */
-            std::vector<std::uint64_t> order;
+            /** @brief The runs the words were last written for, in order. */
+            std::vector<CullRunIdentity> order;
         };
 
         /**
@@ -1124,13 +1148,13 @@ namespace Fenrir::Render
                                            std::vector<CullLevelEntry>& levels, std::vector<std::uint32_t>& phases,
                                            std::vector<CullGroupEntry>& groups);
         /**
-         * @brief Adds one `Cull` pass for phase `phase` (0: the one phase without occlusion culling, 1 or 2 with it)
-         * of `cull`, a view with runs, its job at slot `jobSlot` of the frame's job ring: for phase 0 or 1, a copy of
-         * the view's templates over its command buffer, then one dispatch of `builtin:cull` over its groups; for
-         * phase 2, in `stage`, the dispatch alone, sampling the view's pyramid.
+         * @brief Adds one `Cull` pass for `phase` of `cull`, a view with runs, in `stage`, its job at slot `jobSlot`
+         * of the frame's job ring: for the single or the first phase, a copy of the view's templates over its command
+         * buffer, then one dispatch of `builtin:cull` over its groups; for the second, the dispatch alone, sampling
+         * the view's pyramid.
          */
         void AddCullPass(RenderGraph& graph, std::uint64_t frameIndex, const CullFrame& frame, const CullView& cull,
-                         std::uint32_t phase, std::size_t jobSlot, RenderStage stage);
+                         CullPhase phase, std::size_t jobSlot, RenderStage stage);
         /** @brief Writes the frame's `templates`, `levels` and `groups` into the rings BeginCullFrame reserved. */
         void WriteCullTables(std::uint64_t frameIndex, std::span<const Graphics::DrawIndexedIndirectCommand> templates,
                              std::span<const CullLevelEntry> levels, std::span<const CullGroupEntry> groups);
