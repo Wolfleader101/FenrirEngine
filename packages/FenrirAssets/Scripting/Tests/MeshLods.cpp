@@ -32,6 +32,8 @@ namespace
     void RequireLevels(AssetsScriptingApp& test, AssetHandle<Mesh> mesh, const MeshData& expected)
     {
         const MeshData* actual = test.Store().TryGet(mesh);
+        INFO("The store's mesh should hold exactly the levels C++'s GenerateLods gives over the same data, and its "
+             "indices reordered the same way");
         REQUIRE(actual != nullptr);
         REQUIRE(actual->indices == expected.indices);
         REQUIRE(actual->lods.size() == expected.lods.size());
@@ -100,8 +102,14 @@ TEST_CASE("C#'s default LodSettings are C++'s", "[assets][scripting][lod]")
     AssetsScriptingApp test;
     const AssetHandle<Mesh> mesh = AddGrid(test, 12);
     const MeshData expected = GenerateLods(*test.Store().TryGet(mesh));
-    REQUIRE_FALSE(expected.lods.empty());
-    REQUIRE(test.Call<bool>(LodCallsType, "GenerateDefault", BitsOf(mesh)));
+    {
+        INFO("The grid should simplify under the defaults, or the comparison proves little");
+        REQUIRE_FALSE(expected.lods.empty());
+    }
+    {
+        INFO("C#'s GenerateLods with no settings should succeed");
+        REQUIRE(test.Call<bool>(LodCallsType, "GenerateDefault", BitsOf(mesh)));
+    }
     RequireLevels(test, mesh, expected);
 }
 
@@ -116,6 +124,7 @@ TEST_CASE("A level C# builds by hand joins the mesh under the store's rules", "[
     }
     {
         const MeshData* after = test.Store().TryGet(mesh);
+        INFO("The mesh should hold that one level, its own indices untouched, at revision 2, and C# should count one");
         REQUIRE(after->lods.size() == 1);
         REQUIRE(after->lods[0].indices ==
                 std::vector<std::uint32_t>(before.indices.begin(), before.indices.begin() + 6));

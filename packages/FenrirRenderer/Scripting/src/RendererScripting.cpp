@@ -36,6 +36,20 @@ namespace Fenrir
 {
     namespace
     {
+        // Calls the facade's `setter` on the app's renderer with `arguments` and says whether there was one to call:
+        // the one shape of every setter native, whose C# result is whether the app has a renderer.
+        template <typename... Args>
+        bool SetOnRenderer(const CallContext& context, RendererScripting& renderer, void (*setter)(App&, Args...),
+                           Args... arguments)
+        {
+            if (!renderer.HasRenderer(context))
+            {
+                return false;
+            }
+            setter(context.GetApp(), arguments...);
+            return true;
+        }
+
         // Writes `value` through `out` if there is one, and says whether there was.
         template <typename V>
         bool Write(const std::optional<V>& value, V* out)
@@ -226,12 +240,7 @@ namespace Fenrir
          */
         bool SetSpotShadowBudget(const CallContext& context, RendererScripting& renderer, std::uint32_t budget)
         {
-            if (!renderer.HasRenderer(context))
-            {
-                return false;
-            }
-            Renderer::SetSpotShadowBudget(context.GetApp(), budget);
-            return true;
+            return SetOnRenderer(context, renderer, &Renderer::SetSpotShadowBudget, budget);
         }
 
         /**
@@ -242,12 +251,7 @@ namespace Fenrir
          */
         bool SetPointShadowBudget(const CallContext& context, RendererScripting& renderer, std::uint32_t budget)
         {
-            if (!renderer.HasRenderer(context))
-            {
-                return false;
-            }
-            Renderer::SetPointShadowBudget(context.GetApp(), budget);
-            return true;
+            return SetOnRenderer(context, renderer, &Renderer::SetPointShadowBudget, budget);
         }
 
         /**
@@ -260,12 +264,7 @@ namespace Fenrir
          */
         bool SetGpuCulling(const CallContext& context, RendererScripting& renderer, bool on)
         {
-            if (!renderer.HasRenderer(context))
-            {
-                return false;
-            }
-            Renderer::SetGpuCulling(context.GetApp(), on);
-            return true;
+            return SetOnRenderer(context, renderer, &Renderer::SetGpuCulling, on);
         }
 
         /**
@@ -277,12 +276,7 @@ namespace Fenrir
          */
         bool SetOcclusionCulling(const CallContext& context, RendererScripting& renderer, bool on)
         {
-            if (!renderer.HasRenderer(context))
-            {
-                return false;
-            }
-            Renderer::SetOcclusionCulling(context.GetApp(), on);
-            return true;
+            return SetOnRenderer(context, renderer, &Renderer::SetOcclusionCulling, on);
         }
 
         /**
@@ -295,12 +289,7 @@ namespace Fenrir
          */
         bool SetCullingFrozen(const CallContext& context, RendererScripting& renderer, bool on)
         {
-            if (!renderer.HasRenderer(context))
-            {
-                return false;
-            }
-            Renderer::SetCullingFrozen(context.GetApp(), on);
-            return true;
+            return SetOnRenderer(context, renderer, &Renderer::SetCullingFrozen, on);
         }
 
         /**
@@ -318,12 +307,7 @@ namespace Fenrir
         bool SetLodSelection(const CallContext& context, RendererScripting& renderer, float lodErrorPixels,
                              float minProjectedPixels)
         {
-            if (!renderer.HasRenderer(context))
-            {
-                return false;
-            }
-            Renderer::SetLodSelection(context.GetApp(), lodErrorPixels, minProjectedPixels);
-            return true;
+            return SetOnRenderer(context, renderer, &Renderer::SetLodSelection, lodErrorPixels, minProjectedPixels);
         }
 
         /**

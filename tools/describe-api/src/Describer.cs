@@ -593,25 +593,13 @@ internal sealed class Describer
             case CXTypeKind.CXType_Enum:
                 return new FieldType("enum", RegisterReferenced(type, subject));
             case CXTypeKind.CXType_Record when StdArray(type) is var (elementType, length):
-                var stdElement = Classify(elementType, at, subject);
-                if (stdElement.Kind == "array")
-                {
-                    throw Error(at, subject, "an array of arrays, which the kinds cannot express");
-                }
-
-                return new FieldType("array", Element: stdElement, Length: length);
+                return ArrayField(elementType, length, at, subject);
             case CXTypeKind.CXType_Record:
                 return new FieldType("struct", RegisterReferenced(type, subject));
             case CXTypeKind.CXType_Pointer:
                 return new FieldType("pointer");
             case CXTypeKind.CXType_ConstantArray:
-                var element = Classify(((ArrayType)type).ElementType, at, subject);
-                if (element.Kind == "array")
-                {
-                    throw Error(at, subject, "an array of arrays, which the kinds cannot express");
-                }
-
-                return new FieldType("array", Element: element, Length: type.Handle.ArraySize);
+                return ArrayField(((ArrayType)type).ElementType, type.Handle.ArraySize, at, subject);
             case CXTypeKind.CXType_LValueReference:
             case CXTypeKind.CXType_RValueReference:
                 throw Error(at, subject, "a reference member: a shared type holds values, not references");
@@ -652,6 +640,18 @@ internal sealed class Describer
                 CXTypeKind.CXType_ULong or CXTypeKind.CXType_ULongLong => $"u{bits}",
             _ => null,
         };
+    }
+
+    /// <summary>The <c>array</c> kind: <paramref name="length"/> elements of <paramref name="elementType"/>, whether a C array's or a <c>std::array</c>'s, never an array of arrays.</summary>
+    private FieldType ArrayField(Type elementType, long length, Decl at, string subject)
+    {
+        var element = Classify(elementType, at, subject);
+        if (element.Kind == "array")
+        {
+            throw Error(at, subject, "an array of arrays, which the kinds cannot express");
+        }
+
+        return new FieldType("array", Element: element, Length: length);
     }
 
     /// <summary>
@@ -877,8 +877,9 @@ internal sealed class Describer
             throw UnknownDefault(init, at, subject);
         }
 
-        // A std::array's braced list holds the one list of its C array: `{1.0f, 2.0f}` (braces elided) and
-        // `{{1.0f, 2.0f}}` both, and `{}` one implicit value or nothing.
+        // Clang gives a std::array's braced list as a list of its one member's: `{1.0f, 2.0f}` (braces elided) and
+        // `{{1.0f, 2.0f}}` both arrive as a list of one list, `{}` as one implicit value or nothing, so the elements
+        // are read from the inner list as a C array's are.
         if (StdArray(list.Type.CanonicalType) is not null && list.NumInits > 0)
         {
             if (list.NumInits != 1)

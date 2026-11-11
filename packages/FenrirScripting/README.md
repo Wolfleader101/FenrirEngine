@@ -29,12 +29,13 @@ logged as an error and the app runs without scripts (`HasScripts()` is false).
   script project references it with `<Private>false</Private>` (compile against it, do not copy it). The version is
   part of the contract: a script built against a newer minor than the host's fails to load.
 - **The math contract.** `Fenrir.Math` (`packages/FenrirMath/Managed/Fenrir.Math`, namespace `Fenrir.Math`, ADR-0029)
-  holds `Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Matrix4x4`, `Colour`, `Ray` and `Bounds`, each laid out as its
-  FenrirMath counterpart (`Math::Vec2` to `Math::Mat4`, `Fenrir::Colour`, `Math::Ray`, `Math::AABB`). It is pure managed
-  code with no native functions, so any package's contract can use it. `Colour`, `Ray` and `Bounds` are generated
-  (ADR-0043): the math binding, `api/FenrirMath.binding.toml`, binds FenrirMath's API description to the contract's
-  `Generated/` mirrors, beside which `Colour.cs`, `Ray.cs` and `Bounds.cs` add only behaviour (constructors, operators,
-  conversions), and to `include/FenrirScripting/Generated/FenrirMathMappings.hpp`, and runs its defaults test in this
+  holds `Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Matrix4x4`, `Colour`, `Ray`, `Bounds` and `Frustum`, each laid
+  out as its FenrirMath counterpart (`Math::Vec2` to `Math::Mat4`, `Fenrir::Colour`, `Math::Ray`, `Math::AABB`,
+  `Math::Frustum`). It is pure managed
+  code with no native functions, so any package's contract can use it. `Colour`, `Ray`, `Bounds` and `Frustum` are
+  generated (ADR-0043): the math binding, `api/FenrirMath.binding.toml`, binds FenrirMath's API description to the contract's
+  `Generated/` mirrors, beside which `Colour.cs`, `Ray.cs`, `Bounds.cs` and `Frustum.cs` add only behaviour (constructors,
+  operators, conversions, the frustum's tests), and to `include/FenrirScripting/Generated/FenrirMathMappings.hpp`, and runs its defaults test in this
   package's tests (`Tests/Generated/FenrirMathDefaults*`). The glm types are its bound types, written by hand and mapped
   in `include/FenrirScripting/BoundMappings.hpp`. Every other binding names these types through `uses` (the built-in's
   and FenrirPhysics's do), so each has one C# type and one mapping. The scripting contract is built on it
@@ -204,8 +205,8 @@ public struct Health : IComponent { public int Current; public int Max; }
   mappings, which name them as `Fenrir.Math`'s `Vector3` and `Quaternion` and the contract's `Transform` and
   `Entity`. An `Entity` member then maps as itself, and C# sees it as an `Entity`, as in `Relationship`. The same
   header brings the math binding's (`include/FenrirScripting/Generated/FenrirMathMappings.hpp`, from
-  `api/FenrirMath.binding.toml`): FenrirMath's `Fenrir::Colour`, `Math::Ray` and `Math::AABB`, generated as
-  `Fenrir.Math`'s `Colour`, `Ray` and `Bounds`, and the hand-written mappings of its glm types
+  `api/FenrirMath.binding.toml`): FenrirMath's `Fenrir::Colour`, `Math::Ray`, `Math::AABB` and `Math::Frustum`, generated
+  as `Fenrir.Math`'s `Colour`, `Ray`, `Bounds` and `Frustum`, and the hand-written mappings of its glm types
   (`include/FenrirScripting/BoundMappings.hpp`): `Math::Vec2`, `Vec4` and `Mat4` as `Vector2`, `Vector4` and
   `Matrix4x4` (glm keeps a matrix's columns private, so its mapping gives `Column0` to `Column3` by offset). A generated
   binding names these through `uses` rather than mirroring them again (ADR-0043). In a writable component the entity

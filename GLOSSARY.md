@@ -148,7 +148,7 @@ The shared assembly `Fenrir.Scripting` that every script assembly compiles again
 *Avoid:* engine API assembly, SDK (that is the contract plus its source generator).
 
 **Math contract**
-The shared assembly `Fenrir.Math` (ADR-0029): FenrirMath's types for C# (`Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Matrix4x4`, `Colour`, `Ray`, `Bounds`), each laid out as its C++ counterpart, with no native functions. The built-in extension shares it before the scripting contract, which is built on it, so every package's contract can use it. The generated bindings name its `Vector3` and `Quaternion` for FenrirMath's vector and quaternion, which FenrirMath's API description records as bound types. Since ADR-0043, `Colour`, `Ray` and `Bounds` are generated mirrors from that description, through the math binding, and the glm-backed five are bound types; `Bounds` is the one C# type for `Math::AABB`.
+The shared assembly `Fenrir.Math` (ADR-0029): FenrirMath's types for C# (`Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Matrix4x4`, `Colour`, `Ray`, `Bounds`, `Frustum`), each laid out as its C++ counterpart, with no native functions. The built-in extension shares it before the scripting contract, which is built on it, so every package's contract can use it. The generated bindings name its `Vector3` and `Quaternion` for FenrirMath's vector and quaternion, which FenrirMath's API description records as bound types. Since ADR-0043, `Colour`, `Ray`, `Bounds` and `Frustum` are generated mirrors from that description, through the math binding, and the glm-backed five are bound types; `Bounds` is the one C# type for `Math::AABB`.
 *Avoid:* math library (FenrirMath's functions stay in C++).
 
 **Scripting extension**
