@@ -18,22 +18,23 @@ FENRIR_DEMO_SMOKE=60 FENRIR_DEMO_BACKEND=null out/build/clang-x64-debug/examples
 | 3 | Sky | A plinth with a spinning box and a ring of lit spheres under the scene's `Sky`: the skybox cubemap from the shared assets (`examples/assets/skybox/`, a procedural sky with hills and a sun, loaded from `skybox.cubemap`) or Darcy Wilson's, the legacy DemoApp's sky (`examples/assets/skybox-darcy/`), or one dusk colour. The sky lights the scene too, except Darcy Wilson's, whose teal sea would tint everything: a `SkyLight` lights it with a neutral grey instead. The free-fly camera can override the `Sky` with a teal colour of its own (`ColourBackground`). | B: the scene's `Sky`, the cubemap or the dusk colour. C: the cubemap, the generated skybox (which lights the scene) or Darcy Wilson's (lit by a grey `SkyLight`). O: the camera's own background, the teal colour or the scene's `Sky`. T: the camera's tonemapper, AgX, PBR Neutral, ACES or None. E: the camera's exposure, 0, +1, +2 or -1 EV. |
 | 4 | Debug draw | Every FenrirDebugDraw shape, wire and solid, twice: a depth-tested block on the left and an on-top block on the right, both behind a low wall, each shape labelled in world text. A sphere orbits above them with an axes frame, a box, a circle (kept forever) and a label drawn relative to it. Screen text with Latin-1 accents and a `?` for a character outside it, and two keyed on-screen messages updated every frame. | 1, 2, 3: show or hide the Wire, Solid and Labels groups. T: a sphere, a label and an unkeyed message at the orbiter for three seconds. F: an arrow and label kept forever (`DebugDraw::Forever`), one more each press. X: clear the forever group. |
 | 5 | Overlay | A raw `DrawList2D` on the window overlay (`builtin:2d`): layers (a red, a green and a blue square, submitted in that order on layers 2, 1 and 0), scissors (a quad red at its top and blue at its bottom, faint in full and solid in its top-left quarter, and a yellow strip cut to its middle third) and the four blend modes (one half-transparent orange in each, over black and white stripes). Beside it a spinning cube on a floor, and the scaffold's ImGui overlay (`DemoConfig::imguiOverlay`) with an "Overlay" window: a Label text field (its text is world text over the cube), a Spin speed slider, and what the scene and the input claims say. | Space: pause or resume the cube's spin. C: the cube's colour. Left click: counted as a scene click and logged. None of the three reach the scene while ImGui has the pointer or the keyboard. |
-| 6a | Meshes and materials (C#) | Scene 1 again, built and run entirely by C# systems (`scripts/MeshesAndMaterials.cs`) on the scripting extensions: the same entities, materials and keys, with the textured box from C#'s `Renderer.SpawnModel`. The stripes shader, which C# cannot load by path, is embedded in the app and named `builtin:renderer-demo-stripes`. Only with scripting built (`FENRIR_ENABLE_SCRIPTING`), after the C++ scenes. | As scene 1. |
-| 6b | Debug draw (C#) | Scene 4 again, spawned and drawn entirely by a C# system (`scripts/DebugDrawScene.cs`) through the `Fenrir.DebugDraw` facade: the same shapes, text, groups, durations and `relativeTo` orbiter, with the same keys. Only with scripting built, after Meshes and materials (C#). | As scene 4. |
+| 6 | Painter | FenrirPainter's analytic shapes, paints and clips (`packages/FenrirPainter`), one painted `DrawList2D` on the window overlay (`builtin:painter`), each shape one quad evaluated in the shader. Row 1: a red rectangle, a blue rounded rectangle with four different radii, a dark rounded box with a border of four widths and colours, and two light cards, one over an outset shadow and one with an inset shadow. Row 2: a green circle, a yellow arc whose sweep breathes, a pink ring, a two-stop gradient, a five-stop rainbow (through the stop texture) and a circle with a radial gradient whose focal point circles inside it. Row 3: Fenrir's icon stretched, nine-sliced into a wide panel, and repeating as a pattern in a circle, and a gradient seen through a rounded clip that turns. It blends in gamma space, as a UI on the window does (ADR-0065). | G: blend in gamma or linear space (logged). Space: pause or resume the arc, the focal point and the clip. |
+| 7a | Meshes and materials (C#) | Scene 1 again, built and run entirely by C# systems (`scripts/MeshesAndMaterials.cs`) on the scripting extensions: the same entities, materials and keys, with the textured box from C#'s `Renderer.SpawnModel`. The stripes shader, which C# cannot load by path, is embedded in the app and named `builtin:renderer-demo-stripes`. Only with scripting built (`FENRIR_ENABLE_SCRIPTING`), after the C++ scenes. | As scene 1. |
+| 7b | Debug draw (C#) | Scene 4 again, spawned and drawn entirely by a C# system (`scripts/DebugDrawScene.cs`) through the `Fenrir.DebugDraw` facade: the same shapes, text, groups, durations and `relativeTo` orbiter, with the same keys. Only with scripting built, after Meshes and materials (C#). | As scene 4. |
 
 Every scene draws with 4x MSAA (`DemoConfig::msaa`) and the camera's default tonemapper, AgX (ADR-0049), checked by hand
-in the five C++ scenes on 2026-10-31: they read as before, but softer, and the overlay, drawn after `Output`, is
+in the five C++ scenes before Painter on 2026-10-31: they read as before, but softer, and the overlay, drawn after `Output`, is
 unchanged. Colours of 1 are no longer white (AgX maps 1 to 0.59), so the unlit cubes and the checkerboard are lighter
 and less saturated than their sRGB values, and the LDR skyboxes in Sky are paler and greyer than they were, their
 brightest texels well short of white; E in Sky raises the exposure to bring them back. With scripting built the scene
-list has seven scenes, so the logged scene numbers below read `/7` instead of `/5`. The ImGui overlay is on in every
+list has eight scenes, so the logged scene numbers below read `/8` instead of `/6`. The ImGui overlay is on in every
 scene; only Overlay makes an ImGui window.
 
 ## Hand checks
 
 - The window shows Fenrir's icon (`examples/assets/icons/fenrir.png`, `DemoConfig::iconPath`) in its title bar and on
   its taskbar button, not the system's default.
-- RendererDemo opens a window on Meshes and materials (`Scene 1/5: Meshes and materials` is logged):
+- RendererDemo opens a window on Meshes and materials (`Scene 1/6: Meshes and materials` is logged):
   - The textured box on the left shows the Cesium logo on each face (its base colour texture) and is lit.
   - The blue unlit cube and sphere are flat, one colour all over; the lit ones beside them are shaded, with a highlight.
   - The striped cube's diagonal yellow and black stripes scroll.
@@ -50,8 +51,9 @@ scene; only Overlay makes an ImGui window.
     brighter, then black. V hides the textured box and shows it again. C changes the three cubes' colour together.
 - Holding the right mouse button and moving the mouse looks around; with it held, WASD flies, Shift flies faster and the
   wheel changes the speed.
-- PageDown and PageUp step through the five scenes, wrapping at both ends (`Scene 2/5: Cameras and render targets`,
-  `Scene 3/5: Sky`, `Scene 4/5: Debug draw`, `Scene 5/5: Overlay` and `Scene 1/5: Meshes and materials` are logged).
+- PageDown and PageUp step through the six scenes, wrapping at both ends (`Scene 2/6: Cameras and render targets`,
+  `Scene 3/6: Sky`, `Scene 4/6: Debug draw`, `Scene 5/6: Overlay`, `Scene 6/6: Painter` and
+  `Scene 1/6: Meshes and materials` are logged).
 - F1 shows the help panel (app, scene, keys) in white text in the window's bottom-left corner, long lines wrapped, and
   logs it; F1 again hides it. It shows in every scene, over the scene and clear of the on-screen messages.
 - F3 turns the free-fly camera off (the window is cleared to black, as with no camera) and on again.
@@ -140,3 +142,19 @@ scene; only Overlay makes an ImGui window.
     another program). The cursor turns to an I-beam over the field and to a resize arrow over the window's
     bottom-right corner and its edges.
   - With an IME (Windows' Japanese IME, say), typing in the field opens its candidate window at the field's caret.
+- Painter (`FENRIR_DEMO_SCENE=Painter`):
+  - Every edge is smooth, one pixel soft, with no stair steps or seams: the rounded corners, the circle, the arc's ends,
+    the ring's two edges, the border's inner and outer edges, the turning clip's corners as it rotates, and also with
+    Windows' display scale at 150%.
+  - The rounded rectangle's corners are four sizes: sharp at the bottom left, largest at the bottom right. The border's
+    four sides are four colours and widths (thin yellow top, thick pink bottom), meeting on the corners' diagonals.
+  - The outset shadow is soft, falls down and to the right of its card and is not seen through it; the inset shadow
+    darkens the inside of its card along the top and left edges.
+  - The arc grows and shrinks from the top, clockwise, with flat ends; the five-stop gradient runs red, yellow, green,
+    blue, magenta along the diagonal; the radial gradient's bright point circles inside its disc and never leaves it.
+  - The icon is stretched in the first square; in the wide panel its corners keep their shape and only its middle
+    stretches, with no seam lines between the nine pieces; in the circle it repeats as small tiles.
+  - The orange-to-teal gradient shows only inside the turning rounded rectangle, which stays rounded as it turns.
+  - G switches to linear blending (logged as `G: the painter blends in linear space`): the gradients' middles and the
+    shadows' soft parts look lighter, the solid colours unchanged; G again switches back. Space pauses the arc, the focal
+    point and the clip, and resumes them.

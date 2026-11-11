@@ -1,6 +1,6 @@
 # FenrirDraw2D
 
-2D draw data as plain data (ADR-0027): what a UI library, a future painter or any language fills, and FenrirRenderer draws. It has no GPU code and knows no renderer, UI or language. Header-only, it depends on FenrirAssets (asset handles, `SamplerDescription`, `ColourSpace`) and FenrirMath only, and is built with `FENRIR_ENABLE_ASSETS`.
+2D draw data as plain data (ADR-0027): what a UI library, FenrirPainter's painter or any language fills, and FenrirRenderer draws. It has no GPU code and knows no renderer, UI or language. Header-only, it depends on FenrirAssets (asset handles, `SamplerDescription`, `ColourSpace`) and FenrirMath only, and is built with `FENRIR_ENABLE_ASSETS`.
 
 ## DrawList2D
 

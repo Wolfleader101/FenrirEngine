@@ -13,9 +13,9 @@
 
 **Touches:** `packages/FenrirPainter/`, `packages/CMakeLists.txt`, `README.md`, `examples/RendererDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Draw-list tests: each draw appends one quad with the expected shape data; a gradient's stops and transform land in the vertex; a nine-slice image is nine quads; the clip stack's bounds become the scissor and its radii the vertex clip; same-state draws share one command and a texture or scissor change starts another; index rollover at 65535 vertices.
-- [ ] Null-backend test: the painter's pipeline description makes one device pipeline, cached by value, and the shader's variants compile for both blend spaces.
-- [ ] GL test (skipped without a display): a rounded rectangle, a radial gradient and a bordered box drawn to an image target and read back match expected pixels at their centres and edges within a tolerance.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Draw-list tests: each draw appends one quad with the expected shape data; a gradient's stops and transform land in the vertex; a nine-slice image is nine quads; the clip stack's bounds become the scissor and its radii the vertex clip; same-state draws share one command and a texture or scissor change starts another; index rollover at 65535 vertices.
+- [x] Null-backend test: the painter's pipeline description makes one device pipeline, cached by value, and the shader's variants compile for both blend spaces.
+- [x] GL test (skipped without a display): a rounded rectangle, a radial gradient and a bordered box drawn to an image target and read back match expected pixels at their centres and edges within a tolerance.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
