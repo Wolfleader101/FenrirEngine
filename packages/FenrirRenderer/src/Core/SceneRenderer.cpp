@@ -1137,14 +1137,15 @@ namespace Fenrir::Render
         return found != m_targets.end() && found->second.revision == revision;
     }
 
-    void SceneRenderer::PrepareTarget(AssetKey key, std::uint32_t revision, PixelSize size)
+    void SceneRenderer::PrepareTarget(AssetKey key, std::uint32_t revision, PixelSize size, TextureFormat format)
     {
         ReleaseTarget(key);
         TargetEntry& entry = m_targets[key];
         entry.revision = revision;
         entry.size = size;
+        entry.format = format;
         TextureDesc desc;
-        desc.format = TextureFormat::Rgba8Srgb;
+        desc.format = format;
         desc.width = size.width;
         desc.height = size.height;
         desc.usage = TextureUsage::ColourAttachment | TextureUsage::Sampled;
@@ -2708,7 +2709,7 @@ namespace Fenrir::Render
             }
             const TargetEntry& target = m_targets.at(key);
             TextureDesc desc;
-            desc.format = TextureFormat::Rgba8Srgb;
+            desc.format = target.format;
             desc.width = target.size.width;
             desc.height = target.size.height;
             desc.usage = TextureUsage::ColourAttachment | TextureUsage::Sampled;

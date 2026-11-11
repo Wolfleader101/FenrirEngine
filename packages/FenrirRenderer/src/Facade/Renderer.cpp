@@ -1,4 +1,5 @@
 #include "FenrirRenderer/Renderer.hpp"
+#include "FenrirRenderer/ImageTargets2D.hpp"
 
 #include <algorithm>
 #include <array>
@@ -192,12 +193,21 @@ namespace Fenrir
             return true;
         }
 
-        /** @brief Whether `image` is a render target: a flat RGBA8 sRGB image with a size and no pixels (ADR-0026). */
+        /**
+         * @brief Whether `image` is a render target: a flat RGBA8 image with a size and no pixels (ADR-0026), sRGB for
+         * a camera's, sRGB or linear for an image 2D target's (ADR-0060).
+         */
         bool IsRenderTarget(const ImageData& image)
         {
-            return image.pixels.empty() && image.format == ImageFormat::RGBA8 &&
-                   image.colourSpace == ColourSpace::Srgb && image.shape == ImageShape::Flat && image.width > 0 &&
-                   image.height > 0;
+            return image.pixels.empty() && image.format == ImageFormat::RGBA8 && image.shape == ImageShape::Flat &&
+                   image.width > 0 && image.height > 0;
+        }
+
+        /** @brief A render target image's texture format: RGBA8, sRGB-encoded or linear as its colour space says. */
+        Graphics::TextureFormat RenderTargetFormat(const ImageData& image)
+        {
+            return image.colourSpace == ColourSpace::Linear ? Graphics::TextureFormat::Rgba8Unorm
+                                                            : Graphics::TextureFormat::Rgba8Srgb;
         }
 
         /**
@@ -217,7 +227,7 @@ namespace Fenrir
             const std::uint32_t revision = store.Revision(handle);
             if (!scene.IsTargetCurrent(KeyOf(handle), revision))
             {
-                scene.PrepareTarget(KeyOf(handle), revision, {data->width, data->height});
+                scene.PrepareTarget(KeyOf(handle), revision, {data->width, data->height}, RenderTargetFormat(*data));
             }
             return true;
         }
@@ -675,7 +685,8 @@ namespace Fenrir
                     resolved.problem = resolved.image.IsEmpty() ? CameraProblem::NoImage : CameraProblem::StaleImage;
                     return resolved;
                 }
-                if (!IsRenderTarget(*data))
+                // The views' Output pass writes sRGB, so a camera draws into sRGB render targets only.
+                if (!IsRenderTarget(*data) || data->colourSpace != ColourSpace::Srgb)
                 {
                     resolved.problem = CameraProblem::NotRenderTarget;
                     return resolved;
@@ -1283,14 +1294,103 @@ namespace Fenrir
             return frame;
         }
 
+        /** @brief Prepares the 2D shaders and the images `list` names, as the 2D render feature draws them. */
+        void PrepareList(Detail::RendererState& state, const AssetStore& store, const DrawList2D& list)
+        {
+            for (const PipelineDescription2D& pipeline : list.pipelines)
+            {
+                const ShaderData* data = store.TryGet(pipeline.shader);
+                if (data == nullptr)
+                {
+                    continue;
+                }
+                const std::uint32_t revision = store.Revision(pipeline.shader);
+                if (!state.draw2D->IsShaderCurrent(KeyOf(pipeline.shader), revision))
+                {
+                    state.draw2D->PrepareShader(KeyOf(pipeline.shader), revision, *data);
+                }
+            }
+            for (const Command2D& command : list.commands)
+            {
+                const auto* draw = std::get_if<DrawCommand2D>(&command);
+                if (draw == nullptr)
+                {
+                    continue;
+                }
+                for (const TextureSlot2D& slot : draw->textures)
+                {
+                    if (!slot.image.IsEmpty())
+                    {
+                        PrepareSampledImage(state, store, slot.image, "a 2D draw list");
+                    }
+                }
+            }
+        }
+
+        /**
+         * @brief The ImageTargets2D submissions this frame (ADR-0060), taken so it starts the next frame empty, grouped
+         * by image in the order of each image's first submission, with each image's texture and what its lists name
+         * prepared. A submission to an empty or stale image, or one that is not a render target, is dropped, logged
+         * once per image. With `draw` false they are only taken.
+         */
+        std::vector<Render::ImageSubmission2D> ReadImageTargets(Detail::RendererState& state, const AssetStore* store,
+                                                                bool draw)
+        {
+            std::vector<Render::ImageSubmission2D> images;
+            ImageTargets2D* targets = state.app->TryGetResource<ImageTargets2D>();
+            if (targets == nullptr)
+            {
+                return images;
+            }
+            auto taken = Detail::ImageTargetSubmissions::Take(*targets);
+            if (!draw || store == nullptr)
+            {
+                return images;
+            }
+            for (auto& [image, list] : taken)
+            {
+                const ImageData* data = store->TryGet(image);
+                if (data == nullptr || !IsRenderTarget(*data))
+                {
+                    if (state.loggedImageTargets.insert({image.index, image.generation}).second)
+                    {
+                        state.app->Logger()->Warn(
+                            "FenrirRenderer: a 2D draw list was submitted to image {}, which is {}, so it is dropped",
+                            image.index,
+                            data == nullptr ? (image.IsEmpty() ? "no image" : "stale")
+                                            : "not a render target (a flat RGBA8 image with no pixels)");
+                    }
+                    continue;
+                }
+                PrepareTarget(*state.scene, *store, image);
+                PrepareList(state, *store, list);
+                const auto found = std::find_if(images.begin(), images.end(),
+                                                [&](const auto& submitted) { return submitted.image == KeyOf(image); });
+                if (found != images.end())
+                {
+                    found->lists.push_back(std::move(list));
+                    continue;
+                }
+                Render::ImageSubmission2D& submission = images.emplace_back();
+                submission.image = KeyOf(image);
+                submission.texture = state.scene->SampledTexture(KeyOf(image));
+                submission.desc.width = data->width;
+                submission.desc.height = data->height;
+                submission.desc.format = RenderTargetFormat(*data);
+                submission.desc.usage = Graphics::TextureUsage::ColourAttachment | Graphics::TextureUsage::Sampled;
+                submission.lists.push_back(std::move(list));
+            }
+            return images;
+        }
+
         /**
          * @brief The Overlay's submissions this frame (ADR-0027), taken so it starts the next frame empty, with the
          * shaders and images they name prepared. A submission to a window other than the main window is dropped, logged
          * once per window. With `draw` false (a minimised window, or no store) they are only taken.
          */
-        Render::OverlayFrame ReadOverlay(Detail::RendererState& state, const AssetStore* store, bool draw)
+        Render::Frame2D ReadOverlay(Detail::RendererState& state, const AssetStore* store, bool draw)
         {
-            Render::OverlayFrame frame;
+            Render::Frame2D frame;
             Overlay* overlay = state.app->TryGetResource<Overlay>();
             if (overlay == nullptr)
             {
@@ -1315,30 +1415,7 @@ namespace Fenrir
                     }
                     continue;
                 }
-                const DrawList2D& list = submission.submission.list;
-                for (const PipelineDescription2D& pipeline : list.pipelines)
-                {
-                    const ShaderData* data = store->TryGet(pipeline.shader);
-                    if (data == nullptr)
-                    {
-                        continue;
-                    }
-                    const std::uint32_t revision = store->Revision(pipeline.shader);
-                    if (!state.draw2D->IsShaderCurrent(KeyOf(pipeline.shader), revision))
-                    {
-                        state.draw2D->PrepareShader(KeyOf(pipeline.shader), revision, *data);
-                    }
-                }
-                for (const Command2D& command : list.commands)
-                {
-                    for (const TextureSlot2D& slot : command.textures)
-                    {
-                        if (!slot.image.IsEmpty())
-                        {
-                            PrepareSampledImage(state, *store, slot.image, "a 2D draw list");
-                        }
-                    }
-                }
+                PrepareList(state, *store, submission.submission.list);
                 frame.submissions.push_back(std::move(submission.submission));
             }
             frame.contentScale = Window::Exists(*state.app, Window::MainWindow())
@@ -1383,7 +1460,9 @@ namespace Fenrir
             }
             state.scene->SetFrame(std::move(frame));
             state.debug->SetFrame(std::move(debug));
-            state.draw2D->SetFrame(ReadOverlay(state, store, !size.IsEmpty()));
+            Render::Frame2D frame2D = ReadOverlay(state, store, !size.IsEmpty());
+            frame2D.images = ReadImageTargets(state, store, !size.IsEmpty());
+            state.draw2D->SetFrame(std::move(frame2D));
 
             const Render::FrameReport report = state.core->RenderFrame();
             for (const std::string& error : report.errors)
@@ -1401,6 +1480,11 @@ namespace Fenrir
                 state.stats.distinctPalettesWritten = scene.palettes;
                 state.stats.skinnedDraws = scene.skinnedDraws;
                 state.stats.shadowDraws = scene.shadowDraws;
+                const Render::Stats2D twoD = state.draw2D->Stats();
+                state.stats.lists2D = twoD.lists;
+                state.stats.commands2D = twoD.commands;
+                state.stats.groups2D = twoD.groups;
+                state.stats.transientImageBytes2D = twoD.transientImageBytes;
             }
         }
 
@@ -1513,6 +1597,7 @@ namespace Fenrir
             {
                 app->RemoveResource<InstalledRenderer>();
                 app->RemoveResource<Overlay>();
+                app->RemoveResource<ImageTargets2D>();
             }
         }
     } // namespace Detail
@@ -1605,6 +1690,7 @@ namespace Fenrir
                                 });
         app.AddResource<Detail::InstalledRenderer>(Detail::InstalledRenderer{state});
         app.AddResource<Overlay>();
+        app.AddResource<ImageTargets2D>();
         return Renderer(std::move(state));
     }
 

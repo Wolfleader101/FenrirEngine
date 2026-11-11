@@ -153,6 +153,17 @@ namespace Fenrir::Render
     GraphResource RenderGraph::ImportTexture(std::string name, Graphics::TextureHandle texture,
                                              const Graphics::TextureDesc& desc)
     {
+        // A texture imported again, by another feature, say, is the same resource, so its writers and readers order.
+        if (!texture.IsEmpty())
+        {
+            for (std::size_t r = 0; r < m_resources.size(); ++r)
+            {
+                if (m_resources[r].imported && m_resources[r].importedTexture == texture)
+                {
+                    return {static_cast<std::uint32_t>(r)};
+                }
+            }
+        }
         Resource resource;
         resource.name = std::move(name);
         resource.desc = desc;

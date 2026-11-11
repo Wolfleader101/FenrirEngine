@@ -513,7 +513,7 @@ The rectangle of its render target a view draws into, given as fractions of the 
 *Avoid:* view (the drawing itself), screen rect, scissor.
 
 **Render target**
-Where a view's output goes: a window, or an image asset made with a size but no pixels, which materials and the overlay sample like any image (ADR-0026).
+Where a view's output goes: a window, or an image asset made with a size but no pixels, which materials and the overlay sample like any image (ADR-0026). An image 2D target draws into the same images, which may also be linear there (ADR-0060).
 *Avoid:* render texture (no separate type), framebuffer, scene targets (a view's own intermediate colour and depth).
 
 **Exposure**
@@ -649,7 +649,7 @@ The engine's package of 2D draw data: plain data with no GPU code, knowing no re
 *Avoid:* UI renderer, canvas (a future painter's surface), ImGui backend.
 
 **2D draw list**
-`DrawList2D`: one batch of 2D drawing as plain data: vertex and index bytes, 2D pipeline descriptions, and commands with textures, a scissor and an index range, in local logical coordinates. The same list can be shown on screen, in a texture or in the world; the target decides where.
+`DrawList2D`: one batch of 2D drawing as plain data: vertex and index bytes, 2D pipeline descriptions, and commands (draws with textures, a scissor and an index range, and the begins and ends of offscreen groups), in local logical coordinates. The same list can be shown on screen, in a texture or in the world; the target decides where.
 *Avoid:* draw list (alone: the frame's 3D one), draw data (ImGui's), display list.
 
 **2D pipeline description**
@@ -657,7 +657,7 @@ A plain value saying how a 2D draw list's triangles are drawn: shader, vertex la
 *Avoid:* material (a 3D asset), pipeline handle (the device's).
 
 **2D target**
-Where FenrirRenderer's 2D render feature draws a 2D draw list, supplying the transform from local to clip space, depth and how a scissor is realised. The window overlay is the only one built; an image target and a world-space target are planned.
+Where FenrirRenderer's 2D render feature draws a 2D draw list, supplying the transform from local to clip space, depth and how a scissor is realised. The window overlay and the image 2D target (a list drawn into an image asset, ADR-0060) are built; a world-space target is planned.
 *Avoid:* render target (a camera's image), canvas, layer.
 
 **Overlay layer**
