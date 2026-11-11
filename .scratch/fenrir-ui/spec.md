@@ -247,3 +247,33 @@ No golden images in this spec: they need a display and a tolerance model and are
 - **Research**: the three notes under `research/` are the facts this spec stands on and stay with it until the feature is built.
 - **Dependencies to add as submodules**: Yoga, HarfBuzz, FreeType, SheenBidi, libunibreak; each pinned, built static, warnings silenced, marked `SYSTEM`, following `libs/SDL`'s pattern; HarfBuzz is built with its FreeType integration on, so it shapes from FreeType's faces directly.
 - **Vocabulary**: see GLOSSARY.md's "FenrirEngine painting and UI" section (painter, paint, element, element id, UI root, control, markup document, stylesheet, scale rule) and "offscreen group" under 2D drawing.
+
+## Tickets
+
+One session, branch and PR per ticket, into `fenrir-ui` or the previous ticket's branch when stacked. The PR column is kept current as each opens.
+
+| # | Ticket | Blocked by | Branch | PR |
+|---|---|---|---|---|
+| 01 | [Offscreen groups in `DrawList2D` and the renderer's image 2D target](issues/01-offscreen-groups-and-the-image-2d-target.md) | none | `ui/01-offscreen-groups-and-the-image-2d-target` | |
+| 02 | [FenrirText: fonts, shaping, paragraphs and bitmap atlases](issues/02-fenrirtext-fonts-shaping-paragraphs-and-bitmap-atlases.md) | none | `ui/02-fenrirtext-fonts-shaping-paragraphs-and-bitmap-atlases` | |
+| 03 | [FenrirPainter: analytic shapes, paints and clips in the fat vertex](issues/03-fenrirpainter-analytic-shapes-paints-and-clips.md) | none | `ui/03-fenrirpainter-analytic-shapes-paints-and-clips` | |
+| 04 | [Painter paths and strokes](issues/04-painter-paths-and-strokes.md) | 03 | `ui/04-painter-paths-and-strokes` | |
+| 05 | [Painter groups, filters, masks and backdrop blur](issues/05-painter-groups-filters-masks-and-backdrop-blur.md) | 01, 03 | `ui/05-painter-groups-filters-masks-and-backdrop-blur` | |
+| 06 | [Painter text](issues/06-painter-text.md) | 02, 03 | `ui/06-painter-text` | |
+| 07 | [FenrirUI core: roots, elements, Yoga layout, inline style and box painting](issues/07-fenrirui-core-roots-elements-yoga-layout-inline-style-and-box-painting.md) | 03, 05 | `ui/07-fenrirui-core-roots-elements-yoga-layout-inline-style-and-box-painting` | |
+| 08 | [Stylesheet parser and cascade](issues/08-stylesheet-parser-and-cascade.md) | 07 | `ui/08-stylesheet-parser-and-cascade` | |
+| 09 | [Labels and text style](issues/09-labels-and-text-style.md) | 06, 08 | `ui/09-labels-and-text-style` | |
+| 10 | [Transitions, keyframe animations, `:intro`/`:outro` and deferred removal](issues/10-transitions-keyframe-animations-intro-outro-and-deferred-removal.md) | 08 | `ui/10-transitions-keyframe-animations-intro-outro-and-deferred-removal` | |
+| 11 | [Input routing, hover and focus, `UIEvent` and C++ listeners](issues/11-input-routing-hover-and-focus-uievent-and-cpp-listeners.md) | 07 | `ui/11-input-routing-hover-and-focus-uievent-and-cpp-listeners` | |
+| 12 | [Controls and the default stylesheet](issues/12-controls-and-the-default-stylesheet.md) | 09, 11 | `ui/12-controls-and-the-default-stylesheet` | |
+| 13 | [Text entry](issues/13-text-entry.md) | 09, 11 | `ui/13-text-entry` | |
+| 14 | [Gamepad navigation and the virtual cursor](issues/14-gamepad-navigation-and-the-virtual-cursor.md) | 11, 12 | `ui/14-gamepad-navigation-and-the-virtual-cursor` | |
+| 15 | [Markup documents](issues/15-markup-documents.md) | 09 | `ui/15-markup-documents` | |
+| 16 | [Stylesheet files, `@import`, `@font-face` and hot reload](issues/16-stylesheet-files-import-font-face-and-hot-reload.md) | 08, 15 | `ui/16-stylesheet-files-import-font-face-and-hot-reload` | |
+| 17 | [UIDemo: the HUD](issues/17-uidemo-the-hud.md) | 04, 10, 15, 16 | `ui/17-uidemo-the-hud` | |
+| 18 | [UIDemo: the pause menu](issues/18-uidemo-the-pause-menu.md) | 12, 13, 14, 17 | `ui/18-uidemo-the-pause-menu` | |
+| 19 | [Scripting: text and painter facades](issues/19-scripting-text-and-painter-facades.md) | 06 | `ui/19-scripting-text-and-painter-facades` | |
+| 20 | [Scripting: UI handles, events and the hosted paint stage](issues/20-scripting-ui-handles-events-and-the-hosted-paint-stage.md) | 16, 18, 19 | `ui/20-scripting-ui-handles-events-and-the-hosted-paint-stage` | |
+| 21 | [Image-target UI roots and the menu in a texture](issues/21-image-target-ui-roots-and-the-menu-in-a-texture.md) | 18 | `ui/21-image-target-ui-roots-and-the-menu-in-a-texture` | |
+| 22 | [SDF text mode](issues/22-sdf-text-mode.md) | 06, 16 | `ui/22-sdf-text-mode` | |
+| 23 | [World-space 2D target, world UI roots and the pointer ray](issues/23-world-space-2d-target-world-ui-roots-and-the-pointer-ray.md) | 14, 21, 22 | `ui/23-world-space-2d-target-world-ui-roots-and-the-pointer-ray` | |
