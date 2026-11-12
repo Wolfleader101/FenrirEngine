@@ -239,6 +239,26 @@ State a package keeps in one scene, one value per type, ended with the scene (a 
 State a package keeps for the whole app rather than one scene, one value per type, ended with the App (the input devices and the asset store are ones).
 *Avoid:* singleton, global, app-wide state (informal).
 
+**FenrirTypes**
+The package that holds the engine's type registry and the kinds a described type's fields may have. It knows no file format and no language (ADR-0060).
+*Avoid:* reflection package, FenrirReflection, FenrirSerialisation (file reading is another package's).
+
+**Type registry**
+The run-time table of every described type the running engine knows, by canonical name: its role, fields, kinds, defaults, docs and metadata, filled from each package's generated type registration at `Install` and from C# at admission. A file reader, writer or inspector reaches a type's fields only through it (ADR-0060).
+*Avoid:* reflection, RTTI, ClassDB, type database.
+
+**Type registration**
+The generated C++ a package compiles in that registers its described types with the type registry, written from the package's API description by `tools/generate-type-registry` and committed beside it, as a binding's generated mirrors are (ADR-0060).
+*Avoid:* reflection data, type table, registry entry.
+
+**Canonical type name**
+The one name a type has in files and in the type registry, in every language: the API description's spelling for a C++ type (`Fenrir::Transform`) and the full name for a C# one (`MyGame.WeaponData`). A renamed type keeps reading under its former names (ADR-0060).
+*Avoid:* type id, GUID, class name (a C# spelling of a C++ type).
+
+**Open slot**
+A described field whose value may be of any registered type assignable to a named base, chosen per file rather than fixed by the C++ (a tagged union's kinds are fixed). The file writes the value's canonical type name beside it (ADR-0060).
+*Avoid:* polymorphic field, variant, any.
+
 ## FenrirEngine physics
 
 **FenrirPhysics**

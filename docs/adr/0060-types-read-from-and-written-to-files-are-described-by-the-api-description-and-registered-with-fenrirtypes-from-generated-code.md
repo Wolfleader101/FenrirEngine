@@ -1,0 +1,34 @@
+---
+status: accepted
+---
+
+# Types read from and written to files are described by the API description and registered with FenrirTypes from generated code
+
+Scene files and game-defined data assets need the engine to know a type's fields at run time: the API description (ADR-0042) records them, but only generators read it, the ECS knows sizes and alignments alone, `ComponentType` carries no name, and the one name-to-component table lives in FenrirScripting, present only when scripting is installed. The description also refuses anything that is not trivially copyable, so a type holding a string or a list cannot be described at all.
+
+We decided that **the API description stays the one description of a type, widened to say what files need, and that a generated registration per package fills a run-time type registry in a new package, FenrirTypes**:
+
+1. **The header stays the one hand-written source** for a C++ type, for engine packages and for games alike: a game runs `describe-api` on its own headers through the same CMake function and commits its own description and registration, needing the .NET SDK at development time as C# scripting already does. No registration macros, no intrusive templates, no hand-filled registry.
+2. **A second generator reads the description and writes C++**, as the C# binding does: a committed registration per package, compiled in, that registers each type with the registry at `Install`. The engine parses no description at run time and ships no description file.
+3. **Two rules under one description.** Components, events and resources keep the plain-data rule: trivially copyable, fixed layout, read and written by offset, so a C# script component stored as bytes is read the same way. A type in the `data-asset` role may hold `std::string`, `std::vector<T>`, `std::optional<T>`, nested structs by value and typed references to assets and data assets; the description records them as kinds (`string`, `list`, `optional`, `reference`) without using their offsets, and the registration carries a per-type visitor so nothing pokes an owning type's bytes. A component holding a string is still refused with a diagnostic.
+4. **One visitor interface.** The registry's generic access is a push-model visit over an instance's fields (name, kind, metadata, a reference to the value), used alike by the file writer, the file reader, an inspector and C# bridging. Fixed-layout types get a table-driven visitor emitted from their offsets, owning types a generated one; a caller cannot tell which, and nothing else reads offsets.
+5. **The description can say what files need:** an **open slot** (a field by value or by reference whose type is any registered type assignable to a named base, written as the value's type name beside the value), a per-type `version`, a `formerly` list per type and per field, and a fixed vocabulary of editor metadata (range, step, display name, group, read-only, hidden, multiline, units), all carried as doc commands in C++ (as the natives' `@param` and `@facade` already are) and as attributes in C#. Doc text is compiled into the registration.
+6. **Files name types by the description's canonical name** (`Fenrir::Transform`, `MyGame.WeaponData`): one namespace across languages, no stable ids per type or field; renames read through the `formerly` lists and are rewritten on the next save.
+7. **C# types enter the same registry at admission.** A C# component is registered with its fields, kinds, offsets and a `new T()` default, so a scene file can write and read it without C++ seeing its definition; a C# data asset type arrives the same way through a description generated on the C# side.
+8. **Roles mirror the description's**, plus `data-asset`: a component registers its name and `ComponentType`; a scene or app resource a type-erased add, get and remove; a data asset construct, destroy, fields and visitor; shared structs and enums as nested values. Resources with behaviour (`PhysicsWorld`, `SkeletonPoses`, `DebugDraw`) are not described and are not in the registry.
+
+## Considered options
+
+- **Parse the committed `api.json` at run time.** No second generator, but a JSON library inside the engine, a description file to find and ship with every build, and types known only as data with no compile-time check that the registered layout is the built one. The generated registration is checked by the compiler and by the dirty-tree check CI already runs.
+- **Registration macros or intrusive templates per type** (Godot's `_bind_methods`, O3DE's `Reflect()`, RTTR). Three or four lines per field, no doc comments, and a second spelling of every member; the research found no engine with a header-driven generator that chose this.
+- **Engine-owned string and list types with a committed layout**, so the byte-poking reader covers data assets too. One rule, but game code would write `Fenrir::String` and `Fenrir::List<T>` instead of the standard library, and the C# side would need their layouts; the visitor costs one generated function per type instead.
+- **Stable ids (GUIDs) per type and field** (O3DE, Unreal Blueprints). Renames for free, but every file carries opaque ids beside names, and a hand edit cannot spell one; the `formerly` list pays per rename, which is rare.
+- **A dynamic property bag as the data asset** (Godot's `Dictionary`, O3DE's Lua properties). No reflection problem at all, but no typed C++ or C# access, which is the point of a data asset.
+
+## Consequences
+
+- A new package, FenrirTypes, below FenrirECS, holds the described kinds and the registry (register, look up by name, iterate fields, visit a value) and nothing else; FenrirECS depends on it so a `ComponentType` is found by name, FenrirScene for resources, FenrirAssets for data assets, FenrirScripting fills it at admission.
+- `tools/describe-api` gains the `data-asset` role, the owning kinds, the open slot, `@version`, `@formerly` and the metadata commands; a new tool beside it, `tools/generate-type-registry`, reads the description and writes the registration, configured by a `[registration]` table in the package's `.api.toml`, under one `fenrir-generate-type-registry` target the ordinary build never runs. CI's dirty-tree check gains it and runs with the renderer on, closing the gap that left FenrirWindow's and FenrirRenderer's descriptions unchecked.
+- What "assignable to a base" means for an open slot, how a reader treats an older version, and how a C# data asset's strings and lists cross are decided by the data asset, format and C# tickets of the serialisation map; this decision only guarantees the description and registry can carry them.
+- Doc text ships in the registration until the cooked-form work adds an option to strip it.
+- The generated registration is a second consumer of the description, so a change to `SCHEMA.md` changes two generators and Iris's copy of the schema.
