@@ -272,7 +272,7 @@ One session, branch and PR per ticket, into `fenrir-ui` or the previous ticket's
 | 16 | [Stylesheet files, `@import`, `@font-face` and hot reload](issues/16-stylesheet-files-import-font-face-and-hot-reload.md) | 08, 15 | `ui/16-stylesheet-files-import-font-face-and-hot-reload` | |
 | 17 | [UIDemo: the HUD](issues/17-uidemo-the-hud.md) | 04, 10, 15, 16 | `ui/17-uidemo-the-hud` | |
 | 18 | [UIDemo: the pause menu](issues/18-uidemo-the-pause-menu.md) | 12, 13, 14, 17 | `ui/18-uidemo-the-pause-menu` | |
-| 19 | [Scripting: text and painter facades](issues/19-scripting-text-and-painter-facades.md) | 06 | `ui/19-scripting-text-and-painter-facades` | |
+| 19 | [Scripting: text and painter facades](issues/19-scripting-text-and-painter-facades.md) | 06 | `ui/19-scripting-text-and-painter-facades` | [#341](https://github.com/Wolfleader101/FenrirEngine/pull/341) |
 | 20 | [Scripting: UI handles, events and the hosted paint stage](issues/20-scripting-ui-handles-events-and-the-hosted-paint-stage.md) | 16, 18, 19 | `ui/20-scripting-ui-handles-events-and-the-hosted-paint-stage` | |
 | 21 | [Image-target UI roots and the menu in a texture](issues/21-image-target-ui-roots-and-the-menu-in-a-texture.md) | 18 | `ui/21-image-target-ui-roots-and-the-menu-in-a-texture` | |
 | 22 | [SDF text mode](issues/22-sdf-text-mode.md) | 06, 16 | `ui/22-sdf-text-mode` | |
