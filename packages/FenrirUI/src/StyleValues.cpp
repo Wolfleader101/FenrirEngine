@@ -1094,6 +1094,140 @@ namespace Fenrir::Detail
             return true;
         }
 
+        bool ParseTextShadow(std::string_view value, std::vector<Shadow>& out, StyleParseContext& context)
+        {
+            std::vector<Shadow> shadows;
+            if (!ParseBoxShadow(value, shadows, context))
+            {
+                context.error = "it is not a list of offset-x offset-y [blur] [colour], or none";
+                return false;
+            }
+            if (std::any_of(shadows.begin(), shadows.end(), [](const Shadow& shadow) { return shadow.spread != 0.0f; }))
+            {
+                return Fail(context, "a text shadow takes no spread: it is offset-x offset-y [blur] [colour]");
+            }
+            out = std::move(shadows);
+            return true;
+        }
+
+        bool ParseFontFamily(std::string_view value, std::string& out, StyleParseContext& context)
+        {
+            // CSS tries a list's families in turn; a FenrirText family has its own fallbacks, so the first is taken.
+            const std::vector<std::string_view> families = Split(value, ',');
+            std::string_view family = families.empty() ? std::string_view{} : Trim(families.front());
+            std::string name;
+            if (family.size() >= 2 && (family.front() == '"' || family.front() == '\'') &&
+                family.back() == family.front())
+            {
+                name = std::string(family.substr(1, family.size() - 2));
+            }
+            else
+            {
+                // An unquoted name is its words with single spaces between them.
+                for (const std::string_view word : Split(family, ' '))
+                {
+                    name += name.empty() ? "" : " ";
+                    name += word;
+                }
+            }
+            if (name.empty())
+            {
+                return Fail(context, "it is not a font family's name");
+            }
+            out = std::move(name);
+            return true;
+        }
+
+        bool ParseFontWeight(std::string_view value, std::uint16_t& out, StyleParseContext& context)
+        {
+            if (const std::optional<std::uint16_t> keyword =
+                    ReadKeyword(value, std::array{std::pair{std::string_view("normal"), FontWeightNormal},
+                                                  std::pair{std::string_view("bold"), FontWeightBold}}))
+            {
+                out = *keyword;
+                return true;
+            }
+            const std::optional<float> number = PlainNumber(value);
+            if (!number || *number < 1.0f || *number > 1000.0f)
+            {
+                return Fail(context, "it is not normal, bold, or a weight from 1 to 1000");
+            }
+            out = static_cast<std::uint16_t>(std::lround(*number));
+            return true;
+        }
+
+        bool ParseFontStyle(std::string_view value, FontStyle& out, StyleParseContext& context)
+        {
+            // FenrirText's faces are upright or italic; an oblique asks for the italic.
+            return ParseKeyword(value, out, context,
+                                std::array{std::pair{std::string_view("normal"), FontStyle::Normal},
+                                           std::pair{std::string_view("italic"), FontStyle::Italic},
+                                           std::pair{std::string_view("oblique"), FontStyle::Italic}});
+        }
+
+        bool ParseTextAlign(std::string_view value, TextAlign& out, StyleParseContext& context)
+        {
+            return ParseKeyword(value, out, context,
+                                std::array{std::pair{std::string_view("start"), TextAlign::Start},
+                                           std::pair{std::string_view("end"), TextAlign::End},
+                                           std::pair{std::string_view("left"), TextAlign::Left},
+                                           std::pair{std::string_view("right"), TextAlign::Right},
+                                           std::pair{std::string_view("center"), TextAlign::Center}});
+        }
+
+        bool ParseLineHeight(std::string_view value, Length& out, StyleParseContext& context)
+        {
+            value = Trim(value);
+            if (EqualsIgnoringCase(value, "normal"))
+            {
+                out = Length::Auto();
+                return true;
+            }
+            if (const std::optional<float> number = PlainNumber(value); number && *number >= 0.0f)
+            {
+                // A number scales with the element's own font-size, as a percentage does here.
+                out = Length::Percent(*number * 100.0f);
+                return true;
+            }
+            const std::optional<Length> length = ReadLength(value);
+            if (!length || length->unit == LengthUnit::Auto || length->value < 0.0f)
+            {
+                return Fail(context, "it is not normal, a number, a percentage or a length in px of zero or more");
+            }
+            out = *length;
+            return true;
+        }
+
+        bool ParseLetterSpacing(std::string_view value, float& out, StyleParseContext& context)
+        {
+            if (EqualsIgnoringCase(Trim(value), "normal"))
+            {
+                out = 0.0f;
+                return true;
+            }
+            const std::optional<float> pixels = Pixels(value);
+            if (!pixels)
+            {
+                return Fail(context, "it is not normal or a length in px");
+            }
+            out = *pixels;
+            return true;
+        }
+
+        bool ParseWhiteSpace(std::string_view value, WhiteSpace& out, StyleParseContext& context)
+        {
+            return ParseKeyword(value, out, context,
+                                std::array{std::pair{std::string_view("normal"), WhiteSpace::Normal},
+                                           std::pair{std::string_view("nowrap"), WhiteSpace::NoWrap}});
+        }
+
+        bool ParseTextOverflow(std::string_view value, TextOverflow& out, StyleParseContext& context)
+        {
+            return ParseKeyword(value, out, context,
+                                std::array{std::pair{std::string_view("clip"), TextOverflow::Clip},
+                                           std::pair{std::string_view("ellipsis"), TextOverflow::Ellipsis}});
+        }
+
         bool ParseTransform(std::string_view value, std::vector<TransformStep>& out, StyleParseContext& context)
         {
             if (EqualsIgnoringCase(Trim(value), "none"))
@@ -1525,7 +1659,20 @@ namespace Fenrir::Detail
 
     bool IsInherited(StyleProperty property) noexcept
     {
-        return property == StyleProperty::PointerEvents || property == StyleProperty::Cursor;
+        return property == StyleProperty::PointerEvents || property == StyleProperty::Cursor ||
+               (property >= StyleProperty::Color && property <= StyleProperty::TextOverflow);
+    }
+
+    void Inherit(const ResolvedStyle& parent, ResolvedStyle& style)
+    {
+        for (std::size_t i = 0; i < StylePropertyCount; ++i)
+        {
+            const auto property = static_cast<StyleProperty>(i);
+            if (IsInherited(property))
+            {
+                CopyProperty(property, parent, style);
+            }
+        }
     }
 
     namespace
@@ -1535,13 +1682,10 @@ namespace Fenrir::Detail
             "background", "flex",    "gap",    "transition",   "animation",
         };
 
-        // The spec's property set that the style does not hold yet: text (ticket 09), scrollbars (12), and the filters
-        // and background-position.
-        constexpr std::array<std::string_view, 16> LaterLonghands{
-            "color",           "font-family",         "font-size",       "font-weight",
-            "font-style",      "text-align",          "line-height",     "letter-spacing",
-            "text-shadow",     "white-space",         "text-overflow",   "filter",
-            "backdrop-filter", "background-position", "scrollbar-color", "scrollbar-width",
+        // The spec's property set that the style does not hold yet: scrollbars (ticket 12), and the filters and
+        // background-position.
+        constexpr std::array<std::string_view, 5> LaterLonghands{
+            "filter", "backdrop-filter", "background-position", "scrollbar-color", "scrollbar-width",
         };
 
         bool IsTimingFunction(std::string_view text)

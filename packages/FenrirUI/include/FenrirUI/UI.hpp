@@ -15,6 +15,7 @@
 namespace Fenrir
 {
     class App;
+    class FontLibrary;
 
     /** @brief The UI's switches for every root (ADR-0063: each technique is a switch). */
     struct UISettings
@@ -73,6 +74,13 @@ namespace Fenrir
             return m_painterShader;
         }
 
+        /**
+         * @brief The fonts every root lays its text out with: the app's FontLibrary resource, which UI::Install adds
+         * when the app has none. Register a family on it (FontLibrary::AddFace) for `font-family` to name. Null when
+         * the app has none.
+         */
+        [[nodiscard]] FontLibrary* GetFonts() const noexcept;
+
         /** @brief Runs every root's frame, in drawing order; the PostUpdate system calls it. */
         void Frame();
 
@@ -105,9 +113,10 @@ namespace Fenrir
       public:
         /**
          * @brief Installs the painter (Painting::Install, so FenrirAssets' `Assets::Install` first), adds the UIRoots
-         * resource and the sequential PostUpdate system that runs the roots' frames. A root on a window overlay draws
-         * once the renderer is installed (it adds the overlay) and the window exists. Without an asset store, or with
-         * a UI already installed, it logs why and returns an owner whose IsValid is false.
+         * resource and the sequential PostUpdate system that runs the roots' frames, and adds a FontLibrary resource
+         * over the asset store when the app has none (the owner removes the one it added). A root on a window overlay
+         * draws once the renderer is installed (it adds the overlay) and the window exists. Without an asset store, or
+         * with a UI already installed, it logs why and returns an owner whose IsValid is false.
          */
         [[nodiscard]] static UI Install(App& app, UIConfig config = {});
 
@@ -124,9 +133,14 @@ namespace Fenrir
         }
 
       private:
-        UI(App* app, std::optional<Painting> painting) noexcept;
+        UI(App* app, std::optional<Painting> painting, bool ownsFonts) noexcept;
+
+        /** @brief Removes the resources Install added. */
+        void Uninstall() noexcept;
 
         App* m_app = nullptr;
         std::optional<Painting> m_painting;
+        /** @brief Whether Install added the FontLibrary resource. */
+        bool m_ownsFonts = false;
     };
 } // namespace Fenrir

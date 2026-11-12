@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "Cascade.hpp"
+#include "ElementText.hpp"
 #include "FenrirPainter/StopTexture.hpp"
 #include "FenrirUI/Element.hpp"
 #include "FenrirUI/UIRoot.hpp"
@@ -50,6 +51,8 @@ namespace Fenrir::Detail
         ElementId parent;
         std::vector<ElementId> children;
         LayoutNode* node = nullptr;
+        /** @brief Its text and paragraph; null until UIRoot::SetText gives it some. */
+        std::unique_ptr<ElementText> text;
         ElementBoxes boxes;
         /** @brief Its style needs resolving. */
         bool styleDirty = true;
@@ -81,6 +84,8 @@ namespace Fenrir::Detail
         float scale = 1.0f;
         /** @brief Target pixels per UI unit, which the rectangles were last snapped at; zero before any were. */
         float snappedAt = 0.0f;
+        /** @brief Target pixels per UI unit, which text is laid out at: the scale times the content scale. */
+        float textPixelsPerUnit = 1.0f;
         UIRootStats stats;
         /** @brief The rows of its gradients with more than two stops, made on its first frame. */
         std::optional<StopTexture> stops;
