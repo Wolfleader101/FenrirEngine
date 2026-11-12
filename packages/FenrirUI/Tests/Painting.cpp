@@ -1,0 +1,375 @@
+// Box painting through a capturing target (the spec's seams 1 and 2): a laid-out tree in, the root's draw list out.
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <memory>
+#include <numbers>
+#include <variant>
+#include <vector>
+
+#include <catch2/catch_test_macros.hpp>
+
+#include "FenrirAssets/AssetStore.hpp"
+#include "FenrirPainter/PainterVertex.hpp"
+#include "UITestApp.hpp"
+
+namespace
+{
+    constexpr std::uint32_t Rgba8(std::uint32_t r, std::uint32_t g, std::uint32_t b, std::uint32_t a)
+    {
+        return r | (g << 8u) | (b << 16u) | (a << 24u);
+    }
+
+    std::vector<Fenrir::PainterVertex> Vertices(const Fenrir::DrawList2D& list)
+    {
+        std::vector<Fenrir::PainterVertex> vertices(list.vertices.size() / sizeof(Fenrir::PainterVertex));
+        std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(Fenrir::PainterVertex));
+        return vertices;
+    }
+
+    // Each quad's first vertex, in the order drawn: every painter box is one quad of four.
+    std::vector<Fenrir::PainterVertex> Quads(const Fenrir::DrawList2D& list)
+    {
+        const std::vector<Fenrir::PainterVertex> vertices = Vertices(list);
+        std::vector<Fenrir::PainterVertex> quads;
+        for (std::size_t i = 0; i < vertices.size(); i += 4)
+        {
+            quads.push_back(vertices[i]);
+        }
+        return quads;
+    }
+
+    Fenrir::ShapeKind ShapeOf(const Fenrir::PainterVertex& vertex)
+    {
+        return static_cast<Fenrir::ShapeKind>(vertex.kinds[0]);
+    }
+
+    Fenrir::PaintKind PaintOf(const Fenrir::PainterVertex& vertex)
+    {
+        return static_cast<Fenrir::PaintKind>(vertex.kinds[1]);
+    }
+
+    bool IsClipped(const Fenrir::PainterVertex& vertex)
+    {
+        return (vertex.kinds[2] & Fenrir::PainterFlags::Clipped) != 0;
+    }
+
+    // The quad's centre: the mean of its four corners.
+    Fenrir::Math::Vec2 CentreOf(const std::vector<Fenrir::PainterVertex>& vertices, std::size_t quad)
+    {
+        Fenrir::Math::Vec2 sum(0.0f);
+        for (std::size_t i = 0; i < 4; ++i)
+        {
+            sum += vertices[quad * 4 + i].position;
+        }
+        return sum / 4.0f;
+    }
+
+    bool Near(float a, float b, float tolerance = 1e-3f)
+    {
+        return std::abs(a - b) <= tolerance;
+    }
+
+    std::uint32_t Alpha(std::uint32_t rgba8)
+    {
+        return rgba8 >> 24u;
+    }
+} // namespace
+
+TEST_CASE("Three nested panels paint their shadow, boxes and clipped children inside one opacity group, in tree order",
+          "[ui][paint]")
+{
+    UITest::UITestApp test;
+    std::shared_ptr<UITest::CaptureTarget> target;
+    Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
+    const Fenrir::ElementId outer = root.Create(root.GetRootElement(), "panel");
+    for (const auto& [name, value] : {std::pair{"margin-left", "10px"},
+                                      {"margin-top", "10px"},
+                                      {"width", "200px"},
+                                      {"height", "100px"},
+                                      {"padding-left", "10px"},
+                                      {"padding-top", "10px"},
+                                      {"padding-right", "10px"},
+                                      {"padding-bottom", "10px"},
+                                      {"background-color", "#ff0000"},
+                                      {"border-top-left-radius", "8px"},
+                                      {"border-top-right-radius", "8px"},
+                                      {"border-bottom-right-radius", "8px"},
+                                      {"border-bottom-left-radius", "8px"},
+                                      {"border-top-width", "2px"},
+                                      {"border-right-width", "2px"},
+                                      {"border-bottom-width", "2px"},
+                                      {"border-left-width", "2px"},
+                                      {"border-top-color", "#0000ff"},
+                                      {"border-right-color", "#0000ff"},
+                                      {"border-bottom-color", "#0000ff"},
+                                      {"border-left-color", "#0000ff"},
+                                      {"box-shadow", "0 4px 8px rgba(0, 0, 0, 0.5)"},
+                                      {"opacity", "0.5"},
+                                      {"overflow", "hidden"}})
+    {
+        INFO(name << ": " << value);
+        REQUIRE(root.SetStyleProperty(outer, name, value));
+    }
+    const Fenrir::ElementId middle = root.Create(outer, "panel");
+    REQUIRE(root.SetStyleProperty(middle, "flex-grow", "1"));
+    REQUIRE(root.SetStyleProperty(middle, "background-color", "#00ff00"));
+    root.EditInlineStyle(middle)->SetBorderRadius(Fenrir::CornerRadii::All(4.0f));
+    const Fenrir::ElementId inner = root.Create(middle, "panel");
+    REQUIRE(root.SetStyleProperty(inner, "width", "20px"));
+    REQUIRE(root.SetStyleProperty(inner, "height", "20px"));
+    REQUIRE(root.SetStyleProperty(inner, "background-color", "#ffffff"));
+    test.Frame();
+
+    REQUIRE(target->lists.size() == 1);
+    const Fenrir::DrawList2D& list = target->lists.front();
+    INFO("a group, the outer panel's draws, its clipped children's draws, the group's end");
+    REQUIRE(list.commands.size() == 4);
+    REQUIRE(std::holds_alternative<Fenrir::BeginGroup2D>(list.commands[0]));
+    REQUIRE(std::holds_alternative<Fenrir::DrawCommand2D>(list.commands[1]));
+    REQUIRE(std::holds_alternative<Fenrir::DrawCommand2D>(list.commands[2]));
+    REQUIRE(std::holds_alternative<Fenrir::EndGroup2D>(list.commands[3]));
+
+    const auto& begin = std::get<Fenrir::BeginGroup2D>(list.commands[0]);
+    INFO("the group covers the panel and its shadow, 4 down and blurred 8 out: x 2 to 218, y 6 to 122");
+    REQUIRE(Near(begin.bounds.x, 2.0f));
+    REQUIRE(Near(begin.bounds.y, 6.0f));
+    REQUIRE(Near(begin.bounds.width, 216.0f));
+    REQUIRE(Near(begin.bounds.height, 116.0f));
+    INFO("the group composites at the panel's opacity");
+    REQUIRE(Near(std::get<Fenrir::EndGroup2D>(list.commands[3]).opacity, 0.5f));
+
+    const std::vector<Fenrir::PainterVertex> vertices = Vertices(list);
+    const std::vector<Fenrir::PainterVertex> quads = Quads(list);
+    INFO("five boxes: shadow, background and border of the outer panel, then the middle and inner backgrounds");
+    REQUIRE(quads.size() == 5);
+    REQUIRE(ShapeOf(quads[0]) == Fenrir::ShapeKind::Shadow);
+    REQUIRE(ShapeOf(quads[1]) == Fenrir::ShapeKind::RoundedRectangle);
+    REQUIRE(ShapeOf(quads[2]) == Fenrir::ShapeKind::Border);
+    REQUIRE(ShapeOf(quads[3]) == Fenrir::ShapeKind::RoundedRectangle);
+    REQUIRE(ShapeOf(quads[4]) == Fenrir::ShapeKind::RoundedRectangle);
+    INFO("opaque colours: the group, not the vertices, fades them");
+    REQUIRE(quads[1].colour == Rgba8(255, 0, 0, 255));
+    REQUIRE(quads[2].borderColours[0] == Rgba8(0, 0, 255, 255));
+    REQUIRE(quads[3].colour == Rgba8(0, 255, 0, 255));
+    REQUIRE(quads[4].colour == Rgba8(255, 255, 255, 255));
+
+    INFO("the outer panel's box is its 200 x 100 border box at (10, 10), corners of 8");
+    REQUIRE(Near(quads[1].halfSize.x, 100.0f));
+    REQUIRE(Near(quads[1].halfSize.y, 50.0f));
+    REQUIRE(Near(quads[1].radii.x, 8.0f));
+    REQUIRE(Near(CentreOf(vertices, 1).x, 110.0f));
+    REQUIRE(Near(CentreOf(vertices, 1).y, 60.0f));
+    INFO("the middle panel fills the outer's content box: 176 x 76 at (22, 22)");
+    REQUIRE(Near(quads[3].halfSize.x, 88.0f));
+    REQUIRE(Near(quads[3].halfSize.y, 38.0f));
+    REQUIRE(Near(CentreOf(vertices, 3).x, 110.0f));
+    REQUIRE(Near(CentreOf(vertices, 3).y, 60.0f));
+
+    INFO("the outer panel's own boxes are not clipped");
+    REQUIRE_FALSE(IsClipped(quads[1]));
+    INFO("its children are clipped to its padding box, 196 x 96, with corners of 8 less the border's 2");
+    for (std::size_t quad : {3u, 4u})
+    {
+        REQUIRE(IsClipped(quads[quad]));
+        REQUIRE(Near(quads[quad].clipHalfSize.x, 98.0f));
+        REQUIRE(Near(quads[quad].clipHalfSize.y, 48.0f));
+        REQUIRE(Near(quads[quad].clipRadii.x, 6.0f));
+    }
+    const auto& clipped = std::get<Fenrir::DrawCommand2D>(list.commands[2]);
+    INFO("and the hardware scissor is the padding box");
+    REQUIRE(clipped.scissor.has_value());
+    REQUIRE(Near(clipped.scissor->x, 12.0f));
+    REQUIRE(Near(clipped.scissor->y, 12.0f));
+    REQUIRE(Near(clipped.scissor->width, 196.0f));
+    REQUIRE(Near(clipped.scissor->height, 96.0f));
+}
+
+TEST_CASE("Without offscreen groups, or with no children, opacity fades each box's colour", "[ui][paint]")
+{
+    UITest::UITestApp test;
+    std::shared_ptr<UITest::CaptureTarget> target;
+    Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
+    const Fenrir::ElementId leaf = root.Create(root.GetRootElement(), "panel");
+    REQUIRE(root.SetStyleProperty(leaf, "height", "10px"));
+    REQUIRE(root.SetStyleProperty(leaf, "background-color", "#ffffff"));
+    REQUIRE(root.SetStyleProperty(leaf, "opacity", "0.5"));
+    test.Frame();
+
+    const Fenrir::DrawList2D& alone = target->lists.back();
+    INFO("a leaf needs no group: its colour is faded, premultiplied");
+    REQUIRE(std::none_of(alone.commands.begin(), alone.commands.end(),
+                         [](const Fenrir::Command2D& c) { return std::holds_alternative<Fenrir::BeginGroup2D>(c); }));
+    const std::uint32_t alpha = Alpha(Quads(alone).front().colour);
+    REQUIRE((alpha == 127 || alpha == 128));
+
+    const Fenrir::ElementId child = root.Create(leaf, "panel");
+    REQUIRE(root.SetStyleProperty(child, "height", "5px"));
+    REQUIRE(root.SetStyleProperty(child, "background-color", "#ffffff"));
+    test.Roots().settings.offscreenGroups = false;
+    test.Frame();
+    const Fenrir::DrawList2D& flat = target->lists.back();
+    INFO("with groups switched off, no group is drawn and the child is faded by its parent's opacity too");
+    REQUIRE(std::none_of(flat.commands.begin(), flat.commands.end(),
+                         [](const Fenrir::Command2D& c) { return std::holds_alternative<Fenrir::BeginGroup2D>(c); }));
+    const std::vector<Fenrir::PainterVertex> quads = Quads(flat);
+    REQUIRE(quads.size() == 2);
+    const std::uint32_t childAlpha = Alpha(quads[1].colour);
+    REQUIRE((childAlpha == 127 || childAlpha == 128));
+}
+
+TEST_CASE("Siblings paint by z-index, then tree order, and display none paints nothing", "[ui][paint]")
+{
+    UITest::UITestApp test;
+    std::shared_ptr<UITest::CaptureTarget> target;
+    Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
+    const auto panel = [&](const char* colour) {
+        const Fenrir::ElementId element = root.Create(root.GetRootElement(), "panel");
+        REQUIRE(root.SetStyleProperty(element, "height", "10px"));
+        REQUIRE(root.SetStyleProperty(element, "background-color", colour));
+        return element;
+    };
+    const Fenrir::ElementId red = panel("#ff0000");
+    panel("#00ff00");
+    const Fenrir::ElementId blue = panel("#0000ff");
+    REQUIRE(root.SetStyleProperty(red, "z-index", "1"));
+    test.Frame();
+
+    std::vector<Fenrir::PainterVertex> quads = Quads(target->lists.back());
+    INFO("green and blue at z-index 0 in tree order, then red at 1 on top");
+    REQUIRE(quads.size() == 3);
+    REQUIRE(quads[0].colour == Rgba8(0, 255, 0, 255));
+    REQUIRE(quads[1].colour == Rgba8(0, 0, 255, 255));
+    REQUIRE(quads[2].colour == Rgba8(255, 0, 0, 255));
+
+    REQUIRE(root.SetStyleProperty(blue, "display", "none"));
+    test.Frame();
+    quads = Quads(target->lists.back());
+    INFO("blue is not painted");
+    REQUIRE(quads.size() == 2);
+    REQUIRE(root.GetStats().elementsPainted == 3);
+}
+
+TEST_CASE("A transform turns the element's boxes about its origin", "[ui][paint]")
+{
+    UITest::UITestApp test;
+    std::shared_ptr<UITest::CaptureTarget> target;
+    Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
+    const Fenrir::ElementId panel = root.Create(root.GetRootElement(), "panel");
+    REQUIRE(root.SetStyleProperty(panel, "width", "100px"));
+    REQUIRE(root.SetStyleProperty(panel, "height", "50px"));
+    REQUIRE(root.SetStyleProperty(panel, "background-color", "#ffffff"));
+    REQUIRE(root.SetStyleProperty(panel, "transform", "translateX(10px) rotate(90deg)"));
+    test.Frame();
+
+    const std::vector<Fenrir::PainterVertex> vertices = Vertices(target->lists.back());
+    REQUIRE(vertices.size() == 4);
+    float minX = 1e9f;
+    float maxX = -1e9f;
+    float minY = 1e9f;
+    float maxY = -1e9f;
+    for (const Fenrir::PainterVertex& vertex : vertices)
+    {
+        minX = std::min(minX, vertex.position.x);
+        maxX = std::max(maxX, vertex.position.x);
+        minY = std::min(minY, vertex.position.y);
+        maxY = std::max(maxY, vertex.position.y);
+    }
+    INFO("turned a quarter about its centre (50, 25) and moved 10 right, the box is 50 wide and 100 high about (60, "
+         "25), with the quad's one-unit anti-aliasing margin round it");
+    REQUIRE(Near((minX + maxX) / 2.0f, 60.0f));
+    REQUIRE(Near((minY + maxY) / 2.0f, 25.0f));
+    REQUIRE(Near(maxX - minX, 52.0f));
+    REQUIRE(Near(maxY - minY, 102.0f));
+    INFO("layout is not transformed");
+    REQUIRE(UITest::Near(root.GetBoxes(panel).border, {0.0f, 0.0f, 100.0f, 50.0f}));
+}
+
+TEST_CASE("Backgrounds paint gradients and images, and the root scale reaches the list", "[ui][paint]")
+{
+    UITest::UITestApp test;
+    std::shared_ptr<UITest::CaptureTarget> target;
+    // 1080-height on a 540-high target: half a logical unit per UI unit.
+    Fenrir::UIRoot& root = test.MakeRoot(target, {960.0f, 540.0f}, 1.0f, Fenrir::ScaleRule::Height1080);
+    const Fenrir::ElementId gradient = root.Create(root.GetRootElement(), "panel");
+    REQUIRE(root.SetStyleProperty(gradient, "height", "100px"));
+    REQUIRE(root.SetStyleProperty(gradient, "background-image", "linear-gradient(90deg, #000000, #ffffff)"));
+
+    Fenrir::ImageData pixels;
+    pixels.width = 2;
+    pixels.height = 2;
+    pixels.pixels.assign(16, std::byte{0xFF});
+    const Fenrir::AssetHandle<Fenrir::Image> image =
+        test.app.GetResource<Fenrir::AssetStore>().Add<Fenrir::Image>(std::move(pixels), Fenrir::AssetOwner::App());
+    const Fenrir::ElementId picture = root.Create(root.GetRootElement(), "panel");
+    root.EditInlineStyle(picture)
+        ->SetHeight(Fenrir::Length::Px(100.0f))
+        .SetBackgroundImage(Fenrir::BackgroundImage{image});
+    test.Frame();
+
+    const Fenrir::DrawList2D& list = target->lists.back();
+    const std::vector<Fenrir::PainterVertex> vertices = Vertices(list);
+    const std::vector<Fenrir::PainterVertex> quads = Quads(list);
+    REQUIRE(quads.size() == 2);
+    INFO("a linear gradient, then the image");
+    REQUIRE(PaintOf(quads[0]) == Fenrir::PaintKind::LinearGradient);
+    REQUIRE(PaintOf(quads[1]) == Fenrir::PaintKind::Image);
+    INFO("the 1920 x 100 UI unit box is 960 x 50 logical units, centred at (480, 25)");
+    REQUIRE(Near(CentreOf(vertices, 0).x, 480.0f));
+    REQUIRE(Near(CentreOf(vertices, 0).y, 25.0f));
+    INFO("the image's command samples it");
+    bool sampled = false;
+    for (const Fenrir::Command2D& command : list.commands)
+    {
+        if (const auto* draw = std::get_if<Fenrir::DrawCommand2D>(&command))
+        {
+            for (const Fenrir::TextureSlot2D& slot : draw->textures)
+            {
+                sampled = sampled || slot.image == image;
+            }
+        }
+    }
+    REQUIRE(sampled);
+}
+
+TEST_CASE("A value or property it cannot read is refused and changes nothing", "[ui][style]")
+{
+    UITest::UITestApp test;
+    std::shared_ptr<UITest::CaptureTarget> target;
+    Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
+    const Fenrir::ElementId panel = root.Create(root.GetRootElement(), "panel");
+    REQUIRE(root.SetStyleProperty(panel, "width", "10px"));
+    INFO("an unknown property");
+    REQUIRE_FALSE(root.SetStyleProperty(panel, "colour", "red"));
+    INFO("a length without a unit");
+    REQUIRE_FALSE(root.SetStyleProperty(panel, "width", "12"));
+    INFO("an unknown keyword");
+    REQUIRE_FALSE(root.SetStyleProperty(panel, "display", "grid"));
+    INFO("a malformed colour");
+    REQUIRE_FALSE(root.SetStyleProperty(panel, "background-color", "#12345"));
+    test.Frame();
+    INFO("the width it had stays");
+    REQUIRE(root.GetResolvedStyle(panel)->width == Fenrir::Length::Px(10.0f));
+
+    INFO("colours in the forms CSS writes them");
+    REQUIRE(root.SetStyleProperty(panel, "background-color", "rgb(255 0 0 / 50%)"));
+    test.Frame();
+    const Fenrir::Colour colour = root.GetResolvedStyle(panel)->backgroundColor;
+    REQUIRE(Near(colour.r, 1.0f));
+    REQUIRE(Near(colour.a, 0.5f));
+    REQUIRE(root.SetStyleProperty(panel, "background-color", "hsl(120, 100%, 50%)"));
+    test.Frame();
+    REQUIRE(Near(root.GetResolvedStyle(panel)->backgroundColor.g, 1.0f));
+    REQUIRE(Near(root.GetResolvedStyle(panel)->backgroundColor.r, 0.0f));
+    REQUIRE(root.SetStyleProperty(panel, "background-color", "transparent"));
+    test.Frame();
+    REQUIRE(Near(root.GetResolvedStyle(panel)->backgroundColor.a, 0.0f));
+    INFO("a turn is a whole rotation");
+    REQUIRE(root.SetStyleProperty(panel, "transform", "rotate(0.25turn) scale(2)"));
+    test.Frame();
+    const auto& steps = root.GetResolvedStyle(panel)->transform;
+    REQUIRE(steps.size() == 2);
+    REQUIRE(Near(steps[0].radians, std::numbers::pi_v<float> / 2.0f));
+    REQUIRE(Near(steps[1].factors.y, 2.0f));
+}
