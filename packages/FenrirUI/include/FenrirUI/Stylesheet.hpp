@@ -114,6 +114,7 @@ namespace Fenrir
     {
         std::uint32_t value = 0;
 
+        /** @brief Whether it names a sheet; one a root holds may still have been removed. */
         [[nodiscard]] constexpr bool IsValid() const noexcept
         {
             return value != 0;
@@ -134,12 +135,20 @@ namespace Fenrir
         /** @brief Parses `text`; `name` names it in what the root logs. */
         [[nodiscard]] static Stylesheet Parse(std::string_view text, std::string_view name);
 
+        /** @brief What it is called in what the root logs. */
         std::string name;
-        /** @brief In the order written, a nested rule after the rule it is in. */
+        /**
+         * @brief Its style rules in the order written: a nested rule after the rule it is in, and the declarations
+         * written after a nested rule as a rule of their own after it, with the outer rule's selectors (CSS nesting).
+         */
         std::vector<StyleRule> rules;
+        /** @brief Its `@keyframes` rules, in the order written. */
         std::vector<StyleKeyframes> keyframes;
+        /** @brief Its `@font-face` rules, in the order written. */
         std::vector<StyleFontFace> fontFaces;
+        /** @brief Its `@import`s, in the order written. */
         std::vector<StyleImport> imports;
+        /** @brief What the parser refused or did not know, by line. */
         std::vector<StyleDiagnostic> diagnostics;
     };
 } // namespace Fenrir

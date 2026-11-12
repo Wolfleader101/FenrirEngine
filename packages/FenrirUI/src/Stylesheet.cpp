@@ -14,36 +14,13 @@ namespace Fenrir
 {
     namespace
     {
-        bool IsSpace(char c)
-        {
-            return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
-        }
+        using Detail::IsSpace;
+        using Detail::Trim;
 
         bool IsNameChar(char c)
         {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
                    static_cast<unsigned char>(c) >= 0x80;
-        }
-
-        std::string_view Trim(std::string_view text)
-        {
-            while (!text.empty() && IsSpace(text.front()))
-            {
-                text.remove_prefix(1);
-            }
-            while (!text.empty() && IsSpace(text.back()))
-            {
-                text.remove_suffix(1);
-            }
-            return text;
-        }
-
-        std::string Lower(std::string_view text)
-        {
-            std::string out(text);
-            std::transform(out.begin(), out.end(), out.begin(),
-                           [](char c) { return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c; });
-            return out;
         }
 
         /** @brief `text` cut at each top-level comma, keeping what is inside parentheses and strings whole. */
@@ -58,7 +35,7 @@ namespace Fenrir
                 const char c = text[i];
                 if (quote != 0)
                 {
-                    quote = c == quote ? 0 : quote;
+                    quote = c == quote || c == '\n' ? 0 : quote;
                 }
                 else if (c == '"' || c == '\'')
                 {
@@ -179,7 +156,7 @@ namespace Fenrir
                     }
                     else
                     {
-                        const std::string lower = Lower(name);
+                        const std::string lower = Detail::Lowered(name);
                         const auto found = std::find_if(PseudoClasses.begin(), PseudoClasses.end(),
                                                         [&](const PseudoName& p) { return p.name == lower; });
                         if (found == PseudoClasses.end())
@@ -229,6 +206,13 @@ namespace Fenrir
             return selector;
         }
 
+        /** @brief Whether `value` ends in `!important`, which FenrirUI does not support. */
+        bool MentionsImportant(std::string_view value)
+        {
+            const std::size_t bang = value.rfind('!');
+            return bang != std::string_view::npos && Detail::Lowered(Trim(value.substr(bang + 1))) == "important";
+        }
+
         /** @brief Where a block's items are: what may be in it. */
         enum class BlockKind : std::uint8_t
         {
@@ -240,6 +224,24 @@ namespace Fenrir
             Descriptors,
             /** @brief Keyframe blocks: a @keyframes rule's. */
             Keyframes,
+        };
+
+        /** @brief The rule a block's rules nest in: its selectors and the specificity `&` stands for. */
+        struct NestingContext
+        {
+            /** @brief Its selectors, in canonical form. */
+            std::vector<std::string> texts;
+            /** @brief Each one's specificity as written, before nesting. */
+            std::vector<std::uint32_t> written;
+            /** @brief CSS's `&` is `:is()` of the list: the highest specificity among them. */
+            std::uint32_t specificity = 0;
+        };
+
+        /** @brief Where a rule block's declarations go: the rule, or the rule after its last nested one. */
+        struct RuleTarget
+        {
+            std::size_t index = 0;
+            bool nestedSince = false;
         };
 
         class Parser
@@ -260,7 +262,7 @@ namespace Fenrir
 
             void Run()
             {
-                ParseItems(BlockKind::TopLevel, {}, nullptr, nullptr);
+                ParseItems(BlockKind::TopLevel, nullptr, nullptr, nullptr, nullptr);
             }
 
           private:
@@ -337,7 +339,8 @@ namespace Fenrir
                     const char c = m_text[m_pos];
                     if (quote != 0)
                     {
-                        quote = c == quote ? 0 : quote;
+                        // A string ends at a newline when it is not closed, as CSS's bad strings do.
+                        quote = c == quote || c == '\n' ? 0 : quote;
                     }
                     else if (c == '"' || c == '\'')
                     {
@@ -369,7 +372,8 @@ namespace Fenrir
                     const char c = m_text[m_pos];
                     if (quote != 0)
                     {
-                        quote = c == quote ? 0 : quote;
+                        // A string ends at a newline when it is not closed, as CSS's bad strings do.
+                        quote = c == quote || c == '\n' ? 0 : quote;
                     }
                     else if (c == '"' || c == '\'')
                     {
@@ -389,12 +393,11 @@ namespace Fenrir
 
             /** @brief From a `{`: its items, then past its `}`; a block the sheet ends inside is reported at `start`.
              */
-            void ParseBlock(BlockKind kind, std::size_t start, std::string_view what,
-                            const std::vector<std::string>& selectors, std::vector<StyleDeclaration>* declarations,
-                            StyleKeyframes* keyframes)
+            void ParseBlock(BlockKind kind, std::size_t start, std::string_view what, const NestingContext* nesting,
+                            RuleTarget* target, std::vector<StyleDeclaration>* declarations, StyleKeyframes* keyframes)
             {
                 ++m_pos;
-                ParseItems(kind, selectors, declarations, keyframes);
+                ParseItems(kind, nesting, target, declarations, keyframes);
                 if (AtEnd())
                 {
                     Diagnose(start, "the block of '" + std::string(what) + "' is not closed: the sheet ends inside it");
@@ -403,7 +406,7 @@ namespace Fenrir
                 ++m_pos;
             }
 
-            void ParseItems(BlockKind kind, const std::vector<std::string>& selectors,
+            void ParseItems(BlockKind kind, const NestingContext* nesting, RuleTarget* target,
                             std::vector<StyleDeclaration>* declarations, StyleKeyframes* keyframes)
             {
                 while (true)
@@ -450,7 +453,11 @@ namespace Fenrir
                     {
                         if (kind == BlockKind::TopLevel || kind == BlockKind::Rule)
                         {
-                            ParseRule(prelude, start, selectors);
+                            ParseRule(prelude, start, nesting);
+                            if (target != nullptr)
+                            {
+                                target->nestedSince = true;
+                            }
                         }
                         else if (kind == BlockKind::Keyframes)
                         {
@@ -466,6 +473,22 @@ namespace Fenrir
                     if (!AtEnd() && m_text[m_pos] == ';')
                     {
                         ++m_pos;
+                    }
+                    if (target != nullptr)
+                    {
+                        if (target->nestedSince)
+                        {
+                            // CSS nesting: declarations after a nested rule apply after it, as a rule of their own
+                            // with the outer rule's selectors.
+                            StyleRule after;
+                            after.selectors = m_sheet.rules[target->index].selectors;
+                            after.line = LineAt(start);
+                            target->index = m_sheet.rules.size();
+                            target->nestedSince = false;
+                            m_sheet.rules.push_back(std::move(after));
+                        }
+                        ParseDeclaration(prelude, start, false, m_sheet.rules[target->index].declarations);
+                        continue;
                     }
                     if (declarations == nullptr)
                     {
@@ -488,61 +511,79 @@ namespace Fenrir
                 }
             }
 
-            void ParseRule(std::string_view prelude, std::size_t start, const std::vector<std::string>& parents)
+            void ParseRule(std::string_view prelude, std::size_t start, const NestingContext* parents)
             {
-                std::vector<std::string> texts;
+                struct Flattened
+                {
+                    std::string text;
+                    /** @brief The written specificity of the outer selector it holds, and how many times. */
+                    std::uint32_t outer = 0;
+                    std::uint32_t uses = 0;
+                };
+                std::vector<Flattened> flattened;
                 for (const std::string_view part : SplitCommas(prelude))
                 {
-                    if (parents.empty())
+                    if (parents == nullptr)
                     {
-                        texts.emplace_back(part);
+                        flattened.push_back({std::string(part)});
                         continue;
                     }
-                    // CSS nesting: & is the parent selector; a selector without one is relative to it.
-                    for (const std::string& parent : parents)
+                    // CSS nesting: & is the outer selector; a selector without one is relative to it.
+                    for (std::size_t p = 0; p < parents->texts.size(); ++p)
                     {
+                        const std::string& parent = parents->texts[p];
+                        Flattened out{{}, parents->written[p], 0};
                         if (part.find('&') == std::string_view::npos)
                         {
-                            texts.push_back(parent + " " + std::string(part));
-                            continue;
+                            out.text = parent + " " + std::string(part);
+                            out.uses = 1;
                         }
-                        std::string flattened;
-                        for (const char ch : part)
+                        else
                         {
-                            if (ch == '&')
+                            for (const char ch : part)
                             {
-                                flattened += parent;
-                            }
-                            else
-                            {
-                                flattened += ch;
+                                if (ch == '&')
+                                {
+                                    out.text += parent;
+                                    ++out.uses;
+                                }
+                                else
+                                {
+                                    out.text += ch;
+                                }
                             }
                         }
-                        texts.push_back(std::move(flattened));
+                        flattened.push_back(std::move(out));
                     }
                 }
                 StyleRule rule;
                 rule.line = LineAt(start);
-                std::vector<std::string> canonical;
-                for (const std::string& text : texts)
+                NestingContext inner;
+                for (const Flattened& item : flattened)
                 {
                     std::string error;
-                    std::optional<Selector> selector = ParseSelector(text, error);
+                    std::optional<Selector> selector = ParseSelector(item.text, error);
                     if (!selector)
                     {
                         Diagnose(start, "the rule '" + std::string(prelude) + "' was skipped: " + error);
                         SkipBlock();
                         return;
                     }
-                    canonical.push_back(selector->ToString());
+                    inner.texts.push_back(selector->ToString());
+                    inner.written.push_back(selector->specificity);
+                    if (parents != nullptr)
+                    {
+                        // `&` counts as :is() of the outer list, so its weight is the list's highest, not this one's.
+                        selector->specificity =
+                            selector->specificity - item.uses * item.outer + item.uses * parents->specificity;
+                    }
+                    inner.specificity = std::max(inner.specificity, selector->specificity);
                     rule.selectors.push_back(std::move(*selector));
                 }
                 // The rule comes before the rules nested in it, which ParseBlock adds after it.
-                const std::size_t index = m_sheet.rules.size();
+                RuleTarget target{m_sheet.rules.size(), false};
                 m_sheet.rules.push_back(std::move(rule));
-                std::vector<StyleDeclaration> declarations;
-                ParseBlock(BlockKind::Rule, start, prelude, canonical, &declarations, nullptr);
-                m_sheet.rules[index].declarations = std::move(declarations);
+                ParseBlock(BlockKind::Rule, start, prelude, &inner, &target, nullptr, nullptr);
             }
 
             void ParseKeyframe(std::string_view prelude, std::size_t start, StyleKeyframes& keyframes)
@@ -550,7 +591,7 @@ namespace Fenrir
                 StyleKeyframe keyframe;
                 for (const std::string_view part : SplitCommas(prelude))
                 {
-                    const std::string lower = Lower(part);
+                    const std::string lower = Detail::Lowered(part);
                     float percent = -1.0f;
                     if (lower == "from")
                     {
@@ -578,7 +619,7 @@ namespace Fenrir
                     }
                     keyframe.offsets.push_back(percent / 100.0f);
                 }
-                ParseBlock(BlockKind::Declarations, start, prelude, {}, &keyframe.declarations, nullptr);
+                ParseBlock(BlockKind::Declarations, start, prelude, nullptr, nullptr, &keyframe.declarations, nullptr);
                 keyframes.keyframes.push_back(std::move(keyframe));
             }
 
@@ -590,7 +631,7 @@ namespace Fenrir
                 {
                     ++m_pos;
                 }
-                const std::string name = Lower(std::string_view(m_text).substr(nameStart, m_pos - nameStart));
+                const std::string name = Detail::Lowered(std::string_view(m_text).substr(nameStart, m_pos - nameStart));
                 const std::string_view prelude = Trim(ReadPrelude());
                 const bool opensBlock = !AtEnd() && m_text[m_pos] == '{';
                 if (name == "import")
@@ -600,7 +641,7 @@ namespace Fenrir
                         ++m_pos;
                     }
                     std::string_view url = prelude;
-                    if (url.size() >= 5 && Lower(url.substr(0, 4)) == "url(" && url.back() == ')')
+                    if (url.size() >= 5 && Detail::Lowered(url.substr(0, 4)) == "url(" && url.back() == ')')
                     {
                         url = Trim(url.substr(4, url.size() - 5));
                     }
@@ -634,7 +675,8 @@ namespace Fenrir
                     StyleKeyframes keyframes;
                     keyframes.name = std::string(keyframesName);
                     keyframes.line = LineAt(start);
-                    ParseBlock(BlockKind::Keyframes, start, "@keyframes " + keyframes.name, {}, nullptr, &keyframes);
+                    ParseBlock(BlockKind::Keyframes, start, "@keyframes " + keyframes.name, nullptr, nullptr, nullptr,
+                               &keyframes);
                     m_sheet.keyframes.push_back(std::move(keyframes));
                     return;
                 }
@@ -642,7 +684,8 @@ namespace Fenrir
                 {
                     StyleFontFace face;
                     face.line = LineAt(start);
-                    ParseBlock(BlockKind::Descriptors, start, "@font-face", {}, &face.descriptors, nullptr);
+                    ParseBlock(BlockKind::Descriptors, start, "@font-face", nullptr, nullptr, &face.descriptors,
+                               nullptr);
                     m_sheet.fontFaces.push_back(std::move(face));
                     return;
                 }
@@ -676,7 +719,7 @@ namespace Fenrir
                     Add(declarations, {std::string(rawName), std::string(value), line});
                     return;
                 }
-                const std::string name = Lower(rawName);
+                const std::string name = Detail::Lowered(rawName);
                 if (value.empty())
                 {
                     Diagnose(start, "the declaration '" + name + "' was skipped: it has no value");
@@ -696,7 +739,7 @@ namespace Fenrir
                     skip("'" + name + "' is not a property FenrirUI knows");
                     return;
                 }
-                if (value.find('!') != std::string_view::npos)
+                if (MentionsImportant(value))
                 {
                     skip("!important is not supported");
                     return;

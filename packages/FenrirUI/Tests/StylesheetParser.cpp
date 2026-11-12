@@ -106,7 +106,7 @@ TEST_CASE("Descendant and child combinators and selector lists parse", "[ui][sty
     REQUIRE(SelectorTexts(sheet) == std::vector<std::string>{".menu .item > label", "#hud > .bar"});
 }
 
-TEST_CASE("Every pseudo-class parses, and counts as a class", "[ui][stylesheet]")
+TEST_CASE("Every flag pseudo-class parses to its flag, and counts as a class", "[ui][stylesheet]")
 {
     const std::vector<std::pair<std::string, Fenrir::PseudoClass>> flags{
         {"hover", Fenrir::PseudoClass::Hover},       {"active", Fenrir::PseudoClass::Active},
@@ -117,14 +117,17 @@ TEST_CASE("Every pseudo-class parses, and counts as a class", "[ui][stylesheet]"
     for (const auto& [name, flag] : flags)
     {
         const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse("button:" + name + " {}", "t");
-        INFO("the pseudo-class :" << name << " parses to its flag");
+        INFO("the pseudo-class :" << name << " parses to its flag, with a class's weight");
         REQUIRE(sheet.diagnostics.empty());
         REQUIRE(sheet.rules.size() == 1);
         const Fenrir::Selector& selector = sheet.rules[0].selectors[0];
         REQUIRE(selector.compounds[0].pseudoClasses == static_cast<std::uint16_t>(flag));
         REQUIRE(selector.specificity == Specificity(0, 1, 1));
     }
+}
 
+TEST_CASE("The structural pseudo-classes parse, and count as a class", "[ui][stylesheet]")
+{
     const std::vector<std::pair<std::string, Fenrir::StructuralPseudoClass>> structural{
         {"first-child", Fenrir::StructuralPseudoClass::FirstChild},
         {"last-child", Fenrir::StructuralPseudoClass::LastChild},
@@ -133,7 +136,7 @@ TEST_CASE("Every pseudo-class parses, and counts as a class", "[ui][stylesheet]"
     for (const auto& [name, flag] : structural)
     {
         const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse(":" + name + " {}", "t");
-        INFO("the structural pseudo-class :" << name << " parses, with no tag");
+        INFO("the structural pseudo-class :" << name << " parses alone, with no tag and a class's weight");
         REQUIRE(sheet.diagnostics.empty());
         REQUIRE(sheet.rules.size() == 1);
         const Fenrir::Selector& selector = sheet.rules[0].selectors[0];
@@ -141,10 +144,13 @@ TEST_CASE("Every pseudo-class parses, and counts as a class", "[ui][stylesheet]"
         REQUIRE(selector.compounds[0].tag.empty());
         REQUIRE(selector.specificity == Specificity(0, 1, 0));
     }
+}
 
+TEST_CASE("Pseudo-classes combine on one compound, each counting", "[ui][stylesheet]")
+{
     const Fenrir::Stylesheet combined = Fenrir::Stylesheet::Parse("button:hover:focus {}", "t");
-    INFO("pseudo-classes combine, and each counts");
-    REQUIRE(combined.rules[0].selectors[0].compounds[0].pseudoClasses ==
+    INFO("both flags are on the compound, and each adds a class's weight");
+    REQUIRE(combined.rules.at(0).selectors[0].compounds[0].pseudoClasses ==
             (static_cast<std::uint16_t>(Fenrir::PseudoClass::Hover) |
              static_cast<std::uint16_t>(Fenrir::PseudoClass::Focus)));
     REQUIRE(combined.rules[0].selectors[0].specificity == Specificity(0, 2, 1));
@@ -373,26 +379,60 @@ TEST_CASE("A malformed rule is skipped whole, and the rules after it stand", "[u
     REQUIRE(SelectorTexts(sheet) == std::vector<std::string>{"panel", "label"});
 }
 
-TEST_CASE("An unclosed block, an unclosed comment and an unknown at-rule are reported with their lines",
-          "[ui][stylesheet]")
+TEST_CASE("An unknown at-rule is skipped with its block and reported with its line", "[ui][stylesheet]")
 {
-    const Fenrir::Stylesheet atRule =
+    const Fenrir::Stylesheet sheet =
         Fenrir::Stylesheet::Parse("@media screen { panel { width: 1px; } }\nlabel { width: 2px; }\n", "at");
-    INFO("an unknown at-rule is skipped with its block, on line 1");
-    REQUIRE(HasDiagnosticOnLine(atRule, 1, "@media"));
-    REQUIRE(SelectorTexts(atRule) == std::vector<std::string>{"label"});
+    INFO("@media is named on line 1, and only the rule after its block stands");
+    REQUIRE(HasDiagnosticOnLine(sheet, 1, "@media"));
+    REQUIRE(SelectorTexts(sheet) == std::vector<std::string>{"label"});
+}
 
-    const Fenrir::Stylesheet unclosed =
-        Fenrir::Stylesheet::Parse("panel { width: 1px; }\nlabel {\n  width: 2px;\n", "u");
-    INFO("a block still open at the end is closed there, and reported at its start");
-    REQUIRE(HasDiagnosticOnLine(unclosed, 2, "label"));
-    REQUIRE(unclosed.rules.size() == 2);
-    REQUIRE(NamesAndValues(unclosed.rules[1]) == Declarations{{"width", "2px"}});
+TEST_CASE("A block still open at the end of the sheet is closed there and reported at its start", "[ui][stylesheet]")
+{
+    const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse("panel { width: 1px; }\nlabel {\n  width: 2px;\n", "u");
+    INFO("the open rule is named on line 2, and keeps what it declared");
+    REQUIRE(HasDiagnosticOnLine(sheet, 2, "label"));
+    REQUIRE(sheet.rules.size() == 2);
+    REQUIRE(NamesAndValues(sheet.rules[1]) == Declarations{{"width", "2px"}});
+}
 
-    const Fenrir::Stylesheet comment = Fenrir::Stylesheet::Parse("panel { width: 1px; }\n/* no end\nlabel {}\n", "c");
-    INFO("a comment with no end runs to the end, and is reported at its start");
-    REQUIRE(HasDiagnosticOnLine(comment, 2, "comment"));
-    REQUIRE(SelectorTexts(comment) == std::vector<std::string>{"panel"});
+TEST_CASE("A comment with no end runs to the end of the sheet and is reported at its start", "[ui][stylesheet]")
+{
+    const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse("panel { width: 1px; }\n/* no end\nlabel {}\n", "c");
+    INFO("the comment is reported on line 2, and the rule inside it is gone");
+    REQUIRE(HasDiagnosticOnLine(sheet, 2, "comment"));
+    REQUIRE(SelectorTexts(sheet) == std::vector<std::string>{"panel"});
+}
+
+TEST_CASE("A string with no closing quote ends at its line, and the rest of the sheet stands", "[ui][stylesheet]")
+{
+    const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse("panel {\n"
+                                                               "  background-image: \"ui/open.png;\n"
+                                                               "  width: 4px;\n"
+                                                               "  height: 6px;\n"
+                                                               "}\n"
+                                                               "label { width: 5px; }\n",
+                                                               "string");
+    INFO("the declaration with the open string runs to the next ; after its line, as CSS's does, and is skipped");
+    REQUIRE(HasDiagnosticOnLine(sheet, 2, "background-image"));
+    INFO("the declaration after that, and the rule after the block, stand");
+    REQUIRE(NamesAndValues(sheet.rules.at(0)) == Declarations{{"height", "6px"}});
+    REQUIRE(SelectorTexts(sheet) == std::vector<std::string>{"panel", "label"});
+}
+
+TEST_CASE("!important is refused, and a ! elsewhere in a value is not", "[ui][stylesheet]")
+{
+    const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse("panel {\n"
+                                                               "  width: 4px !important;\n"
+                                                               "  background-image: url(ui/wow!.png);\n"
+                                                               "}\n",
+                                                               "important");
+    INFO("!important is named as unsupported, on line 2");
+    REQUIRE(HasDiagnosticOnLine(sheet, 2, "!important"));
+    REQUIRE(sheet.diagnostics.size() == 1);
+    INFO("a url with a ! in its path is read");
+    REQUIRE(NamesAndValues(sheet.rules.at(0)) == Declarations{{"background-image", "url(ui/wow!.png)"}});
 }
 
 TEST_CASE("Comments are ignored anywhere, and lines count through them", "[ui][stylesheet]")
@@ -438,8 +478,35 @@ TEST_CASE("Nesting flattens to the selectors CSS nesting means", "[ui][styleshee
     INFO("each keeps its own declarations");
     REQUIRE(NamesAndValues(sheet.rules[0]) == Declarations{{"width", "10px"}});
     REQUIRE(NamesAndValues(sheet.rules[1]) == Declarations{{"width", "20px"}});
-    INFO("a flattened selector has the specificity of what it became");
-    REQUIRE(sheet.rules[1].selectors[0].specificity == Specificity(0, 2, 0));
+}
+
+TEST_CASE("A nested selector's & weighs as the outer list's highest specificity, as :is() does", "[ui][stylesheet]")
+{
+    const Fenrir::Stylesheet sheet =
+        Fenrir::Stylesheet::Parse(".card, #hero { &:hover {} > label {} .x { & .y {} } }", "is");
+    REQUIRE(sheet.diagnostics.empty());
+    REQUIRE(sheet.rules.size() == 5);
+    INFO("&:hover under .card, #hero is :is(.card, #hero):hover, an id and a class for both selectors");
+    REQUIRE(sheet.rules[1].selectors[0].ToString() == ".card:hover");
+    REQUIRE(sheet.rules[1].selectors[0].specificity == Specificity(1, 1, 0));
+    REQUIRE(sheet.rules[1].selectors[1].specificity == Specificity(1, 1, 0));
+    INFO("a relative selector counts the outer list the same way");
+    REQUIRE(sheet.rules[2].selectors[0].specificity == Specificity(1, 0, 1));
+    INFO("a level further down, & is the middle rule's list at its own highest");
+    REQUIRE(sheet.rules[4].selectors[0].ToString() == ".card .x .y");
+    REQUIRE(sheet.rules[4].selectors[0].specificity == Specificity(1, 2, 0));
+}
+
+TEST_CASE("Declarations after a nested rule apply after it, as a rule of the outer selectors", "[ui][stylesheet]")
+{
+    const Fenrir::Stylesheet sheet =
+        Fenrir::Stylesheet::Parse(".a {\n  width: 1px;\n  &.b { width: 2px; }\n  width: 3px;\n}\n", "after");
+    REQUIRE(sheet.diagnostics.empty());
+    INFO("the outer rule, the nested rule, then a rule of .a holding what came after the nested one");
+    REQUIRE(SelectorTexts(sheet) == std::vector<std::string>{".a", ".a.b", ".a"});
+    REQUIRE(NamesAndValues(sheet.rules[0]) == Declarations{{"width", "1px"}});
+    REQUIRE(NamesAndValues(sheet.rules[2]) == Declarations{{"width", "3px"}});
+    REQUIRE(sheet.rules[2].line == 4);
 }
 
 TEST_CASE("Custom properties and var() keep their text for the cascade", "[ui][stylesheet]")
@@ -468,48 +535,58 @@ TEST_CASE("Custom properties and var() keep their text for the cascade", "[ui][s
     REQUIRE(sheet.diagnostics.size() == 1);
 }
 
-TEST_CASE("Keyframes, font faces and imports are kept", "[ui][stylesheet]")
+TEST_CASE("Imports are recorded with their url and line", "[ui][stylesheet]")
 {
-    const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse("@import url(\"base.css\");\n"
-                                                               "@import 'theme.css';\n"
-                                                               "@keyframes pulse {\n"
-                                                               "  from { opacity: 0; }\n"
-                                                               "  50%, 75% { opacity: 0.5; margin: 1px; }\n"
-                                                               "  to { opacity: 1; }\n"
-                                                               "}\n"
-                                                               "@font-face {\n"
-                                                               "  font-family: \"Body\";\n"
-                                                               "  src: url(fonts/body.ttf);\n"
-                                                               "  font-weight: 700;\n"
-                                                               "}\n"
-                                                               "panel { width: 1px; }\n",
-                                                               "at-rules");
+    const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse(
+        "@import url(\"base.css\");\n@import 'theme.css';\npanel { width: 1px; }\n", "imports");
     REQUIRE(sheet.diagnostics.empty());
-    INFO("each import keeps its url and line");
+    INFO("url() and a bare string both name the sheet, without their quotes");
     REQUIRE(sheet.imports.size() == 2);
     REQUIRE(sheet.imports[0].url == "base.css");
     REQUIRE(sheet.imports[0].line == 1);
     REQUIRE(sheet.imports[1].url == "theme.css");
+    REQUIRE(sheet.imports[1].line == 2);
+    INFO("the rule after them stands");
+    REQUIRE(SelectorTexts(sheet) == std::vector<std::string>{"panel"});
+}
 
-    INFO("a keyframes rule keeps its name, each block's offsets and declarations, shorthands expanded");
+TEST_CASE("A keyframes rule keeps its name, and each block's offsets and declarations", "[ui][stylesheet]")
+{
+    const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse("@keyframes pulse {\n"
+                                                               "  from { opacity: 0; }\n"
+                                                               "  50%, 75% { opacity: 0.5; margin: 1px; }\n"
+                                                               "  to { opacity: 1; }\n"
+                                                               "}\n",
+                                                               "keyframes");
+    REQUIRE(sheet.diagnostics.empty());
     REQUIRE(sheet.keyframes.size() == 1);
     const Fenrir::StyleKeyframes& pulse = sheet.keyframes[0];
+    INFO("from is 0, to is 1, percentages are fractions, and a shorthand in a keyframe is expanded");
     REQUIRE(pulse.name == "pulse");
     REQUIRE(pulse.keyframes.size() == 3);
     REQUIRE(pulse.keyframes[0].offsets == std::vector<float>{0.0f});
     REQUIRE(pulse.keyframes[1].offsets == std::vector<float>{0.5f, 0.75f});
     REQUIRE(pulse.keyframes[1].declarations.size() == 5);
     REQUIRE(pulse.keyframes[2].offsets == std::vector<float>{1.0f});
+    INFO("a keyframes rule is not a style rule");
+    REQUIRE(sheet.rules.empty());
+}
 
-    INFO("a font face keeps its descriptors as written");
+TEST_CASE("A font face keeps its descriptors as written", "[ui][stylesheet]")
+{
+    const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse("@font-face {\n"
+                                                               "  font-family: \"Body\";\n"
+                                                               "  src: url(fonts/body.ttf);\n"
+                                                               "  font-weight: 700;\n"
+                                                               "}\n",
+                                                               "fonts");
+    REQUIRE(sheet.diagnostics.empty());
     REQUIRE(sheet.fontFaces.size() == 1);
+    INFO("each descriptor keeps its name and its value, quotes and url() included");
     REQUIRE(sheet.fontFaces[0].descriptors.size() == 3);
     REQUIRE(sheet.fontFaces[0].descriptors[0].name == "font-family");
     REQUIRE(sheet.fontFaces[0].descriptors[0].value == "\"Body\"");
     REQUIRE(sheet.fontFaces[0].descriptors[1].value == "url(fonts/body.ttf)");
-
-    INFO("the rule after them stands");
-    REQUIRE(SelectorTexts(sheet) == std::vector<std::string>{"panel"});
 }
 
 TEST_CASE("A later declaration of a property in one rule replaces the earlier", "[ui][stylesheet]")

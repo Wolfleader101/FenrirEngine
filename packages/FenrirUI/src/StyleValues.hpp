@@ -24,6 +24,15 @@ namespace Fenrir::Detail
         bool checkOnly = false;
     };
 
+    /** @brief Whether `c` is CSS whitespace. */
+    [[nodiscard]] bool IsSpace(char c);
+    /** @brief `text` without the CSS whitespace at its ends. */
+    [[nodiscard]] std::string_view Trim(std::string_view text);
+    /** @brief `c` in lower case, for ASCII. */
+    [[nodiscard]] char Lower(char c);
+    /** @brief `text` in lower case, for ASCII: CSS's names are not case-sensitive. */
+    [[nodiscard]] std::string Lowered(std::string_view text);
+
     /** @brief What a declaration's property name is to FenrirUI. */
     enum class PropertyKind : std::uint8_t
     {
@@ -38,7 +47,7 @@ namespace Fenrir::Detail
          * animations, filters, scrollbars, background-position): parsed and kept, and styling nothing until the ticket
          * that adds it.
          */
-        Later,
+        NotYetStyled,
     };
 
     /** @brief One longhand and its value, as a shorthand expands to them. */
@@ -56,7 +65,7 @@ namespace Fenrir::Detail
 
     /**
      * @brief Reads a declaration, longhand or shorthand, into `into`: all of a shorthand's longhands or none of them.
-     * A Later longhand reads as nothing held. False, leaving `into` as it was, as ParseStyleProperty is.
+     * A NotYetStyled longhand reads as nothing held. False, leaving `into` as it was, as ParseStyleProperty is.
      */
     bool ParseStyleDeclaration(std::string_view name, std::string_view value, StyleDeclarations& into,
                                StyleParseContext& context);

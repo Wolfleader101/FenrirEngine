@@ -14,31 +14,38 @@
 
 namespace Fenrir::Detail
 {
+    bool IsSpace(char c)
+    {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
+    }
+
+    std::string_view Trim(std::string_view text)
+    {
+        while (!text.empty() && IsSpace(text.front()))
+        {
+            text.remove_prefix(1);
+        }
+        while (!text.empty() && IsSpace(text.back()))
+        {
+            text.remove_suffix(1);
+        }
+        return text;
+    }
+
+    char Lower(char c)
+    {
+        return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+    }
+
+    std::string Lowered(std::string_view text)
+    {
+        std::string out(text);
+        std::transform(out.begin(), out.end(), out.begin(), Lower);
+        return out;
+    }
+
     namespace
     {
-        bool IsSpace(char c)
-        {
-            return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
-        }
-
-        std::string_view Trim(std::string_view text)
-        {
-            while (!text.empty() && IsSpace(text.front()))
-            {
-                text.remove_prefix(1);
-            }
-            while (!text.empty() && IsSpace(text.back()))
-            {
-                text.remove_suffix(1);
-            }
-            return text;
-        }
-
-        char Lower(char c)
-        {
-            return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
-        }
-
         bool EqualsIgnoringCase(std::string_view a, std::string_view b)
         {
             return a.size() == b.size() &&
@@ -1816,7 +1823,7 @@ namespace Fenrir::Detail
         }
         if (std::find(LaterLonghands.begin(), LaterLonghands.end(), name) != LaterLonghands.end())
         {
-            return PropertyKind::Later;
+            return PropertyKind::NotYetStyled;
         }
         if (name == "transform-origin")
         {
@@ -1922,7 +1929,7 @@ namespace Fenrir::Detail
         {
         case PropertyKind::Styled:
             return ParseStyleProperty(name, value, into, context);
-        case PropertyKind::Later:
+        case PropertyKind::NotYetStyled:
             return true;
         case PropertyKind::Shorthand: {
             std::vector<Longhand> longhands;

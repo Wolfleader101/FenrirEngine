@@ -205,8 +205,7 @@ namespace Fenrir
             {
                 return;
             }
-            const std::vector<ElementId> children = slot->children;
-            for (const ElementId child : children)
+            for (const ElementId child : slot->children)
             {
                 MarkMatchDirty(state, child);
             }
@@ -541,11 +540,9 @@ namespace Fenrir
             return false;
         }
         Detail::StyleParseContext context = Detail::MakeParseContext(*m_state);
-        std::string lower(name);
-        std::transform(lower.begin(), lower.end(), lower.begin(),
-                       [](char c) { return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c; });
+        const std::string lower = Detail::Lowered(name);
         bool set = false;
-        if (Detail::ClassifyProperty(lower) == Detail::PropertyKind::Later)
+        if (Detail::ClassifyProperty(lower) == Detail::PropertyKind::NotYetStyled)
         {
             context.error = "FenrirUI does not style it yet";
         }

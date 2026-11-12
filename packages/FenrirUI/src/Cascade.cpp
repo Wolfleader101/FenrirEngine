@@ -243,11 +243,36 @@ namespace Fenrir::Detail
             if (declaresCustom)
             {
                 auto own = std::make_shared<CustomProperties>(custom != nullptr ? *custom : CustomProperties{});
+                std::vector<std::string> declared;
                 for (const IndexedSelector& match : matched)
                 {
                     for (const StyleDeclaration& declaration : match.rule->customProperties)
                     {
                         (*own)[declaration.name] = declaration.value;
+                        declared.push_back(declaration.name);
+                    }
+                }
+                // As CSS, a custom property's var()s resolve on the element that declares it, and its descendants
+                // inherit the result; one that cannot resolve (a missing name, a cycle) is as if not declared.
+                const CustomProperties raw = *own;
+                const auto rawLookup = [&raw](std::string_view name) -> const std::string* {
+                    const auto found = raw.find(std::string(name));
+                    return found != raw.end() ? &found->second : nullptr;
+                };
+                for (const std::string& name : declared)
+                {
+                    const std::string& value = raw.at(name);
+                    if (!ContainsVar(value))
+                    {
+                        continue;
+                    }
+                    if (std::optional<std::string> resolved = SubstituteVars(value, rawLookup))
+                    {
+                        (*own)[name] = std::move(*resolved);
+                    }
+                    else
+                    {
+                        own->erase(name);
                     }
                 }
                 custom = std::move(own);
@@ -262,7 +287,12 @@ namespace Fenrir::Detail
                 return found != custom->end() ? &found->second : nullptr;
             };
             // What the element has with no rule: the defaults and what it inherits.
-            const ResolvedStyle undeclared = style;
+            std::optional<ResolvedStyle> undeclared;
+            if (std::any_of(matched.begin(), matched.end(),
+                            [](const IndexedSelector& m) { return m.rule->segments.size() > 1; }))
+            {
+                undeclared = style;
+            }
             std::optional<StyleParseContext> context;
             for (const IndexedSelector& match : matched)
             {
@@ -286,7 +316,7 @@ namespace Fenrir::Detail
                         read.Clear();
                         for (const StyleProperty property : PropertiesOf(segment.deferred->name))
                         {
-                            read.CopyFrom(property, undeclared);
+                            read.CopyFrom(property, *undeclared);
                         }
                     }
                     read.ApplyTo(style);

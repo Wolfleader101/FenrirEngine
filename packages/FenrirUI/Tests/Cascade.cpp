@@ -15,6 +15,7 @@ namespace
     float WidthOf(const Fenrir::UIRoot& root, Fenrir::ElementId element)
     {
         const Fenrir::ResolvedStyle* style = root.GetResolvedStyle(element);
+        INFO("the element is alive and its width is a length in px");
         REQUIRE(style != nullptr);
         REQUIRE(style->width.unit == Fenrir::LengthUnit::Px);
         return style->width.value;
@@ -152,6 +153,7 @@ TEST_CASE("A class change restyles its element's subtree and nothing else", "[ui
     root.Create(right, "panel");
     t.test.Frame();
     t.test.Frame();
+    INFO("the tree is clean before the change");
     REQUIRE(root.GetStats().stylesResolved == 0);
 
     root.AddClass(left, "dark");
@@ -171,6 +173,7 @@ TEST_CASE("A pseudo-class flag flip restyles the element", "[ui][cascade]")
                        "pseudo");
     const Fenrir::ElementId button = root.Create(root.GetRootElement(), "button");
     t.test.Frame();
+    INFO("with no flag, the plain rule");
     REQUIRE(WidthOf(root, button) == 10.0f);
 
     root.SetPseudoClass(button, Fenrir::PseudoClass::Hover, true);
@@ -257,6 +260,22 @@ TEST_CASE("Custom properties inherit and resolve at use, with var()'s fallback",
     t.test.Frame();
     INFO("without the class, the inherited custom property is the root's again");
     REQUIRE(WidthOf(root, inner) == 40.0f);
+}
+
+TEST_CASE("A custom property's var() resolves where it is declared, and descendants inherit the result",
+          "[ui][cascade]")
+{
+    SheetTest t;
+    Fenrir::UIRoot& root = t.root;
+    root.AddStylesheet(":root { --base: 10px; --size: var(--base); }\n"
+                       ".inner { --base: 99px; width: var(--size); }\n",
+                       "declared");
+    const Fenrir::ElementId outer = root.Create(root.GetRootElement(), "panel");
+    const Fenrir::ElementId inner = root.Create(outer, "panel");
+    root.AddClass(inner, "inner");
+    t.test.Frame();
+    INFO("--size took --base from :root, where it was declared; the inner --base does not reach it");
+    REQUIRE(WidthOf(root, inner) == 10.0f);
 }
 
 TEST_CASE("Adding and removing a stylesheet restyles the tree", "[ui][cascade]")

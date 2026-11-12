@@ -197,8 +197,9 @@ namespace Fenrir
          * `#rrggbbaa`, `rgb()`, `rgba()`, `hsl()`, `hsla()` or a CSS colour name, `url(path)` for an image asset loaded
          * from the asset store, `linear-gradient()` and `radial-gradient()`, `box-shadow` lists, and `transform`
          * lists of `translate()`, `translateX()`, `translateY()`, `scale()`, `scaleX()`, `scaleY()`, `rotate()` (deg,
-         * rad, grad or turn). An unknown property or a value it cannot read is logged, with both named, and changes
-         * nothing: false.
+         * rad, grad or turn). An unknown property, one the style does not hold yet (the text, transition, animation,
+         * filter and scrollbar properties, which a stylesheet parses and keeps), or a value it cannot read is logged,
+         * with both named, and changes nothing: false.
          */
         bool SetStyleProperty(ElementId element, std::string_view name, std::string_view value);
         /**
