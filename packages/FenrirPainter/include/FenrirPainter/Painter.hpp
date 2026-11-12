@@ -15,7 +15,10 @@
 
 namespace Fenrir
 {
+    class FontLibrary;
+    class Paragraph;
     class StopTexture;
+    struct GlyphRun;
 
     namespace PainterDetail
     {
@@ -50,6 +53,19 @@ namespace Fenrir
          * the lines they are flattened into, under the transform they are drawn with.
          */
         float tolerance = 0.25f;
+        /**
+         * @brief What DrawText lays out a paragraph with that was never laid out, rasterising its glyphs on the spot;
+         * without one such a paragraph draws nothing.
+         */
+        FontLibrary* fonts = nullptr;
+    };
+
+    /** @brief A text shadow: the text drawn again under itself, moved by `offset` (UI units) and in `colour`. */
+    struct TextShadow
+    {
+        Math::Vec2 offset{0.0f};
+        /** @brief Straight alpha, as every painter colour. */
+        Colour colour = Colour::Black;
     };
 
     /**
@@ -182,6 +198,31 @@ namespace Fenrir
         void StrokePath(const Path& path, const StrokeStyle& style, const Paint& paint);
         /** @} */
 
+        /** @name Text
+         * FenrirText's glyphs (ADR-0062) as quads of shape kind Glyph, one a glyph, over their atlas rectangles: the
+         * run's page in the image slot, its colour the solid paint, under the current transform and clip, batched with
+         * the shapes. A run's decoration is a rectangle from its metrics, in its colour, drawn after its glyphs.
+         *
+         * A paragraph's positions are pixels of the target: lay it out with its style sizes, and any width, multiplied
+         * by the root scale and the target's pixels per unit (`size * scale * pixelsPerUnit`), the exact pixel size
+         * its bitmaps are rasterised at. The painter divides them back, so a glyph's whole-pixel rectangle lands on
+         * whole pixels from `point` (UI units, the paragraph's top-left); with pixel snapping on and the transform
+         * axis-aligned, `point` is moved to a whole pixel first.
+         * @{
+         */
+        /**
+         * @brief Every glyph run of `paragraph` from `point`. A paragraph with text that was never laid out is laid
+         * out first, to no width limit, with PainterConfig::fonts, rasterising its glyphs into their atlases.
+         */
+        void DrawText(Paragraph& paragraph, Math::Vec2 point);
+        /** @brief `paragraph` with `shadow` drawn first: every run again, moved and in the shadow's colour. */
+        void DrawText(Paragraph& paragraph, Math::Vec2 point, const TextShadow& shadow);
+        /** @brief One glyph run, `point` being its paragraph's top-left. */
+        void DrawGlyphs(const GlyphRun& run, Math::Vec2 point);
+        /** @brief `run` with `shadow` drawn first: the run again, moved and in the shadow's colour. */
+        void DrawGlyphs(const GlyphRun& run, Math::Vec2 point, const TextShadow& shadow);
+        /** @} */
+
         /** @name Offscreen groups and masks
          * Recorded as FenrirDraw2D's group commands (ADR-0060), which the renderer realises. They nest with each other
          * and apart from Save and Restore; an end with nothing of its kind innermost appends nothing. A group or mask
@@ -282,6 +323,12 @@ namespace Fenrir
          * it extends or starts; returns the first vertex counted from the command's base vertex.
          */
         [[nodiscard]] std::uint32_t ReserveDraw(const PaintSetup& paint, std::uint32_t vertices, std::uint32_t indices);
+        /** @brief `run`'s glyphs and decoration from `point` (already snapped), in `colour`. */
+        void DrawRun(const GlyphRun& run, Math::Vec2 point, const Colour& colour);
+        /** @brief `point` moved to a whole pixel, when snapping is on and the transform axis-aligned. */
+        [[nodiscard]] Math::Vec2 SnapPoint(Math::Vec2 point) const;
+        /** @brief Lays `paragraph` out with PainterConfig::fonts, to no width limit, if it has text never laid out. */
+        void LayOutIfNever(Paragraph& paragraph) const;
 
         DrawList2D& m_list;
         PainterConfig m_config;
