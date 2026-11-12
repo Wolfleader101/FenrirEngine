@@ -15,7 +15,7 @@ fenrir_add_demo_app(PhysicsDemo
         src/Tank.cpp
     SCRIPTS scripts
 )
-target_link_libraries(PhysicsDemo PRIVATE FenrirPhysics FenrirAssets FenrirDebugDraw)
+target_link_libraries(PhysicsDemo PRIVATE FenrirPhysics FenrirRagdoll FenrirAssets FenrirDebugDraw)
 # Physics's scripting extension, which the C# scenes use, and its contract beside the executable.
 if(FENRIR_ENABLE_SCRIPTING)
     target_link_libraries(PhysicsDemo PRIVATE FenrirPhysicsScripting)

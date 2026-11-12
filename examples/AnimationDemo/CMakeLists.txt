@@ -24,9 +24,10 @@ if(FENRIR_ENABLE_SCRIPTING)
     target_link_libraries(AnimationDemo PRIVATE FenrirSkeletonScripting FenrirAnimationScripting)
     fenrir_deploy_scripting(AnimationDemo EXTENSIONS Skeleton Animation)
 endif()
-# Scene 5's kinematic shield pushes dynamic boxes with physics; without it the shield still follows its bone.
+# Scene 5's kinematic shield pushes dynamic boxes with physics; without it the shield still follows its bone. The
+# ragdoll glue is installed wherever physics is.
 if(FENRIR_ENABLE_PHYSICS)
-    target_link_libraries(AnimationDemo PRIVATE FenrirPhysics)
+    target_link_libraries(AnimationDemo PRIVATE FenrirPhysics FenrirRagdoll)
     target_compile_definitions(AnimationDemo PRIVATE ANIMATION_DEMO_PHYSICS)
 endif()
 # Scene 3's user shader without the SKINNED key, embedded in the app.
