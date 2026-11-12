@@ -277,3 +277,4 @@ One session, branch and PR per ticket, into `fenrir-ui` or the previous ticket's
 | 21 | [Image-target UI roots and the menu in a texture](issues/21-image-target-ui-roots-and-the-menu-in-a-texture.md) | 18 | `ui/21-image-target-ui-roots-and-the-menu-in-a-texture` | |
 | 22 | [SDF text mode](issues/22-sdf-text-mode.md) | 06, 16 | `ui/22-sdf-text-mode` | |
 | 23 | [World-space 2D target, world UI roots and the pointer ray](issues/23-world-space-2d-target-world-ui-roots-and-the-pointer-ray.md) | 14, 21, 22 | `ui/23-world-space-2d-target-world-ui-roots-and-the-pointer-ray` | |
+| 24 | [The anti-aliasing switch: a painter option and the UI app resource's switch](issues/24-painter-anti-aliasing-switch.md) | 06, 07 | `ui/24-painter-anti-aliasing-switch` | |
