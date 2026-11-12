@@ -11,8 +11,13 @@ set(renderer_src "${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirRenderer/src")
 
 add_executable(FenrirPainterTests PainterTest.hpp Shapes.cpp Paints.cpp ClipsAndBatching.cpp Pipelines.cpp Paths.cpp
                                   Strokes.cpp
-                                  Groups.cpp)
-target_include_directories(FenrirPainterTests PRIVATE "${renderer_tests}" "${renderer_src}")
+                                  Groups.cpp Text.cpp)
+# Text.cpp lays paragraphs out through FenrirText's test fixture, in HarfBuzz's test fonts where its submodule keeps
+# them.
+set(text_tests "${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirText/Tests")
+target_include_directories(FenrirPainterTests PRIVATE "${renderer_tests}" "${renderer_src}" "${text_tests}")
+target_compile_definitions(FenrirPainterTests
+                           PRIVATE FENRIR_TEXT_HARFBUZZ_TEST="${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirText/libs/harfbuzz/test")
 target_link_libraries(FenrirPainterTests PRIVATE FenrirPainter FenrirRenderer FenrirRendererCore Catch2::Catch2WithMain)
 # RendererTestApp's material shader sampling one texture, which its helpers name.
 fenrir_add_shaders(FenrirPainterTests PROGRAM SampledPicture VERTEX "${renderer_src}/../Shaders/Builtin/mesh.vert"

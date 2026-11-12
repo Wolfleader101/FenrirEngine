@@ -28,6 +28,11 @@ namespace Fenrir
          * the coverage in `local.x`, 1 inside and 0 at the outside of its fringe.
          */
         Triangle = 8,
+        /**
+         * @brief A glyph's quad over its rectangle of an R8 coverage atlas page, in the image slot: `uv` is in the
+         * page's texels, and the shader multiplies the paint by the coverage it samples (ADR-0062's bitmap mode).
+         */
+        Glyph = 9,
     };
 
     /** @brief How a painter quad's pixels are coloured. */

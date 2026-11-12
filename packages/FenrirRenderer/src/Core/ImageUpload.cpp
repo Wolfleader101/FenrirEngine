@@ -108,6 +108,10 @@ namespace Fenrir::Render
         {
             return TextureFormat::Rgba32Float;
         }
+        if (image.format == ImageFormat::R8)
+        {
+            return TextureFormat::R8Unorm;
+        }
         return image.colourSpace == ColourSpace::Srgb ? TextureFormat::Rgba8Srgb : TextureFormat::Rgba8Unorm;
     }
 
@@ -115,7 +119,17 @@ namespace Fenrir::Render
     {
         TexelCodec codec;
         codec.bytes = BytesPerPixel(image.format);
-        if (image.format == ImageFormat::RGBA32F)
+        if (image.format == ImageFormat::R8)
+        {
+            // One channel, as FenrirText's glyph coverage: red, the rest left at none and alpha at one.
+            codec.read = [](std::span<const std::byte> texel, std::array<float, 4>& out) {
+                out = {static_cast<float>(texel[0]) / 255.0f, 0.0f, 0.0f, 1.0f};
+            };
+            codec.write = [](const std::array<float, 4>& in, std::span<std::byte> texel) {
+                texel[0] = std::byte{ToByte(in[0])};
+            };
+        }
+        else if (image.format == ImageFormat::RGBA32F)
         {
             codec.read = [](std::span<const std::byte> texel, std::array<float, 4>& out) {
                 std::memcpy(out.data(), texel.data(), sizeof(float) * 4);

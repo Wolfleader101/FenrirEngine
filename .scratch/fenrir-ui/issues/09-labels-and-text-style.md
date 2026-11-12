@@ -15,3 +15,7 @@
 - [ ] Headless App tests: a label's laid-out size equals its paragraph's size; wrapping follows the parent's width and `white-space: nowrap` stops it; ellipsis at a fixed width; `text-align` moves the lines; `font-size` from a parent inherits and a class override wins; a label in a flex row with `flex-grow` wraps at its share.
 - [ ] Draw-list tests through a capturing target: a label's glyph quads sit inside its content box; `text-shadow` draws first.
 - [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+
+## Comments
+
+- From ticket 06 (painter text): the painter's `DrawText` takes a paragraph laid out in the target's pixels. Lay a label's paragraph out with each style's `font-size`, and the available width, multiplied by the root scale and the target's pixels per unit (`size * scale * pixelsPerUnit`), the exact pixel size its bitmaps are rasterised at (the spec's FenrirText section). Divide the paragraph's measured size by the same factor to give Yoga a size in UI units. The painter divides the glyph positions back, so each glyph's whole-pixel rectangle lands on whole pixels.
