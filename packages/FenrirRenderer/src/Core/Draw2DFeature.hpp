@@ -120,9 +120,9 @@ namespace Fenrir::Render
      * blend. `DropShadow` draws the blurred image's alpha tinted by the shadow colour (times the opacity) at the offset
      * first, then the image as `None` does. `BackdropBlur` copies what the enclosing target holds under the group's
      * bounds, and three radii about them, into a transient image (a `Backdrop 2D` copy pass, ending the target's pass
-     * there and going on in another that loads it), blurs it as a group's image is, taps past the copy repeating its
-     * edge, and draws it back over the bounds in place of what was there; then the group's image, if anything was
-     * drawn in it, as `None` does. A radius of 0 or less is no filter.
+     * there and going on in another that loads it), blurs it as a group's image is, but leaving out the taps past the
+     * copy and weighing the rest up to make up for them, and draws it back over the bounds in place of what was there;
+     * then the group's image, if anything was drawn in it, as `None` does. A radius of 0 or less is no filter.
      *
      * **Masks.** A mask group's image is not drawn: the draws after it, up to its EndMask2D, draw through their
      * shader's `MASK` variant, whose `mask` texture binds the image and whose `maskRect` parameter is the image's
@@ -185,7 +185,7 @@ namespace Fenrir::Render
          */
         void SetOffscreenGroups(bool on) noexcept
         {
-            m_groups = on;
+            m_offscreenGroups = on;
         }
 
         /** @brief What the last AddPasses drew. */
@@ -402,8 +402,8 @@ namespace Fenrir::Render
                                                    Graphics::TextureFormat format);
         /**
          * @brief Adds a `Blur 2D` pass blurring `source` (of `pixels`, its UV rectangle `bounds` blurred) across by
-         * `sigma` of its pixels into a new transient image, at half the size past HalfResolutionBlur2D; `clamp` repeats
-         * the edge where taps pass `bounds`, else they read transparent.
+         * `sigma` of its pixels into a new transient image, at half the size past HalfResolutionBlur2D; with `clamp`
+         * the taps past `bounds` are left out and the rest weighed up, else they read transparent.
          */
         [[nodiscard]] Blurred BlurAcross(RenderGraph& graph, GraphResource source, Graphics::PixelSize pixels,
                                          Math::Vec4 bounds, float sigma, Graphics::TextureFormat format, bool clamp);
@@ -462,7 +462,7 @@ namespace Fenrir::Render
 
         Frame2D m_frame;
         Stats2D m_stats;
-        bool m_groups = true;
+        bool m_offscreenGroups = true;
         std::set<std::string> m_logged;
     };
 } // namespace Fenrir::Render

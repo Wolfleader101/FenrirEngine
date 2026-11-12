@@ -97,6 +97,7 @@ TEST_CASE("An end with no group open appends nothing", "[painter][groups]")
     painter.EndGroup();
     painter.EndMask();
 
+    INFO("neither end appends a command");
     REQUIRE(list.commands.empty());
 }
 
@@ -111,6 +112,7 @@ TEST_CASE("A group's bounds under a rotation are their axis-aligned bounds", "[p
     painter.EndGroup();
 
     const float half = 10.0f * std::numbers::sqrt2_v<float>;
+    INFO("a 20-unit square turned an eighth of a turn spans 20 sqrt(2) about its centre");
     REQUIRE(
         Near(Command<Fenrir::BeginGroup2D>(list, 0).bounds, Rect2D{50 - half, 50 - half, 2 * half, 2 * half}, 1e-3f));
 }
@@ -124,6 +126,7 @@ TEST_CASE("A group's bounds are clipped to the current scissor", "[painter][grou
     painter.BeginGroup({10, 10, 100, 100});
     painter.EndGroup();
 
+    INFO("the bounds stop at the clip's (0, 0)-(30, 30)");
     REQUIRE(Near(Command<Fenrir::BeginGroup2D>(list, 0).bounds, Rect2D{10, 10, 20, 20}));
 }
 

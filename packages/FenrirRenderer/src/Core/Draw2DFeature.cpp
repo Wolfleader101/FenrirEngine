@@ -966,13 +966,13 @@ namespace Fenrir::Render
                                                  "ones draw flat into the group around them",
                                                  MaxGroupDepth2D));
                 }
-                if ((tooDeep || !m_groups) && composite.mask)
+                if ((tooDeep || !m_offscreenGroups) && composite.mask)
                 {
                     open.emplace_back(Open::Dropped, 0);
                     ++culled;
                     continue;
                 }
-                if (tooDeep || !m_groups)
+                if (tooDeep || !m_offscreenGroups)
                 {
                     open.emplace_back(Open::Flat, 0);
                     continue;
@@ -1066,17 +1066,16 @@ namespace Fenrir::Render
                     continue;
                 }
 
-                const TargetPass& group = m_passes[index];
-                TargetPass& into = m_passes[realised.back()];
+                // Blurs add passes, so no reference into m_passes is held across them.
                 const Graphics::BlendMode blend = end->blend == GroupBlend2D::Additive
                                                       ? Graphics::BlendMode::Additive
                                                       : Graphics::BlendMode::Premultiplied;
                 // The opacity scales the premultiplied texel's colour and alpha alike.
                 const float opacity = std::clamp(end->opacity, 0.0f, 1.0f);
-                ImageQuad quad = QuadOver(group, into);
+                ImageQuad quad = QuadOver(m_passes[index], m_passes[realised.back()]);
                 quad.colour = PackLinear(Math::Vec4(opacity));
-                const GraphResource image = group.target;
-                const PixelSize pixels = group.pixels;
+                const GraphResource image = m_passes[index].target;
+                const PixelSize pixels = m_passes[index].pixels;
                 if (end->filter == GroupFilter2D::Blur && sigma > 0.0f)
                 {
                     const Blurred blurred = BlurAcross(graph, image, pixels, {0.0f, 0.0f, 1.0f, 1.0f}, sigma,

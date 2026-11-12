@@ -474,6 +474,7 @@ TEST_CASE("A blur past the threshold runs at half resolution", "[renderer][overl
     const Fenrir::Graphics::TextureDesc across = TargetOf(test, RendererTest::Labelled(all, "Blur 2D").at(0));
     REQUIRE(group.width == 100);
     REQUIRE(group.height == 80);
+    INFO("the blur's image is half the group's, each way");
     REQUIRE(across.width == 50);
     REQUIRE(across.height == 40);
     REQUIRE(test.messages->errors.empty());

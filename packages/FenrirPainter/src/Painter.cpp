@@ -783,8 +783,7 @@ namespace Fenrir
 
     void Painter::BackdropBlur(const Rect2D& rect, float radius)
     {
-        BeginGroup(rect, 1.0f, GroupBlend2D::Normal,
-                   {GroupFilter2D::BackdropBlur, radius, Math::Vec2(0.0f), Colour::Black});
+        BeginGroup(rect, 1.0f, GroupBlend2D::Normal, GroupFilter::Backdrop(radius));
         EndGroup();
     }
 

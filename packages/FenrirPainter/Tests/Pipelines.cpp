@@ -185,8 +185,10 @@ TEST_CASE("A masked run draws through builtin:painter's MASK variant, binding th
     std::array<float, 4> rect{};
     std::memcpy(rect.data(), bytes.data() + block->offset, sizeof(rect));
     const Fenrir::Graphics::TextureDesc desc = RendererProbe::Desc(test.Device(), maskImage);
+    INFO("the top-left is the disc's bounds less a pixel of fringe: (29, 29)");
     REQUIRE(std::abs(rect[0] - 29.0f) < 1e-3f);
     REQUIRE(std::abs(rect[1] - 29.0f) < 1e-3f);
+    INFO("then one over the image's width and height");
     REQUIRE(rect[2] == 1.0f / static_cast<float>(desc.width));
     REQUIRE(rect[3] == 1.0f / static_cast<float>(desc.height));
     REQUIRE(RendererProbe::StaleUses(test.Device()).empty());

@@ -53,11 +53,13 @@ namespace Fenrir
     };
 
     /**
-     * @brief What an offscreen group's image is drawn through when it is composited: nothing, a Gaussian blur, or a
-     * drop shadow of its alpha under it. Lengths are UI units under the transform the group begins under.
+     * @brief What an offscreen group's image is drawn through when it is composited: nothing, a Gaussian blur, a drop
+     * shadow of its alpha under it, or a blur of what is under it (Painter::BackdropBlur). Lengths are UI units under
+     * the transform the group begins under.
      */
     struct GroupFilter
     {
+        /** @brief Which filter. */
         GroupFilter2D kind = GroupFilter2D::None;
         /** @brief The blur's, or the shadow's blur, radius. */
         float radius = 0.0f;
@@ -76,6 +78,12 @@ namespace Fenrir
         [[nodiscard]] static GroupFilter DropShadow(Math::Vec2 offset, float radius, const Colour& colour)
         {
             return {GroupFilter2D::DropShadow, radius, offset, colour};
+        }
+
+        /** @brief What is under the group blurred by `radius`, then the group over it. */
+        [[nodiscard]] static GroupFilter Backdrop(float radius)
+        {
+            return {GroupFilter2D::BackdropBlur, radius, Math::Vec2(0.0f), Colour::Black};
         }
     };
 
