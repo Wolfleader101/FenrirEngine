@@ -17,7 +17,7 @@ namespace Fenrir
     UIRoot& UIRoots::CreateRoot(UIRootConfig config)
     {
         RootEntry entry;
-        entry.root = std::make_unique<UIRoot>(m_app, *this, std::move(config));
+        entry.root = std::make_unique<UIRoot>(m_app, *this, std::move(config), UIRootId{m_nextId++});
         entry.order = m_nextOrder++;
         UIRoot& root = *entry.root;
         // Kept in drawing order: by layer, then as made.

@@ -86,6 +86,7 @@ namespace Fenrir
         AssetHandle<Shader> m_painterShader;
         std::vector<RootEntry> m_roots;
         std::uint64_t m_nextOrder = 0;
+        std::uint32_t m_nextId = 1;
         std::unordered_map<std::string, ElementFactory> m_factories;
     };
 

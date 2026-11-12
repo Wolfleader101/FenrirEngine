@@ -14,6 +14,7 @@
 #include "FenrirUI/ElementId.hpp"
 #include "FenrirUI/Style.hpp"
 #include "FenrirUI/Stylesheet.hpp"
+#include "FenrirUI/UIEvent.hpp"
 #include "FenrirUI/UITarget.hpp"
 
 namespace Fenrir
@@ -68,6 +69,11 @@ namespace Fenrir
         bool snapToPixels = true;
         /** @brief Where it draws instead of its window's overlay; null for the overlay. */
         std::shared_ptr<UITarget> target;
+        /**
+         * @brief Its input router's priority (ADR-0027): routers run highest first, so give a root drawn over another
+         * a higher one. Equal priorities run in the order the roots were made.
+         */
+        int inputPriority = 0;
     };
 
     /** @brief What a root's last frame did: how much of the tree it styled, laid out and painted. */
@@ -100,8 +106,11 @@ namespace Fenrir
         /** @brief Where Create puts an element when no index is given: after its last sibling. */
         static constexpr std::size_t End = std::numeric_limits<std::size_t>::max();
 
-        /** @brief A root of `roots` in `app`; UIRoots::CreateRoot makes them. */
-        UIRoot(App& app, UIRoots& roots, UIRootConfig config);
+        /**
+         * @brief A root of `roots` in `app`, named `id`; UIRoots::CreateRoot makes them. With FenrirInput installed, it
+         * registers its input router at once, or else on its first frame after Input::Install.
+         */
+        UIRoot(App& app, UIRoots& roots, UIRootConfig config, UIRootId id);
         UIRoot(const UIRoot&) = delete;
         UIRoot& operator=(const UIRoot&) = delete;
         UIRoot(UIRoot&&) = delete;
@@ -110,6 +119,8 @@ namespace Fenrir
 
         /** @brief What it was made with. */
         [[nodiscard]] const UIRootConfig& GetConfig() const noexcept;
+        /** @brief Its id, which its UIEvents carry. */
+        [[nodiscard]] UIRootId GetId() const noexcept;
         /** @brief Logical units per UI unit, by its scale rule, as of its last frame (1 before its first). */
         [[nodiscard]] float GetScale() const noexcept;
         /** @brief Its target's size as of its last frame. */
@@ -222,6 +233,52 @@ namespace Fenrir
         [[nodiscard]] ElementBoxes GetBoxes(ElementId element) const noexcept;
         /** @brief Has layout measure `element` again next frame, when its content's size changed. */
         void InvalidateMeasure(ElementId element);
+        /** @} */
+
+        /** @name Input and focus
+         * @{
+         */
+        /**
+         * @brief Makes `element` focusable or not: whether a click on it or under it, Tab and Shift+Tab, and Focus can
+         * give it the focus. Elements are not focusable until made so (the controls make themselves focusable).
+         * Making the focused element unfocusable blurs it.
+         */
+        void SetFocusable(ElementId element, bool focusable);
+        /** @brief Whether it is focusable. */
+        [[nodiscard]] bool IsFocusable(ElementId element) const noexcept;
+        /**
+         * @brief Gives `element` the focus: it gets `:focus` and its ancestors `:focus-within`, the element that had it
+         * is sent Blur and it is sent Focus, and the root claims keyboard focus in its window, so keys and text go to
+         * it. False, changing nothing, for a stale or unfocusable element.
+         */
+        bool Focus(ElementId element);
+        /** @brief Takes the focus from whichever element has it, sending it Blur. Nothing has it after. */
+        void Blur();
+        /** @brief The element that has the focus; nothing when none has. */
+        [[nodiscard]] ElementId GetFocused() const noexcept;
+        /** @brief The topmost element under the pointer that takes pointer input; nothing when none is. */
+        [[nodiscard]] ElementId GetHovered() const noexcept;
+        /**
+         * @brief The topmost element at `position` (UI units from the root's top-left) that takes pointer input
+         * (`pointer-events: all`), as of the last frame's layout: children before their parent, siblings by z-index
+         * then tree order, inside rounded corners, under transforms, within overflow clips. Nothing when none is.
+         */
+        [[nodiscard]] ElementId HitTest(Math::Vec2 position) const;
+        /**
+         * @brief Attaches `listener` to `element` for UIEvents of `kind`: it runs when one happens to the element or
+         * bubbles up to it, after the listeners of the elements under it and, on one element, in the order added. It
+         * lives until RemoveListener or the element is removed. Returns an id that names nothing for a stale element or
+         * an empty listener.
+         */
+        UIListenerId AddListener(ElementId element, UIEventKind kind, UIListener listener);
+        /** @brief Detaches a listener. False when it names none. */
+        bool RemoveListener(UIListenerId listener);
+        /**
+         * @brief Sends `event` (its root set to this one): once to the engine event queue, then to the listeners of its
+         * kind on its target and on each ancestor in turn, until one stops it. The router sends the pointer, key,
+         * text and focus kinds; controls send Change and Submit through it. Nothing for a stale target.
+         */
+        void SendEvent(UIEvent event);
         /** @} */
 
         /**
