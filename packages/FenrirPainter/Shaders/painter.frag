@@ -1,6 +1,7 @@
 #version 460
 // builtin:painter, the fragment stage (ADR-0060): each quad's shape evaluated as a signed distance in its own space and
-// anti-aliased over one pixel, coloured by its paint and cut by its clip. Colours arrive sRGB-encoded and premultiplied
+// anti-aliased over one pixel, or a tessellated path's triangle covered as its vertices say, coloured by its paint and
+// cut by its clip. Colours arrive sRGB-encoded and premultiplied
 // (the painter's vertex colours and stop texture both), and are worked in that form. The output is premultiplied
 // (PremultipliedAlpha): linear by default, the target encoding it, or, in the GAMMA variant (the Gamma blend space),
 // sRGB-encoded as it is, so blending happens in sRGB as a browser's does (ADR-0065).
@@ -36,6 +37,7 @@ const uint Shadow = 4u;
 const uint Circle = 5u;
 const uint Arc = 6u;
 const uint Ring = 7u;
+const uint Triangle = 8u;
 
 const uint Solid = 0u;
 const uint LinearGradient = 1u;
@@ -240,6 +242,11 @@ void main()
     {
         float distance = length(p);
         coverage = Coverage(max(distance - vShape.x, vShape.y - distance), px);
+    }
+    else if (kind == Triangle)
+    {
+        // A tessellated path's triangle: its edge is already anti-aliased by the fringe the coverage fades across.
+        coverage = clamp(p.x, 0.0, 1.0);
     }
 
     if ((flags & Clipped) != 0u)

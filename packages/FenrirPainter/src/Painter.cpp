@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <numbers>
 #include <span>
 #include <type_traits>
@@ -11,11 +12,15 @@
 
 #include "Colours.hpp"
 #include "FenrirPainter/StopTexture.hpp"
+#include "Radii.hpp"
+#include "Tessellation.hpp"
 
 namespace Fenrir
 {
     namespace
     {
+        using PainterDetail::FitRadii;
+
         /** @brief The most vertices one command of 16-bit indices reaches: indices 0 to 65535. */
         constexpr std::uint32_t MaxVertices16 = 65536;
         constexpr float TwoPi = 2.0f * std::numbers::pi_v<float>;
@@ -64,29 +69,6 @@ namespace Fenrir
             return {x0, y0, std::max(x1 - x0, 0.0f), std::max(y1 - y0, 0.0f)};
         }
 
-        /** @brief `radii` with none negative, scaled down together until adjacent ones fit each side, as CSS does. */
-        Math::Vec4 FitRadii(const Rect2D& rect, const CornerRadii& radii)
-        {
-            const Math::Vec4 r{std::max(radii.topLeft, 0.0f), std::max(radii.topRight, 0.0f),
-                               std::max(radii.bottomRight, 0.0f), std::max(radii.bottomLeft, 0.0f)};
-            float factor = 1.0f;
-            const auto fit = [&factor](float side, float sum) {
-                if (sum > side && sum > 0.0f)
-                {
-                    factor = std::min(factor, std::max(side, 0.0f) / sum);
-                }
-            };
-            fit(rect.width, r.x + r.y);
-            fit(rect.width, r.w + r.z);
-            fit(rect.height, r.x + r.w);
-            fit(rect.height, r.y + r.z);
-            // A circular corner reaches at most half the shorter side, or the shader's box would bulge.
-            const float most = std::max(std::min(rect.width, rect.height) * 0.5f, 0.0f);
-            const Math::Vec4 scaled = r * factor;
-            return {std::min(scaled.x, most), std::min(scaled.y, most), std::min(scaled.z, most),
-                    std::min(scaled.w, most)};
-        }
-
         /** @brief The stops sorted by offset, which gradients assume. */
         std::vector<GradientStop> Sorted(const std::vector<GradientStop>& stops)
         {
@@ -128,12 +110,25 @@ namespace Fenrir
             return true;
         }
 
+        /** @brief Appends `indices`, each moved on by `first`, as `T`s. */
         template <typename T>
-        void AppendIndices(DrawList2D& list, std::uint32_t first)
+        void AppendIndices(DrawList2D& list, std::span<const std::uint32_t> indices, std::uint32_t first)
         {
-            const std::array<T, 6> indices{static_cast<T>(first), static_cast<T>(first + 1), static_cast<T>(first + 2),
-                                           static_cast<T>(first), static_cast<T>(first + 2), static_cast<T>(first + 3)};
-            list.AppendIndices(std::span<const T>(indices));
+            std::vector<T> converted(indices.size());
+            for (std::size_t i = 0; i < indices.size(); ++i)
+            {
+                converted[i] = static_cast<T>(indices[i] + first);
+            }
+            list.AppendIndices(std::span<const T>(converted));
+        }
+
+        /** @brief A quad's two triangles over its corners 0 to 3. */
+        constexpr std::array<std::uint32_t, 6> QuadIndices{0, 1, 2, 0, 2, 3};
+
+        /** @brief Whether `style` dashes: some dash length is positive. */
+        bool Dashed(const StrokeStyle& style)
+        {
+            return std::ranges::any_of(style.dashes, [](float length) { return length > 0.0f; });
         }
     } // namespace
 
@@ -249,7 +244,7 @@ namespace Fenrir
         return {min.x, min.y, max.x - min.x, max.y - min.y};
     }
 
-    std::uint32_t Painter::BeginQuad(const PaintSetup& paint)
+    std::uint32_t Painter::Begin(const PaintSetup& paint, std::uint32_t vertices, std::uint32_t indices)
     {
         const std::uint32_t stride = sizeof(PainterVertex);
         const std::size_t indexSize = m_config.indexType == IndexType2D::UInt16 ? 2 : 4;
@@ -265,7 +260,7 @@ namespace Fenrir
         {
             const DrawCommand2D& command = *last;
             extend = command.scissor == m_state.scissor;
-            if (m_config.indexType == IndexType2D::UInt16 && m_commandVertices + 4 > MaxVertices16)
+            if (m_config.indexType == IndexType2D::UInt16 && m_commandVertices + vertices > MaxVertices16)
             {
                 extend = false;
             }
@@ -306,8 +301,8 @@ namespace Fenrir
             }
         }
         const std::uint32_t first = m_commandVertices;
-        m_commandVertices += 4;
-        command.indexCount += 6;
+        m_commandVertices += vertices;
+        command.indexCount += indices;
         return first;
     }
 
@@ -326,7 +321,7 @@ namespace Fenrir
             vertex.clipRadii = m_state.clip->radii;
         }
 
-        const std::uint32_t first = BeginQuad(paint);
+        const std::uint32_t first = Begin(paint, 4, 6);
         const std::array<Math::Vec2, 4> corners{quad.min, Math::Vec2(quad.max.x, quad.min.y), quad.max,
                                                 Math::Vec2(quad.min.x, quad.max.y)};
         std::array<PainterVertex, 4> vertices{};
@@ -345,18 +340,16 @@ namespace Fenrir
         m_list.AppendVertices(std::span<const PainterVertex>(vertices));
         if (m_config.indexType == IndexType2D::UInt16)
         {
-            AppendIndices<std::uint16_t>(m_list, first);
+            AppendIndices<std::uint16_t>(m_list, QuadIndices, first);
         }
         else
         {
-            AppendIndices<std::uint32_t>(m_list, first);
+            AppendIndices<std::uint32_t>(m_list, QuadIndices, first);
         }
     }
 
-    void Painter::DrawShape(Quad quad, const Paint& paint)
+    bool Painter::SetPaint(PainterVertex& vertex, PaintSetup& setup, const Paint& paint) const
     {
-        PainterVertex& vertex = quad.vertex;
-        PaintSetup setup;
         bool draw = true;
         std::visit(
             [&](const auto& value) {
@@ -411,7 +404,13 @@ namespace Fenrir
                 }
             },
             paint);
-        if (draw)
+        return draw;
+    }
+
+    void Painter::DrawShape(Quad quad, const Paint& paint)
+    {
+        PaintSetup setup;
+        if (SetPaint(quad.vertex, setup, paint))
         {
             Emit(quad, setup);
         }
@@ -594,5 +593,182 @@ namespace Fenrir
                 Emit(quad, piece);
             }
         }
+    }
+
+    float Painter::LogicalTolerance() const
+    {
+        const float pixels = m_config.pixelsPerUnit > 0.0f ? m_config.pixelsPerUnit : 1.0f;
+        return std::max(m_config.tolerance, 1e-3f) / pixels;
+    }
+
+    void Painter::FillPath(const Path& path, const Paint& paint)
+    {
+        const Transform2D toLogical = ToLogical();
+        if (toLogical.AreaScale() <= 0.0f)
+        {
+            return;
+        }
+        FillContours(PainterDetail::Flatten(path, toLogical, LogicalTolerance()), path.GetFillRule(), paint);
+    }
+
+    void Painter::StrokePath(const Path& path, const StrokeStyle& style, const Paint& paint)
+    {
+        if (StrokeShape(path, style, paint))
+        {
+            return;
+        }
+        const Transform2D toLogical = ToLogical();
+        const float area = toLogical.AreaScale();
+        if (area <= 0.0f)
+        {
+            return;
+        }
+        const float tolerance = LogicalTolerance();
+        if (style.width <= 0.0f)
+        {
+            // A hairline is stroked after the transform, one pixel wide, its dashes scaled with the path.
+            StrokeStyle hairline = style;
+            hairline.width = 1.0f / (m_config.pixelsPerUnit > 0.0f ? m_config.pixelsPerUnit : 1.0f);
+            const float scale = std::sqrt(area);
+            for (float& length : hairline.dashes)
+            {
+                length *= scale;
+            }
+            hairline.dashOffset *= scale;
+            const std::vector<PainterDetail::Contour> contours = PainterDetail::Flatten(path, toLogical, tolerance);
+            FillContours(PainterDetail::StrokeContours(contours, hairline, tolerance), FillRule::NonZero, paint);
+            return;
+        }
+        // Stroked in UI units, so the transform scales and shears the width as it does the path.
+        FillPath(path.StrokeOutline(style, tolerance / std::sqrt(area)), paint);
+    }
+
+    bool Painter::StrokeShape(const Path& path, const StrokeStyle& style, const Paint& paint)
+    {
+        if (!path.m_shape || !(style.width > 0.0f) || Dashed(style))
+        {
+            return false;
+        }
+        const Path::Shape& shape = *path.m_shape;
+        const float half = style.width * 0.5f;
+        if (shape.kind == Path::Shape::Kind::Circle)
+        {
+            const float radius = shape.rect.width * 0.5f;
+            const Math::Vec2 centre{shape.rect.x + radius, shape.rect.y + radius};
+            DrawRing(centre, radius + half, std::max(radius - half, 0.0f), paint);
+            return true;
+        }
+        const Colour* colour = std::get_if<Colour>(&paint);
+        if (colour == nullptr)
+        {
+            return false;
+        }
+        // A sharp corner's outer edge is the border's only when it miters; a right angle's miter is sqrt(2) widths.
+        const std::array<float, 4> radii{shape.radii.topLeft, shape.radii.topRight, shape.radii.bottomRight,
+                                         shape.radii.bottomLeft};
+        const bool miters = style.join == LineJoin::Miter && style.miterLimit >= std::numbers::sqrt2_v<float>;
+        if (!miters && std::ranges::any_of(radii, [](float radius) { return radius <= 0.0f; }))
+        {
+            return false;
+        }
+        const auto grown = [half](float radius) { return radius > 0.0f ? radius + half : 0.0f; };
+        const Rect2D& rect = shape.rect;
+        DrawBorder({rect.x - half, rect.y - half, rect.width + style.width, rect.height + style.width},
+                   {grown(radii[0]), grown(radii[1]), grown(radii[2]), grown(radii[3])},
+                   Border::Uniform(style.width, *colour));
+        return true;
+    }
+
+    void Painter::FillContours(const std::vector<PainterDetail::Contour>& contours, FillRule rule, const Paint& paint)
+    {
+        if (m_state.scissor && (m_state.scissor->width <= 0.0f || m_state.scissor->height <= 0.0f))
+        {
+            return;
+        }
+        const float pixels = m_config.pixelsPerUnit > 0.0f ? m_config.pixelsPerUnit : 1.0f;
+        const PainterDetail::Tessellation tessellation = PainterDetail::Tessellate(contours, rule, 1.0f / pixels);
+        if (tessellation.indices.empty())
+        {
+            return;
+        }
+
+        PainterVertex vertex;
+        vertex.kinds[0] = static_cast<std::uint8_t>(ShapeKind::Triangle);
+        PaintSetup setup;
+        if (!SetPaint(vertex, setup, paint))
+        {
+            return;
+        }
+        if (m_state.clip)
+        {
+            vertex.kinds[2] |= PainterFlags::Clipped;
+            vertex.clipHalfSize = m_state.clip->halfSize;
+            vertex.clipRadii = m_state.clip->radii;
+        }
+        // The paint is placed in UI units, as a shape's is.
+        const Transform2D toUi = ToLogical().Inverse();
+        std::vector<PainterVertex> vertices(tessellation.positions.size(), vertex);
+        for (std::size_t i = 0; i < vertices.size(); ++i)
+        {
+            vertices[i].position = tessellation.positions[i];
+            vertices[i].uv = setup.toPaint.Apply(toUi.Apply(tessellation.positions[i]));
+            vertices[i].local = {tessellation.coverage[i], 0.0f};
+            if (m_state.clip)
+            {
+                vertices[i].clipPoint = m_state.clip->toClip.Apply(tessellation.positions[i]);
+            }
+        }
+
+        const auto append = [this, &setup](std::span<const PainterVertex> chunk,
+                                           std::span<const std::uint32_t> indices) {
+            const std::uint32_t first =
+                Begin(setup, static_cast<std::uint32_t>(chunk.size()), static_cast<std::uint32_t>(indices.size()));
+            m_list.AppendVertices(chunk);
+            if (m_config.indexType == IndexType2D::UInt16)
+            {
+                AppendIndices<std::uint16_t>(m_list, indices, first);
+            }
+            else
+            {
+                AppendIndices<std::uint32_t>(m_list, indices, first);
+            }
+        };
+        if (m_config.indexType != IndexType2D::UInt16 || vertices.size() <= MaxVertices16)
+        {
+            append(vertices, tessellation.indices);
+            return;
+        }
+        // Too many vertices for one command of 16-bit indices: commands of whole triangles, each with its own vertices.
+        constexpr std::uint32_t Unused = std::numeric_limits<std::uint32_t>::max();
+        std::vector<std::uint32_t> remap(vertices.size(), Unused);
+        std::vector<PainterVertex> chunk;
+        std::vector<std::uint32_t> indices;
+        const auto flush = [&]() {
+            if (!indices.empty())
+            {
+                append(chunk, indices);
+            }
+            std::ranges::fill(remap, Unused);
+            chunk.clear();
+            indices.clear();
+        };
+        for (std::size_t t = 0; t + 2 < tessellation.indices.size(); t += 3)
+        {
+            if (chunk.size() + 3 > MaxVertices16)
+            {
+                flush();
+            }
+            for (std::size_t k = 0; k < 3; ++k)
+            {
+                const std::uint32_t source = tessellation.indices[t + k];
+                if (remap[source] == Unused)
+                {
+                    remap[source] = static_cast<std::uint32_t>(chunk.size());
+                    chunk.push_back(vertices[source]);
+                }
+                indices.push_back(remap[source]);
+            }
+        }
+        flush();
     }
 } // namespace Fenrir
