@@ -14,31 +14,38 @@
 
 namespace Fenrir::Detail
 {
+    bool IsSpace(char c)
+    {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
+    }
+
+    std::string_view Trim(std::string_view text)
+    {
+        while (!text.empty() && IsSpace(text.front()))
+        {
+            text.remove_prefix(1);
+        }
+        while (!text.empty() && IsSpace(text.back()))
+        {
+            text.remove_suffix(1);
+        }
+        return text;
+    }
+
+    char Lower(char c)
+    {
+        return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+    }
+
+    std::string Lowered(std::string_view text)
+    {
+        std::string out(text);
+        std::transform(out.begin(), out.end(), out.begin(), Lower);
+        return out;
+    }
+
     namespace
     {
-        bool IsSpace(char c)
-        {
-            return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
-        }
-
-        std::string_view Trim(std::string_view text)
-        {
-            while (!text.empty() && IsSpace(text.front()))
-            {
-                text.remove_prefix(1);
-            }
-            while (!text.empty() && IsSpace(text.back()))
-            {
-                text.remove_suffix(1);
-            }
-            return text;
-        }
-
-        char Lower(char c)
-        {
-            return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
-        }
-
         bool EqualsIgnoringCase(std::string_view a, std::string_view b)
         {
             return a.size() == b.size() &&
@@ -926,6 +933,10 @@ namespace Fenrir::Detail
             {
                 return Fail(context, "it is not url(path) or none");
             }
+            if (context.checkOnly)
+            {
+                return true;
+            }
             const AssetHandle<Image> image = context.loadImage ? context.loadImage(*path) : AssetHandle<Image>{};
             if (image.IsEmpty())
             {
@@ -1264,5 +1275,767 @@ namespace Fenrir::Detail
     bool IsInherited(StyleProperty property) noexcept
     {
         return property == StyleProperty::PointerEvents || property == StyleProperty::Cursor;
+    }
+
+    namespace
+    {
+        constexpr std::array<std::string_view, 11> Shorthands{
+            "margin",     "padding", "border", "border-width", "border-color", "border-radius",
+            "background", "flex",    "gap",    "transition",   "animation",
+        };
+
+        // The spec's property set that the style does not hold yet: text (ticket 09), transitions and animations (10),
+        // scrollbars (12), and the filters and background-position.
+        constexpr std::array<std::string_view, 27> LaterLonghands{
+            "color",
+            "font-family",
+            "font-size",
+            "font-weight",
+            "font-style",
+            "text-align",
+            "line-height",
+            "letter-spacing",
+            "text-shadow",
+            "white-space",
+            "text-overflow",
+            "filter",
+            "backdrop-filter",
+            "background-position",
+            "scrollbar-color",
+            "scrollbar-width",
+            "transition-property",
+            "transition-duration",
+            "transition-timing-function",
+            "transition-delay",
+            "animation-name",
+            "animation-duration",
+            "animation-timing-function",
+            "animation-delay",
+            "animation-iteration-count",
+            "animation-direction",
+            "animation-fill-mode",
+        };
+
+        bool IsNameChar(char c)
+        {
+            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_';
+        }
+
+        bool IsIdentifier(std::string_view text)
+        {
+            if (text.empty() || (text.front() >= '0' && text.front() <= '9'))
+            {
+                return false;
+            }
+            return std::all_of(text.begin(), text.end(), IsNameChar);
+        }
+
+        bool IsOneOf(std::string_view text, std::span<const std::string_view> words)
+        {
+            return std::any_of(words.begin(), words.end(),
+                               [&](std::string_view w) { return EqualsIgnoringCase(text, w); });
+        }
+
+        /** @brief A time in `s` or `ms`. */
+        bool IsTime(std::string_view text)
+        {
+            const auto number = NumberAndUnit(text);
+            return number && (EqualsIgnoringCase(number->second, "s") || EqualsIgnoringCase(number->second, "ms"));
+        }
+
+        bool IsTimingFunction(std::string_view text)
+        {
+            constexpr std::array<std::string_view, 7> named{"ease",        "linear",     "ease-in", "ease-out",
+                                                            "ease-in-out", "step-start", "step-end"};
+            if (IsOneOf(text, named))
+            {
+                return true;
+            }
+            if (const auto arguments = CallOf(text, "cubic-bezier"))
+            {
+                const std::vector<std::string_view> parts = Split(*arguments, ',');
+                return parts.size() == 4 &&
+                       std::all_of(parts.begin(), parts.end(), [](std::string_view p) { return PlainNumber(p); });
+            }
+            if (const auto arguments = CallOf(text, "steps"))
+            {
+                const std::vector<std::string_view> parts = Split(*arguments, ',');
+                constexpr std::array<std::string_view, 6> positions{"jump-start", "jump-end", "jump-none",
+                                                                    "jump-both",  "start",    "end"};
+                const std::optional<float> count = parts.empty() ? std::nullopt : PlainNumber(parts[0]);
+                return count && *count >= 1.0f && std::floor(*count) == *count &&
+                       (parts.size() == 1 || (parts.size() == 2 && IsOneOf(parts[1], positions)));
+            }
+            return false;
+        }
+
+        /** @brief Joins parts with a space. */
+        std::string Join(std::span<const std::string_view> parts, std::string_view separator = " ")
+        {
+            std::string out;
+            for (std::size_t i = 0; i < parts.size(); ++i)
+            {
+                if (i > 0)
+                {
+                    out += separator;
+                }
+                out += parts[i];
+            }
+            return out;
+        }
+
+        /** @brief One to four values round the box, top first, as margin, padding and the border lists take them. */
+        bool ExpandSides(std::string_view value, const std::array<std::string_view, 4>& names,
+                         std::vector<Longhand>& out, StyleParseContext& context)
+        {
+            const std::vector<std::string_view> parts = Split(value, ' ');
+            if (parts.empty() || parts.size() > 4)
+            {
+                return Fail(context, "it is not one to four values");
+            }
+            const std::size_t n = parts.size();
+            // CSS: top; then right defaults to top, bottom to top, left to right.
+            const std::array<std::string_view, 4> sides{parts[0], n > 1 ? parts[1] : parts[0],
+                                                        n > 2 ? parts[2] : parts[0],
+                                                        n > 3 ? parts[3] : (n > 1 ? parts[1] : parts[0])};
+            for (std::size_t i = 0; i < 4; ++i)
+            {
+                out.emplace_back(names[i], sides[i]);
+            }
+            return true;
+        }
+
+        bool ExpandBorder(std::string_view value, std::vector<Longhand>& out, StyleParseContext& context)
+        {
+            constexpr std::array<std::string_view, 10> styles{"none",   "hidden", "dotted", "dashed", "solid",
+                                                              "double", "groove", "ridge",  "inset",  "outset"};
+            std::optional<std::string> width;
+            std::optional<std::string_view> style;
+            std::optional<std::string_view> colour;
+            for (const std::string_view part : Split(value, ' '))
+            {
+                if (!style && IsOneOf(part, styles))
+                {
+                    style = part;
+                }
+                else if (!width &&
+                         (Pixels(part) || IsOneOf(part, std::array<std::string_view, 3>{"thin", "medium", "thick"})))
+                {
+                    width = EqualsIgnoringCase(part, "thin")     ? "1px"
+                            : EqualsIgnoringCase(part, "medium") ? "3px"
+                            : EqualsIgnoringCase(part, "thick")  ? "5px"
+                                                                 : std::string(part);
+                }
+                else if (!colour && ReadColour(part))
+                {
+                    colour = part;
+                }
+                else
+                {
+                    return Fail(context, "it is not a width, a style and a colour, each at most once");
+                }
+            }
+            if (!width && !style && !colour)
+            {
+                return Fail(context, "it is empty");
+            }
+            // CSS computes a border's width to zero when its style is none or hidden, which it is when left out.
+            const bool drawn = style && !EqualsIgnoringCase(*style, "none") && !EqualsIgnoringCase(*style, "hidden");
+            const std::string widthText = drawn ? width.value_or("3px") : "0";
+            for (const std::string_view side : {"top", "right", "bottom", "left"})
+            {
+                out.emplace_back("border-" + std::string(side) + "-width", widthText);
+            }
+            // CSS's initial border colour is currentcolor; the style has no color property yet, and its border colours
+            // start black.
+            for (const std::string_view side : {"top", "right", "bottom", "left"})
+            {
+                out.emplace_back("border-" + std::string(side) + "-color", std::string(colour.value_or("black")));
+            }
+            return true;
+        }
+
+        bool ExpandBackground(std::string_view value, std::vector<Longhand>& out, StyleParseContext& context)
+        {
+            if (Split(value, ',').size() > 1)
+            {
+                return Fail(context, "it has more than one layer");
+            }
+            // The size is the one or two values that follow a slash at the top level, after the position.
+            std::vector<std::string_view> parts;
+            std::vector<std::string_view> sizeParts;
+            bool slash = false;
+            int depth = 0;
+            for (std::size_t i = 0; i < value.size(); ++i)
+            {
+                depth += value[i] == '(' ? 1 : value[i] == ')' ? -1 : 0;
+                if (depth == 0 && value[i] == '/')
+                {
+                    slash = true;
+                    parts = Split(value.substr(0, i), ' ');
+                    const std::vector<std::string_view> after = Split(value.substr(i + 1), ' ');
+                    constexpr std::array<std::string_view, 4> sizeWords{"cover", "contain", "stretch", "auto"};
+                    std::size_t next = 0;
+                    while (next < after.size() && sizeParts.size() < 2 &&
+                           (IsOneOf(after[next], sizeWords) ||
+                            (ReadLength(after[next]) && !EqualsIgnoringCase(after[next], "none"))))
+                    {
+                        sizeParts.push_back(after[next++]);
+                    }
+                    parts.insert(parts.end(), after.begin() + static_cast<std::ptrdiff_t>(next), after.end());
+                    break;
+                }
+            }
+            if (!slash)
+            {
+                parts = Split(value, ' ');
+            }
+            std::optional<std::string_view> colour;
+            std::optional<std::string_view> image;
+            std::vector<std::string_view> position;
+            constexpr std::array<std::string_view, 5> positionWords{"left", "right", "top", "bottom", "center"};
+            for (const std::string_view part : parts)
+            {
+                if (!image && (EqualsIgnoringCase(part, "none") || UrlPath(part) || CallOf(part, "linear-gradient") ||
+                               CallOf(part, "radial-gradient")))
+                {
+                    image = part;
+                }
+                else if (IsOneOf(part, positionWords) ||
+                         (ReadLength(part) && !EqualsIgnoringCase(part, "auto") && !EqualsIgnoringCase(part, "none")))
+                {
+                    position.push_back(part);
+                }
+                else if (!colour && ReadColour(part))
+                {
+                    colour = part;
+                }
+                else
+                {
+                    return Fail(context, "'" + std::string(part) +
+                                             "' is not a colour, an image or a position (FenrirUI's background takes "
+                                             "background-color, -image, -position and -size)");
+                }
+            }
+            if (slash && (position.empty() || sizeParts.empty()))
+            {
+                return Fail(context, "a size after a slash needs a position before it");
+            }
+            out.emplace_back("background-color", std::string(colour.value_or("transparent")));
+            out.emplace_back("background-image", std::string(image.value_or("none")));
+            out.emplace_back("background-position", position.empty() ? std::string("0% 0%") : Join(position));
+            out.emplace_back("background-size", sizeParts.empty() ? std::string("stretch") : Join(sizeParts));
+            return true;
+        }
+
+        bool ExpandFlex(std::string_view value, std::vector<Longhand>& out, StyleParseContext& context)
+        {
+            const auto emit = [&](std::string grow, std::string shrink, std::string basis) {
+                out.emplace_back("flex-grow", std::move(grow));
+                out.emplace_back("flex-shrink", std::move(shrink));
+                out.emplace_back("flex-basis", std::move(basis));
+                return true;
+            };
+            const std::string_view trimmed = Trim(value);
+            if (EqualsIgnoringCase(trimmed, "none"))
+            {
+                return emit("0", "0", "auto");
+            }
+            if (EqualsIgnoringCase(trimmed, "auto"))
+            {
+                return emit("1", "1", "auto");
+            }
+            if (EqualsIgnoringCase(trimmed, "initial"))
+            {
+                return emit("0", "1", "auto");
+            }
+            std::vector<std::string> numbers;
+            std::optional<std::string> basis;
+            for (const std::string_view part : Split(value, ' '))
+            {
+                if (PlainNumber(part) && numbers.size() < 2)
+                {
+                    numbers.emplace_back(part);
+                }
+                else if (!basis && ReadLength(part) && !EqualsIgnoringCase(part, "none"))
+                {
+                    basis = std::string(part);
+                }
+                else
+                {
+                    return Fail(context, "it is not none, auto, or up to two numbers and a basis");
+                }
+            }
+            if (numbers.empty() && !basis)
+            {
+                return Fail(context, "it is empty");
+            }
+            // CSS: a grow given alone makes the basis 0%; a shrink left out is 1.
+            return emit(numbers.empty() ? "1" : numbers[0], numbers.size() > 1 ? numbers[1] : "1",
+                        basis.value_or("0%"));
+        }
+
+        bool ExpandGap(std::string_view value, std::vector<Longhand>& out, StyleParseContext& context)
+        {
+            const std::vector<std::string_view> parts = Split(value, ' ');
+            if (parts.empty() || parts.size() > 2)
+            {
+                return Fail(context, "it is not one or two lengths");
+            }
+            out.emplace_back("row-gap", std::string(parts[0]));
+            out.emplace_back("column-gap", std::string(parts.size() > 1 ? parts[1] : parts[0]));
+            return true;
+        }
+
+        bool ExpandTransition(std::string_view value, std::vector<Longhand>& out, StyleParseContext& context)
+        {
+            std::vector<std::string> properties;
+            std::vector<std::string> durations;
+            std::vector<std::string> timings;
+            std::vector<std::string> delays;
+            for (const std::string_view single : Split(value, ','))
+            {
+                std::optional<std::string_view> property;
+                std::optional<std::string_view> duration;
+                std::optional<std::string_view> delay;
+                std::optional<std::string_view> timing;
+                for (const std::string_view part : Split(single, ' '))
+                {
+                    if (IsTime(part) && !duration)
+                    {
+                        duration = part;
+                    }
+                    else if (IsTime(part) && !delay)
+                    {
+                        delay = part;
+                    }
+                    else if (!timing && IsTimingFunction(part))
+                    {
+                        timing = part;
+                    }
+                    else if (!property && IsIdentifier(part))
+                    {
+                        property = part;
+                    }
+                    else
+                    {
+                        return Fail(context, "'" + std::string(part) +
+                                                 "' is not a property, a time or a timing "
+                                                 "function, each at most once (two times)");
+                    }
+                }
+                if (!property && !duration && !timing)
+                {
+                    return Fail(context, "a transition in its list is empty");
+                }
+                properties.emplace_back(property.value_or("all"));
+                durations.emplace_back(duration.value_or("0s"));
+                timings.emplace_back(timing.value_or("ease"));
+                delays.emplace_back(delay.value_or("0s"));
+            }
+            const auto list = [](const std::vector<std::string>& items) {
+                std::vector<std::string_view> views(items.begin(), items.end());
+                return Join(views, ", ");
+            };
+            out.emplace_back("transition-property", list(properties));
+            out.emplace_back("transition-duration", list(durations));
+            out.emplace_back("transition-timing-function", list(timings));
+            out.emplace_back("transition-delay", list(delays));
+            return true;
+        }
+
+        bool ExpandAnimation(std::string_view value, std::vector<Longhand>& out, StyleParseContext& context)
+        {
+            constexpr std::array<std::string_view, 4> directions{"normal", "reverse", "alternate", "alternate-reverse"};
+            constexpr std::array<std::string_view, 4> fillModes{"none", "forwards", "backwards", "both"};
+            constexpr std::array<std::string_view, 2> playStates{"running", "paused"};
+            std::array<std::vector<std::string>, 7> lists;
+            for (const std::string_view single : Split(value, ','))
+            {
+                std::array<std::optional<std::string>, 7> found;
+                enum Slot : std::size_t
+                {
+                    Name,
+                    Duration,
+                    Timing,
+                    Delay,
+                    Count,
+                    Direction,
+                    Fill,
+                };
+                for (const std::string_view part : Split(single, ' '))
+                {
+                    const std::optional<float> number = PlainNumber(part);
+                    if (IsTime(part) && !found[Duration])
+                    {
+                        found[Duration] = std::string(part);
+                    }
+                    else if (IsTime(part) && !found[Delay])
+                    {
+                        found[Delay] = std::string(part);
+                    }
+                    else if (!found[Timing] && IsTimingFunction(part))
+                    {
+                        found[Timing] = std::string(part);
+                    }
+                    else if (!found[Count] && (EqualsIgnoringCase(part, "infinite") || (number && *number >= 0.0f)))
+                    {
+                        found[Count] = std::string(part);
+                    }
+                    else if (!found[Direction] && IsOneOf(part, directions))
+                    {
+                        found[Direction] = std::string(part);
+                    }
+                    else if (!found[Fill] && IsOneOf(part, fillModes))
+                    {
+                        found[Fill] = std::string(part);
+                    }
+                    else if (IsOneOf(part, playStates))
+                    {
+                        // animation-play-state is not in the property set; an animation always runs.
+                    }
+                    else if (!found[Name] && IsIdentifier(part))
+                    {
+                        found[Name] = std::string(part);
+                    }
+                    else
+                    {
+                        return Fail(context, "'" + std::string(part) + "' is not part of an animation, or repeats one");
+                    }
+                }
+                constexpr std::array<std::string_view, 7> initial{"none", "0s", "ease", "0s", "1", "normal", "none"};
+                for (std::size_t i = 0; i < 7; ++i)
+                {
+                    lists[i].push_back(found[i].value_or(std::string(initial[i])));
+                }
+            }
+            constexpr std::array<std::string_view, 7> names{
+                "animation-name",     "animation-duration",        "animation-timing-function",
+                "animation-delay",    "animation-iteration-count", "animation-direction",
+                "animation-fill-mode"};
+            for (std::size_t i = 0; i < 7; ++i)
+            {
+                std::vector<std::string_view> views(lists[i].begin(), lists[i].end());
+                out.emplace_back(names[i], Join(views, ", "));
+            }
+            return true;
+        }
+
+        /** @brief The end of the `var(` call starting at `start` (its `)`), or npos when it does not close. */
+        std::size_t CallEnd(std::string_view text, std::size_t open)
+        {
+            int depth = 0;
+            for (std::size_t i = open; i < text.size(); ++i)
+            {
+                if (text[i] == '(')
+                {
+                    ++depth;
+                }
+                else if (text[i] == ')' && --depth == 0)
+                {
+                    return i;
+                }
+            }
+            return std::string_view::npos;
+        }
+
+        /** @brief Where the next `var(` is at or after `from`, or npos. */
+        std::size_t FindVar(std::string_view text, std::size_t from)
+        {
+            for (std::size_t i = from; i + 4 <= text.size(); ++i)
+            {
+                const bool boundary = i == 0 || !IsNameChar(text[i - 1]);
+                if (boundary && EqualsIgnoringCase(text.substr(i, 4), "var("))
+                {
+                    return i;
+                }
+            }
+            return std::string_view::npos;
+        }
+
+        /** @brief A `var()`'s name and its fallback (nothing when it has none), or nothing when it is malformed. */
+        std::optional<std::pair<std::string_view, std::optional<std::string_view>>> VarArguments(std::string_view inner)
+        {
+            const std::size_t comma = inner.find(',');
+            const std::string_view name = Trim(inner.substr(0, comma));
+            if (name.size() < 3 || name.substr(0, 2) != "--" || !IsIdentifier(name.substr(2)))
+            {
+                return std::nullopt;
+            }
+            std::optional<std::string_view> fallback;
+            if (comma != std::string_view::npos)
+            {
+                fallback = Trim(inner.substr(comma + 1));
+            }
+            return std::pair{name, fallback};
+        }
+
+        std::optional<std::string> Substitute(std::string_view value,
+                                              const std::function<const std::string*(std::string_view)>& lookup,
+                                              int depth)
+        {
+            // A custom property that refers to itself, directly or round a loop, is a cycle CSS makes invalid.
+            if (depth > 16)
+            {
+                return std::nullopt;
+            }
+            std::string out;
+            std::size_t at = 0;
+            for (std::size_t start = FindVar(value, 0); start != std::string_view::npos; start = FindVar(value, at))
+            {
+                const std::size_t end = CallEnd(value, start + 3);
+                if (end == std::string_view::npos)
+                {
+                    return std::nullopt;
+                }
+                const auto arguments = VarArguments(value.substr(start + 4, end - start - 4));
+                if (!arguments)
+                {
+                    return std::nullopt;
+                }
+                out += value.substr(at, start - at);
+                std::optional<std::string> replacement;
+                if (const std::string* found = lookup(arguments->first))
+                {
+                    replacement = Substitute(*found, lookup, depth + 1);
+                }
+                if (!replacement && arguments->second)
+                {
+                    replacement = Substitute(*arguments->second, lookup, depth + 1);
+                }
+                if (!replacement)
+                {
+                    return std::nullopt;
+                }
+                out += *replacement;
+                at = end + 1;
+            }
+            out += value.substr(at);
+            return out;
+        }
+    } // namespace
+
+    PropertyKind ClassifyProperty(std::string_view name) noexcept
+    {
+        if (std::find(Shorthands.begin(), Shorthands.end(), name) != Shorthands.end())
+        {
+            return PropertyKind::Shorthand;
+        }
+        if (std::find(LaterLonghands.begin(), LaterLonghands.end(), name) != LaterLonghands.end())
+        {
+            return PropertyKind::NotYetStyled;
+        }
+        if (name == "transform-origin")
+        {
+            return PropertyKind::Styled;
+        }
+        for (const PropertyEntry& entry : Properties)
+        {
+            if (entry.property != StyleProperty::TransformOriginX &&
+                entry.property != StyleProperty::TransformOriginY && entry.name == name)
+            {
+                return PropertyKind::Styled;
+            }
+        }
+        return PropertyKind::Unknown;
+    }
+
+    bool ExpandShorthand(std::string_view name, std::string_view value, std::vector<Longhand>& out,
+                         StyleParseContext& context)
+    {
+        value = Trim(value);
+        if (value.empty())
+        {
+            return Fail(context, "it is empty");
+        }
+        std::vector<Longhand> expanded;
+        bool read = false;
+        if (name == "margin")
+        {
+            read =
+                ExpandSides(value, {"margin-top", "margin-right", "margin-bottom", "margin-left"}, expanded, context);
+        }
+        else if (name == "padding")
+        {
+            read = ExpandSides(value, {"padding-top", "padding-right", "padding-bottom", "padding-left"}, expanded,
+                               context);
+        }
+        else if (name == "border-width")
+        {
+            read = ExpandSides(value,
+                               {"border-top-width", "border-right-width", "border-bottom-width", "border-left-width"},
+                               expanded, context);
+        }
+        else if (name == "border-color")
+        {
+            read = ExpandSides(value,
+                               {"border-top-color", "border-right-color", "border-bottom-color", "border-left-color"},
+                               expanded, context);
+        }
+        else if (name == "border-radius")
+        {
+            if (value.find('/') != std::string_view::npos)
+            {
+                return Fail(context, "elliptical radii (a slash) are not supported");
+            }
+            read = ExpandSides(value,
+                               {"border-top-left-radius", "border-top-right-radius", "border-bottom-right-radius",
+                                "border-bottom-left-radius"},
+                               expanded, context);
+        }
+        else if (name == "border")
+        {
+            read = ExpandBorder(value, expanded, context);
+        }
+        else if (name == "background")
+        {
+            read = ExpandBackground(value, expanded, context);
+        }
+        else if (name == "flex")
+        {
+            read = ExpandFlex(value, expanded, context);
+        }
+        else if (name == "gap")
+        {
+            read = ExpandGap(value, expanded, context);
+        }
+        else if (name == "transition")
+        {
+            read = ExpandTransition(value, expanded, context);
+        }
+        else if (name == "animation")
+        {
+            read = ExpandAnimation(value, expanded, context);
+        }
+        else
+        {
+            return Fail(context, "it is not a shorthand");
+        }
+        if (read)
+        {
+            out.insert(out.end(), expanded.begin(), expanded.end());
+        }
+        return read;
+    }
+
+    bool ParseStyleDeclaration(std::string_view name, std::string_view value, StyleDeclarations& into,
+                               StyleParseContext& context)
+    {
+        if (Trim(value).empty())
+        {
+            return Fail(context, "it has no value");
+        }
+        switch (ClassifyProperty(name))
+        {
+        case PropertyKind::Styled:
+            return ParseStyleProperty(name, value, into, context);
+        case PropertyKind::NotYetStyled:
+            return true;
+        case PropertyKind::Shorthand: {
+            std::vector<Longhand> longhands;
+            if (!ExpandShorthand(name, value, longhands, context))
+            {
+                return false;
+            }
+            StyleDeclarations read = into;
+            for (const auto& [longhand, part] : longhands)
+            {
+                if (ClassifyProperty(longhand) == PropertyKind::Styled &&
+                    !ParseStyleProperty(longhand, part, read, context))
+                {
+                    context.error = longhand + ": " + context.error;
+                    return false;
+                }
+            }
+            into = std::move(read);
+            return true;
+        }
+        case PropertyKind::Unknown:
+            break;
+        }
+        return Fail(context, "it is not a property FenrirUI knows");
+    }
+
+    std::vector<StyleProperty> PropertiesOf(std::string_view name)
+    {
+        if (name == "transform-origin")
+        {
+            return {StyleProperty::TransformOriginX, StyleProperty::TransformOriginY};
+        }
+        std::vector<std::string> longhands{std::string(name)};
+        if (ClassifyProperty(name) == PropertyKind::Shorthand)
+        {
+            // Expanding a value the shorthand reads names the longhands it gives.
+            std::string_view sample = "none";
+            if (name == "border-color")
+            {
+                sample = "black";
+            }
+            else if (name == "border")
+            {
+                sample = "solid";
+            }
+            else if (name != "background" && name != "flex" && name != "transition" && name != "animation")
+            {
+                sample = "0";
+            }
+            StyleParseContext context;
+            std::vector<Longhand> expanded;
+            ExpandShorthand(name, sample, expanded, context);
+            longhands.clear();
+            for (Longhand& longhand : expanded)
+            {
+                longhands.push_back(std::move(longhand.first));
+            }
+        }
+        std::vector<StyleProperty> properties;
+        for (const std::string& longhand : longhands)
+        {
+            for (const PropertyEntry& entry : Properties)
+            {
+                if (entry.name == longhand && entry.property != StyleProperty::TransformOriginX &&
+                    entry.property != StyleProperty::TransformOriginY)
+                {
+                    properties.push_back(entry.property);
+                }
+            }
+        }
+        return properties;
+    }
+
+    bool ContainsVar(std::string_view value) noexcept
+    {
+        return FindVar(value, 0) != std::string_view::npos;
+    }
+
+    bool CheckVarSyntax(std::string_view value, std::string& error)
+    {
+        for (std::size_t start = FindVar(value, 0); start != std::string_view::npos;)
+        {
+            const std::size_t end = CallEnd(value, start + 3);
+            if (end == std::string_view::npos)
+            {
+                error = "a var() is not closed";
+                return false;
+            }
+            const auto arguments = VarArguments(value.substr(start + 4, end - start - 4));
+            if (!arguments)
+            {
+                error = "a var() does not name a custom property (--name)";
+                return false;
+            }
+            if (arguments->second && !CheckVarSyntax(*arguments->second, error))
+            {
+                return false;
+            }
+            start = FindVar(value, end + 1);
+        }
+        return true;
+    }
+
+    std::optional<std::string> SubstituteVars(std::string_view value,
+                                              const std::function<const std::string*(std::string_view)>& lookup)
+    {
+        return Substitute(value, lookup, 0);
     }
 } // namespace Fenrir::Detail
