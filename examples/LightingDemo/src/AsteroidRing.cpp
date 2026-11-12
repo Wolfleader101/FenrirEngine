@@ -63,10 +63,10 @@ namespace LightingDemo
 
         /**
          * @brief How a rock's levels are made: halving to seven levels and 32 to 52 triangles, the coarsest the specks
-         * that are most of the ring, with its UV seams free to collapse (a scanned rock's islands lock it at a few
-         * hundred triangles otherwise).
+         * that are most of the ring, with its UV seams free to collapse, as `LodSettings` leaves them (a scanned
+         * rock's islands lock it at a few hundred triangles otherwise).
          */
-        constexpr Fenrir::LodSettings RockLods{.ratio = 0.5f, .maxLevels = 7, .minTriangles = 32, .lockSeams = false};
+        constexpr Fenrir::LodSettings RockLods{.ratio = 0.5f, .maxLevels = 7, .minTriangles = 32};
         /** @brief The level-of-detail errors L steps through, in pixels; the renderer's default first. */
         constexpr std::array<float, 4> LodErrorSteps{1.0f, 2.0f, 4.0f, 0.5f};
 

@@ -16,11 +16,12 @@ public partial struct LodSettings
     public uint MinTriangles = 32;
     /// <summary>
     /// Whether every vertex on an attribute seam (a position several vertices share: a hard edge, a UV island's border)
-    /// is locked where it is. Off, meshoptimizer still keeps a seam's two sides together, so no crack opens, but the
-    /// seam itself may collapse along its length: a mesh of many small UV islands, such as a scanned rock, stalls at a
-    /// few hundred triangles locked and goes on to a few dozen unlocked.
+    /// is locked where it is. Off, the default, meshoptimizer still keeps a seam's two sides together, so no crack
+    /// opens, but the seam itself may collapse along its length: a mesh of many small UV islands, such as a scanned
+    /// rock, goes on to a few dozen triangles unlocked and stalls at a few hundred locked. On keeps hard edges and UV
+    /// islands exactly where they were, for a mesh whose seams must not move.
     /// </summary>
-    public bool LockSeams = true;
+    public bool LockSeams = false;
 
     public LodSettings()
     {

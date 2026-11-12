@@ -124,7 +124,7 @@ of three Poly Haven moon-rock kinds (ADR-0051): one InstancedMeshRenderer each, 
 ring is three draws a pass however many rocks it holds, its copies each turned, scaled, squashed and tinted at random.
 Poly Haven's rocks have 3,300 to 6,800 triangles each. Each kind loads at full detail and `GenerateLods` (ADR-0057)
 makes its levels once at spawn, halving to seven levels and 32 to 52 triangles with its UV seams free to collapse
-(`LodSettings::lockSeams` off: a scanned rock's islands lock the chain at a few hundred triangles otherwise), and the
+(`LodSettings::lockSeams` off, its default: a scanned rock's islands lock the chain at a few hundred triangles otherwise), and the
 ring and the field draw the same mesh. The cull pass drops the copies outside the camera and draws each of the rest at
 the coarsest level whose error projects under a pixel, so the specks that are most of the ring are a few dozen
 triangles and the field's rocks beside the camera keep their detail. In Release on an RTX 5080 (an i7-13700KF under
