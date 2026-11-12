@@ -58,14 +58,31 @@ namespace Fenrir
     };
 
     /**
+     * @brief A pseudo-element a selector may end with: a part of its subject drawn by FenrirUI rather than an element
+     * of the tree. A scroll view's scrollbars are the two there are: `::scrollbar`, a bar's track (its `width` is the
+     * bar's thickness and its padding the thumb's inset), and `::scrollbar-thumb`.
+     */
+    enum class PseudoElement : std::uint8_t
+    {
+        None,
+        Scrollbar,
+        ScrollbarThumb,
+    };
+
+    /**
      * @brief A complex selector: compound selectors from the leftmost to the subject, the rightmost, each after the
-     * first joined to the one before it by `combinators[i - 1]`.
+     * first joined to the one before it by `combinators[i - 1]`, and the pseudo-element of the subject it styles, if
+     * any. A compound before a pseudo-element may be empty (`::scrollbar` is any element's).
      */
     struct Selector
     {
         std::vector<CompoundSelector> compounds;
         std::vector<SelectorCombinator> combinators;
-        /** @brief CSS's specificity: ids, then classes and pseudo-classes, then tags, each in 10 bits. */
+        PseudoElement pseudoElement = PseudoElement::None;
+        /**
+         * @brief CSS's specificity: ids, then classes and pseudo-classes, then tags and pseudo-elements, each in 10
+         * bits.
+         */
         std::uint32_t specificity = 0;
 
         /** @brief As CSS writes it, in one canonical form (`panel.a:hover > #b`). */

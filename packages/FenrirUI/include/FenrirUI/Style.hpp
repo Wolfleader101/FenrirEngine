@@ -111,11 +111,15 @@ namespace Fenrir
         SpaceEvenly,
     };
 
-    /** @brief `overflow`: children drawn past the padding box, or clipped to it (with its inner radii). */
+    /**
+     * @brief `overflow`: children drawn past the padding box, or clipped to it (with its inner radii), or clipped and
+     * scrolled by the element's scroll offset (UIRoot::SetScrollOffset), with scrollbars.
+     */
     enum class Overflow : std::uint8_t
     {
         Visible,
         Hidden,
+        Scroll,
     };
 
     /** @brief `pointer-events` (ADR-0065): an element takes no pointer input unless it is `All`. Inherited. */

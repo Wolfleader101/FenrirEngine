@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "FenrirUI/Style.hpp"
@@ -69,6 +70,14 @@ namespace Fenrir::Detail
         std::vector<std::uint32_t> any;
         /** @brief Some selector looks above its subject, so a change to an element can restyle its descendants. */
         bool hasCombinators = false;
+        /**
+         * @brief The tags, ids and classes of the compounds before a combinator, so a change to an element none of
+         * them names restyles only the element; `anyAbove` when one such compound names none of them.
+         */
+        std::unordered_set<std::string> aboveTags;
+        std::unordered_set<std::string> aboveIds;
+        std::unordered_set<std::string> aboveClasses;
+        bool anyAbove = false;
         /** @brief Some selector uses :first-child or :last-child, so a change of children can restyle siblings. */
         bool hasSiblingStructure = false;
         /** @brief Some selector uses :intro, so clearing it can restyle. */
@@ -83,16 +92,20 @@ namespace Fenrir::Detail
      */
     void CompileStylesheet(UIRootState& state, StylesheetEntry& entry);
 
-    /** @brief Builds the index, and the keyframes by name, over every sheet the root holds, in the order added. */
+    /**
+     * @brief Builds the index, and the keyframes by name, over the default stylesheet (when the root has it) and every
+     * sheet the root holds, in the order added.
+     */
     void RebuildStyleIndex(UIRootState& state);
 
     /**
      * @brief Resolves the cascaded style of the element in slot `index` onto `style`, which holds the defaults and
-     * what it inherits: its matching rules by specificity and order, then its inline style. `custom` is its custom
-     * properties, what it inherits on the way in.
+     * what it inherits: its matching rules by specificity and order, then its inline style. `custom` is its
+     * custom properties, what it inherits on the way in. With a `pseudoElement`, it resolves that part of the element
+     * instead, from the rules whose selectors end in it, with no inline style.
      */
     void Cascade(UIRootState& state, std::uint32_t index, ResolvedStyle& style,
-                 std::shared_ptr<const CustomProperties>& custom);
+                 std::shared_ptr<const CustomProperties>& custom, PseudoElement pseudoElement = PseudoElement::None);
 
     /** @brief The context that loads a url() from the root's asset store. */
     [[nodiscard]] StyleParseContext MakeParseContext(UIRootState& state);

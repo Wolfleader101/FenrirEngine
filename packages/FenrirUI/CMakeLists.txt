@@ -4,7 +4,18 @@
 # and submits to FenrirRenderer's overlay, both linked PRIVATE too. Built with FENRIR_ENABLE_UI, which needs the renderer.
 add_subdirectory(libs)
 
+# The default stylesheet, embedded as one raw string literal, which MSVC holds to 16380 bytes. Configure reads it again
+# when it changes.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/Resources/default.css" FENRIR_UI_DEFAULT_STYLESHEET)
+string(LENGTH "${FENRIR_UI_DEFAULT_STYLESHEET}" FENRIR_UI_DEFAULT_STYLESHEET_LENGTH)
+if(FENRIR_UI_DEFAULT_STYLESHEET_LENGTH GREATER 16000)
+    message(FATAL_ERROR "FenrirUI: Resources/default.css is over 16000 bytes; split its embedded literal")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Resources/default.css")
+configure_file(src/DefaultStylesheet.cpp.in "${CMAKE_CURRENT_BINARY_DIR}/generated/DefaultStylesheet.cpp" @ONLY)
+
 add_library(FenrirUI STATIC
+    include/FenrirUI/Controls.hpp
     include/FenrirUI/Element.hpp
     include/FenrirUI/ElementId.hpp
     include/FenrirUI/Style.hpp
@@ -18,6 +29,9 @@ add_library(FenrirUI STATIC
     src/BoxPainting.hpp
     src/Cascade.cpp
     src/Cascade.hpp
+    src/Controls.cpp
+    src/DefaultStylesheet.cpp.in
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/DefaultStylesheet.cpp"
     src/ElementGeometry.cpp
     src/ElementGeometry.hpp
     src/ElementText.cpp
@@ -27,6 +41,8 @@ add_library(FenrirUI STATIC
     src/LayoutBridge.cpp
     src/LayoutBridge.hpp
     src/Rects.hpp
+    src/Scrolling.cpp
+    src/Scrolling.hpp
     src/Style.cpp
     src/StyleAnimation.cpp
     src/StyleAnimation.hpp

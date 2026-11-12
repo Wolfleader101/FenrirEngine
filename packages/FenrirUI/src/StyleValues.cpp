@@ -802,7 +802,8 @@ namespace Fenrir::Detail
         {
             return ParseKeyword(value, out, context,
                                 std::array{std::pair{std::string_view("visible"), Overflow::Visible},
-                                           std::pair{std::string_view("hidden"), Overflow::Hidden}});
+                                           std::pair{std::string_view("hidden"), Overflow::Hidden},
+                                           std::pair{std::string_view("scroll"), Overflow::Scroll}});
         }
 
         bool ParsePointerEvents(std::string_view value, PointerEvents& out, StyleParseContext& context)

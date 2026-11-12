@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -23,6 +24,13 @@ namespace Fenrir
 
 namespace Fenrir::Detail
 {
+    /** @brief A scroll view's `::scrollbar` (its tracks) and `::scrollbar-thumb` styles. */
+    struct ScrollbarStyles
+    {
+        ResolvedStyle track;
+        ResolvedStyle thumb;
+    };
+
     /** @brief One slot of a root's dense tree: an element while `alive`, free for reuse otherwise. */
     struct ElementSlot
     {
@@ -62,6 +70,15 @@ namespace Fenrir::Detail
         bool focusable = false;
         /** @brief Its listeners, in the order added. */
         std::vector<ListenerEntry> listeners;
+        /** @brief Its scroll offset, and the largest it can be as of the last layout, while it has `overflow: scroll`.
+         */
+        Math::Vec2 scrollOffset{0.0f, 0.0f};
+        Math::Vec2 scrollRange{0.0f, 0.0f};
+        /**
+         * @brief Its `::scrollbar` and `::scrollbar-thumb` styles as of its last resolve, while it has `overflow:
+         * scroll`; null otherwise.
+         */
+        std::unique_ptr<ScrollbarStyles> scrollbarStyles;
     };
 
     /** @brief A root's tree in dense slots, its Yoga nodes, its target and what its frames keep. */
@@ -84,12 +101,16 @@ namespace Fenrir::Detail
         float scale = 1.0f;
         /** @brief Target pixels per UI unit, which the rectangles were last snapped at; zero before any were. */
         float snappedAt = 0.0f;
+        /** @brief A scroll offset changed: the rectangles are read again on the next frame, laid out or not. */
+        bool boxesDirty = false;
         /** @brief Target pixels per UI unit, which text is laid out at: the scale times the content scale. */
         float textPixelsPerUnit = 1.0f;
         UIRootStats stats;
         /** @brief The rows of its gradients with more than two stops, made on its first frame. */
         std::optional<StopTexture> stops;
         bool stopsUsed = false;
+        /** @brief The default stylesheet, under its own; null when it was made without. */
+        std::unique_ptr<StylesheetEntry> defaultSheet;
         /** @brief Its stylesheets, in the order added. */
         std::vector<std::unique_ptr<StylesheetEntry>> sheets;
         std::uint32_t nextSheet = 1;

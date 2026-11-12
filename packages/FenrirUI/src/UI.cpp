@@ -6,12 +6,19 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirText/FontLibrary.hpp"
+#include "FenrirUI/Controls.hpp"
 
 namespace Fenrir
 {
     UIRoots::UIRoots(App& app, AssetHandle<Shader> painterShader, const UIConfig& config)
         : settings(config.settings), m_app(app), m_painterShader(painterShader)
     {
+        RegisterElement("button", [] { return std::make_unique<Button>(); });
+        RegisterElement("checkbox", [] { return std::make_unique<Checkbox>(); });
+        RegisterElement("slider", [] { return std::make_unique<Slider>(); });
+        RegisterElement("progress", [] { return std::make_unique<ProgressBar>(); });
+        RegisterElement("image", [] { return std::make_unique<ImageView>(); });
+        RegisterElement("scroll", [] { return std::make_unique<ScrollView>(); });
     }
 
     UIRoots::~UIRoots() = default;

@@ -312,7 +312,9 @@ namespace Fenrir::Detail
         YGNodeStyleSetJustifyContent(node, ToYoga(style.justifyContent));
         SetGap(node, YGGutterRow, style.rowGap);
         SetGap(node, YGGutterColumn, style.columnGap);
-        YGNodeStyleSetOverflow(node, style.overflow == Overflow::Hidden ? YGOverflowHidden : YGOverflowVisible);
+        YGNodeStyleSetOverflow(node, style.overflow == Overflow::Scroll   ? YGOverflowScroll
+                                     : style.overflow == Overflow::Hidden ? YGOverflowHidden
+                                                                          : YGOverflowVisible);
     }
 
     void LayoutTree::SetFixedSize(LayoutNode* node, float width, float height)

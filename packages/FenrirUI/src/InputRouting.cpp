@@ -11,6 +11,7 @@
 #include "FenrirInput/Input.hpp"
 #include "FenrirUI/UI.hpp"
 #include "FenrirUI/UIRoot.hpp"
+#include "Scrolling.hpp"
 #include "UIRootState.hpp"
 
 namespace Fenrir::Detail
@@ -35,8 +36,21 @@ namespace Fenrir::Detail
             {
                 point = ElementTransform(style, slot.boxes.border).Inverse().Apply(point);
             }
+            // A scroll view's bars lie over its children.
+            if (style.overflow == Overflow::Scroll && style.pointerEvents == PointerEvents::All)
+            {
+                const ScrollbarBoxes bars = ScrollbarsOf(slot);
+                const auto inside = [&](const Rect2D& rect) {
+                    return point.x >= rect.x && point.y >= rect.y && point.x < rect.x + rect.width &&
+                           point.y < rect.y + rect.height;
+                };
+                if ((bars.vertical && inside(bars.verticalTrack)) || (bars.horizontal && inside(bars.horizontalTrack)))
+                {
+                    return id;
+                }
+            }
             const bool childrenReachable =
-                style.overflow != Overflow::Hidden || ContainsRounded(slot.boxes.padding, InnerRadiiOf(style), point);
+                style.overflow == Overflow::Visible || ContainsRounded(slot.boxes.padding, InnerRadiiOf(style), point);
             if (childrenReachable && !slot.children.empty())
             {
                 // Painted by increasing z-index, equal ones in tree order: the last painted is on top, so tested first.
@@ -186,10 +200,34 @@ namespace Fenrir::Detail
             return event;
         }
 
+        /** @brief Offers the input to `element`, then to each ancestor in turn, until one takes it. */
         RouteResult ElementInput(UIRootState& state, ElementId element, const RoutedInput& input)
         {
-            ElementSlot* slot = state.Find(element);
-            return slot != nullptr ? slot->element->OnInput(state.app, input) : RouteResult::Passed;
+            for (ElementSlot* slot = state.Find(element); slot != nullptr; slot = state.Find(element))
+            {
+                // Read first: the element may change the tree, and the slots with it.
+                const ElementId parent = slot->parent;
+                if (slot->element->OnInput(state.app, input) == RouteResult::Consumed)
+                {
+                    return RouteResult::Consumed;
+                }
+                element = parent;
+            }
+            return RouteResult::Passed;
+        }
+
+        /** @brief Whether `element` or an element above it carries :disabled. */
+        bool IsDisabled(const UIRootState& state, ElementId element)
+        {
+            constexpr auto disabled = static_cast<std::uint16_t>(PseudoClass::Disabled);
+            for (const ElementSlot* slot = state.Find(element); slot != nullptr; slot = state.Find(slot->parent))
+            {
+                if ((slot->pseudoClasses & disabled) != 0)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
     } // namespace
 
@@ -340,6 +378,11 @@ namespace Fenrir::Detail
                 // Only a press this router consumed brings its release here.
                 const ElementId pressed = input.pressed[slot];
                 input.pressed[slot] = {};
+                const bool taken = input.pressTaken;
+                if (!FirstPressed(input).IsValid())
+                {
+                    input.pressTaken = false;
+                }
                 MoveChain(*m_root, input.activeChain, Chain(*m_state, FirstPressed(input), true), PseudoClass::Active);
                 if (m_state->Find(pressed) == nullptr)
                 {
@@ -349,8 +392,8 @@ namespace Fenrir::Detail
                 UIEvent release = MakeEvent(*m_state, UIEventKind::PointerRelease, pressed);
                 release.button = event.button;
                 Send(release);
-                if (!event.cancelled && m_state != nullptr && input.pointer &&
-                    IsWithin(*m_state, HitTest(*m_state, *input.pointer), pressed))
+                if (!event.cancelled && !taken && m_state != nullptr && input.pointer &&
+                    !IsDisabled(*m_state, pressed) && IsWithin(*m_state, HitTest(*m_state, *input.pointer), pressed))
                 {
                     Click(pressed, event.button);
                 }
@@ -366,6 +409,11 @@ namespace Fenrir::Detail
                 // A press outside the UI goes to the game, and takes the focus with it.
                 Blur(*m_root, *m_state);
                 return RouteResult::Passed;
+            }
+            if (IsDisabled(*m_state, hit))
+            {
+                // A disabled control is still the UI's, so the game does not see the press, but it does nothing.
+                return RouteResult::Consumed;
             }
             // A click on this root is a click outside every other root on the window: they lose the focus.
             for (UIRoot* other : m_state->roots.GetRoots())
@@ -429,6 +477,17 @@ namespace Fenrir::Detail
             if (!hit.IsValid())
             {
                 return RouteResult::Passed;
+            }
+            // A disabled element and what is under it are passed over, to what holds them.
+            ElementId above = hit;
+            while (IsDisabled(*m_state, above))
+            {
+                above = m_state->Find(above)->parent;
+            }
+            if (above != hit)
+            {
+                (void)ElementInput(*m_state, above, routed);
+                return RouteResult::Consumed;
             }
             (void)ElementInput(*m_state, hit, routed);
             UIEvent scroll = MakeEvent(*m_state, UIEventKind::Scroll, hit);
@@ -625,6 +684,26 @@ namespace Fenrir::Detail
         {
             SendUIEvent(state, MakeEvent(state, UIEventKind::Blur, blurred));
         }
+    }
+
+    bool TakePress(UIRoot& root, UIRootState& state, ElementId element)
+    {
+        UIRootInput& input = state.input;
+        if (state.Find(element) == nullptr || !FirstPressed(input).IsValid())
+        {
+            return false;
+        }
+        for (ElementId& pressed : input.pressed)
+        {
+            if (pressed.IsValid())
+            {
+                pressed = element;
+            }
+        }
+        input.pressTaken = true;
+        MoveChain(root, input.activeChain, Chain(state, element, true), PseudoClass::Active);
+        PublishClaims(state);
+        return true;
     }
 
     void SendUIEvent(UIRootState& state, UIEvent event)
