@@ -182,8 +182,8 @@ namespace
         {
             const std::vector<std::byte> draws =
                 RendererProbe::Bytes(test.Device(), RendererTest::EntryAt(test.Device(), cull.target, 0).buffer);
-            const std::uint32_t copies =
-                RendererTest::UintAt(draws, std::size_t{group.record} * RendererTest::RecordSize + 140);
+            const std::uint32_t copies = RendererTest::UintAt(
+                draws, std::size_t{group.record} * RendererTest::RecordSize + RendererTest::RecordInstanceCountOffset);
             for (std::uint32_t c = 0; c < (copies == 0 ? group.count : 1u); ++c)
             {
                 records.insert(group.record + c);
@@ -528,7 +528,8 @@ TEST_CASE("RendererProbe on null: a renderer with castShadows off is a candidate
     bool found = false;
     for (const std::uint32_t record : cameraRecords)
     {
-        if (RendererTest::FloatAt(records, std::size_t{record} * RendererTest::RecordSize + 48) == 1.0f)
+        if (RendererTest::FloatAt(records, std::size_t{record} * RendererTest::RecordSize +
+                                               RendererTest::RecordPositionXOffset) == 1.0f)
         {
             hiddenRecord = record;
             found = true;

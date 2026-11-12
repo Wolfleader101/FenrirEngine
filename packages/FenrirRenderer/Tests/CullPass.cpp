@@ -125,12 +125,14 @@ namespace
     {
         const BindingGroupEntry job = RendererTest::EntryAt(test.Device(), cull.job, 0);
         const std::vector<std::byte> bytes = RendererProbe::Bytes(test.Device(), job.buffer);
-        const std::uint32_t count = RendererTest::UintAt(bytes, job.offset + 8);
+        const std::uint32_t count = RendererTest::UintAt(bytes, job.offset + RendererTest::JobPlaneCountOffset);
         INFO("a job names at most the six planes it has room for");
         REQUIRE(count <= 6);
         std::vector<Fenrir::Math::Vec4> planes(count);
-        REQUIRE(job.offset + 16 + count * sizeof(Fenrir::Math::Vec4) <= bytes.size());
-        std::memcpy(planes.data(), bytes.data() + job.offset + 16, count * sizeof(Fenrir::Math::Vec4));
+        const std::size_t first = job.offset + RendererTest::JobPlanesOffset;
+        INFO("the job's buffer holds the planes its count names");
+        REQUIRE(first + count * sizeof(Fenrir::Math::Vec4) <= bytes.size());
+        std::memcpy(planes.data(), bytes.data() + first, count * sizeof(Fenrir::Math::Vec4));
         return planes;
     }
 
@@ -155,22 +157,42 @@ namespace
     }
 } // namespace
 
-TEST_CASE("Each camera's Cull pass copies its templates and dispatches once, first in the frame and before the shadow "
-          "passes",
-          "[renderer][culling][cull-pass]")
+namespace
 {
-    RendererTestApp test(RendererTest::OcclusionOff());
-    test.AddCamera();
-    AddSun(test);
-    AddThreeRuns(test);
+    /** @brief A camera with a sun over three runs, drawn one frame with occlusion off: five Cull passes. */
+    struct ThreeRunsFrame
+    {
+        RendererTestApp test{RendererTest::OcclusionOff()};
 
-    test.Frame();
-    const std::vector<std::string> passes = RendererTest::PassesIn(RendererProbe::Submitted(test.renderer));
+        ThreeRunsFrame()
+        {
+            test.AddCamera();
+            AddSun(test);
+            AddThreeRuns(test);
+            test.Frame();
+        }
+    };
+} // namespace
+
+TEST_CASE("Each camera's Cull pass runs first in the frame, before the shadow passes", "[renderer][culling][cull-pass]")
+{
+    ThreeRunsFrame frame;
+    const std::vector<std::string> passes = RendererTest::PassesIn(RendererProbe::Submitted(frame.test.renderer));
     INFO("the Cull passes run first, before ShadowCascades, DepthPrepass and Opaque: the camera's, then one per "
          "cascade of its sun shadow (ticket 10)");
     REQUIRE(passes.front() == "Cull");
     REQUIRE(std::ranges::count(passes, "Cull") == 5);
     REQUIRE(std::ranges::find(passes, "ShadowCascades") != passes.end());
+    INFO("no stale resource use or error was logged");
+    REQUIRE(RendererProbe::StaleUses(frame.test.Device()).empty());
+    REQUIRE(frame.test.messages->errors.empty());
+}
+
+TEST_CASE("A camera's Cull pass copies its templates and dispatches once, declaring what it reads and writes",
+          "[renderer][culling][cull-pass]")
+{
+    ThreeRunsFrame frame;
+    RendererTestApp& test = frame.test;
     const std::vector<RecordedCull> culls = test.Culls();
     INFO("the camera's Cull pass comes first of the five");
     REQUIRE(culls.size() == 5);
@@ -195,15 +217,22 @@ TEST_CASE("Each camera's Cull pass copies its templates and dispatches once, fir
                      ResourceUsage::StorageRead));
     REQUIRE(Declares(cull.pass.uses, RendererTest::EntryAt(test.Device(), cull.target, 0).buffer,
                      ResourceUsage::StorageRead));
-    INFO("the probe sees the camera's buffers, three runs and fourteen candidates");
+}
+
+TEST_CASE("The probe sees a camera's cull buffers, its runs and its candidates", "[renderer][culling][cull-pass]")
+{
+    ThreeRunsFrame frame;
+    RendererTestApp& test = frame.test;
+    const RecordedCull cull = test.Culls().at(0);
     const std::vector<RendererProbe::CullBuffers> probed = RendererProbe::Culls(test.renderer);
+    INFO("one camera, so one probed cull");
     REQUIRE(probed.size() == 1);
-    REQUIRE(probed.front().commands == commands);
+    INFO("the probe's buffers are the ones the camera's Cull pass binds");
+    REQUIRE(probed.front().commands == CommandsOf(test, cull));
     REQUIRE(probed.front().indirection == IndirectionOf(test, cull));
+    INFO("three runs and fourteen candidates");
     REQUIRE(probed.front().runs == 3);
     REQUIRE(probed.front().candidates == 14);
-    REQUIRE(RendererProbe::StaleUses(test.Device()).empty());
-    REQUIRE(test.messages->errors.empty());
 }
 
 TEST_CASE("The templates and the group table describe a frame of one instance list, one merged run and one lone item",
@@ -249,8 +278,8 @@ TEST_CASE("The templates and the group table describe a frame of one instance li
         REQUIRE(draw->draw.instanceCount == group.count);
         INFO("an instance list's record says its copies; an item's says none");
         const std::vector<std::byte> records = test.DrawBuffer(*draw);
-        const std::uint32_t listCopies =
-            RendererTest::UintAt(records, std::size_t{group.record} * RendererTest::RecordSize + 140);
+        const std::uint32_t listCopies = RendererTest::UintAt(
+            records, std::size_t{group.record} * RendererTest::RecordSize + RendererTest::RecordInstanceCountOffset);
         REQUIRE(listCopies == (group.count == 10 ? 10u : 0u));
     }
     REQUIRE(commandIndices == std::set<std::uint32_t>{0, 1, 2});
@@ -278,13 +307,17 @@ TEST_CASE("A run of more than 64 candidates is several groups of its own, none s
     std::ranges::sort(groups, [](const CullGroup& a, const CullGroup& b) {
         return a.count != b.count ? a.count > b.count : a.first < b.first;
     });
+    INFO("each of the list's three groups runs its 130 copies from its own first, through the list's one command "
+         "and record");
     for (std::size_t g = 0; g < 3; ++g)
     {
+        CAPTURE(g);
         REQUIRE(groups[g].count == 130);
         REQUIRE(groups[g].first == g * 64);
         REQUIRE(groups[g].command == groups[0].command);
         REQUIRE(groups[g].record == groups[0].record);
     }
+    INFO("the cube's one group runs its one copy through a command of its own");
     REQUIRE(groups[3].count == 1);
     REQUIRE(groups[3].first == 0);
     REQUIRE(groups[3].command != groups[0].command);

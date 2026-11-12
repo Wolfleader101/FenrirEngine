@@ -142,6 +142,10 @@ namespace RendererTest
     constexpr std::size_t LevelInstancesOffset = 16;
     /** @brief Where a job block's first level table entry sits in it: the fourth word of its `groups`. */
     constexpr std::size_t JobFirstLevelOffset = 12;
+    /** @brief Where a job block's plane count sits in it: the third word of its `groups`. */
+    constexpr std::size_t JobPlaneCountOffset = 8;
+    /** @brief Where a job block's planes start in it: after its four `groups` words. */
+    constexpr std::size_t JobPlanesOffset = 16;
 
     /**
      * @brief How many instances each kept candidate of the run at `command` of a Cull pass draws as, from the frame's

@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 #include "Backend/OpenGL/OpenGLDevice.hpp"
@@ -1378,6 +1379,12 @@ namespace Fenrir
                 state.stats.draws = scene.draws;
                 state.stats.instances = scene.instances;
                 state.stats.instancesDrawn = scene.instancesDrawn;
+                static_assert(std::extent_v<decltype(RendererStats::drawnByLod)> ==
+                                  std::tuple_size_v<decltype(scene.drawnByLod)>,
+                              "RendererStats::drawnByLod counts as many levels as SceneStats::drawnByLod");
+                static_assert(std::extent_v<decltype(RendererStats::drawnByPhase)> ==
+                                  std::tuple_size_v<decltype(scene.drawnByPhase)>,
+                              "RendererStats::drawnByPhase counts as many phases as SceneStats::drawnByPhase");
                 std::ranges::copy(scene.drawnByLod, std::begin(state.stats.drawnByLod));
                 std::ranges::copy(scene.drawnByPhase, std::begin(state.stats.drawnByPhase));
                 state.stats.passes = report.passesRun;

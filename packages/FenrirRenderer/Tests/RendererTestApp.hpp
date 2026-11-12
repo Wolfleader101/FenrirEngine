@@ -408,6 +408,10 @@ namespace RendererTest
 
     /** @brief The bytes of one record of the draw buffer (set 3 binding 0, `Fenrir/Draw.glsl`'s `DrawItem`, std430). */
     constexpr std::size_t RecordSize = 192;
+    /** @brief Where a record's world position's x sits in it: the world matrix's fourth column's first float. */
+    constexpr std::size_t RecordPositionXOffset = 48;
+    /** @brief Where a record's `instanceCount` sits in it: an instance list's copies, 0 for one item. */
+    constexpr std::size_t RecordInstanceCountOffset = 140;
 
     /** @brief The renderer on the null backend in an App with FenrirAssets and no window (the spec's seam 1). */
     inline Fenrir::RendererConfig NullBackend()
