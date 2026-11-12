@@ -1,0 +1,34 @@
+# The painter binding's own selection (ADR-0042, tools/describe-api/README.md): what its natives take and give by
+# pointer. The painter's paint is a variant and its stroke style and image draw hold vectors and optionals, so the forms
+# C# passes are this library's (ScriptPainter.hpp), with the painter's and path's ids; the
+# painter's own plain data and FenrirDraw2D's enums are described as they are declared, so their mirrors are generated
+# from the painter's headers. The rectangle is the text binding's, the sampler and image handle the assets binding's,
+# and the math types the math binding's.
+headers = ["../include/FenrirPainterScripting/ScriptPainter.hpp"]
+
+[types]
+"Fenrir::ScriptPainter::PainterId" = "shared-struct"
+"Fenrir::ScriptPainter::Path2D" = "shared-struct"
+"Fenrir::ScriptPainter::Paint" = "shared-struct"
+"Fenrir::ScriptPainter::StrokeStyle" = "shared-struct"
+"Fenrir::ScriptPainter::ImageDraw" = "shared-struct"
+"Fenrir::Transform2D" = "shared-struct"
+"Fenrir::CornerRadii" = "shared-struct"
+"Fenrir::Sides" = "shared-struct"
+"Fenrir::GradientStop" = "shared-struct"
+"Fenrir::Border" = "shared-struct"
+"Fenrir::Shadow" = "shared-struct"
+"Fenrir::NineSlice" = "shared-struct"
+"Fenrir::TextShadow" = "shared-struct"
+"Fenrir::GroupFilter" = "shared-struct"
+# The enums natives take by value, which no struct here holds.
+"Fenrir::GroupBlend2D" = "enum"
+"Fenrir::FillRule" = "enum"
+# The text binding's (FenrirTextScripting.api.toml gives it this role).
+"Fenrir::Rect2D" = "shared-struct"
+# The assets binding's (FenrirAssets.api.toml gives them these roles).
+"Fenrir::SamplerDescription" = "shared-struct"
+"Fenrir::AssetHandle<Fenrir::Image>" = "bound-type"
+# The math binding's.
+"Fenrir::Colour" = "shared-struct"
+"Fenrir::Math::Vec2" = "bound-type"

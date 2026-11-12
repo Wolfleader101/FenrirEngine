@@ -45,6 +45,10 @@ It answers `Size()`, `Lines()` (byte range, top, height, baseline, ascent, desce
 
 Not yet: the SDF mode (ADR-0062's opt-in per font), colour emoji, variable fonts and system font fallback. The renderer's `DebugFont` does not use FenrirText.
 
+## From C#
+
+With `FENRIR_ENABLE_SCRIPTING` on, `FenrirTextScripting` (`Scripting/`) gives C# the `Fenrir.Text` contract (`Managed/Fenrir.Text/`, ADR-0061), all of it generated from the binding (`Scripting/api/FenrirText.binding.toml`): add the app's `FontLibrary` as an app resource over its asset store (`app.AddResource<FontLibrary>(store)`), add `Text::ScriptingExtension()` (`FenrirTextScripting/TextScripting.hpp`) to `ScriptingConfig::extensions`, and deploy with `fenrir_deploy_scripting(<target> EXTENSIONS Text)`. A script registers faces by path and family (`Fonts.AddFace`) in that library and makes paragraphs (`Paragraph.Create()`), which the extension keeps until the script destroys them: it sets their text and styles (a `TextStyle` without its family, which a call takes as text), lays them out to a width and reads their size, lines (`LineMetrics`), `CharacterAt` and `RangeRects` (`Rect2D`). With no `FontLibrary`, or a paragraph destroyed or never made, a call does nothing and returns zero, warning once per call site in a debug build.
+
 ## Tests
 
-`FenrirTextTests` (with `FENRIR_BUILD_TESTS`) lays paragraphs out in HarfBuzz's test fonts (Roboto, Amiri, Noto Sans Devanagari, read from the submodule) and the embedded face, checks the atlas's packing, growth and uploads through the store, and fails the build if a public header reaches the text libraries.
+`FenrirTextTests` (with `FENRIR_BUILD_TESTS`) lays paragraphs out in HarfBuzz's test fonts (Roboto, Amiri, Noto Sans Devanagari, read from the submodule) and the embedded face, checks the atlas's packing, growth and uploads through the store, and fails the build if a public header reaches the text libraries. `FenrirTextScriptingTests` lays the same text out from C# and C++ in one library and compares, and `FenrirTextScriptingRulesTests` checks the natives' no-op rules with no .NET.

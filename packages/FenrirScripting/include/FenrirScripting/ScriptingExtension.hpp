@@ -414,6 +414,20 @@ namespace Fenrir
             m_state = std::move(state);
         }
 
+        /**
+         * @brief Its extension state, when SetState gave it one of type `State`, else null: how a package's maker
+         * shares another extension's state with its own (the painter's natives draw the text extension's paragraphs).
+         */
+        template <class State>
+        [[nodiscard]] std::shared_ptr<State> GetState() const
+        {
+            if (m_stateType != std::type_index(typeid(State)))
+            {
+                return nullptr;
+            }
+            return std::static_pointer_cast<State>(m_state);
+        }
+
         /** @brief Who it is, for diagnostics. */
         std::string name;
 

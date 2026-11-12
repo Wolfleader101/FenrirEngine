@@ -139,7 +139,12 @@ namespace Fixture
     {
         float stiffness = 2.0f;
         float damping = 0.5f;
+
+        /** @brief A named constant, which a default may name. */
+        static const Spring Stiff;
     };
+
+    inline constexpr Spring Spring::Stiff{8.0f, 1.0f};
 
     /** @brief Holds nothing: an empty struct is one byte. */
     struct Marker
@@ -176,6 +181,8 @@ namespace Fixture
         std::uint8_t zeros[3] = {};
         void* userData = nullptr;
         const Body* next = nullptr;
+        /** @brief A named constant's values. */
+        Spring stiff = Spring::Stiff;
     };
 
     struct BoxShape
