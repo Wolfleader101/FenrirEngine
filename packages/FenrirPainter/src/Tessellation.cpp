@@ -25,6 +25,8 @@ namespace Fenrir::PainterDetail
         constexpr int MaxPieces = 1024;
         /** @brief The furthest a fringe vertex moves at a sharp corner, in multiples of the half fringe. */
         constexpr float MaxMiter = 5.0f;
+        /** @brief The length a dash of none is given, so its caps know which way they face. */
+        constexpr float DotLength = 1.0f / 64.0f;
 
         float Cross(Vec2 a, Vec2 b)
         {
@@ -92,13 +94,13 @@ namespace Fenrir::PainterDetail
         // --- Strokes ---------------------------------------------------------------------------------------------
 
         /**
-         * @brief The outer side of a join at `p`, from `p + n0 h` to `p + n1 h`. `bulge` is +1 or -1, the way a
-         * half-turn's round join turns from n0.
+         * @brief The outer side of a join at `p`, from `p + n0 halfWidth` to `p + n1 halfWidth`. `bulge` is +1 or -1,
+         * the way a half-turn's round join turns from n0.
          */
-        void OuterJoin(std::vector<Vec2>& points, Vec2 p, Vec2 n0, Vec2 n1, float h, const StrokeStyle& style,
+        void OuterJoin(std::vector<Vec2>& points, Vec2 p, Vec2 n0, Vec2 n1, float halfWidth, const StrokeStyle& style,
                        float bulge, float tolerance)
         {
-            AddPoint(points, p + n0 * h);
+            AddPoint(points, p + n0 * halfWidth);
             const float cosine = std::clamp(Dot(n0, n1), -1.0f, 1.0f);
             if (style.join == LineJoin::Miter)
             {
@@ -107,7 +109,7 @@ namespace Fenrir::PainterDetail
                 if (cosHalf > 1e-6f && 1.0f / cosHalf <= style.miterLimit)
                 {
                     const Vec2 sum = n0 + n1;
-                    AddPoint(points, p + sum * (h / (Length(sum) * cosHalf)));
+                    AddPoint(points, p + sum * (halfWidth / (Length(sum) * cosHalf)));
                 }
             }
             else if (style.join == LineJoin::Round)
@@ -117,62 +119,64 @@ namespace Fenrir::PainterDetail
                 {
                     angle = Pi * bulge;
                 }
-                const int pieces = ArcPieces(h, angle, tolerance);
+                const int pieces = ArcPieces(halfWidth, angle, tolerance);
                 for (int k = 1; k < pieces; ++k)
                 {
-                    AddPoint(points, p + Rotated(n0, angle * static_cast<float>(k) / static_cast<float>(pieces)) * h);
+                    AddPoint(points,
+                             p + Rotated(n0, angle * static_cast<float>(k) / static_cast<float>(pieces)) * halfWidth);
                 }
             }
-            AddPoint(points, p + n1 * h);
+            AddPoint(points, p + n1 * halfWidth);
         }
 
         /**
          * @brief The join at `p` from direction `d0` to `d1`: the outer side's join and the inner side through `p`
          * itself, so that the outline is the sum of each segment's rectangle and the join, all wound one way.
          */
-        void Join(std::vector<Vec2>& left, std::vector<Vec2>& right, Vec2 p, Vec2 d0, Vec2 d1, float h,
+        void Join(std::vector<Vec2>& left, std::vector<Vec2>& right, Vec2 p, Vec2 d0, Vec2 d1, float halfWidth,
                   const StrokeStyle& style, float tolerance)
         {
             const float turn = Cross(d0, d1);
             const float along = Dot(d0, d1);
             if (std::abs(turn) < 1e-6f && along > 0.0f)
             {
-                AddPoint(left, p + Left(d1) * h);
-                AddPoint(right, p + Right(d1) * h);
+                AddPoint(left, p + Left(d1) * halfWidth);
+                AddPoint(right, p + Right(d1) * halfWidth);
                 return;
             }
             // Turning towards the left side, the right is outside the bend; a half turn takes the right.
             if (turn > 0.0f || (std::abs(turn) < 1e-6f && along < 0.0f))
             {
-                OuterJoin(right, p, Right(d0), Right(d1), h, style, 1.0f, tolerance);
-                AddPoint(left, p + Left(d0) * h);
+                OuterJoin(right, p, Right(d0), Right(d1), halfWidth, style, 1.0f, tolerance);
+                AddPoint(left, p + Left(d0) * halfWidth);
                 AddPoint(left, p);
-                AddPoint(left, p + Left(d1) * h);
+                AddPoint(left, p + Left(d1) * halfWidth);
             }
             else
             {
-                OuterJoin(left, p, Left(d0), Left(d1), h, style, -1.0f, tolerance);
-                AddPoint(right, p + Right(d0) * h);
+                OuterJoin(left, p, Left(d0), Left(d1), halfWidth, style, -1.0f, tolerance);
+                AddPoint(right, p + Right(d0) * halfWidth);
                 AddPoint(right, p);
-                AddPoint(right, p + Right(d1) * h);
+                AddPoint(right, p + Right(d1) * halfWidth);
             }
         }
 
-        /** @brief The cap at `p`, the end of a stroke heading `d`: from `p + Left(d) h` round to `p + Right(d) h`. */
-        void Cap(std::vector<Vec2>& points, Vec2 p, Vec2 d, float h, LineCap cap, float tolerance)
+        /** @brief The cap at `p`, the end of a stroke heading `d`: from `p + Left(d) halfWidth` round to `p + Right(d)
+         * halfWidth`. */
+        void Cap(std::vector<Vec2>& points, Vec2 p, Vec2 d, float halfWidth, LineCap cap, float tolerance)
         {
             if (cap == LineCap::Square)
             {
-                AddPoint(points, p + (Left(d) + d) * h);
-                AddPoint(points, p + (Right(d) + d) * h);
+                AddPoint(points, p + (Left(d) + d) * halfWidth);
+                AddPoint(points, p + (Right(d) + d) * halfWidth);
             }
             else if (cap == LineCap::Round)
             {
-                const int pieces = std::max(ArcPieces(h, Pi, tolerance), 2);
+                const int pieces = std::max(ArcPieces(halfWidth, Pi, tolerance), 2);
                 for (int k = 1; k < pieces; ++k)
                 {
-                    AddPoint(points,
-                             p + Rotated(Left(d), -Pi * static_cast<float>(k) / static_cast<float>(pieces)) * h);
+                    AddPoint(points, p + Rotated(Left(d), -Pi * static_cast<float>(k) / static_cast<float>(pieces)) *
+                                             halfWidth);
                 }
             }
         }
@@ -191,35 +195,35 @@ namespace Fenrir::PainterDetail
             return directions;
         }
 
-        void StrokeOpen(std::vector<Contour>& out, const std::vector<Vec2>& points, float h, const StrokeStyle& style,
-                        float tolerance)
+        void StrokeOpen(std::vector<Contour>& out, const std::vector<Vec2>& points, float halfWidth,
+                        const StrokeStyle& style, float tolerance)
         {
             const std::vector<Vec2> d = Directions(points, false);
             std::vector<Vec2> left;
             std::vector<Vec2> right;
-            AddPoint(left, points.front() + Left(d.front()) * h);
-            AddPoint(right, points.front() + Right(d.front()) * h);
+            AddPoint(left, points.front() + Left(d.front()) * halfWidth);
+            AddPoint(right, points.front() + Right(d.front()) * halfWidth);
             for (std::size_t i = 1; i + 1 < points.size(); ++i)
             {
-                Join(left, right, points[i], d[i - 1], d[i], h, style, tolerance);
+                Join(left, right, points[i], d[i - 1], d[i], halfWidth, style, tolerance);
             }
-            AddPoint(left, points.back() + Left(d.back()) * h);
-            AddPoint(right, points.back() + Right(d.back()) * h);
+            AddPoint(left, points.back() + Left(d.back()) * halfWidth);
+            AddPoint(right, points.back() + Right(d.back()) * halfWidth);
 
             Contour outline;
             outline.closed = true;
             outline.points = left;
-            Cap(outline.points, points.back(), d.back(), h, style.cap, tolerance);
+            Cap(outline.points, points.back(), d.back(), halfWidth, style.cap, tolerance);
             for (auto it = right.rbegin(); it != right.rend(); ++it)
             {
                 AddPoint(outline.points, *it);
             }
-            Cap(outline.points, points.front(), -d.front(), h, style.cap, tolerance);
+            Cap(outline.points, points.front(), -d.front(), halfWidth, style.cap, tolerance);
             out.push_back(std::move(outline));
         }
 
-        void StrokeClosed(std::vector<Contour>& out, const std::vector<Vec2>& points, float h, const StrokeStyle& style,
-                          float tolerance)
+        void StrokeClosed(std::vector<Contour>& out, const std::vector<Vec2>& points, float halfWidth,
+                          const StrokeStyle& style, float tolerance)
         {
             const std::vector<Vec2> d = Directions(points, true);
             const std::size_t n = points.size();
@@ -229,7 +233,7 @@ namespace Fenrir::PainterDetail
             right.closed = true;
             for (std::size_t i = 0; i < n; ++i)
             {
-                Join(left.points, right.points, points[i], d[(i + n - 1) % n], d[i], h, style, tolerance);
+                Join(left.points, right.points, points[i], d[(i + n - 1) % n], d[i], halfWidth, style, tolerance);
             }
             std::reverse(right.points.begin(), right.points.end());
             out.push_back(std::move(left));
@@ -307,6 +311,12 @@ namespace Fenrir::PainterDetail
                         if (on)
                         {
                             AddPoint(piece.points, point);
+                            if (piece.points.size() == 1 && style.cap != LineCap::Butt)
+                            {
+                                // A dash of no length is a dot of its caps, as SVG draws it: a step too short to see
+                                // gives the caps their direction.
+                                piece.points.push_back(point + (b - a) * (DotLength / length));
+                            }
                             if (piece.points.size() > 1)
                             {
                                 dashes.push_back(std::move(piece));
@@ -445,14 +455,71 @@ namespace Fenrir::PainterDetail
         }
 
         /**
-         * @brief The winding number at `q` by a ray along +X (`alongX`) or +Y, every edge but `skip` counted where it
-         * crosses: +X crossings by their direction in Y, +Y crossings by theirs in X.
+         * @brief The edges sorted into bands across Y (`acrossY`) or X, each band listing the edges reaching into it,
+         * so a ray along the other axis tests only the edges of its own band.
          */
-        int Winding(const std::vector<Edge>& edges, const std::vector<Vec2>& positions, Vec2 q, std::size_t skip,
-                    bool alongX)
+        class Bands
+        {
+          public:
+            Bands(const std::vector<Edge>& edges, const std::vector<Vec2>& positions, bool acrossY) : m_acrossY(acrossY)
+            {
+                if (edges.empty())
+                {
+                    return;
+                }
+                const auto coordinate = [acrossY](Vec2 p) { return acrossY ? p.y : p.x; };
+                m_low = std::numeric_limits<float>::infinity();
+                float high = -m_low;
+                for (const Vec2 p : positions)
+                {
+                    m_low = std::min(m_low, coordinate(p));
+                    high = std::max(high, coordinate(p));
+                }
+                const auto count =
+                    static_cast<std::size_t>(std::clamp(std::sqrt(static_cast<float>(edges.size())), 1.0f, 4096.0f));
+                m_scale = high > m_low ? static_cast<float>(count) / (high - m_low) : 0.0f;
+                m_bands.resize(count);
+                for (std::size_t e = 0; e < edges.size(); ++e)
+                {
+                    const float a = coordinate(positions[edges[e].a]);
+                    const float b = coordinate(positions[edges[e].b]);
+                    for (std::size_t band = Band(std::min(a, b)); band <= Band(std::max(a, b)); ++band)
+                    {
+                        m_bands[band].push_back(e);
+                    }
+                }
+            }
+
+            /** @brief The edges that may reach `p`'s coordinate across the bands. */
+            [[nodiscard]] const std::vector<std::size_t>& At(Vec2 p) const
+            {
+                static const std::vector<std::size_t> none;
+                return m_bands.empty() ? none : m_bands[Band(m_acrossY ? p.y : p.x)];
+            }
+
+          private:
+            [[nodiscard]] std::size_t Band(float value) const
+            {
+                const float band = std::floor((value - m_low) * m_scale);
+                return std::min(static_cast<std::size_t>(std::max(band, 0.0f)), m_bands.size() - 1);
+            }
+
+            bool m_acrossY = true;
+            float m_low = 0.0f;
+            float m_scale = 0.0f;
+            std::vector<std::vector<std::size_t>> m_bands;
+        };
+
+        /**
+         * @brief The winding number at `q` by a ray along +X (`alongX`) or +Y, every edge but `skip` counted where it
+         * crosses: +X crossings by their direction in Y, +Y crossings by theirs in X. `bands` are across Y for a ray
+         * along X, across X for one along Y.
+         */
+        int Winding(const std::vector<Edge>& edges, const std::vector<Vec2>& positions, const Bands& bands, Vec2 q,
+                    std::size_t skip, bool alongX)
         {
             int winding = 0;
-            for (std::size_t e = 0; e < edges.size(); ++e)
+            for (const std::size_t e : bands.At(q))
             {
                 if (e == skip)
                 {
@@ -629,6 +696,8 @@ namespace Fenrir::PainterDetail
             // Each edge's sides by the winding just beside its middle, kept and turned so what is covered is on its
             // left when only one side is.
             std::vector<std::pair<std::uint32_t, std::uint32_t>> boundary;
+            const Bands rows(edges, positions, true);
+            const Bands columns(edges, positions, false);
             for (std::size_t e = 0; e < edges.size(); ++e)
             {
                 const Vec2 a = positions[edges[e].a];
@@ -636,7 +705,7 @@ namespace Fenrir::PainterDetail
                 const Vec2 d = b - a;
                 const Vec2 middle = (a + b) * 0.5f;
                 const bool alongX = std::abs(d.y) >= std::abs(d.x);
-                const int beyond = Winding(edges, positions, middle, e, alongX);
+                const int beyond = Winding(edges, positions, alongX ? rows : columns, middle, e, alongX);
                 // Beside the edge on the side the ray starts from, the ray also crosses the edge itself.
                 const int before = beyond + edges[e].count * ((alongX ? d.y : d.x) > 0.0f ? 1 : -1);
                 const bool coveredBefore = Inside(before, rule);
@@ -994,9 +1063,9 @@ namespace Fenrir::PainterDetail
 
     std::vector<Contour> StrokeContours(const std::vector<Contour>& contours, const StrokeStyle& style, float tolerance)
     {
-        const float h = style.width * 0.5f;
+        const float halfWidth = style.width * 0.5f;
         std::vector<Contour> outline;
-        if (!(h > 0.0f))
+        if (!(halfWidth > 0.0f))
         {
             return outline;
         }
@@ -1006,20 +1075,13 @@ namespace Fenrir::PainterDetail
             {
                 continue;
             }
-            if (contour.closed && contour.points.size() >= 3)
+            if (contour.closed)
             {
-                StrokeClosed(outline, contour.points, h, style, tolerance);
-            }
-            else if (contour.closed)
-            {
-                // Two points closed: there and back again, turning at both ends.
-                std::vector<Vec2> there = contour.points;
-                there.push_back(there.front());
-                StrokeOpen(outline, there, h, style, tolerance);
+                StrokeClosed(outline, contour.points, halfWidth, style, tolerance);
             }
             else
             {
-                StrokeOpen(outline, contour.points, h, style, tolerance);
+                StrokeOpen(outline, contour.points, halfWidth, style, tolerance);
             }
         }
         return outline;

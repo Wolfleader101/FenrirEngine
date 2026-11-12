@@ -24,7 +24,8 @@ namespace Fenrir::PainterDetail
         fit(rect.width, r.w + r.z);
         fit(rect.height, r.x + r.w);
         fit(rect.height, r.y + r.z);
-        // A circular corner reaches at most half the shorter side, or the shader's box would bulge.
+        // A circular corner reaches at most half the shorter side, or the shader's box would bulge and a path's
+        // corners would overlap.
         const float most = std::max(std::min(rect.width, rect.height) * 0.5f, 0.0f);
         const Math::Vec4 scaled = r * factor;
         return {std::min(scaled.x, most), std::min(scaled.y, most), std::min(scaled.z, most), std::min(scaled.w, most)};

@@ -231,7 +231,7 @@ TEST_CASE("A transformed path fills where the path fills under that transform", 
     }
 }
 
-TEST_CASE("A path fill takes its paint and the clip, and batches with the shapes around it", "[painter][paths]")
+TEST_CASE("A path fill takes its paint and the clip", "[painter][paths]")
 {
     Fenrir::DrawList2D list;
     Fenrir::Painter painter(list, PainterTest::Config());
@@ -243,13 +243,10 @@ TEST_CASE("A path fill takes its paint and the clip, and batches with the shapes
     gradient.stops = {{0.0f, Colour::Black}, {1.0f, Colour::White}};
 
     painter.ClipRoundedRect({0, 0, 100, 100}, Fenrir::CornerRadii::All(8));
-    painter.DrawRect({0, 0, 10, 10}, Colour::Red);
     painter.FillPath(triangle, gradient);
 
-    INFO("the rectangle and the path share one command: four vertices and the path's six, 6 + 3 * 7 indices");
-    REQUIRE(list.commands.size() == 1);
-    REQUIRE(PainterTest::Draw(list, 0).indexCount == 27);
-    const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list, 4);
+    const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
+    INFO("the triangle's three corners, inside and outside the edge");
     REQUIRE(vertices.size() == 6);
     for (const Fenrir::PainterVertex& vertex : vertices)
     {
@@ -259,6 +256,22 @@ TEST_CASE("A path fill takes its paint and the clip, and batches with the shapes
         REQUIRE(PainterTest::HasFlag(vertex, Fenrir::PainterFlags::Clipped));
         REQUIRE(Near(vertex.clipPoint, vertex.position - Vec2(50, 50)));
     }
+}
+
+TEST_CASE("A path fill batches with the shapes before it", "[painter][paths]")
+{
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, PainterTest::Config());
+    Fenrir::Path triangle;
+    triangle.AddPolygon(std::vector<Vec2>{{0, 0}, {40, 0}, {0, 40}});
+
+    painter.DrawRect({0, 0, 10, 10}, Colour::Red);
+    painter.FillPath(triangle, Colour::White);
+
+    INFO("the rectangle and the path share one command: four vertices and the path's six, 6 + 3 * 7 indices");
+    REQUIRE(list.commands.size() == 1);
+    REQUIRE(PainterTest::Draw(list, 0).indexCount == 27);
+    REQUIRE(PainterTest::Vertices(list).size() == 10);
     INFO("the path's indices count from the command's base, after the rectangle's four vertices");
     const std::vector<std::uint16_t> indices = PainterTest::Indices16(list);
     for (std::size_t i = 6; i < indices.size(); ++i)
@@ -266,4 +279,45 @@ TEST_CASE("A path fill takes its paint and the clip, and batches with the shapes
         REQUIRE(indices[i] >= 4);
         REQUIRE(indices[i] < 10);
     }
+}
+
+TEST_CASE("A path past 16-bit indices' 65536 vertices is cut into commands of whole triangles", "[painter][paths]")
+{
+    // 90 by 100 separate squares: 36000 corners, each inside and outside its edge, 72000 vertices.
+    Fenrir::Path squares;
+    for (int row = 0; row < 100; ++row)
+    {
+        for (int column = 0; column < 90; ++column)
+        {
+            squares.AddRect({static_cast<float>(column) * 4.0f, static_cast<float>(row) * 4.0f, 2.0f, 2.0f});
+        }
+    }
+    const auto draw = [&squares](Fenrir::IndexType2D type) {
+        Fenrir::DrawList2D list;
+        Fenrir::PainterConfig config = PainterTest::Config();
+        config.indexType = type;
+        Fenrir::Painter painter(list, config);
+        painter.FillPath(squares, Colour::White);
+        return list;
+    };
+
+    const Fenrir::DrawList2D wide = draw(Fenrir::IndexType2D::UInt32);
+    INFO("with 32-bit indices one command of 9000 squares' 10 triangles");
+    REQUIRE(wide.commands.size() == 1);
+    REQUIRE(PainterTest::Draw(wide, 0).indexCount == 9000u * 10u * 3u);
+
+    const Fenrir::DrawList2D narrow = draw(Fenrir::IndexType2D::UInt16);
+    INFO("with 16-bit indices two commands or more, each within 65536 vertices, the same triangles between them");
+    REQUIRE(narrow.commands.size() >= 2);
+    std::uint32_t indices = 0;
+    for (std::size_t i = 0; i < narrow.commands.size(); ++i)
+    {
+        const Fenrir::DrawCommand2D& command = PainterTest::Draw(narrow, i);
+        indices += command.indexCount;
+        const std::size_t next = i + 1 < narrow.commands.size()
+                                     ? static_cast<std::size_t>(PainterTest::Draw(narrow, i + 1).baseVertex)
+                                     : narrow.vertices.size() / sizeof(Fenrir::PainterVertex);
+        REQUIRE(next - static_cast<std::size_t>(command.baseVertex) <= 65536u);
+    }
+    REQUIRE(indices == 9000u * 10u * 3u);
 }

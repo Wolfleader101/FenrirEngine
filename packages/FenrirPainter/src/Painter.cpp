@@ -122,6 +122,27 @@ namespace Fenrir
             list.AppendIndices(std::span<const T>(converted));
         }
 
+        /** @brief Appends `indices`, each moved on by `first`, at the width `type` says. */
+        void AppendIndices(DrawList2D& list, IndexType2D type, std::span<const std::uint32_t> indices,
+                           std::uint32_t first)
+        {
+            if (type == IndexType2D::UInt16)
+            {
+                AppendIndices<std::uint16_t>(list, indices, first);
+            }
+            else
+            {
+                AppendIndices<std::uint32_t>(list, indices, first);
+            }
+        }
+
+        /** @brief The longer of the lengths `transform` gives the X and Y axes: how much it stretches at most. */
+        float LargestScale(const Transform2D& transform)
+        {
+            const auto length = [](Math::Vec2 v) { return std::sqrt(v.x * v.x + v.y * v.y); };
+            return std::max(length(transform.x), length(transform.y));
+        }
+
         /** @brief A quad's two triangles over its corners 0 to 3. */
         constexpr std::array<std::uint32_t, 6> QuadIndices{0, 1, 2, 0, 2, 3};
 
@@ -244,7 +265,7 @@ namespace Fenrir
         return {min.x, min.y, max.x - min.x, max.y - min.y};
     }
 
-    std::uint32_t Painter::Begin(const PaintSetup& paint, std::uint32_t vertices, std::uint32_t indices)
+    std::uint32_t Painter::ReserveDraw(const PaintSetup& paint, std::uint32_t vertices, std::uint32_t indices)
     {
         const std::uint32_t stride = sizeof(PainterVertex);
         const std::size_t indexSize = m_config.indexType == IndexType2D::UInt16 ? 2 : 4;
@@ -321,7 +342,7 @@ namespace Fenrir
             vertex.clipRadii = m_state.clip->radii;
         }
 
-        const std::uint32_t first = Begin(paint, 4, 6);
+        const std::uint32_t first = ReserveDraw(paint, 4, 6);
         const std::array<Math::Vec2, 4> corners{quad.min, Math::Vec2(quad.max.x, quad.min.y), quad.max,
                                                 Math::Vec2(quad.min.x, quad.max.y)};
         std::array<PainterVertex, 4> vertices{};
@@ -338,14 +359,7 @@ namespace Fenrir
             }
         }
         m_list.AppendVertices(std::span<const PainterVertex>(vertices));
-        if (m_config.indexType == IndexType2D::UInt16)
-        {
-            AppendIndices<std::uint16_t>(m_list, QuadIndices, first);
-        }
-        else
-        {
-            AppendIndices<std::uint32_t>(m_list, QuadIndices, first);
-        }
+        AppendIndices(m_list, m_config.indexType, QuadIndices, first);
     }
 
     bool Painter::SetPaint(PainterVertex& vertex, PaintSetup& setup, const Paint& paint) const
@@ -595,10 +609,14 @@ namespace Fenrir
         }
     }
 
+    float Painter::PixelsPerUnit() const
+    {
+        return m_config.pixelsPerUnit > 0.0f ? m_config.pixelsPerUnit : 1.0f;
+    }
+
     float Painter::LogicalTolerance() const
     {
-        const float pixels = m_config.pixelsPerUnit > 0.0f ? m_config.pixelsPerUnit : 1.0f;
-        return std::max(m_config.tolerance, 1e-3f) / pixels;
+        return std::max(m_config.tolerance, 1e-3f) / PixelsPerUnit();
     }
 
     void Painter::FillPath(const Path& path, const Paint& paint)
@@ -624,23 +642,32 @@ namespace Fenrir
             return;
         }
         const float tolerance = LogicalTolerance();
-        if (style.width <= 0.0f)
+        const float stretch = LargestScale(toLogical);
+        const float pixelWidth = style.width * stretch * PixelsPerUnit();
+        if (pixelWidth < 1.0f)
         {
-            // A hairline is stroked after the transform, one pixel wide, its dashes scaled with the path.
+            // Thinner than a pixel, the fringes either side would fold over each other: it is stroked after the
+            // transform one pixel wide, its dashes scaled with the path, and in a colour faded to the width it has.
             StrokeStyle hairline = style;
-            hairline.width = 1.0f / (m_config.pixelsPerUnit > 0.0f ? m_config.pixelsPerUnit : 1.0f);
+            hairline.width = 1.0f / PixelsPerUnit();
             const float scale = std::sqrt(area);
             for (float& length : hairline.dashes)
             {
                 length *= scale;
             }
             hairline.dashOffset *= scale;
+            Paint faded = paint;
+            if (Colour* colour = std::get_if<Colour>(&faded); colour != nullptr && pixelWidth > 0.0f)
+            {
+                colour->a *= pixelWidth;
+            }
             const std::vector<PainterDetail::Contour> contours = PainterDetail::Flatten(path, toLogical, tolerance);
-            FillContours(PainterDetail::StrokeContours(contours, hairline, tolerance), FillRule::NonZero, paint);
+            FillContours(PainterDetail::StrokeContours(contours, hairline, tolerance), FillRule::NonZero, faded);
             return;
         }
-        // Stroked in UI units, so the transform scales and shears the width as it does the path.
-        FillPath(path.StrokeOutline(style, tolerance / std::sqrt(area)), paint);
+        // Stroked in UI units, so the transform scales and shears the width as it does the path; the tolerance is
+        // taken along the axis the transform stretches most, so no part strays further than it in pixels.
+        FillPath(path.StrokeOutline(style, tolerance / stretch), paint);
     }
 
     bool Painter::StrokeShape(const Path& path, const StrokeStyle& style, const Paint& paint)
@@ -685,8 +712,8 @@ namespace Fenrir
         {
             return;
         }
-        const float pixels = m_config.pixelsPerUnit > 0.0f ? m_config.pixelsPerUnit : 1.0f;
-        const PainterDetail::Tessellation tessellation = PainterDetail::Tessellate(contours, rule, 1.0f / pixels);
+        const PainterDetail::Tessellation tessellation =
+            PainterDetail::Tessellate(contours, rule, 1.0f / PixelsPerUnit());
         if (tessellation.indices.empty())
         {
             return;
@@ -721,24 +748,18 @@ namespace Fenrir
 
         const auto append = [this, &setup](std::span<const PainterVertex> chunk,
                                            std::span<const std::uint32_t> indices) {
-            const std::uint32_t first =
-                Begin(setup, static_cast<std::uint32_t>(chunk.size()), static_cast<std::uint32_t>(indices.size()));
+            const std::uint32_t first = ReserveDraw(setup, static_cast<std::uint32_t>(chunk.size()),
+                                                    static_cast<std::uint32_t>(indices.size()));
             m_list.AppendVertices(chunk);
-            if (m_config.indexType == IndexType2D::UInt16)
-            {
-                AppendIndices<std::uint16_t>(m_list, indices, first);
-            }
-            else
-            {
-                AppendIndices<std::uint32_t>(m_list, indices, first);
-            }
+            AppendIndices(m_list, m_config.indexType, indices, first);
         };
         if (m_config.indexType != IndexType2D::UInt16 || vertices.size() <= MaxVertices16)
         {
             append(vertices, tessellation.indices);
             return;
         }
-        // Too many vertices for one command of 16-bit indices: commands of whole triangles, each with its own vertices.
+        // A command of 16-bit indices reaches 65536 vertices, and a fill's triangles share vertices across the whole
+        // path, so a larger one is cut into commands of whole triangles that each carry the vertices they use.
         constexpr std::uint32_t Unused = std::numeric_limits<std::uint32_t>::max();
         std::vector<std::uint32_t> remap(vertices.size(), Unused);
         std::vector<PainterVertex> chunk;

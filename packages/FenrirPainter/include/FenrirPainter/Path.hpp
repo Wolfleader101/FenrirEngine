@@ -183,8 +183,8 @@ namespace Fenrir
 
         /** @brief Makes sure a subpath is open, starting one at `point` when there is none. */
         void EnsureStarted(Math::Vec2 point);
-        /** @brief Called by every step: the path is no longer one helper's alone. */
-        void Edited();
+        /** @brief Called by every step: the path is no longer one helper's shape alone. */
+        void ForgetShape();
 
         std::vector<PathVerb> m_verbs;
         std::vector<Math::Vec2> m_points;

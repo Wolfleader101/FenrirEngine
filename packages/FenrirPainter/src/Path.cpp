@@ -29,7 +29,7 @@ namespace Fenrir
         }
     } // namespace
 
-    void Path::Edited()
+    void Path::ForgetShape()
     {
         m_shape.reset();
     }
@@ -57,7 +57,7 @@ namespace Fenrir
 
     Path& Path::MoveTo(Math::Vec2 point)
     {
-        Edited();
+        ForgetShape();
         m_verbs.push_back(PathVerb::Move);
         m_points.push_back(point);
         m_start = point;
@@ -69,7 +69,7 @@ namespace Fenrir
 
     Path& Path::LineTo(Math::Vec2 point)
     {
-        Edited();
+        ForgetShape();
         EnsureStarted(point);
         m_verbs.push_back(PathVerb::Line);
         m_points.push_back(point);
@@ -79,7 +79,7 @@ namespace Fenrir
 
     Path& Path::QuadTo(Math::Vec2 control, Math::Vec2 end)
     {
-        Edited();
+        ForgetShape();
         EnsureStarted(control);
         m_verbs.push_back(PathVerb::Quad);
         m_points.push_back(control);
@@ -90,7 +90,7 @@ namespace Fenrir
 
     Path& Path::CubicTo(Math::Vec2 control1, Math::Vec2 control2, Math::Vec2 end)
     {
-        Edited();
+        ForgetShape();
         EnsureStarted(control1);
         m_verbs.push_back(PathVerb::Cubic);
         m_points.push_back(control1);
@@ -102,7 +102,7 @@ namespace Fenrir
 
     Path& Path::Arc(Math::Vec2 centre, float radius, float startRadians, float sweepRadians)
     {
-        Edited();
+        ForgetShape();
         const Math::Vec2 start = centre + OnCircle(startRadians) * radius;
         if (m_open && !m_closed)
         {
@@ -140,7 +140,7 @@ namespace Fenrir
 
     Path& Path::ArcTo(Math::Vec2 corner, Math::Vec2 towards, float radius)
     {
-        Edited();
+        ForgetShape();
         if (!m_open || m_closed)
         {
             EnsureStarted(corner);
@@ -181,7 +181,7 @@ namespace Fenrir
 
     Path& Path::Close()
     {
-        Edited();
+        ForgetShape();
         if (m_open && !m_closed)
         {
             m_verbs.push_back(PathVerb::Close);
@@ -270,7 +270,7 @@ namespace Fenrir
 
     Path& Path::AddPolyline(std::span<const Math::Vec2> points)
     {
-        Edited();
+        ForgetShape();
         if (points.empty())
         {
             return *this;

@@ -205,6 +205,7 @@ TEST_CASE("A stroked star covers its joins once and fades over a pixel at its ed
     REQUIRE(GlProbe::Near(image.At(2, 60), Transparent, Tolerance));
     INFO("partly covered pixels along its edges");
     REQUIRE(HasPartialPixel(image, 0.5f));
+    INFO("and the renderer logged no error");
     REQUIRE(test.scene.messages->errors.empty());
 }
 
@@ -231,5 +232,6 @@ TEST_CASE("A filled ring with a hole is solid in its band, empty in its hole and
     const float outer = image.At(7, 32)[3] + image.At(8, 32)[3];
     INFO("the outer edge's two pixels about x = 8 sum to one pixel's cover (" << outer << ")");
     REQUIRE(std::abs(outer - 1.0f) < 0.15f);
+    INFO("and the renderer logged no error");
     REQUIRE(test.scene.messages->errors.empty());
 }

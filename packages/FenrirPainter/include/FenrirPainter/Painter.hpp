@@ -139,7 +139,8 @@ namespace Fenrir
         void FillPath(const Path& path, const Paint& paint);
         /**
          * @brief `path` stroked with `style` and `paint`: the fill of `path.StrokeOutline(style)` at the configured
-         * tolerance, a hairline one pixel wide. A circle, or in a colour a rectangle or rounded rectangle, made by one
+         * tolerance. A hairline is one pixel wide, and so is a stroke thinner than a pixel, its colour faded to the
+         * width it has. A circle, or in a colour a rectangle or rounded rectangle, made by one
          * helper and stroked with no dashes is one analytic ring or border quad instead, unless its sharp corners
          * would not miter.
          */
@@ -203,6 +204,8 @@ namespace Fenrir
         void DrawShape(Quad quad, const Paint& paint);
         /** @brief Appends the quad's four vertices and six indices, its paint set up by `paint`. */
         void Emit(const Quad& quad, const PaintSetup& paint);
+        /** @brief The target's pixels per logical unit, one when the configuration gives none. */
+        [[nodiscard]] float PixelsPerUnit() const;
         /** @brief The tolerance in logical units: the configured pixels at the target's pixels per unit. */
         [[nodiscard]] float LogicalTolerance() const;
         /** @brief The fill of `contours`, in logical units, by `rule`, with `paint`. */
@@ -213,7 +216,7 @@ namespace Fenrir
          * @brief Makes room for `vertices` vertices and `indices` indices needing the paint's textures in the command
          * it extends or starts; returns the first vertex counted from the command's base vertex.
          */
-        [[nodiscard]] std::uint32_t Begin(const PaintSetup& paint, std::uint32_t vertices, std::uint32_t indices);
+        [[nodiscard]] std::uint32_t ReserveDraw(const PaintSetup& paint, std::uint32_t vertices, std::uint32_t indices);
 
         DrawList2D& m_list;
         PainterConfig m_config;

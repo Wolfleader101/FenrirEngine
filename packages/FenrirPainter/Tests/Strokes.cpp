@@ -72,15 +72,59 @@ TEST_CASE("A dashed stroke draws one piece for each dash", "[painter][strokes]")
     REQUIRE(PainterTest::Covered(dashed, {5, 0}));
     REQUIRE_FALSE(PainterTest::Covered(dashed, {15, 0}));
     REQUIRE(PainterTest::Covered(dashed, {85, 0}));
+}
 
+TEST_CASE("A dash offset starts the stroke that far into the pattern", "[painter][strokes]")
+{
+    Fenrir::Path line;
+    line.MoveTo({0, 0}).LineTo({100, 0});
+    Fenrir::StrokeStyle style = Style(4, LineCap::Butt, LineJoin::Miter);
+    style.dashes = {10, 10};
     style.dashOffset = 5;
-    INFO("five units into the pattern the dashes run 0 to 5, 15 to 25 ... 95 to 100: six pieces");
-    REQUIRE(PainterTest::Count(Stroked(line, style), true) == 12);
 
+    const std::vector<PainterTest::Triangle> dashed = Stroked(line, style);
+    INFO("five units in, the dashes run 0 to 5, 15 to 25 ... 95 to 100: six pieces");
+    REQUIRE(PainterTest::Count(dashed, true) == 12);
+    REQUIRE(PainterTest::Covered(dashed, {2, 0}));
+    REQUIRE_FALSE(PainterTest::Covered(dashed, {10, 0}));
+}
+
+TEST_CASE("An odd dash list repeats to make an even one", "[painter][strokes]")
+{
+    Fenrir::Path line;
+    line.MoveTo({0, 0}).LineTo({100, 0});
+    Fenrir::StrokeStyle style = Style(4, LineCap::Butt, LineJoin::Miter);
     style.dashes = {10};
-    style.dashOffset = 0;
-    INFO("an odd dash list repeats: {10} is {10, 10}");
+
+    INFO("{10} is {10, 10}: five dashes of two solid triangles");
     REQUIRE(PainterTest::Count(Stroked(line, style), true) == 10);
+}
+
+TEST_CASE("A dash of no length with round caps is a dot", "[painter][strokes]")
+{
+    Fenrir::Path line;
+    line.MoveTo({0, 0}).LineTo({30, 0});
+    Fenrir::StrokeStyle style = Style(6, LineCap::Round, LineJoin::Miter);
+    style.dashes = {0, 10};
+
+    const std::vector<PainterTest::Triangle> dotted = Stroked(line, style);
+    INFO("a dot at 0, 10 and 20, each a disc of radius 3, and nothing between them");
+    REQUIRE(PainterTest::Covered(dotted, {10, 0}));
+    REQUIRE(PainterTest::Covered(dotted, {10, 2}));
+    REQUIRE(PainterTest::Covered(dotted, {20, -2}));
+    REQUIRE_FALSE(PainterTest::Covered(dotted, {15, 0}));
+    REQUIRE_FALSE(PainterTest::Covered(dotted, {10, 3.5f}));
+}
+
+TEST_CASE("A closed subpath of two points turns at both ends with its joins", "[painter][strokes]")
+{
+    Fenrir::Path there;
+    there.MoveTo({0, 0}).LineTo({50, 0}).Close();
+    const std::vector<PainterTest::Triangle> stroke = Stroked(there, Style(10, LineCap::Butt, LineJoin::Round));
+    INFO("round joins reach half the width past both ends, where butt caps would stop");
+    REQUIRE(PainterTest::Covered(stroke, {-3, 0}));
+    REQUIRE(PainterTest::Covered(stroke, {53, 0}));
+    REQUIRE_FALSE(PainterTest::Covered(stroke, {-6, 0}));
 }
 
 TEST_CASE("A miter join meets the outer edges at a point", "[painter][strokes]")
@@ -126,6 +170,7 @@ TEST_CASE("A butt cap ends the stroke at its end point", "[painter][strokes]")
     INFO("covered just inside the end, not just outside it");
     REQUIRE(PainterTest::Covered(stroke, {2, 3}));
     REQUIRE_FALSE(PainterTest::Covered(stroke, {-2, 0}));
+    INFO("a rectangle: two solid triangles");
     REQUIRE(PainterTest::Count(stroke, true) == 2);
 }
 
@@ -136,6 +181,7 @@ TEST_CASE("A square cap reaches half the width past the end point", "[painter][s
     REQUIRE(PainterTest::Covered(stroke, {-3, 3}));
     REQUIRE(PainterTest::Covered(stroke, {53, -3}));
     REQUIRE_FALSE(PainterTest::Covered(stroke, {-6, 0}));
+    INFO("a rectangle: two solid triangles");
     REQUIRE(PainterTest::Count(stroke, true) == 2);
 }
 
@@ -189,6 +235,7 @@ TEST_CASE("A hairline is one pixel wide whatever the transform", "[painter][stro
     painter.StrokePath(Line(), Style(0, LineCap::Butt, LineJoin::Miter), Colour::White);
 
     const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
+    INFO("the hairline draws");
     REQUIRE_FALSE(vertices.empty());
     for (const Fenrir::PainterVertex& vertex : vertices)
     {
@@ -231,7 +278,25 @@ TEST_CASE("A stroked rounded rectangle in a colour with no dashes is one analyti
     REQUIRE(vertices[0].borderColours[0] == PainterTest::Rgba8(255, 0, 0, 255));
 }
 
-TEST_CASE("A dashed circle or a rectangle whose corners would bevel is tessellated", "[painter][strokes]")
+TEST_CASE("A stroke thinner than a pixel is a pixel wide, its colour faded to its width", "[painter][strokes]")
+{
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, PainterTest::Config());
+    painter.StrokePath(Line(), Style(0.5f, LineCap::Butt, LineJoin::Miter), Colour::White);
+
+    const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
+    INFO("the stroke draws");
+    REQUIRE_FALSE(vertices.empty());
+    for (const Fenrir::PainterVertex& vertex : vertices)
+    {
+        INFO("a hairline's vertices, half a pixel each side of the line and the fringe a pixel out");
+        REQUIRE((Near(vertex.position.y, 0.0f) || Near(std::abs(vertex.position.y), 1.0f)));
+        INFO("white at half alpha, premultiplied: 128 in every channel");
+        REQUIRE(vertex.colour == PainterTest::Rgba8(128, 128, 128, 128));
+    }
+}
+
+TEST_CASE("A dashed circle is tessellated", "[painter][strokes]")
 {
     Fenrir::Path circle;
     circle.AddCircle({50, 50}, 20);
@@ -239,7 +304,10 @@ TEST_CASE("A dashed circle or a rectangle whose corners would bevel is tessellat
     dashed.dashes = {5, 5};
     INFO("a dashed circle is triangles");
     REQUIRE_FALSE(Stroked(circle, dashed).empty());
+}
 
+TEST_CASE("A rectangle whose corners would bevel is tessellated", "[painter][strokes]")
+{
     Fenrir::Path box;
     box.AddRect({10, 10, 80, 40});
     INFO("a rectangle with bevelled corners is triangles, cut at its corners");
