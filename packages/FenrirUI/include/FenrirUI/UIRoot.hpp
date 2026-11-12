@@ -40,7 +40,11 @@ namespace Fenrir
         ContentScale,
     };
 
-    /** @brief A pseudo-class an element carries, as bit flags; the structural ones (first and last child) are not. */
+    /**
+     * @brief A pseudo-class an element carries, as bit flags; the structural ones (first and last child) are not. The
+     * root sets Intro on each element it makes, until the first layout that includes it completes, and Outro on an
+     * element Remove() waits to remove.
+     */
     enum class PseudoClass : std::uint16_t
     {
         Hover = 1u << 0u,
@@ -51,6 +55,15 @@ namespace Fenrir
         Checked = 1u << 5u,
         Intro = 1u << 6u,
         Outro = 1u << 7u,
+    };
+
+    /** @brief How UIRoot::Remove takes an element away. */
+    enum class RemoveMode : std::uint8_t
+    {
+        /** @brief Give it `:outro`, and remove it once its and its descendants' transitions have ended (ADR-0066). */
+        Outro,
+        /** @brief Remove it and everything under it at once. */
+        Immediate,
     };
 
     /** @brief What a UI root is made with. */
@@ -96,9 +109,12 @@ namespace Fenrir
      *
      * Elements are addressed by ElementId; every call taking a stale id does nothing and returns an empty value. A
      * change to an element's classes, pseudo-classes or inline style marks its style dirty, and a change to its
-     * children marks its layout dirty; each frame (in PostUpdate) the root resolves the dirty styles, lays out with
-     * Yoga if anything laid out changed, snaps the rectangles to pixels, paints every element in tree order through the
-     * painter and submits the list to its target. Call it outside parallel systems.
+     * children marks its layout dirty; each frame (in PostUpdate) the root moves its transitions and animations on by
+     * the frame's delta (FenrirTime's), resolves the dirty styles, writes the transitions and animations over them,
+     * lays out with Yoga if anything laid out changed, snaps the rectangles to pixels, clears `:intro`, paints every
+     * element in tree order through the painter, submits the list to its target, and then removes the elements whose
+     * outros have ended. A frame whose target has no size does none of it, so time stands still for it. Call it outside
+     * parallel systems.
      */
     class UIRoot
     {
@@ -135,15 +151,19 @@ namespace Fenrir
         [[nodiscard]] ElementId GetRootElement() const noexcept;
         /**
          * @brief Makes an element of `tag` under `parent`, at `index` among its children (End, or past the last, for
-         * after them), through the factory registered for `tag`; an unregistered tag makes a plain Element. A stale
-         * parent makes nothing and returns an id that names nothing.
+         * after them), through the factory registered for `tag`; an unregistered tag makes a plain Element. It carries
+         * `:intro` until the first layout that includes it completes, and its first style starts no transitions. A
+         * stale parent makes nothing and returns an id that names nothing.
          */
         ElementId Create(ElementId parent, std::string_view tag, std::size_t index = End);
         /**
-         * @brief Removes `element` and everything under it at once: their ids are stale from here on. The root element
-         * cannot be removed. False when there was nothing to remove.
+         * @brief Removes `element` and everything under it. By default it gives the element `:outro` and removes it
+         * after the frame in which no transition runs on it or under it any more (a frame's styles are resolved
+         * first, so the outro's own transitions count): until then it is alive, laid out, painted and hit-tested, and
+         * a second call does nothing more. RemoveMode::Immediate removes it at once, an outro under way or not. The
+         * ids go stale at the removal. The root element cannot be removed. False when there was nothing to remove.
          */
-        bool Remove(ElementId element);
+        bool Remove(ElementId element, RemoveMode mode = RemoveMode::Outro);
         /**
          * @brief Moves `element` (with everything under it) to be `newParent`'s child at `index` (End for last). False,
          * changing nothing, for a stale id, the root element, or a new parent inside `element`.
@@ -208,9 +228,10 @@ namespace Fenrir
          * `#rrggbbaa`, `rgb()`, `rgba()`, `hsl()`, `hsla()` or a CSS colour name, `url(path)` for an image asset loaded
          * from the asset store, `linear-gradient()` and `radial-gradient()`, `box-shadow` lists, and `transform`
          * lists of `translate()`, `translateX()`, `translateY()`, `scale()`, `scaleX()`, `scaleY()`, `rotate()` (deg,
-         * rad, grad or turn). An unknown property, one the style does not hold yet (the text, transition, animation,
-         * filter and scrollbar properties, which a stylesheet parses and keeps), or a value it cannot read is logged,
-         * with both named, and changes nothing: false.
+         * rad, grad or turn), times in `s` or `ms` and timing functions (the CSS named set, `cubic-bezier()`,
+         * `steps()`) in the transition and animation lists. An unknown property, one the style does not hold yet (the
+         * text, filter and scrollbar properties, which a stylesheet parses and keeps), or a value it cannot read is
+         * logged, with both named, and changes nothing: false.
          */
         bool SetStyleProperty(ElementId element, std::string_view name, std::string_view value);
         /**
@@ -227,7 +248,10 @@ namespace Fenrir
         bool RemoveStylesheet(StylesheetId sheet);
         /** @brief A sheet the root holds, as parsed; null when it names none. */
         [[nodiscard]] const Stylesheet* GetStylesheet(StylesheetId sheet) const noexcept;
-        /** @brief Its resolved style as of the last frame; null for a stale id. */
+        /**
+         * @brief Its resolved style as of the last frame, with its transitions and animations over the cascade: what
+         * it was painted with. Null for a stale id.
+         */
         [[nodiscard]] const ResolvedStyle* GetResolvedStyle(ElementId element) const noexcept;
         /** @brief Its rectangles as of the last frame's layout; empty rectangles for a stale id. */
         [[nodiscard]] ElementBoxes GetBoxes(ElementId element) const noexcept;

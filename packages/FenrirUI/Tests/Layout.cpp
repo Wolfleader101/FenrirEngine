@@ -129,7 +129,7 @@ TEST_CASE("Yoga's conformance fixtures lay out to their rectangles through the b
             REQUIRE(UITest::Near(laidOut, node.rect));
             ++checked;
         }
-        root.Remove(elements.front());
+        root.Remove(elements.front(), Fenrir::RemoveMode::Immediate);
     }
     INFO("every converted fixture was checked");
     REQUIRE(checked > 1000);

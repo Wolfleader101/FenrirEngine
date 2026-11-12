@@ -10,6 +10,7 @@
 
 #include "FenrirUI/Style.hpp"
 #include "FenrirUI/Stylesheet.hpp"
+#include "StyleAnimation.hpp"
 #include "StyleValues.hpp"
 
 namespace Fenrir::Detail
@@ -39,12 +40,13 @@ namespace Fenrir::Detail
         std::uint32_t order = 0;
     };
 
-    /** @brief A sheet a root holds: the sheet as parsed and its rules read for the cascade. */
+    /** @brief A sheet a root holds: the sheet as parsed, its rules read for the cascade and its keyframes read. */
     struct StylesheetEntry
     {
         StylesheetId id;
         Stylesheet sheet;
         std::vector<CompiledRule> rules;
+        std::vector<std::shared_ptr<const CompiledKeyframes>> keyframes;
     };
 
     /** @brief One selector of a rule, with the rule it belongs to. */
@@ -69,12 +71,19 @@ namespace Fenrir::Detail
         bool hasCombinators = false;
         /** @brief Some selector uses :first-child or :last-child, so a change of children can restyle siblings. */
         bool hasSiblingStructure = false;
+        /** @brief Some selector uses :intro, so clearing it can restyle. */
+        bool hasIntro = false;
+        /** @brief Every sheet's `@keyframes` by name. */
+        KeyframesByName keyframes;
     };
 
-    /** @brief Reads a parsed sheet's rules for the cascade, loading its url()s; what fails to read is logged. */
+    /**
+     * @brief Reads a parsed sheet's rules for the cascade and its keyframes for animations, loading its url()s; what
+     * fails to read is logged.
+     */
     void CompileStylesheet(UIRootState& state, StylesheetEntry& entry);
 
-    /** @brief Builds the index over every sheet the root holds, in the order they were added. */
+    /** @brief Builds the index, and the keyframes by name, over every sheet the root holds, in the order added. */
     void RebuildStyleIndex(UIRootState& state);
 
     /**

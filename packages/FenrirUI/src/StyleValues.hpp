@@ -43,9 +43,8 @@ namespace Fenrir::Detail
         /** @brief A shorthand, expanded by ExpandShorthand. */
         Shorthand,
         /**
-         * @brief A longhand of the spec's property set that the style does not hold yet (text, transitions,
-         * animations, filters, scrollbars, background-position): parsed and kept, and styling nothing until the ticket
-         * that adds it.
+         * @brief A longhand of the spec's property set that the style does not hold yet (text, filters, scrollbars,
+         * background-position): parsed and kept, and styling nothing until the ticket that adds it.
          */
         NotYetStyled,
     };
@@ -100,62 +99,73 @@ namespace Fenrir::Detail
 
 // Every property: its enumerator, its CSS name, its ResolvedStyle field and the parser that reads it. The table drives
 // copying a property, reading it by name, and which properties inherit.
-#define FENRIR_UI_STYLE_PROPERTIES(X)                                                              \
-    X(Display, "display", display, ParseDisplay)                                                   \
-    X(Position, "position", position, ParsePosition)                                               \
-    X(Top, "top", top, ParseLength)                                                                \
-    X(Right, "right", right, ParseLength)                                                          \
-    X(Bottom, "bottom", bottom, ParseLength)                                                       \
-    X(Left, "left", left, ParseLength)                                                             \
-    X(Width, "width", width, ParseLength)                                                          \
-    X(Height, "height", height, ParseLength)                                                       \
-    X(MinWidth, "min-width", minWidth, ParseLength)                                                \
-    X(MinHeight, "min-height", minHeight, ParseLength)                                             \
-    X(MaxWidth, "max-width", maxWidth, ParseLength)                                                \
-    X(MaxHeight, "max-height", maxHeight, ParseLength)                                             \
-    X(AspectRatio, "aspect-ratio", aspectRatio, ParseRatio)                                        \
-    X(MarginTop, "margin-top", marginTop, ParseLength)                                             \
-    X(MarginRight, "margin-right", marginRight, ParseLength)                                       \
-    X(MarginBottom, "margin-bottom", marginBottom, ParseLength)                                    \
-    X(MarginLeft, "margin-left", marginLeft, ParseLength)                                          \
-    X(PaddingTop, "padding-top", paddingTop, ParseLength)                                          \
-    X(PaddingRight, "padding-right", paddingRight, ParseLength)                                    \
-    X(PaddingBottom, "padding-bottom", paddingBottom, ParseLength)                                 \
-    X(PaddingLeft, "padding-left", paddingLeft, ParseLength)                                       \
-    X(BorderTopWidth, "border-top-width", borderTopWidth, ParsePixels)                             \
-    X(BorderRightWidth, "border-right-width", borderRightWidth, ParsePixels)                       \
-    X(BorderBottomWidth, "border-bottom-width", borderBottomWidth, ParsePixels)                    \
-    X(BorderLeftWidth, "border-left-width", borderLeftWidth, ParsePixels)                          \
-    X(FlexDirection, "flex-direction", flexDirection, ParseFlexDirection)                          \
-    X(FlexWrap, "flex-wrap", flexWrap, ParseFlexWrap)                                              \
-    X(FlexGrow, "flex-grow", flexGrow, ParseNumber)                                                \
-    X(FlexShrink, "flex-shrink", flexShrink, ParseNumber)                                          \
-    X(FlexBasis, "flex-basis", flexBasis, ParseLength)                                             \
-    X(AlignItems, "align-items", alignItems, ParseAlign)                                           \
-    X(AlignSelf, "align-self", alignSelf, ParseAlign)                                              \
-    X(AlignContent, "align-content", alignContent, ParseAlign)                                     \
-    X(JustifyContent, "justify-content", justifyContent, ParseJustify)                             \
-    X(RowGap, "row-gap", rowGap, ParseLength)                                                      \
-    X(ColumnGap, "column-gap", columnGap, ParseLength)                                             \
-    X(BackgroundColor, "background-color", backgroundColor, ParseColour)                           \
-    X(BackgroundImage, "background-image", backgroundImage, ParseBackgroundImage)                  \
-    X(BackgroundSize, "background-size", backgroundSize, ParseBackgroundSize)                      \
-    X(BorderImageSource, "border-image-source", borderImageSource, ParseImageUrl)                  \
-    X(BorderImageSlice, "border-image-slice", borderImageSlice, ParseSlice)                        \
-    X(BorderTopColor, "border-top-color", borderTopColor, ParseColour)                             \
-    X(BorderRightColor, "border-right-color", borderRightColor, ParseColour)                       \
-    X(BorderBottomColor, "border-bottom-color", borderBottomColor, ParseColour)                    \
-    X(BorderLeftColor, "border-left-color", borderLeftColor, ParseColour)                          \
-    X(BorderTopLeftRadius, "border-top-left-radius", borderTopLeftRadius, ParsePixels)             \
-    X(BorderTopRightRadius, "border-top-right-radius", borderTopRightRadius, ParsePixels)          \
-    X(BorderBottomRightRadius, "border-bottom-right-radius", borderBottomRightRadius, ParsePixels) \
-    X(BorderBottomLeftRadius, "border-bottom-left-radius", borderBottomLeftRadius, ParsePixels)    \
-    X(BoxShadow, "box-shadow", boxShadow, ParseBoxShadow)                                          \
-    X(Opacity, "opacity", opacity, ParseOpacity)                                                   \
-    X(Transform, "transform", transform, ParseTransform)                                           \
-    X(TransformOriginX, "transform-origin-x", transformOriginX, ParseLength)                       \
-    X(TransformOriginY, "transform-origin-y", transformOriginY, ParseLength)                       \
-    X(Overflow, "overflow", overflow, ParseOverflow)                                               \
-    X(ZIndex, "z-index", zIndex, ParseInteger)                                                     \
-    X(PointerEvents, "pointer-events", pointerEvents, ParsePointerEvents)                          \
-    X(Cursor, "cursor", cursor, ParseCursor)
+#define FENRIR_UI_STYLE_PROPERTIES(X)                                                                         \
+    X(Display, "display", display, ParseDisplay)                                                              \
+    X(Position, "position", position, ParsePosition)                                                          \
+    X(Top, "top", top, ParseLength)                                                                           \
+    X(Right, "right", right, ParseLength)                                                                     \
+    X(Bottom, "bottom", bottom, ParseLength)                                                                  \
+    X(Left, "left", left, ParseLength)                                                                        \
+    X(Width, "width", width, ParseLength)                                                                     \
+    X(Height, "height", height, ParseLength)                                                                  \
+    X(MinWidth, "min-width", minWidth, ParseLength)                                                           \
+    X(MinHeight, "min-height", minHeight, ParseLength)                                                        \
+    X(MaxWidth, "max-width", maxWidth, ParseLength)                                                           \
+    X(MaxHeight, "max-height", maxHeight, ParseLength)                                                        \
+    X(AspectRatio, "aspect-ratio", aspectRatio, ParseRatio)                                                   \
+    X(MarginTop, "margin-top", marginTop, ParseLength)                                                        \
+    X(MarginRight, "margin-right", marginRight, ParseLength)                                                  \
+    X(MarginBottom, "margin-bottom", marginBottom, ParseLength)                                               \
+    X(MarginLeft, "margin-left", marginLeft, ParseLength)                                                     \
+    X(PaddingTop, "padding-top", paddingTop, ParseLength)                                                     \
+    X(PaddingRight, "padding-right", paddingRight, ParseLength)                                               \
+    X(PaddingBottom, "padding-bottom", paddingBottom, ParseLength)                                            \
+    X(PaddingLeft, "padding-left", paddingLeft, ParseLength)                                                  \
+    X(BorderTopWidth, "border-top-width", borderTopWidth, ParsePixels)                                        \
+    X(BorderRightWidth, "border-right-width", borderRightWidth, ParsePixels)                                  \
+    X(BorderBottomWidth, "border-bottom-width", borderBottomWidth, ParsePixels)                               \
+    X(BorderLeftWidth, "border-left-width", borderLeftWidth, ParsePixels)                                     \
+    X(FlexDirection, "flex-direction", flexDirection, ParseFlexDirection)                                     \
+    X(FlexWrap, "flex-wrap", flexWrap, ParseFlexWrap)                                                         \
+    X(FlexGrow, "flex-grow", flexGrow, ParseNumber)                                                           \
+    X(FlexShrink, "flex-shrink", flexShrink, ParseNumber)                                                     \
+    X(FlexBasis, "flex-basis", flexBasis, ParseLength)                                                        \
+    X(AlignItems, "align-items", alignItems, ParseAlign)                                                      \
+    X(AlignSelf, "align-self", alignSelf, ParseAlign)                                                         \
+    X(AlignContent, "align-content", alignContent, ParseAlign)                                                \
+    X(JustifyContent, "justify-content", justifyContent, ParseJustify)                                        \
+    X(RowGap, "row-gap", rowGap, ParseLength)                                                                 \
+    X(ColumnGap, "column-gap", columnGap, ParseLength)                                                        \
+    X(BackgroundColor, "background-color", backgroundColor, ParseColour)                                      \
+    X(BackgroundImage, "background-image", backgroundImage, ParseBackgroundImage)                             \
+    X(BackgroundSize, "background-size", backgroundSize, ParseBackgroundSize)                                 \
+    X(BorderImageSource, "border-image-source", borderImageSource, ParseImageUrl)                             \
+    X(BorderImageSlice, "border-image-slice", borderImageSlice, ParseSlice)                                   \
+    X(BorderTopColor, "border-top-color", borderTopColor, ParseColour)                                        \
+    X(BorderRightColor, "border-right-color", borderRightColor, ParseColour)                                  \
+    X(BorderBottomColor, "border-bottom-color", borderBottomColor, ParseColour)                               \
+    X(BorderLeftColor, "border-left-color", borderLeftColor, ParseColour)                                     \
+    X(BorderTopLeftRadius, "border-top-left-radius", borderTopLeftRadius, ParsePixels)                        \
+    X(BorderTopRightRadius, "border-top-right-radius", borderTopRightRadius, ParsePixels)                     \
+    X(BorderBottomRightRadius, "border-bottom-right-radius", borderBottomRightRadius, ParsePixels)            \
+    X(BorderBottomLeftRadius, "border-bottom-left-radius", borderBottomLeftRadius, ParsePixels)               \
+    X(BoxShadow, "box-shadow", boxShadow, ParseBoxShadow)                                                     \
+    X(Opacity, "opacity", opacity, ParseOpacity)                                                              \
+    X(Transform, "transform", transform, ParseTransform)                                                      \
+    X(TransformOriginX, "transform-origin-x", transformOriginX, ParseLength)                                  \
+    X(TransformOriginY, "transform-origin-y", transformOriginY, ParseLength)                                  \
+    X(Overflow, "overflow", overflow, ParseOverflow)                                                          \
+    X(ZIndex, "z-index", zIndex, ParseInteger)                                                                \
+    X(PointerEvents, "pointer-events", pointerEvents, ParsePointerEvents)                                     \
+    X(Cursor, "cursor", cursor, ParseCursor)                                                                  \
+    X(TransitionProperty, "transition-property", transitionProperty, ParseTransitionProperty)                 \
+    X(TransitionDuration, "transition-duration", transitionDuration, ParseDurations)                          \
+    X(TransitionTimingFunction, "transition-timing-function", transitionTimingFunction, ParseTimingFunctions) \
+    X(TransitionDelay, "transition-delay", transitionDelay, ParseDelays)                                      \
+    X(AnimationName, "animation-name", animationName, ParseAnimationNames)                                    \
+    X(AnimationDuration, "animation-duration", animationDuration, ParseDurations)                             \
+    X(AnimationTimingFunction, "animation-timing-function", animationTimingFunction, ParseTimingFunctions)    \
+    X(AnimationDelay, "animation-delay", animationDelay, ParseDelays)                                         \
+    X(AnimationIterationCount, "animation-iteration-count", animationIterationCount, ParseIterationCounts)    \
+    X(AnimationDirection, "animation-direction", animationDirection, ParseDirections)                         \
+    X(AnimationFillMode, "animation-fill-mode", animationFillMode, ParseFillModes)

@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -219,6 +220,118 @@ namespace Fenrir
     };
 
     /**
+     * @brief CSS's easing function, which maps a transition's or a keyframe interval's progress (0 to 1) to how far
+     * between its two values it shows: a cubic Bézier from (0, 0) to (1, 1) through two control points, or a run of
+     * steps. The named functions are Bézier curves (`linear` is the straight one).
+     */
+    struct TimingFunction
+    {
+        /** @brief Which kind of curve. */
+        enum class Kind : std::uint8_t
+        {
+            CubicBezier,
+            Steps,
+        };
+
+        /** @brief Where a `steps()` function jumps: CSS's `jump-start`, `jump-end`, `jump-none` and `jump-both`. */
+        enum class StepPosition : std::uint8_t
+        {
+            JumpStart,
+            JumpEnd,
+            JumpNone,
+            JumpBoth,
+        };
+
+        Kind kind = Kind::CubicBezier;
+        /** @brief A Bézier's control points; their x lie in [0, 1]. `ease` by default. */
+        float x1 = 0.25f;
+        float y1 = 0.1f;
+        float x2 = 0.25f;
+        float y2 = 1.0f;
+        /** @brief A `steps()` function's number of intervals, 1 or more, and where it jumps. */
+        std::uint32_t steps = 1;
+        StepPosition position = StepPosition::JumpEnd;
+
+        /** @brief `cubic-bezier(x1, y1, x2, y2)`. */
+        [[nodiscard]] static constexpr TimingFunction CubicBezier(float x1, float y1, float x2, float y2) noexcept
+        {
+            TimingFunction function;
+            function.x1 = x1;
+            function.y1 = y1;
+            function.x2 = x2;
+            function.y2 = y2;
+            return function;
+        }
+
+        /** @brief `steps(count, position)`. */
+        [[nodiscard]] static constexpr TimingFunction Steps(std::uint32_t count,
+                                                            StepPosition position = StepPosition::JumpEnd) noexcept
+        {
+            TimingFunction function;
+            function.kind = Kind::Steps;
+            function.steps = count;
+            function.position = position;
+            return function;
+        }
+
+        /** @brief `linear`. */
+        [[nodiscard]] static constexpr TimingFunction Linear() noexcept
+        {
+            return CubicBezier(0.0f, 0.0f, 1.0f, 1.0f);
+        }
+
+        /** @brief `ease`, CSS's initial timing function. */
+        [[nodiscard]] static constexpr TimingFunction Ease() noexcept
+        {
+            return CubicBezier(0.25f, 0.1f, 0.25f, 1.0f);
+        }
+
+        /** @brief `ease-in`. */
+        [[nodiscard]] static constexpr TimingFunction EaseIn() noexcept
+        {
+            return CubicBezier(0.42f, 0.0f, 1.0f, 1.0f);
+        }
+
+        /** @brief `ease-out`. */
+        [[nodiscard]] static constexpr TimingFunction EaseOut() noexcept
+        {
+            return CubicBezier(0.0f, 0.0f, 0.58f, 1.0f);
+        }
+
+        /** @brief `ease-in-out`. */
+        [[nodiscard]] static constexpr TimingFunction EaseInOut() noexcept
+        {
+            return CubicBezier(0.42f, 0.0f, 0.58f, 1.0f);
+        }
+
+        /** @brief The output at `progress` (0 to 1) as CSS's easing functions define it. */
+        [[nodiscard]] float Apply(float progress) const noexcept;
+
+        friend constexpr bool operator==(const TimingFunction&, const TimingFunction&) noexcept = default;
+    };
+
+    /** @brief `animation-direction`: which way each iteration plays. */
+    enum class AnimationDirection : std::uint8_t
+    {
+        Normal,
+        Reverse,
+        /** @brief Forwards on even iterations (counting from 0), backwards on odd ones. */
+        Alternate,
+        AlternateReverse,
+    };
+
+    /** @brief `animation-fill-mode`: whether an animation's values hold before it starts and after it ends. */
+    enum class AnimationFillMode : std::uint8_t
+    {
+        None,
+        /** @brief The last iteration's end values hold once it ends. */
+        Forwards,
+        /** @brief The first iteration's start values hold through its delay. */
+        Backwards,
+        Both,
+    };
+
+    /**
      * @brief Every property of an element's style with a value: the resolved style, and the values a StyleDeclarations
      * holds. Defaults are Yoga's, which are those of React Native and Unity's USS rather than the web's:
      * `flex-direction` column, `flex-shrink` 0, `align-content` flex-start, and every element a flex container. Lengths
@@ -292,6 +405,32 @@ namespace Fenrir
         std::int32_t zIndex = 0;
         PointerEvents pointerEvents = PointerEvents::None;
         Cursor cursor = Cursor::Auto;
+
+        /** @name Transitions and animations
+         * Comma-separated lists, as CSS's: the i-th transition (animation) takes the i-th entry of each other list,
+         * which repeats when it is shorter. An empty list is the property's initial value: `all`, `0s`, `ease`, `0s`;
+         * no animation, `0s`, `ease`, `0s`, `1`, `normal`, `none`.
+         * @{
+         */
+        /** @brief Property names in lower case (a shorthand names its longhands), `all`, or `none` alone. */
+        std::vector<std::string> transitionProperty;
+        /** @brief Seconds, zero or more. */
+        std::vector<float> transitionDuration;
+        std::vector<TimingFunction> transitionTimingFunction;
+        /** @brief Seconds; a negative delay starts the transition part way through. */
+        std::vector<float> transitionDelay;
+        /** @brief `@keyframes` names, as written; `none` names no animation but keeps its place in the lists. */
+        std::vector<std::string> animationName;
+        /** @brief Seconds per iteration, zero or more. */
+        std::vector<float> animationDuration;
+        std::vector<TimingFunction> animationTimingFunction;
+        /** @brief Seconds; a negative delay starts the animation part way through. */
+        std::vector<float> animationDelay;
+        /** @brief Iterations, zero or more, fractions allowed; infinity for `infinite`. */
+        std::vector<float> animationIterationCount;
+        std::vector<AnimationDirection> animationDirection;
+        std::vector<AnimationFillMode> animationFillMode;
+        /** @} */
     };
 
     /** @brief The properties of the style, each a ResolvedStyle field, named as CSS's longhands are. */
@@ -355,6 +494,17 @@ namespace Fenrir
         ZIndex,
         PointerEvents,
         Cursor,
+        TransitionProperty,
+        TransitionDuration,
+        TransitionTimingFunction,
+        TransitionDelay,
+        AnimationName,
+        AnimationDuration,
+        AnimationTimingFunction,
+        AnimationDelay,
+        AnimationIterationCount,
+        AnimationDirection,
+        AnimationFillMode,
         /** @brief How many there are; not a property. */
         Count,
     };
@@ -474,6 +624,28 @@ namespace Fenrir
         StyleDeclarations& SetPointerEvents(Fenrir::PointerEvents value);
         /** @brief `cursor`. */
         StyleDeclarations& SetCursor(Fenrir::Cursor value);
+        /** @brief `transition-property`: lower-case property names, `all`, or `none` alone. */
+        StyleDeclarations& SetTransitionProperty(std::vector<std::string> names);
+        /** @brief `transition-duration`, in seconds. */
+        StyleDeclarations& SetTransitionDuration(std::vector<float> seconds);
+        /** @brief `transition-timing-function`. */
+        StyleDeclarations& SetTransitionTimingFunction(std::vector<TimingFunction> functions);
+        /** @brief `transition-delay`, in seconds. */
+        StyleDeclarations& SetTransitionDelay(std::vector<float> seconds);
+        /** @brief `animation-name`: `@keyframes` names. */
+        StyleDeclarations& SetAnimationName(std::vector<std::string> names);
+        /** @brief `animation-duration`, in seconds per iteration. */
+        StyleDeclarations& SetAnimationDuration(std::vector<float> seconds);
+        /** @brief `animation-timing-function`. */
+        StyleDeclarations& SetAnimationTimingFunction(std::vector<TimingFunction> functions);
+        /** @brief `animation-delay`, in seconds. */
+        StyleDeclarations& SetAnimationDelay(std::vector<float> seconds);
+        /** @brief `animation-iteration-count`; infinity for `infinite`. */
+        StyleDeclarations& SetAnimationIterationCount(std::vector<float> counts);
+        /** @brief `animation-direction`. */
+        StyleDeclarations& SetAnimationDirection(std::vector<Fenrir::AnimationDirection> directions);
+        /** @brief `animation-fill-mode`. */
+        StyleDeclarations& SetAnimationFillMode(std::vector<Fenrir::AnimationFillMode> modes);
         /** @} */
 
         /** @brief Gives `property` through `field`, its field of ResolvedStyle, the value `value`. */
