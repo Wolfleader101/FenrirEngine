@@ -9,9 +9,9 @@
 
 **Touches:** `packages/FenrirPainter/`, `packages/FenrirRenderer/src/Core/Draw2DFeature.cpp`, `packages/FenrirRenderer/src/Core/Draw2DFeature.hpp`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Draw-list tests: begin and end groups are balanced and nested as recorded; a mask brackets the right commands; a backdrop blur records the rectangle and radius.
-- [ ] Null-backend tests: a blurred group produces two blur passes and one more transient image; a drop shadow draws before its group; a masked run binds the mask image in the expected slot; backdrop blur on the overlay copies the target region first; with groups off no transient image is made.
-- [ ] GL test (skipped without a display): a half-opacity group over a solid colour, a blurred disc's edge profile, and a masked gradient read back as expected within a tolerance.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Draw-list tests: begin and end groups are balanced and nested as recorded; a mask brackets the right commands; a backdrop blur records the rectangle and radius.
+- [x] Null-backend tests: a blurred group produces two blur passes and one more transient image; a drop shadow draws before its group; a masked run binds the mask image in the expected slot; backdrop blur on the overlay copies the target region first; with groups off no transient image is made.
+- [x] GL test (skipped without a display): a half-opacity group over a solid colour, a blurred disc's edge profile, and a masked gradient read back as expected within a tolerance.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

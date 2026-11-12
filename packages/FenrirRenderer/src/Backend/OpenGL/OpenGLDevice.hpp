@@ -251,6 +251,7 @@ namespace Fenrir::Graphics
         void Execute(const CmdDrawIndexed& command);
         void Execute(const CmdDispatch& command);
         void Execute(const CmdCopyBuffer& command);
+        void Execute(const CmdCopyTexture& command);
 
         /**
          * @brief Sets the levels shaders sample of `texture`: only `level`, as its base and maximum, or every level

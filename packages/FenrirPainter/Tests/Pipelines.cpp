@@ -2,7 +2,11 @@
 // builtin:painter, and a painted list submitted to the window overlay makes one device pipeline, cached by value, from
 // the variant of its blend space. Read back through RendererProbe, as the renderer's own overlay tests are.
 
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstddef>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <vector>
@@ -11,6 +15,7 @@
 
 #include "FenrirPainter/Painter.hpp"
 #include "FenrirPainter/Painting.hpp"
+#include "FenrirPainter/Path.hpp"
 #include "FenrirRenderer/Overlay.hpp"
 #include "RendererTestApp.hpp"
 
@@ -126,5 +131,66 @@ TEST_CASE("builtin:painter's variants compile for both blend spaces", "[painter]
     REQUIRE_FALSE(RendererProbe::State(test.Device(), draws[1].pipeline).encodeSrgb);
     INFO("two pipelines, and nothing logged");
     REQUIRE(draws[0].pipeline != draws[1].pipeline);
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A masked run draws through builtin:painter's MASK variant, binding the mask's image in its mask texture",
+          "[painter][pipelines][masks]")
+{
+    RendererTestApp test;
+    const Fenrir::Painting painting = Fenrir::Painting::Install(test.app);
+    test.AddCamera();
+    Fenrir::DrawList2D list;
+    Fenrir::PainterConfig config;
+    config.shader = painting.GetShader();
+    Fenrir::Painter painter(list, config);
+    Fenrir::Path disc;
+    disc.AddCircle({50, 50}, 20);
+    painter.BeginMask(disc);
+    painter.DrawRect({0, 0, 100, 100}, Fenrir::Colour::Red);
+    painter.EndMask();
+    painter.DrawRect({0, 0, 10, 10}, Fenrir::Colour::Red);
+    OverlayOf(test).Submit(MainWindow, 0, std::move(list));
+
+    test.Frame();
+    const std::vector<RendererTest::PassRecord> groups = RendererTest::Labelled(test.Passes(), "Group 2D");
+    const std::vector<RendererTest::RecordedDraw> draws = test.Draws("Overlay 2D");
+
+    INFO("the mask's shape draws into a group image, which the masked rectangle samples and the one after does not");
+    REQUIRE(groups.size() == 1);
+    const Fenrir::Graphics::TextureHandle maskImage = groups[0].pass.colour.at(0).texture;
+    REQUIRE(draws.size() == 2);
+    const auto bindsMask = [&](const RendererTest::RecordedDraw& draw) {
+        for (const Fenrir::Graphics::BindingGroupEntry& entry :
+             RendererProbe::Entries(test.Device(), draw.groups.at(1)))
+        {
+            if (entry.texture == maskImage)
+            {
+                return entry.binding;
+            }
+        }
+        return ~0u;
+    };
+    INFO("the mask texture is binding 3 of set 1, after the image and the stop texture");
+    REQUIRE(bindsMask(draws[0]) == 3u);
+    REQUIRE(bindsMask(draws[1]) == ~0u);
+    REQUIRE(draws[0].pipeline != draws[1].pipeline);
+    INFO("the masked draw's parameter block holds the mask's rectangle: its top-left and one over its size");
+    const std::vector<Fenrir::Graphics::BindingGroupEntry> entries =
+        RendererProbe::Entries(test.Device(), draws[0].groups.at(1));
+    const auto block = std::find_if(entries.begin(), entries.end(),
+                                    [](const Fenrir::Graphics::BindingGroupEntry& e) { return e.binding == 0; });
+    REQUIRE(block != entries.end());
+    const std::vector<std::byte> bytes = RendererProbe::Bytes(test.Device(), block->buffer);
+    std::array<float, 4> rect{};
+    std::memcpy(rect.data(), bytes.data() + block->offset, sizeof(rect));
+    const Fenrir::Graphics::TextureDesc desc = RendererProbe::Desc(test.Device(), maskImage);
+    INFO("the top-left is the disc's bounds less a pixel of fringe: (29, 29)");
+    REQUIRE(std::abs(rect[0] - 29.0f) < 1e-3f);
+    REQUIRE(std::abs(rect[1] - 29.0f) < 1e-3f);
+    INFO("then one over the image's width and height");
+    REQUIRE(rect[2] == 1.0f / static_cast<float>(desc.width));
+    REQUIRE(rect[3] == 1.0f / static_cast<float>(desc.height));
+    REQUIRE(RendererProbe::StaleUses(test.Device()).empty());
     REQUIRE(test.messages->errors.empty());
 }
