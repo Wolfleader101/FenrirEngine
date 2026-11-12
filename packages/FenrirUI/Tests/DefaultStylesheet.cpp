@@ -110,7 +110,8 @@ TEST_CASE("The default stylesheet's states change a control's look", "[ui][defau
     REQUIRE_FALSE(Same(root.GetResolvedStyle(checkbox)->backgroundColor, unchecked));
 }
 
-TEST_CASE("A game's sheet overrides the default stylesheet, whatever its specificity", "[ui][default]")
+TEST_CASE("A game's sheet overrides the default stylesheet by specificity, and by order at equal specificity",
+          "[ui][default]")
 {
     UITestApp test;
     std::shared_ptr<CaptureTarget> target;
@@ -119,15 +120,22 @@ TEST_CASE("A game's sheet overrides the default stylesheet, whatever its specifi
     root.AddClass(button, "danger");
     root.AddStylesheet("button { background-color: #00ff00; } .danger { color: #ff0000; }", "game.css");
     test.Frame();
+    INFO("the game's button rule comes after the default's of equal specificity");
     REQUIRE(Same(root.GetResolvedStyle(button)->backgroundColor, Fenrir::Colour::Green));
+    INFO("the game's class rule is more specific than the default's inherited colour");
     REQUIRE(Same(root.GetResolvedStyle(button)->color, Fenrir::Colour::Red));
+    INFO("what the game's sheet leaves alone stays the default's");
+    REQUIRE_FALSE(root.GetResolvedStyle(button)->borderTopWidth == 0.0f);
 
     root.SetPseudoClass(button, Fenrir::PseudoClass::Hover, true);
     test.Frame();
-    INFO("the game's plain rule beats the default's more specific button:hover");
-    REQUIRE(Same(root.GetResolvedStyle(button)->backgroundColor, Fenrir::Colour::Green));
-    INFO("what the game's sheet leaves alone stays the default's");
-    REQUIRE_FALSE(root.GetResolvedStyle(button)->borderTopWidth == 0.0f);
+    INFO("hovered, the default's more specific button:hover beats the game's plain rule");
+    REQUIRE_FALSE(Same(root.GetResolvedStyle(button)->backgroundColor, Fenrir::Colour::Green));
+
+    root.AddStylesheet("button:hover { background-color: #0000ff; }", "hover.css");
+    test.Frame();
+    INFO("and the game's own button:hover beats the default's by coming later");
+    REQUIRE(Same(root.GetResolvedStyle(button)->backgroundColor, Fenrir::Colour::Blue));
 }
 
 TEST_CASE("A root made without the default stylesheet gives its controls no look", "[ui][default]")

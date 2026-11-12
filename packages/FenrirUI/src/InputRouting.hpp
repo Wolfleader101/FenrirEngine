@@ -88,7 +88,7 @@ namespace Fenrir::Detail
     /** @copydoc Fenrir::UIRoot::Blur */
     void Blur(UIRoot& root, UIRootState& state);
     /** @copydoc Fenrir::UIRoot::TakePress */
-    void TakePress(UIRoot& root, UIRootState& state, ElementId element);
+    bool TakePress(UIRoot& root, UIRootState& state, ElementId element);
     /** @copydoc Fenrir::UIRoot::SendEvent */
     void SendUIEvent(UIRootState& state, UIEvent event);
 } // namespace Fenrir::Detail

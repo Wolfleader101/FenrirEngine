@@ -39,11 +39,6 @@ namespace Fenrir::Detail
         std::vector<StyleDeclaration> customProperties;
         /** @brief Its place in the cascade's order: later sheets, then later rules, are higher. */
         std::uint32_t order = 0;
-        /**
-         * @brief It is the default stylesheet's: every rule of the root's own sheets wins over it, whatever their
-         * specificity, as CSS's author origin wins over the user agent's.
-         */
-        bool defaultOrigin = false;
     };
 
     /** @brief A sheet a root holds: the sheet as parsed, its rules read for the cascade and its keyframes read. */
@@ -105,7 +100,7 @@ namespace Fenrir::Detail
 
     /**
      * @brief Resolves the cascaded style of the element in slot `index` onto `style`, which holds the defaults and
-     * what it inherits: its matching rules by origin, specificity and order, then its inline style. `custom` is its
+     * what it inherits: its matching rules by specificity and order, then its inline style. `custom` is its
      * custom properties, what it inherits on the way in. With a `pseudoElement`, it resolves that part of the element
      * instead, from the rules whose selectors end in it, with no inline style.
      */

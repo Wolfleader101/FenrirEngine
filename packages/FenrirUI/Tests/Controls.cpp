@@ -141,16 +141,19 @@ TEST_CASE("Space and Enter on a focused button click it", "[ui][controls]")
     UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
     const ElementId button = Place(root, root.GetRootElement(), "button", 10.0f, 10.0f, 100.0f, 40.0f);
     test.Frame();
+    INFO("a button makes itself focusable");
     REQUIRE(root.IsFocusable(button));
     REQUIRE(root.Focus(button));
     Fenrir::EventReader<UIEvent> events;
 
     test.Type(Key::Space, Scancode::Space);
     test.Frame();
+    INFO("Space clicks it once");
     REQUIRE(Of(events, test.app, UIEventKind::Click, button).size() == 1);
 
     test.Type(Key::Enter, Scancode::Enter);
     test.Frame();
+    INFO("Enter clicks it once");
     REQUIRE(Of(events, test.app, UIEventKind::Click, button).size() == 1);
 }
 
@@ -197,6 +200,7 @@ TEST_CASE("A checkbox toggles on click and Space, with :checked and change", "[u
 
     test.Click({20.0f, 20.0f});
     test.Frame();
+    INFO("a click checks it, with :checked and a change of 1");
     REQUIRE(checkbox.IsChecked());
     REQUIRE(root.HasPseudoClass(box, Fenrir::PseudoClass::Checked));
     std::vector<UIEvent> changes = Of(events, test.app, UIEventKind::Change, box);
@@ -278,6 +282,49 @@ TEST_CASE("A slider dragged to its middle reports the mid value snapped to its s
 
     INFO("its thumb is placed at the value, 80% along (the default stylesheet's transform centres it there)");
     REQUIRE(Near(root.GetBoxes(slider.GetThumb()).border.x, 160.0f, 0.5f));
+}
+
+TEST_CASE("A click on a control's own part names the control", "[ui][controls]")
+{
+    UITestApp test;
+    std::shared_ptr<CaptureTarget> target;
+    UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
+    const ElementId box = Place(root, root.GetRootElement(), "checkbox", 10.0f, 10.0f, 20.0f, 20.0f);
+    As<Fenrir::Checkbox>(root, box).SetChecked(true);
+    test.Frame();
+    const Fenrir::Rect2D mark = root.GetBoxes(As<Fenrir::Checkbox>(root, box).GetMark()).border;
+    REQUIRE(mark.width > 0.0f);
+    Fenrir::EventReader<UIEvent> events;
+
+    test.Click(Centre(mark));
+    test.Frame();
+    INFO("the mark takes no pointer input, so the checkbox is hit, clicked and toggled");
+    REQUIRE(Of(events, test.app, UIEventKind::Click, box).size() == 1);
+    REQUIRE_FALSE(As<Fenrir::Checkbox>(root, box).IsChecked());
+}
+
+TEST_CASE("The wheel over a slider without the focus passes to the scroll view round it", "[ui][controls]")
+{
+    UITestApp test;
+    std::shared_ptr<CaptureTarget> target;
+    UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
+    const ElementId view = Place(root, root.GetRootElement(), "scroll", 0.0f, 0.0f, 300.0f, 100.0f);
+    const ElementId element = root.Create(view, "slider");
+    auto& slider = As<Fenrir::Slider>(root, element);
+    slider.SetRange(0.0f, 10.0f);
+    slider.SetStep(1.0f);
+    slider.SetValue(5.0f);
+    const ElementId filler = root.Create(view, "div");
+    REQUIRE(root.SetStyleProperty(filler, "height", "400px"));
+    test.Frame();
+    const Vec2 over = Centre(root.GetBoxes(element).border);
+
+    Move(test, over);
+    test.Feed().Scroll(testWindow, {0.0f, -1.0f});
+    test.Frame();
+    INFO("the view scrolled and the slider kept its value");
+    REQUIRE(root.GetScrollOffset(view).y == Fenrir::ScrollView::ScrollStep);
+    REQUIRE(slider.GetValue() == 5.0f);
 }
 
 TEST_CASE("A vertical slider runs from min at the bottom to max at the top", "[ui][controls]")

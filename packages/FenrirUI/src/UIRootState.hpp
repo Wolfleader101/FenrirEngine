@@ -24,6 +24,13 @@ namespace Fenrir
 
 namespace Fenrir::Detail
 {
+    /** @brief A scroll view's `::scrollbar` (its tracks) and `::scrollbar-thumb` styles. */
+    struct ScrollbarStyles
+    {
+        ResolvedStyle track;
+        ResolvedStyle thumb;
+    };
+
     /** @brief One slot of a root's dense tree: an element while `alive`, free for reuse otherwise. */
     struct ElementSlot
     {
@@ -71,7 +78,7 @@ namespace Fenrir::Detail
          * @brief Its `::scrollbar` and `::scrollbar-thumb` styles as of its last resolve, while it has `overflow:
          * scroll`; null otherwise.
          */
-        std::unique_ptr<std::array<ResolvedStyle, 2>> scrollbarStyles;
+        std::unique_ptr<ScrollbarStyles> scrollbarStyles;
     };
 
     /** @brief A root's tree in dense slots, its Yoga nodes, its target and what its frames keep. */

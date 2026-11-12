@@ -87,7 +87,7 @@ namespace Fenrir
         m_mark = root.Create(GetId(), "checkbox-mark");
         // The root's click (a press and release on it) toggles it, before the game's listeners see the click.
         root.AddListener(GetId(), UIEventKind::Click, [this](UIListenerContext& context) {
-            if (context.GetEvent().target == GetId() || context.GetEvent().target == m_mark)
+            if (context.GetEvent().target == GetId())
             {
                 Toggle();
             }
@@ -268,6 +268,11 @@ namespace Fenrir
         const float step = m_step > 0.0f ? m_step : (m_max - m_min) / 100.0f;
         if (const auto* scroll = std::get_if<MouseScrollEvent>(&input))
         {
+            // Unfocused, the wheel passes on, so a scroll view round it scrolls past it.
+            if (GetRoot().GetFocused() != GetId())
+            {
+                return RouteResult::Passed;
+            }
             Move(m_value + scroll->notches.y * step, false);
             return RouteResult::Consumed;
         }
@@ -474,10 +479,12 @@ namespace Fenrir
 
     RouteResult ScrollView::Press(const MouseButtonEvent& event)
     {
-        if (event.button != MouseButton::Left || m_drag != Drag::None)
+        if (event.button != MouseButton::Left)
         {
             return RouteResult::Passed;
         }
+        // A new press starts over, whatever an earlier one whose release never came was doing.
+        m_drag = Drag::None;
         UIRoot& root = GetRoot();
         const Math::Vec2 pointer = root.GetPointer().value_or(Math::Vec2(0.0f));
         const ScrollbarBoxes bars = root.GetScrollbars(GetId());
@@ -536,8 +543,13 @@ namespace Fenrir
             {
                 return;
             }
+            // The press went away with the element it was on, its release with it: there is no drag.
+            if (!root.TakePress(GetId()))
+            {
+                m_drag = Drag::None;
+                return;
+            }
             m_drag = Drag::Content;
-            root.TakePress(GetId());
             [[fallthrough]];
         case Drag::Content:
             SetOffset(m_pressOffset - moved);

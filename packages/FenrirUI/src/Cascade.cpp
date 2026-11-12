@@ -174,7 +174,6 @@ namespace Fenrir::Detail
             {
                 CompiledRule& rule = entry->rules[r];
                 rule.order = order++;
-                rule.defaultOrigin = entry == state.defaultSheet.get();
                 for (const Selector& selector : entry->sheet.rules[r].selectors)
                 {
                     const auto at = static_cast<std::uint32_t>(index.selectors.size());
@@ -272,10 +271,6 @@ namespace Fenrir::Detail
                             [](const IndexedSelector& a, const IndexedSelector& b) { return a.rule == b.rule; }),
                 matched.end());
             std::stable_sort(matched.begin(), matched.end(), [](const IndexedSelector& a, const IndexedSelector& b) {
-                if (a.rule->defaultOrigin != b.rule->defaultOrigin)
-                {
-                    return a.rule->defaultOrigin;
-                }
                 return a.selector->specificity != b.selector->specificity
                            ? a.selector->specificity < b.selector->specificity
                            : a.rule->order < b.rule->order;

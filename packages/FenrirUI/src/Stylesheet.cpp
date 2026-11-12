@@ -848,13 +848,13 @@ namespace Fenrir
             }
             AppendCompound(out, compounds[i]);
         }
-        if (pseudoElement == PseudoElement::Scrollbar)
+        for (const auto& [name, value] : PseudoElements)
         {
-            out += "::scrollbar";
-        }
-        else if (pseudoElement == PseudoElement::ScrollbarThumb)
-        {
-            out += "::scrollbar-thumb";
+            if (value == pseudoElement)
+            {
+                out += "::";
+                out += name;
+            }
         }
         return out;
     }

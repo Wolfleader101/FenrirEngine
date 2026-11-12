@@ -144,13 +144,13 @@ namespace Fenrir::Detail
                 const ScrollbarBoxes bars = ScrollbarsOf(slot);
                 if (bars.vertical)
                 {
-                    PaintBox((*slot.scrollbarStyles)[0], bars.verticalTrack, alpha);
-                    PaintBox((*slot.scrollbarStyles)[1], bars.verticalThumb, alpha);
+                    PaintBox(slot.scrollbarStyles->track, bars.verticalTrack, alpha);
+                    PaintBox(slot.scrollbarStyles->thumb, bars.verticalThumb, alpha);
                 }
                 if (bars.horizontal)
                 {
-                    PaintBox((*slot.scrollbarStyles)[0], bars.horizontalTrack, alpha);
-                    PaintBox((*slot.scrollbarStyles)[1], bars.horizontalThumb, alpha);
+                    PaintBox(slot.scrollbarStyles->track, bars.horizontalTrack, alpha);
+                    PaintBox(slot.scrollbarStyles->thumb, bars.horizontalThumb, alpha);
                 }
             }
 

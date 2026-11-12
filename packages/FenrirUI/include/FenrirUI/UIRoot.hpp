@@ -90,9 +90,9 @@ namespace Fenrir
          */
         int inputPriority = 0;
         /**
-         * @brief Give it FenrirUI's default stylesheet (DefaultStylesheet) under its own sheets: every rule of the
-         * root's sheets wins over every one of the default's, whatever their specificity, as an author's sheet wins
-         * over a browser's. Off, the controls have no look but what the root's sheets give them.
+         * @brief Give it FenrirUI's default stylesheet (DefaultStylesheet) before its own sheets: a rule of the root's
+         * sheets wins over one of the default's of the same or lower specificity, by coming later, and loses to a more
+         * specific one, as CSS orders them. Off, the controls have no look but what the root's sheets give them.
          */
         bool defaultStylesheet = true;
     };
@@ -104,10 +104,14 @@ namespace Fenrir
      */
     struct ScrollbarBoxes
     {
+        /** @brief Whether the vertical bar, along the right edge, shows. */
         bool vertical = false;
+        /** @brief Whether the horizontal bar, along the bottom edge, shows. */
         bool horizontal = false;
+        /** @brief The vertical bar's track and its thumb, while it shows. */
         Rect2D verticalTrack;
         Rect2D verticalThumb;
+        /** @brief The horizontal bar's track and its thumb, while it shows. */
         Rect2D horizontalTrack;
         Rect2D horizontalThumb;
         /** @brief How far each thumb moves from one end of its track to the other: x the horizontal one's, y the
@@ -353,9 +357,9 @@ namespace Fenrir
         /**
          * @brief Gives the buttons held now to `element`, as a scroll view does when a press on its content becomes a
          * drag: what they were pressed on loses them (and `:active`), their motion and releases go to `element`, and
-         * their releases send no click. Nothing for a stale element or while no button is held.
+         * their releases send no click. False, doing nothing, for a stale element or while no button is held.
          */
-        void TakePress(ElementId element);
+        bool TakePress(ElementId element);
         /**
          * @brief The topmost element at `position` (UI units from the root's top-left) that takes pointer input
          * (`pointer-events: all`), as of the last frame's layout: children before their parent, siblings by z-index

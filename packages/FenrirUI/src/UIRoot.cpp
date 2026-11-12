@@ -135,14 +135,14 @@ namespace Fenrir
                 if (style.overflow == Overflow::Scroll)
                 {
                     // Its scrollbars are parts of it: they inherit from it and match its pseudo-classes.
-                    auto parts = std::make_unique<std::array<ResolvedStyle, 2>>();
-                    const std::array pseudoElements{PseudoElement::Scrollbar, PseudoElement::ScrollbarThumb};
-                    for (std::size_t i = 0; i < pseudoElements.size(); ++i)
-                    {
-                        Detail::Inherit(style, (*parts)[i]);
+                    auto parts = std::make_unique<Detail::ScrollbarStyles>();
+                    const auto resolvePart = [&](ResolvedStyle& part, PseudoElement pseudoElement) {
+                        Detail::Inherit(style, part);
                         std::shared_ptr<const Detail::CustomProperties> partCustom = slot.customProperties;
-                        Detail::Cascade(state, index, (*parts)[i], partCustom, pseudoElements[i]);
-                    }
+                        Detail::Cascade(state, index, part, partCustom, pseudoElement);
+                    };
+                    resolvePart(parts->track, PseudoElement::Scrollbar);
+                    resolvePart(parts->thumb, PseudoElement::ScrollbarThumb);
                     slot.scrollbarStyles = std::move(parts);
                 }
                 else
@@ -923,9 +923,9 @@ namespace Fenrir
         return m_state->input.pointer;
     }
 
-    void UIRoot::TakePress(ElementId element)
+    bool UIRoot::TakePress(ElementId element)
     {
-        Detail::TakePress(*this, *m_state, element);
+        return Detail::TakePress(*this, *m_state, element);
     }
 
     ElementId UIRoot::HitTest(Math::Vec2 position) const

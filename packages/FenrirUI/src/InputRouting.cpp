@@ -478,8 +478,15 @@ namespace Fenrir::Detail
             {
                 return RouteResult::Passed;
             }
-            if (IsDisabled(*m_state, hit))
+            // A disabled element and what is under it are passed over, to what holds them.
+            ElementId above = hit;
+            while (IsDisabled(*m_state, above))
             {
+                above = m_state->Find(above)->parent;
+            }
+            if (above != hit)
+            {
+                (void)ElementInput(*m_state, above, routed);
                 return RouteResult::Consumed;
             }
             (void)ElementInput(*m_state, hit, routed);
@@ -679,12 +686,12 @@ namespace Fenrir::Detail
         }
     }
 
-    void TakePress(UIRoot& root, UIRootState& state, ElementId element)
+    bool TakePress(UIRoot& root, UIRootState& state, ElementId element)
     {
         UIRootInput& input = state.input;
         if (state.Find(element) == nullptr || !FirstPressed(input).IsValid())
         {
-            return;
+            return false;
         }
         for (ElementId& pressed : input.pressed)
         {
@@ -696,6 +703,7 @@ namespace Fenrir::Detail
         input.pressTaken = true;
         MoveChain(root, input.activeChain, Chain(state, element, true), PseudoClass::Active);
         PublishClaims(state);
+        return true;
     }
 
     void SendUIEvent(UIRootState& state, UIEvent event)

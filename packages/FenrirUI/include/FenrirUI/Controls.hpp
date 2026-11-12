@@ -93,7 +93,8 @@ namespace Fenrir
     /**
      * @brief `slider`: a value from min to max in steps, shown by a `slider-fill` child up to the value and a
      * `slider-thumb` child at it, both placed by their inline style. A press on it sets the value where it lands and
-     * drags it; Left and Down step it down and Right and Up step it up while focused; the wheel over it steps it. It
+     * drags it; Left and Down step it down and Right and Up step it up while focused; the wheel over it steps it while
+     * focused, and passes on otherwise. It
      * sends Change (value the new value) at each change while dragged, from the keys and the wheel, and once more at
      * the drag's release with `integer` 1. Vertical, the class `vertical` is set on it and min is at the bottom.
      */
@@ -109,31 +110,37 @@ namespace Fenrir
         /** @brief Sets which way it runs. */
         void SetOrientation(Orientation orientation);
 
+        /** @brief Its value, within its range and on its step. */
         [[nodiscard]] float GetValue() const noexcept
         {
             return m_value;
         }
+        /** @brief Its range's low end. */
         [[nodiscard]] float GetMin() const noexcept
         {
             return m_min;
         }
+        /** @brief Its range's high end. */
         [[nodiscard]] float GetMax() const noexcept
         {
             return m_max;
         }
+        /** @brief Its step; 0 for none. */
         [[nodiscard]] float GetStep() const noexcept
         {
             return m_step;
         }
+        /** @brief Which way it runs. */
         [[nodiscard]] Orientation GetOrientation() const noexcept
         {
             return m_orientation;
         }
-        /** @brief Its fill and thumb children. */
+        /** @brief Its fill child, from min to the value. */
         [[nodiscard]] ElementId GetFill() const noexcept
         {
             return m_fill;
         }
+        /** @brief Its thumb child, at the value. */
         [[nodiscard]] ElementId GetThumb() const noexcept
         {
             return m_thumb;
@@ -173,6 +180,7 @@ namespace Fenrir
         /** @brief Sets the value, clamped to the range. */
         void SetValue(float value);
 
+        /** @brief Its value, within its range. */
         [[nodiscard]] float GetValue() const noexcept
         {
             return m_value;
@@ -221,10 +229,12 @@ namespace Fenrir
         /** @brief Sets the fit. */
         void SetFit(ImageFit fit);
 
+        /** @brief Its image; empty for none. */
         [[nodiscard]] AssetHandle<Image> GetSource() const noexcept
         {
             return m_source;
         }
+        /** @brief How it draws its image. */
         [[nodiscard]] ImageFit GetFit() const noexcept
         {
             return m_fit;

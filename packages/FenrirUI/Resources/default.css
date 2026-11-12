@@ -1,7 +1,8 @@
 /*
  * FenrirUI's default stylesheet, embedded in the package (DefaultStylesheet) and given to every root under its own
  * sheets: plain, neutral greys, one sans family, and the hover, active, focus, checked and disabled states of every
- * control. A game's sheets win over every rule here; a root made with UIRootConfig::defaultStylesheet off has none of it.
+ * control. It comes before a root's own sheets, so a game's rule overrides one here by specificity, or by order at
+ * equal specificity; a root made with UIRootConfig::defaultStylesheet off has none of it.
  */
 
 /* The text every element inherits. No family is registered as sans-serif until a game does, so it is the embedded
@@ -15,6 +16,11 @@
 /* The controls take pointer input, and so does everything inside them, which passes it up to them. */
 button, checkbox, slider, scroll {
     pointer-events: all;
+}
+
+/* Their own parts do not, so the control is what a press or click names. */
+checkbox-mark, slider-fill, slider-thumb, progress-fill {
+    pointer-events: none;
 }
 
 /* One focus ring for every focusable control. */
