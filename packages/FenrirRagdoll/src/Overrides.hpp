@@ -1,8 +1,9 @@
 #pragma once
 
-// The pose override entries the glue wrote, per skeleton, kept as a resource of the skeleton's scene: the clearing
-// rule reads their weights, and Ragdolls::ClearOverrides and DestroyRagdoll clear them, including the bones of bodies
-// destroyed since. Private to FenrirRagdoll.
+// The pose override entries the glue wrote, per skeleton, kept as a resource of the skeleton's scene (so an inactive
+// scene keeps its own, and entity ids of two scenes never meet): the clearing rule reads their weights, and
+// Ragdolls::ClearOverrides and DestroyRagdoll clear them, including the bones of bodies destroyed since. Private to
+// FenrirRagdoll.
 
 #include <algorithm>
 #include <cstdint>
@@ -11,6 +12,7 @@
 
 #include "FenrirECS/Entity.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "FenrirSkeleton/Skeletons.hpp"
 
 namespace Fenrir::Detail
 {
@@ -60,6 +62,26 @@ namespace Fenrir::Detail
             WrittenBones& added = bySkeleton[skeleton.GetId()];
             added.skeleton = skeleton;
             return added;
+        }
+
+        /** @brief Clears every entry `skeleton`'s record names, and the record. */
+        void Clear(Scene& scene, const Entity& skeleton)
+        {
+            if (const WrittenBones* written = Find(skeleton))
+            {
+                for (const std::int32_t bone : written->bones)
+                {
+                    Skeletons::ClearOverride(scene, skeleton, bone);
+                }
+                bySkeleton.erase(skeleton.GetId());
+            }
+        }
+
+        /** @brief Drops the records of skeletons `keep` rejects. */
+        template <typename Keep>
+        void Prune(Keep keep)
+        {
+            std::erase_if(bySkeleton, [&keep](const auto& entry) { return !keep(entry.second.skeleton); });
         }
 
         /** @brief The scene's record, made on first use. */

@@ -74,6 +74,13 @@ namespace Fenrir
             return "entity " + std::to_string(entity.GetId()) + " ('" + entity.GetComponent<Name>().Get() + "')";
         }
 
+        /** @brief Whether `skeleton` is a live entity of `entities` with a `Ragdoll`. */
+        bool IsLiveRagdoll(EntityList& entities, const Entity& skeleton)
+        {
+            return skeleton.IsValid() && entities.HasEntity(skeleton.GetId()) &&
+                   entities.GetEntity(skeleton.GetId()) == skeleton && skeleton.HasComponent<Ragdoll>();
+        }
+
         RagdollMode EffectiveMode(const Ragdoll& ragdoll, const RagdollBody& body)
         {
             switch (body.mode)
@@ -144,10 +151,7 @@ namespace Fenrir
             for (const Entity& body : bodies)
             {
                 RagdollBody& mapping = body.GetComponent<RagdollBody>();
-                const Entity& ragdoll = mapping.ragdoll;
-                const bool live = ragdoll.IsValid() && entities.HasEntity(ragdoll.GetId()) &&
-                                  entities.GetEntity(ragdoll.GetId()) == ragdoll && ragdoll.HasComponent<Ragdoll>();
-                if (!live)
+                if (!IsLiveRagdoll(entities, mapping.ragdoll))
                 {
                     mapping.state.bone = NoBone;
                     WarnSkipped(state, body, "its ragdoll is not a live entity of the scene with a Ragdoll");
@@ -179,7 +183,7 @@ namespace Fenrir
                     }
                     // 1. Resolve.
                     mapping.state.mode = EffectiveMode(ragdoll, mapping);
-                    const std::string_view name = mapping.bone.Get().value_or(std::string_view());
+                    const std::string_view name = Detail::NameOf(mapping.bone);
                     mapping.state.bone = Skeletons::FindBone(scene, skeleton, name);
                     if (!body.HasComponent<RigidBody>())
                     {
@@ -238,26 +242,26 @@ namespace Fenrir
             state.lastFollowed = std::move(followed);
         }
 
-        /** @brief A body the glue drove last tick, with its mapping. */
-        struct Driven
+        /** @brief A body that resolved last tick, with its mapping. */
+        struct Resolved
         {
             Entity entity;
             const RagdollBody* mapping;
         };
 
-        /** @brief `skeleton`'s bodies that last tick resolved, in storage order. */
-        std::vector<Driven> DrivenBodies(const std::vector<Entity>& bodies, const Entity& skeleton)
+        /** @brief `skeleton`'s bodies that resolved last tick, in storage order. */
+        std::vector<Resolved> ResolvedBodies(const std::vector<Entity>& bodies, const Entity& skeleton)
         {
-            std::vector<Driven> driven;
+            std::vector<Resolved> resolved;
             for (const Entity& body : bodies)
             {
                 const RagdollBody& mapping = body.GetComponent<RagdollBody>();
                 if (mapping.ragdoll == skeleton && mapping.state.bone != NoBone && body.HasComponent<RigidBody>())
                 {
-                    driven.push_back(Driven{body, &mapping});
+                    resolved.push_back(Resolved{body, &mapping});
                 }
             }
-            return driven;
+            return resolved;
         }
 
         /**
@@ -284,21 +288,19 @@ namespace Fenrir
         }
 
         /**
-         * @brief The turn about +Y that `rotation` faces: where it turns +Z, flattened, with its +Y's flattened
-         * direction standing in as +Z tips towards the vertical, so a body lying on its front or back still faces the
-         * way its head points. `nullopt` when neither gives a direction.
+         * @brief The twist of `rotation` about +Y (its swing-twist decomposition): a turn about the vertical followed
+         * by a tip about any horizontal axis twists by exactly that turn, so a body that tipped over onto its front,
+         * back or side still faces the way it faced standing, at any tip short of upside down. `nullopt` there, where
+         * no twist is defined.
          */
         std::optional<Quat> Yaw(const Quat& rotation)
         {
-            const Vec3 forward = Math::Rotate(rotation, Vec3(0.0f, 0.0f, 1.0f));
-            const Vec3 up = Math::Rotate(rotation, Vec3(0.0f, 1.0f, 0.0f));
-            const float x = forward.x - forward.y * up.x;
-            const float z = forward.z - forward.y * up.z;
-            if (x * x + z * z < 1e-10f)
+            const float length = std::sqrt(rotation.w * rotation.w + rotation.y * rotation.y);
+            if (length < 1e-6f)
             {
                 return std::nullopt;
             }
-            return Math::AngleAxis(std::atan2(x, z), Vec3(0.0f, 1.0f, 0.0f));
+            return Quat(rotation.w / length, 0.0f, rotation.y / length, 0.0f);
         }
 
         /**
@@ -331,6 +333,11 @@ namespace Fenrir
         {
             Scene& scene = app.GetActiveScene();
             EntityList& entities = scene.GetEntityList();
+            // A skeleton that lost its Ragdoll, or is gone, keeps its entries (ADR-0038) but no record of them.
+            if (Detail::RagdollOverrides* written = scene.GetResource<Detail::RagdollOverrides>())
+            {
+                written->Prune([&entities](const Entity& skeleton) { return IsLiveRagdoll(entities, skeleton); });
+            }
             const std::vector<Entity> ragdolls = With(entities, ComponentType::Native<Ragdoll>());
             if (ragdolls.empty())
             {
@@ -346,17 +353,17 @@ namespace Fenrir
                 {
                     continue; // Tick warned
                 }
-                const std::vector<Driven> driven = DrivenBodies(bodies, skeleton);
+                const std::vector<Resolved> resolved = ResolvedBodies(bodies, skeleton);
                 const bool allFollowing = std::ranges::all_of(
-                    driven, [](const Driven& body) { return body.mapping->state.mode == RagdollMode::Following; });
+                    resolved, [](const Resolved& body) { return body.mapping->state.mode == RagdollMode::Following; });
 
-                // 1. Follow root: while the root body is not following (any body, ADR-0054, but a following root is
-                // where the entity already puts it, and following it would fight a character moving the entity).
+                // 1. Follow root: while the root body is not following (ADR-0054's 2026-11-12 amendment): a following
+                // root is already where the entity puts it, and following it would fight a character moving the entity.
                 if (ragdoll.followRoot)
                 {
                     const auto root = std::ranges::find_if(
-                        driven, [&ragdoll](const Driven& body) { return body.entity == ragdoll.rootBody; });
-                    if (root != driven.end() && root->mapping->state.mode != RagdollMode::Following)
+                        resolved, [&ragdoll](const Resolved& body) { return body.entity == ragdoll.rootBody; });
+                    if (root != resolved.end() && root->mapping->state.mode != RagdollMode::Following)
                     {
                         FollowRoot(scene, skeleton, root->entity, *root->mapping);
                     }
@@ -367,7 +374,7 @@ namespace Fenrir
                 if (!allFollowing)
                 {
                     Detail::WrittenBones& written = overrides.Of(skeleton);
-                    for (const Driven& body : driven)
+                    for (const Resolved& body : resolved)
                     {
                         if (body.mapping->state.mode == RagdollMode::Following)
                         {
@@ -404,11 +411,7 @@ namespace Fenrir
                 });
                 if (allZero)
                 {
-                    for (const std::int32_t bone : written->bones)
-                    {
-                        Skeletons::ClearOverride(scene, skeleton, bone);
-                    }
-                    overrides.bySkeleton.erase(skeleton.GetId());
+                    overrides.Clear(scene, skeleton);
                 }
             }
         }
@@ -426,22 +429,14 @@ namespace Fenrir
             const RagdollBody& mapping = body.GetComponent<RagdollBody>();
             if (mapping.ragdoll == skeleton)
             {
-                Skeletons::ClearOverride(
-                    scene, skeleton,
-                    Skeletons::FindBone(scene, skeleton, mapping.bone.Get().value_or(std::string_view())));
+                Skeletons::ClearOverride(scene, skeleton,
+                                         Skeletons::FindBone(scene, skeleton, Detail::NameOf(mapping.bone)));
             }
         }
-        // Bones of bodies destroyed since they were written.
+        // And the bones of bodies destroyed since they were written.
         if (Detail::RagdollOverrides* overrides = scene.GetResource<Detail::RagdollOverrides>())
         {
-            if (const Detail::WrittenBones* written = overrides->Find(skeleton))
-            {
-                for (const std::int32_t bone : written->bones)
-                {
-                    Skeletons::ClearOverride(scene, skeleton, bone);
-                }
-                overrides->bySkeleton.erase(skeleton.GetId());
-            }
+            overrides->Clear(scene, skeleton);
         }
         return true;
     }

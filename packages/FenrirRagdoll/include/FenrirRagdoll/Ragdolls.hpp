@@ -47,14 +47,18 @@ namespace Fenrir
      *
      * 1. **Follow root:** while the root body is not following and `followRoot` is true, the skeleton entity is moved
      *    so the hips bone's base pose (`GetBaseModel`, `PoseKind::Simulation`) under it lands on the root body's bone
-     *    horizontally and in yaw; it keeps its height and scale and stays upright.
+     *    horizontally and in yaw (the twist about +Y of the hips' turn from their base pose, so a body tipped over
+     *    still faces the way it faced); it keeps its height and scale and stays upright.
      * 2. **Override targets:** each simulating or powered body's bone is set where the body (interpolated) puts it,
      *    body × `offset`⁻¹, as `SetOverride(skeleton, bone, Target { World, trs, Translation | Rotation, weight 1 })`,
      *    each frame, asleep or awake. The glue never writes an override weight: gameplay sets them to 1 when it drops
      *    the ragdoll (on the subtree, for a partial ragdoll) and ramps them to 0 as it gets up (ADR-0038). A body
      *    destroyed while simulating stops being written, and its bone keeps its last entry.
      * 3. **Clearing:** while every body follows, the entries hold the last simulated pose, until every override
-     *    weight of the bones written reads 0; then the glue clears them. `ClearOverrides` clears them at once.
+     *    weight of the bones written reads 0; then the glue clears them. `ClearOverrides` clears them at once. A body
+     *    of a partial ragdoll that follows again while others still simulate keeps its held entry until they all
+     *    follow: set its subtree's weight to 0 to let the animation through. A skeleton whose `Ragdoll` is removed
+     *    keeps its entries; `Skeletons::ClearOverrides` clears them.
      */
     class Ragdolls
     {

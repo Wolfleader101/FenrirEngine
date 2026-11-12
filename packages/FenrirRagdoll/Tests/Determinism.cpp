@@ -95,7 +95,7 @@ TEST_CASE("Two runs of a following ragdoll pushing boxes are bit-identical over 
         const std::vector<std::byte> second = Run(threads, false);
         INFO((threads ? "on worker threads" : "on one thread")
              << ": every body's and box's pose and velocities match byte for byte");
-        REQUIRE(first.size() == second.size());
+        REQUIRE(first.size() == second.size()); // same entities, so a difference is in the bytes below
         REQUIRE(std::memcmp(first.data(), second.data(), first.size()) == 0);
     }
 }
@@ -109,7 +109,7 @@ TEST_CASE("Two runs of a ragdoll falling onto boxes are bit-identical over 300 t
         const std::vector<std::byte> second = Run(threads, true);
         INFO((threads ? "on worker threads" : "on one thread")
              << ": every body's, box's and bone override's values match byte for byte");
-        REQUIRE(first.size() == second.size());
+        REQUIRE(first.size() == second.size()); // the same entries exist in both runs
         REQUIRE(std::memcmp(first.data(), second.data(), first.size()) == 0);
     }
 }
