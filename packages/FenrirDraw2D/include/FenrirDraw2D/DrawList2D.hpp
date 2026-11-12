@@ -206,6 +206,12 @@ namespace Fenrir
         Blur,
         /** @brief The image's alpha, blurred by `radius`, tinted `shadowColour` and drawn `offset` away, under it. */
         DropShadow,
+        /**
+         * @brief What is under the group's bounds blurred by `radius` and drawn back there, then the image over it as
+         * `None` draws it. The one composite that reads the target it draws into; it draws even when the group is
+         * empty.
+         */
+        BackdropBlur,
     };
 
     /**
@@ -221,7 +227,8 @@ namespace Fenrir
         GroupBlend2D blend = GroupBlend2D::Normal;
         /** @brief What the image is drawn through. */
         GroupFilter2D filter = GroupFilter2D::None;
-        /** @brief The Blur's and the DropShadow's radius, in local units. */
+        /** @brief The Blur's, the DropShadow's and the BackdropBlur's radius, in local units: the Gaussian's standard
+         * deviation. */
         float radius = 0.0f;
         /** @brief Where the DropShadow is drawn from the image, in local units. */
         Math::Vec2 offset{0.0f};

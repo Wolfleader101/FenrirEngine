@@ -1,6 +1,7 @@
 // builtin:painter on OpenGL (the spec's GL check): a rounded rectangle, a radial gradient, a bordered box, a stroked
 // star and a filled ring with a hole painted into an image 2D target (ADR-0060) through the renderer's ImageTargets2D,
-// and read back at their centres, joins and edges. The image is linear RGBA8, cleared transparent each frame it is
+// and read back at their centres, joins and edges; and offscreen groups: a half-opacity group, a blurred disc's edge,
+// a masked gradient and a backdrop blur. The image is linear RGBA8, cleared transparent each frame it is
 // drawn, and the root's blend space Linear, so a pixel is the shader's premultiplied linear output to 8 bits; the
 // expected values are worked by hand.
 
@@ -233,5 +234,118 @@ TEST_CASE("A filled ring with a hole is solid in its band, empty in its hole and
     INFO("the outer edge's two pixels about x = 8 sum to one pixel's cover (" << outer << ")");
     REQUIRE(std::abs(outer - 1.0f) < 0.15f);
     INFO("and the renderer logged no error");
+    REQUIRE(test.scene.messages->errors.empty());
+}
+
+namespace
+{
+    /** @brief The share of a straight edge at `distance` pixels inside (negative) or outside it, blurred by `sigma`. */
+    float BlurredEdge(float distance, float sigma)
+    {
+        return 0.5f * std::erfc(distance / (sigma * std::numbers::sqrt2_v<float>));
+    }
+} // namespace
+
+TEST_CASE("A half-opacity group draws over a solid colour as one, half and half", "[painter][gl][groups]")
+{
+    GlPainter test;
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, test.Config());
+    painter.DrawRect({0, 0, 64, 64}, Colour::Blue);
+    painter.BeginGroup({0, 0, 64, 64}, 0.5f);
+    // Two overlapping rectangles: in a group they are one layer, so the overlap is no redder than the rest.
+    painter.DrawRect({16, 16, 24, 32}, Colour::Red);
+    painter.DrawRect({24, 16, 24, 32}, Colour::Red);
+    painter.EndGroup();
+
+    const GlProbe::Image image = test.Draw(std::move(list));
+
+    INFO("half red over blue, where one rectangle is and where both are");
+    REQUIRE(GlProbe::Near(image.At(20, 32), {0.5f, 0.0f, 0.5f, 1.0f}, Tolerance));
+    REQUIRE(GlProbe::Near(image.At(32, 32), {0.5f, 0.0f, 0.5f, 1.0f}, Tolerance));
+    INFO("blue outside them");
+    REQUIRE(GlProbe::Near(image.At(4, 4), {0.0f, 0.0f, 1.0f, 1.0f}, Tolerance));
+    REQUIRE(test.scene.messages->errors.empty());
+}
+
+TEST_CASE("A blurred disc's edge falls off as a Gaussian of the radius", "[painter][gl][groups]")
+{
+    GlPainter test;
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, test.Config());
+    painter.BeginGroup({16, 16, 32, 32}, 1.0f, Fenrir::GroupBlend2D::Normal, Fenrir::GroupFilter::Blur(2.0f));
+    painter.DrawCircle({32, 32}, 12, Colour::White);
+    painter.EndGroup();
+
+    const GlProbe::Image image = test.Draw(std::move(list));
+
+    // Along the row through the centre the edge is at x = 44; pixel x's centre is x + 0.5. The disc's own one-pixel
+    // anti-aliasing and its curve widen the fall-off slightly, which the tolerance takes.
+    constexpr float BlurTolerance = 0.04f;
+    for (const int x : {32, 40, 42, 44, 46, 48})
+    {
+        const float expected = BlurredEdge(static_cast<float>(x) + 0.5f - 44.0f, 2.0f);
+        INFO("pixel " << x << ": alpha " << image.At(x, 32)[3] << ", expected " << expected);
+        REQUIRE(std::abs(image.At(x, 32)[3] - expected) <= BlurTolerance);
+    }
+    INFO("the blur spreads past the group's bounds by its reach, and no further");
+    REQUIRE(image.At(8, 32)[3] == 0.0f);
+    REQUIRE(test.scene.messages->errors.empty());
+}
+
+TEST_CASE("A masked gradient shows inside the mask's disc and nothing outside it", "[painter][gl][masks]")
+{
+    GlPainter test;
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, test.Config());
+    Fenrir::Path disc;
+    disc.AddCircle({32, 32}, 16);
+    painter.BeginMask(disc);
+    Fenrir::LinearGradient gradient;
+    gradient.end = {64, 0};
+    gradient.stops = {{0.0f, Colour::Black}, {1.0f, Colour::White}};
+    painter.DrawRect({0, 0, 64, 64}, gradient);
+    painter.EndMask();
+
+    const GlProbe::Image image = test.Draw(std::move(list));
+
+    // The stops blend in sRGB: at pixel x the gradient is sRGB (x + 0.5) / 64, decoded.
+    const auto expected = [](int x) {
+        const float value = Decode((static_cast<float>(x) + 0.5f) / 64.0f);
+        return GlProbe::Pixel{value, value, value, 1.0f};
+    };
+    INFO("the gradient inside the disc");
+    REQUIRE(GlProbe::Near(image.At(32, 32), expected(32), Tolerance));
+    REQUIRE(GlProbe::Near(image.At(22, 32), expected(22), Tolerance));
+    REQUIRE(GlProbe::Near(image.At(42, 32), expected(42), Tolerance));
+    INFO("nothing outside it, across the gradient and in the corners");
+    REQUIRE(GlProbe::Near(image.At(8, 32), Transparent, Tolerance));
+    REQUIRE(GlProbe::Near(image.At(56, 32), Transparent, Tolerance));
+    REQUIRE(GlProbe::Near(image.At(18, 18), Transparent, Tolerance));
+    REQUIRE(test.scene.messages->errors.empty());
+}
+
+TEST_CASE("A backdrop blur blurs what is under it, the right way up, and leaves the rest", "[painter][gl][groups]")
+{
+    GlPainter test;
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, test.Config());
+    // Red above y = 32, blue below.
+    painter.DrawRect({0, 0, 64, 32}, Colour::Red);
+    painter.DrawRect({0, 32, 64, 32}, Colour::Blue);
+    painter.BackdropBlur({16, 16, 32, 32}, 2.0f);
+
+    const GlProbe::Image image = test.Draw(std::move(list));
+
+    // The copy reaches six pixels past the panel, so its rows near y = 32 blur as an unbroken edge.
+    const float red = BlurredEdge(31.5f - 32.0f, 2.0f);
+    INFO("just above the edge, in the panel: mostly red, blurred; just below it, mostly blue");
+    REQUIRE(GlProbe::Near(image.At(32, 31), {red, 0.0f, 1.0f - red, 1.0f}, 0.03f));
+    REQUIRE(GlProbe::Near(image.At(32, 32), {1.0f - red, 0.0f, red, 1.0f}, 0.03f));
+    INFO("outside the panel, on the same edge, unblurred");
+    REQUIRE(GlProbe::Near(image.At(8, 31), {1.0f, 0.0f, 0.0f, 1.0f}, Tolerance));
+    REQUIRE(GlProbe::Near(image.At(8, 32), {0.0f, 0.0f, 1.0f, 1.0f}, Tolerance));
+    INFO("far from the edge in the panel, the colour as it was");
+    REQUIRE(GlProbe::Near(image.At(32, 18), {1.0f, 0.0f, 0.0f, 1.0f}, Tolerance));
     REQUIRE(test.scene.messages->errors.empty());
 }

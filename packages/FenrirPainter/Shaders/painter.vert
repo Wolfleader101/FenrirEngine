@@ -35,6 +35,10 @@ layout(location = 10) flat out vec4 vBorderRight;
 layout(location = 11) flat out vec4 vBorderBottom;
 layout(location = 12) flat out vec4 vBorderLeft;
 layout(location = 13) flat out uvec4 vKinds;
+#ifdef MASK
+// The MASK variant: the position in local units, where the fragment stage finds its texel of the mask's image.
+layout(location = 14) out vec2 vPosition;
+#endif
 
 void main()
 {
@@ -52,5 +56,8 @@ void main()
     vBorderBottom = inBorderBottom;
     vBorderLeft = inBorderLeft;
     vKinds = uvec4(round(inKinds * 255.0));
+#ifdef MASK
+    vPosition = inPosition;
+#endif
     gl_Position = target2D.localToClip * vec4(inPosition, 0.0, 1.0);
 }

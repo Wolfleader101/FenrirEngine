@@ -6,9 +6,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <iterator>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -324,5 +326,303 @@ TEST_CASE("An empty group draws nothing and makes no image", "[renderer][overlay
     INFO("the quad outside them draws as it would without them");
     REQUIRE(test.Draws("Overlay 2D").size() == 1);
     REQUIRE(test.renderer.Stats().groups2D == 0);
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("With offscreen groups off, groups draw flat, filters are ignored, a mask's shape is not drawn and no "
+          "transient image is made",
+          "[renderer][overlay][groups]")
+{
+    Fenrir::RendererConfig config = RendererTest::NullBackend();
+    config.offscreenGroups2D = false;
+    RendererTestApp test(config);
+    test.AddCamera();
+    Fenrir::DrawList2D list = NestedGroups(test);
+    list.BeginGroup({0.0f, 0.0f, 16.0f, 16.0f});
+    AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
+    Fenrir::EndGroup2D blur;
+    blur.filter = Fenrir::GroupFilter2D::Blur;
+    blur.radius = 4.0f;
+    list.EndGroup(blur);
+    list.BeginGroup({0.0f, 0.0f, 16.0f, 16.0f});
+    AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
+    Fenrir::EndGroup2D mask;
+    mask.mask = true;
+    list.EndGroup(mask);
+    AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
+    list.commands.emplace_back(Fenrir::EndMask2D{});
+    test.app.GetResource<Fenrir::Overlay>().Submit(MainWindow, 0, std::move(list));
+
+    test.Frame();
+
+    REQUIRE(RendererTest::Labelled(test.Passes(), "Group 2D").empty());
+    INFO("the nested groups' five quads, the blurred group's quad and the masked quad draw on the overlay; the mask's "
+         "shape does not");
+    const std::vector<RendererTest::RecordedDraw> draws = test.Draws("Overlay 2D");
+    REQUIRE(draws.size() == 7);
+    for (const RendererTest::RecordedDraw& draw : draws)
+    {
+        REQUIRE(test.GroupLabel(draw, 1) == "2D command");
+    }
+    REQUIRE(test.renderer.Stats().groups2D == 0);
+    REQUIRE(test.renderer.Stats().transientImageBytes2D == 0);
+    REQUIRE(test.messages->errors.empty());
+}
+
+namespace
+{
+    /** @brief A list of one group over (100, 100)-(140, 120) holding one quad, ended by `composite`. */
+    Fenrir::DrawList2D FilteredGroup(RendererTestApp& test, const Fenrir::EndGroup2D& composite)
+    {
+        Fenrir::DrawList2D list = List(test);
+        list.BeginGroup({100.0f, 100.0f, 40.0f, 20.0f});
+        AddQuad(list, 0, {100.0f, 100.0f}, {140.0f, 120.0f});
+        list.EndGroup(composite);
+        return list;
+    }
+
+    /** @brief The size of the texture `pass` draws into. */
+    Fenrir::Graphics::TextureDesc TargetOf(RendererTestApp& test, const RendererTest::PassRecord& pass)
+    {
+        return RendererProbe::Desc(test.Device(), pass.pass.colour.at(0).texture);
+    }
+
+    /** @brief The labels of the last frame's passes ending in " 2D", in order. */
+    std::vector<std::string> Passes2D(RendererTestApp& test)
+    {
+        std::vector<std::string> labels;
+        for (const RendererTest::PassRecord& pass : test.Passes())
+        {
+            if (pass.pass.label.ends_with(" 2D"))
+            {
+                labels.push_back(pass.pass.label);
+            }
+        }
+        return labels;
+    }
+
+    /** @brief Every texture copy the last frame recorded. */
+    std::vector<Fenrir::Graphics::CmdCopyTexture> Copies(RendererTestApp& test)
+    {
+        std::vector<Fenrir::Graphics::CmdCopyTexture> copies;
+        for (const Fenrir::Graphics::CommandList& list : RendererProbe::Submitted(test.renderer))
+        {
+            for (const Fenrir::Graphics::Command& command : list.commands)
+            {
+                if (const auto* copy = std::get_if<Fenrir::Graphics::CmdCopyTexture>(&command))
+                {
+                    copies.push_back(*copy);
+                }
+            }
+        }
+        return copies;
+    }
+} // namespace
+
+TEST_CASE("A blurred group draws a blur pass into one more transient image, which its composite blurs down",
+          "[renderer][overlay][groups][filters]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    Fenrir::EndGroup2D blur;
+    blur.filter = Fenrir::GroupFilter2D::Blur;
+    blur.radius = 2.0f;
+    test.app.GetResource<Fenrir::Overlay>().Submit(MainWindow, 0, FilteredGroup(test, blur));
+
+    test.Frame();
+
+    INFO("the group's pass, the blur across, then the overlay drawing the blur down");
+    REQUIRE(Passes2D(test) == std::vector<std::string>{"Group 2D", "Blur 2D", "Overlay 2D"});
+    const std::vector<RendererTest::PassRecord> all = test.Passes();
+    const RendererTest::PassRecord group = RendererTest::Labelled(all, "Group 2D").at(0);
+    const RendererTest::PassRecord across = RendererTest::Labelled(all, "Blur 2D").at(0);
+    INFO("the group's image reaches three radii past its bounds, and the blur's image is as large");
+    REQUIRE(TargetOf(test, group).width == 40 + 2 * 6);
+    REQUIRE(TargetOf(test, group).height == 20 + 2 * 6);
+    REQUIRE(TargetOf(test, across).width == 52);
+    REQUIRE(TargetOf(test, across).height == 32);
+    REQUIRE(across.pass.colour[0].texture != group.pass.colour[0].texture);
+    INFO("the blur samples the group's image; the overlay's one draw samples the blur's");
+    const std::vector<RendererTest::RecordedDraw> blurDraws = test.Draws("Blur 2D");
+    REQUIRE(blurDraws.size() == 1);
+    REQUIRE(SampledBy(test, blurDraws[0]) == group.pass.colour[0].texture);
+    const std::vector<RendererTest::RecordedDraw> overlay = test.Draws("Overlay 2D");
+    REQUIRE(overlay.size() == 1);
+    REQUIRE(SampledBy(test, overlay[0]) == across.pass.colour[0].texture);
+    REQUIRE(test.GroupLabel(overlay[0], 1) == "2D composite");
+    INFO("the blur pass and the composite draw with different pipelines than a plain composite's");
+    REQUIRE(blurDraws[0].pipeline != overlay[0].pipeline);
+    REQUIRE(test.renderer.Stats().transientImageBytes2D == 2 * 52 * 32 * 4);
+    REQUIRE(RendererProbe::StaleUses(test.Device()).empty());
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A blur past the threshold runs at half resolution", "[renderer][overlay][groups][filters]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    Fenrir::EndGroup2D blur;
+    blur.filter = Fenrir::GroupFilter2D::Blur;
+    blur.radius = 10.0f;
+    test.app.GetResource<Fenrir::Overlay>().Submit(MainWindow, 0, FilteredGroup(test, blur));
+
+    test.Frame();
+    const std::vector<RendererTest::PassRecord> all = test.Passes();
+
+    INFO("the group reaches 30 pixels past its bounds; the blur's image is half as large");
+    const Fenrir::Graphics::TextureDesc group = TargetOf(test, RendererTest::Labelled(all, "Group 2D").at(0));
+    const Fenrir::Graphics::TextureDesc across = TargetOf(test, RendererTest::Labelled(all, "Blur 2D").at(0));
+    REQUIRE(group.width == 100);
+    REQUIRE(group.height == 80);
+    INFO("the blur's image is half the group's, each way");
+    REQUIRE(across.width == 50);
+    REQUIRE(across.height == 40);
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A drop shadow draws its blurred alpha at its offset before its group",
+          "[renderer][overlay][groups][filters]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    Fenrir::EndGroup2D shadow;
+    shadow.filter = Fenrir::GroupFilter2D::DropShadow;
+    shadow.radius = 2.0f;
+    shadow.offset = {4.0f, 6.0f};
+    test.app.GetResource<Fenrir::Overlay>().Submit(MainWindow, 0, FilteredGroup(test, shadow));
+
+    test.Frame();
+    const std::vector<RendererTest::PassRecord> all = test.Passes();
+    const auto group = RendererTest::Labelled(all, "Group 2D").at(0).pass.colour[0].texture;
+    const auto across = RendererTest::Labelled(all, "Blur 2D").at(0).pass.colour[0].texture;
+    const std::vector<RendererTest::RecordedDraw> overlay = test.Draws("Overlay 2D");
+
+    INFO("the shadow, sampling the blur, then the group's image");
+    REQUIRE(overlay.size() == 2);
+    REQUIRE(SampledBy(test, overlay[0]) == across);
+    REQUIRE(SampledBy(test, overlay[1]) == group);
+    INFO("the shadow's quad is the group's moved by the offset");
+    const auto corner = [&](const RendererTest::RecordedDraw& draw) {
+        const std::vector<std::byte> bytes = RendererProbe::Bytes(test.Device(), draw.vertexBuffers.at(0));
+        Fenrir::Vertex2D vertex;
+        std::memcpy(&vertex, bytes.data() + draw.vertexOffsets.at(0), sizeof(vertex));
+        return vertex.position;
+    };
+    REQUIRE(corner(overlay[0]) == corner(overlay[1]) + Fenrir::Math::Vec2(4.0f, 6.0f));
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A backdrop blur on the overlay copies the target under it first, blurs it and draws it back",
+          "[renderer][overlay][groups][filters]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    Fenrir::DrawList2D list = List(test);
+    AddQuad(list, 0, {0.0f, 0.0f}, {300.0f, 300.0f});
+    list.BeginGroup({100.0f, 100.0f, 40.0f, 20.0f});
+    Fenrir::EndGroup2D backdrop;
+    backdrop.filter = Fenrir::GroupFilter2D::BackdropBlur;
+    backdrop.radius = 2.0f;
+    list.EndGroup(backdrop);
+    AddQuad(list, 0, {0.0f, 0.0f}, {8.0f, 8.0f});
+    test.app.GetResource<Fenrir::Overlay>().Submit(MainWindow, 0, std::move(list));
+
+    test.Frame();
+
+    INFO("the overlay up to the backdrop, the copy, the blur across, then the overlay again");
+    REQUIRE(Passes2D(test) == std::vector<std::string>{"Overlay 2D", "Backdrop 2D", "Blur 2D", "Overlay 2D"});
+    const std::vector<RendererTest::PassRecord> all = test.Passes();
+    const auto overlays = RendererTest::Labelled(all, "Overlay 2D");
+    const RendererTest::PassRecord copy = RendererTest::Labelled(all, "Backdrop 2D").at(0);
+    INFO("the copy is a copy pass from the backbuffer of the bounds and three radii about them");
+    REQUIRE(copy.pass.queue == Fenrir::Graphics::QueueKind::Copy);
+    const std::vector<Fenrir::Graphics::CmdCopyTexture> copies = Copies(test);
+    REQUIRE(copies.size() == 1);
+    REQUIRE(copies[0].source == overlays[0].pass.colour.at(0).texture);
+    REQUIRE(copies[0].region == Fenrir::Graphics::PixelRect{94, 94, 52, 32});
+    INFO("the second overlay pass loads what the first drew");
+    REQUIRE(overlays[1].pass.colour.at(0).texture == overlays[0].pass.colour.at(0).texture);
+    REQUIRE(overlays[1].pass.colour.at(0).load == Fenrir::Graphics::LoadOp::Load);
+    INFO("the first draws the quad under the panel; the second the blurred backdrop, then the quad after");
+    const std::vector<RendererTest::RecordedDraw> draws = test.Draws("Overlay 2D");
+    REQUIRE(draws.size() == 3);
+    REQUIRE(SampledBy(test, draws[1]) == RendererTest::Labelled(all, "Blur 2D").at(0).pass.colour.at(0).texture);
+    REQUIRE(test.GroupLabel(draws[1], 1) == "2D composite");
+    REQUIRE(test.GroupLabel(draws[2], 1) == "2D command");
+    REQUIRE(RendererProbe::StaleUses(test.Device()).empty());
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A backdrop blur in an image 2D target copies from the image", "[renderer][overlay][image2d][filters]")
+{
+    RendererTestApp test;
+    const auto image = TargetImage(test, 64, 64, Fenrir::ColourSpace::Srgb);
+    Fenrir::DrawList2D list = List(test);
+    AddQuad(list, 0, {0.0f, 0.0f}, {64.0f, 64.0f});
+    list.BeginGroup({16.0f, 16.0f, 32.0f, 32.0f});
+    AddQuad(list, 0, {20.0f, 20.0f}, {30.0f, 30.0f});
+    Fenrir::EndGroup2D backdrop;
+    backdrop.filter = Fenrir::GroupFilter2D::BackdropBlur;
+    backdrop.radius = 1.0f;
+    list.EndGroup(backdrop);
+    test.app.GetResource<Fenrir::ImageTargets2D>().Submit(image, std::move(list));
+
+    test.Frame();
+
+    REQUIRE(Passes2D(test) == std::vector<std::string>{"Group 2D", "Image 2D", "Backdrop 2D", "Blur 2D", "Image 2D"});
+    const std::vector<Fenrir::Graphics::CmdCopyTexture> copies = Copies(test);
+    REQUIRE(copies.size() == 1);
+    REQUIRE(copies[0].source == RendererProbe::ImageTexture(test.renderer, image));
+    INFO("the second image pass draws the backdrop back, then the group over it");
+    REQUIRE(test.Draws("Image 2D").size() == 3);
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("A shader with no MASK variant draws what a mask reaches unmasked, logged once",
+          "[renderer][overlay][groups][masks]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    for (int frame = 0; frame < 2; ++frame)
+    {
+        Fenrir::DrawList2D list = List(test);
+        list.BeginGroup({0.0f, 0.0f, 16.0f, 16.0f});
+        AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
+        Fenrir::EndGroup2D mask;
+        mask.mask = true;
+        list.EndGroup(mask);
+        AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
+        list.commands.emplace_back(Fenrir::EndMask2D{});
+        test.app.GetResource<Fenrir::Overlay>().Submit(MainWindow, 0, std::move(list));
+        test.Frame();
+
+        INFO("frame " << frame
+                      << ": the quad it reaches draws on the overlay; nothing samples the mask's image, so "
+                         "its pass is culled");
+        REQUIRE(RendererTest::Labelled(test.Passes(), "Group 2D").empty());
+        REQUIRE(test.Draws("Overlay 2D").size() == 1);
+    }
+    REQUIRE(RendererTest::CountContaining(test.messages->errors, "no MASK variant") == 1);
+}
+
+TEST_CASE("A mask covering no pixel masks what it reaches away", "[renderer][overlay][groups][masks]")
+{
+    RendererTestApp test;
+    test.AddCamera();
+    Fenrir::DrawList2D list = List(test);
+    list.BeginGroup({5000.0f, 5000.0f, 16.0f, 16.0f});
+    AddQuad(list, 0, {5000.0f, 5000.0f}, {5016.0f, 5016.0f});
+    Fenrir::EndGroup2D mask;
+    mask.mask = true;
+    list.EndGroup(mask);
+    AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
+    list.commands.emplace_back(Fenrir::EndMask2D{});
+    AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
+    test.app.GetResource<Fenrir::Overlay>().Submit(MainWindow, 0, std::move(list));
+
+    test.Frame();
+
+    INFO("only the quad after the mask's reach draws");
+    REQUIRE(test.Draws("Overlay 2D").size() == 1);
     REQUIRE(test.messages->errors.empty());
 }
