@@ -9,6 +9,7 @@
 #include <set>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -17,6 +18,7 @@
 #include "Core/Bloom.hpp"
 #include "Core/Cascades.hpp"
 #include "Core/Gtao.hpp"
+#include "Core/LevelOfDetail.hpp"
 #include "Core/LightClusters.hpp"
 #include "Core/PointShadows.hpp"
 #include "Core/ReflectionTrace.hpp"
@@ -43,6 +45,9 @@ namespace Fenrir
 
 namespace Fenrir::Render
 {
+    /** @brief How many levels of detail SceneStats::drawnByLod counts apart: level 0 to 6, and 7 with any coarser. */
+    constexpr std::size_t LodLevelsCounted = 8;
+
     /** @brief What the scene renderer did since it was last asked. */
     struct SceneStats
     {
@@ -56,6 +61,24 @@ namespace Fenrir::Render
          * instance list.
          */
         std::uint32_t instances = 0;
+        /**
+         * @brief Items and instance list copies the cull passes kept and the GPU drew (ADR-0057), summed over views,
+         * from the most recent frame whose command buffers have been read back: the frame `FramesInFlight` frames
+         * ago, usually two behind `instances`; 0 when that frame had no run. Unchanged by a frame whose slot that frame
+         * did not fill.
+         */
+        std::uint32_t instancesDrawn = 0;
+        /**
+         * @brief `instancesDrawn` by the level of detail each was drawn at (ADR-0057): entry `i` the copies drawn at
+         * level `i`, the last entry those at its level or coarser, so the entries sum to `instancesDrawn`.
+         */
+        std::array<std::uint32_t, LodLevelsCounted> drawnByLod{};
+        /**
+         * @brief `instancesDrawn` by the occlusion phase each was drawn in (ADR-0057): the first entry those drawn as
+         * visible last frame (every survivor of a view without occlusion culling), the second those drawn after the
+         * pyramid test showed them; the two sum to `instancesDrawn`.
+         */
+        std::array<std::uint32_t, 2> drawnByPhase{};
         /** @brief Meshes, images, material blocks and instance lists uploaded since the last call. */
         std::uint32_t uploads = 0;
         /** @brief Bytes written into the last frame's palette buffer. */
@@ -89,7 +112,90 @@ namespace Fenrir::Render
          * white texture as its ambient occlusion and no shadow.
          */
         Graphics::BindingGroupHandle viewGroup;
+        /**
+         * @brief Its cull pass's command buffer (ADR-0057), the indirect commands its DepthPrepass and Opaque passes
+         * draw from, one per run and level of detail; empty when it has no opaque runs.
+         */
+        Graphics::BufferHandle cullCommands;
+        /** @brief Its cull pass's indirection, which those draws' instances read; empty when it has no opaque runs. */
+        Graphics::BufferHandle cullIndirection;
+        /** @brief How many runs its cull pass counts into. */
+        std::uint32_t cullRuns = 0;
+        /** @brief How many candidates its cull pass culls. */
+        std::uint32_t cullCandidates = 0;
+        /** @brief How many phases its cull pass ran: 2 with occlusion culling, else 1. */
+        std::uint32_t cullPhases = 1;
+        /** @brief How many commands each phase has: the second phase's start in the command buffer. */
+        std::uint32_t cullCommandsPerPhase = 0;
     };
+
+    /**
+     * @brief What a view's cull pass tests its candidates against (ADR-0057): its planes (a camera's five, a cascade's
+     * five with the near one left open, a spot light's five, or none) and a sphere (a point light's range, radius 0
+     * for none). A candidate must pass both.
+     */
+    struct CullVolume
+    {
+        Math::Frustum frustum;
+        Math::Sphere sphere;
+    };
+
+    /** @brief Which kind of shadow a shadow view draws (ADR-0050). */
+    enum class ShadowViewKind : std::uint8_t
+    {
+        /** @brief One cascade of a camera's sun shadow. */
+        Cascade,
+        /** @brief One shadowed spot light's tile of the spot shadow atlas. */
+        Spot,
+        /** @brief One shadowed point light's cube: its six faces from one cull. */
+        Point,
+    };
+
+    /**
+     * @brief A shadow view the scene renderer culled this frame (ADR-0057): a cascade, a shadowed spot light or a
+     * shadowed point light, with what its cull pass tested against and chose levels by, and what its draws read.
+     */
+    struct DrawnShadowView
+    {
+        /** @brief Which kind of shadow it draws. */
+        ShadowViewKind kind = ShadowViewKind::Cascade;
+        /** @brief A cascade's camera's place in SceneFrame::views; none for a spot or point light, shared by all. */
+        std::optional<std::size_t> view;
+        /** @brief The cascade's index, the spot light's tile or the point light's cube. */
+        std::uint32_t index = 0;
+        /** @brief The planes and sphere its pass tested the casters against. */
+        CullVolume volume;
+        /** @brief What its pass chose levels by: the camera's, never the light's. */
+        LodView lod;
+        /** @brief Its command buffer and indirection, as DrawnView's; empty when it had no casting runs. */
+        Graphics::BufferHandle cullCommands;
+        Graphics::BufferHandle cullIndirection;
+        std::uint32_t cullRuns = 0;
+        std::uint32_t cullCandidates = 0;
+    };
+
+    /**
+     * @brief What a camera's cull kept of the frame culling was frozen in (ADR-0057): the planes and position its
+     * views cull against while frozen, however the camera has moved since, and the volume's corners for drawing it.
+     */
+    struct FrozenCull
+    {
+        /** @brief The camera's entity id, as ViewRequest::camera names it. */
+        std::uint32_t camera = 0;
+        /** @brief The planes the camera's views cull against, as its frustum was when frozen. */
+        Math::Frustum frustum;
+        /** @brief Where the camera was when frozen, for what chooses by distance from it. */
+        Math::Vec3 position{0.0f};
+        /**
+         * @brief The frozen volume's corners in world space, the near four then the far four, each in the order
+         * bottom-left, bottom-right, top-left, top-right; a perspective view's far plane, at infinity, is drawn
+         * FrozenFarDistance along each corner's ray instead.
+         */
+        std::array<Math::Vec3, 8> corners{};
+    };
+
+    /** @brief How far along its rays a frozen perspective frustum's far end is drawn, in world units. */
+    constexpr float FrozenFarDistance = 100.0f;
 
     /**
      * @brief The render feature that draws the scene (ADR-0019, ADR-0023, ADR-0024): the GPU side of the meshes,
@@ -171,11 +277,13 @@ namespace Fenrir::Render
      * texture there. A view showing its occlusion (`ViewRequest::showOcclusion`) has Output draw that texture as grey
      * instead of SceneColor, so the passes only SceneColor needs are culled; it shows black without the passes.
      *
-     * **Reflection inputs** (ADR-0056): a view whose camera has reflections keeps, under its camera's entity id, a
-     * history colour and two Hi-Z pyramids across frames (SceneHistory): its HiZ passes after GTAO's draw this frame's
-     * pyramid from SceneDepth, and its SceneHistory passes, the first of `PostProcess`, copy SceneColor before bloom.
-     * They write textures kept outside the graph, so they are never culled, and keep the passes SceneColor needs even
-     * when Output shows grey. A camera with no such view in a frame has its textures freed.
+     * **The Hi-Z pyramid and the reflection inputs** (ADR-0056, ADR-0057): every view keeps, under its camera's
+     * entity id, a Hi-Z pyramid across frames (SceneHistory), which its HiZ passes draw from SceneDepth after the
+     * prepass's first phase, for the cull pass's second; a view whose camera has reflections keeps a history colour
+     * and a second pyramid too: its HiZ passes after GTAO's draw the pyramid again from the complete depth, and its
+     * SceneHistory passes, the first of `PostProcess`, copy SceneColor before bloom. They write textures kept outside
+     * the graph, so they are never culled, and keep the passes SceneColor needs even when Output shows grey. A camera
+     * with no such view in a frame has its textures freed.
      *
      * **Variants** (ADR-0024): the renderer picks the keys. A `Masked` material draws with its shader's `ALPHA_MASK`
      * variant if the shader has the key, its `MaterialData::alphaCutoff` written into the variant's `alphaCutoff` block
@@ -199,11 +307,45 @@ namespace Fenrir::Render
      * material (whose draws are compute-skinned), and with compute skinning off, or without the compute pipeline, every
      * skinned draw skins in its vertex stage as before.
      *
+     * **GPU culling** (ADR-0057): every view's opaque and masked runs (merged items, instance lists, and lone items as
+     * runs of one) are candidates of a `Cull` compute pass per view, first in the frame, running `builtin:cull`: the
+     * renderer writes each run's command templates, one per level of detail of its mesh (the level's index count
+     * and first index, no instances, and the base instance where the level's region of the view's indirection
+     * starts, each region the whole run long), their level table entries (the level's error) and group table entries
+     * (one per 64 candidates, naming the run) into the frame's rings; the pass copies the templates over the view's
+     * command buffer and one dispatch appends each candidate it keeps, `(record, copy)`, to the region of the level
+     * it chooses for it (the coarsest whose error projects under `lodErrorPixels` at the candidate's distance from
+     * the camera; SelectLod), counting it into that command with an atomic. `DepthPrepass` and `Opaque` then draw
+     * each run with one multi-draw of its level commands, declaring
+     * `IndirectRead` on the commands and `StorageRead` on the indirection, which set 3 binding 3 binds for them
+     * (`Fenrir/Draw.glsl`'s `CurrentDraw()` reads it), so there is one draw group per view and frame in flight; the
+     * shadow passes draw from their shadow views' buffers the same way, and the transparent passes bind the buffer
+     * that says there is no indirection and draw directly, as before. The per-view
+     * buffers are sized to the frame's runs and candidates, kept between frames and ring-buffered per frame in flight.
+     * The job block carries the view's planes (Math::Frustum), and the pass keeps a candidate whose sphere and then
+     * whose box's eight corners may be inside them, as Math::Frustum tests them; with GPU culling off it gets no
+     * planes and keeps every candidate. Before the runs form, a draw whose world bounds are outside the view's frustum
+     * is left out of the view altogether, opaque or transparent. With occlusion culling (SetOcclusionCulling, on by
+     * default; never while frozen or with GPU culling off) the pass runs in two phases over the same groups, with a
+     * word of visibility per candidate kept between frames in the view's cull rings while the view's candidates keep
+     * their order: phase one, in the `Cull` stage, keeps the candidates visible last frame, counted into a first set
+     * of commands the `DepthPrepass` pass draws; `HiZ` passes then build the view's pyramid (SceneHistory) from that
+     * depth, and phase two, a second `Cull` pass in the `DepthPrepass` stage, tests every candidate inside the planes
+     * against it by its box's screen rectangle (Core/Occlusion.hpp), writes the result as next frame's visibility,
+     * and counts what phase one did not draw into a second set of commands, which a second `DepthPrepass` pass draws
+     * after the first's and `Opaque` draws with the first's. At the frame's end a `CullReadback` pass copies
+     * every view's command buffer into the frame's slot of a readback ring (a copy per frame in flight), and each
+     * frame reads the slot the frame `FramesInFlight` ago filled, summing its commands' instance counts into
+     * SceneStats::instancesDrawn, by level and by phase. With culling frozen (SetCullingFrozen), each camera's views
+     * keep culling, on the CPU and in the pass, against the frustum the camera had when it was frozen while drawing
+     * from where it is now (FrozenCulls, which DebugFeature draws the edges of).
+     *
      * **Instance lists** (ADR-0051) are prepared like assets: each copy's transform, normal matrix and colour, kept
      * packed back to back with every other list's in one storage buffer, set 3 binding 1, made again whenever a list
      * is prepared or released, so a list that never changes is uploaded once. An item naming one is one draw of as many
      * instances as the list has copies, from its own record: `Fenrir/Draw.glsl` composes each copy's record from it.
-     * It never merges with other items, and is never culled.
+     * It never merges with other items. Its bounds, the box around every copy's mesh box, are computed when it is
+     * prepared (ADR-0057), and a transparent list outside a view's frustum is left out of that view as an item is.
      *
      * **Images** with pixels that materials name are prepared like assets: uploaded as 2D textures (RGBA8, sRGB or
      * linear as the image is, RGBA16F or RGBA32F) with every mip level made at upload, and bound with their texture
@@ -294,9 +436,19 @@ namespace Fenrir::Render
         void ReleaseTarget(AssetKey key);
 
         [[nodiscard]] bool IsInstanceListCurrent(AssetKey key, std::uint32_t revision) const;
-        /** @brief An instance list's copies, uploaded into the instance-list buffer before the next frame's draws. */
-        void PrepareInstanceList(AssetKey key, std::uint32_t revision, const InstanceListData& list);
+        /**
+         * @brief An instance list's copies, uploaded into the instance-list buffer before the next frame's draws, and
+         * its bounds, the box around every copy's `meshBounds` (the box of the mesh it draws), computed now.
+         */
+        void PrepareInstanceList(AssetKey key, std::uint32_t revision, const InstanceListData& list,
+                                 const Math::AABB& meshBounds);
         void ReleaseInstanceList(AssetKey key);
+        /**
+         * @brief The box around every copy of a prepared instance list's mesh box `meshBounds`, in the drawing
+         * entity's local space (ADR-0057): as computed when the list was uploaded, or again now for a mesh box other
+         * than the one it was uploaded with. Empty for a list not prepared or with no copies.
+         */
+        [[nodiscard]] std::optional<Math::AABB> InstanceListBounds(AssetKey key, const Math::AABB& meshBounds);
 
         /** @brief The keys with GPU resources, for the facade to release those that went stale. */
         [[nodiscard]] std::vector<AssetKey> TargetKeys() const;
@@ -331,6 +483,57 @@ namespace Fenrir::Render
         }
 
         /**
+         * @brief Whether each view's cull pass tests its candidates against the view's planes from the next frame
+         * (ADR-0057); off, it keeps every candidate, and only the coarse cull by entity on the CPU culls.
+         */
+        void SetGpuCulling(bool on) noexcept
+        {
+            m_gpuCulling = on;
+        }
+
+        /**
+         * @brief Whether each camera's cull pass runs its second, occlusion phase from the next frame (ADR-0057):
+         * candidates hidden behind what was visible last frame are not drawn. Off, one phase keeps everything inside
+         * the planes. Shadow views never cull by occlusion.
+         */
+        void SetOcclusionCulling(bool on) noexcept
+        {
+            m_occlusionCulling = on;
+        }
+
+        /**
+         * @brief How each view's cull pass chooses levels of detail from the next frame (ADR-0057): a copy draws at the
+         * coarsest level whose error projects under `lodErrorPixels` pixels, and one whose radius projects under
+         * `minProjectedPixels` is dropped, 0 dropping none (SelectLod). With GPU culling off every copy draws level 0.
+         */
+        void SetLodSelection(float lodErrorPixels, float minProjectedPixels) noexcept
+        {
+            m_lodErrorPixels = lodErrorPixels;
+            m_minProjectedPixels = minProjectedPixels;
+        }
+
+        /**
+         * @brief Freezes culling from the next frame (ADR-0057): each camera then keeps culling against the frustum
+         * and position it has in that frame, however it moves after, so flying out shows what was kept; off, every
+         * camera culls by where it is again and the frozen frustums are forgotten.
+         */
+        void SetCullingFrozen(bool on)
+        {
+            m_cullingFrozen = on;
+            if (!on)
+            {
+                m_frozenCulls.clear();
+            }
+        }
+
+        /** @brief Each camera's frozen cull, in the order their first frozen frames drew them; empty when not frozen.
+         */
+        [[nodiscard]] const std::vector<FrozenCull>& FrozenCulls() const noexcept
+        {
+            return m_frozenCulls;
+        }
+
+        /**
          * @brief How many spot lights may cast shadows from the next frame (ADR-0050); the spot shadow atlas is made
          * again at its new size when next needed.
          */
@@ -360,6 +563,12 @@ namespace Fenrir::Render
         [[nodiscard]] const std::vector<DrawnView>& DrawnViews() const noexcept
         {
             return m_drawnViews;
+        }
+
+        /** @brief The shadow views the last AddPasses culled, in the order their cull passes were added. */
+        [[nodiscard]] const std::vector<DrawnShadowView>& DrawnShadowViews() const noexcept
+        {
+            return m_drawnShadowViews;
         }
 
         /** @brief The layout of the view block's binding groups (set 1). */
@@ -425,13 +634,33 @@ namespace Fenrir::Render
             Graphics::TextureDesc desc;
         };
 
-        /** @brief A prepared mesh: its streams back to back in one buffer, and its indices. */
+        /** @brief One level of detail of a prepared mesh (ADR-0057): where it is in the mesh's index buffer. */
+        struct MeshLevel
+        {
+            /** @brief Its first index in the mesh's index buffer. */
+            std::uint32_t firstIndex = 0;
+            /** @brief How many indices it has. */
+            std::uint32_t indexCount = 0;
+            /** @brief Its error in the mesh's local units (MeshLod::error); 0 for level 0. */
+            float error = 0.0f;
+        };
+
+        /**
+         * @brief A prepared mesh: its streams back to back in one buffer, and its indices, level 0's then each coarser
+         * level's back to back in one index buffer.
+         */
         struct MeshEntry
         {
             std::uint32_t revision = 0;
             Graphics::BufferHandle vertices;
             Graphics::BufferHandle indices;
+            /** @brief Level 0's index count, what a direct draw draws. */
             std::uint32_t indexCount = 0;
+            /**
+             * @brief Its levels of detail, level 0 (the mesh's own indices, error 0) then MeshData::lods in order;
+             * empty when it has no indices.
+             */
+            std::vector<MeshLevel> levels;
             /** @brief Each standard stream's offset in `vertices`, by vertex location; empty if the mesh lacks it. */
             std::array<std::optional<std::size_t>, 8> streams{};
             std::uint32_t id = 0;
@@ -442,6 +671,8 @@ namespace Fenrir::Render
             std::uint32_t vertexCount = 0;
             /** @brief A skinned mesh's vertex buffer as builtin:skinning reads it, its set 1; else empty. */
             Graphics::BindingGroupHandle skinSource;
+            /** @brief The mesh's local bounds (ADR-0021), which its draws' records carry (ADR-0057). */
+            Math::AABB bounds{Math::Vec3(0.0f), Math::Vec3(0.0f)};
         };
 
         /** @brief An instance list's copies in the instance-list buffer: its first record and how many; 0 for none. */
@@ -457,6 +688,10 @@ namespace Fenrir::Render
             std::uint32_t revision = 0;
             std::vector<std::byte> records;
             InstanceRange range;
+            /** @brief The mesh box `bounds` was computed with. */
+            Math::AABB meshBounds{Math::Vec3(0.0f), Math::Vec3(0.0f)};
+            /** @brief The box around every copy's mesh box, in the drawing entity's local space (ADR-0057). */
+            Math::AABB bounds{Math::Vec3(0.0f), Math::Vec3(0.0f)};
         };
 
         /** @brief A prepared render target image: its texture and size. */
@@ -618,6 +853,13 @@ namespace Fenrir::Render
             /** @brief An instance list's copies; none for one item. */
             InstanceRange instances;
             /**
+             * @brief What its record carries (ADR-0057): an item's world bounds, or an instance list's mesh's local
+             * box.
+             */
+            Math::AABB recordBounds{Math::Vec3(0.0f), Math::Vec3(0.0f)};
+            /** @brief The box it is culled by: `recordBounds` for an item, the box around every copy for a list. */
+            Math::AABB worldBounds{Math::Vec3(0.0f), Math::Vec3(0.0f)};
+            /**
              * @brief A compute-skinned draw's skinned vertices in the frame's skinned vertex buffer: the byte offset of
              * its positions, followed by its normals and its tangents. Empty for every other draw.
              */
@@ -668,15 +910,196 @@ namespace Fenrir::Render
         };
 
         /**
-         * @brief One frame in flight's draw set binding group (set 3), for the draw, palette and instance-list
-         * buffers it was made with.
+         * @brief One entry of the frame's group table, as `builtin:cull` declares it (std430, a uvec4): a work group's
+         * run (ADR-0057) and which of its candidates the group culls.
          */
-        struct DrawGroup
+        struct CullGroupEntry
         {
-            Graphics::BufferHandle draws;
-            Graphics::BufferHandle palette;
-            Graphics::BufferHandle instanceLists;
-            Graphics::BindingGroupHandle group;
+            /** @brief The run's command in the view's command buffer. */
+            std::uint32_t command = 0;
+            /** @brief The run's first record: an instance list's one record, or the first of a merged run's. */
+            std::uint32_t record = 0;
+            /** @brief How many candidates the run has: a list's copies, or the merged run's items. */
+            std::uint32_t count = 0;
+            /** @brief The first candidate this group culls, within the run. */
+            std::uint32_t first = 0;
+        };
+        static_assert(sizeof(CullGroupEntry) == 16, "a group table entry is a uvec4");
+
+        /**
+         * @brief One entry of the frame's level table, as `builtin:cull` declares it (std430, five words): one per
+         * command template, in the templates' order, saying which level of its run's mesh the command draws and how
+         * many instances each kept candidate draws as.
+         */
+        struct CullLevelEntry
+        {
+            /** @brief The level's error in the mesh's local units (MeshLevel::error). */
+            float error = 0.0f;
+            /** @brief Which level of its run's this is: 0 for the run's first command. */
+            std::uint32_t level = 0;
+            /** @brief How many levels the run has: as many commands, from its first. */
+            std::uint32_t levels = 0;
+            /** @brief The run's first candidate's index among the view's, where its visibility words start. */
+            std::uint32_t firstCandidate = 0;
+            /**
+             * @brief How many instances the command draws for each candidate the pass keeps (DrawRun::instances): six
+             * for a point light's cube faces drawn as instances, else one.
+             */
+            std::uint32_t instances = 1;
+        };
+        static_assert(sizeof(CullLevelEntry) == 20, "a level table entry is five words");
+
+        /** @brief One view's cull pass this frame (ADR-0057): what it writes, and what its draws then read. */
+        struct CullView
+        {
+            /** @brief The view's command buffer; empty when the view has no opaque runs. */
+            Graphics::BufferHandle commands;
+            /** @brief The view's indirection; empty when the view has no opaque runs. */
+            Graphics::BufferHandle indirection;
+            /** @brief The two, imported into the frame's graph. */
+            GraphResource commandsResource;
+            GraphResource indirectionResource;
+            /** @brief Its templates' byte offset in the frame's template ring. */
+            std::size_t templateOffset = 0;
+            /** @brief Its templates' size in bytes: one command per run and level of detail. */
+            std::size_t templateBytes = 0;
+            /** @brief Its first template's index in the frame's template ring and level table. */
+            std::uint32_t firstTemplate = 0;
+            /** @brief What the pass chooses each survivor's level of detail by (ADR-0057). */
+            LodView lod;
+            /** @brief Its first entry in the frame's group table. */
+            std::uint32_t firstGroup = 0;
+            /** @brief How many group table entries it has: one dispatch of as many groups. */
+            std::uint32_t groups = 0;
+            /** @brief How many runs it counts into. */
+            std::uint32_t runs = 0;
+            /** @brief How many candidates it culls. */
+            std::uint32_t candidates = 0;
+            /** @brief The view's planes, which the pass tests each candidate against (ADR-0057). */
+            Math::Frustum frustum;
+            /**
+             * @brief The view's range sphere, a point light's, which the pass tests each candidate against too;
+             * radius 0 for none.
+             */
+            Math::Sphere sphere;
+            /** @brief How many phases the pass runs: 2 with occlusion culling, else 1. */
+            std::uint32_t phases = 1;
+            /** @brief How many commands each phase has: the second phase's start in the command buffer. */
+            std::uint32_t commandsPerPhase = 0;
+            /** @brief The view's visibility words, one a candidate, kept between frames; empty with one phase. */
+            Graphics::BufferHandle visibility;
+            /** @brief The words, imported into the frame's graph. */
+            GraphResource visibilityResource;
+            /** @brief Whether the words are stale (the candidates changed), so every candidate counts as visible. */
+            bool visibilityStale = false;
+            /** @brief The view's Hi-Z pyramid, which the second phase reads, and its size; empty with one phase. */
+            HistoryView history;
+            /** @brief World to clip space, which the second phase takes screen rectangles in. */
+            Math::Mat4 viewProjection{1.0f};
+        };
+
+        /** @brief What a view's cull pass needs for its occlusion phase (ADR-0057). */
+        struct CullOcclusion
+        {
+            /** @brief The view's Hi-Z pyramid (and, reflecting, its history), imported this frame. */
+            HistoryView history;
+            /** @brief World to clip space, which the second phase takes screen rectangles in. */
+            Math::Mat4 viewProjection{1.0f};
+        };
+
+        /**
+         * @brief Which phase a `Cull` pass runs (ADR-0057), as `builtin:cull`'s job names it: the one phase of a view
+         * without occlusion culling, or the first (what was visible last frame) or the second (the pyramid test) of a
+         * view with it.
+         */
+        enum class CullPhase : std::uint32_t
+        {
+            Single = 0,
+            First = 1,
+            Second = 2,
+        };
+
+        /**
+         * @brief What makes a run the same run as last frame's, for keeping its candidates' visibility (ADR-0057): its
+         * first draw's place in the draw list, its candidate count, its instance list's first copy and its mesh.
+         */
+        struct CullRunIdentity
+        {
+            std::uint32_t first = 0;
+            std::uint32_t count = 0;
+            std::uint32_t listFirst = 0;
+            const MeshEntry* mesh = nullptr;
+
+            friend bool operator==(const CullRunIdentity&, const CullRunIdentity&) = default;
+        };
+
+        /**
+         * @brief The frame's cull buffers, reserved and imported before the views so every view's passes can bind
+         * them: the template, level table and group table rings, the draw records and the instance lists.
+         */
+        struct CullFrame
+        {
+            Graphics::BufferHandle templates;
+            Graphics::BufferHandle levels;
+            Graphics::BufferHandle groups;
+            Graphics::BufferHandle records;
+            GraphResource templatesResource;
+            GraphResource levelsResource;
+            GraphResource groupsResource;
+            GraphResource recordsResource;
+            GraphResource copiesResource;
+
+            /** @brief Whether the frame can have no cull pass: no opaque draw at all. */
+            [[nodiscard]] bool IsEmpty() const noexcept
+            {
+                return templates.IsEmpty();
+            }
+        };
+
+        /** @brief A buffer ringed per frame in flight and grown by doubling when a frame needs more than it holds. */
+        struct GrownRing
+        {
+            std::unique_ptr<FrameRingBuffer> ring;
+            /** @brief Each copy's size in bytes. */
+            std::size_t capacity = 0;
+
+            /** @brief Makes the ring hold at least `bytes`, remaking its copies with `usage` when it does not. */
+            void Reserve(Graphics::GraphicsDevice& device, std::size_t bytes, Graphics::BufferUsage usage,
+                         std::string_view label);
+        };
+
+        /**
+         * @brief A view's cull rings: its command buffer and its indirection, and its visibility words (one buffer,
+         * read and written by the pass alone, so never ringed) with the candidate order they were written for.
+         */
+        struct CullRings
+        {
+            GrownRing commands;
+            GrownRing indirection;
+            Graphics::BufferHandle visibility;
+            std::size_t visibilityCapacity = 0;
+            /** @brief The runs the words were last written for, in order. */
+            std::vector<CullRunIdentity> order;
+        };
+
+        /**
+         * @brief One slot of the cull readback ring (ADR-0057): every view's command buffer of one frame, copied
+         * back to back in the frame's template order, which the CPU reads once that frame has left flight.
+         */
+        struct CullReadback
+        {
+            /** @brief Made with CopyDestination | Readback; empty until a frame with runs fills the slot. */
+            Graphics::BufferHandle buffer;
+            /** @brief Its size in bytes, grown by doubling when a frame needs more. */
+            std::size_t capacity = 0;
+            /** @brief The frame whose commands it holds; none before its first. */
+            std::optional<std::uint64_t> frame;
+            /** @brief How many commands that frame copied into it, over every view. */
+            std::uint32_t commands = 0;
+            /** @brief Each of those commands' level of detail, in the slot's order, for summing by level. */
+            std::vector<std::uint32_t> levels;
+            /** @brief Each of those commands' occlusion phase, 0 or 1, in the slot's order, for summing by phase. */
+            std::vector<std::uint32_t> phases;
         };
 
         /** @brief The pipeline drawing a mesh with the standard streams `streams` (StreamsOf's bits) has. */
@@ -740,6 +1163,12 @@ namespace Fenrir::Render
         {
             std::size_t first = 0;
             std::uint32_t count = 1;
+            /**
+             * @brief How many instances each item or copy of the run draws as: six in a point light's instanced faces
+             * pass (DrawPass::PointShadowLayered, one a face), else one. A cull pass counts a kept candidate as that
+             * many (ADR-0057).
+             */
+            std::uint32_t instances = 1;
         };
 
         /**
@@ -752,13 +1181,79 @@ namespace Fenrir::Render
                                                   const std::vector<std::size_t>& order, DrawPass pass) const;
         /**
          * @brief Records `runs` of `draws` into a pass, binding each one's pipeline (`pass`'s), groups and streams, a
-         * compute-skinned draw's first three from `skinned`, and drawing each run's instances.
+         * compute-skinned draw's first three from `skinned`, and drawing each run's instances: directly, or, with
+         * `commands`, the view's command buffer a cull pass counted into (ADR-0057), as one multi-draw of the run's
+         * commands, one per level of detail of its mesh, from the run's first. A run with no pipeline for `pass` is
+         * skipped, its commands left in place.
          */
         void RecordDraws(Graphics::PassEncoder& encoder, const std::vector<ResolvedDraw>& draws,
                          const std::vector<Graphics::BindingGroupHandle>& groups, const std::vector<DrawRun>& runs,
                          Graphics::BindingGroupHandle frameGroup, Graphics::BindingGroupHandle viewGroup,
                          Graphics::BindingGroupHandle drawGroup, Graphics::BufferHandle skinned,
-                         Graphics::PixelRect viewport, DrawPass pass) const;
+                         Graphics::PixelRect viewport, DrawPass pass, Graphics::BufferHandle commands = {},
+                         std::uint32_t commandOffset = 0) const;
+        /**
+         * @brief Reserves the frame's cull rings for the most templates, level entries and groups `views` views of
+         * `draws` could take (every opaque draw a run of its own, in two phases; `views` counts the cameras and the
+         * shadow views, whose casters are among the draws), writes nothing yet, and imports them into `graph` with
+         * the draw records and the instance lists; empty when no draw is opaque.
+         */
+        [[nodiscard]] CullFrame BeginCullFrame(RenderGraph& graph, std::uint64_t frameIndex, std::size_t views,
+                                               const std::vector<ResolvedDraw>& draws);
+        /**
+         * @brief Sizes view `view`'s command buffer and indirection for `runs` of `draws` this frame (ADR-0057),
+         * imports them into `graph`, and appends the runs' command templates, one per run and level of detail, their
+         * level table entries and their group table entries to `templates`, `levels` and `groups`, the frame's; empty
+         * buffers, with nothing appended, when there are no runs or the frame has no cull buffers. The pass culls
+         * against `volume` and chooses levels by `lod`. A shadow view's `view` index follows the cameras'. With
+         * `occlusion`, the templates and level entries are appended twice, a set per phase, `phases` recording each
+         * template's, and the view's visibility words are sized and kept, marked stale when the runs' identities or
+         * counts differ from last frame's. AddCullPass then adds each phase's pass.
+         */
+        [[nodiscard]] CullView PrepareCull(RenderGraph& graph, std::uint64_t frameIndex, std::size_t view,
+                                           const CullVolume& volume, const LodView& lod,
+                                           const std::vector<ResolvedDraw>& draws, const std::vector<DrawRun>& runs,
+                                           const CullFrame& frame, const CullOcclusion* occlusion,
+                                           std::vector<Graphics::DrawIndexedIndirectCommand>& templates,
+                                           std::vector<CullLevelEntry>& levels, std::vector<std::uint32_t>& phases,
+                                           std::vector<CullGroupEntry>& groups);
+        /**
+         * @brief Adds one `Cull` pass for `phase` of `cull`, a view with runs, in `stage`, its job at slot `jobSlot`
+         * of the frame's job ring: for the single or the first phase, a copy of the view's templates over its command
+         * buffer, then one dispatch of `builtin:cull` over its groups; for the second, the dispatch alone, sampling
+         * the view's pyramid.
+         */
+        void AddCullPass(RenderGraph& graph, std::uint64_t frameIndex, const CullFrame& frame, const CullView& cull,
+                         CullPhase phase, std::size_t jobSlot, RenderStage stage);
+        /** @brief Writes the frame's `templates`, `levels` and `groups` into the rings BeginCullFrame reserved. */
+        void WriteCullTables(std::uint64_t frameIndex, std::span<const Graphics::DrawIndexedIndirectCommand> templates,
+                             std::span<const CullLevelEntry> levels, std::span<const CullGroupEntry> groups);
+        /**
+         * @brief Sums the instance counts of the commands the frame `FramesInFlight` before `frameIndex` copied into
+         * its readback slot into SceneStats::instancesDrawn, by each command's level of detail into
+         * SceneStats::drawnByLod and by its phase into SceneStats::drawnByPhase, if that frame filled it and the
+         * device lets it be read.
+         */
+        void ReadCulled(std::uint64_t frameIndex);
+        /**
+         * @brief Adds the frame's `CullReadback` pass, last in the frame: a copy of each view's command buffer into
+         * the frame's slot of the readback ring, at its templates' offset, the slot grown to hold one command per
+         * entry of `levels`, the frame's level table, which says each command's level, `phases` each one's phase.
+         */
+        void AddCullReadback(RenderGraph& graph, std::uint64_t frameIndex, const std::vector<CullView>& views,
+                             std::span<const CullLevelEntry> levels, std::span<const std::uint32_t> phases);
+        /** @brief What a view culls against and chooses levels of detail from (ADR-0057). */
+        struct CullCamera
+        {
+            Math::Frustum frustum;
+            /** @brief The camera's position, which the copies' distances are measured from. */
+            Math::Vec3 position{0.0f};
+        };
+        /**
+         * @brief What view `request` culls against: `frustum`, the view's own, and `request.position`, or, frozen,
+         * the frustum and position its camera had when frozen, kept from this frame if the camera has none yet.
+         */
+        [[nodiscard]] CullCamera CullCameraOf(const ViewRequest& request, const Math::Frustum& frustum);
         [[nodiscard]] Graphics::PipelineHandle MakeInternalPipeline(
             const ShaderContainer& container, const ShaderVariant* variant, Graphics::BindingGroupLayoutHandle layout,
             Graphics::TextureFormat colour, bool depthTested, std::uint32_t samples,
@@ -832,10 +1327,11 @@ namespace Fenrir::Render
             RenderGraph& graph, std::uint64_t frameIndex, std::size_t view, const ViewRequest& request,
             std::uint32_t lightCount, ClusterDepths depths);
         /**
-         * @brief The draw set's group for frame `frameIndex`: its copies of the draw and palette buffers, and the
-         * instance-list buffer.
+         * @brief The draw set's group for frame `frameIndex`: its copies of the draw and palette buffers, the
+         * instance-list buffer, and `indirection` at binding 3, a view's or (empty) the buffer that says there is none.
          */
-        [[nodiscard]] Graphics::BindingGroupHandle DrawGroupFor(std::uint64_t frameIndex);
+        [[nodiscard]] Graphics::BindingGroupHandle DrawGroupFor(std::uint64_t frameIndex,
+                                                                Graphics::BufferHandle indirection = {});
         [[nodiscard]] std::uint32_t NextId();
 
         Graphics::GraphicsDevice& m_device;
@@ -848,6 +1344,14 @@ namespace Fenrir::Render
         bool m_computeSkinning;
         /** @brief RendererConfig::clusteredLights: whether views with lights get a LightClusters pass. */
         bool m_clusteredLights = true;
+        /** @brief RendererConfig::gpuCulling: whether each view's cull pass gets the view's planes. */
+        bool m_gpuCulling = true;
+        /** @brief RendererConfig::occlusionCulling: whether each view's cull pass runs its second phase. */
+        bool m_occlusionCulling = true;
+        /** @brief The pixels a level's projected error must be under to be drawn (SetLodSelection). */
+        float m_lodErrorPixels = 1.0f;
+        /** @brief The pixels a copy's projected radius must reach to be drawn; 0 drops none (SetLodSelection). */
+        float m_minProjectedPixels = 0.0f;
         /** @brief How each view's sun cascades are made (RendererConfig's shadow members). */
         CascadeConfig m_cascades;
 
@@ -864,6 +1368,8 @@ namespace Fenrir::Render
          * one zeroed record when there are none.
          */
         Graphics::BufferHandle m_instanceListBuffer;
+        /** @brief Its size in bytes. */
+        std::size_t m_instanceListBytes = 0;
         /** @brief Whether a list was prepared or released since the instance-list buffer was packed. */
         bool m_instancesChanged = true;
         /** @brief The samplers made for material parameters, by description. */
@@ -898,6 +1404,19 @@ namespace Fenrir::Render
         /** @brief Its sets: 0 the view's job block, 1 the frame's light buffer and the view's cluster buffer. */
         Graphics::BindingGroupLayoutHandle m_clusterJobLayout;
         Graphics::BindingGroupLayoutHandle m_clusterTargetLayout;
+        /** @brief `builtin:cull`, the Cull passes' compute program. */
+        ShaderContainer m_cull;
+        /** @brief Its pipeline; empty if it failed, and then every pass draws directly. */
+        Graphics::PipelineHandle m_cullPipeline;
+        /** @brief Its set 0: the view's job block. */
+        Graphics::BindingGroupLayoutHandle m_cullJobLayout;
+        /**
+         * @brief Its set 1: the frame's draw records, group table, instance lists and level table, the view's command
+         * buffer, indirection and visibility words, and its pyramid.
+         */
+        Graphics::BindingGroupLayoutHandle m_cullTargetLayout;
+        /** @brief The sampler the pass reads the pyramid through: nearest, clamped, every read a texelFetch. */
+        Graphics::SamplerHandle m_cullSampler;
 
         Graphics::BindingGroupLayoutHandle m_frameLayout;
         Graphics::BindingGroupLayoutHandle m_viewLayout;
@@ -980,6 +1499,35 @@ namespace Fenrir::Render
         std::vector<ClusterBuffers> m_clusterBuffers;
         /** @brief The buffer of one 0 that view blocks without clusters bind at set 1 binding 3. */
         Graphics::BufferHandle m_noClusters;
+        /** @brief Each Cull pass's job block, one uniform slot a view, bound at its set 0. */
+        std::unique_ptr<BlockRing> m_cullJobs;
+        /** @brief The frame's command templates, which each Cull pass copies its view's from. */
+        GrownRing m_cullTemplates;
+        /** @brief The frame's level table, one entry per template, which each Cull pass chooses levels from. */
+        GrownRing m_cullLevels;
+        /** @brief The frame's group table, which each Cull pass reads its view's groups of. */
+        GrownRing m_cullGroups;
+        /** @brief Each view's cull rings, by view index: the cameras', then the frame's shadow views'. */
+        std::vector<CullRings> m_cullRings;
+        /** @brief The cull readback ring, a slot per frame in flight, by frame index modulo the slots. */
+        std::vector<CullReadback> m_cullReadbacks;
+        /** @brief Whether culling is frozen (SetCullingFrozen). */
+        bool m_cullingFrozen = false;
+        /** @brief Each camera's frozen cull while culling is frozen, in the order their first frozen frames came. */
+        std::vector<FrozenCull> m_frozenCulls;
+        /**
+         * @brief The buffer of one entry naming no record (`Fenrir/DrawRecord.glsl`'s FenrirNoIndirection) that the
+         * draw group of every direct draw binds at set 3 binding 3.
+         */
+        Graphics::BufferHandle m_noIndirection;
+        /**
+         * @brief builtin:cull's set 1 groups, by the draw buffer, the group table, the command buffer, the
+         * indirection, the instance lists, the level table, the visibility words and the pyramid, while all eight
+         * live.
+         */
+        BindingGroupCache<8> m_cullTargetGroups;
+        /** @brief The one-word buffer a view with one phase binds as its visibility, which the pass never reads. */
+        Graphics::BufferHandle m_noVisibility;
         /** @brief builtin:light-clusters' set 1 groups, by the light buffer and the cluster buffer, while both live. */
         BindingGroupCache<2> m_clusterTargetGroups;
         /** @brief The Background pass's group of each Sky cube texture it draws, while the texture lives. */
@@ -996,8 +1544,11 @@ namespace Fenrir::Render
         std::unique_ptr<ReflectionTrace> m_reflectionTrace;
         /** @brief Each copy's frame set group, by frame index modulo the copies. */
         std::vector<FrameGroup> m_frameGroups;
-        /** @brief Each copy's draw set group, by frame index modulo the copies. */
-        std::vector<DrawGroup> m_drawGroups;
+        /**
+         * @brief The draw set's groups, by the draw buffer, the palette, the instance-list buffer and the indirection,
+         * while all four live.
+         */
+        BindingGroupCache<4> m_drawGroups;
         /**
          * @brief The view set's groups, by the view ring's buffer, slot, the occlusion and shadow textures, the
          * cluster buffer and the reflection hits and history, while all six live.
@@ -1010,6 +1561,8 @@ namespace Fenrir::Render
 
         SceneFrame m_frame;
         std::vector<DrawnView> m_drawnViews;
+        /** @brief The shadow views the last AddPasses culled, in the order their cull passes were added. */
+        std::vector<DrawnShadowView> m_drawnShadowViews;
         SceneStats m_stats;
         /** @brief The missing vertex streams already logged, by mesh and vertex location. */
         std::set<std::pair<AssetKey, std::uint32_t>> m_loggedStreams;

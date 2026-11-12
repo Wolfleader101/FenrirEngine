@@ -22,6 +22,10 @@ namespace Fenrir::Graphics
         Storage = 1u << 3,
         CopySource = 1u << 4,
         CopyDestination = 1u << 5,
+        /** @brief Read as indirect draw commands, DrawIndexedIndirectCommand records (ADR-0057). */
+        Indirect = 1u << 6,
+        /** @brief Read back by the CPU with GraphicsDevice::ReadBuffer once its writing frame has left flight. */
+        Readback = 1u << 7,
     };
 
     /** @brief What a texture may be used as, as flags. */
@@ -83,8 +87,13 @@ namespace Fenrir::Graphics
         R8Unorm,
         /** @brief Two linear half floats, read by shaders as red and green; the BRDF lookup table (ADR-0047). */
         Rg16Float,
-        /** @brief One linear 32-bit float, read by shaders as red; a view's Hi-Z pyramid (ADR-0056). */
+        /** @brief One linear 32-bit float, read by shaders as red. */
         R32Float,
+        /**
+         * @brief Two linear 32-bit floats, read by shaders as red and green; a view's Hi-Z pyramid, the nearest and
+         * the farthest depth of each texel's footprint (ADR-0056, ADR-0057).
+         */
+        Rg32Float,
     };
 
     /** @brief Whether a texture is one image, six cube faces, or an array of cubes. */

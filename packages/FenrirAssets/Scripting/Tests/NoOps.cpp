@@ -24,6 +24,7 @@
 
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirAssets/Assets.hpp"
+#include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
 #include "FenrirAssetsScripting/AssetResolve.hpp"
 #include "FenrirAssetsScripting/AssetsScripting.hpp"
@@ -163,6 +164,26 @@ namespace
              [=](Testing::NativeCallHarness& h) {
                  return !h.Call<bool>("AssetsNative.ReplaceMesh", &mesh, positions, 3, noNormals, 0, noUvs, 0, indices,
                                       3);
+             }},
+            {"AssetsNative.GenerateLods", "mesh",
+             [=](Testing::NativeCallHarness& h) {
+                 const LodSettings settings;
+                 return !h.Call<bool>("AssetsNative.GenerateLods", &mesh, &settings);
+             }},
+            {"AssetsNative.AddMeshLod", "mesh",
+             [=](Testing::NativeCallHarness& h) {
+                 return !h.Call<bool>("AssetsNative.AddMeshLod", &mesh, indices, 3, 0.5f);
+             }},
+            {"AssetsNative.GetMeshLodErrors", "mesh",
+             [=](Testing::NativeCallHarness& h) {
+                 float errors[2] = {7.0f, 7.0f};
+                 return h.Call<std::int32_t>("AssetsNative.GetMeshLodErrors", &mesh, errors, 2) == 0 &&
+                        errors[0] == 7.0f;
+             }},
+            {"AssetsNative.GetMeshLodIndices", "mesh",
+             [=](Testing::NativeCallHarness& h) {
+                 std::uint32_t room[3] = {7, 7, 7};
+                 return h.Call<std::int32_t>("AssetsNative.GetMeshLodIndices", &mesh, 0, room, 3) == 0 && room[0] == 7;
              }},
             {"AssetsNative.ResizeRenderTarget", "image",
              [=](Testing::NativeCallHarness& h) {

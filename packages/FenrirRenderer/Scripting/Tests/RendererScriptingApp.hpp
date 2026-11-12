@@ -17,6 +17,7 @@
 #include <variant>
 #include <vector>
 
+#include "CullProbe.hpp"
 #include "Device/CommandList.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirAssetsScripting/AssetsScripting.hpp"
@@ -110,10 +111,14 @@ namespace Fenrir::Testing
         Graphics::CmdDrawIndexed draw;
     };
 
-    // Every indexed draw in passes labelled `pass`, in order.
-    inline std::vector<RecordedDraw> DrawsIn(const std::vector<Graphics::CommandList>& lists, std::string_view pass)
+    // Every indexed draw in passes labelled `pass`, in order. With `device`, the null backend, an indirect draw of a
+    // view's cull pass (ADR-0057) is resolved into the direct draw it stands for (RendererTest::ResolveIndirect).
+    inline std::vector<RecordedDraw> DrawsIn(const std::vector<Graphics::CommandList>& lists, std::string_view pass,
+                                             const Graphics::GraphicsDevice* device = nullptr)
     {
         using namespace Graphics;
+        const std::vector<RendererTest::RecordedCull> culls =
+            device == nullptr ? std::vector<RendererTest::RecordedCull>{} : RendererTest::CullsIn(lists);
         std::vector<RecordedDraw> draws;
         for (const CommandList& list : lists)
         {
@@ -136,9 +141,25 @@ namespace Fenrir::Testing
                     recorded.draw = *draw;
                     draws.push_back(recorded);
                 }
+                else if (const auto* indirect = std::get_if<CmdDrawIndexedIndirect>(&command);
+                         indirect != nullptr && inPass && device != nullptr)
+                {
+                    if (const auto resolved = RendererTest::ResolveIndirect(*device, culls, *indirect))
+                    {
+                        RecordedDraw recorded = bound;
+                        recorded.draw = *resolved;
+                        draws.push_back(recorded);
+                    }
+                }
             }
         }
         return draws;
+    }
+
+    // The draws of the last frame's passes labelled `pass`, indirect ones resolved.
+    inline std::vector<RecordedDraw> DrawsIn(const RendererScriptingApp& test, std::string_view pass)
+    {
+        return DrawsIn(test.Submitted(), pass, &test.Device());
     }
 
     // The bytes of the buffer bound at `binding` of binding group `group`; empty if there is none.

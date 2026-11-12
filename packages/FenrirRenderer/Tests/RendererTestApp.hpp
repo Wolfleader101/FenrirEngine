@@ -9,6 +9,7 @@
 #include <iterator>
 #include <memory>
 #include <numbers>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -18,6 +19,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "CullProbe.hpp"
 #include "Device/CommandList.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
@@ -170,6 +172,15 @@ namespace RendererTest
         return image;
     }
 
+    /** @brief The float at byte `offset` of `bytes`. */
+    inline float FloatAt(const std::vector<std::byte>& bytes, std::size_t offset)
+    {
+        float value = 0.0f;
+        REQUIRE(offset + sizeof(float) <= bytes.size());
+        std::memcpy(&value, std::span(bytes).subspan(offset).data(), sizeof(float));
+        return value;
+    }
+
     /** @brief One indexed draw recorded in a pass, with what was bound for it. */
     struct RecordedDraw
     {
@@ -184,11 +195,18 @@ namespace RendererTest
         Fenrir::Graphics::CmdDrawIndexed draw;
     };
 
-    /** @brief Every indexed draw the device received in passes labelled `pass`, in order. */
+    /**
+     * @brief Every indexed draw the device received in passes labelled `pass`, in order. With `device`, the null
+     * backend, an indirect draw (ADR-0057) is resolved through the frame's Cull passes as ResolveIndirect says, so a
+     * pass drawing from a view's command buffer reads as it did drawing directly; one that cannot be resolved is left
+     * out.
+     */
     inline std::vector<RecordedDraw> DrawsIn(const std::vector<Fenrir::Graphics::CommandList>& lists,
-                                             std::string_view pass)
+                                             std::string_view pass,
+                                             const Fenrir::Graphics::GraphicsDevice* device = nullptr)
     {
         using namespace Fenrir::Graphics;
+        const std::vector<RecordedCull> culls = device == nullptr ? std::vector<RecordedCull>{} : CullsIn(lists);
         std::vector<RecordedDraw> draws;
         for (const CommandList& list : lists)
         {
@@ -232,6 +250,73 @@ namespace RendererTest
                     if (inPass)
                     {
                         RecordedDraw recorded = bound;
+                        recorded.draw = *draw;
+                        draws.push_back(recorded);
+                    }
+                }
+                else if (const auto* indirect = std::get_if<CmdDrawIndexedIndirect>(&command))
+                {
+                    if (inPass && device != nullptr)
+                    {
+                        if (const auto resolved = ResolveIndirect(*device, culls, *indirect))
+                        {
+                            RecordedDraw recorded = bound;
+                            recorded.draw = *resolved;
+                            draws.push_back(recorded);
+                        }
+                    }
+                }
+            }
+        }
+        return draws;
+    }
+
+    /** @brief One indirect draw recorded in a pass (ADR-0057), with what was bound for it and the pass's declared uses.
+     */
+    struct RecordedIndirectDraw
+    {
+        Fenrir::Graphics::PipelineHandle pipeline;
+        std::array<Fenrir::Graphics::BindingGroupHandle, 4> groups{};
+        Fenrir::Graphics::BufferHandle indexBuffer;
+        Fenrir::Graphics::CmdDrawIndexedIndirect draw;
+        std::vector<Fenrir::Graphics::PassResourceUse> uses;
+    };
+
+    /** @brief Every indirect draw the device received in passes labelled `pass`, in order, as recorded. */
+    inline std::vector<RecordedIndirectDraw> IndirectDrawsIn(const std::vector<Fenrir::Graphics::CommandList>& lists,
+                                                             std::string_view pass)
+    {
+        using namespace Fenrir::Graphics;
+        std::vector<RecordedIndirectDraw> draws;
+        for (const CommandList& list : lists)
+        {
+            bool inPass = false;
+            RecordedIndirectDraw bound;
+            for (const Command& command : list.commands)
+            {
+                if (const auto* begin = std::get_if<CmdBeginPass>(&command))
+                {
+                    inPass = begin->pass.label == pass;
+                    bound = {};
+                    bound.uses = begin->pass.uses;
+                }
+                else if (const auto* pipeline = std::get_if<CmdSetPipeline>(&command))
+                {
+                    bound.pipeline = pipeline->pipeline;
+                }
+                else if (const auto* group = std::get_if<CmdSetBindingGroup>(&command))
+                {
+                    bound.groups.at(group->set) = group->group;
+                }
+                else if (const auto* indices = std::get_if<CmdSetIndexBuffer>(&command))
+                {
+                    bound.indexBuffer = indices->buffer;
+                }
+                else if (const auto* draw = std::get_if<CmdDrawIndexedIndirect>(&command))
+                {
+                    if (inPass)
+                    {
+                        RecordedIndirectDraw recorded = bound;
                         recorded.draw = *draw;
                         draws.push_back(recorded);
                     }
@@ -321,23 +406,12 @@ namespace RendererTest
             messages.begin(), messages.end(), [&](const std::string& m) { return m.find(text) != std::string::npos; }));
     }
 
-    /** @brief The float at byte `offset` of `bytes`. */
-    inline float FloatAt(const std::vector<std::byte>& bytes, std::size_t offset)
-    {
-        float value = 0.0f;
-        REQUIRE(offset + sizeof(float) <= bytes.size());
-        std::memcpy(&value, std::span(bytes).subspan(offset).data(), sizeof(float));
-        return value;
-    }
-
-    /** @brief The 32-bit unsigned integer at byte `offset` of `bytes`. */
-    inline std::uint32_t UintAt(const std::vector<std::byte>& bytes, std::size_t offset)
-    {
-        std::uint32_t value = 0;
-        REQUIRE(offset + sizeof(value) <= bytes.size());
-        std::memcpy(&value, std::span(bytes).subspan(offset).data(), sizeof(value));
-        return value;
-    }
+    /** @brief The bytes of one record of the draw buffer (set 3 binding 0, `Fenrir/Draw.glsl`'s `DrawItem`, std430). */
+    constexpr std::size_t RecordSize = 192;
+    /** @brief Where a record's world position's x sits in it: the world matrix's fourth column's first float. */
+    constexpr std::size_t RecordPositionXOffset = 48;
+    /** @brief Where a record's `instanceCount` sits in it: an instance list's copies, 0 for one item. */
+    constexpr std::size_t RecordInstanceCountOffset = 140;
 
     /** @brief The renderer on the null backend in an App with FenrirAssets and no window (the spec's seam 1). */
     inline Fenrir::RendererConfig NullBackend()
@@ -345,6 +419,36 @@ namespace RendererTest
         Fenrir::RendererConfig config;
         config.backend = Fenrir::GraphicsBackend::Null;
         return config;
+    }
+
+    /**
+     * @brief The null backend with occlusion culling off (ADR-0057), so a camera's cull pass has its one phase and
+     * its prepass one draw per run, as the tests of the frustum test and the readback read them; occlusion culling's
+     * own tests keep it on.
+     */
+    inline Fenrir::RendererConfig OcclusionOff()
+    {
+        Fenrir::RendererConfig config = NullBackend();
+        config.occlusionCulling = false;
+        return config;
+    }
+
+    /**
+     * @brief `labels` with occlusion culling's passes (ADR-0057) after its first "DepthPrepass": the HiZ passes of a
+     * `mips`-level pyramid (11 for the 1280 x 720 window), the second Cull pass and the second DepthPrepass pass.
+     */
+    inline std::vector<std::string> WithOcclusion(std::vector<std::string> labels, std::size_t mips = 11)
+    {
+        const auto prepass = std::find(labels.begin(), labels.end(), "DepthPrepass");
+        if (prepass == labels.end())
+        {
+            return labels;
+        }
+        std::vector<std::string> added(mips, "HiZ");
+        added.emplace_back("Cull");
+        added.emplace_back("DepthPrepass");
+        labels.insert(prepass + 1, added.begin(), added.end());
+        return labels;
     }
 
     /**
@@ -457,10 +561,25 @@ namespace RendererTest
             return Fenrir::RendererProbe::Device(renderer);
         }
 
-        /** @brief The indexed draws of the last frame's passes labelled `pass`. */
+        /**
+         * @brief The indexed draws of the last frame's passes labelled `pass`, an indirect draw resolved through the
+         * frame's Cull passes (DrawsIn), so a DepthPrepass or Opaque draw reads as it did drawing directly.
+         */
         [[nodiscard]] std::vector<RecordedDraw> Draws(std::string_view pass = "Opaque") const
         {
-            return DrawsIn(Fenrir::RendererProbe::Submitted(renderer), pass);
+            return DrawsIn(Fenrir::RendererProbe::Submitted(renderer), pass, &Device());
+        }
+
+        /** @brief The indirect draws of the last frame's passes labelled `pass`, as recorded (ADR-0057). */
+        [[nodiscard]] std::vector<RecordedIndirectDraw> IndirectDraws(std::string_view pass = "Opaque") const
+        {
+            return IndirectDrawsIn(Fenrir::RendererProbe::Submitted(renderer), pass);
+        }
+
+        /** @brief The last frame's Cull passes, in order (ADR-0057). */
+        [[nodiscard]] std::vector<RecordedCull> Culls() const
+        {
+            return CullsIn(Fenrir::RendererProbe::Submitted(renderer));
         }
 
         /** @brief The label of the binding group a draw bound at `set`. */
@@ -483,23 +602,35 @@ namespace RendererTest
             return {};
         }
 
-        /**
-         * @brief The world position of the item a draw drew: column 3 of the world matrix in its record of the draw
-         * buffer (set 3, binding 0; 160 bytes a record, `Fenrir/Draw.glsl`).
-         */
-        [[nodiscard]] Fenrir::Math::Vec3 DrawPosition(const RecordedDraw& draw) const
+        /** @brief The bytes of the draw buffer a draw bound at set 3 binding 0; empty when it bound none. */
+        [[nodiscard]] std::vector<std::byte> DrawBuffer(const RecordedDraw& draw) const
         {
             for (const Fenrir::Graphics::BindingGroupEntry& entry :
                  Fenrir::RendererProbe::Entries(Device(), draw.groups.at(3)))
             {
                 if (entry.binding == 0)
                 {
-                    const std::vector<std::byte> bytes = Fenrir::RendererProbe::Bytes(Device(), entry.buffer);
-                    const std::size_t at = std::size_t{draw.draw.firstInstance} * 160 + 48;
-                    return {FloatAt(bytes, at), FloatAt(bytes, at + 4), FloatAt(bytes, at + 8)};
+                    return Fenrir::RendererProbe::Bytes(Device(), entry.buffer);
                 }
             }
-            return Fenrir::Math::Vec3(0.0f);
+            return {};
+        }
+
+        /** @brief The three floats at byte `offset` of a draw's record of the draw buffer (its first instance's). */
+        [[nodiscard]] Fenrir::Math::Vec3 RecordVec3(const RecordedDraw& draw, std::size_t offset) const
+        {
+            const std::vector<std::byte> bytes = DrawBuffer(draw);
+            const std::size_t at = std::size_t{draw.draw.firstInstance} * RecordSize + offset;
+            return {FloatAt(bytes, at), FloatAt(bytes, at + 4), FloatAt(bytes, at + 8)};
+        }
+
+        /**
+         * @brief The world position of the item a draw drew: column 3 of the world matrix in its record of the draw
+         * buffer (`Fenrir/Draw.glsl`).
+         */
+        [[nodiscard]] Fenrir::Math::Vec3 DrawPosition(const RecordedDraw& draw) const
+        {
+            return RecordVec3(draw, 48);
         }
 
         /** @brief An image asset owned by the app. */

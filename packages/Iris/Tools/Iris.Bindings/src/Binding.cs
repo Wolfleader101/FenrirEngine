@@ -257,7 +257,9 @@ internal sealed class Binding
         owners.TryGetValue(owner.Name, out var binding) ? binding.MemberName(binding.Type(owner.Name), member)
         : Config.Names.TryGetValue($"{owner.Name}::{member}", out var qualified) ? qualified
         : Config.Names.TryGetValue(member, out var bare) ? bare
-        : char.ToUpperInvariant(member[0]) + member[1..];
+        : PascalCase(member);
+
+    private static string PascalCase(string name) => char.ToUpperInvariant(name[0]) + name[1..];
 
     /// <summary>
     /// Whether a struct's mirror is a <c>readonly struct</c> of <c>readonly</c> fields: an event under
@@ -402,7 +404,8 @@ internal sealed class Binding
     };
 
     /// <summary>The C# name of an array field's storage type, nested in its struct.</summary>
-    public static string ArrayTypeName(string fieldName) => fieldName + "Array";
+    // PascalCase, so a private field's lower-case name gives its public storage struct a C# type name.
+    public static string ArrayTypeName(string fieldName) => PascalCase(fieldName) + "Array";
 
     // Finds the type each binding in `uses` mirrors among the described ones: one binding's at most, with the layout that
     // binding describes, never one this binding selects, excludes or binds as a bound type.

@@ -93,8 +93,9 @@ namespace Fenrir::Graphics
             }
         }
 
-        constexpr std::array<GLenum, 8> internalFormats{GL_RGBA8,   GL_SRGB8_ALPHA8, GL_RGBA16F, GL_DEPTH_COMPONENT32F,
-                                                        GL_RGBA32F, GL_R8,           GL_RG16F,   GL_R32F};
+        constexpr std::array<GLenum, 9> internalFormats{GL_RGBA8,   GL_SRGB8_ALPHA8, GL_RGBA16F, GL_DEPTH_COMPONENT32F,
+                                                        GL_RGBA32F, GL_R8,           GL_RG16F,   GL_R32F,
+                                                        GL_RG32F};
 
         /** @brief How WriteTexture's tightly packed texels of a format are laid out for GL. */
         struct UploadFormat
@@ -105,7 +106,7 @@ namespace Fenrir::Graphics
         };
 
         /** @brief The upload layout of each TextureFormat. */
-        constexpr std::array<UploadFormat, 8> uploadFormats{{
+        constexpr std::array<UploadFormat, 9> uploadFormats{{
             {GL_RGBA, GL_UNSIGNED_BYTE, 4},
             {GL_RGBA, GL_UNSIGNED_BYTE, 4},
             {GL_RGBA, GL_HALF_FLOAT, 8},
@@ -114,6 +115,7 @@ namespace Fenrir::Graphics
             {GL_RED, GL_UNSIGNED_BYTE, 1},
             {GL_RG, GL_HALF_FLOAT, 4},
             {GL_RED, GL_FLOAT, 4},
+            {GL_RG, GL_FLOAT, 8},
         }};
 
         /** @brief GL's wrap mode for each AddressMode. */
@@ -241,6 +243,41 @@ namespace Fenrir::Graphics
                 }
             }
             return nullptr;
+        }
+
+        /** @brief GL's primitive mode for a pipeline's topology. */
+        constexpr GLenum PrimitiveOf(Topology topology) noexcept
+        {
+            return topology == Topology::Lines ? GL_LINES : GL_TRIANGLES;
+        }
+
+        /** @brief GL's index type for an index format. */
+        constexpr GLenum IndexTypeOf(IndexFormat format) noexcept
+        {
+            return format == IndexFormat::UInt16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT;
+        }
+
+        /**
+         * @brief The memory barrier bits a read of a buffer written as storage by a shader needs, by how a pass
+         * declares the read; 0 for a use that is no such read.
+         */
+        constexpr GLbitfield BarrierBitsOf(ResourceUsage usage) noexcept
+        {
+            switch (usage)
+            {
+            case ResourceUsage::StorageRead:
+            case ResourceUsage::StorageWrite:
+                return GL_SHADER_STORAGE_BARRIER_BIT;
+            case ResourceUsage::VertexInput:
+                return GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT | GL_ELEMENT_ARRAY_BARRIER_BIT;
+            case ResourceUsage::IndirectRead:
+                return GL_COMMAND_BARRIER_BIT;
+            case ResourceUsage::CopySource:
+            case ResourceUsage::CopyDestination:
+                return GL_BUFFER_UPDATE_BARRIER_BIT;
+            default:
+                return 0;
+            }
         }
     } // namespace
 
@@ -388,7 +425,10 @@ namespace Fenrir::Graphics
         m_frameIndex = frameIndex;
         GladGLContext& gl = *m_gl;
         const std::uint32_t frames = m_config.framesInFlight;
-        m_buffers.Collect(frameIndex, frames, [&gl](GlBuffer& buffer) { gl.DeleteBuffers(1, &buffer.name); });
+        m_buffers.Collect(frameIndex, frames, [this, &gl](GlBuffer& buffer) {
+            m_storageWritten.erase(buffer.name);
+            gl.DeleteBuffers(1, &buffer.name);
+        });
         m_textures.Collect(frameIndex, frames, [this, &gl](GlTexture& texture) {
             ForgetFramebuffers(texture.name);
             gl.DeleteTextures(1, &texture.name);
@@ -405,8 +445,13 @@ namespace Fenrir::Graphics
         GladGLContext& gl = *m_gl;
         GlBuffer buffer;
         buffer.size = desc.size;
+        buffer.usage = desc.usage;
+        buffer.writtenFrame = m_frameIndex;
         gl.CreateBuffers(1, &buffer.name);
-        gl.NamedBufferStorage(buffer.name, static_cast<GLsizeiptr>(desc.size), nullptr, GL_DYNAMIC_STORAGE_BIT);
+        // A buffer the CPU reads back is a hint to keep it where the client can read it.
+        const GLbitfield flags =
+            GL_DYNAMIC_STORAGE_BIT | (HasUsage(desc.usage, BufferUsage::Readback) ? GL_CLIENT_STORAGE_BIT : 0);
+        gl.NamedBufferStorage(buffer.name, static_cast<GLsizeiptr>(desc.size), nullptr, flags);
         if (!initial.empty())
         {
             gl.NamedBufferSubData(buffer.name, 0, static_cast<GLsizeiptr>(initial.size()), initial.data());
@@ -684,15 +729,48 @@ namespace Fenrir::Graphics
 
     bool OpenGLDevice::WriteBuffer(BufferHandle buffer, std::size_t offset, std::span<const std::byte> bytes)
     {
-        const GlBuffer* found = m_buffers.Find(buffer);
+        GlBuffer* found = m_buffers.Find(buffer);
         if (found == nullptr)
         {
             return false;
         }
         if (!bytes.empty())
         {
+            // A buffer update after a shader wrote the buffer needs the same barrier a copy does.
+            const auto written = m_storageWritten.find(found->name);
+            if (written != m_storageWritten.end())
+            {
+                MakeVisible(GL_BUFFER_UPDATE_BARRIER_BIT & ~written->second);
+            }
             m_gl->NamedBufferSubData(found->name, static_cast<GLintptr>(offset), static_cast<GLsizeiptr>(bytes.size()),
                                      bytes.data());
+        }
+        found->writtenFrame = m_frameIndex;
+        return true;
+    }
+
+    bool OpenGLDevice::ReadBuffer(BufferHandle buffer, std::size_t offset, std::span<std::byte> bytes)
+    {
+        const GlBuffer* found = m_buffers.Find(buffer);
+        if (found == nullptr || !HasUsage(found->usage, BufferUsage::Readback) || offset + bytes.size() > found->size)
+        {
+            return false;
+        }
+        // Refused until the writing frame has left flight: GL would otherwise wait for its commands here.
+        if (!HasLeftFlight(found->writtenFrame, m_config.framesInFlight, m_frameIndex))
+        {
+            return false;
+        }
+        if (!bytes.empty())
+        {
+            // A read after a shader wrote the buffer needs the same barrier a copy does; a copy's write needs none.
+            const auto written = m_storageWritten.find(found->name);
+            if (written != m_storageWritten.end())
+            {
+                MakeVisible(GL_BUFFER_UPDATE_BARRIER_BIT & ~written->second);
+            }
+            m_gl->GetNamedBufferSubData(found->name, static_cast<GLintptr>(offset),
+                                        static_cast<GLsizeiptr>(bytes.size()), bytes.data());
         }
         return true;
     }
@@ -848,13 +926,22 @@ namespace Fenrir::Graphics
     {
         const PassDesc& pass = command.pass;
         m_replay = ReplayState{};
+        BarrierBefore(pass);
+        // What the pass writes as storage, later passes read as vertices, storage, indirect commands or a copy's
+        // source, which GL makes visible only after a barrier before them: those passes' uses say which.
+        for (const PassResourceUse& use : pass.uses)
+        {
+            GlBuffer* buffer = BufferOf(use);
+            if (buffer != nullptr && use.usage == ResourceUsage::StorageWrite)
+            {
+                m_replay.storageWrites.push_back(buffer->name);
+                buffer->writtenFrame = m_frameIndex;
+            }
+        }
         if (pass.queue == QueueKind::Compute)
         {
-            // Dispatches only: no target to bind. What it writes as storage, later passes read as vertices or storage,
-            // which GL makes visible only after a barrier at its end.
+            // Dispatches only: no target to bind.
             m_replay.computing = true;
-            m_replay.storageWrites = std::ranges::any_of(
-                pass.uses, [](const PassResourceUse& use) { return use.usage == ResourceUsage::StorageWrite; });
             m_gl->PushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, static_cast<GLsizei>(pass.label.size()),
                                  pass.label.data());
             return;
@@ -945,9 +1032,10 @@ namespace Fenrir::Graphics
             m_replay.skipping = false;
             return;
         }
-        if (m_replay.storageWrites)
+        // Written again, a buffer's earlier barriers no longer cover it.
+        for (const std::uint32_t name : m_replay.storageWrites)
         {
-            m_gl->MemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+            m_storageWritten[name] = 0;
         }
         // A pipeline on the gamma path turned encoding off; every pass, and its clears, starts with it on.
         m_gl->Enable(GL_FRAMEBUFFER_SRGB);
@@ -1114,7 +1202,7 @@ namespace Fenrir::Graphics
         {
             return;
         }
-        m_gl->DrawArraysInstancedBaseInstance(m_replay.pipeline->topology == Topology::Lines ? GL_LINES : GL_TRIANGLES,
+        m_gl->DrawArraysInstancedBaseInstance(PrimitiveOf(m_replay.pipeline->topology),
                                               static_cast<GLint>(command.firstVertex),
                                               static_cast<GLsizei>(command.vertexCount),
                                               static_cast<GLsizei>(command.instanceCount), command.firstInstance);
@@ -1130,10 +1218,38 @@ namespace Fenrir::Graphics
         const std::size_t offset =
             m_replay.indexBuffer.offset + std::size_t{command.firstIndex} * (shortIndices ? 2u : 4u);
         m_gl->DrawElementsInstancedBaseVertexBaseInstance(
-            m_replay.pipeline->topology == Topology::Lines ? GL_LINES : GL_TRIANGLES,
-            static_cast<GLsizei>(command.indexCount), shortIndices ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT,
-            reinterpret_cast<const void*>(offset), static_cast<GLsizei>(command.instanceCount), command.baseVertex,
-            command.firstInstance);
+            PrimitiveOf(m_replay.pipeline->topology), static_cast<GLsizei>(command.indexCount),
+            IndexTypeOf(m_replay.indexFormat), reinterpret_cast<const void*>(offset),
+            static_cast<GLsizei>(command.instanceCount), command.baseVertex, command.firstInstance);
+    }
+
+    void OpenGLDevice::Execute(const CmdDrawIndexedIndirect& command)
+    {
+        if (m_replay.pipeline == nullptr || m_replay.pipeline->compute)
+        {
+            return;
+        }
+        const GlBuffer* buffer = m_buffers.Find(command.buffer);
+        if (buffer == nullptr)
+        {
+            m_logger->Error("OpenGL backend: an indirect draw reads a stale command buffer, so it is skipped");
+            return;
+        }
+        // Each command's firstIndex counts indices from the bound index buffer's offset, as CmdDrawIndexed's does, but
+        // the commands are the GPU's to read and GL counts from the element buffer's start, so only offset 0 can be
+        // honoured; the null backend reports the same.
+        if (m_replay.indexBuffer.offset != 0)
+        {
+            m_logger->Error("OpenGL backend: an indirect draw's index buffer is bound {} bytes in, which indirect "
+                            "commands cannot count from, so it is skipped",
+                            m_replay.indexBuffer.offset);
+            return;
+        }
+        GladGLContext& gl = *m_gl;
+        gl.BindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer->name);
+        gl.MultiDrawElementsIndirect(PrimitiveOf(m_replay.pipeline->topology), IndexTypeOf(m_replay.indexFormat),
+                                     reinterpret_cast<const void*>(command.offset),
+                                     static_cast<GLsizei>(command.drawCount), static_cast<GLsizei>(command.stride));
     }
 
     void OpenGLDevice::Execute(const CmdDispatch& command)
@@ -1148,7 +1264,7 @@ namespace Fenrir::Graphics
     void OpenGLDevice::Execute(const CmdCopyBuffer& command)
     {
         const GlBuffer* source = m_buffers.Find(command.source);
-        const GlBuffer* destination = m_buffers.Find(command.destination);
+        GlBuffer* destination = m_buffers.Find(command.destination);
         if (source == nullptr || destination == nullptr)
         {
             m_logger->Error("OpenGL backend: a buffer copy names a stale buffer");
@@ -1157,6 +1273,49 @@ namespace Fenrir::Graphics
         m_gl->CopyNamedBufferSubData(source->name, destination->name, static_cast<GLintptr>(command.sourceOffset),
                                      static_cast<GLintptr>(command.destinationOffset),
                                      static_cast<GLsizeiptr>(command.size));
+        destination->writtenFrame = m_frameIndex;
+    }
+
+    void OpenGLDevice::BarrierBefore(const PassDesc& pass)
+    {
+        if (m_storageWritten.empty())
+        {
+            return;
+        }
+        GLbitfield wanted = 0;
+        for (const PassResourceUse& use : pass.uses)
+        {
+            const GlBuffer* buffer = BufferOf(use);
+            if (buffer == nullptr)
+            {
+                continue;
+            }
+            const auto written = m_storageWritten.find(buffer->name);
+            if (written == m_storageWritten.end())
+            {
+                continue;
+            }
+            wanted |= BarrierBitsOf(use.usage) & ~written->second;
+        }
+        MakeVisible(wanted);
+    }
+
+    OpenGLDevice::GlBuffer* OpenGLDevice::BufferOf(const PassResourceUse& use)
+    {
+        return use.texture.IsEmpty() ? m_buffers.Find(use.buffer) : nullptr;
+    }
+
+    void OpenGLDevice::MakeVisible(std::uint32_t bits)
+    {
+        if (bits == 0)
+        {
+            return;
+        }
+        m_gl->MemoryBarrier(bits);
+        for (auto& [name, issued] : m_storageWritten)
+        {
+            issued |= bits;
+        }
     }
 
     void OpenGLDevice::BindVertexInput()
@@ -1323,6 +1482,20 @@ namespace Fenrir::Graphics
     {
         const GlBuffer* found = m_buffers.Find(buffer);
         return found != nullptr ? found->name : 0;
+    }
+
+    std::vector<std::byte> OpenGLDevice::ReadBufferNow(BufferHandle buffer)
+    {
+        const GlBuffer* found = m_buffers.Find(buffer);
+        if (found == nullptr || found->name == 0)
+        {
+            return {};
+        }
+        // Reading back waits for every command that writes the buffer, a compute pass's included.
+        std::vector<std::byte> bytes(found->size);
+        m_gl->MemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
+        m_gl->GetNamedBufferSubData(found->name, 0, static_cast<GLsizeiptr>(bytes.size()), bytes.data());
+        return bytes;
     }
 
     std::uint32_t OpenGLDevice::GlName(TextureHandle texture)

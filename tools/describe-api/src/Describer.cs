@@ -592,18 +592,14 @@ internal sealed class Describer
                                      throw Error(at, subject, $"its type '{declared.AsString}' is not a kind the description records"));
             case CXTypeKind.CXType_Enum:
                 return new FieldType("enum", RegisterReferenced(type, subject));
+            case CXTypeKind.CXType_Record when StdArray(type) is var (elementType, length):
+                return ArrayField(elementType, length, at, subject);
             case CXTypeKind.CXType_Record:
                 return new FieldType("struct", RegisterReferenced(type, subject));
             case CXTypeKind.CXType_Pointer:
                 return new FieldType("pointer");
             case CXTypeKind.CXType_ConstantArray:
-                var element = Classify(((ArrayType)type).ElementType, at, subject);
-                if (element.Kind == "array")
-                {
-                    throw Error(at, subject, "an array of arrays, which the kinds cannot express");
-                }
-
-                return new FieldType("array", Element: element, Length: type.Handle.ArraySize);
+                return ArrayField(((ArrayType)type).ElementType, type.Handle.ArraySize, at, subject);
             case CXTypeKind.CXType_LValueReference:
             case CXTypeKind.CXType_RValueReference:
                 throw Error(at, subject, "a reference member: a shared type holds values, not references");
@@ -644,6 +640,40 @@ internal sealed class Describer
                 CXTypeKind.CXType_ULong or CXTypeKind.CXType_ULongLong => $"u{bits}",
             _ => null,
         };
+    }
+
+    /// <summary>The <c>array</c> kind: <paramref name="length"/> elements of <paramref name="elementType"/>, whether a C array's or a <c>std::array</c>'s, never an array of arrays.</summary>
+    private FieldType ArrayField(Type elementType, long length, Decl at, string subject)
+    {
+        var element = Classify(elementType, at, subject);
+        if (element.Kind == "array")
+        {
+            throw Error(at, subject, "an array of arrays, which the kinds cannot express");
+        }
+
+        return new FieldType("array", Element: element, Length: length);
+    }
+
+    /// <summary>
+    /// A <c>std::array&lt;T, N&gt;</c>, the standard's wrapper of one C array, which a shared type holds as it would
+    /// <c>T[N]</c> (the same bytes, and the wrapper's one member has a name of the library's own): its element type and
+    /// length, or null for any other class.
+    /// </summary>
+    private static (Type Element, long Length)? StdArray(Type canonical)
+    {
+        if (canonical.AsTagDecl is not ClassTemplateSpecializationDecl { Name: "array" } array || !array.IsInStdNamespace)
+        {
+            return null;
+        }
+
+        var arguments = array.TemplateArgs;
+        if (arguments.Count != 2 || arguments[0].Kind != CXTemplateArgumentKind.CXTemplateArgumentKind_Type ||
+            arguments[1].Kind != CXTemplateArgumentKind.CXTemplateArgumentKind_Integral)
+        {
+            return null;
+        }
+
+        return (arguments[0].AsType, arguments[1].AsIntegral);
     }
 
     private string RegisterReferenced(Type canonical, string subject)
@@ -845,6 +875,28 @@ internal sealed class Describer
         if (Strip(init) is not InitListExpr list)
         {
             throw UnknownDefault(init, at, subject);
+        }
+
+        // Clang gives a std::array's braced list as a list of its one member's: `{1.0f, 2.0f}` (braces elided) and
+        // `{{1.0f, 2.0f}}` both arrive as a list of one list, `{}` as one implicit value or nothing, so the elements
+        // are read from the inner list as a C array's are.
+        if (StdArray(list.Type.CanonicalType) is not null && list.NumInits > 0)
+        {
+            if (list.NumInits != 1)
+            {
+                throw UnknownDefault(init, at, subject);
+            }
+
+            switch (Strip((Expr)list.Inits[0]))
+            {
+                case InitListExpr inner:
+                    list = inner;
+                    break;
+                case ImplicitValueInitExpr:
+                    return Zero(type, at, subject);
+                default:
+                    throw UnknownDefault(init, at, subject);
+            }
         }
 
         var elements = list.Inits.Cast<Expr>().Select(item => Default(element, item, at, subject)).ToList();

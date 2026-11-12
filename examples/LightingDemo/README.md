@@ -122,10 +122,17 @@ reflections where they are on screen. The window's Scene part has each light's w
 A planet forty metres across, in Solar System Scope's Jupiter texture, ringed from 30 to 55 metres out by 100,000 rocks
 of three Poly Haven moon-rock kinds (ADR-0051): one InstancedMeshRenderer each, on children of one ring entity, so the
 ring is three draws a pass however many rocks it holds, its copies each turned, scaled, squashed and tinted at random.
-Poly Haven's rocks have 3,300 to 6,800 triangles each and the renderer has no LODs, so the demo simplifies each mesh at
-spawn by vertex clustering: on 5 cells a side for the ring, whose rocks are a few pixels across, and 16 for the field.
-At full detail the ring took 136 ms a frame in Release on an RTX 5080, shading micro-triangles; simplified, 9 ms.
-The ring entity turns slowly about the planet; its lists were uploaded once and are not uploaded again as it turns.
+Poly Haven's rocks have 3,300 to 6,800 triangles each. Each kind loads at full detail and `GenerateLods` (ADR-0057)
+makes its levels once at spawn, halving to seven levels and 32 to 52 triangles with its UV seams free to collapse
+(`LodSettings::lockSeams` off: a scanned rock's islands lock the chain at a few hundred triangles otherwise), and the
+ring and the field draw the same mesh. The cull pass drops the copies outside the camera and draws each of the rest at
+the coarsest level whose error projects under a pixel, so the specks that are most of the ring are a few dozen
+triangles and the field's rocks beside the camera keep their detail. In Release on an RTX 5080 (an i7-13700KF under
+Windows 11) at 1280 by 720 with 4x MSAA and vsync off, the panel's frame time: looking across the ring from where the
+camera starts, every one of the 105,000 copies in view, 12.2 ms with culling on and 96 ms off (every copy at full
+detail); looking along the ring from inside it, 22,600 copies kept of 100,000, 10.2 ms on and 88 ms off. The ring this
+replaces, simplified by vertex clustering at spawn, measured 9 ms before the post effects and reflections of lighting
+tickets 25 to 31 were added, and 136 ms at full detail. The ring entity turns slowly about the planet; its lists were uploaded once and are not uploaded again as it turns.
 Beside the ring's outer edge floats a field of 5,000 rock entities, each its own MeshRenderer in one of nine tinted
 materials, which automatic instancing merges into a handful of draws, and beside the field a station: a hull and six
 modules on spokes, glowing windows (emissive, strength 6) and on each module a coloured beacon with a point light that
@@ -138,8 +145,14 @@ scene says so on screen.
 
 The window's Scene part has the ring's count (cutting each list to its share, which bumps its revision and uploads it
 again), the merging switch (Renderer::SetAutomaticInstancing: the renderer's, so the other scenes keep it as it was left), the
-ring turning, and the last frame's draws, instances
-and uploads.
+ring turning, and the last frame's draws, instances, what the GPU drew of them (`RendererStats::instancesDrawn`, two
+frames behind) and uploads. Its Culling part (ADR-0057) has the GPU test (`Renderer::SetGpuCulling`; off, every copy
+draws at level 0, for comparison), occlusion culling (`Renderer::SetOcclusionCulling`; off, every copy inside the
+frustum draws, those the planet or the station hide too), freezing culling (`Renderer::SetCullingFrozen`: flying out of
+the frozen volume shows only what it kept, inside the frozen frustum's amber edges), the level-of-detail error in pixels
+(`Renderer::SetLodSelection`), how many copies drew at each level (`RendererStats::drawnByLod`) and how many each
+occlusion phase drew (`RendererStats::drawnByPhase`: visible last frame, then shown by the Hi-Z pyramid). The four are
+the renderer's, like merging, and the scene sets them back to on, on, following and a pixel each time it spawns.
 
 | Keys | |
 | --- | --- |
@@ -147,6 +160,10 @@ and uploads.
 | N | 10k, 50k or 100k ring rocks. |
 | I | Automatic instancing off or back on: the field's 5,000 rocks become 5,000 draws, and back to a handful. |
 | R | The ring turning or still. |
+| C | GPU culling off or back on. |
+| V | Occlusion culling off or back on: off, the rocks behind the planet draw too, and Drawn rises. |
+| F | Culling frozen where the camera is, or following it again. |
+| L | The next level-of-detail error: 1, 2, 4 or 0.5 pixels. |
 
 ### Forest clearing
 
@@ -477,6 +494,15 @@ Hand checks, on OpenGL:
   `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
 - The planet's shadow darkens the ring's far side behind it, its edge sliding over the rocks as the ring turns, and the
   field's rocks shadow one another.
+- With culling and levels on (ADR-0057) the full-detail ring is no slower than the clustered ring it replaces on the
+  same build (the clustered ring's 9 ms predates lighting tickets 25 to 31's post effects; 12.2 ms here), and the
+  field's rocks beside the camera keep their detail. Looking across the ring from the start,
+  Drawn equals Instances and most copies draw at the coarsest levels; looking along the ring from inside it, Drawn
+  falls to about a fifth. C off puts every copy at level 0 and the frame time up about eightfold.
+- At the default error of a pixel, no pop shows as the ring turns or the camera flies along it; L to 4 pixels makes the
+  ring's rocks visibly coarser and 0.5 finer, the counts shifting between the levels.
+- F, then flying out of the ring: only the copies the frozen view kept are drawn, inside the frozen frustum's amber
+  edges; F again fills the view in.
 
 ### Forest clearing
 

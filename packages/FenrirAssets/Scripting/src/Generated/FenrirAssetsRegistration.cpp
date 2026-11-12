@@ -18,6 +18,7 @@ namespace Fenrir::Generated
             extension.components = {};
             extension.events = {};
             extension.sharedStructs = {
+                Fenrir::MakeSharedStruct<Fenrir::LodSettings>("Fenrir.Assets.LodSettings"),
                 Fenrir::MakeSharedStruct<Fenrir::SamplerDescription>("Fenrir.Assets.SamplerDescription"),
                 Fenrir::MakeSharedStruct<Fenrir::MaterialTexture>("Fenrir.Assets.MaterialTexture"),
                 Fenrir::MakeSharedStruct<Fenrir::ScriptShaderParameter>("Fenrir.Assets.ShaderParameter"),
@@ -28,6 +29,10 @@ namespace Fenrir::Generated
                 Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::IsValid>("Fenrir.Assets.AssetsNative.IsValid"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::AddMesh, 11>::Call>("Fenrir.Assets.AssetsNative.AddMesh"),
                 Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::ReplaceMesh>("Fenrir.Assets.AssetsNative.ReplaceMesh"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::GenerateLods>("Fenrir.Assets.AssetsNative.GenerateLods"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::AddMeshLod>("Fenrir.Assets.AssetsNative.AddMeshLod"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::GetMeshLodErrors>("Fenrir.Assets.AssetsNative.GetMeshLodErrors"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::GetMeshLodIndices>("Fenrir.Assets.AssetsNative.GetMeshLodIndices"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::AddRenderTarget, 5>::Call>("Fenrir.Assets.AssetsNative.AddRenderTarget"),
                 Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::ResizeRenderTarget>("Fenrir.Assets.AssetsNative.ResizeRenderTarget"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::AddImage, 7>::Call>("Fenrir.Assets.AssetsNative.AddImage"),

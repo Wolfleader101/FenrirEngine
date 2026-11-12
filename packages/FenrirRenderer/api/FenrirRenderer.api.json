@@ -1186,7 +1186,7 @@
       "role": "component",
       "size": 28,
       "alignment": 4,
-      "doc": "Draws one mesh with one material many times, once per transform of an instance list, with no entity per copy (ADR-0051). Each copy is drawn at the entity's world matrix times its own transform, its colour multiplying the material's base colour in builtin:lit and builtin:unlit. The renderer uploads the list when it is new or its revision has moved on, so a list that never changes uploads once, however far the entity moves.\n\nOne draw a pass, whatever the count: never merged with other items, and never culled, copy by copy or whole. A transparent material sorts the whole list by the entity's world position. An empty or stale mesh or list is skipped (a stale one logged once per handle), as is a mesh with skin data; an empty or stale material draws with the fallback material, as a MeshRenderer's does.",
+      "doc": "Draws one mesh with one material many times, once per transform of an instance list, with no entity per copy (ADR-0051). Each copy is drawn at the entity's world matrix times its own transform, its colour multiplying the material's base colour in builtin:lit and builtin:unlit. The renderer uploads the list when it is new or its revision has moved on, so a list that never changes uploads once, however far the entity moves.\n\nOne draw a pass, whatever the count: never merged with other items. Its world bounds are the box around every copy's mesh box (ADR-0057; Renderer::GetWorldBounds), by which a camera it is wholly outside of leaves the whole list out; an opaque or masked list's copies are then culled one by one in the camera's cull pass, and a transparent list is sorted whole by the entity's world position. An empty or stale mesh or list is skipped (a stale one logged once per handle), as is a mesh with skin data; an empty or stale material draws with the fallback material, as a MeshRenderer's does.",
       "fields": [
         {
           "name": "mesh",
@@ -1245,6 +1245,45 @@
           "kind": "struct",
           "type": "Fenrir::Math::Vec3",
           "default": {}
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Math::Vec4",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 16,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::Math::Frustum",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 104,
+      "alignment": 8,
+      "doc": "The volume a view sees, as the planes that bound it in world space (ADR-0057): what the renderer culls against, public so a game culls or streams its own chunks and cells by the same maths. Each plane is a `Vec4` whose xyz is its unit normal pointing into the volume and whose w is its distance, so a point `p` is on the inside of it when `dot(xyz, p) + w >= 0`.",
+      "fields": [
+        {
+          "name": "m_planes",
+          "offset": 0,
+          "kind": "array",
+          "elementKind": "struct",
+          "elementType": "Fenrir::Math::Vec4",
+          "length": 6,
+          "default": [
+            {},
+            {},
+            {},
+            {},
+            {},
+            {}
+          ]
+        },
+        {
+          "name": "m_count",
+          "offset": 96,
+          "kind": "u64",
+          "default": 0
         }
       ]
     },
@@ -1481,9 +1520,9 @@
       "name": "Fenrir::RendererStats",
       "category": "struct",
       "role": "shared-struct",
-      "size": 32,
+      "size": 76,
       "alignment": 4,
-      "doc": "What the renderer did in its last drawn frame (ADR-0023).",
+      "doc": "What the renderer did in its last drawn frame (ADR-0023), except `instancesDrawn` and `drawnByLod`, read back from the most recent frame that has left flight (ADR-0057).",
       "fields": [
         {
           "name": "draws",
@@ -1500,43 +1539,80 @@
           "doc": "MeshRenderers drawn, one per item per view, however many draws they took, and the copies of each InstancedMeshRenderer's instance list, one per copy per view."
         },
         {
-          "name": "passes",
+          "name": "instancesDrawn",
           "offset": 8,
+          "kind": "u32",
+          "default": 0,
+          "doc": "MeshRenderers and instance list copies the GPU drew after each camera's cull pass (ADR-0057), summed over cameras, read back from the most recent frame that has left flight: usually two frames behind `instances`, the candidates this frame submitted. 0 until a frame has been read back."
+        },
+        {
+          "name": "drawnByLod",
+          "offset": 12,
+          "kind": "array",
+          "elementKind": "u32",
+          "length": 8,
+          "default": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "doc": "`instancesDrawn` by the level of detail each was drawn at (ADR-0057): entry `i` the MeshRenderers and copies drawn at level `i` of their mesh (level 0 its full detail), the last entry those drawn at that level or any coarser, so the entries sum to `instancesDrawn`."
+        },
+        {
+          "name": "drawnByPhase",
+          "offset": 44,
+          "kind": "array",
+          "elementKind": "u32",
+          "length": 2,
+          "default": [
+            0,
+            0
+          ],
+          "doc": "`instancesDrawn` by the occlusion culling phase each was drawn in (ADR-0057): the first entry the MeshRenderers and copies drawn as visible last frame (every survivor of a camera without occlusion culling), the second those drawn after the Hi-Z pyramid test showed them, so the two sum to `instancesDrawn`."
+        },
+        {
+          "name": "passes",
+          "offset": 52,
           "kind": "u32",
           "default": 0,
           "doc": "Render passes run."
         },
         {
           "name": "uploads",
-          "offset": 12,
+          "offset": 56,
           "kind": "u32",
           "default": 0,
           "doc": "Assets uploaded to the GPU by the prepare step: a mesh, a material's parameter block, or an instance list."
         },
         {
           "name": "paletteBytesUploaded",
-          "offset": 16,
+          "offset": 60,
           "kind": "u32",
           "default": 0,
           "doc": "Bytes copied into the frame's palette buffer: every skeleton palette the frame's draws read."
         },
         {
           "name": "distinctPalettesWritten",
-          "offset": 20,
+          "offset": 64,
           "kind": "u32",
           "default": 0,
           "doc": "Skeleton palettes written, one per skeleton and pose however many meshes and views draw it (ADR-0035)."
         },
         {
           "name": "skinnedDraws",
-          "offset": 24,
+          "offset": 68,
           "kind": "u32",
           "default": 0,
           "doc": "Skinned MeshRenderers drawn, one per item per view; part of `instances`."
         },
         {
           "name": "shadowDraws",
-          "offset": 28,
+          "offset": 72,
           "kind": "u32",
           "default": 0,
           "doc": "Draws into the sun's shadow cascades and the spot lights' shadow tiles (ADR-0050): one per run of matching casting items, merged as in `draws`, per cascade of each view, per shadowed spot light, and per shadowed point light (six times over for items whose shader draws its six faces one at a time)."

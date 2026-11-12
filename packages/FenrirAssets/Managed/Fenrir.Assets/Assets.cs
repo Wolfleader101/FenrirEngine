@@ -2,11 +2,12 @@ using Fenrir.Math;
 
 namespace Fenrir.Assets;
 
-// AddMesh, ReplaceMesh, AddRenderTarget, ResizeRenderTarget, AddImage, ReplaceImage and the instance lists' add, replace
-// and reads are generated (Generated/Assets.cs, from the natives' @facade marks in Scripting/src/AssetsScripting.cpp), each
-// taking the owner the native takes. This part holds what a description cannot say: the class doc, the generic methods
-// over the kind-generic natives, and the overloads that default the owner to the active scene and an instance list's
-// colours to none.
+// AddMesh, ReplaceMesh, the mesh levels of detail (GenerateLods, AddMeshLod, GetMeshLodErrors, GetMeshLodIndices),
+// AddRenderTarget, ResizeRenderTarget, AddImage, ReplaceImage and the instance lists' add, replace and reads are
+// generated (Generated/Assets.cs, from the natives' @facade marks in Scripting/src/AssetsScripting.cpp), each taking the
+// owner the native takes. This part holds what a description cannot say: the class doc, the generic methods over the
+// kind-generic natives, and the overloads that default the owner to the active scene, an instance list's colours to
+// none and the level-of-detail settings to C++'s.
 
 /// <summary>
 /// The asset store from C#: loading, adding, replacing and unloading assets, as FenrirAssets' <c>AssetStore</c> does in C++
@@ -56,6 +57,9 @@ public static partial class Assets
     public static AssetHandle<Mesh> AddMesh(ReadOnlySpan<Vector3> positions, ReadOnlySpan<Vector3> normals,
                                             ReadOnlySpan<Vector2> uvs, ReadOnlySpan<uint> indices) =>
         AddMesh(positions, normals, uvs, indices, AssetOwner.Scene);
+
+    /// <summary><see cref="GenerateLods(AssetHandle{Mesh}, LodSettings)"/> with C++'s default <see cref="LodSettings"/>.</summary>
+    public static bool GenerateLods(AssetHandle<Mesh> mesh) => GenerateLods(mesh, new LodSettings());
 
     /// <summary><see cref="AddRenderTarget(int, int, AssetOwner)"/> for the active scene.</summary>
     public static AssetHandle<Image> AddRenderTarget(int width, int height) => AddRenderTarget(width, height, AssetOwner.Scene);

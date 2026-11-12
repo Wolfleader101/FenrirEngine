@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 #include "Backend/OpenGL/OpenGLDevice.hpp"
@@ -908,22 +909,6 @@ namespace Fenrir
             }
         }
 
-        /** @brief `box` moved by `matrix`: the box around its eight corners, moved. */
-        Math::AABB Moved(const Math::AABB& box, const Math::Mat4& matrix)
-        {
-            Math::AABB moved;
-            for (int corner = 0; corner < 8; ++corner)
-            {
-                const Math::Vec3 local((corner & 1) != 0 ? box.max.x : box.min.x,
-                                       (corner & 2) != 0 ? box.max.y : box.min.y,
-                                       (corner & 4) != 0 ? box.max.z : box.min.z);
-                const Math::Vec3 point(matrix * Math::Vec4(local, 1.0f));
-                moved.min = corner == 0 ? point : glm::min(moved.min, point);
-                moved.max = corner == 0 ? point : glm::max(moved.max, point);
-            }
-            return moved;
-        }
-
         /**
          * @brief A skinned mesh's world bounds (ADR-0035): each bone's box moved by its palette matrix, and the box of
          * unweighted vertices, all under the skeleton entity's `world`. Empty when the skin bounds nothing.
@@ -932,19 +917,17 @@ namespace Fenrir
                                                 const Math::Mat4& world)
         {
             std::optional<Math::AABB> bounds;
-            const auto add = [&](const Math::AABB& box) {
-                bounds = bounds ? Math::AABB{glm::min(bounds->min, box.min), glm::max(bounds->max, box.max)} : box;
-            };
+            const auto add = [&](const Math::AABB& box) { bounds = bounds ? Math::Union(*bounds, box) : box; };
             for (std::size_t bone = 0; bone < skin.boneBounds.size() && bone < palette.size(); ++bone)
             {
                 if (skin.boneBounds[bone].has_value())
                 {
-                    add(Moved(*skin.boneBounds[bone], world * palette[bone]));
+                    add(Math::Moved(*skin.boneBounds[bone], world * palette[bone]));
                 }
             }
             if (skin.unweightedBounds.has_value())
             {
-                add(Moved(*skin.unweightedBounds, world));
+                add(Math::Moved(*skin.unweightedBounds, world));
             }
             return bounds;
         }
@@ -1061,15 +1044,14 @@ namespace Fenrir
             draw.skinned = true;
             draw.paletteOffset = range->second;
             draw.world = GetWorldMatrix(skeleton);
+            // Its record carries its skinned bounds (ADR-0057), which a transparent one is also sorted and culled by.
+            draw.bounds = SkinnedBounds(skin, source->GetPalette(scene, skeleton), draw.world);
             const MaterialData* material =
                 store.TryGet(AssetHandle<Material>{draw.material.index, draw.material.generation});
-            if (material != nullptr &&
+            if (draw.bounds.has_value() && material != nullptr &&
                 (material->blendMode == BlendMode::AlphaBlend || material->blendMode == BlendMode::Additive))
             {
-                if (const auto bounds = SkinnedBounds(skin, source->GetPalette(scene, skeleton), draw.world))
-                {
-                    draw.sortPoint = (bounds->min + bounds->max) * 0.5f;
-                }
+                draw.sortPoint = (draw.bounds->min + draw.bounds->max) * 0.5f;
             }
             return true;
         }
@@ -1155,7 +1137,8 @@ namespace Fenrir
                 const std::uint32_t revision = store.Revision(renderer.instances);
                 if (!state.scene->IsInstanceListCurrent(KeyOf(renderer.instances), revision))
                 {
-                    state.scene->PrepareInstanceList(KeyOf(renderer.instances), revision, *list);
+                    state.scene->PrepareInstanceList(KeyOf(renderer.instances), revision, *list,
+                                                     store.TryGet(renderer.mesh)->bounds);
                 }
                 Render::DrawRequest draw;
                 draw.mesh = KeyOf(renderer.mesh);
@@ -1395,6 +1378,15 @@ namespace Fenrir
                 const Render::SceneStats scene = state.scene->TakeStats();
                 state.stats.draws = scene.draws;
                 state.stats.instances = scene.instances;
+                state.stats.instancesDrawn = scene.instancesDrawn;
+                static_assert(std::extent_v<decltype(RendererStats::drawnByLod)> ==
+                                  std::tuple_size_v<decltype(scene.drawnByLod)>,
+                              "RendererStats::drawnByLod counts as many levels as SceneStats::drawnByLod");
+                static_assert(std::extent_v<decltype(RendererStats::drawnByPhase)> ==
+                                  std::tuple_size_v<decltype(scene.drawnByPhase)>,
+                              "RendererStats::drawnByPhase counts as many phases as SceneStats::drawnByPhase");
+                std::ranges::copy(scene.drawnByLod, std::begin(state.stats.drawnByLod));
+                std::ranges::copy(scene.drawnByPhase, std::begin(state.stats.drawnByPhase));
                 state.stats.passes = report.passesRun;
                 state.stats.uploads = scene.uploads;
                 state.stats.paletteBytesUploaded = scene.paletteBytes;
@@ -1580,6 +1572,9 @@ namespace Fenrir
             state->core->Device(), *app.Logger(), SupportedMsaa(app, config), config.automaticInstancing,
             config.computeSkinning, cascades, spotShadows, pointShadows);
         scene->SetClusteredLights(config.clusteredLights);
+        scene->SetGpuCulling(config.gpuCulling);
+        scene->SetOcclusionCulling(config.occlusionCulling);
+        scene->SetLodSelection(config.lodErrorPixels, config.minProjectedPixels);
         state->scene = scene.get();
         // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
         // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).
@@ -1649,6 +1644,38 @@ namespace Fenrir
         }
     }
 
+    void Renderer::SetGpuCulling(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetGpuCulling(on);
+        }
+    }
+
+    void Renderer::SetOcclusionCulling(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetOcclusionCulling(on);
+        }
+    }
+
+    void Renderer::SetCullingFrozen(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetCullingFrozen(on);
+        }
+    }
+
+    void Renderer::SetLodSelection(float lodErrorPixels, float minProjectedPixels)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetLodSelection(lodErrorPixels, minProjectedPixels);
+        }
+    }
+
     void Renderer::SetSpotShadowBudget(std::uint32_t budget)
     {
         if (m_state != nullptr)
@@ -1667,19 +1694,46 @@ namespace Fenrir
 
     std::optional<Math::AABB> Renderer::GetWorldBounds(const Entity& entity) const
     {
-        if (m_state == nullptr || !entity.IsValid() || !entity.HasComponent<MeshRenderer>())
+        if (m_state == nullptr || !entity.IsValid())
         {
             return std::nullopt;
         }
         const AssetStore* store = m_state->app->TryGetResource<AssetStore>();
-        const MeshData* mesh = store == nullptr ? nullptr : store->TryGet(entity.GetComponent<MeshRenderer>().mesh);
+        if (store == nullptr)
+        {
+            return std::nullopt;
+        }
+        if (entity.HasComponent<InstancedMeshRenderer>())
+        {
+            // The box around every copy (ADR-0057): the core's, computed when the list was uploaded, else from the
+            // list itself before its first frame.
+            const InstancedMeshRenderer& renderer = entity.GetComponent<InstancedMeshRenderer>();
+            const MeshData* mesh = store->TryGet(renderer.mesh);
+            const InstanceListData* list = store->TryGet(renderer.instances);
+            if (mesh == nullptr || list == nullptr || list->transforms.empty())
+            {
+                return std::nullopt;
+            }
+            std::optional<Math::AABB> local;
+            if (m_state->scene->IsInstanceListCurrent(KeyOf(renderer.instances), store->Revision(renderer.instances)))
+            {
+                local = m_state->scene->InstanceListBounds(KeyOf(renderer.instances), mesh->bounds);
+            }
+            return Math::Moved(local.value_or(Render::CopiesBounds(list->transforms, mesh->bounds)),
+                               GetWorldMatrix(entity));
+        }
+        if (!entity.HasComponent<MeshRenderer>())
+        {
+            return std::nullopt;
+        }
+        const MeshData* mesh = store->TryGet(entity.GetComponent<MeshRenderer>().mesh);
         if (mesh == nullptr)
         {
             return std::nullopt;
         }
         if (!mesh->skin.has_value())
         {
-            return Moved(mesh->bounds, GetWorldMatrix(entity));
+            return Math::Moved(mesh->bounds, GetWorldMatrix(entity));
         }
         // A skinned mesh (ADR-0035), from its skeleton's pose now; it is not drawn without a SkinnedMesh.
         SkinningSource* source = SkinningSourceOf(*m_state->app);
@@ -1758,6 +1812,20 @@ namespace Fenrir
         }
         const Math::Mat4& world = resolved->world;
         return Math::Ray(Math::Vec3(world * Math::Vec4(origin, 1.0f)), Math::Vec3(world * Math::Vec4(direction, 0.0f)));
+    }
+
+    std::optional<Math::Frustum> Renderer::GetFrustum(const Entity& camera) const
+    {
+        if (m_state == nullptr)
+        {
+            return std::nullopt;
+        }
+        const std::optional<ResolvedCamera> resolved = PickingCamera(*m_state, camera);
+        if (!resolved)
+        {
+            return std::nullopt;
+        }
+        return Math::Frustum::FromViewProjection(resolved->projection * glm::inverse(resolved->world));
     }
 
     std::optional<Math::Vec2> Renderer::WorldToScreenPoint(const Entity& camera, Math::Vec3 point) const
@@ -1856,6 +1924,26 @@ namespace Fenrir
         Renderer(InstalledState(app)).SetClusteredLights(on);
     }
 
+    void Renderer::SetGpuCulling(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetGpuCulling(on);
+    }
+
+    void Renderer::SetOcclusionCulling(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetOcclusionCulling(on);
+    }
+
+    void Renderer::SetCullingFrozen(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetCullingFrozen(on);
+    }
+
+    void Renderer::SetLodSelection(App& app, float lodErrorPixels, float minProjectedPixels)
+    {
+        Renderer(InstalledState(app)).SetLodSelection(lodErrorPixels, minProjectedPixels);
+    }
+
     void Renderer::SetSpotShadowBudget(App& app, std::uint32_t budget)
     {
         Renderer(InstalledState(app)).SetSpotShadowBudget(budget);
@@ -1879,6 +1967,11 @@ namespace Fenrir
     std::optional<Math::Vec2> Renderer::WorldToScreenPoint(App& app, const Entity& camera, Math::Vec3 point)
     {
         return Renderer(InstalledState(app)).WorldToScreenPoint(camera, point);
+    }
+
+    std::optional<Math::Frustum> Renderer::GetFrustum(App& app, const Entity& camera)
+    {
+        return Renderer(InstalledState(app)).GetFrustum(camera);
     }
 
     Entity Renderer::CameraAt(App& app, WindowId window, Math::Vec2 point)

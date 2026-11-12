@@ -428,6 +428,10 @@ static_assert(sizeof(Fenrir::InstancedMeshRenderer) == 28 && alignof(Fenrir::Ins
               "Fenrir::InstancedMeshRenderer is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
+static_assert(sizeof(Fenrir::Math::Vec4) == 16 && alignof(Fenrir::Math::Vec4) == 4,
+              "Fenrir::Math::Vec4 is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
 static_assert(sizeof(Fenrir::Math::Vec2) == 8 && alignof(Fenrir::Math::Vec2) == 4,
               "Fenrir::Math::Vec2 is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
@@ -499,14 +503,17 @@ struct Iris::StructMapping<Fenrir::RendererStats>
     static constexpr auto fields = Iris::StructFields(
         Iris::Field<std::uint32_t>("Draws", 0),
         Iris::Field<std::uint32_t>("Instances", 4),
-        Iris::Field<std::uint32_t>("Passes", 8),
-        Iris::Field<std::uint32_t>("Uploads", 12),
-        Iris::Field<std::uint32_t>("PaletteBytesUploaded", 16),
-        Iris::Field<std::uint32_t>("DistinctPalettesWritten", 20),
-        Iris::Field<std::uint32_t>("SkinnedDraws", 24),
-        Iris::Field<std::uint32_t>("ShadowDraws", 28));
+        Iris::Field<std::uint32_t>("InstancesDrawn", 8),
+        Iris::Field<std::uint32_t[8]>("DrawnByLod", 12),
+        Iris::Field<std::uint32_t[2]>("DrawnByPhase", 44),
+        Iris::Field<std::uint32_t>("Passes", 52),
+        Iris::Field<std::uint32_t>("Uploads", 56),
+        Iris::Field<std::uint32_t>("PaletteBytesUploaded", 60),
+        Iris::Field<std::uint32_t>("DistinctPalettesWritten", 64),
+        Iris::Field<std::uint32_t>("SkinnedDraws", 68),
+        Iris::Field<std::uint32_t>("ShadowDraws", 72));
 };
-static_assert(sizeof(Fenrir::RendererStats) == 32 && alignof(Fenrir::RendererStats) == 4,
+static_assert(sizeof(Fenrir::RendererStats) == 76 && alignof(Fenrir::RendererStats) == 4,
               "Fenrir::RendererStats is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 

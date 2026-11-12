@@ -29,6 +29,7 @@ above it, and each spark's where it is.
 | Press `Space`: five `Spark N` names appear in a row above the boxes and vanish a couple of seconds later. | **Creating and destroying entities from C#**, giving them components and names, and **changes landing between systems** (the `Dresser` sees the sparks the `Spawner` made a moment before, the `Reaper`'s destroys never disturb its own loop). | `Sparks.cs` |
 | `C++ saw a burst of 5 sparks sent from C#.` | **An event from C# to C++**: `Burst` is one queue read by both languages. | `Controls.cs`, `Sparks.cs`, `Showcase.cpp` |
 | `Spark 3 burnt out.` | **An event only C# defines** (`Expired`): no C++ type and no registration; the build finds it and the engine makes its queue. | `Sparks.cs` |
+| Press `G`: `G: GPU culling off; 2 of 2 instances drawn.` in the log a few frames later (`0 of 2` on the null backend, which runs no cull shader); `G` again turns it back on. | **The renderer's switches and statistics from C#**: `Renderer.SetGpuCulling` turns the GPU frustum test (ADR-0057) off or on, and `Renderer.Stats` reads what the cull passes drew, through the `Fenrir.Renderer` contract. | `Culling.cs` |
 | Edit a script while the demo runs (below). | **Hot reload**, with the data kept: the spin angles carry on. | all of them |
 
 Each system reads events through readers of its own (`EventReader<T>` fields in C#, captured in the lambda in C++), so it
@@ -40,6 +41,7 @@ handles each event once, whichever language sent it. `Bob` and `Burst` are the a
 |---|---|
 | `R` | Reverses the boxes' spin. |
 | `Space` | A burst of five sparks. |
+| `G` | Turns the renderer's GPU culling off, or back on, and logs what the cull passes drew. |
 
 ### Change the script while the demo runs
 
@@ -56,9 +58,9 @@ See "Hot reload" in `packages/FenrirScripting/README.md`. Smoke runs turn hot re
 ## Smoke runs
 
 CTest runs `ScriptingDemo-Smoke-null` and `ScriptingDemo-Smoke-opengl`, as for every demo app, and
-`ScriptingDemo-Showcase-null` and `ScriptingDemo-Showcase-opengl`: 900 frames of Showcase with R and Space pressed, which
-pass only if the log has the lines above (the spin, `Bob.Phase` read by C++, the key event, the burst and a burnt-out
-spark; `cmake/CheckShowcaseLog.cmake`).
+`ScriptingDemo-Showcase-null` and `ScriptingDemo-Showcase-opengl`: 900 frames of Showcase with R, Space and G pressed,
+which pass only if the log has the lines above (the spin, `Bob.Phase` read by C++, the key event, the burst, a burnt-out
+spark and the culling switch with its count; `cmake/CheckShowcaseLog.cmake`).
 
 ## Hand checks
 
@@ -72,6 +74,8 @@ spark; `cmake/CheckShowcaseLog.cmake`).
 - Space puts five `Spark N` names in a row above the boxes, logs `C++ saw a burst of 5 sparks sent from C#.`, and
   over the next two to four seconds each name vanishes as `Spark N burnt out.` is logged. Several presses number the
   sparks on (`Spark 6`, `Spark 7`…).
+- G logs `G: GPU culling off; 2 of 2 instances drawn.` a few frames later, and the boxes look as they did (culling
+  off draws everything, so nothing changes on screen); G again logs `G: GPU culling on; 2 of 2 instances drawn.`.
 - Hot reload: with the demo running, change `RadiansPerSecond` in `scripts/Spin.cs`'s `SpinSetup` to `3.0f` and the log
   message, and build `ScriptingDemoDeployScripts`. The log says `Scripting: reloaded 'ScriptingDemo.Scripts.dll'`, the
   boxes keep turning from where they were, without a jump, and PageDown (which enters Showcase again) spawns them

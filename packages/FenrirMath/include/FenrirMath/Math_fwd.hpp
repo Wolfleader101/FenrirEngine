@@ -29,4 +29,11 @@ namespace Fenrir::Math
         }
     };
 
+    /** @brief A sphere: a centre and a radius. */
+    struct Sphere
+    {
+        Vec3 centre{0.0f};
+        float radius = 0.0f;
+    };
+
 } // namespace Fenrir::Math

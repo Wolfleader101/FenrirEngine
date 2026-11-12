@@ -297,7 +297,7 @@ TEST_CASE("A camera's flare runs in PostProcess after its streaks, from bloom's 
 
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
-    std::vector<std::string> expected{"BrdfLut", "DepthPrepass", "Opaque", "Background"};
+    std::vector<std::string> expected{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background"};
     expected.insert(expected.end(), 6, "BloomDownsample");
     expected.insert(expected.end(), 8, "StreakDownsample");
     expected.insert(expected.end(), {"FlareGhosts", "FlareBlur"});
@@ -305,7 +305,8 @@ TEST_CASE("A camera's flare runs in PostProcess after its streaks, from bloom's 
     expected.emplace_back("BloomComposite");
     expected.insert(expected.end(), 7, "StreakUpsample");
     expected.emplace_back("StreakComposite");
-    expected.insert(expected.end(), {"FlareComposite", "Output"});
+    expected.insert(expected.end(), {"FlareComposite", "Output", "CullReadback"});
+    expected = RendererTest::WithOcclusion(expected);
     INFO("the ghosts and their blur read level 1 before bloom's upsamples blend over it, as the streaks' downsamples "
          "read level 0; the flare's composite follows the streaks'");
     REQUIRE(Labels(passes) == expected);
@@ -358,9 +359,9 @@ TEST_CASE("A camera with bloom off still flares, running bloom's first two downs
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
     INFO("two downsamples of SceneColor down to level 1, then the flare's passes; no bloom upsample or composite");
-    REQUIRE(Labels(passes) == std::vector<std::string>{"BrdfLut", "DepthPrepass", "Opaque", "Background",
-                                                       "BloomDownsample", "BloomDownsample", "FlareGhosts", "FlareBlur",
-                                                       "FlareComposite", "Output"});
+    REQUIRE(Labels(passes) == RendererTest::WithOcclusion({"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background",
+                                                           "BloomDownsample", "BloomDownsample", "FlareGhosts",
+                                                           "FlareBlur", "FlareComposite", "Output", "CullReadback"}));
     REQUIRE(Samples(RendererTest::Labelled(passes, "FlareGhosts").at(0),
                     RendererTest::Labelled(passes, "BloomDownsample").at(1).pass.colour.at(0).texture));
     INFO("an intensity over 1 mixes in the flare alone, and the ghost count is held to MaxGhosts");
