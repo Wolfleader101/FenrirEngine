@@ -155,7 +155,16 @@ namespace Fenrir::Detail
     {
         StyleIndex index;
         std::uint32_t order = 0;
+        std::vector<StylesheetEntry*> entries;
+        if (state.defaultSheet != nullptr)
+        {
+            entries.push_back(state.defaultSheet.get());
+        }
         for (const std::unique_ptr<StylesheetEntry>& entry : state.sheets)
+        {
+            entries.push_back(entry.get());
+        }
+        for (StylesheetEntry* entry : entries)
         {
             for (const std::shared_ptr<const CompiledKeyframes>& keyframes : entry->keyframes)
             {
@@ -170,6 +179,23 @@ namespace Fenrir::Detail
                     const auto at = static_cast<std::uint32_t>(index.selectors.size());
                     index.selectors.push_back({&selector, &rule});
                     index.hasCombinators = index.hasCombinators || selector.compounds.size() > 1;
+                    for (std::size_t c = 0; c + 1 < selector.compounds.size(); ++c)
+                    {
+                        const CompoundSelector& above = selector.compounds[c];
+                        if (above.tag.empty() && above.id.empty() && above.classes.empty())
+                        {
+                            index.anyAbove = true;
+                        }
+                        if (!above.tag.empty())
+                        {
+                            index.aboveTags.insert(above.tag);
+                        }
+                        if (!above.id.empty())
+                        {
+                            index.aboveIds.insert(above.id);
+                        }
+                        index.aboveClasses.insert(above.classes.begin(), above.classes.end());
+                    }
                     for (const CompoundSelector& compound : selector.compounds)
                     {
                         constexpr auto siblings = static_cast<std::uint8_t>(StructuralPseudoClass::FirstChild) |
@@ -202,7 +228,7 @@ namespace Fenrir::Detail
     }
 
     void Cascade(UIRootState& state, std::uint32_t index, ResolvedStyle& style,
-                 std::shared_ptr<const CustomProperties>& custom)
+                 std::shared_ptr<const CustomProperties>& custom, PseudoElement pseudoElement)
     {
         ElementSlot& slot = state.slots[index];
         const ElementId id{index, slot.version};
@@ -229,7 +255,8 @@ namespace Fenrir::Detail
             for (const std::uint32_t at : candidates)
             {
                 const IndexedSelector& candidate = styles.selectors[at];
-                if (MatchFrom(state, *candidate.selector, candidate.selector->compounds.size() - 1, id))
+                if (candidate.selector->pseudoElement == pseudoElement &&
+                    MatchFrom(state, *candidate.selector, candidate.selector->compounds.size() - 1, id))
                 {
                     matched.push_back(candidate);
                 }
@@ -335,6 +362,9 @@ namespace Fenrir::Detail
                 }
             }
         }
-        state.slots[index].inlineStyle.ApplyTo(style);
+        if (pseudoElement == PseudoElement::None)
+        {
+            state.slots[index].inlineStyle.ApplyTo(style);
+        }
     }
 } // namespace Fenrir::Detail

@@ -27,6 +27,13 @@ namespace Fenrir
         bool offscreenGroups = true;
     };
 
+    /**
+     * @brief FenrirUI's default stylesheet, as CSS: embedded in the package from `Resources/default.css` and given to
+     * every root made with UIRootConfig::defaultStylesheet, under the root's own sheets. A game that wants a look of
+     * its own from the same start can copy it.
+     */
+    [[nodiscard]] std::string_view DefaultStylesheet() noexcept;
+
     /** @brief What UI::Install is given. */
     struct UIConfig
     {
@@ -35,7 +42,8 @@ namespace Fenrir
 
     /**
      * @brief The UI's app resource, which UI::Install adds: it makes and destroys the UI roots, which several may share
-     * the app, ordered by layer; holds the registry of element tags; and holds the switches. Its frame system runs
+     * the app, ordered by layer; holds the registry of element tags, which starts with the controls' (Controls.hpp:
+     * `button`, `checkbox`, `slider`, `progress`, `image` and `scroll`); and holds the switches. Its frame system runs
      * every root's frame in PostUpdate, lowest layer first, roots of one layer in the order they were made.
      */
     class UIRoots

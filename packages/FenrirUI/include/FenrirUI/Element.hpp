@@ -120,19 +120,29 @@ namespace Fenrir
         }
 
         /**
-         * @brief Sees an input the root's input router routes to the element, before the UIEvent it makes is sent: a
-         * button press or scroll over it (it is the topmost element under the pointer taking pointer input), the
-         * release of a button pressed on it, pointer motion while a button pressed on it is held or else while it is
-         * under the pointer, and keys and text while it has the focus. Returning Consumed says it took the input
-         * itself, which skips the root's default action: a press then leaves the focus where it was, and Tab does not
-         * move it. The input is consumed either way, as the router's rules say (ADR-0065), except motion, which always
-         * reaches the game.
+         * @brief Sees an input the root's input router routes to the element or to an element under it, before the
+         * UIEvent it makes is sent: a button press or scroll over it (it is the topmost element under the pointer
+         * taking pointer input), the release of a button pressed on it, pointer motion while a button pressed on it is
+         * held or else while it is under the pointer, and keys and text while it has the focus. The input is offered
+         * to that element first, then to each ancestor in turn until one returns Consumed, so a scroll view sees the
+         * wheel over its rows. Returning Consumed says it took the input itself, which stops it there and skips the
+         * root's default action: a press then leaves the focus where it was, and Tab does not move it. The input is
+         * consumed either way, as the router's rules say (ADR-0065), except motion, which always reaches the game.
          */
         virtual RouteResult OnInput(App& app, const RoutedInput& input)
         {
             (void)app;
             (void)input;
             return RouteResult::Passed;
+        }
+
+      protected:
+        /**
+         * @brief Called once the element is in its root, at the end of UIRoot::Create: a control makes its own
+         * children here and makes itself focusable.
+         */
+        virtual void OnCreate()
+        {
         }
 
       private:

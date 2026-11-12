@@ -15,8 +15,8 @@
 
 **Touches:** `packages/FenrirUI/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Headless App tests with the test feed: a button clicked sends click and not when the release is outside; Space on a focused button clicks; a checkbox toggles and reports `:checked` and change; a slider dragged to its middle reports the mid value snapped to its step, arrows move by a step; a progress bar's fill rectangle is the fraction of its track; an image measures its asset's size under each fit; a scroll view scrolls by the wheel, clamps at its content's end, drags its bar, and hit-tests a child at its scrolled position.
-- [ ] Default stylesheet tests: every control resolves a background, text colour and focus ring from the embedded sheet with no game sheet; a game sheet overrides it by specificity.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Headless App tests with the test feed: a button clicked sends click and not when the release is outside; Space on a focused button clicks; a checkbox toggles and reports `:checked` and change; a slider dragged to its middle reports the mid value snapped to its step, arrows move by a step; a progress bar's fill rectangle is the fraction of its track; an image measures its asset's size under each fit; a scroll view scrolls by the wheel, clamps at its content's end, drags its bar, and hit-tests a child at its scrolled position.
+- [x] Default stylesheet tests: every control resolves a background, text colour and focus ring from the embedded sheet with no game sheet; a game sheet overrides it by specificity.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

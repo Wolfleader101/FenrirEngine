@@ -14,6 +14,7 @@
 #include "FenrirUI/UI.hpp"
 #include "FenrirWindow/Window.hpp"
 #include "Rects.hpp"
+#include "Scrolling.hpp"
 #include "StyleAnimation.hpp"
 #include "StyleValues.hpp"
 #include "UIRootState.hpp"
@@ -131,6 +132,25 @@ namespace Fenrir
                     Detail::StartTransitions(slot.motion, slot.cascaded, style);
                 }
                 Detail::ReconcileAnimations(slot.motion, style, state.index.keyframes);
+                if (style.overflow == Overflow::Scroll)
+                {
+                    // Its scrollbars are parts of it: they inherit from it and match its pseudo-classes.
+                    auto parts = std::make_unique<Detail::ScrollbarStyles>();
+                    const auto resolvePart = [&](ResolvedStyle& part, PseudoElement pseudoElement) {
+                        Detail::Inherit(style, part);
+                        std::shared_ptr<const Detail::CustomProperties> partCustom = slot.customProperties;
+                        Detail::Cascade(state, index, part, partCustom, pseudoElement);
+                    };
+                    resolvePart(parts->track, PseudoElement::Scrollbar);
+                    resolvePart(parts->thumb, PseudoElement::ScrollbarThumb);
+                    slot.scrollbarStyles = std::move(parts);
+                }
+                else
+                {
+                    slot.scrollbarStyles.reset();
+                    slot.scrollOffset = Math::Vec2(0.0f);
+                    slot.scrollRange = Math::Vec2(0.0f);
+                }
                 slot.cascaded = std::move(style);
                 slot.hasCascaded = true;
                 slot.styleDirty = false;
@@ -186,10 +206,33 @@ namespace Fenrir
                                            padding.right);
             }
             const Rect2D childClip =
-                slot.resolved.overflow == Overflow::Hidden ? Detail::Intersect(clip, slot.boxes.padding) : clip;
+                slot.resolved.overflow != Overflow::Visible ? Detail::Intersect(clip, slot.boxes.padding) : clip;
+            Math::Vec2 offset(0.0f);
+            if (slot.resolved.overflow == Overflow::Scroll)
+            {
+                // Its content reaches as far as its children's border boxes, and its padding past them, from its
+                // padding box's top-left.
+                Math::Vec2 reach(0.0f);
+                for (const ElementId child : slot.children)
+                {
+                    const Detail::ElementSlot& under = state.slots[child.index];
+                    if (under.resolved.display == Display::None)
+                    {
+                        continue;
+                    }
+                    const Rect2D rect = state.layout.Result(under.node).rect;
+                    reach = glm::max(reach, Math::Vec2(rect.x + rect.width - border.left + padding.right,
+                                                       rect.y + rect.height - border.top + padding.bottom));
+                }
+                const Math::Vec2 shown(result.rect.width - border.left - border.right,
+                                       result.rect.height - border.top - border.bottom);
+                slot.scrollRange = glm::max(Math::Vec2(0.0f), reach - shown);
+                slot.scrollOffset = glm::clamp(slot.scrollOffset, Math::Vec2(0.0f), slot.scrollRange);
+                offset = slot.scrollOffset;
+            }
             for (const ElementId child : slot.children)
             {
-                ReadBoxes(state, child.index, left, top, childClip, pixelsPerUnit);
+                ReadBoxes(state, child.index, left - offset.x, top - offset.y, childClip, pixelsPerUnit);
             }
         }
 
@@ -260,11 +303,26 @@ namespace Fenrir
 
         /**
          * @brief Marks what a change to the element's classes, id or pseudo-classes can restyle: the element, and its
-         * subtree when a selector looks above its subject.
+         * subtree when a compound before a combinator may match it, by its tag, id or classes or by `former`, a class
+         * or id it has just lost.
          */
-        void MarkMatchDirty(Detail::UIRootState& state, ElementId id)
+        void MarkMatchDirty(Detail::UIRootState& state, ElementId id, std::string_view former = {})
         {
-            if (state.index.hasCombinators)
+            const Detail::ElementSlot* slot = state.Find(id);
+            if (slot == nullptr)
+            {
+                return;
+            }
+            const Detail::StyleIndex& index = state.index;
+            const auto named = [](const std::unordered_set<std::string>& names, std::string_view name) {
+                return !name.empty() && names.contains(std::string(name));
+            };
+            const bool above = index.anyAbove || named(index.aboveTags, slot->tag) ||
+                               named(index.aboveIds, slot->idString) || named(index.aboveIds, former) ||
+                               named(index.aboveClasses, former) ||
+                               std::any_of(slot->classes.begin(), slot->classes.end(),
+                                           [&](const std::string& name) { return named(index.aboveClasses, name); });
+            if (above)
             {
                 MarkSubtreeStyleDirty(state, id);
             }
@@ -341,6 +399,13 @@ namespace Fenrir
         slot.element->m_id = m_state->rootElement;
         slot.element->m_root = this;
         slot.node = m_state->layout.CreateNode(slot.element.get());
+        if (m_state->config.defaultStylesheet)
+        {
+            m_state->defaultSheet = std::make_unique<Detail::StylesheetEntry>();
+            m_state->defaultSheet->sheet = Stylesheet::Parse(DefaultStylesheet(), "FenrirUI default stylesheet");
+            Detail::CompileStylesheet(*m_state, *m_state->defaultSheet);
+            Detail::RebuildStyleIndex(*m_state);
+        }
         Detail::StartInput(*this, *m_state);
     }
 
@@ -381,6 +446,11 @@ namespace Fenrir
         return m_state->stats;
     }
 
+    App& UIRoot::GetApp() const noexcept
+    {
+        return m_state->app;
+    }
+
     ElementId UIRoot::GetRootElement() const noexcept
     {
         return m_state->rootElement;
@@ -417,6 +487,8 @@ namespace Fenrir
         Attach(*m_state, id, parent, index);
         MarkStyleDirty(*m_state, id);
         MarkChildrenMatchDirty(*m_state, parent);
+        // Last, as it may make children of its own, which can move the slots.
+        m_state->Find(id)->element->OnCreate();
         return id;
     }
 
@@ -462,7 +534,14 @@ namespace Fenrir
         Detach(*m_state, element);
         Attach(*m_state, element, newParent, index);
         // What it inherits, and what its ancestors let selectors match, may differ under its new parent.
-        MarkMatchDirty(*m_state, element);
+        if (m_state->index.hasCombinators)
+        {
+            MarkSubtreeStyleDirty(*m_state, element);
+        }
+        else
+        {
+            MarkStyleDirty(*m_state, element);
+        }
         MarkChildrenMatchDirty(*m_state, oldParent);
         MarkChildrenMatchDirty(*m_state, newParent);
         // What carries :hover, :active and :focus-within above it has changed.
@@ -522,8 +601,8 @@ namespace Fenrir
     {
         if (Detail::ElementSlot* slot = m_state->Find(element))
         {
-            slot->idString = std::string(id);
-            MarkMatchDirty(*m_state, element);
+            const std::string former = std::exchange(slot->idString, std::string(id));
+            MarkMatchDirty(*m_state, element, former);
         }
     }
 
@@ -589,8 +668,9 @@ namespace Fenrir
         const auto it = std::find(slot->classes.begin(), slot->classes.end(), name);
         if (it != slot->classes.end())
         {
+            const std::string former = std::move(*it);
             slot->classes.erase(it);
-            MarkMatchDirty(*m_state, element);
+            MarkMatchDirty(*m_state, element, former);
         }
     }
 
@@ -765,6 +845,39 @@ namespace Fenrir
         }
     }
 
+    Math::Vec2 UIRoot::GetScrollOffset(ElementId element) const noexcept
+    {
+        const Detail::ElementSlot* slot = m_state->Find(element);
+        return slot != nullptr ? slot->scrollOffset : Math::Vec2(0.0f);
+    }
+
+    void UIRoot::SetScrollOffset(ElementId element, Math::Vec2 offset)
+    {
+        Detail::ElementSlot* slot = m_state->Find(element);
+        if (slot == nullptr || slot->resolved.overflow != Overflow::Scroll)
+        {
+            return;
+        }
+        const Math::Vec2 clamped = glm::clamp(offset, Math::Vec2(0.0f), slot->scrollRange);
+        if (clamped != slot->scrollOffset)
+        {
+            slot->scrollOffset = clamped;
+            m_state->boxesDirty = true;
+        }
+    }
+
+    Math::Vec2 UIRoot::GetScrollRange(ElementId element) const noexcept
+    {
+        const Detail::ElementSlot* slot = m_state->Find(element);
+        return slot != nullptr ? slot->scrollRange : Math::Vec2(0.0f);
+    }
+
+    ScrollbarBoxes UIRoot::GetScrollbars(ElementId element) const noexcept
+    {
+        const Detail::ElementSlot* slot = m_state->Find(element);
+        return slot != nullptr ? Detail::ScrollbarsOf(*slot) : ScrollbarBoxes{};
+    }
+
     void UIRoot::SetFocusable(ElementId element, bool focusable)
     {
         Detail::ElementSlot* slot = m_state->Find(element);
@@ -803,6 +916,16 @@ namespace Fenrir
     ElementId UIRoot::GetHovered() const noexcept
     {
         return m_state->Find(m_state->input.hovered) != nullptr ? m_state->input.hovered : ElementId{};
+    }
+
+    std::optional<Math::Vec2> UIRoot::GetPointer() const noexcept
+    {
+        return m_state->input.pointer;
+    }
+
+    bool UIRoot::TakePress(ElementId element)
+    {
+        return Detail::TakePress(*this, *m_state, element);
     }
 
     ElementId UIRoot::HitTest(Math::Vec2 position) const
@@ -885,10 +1008,11 @@ namespace Fenrir
         state.stats.measures = state.layout.TakeMeasureCount();
 
         const float pixelsPerUnit = state.config.snapToPixels ? state.scale * contentScale : 0.0f;
-        if (laidOut || state.snappedAt != pixelsPerUnit)
+        if (laidOut || state.snappedAt != pixelsPerUnit || state.boxesDirty)
         {
             ReadBoxes(state, state.rootElement.index, 0.0f, 0.0f, {0.0f, 0.0f, uiSize.x, uiSize.y}, pixelsPerUnit);
             state.snappedAt = pixelsPerUnit;
+            state.boxesDirty = false;
         }
         if (fonts != nullptr)
         {

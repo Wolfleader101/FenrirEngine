@@ -80,10 +80,16 @@ namespace Fenrir
             {"root", 0, static_cast<std::uint8_t>(StructuralPseudoClass::Root)},
         }};
 
+        constexpr std::array<std::pair<std::string_view, PseudoElement>, 2> PseudoElements{{
+            {"scrollbar", PseudoElement::Scrollbar},
+            {"scrollbar-thumb", PseudoElement::ScrollbarThumb},
+        }};
+
         /** @brief Reads one complex selector; nothing, with `error` saying why, for one FenrirUI cannot match. */
         std::optional<Selector> ParseSelector(std::string_view text, std::string& error)
         {
             Selector selector;
+            bool ended = false;
             std::size_t i = 0;
             std::optional<SelectorCombinator> pending;
             const auto readName = [&]() {
@@ -96,6 +102,11 @@ namespace Fenrir
             };
             while (i < text.size())
             {
+                if (ended && !IsSpace(text[i]))
+                {
+                    error = "a pseudo-element must end its selector";
+                    return std::nullopt;
+                }
                 if (IsSpace(text[i]))
                 {
                     ++i;
@@ -127,8 +138,19 @@ namespace Fenrir
                     const char kind = text[i++];
                     if (kind == ':' && i < text.size() && text[i] == ':')
                     {
-                        error = "pseudo-elements (::) are not supported";
-                        return std::nullopt;
+                        ++i;
+                        const std::string lower = Detail::Lowered(readName());
+                        const auto found =
+                            std::find_if(PseudoElements.begin(), PseudoElements.end(),
+                                         [&](const auto& pseudoElement) { return pseudoElement.first == lower; });
+                        if (found == PseudoElements.end())
+                        {
+                            error = "'::" + lower + "' is not a pseudo-element FenrirUI knows";
+                            return std::nullopt;
+                        }
+                        selector.pseudoElement = found->second;
+                        ended = true;
+                        break;
                     }
                     if (kind != '.' && kind != '#' && kind != ':')
                     {
@@ -175,6 +197,13 @@ namespace Fenrir
                 }
                 if (!selector.compounds.empty())
                 {
+                    if (pending != SelectorCombinator::Child && compound.tag.empty() && compound.id.empty() &&
+                        compound.classes.empty() && compound.pseudoClasses == 0 && compound.structural == 0)
+                    {
+                        // `a ::scrollbar` is the scrollbar of any element under `a`, which no index bucket holds.
+                        error = "a pseudo-element must follow a compound selector";
+                        return std::nullopt;
+                    }
                     selector.combinators.push_back(pending.value_or(SelectorCombinator::Descendant));
                 }
                 pending.reset();
@@ -201,6 +230,7 @@ namespace Fenrir
                            static_cast<std::uint32_t>(std::popcount(compound.structural));
                 tags += compound.tag.empty() ? 0u : 1u;
             }
+            tags += selector.pseudoElement != PseudoElement::None ? 1u : 0u;
             selector.specificity =
                 (std::min(ids, 1023u) << 20u) | (std::min(classes, 1023u) << 10u) | std::min(tags, 1023u);
             return selector;
@@ -817,6 +847,14 @@ namespace Fenrir
                 out += combinators[i - 1] == SelectorCombinator::Child ? " > " : " ";
             }
             AppendCompound(out, compounds[i]);
+        }
+        for (const auto& [name, value] : PseudoElements)
+        {
+            if (value == pseudoElement)
+            {
+                out += "::";
+                out += name;
+            }
         }
         return out;
     }
