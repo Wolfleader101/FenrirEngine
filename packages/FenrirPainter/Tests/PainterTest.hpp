@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -94,5 +95,111 @@ namespace PainterTest
     inline bool HasFlag(const Fenrir::PainterVertex& vertex, std::uint8_t flag)
     {
         return (vertex.kinds[2] & flag) != 0;
+    }
+
+    /** @brief One triangle of a list, its corners' positions and coverages (a triangle vertex's coverage is local.x).
+     */
+    struct Triangle
+    {
+        std::array<Fenrir::Math::Vec2, 3> corners;
+        std::array<float, 3> coverage;
+
+        /** @brief Every corner fully covered: a triangle of the fill, not of its fringe. */
+        [[nodiscard]] bool IsSolid() const
+        {
+            return coverage[0] == 1.0f && coverage[1] == 1.0f && coverage[2] == 1.0f;
+        }
+
+        /** @brief Twice the signed area. */
+        [[nodiscard]] float Area() const
+        {
+            const Fenrir::Math::Vec2 u = corners[1] - corners[0];
+            const Fenrir::Math::Vec2 v = corners[2] - corners[0];
+            return 0.5f * std::abs(u.x * v.y - u.y * v.x);
+        }
+
+        /** @brief Whether `point` lies inside or on it. */
+        [[nodiscard]] bool Contains(Fenrir::Math::Vec2 point) const
+        {
+            const auto side = [&](std::size_t i) {
+                const Fenrir::Math::Vec2 a = corners[i];
+                const Fenrir::Math::Vec2 b = corners[(i + 1) % 3];
+                return (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x);
+            };
+            const float s0 = side(0);
+            const float s1 = side(1);
+            const float s2 = side(2);
+            return (s0 >= 0.0f && s1 >= 0.0f && s2 >= 0.0f) || (s0 <= 0.0f && s1 <= 0.0f && s2 <= 0.0f);
+        }
+    };
+
+    /** @brief Every triangle of the list's draws of shape kind Triangle, command by command, read through 16-bit
+     * indices. */
+    inline std::vector<Triangle> Triangles(const Fenrir::DrawList2D& list)
+    {
+        const std::vector<Fenrir::PainterVertex> vertices = Vertices(list);
+        const std::vector<std::uint16_t> indices = Indices16(list);
+        std::vector<Triangle> triangles;
+        for (const Fenrir::Command2D& entry : list.commands)
+        {
+            const auto* command = std::get_if<Fenrir::DrawCommand2D>(&entry);
+            if (command == nullptr)
+            {
+                continue;
+            }
+            for (std::uint32_t i = 0; i + 2 < command->indexCount; i += 3)
+            {
+                Triangle triangle{};
+                bool isPath = true;
+                for (std::size_t k = 0; k < 3; ++k)
+                {
+                    const Fenrir::PainterVertex& vertex =
+                        vertices[command->baseVertex + indices[command->indexOffset + i + k]];
+                    isPath = isPath && ShapeOf(vertex) == Fenrir::ShapeKind::Triangle;
+                    triangle.corners[k] = vertex.position;
+                    triangle.coverage[k] = vertex.local.x;
+                }
+                if (isPath)
+                {
+                    triangles.push_back(triangle);
+                }
+            }
+        }
+        return triangles;
+    }
+
+    /** @brief How many of `triangles` are solid (`solid`) or fringe (`!solid`). */
+    inline std::size_t Count(const std::vector<Triangle>& triangles, bool solid)
+    {
+        std::size_t count = 0;
+        for (const Triangle& triangle : triangles)
+        {
+            count += triangle.IsSolid() == solid ? 1 : 0;
+        }
+        return count;
+    }
+
+    /** @brief Whether a solid triangle covers `point`. */
+    inline bool Covered(const std::vector<Triangle>& triangles, Fenrir::Math::Vec2 point)
+    {
+        for (const Triangle& triangle : triangles)
+        {
+            if (triangle.IsSolid() && triangle.Contains(point))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** @brief The summed area of the solid triangles. */
+    inline float SolidArea(const std::vector<Triangle>& triangles)
+    {
+        float area = 0.0f;
+        for (const Triangle& triangle : triangles)
+        {
+            area += triangle.IsSolid() ? triangle.Area() : 0.0f;
+        }
+        return area;
     }
 } // namespace PainterTest

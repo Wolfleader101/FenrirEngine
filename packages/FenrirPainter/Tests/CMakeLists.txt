@@ -9,7 +9,8 @@ fenrir_add_catch2()
 set(renderer_tests "${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirRenderer/Tests")
 set(renderer_src "${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirRenderer/src")
 
-add_executable(FenrirPainterTests PainterTest.hpp Shapes.cpp Paints.cpp ClipsAndBatching.cpp Pipelines.cpp)
+add_executable(FenrirPainterTests PainterTest.hpp Shapes.cpp Paints.cpp ClipsAndBatching.cpp Pipelines.cpp Paths.cpp
+                                  Strokes.cpp)
 target_include_directories(FenrirPainterTests PRIVATE "${renderer_tests}" "${renderer_src}")
 target_link_libraries(FenrirPainterTests PRIVATE FenrirPainter FenrirRenderer FenrirRendererCore Catch2::Catch2WithMain)
 # RendererTestApp's material shader sampling one texture, which its helpers name.

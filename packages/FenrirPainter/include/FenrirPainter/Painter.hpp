@@ -11,10 +11,16 @@
 #include "FenrirMath/Math.hpp"
 #include "FenrirPainter/Paint.hpp"
 #include "FenrirPainter/PainterVertex.hpp"
+#include "FenrirPainter/Path.hpp"
 
 namespace Fenrir
 {
     class StopTexture;
+
+    namespace PainterDetail
+    {
+        struct Contour;
+    } // namespace PainterDetail
 
     /** @brief What a Painter draws with and into: its shader, its root's scale and blend space, and its options. */
     struct PainterConfig
@@ -39,12 +45,18 @@ namespace Fenrir
         IndexType2D indexType = IndexType2D::UInt16;
         /** @brief Where gradients of more than two stops get their rows; without one they use their end stops. */
         StopTexture* stops = nullptr;
+        /**
+         * @brief How far, in the target's pixels, a path's curves and a stroke's round joins and caps may stray from
+         * the lines they are flattened into, under the transform they are drawn with.
+         */
+        float tolerance = 0.25f;
     };
 
     /**
      * @brief The painter (ADR-0060): a value over one 2D draw list that appends shapes, each one quad of PainterVertex
-     * evaluated in the painter's shader, with a paint per call, under a save/restore stack of transform and clip. It
-     * keeps nothing between frames: make one over each frame's list.
+     * evaluated in the painter's shader, and paths, filled and stroked as triangles of the same vertex with a
+     * one-pixel anti-aliasing fringe, with a paint per call, under a save/restore stack of transform and clip. It keeps
+     * nothing between frames: make one over each frame's list.
      *
      * Coordinates are UI units, multiplied by the root scale into the list's logical units. Consecutive draws with the
      * same texture slots and scissor extend one command; a texture in a slot another draw of the command filled, or a
@@ -117,6 +129,24 @@ namespace Fenrir
         void DrawImage(const Rect2D& rect, const ImageDraw& image);
         /** @} */
 
+        /** @name Paths
+         * A path is flattened under the current transform to the configured tolerance, split by winding into loops
+         * that cross nowhere, its holes bridged, and ear-clipped into triangles of shape kind Triangle, with a fringe
+         * ring a pixel wide round every loop: half a pixel inside the edge fully covered, half a pixel outside it not.
+         * @{
+         */
+        /** @brief The region `path` covers by its fill rule, filled with `paint`. */
+        void FillPath(const Path& path, const Paint& paint);
+        /**
+         * @brief `path` stroked with `style` and `paint`: the fill of `path.StrokeOutline(style)` at the configured
+         * tolerance. A hairline is one pixel wide, and so is a stroke thinner than a pixel, its colour faded to the
+         * width it has. A circle, or in a colour a rectangle or rounded rectangle, made by one
+         * helper and stroked with no dashes is one analytic ring or border quad instead, unless its sharp corners
+         * would not miter.
+         */
+        void StrokePath(const Path& path, const StrokeStyle& style, const Paint& paint);
+        /** @} */
+
       private:
         /** @brief The paint's part of a quad: its transform into paint space and the textures it samples. */
         struct PaintSetup
@@ -168,15 +198,25 @@ namespace Fenrir
         void SetClip(const Rect2D& rect, const CornerRadii& radii);
         /** @brief `rect` with its edges on whole pixels, when snapping is on and the transform axis-aligned. */
         [[nodiscard]] Rect2D Snap(const Rect2D& rect) const;
+        /** @brief Sets `paint` in `vertex` and `setup`; false when the paint has nothing to draw. */
+        [[nodiscard]] bool SetPaint(PainterVertex& vertex, PaintSetup& setup, const Paint& paint) const;
         /** @brief Sets the quad's paint and emits it, unless the paint has nothing to draw. */
         void DrawShape(Quad quad, const Paint& paint);
         /** @brief Appends the quad's four vertices and six indices, its paint set up by `paint`. */
         void Emit(const Quad& quad, const PaintSetup& paint);
+        /** @brief The target's pixels per logical unit, one when the configuration gives none. */
+        [[nodiscard]] float PixelsPerUnit() const;
+        /** @brief The tolerance in logical units: the configured pixels at the target's pixels per unit. */
+        [[nodiscard]] float LogicalTolerance() const;
+        /** @brief The fill of `contours`, in logical units, by `rule`, with `paint`. */
+        void FillContours(const std::vector<PainterDetail::Contour>& contours, FillRule rule, const Paint& paint);
+        /** @brief Strokes `path` analytically when it is one helper's circle or rounded rectangle; false otherwise. */
+        bool StrokeShape(const Path& path, const StrokeStyle& style, const Paint& paint);
         /**
-         * @brief Makes room for one quad needing `image` and `stops` in the command it extends or starts; returns the
-         * quad's first vertex counted from the command's base vertex.
+         * @brief Makes room for `vertices` vertices and `indices` indices needing the paint's textures in the command
+         * it extends or starts; returns the first vertex counted from the command's base vertex.
          */
-        [[nodiscard]] std::uint32_t BeginQuad(const PaintSetup& paint);
+        [[nodiscard]] std::uint32_t ReserveDraw(const PaintSetup& paint, std::uint32_t vertices, std::uint32_t indices);
 
         DrawList2D& m_list;
         PainterConfig m_config;
