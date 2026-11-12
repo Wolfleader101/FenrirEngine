@@ -260,7 +260,7 @@ One session, branch and PR per ticket, into `fenrir-ui` or the previous ticket's
 | 04 | [Painter paths and strokes](issues/04-painter-paths-and-strokes.md) | 03 | `ui/04-painter-paths-and-strokes` | [#334](https://github.com/Wolfleader101/FenrirEngine/pull/334) |
 | 05 | [Painter groups, filters, masks and backdrop blur](issues/05-painter-groups-filters-masks-and-backdrop-blur.md) | 01, 03 | `ui/05-painter-groups-filters-masks-and-backdrop-blur` | [#336](https://github.com/Wolfleader101/FenrirEngine/pull/336) |
 | 06 | [Painter text](issues/06-painter-text.md) | 02, 03 | `ui/06-painter-text` | [#337](https://github.com/Wolfleader101/FenrirEngine/pull/337) |
-| 07 | [FenrirUI core: roots, elements, Yoga layout, inline style and box painting](issues/07-fenrirui-core-roots-elements-yoga-layout-inline-style-and-box-painting.md) | 03, 05 | `ui/07-fenrirui-core-roots-elements-yoga-layout-inline-style-and-box-painting` | |
+| 07 | [FenrirUI core: roots, elements, Yoga layout, inline style and box painting](issues/07-fenrirui-core-roots-elements-yoga-layout-inline-style-and-box-painting.md) | 03, 05 | `ui/07-fenrirui-core-roots-elements-yoga-layout-inline-style-and-box-painting` | [#338](https://github.com/Wolfleader101/FenrirEngine/pull/338) |
 | 08 | [Stylesheet parser and cascade](issues/08-stylesheet-parser-and-cascade.md) | 07 | `ui/08-stylesheet-parser-and-cascade` | |
 | 09 | [Labels and text style](issues/09-labels-and-text-style.md) | 06, 08 | `ui/09-labels-and-text-style` | |
 | 10 | [Transitions, keyframe animations, `:intro`/`:outro` and deferred removal](issues/10-transitions-keyframe-animations-intro-outro-and-deferred-removal.md) | 08 | `ui/10-transitions-keyframe-animations-intro-outro-and-deferred-removal` | |
