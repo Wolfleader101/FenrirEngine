@@ -10,9 +10,9 @@
 
 **Touches:** `packages/FenrirUI/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Parser tests: every selector form and pseudo-class; every shorthand expands as CSS does; each error kind reports the right line and leaves the rest of the sheet intact; nesting flattens to the expected selectors; `var()` with and without fallback; custom properties inherit.
-- [ ] Cascade tests in a headless App: specificity order (type < class < id), later rule wins at equal specificity, inline wins over all, inheritance down three levels, a class change restyles only its subtree, a pseudo-class flag flip restyles the element.
-- [ ] Layout test: a sheet-styled tree lays out as the same tree styled inline.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Parser tests: every selector form and pseudo-class; every shorthand expands as CSS does; each error kind reports the right line and leaves the rest of the sheet intact; nesting flattens to the expected selectors; `var()` with and without fallback; custom properties inherit.
+- [x] Cascade tests in a headless App: specificity order (type < class < id), later rule wins at equal specificity, inline wins over all, inheritance down three levels, a class change restyles only its subtree, a pseudo-class flag flip restyles the element.
+- [x] Layout test: a sheet-styled tree lays out as the same tree styled inline.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

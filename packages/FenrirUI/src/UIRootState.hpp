@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "Cascade.hpp"
 #include "FenrirPainter/StopTexture.hpp"
 #include "FenrirUI/Element.hpp"
 #include "FenrirUI/UIRoot.hpp"
@@ -31,6 +32,8 @@ namespace Fenrir::Detail
         std::uint16_t pseudoClasses = 0;
         StyleDeclarations inlineStyle;
         ResolvedStyle resolved;
+        /** @brief Its custom properties as of its last resolve; null for none. */
+        std::shared_ptr<const CustomProperties> customProperties;
         ElementId parent;
         std::vector<ElementId> children;
         LayoutNode* node = nullptr;
@@ -65,6 +68,13 @@ namespace Fenrir::Detail
         /** @brief The rows of its gradients with more than two stops, made on its first frame. */
         std::optional<StopTexture> stops;
         bool stopsUsed = false;
+        /** @brief Its stylesheets, in the order added. */
+        std::vector<std::unique_ptr<StylesheetEntry>> sheets;
+        std::uint32_t nextSheet = 1;
+        StyleIndex index;
+        /** @brief Scratch for matching, kept to reuse their storage. */
+        std::vector<std::uint32_t> candidates;
+        std::vector<IndexedSelector> matched;
 
         /** @brief The slot `id` names, or null when it is stale. */
         [[nodiscard]] ElementSlot* Find(ElementId id) noexcept
