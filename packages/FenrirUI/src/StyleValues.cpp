@@ -201,6 +201,7 @@ namespace Fenrir::Detail
             return std::nullopt;
         }
 
+        // Colour's own transfer function is private, and rgb() and hsl() give channels that are not whole bytes.
         float SrgbToLinear(float encoded)
         {
             return encoded <= 0.04045f ? encoded / 12.92f : std::pow((encoded + 0.055f) / 1.055f, 2.4f);
@@ -501,10 +502,7 @@ namespace Fenrir::Detail
             {
                 if (EqualsIgnoringCase(text, named.name))
                 {
-                    const auto byte = [&](int shift) {
-                        return static_cast<float>((named.rgb >> shift) & 0xFFu) / 255.0f;
-                    };
-                    return FromSrgb(byte(16), byte(8), byte(0), 1.0f);
+                    return Colour::FromSrgb((named.rgb << 8u) | 0xFFu);
                 }
             }
             std::optional<std::string_view> arguments = CallOf(text, "rgb");

@@ -165,51 +165,91 @@ TEST_CASE("A registered tag makes its custom element, whose measure sizes the le
     REQUIRE(dynamic_cast<FixedSizeElement*>(root.GetElement(plain)) == nullptr);
 }
 
-TEST_CASE("A dirty subtree lays out again and a clean root calls no layout", "[ui][tree]")
+namespace
+{
+    // Two panels under the root element, each with one fixed-size leaf, laid out once.
+    struct TwoSubtrees
+    {
+        explicit TwoSubtrees(UITest::UITestApp& test)
+        {
+            test.Roots().RegisterElement("fixed", [] { return std::make_unique<FixedSizeElement>(); });
+            root = &test.MakeRoot(target, {800.0f, 600.0f});
+            left = root->Create(root->GetRootElement(), "panel");
+            right = root->Create(root->GetRootElement(), "panel");
+            leftLeaf = root->Create(left, "fixed");
+            rightLeaf = root->Create(right, "fixed");
+            test.Frame();
+        }
+
+        std::shared_ptr<UITest::CaptureTarget> target;
+        Fenrir::UIRoot* root = nullptr;
+        Fenrir::ElementId left;
+        Fenrir::ElementId right;
+        Fenrir::ElementId leftLeaf;
+        Fenrir::ElementId rightLeaf;
+    };
+} // namespace
+
+TEST_CASE("The first frame resolves every style and lays out once", "[ui][tree]")
 {
     UITest::UITestApp test;
-    test.Roots().RegisterElement("fixed", [] { return std::make_unique<FixedSizeElement>(); });
-    std::shared_ptr<UITest::CaptureTarget> target;
-    Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
-    const Fenrir::ElementId left = root.Create(root.GetRootElement(), "panel");
-    const Fenrir::ElementId right = root.Create(root.GetRootElement(), "panel");
-    const Fenrir::ElementId leftLeaf = root.Create(left, "fixed");
-    const Fenrir::ElementId rightLeaf = root.Create(right, "fixed");
-    test.Frame();
-    INFO("the first frame resolves every style and lays out once");
-    REQUIRE(root.GetStats().layouts == 1);
-    REQUIRE(root.GetStats().stylesResolved == 5);
+    TwoSubtrees tree(test);
+    INFO("the root element and its four elements are resolved, and Yoga lays out once");
+    REQUIRE(tree.root->GetStats().stylesResolved == 5);
+    REQUIRE(tree.root->GetStats().layouts == 1);
+}
 
+TEST_CASE("A clean root resolves no style and calls no layout, and still paints", "[ui][tree]")
+{
+    UITest::UITestApp test;
+    TwoSubtrees tree(test);
     test.Frame();
-    INFO("nothing changed: no style is resolved and Yoga is not called");
-    REQUIRE(root.GetStats().stylesResolved == 0);
-    REQUIRE(root.GetStats().layouts == 0);
-    REQUIRE(root.GetStats().measures == 0);
-    INFO("a clean root still paints every frame");
-    REQUIRE(target->lists.size() == 2);
+    INFO("nothing changed: no style is resolved, Yoga does not lay out and no leaf is measured");
+    REQUIRE(tree.root->GetStats().stylesResolved == 0);
+    REQUIRE(tree.root->GetStats().layouts == 0);
+    REQUIRE(tree.root->GetStats().measures == 0);
+    INFO("a list is submitted every frame");
+    REQUIRE(tree.target->lists.size() == 2);
+}
 
-    auto* rightElement = dynamic_cast<FixedSizeElement*>(root.GetElement(rightLeaf));
+TEST_CASE("A dirty subtree resolves and lays out again, and a clean subtree is not measured again", "[ui][tree]")
+{
+    UITest::UITestApp test;
+    TwoSubtrees tree(test);
+    auto* rightElement = dynamic_cast<FixedSizeElement*>(tree.root->GetElement(tree.rightLeaf));
     const int rightMeasures = rightElement->measures;
-    REQUIRE(root.SetStyleProperty(leftLeaf, "margin-top", "7px"));
+    REQUIRE(tree.root->SetStyleProperty(tree.leftLeaf, "margin-top", "7px"));
     test.Frame();
-    INFO("a changed style resolves that element only, and lays out again");
-    REQUIRE(root.GetStats().stylesResolved == 1);
-    REQUIRE(root.GetStats().layouts == 1);
-    REQUIRE(UITest::Near(root.GetBoxes(leftLeaf).border.y, 7.0f));
-    INFO("the clean subtree's leaf is not measured again");
+
+    INFO("only the changed element's style is resolved, and the root lays out again");
+    REQUIRE(tree.root->GetStats().stylesResolved == 1);
+    REQUIRE(tree.root->GetStats().layouts == 1);
+    REQUIRE(UITest::Near(tree.root->GetBoxes(tree.leftLeaf).border.y, 7.0f));
+    INFO("the other subtree's leaf is not measured again");
     REQUIRE(rightElement->measures == rightMeasures);
+}
 
-    REQUIRE(root.SetStyleProperty(right, "background-color", "#ff0000"));
+TEST_CASE("A change that does not lay out resolves the style without a layout", "[ui][tree]")
+{
+    UITest::UITestApp test;
+    TwoSubtrees tree(test);
+    REQUIRE(tree.root->SetStyleProperty(tree.right, "background-color", "#ff0000"));
     test.Frame();
-    INFO("a change that does not lay out resolves the style without calling Yoga");
-    REQUIRE(root.GetStats().stylesResolved == 1);
-    REQUIRE(root.GetStats().layouts == 0);
+    INFO("the panel's style is resolved, and Yoga's style is unchanged, so no layout runs");
+    REQUIRE(tree.root->GetStats().stylesResolved == 1);
+    REQUIRE(tree.root->GetStats().layouts == 0);
+}
 
-    root.SetPseudoClass(right, Fenrir::PseudoClass::Hover, true);
-    REQUIRE(root.HasPseudoClass(right, Fenrir::PseudoClass::Hover));
+TEST_CASE("A pseudo-class change marks the element's style dirty", "[ui][tree]")
+{
+    UITest::UITestApp test;
+    TwoSubtrees tree(test);
+    tree.root->SetPseudoClass(tree.right, Fenrir::PseudoClass::Hover, true);
+    INFO("the element carries the pseudo-class");
+    REQUIRE(tree.root->HasPseudoClass(tree.right, Fenrir::PseudoClass::Hover));
     test.Frame();
-    INFO("a pseudo-class change marks the style dirty");
-    REQUIRE(root.GetStats().stylesResolved == 1);
+    INFO("its style is resolved again");
+    REQUIRE(tree.root->GetStats().stylesResolved == 1);
 }
 
 TEST_CASE("Inherited properties come from the parent, others from the defaults", "[ui][tree]")

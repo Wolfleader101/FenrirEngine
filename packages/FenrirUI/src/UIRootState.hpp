@@ -41,6 +41,7 @@ namespace Fenrir::Detail
         bool descendantStyleDirty = false;
     };
 
+    /** @brief A root's tree in dense slots, its Yoga nodes, its target and what its frames keep. */
     struct UIRootState
     {
         UIRootState(App& app, UIRoots& roots, UIRootConfig config) : app(app), roots(roots), config(std::move(config))
@@ -65,6 +66,7 @@ namespace Fenrir::Detail
         std::optional<StopTexture> stops;
         bool stopsUsed = false;
 
+        /** @brief The slot `id` names, or null when it is stale. */
         [[nodiscard]] ElementSlot* Find(ElementId id) noexcept
         {
             if (id.index >= slots.size() || !slots[id.index].alive || slots[id.index].version != id.version)
@@ -74,6 +76,7 @@ namespace Fenrir::Detail
             return &slots[id.index];
         }
 
+        /** @copydoc Find */
         [[nodiscard]] const ElementSlot* Find(ElementId id) const noexcept
         {
             return const_cast<UIRootState*>(this)->Find(id);

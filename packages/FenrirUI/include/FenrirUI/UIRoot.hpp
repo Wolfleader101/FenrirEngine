@@ -58,6 +58,7 @@ namespace Fenrir
         WindowId window{1};
         /** @brief The overlay layer it draws on; roots draw lowest layer first, then in the order they were made. */
         std::int32_t layer = 0;
+        /** @brief How its UI units map to its target's logical units. */
         ScaleRule scaleRule = ScaleRule::Height1080;
         /** @brief Blending on the window overlay is in gamma space by default, as browsers and designers do (ADR-0065).
          */
@@ -98,6 +99,7 @@ namespace Fenrir
         /** @brief Where Create puts an element when no index is given: after its last sibling. */
         static constexpr std::size_t End = std::numeric_limits<std::size_t>::max();
 
+        /** @brief A root of `roots` in `app`; UIRoots::CreateRoot makes them. */
         UIRoot(App& app, UIRoots& roots, UIRootConfig config);
         UIRoot(const UIRoot&) = delete;
         UIRoot& operator=(const UIRoot&) = delete;
@@ -141,7 +143,10 @@ namespace Fenrir
         [[nodiscard]] bool IsAlive(ElementId element) const noexcept;
         /** @brief Its parent; nothing for the root element or a stale id. */
         [[nodiscard]] ElementId GetParent(ElementId element) const noexcept;
-        /** @brief Its children in order; empty for a stale id. */
+        /**
+         * @brief Its children in order; empty for a stale id. Like the tag, id string and classes below, the view is
+         * valid until the tree next changes.
+         */
         [[nodiscard]] std::span<const ElementId> GetChildren(ElementId element) const noexcept;
         /** @brief Its behaviour object; null for a stale id. */
         [[nodiscard]] Element* GetElement(ElementId element) const noexcept;
@@ -189,8 +194,9 @@ namespace Fenrir
          * CSS writes it: lengths in `px` or `%` (`0` alone is 0px) or `auto`, colours as `#rgb`, `#rgba`, `#rrggbb`,
          * `#rrggbbaa`, `rgb()`, `rgba()`, `hsl()`, `hsla()` or a CSS colour name, `url(path)` for an image asset loaded
          * from the asset store, `linear-gradient()` and `radial-gradient()`, `box-shadow` lists, and `transform`
-         * lists of `translate()`, `translateX()`, `translateY()`, `scale()`, `rotate()` (deg, rad or turn). An unknown
-         * property or a value it cannot read is logged, with both named, and changes nothing: false.
+         * lists of `translate()`, `translateX()`, `translateY()`, `scale()`, `scaleX()`, `scaleY()`, `rotate()` (deg,
+         * rad, grad or turn). An unknown property or a value it cannot read is logged, with both named, and changes
+         * nothing: false.
          */
         bool SetStyleProperty(ElementId element, std::string_view name, std::string_view value);
         /** @brief Its resolved style as of the last frame; null for a stale id. */

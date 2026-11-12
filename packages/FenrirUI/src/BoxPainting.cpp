@@ -12,6 +12,7 @@
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirPainter/Painter.hpp"
 #include "FenrirUI/UI.hpp"
+#include "Rects.hpp"
 #include "UIRootState.hpp"
 
 namespace Fenrir::Detail
@@ -30,24 +31,6 @@ namespace Fenrir::Detail
                 break;
             }
             return 0.0f;
-        }
-
-        Rect2D Union(const Rect2D& a, const Rect2D& b)
-        {
-            const float x0 = std::min(a.x, b.x);
-            const float y0 = std::min(a.y, b.y);
-            const float x1 = std::max(a.x + a.width, b.x + b.width);
-            const float y1 = std::max(a.y + a.height, b.y + b.height);
-            return {x0, y0, x1 - x0, y1 - y0};
-        }
-
-        Rect2D Intersect(const Rect2D& a, const Rect2D& b)
-        {
-            const float x0 = std::max(a.x, b.x);
-            const float y0 = std::max(a.y, b.y);
-            const float x1 = std::max(x0, std::min(a.x + a.width, b.x + b.width));
-            const float y1 = std::max(y0, std::min(a.y + a.height, b.y + b.height));
-            return {x0, y0, x1 - x0, y1 - y0};
         }
 
         CornerRadii RadiiOf(const ResolvedStyle& style)
@@ -144,16 +127,16 @@ namespace Fenrir::Detail
                     m_painter.BeginGroup(LocalBounds(index), style.opacity);
                 }
                 PaintBox(slot, ownAlpha);
-                slot.element->Paint(m_painter, ElementPaint{boxes, style, ownAlpha});
-
+                // Overflow clips the content and the children to the padding box, not the element's own box.
+                if (style.overflow == Overflow::Hidden)
+                {
+                    m_painter.ClipRoundedRect(boxes.padding, InnerRadiiOf(style));
+                }
                 std::vector<ElementId> children = slot.children;
                 std::stable_sort(children.begin(), children.end(), [&](ElementId a, ElementId b) {
                     return m_state.slots[a.index].resolved.zIndex < m_state.slots[b.index].resolved.zIndex;
                 });
-                if (!children.empty() && style.overflow == Overflow::Hidden)
-                {
-                    m_painter.ClipRoundedRect(boxes.padding, InnerRadiiOf(style));
-                }
+                slot.element->Paint(m_painter, ElementPaint{boxes, style, ownAlpha});
                 for (const ElementId child : children)
                 {
                     PaintElement(child.index, ownAlpha);

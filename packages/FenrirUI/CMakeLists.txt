@@ -16,6 +16,7 @@ add_library(FenrirUI STATIC
     src/BoxPainting.hpp
     src/LayoutBridge.cpp
     src/LayoutBridge.hpp
+    src/Rects.hpp
     src/Style.cpp
     src/StyleValues.cpp
     src/StyleValues.hpp

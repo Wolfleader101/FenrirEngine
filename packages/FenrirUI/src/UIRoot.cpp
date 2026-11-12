@@ -11,6 +11,7 @@
 #include "FenrirRenderer/Overlay.hpp"
 #include "FenrirUI/UI.hpp"
 #include "FenrirWindow/Window.hpp"
+#include "Rects.hpp"
 #include "StyleValues.hpp"
 #include "UIRootState.hpp"
 
@@ -70,15 +71,6 @@ namespace Fenrir
             return {x0, y0, x1 - x0, y1 - y0};
         }
 
-        Rect2D Intersect(const Rect2D& a, const Rect2D& b)
-        {
-            const float x0 = std::max(a.x, b.x);
-            const float y0 = std::max(a.y, b.y);
-            const float x1 = std::max(x0, std::min(a.x + a.width, b.x + b.width));
-            const float y1 = std::max(y0, std::min(a.y + a.height, b.y + b.height));
-            return {x0, y0, x1 - x0, y1 - y0};
-        }
-
         /** @brief Resolves the styles under slot `index` that are dirty or inherit a changed value. */
         void ResolveStyles(Detail::UIRootState& state, std::uint32_t index, const ResolvedStyle* parent,
                            bool parentInheritedChanged)
@@ -135,7 +127,7 @@ namespace Fenrir
                                              bottom - border.bottom - padding.bottom, pixelsPerUnit);
             slot.boxes.clip = clip;
             const Rect2D childClip =
-                slot.resolved.overflow == Overflow::Hidden ? Intersect(clip, slot.boxes.padding) : clip;
+                slot.resolved.overflow == Overflow::Hidden ? Detail::Intersect(clip, slot.boxes.padding) : clip;
             for (const ElementId child : slot.children)
             {
                 ReadBoxes(state, child.index, left, top, childClip, pixelsPerUnit);

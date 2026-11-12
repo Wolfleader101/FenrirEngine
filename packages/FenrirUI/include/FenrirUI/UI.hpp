@@ -40,6 +40,7 @@ namespace Fenrir
     class UIRoots
     {
       public:
+        /** @brief The resource UI::Install adds, painting with `painterShader` (`builtin:painter`). */
         UIRoots(App& app, AssetHandle<Shader> painterShader, const UIConfig& config);
         UIRoots(const UIRoots&) = delete;
         UIRoots& operator=(const UIRoots&) = delete;
