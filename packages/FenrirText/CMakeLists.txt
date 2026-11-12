@@ -7,12 +7,14 @@ add_library(FenrirText STATIC
     include/FenrirText/FontLibrary.hpp
     include/FenrirText/GlyphAtlas.hpp
     include/FenrirText/Paragraph.hpp
+    include/FenrirText/TextSegments.hpp
     include/FenrirText/TextStyle.hpp
 
     src/FontLibrary.cpp
     src/FontLibraryState.hpp
     src/GlyphAtlas.cpp
     src/Paragraph.cpp
+    src/TextSegments.cpp
     src/Unicode.hpp
     src/Unicode.cpp
 )

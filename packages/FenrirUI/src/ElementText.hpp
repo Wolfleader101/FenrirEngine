@@ -35,6 +35,15 @@ namespace Fenrir::Detail
         }
 
         /**
+         * @brief Keeps it on one line whatever its style says, as a text entry's: every space kept, no wrapping, no
+         * ellipsis, aligned to the start. Taken at the next SetStyle.
+         */
+        void SetSingleLine(bool singleLine) noexcept
+        {
+            m_singleLine = singleLine;
+        }
+
+        /**
          * @brief Takes the text properties of `style` at `pixelsPerUnit` target pixels per UI unit. True when what
          * changed can change the paragraph's size, so layout must measure it again.
          */
@@ -82,5 +91,6 @@ namespace Fenrir::Detail
         /** @brief The width, in target pixels, it was last drawn at, and its size there; negative after a measure. */
         float m_drawnWidth = -1.0f;
         Math::Vec2 m_drawnSize{0.0f};
+        bool m_singleLine = false;
     };
 } // namespace Fenrir::Detail

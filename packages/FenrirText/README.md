@@ -9,7 +9,7 @@ Its text libraries are submodules under `libs/`, each pinned, built static, warn
 | FreeType | 2.15.0 | FreeType (BSD-style) | Faces, metrics, rasterising (auto-hinter, grayscale) |
 | HarfBuzz | 15.1.0 | MIT | Shaping, through its FreeType integration |
 | SheenBidi | 2.9.0 | Apache 2.0 | Bidi levels (UAX#9), line runs, scripts |
-| libunibreak | 8.0 | zlib | Line breaks (UAX#14), grapheme boundaries (UAX#29) |
+| libunibreak | 8.0 | zlib | Line breaks (UAX#14), grapheme and word boundaries (UAX#29) |
 
 No ICU: SheenBidi and libunibreak together are a fraction of its size.
 
@@ -38,6 +38,8 @@ FenrirAssets's `Font` asset is a TrueType or OpenType file's bytes (`.ttf`, `.ot
 6. Glyphs are rasterised into the atlases on first use and placed at quarter-pixel pen positions.
 
 It answers `Size()`, `Lines()` (byte range, top, height, baseline, ascent, descent, left, width), `Runs()` (glyph runs of one face, page, style and line, left to right, each glyph with its pen position, its quad in whole pixels and its atlas rectangle), `RangeRects(begin, end)` (the boxes of a character range), `CharacterAt(point)` (the caret position under a point) and `GraphemeBoundaries()` with `NextGrapheme` and `PreviousGrapheme` (UAX#29). Character positions are byte offsets into `Text()`.
+
+For text outside a paragraph, `FenrirText/TextSegments.hpp` gives the same `GraphemeBoundaries(utf8)` and `Words(utf8)`: the UAX#29 word segments that start with a letter, digit or ideograph, not a space or punctuation, as byte ranges. A text entry moves its caret by them over the text it holds, which is not the text it shows when that is a password's bullets.
 
 ## Atlases
 

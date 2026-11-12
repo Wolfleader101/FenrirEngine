@@ -144,7 +144,16 @@ namespace Fenrir::Detail
             WindowInputClaims claims;
             claims.pointer = state.Find(input.hovered) != nullptr;
             claims.pointerCapture = state.Find(FirstPressed(input)) != nullptr;
-            claims.keyboardFocus = state.Find(input.focused) != nullptr;
+            const ElementSlot* focused = state.Find(input.focused);
+            claims.keyboardFocus = focused != nullptr;
+            // A focused element that takes text, a text entry, has the window take it, with the IME at its caret.
+            if (const std::optional<Rect2D> caret =
+                    focused != nullptr ? focused->element->GetTextCaret() : std::nullopt)
+            {
+                claims.textInput = true;
+                claims.caret.position = Math::Vec2(caret->x, caret->y) * state.scale;
+                claims.caret.size = Math::Vec2(caret->width, caret->height) * state.scale;
+            }
             if (input.routerId.value == 0 || claims == input.published)
             {
                 return;

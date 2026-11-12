@@ -20,6 +20,9 @@ namespace Fenrir::Detail
     /** @brief The UAX#29 grapheme boundaries of `text`, as byte offsets from 0 to its size (libunibreak). */
     [[nodiscard]] std::vector<std::uint32_t> GraphemeBoundaries(std::string_view text);
 
+    /** @brief The UAX#29 word boundaries of `text`, as byte offsets from 0 to its size (libunibreak). */
+    [[nodiscard]] std::vector<std::uint32_t> WordBoundaries(std::string_view text);
+
     /** @brief What UAX#14 allows after a byte of text. */
     enum class BreakAfter : std::uint8_t
     {

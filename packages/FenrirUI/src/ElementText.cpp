@@ -93,6 +93,12 @@ namespace Fenrir::Detail
         paragraph.lineHeight = LineHeightOf(style);
         paragraph.ellipsis = style.textOverflow == TextOverflow::Ellipsis;
         paragraph.whiteSpace = style.whiteSpace;
+        if (m_singleLine)
+        {
+            paragraph.align = TextAlign::Start;
+            paragraph.ellipsis = false;
+            paragraph.whiteSpace = WhiteSpace::Pre;
+        }
 
         const bool resized =
             !SameShape(text, m_style) || !SameShape(paragraph, m_paragraphStyle) || pixelsPerUnit != m_pixelsPerUnit;

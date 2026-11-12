@@ -2,13 +2,21 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
+#include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
+#include "ElementText.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirPainter/Painter.hpp"
+#include "FenrirText/FontLibrary.hpp"
+#include "FenrirText/Paragraph.hpp"
+#include "FenrirUI/UI.hpp"
 #include "FenrirUI/UIRoot.hpp"
+#include "FenrirWindow/Window.hpp"
 
 namespace Fenrir
 {
@@ -611,5 +619,624 @@ namespace Fenrir
         default:
             return RouteResult::Passed;
         }
+    }
+
+    namespace
+    {
+        /** @brief `codepoint` as UTF-8, appended to `out`. */
+        void AppendUtf8(std::string& out, char32_t codepoint)
+        {
+            const auto byte = [&](std::uint32_t value) { out.push_back(static_cast<char>(value)); };
+            const auto value = static_cast<std::uint32_t>(codepoint);
+            if (value < 0x80u)
+            {
+                byte(value);
+            }
+            else if (value < 0x800u)
+            {
+                byte(0xC0u | (value >> 6u));
+                byte(0x80u | (value & 0x3Fu));
+            }
+            else if (value < 0x10000u)
+            {
+                byte(0xE0u | (value >> 12u));
+                byte(0x80u | ((value >> 6u) & 0x3Fu));
+                byte(0x80u | (value & 0x3Fu));
+            }
+            else
+            {
+                byte(0xF0u | (value >> 18u));
+                byte(0x80u | ((value >> 12u) & 0x3Fu));
+                byte(0x80u | ((value >> 6u) & 0x3Fu));
+                byte(0x80u | (value & 0x3Fu));
+            }
+        }
+
+        /**
+         * @brief `utf8` made fit for one line: tabs and line breaks become spaces and the other C0 controls and DEL
+         * are dropped. Multi-byte sequences pass as they are.
+         */
+        std::string OneLine(std::string_view utf8)
+        {
+            std::string line;
+            line.reserve(utf8.size());
+            for (const char c : utf8)
+            {
+                const auto byte = static_cast<unsigned char>(c);
+                if (byte == '\t' || byte == '\n' || byte == '\r')
+                {
+                    line.push_back(' ');
+                }
+                else if (byte >= 0x20u && byte != 0x7Fu)
+                {
+                    line.push_back(c);
+                }
+            }
+            return line;
+        }
+
+        /** @brief Whether a typed codepoint is text: not a C0 or C1 control or DEL, nor a surrogate. */
+        bool IsTypedText(char32_t codepoint)
+        {
+            return codepoint >= 0x20 && !(codepoint >= 0x7F && codepoint <= 0x9F) &&
+                   !(codepoint >= 0xD800 && codepoint <= 0xDFFF) && codepoint <= 0x10FFFF;
+        }
+
+        Colour Faded(Colour colour, float alpha)
+        {
+            colour.a *= alpha;
+            return colour;
+        }
+
+        bool SameColour(const Colour& a, const Colour& b)
+        {
+            return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+        }
+
+        /** @brief `paragraph` from `point`, its runs in `colour` when given, faded by `alpha`. */
+        void DrawParagraph(Painter& painter, Paragraph& paragraph, Math::Vec2 point, const Colour* colour, float alpha)
+        {
+            if (colour == nullptr && alpha >= 1.0f)
+            {
+                painter.DrawText(paragraph, point);
+                return;
+            }
+            for (const GlyphRun& run : paragraph.Runs())
+            {
+                GlyphRun tinted = run;
+                tinted.colour = Faded(colour != nullptr ? *colour : run.colour, alpha);
+                painter.DrawGlyphs(tinted, point);
+            }
+        }
+
+        /** @brief Where the caret before shown offset `index` is, in pixels from the paragraph's left. */
+        float CaretOffset(const Paragraph& paragraph, std::uint32_t index)
+        {
+            const auto size = static_cast<std::uint32_t>(paragraph.Text().size());
+            if (size == 0)
+            {
+                return 0.0f;
+            }
+            if (index < size)
+            {
+                const std::vector<Rect2D> rects = paragraph.RangeRects(index, paragraph.NextGrapheme(index));
+                if (!rects.empty())
+                {
+                    return rects.front().x;
+                }
+            }
+            const std::vector<Rect2D> rects = paragraph.RangeRects(paragraph.PreviousGrapheme(index), index);
+            return rects.empty() ? paragraph.Size().x : rects.back().x + rects.back().width;
+        }
+
+        Rect2D ToUnits(const Rect2D& pixels, Math::Vec2 origin, float pixelsPerUnit)
+        {
+            return {origin.x + pixels.x / pixelsPerUnit, origin.y + pixels.y / pixelsPerUnit,
+                    pixels.width / pixelsPerUnit, pixels.height / pixelsPerUnit};
+        }
+    } // namespace
+
+    TextEntry::TextEntry()
+        : m_shown(std::make_unique<Detail::ElementText>()), m_placeholderText(std::make_unique<Detail::ElementText>()),
+          m_line(std::make_unique<Detail::ElementText>())
+    {
+        for (Detail::ElementText* text : {m_shown.get(), m_placeholderText.get(), m_line.get()})
+        {
+            text->SetSingleLine(true);
+        }
+        // A space keeps its line's height, which an empty paragraph has none of.
+        m_line->SetText(" ");
+    }
+
+    TextEntry::~TextEntry() = default;
+
+    void TextEntry::OnCreate()
+    {
+        Control::OnCreate();
+        // The root's double click, after the press that put the caret under it.
+        GetRoot().AddListener(GetId(), UIEventKind::DoubleClick, [this](UIListenerContext& context) {
+            if (context.GetEvent().target == GetId())
+            {
+                const TextRange word = WordAt(m_caret);
+                Select(word.begin, word.end);
+            }
+        });
+    }
+
+    void TextEntry::SetValue(std::string_view utf8)
+    {
+        m_value = OneLine(utf8);
+        ValueChanged();
+        const auto end = static_cast<std::uint32_t>(m_value.size());
+        Select(end, end);
+    }
+
+    void TextEntry::SetPlaceholder(std::string_view utf8)
+    {
+        m_placeholder = OneLine(utf8);
+        m_placeholderText->SetText(m_placeholder);
+    }
+
+    void TextEntry::SetPassword(bool password)
+    {
+        m_password = password;
+        ValueChanged();
+    }
+
+    void TextEntry::SetMaxLength(std::size_t graphemes)
+    {
+        m_maxLength = graphemes;
+    }
+
+    void TextEntry::Select(std::uint32_t anchor, std::uint32_t caret)
+    {
+        m_anchor = Snap(anchor);
+        m_caret = Snap(caret);
+        m_blink = 0.0;
+    }
+
+    void TextEntry::SelectAll()
+    {
+        Select(0, static_cast<std::uint32_t>(m_value.size()));
+    }
+
+    const Paragraph& TextEntry::GetParagraph() const noexcept
+    {
+        return m_shown->GetParagraph();
+    }
+
+    std::uint32_t TextEntry::Snap(std::uint32_t index) const
+    {
+        const auto at = std::upper_bound(m_graphemes.begin(), m_graphemes.end(), index);
+        return at == m_graphemes.begin() ? 0 : *(at - 1);
+    }
+
+    std::uint32_t TextEntry::NextGrapheme(std::uint32_t index) const
+    {
+        const auto at = std::upper_bound(m_graphemes.begin(), m_graphemes.end(), index);
+        return at == m_graphemes.end() ? m_graphemes.back() : *at;
+    }
+
+    std::uint32_t TextEntry::PreviousGrapheme(std::uint32_t index) const
+    {
+        const auto at = std::lower_bound(m_graphemes.begin(), m_graphemes.end(), index);
+        return at == m_graphemes.begin() ? 0 : *(at - 1);
+    }
+
+    std::uint32_t TextEntry::PreviousWordStart(std::uint32_t index) const
+    {
+        for (auto word = m_words.rbegin(); word != m_words.rend(); ++word)
+        {
+            if (word->begin < index)
+            {
+                return word->begin;
+            }
+        }
+        return 0;
+    }
+
+    std::uint32_t TextEntry::NextWordEnd(std::uint32_t index) const
+    {
+        for (const TextRange& word : m_words)
+        {
+            if (word.end > index)
+            {
+                return word.end;
+            }
+        }
+        return static_cast<std::uint32_t>(m_value.size());
+    }
+
+    TextRange TextEntry::WordAt(std::uint32_t index) const
+    {
+        if (m_password)
+        {
+            return {0, static_cast<std::uint32_t>(m_value.size())};
+        }
+        // A word that holds `index`, or ends at it, is the word there; else the run between the words either side.
+        TextRange between{0, static_cast<std::uint32_t>(m_value.size())};
+        for (const TextRange& word : m_words)
+        {
+            if (word.begin <= index && index <= word.end)
+            {
+                return word;
+            }
+            if (word.end < index)
+            {
+                between.begin = word.end;
+            }
+            else
+            {
+                between.end = word.begin;
+                break;
+            }
+        }
+        return between;
+    }
+
+    std::uint32_t TextEntry::ShownIndex(std::uint32_t index) const
+    {
+        if (!m_password)
+        {
+            return index;
+        }
+        const auto before = std::lower_bound(m_graphemes.begin(), m_graphemes.end(), index) - m_graphemes.begin();
+        return static_cast<std::uint32_t>(before) * static_cast<std::uint32_t>(Bullet.size());
+    }
+
+    std::uint32_t TextEntry::ValueIndex(std::uint32_t index) const
+    {
+        if (!m_password)
+        {
+            return Snap(index);
+        }
+        const std::size_t grapheme = std::min<std::size_t>(index / Bullet.size(), m_graphemes.size() - 1);
+        return m_graphemes[grapheme];
+    }
+
+    std::uint32_t TextEntry::IndexAt(Math::Vec2 point)
+    {
+        if (!m_painted || !LayOut())
+        {
+            return static_cast<std::uint32_t>(m_value.size());
+        }
+        const Math::Vec2 local = (point - m_origin) * PixelsPerUnit();
+        return ValueIndex(m_shown->GetParagraph().CharacterAt(local));
+    }
+
+    void TextEntry::MoveCaret(std::uint32_t index, bool extend)
+    {
+        m_caret = Snap(index);
+        if (!extend)
+        {
+            m_anchor = m_caret;
+        }
+        m_blink = 0.0;
+    }
+
+    void TextEntry::Replace(std::uint32_t begin, std::uint32_t end, std::string_view text)
+    {
+        std::string inserted = OneLine(text);
+        std::string value = m_value.substr(0, begin) + inserted + m_value.substr(end);
+        if (m_maxLength > 0)
+        {
+            // Drop the inserted text's last graphemes until the value fits.
+            const std::vector<std::uint32_t> pieces = GraphemeBoundaries(inserted);
+            std::size_t keep = pieces.size() - 1;
+            while (keep > 0 && GraphemeBoundaries(value).size() - 1 > m_maxLength)
+            {
+                --keep;
+                inserted.resize(pieces[keep]);
+                value = m_value.substr(0, begin) + inserted + m_value.substr(end);
+            }
+        }
+        const bool changed = value != m_value;
+        m_value = std::move(value);
+        ValueChanged();
+        const auto caret = static_cast<std::uint32_t>(begin + inserted.size());
+        Select(caret, caret);
+        if (changed)
+        {
+            GetRoot().SendEvent(MakeEvent(*this, UIEventKind::Change));
+        }
+    }
+
+    void TextEntry::Insert(std::string_view text)
+    {
+        Replace(std::min(m_caret, m_anchor), std::max(m_caret, m_anchor), text);
+    }
+
+    void TextEntry::ValueChanged()
+    {
+        m_graphemes = GraphemeBoundaries(m_value);
+        m_words = m_password ? std::vector<TextRange>{} : Words(m_value);
+        if (m_password)
+        {
+            std::string bullets;
+            for (std::size_t i = 1; i < m_graphemes.size(); ++i)
+            {
+                bullets += Bullet;
+            }
+            m_shown->SetText(bullets);
+        }
+        else
+        {
+            m_shown->SetText(m_value);
+        }
+        m_caret = Snap(m_caret);
+        m_anchor = Snap(m_anchor);
+        m_blink = 0.0;
+    }
+
+    RouteResult TextEntry::OnInput(App& app, const RoutedInput& input)
+    {
+        if (const auto* text = std::get_if<TextEvent>(&input))
+        {
+            if (IsTypedText(text->codepoint))
+            {
+                std::string utf8;
+                AppendUtf8(utf8, text->codepoint);
+                Insert(utf8);
+            }
+            return RouteResult::Consumed;
+        }
+        if (const KeyEvent* key = KeyPress(input))
+        {
+            return KeyPressed(app, *key);
+        }
+        if (const auto* button = std::get_if<MouseButtonEvent>(&input))
+        {
+            if (button->button != MouseButton::Left)
+            {
+                return RouteResult::Passed;
+            }
+            if (!button->pressed)
+            {
+                m_dragging = false;
+                return RouteResult::Passed;
+            }
+            // Taken here, focusing itself, so an enclosing scroll view starts no content drag.
+            (void)GetRoot().Focus(GetId());
+            MoveCaret(IndexAt(GetRoot().GetPointer().value_or(m_origin)), false);
+            m_dragging = true;
+            return RouteResult::Consumed;
+        }
+        if (std::holds_alternative<MouseMotionEvent>(input) && m_dragging)
+        {
+            if (const std::optional<Math::Vec2> pointer = GetRoot().GetPointer())
+            {
+                MoveCaret(IndexAt(*pointer), true);
+            }
+            return RouteResult::Consumed;
+        }
+        return RouteResult::Passed;
+    }
+
+    RouteResult TextEntry::KeyPressed(App& app, const KeyEvent& key)
+    {
+        const bool ctrl = HasModifiers(key.modifiers, KeyModifiers::Ctrl);
+        const bool shift = HasModifiers(key.modifiers, KeyModifiers::Shift);
+        const std::uint32_t begin = std::min(m_caret, m_anchor);
+        const std::uint32_t end = std::max(m_caret, m_anchor);
+        const auto size = static_cast<std::uint32_t>(m_value.size());
+        switch (key.key)
+        {
+        case Key::Left:
+            if (HasSelection() && !shift)
+            {
+                MoveCaret(begin, false);
+            }
+            else
+            {
+                MoveCaret(ctrl ? PreviousWordStart(m_caret) : PreviousGrapheme(m_caret), shift);
+            }
+            return RouteResult::Consumed;
+        case Key::Right:
+            if (HasSelection() && !shift)
+            {
+                MoveCaret(end, false);
+            }
+            else
+            {
+                MoveCaret(ctrl ? NextWordEnd(m_caret) : NextGrapheme(m_caret), shift);
+            }
+            return RouteResult::Consumed;
+        case Key::Home:
+            MoveCaret(0, shift);
+            return RouteResult::Consumed;
+        case Key::End:
+            MoveCaret(size, shift);
+            return RouteResult::Consumed;
+        case Key::Backspace:
+            if (HasSelection())
+            {
+                Insert({});
+            }
+            else if (m_caret > 0)
+            {
+                Replace(ctrl ? PreviousWordStart(m_caret) : PreviousGrapheme(m_caret), m_caret, {});
+            }
+            return RouteResult::Consumed;
+        case Key::Delete:
+            if (HasSelection())
+            {
+                Insert({});
+            }
+            else if (m_caret < size)
+            {
+                Replace(m_caret, ctrl ? NextWordEnd(m_caret) : NextGrapheme(m_caret), {});
+            }
+            return RouteResult::Consumed;
+        case Key::A:
+            if (ctrl)
+            {
+                SelectAll();
+            }
+            return RouteResult::Consumed;
+        case Key::C:
+        case Key::X:
+            if (ctrl && HasSelection() && !m_password)
+            {
+                (void)Window::SetClipboardText(app, std::string_view(m_value).substr(begin, end - begin));
+                if (key.key == Key::X)
+                {
+                    Insert({});
+                }
+            }
+            return RouteResult::Consumed;
+        case Key::V:
+            if (ctrl)
+            {
+                Insert(Window::ClipboardText(app));
+            }
+            return RouteResult::Consumed;
+        case Key::Enter:
+        case Key::KeypadEnter:
+            if (!key.repeat)
+            {
+                GetRoot().SendEvent(MakeEvent(*this, UIEventKind::Submit));
+            }
+            return RouteResult::Consumed;
+        case Key::Escape:
+            GetRoot().Blur();
+            return RouteResult::Consumed;
+        default:
+            // Tab moves the focus on, and Up, Down and the page keys reach an enclosing scroll view.
+            return RouteResult::Passed;
+        }
+    }
+
+    float TextEntry::PixelsPerUnit() const
+    {
+        const UIRoot& root = GetRoot();
+        const float contentScale = root.GetTargetSize().contentScale;
+        return root.GetScale() * (contentScale > 0.0f ? contentScale : 1.0f);
+    }
+
+    bool TextEntry::ApplyStyle(const ResolvedStyle& style)
+    {
+        const float pixelsPerUnit = PixelsPerUnit();
+        const bool resized = m_line->SetStyle(style, pixelsPerUnit);
+        (void)m_shown->SetStyle(style, pixelsPerUnit);
+        const ResolvedStyle* placeholder = GetRoot().GetPseudoElementStyle(GetId(), PseudoElement::Placeholder);
+        (void)m_placeholderText->SetStyle(placeholder != nullptr ? *placeholder : style, pixelsPerUnit);
+        return resized;
+    }
+
+    bool TextEntry::LayOut()
+    {
+        FontLibrary* fonts = GetRoot().GetApp().GetResource<UIRoots>().GetFonts();
+        if (fonts == nullptr)
+        {
+            return false;
+        }
+        for (Detail::ElementText* text : {m_shown.get(), m_placeholderText.get(), m_line.get()})
+        {
+            (void)text->LayOutForDrawing(*fonts);
+        }
+        return true;
+    }
+
+    Math::Vec2 TextEntry::Measure(const MeasureConstraints& constraints)
+    {
+        // Layout runs after the frame's styles are resolved: its own is this frame's.
+        if (const ResolvedStyle* style = GetRoot().GetResolvedStyle(GetId()))
+        {
+            (void)ApplyStyle(*style);
+        }
+        const float line = m_line->Measure(GetRoot().GetApp().GetResource<UIRoots>().GetFonts(), {}).y;
+        const float width = constraints.widthMode == MeasureMode::Exactly ? constraints.width : 0.0f;
+        float height = line;
+        if (constraints.heightMode == MeasureMode::Exactly)
+        {
+            height = constraints.height;
+        }
+        else if (constraints.heightMode == MeasureMode::AtMost)
+        {
+            height = std::min(line, constraints.height);
+        }
+        return {width, height};
+    }
+
+    void TextEntry::Paint(Painter& painter, const ElementPaint& paint)
+    {
+        if (ApplyStyle(paint.style))
+        {
+            // Its font changed after layout measured it: its line's height is measured again next frame.
+            GetRoot().InvalidateMeasure(GetId());
+        }
+        if (!LayOut())
+        {
+            return;
+        }
+        UIRoot& root = GetRoot();
+        m_blink += root.GetApp().GetTime().deltaTime;
+        const float pixelsPerUnit = PixelsPerUnit();
+        const Rect2D& content = paint.boxes.content;
+        Paragraph& shown = m_shown->GetParagraph();
+        const float lineHeight = m_line->GetParagraph().Size().y / pixelsPerUnit;
+        const float caret = CaretOffset(shown, ShownIndex(m_caret)) / pixelsPerUnit;
+        const float width = shown.Size().x / pixelsPerUnit;
+
+        // Scrolled as little as keeps the caret in the content box, and no further than the text's end needs.
+        const float view = std::max(content.width - CaretWidth, 0.0f);
+        m_scroll = std::clamp(m_scroll, caret - view, caret);
+        m_scroll = std::clamp(m_scroll, 0.0f, std::max(width - view, 0.0f));
+        m_origin = {content.x - m_scroll, content.y + (content.height - lineHeight) / 2.0f};
+        m_caretRect = {m_origin.x + caret, m_origin.y, CaretWidth, lineHeight};
+        m_painted = true;
+
+        const bool focused = root.GetFocused() == GetId();
+        painter.Save();
+        painter.ClipRect(content);
+        if (m_value.empty())
+        {
+            DrawParagraph(painter, m_placeholderText->GetParagraph(), m_origin, nullptr, paint.opacity);
+        }
+        else
+        {
+            std::vector<Rect2D> selection;
+            const ResolvedStyle* selected = root.GetPseudoElementStyle(GetId(), PseudoElement::Selection);
+            if (focused && HasSelection() && selected != nullptr)
+            {
+                for (const Rect2D& rect :
+                     shown.RangeRects(ShownIndex(std::min(m_caret, m_anchor)), ShownIndex(std::max(m_caret, m_anchor))))
+                {
+                    selection.push_back(ToUnits(rect, m_origin, pixelsPerUnit));
+                    const Colour background = Faded(selected->backgroundColor, paint.opacity);
+                    if (background.a > 0.0f)
+                    {
+                        painter.DrawRect(selection.back(), background);
+                    }
+                }
+            }
+            DrawParagraph(painter, shown, m_origin, nullptr, paint.opacity);
+            // The selected text again over it, in the selection's colour, when that differs.
+            if (!selection.empty() && !SameColour(selected->color, paint.style.color))
+            {
+                for (const Rect2D& rect : selection)
+                {
+                    painter.Save();
+                    painter.ClipRect(rect);
+                    DrawParagraph(painter, shown, m_origin, &selected->color, paint.opacity);
+                    painter.Restore();
+                }
+            }
+        }
+        if (focused && !HasSelection() && std::fmod(m_blink, 2.0 * BlinkSeconds) < BlinkSeconds)
+        {
+            painter.DrawRect(m_caretRect, Faded(paint.style.color, paint.opacity));
+        }
+        painter.Restore();
+    }
+
+    std::optional<Rect2D> TextEntry::GetTextCaret() const
+    {
+        if (m_painted)
+        {
+            return m_caretRect;
+        }
+        const Rect2D content = GetRoot().GetBoxes(GetId()).content;
+        return Rect2D{content.x, content.y, CaretWidth, content.height};
     }
 } // namespace Fenrir
