@@ -11,6 +11,7 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirDraw2D/DrawList2D.hpp"
+#include "FenrirInput/Input.hpp"
 #include "FenrirUI/UI.hpp"
 
 namespace UITest
@@ -66,12 +67,38 @@ namespace UITest
         std::vector<Fenrir::DrawList2D> lists;
     };
 
-    // A headless App with FenrirAssets and FenrirUI and no window, driven a frame at a time.
+    // The window input is fed to: the roots' default window.
+    inline constexpr Fenrir::WindowId testWindow{1};
+
+    // A headless App with FenrirAssets, FenrirInput and FenrirUI and no window, driven a frame at a time; input comes
+    // through FenrirInput's feed. Input is declared before the UI so the roots leave its routers before it ends.
     struct UITestApp
     {
         Fenrir::App app{std::make_unique<SilentLogger>(), 1};
         Fenrir::Assets assets = Fenrir::Assets::Install(app);
+        Fenrir::Input input = Fenrir::Input::Install(app);
         Fenrir::UI ui = Fenrir::UI::Install(app);
+
+        Fenrir::InputFeed& Feed()
+        {
+            return app.GetResource<Fenrir::InputFeed>();
+        }
+
+        // Moves the pointer to `position` in the window and clicks `button` there, all fed for the next frame.
+        void Click(Fenrir::Math::Vec2 position, Fenrir::MouseButton button = Fenrir::MouseButton::Left)
+        {
+            Feed().MouseMove(testWindow, position, {0.0f, 0.0f});
+            Feed().MouseButtonDown(testWindow, button);
+            Feed().MouseButtonUp(testWindow, button);
+        }
+
+        // Presses and releases `key`, fed for the next frame.
+        void Type(Fenrir::Key key, Fenrir::Scancode scancode,
+                  Fenrir::KeyModifiers modifiers = Fenrir::KeyModifiers::None)
+        {
+            Feed().KeyDown(testWindow, key, scancode, modifiers);
+            Feed().KeyUp(testWindow, key, scancode, modifiers);
+        }
 
         Fenrir::UIRoots& Roots()
         {
@@ -94,6 +121,18 @@ namespace UITest
             app.RunFrame(1.0 / 60.0);
         }
     };
+
+    // The events `reader` has not read yet, copied out.
+    template <typename TEvent>
+    std::vector<TEvent> ReadAll(Fenrir::EventReader<TEvent>& reader, const Fenrir::App& app)
+    {
+        std::vector<TEvent> events;
+        for (const TEvent& event : reader.Read(app))
+        {
+            events.push_back(event);
+        }
+        return events;
+    }
 
     inline bool Near(float a, float b, float tolerance = 1e-3f)
     {

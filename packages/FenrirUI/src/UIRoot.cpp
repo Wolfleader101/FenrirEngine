@@ -247,9 +247,10 @@ namespace Fenrir
         }
     } // namespace
 
-    UIRoot::UIRoot(App& app, UIRoots& roots, UIRootConfig config)
+    UIRoot::UIRoot(App& app, UIRoots& roots, UIRootConfig config, UIRootId id)
         : m_state(std::make_unique<Detail::UIRootState>(app, roots, std::move(config)))
     {
+        m_state->input.id = id;
         m_state->target = m_state->config.target != nullptr
                               ? m_state->config.target
                               : std::make_shared<WindowOverlayTarget>(m_state->config.window, m_state->config.layer);
@@ -262,10 +263,12 @@ namespace Fenrir
         slot.element->m_id = m_state->rootElement;
         slot.element->m_root = this;
         slot.node = m_state->layout.CreateNode(slot.element.get());
+        Detail::StartInput(*this, *m_state);
     }
 
     UIRoot::~UIRoot()
     {
+        Detail::StopInput(*m_state, true);
         // Every Yoga node is freed before the tree's configuration is.
         FreeSubtree(*m_state, m_state->rootElement.index);
     }
@@ -273,6 +276,16 @@ namespace Fenrir
     const UIRootConfig& UIRoot::GetConfig() const noexcept
     {
         return m_state->config;
+    }
+
+    void UIRoot::Retire()
+    {
+        Detail::StopInput(*m_state, false);
+    }
+
+    UIRootId UIRoot::GetId() const noexcept
+    {
+        return m_state->input.id;
     }
 
     float UIRoot::GetScale() const noexcept
@@ -337,6 +350,7 @@ namespace Fenrir
         Detach(*m_state, element);
         FreeSubtree(*m_state, element.index);
         MarkChildrenMatchDirty(*m_state, parent);
+        Detail::RefreshInput(*this, *m_state);
         return true;
     }
 
@@ -360,6 +374,8 @@ namespace Fenrir
         MarkMatchDirty(*m_state, element);
         MarkChildrenMatchDirty(*m_state, oldParent);
         MarkChildrenMatchDirty(*m_state, newParent);
+        // What carries :hover, :active and :focus-within above it has changed.
+        Detail::RefreshInput(*this, *m_state);
         return true;
     }
 
@@ -629,9 +645,90 @@ namespace Fenrir
         }
     }
 
+    void UIRoot::SetFocusable(ElementId element, bool focusable)
+    {
+        Detail::ElementSlot* slot = m_state->Find(element);
+        if (slot == nullptr)
+        {
+            return;
+        }
+        slot->focusable = focusable;
+        if (!focusable && m_state->input.focused == element)
+        {
+            Detail::Blur(*this, *m_state);
+        }
+    }
+
+    bool UIRoot::IsFocusable(ElementId element) const noexcept
+    {
+        const Detail::ElementSlot* slot = m_state->Find(element);
+        return slot != nullptr && slot->focusable;
+    }
+
+    bool UIRoot::Focus(ElementId element)
+    {
+        return Detail::Focus(*this, *m_state, element);
+    }
+
+    void UIRoot::Blur()
+    {
+        Detail::Blur(*this, *m_state);
+    }
+
+    ElementId UIRoot::GetFocused() const noexcept
+    {
+        return m_state->Find(m_state->input.focused) != nullptr ? m_state->input.focused : ElementId{};
+    }
+
+    ElementId UIRoot::GetHovered() const noexcept
+    {
+        return m_state->Find(m_state->input.hovered) != nullptr ? m_state->input.hovered : ElementId{};
+    }
+
+    ElementId UIRoot::HitTest(Math::Vec2 position) const
+    {
+        return Detail::HitTest(*m_state, position);
+    }
+
+    UIListenerId UIRoot::AddListener(ElementId element, UIEventKind kind, UIListener listener)
+    {
+        Detail::ElementSlot* slot = m_state->Find(element);
+        if (slot == nullptr || !listener)
+        {
+            return {};
+        }
+        const std::uint32_t serial = m_state->input.nextListener++;
+        slot->listeners.push_back({serial, kind, std::make_shared<UIListener>(std::move(listener))});
+        return {element, serial};
+    }
+
+    bool UIRoot::RemoveListener(UIListenerId listener)
+    {
+        Detail::ElementSlot* slot = m_state->Find(listener.element);
+        if (slot == nullptr)
+        {
+            return false;
+        }
+        const auto found =
+            std::find_if(slot->listeners.begin(), slot->listeners.end(),
+                         [&](const Detail::ListenerEntry& entry) { return entry.serial == listener.serial; });
+        if (found == slot->listeners.end())
+        {
+            return false;
+        }
+        slot->listeners.erase(found);
+        return true;
+    }
+
+    void UIRoot::SendEvent(UIEvent event)
+    {
+        Detail::SendUIEvent(*m_state, event);
+    }
+
     void UIRoot::Frame()
     {
         Detail::UIRootState& state = *m_state;
+        Detail::StartInput(*this, state);
         state.stats = {};
         state.size = state.target->GetSize(state.app);
         if (state.size.logicalSize.x <= 0.0f || state.size.logicalSize.y <= 0.0f)

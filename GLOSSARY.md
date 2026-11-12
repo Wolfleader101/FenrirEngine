@@ -706,6 +706,18 @@ A file of CSS rules, custom properties, keyframes and font faces that FenrirUI m
 How a UI root maps its UI units to its target's logical units: by default so that 1080 UI units span the target's pixel height, or one to one with the target's logical units.
 *Avoid:* DPI scale (the window's content scale, one of its inputs), zoom, reference resolution.
 
+**UI event**
+`UIEvent`: the engine event a UI root sends once, at its target element, for each click, press, release, hover, scroll, key, text, focus, blur, change or submit (ADR-0065). Systems read it through an event reader.
+*Avoid:* UI message, signal, DOM event.
+
+**UI listener**
+C++ attached to one element for one kind of UI event, called when the event happens to the element or bubbles up to it from an element under it, until one stops its propagation. Unlike an event reader, it is called at the time; C# reads the UI event instead.
+*Avoid:* handler, callback, delegate.
+
+**Focusable**
+Of an element: a click on it or under it, Tab and Shift+Tab, and code can give it the focus, which sends it keys and text. Elements are not focusable until made so; the controls make themselves focusable.
+*Avoid:* tab stop, selectable (Unity's).
+
 **FenrirAssets**
 The engine's asset package: loads files into plain CPU-side data and owns it behind asset handles. It has no GPU code; FenrirRenderer and animation each turn its data into their own form (ADR-0021).
 *Avoid:* resource manager, asset server, asset database (cooking and an editor database are out of scope).

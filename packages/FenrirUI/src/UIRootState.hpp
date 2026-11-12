@@ -10,6 +10,7 @@
 #include "FenrirPainter/StopTexture.hpp"
 #include "FenrirUI/Element.hpp"
 #include "FenrirUI/UIRoot.hpp"
+#include "InputRouting.hpp"
 #include "LayoutBridge.hpp"
 
 namespace Fenrir
@@ -42,6 +43,10 @@ namespace Fenrir::Detail
         bool styleDirty = true;
         /** @brief Something under it needs its style resolved. */
         bool descendantStyleDirty = false;
+        /** @brief Whether a click, Tab or UIRoot::Focus can give it the focus. */
+        bool focusable = false;
+        /** @brief Its listeners, in the order added. */
+        std::vector<ListenerEntry> listeners;
     };
 
     /** @brief A root's tree in dense slots, its Yoga nodes, its target and what its frames keep. */
@@ -75,6 +80,8 @@ namespace Fenrir::Detail
         /** @brief Scratch for matching, kept to reuse their storage. */
         std::vector<std::uint32_t> candidates;
         std::vector<IndexedSelector> matched;
+        /** @brief Its input router, hover, press and focus. */
+        UIRootInput input;
 
         /** @brief The slot `id` names, or null when it is stale. */
         [[nodiscard]] ElementSlot* Find(ElementId id) noexcept
