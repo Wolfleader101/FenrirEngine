@@ -72,12 +72,17 @@ namespace Fenrir
             return {x0, y0, x1 - x0, y1 - y0};
         }
 
-        /** @brief Resolves the styles under slot `index` that are dirty or inherit a changed value. */
+        /**
+         * @brief Resolves the styles under slot `index` that are dirty or inherit a changed value, starting the
+         * transitions and animations their changes call for, and writes the shown style of those and of the elements
+         * whose motion moved.
+         */
         void ResolveStyles(Detail::UIRootState& state, std::uint32_t index, const Detail::ElementSlot* parent,
                            bool parentInheritedChanged)
         {
             const bool resolve = state.slots[index].styleDirty || parentInheritedChanged;
             bool inheritedChanged = false;
+            bool customChanged = false;
             if (resolve)
             {
                 ResolvedStyle style;
@@ -90,19 +95,33 @@ namespace Fenrir
                 }
                 Detail::Cascade(state, index, style, custom);
                 Detail::ElementSlot& slot = state.slots[index];
-                const bool customChanged =
+                customChanged =
                     custom != slot.customProperties &&
                     (custom == nullptr || slot.customProperties == nullptr || *custom != *slot.customProperties);
-                inheritedChanged = style.pointerEvents != slot.resolved.pointerEvents ||
-                                   style.cursor != slot.resolved.cursor || customChanged;
                 if (customChanged)
                 {
                     slot.customProperties = std::move(custom);
                 }
-                slot.resolved = std::move(style);
-                state.layout.ApplyStyle(slot.node, slot.resolved);
+                if (slot.hasCascaded)
+                {
+                    Detail::StartTransitions(slot.motion, slot.cascaded, style);
+                }
+                Detail::ReconcileAnimations(slot.motion, style, state.index.keyframes);
+                slot.cascaded = std::move(style);
+                slot.hasCascaded = true;
                 slot.styleDirty = false;
                 ++state.stats.stylesResolved;
+            }
+            Detail::ElementSlot& slot = state.slots[index];
+            if (resolve || slot.motionDirty)
+            {
+                ResolvedStyle shown = slot.cascaded;
+                Detail::ApplyMotion(slot.motion, shown);
+                inheritedChanged = shown.pointerEvents != slot.resolved.pointerEvents ||
+                                   shown.cursor != slot.resolved.cursor || customChanged;
+                slot.resolved = std::move(shown);
+                state.layout.ApplyStyle(slot.node, slot.resolved);
+                slot.motionDirty = false;
             }
             if (inheritedChanged || state.slots[index].descendantStyleDirty)
             {
@@ -178,6 +197,35 @@ namespace Fenrir
                 }
             };
             mark(mark, *slot);
+        }
+
+        /** @brief Moves every element's transitions and animations on by `seconds`, marking those whose moved. */
+        void AdvanceMotion(Detail::UIRootState& state, float seconds)
+        {
+            for (std::uint32_t index = 0; index < state.slots.size(); ++index)
+            {
+                Detail::ElementSlot& slot = state.slots[index];
+                if (!slot.alive || !slot.motion.IsMoving() ||
+                    !Detail::AdvanceMotion(slot.motion, slot.cascaded, seconds))
+                {
+                    continue;
+                }
+                slot.motionDirty = true;
+                for (Detail::ElementSlot* above = state.Find(slot.parent);
+                     above != nullptr && !above->descendantStyleDirty; above = state.Find(above->parent))
+                {
+                    above->descendantStyleDirty = true;
+                }
+            }
+        }
+
+        /** @brief Whether a transition runs on the element in slot `index` or under it. */
+        bool HasTransitions(const Detail::UIRootState& state, std::uint32_t index)
+        {
+            const Detail::ElementSlot& slot = state.slots[index];
+            return !slot.motion.transitions.empty() ||
+                   std::any_of(slot.children.begin(), slot.children.end(),
+                               [&](ElementId child) { return HasTransitions(state, child.index); });
         }
 
         /**
@@ -334,17 +382,30 @@ namespace Fenrir
         slot.element->m_id = id;
         slot.element->m_root = this;
         slot.node = m_state->layout.CreateNode(slot.element.get());
+        slot.pseudoClasses = static_cast<std::uint16_t>(PseudoClass::Intro);
+        m_state->introducing.push_back(id);
         Attach(*m_state, id, parent, index);
         MarkStyleDirty(*m_state, id);
         MarkChildrenMatchDirty(*m_state, parent);
         return id;
     }
 
-    bool UIRoot::Remove(ElementId element)
+    bool UIRoot::Remove(ElementId element, RemoveMode mode)
     {
-        if (element == m_state->rootElement || m_state->Find(element) == nullptr)
+        Detail::ElementSlot* slot = m_state->Find(element);
+        if (element == m_state->rootElement || slot == nullptr)
         {
             return false;
+        }
+        if (mode == RemoveMode::Outro)
+        {
+            if (!slot->removing)
+            {
+                slot->removing = true;
+                m_state->removing.push_back(element);
+                SetPseudoClass(element, PseudoClass::Outro, true);
+            }
+            return true;
         }
         const ElementId parent = GetParent(element);
         Detach(*m_state, element);
@@ -739,8 +800,9 @@ namespace Fenrir
         state.scale = state.config.scaleRule == ScaleRule::Height1080 ? state.size.logicalSize.y / 1080.0f : 1.0f;
         const Math::Vec2 uiSize = state.size.logicalSize / state.scale;
 
+        AdvanceMotion(state, static_cast<float>(state.app.GetTime().deltaTime));
         Detail::ElementSlot& root = state.slots[state.rootElement.index];
-        if (root.styleDirty || root.descendantStyleDirty)
+        if (root.styleDirty || root.descendantStyleDirty || root.motionDirty)
         {
             ResolveStyles(state, state.rootElement.index, nullptr, false);
         }
@@ -756,8 +818,43 @@ namespace Fenrir
             state.snappedAt = pixelsPerUnit;
         }
 
+        // The layout that included them has completed: their :intro rules give way next frame, and an intro
+        // transition runs from what they gave. With no :intro rule, nothing restyles.
+        for (const ElementId element : std::exchange(state.introducing, {}))
+        {
+            if (Detail::ElementSlot* slot = state.Find(element))
+            {
+                slot->pseudoClasses =
+                    static_cast<std::uint16_t>(slot->pseudoClasses & ~static_cast<std::uint16_t>(PseudoClass::Intro));
+                if (state.index.hasIntro)
+                {
+                    MarkMatchDirty(state, element);
+                }
+            }
+        }
+
         DrawList2D list;
         Detail::PaintRoot(state, list, contentScale);
         state.target->Submit(state.app, std::move(list));
+
+        // Removals wait for painting, so an outro's last frame is seen. Those already gone (under another removal, or
+        // removed at once) drop out.
+        std::vector<ElementId> waiting;
+        for (const ElementId element : std::exchange(state.removing, {}))
+        {
+            if (state.Find(element) == nullptr)
+            {
+                continue;
+            }
+            if (HasTransitions(state, element.index))
+            {
+                waiting.push_back(element);
+            }
+            else
+            {
+                Remove(element, RemoveMode::Immediate);
+            }
+        }
+        state.removing.insert(state.removing.end(), waiting.begin(), waiting.end());
     }
 } // namespace Fenrir

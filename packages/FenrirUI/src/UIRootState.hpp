@@ -12,6 +12,7 @@
 #include "FenrirUI/UIRoot.hpp"
 #include "InputRouting.hpp"
 #include "LayoutBridge.hpp"
+#include "StyleAnimation.hpp"
 
 namespace Fenrir
 {
@@ -32,7 +33,18 @@ namespace Fenrir::Detail
         std::vector<std::string> classes;
         std::uint16_t pseudoClasses = 0;
         StyleDeclarations inlineStyle;
+        /** @brief Its cascaded style as of its last resolve: what its rules and inline style give, before motion. */
+        ResolvedStyle cascaded;
+        /** @brief Whether it has been cascaded: a first style starts no transitions, having nothing to change from. */
+        bool hasCascaded = false;
+        /** @brief Its shown style: the cascaded one with its animations and transitions over it. */
         ResolvedStyle resolved;
+        /** @brief Its transitions and animations. */
+        ElementMotion motion;
+        /** @brief Its motion moved this frame, so its shown style needs writing again. */
+        bool motionDirty = false;
+        /** @brief Remove() was called on it: it carries :outro and goes when its subtree's transitions end. */
+        bool removing = false;
         /** @brief Its custom properties as of its last resolve; null for none. */
         std::shared_ptr<const CustomProperties> customProperties;
         ElementId parent;
@@ -82,6 +94,10 @@ namespace Fenrir::Detail
         std::vector<IndexedSelector> matched;
         /** @brief Its input router, hover, press and focus. */
         UIRootInput input;
+        /** @brief Elements made since the last completed layout, which carry :intro until it completes. */
+        std::vector<ElementId> introducing;
+        /** @brief Elements Remove() was called on, waiting for their subtrees' transitions to end. */
+        std::vector<ElementId> removing;
 
         /** @brief The slot `id` names, or null when it is stale. */
         [[nodiscard]] ElementSlot* Find(ElementId id) noexcept

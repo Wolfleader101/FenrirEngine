@@ -11,8 +11,8 @@
 
 **Touches:** `packages/FenrirUI/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Headless App tests ticking fixed deltas: a width transition reaches half way at half its duration under `linear`, and the expected fraction under `ease-in-out` and `steps(4)`; a colour transition interpolates in sRGB; a change mid-transition continues from the current value; a keyframe animation loops and reverses as its direction says and holds with `fill-mode: forwards`.
-- [ ] Lifecycle tests: an element has `:intro` on its first frame and not on its second; `Remove()` on an element with an opacity outro transition keeps it alive, animating, for the duration, then removes it and its id goes stale; `Remove(immediate)` removes at once; a parent's outro keeps its children alive.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Headless App tests ticking fixed deltas: a width transition reaches half way at half its duration under `linear`, and the expected fraction under `ease-in-out` and `steps(4)`; a colour transition interpolates in sRGB; a change mid-transition continues from the current value; a keyframe animation loops and reverses as its direction says and holds with `fill-mode: forwards`.
+- [x] Lifecycle tests: an element has `:intro` on its first frame and not on its second; `Remove()` on an element with an opacity outro transition keeps it alive, animating, for the duration, then removes it and its id goes stale; `Remove(immediate)` removes at once; a parent's outro keeps its children alive.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

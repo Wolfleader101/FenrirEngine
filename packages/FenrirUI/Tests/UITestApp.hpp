@@ -120,6 +120,15 @@ namespace UITest
         {
             app.RunFrame(1.0 / 60.0);
         }
+
+        // Runs `count` frames of `seconds` each: FenrirTime's frame delta, which transitions and animations step by.
+        void Frames(int count, double seconds)
+        {
+            for (int i = 0; i < count; ++i)
+            {
+                app.RunFrame(seconds);
+            }
+        }
     };
 
     // The events `reader` has not read yet, copied out.

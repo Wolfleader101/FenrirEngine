@@ -5,6 +5,7 @@
 #include <charconv>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <numbers>
 #include <optional>
 #include <span>
@@ -708,20 +709,33 @@ namespace Fenrir::Detail
             return path->empty() ? std::nullopt : path;
         }
 
+        /** @brief A keyword of `keywords`, or nothing. */
+        template <typename T, std::size_t N>
+        std::optional<T> ReadKeyword(std::string_view text,
+                                     const std::array<std::pair<std::string_view, T>, N>& keywords)
+        {
+            text = Trim(text);
+            for (const auto& [name, keyword] : keywords)
+            {
+                if (EqualsIgnoringCase(text, name))
+                {
+                    return keyword;
+                }
+            }
+            return std::nullopt;
+        }
+
         template <typename T, std::size_t N>
         bool ParseKeyword(std::string_view value, T& out, StyleParseContext& context,
                           const std::array<std::pair<std::string_view, T>, N>& keywords)
         {
-            value = Trim(value);
-            for (const auto& [name, keyword] : keywords)
+            const std::optional<T> keyword = ReadKeyword(value, keywords);
+            if (!keyword)
             {
-                if (EqualsIgnoringCase(value, name))
-                {
-                    out = keyword;
-                    return true;
-                }
+                return Fail(context, "it is not one of the property's keywords");
             }
-            return Fail(context, "it is not one of the property's keywords");
+            out = *keyword;
+            return true;
         }
 
         bool ParseDisplay(std::string_view value, Display& out, StyleParseContext& context)
@@ -1221,6 +1235,243 @@ namespace Fenrir::Detail
             return true;
         }
 
+        bool IsNameChar(char c)
+        {
+            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_';
+        }
+
+        bool IsIdentifier(std::string_view text)
+        {
+            if (text.empty() || (text.front() >= '0' && text.front() <= '9'))
+            {
+                return false;
+            }
+            return std::all_of(text.begin(), text.end(), IsNameChar);
+        }
+
+        bool IsOneOf(std::string_view text, std::span<const std::string_view> words)
+        {
+            return std::any_of(words.begin(), words.end(),
+                               [&](std::string_view w) { return EqualsIgnoringCase(text, w); });
+        }
+
+        /** @brief A time in `s` or `ms`, in seconds. */
+        std::optional<float> Seconds(std::string_view text)
+        {
+            const auto number = NumberAndUnit(text);
+            if (number && EqualsIgnoringCase(number->second, "s"))
+            {
+                return number->first;
+            }
+            if (number && EqualsIgnoringCase(number->second, "ms"))
+            {
+                return number->first / 1000.0f;
+            }
+            return std::nullopt;
+        }
+
+        /** @brief A time in `s` or `ms`. */
+        bool IsTime(std::string_view text)
+        {
+            return Seconds(text).has_value();
+        }
+
+        /** @brief A named timing function, `cubic-bezier()` or `steps()`. */
+        std::optional<TimingFunction> ReadTimingFunction(std::string_view text)
+        {
+            text = Trim(text);
+            using Position = TimingFunction::StepPosition;
+            constexpr std::array<std::pair<std::string_view, TimingFunction>, 7> named{{
+                {"ease", TimingFunction::Ease()},
+                {"linear", TimingFunction::Linear()},
+                {"ease-in", TimingFunction::EaseIn()},
+                {"ease-out", TimingFunction::EaseOut()},
+                {"ease-in-out", TimingFunction::EaseInOut()},
+                {"step-start", TimingFunction::Steps(1, Position::JumpStart)},
+                {"step-end", TimingFunction::Steps(1, Position::JumpEnd)},
+            }};
+            if (const std::optional<TimingFunction> function = ReadKeyword(text, named))
+            {
+                return function;
+            }
+            if (const auto arguments = CallOf(text, "cubic-bezier"))
+            {
+                const std::vector<std::string_view> parts = Split(*arguments, ',');
+                std::array<float, 4> numbers{};
+                if (parts.size() != 4)
+                {
+                    return std::nullopt;
+                }
+                for (std::size_t i = 0; i < 4; ++i)
+                {
+                    const std::optional<float> number = PlainNumber(parts[i]);
+                    if (!number)
+                    {
+                        return std::nullopt;
+                    }
+                    numbers[i] = *number;
+                }
+                // As CSS: the curve's x must rise from 0 to 1, so its control points' x lie in [0, 1].
+                if (numbers[0] < 0.0f || numbers[0] > 1.0f || numbers[2] < 0.0f || numbers[2] > 1.0f)
+                {
+                    return std::nullopt;
+                }
+                return TimingFunction::CubicBezier(numbers[0], numbers[1], numbers[2], numbers[3]);
+            }
+            if (const auto arguments = CallOf(text, "steps"))
+            {
+                const std::vector<std::string_view> parts = Split(*arguments, ',');
+                const std::optional<float> count = parts.empty() ? std::nullopt : PlainNumber(parts[0]);
+                if (!count || *count < 1.0f || std::floor(*count) != *count || parts.size() > 2)
+                {
+                    return std::nullopt;
+                }
+                Position position = Position::JumpEnd;
+                if (parts.size() == 2)
+                {
+                    constexpr std::array<std::pair<std::string_view, Position>, 6> positions{{
+                        {"jump-start", Position::JumpStart},
+                        {"start", Position::JumpStart},
+                        {"jump-end", Position::JumpEnd},
+                        {"end", Position::JumpEnd},
+                        {"jump-none", Position::JumpNone},
+                        {"jump-both", Position::JumpBoth},
+                    }};
+                    const std::optional<Position> found = ReadKeyword(parts[1], positions);
+                    if (!found)
+                    {
+                        return std::nullopt;
+                    }
+                    position = *found;
+                }
+                // CSS: jump-none needs two steps or more, to have a jump at all.
+                if (position == Position::JumpNone && *count < 2.0f)
+                {
+                    return std::nullopt;
+                }
+                return TimingFunction::Steps(static_cast<std::uint32_t>(*count), position);
+            }
+            return std::nullopt;
+        }
+
+        /** @brief Reads a comma-separated list through `read`, each item or none; `what` names an item for the error.
+         */
+        template <typename T, typename Read>
+        bool ParseList(std::string_view value, std::vector<T>& out, StyleParseContext& context, Read read,
+                       std::string_view what)
+        {
+            std::vector<T> items;
+            for (const std::string_view part : Split(value, ','))
+            {
+                std::optional<T> item = read(part);
+                if (!item)
+                {
+                    return Fail(context, "'" + std::string(part) + "' is not " + std::string(what));
+                }
+                items.push_back(std::move(*item));
+            }
+            out = std::move(items);
+            return true;
+        }
+
+        bool ParseTransitionProperty(std::string_view value, std::vector<std::string>& out, StyleParseContext& context)
+        {
+            if (EqualsIgnoringCase(Trim(value), "none"))
+            {
+                out = {"none"};
+                return true;
+            }
+            // CSS keeps a name it does not know (it may be a later property's) and transitions nothing for it.
+            return ParseList(
+                value, out, context,
+                [](std::string_view part) -> std::optional<std::string> {
+                    if (!IsIdentifier(part) || EqualsIgnoringCase(part, "none"))
+                    {
+                        return std::nullopt;
+                    }
+                    return Lowered(part);
+                },
+                "a property name or all (none stands alone)");
+        }
+
+        bool ParseDurations(std::string_view value, std::vector<float>& out, StyleParseContext& context)
+        {
+            return ParseList(
+                value, out, context,
+                [](std::string_view part) -> std::optional<float> {
+                    const std::optional<float> seconds = Seconds(part);
+                    return seconds && *seconds >= 0.0f ? seconds : std::nullopt;
+                },
+                "a time of zero or more in s or ms");
+        }
+
+        bool ParseDelays(std::string_view value, std::vector<float>& out, StyleParseContext& context)
+        {
+            return ParseList(value, out, context, Seconds, "a time in s or ms");
+        }
+
+        bool ParseTimingFunctions(std::string_view value, std::vector<TimingFunction>& out, StyleParseContext& context)
+        {
+            return ParseList(value, out, context, ReadTimingFunction,
+                             "a timing function (a CSS named one, cubic-bezier() or steps())");
+        }
+
+        bool ParseAnimationNames(std::string_view value, std::vector<std::string>& out, StyleParseContext& context)
+        {
+            return ParseList(
+                value, out, context,
+                [](std::string_view part) -> std::optional<std::string> {
+                    part = Trim(part);
+                    if (EqualsIgnoringCase(part, "none"))
+                    {
+                        return std::string("none");
+                    }
+                    return IsIdentifier(part) ? std::optional<std::string>(part) : std::nullopt;
+                },
+                "a keyframes name or none");
+        }
+
+        bool ParseIterationCounts(std::string_view value, std::vector<float>& out, StyleParseContext& context)
+        {
+            return ParseList(
+                value, out, context,
+                [](std::string_view part) -> std::optional<float> {
+                    if (EqualsIgnoringCase(Trim(part), "infinite"))
+                    {
+                        return std::numeric_limits<float>::infinity();
+                    }
+                    const std::optional<float> count = PlainNumber(part);
+                    return count && *count >= 0.0f ? count : std::nullopt;
+                },
+                "a number of zero or more, or infinite");
+        }
+
+        bool ParseDirections(std::string_view value, std::vector<AnimationDirection>& out, StyleParseContext& context)
+        {
+            constexpr std::array<std::pair<std::string_view, AnimationDirection>, 4> keywords{{
+                {"normal", AnimationDirection::Normal},
+                {"reverse", AnimationDirection::Reverse},
+                {"alternate", AnimationDirection::Alternate},
+                {"alternate-reverse", AnimationDirection::AlternateReverse},
+            }};
+            return ParseList(
+                value, out, context, [&](std::string_view part) { return ReadKeyword(part, keywords); },
+                "normal, reverse, alternate or alternate-reverse");
+        }
+
+        bool ParseFillModes(std::string_view value, std::vector<AnimationFillMode>& out, StyleParseContext& context)
+        {
+            constexpr std::array<std::pair<std::string_view, AnimationFillMode>, 4> keywords{{
+                {"none", AnimationFillMode::None},
+                {"forwards", AnimationFillMode::Forwards},
+                {"backwards", AnimationFillMode::Backwards},
+                {"both", AnimationFillMode::Both},
+            }};
+            return ParseList(
+                value, out, context, [&](std::string_view part) { return ReadKeyword(part, keywords); },
+                "none, forwards, backwards or both");
+        }
+
         using Parser = bool (*)(std::string_view, StyleDeclarations&, StyleParseContext&);
 
         struct PropertyEntry
@@ -1284,89 +1535,18 @@ namespace Fenrir::Detail
             "background", "flex",    "gap",    "transition",   "animation",
         };
 
-        // The spec's property set that the style does not hold yet: text (ticket 09), transitions and animations (10),
-        // scrollbars (12), and the filters and background-position.
-        constexpr std::array<std::string_view, 27> LaterLonghands{
-            "color",
-            "font-family",
-            "font-size",
-            "font-weight",
-            "font-style",
-            "text-align",
-            "line-height",
-            "letter-spacing",
-            "text-shadow",
-            "white-space",
-            "text-overflow",
-            "filter",
-            "backdrop-filter",
-            "background-position",
-            "scrollbar-color",
-            "scrollbar-width",
-            "transition-property",
-            "transition-duration",
-            "transition-timing-function",
-            "transition-delay",
-            "animation-name",
-            "animation-duration",
-            "animation-timing-function",
-            "animation-delay",
-            "animation-iteration-count",
-            "animation-direction",
-            "animation-fill-mode",
+        // The spec's property set that the style does not hold yet: text (ticket 09), scrollbars (12), and the filters
+        // and background-position.
+        constexpr std::array<std::string_view, 16> LaterLonghands{
+            "color",           "font-family",         "font-size",       "font-weight",
+            "font-style",      "text-align",          "line-height",     "letter-spacing",
+            "text-shadow",     "white-space",         "text-overflow",   "filter",
+            "backdrop-filter", "background-position", "scrollbar-color", "scrollbar-width",
         };
-
-        bool IsNameChar(char c)
-        {
-            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_';
-        }
-
-        bool IsIdentifier(std::string_view text)
-        {
-            if (text.empty() || (text.front() >= '0' && text.front() <= '9'))
-            {
-                return false;
-            }
-            return std::all_of(text.begin(), text.end(), IsNameChar);
-        }
-
-        bool IsOneOf(std::string_view text, std::span<const std::string_view> words)
-        {
-            return std::any_of(words.begin(), words.end(),
-                               [&](std::string_view w) { return EqualsIgnoringCase(text, w); });
-        }
-
-        /** @brief A time in `s` or `ms`. */
-        bool IsTime(std::string_view text)
-        {
-            const auto number = NumberAndUnit(text);
-            return number && (EqualsIgnoringCase(number->second, "s") || EqualsIgnoringCase(number->second, "ms"));
-        }
 
         bool IsTimingFunction(std::string_view text)
         {
-            constexpr std::array<std::string_view, 7> named{"ease",        "linear",     "ease-in", "ease-out",
-                                                            "ease-in-out", "step-start", "step-end"};
-            if (IsOneOf(text, named))
-            {
-                return true;
-            }
-            if (const auto arguments = CallOf(text, "cubic-bezier"))
-            {
-                const std::vector<std::string_view> parts = Split(*arguments, ',');
-                return parts.size() == 4 &&
-                       std::all_of(parts.begin(), parts.end(), [](std::string_view p) { return PlainNumber(p); });
-            }
-            if (const auto arguments = CallOf(text, "steps"))
-            {
-                const std::vector<std::string_view> parts = Split(*arguments, ',');
-                constexpr std::array<std::string_view, 6> positions{"jump-start", "jump-end", "jump-none",
-                                                                    "jump-both",  "start",    "end"};
-                const std::optional<float> count = parts.empty() ? std::nullopt : PlainNumber(parts[0]);
-                return count && *count >= 1.0f && std::floor(*count) == *count &&
-                       (parts.size() == 1 || (parts.size() == 2 && IsOneOf(parts[1], positions)));
-            }
-            return false;
+            return ReadTimingFunction(text).has_value();
         }
 
         /** @brief Joins parts with a space. */

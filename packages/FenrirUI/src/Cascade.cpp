@@ -143,6 +143,12 @@ namespace Fenrir::Detail
                 }
             }
         }
+        std::vector<std::string> skipped;
+        entry.keyframes = CompileKeyframes(entry.sheet, context, skipped);
+        for (const std::string& line : skipped)
+        {
+            state.app.Logger()->Warn("FenrirUI: {}:{}", entry.sheet.name, line);
+        }
     }
 
     void RebuildStyleIndex(UIRootState& state)
@@ -151,6 +157,10 @@ namespace Fenrir::Detail
         std::uint32_t order = 0;
         for (const std::unique_ptr<StylesheetEntry>& entry : state.sheets)
         {
+            for (const std::shared_ptr<const CompiledKeyframes>& keyframes : entry->keyframes)
+            {
+                index.keyframes.insert_or_assign(keyframes->name, keyframes);
+            }
             for (std::size_t r = 0; r < entry->rules.size(); ++r)
             {
                 CompiledRule& rule = entry->rules[r];
@@ -165,6 +175,8 @@ namespace Fenrir::Detail
                         constexpr auto siblings = static_cast<std::uint8_t>(StructuralPseudoClass::FirstChild) |
                                                   static_cast<std::uint8_t>(StructuralPseudoClass::LastChild);
                         index.hasSiblingStructure = index.hasSiblingStructure || (compound.structural & siblings) != 0;
+                        index.hasIntro = index.hasIntro ||
+                                         (compound.pseudoClasses & static_cast<std::uint16_t>(PseudoClass::Intro)) != 0;
                     }
                     const CompoundSelector& subject = selector.compounds.back();
                     if (!subject.id.empty())

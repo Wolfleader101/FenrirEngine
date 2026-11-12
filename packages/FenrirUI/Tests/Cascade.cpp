@@ -221,7 +221,7 @@ TEST_CASE("First-child, last-child and root follow the tree as it changes", "[ui
     REQUIRE(root.GetResolvedStyle(a)->width == Length::Auto());
     REQUIRE(WidthOf(root, b) == 3.0f);
 
-    root.Remove(b);
+    root.Remove(b, Fenrir::RemoveMode::Immediate);
     t.test.Frame();
     INFO("after a removal the sibling that is now last matches");
     REQUIRE(WidthOf(root, a) == 3.0f);
