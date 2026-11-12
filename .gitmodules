@@ -46,3 +46,6 @@
 [submodule "packages/FenrirText/libs/harfbuzz"]
 	path = packages/FenrirText/libs/harfbuzz
 	url = https://github.com/harfbuzz/harfbuzz
+[submodule "packages/FenrirUI/libs/yoga"]
+	path = packages/FenrirUI/libs/yoga
+	url = https://github.com/facebook/yoga
