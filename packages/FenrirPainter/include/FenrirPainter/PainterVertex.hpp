@@ -23,6 +23,11 @@ namespace Fenrir
         Arc = 6,
         /** @brief The band between two circles about one centre. */
         Ring = 7,
+        /**
+         * @brief A triangle of a tessellated path, fill or stroke: the shader applies only its paint, its clip and
+         * the coverage in `local.x`, 1 inside and 0 at the outside of its fringe.
+         */
+        Triangle = 8,
     };
 
     /** @brief How a painter quad's pixels are coloured. */
@@ -49,7 +54,8 @@ namespace Fenrir
 
     /**
      * @brief The painter's fat vertex (ADR-0060): with its quad's three others it carries the whole shape, its paint
-     * and its clip, so a panel's boxes batch into one command. Positions are in the list's local logical units; the
+     * and its clip, so a panel's boxes batch into one command; a tessellated path's triangles carry their paint and
+     * clip the same way. Positions are in the list's local logical units; the
      * other points are in spaces centred on what they describe, mapped per vertex so they interpolate exactly under
      * any affine transform. Colours are RGBA8, red in the lowest byte, sRGB-encoded and premultiplied.
      */
@@ -62,7 +68,10 @@ namespace Fenrir
          * `x`, a radial gradient's point with its circle at the origin and radius 1, an image's texture coordinate.
          */
         Math::Vec2 uv{0.0f};
-        /** @brief The vertex in the shape's space, the shape's centre at the origin, in UI units. */
+        /**
+         * @brief The vertex in the shape's space, the shape's centre at the origin, in UI units; for a Triangle, its
+         * coverage in `x`.
+         */
         Math::Vec2 local{0.0f};
         /** @brief The vertex in the clip's space, the clip's centre at the origin. */
         Math::Vec2 clipPoint{0.0f};

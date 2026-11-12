@@ -11,8 +11,8 @@
 
 **Touches:** `packages/FenrirPainter/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Draw-list tests: a filled square path is two triangles plus its fringe; a concave path with a hole has the expected triangle count within a tolerance and its fringe follows the outline; even-odd versus non-zero on a self-intersecting path; a dashed stroke emits the expected number of segments; each join and cap kind emits the expected geometry; flattening tolerance halves the segment count when doubled.
-- [ ] GL test (skipped without a display): a stroked star and a filled ring-with-hole read back with anti-aliased edges and no double coverage at joins.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Draw-list tests: a filled square path is two triangles plus its fringe; a concave path with a hole has the expected triangle count within a tolerance and its fringe follows the outline; even-odd versus non-zero on a self-intersecting path; a dashed stroke emits the expected number of segments; each join and cap kind emits the expected geometry; flattening tolerance halves the segment count when quadrupled (a curve's error falls as the square of its segment count, so doubling the tolerance divides the count by only the square root of two).
+- [x] GL test (skipped without a display): a stroked star and a filled ring-with-hole read back with anti-aliased edges and no double coverage at joins.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
