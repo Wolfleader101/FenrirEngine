@@ -35,7 +35,7 @@ namespace
     }
 } // namespace
 
-TEST_CASE("A removed element's id goes stale, and a reused slot does not revive it", "[ui][tree]")
+TEST_CASE("An element removed at once has a stale id, and a reused slot does not revive it", "[ui][tree]")
 {
     UITest::UITestApp test;
     std::shared_ptr<UITest::CaptureTarget> target;
@@ -44,7 +44,7 @@ TEST_CASE("A removed element's id goes stale, and a reused slot does not revive 
     const Fenrir::ElementId child = root.Create(panel, "panel");
     root.SetIdString(child, "child");
 
-    REQUIRE(root.Remove(panel));
+    REQUIRE(root.Remove(panel, Fenrir::RemoveMode::Immediate));
     INFO("the element and everything under it are gone");
     REQUIRE_FALSE(root.IsAlive(panel));
     REQUIRE_FALSE(root.IsAlive(child));
@@ -58,7 +58,7 @@ TEST_CASE("A removed element's id goes stale, and a reused slot does not revive 
     REQUIRE_FALSE(root.IsAlive(child));
     INFO("calls with a stale id do nothing");
     REQUIRE(root.GetElement(panel) == nullptr);
-    REQUIRE_FALSE(root.Remove(panel));
+    REQUIRE_FALSE(root.Remove(panel, Fenrir::RemoveMode::Immediate));
     REQUIRE(root.GetTag(panel).empty());
     INFO("the root element cannot be removed");
     REQUIRE_FALSE(root.Remove(root.GetRootElement()));

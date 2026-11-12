@@ -320,7 +320,8 @@ TEST_CASE("Every kind of value the property set takes parses with no diagnostic"
     {
         UNSCOPED_INFO("line " << diagnostic.line << ": " << diagnostic.message);
     }
-    INFO("lengths, colours, url(), gradients, shadows, transforms and the properties later tickets style all parse");
+    INFO("lengths, colours, url(), gradients, shadows, transforms, transition and animation lists and the properties "
+         "later tickets style all parse");
     REQUIRE(sheet.diagnostics.empty());
     REQUIRE(sheet.rules.size() == 3);
     REQUIRE(sheet.rules[0].declarations.size() == 24);

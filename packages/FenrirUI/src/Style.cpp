@@ -1,14 +1,15 @@
 #include "FenrirUI/Style.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <utility>
 
 #include "StyleValues.hpp"
 
 namespace Fenrir
 {
-    namespace
+    namespace Detail
     {
-        /** @brief Copies `property`'s field from `from` to `to`. */
         void CopyProperty(StyleProperty property, const ResolvedStyle& from, ResolvedStyle& to)
         {
             switch (property)
@@ -23,7 +24,9 @@ namespace Fenrir
                 break;
             }
         }
-    } // namespace
+    } // namespace Detail
+
+    using Detail::CopyProperty;
 
     bool StyleDeclarations::IsSet(StyleProperty property) const noexcept
     {
@@ -287,5 +290,136 @@ namespace Fenrir
     StyleDeclarations& StyleDeclarations::SetCursor(Fenrir::Cursor value)
     {
         return Set(StyleProperty::Cursor, &ResolvedStyle::cursor, value);
+    }
+
+    StyleDeclarations& StyleDeclarations::SetTransitionProperty(std::vector<std::string> names)
+    {
+        return Set(StyleProperty::TransitionProperty, &ResolvedStyle::transitionProperty, std::move(names));
+    }
+
+    StyleDeclarations& StyleDeclarations::SetTransitionDuration(std::vector<float> seconds)
+    {
+        return Set(StyleProperty::TransitionDuration, &ResolvedStyle::transitionDuration, std::move(seconds));
+    }
+
+    StyleDeclarations& StyleDeclarations::SetTransitionTimingFunction(std::vector<TimingFunction> functions)
+    {
+        return Set(StyleProperty::TransitionTimingFunction, &ResolvedStyle::transitionTimingFunction,
+                   std::move(functions));
+    }
+
+    StyleDeclarations& StyleDeclarations::SetTransitionDelay(std::vector<float> seconds)
+    {
+        return Set(StyleProperty::TransitionDelay, &ResolvedStyle::transitionDelay, std::move(seconds));
+    }
+
+    StyleDeclarations& StyleDeclarations::SetAnimationName(std::vector<std::string> names)
+    {
+        return Set(StyleProperty::AnimationName, &ResolvedStyle::animationName, std::move(names));
+    }
+
+    StyleDeclarations& StyleDeclarations::SetAnimationDuration(std::vector<float> seconds)
+    {
+        return Set(StyleProperty::AnimationDuration, &ResolvedStyle::animationDuration, std::move(seconds));
+    }
+
+    StyleDeclarations& StyleDeclarations::SetAnimationTimingFunction(std::vector<TimingFunction> functions)
+    {
+        return Set(StyleProperty::AnimationTimingFunction, &ResolvedStyle::animationTimingFunction,
+                   std::move(functions));
+    }
+
+    StyleDeclarations& StyleDeclarations::SetAnimationDelay(std::vector<float> seconds)
+    {
+        return Set(StyleProperty::AnimationDelay, &ResolvedStyle::animationDelay, std::move(seconds));
+    }
+
+    StyleDeclarations& StyleDeclarations::SetAnimationIterationCount(std::vector<float> counts)
+    {
+        return Set(StyleProperty::AnimationIterationCount, &ResolvedStyle::animationIterationCount, std::move(counts));
+    }
+
+    StyleDeclarations& StyleDeclarations::SetAnimationDirection(std::vector<Fenrir::AnimationDirection> directions)
+    {
+        return Set(StyleProperty::AnimationDirection, &ResolvedStyle::animationDirection, std::move(directions));
+    }
+
+    StyleDeclarations& StyleDeclarations::SetAnimationFillMode(std::vector<Fenrir::AnimationFillMode> modes)
+    {
+        return Set(StyleProperty::AnimationFillMode, &ResolvedStyle::animationFillMode, std::move(modes));
+    }
+
+    float TimingFunction::Apply(float progress) const noexcept
+    {
+        if (kind == Kind::Steps)
+        {
+            // CSS Easing Functions 1, "the steps() functions": the step reached, counted from 0, over the jumps.
+            const auto count = static_cast<float>(std::max<std::uint32_t>(steps, 1));
+            float step = std::floor(progress * count);
+            if (position == StepPosition::JumpStart || position == StepPosition::JumpBoth)
+            {
+                step += 1.0f;
+            }
+            if (progress >= 0.0f && step < 0.0f)
+            {
+                step = 0.0f;
+            }
+            const float jumps = position == StepPosition::JumpBoth   ? count + 1.0f
+                                : position == StepPosition::JumpNone ? std::max(count - 1.0f, 1.0f)
+                                                                     : count;
+            if (progress <= 1.0f && step > jumps)
+            {
+                step = jumps;
+            }
+            return step / jumps;
+        }
+        if (progress <= 0.0f || progress >= 1.0f)
+        {
+            return std::clamp(progress, 0.0f, 1.0f);
+        }
+        // x(t) = 3(1-t)^2 t x1 + 3(1-t) t^2 x2 + t^3, rising from 0 to 1 since x1 and x2 lie in [0, 1]: find the t
+        // whose x is `progress` by Newton's method, falling back to bisection where the slope is flat, then give y(t).
+        const auto curve = [](float t, float a, float b) {
+            const float u = 1.0f - t;
+            return 3.0f * u * u * t * a + 3.0f * u * t * t * b + t * t * t;
+        };
+        const auto slope = [](float t, float a, float b) {
+            const float u = 1.0f - t;
+            return 3.0f * u * u * a + 6.0f * u * t * (b - a) + 3.0f * t * t * (1.0f - b);
+        };
+        float t = progress;
+        bool solved = false;
+        for (int i = 0; i < 8; ++i)
+        {
+            const float error = curve(t, x1, x2) - progress;
+            if (std::abs(error) < 1e-6f)
+            {
+                solved = true;
+                break;
+            }
+            const float d = slope(t, x1, x2);
+            if (std::abs(d) < 1e-6f)
+            {
+                break;
+            }
+            t -= error / d;
+        }
+        if (!solved || t < 0.0f || t > 1.0f)
+        {
+            float low = 0.0f;
+            float high = 1.0f;
+            t = progress;
+            for (int i = 0; i < 40; ++i)
+            {
+                const float x = curve(t, x1, x2);
+                if (std::abs(x - progress) < 1e-6f)
+                {
+                    break;
+                }
+                (x < progress ? low : high) = t;
+                t = 0.5f * (low + high);
+            }
+        }
+        return curve(t, y1, y2);
     }
 } // namespace Fenrir

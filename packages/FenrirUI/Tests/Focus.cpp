@@ -206,7 +206,7 @@ TEST_CASE("Removing the focused element takes the focus and :focus-within away",
     test.Frame();
     REQUIRE(root.Focus(menu.buttons[0]));
 
-    root.Remove(menu.buttons[0]);
+    root.Remove(menu.buttons[0], Fenrir::RemoveMode::Immediate);
     INFO("nothing has the focus and the panel no longer holds :focus-within");
     REQUIRE_FALSE(root.GetFocused().IsValid());
     REQUIRE_FALSE(root.HasPseudoClass(menu.panel, PseudoClass::FocusWithin));
