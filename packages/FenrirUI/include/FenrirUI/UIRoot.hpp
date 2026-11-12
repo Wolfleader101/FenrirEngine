@@ -20,6 +20,7 @@
 namespace Fenrir
 {
     class App;
+    class Paragraph;
     class UIRoots;
 
     namespace Detail
@@ -230,7 +231,7 @@ namespace Fenrir
          * lists of `translate()`, `translateX()`, `translateY()`, `scale()`, `scaleX()`, `scaleY()`, `rotate()` (deg,
          * rad, grad or turn), times in `s` or `ms` and timing functions (the CSS named set, `cubic-bezier()`,
          * `steps()`) in the transition and animation lists. An unknown property, one the style does not hold yet (the
-         * text, filter and scrollbar properties, which a stylesheet parses and keeps), or a value it cannot read is
+         * filter and scrollbar properties, which a stylesheet parses and keeps), or a value it cannot read is
          * logged, with both named, and changes nothing: false.
          */
         bool SetStyleProperty(ElementId element, std::string_view name, std::string_view value);
@@ -255,6 +256,24 @@ namespace Fenrir
         [[nodiscard]] const ResolvedStyle* GetResolvedStyle(ElementId element) const noexcept;
         /** @brief Its rectangles as of the last frame's layout; empty rectangles for a stale id. */
         [[nodiscard]] ElementBoxes GetBoxes(ElementId element) const noexcept;
+        /**
+         * @brief Gives `element` the UTF-8 `text`, any element as a label has it: a FenrirText paragraph kept on the
+         * element, in its text properties (color, font-family, font-size, font-weight, font-style, text-align,
+         * line-height, letter-spacing, white-space and text-overflow), laid out again when the text, those or the
+         * width it is given change. While it has no children, layout measures its content box to the paragraph at
+         * the width it is offered; each frame paints it at the content box's top-left, under its text-shadow, before
+         * the element's own Paint. The paragraph is laid out in the target's pixels, its sizes the style's times the
+         * root's scale and the target's content scale, and measured back in UI units. The fonts are the app's
+         * FontLibrary (UIRoots::GetFonts); without one the text measures and draws nothing.
+         */
+        void SetText(ElementId element, std::string_view text);
+        /** @brief Its text; empty when it has none or for a stale id. */
+        [[nodiscard]] std::string_view GetText(ElementId element) const noexcept;
+        /**
+         * @brief Its paragraph as of the last frame, laid out in the target's pixels at its content box's width; null
+         * when it has no text or for a stale id. Valid until the element is removed.
+         */
+        [[nodiscard]] const Paragraph* GetParagraph(ElementId element) const noexcept;
         /** @brief Has layout measure `element` again next frame, when its content's size changed. */
         void InvalidateMeasure(ElementId element);
         /** @} */

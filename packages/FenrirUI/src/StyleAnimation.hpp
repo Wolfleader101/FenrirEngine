@@ -100,4 +100,7 @@ namespace Fenrir::Detail
      * values on the way in.
      */
     void ApplyMotion(const ElementMotion& motion, ResolvedStyle& style);
+
+    /** @brief Whether `a` and `b` hold the same value for `property`. */
+    [[nodiscard]] bool SameProperty(StyleProperty property, const ResolvedStyle& a, const ResolvedStyle& b);
 } // namespace Fenrir::Detail

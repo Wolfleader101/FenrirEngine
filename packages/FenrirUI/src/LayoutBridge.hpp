@@ -10,12 +10,14 @@
 namespace Fenrir
 {
     class Element;
-}
+    class FontLibrary;
+} // namespace Fenrir
 
 namespace Fenrir::Detail
 {
     /** @brief A Yoga node, named without Yoga's types. */
     struct LayoutNode;
+    class ElementText;
 
     /** @brief A node's laid-out rectangle relative to its parent's border box, and its border and padding widths. */
     struct LayoutResult
@@ -41,7 +43,10 @@ namespace Fenrir::Detail
         LayoutTree& operator=(LayoutTree&&) = delete;
         ~LayoutTree();
 
-        /** @brief A new node with no parent, measured through `element` when it is a leaf that has a measure. */
+        /**
+         * @brief A new node with no parent, measured when it is a leaf: through its text, once SetText gives it one,
+         * else through `element` when it has a measure.
+         */
         [[nodiscard]] LayoutNode* CreateNode(Element* element);
         /** @brief Frees `node`, taking it out of its parent first; its children are left without a parent. */
         void DestroyNode(LayoutNode* node);
@@ -57,6 +62,13 @@ namespace Fenrir::Detail
         void SetFixedSize(LayoutNode* node, float width, float height);
         /** @brief Has a measured leaf measured again. */
         void InvalidateMeasure(LayoutNode* node);
+        /**
+         * @brief Measures the node, while it has no children, through `text` (null for none, which measures through
+         * its element again), and has it measured again.
+         */
+        void SetText(LayoutNode* node, ElementText* text);
+        /** @brief What text measures lay their paragraphs out with; null lays nothing out. */
+        void SetFonts(FontLibrary* fonts) noexcept;
 
         /** @brief Lays the tree under `root` out if anything in it is dirty; true when it did. */
         bool Layout(LayoutNode* root);

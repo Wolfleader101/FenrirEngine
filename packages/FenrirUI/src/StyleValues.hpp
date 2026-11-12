@@ -96,8 +96,11 @@ namespace Fenrir::Detail
     /** @brief Copies `property`'s field of `from` to `to`. */
     void CopyProperty(StyleProperty property, const ResolvedStyle& from, ResolvedStyle& to);
 
-    /** @brief Whether `property` is inherited: pointer-events and cursor (the text properties come later). */
+    /** @brief Whether `property` is inherited: pointer-events, cursor and the text properties. */
     [[nodiscard]] bool IsInherited(StyleProperty property) noexcept;
+
+    /** @brief Copies every inherited property of `parent` to `style`. */
+    void Inherit(const ResolvedStyle& parent, ResolvedStyle& style);
 } // namespace Fenrir::Detail
 
 // Every property: its enumerator, its CSS name, its ResolvedStyle field and the parser that reads it. The table drives
@@ -161,6 +164,17 @@ namespace Fenrir::Detail
     X(ZIndex, "z-index", zIndex, ParseInteger)                                                                \
     X(PointerEvents, "pointer-events", pointerEvents, ParsePointerEvents)                                     \
     X(Cursor, "cursor", cursor, ParseCursor)                                                                  \
+    X(Color, "color", color, ParseColour)                                                                     \
+    X(FontFamily, "font-family", fontFamily, ParseFontFamily)                                                 \
+    X(FontSize, "font-size", fontSize, ParsePixels)                                                           \
+    X(FontWeight, "font-weight", fontWeight, ParseFontWeight)                                                 \
+    X(FontStyle, "font-style", fontStyle, ParseFontStyle)                                                     \
+    X(TextAlign, "text-align", textAlign, ParseTextAlign)                                                     \
+    X(LineHeight, "line-height", lineHeight, ParseLineHeight)                                                 \
+    X(LetterSpacing, "letter-spacing", letterSpacing, ParseLetterSpacing)                                     \
+    X(TextShadow, "text-shadow", textShadow, ParseTextShadow)                                                 \
+    X(WhiteSpace, "white-space", whiteSpace, ParseWhiteSpace)                                                 \
+    X(TextOverflow, "text-overflow", textOverflow, ParseTextOverflow)                                         \
     X(TransitionProperty, "transition-property", transitionProperty, ParseTransitionProperty)                 \
     X(TransitionDuration, "transition-duration", transitionDuration, ParseDurations)                          \
     X(TransitionTimingFunction, "transition-timing-function", transitionTimingFunction, ParseTimingFunctions) \
