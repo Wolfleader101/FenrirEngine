@@ -265,7 +265,7 @@ One session, branch and PR per ticket, into `fenrir-ui` or the previous ticket's
 | 09 | [Labels and text style](issues/09-labels-and-text-style.md) | 06, 08 | `ui/09-labels-and-text-style` | [#344](https://github.com/Wolfleader101/FenrirEngine/pull/344) |
 | 10 | [Transitions, keyframe animations, `:intro`/`:outro` and deferred removal](issues/10-transitions-keyframe-animations-intro-outro-and-deferred-removal.md) | 08 | `ui/10-transitions-keyframe-animations-intro-outro-and-deferred-removal` | [#342](https://github.com/Wolfleader101/FenrirEngine/pull/342) |
 | 11 | [Input routing, hover and focus, `UIEvent` and C++ listeners](issues/11-input-routing-hover-and-focus-uievent-and-cpp-listeners.md) | 07 | `ui/11-input-routing-hover-and-focus-uievent-and-cpp-listeners` | [#340](https://github.com/Wolfleader101/FenrirEngine/pull/340) |
-| 12 | [Controls and the default stylesheet](issues/12-controls-and-the-default-stylesheet.md) | 09, 11 | `ui/12-controls-and-the-default-stylesheet` | |
+| 12 | [Controls and the default stylesheet](issues/12-controls-and-the-default-stylesheet.md) | 09, 11 | `ui/12-controls-and-the-default-stylesheet` | [#346](https://github.com/Wolfleader101/FenrirEngine/pull/346) |
 | 13 | [Text entry](issues/13-text-entry.md) | 09, 11 | `ui/13-text-entry` | |
 | 14 | [Gamepad navigation and the virtual cursor](issues/14-gamepad-navigation-and-the-virtual-cursor.md) | 11, 12 | `ui/14-gamepad-navigation-and-the-virtual-cursor` | |
 | 15 | [Markup documents](issues/15-markup-documents.md) | 09 | `ui/15-markup-documents` | |
