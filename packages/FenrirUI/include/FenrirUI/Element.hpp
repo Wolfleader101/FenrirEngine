@@ -119,8 +119,13 @@ namespace Fenrir
         }
 
         /**
-         * @brief Sees an input routed to the element; returns Consumed when it took it. The root's input router, which
-         * a later part of the FenrirUI spec builds, calls it; nothing does yet.
+         * @brief Sees an input the root's input router routes to the element, before the UIEvent it makes is sent: a
+         * button press or scroll over it (it is the topmost element under the pointer taking pointer input), the
+         * release of a button pressed on it, pointer motion while a button pressed on it is held or else while it is
+         * under the pointer, and keys and text while it has the focus. Returning Consumed says it took the input
+         * itself, which skips the root's default action: a press then leaves the focus where it was, and Tab does not
+         * move it. The input is consumed either way, as the router's rules say (ADR-0065), except motion, which always
+         * reaches the game.
          */
         virtual RouteResult OnInput(App& app, const RoutedInput& input)
         {

@@ -11,9 +11,9 @@
 
 **Touches:** `packages/FenrirUI/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Headless App tests with FenrirInput's test feed: a click on a panel with `pointer-events: none` reaches the game's `Mouse` and sends no event; with `all` it is consumed, sends press, release and click, and `Mouse` sees nothing; a click on a rounded corner's cut-off hits what is behind; a click outside an overflow-hidden parent's box misses a child that overflows; hover enter and leave as the pointer moves; the topmost of two overlapping elements wins by z-index.
-- [ ] Focus tests: click focuses, Tab and Shift+Tab walk the order, `:focus-within` on ancestors, key events go to the focused element and are consumed, the claims resource shows keyboard focus while focused.
-- [ ] Listener tests: a click runs the target's listener then the parent's; stop-propagation on the target keeps the parent's from running; the engine event is sent once regardless.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Headless App tests with FenrirInput's test feed: a click on a panel with `pointer-events: none` reaches the game's `Mouse` and sends no event; with `all` it is consumed, sends press, release and click, and `Mouse` sees nothing; a click on a rounded corner's cut-off hits what is behind; a click outside an overflow-hidden parent's box misses a child that overflows; hover enter and leave as the pointer moves; the topmost of two overlapping elements wins by z-index.
+- [x] Focus tests: click focuses, Tab and Shift+Tab walk the order, `:focus-within` on ancestors, key events go to the focused element and are consumed, the claims resource shows keyboard focus while focused.
+- [x] Listener tests: a click runs the target's listener then the parent's; stop-propagation on the target keeps the parent's from running; the engine event is sent once regardless.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

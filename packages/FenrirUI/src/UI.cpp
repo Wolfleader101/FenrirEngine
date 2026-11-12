@@ -17,7 +17,7 @@ namespace Fenrir
     UIRoot& UIRoots::CreateRoot(UIRootConfig config)
     {
         RootEntry entry;
-        entry.root = std::make_unique<UIRoot>(m_app, *this, std::move(config));
+        entry.root = std::make_unique<UIRoot>(m_app, *this, std::move(config), UIRootId{m_nextId++});
         entry.order = m_nextOrder++;
         UIRoot& root = *entry.root;
         // Kept in drawing order: by layer, then as made.
@@ -39,6 +39,8 @@ namespace Fenrir
         {
             return false;
         }
+        it->root->Retire();
+        m_retired.push_back(std::move(it->root));
         m_roots.erase(it);
         return true;
     }
@@ -76,6 +78,7 @@ namespace Fenrir
 
     void UIRoots::Frame()
     {
+        m_retired.clear();
         for (const RootEntry& entry : m_roots)
         {
             entry.root->Frame();

@@ -8,6 +8,7 @@
 #include <variant>
 #include <vector>
 
+#include "ElementGeometry.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirPainter/Painter.hpp"
@@ -19,65 +20,10 @@ namespace Fenrir::Detail
 {
     namespace
     {
-        float Resolve(const Length& length, float reference)
-        {
-            switch (length.unit)
-            {
-            case LengthUnit::Px:
-                return length.value;
-            case LengthUnit::Percent:
-                return length.value / 100.0f * reference;
-            case LengthUnit::Auto:
-                break;
-            }
-            return 0.0f;
-        }
-
-        CornerRadii RadiiOf(const ResolvedStyle& style)
-        {
-            return {style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius,
-                    style.borderBottomLeftRadius};
-        }
-
-        /** @brief The padding box's corners: each outer radius less the wider of the borders that meet there. */
-        CornerRadii InnerRadiiOf(const ResolvedStyle& style)
-        {
-            const auto inner = [](float radius, float a, float b) { return std::max(0.0f, radius - std::max(a, b)); };
-            return {inner(style.borderTopLeftRadius, style.borderTopWidth, style.borderLeftWidth),
-                    inner(style.borderTopRightRadius, style.borderTopWidth, style.borderRightWidth),
-                    inner(style.borderBottomRightRadius, style.borderBottomWidth, style.borderRightWidth),
-                    inner(style.borderBottomLeftRadius, style.borderBottomWidth, style.borderLeftWidth)};
-        }
-
         Colour Faded(Colour colour, float alpha)
         {
             colour.a *= alpha;
             return colour;
-        }
-
-        /** @brief The element's transform about its origin, from its local UI units to its parent's. */
-        Transform2D ElementTransform(const ResolvedStyle& style, const Rect2D& border)
-        {
-            const Math::Vec2 origin{border.x + Resolve(style.transformOriginX, border.width),
-                                    border.y + Resolve(style.transformOriginY, border.height)};
-            Transform2D transform = Transform2D::Translation(origin);
-            for (const TransformStep& step : style.transform)
-            {
-                switch (step.kind)
-                {
-                case TransformStep::Kind::Translate:
-                    transform = transform * Transform2D::Translation(
-                                                {Resolve(step.x, border.width), Resolve(step.y, border.height)});
-                    break;
-                case TransformStep::Kind::Scale:
-                    transform = transform * Transform2D::Scaling(step.factors);
-                    break;
-                case TransformStep::Kind::Rotate:
-                    transform = transform * Transform2D::Rotation(step.radians);
-                    break;
-                }
-            }
-            return transform * Transform2D::Translation(-origin);
         }
 
         Rect2D TransformedBounds(const Transform2D& transform, const Rect2D& rect)
