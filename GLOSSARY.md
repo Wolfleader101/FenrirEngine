@@ -196,7 +196,7 @@ A plain-data C++ resource, scene or app, that C# sees as a blittable struct mark
 *Avoid:* singleton, global, resource mirror (informal).
 
 **Facade**
-A static C# class over a package's generated native functions, its generated part the pass-throughs each native's `@facade` names and its hand-written part what a description cannot say: overloads that are not renames, generic methods, properties over outputs, constants, defaults and conversions. It stands for a C++ resource with behaviour (`Keyboard`, `Mouse`, `Gamepads`, `Window`, `Assets`, `Materials`, `Renderer`, `DebugDraw`, physics's `PhysicsWorld`): its answers come from C++, so C# never re-implements the rules (ADR-0029, ADR-0043). A generated facade method takes by value what its declaration takes `in`, and when its mark names one output (`returns`) gives that output as its value, the C++ default when the call did nothing.
+A static C# class over a package's generated native functions, its generated part the pass-throughs each native's `@facade` names and its hand-written part what a description cannot say: overloads that are not renames, generic methods, properties over outputs, constants, defaults and conversions. It stands for a C++ resource with behaviour (`Keyboard`, `Mouse`, `Gamepads`, `Window`, `Assets`, `Materials`, `Renderer`, `DebugDraw`, physics's `PhysicsWorld`, text's `Fonts`, the painter's `Painter`): its answers come from C++, so C# never re-implements the rules (ADR-0029, ADR-0043). A generated facade method takes by value what its declaration takes `in`, and when its mark names one output (`returns`) gives that output as its value, the C++ default when the call did nothing.
 *Avoid:* wrapper (that is a one-field struct), API class, service.
 
 **Wrapper**

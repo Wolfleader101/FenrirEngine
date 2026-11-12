@@ -1,0 +1,407 @@
+{
+  "package": "FenrirTextScripting",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fenrir::Colour",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A colour as linear red, green, blue and alpha, each a float, usually in [0, 1] (ADR-0025). Debug draw, materials and lights take it, and the renderer packs it for vertices. Colours written as sRGB hex values, as colour pickers and art tools give them, are converted when made (FromSrgb). Default constructed, it is opaque white.",
+      "fields": [
+        {
+          "name": "r",
+          "offset": 0,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "g",
+          "offset": 4,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "b",
+          "offset": 8,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "a",
+          "offset": 12,
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::FontStyle",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Whether a face is upright or italic.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Normal",
+          "value": 0
+        },
+        {
+          "name": "Italic",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::LineMetrics",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 36,
+      "alignment": 4,
+      "doc": "One laid-out line of a paragraph.",
+      "fields": [
+        {
+          "name": "begin",
+          "offset": 0,
+          "kind": "u32",
+          "default": 0,
+          "doc": "The byte range of the paragraph's text on the line, its trailing spaces and newline included."
+        },
+        {
+          "name": "end",
+          "offset": 4,
+          "kind": "u32",
+          "default": 0
+        },
+        {
+          "name": "top",
+          "offset": 8,
+          "kind": "f32",
+          "default": 0,
+          "doc": "The line box's top and height, in pixels from the paragraph's top."
+        },
+        {
+          "name": "height",
+          "offset": 12,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "baseline",
+          "offset": 16,
+          "kind": "f32",
+          "default": 0,
+          "doc": "The baseline, in pixels from the paragraph's top."
+        },
+        {
+          "name": "ascent",
+          "offset": 20,
+          "kind": "f32",
+          "default": 0,
+          "doc": "The largest ascent above the baseline and descent below it of the line's faces, in pixels."
+        },
+        {
+          "name": "descent",
+          "offset": 24,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "left",
+          "offset": 28,
+          "kind": "f32",
+          "default": 0,
+          "doc": "Where the line's text starts after alignment, and its width without trailing spaces, in pixels."
+        },
+        {
+          "name": "width",
+          "offset": 32,
+          "kind": "f32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Math::Vec2",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::TextAlign",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Where a paragraph's lines sit across its width.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Start",
+          "value": 0,
+          "doc": "Left in a left-to-right paragraph, right in a right-to-left one."
+        },
+        {
+          "name": "End",
+          "value": 1,
+          "doc": "Right in a left-to-right paragraph, left in a right-to-left one."
+        },
+        {
+          "name": "Left",
+          "value": 2
+        },
+        {
+          "name": "Right",
+          "value": 3
+        },
+        {
+          "name": "Center",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::TextDirection",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "A paragraph's base direction.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Auto",
+          "value": 0,
+          "doc": "From its first strong character (Unicode's rule P2), left to right if it has none."
+        },
+        {
+          "name": "LeftToRight",
+          "value": 1
+        },
+        {
+          "name": "RightToLeft",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::WhiteSpace",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How a paragraph treats spaces, tabs and newlines, as CSS's `white-space`.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Normal",
+          "value": 0,
+          "doc": "Spaces, tabs and newlines collapse to one space, and lines wrap at the width."
+        },
+        {
+          "name": "NoWrap",
+          "value": 1,
+          "doc": "Collapsed as Normal, on one line."
+        },
+        {
+          "name": "Pre",
+          "value": 2,
+          "doc": "Every space is kept (a tab as one space), newlines break lines, and lines never wrap."
+        },
+        {
+          "name": "PreWrap",
+          "value": 3,
+          "doc": "Kept as Pre, and lines wrap at the width."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ParagraphStyle",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 4,
+      "doc": "How a paragraph's lines are laid out.",
+      "fields": [
+        {
+          "name": "align",
+          "offset": 0,
+          "kind": "enum",
+          "type": "Fenrir::TextAlign",
+          "default": "Start",
+          "doc": "Where the lines sit across the width."
+        },
+        {
+          "name": "lineHeight",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0,
+          "doc": "A line's height as a multiple of its largest font size; zero means its fonts' own height (ascent, descent and line gap). The space above the tallest glyphs and below is split evenly, as CSS's half-leading."
+        },
+        {
+          "name": "maxLines",
+          "offset": 8,
+          "kind": "u32",
+          "default": 0,
+          "doc": "The most lines laid out; zero means no limit."
+        },
+        {
+          "name": "ellipsis",
+          "offset": 12,
+          "kind": "bool",
+          "default": false,
+          "doc": "Whether text cut off (by maxLines, or past the width on a line that does not wrap) ends its last line with an ellipsis, `…`, in the style there."
+        },
+        {
+          "name": "whiteSpace",
+          "offset": 13,
+          "kind": "enum",
+          "type": "Fenrir::WhiteSpace",
+          "default": "Normal",
+          "doc": "How spaces, tabs and newlines are treated."
+        },
+        {
+          "name": "direction",
+          "offset": 14,
+          "kind": "enum",
+          "type": "Fenrir::TextDirection",
+          "default": "Auto",
+          "doc": "The base direction, which Start and End alignment follow."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Rect2D",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A rectangle in local 2D coordinates: logical units from the top-left, Y down.",
+      "fields": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "width",
+          "offset": 8,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "height",
+          "offset": 12,
+          "kind": "f32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptText::Paragraph",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 8,
+      "alignment": 8,
+      "doc": "A paragraph of styled text that a script made (Paragraph.Create) and the engine keeps until the script destroys it: plain data, so copying it does not copy the paragraph. Its calls lay it out in the app's FontLibrary and read back its size, lines and hit positions. Ids are never handed out again, so a destroyed paragraph's calls do nothing. The default paragraph names none.",
+      "fields": [
+        {
+          "name": "id",
+          "offset": 0,
+          "kind": "u64",
+          "default": 0,
+          "doc": "Which paragraph: zero for none."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::TextDecoration",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "A line drawn with a run of text, as CSS's `text-decoration-line`. FenrirText only reports it.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "None",
+          "value": 0
+        },
+        {
+          "name": "Underline",
+          "value": 1
+        },
+        {
+          "name": "LineThrough",
+          "value": 2
+        },
+        {
+          "name": "Overline",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptText::TextStyle",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 32,
+      "alignment": 4,
+      "doc": "How one run of a paragraph's text looks, but its family, which a call takes as text.",
+      "fields": [
+        {
+          "name": "size",
+          "offset": 0,
+          "kind": "f32",
+          "default": 16,
+          "doc": "The font size in pixels: the em square's height. A paragraph a painter draws is laid out in the target's pixels: the style's size times the root scale times the target's pixels per unit."
+        },
+        {
+          "name": "weight",
+          "offset": 4,
+          "kind": "u16",
+          "default": 400,
+          "doc": "The weight asked for, 100 to 900; the family's nearest face is used."
+        },
+        {
+          "name": "style",
+          "offset": 6,
+          "kind": "enum",
+          "type": "Fenrir::FontStyle",
+          "default": "Normal",
+          "doc": "Upright or italic; a family without the style uses its other faces."
+        },
+        {
+          "name": "colour",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {},
+          "doc": "The text's colour, straight alpha."
+        },
+        {
+          "name": "letterSpacing",
+          "offset": 24,
+          "kind": "f32",
+          "default": 0,
+          "doc": "Pixels added after each glyph that advances. Not zero turns ligatures off."
+        },
+        {
+          "name": "decoration",
+          "offset": 28,
+          "kind": "enum",
+          "type": "Fenrir::TextDecoration",
+          "default": "None",
+          "doc": "The line drawn with the run."
+        }
+      ]
+    }
+  ]
+}

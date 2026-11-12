@@ -1,0 +1,63 @@
+# FenrirPainter's C# binding (ADR-0042, ADR-0061, packages/Iris/Tools/Iris.Bindings/README.md): this binding's own
+# FenrirPainterScripting.api.json bound to the Fenrir.Painter contract and this extension. C# reaches the painter only
+# through the natives declared here: the Painter facade and the Path2D mirror's methods are generated from their
+# @facade marks, and nothing of it is written by hand but the facade's class doc.
+# Paths are relative to this file. `cmake --build <dir> --target fenrir-generate-bindings` regenerates every output
+# below; they are committed.
+namespace = "Fenrir.Painter"
+# The rectangle and paragraph are the text binding's, the sampler and image handle the assets binding's, the window id
+# the input binding's, the colour and vectors the math binding's: named as theirs, never mirrored here.
+uses = [
+    "../../../FenrirScripting/api/FenrirMath.binding.toml",
+    "../../../FenrirInput/Scripting/api/FenrirInput.binding.toml",
+    "../../../FenrirAssets/Scripting/api/FenrirAssets.binding.toml",
+    "../../../FenrirText/Scripting/api/FenrirText.binding.toml",
+]
+# The scripting SDK's names are its defaults file's (FenrirScripting.binding-defaults.toml): this file states only what is this binding's.
+defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
+
+[csharp]
+contract = "../../Managed/Fenrir.Painter"
+generated = "../../Managed/Fenrir.Painter/Generated"
+# A path is an id the engine hands out: C# assigns it whole, never its field.
+immutable-structs = ["Fenrir::ScriptPainter::Path2D"]
+
+[cpp]
+# On the include path, for FenrirUI's binding, which builds on this one.
+mappings = "../include/FenrirPainterScripting/Generated/FenrirPainterMappings.hpp"
+# The structs as C# passes them.
+includes = ["FenrirPainterScripting/ScriptPainter.hpp"]
+
+[registration]
+source = "../src/Generated/FenrirPainterRegistration.cpp"
+function = "Fenrir::Generated::RegisterPainter"
+# Makes the extension from its state (ADR-0046): what the package's public function returns.
+maker = "Fenrir::Generated::MakePainterExtension"
+
+[tests]
+cpp = "../Tests/Generated/FenrirPainterDefaultsTests.cpp"
+csharp = "../Tests/Generated/FenrirPainterDefaults.cs"
+class = "PainterScriptFixture.Defaults"
+includes = ["PainterScriptingApp.hpp"]
+setup = "Fenrir::Testing::PainterScriptingApp app;"
+tags = "[painter][scripting][bindings]"
+
+[names]
+"Fenrir::ScriptPainter::PainterId" = "PainterId"
+"Fenrir::ScriptPainter::Path2D" = "Path2D"
+"Fenrir::ScriptPainter::Paint" = "Paint"
+"Fenrir::ScriptPainter::StrokeStyle" = "StrokeStyle"
+"Fenrir::ScriptPainter::ImageDraw" = "ImageDraw"
+
+# The native functions: tools/describe-api's natives mode reads every function in `sources` taking `context` first (with
+# the extension's state second) into FenrirPainter.natives.json, and this binding generates from it their C#
+# declarations, the PainterNative class, and their registration.
+[natives]
+sources = ["../src/PainterScripting.cpp"]
+class = "PainterNative"
+header = "../src/Generated/FenrirPainterNatives.hpp"
+includes = [
+    # What the natives' declarations name: their extension state and the structs as C# passes them.
+    "PainterScriptingState.hpp",
+    "FenrirPainterScripting/ScriptPainter.hpp",
+]

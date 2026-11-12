@@ -5,6 +5,8 @@
 namespace Fenrir
 {
     class App;
+    // Only named here: FenrirPainterScripting defines Painting::ScriptingExtension().
+    struct ScriptingExtension;
 
     /**
      * @brief The owner of what Painting::Install set up: the painter's shader, `builtin:painter`, registered with the
@@ -19,6 +21,17 @@ namespace Fenrir
          * asset store, or a shader the store refuses, it logs why and returns an owner whose IsValid is false.
          */
         [[nodiscard]] static Painting Install(App& app);
+
+        /**
+         * @brief The painter's scripting extension (ADR-0061): a C# system is given a painter over a window's overlay
+         * for one layer (Painter.Overlay), makes paths, and paints through the Painter facade, one native per call; it
+         * draws the paragraphs of `text`, the text extension (Text::ScriptingExtension), whose state it shares.
+         *
+         * Defined by the FenrirPainterScripting library, not FenrirPainter (which never links FenrirScripting), so it
+         * exists only in a build with scripting on. Include "FenrirPainterScripting/PainterScripting.hpp" and link
+         * FenrirPainterScripting to call it.
+         */
+        [[nodiscard]] static Fenrir::ScriptingExtension ScriptingExtension(const Fenrir::ScriptingExtension& text);
 
         Painting(Painting&& other) noexcept;
         Painting& operator=(Painting&& other) noexcept;

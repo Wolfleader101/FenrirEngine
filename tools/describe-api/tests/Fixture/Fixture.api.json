@@ -270,7 +270,7 @@
       "name": "Fixture::Body",
       "category": "struct",
       "role": "component",
-      "size": 312,
+      "size": 320,
       "alignment": 8,
       "doc": "A component using each kind of field: enums, bound types, nested structs, arrays and pointers. Its doc comment is wrapped over three lines.",
       "fields": [
@@ -489,6 +489,17 @@
           "offset": 304,
           "kind": "pointer",
           "default": null
+        },
+        {
+          "name": "stiff",
+          "offset": 312,
+          "kind": "struct",
+          "type": "Fixture::Spring",
+          "default": {
+            "stiffness": 8,
+            "damping": 1
+          },
+          "doc": "A named constant's values."
         }
       ]
     },
