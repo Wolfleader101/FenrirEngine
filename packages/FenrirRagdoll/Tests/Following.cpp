@@ -119,16 +119,22 @@ TEST_CASE("Following bodies are on their simulation bones after every tick, at s
     REQUIRE(checks->failure.empty());
 }
 
-TEST_CASE("Following bodies' velocities are their pose's change over the tick", "[ragdoll][follow]")
+TEST_CASE("A body's first following tick has no earlier pose, so no velocity", "[ragdoll][follow]")
 {
     Walker walker;
     walker.test.Run(1);
-    INFO("on the first following tick there is no earlier pose: no velocity");
     for (const Entity& body : walker.spawned.bodies)
     {
+        INFO(Text(body.GetComponent<Fenrir::RagdollBody>().bone) << " has no velocity after one tick");
         REQUIRE(Near(body.GetComponent<Fenrir::RigidBody>().linearVelocity, Vec3(0.0f)));
+        REQUIRE(Near(body.GetComponent<Fenrir::RigidBody>().angularVelocity, Vec3(0.0f)));
     }
-    walker.test.Run(5);
+}
+
+TEST_CASE("Following bodies' linear velocities are their pose's change over the tick", "[ragdoll][follow]")
+{
+    Walker walker;
+    walker.test.Run(6);
     for (const Entity& body : walker.spawned.bodies)
     {
         const Fenrir::RigidBody& rigid = body.GetComponent<Fenrir::RigidBody>();
@@ -138,7 +144,10 @@ TEST_CASE("Following bodies' velocities are their pose's change over the tick", 
         REQUIRE(Near(rigid.linearVelocity, Vec3(WalkSpeed, 0.0f, 0.0f), 1e-3f));
         REQUIRE(Near(rigid.angularVelocity, Vec3(0.0f), 1e-3f));
     }
+}
 
+TEST_CASE("Following bodies' angular velocities are their pose's turn over the tick", "[ragdoll][follow]")
+{
     // A chain turning about +Y at 2 rad/s: every body turns with it.
     RagdollTest::RagdollApp spinning;
     const Entity chain = spinning.AddSkeleton(RagdollTest::Chain());
@@ -159,6 +168,35 @@ TEST_CASE("Following bodies' velocities are their pose's change over the tick", 
     // Its centre sits 0.2 from the turning axis, so it moves at 0.4 m/s.
     INFO("and moves at 0.2 m × 2 rad/s round the axis");
     REQUIRE(Near(Fenrir::Math::Magnitude(rigid.linearVelocity), 0.4f, 2e-3f));
+}
+
+TEST_CASE("A rig with a scaled armature puts its bodies on its bones, built and following", "[ragdoll][follow]")
+{
+    RagdollTest::RagdollApp test;
+    test.AddGround();
+    // An armature scale, as imported rigs often carry: the pelvis, and everything under it, at half size.
+    Fenrir::SkeletonData rig = RagdollTest::Humanoid();
+    rig.bones[0].rest.scale = Vec3(0.5f);
+    const Entity skeleton = test.AddSkeleton(std::move(rig));
+    RagdollTest::AddWalk(test, WalkSpeed);
+    const SpawnedRagdoll spawned = Fenrir::BuildRagdoll(
+        test.app, test.level, skeleton, Fenrir::DescribeHumanoid(test.DataOf(skeleton), RagdollTest::HumanoidMap()));
+    REQUIRE(spawned.error.empty());
+    for (const Entity& body : spawned.bodies)
+    {
+        INFO(Text(body.GetComponent<Fenrir::RagdollBody>().bone) << " is built on its scaled bone × offset");
+        REQUIRE(Near(Fenrir::GetWorldTransform(body).pos, RagdollTest::OnBone(test.level, body).pos, 1e-4f));
+    }
+    INFO("the calf's body sits half way between the half-size calf (0.05, 0.75, 0) and foot (0.05, 0.55, 0)");
+    REQUIRE(
+        Near(Fenrir::GetWorldTransform(RagdollTest::BodyOf(spawned, "calf_l")).pos, Vec3(0.05f, 0.65f, 0.0f), 1e-4f));
+    test.Run(10);
+    for (const Entity& body : spawned.bodies)
+    {
+        INFO(Text(body.GetComponent<Fenrir::RagdollBody>().bone) << " follows its scaled bone × offset");
+        REQUIRE(Near(Fenrir::GetWorldTransform(body).pos, RagdollTest::OnBone(test.level, body).pos, 1e-4f));
+        REQUIRE(Near(Fenrir::GetWorldTransform(body).rot, RagdollTest::OnBone(test.level, body).rot, 1e-4f));
+    }
 }
 
 TEST_CASE("A game write to a following body's Transform is overwritten next tick", "[ragdoll][follow]")

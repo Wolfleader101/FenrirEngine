@@ -40,7 +40,7 @@ namespace Fenrir
         }
 
         /** @brief The joint kind as built: friction from the description, its motor off. */
-        JointKind Built(JointKind kind, float friction)
+        JointKind AsSpawned(JointKind kind, float friction)
         {
             if (kind.Is<HingeJoint>())
             {
@@ -117,7 +117,7 @@ namespace Fenrir
             partOf.emplace(name, i);
         }
 
-        const std::vector<Detail::Pose> rest = Detail::RestPoses(*data);
+        const std::vector<Math::Mat4> rest = Detail::RestModels(*data);
         const Math::Mat4 skeletonWorld = GetWorldMatrix(skeleton);
         const Math::Quat skeletonTurn = Detail::PoseOf(skeletonWorld).rot;
         // The id 0 is no group: Entity::Null is never a live entity's id, so no other ragdoll takes it by default.
@@ -133,9 +133,9 @@ namespace Fenrir
         for (std::size_t i = 0; i < description.parts.size(); ++i)
         {
             const RagdollPart& part = description.parts[i];
-            const Detail::Pose& boneRest = rest[static_cast<std::size_t>(bones[i])];
-            const Math::Mat4 boneModel = Math::Translate(Math::Mat4(1.0f), boneRest.pos) * glm::mat4_cast(boneRest.rot);
-            const Detail::Pose body = Detail::Compose(Detail::PoseOf(skeletonWorld * boneModel), part.offset);
+            // skeleton × bone × offset, as the glue follows it, then reduced to a position and rotation.
+            const Detail::Pose body =
+                Detail::PoseOf(skeletonWorld * rest[static_cast<std::size_t>(bones[i])] * TransformToMat4(part.offset));
 
             Entity entity = entities.CreateEntity();
             entity.GetComponent<Name>().Set((std::string(NameOf(part.bone)) + " body").c_str());
@@ -169,7 +169,7 @@ namespace Fenrir
                                              .bodyB = spawned.bodies[i],
                                              .frameA = frames.frameA,
                                              .frameB = frames.frameB,
-                                             .kind = Built(part.joint, description.jointFriction),
+                                             .kind = AsSpawned(part.joint, description.jointFriction),
                                              .collideConnected = false});
             spawned.joints.push_back(entity);
         }
@@ -197,10 +197,19 @@ namespace Fenrir
             EntityList& entities = scene.GetEntityList();
             for (const Entity& entity : spawned)
             {
+                // The glue's override entries are on its bodies' bones; game code's on other bones stay.
+                if (entity.HasComponent<RagdollBody>() && entity.GetComponent<RagdollBody>().ragdoll == skeleton)
+                {
+                    const std::int32_t bone =
+                        Skeletons::FindBone(scene, skeleton, NameOf(entity.GetComponent<RagdollBody>().bone));
+                    Skeletons::ClearOverride(scene, skeleton, bone);
+                }
+            }
+            for (const Entity& entity : spawned)
+            {
                 entities.DestroyEntity(entity);
             }
         }
-        Skeletons::ClearOverrides(scene, skeleton);
         skeleton.RemoveComponent<Ragdoll>();
     }
 } // namespace Fenrir

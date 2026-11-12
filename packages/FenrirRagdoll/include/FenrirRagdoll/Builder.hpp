@@ -47,8 +47,9 @@ namespace Fenrir
 
     /**
      * @brief Removes `skeleton`'s ragdoll: the parent entity `BuildRagdoll` spawned (the root body's parent) and every
-     * entity under it, the skeleton's pose override entries, and its `Ragdoll`. Bodies game code added elsewhere are
-     * left, as inactive ragdoll bodies. Does nothing to an entity with no `Ragdoll`.
+     * entity under it, the pose override entries on those bodies' bones (game code's entries on other bones stay),
+     * and its `Ragdoll`. Bodies game code added elsewhere are left, as inactive ragdoll bodies. Does nothing to an
+     * entity with no `Ragdoll`.
      */
     void DestroyRagdoll(Scene& scene, Entity skeleton);
 } // namespace Fenrir

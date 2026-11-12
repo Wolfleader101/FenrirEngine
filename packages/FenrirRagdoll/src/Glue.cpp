@@ -63,7 +63,8 @@ namespace Fenrir
             return found;
         }
 
-        std::string Describe(const Entity& entity)
+        /** @brief How a log line names an entity: its id and name. */
+        std::string LogName(const Entity& entity)
         {
             return "entity " + std::to_string(entity.GetId()) + " ('" + entity.GetComponent<Name>().Get() + "')";
         }
@@ -106,7 +107,7 @@ namespace Fenrir
             if (added || entry->second != why)
             {
                 entry->second = why;
-                state.app->Logger()->Warn("The RagdollBody on " + Describe(body) + " is skipped: " + why);
+                state.app->Logger()->Warn("The RagdollBody on " + LogName(body) + " is skipped: " + why);
             }
         }
 
@@ -157,7 +158,7 @@ namespace Fenrir
                     ragdoll.state = RagdollState{.inactive = true};
                     if (state.inactiveWarned.insert(skeleton.GetId()).second)
                     {
-                        app.Logger()->Warn("The Ragdoll on " + Describe(skeleton) + " is inactive: " + inactivity);
+                        app.Logger()->Warn("The Ragdoll on " + LogName(skeleton) + " is inactive: " + inactivity);
                     }
                     continue;
                 }
@@ -203,10 +204,9 @@ namespace Fenrir
                     // 2. Modes, and 3. Follow: physics's PostTick moves the kinematic body onto the pose over the step.
                     RigidBody& rigid = body.GetComponent<RigidBody>();
                     rigid.motionType = MotionType::Kinematic;
-                    const Detail::Pose pose =
-                        Detail::Compose(Detail::PoseOf(*Skeletons::GetBoneWorldMatrix(
-                                            scene, skeleton, mapping.state.bone, PoseKind::Simulation)),
-                                        mapping.offset);
+                    const Detail::Pose pose = Detail::PoseOf(
+                        *Skeletons::GetBoneWorldMatrix(scene, skeleton, mapping.state.bone, PoseKind::Simulation) *
+                        TransformToMat4(mapping.offset));
                     SetWorldTransform(body, Transform(pose.pos, pose.rot, GetWorldTransform(body).scale));
                     // A body that becomes dynamic takes the velocity its RigidBody holds, so it is kept as the move's.
                     const auto last = state.lastFollowed.find(body.GetId());

@@ -8,7 +8,7 @@ ADR-0028 and ADR-0038 have **ragdoll glue** write simulated body poses into a sk
 
 ## The model
 
-- **A new package, FenrirRagdoll,** depends on FenrirPhysics, FenrirSkeleton and the core, and is built only when physics is on. It owns the ragdoll components, the builder that spawns a ragdoll from a description, the glue systems, and its own scripting extension (ADR-0009) with a `Fenrir.Ragdoll` contract, built only with scripting on. FenrirPhysics gains nothing for ragdolls beyond general collision groups (`CollisionGroup`), and FenrirSkeleton nothing.
+- **A new package, FenrirRagdoll,** depends on FenrirPhysics, FenrirSkeleton and the core, and is built only when physics is on (and assets, which FenrirSkeleton needs: *amended while building the ragdoll spec's ticket 02, 2026-11-12*). It owns the ragdoll components, the builder that spawns a ragdoll from a description, the glue systems, and its own scripting extension (ADR-0009) with a `Fenrir.Ragdoll` contract, built only with scripting on. FenrirPhysics gains nothing for ragdolls beyond general collision groups (`CollisionGroup`), and FenrirSkeleton nothing.
 - **Bodies and joints are ordinary.** Each ragdoll body is a `RigidBody` plus `Collider` entity; each joint between a body and its parent body is an ordinary `Joint` entity (ADR-0013), a hinge or a swing-twist. Nothing is a private Jolt `Ragdoll`. Events, queries, materials, breaking, debug lines and the C# physics surface apply to them unchanged.
 - **The mapping is one component per body entity:**
 

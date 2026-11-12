@@ -271,7 +271,7 @@ TEST_CASE("An empty slot drops the chain below it", "[ragdoll][describe]")
     REQUIRE(PartOf(description, "upperarm_l") == nullptr);
 }
 
-TEST_CASE("A map naming an unknown bone, or not rooted at the hips, is refused with an error", "[ragdoll][describe]")
+TEST_CASE("A map naming a bone the skeleton lacks is refused, names matched exactly", "[ragdoll][describe]")
 {
     HumanoidBones unknown = RagdollTest::HumanoidMap();
     unknown.head = RagdollTest::NameOf("Skull");
@@ -284,14 +284,20 @@ TEST_CASE("A map naming an unknown bone, or not rooted at the hips, is refused w
     near.head = RagdollTest::NameOf("head");
     INFO("a name differing only in case is not guessed at");
     REQUIRE_FALSE(Describe(near).error.empty());
+}
 
+TEST_CASE("A map with no hips is refused", "[ragdoll][describe]")
+{
     HumanoidBones noHips = RagdollTest::HumanoidMap();
     noHips.hips = {};
     const RagdollDescription refusedRoot = Describe(noHips);
     INFO("no hips: refused, since every part hangs from them");
     REQUIRE_FALSE(refusedRoot.error.empty());
     REQUIRE(refusedRoot.parts.empty());
+}
 
+TEST_CASE("A map whose slots are not one tree under the hips is refused", "[ragdoll][describe]")
+{
     HumanoidBones crossed = RagdollTest::HumanoidMap();
     crossed.leftLowerArm = RagdollTest::NameOf("calf_l");
     const RagdollDescription refusedTree = Describe(crossed);

@@ -40,6 +40,41 @@ namespace Fenrir
             Foot,
         };
 
+        /** @brief A kind's numbers from the spec. */
+        struct KindNumbers
+        {
+            /** @brief The capsule's radius, × the stature. */
+            float radius;
+            /** @brief Its share of the total mass; every slot's together sum to 1. */
+            float mass;
+            /** @brief Its length when its bone has nothing to run to, × the stature. */
+            float leafLength;
+            /** @brief Whether the joint to its parent is a hinge (elbow, knee); else a swing-twist joint. */
+            bool hinge;
+            /** @brief A swing-twist joint's cone half-angle and twist either way, degrees. */
+            float cone;
+            float twist;
+        };
+
+        // Indexed by Kind. The hips have no joint.
+        constexpr std::array<KindNumbers, 10> Numbers = {
+            KindNumbers{0.065f, 0.14f, 0.10f, false, 0.0f, 0.0f},    // Hips
+            KindNumbers{0.055f, 0.12f, 0.10f, false, 20.0f, 20.0f},  // Spine
+            KindNumbers{0.06f, 0.22f, 0.10f, false, 20.0f, 20.0f},   // Chest
+            KindNumbers{0.055f, 0.08f, 0.12f, false, 30.0f, 45.0f},  // Head
+            KindNumbers{0.025f, 0.03f, 0.10f, false, 80.0f, 45.0f},  // UpperArm (the shoulder)
+            KindNumbers{0.022f, 0.02f, 0.10f, true, 0.0f, 0.0f},     // LowerArm (the elbow)
+            KindNumbers{0.02f, 0.01f, 0.10f, false, 35.0f, 20.0f},   // Hand (the wrist)
+            KindNumbers{0.038f, 0.10f, 0.10f, false, 45.0f, 25.0f},  // UpperLeg (the hip)
+            KindNumbers{0.03f, 0.045f, 0.10f, true, 0.0f, 0.0f},     // LowerLeg (the knee)
+            KindNumbers{0.025f, 0.015f, 0.13f, false, 30.0f, 10.0f}, // Foot (the ankle)
+        };
+
+        const KindNumbers& NumbersOf(Kind kind)
+        {
+            return Numbers[static_cast<std::size_t>(kind)];
+        }
+
         struct Slot
         {
             Kind kind;
@@ -47,20 +82,28 @@ namespace Fenrir
             std::size_t parent;
             /** @brief The slot whose bone this part's capsule runs to; NoSlot for a leaf. */
             std::size_t child;
+            /** @brief Whether its hinge bends the limb's end forward (an elbow) rather than back (a knee). */
+            bool bendsForward;
         };
 
         // In HumanoidBones' order: hips, spine, chest, head; the left arm (upper, lower, hand), the right arm; the left
         // leg (upper, lower, foot), the right leg. Each slot comes after the one it hangs from.
         constexpr std::array<Slot, SlotCount> Slots = {
-            Slot{Kind::Hips, NoSlot, 1},  Slot{Kind::Spine, 0, 2},     Slot{Kind::Chest, 1, 3},
-            Slot{Kind::Head, 2, NoSlot},  Slot{Kind::UpperArm, 2, 5},  Slot{Kind::LowerArm, 4, 6},
-            Slot{Kind::Hand, 5, NoSlot},  Slot{Kind::UpperArm, 2, 8},  Slot{Kind::LowerArm, 7, 9},
-            Slot{Kind::Hand, 8, NoSlot},  Slot{Kind::UpperLeg, 0, 11}, Slot{Kind::LowerLeg, 10, 12},
-            Slot{Kind::Foot, 11, NoSlot}, Slot{Kind::UpperLeg, 0, 14}, Slot{Kind::LowerLeg, 13, 15},
-            Slot{Kind::Foot, 14, NoSlot},
+            Slot{Kind::Hips, NoSlot, 1, false},  Slot{Kind::Spine, 0, 2, false},
+            Slot{Kind::Chest, 1, 3, false},      Slot{Kind::Head, 2, NoSlot, false},
+            Slot{Kind::UpperArm, 2, 5, false},   Slot{Kind::LowerArm, 4, 6, true},
+            Slot{Kind::Hand, 5, NoSlot, false},  Slot{Kind::UpperArm, 2, 8, false},
+            Slot{Kind::LowerArm, 7, 9, true},    Slot{Kind::Hand, 8, NoSlot, false},
+            Slot{Kind::UpperLeg, 0, 11, false},  Slot{Kind::LowerLeg, 10, 12, false},
+            Slot{Kind::Foot, 11, NoSlot, false}, Slot{Kind::UpperLeg, 0, 14, false},
+            Slot{Kind::LowerLeg, 13, 15, false}, Slot{Kind::Foot, 14, NoSlot, false},
         };
         constexpr std::size_t HeadSlot = 3;
         constexpr std::array<std::size_t, 2> FootSlots = {12, 15};
+
+        constexpr float Degree = std::numbers::pi_v<float> / 180.0f;
+        /** @brief How far an elbow or knee bends from the rest pose. */
+        constexpr float HingeBend = 140.0f * Degree;
 
         std::array<const BoneName*, SlotCount> NamesOf(const HumanoidBones& bones)
         {
@@ -70,126 +113,37 @@ namespace Fenrir
                     &bones.leftFoot,      &bones.rightUpperLeg, &bones.rightLowerLeg, &bones.rightFoot};
         }
 
-        /** @brief The capsule's radius as a fraction of the stature. */
-        float RadiusRatio(Kind kind)
-        {
-            switch (kind)
-            {
-            case Kind::Hips:
-                return 0.065f;
-            case Kind::Spine:
-                return 0.055f;
-            case Kind::Chest:
-                return 0.06f;
-            case Kind::Head:
-                return 0.055f;
-            case Kind::UpperArm:
-                return 0.025f;
-            case Kind::LowerArm:
-                return 0.022f;
-            case Kind::Hand:
-                return 0.02f;
-            case Kind::UpperLeg:
-                return 0.038f;
-            case Kind::LowerLeg:
-                return 0.03f;
-            case Kind::Foot:
-                return 0.025f;
-            }
-            return 0.03f;
-        }
-
-        /** @brief The part's share of the total mass; every slot's together sum to 1. */
-        float MassFraction(Kind kind)
-        {
-            switch (kind)
-            {
-            case Kind::Hips:
-                return 0.14f;
-            case Kind::Spine:
-                return 0.12f;
-            case Kind::Chest:
-                return 0.22f;
-            case Kind::Head:
-                return 0.08f;
-            case Kind::UpperArm:
-                return 0.03f;
-            case Kind::LowerArm:
-                return 0.02f;
-            case Kind::Hand:
-                return 0.01f;
-            case Kind::UpperLeg:
-                return 0.10f;
-            case Kind::LowerLeg:
-                return 0.045f;
-            case Kind::Foot:
-                return 0.015f;
-            }
-            return 0.0f;
-        }
-
-        /** @brief How long a part with no bone to run to is, as a fraction of the stature. */
-        float LeafLengthRatio(Kind kind)
-        {
-            switch (kind)
-            {
-            case Kind::Head:
-                return 0.12f;
-            case Kind::Foot:
-                return 0.13f;
-            default:
-                return 0.10f;
-            }
-        }
-
-        constexpr float Degree = std::numbers::pi_v<float> / 180.0f;
-        /** @brief How far an elbow or knee bends from the rest pose. */
-        constexpr float HingeBend = 140.0f * Degree;
-
-        /** @brief A swing-twist joint with the slot's cone half-angle and twist either way, in degrees. */
-        SwingTwistJoint SwingTwistOf(Kind kind, float friction)
-        {
-            float cone = 20.0f;
-            float twist = 20.0f;
-            switch (kind)
-            {
-            case Kind::Head:
-                cone = 30.0f;
-                twist = 45.0f;
-                break;
-            case Kind::UpperArm:
-                cone = 80.0f;
-                twist = 45.0f;
-                break;
-            case Kind::Hand:
-                cone = 35.0f;
-                twist = 20.0f;
-                break;
-            case Kind::UpperLeg:
-                cone = 45.0f;
-                twist = 25.0f;
-                break;
-            case Kind::Foot:
-                cone = 30.0f;
-                twist = 10.0f;
-                break;
-            default: // the spine and chest
-                break;
-            }
-            SwingTwistJoint joint;
-            joint.swingYLimit = cone * Degree;
-            joint.swingZLimit = cone * Degree;
-            joint.twistMin = -twist * Degree;
-            joint.twistMax = twist * Degree;
-            joint.friction = friction;
-            return joint;
-        }
-
         RagdollDescription Refused(std::string error)
         {
             RagdollDescription refused;
             refused.error = "DescribeHumanoid: " + std::move(error);
             return refused;
+        }
+
+        /** @brief A hinge whose 140° range lies on the side a turn about `axis` must take to move the limb's end
+         * (along `direction`) forward or back, as `bendsForward` says. The hinge's angle is signed about its axis. */
+        HingeJoint HingeOf(const Vec3& axis, const Vec3& direction, const Vec3& forward, bool bendsForward,
+                           float friction)
+        {
+            const Vec3 bent = Math::Rotate(Math::AngleAxis(0.1f, axis), direction) - direction;
+            const bool positiveGoesForward = Math::Dot(bent, forward) > 0.0f;
+            HingeJoint hinge;
+            hinge.friction = friction;
+            hinge.limits.enabled = true;
+            hinge.limits.min = positiveGoesForward == bendsForward ? 0.0f : -HingeBend;
+            hinge.limits.max = positiveGoesForward == bendsForward ? HingeBend : 0.0f;
+            return hinge;
+        }
+
+        SwingTwistJoint SwingTwistOf(const KindNumbers& numbers, float friction)
+        {
+            SwingTwistJoint joint;
+            joint.swingYLimit = numbers.cone * Degree;
+            joint.swingZLimit = numbers.cone * Degree;
+            joint.twistMin = -numbers.twist * Degree;
+            joint.twistMax = numbers.twist * Degree;
+            joint.friction = friction;
+            return joint;
         }
     } // namespace
 
@@ -234,8 +188,8 @@ namespace Fenrir
             }
         }
 
-        const std::vector<Detail::Pose> rest = Detail::RestPoses(skeleton);
-        const auto at = [&](std::int32_t b) { return rest[static_cast<std::size_t>(b)].pos; };
+        const std::vector<Math::Mat4> rest = Detail::RestModels(skeleton);
+        const auto at = [&](std::int32_t b) { return Vec3(rest[static_cast<std::size_t>(b)][3]); };
         const auto firstChild = [&](std::int32_t b) {
             const std::vector<std::int32_t> below = skeleton.Subtree(b);
             return below.size() > 1 ? below[1] : NoBone;
@@ -253,20 +207,19 @@ namespace Fenrir
         if (stature == 0.0f && !rest.empty())
         {
             const auto [low, high] = std::ranges::minmax_element(
-                rest, [](const Detail::Pose& a, const Detail::Pose& b) { return a.pos.y < b.pos.y; });
-            stature = high->pos.y - low->pos.y;
+                rest, [](const Math::Mat4& a, const Math::Mat4& b) { return a[3].y < b[3].y; });
+            stature = (*high)[3].y - (*low)[3].y;
         }
         stature = std::max(stature, 0.2f);
 
-        // Forward is where the feet point, else +Z.
+        // Forward is where the feet point (the left foot's when both are mapped), else +Z.
         Vec3 forward(0.0f, 0.0f, 1.0f);
         for (auto it = FootSlots.rbegin(); it != FootSlots.rend(); ++it)
         {
-            const std::size_t foot = *it;
-            const std::int32_t toe = filled[foot] ? firstChild(bone[foot]) : NoBone;
+            const std::int32_t toe = filled[*it] ? firstChild(bone[*it]) : NoBone;
             if (toe != NoBone)
             {
-                Vec3 along = at(toe) - at(bone[foot]);
+                Vec3 along = at(toe) - at(bone[*it]);
                 along.y = 0.0f;
                 forward = Math::Magnitude(along) > 1e-4f ? Math::Normalized(along) : forward;
             }
@@ -275,7 +228,7 @@ namespace Fenrir
         float massShare = 0.0f;
         for (std::size_t i = 0; i < SlotCount; ++i)
         {
-            massShare += filled[i] ? MassFraction(Slots[i].kind) : 0.0f;
+            massShare += filled[i] ? NumbersOf(Slots[i].kind).mass : 0.0f;
         }
 
         RagdollDescription description;
@@ -287,24 +240,26 @@ namespace Fenrir
                 continue;
             }
             const Slot& slot = Slots[i];
-            const Detail::Pose& boneRest = rest[static_cast<std::size_t>(bone[i])];
+            const KindNumbers& numbers = NumbersOf(slot.kind);
+            const Math::Mat4& boneModel = rest[static_cast<std::size_t>(bone[i])];
+            const Vec3 origin = at(bone[i]);
 
             // The run: to the child slot's bone, else to the bone's first child, else on along the parent bone.
             Vec3 run(0.0f);
             if (slot.child != NoSlot && filled[slot.child])
             {
-                run = at(bone[slot.child]) - boneRest.pos;
+                run = at(bone[slot.child]) - origin;
             }
             else if (const std::int32_t child = firstChild(bone[i]); child != NoBone)
             {
-                run = at(child) - boneRest.pos;
+                run = at(child) - origin;
             }
             if (Math::Magnitude(run) < 1e-4f)
             {
                 const std::int32_t parentBone = skeleton.Parent(bone[i]);
-                const Vec3 along = parentBone == NoBone ? Vec3(0.0f) : boneRest.pos - at(parentBone);
+                const Vec3 along = parentBone == NoBone ? Vec3(0.0f) : origin - at(parentBone);
                 run = (Math::Magnitude(along) > 1e-4f ? Math::Normalized(along) : Vec3(0.0f, 1.0f, 0.0f)) *
-                      (LeafLengthRatio(slot.kind) * stature);
+                      (numbers.leafLength * stature);
             }
             const float length = Math::Magnitude(run);
             const Vec3 direction = run / length;
@@ -315,43 +270,32 @@ namespace Fenrir
             {
                 part.parent = *names[slot.parent];
             }
-            const float radius = RadiusRatio(slot.kind) * stature;
+            const float radius = numbers.radius * stature;
             part.shape = CapsuleShape{.halfHeight = std::max(0.5f * length - radius, 0.005f), .radius = radius};
-            // The capsule stands along the body's Y, centred on the run; offset = bone⁻¹ × body.
-            const Detail::Pose body{boneRest.pos + direction * (0.5f * length),
-                                    Detail::FromTo(Vec3(0.0f, 1.0f, 0.0f), direction)};
-            const Math::Quat inverseBone = Math::Conjugate(boneRest.rot);
-            part.offset.pos = Math::Rotate(inverseBone, body.pos - boneRest.pos);
-            part.offset.rot = Math::Normalized(inverseBone * body.rot);
-            part.mass = MassFraction(slot.kind) / massShare * totalMass;
-            part.jointAnchor = boneRest.pos;
-            part.jointFrame.position = boneRest.pos;
+            // The capsule stands along the body's Y, centred on the run; offset = bone⁻¹ × body, through the full
+            // matrices, so a scaled armature's bone × offset is the body again.
+            const Math::Mat4 body = Math::Translate(Math::Mat4(1.0f), origin + direction * (0.5f * length)) *
+                                    Math::QuatToMat4(Detail::FromTo(Vec3(0.0f, 1.0f, 0.0f), direction));
+            Math::Decompose(Math::Inverse(boneModel) * body, part.offset.pos, part.offset.rot, part.offset.scale);
+            part.mass = numbers.mass / massShare * totalMass;
+            part.jointAnchor = origin;
+            part.jointFrame.position = origin;
 
-            if (slot.parent != NoSlot && (slot.kind == Kind::LowerArm || slot.kind == Kind::LowerLeg))
+            if (slot.parent != NoSlot && numbers.hinge)
             {
-                // The bend axis lies across the limb and across forward. An elbow bends the forearm's end forward, a
-                // knee the shin's backward: the hinge's angle is signed about the axis, so the range goes on the side
-                // a small turn about it moves the end towards.
+                // The bend axis lies across the limb and across forward.
                 Vec3 axis = Math::Cross(forward, direction);
                 if (Math::Magnitude(axis) < 1e-3f)
                 {
                     axis = Math::Cross(Vec3(0.0f, 1.0f, 0.0f), direction);
                 }
                 axis = Math::Normalized(axis);
-                const Vec3 bent = Math::Rotate(Math::AngleAxis(0.1f, axis), direction) - direction;
-                const bool positiveGoesForward = Math::Dot(bent, forward) > 0.0f;
-                const bool bendsForward = slot.kind == Kind::LowerArm;
-                HingeJoint hinge;
-                hinge.friction = description.jointFriction;
-                hinge.limits.enabled = true;
-                hinge.limits.min = positiveGoesForward == bendsForward ? 0.0f : -HingeBend;
-                hinge.limits.max = positiveGoesForward == bendsForward ? HingeBend : 0.0f;
-                part.joint = hinge;
+                part.joint = HingeOf(axis, direction, forward, slot.bendsForward, description.jointFriction);
                 part.jointFrame.rotation = Detail::BasisWithX(axis, direction);
             }
             else if (slot.parent != NoSlot)
             {
-                part.joint = SwingTwistOf(slot.kind, description.jointFriction);
+                part.joint = SwingTwistOf(numbers, description.jointFriction);
                 // The twist axis runs along the part, the cone about it.
                 part.jointFrame.rotation = Detail::BasisWithX(direction, forward);
             }

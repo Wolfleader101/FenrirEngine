@@ -1,13 +1,13 @@
 #pragma once
 
-// Pose arithmetic the description, the builder and the glue share: rest poses in model space, and position-rotation
-// poses composed with offsets. Private to FenrirRagdoll.
+// Pose arithmetic the description, the builder and the glue share: rest-pose model matrices, and the position and
+// rotation of a matrix. Bodies are placed through full matrices (bone × offset), scale included, and only then reduced
+// to a position and rotation, so a rig with a scaled armature puts its bodies where its bones are. Private to
+// FenrirRagdoll.
 
 #include <cmath>
 #include <cstddef>
 #include <vector>
-
-#include <glm/gtc/quaternion.hpp>
 
 #include "FenrirAssets/SkeletonData.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
@@ -15,45 +15,35 @@
 
 namespace Fenrir::Detail
 {
-    /** @brief A position and rotation: a bone's or body's pose, scale dropped. */
+    /** @brief A position and rotation: a body's pose once its matrix is reduced, scale dropped. */
     struct Pose
     {
         Math::Vec3 pos = Math::Vec3(0.0f);
         Math::Quat rot = Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
     };
 
-    /** @brief Every bone's rest pose in model space, parents first (rest scales are dropped). */
-    inline std::vector<Pose> RestPoses(const SkeletonData& skeleton)
+    /** @brief Every bone's rest-pose model matrix, parents first: the parent's × the bone's rest transform. */
+    inline std::vector<Math::Mat4> RestModels(const SkeletonData& skeleton)
     {
-        std::vector<Pose> poses(skeleton.BoneCount());
-        for (std::size_t i = 0; i < poses.size(); ++i)
+        std::vector<Math::Mat4> models(skeleton.BoneCount());
+        for (std::size_t i = 0; i < models.size(); ++i)
         {
             const SkeletonBone& bone = skeleton.bones[i];
-            const Pose parent = bone.parent == NoBone ? Pose{} : poses[static_cast<std::size_t>(bone.parent)];
-            poses[i].pos = parent.pos + Math::Rotate(parent.rot, bone.rest.pos);
-            poses[i].rot = Math::Normalized(parent.rot * bone.rest.rot);
+            const Math::Mat4 local = TransformToMat4(bone.rest);
+            models[i] = bone.parent == NoBone ? local : models[static_cast<std::size_t>(bone.parent)] * local;
         }
-        return poses;
-    }
-
-    /** @brief `outer × inner`: `inner` given relative to `outer`, in `outer`'s space. */
-    inline Pose Compose(const Pose& outer, const Pose& inner)
-    {
-        return Pose{outer.pos + Math::Rotate(outer.rot, inner.pos), Math::Normalized(outer.rot * inner.rot)};
-    }
-
-    /** @brief `bone × offset`: a body's pose from its bone's. */
-    inline Pose Compose(const Pose& bone, const Transform& offset)
-    {
-        return Compose(bone, Pose{offset.pos, offset.rot});
+        return models;
     }
 
     /** @brief The position and rotation of an affine matrix with no shear; its scale is dropped. */
     inline Pose PoseOf(const Math::Mat4& matrix)
     {
-        const Math::Mat3 axes(Math::Normalized(Math::Vec3(matrix[0])), Math::Normalized(Math::Vec3(matrix[1])),
-                              Math::Normalized(Math::Vec3(matrix[2])));
-        return Pose{Math::Vec3(matrix[3]), Math::Normalized(glm::quat_cast(axes))};
+        Math::Mat4 axes(1.0f);
+        for (int column = 0; column < 3; ++column)
+        {
+            axes[column] = Math::Vec4(Math::Normalized(Math::Vec3(matrix[column])), 0.0f);
+        }
+        return Pose{Math::Vec3(matrix[3]), Math::Normalized(Math::Mat4ToQuat(axes))};
     }
 
     /** @brief The shortest rotation turning unit `from` onto unit `to`. */
@@ -64,7 +54,7 @@ namespace Fenrir::Detail
         {
             const Math::Vec3 other =
                 std::abs(from.x) < 0.9f ? Math::Vec3(1.0f, 0.0f, 0.0f) : Math::Vec3(0.0f, 0.0f, 1.0f);
-            return Math::AngleAxis(glm::pi<float>(), Math::Normalized(Math::Cross(from, other)));
+            return Math::AngleAxis(Math::DegToRad(180.0f), Math::Normalized(Math::Cross(from, other)));
         }
         const Math::Vec3 axis = Math::Cross(from, to);
         return Math::Normalized(Math::Quat(1.0f + dot, axis.x, axis.y, axis.z));
@@ -79,6 +69,10 @@ namespace Fenrir::Detail
         }
         const Math::Vec3 y = Math::Normalized(Math::Cross(reference, x));
         const Math::Vec3 z = Math::Cross(x, y);
-        return Math::Normalized(glm::quat_cast(Math::Mat3(x, y, z)));
+        Math::Mat4 axes(1.0f);
+        axes[0] = Math::Vec4(x, 0.0f);
+        axes[1] = Math::Vec4(y, 0.0f);
+        axes[2] = Math::Vec4(z, 0.0f);
+        return Math::Normalized(Math::Mat4ToQuat(axes));
     }
 } // namespace Fenrir::Detail

@@ -41,6 +41,21 @@ namespace
         }
     };
 
+    // A skeleton and a good description, not yet built, for the refusals.
+    struct Unbuilt
+    {
+        RagdollTest::RagdollApp test;
+        Entity skeleton;
+        RagdollDescription good;
+
+        Unbuilt()
+        {
+            test.AddGround();
+            skeleton = test.AddSkeleton(RagdollTest::Humanoid());
+            good = Fenrir::DescribeHumanoid(test.DataOf(skeleton), RagdollTest::HumanoidMap());
+        }
+    };
+
     std::size_t CountEntities(Fenrir::EntityList& entities)
     {
         std::size_t count = 0;
@@ -55,52 +70,52 @@ namespace
     }
 } // namespace
 
-TEST_CASE("BuildRagdoll spawns kinematic, grouped bodies under one parent, and the Ragdoll on the skeleton entity",
-          "[ragdoll][build]")
+TEST_CASE("BuildRagdoll spawns one kinematic, grouped body entity per part under one parent", "[ragdoll][build]")
 {
     Built built;
     const SpawnedRagdoll& spawned = built.spawned;
 
     INFO("it built: " << spawned.error);
     REQUIRE(spawned.error.empty());
-    INFO("sixteen bodies and fifteen joints");
+    INFO("sixteen bodies under a parent at the top of the scene");
     REQUIRE(spawned.bodies.size() == 16);
-    REQUIRE(spawned.joints.size() == 15);
     REQUIRE(spawned.parent.IsValid());
-    INFO("the parent sits at the top of the scene");
     REQUIRE_FALSE(spawned.parent.GetComponent<Fenrir::Relationship>().parent.IsValid());
 
     for (std::size_t i = 0; i < spawned.bodies.size(); ++i)
     {
         const Entity& body = spawned.bodies[i];
-        INFO("body " << i << " (" << Text(built.description.parts[i].bone) << ")");
-        INFO("is under the parent");
+        const Fenrir::RagdollPart& part = built.description.parts[i];
+        INFO("body " << i << " (" << Text(part.bone) << ") is under the parent");
         REQUIRE(body.GetComponent<Fenrir::Relationship>().parent == spawned.parent);
-        INFO("is a kinematic rigid body with the part's mass and shape");
-        REQUIRE(body.HasComponent<Fenrir::RigidBody>());
+        INFO(Text(part.bone) << " is a kinematic rigid body with the part's mass and capsule");
         REQUIRE(body.GetComponent<Fenrir::RigidBody>().motionType == Fenrir::MotionType::Kinematic);
-        REQUIRE(Near(body.GetComponent<Fenrir::RigidBody>().mass, built.description.parts[i].mass));
-        REQUIRE(body.HasComponent<Fenrir::Collider>());
+        REQUIRE(Near(body.GetComponent<Fenrir::RigidBody>().mass, part.mass));
         REQUIRE(body.GetComponent<Fenrir::Collider>().shape.Is<Fenrir::CapsuleShape>());
-        INFO("is in the skeleton entity's collision group");
-        REQUIRE(body.HasComponent<Fenrir::CollisionGroup>());
+        INFO(Text(part.bone) << " is in the skeleton entity's collision group");
         REQUIRE(body.GetComponent<Fenrir::CollisionGroup>().group == built.skeleton.GetId());
-        INFO("names the skeleton entity, its bone and offset, inheriting the ragdoll's mode");
+        INFO(Text(part.bone) << " names the skeleton entity, its bone and offset, inheriting the ragdoll's mode");
         const Fenrir::RagdollBody& mapping = body.GetComponent<Fenrir::RagdollBody>();
         REQUIRE(mapping.ragdoll == built.skeleton);
-        REQUIRE(Text(mapping.bone) == Text(built.description.parts[i].bone));
-        REQUIRE(Near(mapping.offset.pos, built.description.parts[i].offset.pos));
+        REQUIRE(Text(mapping.bone) == Text(part.bone));
+        REQUIRE(Near(mapping.offset.pos, part.offset.pos));
         REQUIRE(mapping.mode == Fenrir::RagdollBodyMode::Inherit);
     }
+}
 
-    INFO("the skeleton entity has a following Ragdoll, its root body the hips'");
+TEST_CASE("BuildRagdoll puts a following Ragdoll on the skeleton entity, its root body the hips'", "[ragdoll][build]")
+{
+    Built built;
+    REQUIRE(built.spawned.error.empty());
+    INFO("the skeleton entity has a Ragdoll in Following mode, at full strength, in its own group");
     REQUIRE(built.skeleton.HasComponent<Fenrir::Ragdoll>());
     const Fenrir::Ragdoll& ragdoll = built.skeleton.GetComponent<Fenrir::Ragdoll>();
     REQUIRE(ragdoll.mode == Fenrir::RagdollMode::Following);
-    REQUIRE(ragdoll.rootBody == spawned.bodies.front());
-    REQUIRE(Text(ragdoll.rootBody.GetComponent<Fenrir::RagdollBody>().bone) == "pelvis");
-    REQUIRE(ragdoll.group == built.skeleton.GetId());
     REQUIRE(Near(ragdoll.strength, 1.0f));
+    REQUIRE(ragdoll.group == built.skeleton.GetId());
+    INFO("its root body is the first spawned, the pelvis's");
+    REQUIRE(ragdoll.rootBody == built.spawned.bodies.front());
+    REQUIRE(Text(ragdoll.rootBody.GetComponent<Fenrir::RagdollBody>().bone) == "pelvis");
 }
 
 TEST_CASE("BuildRagdoll joins each part to its parent's body, root first, with friction and no self-collision",
@@ -109,12 +124,14 @@ TEST_CASE("BuildRagdoll joins each part to its parent's body, root first, with f
     Built built(Vec3(3.0f, 0.0f, -2.0f));
     const SpawnedRagdoll& spawned = built.spawned;
     REQUIRE(spawned.error.empty());
+    INFO("fifteen joints, one per part but the root");
+    REQUIRE(spawned.joints.size() == 15);
 
     for (std::size_t i = 0; i < spawned.joints.size(); ++i)
     {
         const Fenrir::RagdollPart& part = built.description.parts[i + 1];
         const Entity& entity = spawned.joints[i];
-        INFO("joint " << i << " joins " << Text(part.parent) << " to " << Text(part.bone));
+        INFO("joint " << i << " joins " << Text(part.parent) << " to " << Text(part.bone) << ", under the parent");
         REQUIRE(entity.GetComponent<Fenrir::Relationship>().parent == spawned.parent);
         const Fenrir::Joint& joint = entity.GetComponent<Fenrir::Joint>();
         REQUIRE(joint.bodyA == RagdollTest::BodyOf(spawned, Text(part.parent)));
@@ -159,23 +176,23 @@ TEST_CASE("BuildRagdoll places each body on its bone at once", "[ragdoll][build]
     }
 }
 
-TEST_CASE("A description's own group is used when it has one", "[ragdoll][build]")
+TEST_CASE("A description's group, strength and joint friction are the built ragdoll's", "[ragdoll][build]")
 {
-    RagdollTest::RagdollApp test;
-    const Entity skeleton = test.AddSkeleton(RagdollTest::Humanoid());
-    RagdollDescription description = Fenrir::DescribeHumanoid(test.DataOf(skeleton), RagdollTest::HumanoidMap());
+    Unbuilt unbuilt;
+    RagdollDescription description = unbuilt.good;
     description.group = 77;
     description.strength = 0.25f;
     description.jointFriction = 2.0f;
-    const SpawnedRagdoll spawned = Fenrir::BuildRagdoll(test.app, test.level, skeleton, description);
+    const SpawnedRagdoll spawned =
+        Fenrir::BuildRagdoll(unbuilt.test.app, unbuilt.test.level, unbuilt.skeleton, description);
     REQUIRE(spawned.error.empty());
     INFO("every body, and the Ragdoll, take group 77, the ragdoll strength 0.25, the joints friction 2");
     for (const Entity& body : spawned.bodies)
     {
         REQUIRE(body.GetComponent<Fenrir::CollisionGroup>().group == 77);
     }
-    REQUIRE(skeleton.GetComponent<Fenrir::Ragdoll>().group == 77);
-    REQUIRE(Near(skeleton.GetComponent<Fenrir::Ragdoll>().strength, 0.25f));
+    REQUIRE(unbuilt.skeleton.GetComponent<Fenrir::Ragdoll>().group == 77);
+    REQUIRE(Near(unbuilt.skeleton.GetComponent<Fenrir::Ragdoll>().strength, 0.25f));
     REQUIRE(
         Near(spawned.joints.front().GetComponent<Fenrir::Joint>().kind.As<Fenrir::SwingTwistJoint>().friction, 2.0f));
 }
@@ -197,63 +214,81 @@ TEST_CASE("A skeleton entity whose id is 0, which is no group, gives its bodies 
     REQUIRE(skeleton.GetComponent<Fenrir::Ragdoll>().group == Entity::Null);
 }
 
-TEST_CASE("BuildRagdoll spawns nothing from a refused description, an unready skeleton or a bad part",
-          "[ragdoll][build]")
+TEST_CASE("BuildRagdoll spawns nothing from a description DescribeHumanoid refused", "[ragdoll][build]")
 {
-    RagdollTest::RagdollApp test;
-    const Entity skeleton = test.AddSkeleton(RagdollTest::Humanoid());
+    Unbuilt unbuilt;
     Fenrir::HumanoidBones bones = RagdollTest::HumanoidMap();
     bones.head = RagdollTest::NameOf("Skull");
-    const RagdollDescription refused = Fenrir::DescribeHumanoid(test.DataOf(skeleton), bones);
+    const RagdollDescription refused = Fenrir::DescribeHumanoid(unbuilt.test.DataOf(unbuilt.skeleton), bones);
     REQUIRE_FALSE(refused.error.empty());
-    const std::size_t before = CountEntities(test.Entities());
+    const std::size_t before = CountEntities(unbuilt.test.Entities());
 
-    const SpawnedRagdoll fromError = Fenrir::BuildRagdoll(test.app, test.level, skeleton, refused);
-    INFO("a description with an error: an error, nothing spawned, no Ragdoll");
-    REQUIRE_FALSE(fromError.error.empty());
-    REQUIRE(fromError.bodies.empty());
-    REQUIRE(CountEntities(test.Entities()) == before);
-    REQUIRE_FALSE(skeleton.HasComponent<Fenrir::Ragdoll>());
-
-    const RagdollDescription good = Fenrir::DescribeHumanoid(test.DataOf(skeleton), RagdollTest::HumanoidMap());
-    Entity plain = test.Entities().CreateEntity();
-    const std::size_t withPlain = CountEntities(test.Entities());
-    const SpawnedRagdoll fromPlain = Fenrir::BuildRagdoll(test.app, test.level, plain, good);
-    INFO("an entity without a ready SkeletonPose: an error, nothing spawned");
-    REQUIRE_FALSE(fromPlain.error.empty());
-    REQUIRE(CountEntities(test.Entities()) == withPlain);
-    REQUIRE_FALSE(plain.HasComponent<Fenrir::Ragdoll>());
-
-    RagdollDescription renamed = good;
-    renamed.parts[5].bone = RagdollTest::NameOf("elbow_l");
-    const SpawnedRagdoll fromRenamed = Fenrir::BuildRagdoll(test.app, test.level, skeleton, renamed);
-    INFO("a part naming a bone the skeleton lacks: an error naming it, nothing spawned");
-    REQUIRE(fromRenamed.error.find("elbow_l") != std::string::npos);
-    REQUIRE(CountEntities(test.Entities()) == withPlain);
-
-    RagdollDescription orphan = good;
-    orphan.parts[1].parent = RagdollTest::NameOf("spine_03");
-    const SpawnedRagdoll fromOrphan = Fenrir::BuildRagdoll(test.app, test.level, skeleton, orphan);
-    INFO("a part whose parent is not an earlier part: an error, nothing spawned");
-    REQUIRE_FALSE(fromOrphan.error.empty());
-    REQUIRE(CountEntities(test.Entities()) == withPlain);
-    REQUIRE_FALSE(skeleton.HasComponent<Fenrir::Ragdoll>());
-
-    REQUIRE(Fenrir::BuildRagdoll(test.app, test.level, skeleton, good).error.empty());
-    const std::size_t withRagdoll = CountEntities(test.Entities());
-    INFO("a second ragdoll on one skeleton: an error, nothing spawned");
-    REQUIRE_FALSE(Fenrir::BuildRagdoll(test.app, test.level, skeleton, good).error.empty());
-    REQUIRE(CountEntities(test.Entities()) == withRagdoll);
+    const SpawnedRagdoll spawned =
+        Fenrir::BuildRagdoll(unbuilt.test.app, unbuilt.test.level, unbuilt.skeleton, refused);
+    INFO("an error, nothing spawned, no Ragdoll");
+    REQUIRE_FALSE(spawned.error.empty());
+    REQUIRE(spawned.bodies.empty());
+    REQUIRE(CountEntities(unbuilt.test.Entities()) == before);
+    REQUIRE_FALSE(unbuilt.skeleton.HasComponent<Fenrir::Ragdoll>());
 }
 
-TEST_CASE("DestroyRagdoll removes the parent, everything under it, the overrides and the Ragdoll", "[ragdoll][build]")
+TEST_CASE("BuildRagdoll spawns nothing for an entity without a ready SkeletonPose", "[ragdoll][build]")
+{
+    Unbuilt unbuilt;
+    Entity plain = unbuilt.test.Entities().CreateEntity();
+    const std::size_t before = CountEntities(unbuilt.test.Entities());
+    const SpawnedRagdoll spawned = Fenrir::BuildRagdoll(unbuilt.test.app, unbuilt.test.level, plain, unbuilt.good);
+    INFO("an error, nothing spawned, no Ragdoll");
+    REQUIRE_FALSE(spawned.error.empty());
+    REQUIRE(CountEntities(unbuilt.test.Entities()) == before);
+    REQUIRE_FALSE(plain.HasComponent<Fenrir::Ragdoll>());
+}
+
+TEST_CASE("BuildRagdoll spawns nothing for a part naming a bone the skeleton lacks", "[ragdoll][build]")
+{
+    Unbuilt unbuilt;
+    RagdollDescription renamed = unbuilt.good;
+    renamed.parts[5].bone = RagdollTest::NameOf("elbow_l");
+    const std::size_t before = CountEntities(unbuilt.test.Entities());
+    const SpawnedRagdoll spawned =
+        Fenrir::BuildRagdoll(unbuilt.test.app, unbuilt.test.level, unbuilt.skeleton, renamed);
+    INFO("an error naming the bone, nothing spawned, no Ragdoll");
+    REQUIRE(spawned.error.find("elbow_l") != std::string::npos);
+    REQUIRE(CountEntities(unbuilt.test.Entities()) == before);
+    REQUIRE_FALSE(unbuilt.skeleton.HasComponent<Fenrir::Ragdoll>());
+}
+
+TEST_CASE("BuildRagdoll spawns nothing for a part whose parent is not an earlier part", "[ragdoll][build]")
+{
+    Unbuilt unbuilt;
+    RagdollDescription orphan = unbuilt.good;
+    orphan.parts[1].parent = RagdollTest::NameOf("spine_03");
+    const std::size_t before = CountEntities(unbuilt.test.Entities());
+    const SpawnedRagdoll spawned = Fenrir::BuildRagdoll(unbuilt.test.app, unbuilt.test.level, unbuilt.skeleton, orphan);
+    INFO("an error, nothing spawned, no Ragdoll");
+    REQUIRE_FALSE(spawned.error.empty());
+    REQUIRE(CountEntities(unbuilt.test.Entities()) == before);
+    REQUIRE_FALSE(unbuilt.skeleton.HasComponent<Fenrir::Ragdoll>());
+}
+
+TEST_CASE("BuildRagdoll spawns nothing for a skeleton that already has a ragdoll", "[ragdoll][build]")
+{
+    Unbuilt unbuilt;
+    REQUIRE(Fenrir::BuildRagdoll(unbuilt.test.app, unbuilt.test.level, unbuilt.skeleton, unbuilt.good).error.empty());
+    const std::size_t before = CountEntities(unbuilt.test.Entities());
+    const SpawnedRagdoll second =
+        Fenrir::BuildRagdoll(unbuilt.test.app, unbuilt.test.level, unbuilt.skeleton, unbuilt.good);
+    INFO("one ragdoll per skeleton: an error, nothing spawned");
+    REQUIRE_FALSE(second.error.empty());
+    REQUIRE(CountEntities(unbuilt.test.Entities()) == before);
+}
+
+TEST_CASE("DestroyRagdoll removes the parent, everything under it and the Ragdoll", "[ragdoll][build]")
 {
     Built built;
     REQUIRE(built.spawned.error.empty());
     built.test.Run(2);
     Entity elsewhere = built.test.Entities().CreateEntity();
-    const std::int32_t hips = built.test.DataOf(built.skeleton).FindBone("pelvis");
-    REQUIRE(Fenrir::Skeletons::SetOverride(built.test.level, built.skeleton, hips, Fenrir::Target{}));
 
     Fenrir::DestroyRagdoll(built.test.level, built.skeleton);
 
@@ -267,12 +302,29 @@ TEST_CASE("DestroyRagdoll removes the parent, everything under it, the overrides
     {
         REQUIRE_FALSE(joint.IsValid());
     }
-    INFO("the Ragdoll is removed and the skeleton's overrides cleared; the skeleton and other entities stay");
+    INFO("the Ragdoll is removed; the skeleton and other entities stay");
     REQUIRE_FALSE(built.skeleton.HasComponent<Fenrir::Ragdoll>());
-    REQUIRE_FALSE(Fenrir::Skeletons::GetOverride(built.test.level, built.skeleton, hips).has_value());
     REQUIRE(built.skeleton.IsValid());
     REQUIRE(elsewhere.IsValid());
     INFO("the frames after run with no warning");
     built.test.Run(2);
     REQUIRE(built.test.warnings->empty());
+}
+
+TEST_CASE("DestroyRagdoll clears the overrides on its bodies' bones and leaves the others", "[ragdoll][build]")
+{
+    Built built;
+    REQUIRE(built.spawned.error.empty());
+    const Fenrir::SkeletonData& data = built.test.DataOf(built.skeleton);
+    const std::int32_t hips = data.FindBone("pelvis");
+    const std::int32_t neck = data.FindBone("neck_01");
+    REQUIRE(Fenrir::Skeletons::SetOverride(built.test.level, built.skeleton, hips, Fenrir::Target{}));
+    REQUIRE(Fenrir::Skeletons::SetOverride(built.test.level, built.skeleton, neck, Fenrir::Target{}));
+
+    Fenrir::DestroyRagdoll(built.test.level, built.skeleton);
+
+    INFO("the pelvis, a ragdoll body's bone, loses its entry");
+    REQUIRE_FALSE(Fenrir::Skeletons::GetOverride(built.test.level, built.skeleton, hips).has_value());
+    INFO("the neck, which no body follows, keeps game code's entry");
+    REQUIRE(Fenrir::Skeletons::GetOverride(built.test.level, built.skeleton, neck).has_value());
 }

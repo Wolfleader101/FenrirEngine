@@ -31,7 +31,7 @@ ADR-0053 makes a ragdoll ordinary bodies and joints mapped to bones by name, glu
 ## Order and state
 
 - Systems in `Tick` (modes, following moves, motor targets) after FenrirSkeleton's `PreTick` pass and before physics's `PostTick`, and in `Update` (follow root, override targets) after physics's `AfterTicks`: phase boundaries, no new phases (ADR-0040's rule).
-- `RagdollState state` on `Ragdoll` (`bool anyAwake`); each body's effective mode is on its `RagdollBody`.
+- `RagdollState state` on `Ragdoll` (`bool anyAwake`, and from the ragdoll spec `bodies`, the count the glue drives, and `inactive`); each body's effective mode, and its resolved bone, are on its `RagdollBody`'s `RagdollBodyState` (*amended while building the ragdoll spec's ticket 02, 2026-11-12*).
 
 ## Considered options
 

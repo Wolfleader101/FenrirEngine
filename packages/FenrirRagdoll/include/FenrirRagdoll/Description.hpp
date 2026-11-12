@@ -88,8 +88,8 @@ namespace Fenrir
      * @brief A ragdoll as plain data: its parts and the ragdoll's defaults, built by `BuildRagdoll`. Derive one with
      * `DescribeHumanoid` and edit it, or fill one by hand for any skeleton. Not an asset.
      *
-     * Jolt's advice for stable ragdolls holds for hand-written descriptions: keep the mass of a parent part and its
-     * child within 0.8 to 1.2 of each other where you can, which reduces jitter. Nothing rebalances masses for you.
+     * For a hand-written description: a parent part's mass and its child's within 0.8 to 1.2 of each other jitter
+     * less (the physics backend's advice for ragdolls). Nothing rebalances masses for you.
      */
     struct RagdollDescription
     {
