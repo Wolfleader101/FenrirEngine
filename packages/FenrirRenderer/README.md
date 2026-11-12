@@ -123,7 +123,7 @@ The renderer draws the active scene's `DebugDraw` (FenrirDebugDraw, ADR-0025) wh
 
 ## The window overlay
 
-Any UI draws over the game through the `Overlay` app resource (`FenrirRenderer/Overlay.hpp`, ADR-0027), filling FenrirDraw2D's plain-data `DrawList2D`s with its own shaders, vertex layouts, textures and scissors:
+Any UI draws over the game through the `Overlay` app resource (`FenrirRenderer/Overlay.hpp`, ADR-0027), filling FenrirDraw2D's plain-data `DrawList2D`s with its own shaders, vertex layouts, textures and scissors. FenrirUI's roots submit here, one list each on their layer (`packages/FenrirUI/README.md`):
 
 ```cpp
 Fenrir::DrawList2D list;

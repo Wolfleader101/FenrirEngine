@@ -14,9 +14,9 @@
 
 **Touches:** `packages/FenrirUI/`, `packages/CMakeLists.txt`, `CMakeLists.txt`, `.gitmodules`, `README.md`, `packages/FenrirRenderer/README.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Headless App tests (null backend): Yoga's generated conformance fixtures, converted to element trees with inline styles, lay out to the fixtures' rectangles through the bridge; absolute positioning, percentages, gaps, min and max; both scale rules at two window sizes; pixel snapping rounds consistently.
-- [ ] Tree tests: ids go stale on removal; reorder and reparent keep children ordered; queries by id and class; a dirty subtree relays out and a clean root does not call Yoga.
-- [ ] Draw-list tests through a capturing target: a tree of three nested panels with radii, a border, a shadow and half opacity on a parent emits the expected box draws, clip data and one group, in tree order.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Headless App tests (null backend): Yoga's generated conformance fixtures, converted to element trees with inline styles, lay out to the fixtures' rectangles through the bridge; absolute positioning, percentages, gaps, min and max; both scale rules at two window sizes; pixel snapping rounds consistently.
+- [x] Tree tests: ids go stale on removal; reorder and reparent keep children ordered; queries by id and class; a dirty subtree relays out and a clean root does not call Yoga.
+- [x] Draw-list tests through a capturing target: a tree of three nested panels with radii, a border, a shadow and half opacity on a parent emits the expected box draws, clip data and one group, in tree order.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

@@ -1,0 +1,137 @@
+#include "FenrirUI/UI.hpp"
+
+#include <algorithm>
+#include <utility>
+
+#include "FenrirApp/App.hpp"
+
+namespace Fenrir
+{
+    UIRoots::UIRoots(App& app, AssetHandle<Shader> painterShader, const UIConfig& config)
+        : settings(config.settings), m_app(app), m_painterShader(painterShader)
+    {
+    }
+
+    UIRoots::~UIRoots() = default;
+
+    UIRoot& UIRoots::CreateRoot(UIRootConfig config)
+    {
+        RootEntry entry;
+        entry.root = std::make_unique<UIRoot>(m_app, *this, std::move(config));
+        entry.order = m_nextOrder++;
+        UIRoot& root = *entry.root;
+        // Kept in drawing order: by layer, then as made.
+        const auto at =
+            std::upper_bound(m_roots.begin(), m_roots.end(), entry, [](const RootEntry& a, const RootEntry& b) {
+                const std::int32_t layerA = a.root->GetConfig().layer;
+                const std::int32_t layerB = b.root->GetConfig().layer;
+                return layerA != layerB ? layerA < layerB : a.order < b.order;
+            });
+        m_roots.insert(at, std::move(entry));
+        return root;
+    }
+
+    bool UIRoots::DestroyRoot(const UIRoot& root)
+    {
+        const auto it = std::find_if(m_roots.begin(), m_roots.end(),
+                                     [&](const RootEntry& entry) { return entry.root.get() == &root; });
+        if (it == m_roots.end())
+        {
+            return false;
+        }
+        m_roots.erase(it);
+        return true;
+    }
+
+    std::vector<UIRoot*> UIRoots::GetRoots() const
+    {
+        std::vector<UIRoot*> roots;
+        roots.reserve(m_roots.size());
+        for (const RootEntry& entry : m_roots)
+        {
+            roots.push_back(entry.root.get());
+        }
+        return roots;
+    }
+
+    void UIRoots::RegisterElement(std::string_view tag, ElementFactory factory)
+    {
+        m_factories.insert_or_assign(std::string(tag), std::move(factory));
+    }
+
+    std::unique_ptr<Element> UIRoots::MakeElement(std::string_view tag) const
+    {
+        const auto it = m_factories.find(std::string(tag));
+        if (it != m_factories.end() && it->second)
+        {
+            if (std::unique_ptr<Element> element = it->second())
+            {
+                return element;
+            }
+            m_app.Logger()->Warn("FenrirUI: the factory registered for <{}> made no element; it is a plain element",
+                                 tag);
+        }
+        return std::make_unique<Element>();
+    }
+
+    void UIRoots::Frame()
+    {
+        for (const RootEntry& entry : m_roots)
+        {
+            entry.root->Frame();
+        }
+    }
+
+    UI UI::Install(App& app, UIConfig config)
+    {
+        if (app.TryGetResource<UIRoots>() != nullptr)
+        {
+            app.Logger()->Error("FenrirUI: the app already has a UI installed");
+            return UI(nullptr, std::nullopt);
+        }
+        Painting painting = Painting::Install(app);
+        if (!painting.IsValid())
+        {
+            // Painting::Install logged why.
+            return UI(nullptr, std::move(painting));
+        }
+        app.AddResource<UIRoots>(app, painting.GetShader(), config);
+        app.AddSequentialSystem(SchedulePriority::PostUpdate, [](App& running) {
+            if (UIRoots* roots = running.TryGetResource<UIRoots>())
+            {
+                roots->Frame();
+            }
+        });
+        return UI(&app, std::move(painting));
+    }
+
+    UI::UI(App* app, std::optional<Painting> painting) noexcept : m_app(app), m_painting(std::move(painting))
+    {
+    }
+
+    UI::UI(UI&& other) noexcept : m_app(std::exchange(other.m_app, nullptr)), m_painting(std::move(other.m_painting))
+    {
+    }
+
+    UI& UI::operator=(UI&& other) noexcept
+    {
+        if (this != &other)
+        {
+            if (m_app != nullptr)
+            {
+                m_app->RemoveResource<UIRoots>();
+            }
+            m_app = std::exchange(other.m_app, nullptr);
+            m_painting = std::move(other.m_painting);
+        }
+        return *this;
+    }
+
+    UI::~UI()
+    {
+        if (m_app != nullptr)
+        {
+            m_app->RemoveResource<UIRoots>();
+        }
+    }
+} // namespace Fenrir

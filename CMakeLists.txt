@@ -13,6 +13,7 @@ option(FENRIR_ENABLE_PHYSICS "Build FenrirPhysics and JoltPhysics (the packages/
 option(FENRIR_ENABLE_ASSETS "Build FenrirAssets with cgltf, ufbx and stb (the packages/FenrirAssets/libs submodules)" ON)
 option(FENRIR_ENABLE_TEXT "Build FenrirText with FreeType, HarfBuzz, SheenBidi and libunibreak (the packages/FenrirText/libs submodules)" ON)
 option(FENRIR_ENABLE_RENDERER "Build FenrirWindow and SDL3 (the packages/FenrirWindow/libs/SDL submodule), and FenrirRenderer's FenrirShaderCompiler with glslang and SPIRV-Reflect, the renderer core with its graphics device, null backend and OpenGL backend (with the checked-in glad loader), and FenrirRenderer's ECS facade" ON)
+option(FENRIR_ENABLE_UI "Build FenrirUI with Yoga (the packages/FenrirUI/libs/yoga submodule); needs the renderer" ON)
 option(FENRIR_BUILD_TESTS "Build the package tests (Catch2: the libs/catch2 submodule, or an installed Catch2 v3)" OFF)
 option(FENRIR_BUILD_EXAMPLES "Build the demo apps on the demo scaffold (examples/; with the renderer only)" ON)
 option(FENRIR_FETCH_DEMO_ASSETS "Download the demo apps' large assets at configure time, into FENRIR_DEMO_ASSET_CACHE (ADR-0052)" OFF)
@@ -38,6 +39,12 @@ endif()
 # Text reads fonts from the asset store and keeps its atlases there.
 if(FENRIR_ENABLE_TEXT AND NOT FENRIR_ENABLE_ASSETS)
     message(FATAL_ERROR "FENRIR_ENABLE_TEXT needs FENRIR_ENABLE_ASSETS: turn assets on, or text off.")
+endif()
+
+# The UI paints through FenrirPainter, which is built with the renderer. With the renderer off, the UI is off too.
+if(FENRIR_ENABLE_UI AND NOT FENRIR_ENABLE_RENDERER)
+    message(STATUS "FENRIR_ENABLE_UI is on but FENRIR_ENABLE_RENDERER is off: FenrirUI is not built.")
+    set(FENRIR_ENABLE_UI OFF)
 endif()
 
 # fenrir_add_shaders(), for the engine's shaders and users' alike. Defined before any package, so a package's tests can
@@ -106,6 +113,9 @@ if(FENRIR_ENABLE_RENDERER)
     add_subdirectory(packages/FenrirRenderer)
     # It builds its shader with fenrir_add_shaders, and its tests draw through the renderer.
     add_subdirectory(packages/FenrirPainter)
+endif()
+if(FENRIR_ENABLE_UI)
+    add_subdirectory(packages/FenrirUI)
 endif()
 
 if(FENRIR_ENABLE_PHYSICS)
