@@ -1,0 +1,198 @@
+/*
+ * FenrirUI's default stylesheet, embedded in the package (DefaultStylesheet) and given to every root under its own
+ * sheets: plain, neutral greys, one sans family, and the hover, active, focus, checked and disabled states of every
+ * control. A game's sheets win over every rule here; a root made with UIRootConfig::defaultStylesheet off has none of it.
+ */
+
+/* The text every element inherits. No family is registered as sans-serif until a game does, so it is the embedded
+   default face. */
+:root {
+    color: #202020;
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+/* The controls take pointer input, and so does everything inside them, which passes it up to them. */
+button, checkbox, slider, scroll {
+    pointer-events: all;
+}
+
+/* One focus ring for every focusable control. */
+button:focus, checkbox:focus, slider:focus, scroll:focus {
+    box-shadow: 0 0 0 2px #4a7fd9;
+}
+
+button {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 14px;
+    border: 1px solid #a8a8a8;
+    border-radius: 4px;
+    background-color: #e2e2e2;
+    cursor: pointer;
+}
+
+button:hover {
+    border-color: #8a8a8a;
+    background-color: #ececec;
+}
+
+button:active {
+    background-color: #cdcdcd;
+}
+
+button:disabled {
+    border-color: #d2d2d2;
+    background-color: #f0f0f0;
+    color: #a0a0a0;
+    cursor: default;
+}
+
+checkbox {
+    width: 18px;
+    height: 18px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #8a8a8a;
+    border-radius: 3px;
+    background-color: #ffffff;
+    cursor: pointer;
+}
+
+checkbox:hover {
+    border-color: #5c5c5c;
+}
+
+checkbox:active {
+    background-color: #e0e0e0;
+}
+
+checkbox:checked {
+    border-color: #3c6fd1;
+    background-color: #3c6fd1;
+}
+
+checkbox:disabled {
+    border-color: #cfcfcf;
+    background-color: #f0f0f0;
+    cursor: default;
+}
+
+checkbox:checked:disabled {
+    background-color: #b8c8e6;
+}
+
+checkbox-mark {
+    display: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background-color: #ffffff;
+}
+
+checkbox:checked > checkbox-mark {
+    display: flex;
+}
+
+/* The slider is its track; its fill and thumb are placed along it by their inline style. */
+slider {
+    width: 200px;
+    height: 6px;
+    margin: 7px 0;
+    border-radius: 3px;
+    background-color: #c8c8c8;
+    cursor: pointer;
+}
+
+slider.vertical {
+    width: 6px;
+    height: 200px;
+    margin: 0 7px;
+}
+
+slider-fill {
+    position: absolute;
+    border-radius: 3px;
+    background-color: #3c6fd1;
+}
+
+slider-thumb {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border: 1px solid #8a8a8a;
+    border-radius: 8px;
+    background-color: #ffffff;
+    transform: translate(-50%, -50%);
+}
+
+slider:hover > slider-thumb {
+    border-color: #5c5c5c;
+}
+
+slider:active > slider-thumb {
+    background-color: #e0e0e0;
+}
+
+slider:disabled {
+    background-color: #e0e0e0;
+    cursor: default;
+}
+
+slider:disabled > slider-fill {
+    background-color: #b0b0b0;
+}
+
+slider:disabled > slider-thumb {
+    border-color: #cfcfcf;
+    background-color: #f0f0f0;
+}
+
+progress {
+    width: 200px;
+    height: 8px;
+    border-radius: 4px;
+    background-color: #d8d8d8;
+    overflow: hidden;
+}
+
+progress-fill {
+    height: 100%;
+    background-color: #3c6fd1;
+}
+
+scroll {
+    overflow: scroll;
+    padding: 4px;
+    border: 1px solid #c4c4c4;
+    background-color: #f8f8f8;
+}
+
+scroll:disabled {
+    background-color: #f0f0f0;
+}
+
+/* A scroll view's scrollbars: the track's width is the bar's thickness and its padding the thumb's inset. */
+::scrollbar {
+    width: 10px;
+    padding: 2px;
+    background-color: #ececec;
+}
+
+::scrollbar-thumb {
+    border-radius: 3px;
+    background-color: #b4b4b4;
+}
+
+:hover::scrollbar-thumb {
+    background-color: #999999;
+}
+
+:active::scrollbar-thumb {
+    background-color: #7d7d7d;
+}
+
+:disabled::scrollbar-thumb {
+    background-color: #d6d6d6;
+}

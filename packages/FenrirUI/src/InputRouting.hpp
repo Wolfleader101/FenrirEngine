@@ -43,6 +43,8 @@ namespace Fenrir::Detail
         ElementId hovered;
         /** @brief The element each mouse button was pressed on, while held. */
         std::array<ElementId, static_cast<std::size_t>(MouseButton::Count)> pressed{};
+        /** @brief UIRoot::TakePress moved the held buttons: their releases send no click. */
+        bool pressTaken = false;
         ElementId focused;
         /** @brief The elements carrying :hover, :active and :focus-within, to clear when they move. */
         std::vector<ElementId> hoverChain;
@@ -85,6 +87,8 @@ namespace Fenrir::Detail
     bool Focus(UIRoot& root, UIRootState& state, ElementId element);
     /** @copydoc Fenrir::UIRoot::Blur */
     void Blur(UIRoot& root, UIRootState& state);
+    /** @copydoc Fenrir::UIRoot::TakePress */
+    void TakePress(UIRoot& root, UIRootState& state, ElementId element);
     /** @copydoc Fenrir::UIRoot::SendEvent */
     void SendUIEvent(UIRootState& state, UIEvent event);
 } // namespace Fenrir::Detail

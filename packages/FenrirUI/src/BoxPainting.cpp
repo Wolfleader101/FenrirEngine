@@ -15,6 +15,7 @@
 #include "FenrirText/Paragraph.hpp"
 #include "FenrirUI/UI.hpp"
 #include "Rects.hpp"
+#include "Scrolling.hpp"
 #include "UIRootState.hpp"
 
 namespace Fenrir::Detail
@@ -73,9 +74,9 @@ namespace Fenrir::Detail
                 {
                     m_painter.BeginGroup(LocalBounds(index), style.opacity);
                 }
-                PaintBox(slot, ownAlpha);
+                PaintBox(style, boxes.border, ownAlpha);
                 // Overflow clips the content and the children to the padding box, not the element's own box.
-                if (style.overflow == Overflow::Hidden)
+                if (style.overflow != Overflow::Visible)
                 {
                     m_painter.ClipRoundedRect(boxes.padding, InnerRadiiOf(style));
                 }
@@ -89,6 +90,7 @@ namespace Fenrir::Detail
                 {
                     PaintElement(child.index, ownAlpha);
                 }
+                PaintScrollbars(m_state.slots[index], ownAlpha);
                 if (group)
                 {
                     m_painter.EndGroup();
@@ -127,7 +129,7 @@ namespace Fenrir::Detail
                         childBounds = TransformedBounds(ElementTransform(childSlot.resolved, childSlot.boxes.border),
                                                         childBounds);
                     }
-                    if (style.overflow == Overflow::Hidden)
+                    if (style.overflow != Overflow::Visible)
                     {
                         childBounds = Intersect(childBounds, slot.boxes.padding);
                     }
@@ -136,11 +138,25 @@ namespace Fenrir::Detail
                 return bounds;
             }
 
-            /** @brief Shadows (the first on top, so drawn last), background, border and border image. */
-            void PaintBox(const ElementSlot& slot, float alpha)
+            /** @brief A scroll view's bars over its children: each track's box, then its thumb's. */
+            void PaintScrollbars(const ElementSlot& slot, float alpha)
             {
-                const ResolvedStyle& style = slot.resolved;
-                const Rect2D& border = slot.boxes.border;
+                const ScrollbarBoxes bars = ScrollbarsOf(slot);
+                if (bars.vertical)
+                {
+                    PaintBox((*slot.scrollbarStyles)[0], bars.verticalTrack, alpha);
+                    PaintBox((*slot.scrollbarStyles)[1], bars.verticalThumb, alpha);
+                }
+                if (bars.horizontal)
+                {
+                    PaintBox((*slot.scrollbarStyles)[0], bars.horizontalTrack, alpha);
+                    PaintBox((*slot.scrollbarStyles)[1], bars.horizontalThumb, alpha);
+                }
+            }
+
+            /** @brief Shadows (the first on top, so drawn last), background, border and border image. */
+            void PaintBox(const ResolvedStyle& style, const Rect2D& border, float alpha)
+            {
                 const CornerRadii radii = RadiiOf(style);
                 for (auto shadow = style.boxShadow.rbegin(); shadow != style.boxShadow.rend(); ++shadow)
                 {

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -88,6 +89,30 @@ namespace Fenrir
          * a higher one. Equal priorities run in the order the roots were made.
          */
         int inputPriority = 0;
+        /**
+         * @brief Give it FenrirUI's default stylesheet (DefaultStylesheet) under its own sheets: every rule of the
+         * root's sheets wins over every one of the default's, whatever their specificity, as an author's sheet wins
+         * over a browser's. Off, the controls have no look but what the root's sheets give them.
+         */
+        bool defaultStylesheet = true;
+    };
+
+    /**
+     * @brief Where an element's scrollbars are, in UI units from the root's top-left, as of the last frame's layout:
+     * each bar's track along an edge of its padding box and its thumb inside the track. A bar shows while its content
+     * is longer than the padding box on its axis and its `::scrollbar` gives it a width.
+     */
+    struct ScrollbarBoxes
+    {
+        bool vertical = false;
+        bool horizontal = false;
+        Rect2D verticalTrack;
+        Rect2D verticalThumb;
+        Rect2D horizontalTrack;
+        Rect2D horizontalThumb;
+        /** @brief How far each thumb moves from one end of its track to the other: x the horizontal one's, y the
+         * vertical one's. */
+        Math::Vec2 travel{0.0f, 0.0f};
     };
 
     /** @brief What a root's last frame did: how much of the tree it styled, laid out and painted. */
@@ -144,6 +169,8 @@ namespace Fenrir
         [[nodiscard]] UITargetSize GetTargetSize() const noexcept;
         /** @brief What its last frame did. */
         [[nodiscard]] const UIRootStats& GetStats() const noexcept;
+        /** @brief The app it is in, for elements that read its resources. */
+        [[nodiscard]] App& GetApp() const noexcept;
 
         /** @name The tree
          * @{
@@ -278,6 +305,26 @@ namespace Fenrir
         void InvalidateMeasure(ElementId element);
         /** @} */
 
+        /** @name Scrolling
+         * An element with `overflow: scroll` clips its children to its padding box, as `hidden` does, and moves them
+         * up and left by its scroll offset: they are laid out, painted and hit-tested where the offset puts them. Its
+         * range is how far its content (its children's border boxes, and its padding past them) reaches past its
+         * padding box; the offset is clamped to it after each layout.
+         * @{
+         */
+        /** @brief Its scroll offset; zero for an element that does not scroll or a stale id. */
+        [[nodiscard]] Math::Vec2 GetScrollOffset(ElementId element) const noexcept;
+        /**
+         * @brief Scrolls it to `offset`, clamped to its range as of the last layout (and again after the next): its
+         * children move on the next frame. Nothing for an element that does not scroll.
+         */
+        void SetScrollOffset(ElementId element, Math::Vec2 offset);
+        /** @brief The largest offset it can scroll to, as of the last layout; zero when its content fits. */
+        [[nodiscard]] Math::Vec2 GetScrollRange(ElementId element) const noexcept;
+        /** @brief Its scrollbars as of the last layout; none for an element that does not scroll. */
+        [[nodiscard]] ScrollbarBoxes GetScrollbars(ElementId element) const noexcept;
+        /** @} */
+
         /** @name Input and focus
          * @{
          */
@@ -301,6 +348,14 @@ namespace Fenrir
         [[nodiscard]] ElementId GetFocused() const noexcept;
         /** @brief The topmost element under the pointer that takes pointer input; nothing when none is. */
         [[nodiscard]] ElementId GetHovered() const noexcept;
+        /** @brief Where the pointer last was in the root's window, in UI units; none before it moved there. */
+        [[nodiscard]] std::optional<Math::Vec2> GetPointer() const noexcept;
+        /**
+         * @brief Gives the buttons held now to `element`, as a scroll view does when a press on its content becomes a
+         * drag: what they were pressed on loses them (and `:active`), their motion and releases go to `element`, and
+         * their releases send no click. Nothing for a stale element or while no button is held.
+         */
+        void TakePress(ElementId element);
         /**
          * @brief The topmost element at `position` (UI units from the root's top-left) that takes pointer input
          * (`pointer-events: all`), as of the last frame's layout: children before their parent, siblings by z-index

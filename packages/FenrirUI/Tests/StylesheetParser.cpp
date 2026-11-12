@@ -599,3 +599,28 @@ TEST_CASE("A later declaration of a property in one rule replaces the earlier", 
         Expand("margin: 1px; margin-left: 9px;") ==
         Declarations{{"margin-top", "1px"}, {"margin-right", "1px"}, {"margin-bottom", "1px"}, {"margin-left", "9px"}});
 }
+
+TEST_CASE("A selector may end in a scrollbar pseudo-element, which counts as a type", "[ui][stylesheet]")
+{
+    const Fenrir::Stylesheet sheet =
+        Fenrir::Stylesheet::Parse("scroll::scrollbar {}\n#list:hover::scrollbar-thumb {}\n::scrollbar {}\n", "pe");
+    REQUIRE(sheet.diagnostics.empty());
+    REQUIRE(sheet.rules.size() == 3);
+    const Fenrir::Selector& track = sheet.rules[0].selectors[0];
+    REQUIRE(track.pseudoElement == Fenrir::PseudoElement::Scrollbar);
+    REQUIRE(track.specificity == Specificity(0, 0, 2));
+    REQUIRE(sheet.rules[1].selectors[0].pseudoElement == Fenrir::PseudoElement::ScrollbarThumb);
+    REQUIRE(sheet.rules[1].selectors[0].specificity == Specificity(1, 1, 1));
+    REQUIRE(SelectorTexts(sheet) ==
+            std::vector<std::string>{"scroll::scrollbar", "#list:hover::scrollbar-thumb", "::scrollbar"});
+}
+
+TEST_CASE("An unknown pseudo-element, or one not at the end of its selector, skips its rule", "[ui][stylesheet]")
+{
+    const Fenrir::Stylesheet sheet =
+        Fenrir::Stylesheet::Parse("label::before {}\nscroll::scrollbar .a {}\nscroll ::scrollbar {}\npanel {}\n", "pe");
+    REQUIRE(HasDiagnosticOnLine(sheet, 1, "::before"));
+    REQUIRE(HasDiagnosticOnLine(sheet, 2, "must end"));
+    REQUIRE(HasDiagnosticOnLine(sheet, 3, "must follow"));
+    REQUIRE(SelectorTexts(sheet) == std::vector<std::string>{"panel"});
+}
