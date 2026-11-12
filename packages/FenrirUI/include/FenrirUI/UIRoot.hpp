@@ -271,7 +271,7 @@ namespace Fenrir
          * an empty listener.
          */
         UIListenerId AddListener(ElementId element, UIEventKind kind, UIListener listener);
-        /** @brief Detaches a listener. False when it names none. */
+        /** @brief Detaches a listener. False when it names none. A dispatch already under way still runs it. */
         bool RemoveListener(UIListenerId listener);
         /**
          * @brief Sends `event` (its root set to this one): once to the engine event queue, then to the listeners of its
@@ -289,6 +289,11 @@ namespace Fenrir
         void Frame();
 
       private:
+        friend class UIRoots;
+
+        /** @brief Leaves FenrirInput before the root is freed, which UIRoots puts off to its next frame. */
+        void Retire();
+
         std::unique_ptr<Detail::UIRootState> m_state;
     };
 } // namespace Fenrir

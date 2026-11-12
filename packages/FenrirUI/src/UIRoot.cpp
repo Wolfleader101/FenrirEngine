@@ -268,7 +268,7 @@ namespace Fenrir
 
     UIRoot::~UIRoot()
     {
-        Detail::StopInput(*m_state);
+        Detail::StopInput(*m_state, true);
         // Every Yoga node is freed before the tree's configuration is.
         FreeSubtree(*m_state, m_state->rootElement.index);
     }
@@ -276,6 +276,11 @@ namespace Fenrir
     const UIRootConfig& UIRoot::GetConfig() const noexcept
     {
         return m_state->config;
+    }
+
+    void UIRoot::Retire()
+    {
+        Detail::StopInput(*m_state, false);
     }
 
     UIRootId UIRoot::GetId() const noexcept

@@ -9,6 +9,7 @@
 #include "ElementGeometry.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirInput/Input.hpp"
+#include "FenrirUI/UI.hpp"
 #include "FenrirUI/UIRoot.hpp"
 #include "UIRootState.hpp"
 
@@ -274,16 +275,14 @@ namespace Fenrir::Detail
             return window == m_state->config.window;
         }
 
-        void Send(UIEventKind kind, ElementId target, UIEvent event)
+        void Send(const UIEvent& event)
         {
-            event.kind = kind;
-            event.target = target;
             SendUIEvent(*m_state, event);
         }
 
         void Send(UIEventKind kind, ElementId target)
         {
-            Send(kind, target, MakeEvent(*m_state, kind, target));
+            Send(MakeEvent(*m_state, kind, target));
         }
 
         /** @brief Makes `hit` the hovered element, sending leave and enter, or a move over it when it stays. */
@@ -349,7 +348,7 @@ namespace Fenrir::Detail
                 (void)ElementInput(*m_state, pressed, routed);
                 UIEvent release = MakeEvent(*m_state, UIEventKind::PointerRelease, pressed);
                 release.button = event.button;
-                Send(UIEventKind::PointerRelease, pressed, release);
+                Send(release);
                 if (!event.cancelled && m_state != nullptr && input.pointer &&
                     IsWithin(*m_state, HitTest(*m_state, *input.pointer), pressed))
                 {
@@ -368,12 +367,20 @@ namespace Fenrir::Detail
                 Blur(*m_root, *m_state);
                 return RouteResult::Passed;
             }
+            // A click on this root is a click outside every other root on the window: they lose the focus.
+            for (UIRoot* other : m_state->roots.GetRoots())
+            {
+                if (other != m_root && other->GetConfig().window == event.window)
+                {
+                    other->Blur();
+                }
+            }
             input.pressed[slot] = hit;
             MoveChain(*m_root, input.activeChain, Chain(*m_state, hit, true), PseudoClass::Active);
             const RouteResult taken = ElementInput(*m_state, hit, routed);
             UIEvent press = MakeEvent(*m_state, UIEventKind::PointerPress, hit);
             press.button = event.button;
-            Send(UIEventKind::PointerPress, hit, press);
+            Send(press);
             // An element that took the press itself keeps the focus where it was.
             if (taken != RouteResult::Consumed && m_state != nullptr)
             {
@@ -404,11 +411,11 @@ namespace Fenrir::Detail
             UIEvent click = MakeEvent(*m_state, UIEventKind::Click, element);
             click.button = button;
             click.integer = second ? 2 : 1;
-            Send(UIEventKind::Click, element, click);
+            Send(click);
             if (second && m_state != nullptr)
             {
                 click.kind = UIEventKind::DoubleClick;
-                Send(UIEventKind::DoubleClick, element, click);
+                Send(click);
             }
         }
 
@@ -426,23 +433,32 @@ namespace Fenrir::Detail
             (void)ElementInput(*m_state, hit, routed);
             UIEvent scroll = MakeEvent(*m_state, UIEventKind::Scroll, hit);
             scroll.value = event.notches.y;
-            Send(UIEventKind::Scroll, hit, scroll);
+            Send(scroll);
             return RouteResult::Consumed;
         }
 
         RouteResult KeyInput(const KeyEvent& event, const RoutedInput& routed)
         {
             const ElementId focused = m_state->input.focused;
+            auto& presses = m_state->input.keyPresses;
             if (!event.pressed)
             {
-                // Only a press this router consumed brings its release here: the focus took it.
-                if (m_state->Find(focused) != nullptr)
+                // Only a press this router consumed brings its release here, and it goes where the press went: Tab's
+                // press moves the focus, and its release is not the new element's.
+                const auto press = std::find_if(presses.begin(), presses.end(),
+                                                [&](const auto& entry) { return entry.first == event.scancode; });
+                const ElementId pressed = press != presses.end() ? press->second : ElementId{};
+                if (press != presses.end())
                 {
-                    (void)ElementInput(*m_state, focused, routed);
-                    UIEvent release = MakeEvent(*m_state, UIEventKind::KeyRelease, focused);
+                    presses.erase(press);
+                }
+                if (m_state->Find(pressed) != nullptr)
+                {
+                    (void)ElementInput(*m_state, pressed, routed);
+                    UIEvent release = MakeEvent(*m_state, UIEventKind::KeyRelease, pressed);
                     release.key = event.key;
                     release.integer = static_cast<std::int32_t>(event.modifiers);
-                    Send(UIEventKind::KeyRelease, focused, release);
+                    Send(release);
                 }
                 return RouteResult::Consumed;
             }
@@ -450,12 +466,16 @@ namespace Fenrir::Detail
             {
                 return RouteResult::Passed;
             }
+            if (!event.repeat)
+            {
+                presses.emplace_back(event.scancode, focused);
+            }
             const RouteResult taken = ElementInput(*m_state, focused, routed);
             UIEvent press = MakeEvent(*m_state, UIEventKind::KeyPress, focused);
             press.key = event.key;
             press.value = event.repeat ? 1.0f : 0.0f;
             press.integer = static_cast<std::int32_t>(event.modifiers);
-            Send(UIEventKind::KeyPress, focused, press);
+            Send(press);
             // Tab is the root's default action, unless the focused element took the key itself.
             if (taken != RouteResult::Consumed && event.key == Key::Tab && m_state != nullptr)
             {
@@ -475,7 +495,7 @@ namespace Fenrir::Detail
             (void)ElementInput(*m_state, focused, routed);
             UIEvent text = MakeEvent(*m_state, UIEventKind::TextInput, focused);
             text.integer = static_cast<std::int32_t>(event.codepoint);
-            Send(UIEventKind::TextInput, focused, text);
+            Send(text);
             return RouteResult::Consumed;
         }
 
@@ -520,10 +540,10 @@ namespace Fenrir::Detail
         input.routerId = Input::AddInputRouter(state.app, state.config.inputPriority, input.router);
     }
 
-    void StopInput(UIRootState& state)
+    void StopInput(UIRootState& state, bool detach)
     {
         UIRootInput& input = state.input;
-        if (input.router != nullptr)
+        if (detach && input.router != nullptr)
         {
             input.router->Detach();
         }

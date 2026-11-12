@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "FenrirInput/InputRouter.hpp"
@@ -60,13 +61,18 @@ namespace Fenrir::Detail
             Math::Vec2 position{0.0f, 0.0f};
             bool armed = false;
         } lastClick;
+        /** @brief The element each held key's press went to, so its release goes there even if the focus moved. */
+        std::vector<std::pair<Scancode, ElementId>> keyPresses;
         std::uint32_t nextListener = 1;
     };
 
     /** @brief Registers the root's router with FenrirInput when the app has input and it is not registered yet. */
     void StartInput(UIRoot& root, UIRootState& state);
-    /** @brief Removes the root's router from FenrirInput; it sees no more input. */
-    void StopInput(UIRootState& state);
+    /**
+     * @brief Removes the root's router from FenrirInput: it sees no more input. With `detach`, for a root being freed,
+     * it is cut from the state too; without, a route under way can finish on the state.
+     */
+    void StopInput(UIRootState& state, bool detach);
     /**
      * @brief After the tree changed: forgets hovered, pressed and focused elements that were removed and puts :hover,
      * :active and :focus-within back on the elements now above them, then publishes the claims.

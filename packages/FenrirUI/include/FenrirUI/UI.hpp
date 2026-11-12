@@ -50,7 +50,11 @@ namespace Fenrir
 
         /** @brief Makes a root. It lives until DestroyRoot or the resource ends. */
         UIRoot& CreateRoot(UIRootConfig config = {});
-        /** @brief Destroys `root` and its elements. False when it is not one of these roots. */
+        /**
+         * @brief Destroys `root` and its elements: at once it draws no more, is not among GetRoots and leaves
+         * FenrirInput; it is freed on the next frame, so a UI listener may destroy the root that is calling it. False
+         * when it is not one of these roots.
+         */
         bool DestroyRoot(const UIRoot& root);
         /** @brief Every root, in the order they draw. */
         [[nodiscard]] std::vector<UIRoot*> GetRoots() const;
@@ -85,6 +89,8 @@ namespace Fenrir
         App& m_app;
         AssetHandle<Shader> m_painterShader;
         std::vector<RootEntry> m_roots;
+        /** @brief Roots destroyed since the last frame, freed at the start of the next. */
+        std::vector<std::unique_ptr<UIRoot>> m_retired;
         std::uint64_t m_nextOrder = 0;
         std::uint32_t m_nextId = 1;
         std::unordered_map<std::string, ElementFactory> m_factories;

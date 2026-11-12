@@ -295,3 +295,59 @@ TEST_CASE("The claims resource shows keyboard focus while an element is focused"
     INFO("blurred, it is not, at once");
     REQUIRE_FALSE(claims().keyboardFocus);
 }
+
+TEST_CASE("Tab's release goes to the element that had its press, not the one it focused", "[ui][focus]")
+{
+    UITestApp test;
+    std::shared_ptr<CaptureTarget> target;
+    UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
+    const Menu menu = MakeMenu(root, 2);
+    test.Frame();
+    REQUIRE(root.Focus(menu.buttons[0]));
+    Fenrir::EventReader<UIEvent> events;
+    (void)ReadAll(events, test.app);
+
+    test.Type(Key::Tab, Scancode::Tab);
+    test.Frame();
+
+    std::vector<std::pair<UIEventKind, ElementId>> keys;
+    for (const UIEvent& event : ReadAll(events, test.app))
+    {
+        if (event.kind == UIEventKind::KeyPress || event.kind == UIEventKind::KeyRelease)
+        {
+            keys.emplace_back(event.kind, event.target);
+        }
+    }
+    INFO("the first button got both the press and the release; the focus moved to the second");
+    REQUIRE(keys == Sends{{UIEventKind::KeyPress, menu.buttons[0]}, {UIEventKind::KeyRelease, menu.buttons[0]}});
+    REQUIRE(root.GetFocused() == menu.buttons[1]);
+}
+
+TEST_CASE("A click on another root on the window blurs this one", "[ui][focus]")
+{
+    UITestApp test;
+    std::shared_ptr<CaptureTarget> hudTarget;
+    UIRoot& hud = test.MakeRoot(hudTarget, {400.0f, 300.0f});
+    const Menu menu = MakeMenu(hud, 1);
+    hud.SetStyleProperty(menu.panel, "height", "300px");
+    // Drawn over the HUD, so its router goes first and the HUD never sees a press it consumes.
+    Fenrir::UIRootConfig popupConfig;
+    popupConfig.scaleRule = Fenrir::ScaleRule::ContentScale;
+    popupConfig.target = std::make_shared<CaptureTarget>(Fenrir::UITargetSize{{400.0f, 300.0f}, 1.0f});
+    popupConfig.inputPriority = 10;
+    UIRoot& popup = test.Roots().CreateRoot(popupConfig);
+    const ElementId panel = popup.Create(popup.GetRootElement(), "div");
+    popup.SetStyleProperty(panel, "position", "absolute");
+    popup.SetStyleProperty(panel, "top", "200px");
+    popup.SetStyleProperty(panel, "width", "100px");
+    popup.SetStyleProperty(panel, "height", "50px");
+    popup.SetStyleProperty(panel, "pointer-events", "all");
+    test.Frame();
+    REQUIRE(hud.Focus(menu.buttons[0]));
+
+    test.Click({50.0f, 220.0f});
+    test.Frame();
+    INFO("the other root took the click, and the first lost its focus and its keyboard claim");
+    REQUIRE_FALSE(hud.GetFocused().IsValid());
+    REQUIRE_FALSE(test.app.GetResource<Fenrir::InputClaims>().For(testWindow).keyboardFocus);
+}

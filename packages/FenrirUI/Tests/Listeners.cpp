@@ -6,6 +6,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "FenrirInput/Devices.hpp"
 #include "FenrirUI/UIEvent.hpp"
 #include "UITestApp.hpp"
 
@@ -181,4 +182,25 @@ TEST_CASE("Code can send a UI event through the listeners and the queue", "[ui][
     const std::vector<UIEvent> read = ReadAll(events, test.app);
     REQUIRE(read.size() == 1);
     REQUIRE(read[0].root == root.GetId());
+}
+
+TEST_CASE("A listener may destroy the root that is calling it", "[ui][listeners]")
+{
+    UITestApp test;
+    std::shared_ptr<CaptureTarget> target;
+    UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
+    const Nested nested = MakeNested(root);
+    root.AddListener(nested.button, UIEventKind::PointerPress,
+                     [&](UIListenerContext&) { REQUIRE(test.Roots().DestroyRoot(root)); });
+    test.Frame();
+    Fenrir::EventReader<Fenrir::MouseButtonEvent> buttons;
+
+    test.Click({25.0f, 25.0f});
+    test.Frame();
+    test.Click({25.0f, 25.0f});
+    test.Frame();
+
+    INFO("the root is gone, and the second click, with no root to take it, reached the game");
+    REQUIRE(test.Roots().GetRoots().empty());
+    REQUIRE(test.app.GetResource<Fenrir::Mouse>().JustReleased(Fenrir::MouseButton::Left));
 }

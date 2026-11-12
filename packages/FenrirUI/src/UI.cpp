@@ -39,6 +39,8 @@ namespace Fenrir
         {
             return false;
         }
+        it->root->Retire();
+        m_retired.push_back(std::move(it->root));
         m_roots.erase(it);
         return true;
     }
@@ -76,6 +78,7 @@ namespace Fenrir
 
     void UIRoots::Frame()
     {
+        m_retired.clear();
         for (const RootEntry& entry : m_roots)
         {
             entry.root->Frame();
