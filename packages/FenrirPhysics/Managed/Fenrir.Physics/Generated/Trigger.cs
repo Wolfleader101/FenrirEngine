@@ -11,9 +11,10 @@ namespace Fenrir.Physics;
 /// </summary>
 /// <remarks>
 /// A trigger follows its entity's world transform, so one under a moving body moves with it, and is in the layers of a
-/// CollisionFilter on its own entity (not its body's). It sees static, kinematic and dynamic bodies, sleeping ones
-/// included, but not other triggers. A RigidBody on the trigger's own entity gets no solid collider from it. A trigger
-/// is never part of a compound body, and ignores the body it is beneath (it would always be inside it).
+/// CollisionFilter and the group of a CollisionGroup on its own entity (not its body's). It sees static, kinematic and
+/// dynamic bodies, sleeping ones included, but not other triggers. A RigidBody on the trigger's own entity gets no
+/// solid collider from it. A trigger is never part of a compound body, and ignores the body it is beneath (it would
+/// always be inside it).
 /// </remarks>
 [NativeComponent("Fenrir.Physics.Trigger")]
 public partial struct Trigger : IComponent

@@ -29,6 +29,9 @@ public static class Bodies
         e.Add(new ContactEvents { Enabled = false });
     }
 
+    // Puts the entity's body in a collision group.
+    public static void Group(uint entity, uint group) => new Entity(entity).Add(new CollisionGroup { Group = group });
+
     // Reads the box's sphere view, which must throw: the exception's message, or null if it did not.
     public static string? WrongKindMessage(uint entity)
     {

@@ -582,6 +582,44 @@ TEST_CASE("C# disabling ContactEvents ends the contact on the next tick", "[phys
     }
 }
 
+TEST_CASE("CollisionGroup is shared with C#", "[physics][scripting][groups]")
+{
+    const ScriptingConfig config = PhysicsScriptingApp::Config();
+    const std::vector<ComponentRegistration>& components = config.extensions[0].components;
+    INFO("Physics's extension should share Fenrir.Physics.CollisionGroup with C#");
+    REQUIRE(std::ranges::any_of(components, [](const ComponentRegistration& component) {
+        return component.name == "Fenrir.Physics.CollisionGroup";
+    }));
+}
+
+TEST_CASE("A collision group written from C# makes two bodies ignore each other", "[physics][scripting][groups]")
+{
+    PhysicsScriptingApp test;
+    AddGround(test);
+    // Two unit boxes, one resting on the ground and one a metre above it.
+    const std::uint32_t lower = AddBody(test, Math::Vec3(0.0f, 0.5f, 0.0f));
+    const std::uint32_t upper = AddBody(test, Math::Vec3(0.0f, 2.0f, 0.0f));
+
+    test.Call<void>(BodiesType, "Group", lower, 7u);
+    test.Call<void>(BodiesType, "Group", upper, 7u);
+    test.ApplyChanges();
+    {
+        INFO("The CollisionGroup C# added to each body does not hold the group it wrote");
+        REQUIRE(test.Entities().GetEntity(lower).HasComponent<CollisionGroup>());
+        REQUIRE(test.Entities().GetEntity(lower).GetComponent<CollisionGroup>().group == 7u);
+        REQUIRE(test.Entities().GetEntity(upper).HasComponent<CollisionGroup>());
+        REQUIRE(test.Entities().GetEntity(upper).GetComponent<CollisionGroup>().group == 7u);
+    }
+
+    test.Run(120);
+
+    const float height = test.Call<float>(BodiesType, "Height", upper);
+    INFO("In one group the upper box should fall through the lower to rest on the ground at y = 0.5, but C# reads "
+         "it at "
+         << height);
+    REQUIRE(height == Approx(0.5f).margin(0.03));
+}
+
 TEST_CASE("C# disabling a trigger exits what is inside on the next tick, and enabling it enters again",
           "[physics][scripting][events]")
 {

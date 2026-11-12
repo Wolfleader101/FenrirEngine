@@ -22,14 +22,6 @@ namespace
         return *PhysicsWorld::Of(test.app.GetActiveScene());
     }
 
-    /** Whether `a`'s body touches `b`'s now, as of the last step. */
-    bool Touching(PhysicsApp& test, const Entity& a, const Entity& b)
-    {
-        bool touching = false;
-        World(test).ForEachContact(a, [&](const Contact& contact) { touching = touching || contact.otherBody == b; });
-        return touching;
-    }
-
     /** A joint of `kind` on a new joint entity between `bodyA` and `bodyB`, its rest pose at `anchor` where the bodies
      * are now. */
     Entity Join(PhysicsApp& test, const Entity& bodyA, const Entity& bodyB, const Math::Vec3& anchor,
