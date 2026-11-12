@@ -250,19 +250,23 @@ namespace Fenrir
 
     Rect2D Painter::Snap(const Rect2D& rect) const
     {
+        const Math::Vec2 min = SnapPoint({rect.x, rect.y});
+        const Math::Vec2 max = SnapPoint({rect.x + rect.width, rect.y + rect.height});
+        return {min.x, min.y, max.x - min.x, max.y - min.y};
+    }
+
+    Math::Vec2 Painter::SnapPoint(Math::Vec2 point) const
+    {
         const Transform2D toLogical = ToLogical();
-        if (!m_config.snapToPixels || m_config.pixelsPerUnit <= 0.0f || !toLogical.IsAxisAligned())
+        if (!m_config.snapToPixels || m_config.pixelsPerUnit <= 0.0f || !toLogical.IsAxisAligned() ||
+            toLogical.AreaScale() <= 0.0f)
         {
-            return rect;
+            return point;
         }
         const float pixels = m_config.pixelsPerUnit;
-        const auto snap = [pixels](Math::Vec2 point) {
-            return Math::Vec2(std::round(point.x * pixels), std::round(point.y * pixels)) / pixels;
-        };
-        const Transform2D back = toLogical.Inverse();
-        const Math::Vec2 min = back.Apply(snap(toLogical.Apply({rect.x, rect.y})));
-        const Math::Vec2 max = back.Apply(snap(toLogical.Apply({rect.x + rect.width, rect.y + rect.height})));
-        return {min.x, min.y, max.x - min.x, max.y - min.y};
+        const Math::Vec2 logical = toLogical.Apply(point);
+        const Math::Vec2 snapped = Math::Vec2(std::round(logical.x * pixels), std::round(logical.y * pixels)) / pixels;
+        return toLogical.Inverse().Apply(snapped);
     }
 
     std::uint32_t Painter::ReserveDraw(const PaintSetup& paint, std::uint32_t vertices, std::uint32_t indices)

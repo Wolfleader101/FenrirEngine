@@ -17,15 +17,20 @@ namespace Fenrir
          * @brief How far above the baseline a line-through's centre is, as a share of the face's ascent: about half
          * the x-height of a Latin face, where browsers draw it from the face's strikeout metrics.
          */
-        constexpr float LineThroughHeight = 0.3f;
+        constexpr float LineThroughShareOfAscent = 0.3f;
     } // namespace
 
-    void Painter::DrawText(Paragraph& paragraph, Math::Vec2 point)
+    void Painter::LayOutIfNever(Paragraph& paragraph) const
     {
         if (!paragraph.Text().empty() && paragraph.Lines().empty() && m_config.fonts != nullptr)
         {
             paragraph.Layout(*m_config.fonts, UnlimitedWidth);
         }
+    }
+
+    void Painter::DrawText(Paragraph& paragraph, Math::Vec2 point)
+    {
+        LayOutIfNever(paragraph);
         const Math::Vec2 origin = SnapPoint(point);
         for (const GlyphRun& run : paragraph.Runs())
         {
@@ -35,10 +40,7 @@ namespace Fenrir
 
     void Painter::DrawText(Paragraph& paragraph, Math::Vec2 point, const TextShadow& shadow)
     {
-        if (!paragraph.Text().empty() && paragraph.Lines().empty() && m_config.fonts != nullptr)
-        {
-            paragraph.Layout(*m_config.fonts, UnlimitedWidth);
-        }
+        LayOutIfNever(paragraph);
         const Math::Vec2 shadowOrigin = SnapPoint(point + shadow.offset);
         for (const GlyphRun& run : paragraph.Runs())
         {
@@ -52,18 +54,10 @@ namespace Fenrir
         DrawRun(run, SnapPoint(point), run.colour);
     }
 
-    Math::Vec2 Painter::SnapPoint(Math::Vec2 point) const
+    void Painter::DrawGlyphs(const GlyphRun& run, Math::Vec2 point, const TextShadow& shadow)
     {
-        const Transform2D toLogical = ToLogical();
-        if (!m_config.snapToPixels || m_config.pixelsPerUnit <= 0.0f || !toLogical.IsAxisAligned() ||
-            toLogical.AreaScale() <= 0.0f)
-        {
-            return point;
-        }
-        const float pixels = m_config.pixelsPerUnit;
-        const Math::Vec2 logical = toLogical.Apply(point);
-        const Math::Vec2 snapped = Math::Vec2(std::round(logical.x * pixels), std::round(logical.y * pixels)) / pixels;
-        return toLogical.Inverse().Apply(snapped);
+        DrawRun(run, SnapPoint(point + shadow.offset), shadow.colour);
+        DrawGlyphs(run, point);
     }
 
     void Painter::DrawRun(const GlyphRun& run, Math::Vec2 point, const Colour& colour)
@@ -116,7 +110,7 @@ namespace Fenrir
         float centre = run.baseline + run.underlineOffset;
         if (run.decoration == TextDecoration::LineThrough)
         {
-            centre = run.baseline - run.ascent * LineThroughHeight;
+            centre = run.baseline - run.ascent * LineThroughShareOfAscent;
         }
         else if (run.decoration == TextDecoration::Overline)
         {

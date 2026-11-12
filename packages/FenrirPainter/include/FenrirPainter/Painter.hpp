@@ -219,6 +219,8 @@ namespace Fenrir
         void DrawText(Paragraph& paragraph, Math::Vec2 point, const TextShadow& shadow);
         /** @brief One glyph run, `point` being its paragraph's top-left. */
         void DrawGlyphs(const GlyphRun& run, Math::Vec2 point);
+        /** @brief `run` with `shadow` drawn first: the run again, moved and in the shadow's colour. */
+        void DrawGlyphs(const GlyphRun& run, Math::Vec2 point, const TextShadow& shadow);
         /** @} */
 
         /** @name Offscreen groups and masks
@@ -325,6 +327,8 @@ namespace Fenrir
         void DrawRun(const GlyphRun& run, Math::Vec2 point, const Colour& colour);
         /** @brief `point` moved to a whole pixel, when snapping is on and the transform axis-aligned. */
         [[nodiscard]] Math::Vec2 SnapPoint(Math::Vec2 point) const;
+        /** @brief Lays `paragraph` out with PainterConfig::fonts, to no width limit, if it has text never laid out. */
+        void LayOutIfNever(Paragraph& paragraph) const;
 
         DrawList2D& m_list;
         PainterConfig m_config;

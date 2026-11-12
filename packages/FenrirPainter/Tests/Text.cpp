@@ -78,6 +78,12 @@ namespace
         return true;
     }
 
+    /** @brief The centre of the quad starting at vertex `first`: the mean of its opposite corners. */
+    Vec2 LineCentre(const std::vector<Fenrir::PainterVertex>& vertices, std::size_t first)
+    {
+        return (vertices[first].position + vertices[first + 2].position) * 0.5f;
+    }
+
     /** @brief The glyph's quad moved by `offset`. */
     Rect2D Moved(const Rect2D& rect, Vec2 offset)
     {
@@ -97,6 +103,7 @@ TEST_CASE("A paragraph of N visible glyphs is N glyph quads over their atlas rec
     Fenrir::Painter painter(list, PainterTest::Config());
     painter.DrawText(paragraph, {10, 20});
 
+    INFO("one command of seven quads: four vertices and six indices a glyph");
     REQUIRE(list.commands.size() == 1);
     const Fenrir::DrawCommand2D& command = PainterTest::Draw(list, 0);
     REQUIRE(command.indexCount == glyphs * 6);
@@ -132,6 +139,7 @@ TEST_CASE("A glyph run draws alone at a point", "[painter][text]")
     Fenrir::Painter painter(list, PainterTest::Config());
     painter.DrawGlyphs(run, {5, 6});
 
+    INFO("a quad a glyph of the run, the first over its rectangle from the point");
     const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
     REQUIRE(vertices.size() == run.glyphs.size() * 4);
     REQUIRE(QuadIs(vertices, 0, Moved(run.glyphs.front().quad, {5, 6}), run.glyphs.front().atlas.region));
@@ -145,6 +153,7 @@ TEST_CASE("Glyphs of two faces are two commands, each with its own page", "[pain
     paragraph.AddRun("Ab", TextTest::Style("default"));
     paragraph.AddRun("Cd", TextTest::Style("Roboto"));
     paragraph.Layout(test.fonts, Fenrir::UnlimitedWidth);
+    INFO("each face has its own run and atlas page");
     REQUIRE(paragraph.Runs().size() == 2);
     REQUIRE(paragraph.Runs()[0].page != paragraph.Runs()[1].page);
 
@@ -152,6 +161,7 @@ TEST_CASE("Glyphs of two faces are two commands, each with its own page", "[pain
     Fenrir::Painter painter(list, PainterTest::Config());
     painter.DrawText(paragraph, {0, 0});
 
+    INFO("the second page cannot share the first's image slot, so it starts a second command");
     REQUIRE(list.commands.size() == 2);
     REQUIRE(PainterTest::Draw(list, 0).textures[Fenrir::PainterImageSlot].image == paragraph.Runs()[0].page);
     REQUIRE(PainterTest::Draw(list, 1).textures[Fenrir::PainterImageSlot].image == paragraph.Runs()[1].page);
@@ -186,6 +196,7 @@ TEST_CASE("Text under a clip carries the clip and its scissor", "[painter][text]
     painter.ClipRoundedRect({0, 0, 20, 40}, Fenrir::CornerRadii::All(4));
     painter.DrawText(paragraph, {2, 2});
 
+    INFO("the command is scissored and every glyph vertex carries the rounded clip");
     REQUIRE(PainterTest::Draw(list, 0).scissor.has_value());
     for (const Fenrir::PainterVertex& vertex : PainterTest::Vertices(list))
     {
@@ -231,13 +242,14 @@ TEST_CASE("An underline is a rectangle under the run, from its metrics", "[paint
     painter.DrawText(paragraph, {0, 0});
 
     const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
+    INFO("the glyphs, then one rectangle quad after them");
     REQUIRE(vertices.size() == (run.glyphs.size() + 1) * 4);
     const Fenrir::PainterVertex& line = vertices[run.glyphs.size() * 4];
     REQUIRE(PainterTest::ShapeOf(line) == Fenrir::ShapeKind::Rectangle);
     INFO("the rectangle spans the run's advances, centred the underline offset below the baseline");
     REQUIRE(Near(line.halfSize, Vec2(run.width * 0.5f, run.underlineThickness * 0.5f)));
-    const std::size_t corner = run.glyphs.size() * 4 + 2;
-    REQUIRE(Near(vertices[corner].position.x, run.left + run.width + 1.0f, 1e-3f));
+    REQUIRE(Near(LineCentre(vertices, run.glyphs.size() * 4),
+                 Vec2(run.left + run.width * 0.5f, run.baseline + run.underlineOffset), 1e-3f));
 }
 
 TEST_CASE("A paragraph laid out at the root's scale lands on whole pixels of the target", "[painter][text]")
@@ -274,6 +286,7 @@ TEST_CASE("With pixel snapping the text's origin moves to a whole pixel", "[pain
     Fenrir::Painter painter(list, config);
     painter.DrawText(paragraph, {10.3f, 20.6f});
 
+    INFO("the point (10.3, 20.6) rounds to (10, 21), and the glyph's whole-pixel quad is drawn from there");
     REQUIRE(Near(PainterTest::Vertices(list)[0].position, Vec2(10 + glyph.quad.x, 21 + glyph.quad.y)));
 }
 
@@ -290,7 +303,63 @@ TEST_CASE("A paragraph not yet laid out is laid out on the spot, rasterising its
     Fenrir::Painter painter(list, config);
     painter.DrawText(paragraph, {0, 0});
 
-    INFO("the atlas at 23 pixels was made, and the five glyphs drawn from it");
+    INFO("the atlas at 23 pixels was made");
     REQUIRE_FALSE(test.fonts.AtlasPages(test.fonts.DefaultFont(), 23.0f).empty());
+    INFO("and the five glyphs drawn from it");
     REQUIRE(PainterTest::Vertices(list).size() == 5 * 4);
+}
+
+TEST_CASE("A line-through is a rectangle across the run above its baseline, and an overline at its ascent",
+          "[painter][text]")
+{
+    TextTest::TextApp test;
+    for (const Fenrir::TextDecoration decoration :
+         {Fenrir::TextDecoration::LineThrough, Fenrir::TextDecoration::Overline})
+    {
+        Fenrir::Paragraph paragraph;
+        Fenrir::TextStyle style = TextTest::Style("default");
+        style.decoration = decoration;
+        paragraph.SetText("Line", style);
+        paragraph.Layout(test.fonts, Fenrir::UnlimitedWidth);
+        const Fenrir::GlyphRun& run = paragraph.Runs().front();
+
+        Fenrir::DrawList2D list;
+        Fenrir::Painter painter(list, PainterTest::Config());
+        painter.DrawText(paragraph, {0, 0});
+
+        const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
+        INFO("one rectangle after the glyphs, across the run's advances");
+        REQUIRE(vertices.size() == (run.glyphs.size() + 1) * 4);
+        const Vec2 centre = LineCentre(vertices, run.glyphs.size() * 4);
+        REQUIRE(Near(centre.x, run.left + run.width * 0.5f, 1e-3f));
+        if (decoration == Fenrir::TextDecoration::LineThrough)
+        {
+            INFO("a line-through sits above the baseline, below half the ascent");
+            REQUIRE(centre.y < run.baseline);
+            REQUIRE(centre.y > run.baseline - run.ascent * 0.5f);
+        }
+        else
+        {
+            INFO("an overline's top is at the ascent");
+            REQUIRE(Near(centre.y, run.baseline - run.ascent + run.underlineThickness * 0.5f, 1e-3f));
+        }
+    }
+}
+
+TEST_CASE("A glyph run's shadow draws offset and tinted before it", "[painter][text]")
+{
+    TextTest::TextApp test;
+    Fenrir::Paragraph paragraph = LaidOut(test, "Run");
+    const Fenrir::GlyphRun& run = paragraph.Runs().front();
+
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, PainterTest::Config());
+    painter.DrawGlyphs(run, {0, 0}, Fenrir::TextShadow{{1, 1}, Colour::Black});
+
+    const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
+    INFO("the shadow's quads first, moved by (1, 1) and black, then the run's");
+    REQUIRE(vertices.size() == run.glyphs.size() * 8);
+    REQUIRE(QuadIs(vertices, 0, Moved(run.glyphs.front().quad, {1, 1}), run.glyphs.front().atlas.region));
+    REQUIRE(vertices[0].colour == PainterTest::Rgba8(0, 0, 0, 255));
+    REQUIRE(QuadIs(vertices, run.glyphs.size() * 4, run.glyphs.front().quad, run.glyphs.front().atlas.region));
 }
