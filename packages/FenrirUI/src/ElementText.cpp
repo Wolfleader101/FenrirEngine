@@ -15,6 +15,12 @@ namespace Fenrir::Detail
          */
         constexpr float WidthSlack = 1.0f / 64.0f;
 
+        /** @brief The width in target pixels a paragraph is laid out to for `units` UI units of box. */
+        float LayoutWidth(float units, float pixelsPerUnit)
+        {
+            return std::max(units, 0.0f) * pixelsPerUnit + WidthSlack;
+        }
+
         /** @brief Whether two styles lay text out to the same size: all but the colour. */
         bool SameShape(const TextStyle& a, const TextStyle& b)
         {
@@ -109,7 +115,7 @@ namespace Fenrir::Detail
         }
         const float width = constraints.widthMode == MeasureMode::Undefined
                                 ? UnlimitedWidth
-                                : std::max(constraints.width, 0.0f) * m_pixelsPerUnit + WidthSlack;
+                                : LayoutWidth(constraints.width, m_pixelsPerUnit);
         m_paragraph.Layout(*fonts, width);
         // Layout has seen the paragraph's size: drawing it at another width next is no news.
         m_drawnWidth = -1.0f;
@@ -120,9 +126,8 @@ namespace Fenrir::Detail
 
     bool ElementText::LayOutForDrawing(FontLibrary& fonts)
     {
-        const float width = std::isfinite(m_contentWidth)
-                                ? std::max(m_contentWidth, 0.0f) * m_pixelsPerUnit + WidthSlack
-                                : UnlimitedWidth;
+        const float width =
+            std::isfinite(m_contentWidth) ? LayoutWidth(m_contentWidth, m_pixelsPerUnit) : UnlimitedWidth;
         const bool relaid = m_paragraph.Layout(fonts, width);
         // Laid out again at the width it was drawn at, with no measure since: the fonts changed under it, and layout
         // has not seen its new size.

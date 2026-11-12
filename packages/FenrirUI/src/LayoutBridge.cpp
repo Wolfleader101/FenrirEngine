@@ -23,10 +23,7 @@ namespace Fenrir::Detail
             Element* element = nullptr;
             ElementText* text = nullptr;
         };
-    } // namespace
 
-    namespace
-    {
         YGNodeRef Node(LayoutNode* node)
         {
             return reinterpret_cast<YGNodeRef>(node);

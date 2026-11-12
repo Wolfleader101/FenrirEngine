@@ -316,7 +316,7 @@ namespace Fenrir
     {
         /** @brief Nothing: the line runs on past the width (and is cut only by an `overflow: hidden` ancestor). */
         Clip,
-        /** @brief An ellipsis, `…`, inside the width. */
+        /** @brief An ellipsis inside the width. */
         Ellipsis,
     };
 
@@ -724,15 +724,6 @@ namespace Fenrir
         StyleDeclarations& SetAnimationDelay(std::vector<float> seconds);
         /** @brief `animation-iteration-count`; infinity for `infinite`. */
         StyleDeclarations& SetAnimationIterationCount(std::vector<float> counts);
-        /** @brief `text-overflow`: what a line cut off at its element's width ends with. */
-        enum class TextOverflow : std::uint8_t
-        {
-            /** @brief Nothing: the line runs on past the width (and is cut only by an `overflow: hidden` ancestor). */
-            Clip,
-            /** @brief An ellipsis, `…`, inside the width. */
-            Ellipsis,
-        };
-
         /** @brief `animation-direction`. */
         StyleDeclarations& SetAnimationDirection(std::vector<Fenrir::AnimationDirection> directions);
         /** @brief `animation-fill-mode`. */

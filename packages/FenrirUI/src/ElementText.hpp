@@ -17,7 +17,7 @@ namespace Fenrir
 namespace Fenrir::Detail
 {
     /**
-     * @brief An element's text (ticket 09): its FenrirText paragraph, laid out in the target's pixels and measured
+     * @brief An element's text: its FenrirText paragraph, laid out in the target's pixels and measured
      * back in UI units. The paragraph's sizes are the style's times the target's pixels per UI unit (the root's scale
      * times the target's content scale, `size * scale * pixelsPerUnit`), the exact pixel size its bitmaps are
      * rasterised at, so the painter's DrawText puts whole-pixel glyphs on whole pixels.

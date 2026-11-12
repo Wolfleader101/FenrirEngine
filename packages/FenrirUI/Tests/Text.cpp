@@ -1,4 +1,4 @@
-// Text on elements (ticket 09): a label's paragraph laid out at its style through the headless App (the spec's seam 1),
+// Text on elements: a label's paragraph laid out at its style through the headless App (the spec's seam 1),
 // and its glyphs in the root's draw list through a capturing target (seam 2). Paragraphs are laid out in target pixels,
 // `size * scale * pixelsPerUnit`, and measured back into UI units; the roots here use the content-scale rule, so a
 // target at content scale 2 lays text out at twice its UI size.
@@ -127,6 +127,7 @@ TEST_CASE("A label's laid-out size is its paragraph's, laid out in target pixels
     scene.test.Frame();
 
     const Fenrir::Paragraph& paragraph = scene.ParagraphOf(label);
+    INFO("the label keeps its text and its paragraph");
     REQUIRE(scene.root.GetText(label) == "Hello, labels");
     REQUIRE(paragraph.Text() == "Hello, labels");
     INFO("the paragraph is laid out at size * scale * pixelsPerUnit: 20 * 1 * 2");
@@ -139,23 +140,31 @@ TEST_CASE("A label's laid-out size is its paragraph's, laid out in target pixels
     REQUIRE(content.width > 0.0f);
 }
 
-TEST_CASE("A label wraps at its parent's width, and white-space: nowrap keeps it on one line", "[ui][text]")
+TEST_CASE("A label wraps at its parent's width", "[ui][text]")
 {
     TextScene scene;
     const Fenrir::ElementId panel = scene.root.Create(scene.root.GetRootElement(), "panel");
     scene.SetStyle(panel, "width: 120px");
     const Fenrir::ElementId wrapped = scene.Label(panel, LongText);
-    const Fenrir::ElementId unwrapped = scene.Label(panel, LongText, "white-space: nowrap");
     scene.test.Frame();
 
-    INFO("the wrapping label breaks into lines no wider than the panel");
+    INFO("the label breaks into lines no wider than the panel, and fills its width");
     const Fenrir::Paragraph& lines = scene.ParagraphOf(wrapped);
     REQUIRE(lines.Lines().size() > 1);
     REQUIRE(lines.Size().x <= 120.0f);
     REQUIRE(UITest::Near(scene.root.GetBoxes(wrapped).content.width, 120.0f));
-    REQUIRE(scene.root.GetBoxes(wrapped).content.height > scene.root.GetBoxes(unwrapped).content.height);
+    REQUIRE(UITest::Near(scene.root.GetBoxes(wrapped).content.height, lines.Size().y));
+}
 
-    INFO("the nowrap label is one line, past the panel's width");
+TEST_CASE("white-space: nowrap keeps a label on one line past its parent's width", "[ui][text]")
+{
+    TextScene scene;
+    const Fenrir::ElementId panel = scene.root.Create(scene.root.GetRootElement(), "panel");
+    scene.SetStyle(panel, "width: 120px");
+    const Fenrir::ElementId unwrapped = scene.Label(panel, LongText, "white-space: nowrap");
+    scene.test.Frame();
+
+    INFO("the nowrap label is one line, wider than the panel");
     const Fenrir::Paragraph& line = scene.ParagraphOf(unwrapped);
     REQUIRE(line.Lines().size() == 1);
     REQUIRE(line.Size().x > 120.0f);
@@ -171,6 +180,7 @@ TEST_CASE("text-overflow: ellipsis cuts a nowrap label at its fixed width", "[ui
                                                      "width: 100px; white-space: nowrap; text-overflow: ellipsis");
     scene.test.Frame();
 
+    INFO("the ellipsised label keeps its fixed width");
     REQUIRE(scene.root.GetBoxes(ellipsised).content.width == 100.0f);
     INFO("clip lets the line run past the width; ellipsis ends it inside the width with fewer glyphs");
     const Fenrir::Paragraph& clip = scene.ParagraphOf(clipped);
@@ -193,6 +203,7 @@ TEST_CASE("text-align moves a label's lines across its width", "[ui][text]")
     const float centreStart = scene.ParagraphOf(centre).Lines().front().left;
     const float rightStart = scene.ParagraphOf(right).Lines().front().left;
     const float width = scene.ParagraphOf(left).Lines().front().width;
+    INFO("left starts at 0, center halfway along the free space, right at its end");
     REQUIRE(UITest::Near(leftStart, 0.0f));
     REQUIRE(UITest::Near(centreStart, (300.0f - width) / 2.0f, 0.5f));
     REQUIRE(UITest::Near(rightStart, 300.0f - width, 0.5f));
@@ -215,6 +226,7 @@ TEST_CASE("font-size inherits from a parent and a class's own wins", "[ui][text]
     scene.root.AddClass(overrides, "big");
     scene.test.Frame();
 
+    INFO("the plain label takes the parent's 30px, the .big one its own 40px, and their paragraphs follow");
     REQUIRE(scene.root.GetResolvedStyle(inherits)->fontSize == 30.0f);
     REQUIRE(scene.root.GetResolvedStyle(overrides)->fontSize == 40.0f);
     REQUIRE(UITest::Near(scene.ParagraphOf(inherits).Runs().front().size, 30.0f));
@@ -238,6 +250,7 @@ TEST_CASE("Labels in a flex row with flex-grow wrap at their share of it", "[ui]
     const Fenrir::ElementId second = scene.Label(row, LongText, "flex-grow: 1; flex-basis: 0");
     scene.test.Frame();
 
+    INFO("each label grows to half the row and wraps there");
     REQUIRE(UITest::Near(scene.root.GetBoxes(first).content.width, 150.0f));
     REQUIRE(UITest::Near(scene.root.GetBoxes(second).content.width, 150.0f));
     const Fenrir::Paragraph& paragraph = scene.ParagraphOf(first);
@@ -259,6 +272,7 @@ TEST_CASE("Text properties read from inline style and every one inherits", "[ui]
     scene.test.Frame();
 
     const Fenrir::ResolvedStyle& style = *scene.root.GetResolvedStyle(label);
+    INFO("the label inherits each value its parent's inline style gave");
     REQUIRE(style.color.r == 1.0f);
     REQUIRE(style.color.g == 0.0f);
     REQUIRE(style.fontFamily == "Body Text");
@@ -299,6 +313,7 @@ TEST_CASE("font-family resolves through the app's font library, with families re
         scene.test.assets.Store().Load<Fenrir::Font>(file.string(), Fenrir::AssetOwner::App()).handle;
     REQUIRE_FALSE(roboto.IsEmpty());
     fonts->AddFace("Body", roboto);
+    INFO("Body is Roboto; a label with no family is in the embedded default face");
 
     const Fenrir::ElementId body = scene.Label(scene.root.GetRootElement(), "Body", "font-family: Body");
     const Fenrir::ElementId plain = scene.Label(scene.root.GetRootElement(), "Plain");
@@ -308,11 +323,12 @@ TEST_CASE("font-family resolves through the app's font library, with families re
     REQUIRE(scene.ParagraphOf(plain).Runs().front().font == fonts->DefaultFont());
 }
 
-TEST_CASE("Text set again, or on any element, lays out again", "[ui][text]")
+TEST_CASE("New text on any element measures it again", "[ui][text]")
 {
     TextScene scene;
     scene.SetStyle(scene.root.GetRootElement(), "align-items: flex-start");
     const Fenrir::ElementId button = scene.root.Create(scene.root.GetRootElement(), "button");
+    INFO("an element of any tag has no paragraph until given text, and its box follows the text set last");
     REQUIRE(scene.root.GetParagraph(button) == nullptr);
     scene.root.SetText(button, "OK");
     scene.test.Frame();
@@ -336,6 +352,7 @@ TEST_CASE("A label's glyph quads sit inside its content box", "[ui][text]")
 
     const Fenrir::Rect2D content = scene.root.GetBoxes(label).content;
     const auto quads = GlyphQuads(scene.target->lists.back());
+    INFO("one quad a glyph, every corner within the label's content box");
     REQUIRE(quads.size() == GlyphCount(scene.ParagraphOf(label)));
     REQUIRE_FALSE(quads.empty());
     for (const auto& quad : quads)
@@ -360,6 +377,7 @@ TEST_CASE("A label's text-shadow draws before its text, offset and in its colour
 
     const std::size_t glyphs = GlyphCount(scene.ParagraphOf(label));
     const auto quads = GlyphQuads(scene.target->lists.back());
+    INFO("each glyph is drawn twice: once for the shadow, once for the text");
     REQUIRE(quads.size() == glyphs * 2);
     INFO("the shadow's quads come first, red and moved by (2, 3); then the text's, blue");
     REQUIRE(quads[0][0].colour == Rgba8(255, 0, 0, 255));

@@ -1682,7 +1682,7 @@ namespace Fenrir::Detail
             "background", "flex",    "gap",    "transition",   "animation",
         };
 
-        // The spec's property set that the style does not hold yet: scrollbars (ticket 12), and the filters and
+        // The spec's property set that the style does not hold yet: the scrollbars, the filters and
         // background-position.
         constexpr std::array<std::string_view, 5> LaterLonghands{
             "filter", "backdrop-filter", "background-position", "scrollbar-color", "scrollbar-width",
