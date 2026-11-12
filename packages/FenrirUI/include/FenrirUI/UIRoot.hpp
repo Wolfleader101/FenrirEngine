@@ -13,6 +13,7 @@
 #include "FenrirUI/Element.hpp"
 #include "FenrirUI/ElementId.hpp"
 #include "FenrirUI/Style.hpp"
+#include "FenrirUI/Stylesheet.hpp"
 #include "FenrirUI/UITarget.hpp"
 
 namespace Fenrir
@@ -190,8 +191,9 @@ namespace Fenrir
          */
         [[nodiscard]] StyleDeclarations* EditInlineStyle(ElementId element);
         /**
-         * @brief Gives the inline style property `name` (a CSS longhand, such as `margin-left`) the value `value`, as
-         * CSS writes it: lengths in `px` or `%` (`0` alone is 0px) or `auto`, colours as `#rgb`, `#rgba`, `#rrggbb`,
+         * @brief Gives the inline style property `name` (a CSS longhand, such as `margin-left`, or a shorthand a
+         * stylesheet takes, such as `margin`, which gives all of its longhands or none) the value `value`, as CSS
+         * writes it: lengths in `px` or `%` (`0` alone is 0px) or `auto`, colours as `#rgb`, `#rgba`, `#rrggbb`,
          * `#rrggbbaa`, `rgb()`, `rgba()`, `hsl()`, `hsla()` or a CSS colour name, `url(path)` for an image asset loaded
          * from the asset store, `linear-gradient()` and `radial-gradient()`, `box-shadow` lists, and `transform`
          * lists of `translate()`, `translateX()`, `translateY()`, `scale()`, `scaleX()`, `scaleY()`, `rotate()` (deg,
@@ -199,6 +201,20 @@ namespace Fenrir
          * nothing: false.
          */
         bool SetStyleProperty(ElementId element, std::string_view name, std::string_view value);
+        /**
+         * @brief Parses `text` as a stylesheet named `name` (Stylesheet::Parse), logs what the parser refused with the
+         * name and line, and adds it after the root's other sheets: at equal specificity a later sheet's rules win.
+         * Every element's style is resolved again on the next frame. The sheet's url()s load from the asset store now;
+         * a declaration whose image cannot be loaded is logged and skipped.
+         */
+        StylesheetId AddStylesheet(std::string_view text, std::string_view name);
+        /** @brief Adds a sheet already parsed, as AddStylesheet(text, name) does after parsing. */
+        StylesheetId AddStylesheet(Stylesheet sheet);
+        /** @brief Takes a sheet away and resolves every style again next frame. False when it names none of the root's.
+         */
+        bool RemoveStylesheet(StylesheetId sheet);
+        /** @brief A sheet the root holds, as parsed; null when it names none. */
+        [[nodiscard]] const Stylesheet* GetStylesheet(StylesheetId sheet) const noexcept;
         /** @brief Its resolved style as of the last frame; null for a stale id. */
         [[nodiscard]] const ResolvedStyle* GetResolvedStyle(ElementId element) const noexcept;
         /** @brief Its rectangles as of the last frame's layout; empty rectangles for a stale id. */

@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "BoxPainting.hpp"
+#include "Cascade.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirRenderer/Overlay.hpp"
@@ -72,33 +73,42 @@ namespace Fenrir
         }
 
         /** @brief Resolves the styles under slot `index` that are dirty or inherit a changed value. */
-        void ResolveStyles(Detail::UIRootState& state, std::uint32_t index, const ResolvedStyle* parent,
+        void ResolveStyles(Detail::UIRootState& state, std::uint32_t index, const Detail::ElementSlot* parent,
                            bool parentInheritedChanged)
         {
-            Detail::ElementSlot& slot = state.slots[index];
-            const bool resolve = slot.styleDirty || parentInheritedChanged;
+            const bool resolve = state.slots[index].styleDirty || parentInheritedChanged;
             bool inheritedChanged = false;
             if (resolve)
             {
                 ResolvedStyle style;
+                std::shared_ptr<const Detail::CustomProperties> custom;
                 if (parent != nullptr)
                 {
-                    style.pointerEvents = parent->pointerEvents;
-                    style.cursor = parent->cursor;
+                    style.pointerEvents = parent->resolved.pointerEvents;
+                    style.cursor = parent->resolved.cursor;
+                    custom = parent->customProperties;
                 }
-                slot.inlineStyle.ApplyTo(style);
-                inheritedChanged =
-                    style.pointerEvents != slot.resolved.pointerEvents || style.cursor != slot.resolved.cursor;
+                Detail::Cascade(state, index, style, custom);
+                Detail::ElementSlot& slot = state.slots[index];
+                const bool customChanged =
+                    custom != slot.customProperties &&
+                    (custom == nullptr || slot.customProperties == nullptr || *custom != *slot.customProperties);
+                inheritedChanged = style.pointerEvents != slot.resolved.pointerEvents ||
+                                   style.cursor != slot.resolved.cursor || customChanged;
+                if (customChanged)
+                {
+                    slot.customProperties = std::move(custom);
+                }
                 slot.resolved = std::move(style);
                 state.layout.ApplyStyle(slot.node, slot.resolved);
                 slot.styleDirty = false;
                 ++state.stats.stylesResolved;
             }
-            if (inheritedChanged || slot.descendantStyleDirty)
+            if (inheritedChanged || state.slots[index].descendantStyleDirty)
             {
-                for (const ElementId child : slot.children)
+                for (const ElementId child : state.slots[index].children)
                 {
-                    ResolveStyles(state, child.index, &state.slots[index].resolved, inheritedChanged);
+                    ResolveStyles(state, child.index, &state.slots[index], inheritedChanged);
                 }
             }
             state.slots[index].descendantStyleDirty = false;
@@ -147,6 +157,58 @@ namespace Fenrir
                  above != nullptr && !above->descendantStyleDirty; above = state.Find(above->parent))
             {
                 above->descendantStyleDirty = true;
+            }
+        }
+
+        /** @brief Marks the element and everything under it dirty, and the path above it. */
+        void MarkSubtreeStyleDirty(Detail::UIRootState& state, ElementId id)
+        {
+            Detail::ElementSlot* slot = state.Find(id);
+            if (slot == nullptr)
+            {
+                return;
+            }
+            MarkStyleDirty(state, id);
+            const auto mark = [&state](const auto& self, Detail::ElementSlot& under) -> void {
+                under.styleDirty = true;
+                under.descendantStyleDirty = !under.children.empty();
+                for (const ElementId child : under.children)
+                {
+                    self(self, state.slots[child.index]);
+                }
+            };
+            mark(mark, *slot);
+        }
+
+        /**
+         * @brief Marks what a change to the element's classes, id or pseudo-classes can restyle: the element, and its
+         * subtree when a selector looks above its subject.
+         */
+        void MarkMatchDirty(Detail::UIRootState& state, ElementId id)
+        {
+            if (state.index.hasCombinators)
+            {
+                MarkSubtreeStyleDirty(state, id);
+            }
+            else
+            {
+                MarkStyleDirty(state, id);
+            }
+        }
+
+        /** @brief After `parent`'s children changed, marks those :first-child and :last-child may now match otherwise.
+         */
+        void MarkChildrenMatchDirty(Detail::UIRootState& state, ElementId parent)
+        {
+            const Detail::ElementSlot* slot = state.Find(parent);
+            if (slot == nullptr || !state.index.hasSiblingStructure)
+            {
+                return;
+            }
+            const std::vector<ElementId> children = slot->children;
+            for (const ElementId child : children)
+            {
+                MarkMatchDirty(state, child);
             }
         }
 
@@ -262,6 +324,7 @@ namespace Fenrir
         slot.node = m_state->layout.CreateNode(slot.element.get());
         Attach(*m_state, id, parent, index);
         MarkStyleDirty(*m_state, id);
+        MarkChildrenMatchDirty(*m_state, parent);
         return id;
     }
 
@@ -271,8 +334,10 @@ namespace Fenrir
         {
             return false;
         }
+        const ElementId parent = GetParent(element);
         Detach(*m_state, element);
         FreeSubtree(*m_state, element.index);
+        MarkChildrenMatchDirty(*m_state, parent);
         return true;
     }
 
@@ -289,10 +354,13 @@ namespace Fenrir
                 return false;
             }
         }
+        const ElementId oldParent = GetParent(element);
         Detach(*m_state, element);
         Attach(*m_state, element, newParent, index);
-        // What it inherits may differ under its new parent.
-        MarkStyleDirty(*m_state, element);
+        // What it inherits, and what its ancestors let selectors match, may differ under its new parent.
+        MarkMatchDirty(*m_state, element);
+        MarkChildrenMatchDirty(*m_state, oldParent);
+        MarkChildrenMatchDirty(*m_state, newParent);
         return true;
     }
 
@@ -305,6 +373,7 @@ namespace Fenrir
         }
         Detach(*m_state, element);
         Attach(*m_state, element, parent, index);
+        MarkChildrenMatchDirty(*m_state, parent);
         return true;
     }
 
@@ -348,7 +417,7 @@ namespace Fenrir
         if (Detail::ElementSlot* slot = m_state->Find(element))
         {
             slot->idString = std::string(id);
-            MarkStyleDirty(*m_state, element);
+            MarkMatchDirty(*m_state, element);
         }
     }
 
@@ -401,7 +470,7 @@ namespace Fenrir
             return;
         }
         slot->classes.emplace_back(name);
-        MarkStyleDirty(*m_state, element);
+        MarkMatchDirty(*m_state, element);
     }
 
     void UIRoot::RemoveClass(ElementId element, std::string_view name)
@@ -415,7 +484,7 @@ namespace Fenrir
         if (it != slot->classes.end())
         {
             slot->classes.erase(it);
-            MarkStyleDirty(*m_state, element);
+            MarkMatchDirty(*m_state, element);
         }
     }
 
@@ -437,7 +506,7 @@ namespace Fenrir
         if (flags != slot->pseudoClasses)
         {
             slot->pseudoClasses = flags;
-            MarkStyleDirty(*m_state, element);
+            MarkMatchDirty(*m_state, element);
         }
     }
 
@@ -471,24 +540,76 @@ namespace Fenrir
         {
             return false;
         }
-        Detail::StyleParseContext context;
-        App& app = m_state->app;
-        context.loadImage = [&app](std::string_view path) -> AssetHandle<Image> {
-            AssetStore* store = app.TryGetResource<AssetStore>();
-            if (store == nullptr)
-            {
-                return {};
-            }
-            return store->Load<Image>(path, AssetOwner::App()).handle;
-        };
-        if (!Detail::ParseStyleProperty(name, value, slot->inlineStyle, context))
+        Detail::StyleParseContext context = Detail::MakeParseContext(*m_state);
+        std::string lower(name);
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](char c) { return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c; });
+        bool set = false;
+        if (Detail::ClassifyProperty(lower) == Detail::PropertyKind::Later)
         {
-            app.Logger()->Warn("FenrirUI: the inline style property '{}: {}' was not set: {}", name, value,
-                               context.error);
+            context.error = "FenrirUI does not style it yet";
+        }
+        else
+        {
+            set = Detail::ParseStyleDeclaration(lower, value, slot->inlineStyle, context);
+        }
+        if (!set)
+        {
+            m_state->app.Logger()->Warn("FenrirUI: the inline style property '{}: {}' was not set: {}", name, value,
+                                        context.error);
             return false;
         }
         MarkStyleDirty(*m_state, element);
         return true;
+    }
+
+    StylesheetId UIRoot::AddStylesheet(std::string_view text, std::string_view name)
+    {
+        return AddStylesheet(Stylesheet::Parse(text, name));
+    }
+
+    StylesheetId UIRoot::AddStylesheet(Stylesheet sheet)
+    {
+        for (const StyleDiagnostic& diagnostic : sheet.diagnostics)
+        {
+            m_state->app.Logger()->Warn("FenrirUI: {}:{}: {}", sheet.name, diagnostic.line, diagnostic.message);
+        }
+        auto entry = std::make_unique<Detail::StylesheetEntry>();
+        entry->id = {m_state->nextSheet++};
+        entry->sheet = std::move(sheet);
+        Detail::CompileStylesheet(*m_state, *entry);
+        const StylesheetId id = entry->id;
+        m_state->sheets.push_back(std::move(entry));
+        Detail::RebuildStyleIndex(*m_state);
+        MarkSubtreeStyleDirty(*m_state, m_state->rootElement);
+        return id;
+    }
+
+    bool UIRoot::RemoveStylesheet(StylesheetId sheet)
+    {
+        auto& sheets = m_state->sheets;
+        const auto found =
+            std::find_if(sheets.begin(), sheets.end(), [&](const auto& entry) { return entry->id == sheet; });
+        if (!sheet.IsValid() || found == sheets.end())
+        {
+            return false;
+        }
+        sheets.erase(found);
+        Detail::RebuildStyleIndex(*m_state);
+        MarkSubtreeStyleDirty(*m_state, m_state->rootElement);
+        return true;
+    }
+
+    const Stylesheet* UIRoot::GetStylesheet(StylesheetId sheet) const noexcept
+    {
+        for (const auto& entry : m_state->sheets)
+        {
+            if (entry->id == sheet)
+            {
+                return &entry->sheet;
+            }
+        }
+        return nullptr;
     }
 
     const ResolvedStyle* UIRoot::GetResolvedStyle(ElementId element) const noexcept

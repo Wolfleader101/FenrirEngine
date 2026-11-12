@@ -365,8 +365,8 @@ namespace Fenrir
     /**
      * @brief A set of property values, some properties given and the rest not: an element's inline style. Resolving an
      * element's style starts from the defaults, takes the inherited properties (pointer-events and cursor) from its
-     * parent's resolved style, and writes over them every property given here. Each typed setter gives one property;
-     * UIRoot::SetStyleProperty gives one by its CSS name and a value string.
+     * parent's resolved style, writes the matching stylesheet rules over them, then every property given here. Each
+     * typed setter gives one property; UIRoot::SetStyleProperty gives one by its CSS name and a value string.
      */
     class StyleDeclarations
     {

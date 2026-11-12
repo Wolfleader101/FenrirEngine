@@ -8,18 +8,22 @@ add_library(FenrirUI STATIC
     include/FenrirUI/Element.hpp
     include/FenrirUI/ElementId.hpp
     include/FenrirUI/Style.hpp
+    include/FenrirUI/Stylesheet.hpp
     include/FenrirUI/UI.hpp
     include/FenrirUI/UIRoot.hpp
     include/FenrirUI/UITarget.hpp
 
     src/BoxPainting.cpp
     src/BoxPainting.hpp
+    src/Cascade.cpp
+    src/Cascade.hpp
     src/LayoutBridge.cpp
     src/LayoutBridge.hpp
     src/Rects.hpp
     src/Style.cpp
     src/StyleValues.cpp
     src/StyleValues.hpp
+    src/Stylesheet.cpp
     src/UI.cpp
     src/UIRoot.cpp
     src/UIRootState.hpp

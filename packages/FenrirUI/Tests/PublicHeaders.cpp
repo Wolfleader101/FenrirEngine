@@ -4,6 +4,7 @@
 #include "FenrirUI/Element.hpp"
 #include "FenrirUI/ElementId.hpp"
 #include "FenrirUI/Style.hpp"
+#include "FenrirUI/Stylesheet.hpp"
 #include "FenrirUI/UI.hpp"
 #include "FenrirUI/UIRoot.hpp"
 #include "FenrirUI/UITarget.hpp"
