@@ -153,7 +153,8 @@ TEST_CASE("A label wraps at its parent's width", "[ui][text]")
     REQUIRE(lines.Lines().size() > 1);
     REQUIRE(lines.Size().x <= 120.0f);
     REQUIRE(UITest::Near(scene.root.GetBoxes(wrapped).content.width, 120.0f));
-    REQUIRE(UITest::Near(scene.root.GetBoxes(wrapped).content.height, lines.Size().y));
+    // The root snaps the box to whole pixels; the paragraph's height is fractional.
+    REQUIRE(UITest::Near(scene.root.GetBoxes(wrapped).content.height, lines.Size().y, 1.0f));
 }
 
 TEST_CASE("white-space: nowrap keeps a label on one line past its parent's width", "[ui][text]")
