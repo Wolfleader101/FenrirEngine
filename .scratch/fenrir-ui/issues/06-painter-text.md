@@ -10,8 +10,8 @@
 
 **Touches:** `packages/FenrirPainter/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Draw-list tests: a paragraph of N visible glyphs emits N quads over the right atlas rectangles; glyphs of two faces split into two commands by texture; text under a rotated transform lands rotated; text under a clip gets the clip's data; a shadow draws before its text.
-- [ ] GL test (skipped without a display): a word drawn to an image target reads back darker pixels along its baseline than above it, and the same word at two sizes differs in extent as the font's metrics predict.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Draw-list tests: a paragraph of N visible glyphs emits N quads over the right atlas rectangles; glyphs of two faces split into two commands by texture; text under a rotated transform lands rotated; text under a clip gets the clip's data; a shadow draws before its text.
+- [x] GL test (skipped without a display): a word drawn to an image target reads back darker pixels along its baseline than above it, and the same word at two sizes differs in extent as the font's metrics predict.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

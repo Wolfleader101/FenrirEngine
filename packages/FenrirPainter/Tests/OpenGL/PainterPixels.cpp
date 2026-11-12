@@ -1,9 +1,9 @@
 // builtin:painter on OpenGL (the spec's GL check): a rounded rectangle, a radial gradient, a bordered box, a stroked
 // star and a filled ring with a hole painted into an image 2D target (ADR-0060) through the renderer's ImageTargets2D,
 // and read back at their centres, joins and edges; and offscreen groups: a half-opacity group, a blurred disc's edge,
-// a masked gradient and a backdrop blur. The image is linear RGBA8, cleared transparent each frame it is
-// drawn, and the root's blend space Linear, so a pixel is the shader's premultiplied linear output to 8 bits; the
-// expected values are worked by hand.
+// a masked gradient and a backdrop blur; and a word of text at two sizes. The image is linear RGBA8, cleared
+// transparent each frame it is drawn, and the root's blend space Linear, so a pixel is the shader's premultiplied
+// linear output to 8 bits; the expected values are worked by hand.
 
 #include <algorithm>
 #include <cmath>
@@ -18,6 +18,8 @@
 #include "FenrirPainter/Painting.hpp"
 #include "FenrirPainter/Path.hpp"
 #include "FenrirRenderer/ImageTargets2D.hpp"
+#include "FenrirText/FontLibrary.hpp"
+#include "FenrirText/Paragraph.hpp"
 #include "GlScene.hpp"
 
 using Fenrir::Colour;
@@ -348,4 +350,106 @@ TEST_CASE("A backdrop blur blurs what is under it, the right way up, and leaves 
     INFO("far from the edge in the panel, the colour as it was");
     REQUIRE(GlProbe::Near(image.At(32, 18), {1.0f, 0.0f, 0.0f, 1.0f}, Tolerance));
     REQUIRE(test.scene.messages->errors.empty());
+}
+
+namespace
+{
+    /** @brief Where a word drawn black on white inked the image, and how dark it is by its baseline and above it. */
+    struct Inked
+    {
+        int left = -1;
+        int right = -1;
+        /** @brief The mean red of the rows just above the baseline, and of a row above the line's ascent. */
+        float atBaseline = 1.0f;
+        float above = 1.0f;
+    };
+
+    /**
+     * @brief "Hi" in the embedded face at `size` pixels, black on white from (8, 8), drawn and read back, with the
+     * paragraph's own extent: the union of its glyph quads' columns.
+     */
+    Inked DrawWord(float size, int& predictedLeft, int& predictedRight)
+    {
+        GlPainter test;
+        Fenrir::FontLibrary fonts(test.scene.assets.Store());
+        Fenrir::Paragraph paragraph;
+        Fenrir::TextStyle style;
+        style.size = size;
+        style.colour = Colour::Black;
+        paragraph.SetText("Hi", style);
+        paragraph.Layout(fonts, Fenrir::UnlimitedWidth);
+        REQUIRE_FALSE(paragraph.Runs().empty());
+        const Fenrir::GlyphRun& run = paragraph.Runs().front();
+
+        float left = 1e9f;
+        float right = -1e9f;
+        for (const Fenrir::PositionedGlyph& glyph : run.glyphs)
+        {
+            left = std::min(left, glyph.quad.x);
+            right = std::max(right, glyph.quad.x + glyph.quad.width);
+        }
+        predictedLeft = 8 + static_cast<int>(left);
+        predictedRight = 8 + static_cast<int>(right) - 1;
+
+        Fenrir::DrawList2D list;
+        Fenrir::Painter painter(list, test.Config());
+        painter.DrawRect({0, 0, 64, 64}, Colour::White);
+        painter.DrawText(paragraph, {8, 8});
+        const GlProbe::Image image = test.Draw(std::move(list));
+        REQUIRE(test.scene.messages->errors.empty());
+
+        Inked inked;
+        for (std::uint32_t y = 0; y < Size; ++y)
+        {
+            for (std::uint32_t x = 0; x < Size; ++x)
+            {
+                if (image.At(x, y)[0] < 0.9f)
+                {
+                    const int column = static_cast<int>(x);
+                    inked.left = inked.left < 0 ? column : std::min(inked.left, column);
+                    inked.right = std::max(inked.right, column);
+                }
+            }
+        }
+        const auto meanRed = [&](int row) {
+            float sum = 0.0f;
+            for (int x = inked.left; x <= inked.right; ++x)
+            {
+                sum += image.At(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(row))[0];
+            }
+            return sum / static_cast<float>(inked.right - inked.left + 1);
+        };
+        const int baseline = 8 + static_cast<int>(run.baseline);
+        inked.atBaseline = (meanRed(baseline - 1) + meanRed(baseline - 2) + meanRed(baseline - 3)) / 3.0f;
+        inked.above = meanRed(8 + static_cast<int>(run.baseline - run.ascent) - 2);
+        return inked;
+    }
+} // namespace
+
+TEST_CASE("A word reads back dark along its baseline and not above it, its extent as the font's metrics say",
+          "[painter][gl][text]")
+{
+    int predictedLeft = 0;
+    int predictedRight = 0;
+    const Inked small = DrawWord(16.0f, predictedLeft, predictedRight);
+    INFO("at 16 pixels: inked columns " << small.left << " to " << small.right << ", the glyph quads' " << predictedLeft
+                                        << " to " << predictedRight);
+    REQUIRE(small.left >= 0);
+    REQUIRE(small.atBaseline < 0.7f);
+    REQUIRE(small.above > 0.99f);
+    // The ink lies within the glyphs' bitmaps, which reach at most a pixel past it.
+    REQUIRE(std::abs(small.left - predictedLeft) <= 1);
+    REQUIRE(std::abs(small.right - predictedRight) <= 1);
+
+    const Inked large = DrawWord(32.0f, predictedLeft, predictedRight);
+    INFO("at 32 pixels: inked columns " << large.left << " to " << large.right << ", the glyph quads' " << predictedLeft
+                                        << " to " << predictedRight);
+    REQUIRE(large.atBaseline < 0.7f);
+    REQUIRE(large.above > 0.99f);
+    REQUIRE(std::abs(large.left - predictedLeft) <= 1);
+    REQUIRE(std::abs(large.right - predictedRight) <= 1);
+    INFO("twice the size, about twice as wide");
+    const int smallWidth = small.right - small.left + 1;
+    const int largeWidth = large.right - large.left + 1;
+    REQUIRE(std::abs(largeWidth - 2 * smallWidth) <= 3);
 }

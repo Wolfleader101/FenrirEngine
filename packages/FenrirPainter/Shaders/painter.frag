@@ -1,8 +1,8 @@
 #version 460
 // builtin:painter, the fragment stage (ADR-0060): each quad's shape evaluated as a signed distance in its own space and
-// anti-aliased over one pixel, or a tessellated path's triangle covered as its vertices say, coloured by its paint and
-// cut by its clip. Colours arrive sRGB-encoded and premultiplied
-// (the painter's vertex colours and stop texture both), and are worked in that form. The output is premultiplied
+// anti-aliased over one pixel, a tessellated path's triangle covered as its vertices say, or a glyph covered as its atlas
+// page says, coloured by its paint and cut by its clip. Colours arrive sRGB-encoded and premultiplied (the painter's
+// vertex colours and stop texture both), and are worked in that form. The output is premultiplied
 // (PremultipliedAlpha): linear by default, the target encoding it, or, in the GAMMA variant (the Gamma blend space),
 // sRGB-encoded as it is, so blending happens in sRGB as a browser's does (ADR-0065).
 
@@ -54,6 +54,7 @@ const uint Circle = 5u;
 const uint Arc = 6u;
 const uint Ring = 7u;
 const uint Triangle = 8u;
+const uint Glyph = 9u;
 
 const uint Solid = 0u;
 const uint LinearGradient = 1u;
@@ -263,6 +264,13 @@ void main()
     {
         // A tessellated path's triangle: its edge is already anti-aliased by the fringe the coverage fades across.
         coverage = clamp(p.x, 0.0, 1.0);
+    }
+    else if (kind == Glyph)
+    {
+        // A glyph's quad over its atlas rectangle (ADR-0062's bitmap mode): the page's R8 coverage, its texel
+        // coordinates in vUv, multiplying the paint.
+        vec2 texels = vec2(textureSize(image, 0));
+        coverage = textureGrad(image, vUv / texels, uvDx / texels, uvDy / texels).r;
     }
 
     if ((flags & Clipped) != 0u)
