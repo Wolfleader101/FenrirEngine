@@ -155,6 +155,26 @@ namespace Fenrir::Render
             return open.empty();
         }
 
+        /** @brief For each of a balanced `list`'s commands, whether it begins a group that ends as a mask. */
+        std::vector<bool> MaskBegins(const DrawList2D& list)
+        {
+            std::vector<bool> masks(list.commands.size(), false);
+            std::vector<std::size_t> open;
+            for (std::size_t i = 0; i < list.commands.size(); ++i)
+            {
+                if (std::holds_alternative<BeginGroup2D>(list.commands[i]))
+                {
+                    open.push_back(i);
+                }
+                else if (const auto* end = std::get_if<EndGroup2D>(&list.commands[i]))
+                {
+                    masks[open.back()] = end->mask;
+                    open.pop_back();
+                }
+            }
+            return masks;
+        }
+
         /** @brief The target block of a pass of `pixels` at `scale` whose top-left is (`originX`, `originY`). */
         TargetBlock BlockOf(PixelSize pixels, float scale, std::int32_t originX, std::int32_t originY)
         {
@@ -659,8 +679,10 @@ namespace Fenrir::Render
         std::vector<std::pair<Open, std::size_t>> open;
         std::vector<std::size_t> realised{target.root};
         std::size_t culled = 0;
-        for (const Command2D& command : list.commands)
+        const std::vector<bool> masks = MaskBegins(list);
+        for (std::size_t c = 0; c < list.commands.size(); ++c)
         {
+            const Command2D& command = list.commands[c];
             if (const auto* draw = std::get_if<DrawCommand2D>(&command))
             {
                 if (culled == 0)
@@ -670,10 +692,16 @@ namespace Fenrir::Render
             }
             else if (const auto* begin = std::get_if<BeginGroup2D>(&command))
             {
-                if (culled > 0)
+                if (culled > 0 || (!m_groups && masks[c]))
                 {
+                    // With groups off a mask's shape is not drawn.
                     open.emplace_back(Open::Culled, 0);
                     ++culled;
+                    continue;
+                }
+                if (!m_groups)
+                {
+                    open.emplace_back(Open::Flat, 0);
                     continue;
                 }
                 if (realised.size() > MaxGroupDepth2D)

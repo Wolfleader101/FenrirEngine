@@ -326,3 +326,43 @@ TEST_CASE("An empty group draws nothing and makes no image", "[renderer][overlay
     REQUIRE(test.renderer.Stats().groups2D == 0);
     REQUIRE(test.messages->errors.empty());
 }
+
+TEST_CASE("With offscreen groups off, groups draw flat, filters are ignored, a mask's shape is not drawn and no "
+          "transient image is made",
+          "[renderer][overlay][groups]")
+{
+    Fenrir::RendererConfig config = RendererTest::NullBackend();
+    config.offscreenGroups2D = false;
+    RendererTestApp test(config);
+    test.AddCamera();
+    Fenrir::DrawList2D list = NestedGroups(test);
+    list.BeginGroup({0.0f, 0.0f, 16.0f, 16.0f});
+    AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
+    Fenrir::EndGroup2D blur;
+    blur.filter = Fenrir::GroupFilter2D::Blur;
+    blur.radius = 4.0f;
+    list.EndGroup(blur);
+    list.BeginGroup({0.0f, 0.0f, 16.0f, 16.0f});
+    AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
+    Fenrir::EndGroup2D mask;
+    mask.mask = true;
+    list.EndGroup(mask);
+    AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
+    list.commands.emplace_back(Fenrir::EndMask2D{});
+    test.app.GetResource<Fenrir::Overlay>().Submit(MainWindow, 0, std::move(list));
+
+    test.Frame();
+
+    REQUIRE(RendererTest::Labelled(test.Passes(), "Group 2D").empty());
+    INFO("the nested groups' five quads, the blurred group's quad and the masked quad draw on the overlay; the mask's "
+         "shape does not");
+    const std::vector<RendererTest::RecordedDraw> draws = test.Draws("Overlay 2D");
+    REQUIRE(draws.size() == 7);
+    for (const RendererTest::RecordedDraw& draw : draws)
+    {
+        REQUIRE(test.GroupLabel(draw, 1) == "2D command");
+    }
+    REQUIRE(test.renderer.Stats().groups2D == 0);
+    REQUIRE(test.renderer.Stats().transientImageBytes2D == 0);
+    REQUIRE(test.messages->errors.empty());
+}

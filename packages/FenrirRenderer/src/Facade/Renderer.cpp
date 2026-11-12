@@ -1669,6 +1669,7 @@ namespace Fenrir
         // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
         // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).
         auto draw2D = std::make_unique<Render::Draw2DFeature>(state->core->Device(), *app.Logger(), *scene);
+        draw2D->SetOffscreenGroups(config.offscreenGroups2D);
         state->draw2D = draw2D.get();
         // Debug drawing goes into the views the scene renderer drew, so it is added after it.
         auto debug = std::make_unique<Render::DebugFeature>(state->core->Device(), *app.Logger(), *scene);

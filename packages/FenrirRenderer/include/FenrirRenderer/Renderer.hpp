@@ -118,6 +118,12 @@ namespace Fenrir
          * one cube array of the budget's cubes.
          */
         std::uint32_t pointShadowMapSize = 512;
+        /**
+         * @brief Whether 2D draw lists' offscreen groups are realised (ADR-0060): each drawn into a transient image and
+         * composited through its opacity, blend, filter or mask. Off, a group's commands draw flat into the target
+         * around it, its composite and filter ignored, and a mask's shape is not drawn and masks nothing.
+         */
+        bool offscreenGroups2D = true;
     };
 
     /** @brief What the renderer did in its last drawn frame (ADR-0023). */

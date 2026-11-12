@@ -148,6 +148,16 @@ namespace Fenrir::Render
         /** @brief What the next frame draws. */
         void SetFrame(Frame2D frame);
 
+        /**
+         * @brief Whether offscreen groups are realised (RendererConfig::offscreenGroups2D, on by default). Off, a
+         * group's commands draw flat into the target around it, its composite ignored, and a mask's shape draws nothing
+         * and masks nothing.
+         */
+        void SetOffscreenGroups(bool on) noexcept
+        {
+            m_groups = on;
+        }
+
         /** @brief What the last AddPasses drew. */
         [[nodiscard]] Stats2D Stats() const noexcept
         {
@@ -293,6 +303,7 @@ namespace Fenrir::Render
 
         Frame2D m_frame;
         Stats2D m_stats;
+        bool m_groups = true;
         std::set<std::string> m_logged;
     };
 } // namespace Fenrir::Render

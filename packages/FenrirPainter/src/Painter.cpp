@@ -706,6 +706,81 @@ namespace Fenrir
         return true;
     }
 
+    void Painter::BeginGroup(const Rect2D& bounds, float opacity, GroupBlend2D blend, const GroupFilter& filter)
+    {
+        const Transform2D toLogical = ToLogical();
+        Rect2D logical = Bounds(bounds, toLogical);
+        if (m_state.scissor)
+        {
+            logical = Intersect(*m_state.scissor, logical);
+        }
+        EndGroup2D composite;
+        composite.opacity = opacity;
+        composite.blend = blend;
+        composite.filter = filter.kind;
+        // Lengths scale as the transform scales areas; the offset turns with it too.
+        composite.radius = filter.radius * std::sqrt(toLogical.AreaScale());
+        composite.offset = toLogical.Apply(filter.offset) - toLogical.Apply(Math::Vec2(0.0f));
+        composite.shadowColour = {filter.colour.r, filter.colour.g, filter.colour.b, filter.colour.a};
+        m_list.BeginGroup(logical);
+        m_open.emplace_back(composite);
+    }
+
+    void Painter::EndGroup()
+    {
+        if (m_open.empty() || !m_open.back())
+        {
+            return;
+        }
+        m_list.EndGroup(*m_open.back());
+        m_open.pop_back();
+    }
+
+    void Painter::BeginMask(const Path& mask)
+    {
+        const Transform2D toLogical = ToLogical();
+        const std::vector<PainterDetail::Contour> contours =
+            toLogical.AreaScale() > 0.0f ? PainterDetail::Flatten(mask, toLogical, LogicalTolerance())
+                                         : std::vector<PainterDetail::Contour>{};
+        // The shape's bounds in logical units, with the pixel of fringe about them.
+        Math::Vec2 min{std::numeric_limits<float>::max()};
+        Math::Vec2 max{std::numeric_limits<float>::lowest()};
+        for (const PainterDetail::Contour& contour : contours)
+        {
+            for (const Math::Vec2 point : contour.points)
+            {
+                min = {std::min(min.x, point.x), std::min(min.y, point.y)};
+                max = {std::max(max.x, point.x), std::max(max.y, point.y)};
+            }
+        }
+        Rect2D logical;
+        if (min.x <= max.x)
+        {
+            const float fringe = 1.0f / PixelsPerUnit();
+            logical = {min.x - fringe, min.y - fringe, max.x - min.x + 2.0f * fringe, max.y - min.y + 2.0f * fringe};
+        }
+        if (m_state.scissor)
+        {
+            logical = Intersect(*m_state.scissor, logical);
+        }
+        m_list.BeginGroup(logical);
+        FillContours(contours, mask.GetFillRule(), Colour::White);
+        EndGroup2D composite;
+        composite.mask = true;
+        m_list.EndGroup(composite);
+        m_open.emplace_back(std::nullopt);
+    }
+
+    void Painter::EndMask()
+    {
+        if (m_open.empty() || m_open.back())
+        {
+            return;
+        }
+        m_list.commands.emplace_back(EndMask2D{});
+        m_open.pop_back();
+    }
+
     void Painter::FillContours(const std::vector<PainterDetail::Contour>& contours, FillRule rule, const Paint& paint)
     {
         if (m_state.scissor && (m_state.scissor->width <= 0.0f || m_state.scissor->height <= 0.0f))

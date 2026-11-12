@@ -53,6 +53,33 @@ namespace Fenrir
     };
 
     /**
+     * @brief What an offscreen group's image is drawn through when it is composited: nothing, a Gaussian blur, or a
+     * drop shadow of its alpha under it. Lengths are UI units under the transform the group begins under.
+     */
+    struct GroupFilter
+    {
+        GroupFilter2D kind = GroupFilter2D::None;
+        /** @brief The blur's, or the shadow's blur, radius. */
+        float radius = 0.0f;
+        /** @brief Where the shadow is drawn from the group. */
+        Math::Vec2 offset{0.0f};
+        /** @brief The shadow's colour, straight alpha. */
+        Colour colour = Colour::Black;
+
+        /** @brief The group blurred by `radius`. */
+        [[nodiscard]] static GroupFilter Blur(float radius)
+        {
+            return {GroupFilter2D::Blur, radius, Math::Vec2(0.0f), Colour::Black};
+        }
+
+        /** @brief The group's alpha blurred by `radius`, tinted `colour` and drawn `offset` away, under the group. */
+        [[nodiscard]] static GroupFilter DropShadow(Math::Vec2 offset, float radius, const Colour& colour)
+        {
+            return {GroupFilter2D::DropShadow, radius, offset, colour};
+        }
+    };
+
+    /**
      * @brief The painter (ADR-0060): a value over one 2D draw list that appends shapes, each one quad of PainterVertex
      * evaluated in the painter's shader, and paths, filled and stroked as triangles of the same vertex with a
      * one-pixel anti-aliasing fringe, with a paint per call, under a save/restore stack of transform and clip. It keeps
@@ -147,6 +174,30 @@ namespace Fenrir
         void StrokePath(const Path& path, const StrokeStyle& style, const Paint& paint);
         /** @} */
 
+        /** @name Offscreen groups and masks
+         * Recorded as FenrirDraw2D's group commands (ADR-0060), which the renderer realises. They nest with each other
+         * and apart from Save and Restore; an end with nothing of its kind innermost appends nothing. A group or mask
+         * left open leaves the list unbalanced, and the renderer skips it whole.
+         * @{
+         */
+        /**
+         * @brief Begins a group: what is drawn up to its EndGroup draws into an image of its own covering `bounds`
+         * (under the current transform, their axis-aligned bounds, clipped to the scissor), which is then composited
+         * over what is under it at `opacity` (0 to 1), by `blend`, through `filter`.
+         */
+        void BeginGroup(const Rect2D& bounds, float opacity = 1.0f, GroupBlend2D blend = GroupBlend2D::Normal,
+                        const GroupFilter& filter = {});
+        /** @brief Ends the innermost group, if it was opened inside the innermost mask's reach or no mask is open. */
+        void EndGroup();
+        /**
+         * @brief Begins a mask: `mask` is filled opaque under the current transform into a mask group over its bounds
+         * (clipped to the scissor), and what is drawn up to EndMask has its colour multiplied by that fill's coverage.
+         */
+        void BeginMask(const Path& mask);
+        /** @brief Ends the innermost mask's reach, if no group opened inside it is still open. */
+        void EndMask();
+        /** @} */
+
       private:
         /** @brief The paint's part of a quad: its transform into paint space and the textures it samples. */
         struct PaintSetup
@@ -226,5 +277,7 @@ namespace Fenrir
         /** @brief The command this painter made last, if it is still the list's last. */
         std::optional<std::size_t> m_command;
         std::uint32_t m_commandVertices = 0;
+        /** @brief What is open, innermost last: a group's composite, or a mask's reach (empty). */
+        std::vector<std::optional<EndGroup2D>> m_open;
     };
 } // namespace Fenrir
