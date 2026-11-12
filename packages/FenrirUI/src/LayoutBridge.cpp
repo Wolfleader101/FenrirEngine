@@ -3,6 +3,7 @@
 
 #include <yoga/Yoga.h>
 
+#include "ElementText.hpp"
 #include "FenrirUI/Element.hpp"
 
 namespace Fenrir::Detail
@@ -11,10 +12,18 @@ namespace Fenrir::Detail
     {
         YGConfigRef config = nullptr;
         std::uint32_t measures = 0;
+        FontLibrary* fonts = nullptr;
     };
 
     namespace
     {
+        /** @brief What a node is measured through: its text when it has some, else its element. */
+        struct NodeContext
+        {
+            Element* element = nullptr;
+            ElementText* text = nullptr;
+        };
+
         YGNodeRef Node(LayoutNode* node)
         {
             return reinterpret_cast<YGNodeRef>(node);
@@ -42,20 +51,23 @@ namespace Fenrir::Detail
         YGSize MeasureElement(YGNodeConstRef node, float width, YGMeasureMode widthMode, float height,
                               YGMeasureMode heightMode)
         {
-            auto* element = static_cast<Element*>(YGNodeGetContext(node));
+            const auto* context = static_cast<const NodeContext*>(YGNodeGetContext(node));
             auto* config = static_cast<LayoutTree::Config*>(YGConfigGetContext(
                 YGNodeGetConfig(const_cast<YGNodeRef>(node)))); // YGNodeGetConfig takes a mutable node; it reads only.
             ++config->measures;
             const MeasureConstraints constraints{width, ModeOf(widthMode), height, ModeOf(heightMode)};
-            const Math::Vec2 size = element->Measure(constraints);
+            const Math::Vec2 size = context->text != nullptr ? context->text->Measure(config->fonts, constraints)
+                                                             : context->element->Measure(constraints);
             return {size.x, size.y};
         }
 
-        /** @brief Sets the node to measure through its element when it has a measure and no children. */
+        /** @brief Sets the node to measure when it has text or its element a measure, and it has no children. */
         void UpdateMeasure(YGNodeRef node)
         {
-            const auto* element = static_cast<const Element*>(YGNodeGetContext(node));
-            const bool measured = element != nullptr && element->HasMeasure() && YGNodeGetChildCount(node) == 0;
+            const auto* context = static_cast<const NodeContext*>(YGNodeGetContext(node));
+            const bool measured =
+                (context->text != nullptr || (context->element != nullptr && context->element->HasMeasure())) &&
+                YGNodeGetChildCount(node) == 0;
             if (measured != YGNodeHasMeasureFunc(node))
             {
                 YGNodeSetMeasureFunc(node, measured ? &MeasureElement : nullptr);
@@ -207,7 +219,7 @@ namespace Fenrir::Detail
     LayoutNode* LayoutTree::CreateNode(Element* element)
     {
         YGNodeRef node = YGNodeNewWithConfig(m_config->config);
-        YGNodeSetContext(node, element);
+        YGNodeSetContext(node, new NodeContext{element, nullptr});
         UpdateMeasure(node);
         return reinterpret_cast<LayoutNode*>(node);
     }
@@ -220,6 +232,7 @@ namespace Fenrir::Detail
             YGNodeRemoveChild(owner, yoga);
             UpdateMeasure(owner);
         }
+        delete static_cast<NodeContext*>(YGNodeGetContext(yoga));
         YGNodeFree(yoga);
     }
 
@@ -315,6 +328,18 @@ namespace Fenrir::Detail
         {
             YGNodeMarkDirty(Node(node));
         }
+    }
+
+    void LayoutTree::SetText(LayoutNode* node, ElementText* text)
+    {
+        static_cast<NodeContext*>(YGNodeGetContext(Node(node)))->text = text;
+        UpdateMeasure(Node(node));
+        InvalidateMeasure(node);
+    }
+
+    void LayoutTree::SetFonts(FontLibrary* fonts) noexcept
+    {
+        m_config->fonts = fonts;
     }
 
     bool LayoutTree::Layout(LayoutNode* root)

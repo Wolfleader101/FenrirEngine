@@ -20,6 +20,8 @@ add_library(FenrirUI STATIC
     src/Cascade.hpp
     src/ElementGeometry.cpp
     src/ElementGeometry.hpp
+    src/ElementText.cpp
+    src/ElementText.hpp
     src/InputRouting.cpp
     src/InputRouting.hpp
     src/LayoutBridge.cpp

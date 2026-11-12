@@ -4,6 +4,8 @@
 #include <utility>
 
 #include "FenrirApp/App.hpp"
+#include "FenrirAssets/AssetStore.hpp"
+#include "FenrirText/FontLibrary.hpp"
 
 namespace Fenrir
 {
@@ -76,6 +78,11 @@ namespace Fenrir
         return std::make_unique<Element>();
     }
 
+    FontLibrary* UIRoots::GetFonts() const noexcept
+    {
+        return m_app.TryGetResource<FontLibrary>();
+    }
+
     void UIRoots::Frame()
     {
         m_retired.clear();
@@ -90,13 +97,19 @@ namespace Fenrir
         if (app.TryGetResource<UIRoots>() != nullptr)
         {
             app.Logger()->Error("FenrirUI: the app already has a UI installed");
-            return UI(nullptr, std::nullopt);
+            return UI(nullptr, std::nullopt, false);
         }
         Painting painting = Painting::Install(app);
         if (!painting.IsValid())
         {
             // Painting::Install logged why.
-            return UI(nullptr, std::move(painting));
+            return UI(nullptr, std::move(painting), false);
+        }
+        // Painting::Install succeeds only over an asset store, which the font library uses.
+        const bool ownsFonts = app.TryGetResource<FontLibrary>() == nullptr;
+        if (ownsFonts)
+        {
+            app.AddResource<FontLibrary>(app.GetResource<AssetStore>());
         }
         app.AddResource<UIRoots>(app, painting.GetShader(), config);
         app.AddSequentialSystem(SchedulePriority::PostUpdate, [](App& running) {
@@ -105,14 +118,17 @@ namespace Fenrir
                 roots->Frame();
             }
         });
-        return UI(&app, std::move(painting));
+        return UI(&app, std::move(painting), ownsFonts);
     }
 
-    UI::UI(App* app, std::optional<Painting> painting) noexcept : m_app(app), m_painting(std::move(painting))
+    UI::UI(App* app, std::optional<Painting> painting, bool ownsFonts) noexcept
+        : m_app(app), m_painting(std::move(painting)), m_ownsFonts(ownsFonts)
     {
     }
 
-    UI::UI(UI&& other) noexcept : m_app(std::exchange(other.m_app, nullptr)), m_painting(std::move(other.m_painting))
+    UI::UI(UI&& other) noexcept
+        : m_app(std::exchange(other.m_app, nullptr)), m_painting(std::move(other.m_painting)),
+          m_ownsFonts(std::exchange(other.m_ownsFonts, false))
     {
     }
 
@@ -120,21 +136,30 @@ namespace Fenrir
     {
         if (this != &other)
         {
-            if (m_app != nullptr)
-            {
-                m_app->RemoveResource<UIRoots>();
-            }
+            Uninstall();
             m_app = std::exchange(other.m_app, nullptr);
             m_painting = std::move(other.m_painting);
+            m_ownsFonts = std::exchange(other.m_ownsFonts, false);
         }
         return *this;
     }
 
     UI::~UI()
     {
-        if (m_app != nullptr)
+        Uninstall();
+    }
+
+    void UI::Uninstall() noexcept
+    {
+        if (m_app == nullptr)
         {
-            m_app->RemoveResource<UIRoots>();
+            return;
+        }
+        // The roots' paragraphs go before the library whose atlases they name.
+        m_app->RemoveResource<UIRoots>();
+        if (m_ownsFonts)
+        {
+            m_app->RemoveResource<FontLibrary>();
         }
     }
 } // namespace Fenrir

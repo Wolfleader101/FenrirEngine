@@ -292,6 +292,61 @@ namespace Fenrir
         return Set(StyleProperty::Cursor, &ResolvedStyle::cursor, value);
     }
 
+    StyleDeclarations& StyleDeclarations::SetColor(const Colour& value)
+    {
+        return Set(StyleProperty::Color, &ResolvedStyle::color, value);
+    }
+
+    StyleDeclarations& StyleDeclarations::SetFontFamily(std::string value)
+    {
+        return Set(StyleProperty::FontFamily, &ResolvedStyle::fontFamily, std::move(value));
+    }
+
+    StyleDeclarations& StyleDeclarations::SetFontSize(float value)
+    {
+        return Set(StyleProperty::FontSize, &ResolvedStyle::fontSize, std::max(value, 0.0f));
+    }
+
+    StyleDeclarations& StyleDeclarations::SetFontWeight(std::uint16_t value)
+    {
+        return Set(StyleProperty::FontWeight, &ResolvedStyle::fontWeight, std::clamp<std::uint16_t>(value, 1, 1000));
+    }
+
+    StyleDeclarations& StyleDeclarations::SetFontStyle(Fenrir::FontStyle value)
+    {
+        return Set(StyleProperty::FontStyle, &ResolvedStyle::fontStyle, value);
+    }
+
+    StyleDeclarations& StyleDeclarations::SetTextAlign(Fenrir::TextAlign value)
+    {
+        return Set(StyleProperty::TextAlign, &ResolvedStyle::textAlign, value);
+    }
+
+    StyleDeclarations& StyleDeclarations::SetLineHeight(Length value)
+    {
+        return Set(StyleProperty::LineHeight, &ResolvedStyle::lineHeight, value);
+    }
+
+    StyleDeclarations& StyleDeclarations::SetLetterSpacing(float value)
+    {
+        return Set(StyleProperty::LetterSpacing, &ResolvedStyle::letterSpacing, value);
+    }
+
+    StyleDeclarations& StyleDeclarations::SetTextShadow(std::vector<Shadow> shadows)
+    {
+        return Set(StyleProperty::TextShadow, &ResolvedStyle::textShadow, std::move(shadows));
+    }
+
+    StyleDeclarations& StyleDeclarations::SetWhiteSpace(Fenrir::WhiteSpace value)
+    {
+        return Set(StyleProperty::WhiteSpace, &ResolvedStyle::whiteSpace, value);
+    }
+
+    StyleDeclarations& StyleDeclarations::SetTextOverflow(Fenrir::TextOverflow value)
+    {
+        return Set(StyleProperty::TextOverflow, &ResolvedStyle::textOverflow, value);
+    }
+
     StyleDeclarations& StyleDeclarations::SetTransitionProperty(std::vector<std::string> names)
     {
         return Set(StyleProperty::TransitionProperty, &ResolvedStyle::transitionProperty, std::move(names));

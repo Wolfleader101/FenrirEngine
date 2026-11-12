@@ -10,9 +10,11 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirRenderer/Overlay.hpp"
+#include "FenrirText/FontLibrary.hpp"
 #include "FenrirUI/UI.hpp"
 #include "FenrirWindow/Window.hpp"
 #include "Rects.hpp"
+#include "StyleAnimation.hpp"
 #include "StyleValues.hpp"
 #include "UIRootState.hpp"
 
@@ -72,6 +74,29 @@ namespace Fenrir
             return {x0, y0, x1 - x0, y1 - y0};
         }
 
+        /** @brief Whether `a` and `b` differ in a property children inherit. */
+        bool InheritedDiffer(const ResolvedStyle& a, const ResolvedStyle& b)
+        {
+            for (std::size_t i = 0; i < StylePropertyCount; ++i)
+            {
+                const auto property = static_cast<StyleProperty>(i);
+                if (Detail::IsInherited(property) && !Detail::SameProperty(property, a, b))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /** @brief Gives the element's text the style it is shown with, measuring it again when its size may change. */
+        void UpdateTextStyle(Detail::UIRootState& state, Detail::ElementSlot& slot)
+        {
+            if (slot.text != nullptr && slot.text->SetStyle(slot.resolved, state.textPixelsPerUnit))
+            {
+                state.layout.InvalidateMeasure(slot.node);
+            }
+        }
+
         /**
          * @brief Resolves the styles under slot `index` that are dirty or inherit a changed value, starting the
          * transitions and animations their changes call for, and writes the shown style of those and of the elements
@@ -89,8 +114,7 @@ namespace Fenrir
                 std::shared_ptr<const Detail::CustomProperties> custom;
                 if (parent != nullptr)
                 {
-                    style.pointerEvents = parent->resolved.pointerEvents;
-                    style.cursor = parent->resolved.cursor;
+                    Detail::Inherit(parent->resolved, style);
                     custom = parent->customProperties;
                 }
                 Detail::Cascade(state, index, style, custom);
@@ -117,10 +141,10 @@ namespace Fenrir
             {
                 ResolvedStyle shown = slot.cascaded;
                 Detail::ApplyMotion(slot.motion, shown);
-                inheritedChanged = shown.pointerEvents != slot.resolved.pointerEvents ||
-                                   shown.cursor != slot.resolved.cursor || customChanged;
+                inheritedChanged = InheritedDiffer(shown, slot.resolved) || customChanged;
                 slot.resolved = std::move(shown);
                 state.layout.ApplyStyle(slot.node, slot.resolved);
+                UpdateTextStyle(state, slot);
                 slot.motionDirty = false;
             }
             if (inheritedChanged || state.slots[index].descendantStyleDirty)
@@ -155,6 +179,12 @@ namespace Fenrir
                                              right - border.right - padding.right,
                                              bottom - border.bottom - padding.bottom, pixelsPerUnit);
             slot.boxes.clip = clip;
+            if (slot.text != nullptr)
+            {
+                // The unsnapped width, which the paragraph was measured to fit.
+                slot.text->SetContentWidth(result.rect.width - border.left - border.right - padding.left -
+                                           padding.right);
+            }
             const Rect2D childClip =
                 slot.resolved.overflow == Overflow::Hidden ? Detail::Intersect(clip, slot.boxes.padding) : clip;
             for (const ElementId child : slot.children)
@@ -698,6 +728,35 @@ namespace Fenrir
         return slot != nullptr ? slot->boxes : ElementBoxes{};
     }
 
+    void UIRoot::SetText(ElementId element, std::string_view text)
+    {
+        Detail::ElementSlot* slot = m_state->Find(element);
+        if (slot == nullptr || (slot->text != nullptr && slot->text->Text() == text))
+        {
+            return;
+        }
+        if (slot->text == nullptr)
+        {
+            slot->text = std::make_unique<Detail::ElementText>();
+            slot->text->SetStyle(slot->resolved, m_state->textPixelsPerUnit);
+            m_state->layout.SetText(slot->node, slot->text.get());
+        }
+        slot->text->SetText(text);
+        m_state->layout.InvalidateMeasure(slot->node);
+    }
+
+    std::string_view UIRoot::GetText(ElementId element) const noexcept
+    {
+        const Detail::ElementSlot* slot = m_state->Find(element);
+        return slot != nullptr && slot->text != nullptr ? std::string_view(slot->text->Text()) : std::string_view{};
+    }
+
+    const Paragraph* UIRoot::GetParagraph(ElementId element) const noexcept
+    {
+        const Detail::ElementSlot* slot = m_state->Find(element);
+        return slot != nullptr && slot->text != nullptr ? &slot->text->GetParagraph() : nullptr;
+    }
+
     void UIRoot::InvalidateMeasure(ElementId element)
     {
         if (Detail::ElementSlot* slot = m_state->Find(element))
@@ -799,6 +858,20 @@ namespace Fenrir
         const float contentScale = state.size.contentScale > 0.0f ? state.size.contentScale : 1.0f;
         state.scale = state.config.scaleRule == ScaleRule::Height1080 ? state.size.logicalSize.y / 1080.0f : 1.0f;
         const Math::Vec2 uiSize = state.size.logicalSize / state.scale;
+        FontLibrary* fonts = state.roots.GetFonts();
+        state.layout.SetFonts(fonts);
+        if (const float textPixelsPerUnit = state.scale * contentScale; textPixelsPerUnit != state.textPixelsPerUnit)
+        {
+            // Text is laid out in target pixels: every paragraph lays out again at the new size.
+            state.textPixelsPerUnit = textPixelsPerUnit;
+            for (Detail::ElementSlot& slot : state.slots)
+            {
+                if (slot.alive)
+                {
+                    UpdateTextStyle(state, slot);
+                }
+            }
+        }
 
         AdvanceMotion(state, static_cast<float>(state.app.GetTime().deltaTime));
         Detail::ElementSlot& root = state.slots[state.rootElement.index];
@@ -816,6 +889,18 @@ namespace Fenrir
         {
             ReadBoxes(state, state.rootElement.index, 0.0f, 0.0f, {0.0f, 0.0f, uiSize.x, uiSize.y}, pixelsPerUnit);
             state.snappedAt = pixelsPerUnit;
+        }
+        if (fonts != nullptr)
+        {
+            // Each paragraph lays out at its content box's width, to be drawn; one whose fonts changed under it, and
+            // its size with them, is measured again next frame.
+            for (Detail::ElementSlot& slot : state.slots)
+            {
+                if (slot.alive && slot.text != nullptr && slot.text->LayOutForDrawing(*fonts))
+                {
+                    state.layout.InvalidateMeasure(slot.node);
+                }
+            }
         }
 
         // The layout that included them has completed: their :intro rules give way next frame, and an intro

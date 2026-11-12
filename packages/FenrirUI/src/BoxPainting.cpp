@@ -12,6 +12,7 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirPainter/Painter.hpp"
+#include "FenrirText/Paragraph.hpp"
 #include "FenrirUI/UI.hpp"
 #include "Rects.hpp"
 #include "UIRootState.hpp"
@@ -82,6 +83,7 @@ namespace Fenrir::Detail
                 std::stable_sort(children.begin(), children.end(), [&](ElementId a, ElementId b) {
                     return m_state.slots[a.index].resolved.zIndex < m_state.slots[b.index].resolved.zIndex;
                 });
+                PaintText(slot, ownAlpha);
                 slot.element->Paint(m_painter, ElementPaint{boxes, style, ownAlpha});
                 for (const ElementId child : children)
                 {
@@ -239,6 +241,48 @@ namespace Fenrir::Detail
                 }
             }
 
+            /**
+             * @brief The element's paragraph at its content box's top-left: its text shadows first (the first on top,
+             * so drawn last), each its runs again moved and in its colour, then the runs in their own.
+             */
+            void PaintText(const ElementSlot& slot, float alpha)
+            {
+                if (slot.text == nullptr)
+                {
+                    return;
+                }
+                Paragraph& paragraph = slot.text->GetParagraph();
+                const Math::Vec2 point{slot.boxes.content.x, slot.boxes.content.y};
+                for (auto shadow = slot.resolved.textShadow.rbegin(); shadow != slot.resolved.textShadow.rend();
+                     ++shadow)
+                {
+                    const Colour colour = Faded(shadow->colour, alpha);
+                    if (colour.a > 0.0f)
+                    {
+                        PaintRuns(paragraph, point + shadow->offset, &colour, 1.0f);
+                    }
+                }
+                if (alpha >= 1.0f)
+                {
+                    m_painter.DrawText(paragraph, point);
+                }
+                else
+                {
+                    PaintRuns(paragraph, point, nullptr, alpha);
+                }
+            }
+
+            /** @brief Every run of `paragraph` at `point`, in `colour` if given, else its own, faded by `alpha`. */
+            void PaintRuns(const Paragraph& paragraph, Math::Vec2 point, const Colour* colour, float alpha)
+            {
+                for (const GlyphRun& run : paragraph.Runs())
+                {
+                    GlyphRun tinted = run;
+                    tinted.colour = Faded(colour != nullptr ? *colour : run.colour, alpha);
+                    m_painter.DrawGlyphs(tinted, point);
+                }
+            }
+
             /** @brief The image's size in pixels; none for an empty or stale handle. */
             std::optional<Math::Vec2> ImageSize(AssetHandle<Image> image) const
             {
@@ -280,6 +324,7 @@ namespace Fenrir::Detail
         config.snapToPixels = state.config.snapToPixels;
         config.pixelsPerUnit = contentScale;
         config.stops = state.stops ? &*state.stops : nullptr;
+        config.fonts = state.roots.GetFonts();
         Painter painter(list, config);
         TreePainter(state, painter, store).PaintElement(state.rootElement.index, 1.0f);
 

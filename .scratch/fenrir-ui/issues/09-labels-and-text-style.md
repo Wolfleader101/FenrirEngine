@@ -10,11 +10,11 @@
 
 **Touches:** `packages/FenrirUI/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Headless App tests: a label's laid-out size equals its paragraph's size; wrapping follows the parent's width and `white-space: nowrap` stops it; ellipsis at a fixed width; `text-align` moves the lines; `font-size` from a parent inherits and a class override wins; a label in a flex row with `flex-grow` wraps at its share.
-- [ ] Draw-list tests through a capturing target: a label's glyph quads sit inside its content box; `text-shadow` draws first.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Headless App tests: a label's laid-out size equals its paragraph's size; wrapping follows the parent's width and `white-space: nowrap` stops it; ellipsis at a fixed width; `text-align` moves the lines; `font-size` from a parent inherits and a class override wins; a label in a flex row with `flex-grow` wraps at its share.
+- [x] Draw-list tests through a capturing target: a label's glyph quads sit inside its content box; `text-shadow` draws first.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
 
 ## Comments
 

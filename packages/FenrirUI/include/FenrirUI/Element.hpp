@@ -108,9 +108,10 @@ namespace Fenrir
         }
 
         /**
-         * @brief Paints the content, after the element's shadows, background and border and before its children, under
-         * its transform, its own overflow clip and its ancestors' clips. Coordinates are UI units from the root's
-         * top-left. It must not create, remove or move elements: `paint` refers into the root's tree.
+         * @brief Paints the content, after the element's shadows, background, border and text (UIRoot::SetText) and
+         * before its children, under its transform, its own overflow clip and its ancestors' clips. Coordinates are UI
+         * units from the root's top-left. It must not create, remove or move elements: `paint` refers into the root's
+         * tree.
          */
         virtual void Paint(Painter& painter, const ElementPaint& paint)
         {

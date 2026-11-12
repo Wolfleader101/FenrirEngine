@@ -93,6 +93,13 @@ namespace Fenrir::Detail
             return static_cast<std::int32_t>(std::lround(Mix(static_cast<float>(a), static_cast<float>(b), t)));
         }
 
+        /** @brief A font weight, as CSS interpolates it: by number, rounded, within 1 to 1000. */
+        std::uint16_t Mix(std::uint16_t a, std::uint16_t b, float t)
+        {
+            const long weight = std::lround(Mix(static_cast<float>(a), static_cast<float>(b), t));
+            return static_cast<std::uint16_t>(std::clamp(weight, 1L, 1000L));
+        }
+
         Math::Vec2 Mix(const Math::Vec2& a, const Math::Vec2& b, float t)
         {
             return a + (b - a) * t;
@@ -598,6 +605,11 @@ namespace Fenrir::Detail
             }
         }
         return changed;
+    }
+
+    bool SameProperty(StyleProperty property, const ResolvedStyle& a, const ResolvedStyle& b)
+    {
+        return SameField(property, a, b);
     }
 
     void ApplyMotion(const ElementMotion& motion, ResolvedStyle& style)

@@ -13,6 +13,7 @@
 #include "FenrirMath/Colour.hpp"
 #include "FenrirMath/Math.hpp"
 #include "FenrirPainter/Paint.hpp"
+#include "FenrirText/TextStyle.hpp"
 
 namespace Fenrir
 {
@@ -310,6 +311,15 @@ namespace Fenrir
         friend constexpr bool operator==(const TimingFunction&, const TimingFunction&) noexcept = default;
     };
 
+    /** @brief `text-overflow`: what a line cut off at its element's width ends with. */
+    enum class TextOverflow : std::uint8_t
+    {
+        /** @brief Nothing: the line runs on past the width (and is cut only by an `overflow: hidden` ancestor). */
+        Clip,
+        /** @brief An ellipsis inside the width. */
+        Ellipsis,
+    };
+
     /** @brief `animation-direction`: which way each iteration plays. */
     enum class AnimationDirection : std::uint8_t
     {
@@ -406,6 +416,44 @@ namespace Fenrir
         PointerEvents pointerEvents = PointerEvents::None;
         Cursor cursor = Cursor::Auto;
 
+        /** @name Text
+         * How an element's text (UIRoot::SetText) is laid out and drawn, through FenrirText (ADR-0062). Every one is
+         * inherited. Sizes are UI units; the root lays the paragraph out in its target's pixels.
+         * @{
+         */
+        /** @brief `color`: the text's colour, straight alpha. */
+        Colour color = Colour::Black;
+        /**
+         * @brief `font-family`: a family registered with the app's FontLibrary; one with no faces is the embedded
+         * default face, as is `default`. A list in a stylesheet takes its first name.
+         */
+        std::string fontFamily = "default";
+        /** @brief `font-size`: the em square's height. */
+        float fontSize = 16.0f;
+        /** @brief `font-weight`, 1 to 1000; the family's nearest face is used. */
+        std::uint16_t fontWeight = FontWeightNormal;
+        /** @brief `font-style`. */
+        FontStyle fontStyle = FontStyle::Normal;
+        /** @brief `text-align`: where the lines sit across the content box. */
+        TextAlign textAlign = TextAlign::Start;
+        /**
+         * @brief `line-height`: `normal` (auto) for the fonts' own height, a percentage (a plain number is its
+         * hundredfold) of the element's font-size, or UI units.
+         */
+        Length lineHeight = Length::Auto();
+        /** @brief `letter-spacing`: added after each glyph, and may be negative. */
+        float letterSpacing = 0.0f;
+        /**
+         * @brief `text-shadow`: the text drawn again under itself, the first on top, as CSS. A shadow's blur is kept
+         * and not drawn yet: shadows are sharp, offset and tinted.
+         */
+        std::vector<Shadow> textShadow;
+        /** @brief `white-space`: Normal wraps at the width, NoWrap keeps one line; both collapse spaces. */
+        WhiteSpace whiteSpace = WhiteSpace::Normal;
+        /** @brief `text-overflow`. */
+        TextOverflow textOverflow = TextOverflow::Clip;
+        /** @} */
+
         /** @name Transitions and animations
          * Comma-separated lists, as CSS's: the i-th transition (animation) takes the i-th entry of each other list,
          * which repeats when it is shorter. An empty list is the property's initial value: `all`, `0s`, `ease`, `0s`;
@@ -494,6 +542,17 @@ namespace Fenrir
         ZIndex,
         PointerEvents,
         Cursor,
+        Color,
+        FontFamily,
+        FontSize,
+        FontWeight,
+        FontStyle,
+        TextAlign,
+        LineHeight,
+        LetterSpacing,
+        TextShadow,
+        WhiteSpace,
+        TextOverflow,
         // The transition and animation lists come last: transitions and animations move every property before them.
         TransitionProperty,
         TransitionDuration,
@@ -515,10 +574,10 @@ namespace Fenrir
 
     /**
      * @brief A set of property values, some properties given and the rest not: an element's inline style. Resolving an
-     * element's style starts from the defaults, takes the inherited properties (pointer-events, cursor and the custom
-     * properties) from its parent's resolved style, writes the matching stylesheet rules over them, then every property
-     * given here. Each typed setter gives one property; UIRoot::SetStyleProperty gives one by its CSS name and a value
-     * string.
+     * element's style starts from the defaults, takes the inherited properties (pointer-events, cursor, the text
+     * properties and the custom properties) from its parent's resolved style, writes the matching stylesheet rules over
+     * them, then every property given here. Each typed setter gives one property; UIRoot::SetStyleProperty gives one by
+     * its CSS name and a value string.
      */
     class StyleDeclarations
     {
@@ -625,6 +684,28 @@ namespace Fenrir
         StyleDeclarations& SetPointerEvents(Fenrir::PointerEvents value);
         /** @brief `cursor`. */
         StyleDeclarations& SetCursor(Fenrir::Cursor value);
+        /** @brief `color`. */
+        StyleDeclarations& SetColor(const Colour& value);
+        /** @brief `font-family`: one family's name. */
+        StyleDeclarations& SetFontFamily(std::string value);
+        /** @brief `font-size`. */
+        StyleDeclarations& SetFontSize(float value);
+        /** @brief `font-weight`, 1 to 1000. */
+        StyleDeclarations& SetFontWeight(std::uint16_t value);
+        /** @brief `font-style`. */
+        StyleDeclarations& SetFontStyle(Fenrir::FontStyle value);
+        /** @brief `text-align`. */
+        StyleDeclarations& SetTextAlign(Fenrir::TextAlign value);
+        /** @brief `line-height`: auto for `normal`, a percentage of the font-size, or UI units. */
+        StyleDeclarations& SetLineHeight(Length value);
+        /** @brief `letter-spacing`. */
+        StyleDeclarations& SetLetterSpacing(float value);
+        /** @brief `text-shadow`. */
+        StyleDeclarations& SetTextShadow(std::vector<Shadow> shadows);
+        /** @brief `white-space`: Normal or NoWrap. */
+        StyleDeclarations& SetWhiteSpace(Fenrir::WhiteSpace value);
+        /** @brief `text-overflow`. */
+        StyleDeclarations& SetTextOverflow(Fenrir::TextOverflow value);
         /** @brief `transition-property`: lower-case property names, `all`, or `none` alone. */
         StyleDeclarations& SetTransitionProperty(std::vector<std::string> names);
         /** @brief `transition-duration`, in seconds. */
