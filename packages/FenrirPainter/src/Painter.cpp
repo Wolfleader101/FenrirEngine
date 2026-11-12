@@ -781,6 +781,13 @@ namespace Fenrir
         m_open.pop_back();
     }
 
+    void Painter::BackdropBlur(const Rect2D& rect, float radius)
+    {
+        BeginGroup(rect, 1.0f, GroupBlend2D::Normal,
+                   {GroupFilter2D::BackdropBlur, radius, Math::Vec2(0.0f), Colour::Black});
+        EndGroup();
+    }
+
     void Painter::FillContours(const std::vector<PainterDetail::Contour>& contours, FillRule rule, const Paint& paint)
     {
         if (m_state.scissor && (m_state.scissor->width <= 0.0f || m_state.scissor->height <= 0.0f))

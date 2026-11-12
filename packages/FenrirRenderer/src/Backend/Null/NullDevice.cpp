@@ -244,6 +244,10 @@ namespace Fenrir::Graphics
                     {
                         CheckLive(m_buffers.IsLive(cmd.source) && m_buffers.IsLive(cmd.destination), "buffer");
                     }
+                    else if constexpr (std::is_same_v<T, CmdCopyTexture>)
+                    {
+                        CheckLive(m_textures.IsLive(cmd.source) && m_textures.IsLive(cmd.destination), "texture");
+                    }
                 },
                 command);
         }

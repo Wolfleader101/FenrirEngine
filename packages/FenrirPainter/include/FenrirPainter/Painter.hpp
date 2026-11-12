@@ -196,6 +196,12 @@ namespace Fenrir
         void BeginMask(const Path& mask);
         /** @brief Ends the innermost mask's reach, if no group opened inside it is still open. */
         void EndMask();
+        /**
+         * @brief Blurs what is already drawn under `rect` (under the current transform, its axis-aligned bounds,
+         * clipped to the scissor) by `radius`, a Gaussian's standard deviation in UI units, as a frosted panel's
+         * background: an empty group whose filter is GroupFilter2D::BackdropBlur.
+         */
+        void BackdropBlur(const Rect2D& rect, float radius);
         /** @} */
 
       private:

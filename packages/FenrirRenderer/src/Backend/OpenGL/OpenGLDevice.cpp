@@ -848,6 +848,13 @@ namespace Fenrir::Graphics
     {
         const PassDesc& pass = command.pass;
         m_replay = ReplayState{};
+        if (pass.queue == QueueKind::Copy)
+        {
+            // Copies only: no target to bind.
+            m_gl->PushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, static_cast<GLsizei>(pass.label.size()),
+                                 pass.label.data());
+            return;
+        }
         if (pass.queue == QueueKind::Compute)
         {
             // Dispatches only: no target to bind. What it writes as storage, later passes read as vertices or storage,
@@ -1143,6 +1150,50 @@ namespace Fenrir::Graphics
             return;
         }
         m_gl->DispatchCompute(command.groupsX, command.groupsY, command.groupsZ);
+    }
+
+    void OpenGLDevice::Execute(const CmdCopyTexture& command)
+    {
+        const GlTexture* source = m_textures.Find(command.source);
+        const GlTexture* destination = m_textures.Find(command.destination);
+        if (source == nullptr || destination == nullptr || destination->name == 0)
+        {
+            m_logger->Error("OpenGL backend: a texture copy names a stale texture, or copies into the backbuffer");
+            return;
+        }
+        const auto framebufferOf = [this](const GlTexture& texture, TextureHandle handle) -> GLuint {
+            if (texture.name == 0)
+            {
+                return 0;
+            }
+            PassDesc pass;
+            pass.colour.push_back({handle, LoadOp::Load});
+            return FramebufferFor(pass);
+        };
+        const GLuint read = framebufferOf(*source, command.source);
+        const GLuint draw = framebufferOf(*destination, command.destination);
+        const PixelRect& region = command.region;
+        auto top = static_cast<GLint>(region.y);
+        auto bottom = static_cast<GLint>(region.y + static_cast<std::int32_t>(region.height));
+        if (source->name == 0)
+        {
+            // The window's row 0 is its bottom; a texture's is its top, so the rows are turned over.
+            const auto height = static_cast<GLint>(m_surface->GetPixelSize().height);
+            const GLint flippedTop = height - bottom;
+            bottom = height - top;
+            top = flippedTop;
+        }
+        const auto x0 = static_cast<GLint>(command.x);
+        const auto y0 = static_cast<GLint>(command.y);
+        const auto x1 = x0 + static_cast<GLint>(region.width);
+        const auto y1 = y0 + static_cast<GLint>(region.height);
+        GladGLContext& gl = *m_gl;
+        // A blit is scissored; a copy is not.
+        gl.Disable(GL_SCISSOR_TEST);
+        gl.BlitNamedFramebuffer(read, draw, static_cast<GLint>(region.x), top,
+                                static_cast<GLint>(region.x + static_cast<std::int32_t>(region.width)), bottom, x0,
+                                source->name == 0 ? y1 : y0, x1, source->name == 0 ? y0 : y1, GL_COLOR_BUFFER_BIT,
+                                GL_NEAREST);
     }
 
     void OpenGLDevice::Execute(const CmdCopyBuffer& command)

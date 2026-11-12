@@ -207,3 +207,23 @@ TEST_CASE("An EndGroup in a mask's reach closes only a group opened in it, and E
 
     REQUIRE(Kinds(list) == "BDEBDEM");
 }
+
+TEST_CASE("A backdrop blur records an empty group over the rectangle with the radius, in logical units",
+          "[painter][groups]")
+{
+    Fenrir::DrawList2D list;
+    Fenrir::PainterConfig config = PainterTest::Config();
+    config.scale = 2.0f;
+    Fenrir::Painter painter(list, config);
+
+    painter.DrawRect({0, 0, 10, 10}, Colour::White);
+    painter.BackdropBlur({10, 20, 30, 40}, 5.0f);
+    painter.DrawRect({0, 0, 10, 10}, Colour::White);
+
+    REQUIRE(Kinds(list) == "DBED");
+    REQUIRE(Near(Command<Fenrir::BeginGroup2D>(list, 1).bounds, Rect2D{20, 40, 60, 80}));
+    const auto& end = Command<Fenrir::EndGroup2D>(list, 2);
+    REQUIRE(end.filter == Fenrir::GroupFilter2D::BackdropBlur);
+    REQUIRE(PainterTest::Near(end.radius, 10.0f));
+    REQUIRE_FALSE(end.mask);
+}

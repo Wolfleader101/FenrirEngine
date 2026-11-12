@@ -7,6 +7,7 @@
 #include <format>
 #include <numeric>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
@@ -155,10 +156,10 @@ namespace Fenrir::Render
             return open.empty();
         }
 
-        /** @brief For each of a balanced `list`'s commands, whether it begins a group that ends as a mask. */
-        std::vector<bool> MaskBegins(const DrawList2D& list)
+        /** @brief For each of a balanced `list`'s commands that begins a group, the index of the command ending it. */
+        std::vector<std::size_t> GroupEnds(const DrawList2D& list)
         {
-            std::vector<bool> masks(list.commands.size(), false);
+            std::vector<std::size_t> ends(list.commands.size(), 0);
             std::vector<std::size_t> open;
             for (std::size_t i = 0; i < list.commands.size(); ++i)
             {
@@ -166,14 +167,34 @@ namespace Fenrir::Render
                 {
                     open.push_back(i);
                 }
-                else if (const auto* end = std::get_if<EndGroup2D>(&list.commands[i]))
+                else if (std::holds_alternative<EndGroup2D>(list.commands[i]))
                 {
-                    masks[open.back()] = end->mask;
+                    ends[open.back()] = i;
                     open.pop_back();
                 }
             }
-            return masks;
+            return ends;
         }
+
+        /** @brief How far a blur of `sigma` pixels reaches: three of them, in whole pixels. */
+        std::int64_t BlurReach(float sigma)
+        {
+            return sigma > 0.0f ? static_cast<std::int64_t>(std::ceil(3.0f * sigma)) : 0;
+        }
+
+        /** @brief `colour`, linear and premultiplied, as Vertex2D packs it. */
+        std::uint32_t PackLinear(Math::Vec4 colour)
+        {
+            const auto byte = [](float channel) {
+                return static_cast<std::uint32_t>(std::lround(std::clamp(channel, 0.0f, 1.0f) * 255.0f));
+            };
+            return byte(colour.x) | (byte(colour.y) << 8u) | (byte(colour.z) << 16u) | (byte(colour.w) << 24u);
+        }
+
+        /** @brief The keys of builtin:2d's variant for each composite kind, by Draw2DFeature's CompositeKind. */
+        const std::array<std::vector<std::string_view>, 3> compositeKeys{
+            std::vector<std::string_view>{}, std::vector<std::string_view>{"BLUR"},
+            std::vector<std::string_view>{"BLUR", "SHADOW"}};
 
         /** @brief The target block of a pass of `pixels` at `scale` whose top-left is (`originX`, `originY`). */
         TargetBlock BlockOf(PixelSize pixels, float scale, std::int32_t originX, std::int32_t originY)
@@ -235,20 +256,26 @@ namespace Fenrir::Render
         m_indices = std::make_unique<ByteRing>(m_device, BufferUsage::Index, "2D indices");
         m_parameters = std::make_unique<ByteRing>(m_device, BufferUsage::Uniform, "2D parameters");
 
-        // builtin:2d with no keys: linear vertex colours, which carry the opacity, times the premultiplied texel.
+        // builtin:2d with no keys: linear vertex colours, which carry the opacity, times the premultiplied texel; with
+        // BLUR, one pass of a Gaussian; with SHADOW too, the blurred alpha tinted.
         m_composite.container = std::make_unique<ShaderContainer>(ReadBuiltin(BuiltinProgram::Draw2D, m_logger));
-        m_composite.variant = m_composite.container->FindVariant({});
-        if (m_composite.variant != nullptr)
+        for (std::size_t kind = 0; kind < m_composite.variants.size(); ++kind)
         {
+            Composite::Variant& variant = m_composite.variants.at(kind);
+            variant.variant = m_composite.container->FindVariant(compositeKeys.at(kind));
+            if (variant.variant == nullptr)
+            {
+                continue;
+            }
             BindingGroupLayoutDesc layout;
-            for (const ShaderBinding& binding : m_composite.variant->bindings)
+            for (const ShaderBinding& binding : variant.variant->bindings)
             {
                 if (binding.set == CommandSet)
                 {
                     layout.entries.push_back({binding.binding, binding.kind});
                 }
             }
-            m_composite.layout = m_device.CreateBindingGroupLayout(layout, "2D composite");
+            variant.layout = m_device.CreateBindingGroupLayout(layout, "2D composite");
         }
     }
 
@@ -270,7 +297,10 @@ namespace Fenrir::Render
         {
             m_device.Destroy(pipeline);
         }
-        m_device.Destroy(m_composite.layout);
+        for (const Composite::Variant& variant : m_composite.variants)
+        {
+            m_device.Destroy(variant.layout);
+        }
         m_targetBlocks.reset();
         m_vertices.reset();
         m_indices.reset();
@@ -369,10 +399,10 @@ namespace Fenrir::Render
     }
 
     const Draw2DFeature::PipelineEntry* Draw2DFeature::Pipeline(const PipelineDescription2D& description,
-                                                                TextureFormat format)
+                                                                TextureFormat format, bool masked)
     {
         const auto cached = std::find_if(m_pipelines.begin(), m_pipelines.end(), [&](const PipelineEntry& entry) {
-            return entry.format == format && entry.description == description;
+            return entry.format == format && entry.masked == masked && entry.description == description;
         });
         if (cached != m_pipelines.end())
         {
@@ -380,10 +410,6 @@ namespace Fenrir::Render
         }
 
         const ShaderEntry& shader = m_shaders.at(KeyOf(description.shader));
-        PipelineEntry& entry = m_pipelines.emplace_back();
-        entry.description = description;
-        entry.format = format;
-
         bool gamma = description.blendSpace == BlendSpace2D::Gamma;
         if (gamma && format != TextureFormat::Rgba8Srgb)
         {
@@ -405,7 +431,37 @@ namespace Fenrir::Render
         {
             keys.emplace_back("GAMMA");
         }
-        entry.variant = shader.container->FindVariant(keys);
+        const ShaderVariant* variant = nullptr;
+        if (masked)
+        {
+            std::vector<std::string_view> maskedKeys = keys;
+            maskedKeys.emplace_back("MASK");
+            // FindVariant passes over keys a shader does not have, so a shader without MASK is told apart first.
+            const std::vector<std::string>& declared = shader.container->keys;
+            if (std::ranges::find(declared, std::string_view("MASK")) != declared.end())
+            {
+                variant = shader.container->FindVariant(maskedKeys);
+            }
+            if (variant == nullptr)
+            {
+                // The unmasked pipeline draws them.
+                LogOnce(std::format("no mask {}", shader.container->name),
+                        std::format("2D shader '{}' has no MASK variant, so the commands a mask group reaches draw "
+                                    "unmasked",
+                                    shader.container->name));
+                return Pipeline(description, format, false);
+            }
+        }
+        else
+        {
+            variant = shader.container->FindVariant(keys);
+        }
+
+        PipelineEntry& entry = m_pipelines.emplace_back();
+        entry.description = description;
+        entry.format = format;
+        entry.masked = masked;
+        entry.variant = variant;
         if (entry.variant == nullptr)
         {
             return nullptr;
@@ -436,29 +492,28 @@ namespace Fenrir::Render
         return &entry;
     }
 
-    PipelineHandle Draw2DFeature::CompositePipeline(GroupBlend2D blend, TextureFormat format)
+    PipelineHandle Draw2DFeature::CompositePipeline(CompositeKind kind, Graphics::BlendMode blend, TextureFormat format)
     {
-        const auto key = std::make_pair(blend, format);
+        const auto key = std::make_tuple(kind, blend, format);
         if (const auto found = m_composite.pipelines.find(key); found != m_composite.pipelines.end())
         {
             return found->second;
         }
         PipelineHandle& pipeline = m_composite.pipelines[key];
-        if (m_composite.variant == nullptr)
+        const Composite::Variant& variant = m_composite.variants.at(static_cast<std::size_t>(kind));
+        if (variant.variant == nullptr)
         {
             return pipeline;
         }
         PipelineDesc desc;
-        desc.shader = m_composite.variant;
-        desc.sets = {m_targetLayout, m_composite.layout, BindingGroupLayoutHandle{}, BindingGroupLayoutHandle{}};
+        desc.shader = variant.variant;
+        desc.sets = {m_targetLayout, variant.layout, BindingGroupLayoutHandle{}, BindingGroupLayoutHandle{}};
         desc.vertexBuffers = {DeviceLayout(Vertex2DLayout())};
         desc.cull = CullMode::None;
         desc.depth.test = false;
         desc.depth.write = false;
         desc.depthFormat.reset();
-        // The image is premultiplied, so drawing it over is the premultiplied blend.
-        desc.blend =
-            blend == GroupBlend2D::Additive ? Graphics::BlendMode::Additive : Graphics::BlendMode::Premultiplied;
+        desc.blend = blend;
         desc.encodeSrgb = true;
         desc.colourFormats = {format};
         desc.samples = 1;
@@ -472,8 +527,14 @@ namespace Fenrir::Render
     }
 
     bool Draw2DFeature::Resolve(const DrawList2D& list, const DrawCommand2D& command, std::size_t vertexOffset,
-                                std::size_t indexOffset, const ListTarget& target, TargetPass& pass)
+                                std::size_t indexOffset, const ListTarget& target, const MaskState* mask,
+                                TargetPass& pass)
     {
+        if (mask != nullptr && mask->kind == MaskState::Kind::Nothing)
+        {
+            // A mask covering nothing masks everything away.
+            return false;
+        }
         if (command.pipeline >= list.pipelines.size())
         {
             LogOnce("pipeline", std::format("a 2D draw list's command names pipeline {} of a table of {}, so it is "
@@ -525,18 +586,21 @@ namespace Fenrir::Render
         {
             return false;
         }
-        const PipelineEntry* pipeline = Pipeline(description, pass.format);
+        const bool masked = mask != nullptr && mask->kind == MaskState::Kind::Image;
+        const PipelineEntry* pipeline = Pipeline(description, pass.format, masked);
         if (pipeline == nullptr)
         {
             return false;
         }
 
-        // Set 1: the parameter block, then the textures, slot by slot, in binding order.
+        // Set 1: the parameter block, then the textures, slot by slot, in binding order; a masked variant's `mask`
+        // texture is the mask's image, bound as the pass is recorded, and takes no slot.
         const ShaderVariant& variant = *pipeline->variant;
         if (!pipeline->layout.IsEmpty())
         {
             BindingGroupDesc group{pipeline->layout, {}};
             std::size_t slot = 0;
+            bool deferred = false;
             for (const ShaderBinding& binding : variant.bindings)
             {
                 if (binding.set != CommandSet)
@@ -545,7 +609,15 @@ namespace Fenrir::Render
                 }
                 BindingGroupEntry entry;
                 entry.binding = binding.binding;
-                if (binding.kind == ShaderBindingKind::Texture)
+                if (binding.kind == ShaderBindingKind::Texture && pipeline->masked && binding.name == "mask")
+                {
+                    draw.mask = mask->image;
+                    draw.maskEntry = group.entries.size();
+                    entry.sampler = m_images.SamplerFor(LinearClamp2D);
+                    pass.samples.push_back(mask->image);
+                    deferred = true;
+                }
+                else if (binding.kind == ShaderBindingKind::Texture)
                 {
                     const TextureSlot2D texture =
                         slot < command.textures.size() ? command.textures[slot] : TextureSlot2D{};
@@ -583,6 +655,18 @@ namespace Fenrir::Render
                         std::memcpy(block.data(), command.parameters.data(),
                                     std::min(block.size(), command.parameters.size()));
                     }
+                    if (pipeline->masked)
+                    {
+                        // The mask's rectangle, where the masked variant reads it.
+                        const auto member =
+                            std::find_if(variant.materialMembers.begin(), variant.materialMembers.end(),
+                                         [](const ShaderBlockMember& m) { return m.name == "maskRect"; });
+                        if (member != variant.materialMembers.end() &&
+                            member->offset + sizeof(Math::Vec4) <= block.size())
+                        {
+                            std::memcpy(block.data() + member->offset, &mask->rect, sizeof(Math::Vec4));
+                        }
+                    }
                     // Its buffer is set once the frame's parameter bytes are written.
                     entry.offset = m_parameterBytes.size();
                     entry.size = block.size();
@@ -593,6 +677,7 @@ namespace Fenrir::Render
                 group.entries.push_back(entry);
             }
             m_pendingGroups.push_back(std::move(group));
+            m_deferredGroups.push_back(deferred);
             draw.groupIndex = m_pendingGroups.size();
         }
         draw.pipeline = pipeline->pipeline;
@@ -606,34 +691,38 @@ namespace Fenrir::Render
         return true;
     }
 
-    void Draw2DFeature::AddComposite(const TargetPass& group, const EndGroup2D& composite, TargetPass& into)
+    void Draw2DFeature::AddImageQuad(TargetPass& into, const ImageQuad& quad, GraphResource source, CompositeKind kind,
+                                     Graphics::BlendMode blend, const BlurBlock* block)
     {
-        const PipelineHandle pipeline = CompositePipeline(composite.blend, into.format);
+        const PipelineHandle pipeline = CompositePipeline(kind, blend, into.format);
         if (pipeline.IsEmpty())
         {
             return;
         }
-        // The group's pixels, in the list's local units: the quad covers its image exactly.
-        const float scale = into.scale;
-        const float left = static_cast<float>(group.originX) / scale;
-        const float top = static_cast<float>(group.originY) / scale;
-        const float right = static_cast<float>(group.originX + static_cast<std::int64_t>(group.pixels.width)) / scale;
-        const float bottom = static_cast<float>(group.originY + static_cast<std::int64_t>(group.pixels.height)) / scale;
-        // The opacity scales the premultiplied texel's colour and alpha alike.
-        const auto opacity =
-            static_cast<std::uint32_t>(std::lround(std::clamp(composite.opacity, 0.0f, 1.0f) * 255.0f));
-        const std::uint32_t colour = opacity | (opacity << 8u) | (opacity << 16u) | (opacity << 24u);
+        const Math::Vec4& uv = quad.uv;
         const std::array<Vertex2D, 4> corners{{
-            {{left, top}, {0.0f, 0.0f}, colour},
-            {{right, top}, {1.0f, 0.0f}, colour},
-            {{right, bottom}, {1.0f, 1.0f}, colour},
-            {{left, bottom}, {0.0f, 1.0f}, colour},
+            {{quad.left, quad.top}, {uv.x, uv.y}, quad.colour},
+            {{quad.right, quad.top}, {uv.z, uv.y}, quad.colour},
+            {{quad.right, quad.bottom}, {uv.z, uv.w}, quad.colour},
+            {{quad.left, quad.bottom}, {uv.x, uv.w}, quad.colour},
         }};
         constexpr std::array<std::uint16_t, 6> indices{0, 2, 1, 0, 3, 2};
 
         Draw draw;
         draw.pipeline = pipeline;
-        draw.composite = group.target;
+        draw.composite = source;
+        draw.compositeKind = kind;
+        if (block != nullptr)
+        {
+            // The variant's block, its defaults with the blur's values over them.
+            const ShaderVariant& variant = *m_composite.variants.at(static_cast<std::size_t>(kind)).variant;
+            std::vector<std::byte> bytes = variant.defaultBlock;
+            bytes.resize(std::max(bytes.size(), sizeof(BlurBlock)));
+            std::memcpy(bytes.data(), block, sizeof(BlurBlock));
+            draw.compositeParameters = m_parameterBytes.size();
+            m_parameterBytes.insert(m_parameterBytes.end(), bytes.begin(), bytes.end());
+            m_parameterBytes.resize(AlignUp(m_parameterBytes.size(), UniformBlockAlignment));
+        }
         draw.vertexOffset = AlignUp(m_vertexBytes.size(), 16);
         m_vertexBytes.resize(draw.vertexOffset);
         const std::span<const std::byte> vertexBytes = std::as_bytes(std::span(corners));
@@ -646,10 +735,161 @@ namespace Fenrir::Render
         draw.scissor = {0, 0, into.pixels.width, into.pixels.height};
         draw.indexCount = static_cast<std::uint32_t>(indices.size());
         into.draws.push_back(draw);
-        into.samples.push_back(group.target);
+        into.samples.push_back(source);
     }
 
-    bool Draw2DFeature::DrawList(const DrawList2D& list, const ListTarget& target, RenderGraph& graph)
+    Draw2DFeature::ImageQuad Draw2DFeature::QuadOver(const TargetPass& group, const TargetPass& into, Math::Vec2 offset)
+    {
+        // The group's pixels, in the list's local units: the quad covers its image exactly.
+        const float scale = into.scale;
+        ImageQuad quad;
+        quad.left = static_cast<float>(group.originX) / scale + offset.x;
+        quad.top = static_cast<float>(group.originY) / scale + offset.y;
+        quad.right =
+            static_cast<float>(group.originX + static_cast<std::int64_t>(group.pixels.width)) / scale + offset.x;
+        quad.bottom =
+            static_cast<float>(group.originY + static_cast<std::int64_t>(group.pixels.height)) / scale + offset.y;
+        return quad;
+    }
+
+    GraphResource Draw2DFeature::TransientImage(RenderGraph& graph, const char* name, PixelSize pixels,
+                                                TextureFormat format)
+    {
+        TextureDesc desc;
+        desc.format = format;
+        desc.width = pixels.width;
+        desc.height = pixels.height;
+        desc.usage = TextureUsage::ColourAttachment | TextureUsage::Sampled;
+        m_stats.transientImageBytes += pixels.width * pixels.height * GroupPixelBytes;
+        return graph.CreateTexture(name, desc);
+    }
+
+    namespace
+    {
+        /**
+         * @brief A pass of a Gaussian of `sigma` texels along `step` (the UV of one texel), with at most MaxBlurTaps2D
+         * taps a side spaced to reach three sigmas.
+         */
+        Math::Vec4 GaussianAlong(Math::Vec2 step, float sigma)
+        {
+            const float reach = std::ceil(3.0f * std::max(sigma, 0.0f));
+            const float taps = std::min(reach, static_cast<float>(MaxBlurTaps2D));
+            const float spacing = taps > 0.0f ? reach / taps : 1.0f;
+            return {step.x * spacing, step.y * spacing, sigma > 0.0f ? spacing / sigma : 0.0f, taps};
+        }
+    } // namespace
+
+    Draw2DFeature::Blurred Draw2DFeature::BlurAcross(RenderGraph& graph, GraphResource source, PixelSize pixels,
+                                                     Math::Vec4 bounds, float sigma, TextureFormat format, bool clamp)
+    {
+        // The region blurred, in the source's pixels, at half its size past the threshold.
+        const float regionWidth = (bounds.z - bounds.x) * static_cast<float>(pixels.width);
+        const float regionHeight = (bounds.w - bounds.y) * static_cast<float>(pixels.height);
+        const bool half = sigma > HalfResolutionBlur2D;
+        const auto size = [half](float length) {
+            return std::max<std::uint32_t>(
+                static_cast<std::uint32_t>(std::ceil(half ? length * 0.5f : std::round(length))), 1u);
+        };
+        Blurred blurred;
+        blurred.pixels = {size(regionWidth), size(regionHeight)};
+        blurred.image = TransientImage(graph, "2D blur", blurred.pixels, format);
+
+        TargetPass pass;
+        pass.name = "Blur 2D";
+        pass.target = blurred.image;
+        pass.load = LoadOp::DontCare;
+        pass.format = format;
+        pass.pixels = blurred.pixels;
+        const float texels = static_cast<float>(blurred.pixels.width);
+        BlurBlock block;
+        block.blur = GaussianAlong({(bounds.z - bounds.x) / texels, 0.0f}, sigma * texels / regionWidth);
+        block.bounds = bounds;
+        block.options.x = clamp ? 1.0f : 0.0f;
+        ImageQuad quad;
+        quad.right = texels;
+        quad.bottom = static_cast<float>(blurred.pixels.height);
+        quad.uv = bounds;
+        AddImageQuad(pass, quad, source, CompositeKind::Blur, Graphics::BlendMode::None, &block);
+        m_passes.push_back(std::move(pass));
+        m_finished.push_back(m_passes.size() - 1);
+        return blurred;
+    }
+
+    Draw2DFeature::BlurBlock Draw2DFeature::BlurDown(const Blurred& blurred, std::uint32_t height, float sigma,
+                                                     bool clamp)
+    {
+        const float texels = static_cast<float>(blurred.pixels.height);
+        BlurBlock block;
+        block.blur = GaussianAlong({0.0f, 1.0f / texels}, sigma * texels / static_cast<float>(std::max(height, 1u)));
+        block.options.x = clamp ? 1.0f : 0.0f;
+        return block;
+    }
+
+    std::size_t Draw2DFeature::AddBackdrop(RenderGraph& graph, std::size_t group, std::size_t into, float sigma)
+    {
+        // The group's bounds and three sigmas about them, in the root's pixels, inside the pass drawn into.
+        const TargetPass& outer = m_passes[into];
+        const TargetPass& panel = m_passes[group];
+        const std::int64_t reach = BlurReach(sigma);
+        const std::int64_t outerRight = outer.originX + static_cast<std::int64_t>(outer.pixels.width);
+        const std::int64_t outerBottom = outer.originY + static_cast<std::int64_t>(outer.pixels.height);
+        const std::int64_t left = std::max<std::int64_t>(panel.originX - reach, outer.originX);
+        const std::int64_t top = std::max<std::int64_t>(panel.originY - reach, outer.originY);
+        const std::int64_t right =
+            std::min<std::int64_t>(panel.originX + static_cast<std::int64_t>(panel.pixels.width) + reach, outerRight);
+        const std::int64_t bottom =
+            std::min<std::int64_t>(panel.originY + static_cast<std::int64_t>(panel.pixels.height) + reach, outerBottom);
+        const PixelSize copied{static_cast<std::uint32_t>(right - left), static_cast<std::uint32_t>(bottom - top)};
+
+        // The pass so far ends here: a group's image is made now, the overlay's is drawn only if it draws something.
+        if (m_passes[into].target.IsEmpty())
+        {
+            m_passes[into].target = TransientImage(graph, "2D group", m_passes[into].pixels, m_passes[into].format);
+        }
+        if (!m_passes[into].draws.empty() || m_passes[into].load == LoadOp::Clear)
+        {
+            m_finished.push_back(into);
+        }
+        TargetPass next;
+        next.name = m_passes[into].name;
+        next.target = m_passes[into].target;
+        next.load = LoadOp::Load;
+        next.format = m_passes[into].format;
+        next.pixels = m_passes[into].pixels;
+        next.originX = m_passes[into].originX;
+        next.originY = m_passes[into].originY;
+        next.scale = m_passes[into].scale;
+
+        // What it holds under them, copied, then blurred across and down.
+        TargetPass copy;
+        copy.name = "Backdrop 2D";
+        copy.format = next.format;
+        copy.pixels = copied;
+        copy.target = TransientImage(graph, "2D backdrop", copied, next.format);
+        copy.copy = Copy{next.target,
+                         {static_cast<std::int32_t>(left - next.originX), static_cast<std::int32_t>(top - next.originY),
+                          copied.width, copied.height}};
+        const GraphResource backdrop = copy.target;
+        m_passes.push_back(std::move(copy));
+        m_finished.push_back(m_passes.size() - 1);
+        const Blurred blurred = BlurAcross(graph, backdrop, copied, {0.0f, 0.0f, 1.0f, 1.0f}, sigma, next.format, true);
+
+        // Drawn back over the group's bounds in place of what was there.
+        const TargetPass& bounds = m_passes[group];
+        ImageQuad quad = QuadOver(bounds, next);
+        const auto fraction = [](std::int64_t value, std::int64_t from, std::uint32_t length) {
+            return static_cast<float>(value - from) / static_cast<float>(length);
+        };
+        quad.uv = {fraction(bounds.originX, left, copied.width), fraction(bounds.originY, top, copied.height),
+                   fraction(bounds.originX + static_cast<std::int64_t>(bounds.pixels.width), left, copied.width),
+                   fraction(bounds.originY + static_cast<std::int64_t>(bounds.pixels.height), top, copied.height)};
+        const BlurBlock block = BlurDown(blurred, copied.height, sigma, true);
+        AddImageQuad(next, quad, blurred.image, CompositeKind::Blur, Graphics::BlendMode::None, &block);
+        m_passes.push_back(std::move(next));
+        return m_passes.size() - 1;
+    }
+
+    bool Draw2DFeature::DrawList(const DrawList2D& list, ListTarget& target, RenderGraph& graph)
     {
         if (!Balanced(list))
         {
@@ -668,18 +908,37 @@ namespace Fenrir::Render
         m_indexBytes.resize(indexOffset);
         m_indexBytes.insert(m_indexBytes.end(), list.indices.begin(), list.indices.end());
 
-        // Each group open, innermost last: realised into a pass of its own, drawn flat (too deep), or culled (covering
-        // no pixel, or inside a culled group).
+        // Each group open, innermost last: realised into a pass of its own, drawn flat (too deep, or groups off),
+        // culled (covering no pixel, or inside a culled group), or dropped (a mask's shape not drawn, what it reaches
+        // left unmasked).
         enum class Open : std::uint8_t
         {
             Realised,
             Flat,
             Culled,
+            Dropped,
         };
         std::vector<std::pair<Open, std::size_t>> open;
         std::vector<std::size_t> realised{target.root};
+        std::vector<MaskState> masks;
         std::size_t culled = 0;
-        const std::vector<bool> masks = MaskBegins(list);
+        const std::vector<std::size_t> ends = GroupEnds(list);
+        // Moves the innermost realised pass on to `next`, the pass that goes on drawing into its target.
+        const auto moveOn = [&](std::size_t next) {
+            const std::size_t from = realised.back();
+            realised.back() = next;
+            for (auto& [kind, index] : open)
+            {
+                if (kind == Open::Realised && index == from)
+                {
+                    index = next;
+                }
+            }
+            if (realised.size() == 1)
+            {
+                target.root = next;
+            }
+        };
         for (std::size_t c = 0; c < list.commands.size(); ++c)
         {
             const Command2D& command = list.commands[c];
@@ -687,38 +946,50 @@ namespace Fenrir::Render
             {
                 if (culled == 0)
                 {
-                    Resolve(list, *draw, vertexOffset, indexOffset, target, m_passes[realised.back()]);
+                    Resolve(list, *draw, vertexOffset, indexOffset, target, masks.empty() ? nullptr : &masks.back(),
+                            m_passes[realised.back()]);
                 }
             }
             else if (const auto* begin = std::get_if<BeginGroup2D>(&command))
             {
-                if (culled > 0 || (!m_groups && masks[c]))
+                const auto& composite = std::get<EndGroup2D>(list.commands[ends[c]]);
+                if (culled > 0)
                 {
-                    // With groups off a mask's shape is not drawn.
                     open.emplace_back(Open::Culled, 0);
                     ++culled;
                     continue;
                 }
-                if (!m_groups)
-                {
-                    open.emplace_back(Open::Flat, 0);
-                    continue;
-                }
-                if (realised.size() > MaxGroupDepth2D)
+                const bool tooDeep = realised.size() > MaxGroupDepth2D;
+                if (tooDeep)
                 {
                     LogOnce("depth", std::format("a 2D draw list's offscreen groups nest deeper than {}, so the deeper "
                                                  "ones draw flat into the group around them",
                                                  MaxGroupDepth2D));
+                }
+                if ((tooDeep || !m_groups) && composite.mask)
+                {
+                    open.emplace_back(Open::Dropped, 0);
+                    ++culled;
+                    continue;
+                }
+                if (tooDeep || !m_groups)
+                {
                     open.emplace_back(Open::Flat, 0);
                     continue;
                 }
-                // The group's bounds in the root's pixels, rounded outwards and clamped to the pass around it.
+                // The group's bounds in the root's pixels, rounded outwards (a blur's or a shadow's reach about them)
+                // and clamped to the pass around it.
                 const TargetPass& outer = m_passes[realised.back()];
+                const bool spreads = !composite.mask && (composite.filter == GroupFilter2D::Blur ||
+                                                         composite.filter == GroupFilter2D::DropShadow);
+                const std::int64_t reach = spreads ? BlurReach(composite.radius * outer.scale) : 0;
                 const PixelEdges edges = RoundOut(begin->bounds, outer.scale);
-                const std::int64_t left = std::max<std::int64_t>(edges.left, outer.originX);
-                const std::int64_t top = std::max<std::int64_t>(edges.top, outer.originY);
-                const std::int64_t right = std::min<std::int64_t>(edges.right, outer.originX + outer.pixels.width);
-                const std::int64_t bottom = std::min<std::int64_t>(edges.bottom, outer.originY + outer.pixels.height);
+                const std::int64_t left = std::max<std::int64_t>(edges.left - reach, outer.originX);
+                const std::int64_t top = std::max<std::int64_t>(edges.top - reach, outer.originY);
+                const std::int64_t right =
+                    std::min<std::int64_t>(edges.right + reach, outer.originX + outer.pixels.width);
+                const std::int64_t bottom =
+                    std::min<std::int64_t>(edges.bottom + reach, outer.originY + outer.pixels.height);
                 if (right <= left || bottom <= top)
                 {
                     open.emplace_back(Open::Culled, 0);
@@ -741,9 +1012,14 @@ namespace Fenrir::Render
             {
                 const auto [kind, index] = open.back();
                 open.pop_back();
-                if (kind == Open::Culled)
+                if (kind == Open::Culled || kind == Open::Dropped)
                 {
                     --culled;
+                    if (end->mask && culled == 0)
+                    {
+                        // A mask covering no pixel masks everything away; one dropped masks nothing.
+                        masks.push_back({kind == Open::Dropped ? MaskState::Kind::Unmasked : MaskState::Kind::Nothing});
+                    }
                     continue;
                 }
                 if (kind == Open::Flat)
@@ -751,32 +1027,89 @@ namespace Fenrir::Render
                     continue;
                 }
                 realised.pop_back();
-                TargetPass& group = m_passes[index];
+                const bool drawn = !m_passes[index].draws.empty() || !m_passes[index].target.IsEmpty();
+                const float scale = m_passes[index].scale;
+                const float sigma = end->radius * scale;
+                const bool backdrop = !end->mask && end->filter == GroupFilter2D::BackdropBlur && sigma > 0.0f;
+                if (drawn)
+                {
+                    if (m_passes[index].target.IsEmpty())
+                    {
+                        m_passes[index].target =
+                            TransientImage(graph, "2D group", m_passes[index].pixels, m_passes[index].format);
+                    }
+                    m_finished.push_back(index);
+                    ++m_stats.groups;
+                }
                 if (end->mask)
                 {
-                    LogOnce("mask", "a 2D draw list has a mask group, which the renderer does not realise yet, so it "
-                                    "draws nothing and the commands it masks draw unmasked");
+                    if (!drawn)
+                    {
+                        masks.push_back({MaskState::Kind::Nothing});
+                        continue;
+                    }
+                    const TargetPass& shape = m_passes[index];
+                    masks.push_back(
+                        {MaskState::Kind::Image,
+                         shape.target,
+                         {static_cast<float>(shape.originX) / scale, static_cast<float>(shape.originY) / scale,
+                          scale / static_cast<float>(shape.pixels.width),
+                          scale / static_cast<float>(shape.pixels.height)}});
                     continue;
                 }
-                if (group.draws.empty())
+                if (backdrop)
+                {
+                    moveOn(AddBackdrop(graph, index, realised.back(), sigma));
+                }
+                if (!drawn)
                 {
                     continue;
                 }
-                if (end->filter != GroupFilter2D::None)
+
+                const TargetPass& group = m_passes[index];
+                TargetPass& into = m_passes[realised.back()];
+                const Graphics::BlendMode blend = end->blend == GroupBlend2D::Additive
+                                                      ? Graphics::BlendMode::Additive
+                                                      : Graphics::BlendMode::Premultiplied;
+                // The opacity scales the premultiplied texel's colour and alpha alike.
+                const float opacity = std::clamp(end->opacity, 0.0f, 1.0f);
+                ImageQuad quad = QuadOver(group, into);
+                quad.colour = PackLinear(Math::Vec4(opacity));
+                const GraphResource image = group.target;
+                const PixelSize pixels = group.pixels;
+                if (end->filter == GroupFilter2D::Blur && sigma > 0.0f)
                 {
-                    LogOnce("filter", "a 2D draw list's offscreen group has a filter, which the renderer does not "
-                                      "realise yet, so it is drawn plainly");
+                    const Blurred blurred = BlurAcross(graph, image, pixels, {0.0f, 0.0f, 1.0f, 1.0f}, sigma,
+                                                       TextureFormat::Rgba8Srgb, false);
+                    const BlurBlock block = BlurDown(blurred, pixels.height, sigma, false);
+                    AddImageQuad(m_passes[realised.back()], quad, blurred.image, CompositeKind::Blur, blend, &block);
+                    continue;
                 }
-                TextureDesc desc;
-                desc.format = group.format;
-                desc.width = group.pixels.width;
-                desc.height = group.pixels.height;
-                desc.usage = TextureUsage::ColourAttachment | TextureUsage::Sampled;
-                group.target = graph.CreateTexture("2D group", desc);
-                m_finished.push_back(index);
-                ++m_stats.groups;
-                m_stats.transientImageBytes += group.pixels.width * group.pixels.height * GroupPixelBytes;
-                AddComposite(group, *end, m_passes[realised.back()]);
+                if (end->filter == GroupFilter2D::DropShadow)
+                {
+                    // The image's alpha, blurred across first when it blurs at all, then down as the shadow draws.
+                    Blurred blurred{image, pixels};
+                    if (sigma > 0.0f)
+                    {
+                        blurred = BlurAcross(graph, image, pixels, {0.0f, 0.0f, 1.0f, 1.0f}, sigma,
+                                             TextureFormat::Rgba8Srgb, false);
+                    }
+                    BlurBlock block = BlurDown(blurred, pixels.height, sigma, false);
+                    const Math::Vec4& tint = end->shadowColour;
+                    const float alpha = std::clamp(tint.w, 0.0f, 1.0f) * opacity;
+                    block.shadow = {tint.x * alpha, tint.y * alpha, tint.z * alpha, alpha};
+                    TargetPass& under = m_passes[realised.back()];
+                    ImageQuad shadow = QuadOver(m_passes[index], under, end->offset);
+                    AddImageQuad(under, shadow, blurred.image, CompositeKind::Shadow, blend, &block);
+                }
+                AddImageQuad(m_passes[realised.back()], quad, image, CompositeKind::Plain, blend);
+            }
+            else if (std::holds_alternative<EndMask2D>(command))
+            {
+                if (culled == 0)
+                {
+                    masks.pop_back();
+                }
             }
         }
         return true;
@@ -804,6 +1137,7 @@ namespace Fenrir::Render
         m_parameterBytes.clear();
         m_parameterEntries.clear();
         m_pendingGroups.clear();
+        m_deferredGroups.clear();
 
         // The images first, each a pass of its own, cleared, at a content scale of 1; an image a later list samples
         // runs before it.
@@ -817,7 +1151,7 @@ namespace Fenrir::Render
             root.format = image.desc.format;
             root.pixels = {image.desc.width, image.desc.height};
             m_passes.push_back(std::move(root));
-            const ListTarget target{m_passes.size() - 1, image.image, &images};
+            ListTarget target{m_passes.size() - 1, image.image, &images};
             for (const DrawList2D& list : image.lists)
             {
                 DrawList(list, target, graph);
@@ -841,7 +1175,7 @@ namespace Fenrir::Render
             }
             root.scale = drawn.contentScale > 0.0f ? drawn.contentScale : 1.0f;
             m_passes.push_back(std::move(root));
-            const ListTarget target{m_passes.size() - 1, AssetKey{}, &images};
+            ListTarget target{m_passes.size() - 1, AssetKey{}, &images};
 
             // Layers lowest first, then submission order.
             std::vector<std::size_t> order(drawn.submissions.size());
@@ -869,20 +1203,27 @@ namespace Fenrir::Render
             m_vertices->Write(frameIndex, m_vertexBytes);
             m_indices->Write(frameIndex, m_indexBytes);
         }
+        BufferHandle parameterBuffer;
         if (!m_parameterBytes.empty())
         {
             m_parameters->Write(frameIndex, m_parameterBytes);
+            parameterBuffer = m_parameters->Current(frameIndex);
             for (const auto& [group, entry] : m_parameterEntries)
             {
-                m_pendingGroups.at(group).entries.at(entry).buffer = m_parameters->Current(frameIndex);
+                m_pendingGroups.at(group).entries.at(entry).buffer = parameterBuffer;
             }
         }
         std::vector<BindingGroupHandle> groups;
-        for (const BindingGroupDesc& desc : m_pendingGroups)
+        for (std::size_t i = 0; i < m_pendingGroups.size(); ++i)
         {
-            groups.push_back(m_device.CreateBindingGroup(desc, "2D command"));
+            // A masked draw's group binds the mask's image, which exists only as its pass is recorded.
+            groups.push_back(m_deferredGroups[i] ? BindingGroupHandle{}
+                                                 : m_device.CreateBindingGroup(m_pendingGroups[i], "2D command"));
+            if (!groups.back().IsEmpty())
+            {
+                m_frameGroups.push_back(groups.back());
+            }
         }
-        m_frameGroups = groups;
 
         m_targetBlocks->Reserve(m_finished.size());
         const BufferHandle vertexBuffer = m_vertices->Current(frameIndex);
@@ -890,13 +1231,36 @@ namespace Fenrir::Render
         for (std::size_t slot = 0; slot < m_finished.size(); ++slot)
         {
             TargetPass& pass = m_passes[m_finished[slot]];
+            if (pass.copy)
+            {
+                // A backdrop's copy: what the target holds under it, into the copy's image.
+                graph.AddPass(
+                    pass.name, RenderStage::Overlay, QueueKind::Copy,
+                    [source = pass.copy->source, target = pass.target](PassBuilder& builder) {
+                        builder.CopySource(source);
+                        builder.CopyDestination(target);
+                    },
+                    [source = pass.copy->source, region = pass.copy->region,
+                     target = pass.target](PassContext& context) {
+                        context.Encoder().CopyTexture({context.Texture(source), region, context.Texture(target), 0, 0});
+                    });
+                continue;
+            }
             const TargetBlock block = BlockOf(pass.pixels, pass.scale, pass.originX, pass.originY);
             m_targetBlocks->Write(frameIndex, slot, std::as_bytes(std::span(&block, 1)));
             for (Draw& draw : pass.draws)
             {
-                if (draw.groupIndex > 0)
+                if (draw.groupIndex == 0)
+                {
+                    continue;
+                }
+                if (draw.mask.IsEmpty())
                 {
                     draw.group = groups.at(draw.groupIndex - 1);
+                }
+                else
+                {
+                    draw.maskedGroup = m_pendingGroups.at(draw.groupIndex - 1);
                 }
             }
             std::sort(pass.samples.begin(), pass.samples.end(),
@@ -916,7 +1280,7 @@ namespace Fenrir::Render
                         builder.Sample(sampled);
                     }
                 },
-                [this, recorded = std::move(pass.draws), viewport, vertexBuffer, indexBuffer,
+                [this, recorded = std::move(pass.draws), viewport, vertexBuffer, indexBuffer, parameterBuffer,
                  targetGroup](PassContext& context) {
                     PassEncoder& encoder = context.Encoder();
                     encoder.SetViewport(viewport);
@@ -925,7 +1289,15 @@ namespace Fenrir::Render
                         BindingGroupHandle group = draw.group;
                         if (!draw.composite.IsEmpty())
                         {
-                            group = CompositeGroup(context.Texture(draw.composite));
+                            group = CompositeGroup(draw.compositeKind, context.Texture(draw.composite), parameterBuffer,
+                                                   draw.compositeParameters);
+                        }
+                        else if (!draw.mask.IsEmpty())
+                        {
+                            BindingGroupDesc desc = draw.maskedGroup;
+                            desc.entries.at(draw.maskEntry).texture = context.Texture(draw.mask);
+                            group = m_device.CreateBindingGroup(desc, "2D command");
+                            m_frameGroups.push_back(group);
                         }
                         encoder.SetPipeline(draw.pipeline);
                         encoder.SetBindingGroup(0, targetGroup);
@@ -944,10 +1316,12 @@ namespace Fenrir::Render
         }
     }
 
-    BindingGroupHandle Draw2DFeature::CompositeGroup(TextureHandle image)
+    BindingGroupHandle Draw2DFeature::CompositeGroup(CompositeKind kind, TextureHandle image, BufferHandle buffer,
+                                                     std::size_t parameters)
     {
-        BindingGroupDesc desc{m_composite.layout, {}};
-        for (const ShaderBinding& binding : m_composite.variant->bindings)
+        const Composite::Variant& variant = m_composite.variants.at(static_cast<std::size_t>(kind));
+        BindingGroupDesc desc{variant.layout, {}};
+        for (const ShaderBinding& binding : variant.variant->bindings)
         {
             if (binding.set != CommandSet)
             {
@@ -959,6 +1333,12 @@ namespace Fenrir::Render
             {
                 entry.texture = image;
                 entry.sampler = m_images.SamplerFor(LinearClamp2D);
+            }
+            else if (variant.variant->materialBlockBinding == binding.binding)
+            {
+                entry.buffer = buffer;
+                entry.offset = parameters;
+                entry.size = std::max<std::size_t>(binding.size, sizeof(BlurBlock));
             }
             desc.entries.push_back(entry);
         }

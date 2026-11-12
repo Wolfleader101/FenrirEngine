@@ -7,10 +7,23 @@
 // sRGB-encoded as it is, so blending happens in sRGB as a browser's does (ADR-0065).
 
 // Set 1, the command's: no parameter block, then its image and its stop texture, white when the command binds none.
+// The MASK variant, which the renderer draws a command a mask group reaches with, adds the block holding the mask's
+// rectangle and the mask's image, which the renderer fills (ADR-0060).
+#ifdef MASK
+layout(set = 1, binding = 0, std140) uniform MaterialParams
+{
+    // The mask image's top-left in local units, then one over its width and height.
+    vec4 maskRect;
+} params;
+#endif
 layout(set = 1, binding = 1) uniform sampler2D image;
 #pragma fenrir default(image, white)
 layout(set = 1, binding = 2) uniform sampler2D stops;
 #pragma fenrir default(stops, white)
+#ifdef MASK
+layout(set = 1, binding = 3) uniform sampler2D mask;
+#pragma fenrir default(mask, white)
+#endif
 
 layout(location = 0) in vec2 vUv;
 layout(location = 1) in vec4 vLocalAndClip;
@@ -26,6 +39,9 @@ layout(location = 10) flat in vec4 vBorderRight;
 layout(location = 11) flat in vec4 vBorderBottom;
 layout(location = 12) flat in vec4 vBorderLeft;
 layout(location = 13) flat in uvec4 vKinds;
+#ifdef MASK
+layout(location = 14) in vec2 vPosition;
+#endif
 
 layout(location = 0) out vec4 outColour;
 
@@ -255,6 +271,12 @@ void main()
     }
 
     colour *= coverage;
+#ifdef MASK
+    // The mask's coverage: its image's alpha, nothing outside it.
+    vec2 maskUv = (vPosition - params.maskRect.xy) * params.maskRect.zw;
+    bool inMask = all(greaterThanEqual(maskUv, vec2(0.0))) && all(lessThanEqual(maskUv, vec2(1.0)));
+    colour *= inMask ? texture(mask, maskUv).a : 0.0;
+#endif
 #ifdef GAMMA
     outColour = colour;
 #else
