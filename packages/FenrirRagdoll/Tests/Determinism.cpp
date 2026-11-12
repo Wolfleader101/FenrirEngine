@@ -1,8 +1,11 @@
-// Same inputs, same ragdoll (the spec's user story 45): a humanoid walking through a row of boxes for 300 ticks gives
-// the same bodies and boxes, byte for byte, in two runs, on one thread and on several.
+// Same inputs, same ragdoll (the spec's user story 45): a humanoid walking through a row of boxes for 300 ticks, or
+// walking into them and falling onto them, gives the same bodies, boxes and bone overrides, byte for byte, in two runs,
+// on one thread and on several.
 
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -23,8 +26,9 @@ namespace
         bytes.insert(bytes.end(), begin, begin + sizeof(T));
     }
 
-    // One run: the walk into five boxes, 300 ticks, then every body's and box's world transform and velocities.
-    std::vector<std::byte> Run(bool workerThreads)
+    // One run: the walk into five boxes, 300 ticks (going limp after the first 40 when `fall`), then every body's and
+    // box's world transform and velocities, and every body's bone override.
+    std::vector<std::byte> Run(bool workerThreads, bool fall)
     {
         Fenrir::PhysicsConfig config = RagdollTest::StepPosesOnly();
         config.useWorkerThreads = workerThreads;
@@ -46,7 +50,16 @@ namespace
             box.AddComponent<Fenrir::Collider>(Fenrir::Collider{Fenrir::BoxShape{Vec3(0.2f)}});
             boxes.push_back(box);
         }
-        test.Run(300);
+        if (fall)
+        {
+            test.Run(40);
+            skeleton.GetComponent<Fenrir::Ragdoll>().mode = Fenrir::RagdollMode::Simulating;
+            test.Run(260);
+        }
+        else
+        {
+            test.Run(300);
+        }
 
         std::vector<std::byte> bytes;
         std::vector<Entity> everything = spawned.bodies;
@@ -58,6 +71,17 @@ namespace
                 Append(bytes, entity.GetComponent<Fenrir::RigidBody>().linearVelocity);
                 Append(bytes, entity.GetComponent<Fenrir::RigidBody>().angularVelocity);
             }
+            for (const Entity& body : spawned.bodies)
+            {
+                const std::int32_t bone = body.GetComponent<Fenrir::RagdollBody>().state.bone;
+                const std::optional<Fenrir::Target> entry = Fenrir::Skeletons::GetOverride(test.level, skeleton, bone);
+                Append(bytes, entry.has_value());
+                if (entry)
+                {
+                    Append(bytes, entry->trs.pos);
+                    Append(bytes, entry->trs.rot);
+                }
+            }
         }
         return bytes;
     }
@@ -67,10 +91,24 @@ TEST_CASE("Two runs of a following ragdoll pushing boxes are bit-identical over 
 {
     for (const bool threads : {false, true})
     {
-        const std::vector<std::byte> first = Run(threads);
-        const std::vector<std::byte> second = Run(threads);
+        const std::vector<std::byte> first = Run(threads, false);
+        const std::vector<std::byte> second = Run(threads, false);
         INFO((threads ? "on worker threads" : "on one thread")
              << ": every body's and box's pose and velocities match byte for byte");
+        REQUIRE(first.size() == second.size());
+        REQUIRE(std::memcmp(first.data(), second.data(), first.size()) == 0);
+    }
+}
+
+TEST_CASE("Two runs of a ragdoll falling onto boxes are bit-identical over 300 ticks",
+          "[ragdoll][determinism][simulate]")
+{
+    for (const bool threads : {false, true})
+    {
+        const std::vector<std::byte> first = Run(threads, true);
+        const std::vector<std::byte> second = Run(threads, true);
+        INFO((threads ? "on worker threads" : "on one thread")
+             << ": every body's, box's and bone override's values match byte for byte");
         REQUIRE(first.size() == second.size());
         REQUIRE(std::memcmp(first.data(), second.data(), first.size()) == 0);
     }

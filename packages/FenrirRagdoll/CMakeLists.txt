@@ -10,6 +10,7 @@ add_library(FenrirRagdoll STATIC
     include/FenrirRagdoll/Ragdolls.hpp
 
     src/Frames.hpp
+    src/Overrides.hpp
     src/Describe.cpp
     src/Build.cpp
     src/Glue.cpp

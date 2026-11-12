@@ -326,6 +326,19 @@ namespace RagdollTest
         return expected;
     }
 
+    /** @brief Where a simulating body puts its bone, in world space: the body's world pose (no scale) × its offset⁻¹.
+     */
+    inline Fenrir::Transform BoneFromBody(const Fenrir::Entity& body)
+    {
+        const Fenrir::Transform world = Fenrir::GetWorldTransform(body);
+        const Fenrir::Math::Mat4 matrix =
+            Fenrir::TransformToMat4(Fenrir::Transform(world.pos, world.rot, Fenrir::Math::Vec3(1.0f))) *
+            Fenrir::Math::Inverse(Fenrir::TransformToMat4(body.GetComponent<Fenrir::RagdollBody>().offset));
+        Fenrir::Transform bone;
+        Fenrir::Math::Decompose(matrix, bone.pos, bone.rot, bone.scale);
+        return bone;
+    }
+
     /** @brief The spawned body whose RagdollBody names `bone`. */
     inline Fenrir::Entity BodyOf(const Fenrir::SpawnedRagdoll& spawned, std::string_view bone)
     {

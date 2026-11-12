@@ -1,11 +1,14 @@
 // The ragdoll glue (ADR-0054, amended by the spike): each tick, after FenrirSkeleton's tick pass and before physics
-// steps, every active ragdoll's following bodies are moved onto their bones in the simulation pose, with the velocity
-// of the move, and the ragdoll's and bodies' states are written.
+// steps, every active ragdoll's bodies get their motion types and its following bodies are moved onto their bones in
+// the simulation pose, with the velocity of the move, and the ragdoll's and bodies' states are written. Each frame,
+// after physics interpolates and before the pose pipeline, the skeleton entity follows a simulating root body and each
+// simulating body's bone is written as a world pose override, cleared once every body follows and every weight is 0.
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -25,9 +28,11 @@
 #include "FenrirRagdoll/Ragdolls.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirScheduler/Scheduler.hpp"
+#include "FenrirSkeleton/PoseStages.hpp"
 #include "FenrirSkeleton/SkeletonPose.hpp"
 #include "FenrirSkeleton/Skeletons.hpp"
 #include "Frames.hpp"
+#include "Overrides.hpp"
 
 namespace Fenrir
 {
@@ -196,13 +201,16 @@ namespace Fenrir
                     {
                         next.anyAwake = true;
                     }
+                    // 2. Modes. A body made dynamic is not moved and keeps the velocity its RigidBody holds: the last
+                    // following move's. One made kinematic is not moved either: the follow below takes it there.
+                    RigidBody& rigid = body.GetComponent<RigidBody>();
                     if (mapping.state.mode != RagdollMode::Following)
                     {
+                        rigid.motionType = MotionType::Dynamic;
                         continue;
                     }
 
-                    // 2. Modes, and 3. Follow: physics's PostTick moves the kinematic body onto the pose over the step.
-                    RigidBody& rigid = body.GetComponent<RigidBody>();
+                    // 3. Follow: physics's PostTick moves the kinematic body onto the pose over the step.
                     rigid.motionType = MotionType::Kinematic;
                     const Detail::Pose pose = Detail::PoseOf(
                         *Skeletons::GetBoneWorldMatrix(scene, skeleton, mapping.state.bone, PoseKind::Simulation) *
@@ -229,7 +237,214 @@ namespace Fenrir
             // A body that stopped following, was skipped or is gone starts again with no earlier pose.
             state.lastFollowed = std::move(followed);
         }
+
+        /** @brief A body the glue drove last tick, with its mapping. */
+        struct Driven
+        {
+            Entity entity;
+            const RagdollBody* mapping;
+        };
+
+        /** @brief `skeleton`'s bodies that last tick resolved, in storage order. */
+        std::vector<Driven> DrivenBodies(const std::vector<Entity>& bodies, const Entity& skeleton)
+        {
+            std::vector<Driven> driven;
+            for (const Entity& body : bodies)
+            {
+                const RagdollBody& mapping = body.GetComponent<RagdollBody>();
+                if (mapping.ragdoll == skeleton && mapping.state.bone != NoBone && body.HasComponent<RigidBody>())
+                {
+                    driven.push_back(Driven{body, &mapping});
+                }
+            }
+            return driven;
+        }
+
+        /**
+         * @brief Where `body` puts its bone, in world space: its world pose × offset⁻¹. The body's pose has no scale,
+         * so the bone's simulation-pose world scale is put back first, which makes the inverse of the follow (bone ×
+         * offset, scale dropped) exact for a uniformly scaled bone.
+         */
+        std::optional<Math::Mat4> BoneWorld(Scene& scene, const Entity& skeleton, const Entity& body,
+                                            const RagdollBody& mapping)
+        {
+            const std::optional<Math::Mat4> bone =
+                Skeletons::GetBoneWorldMatrix(scene, skeleton, mapping.state.bone, PoseKind::Simulation);
+            if (!bone)
+            {
+                return std::nullopt;
+            }
+            Vec3 scale;
+            Vec3 unusedPos;
+            Quat unusedRot;
+            Math::Decompose(*bone, unusedPos, unusedRot, scale);
+            const Transform world = GetWorldTransform(body);
+            return TransformToMat4(Transform(world.pos, world.rot, scale)) *
+                   Math::Inverse(TransformToMat4(mapping.offset));
+        }
+
+        /**
+         * @brief The turn about +Y that `rotation` faces: where it turns +Z, flattened, with its +Y's flattened
+         * direction standing in as +Z tips towards the vertical, so a body lying on its front or back still faces the
+         * way its head points. `nullopt` when neither gives a direction.
+         */
+        std::optional<Quat> Yaw(const Quat& rotation)
+        {
+            const Vec3 forward = Math::Rotate(rotation, Vec3(0.0f, 0.0f, 1.0f));
+            const Vec3 up = Math::Rotate(rotation, Vec3(0.0f, 1.0f, 0.0f));
+            const float x = forward.x - forward.y * up.x;
+            const float z = forward.z - forward.y * up.z;
+            if (x * x + z * z < 1e-10f)
+            {
+                return std::nullopt;
+            }
+            return Math::AngleAxis(std::atan2(x, z), Vec3(0.0f, 1.0f, 0.0f));
+        }
+
+        /**
+         * @brief Moves the skeleton entity so the hips bone's base pose under it lands on the root body's bone
+         * horizontally and in yaw: its height and scale kept, upright.
+         */
+        void FollowRoot(Scene& scene, const Entity& skeleton, const Entity& root, const RagdollBody& mapping)
+        {
+            const std::optional<Math::Mat4> hips = BoneWorld(scene, skeleton, root, mapping);
+            const std::optional<Math::Mat4> base =
+                Skeletons::GetBaseModel(scene, skeleton, mapping.state.bone, PoseKind::Simulation);
+            if (!hips || !base)
+            {
+                return;
+            }
+            // The entity's world matrix that would put the base pose's hips exactly on the bone: only its yaw is kept.
+            const Detail::Pose under = Detail::PoseOf(*hips * Math::Inverse(*base));
+            Transform entity = GetWorldTransform(skeleton);
+            if (const std::optional<Quat> yaw = Yaw(under.rot))
+            {
+                entity.rot = *yaw;
+            }
+            const Vec3 offset = Math::Rotate(entity.rot, Vec3((*base)[3]) * entity.scale);
+            entity.pos.x = (*hips)[3].x - offset.x;
+            entity.pos.z = (*hips)[3].z - offset.z;
+            SetWorldTransform(skeleton, entity);
+        }
+
+        void Update(App& app)
+        {
+            Scene& scene = app.GetActiveScene();
+            EntityList& entities = scene.GetEntityList();
+            const std::vector<Entity> ragdolls = With(entities, ComponentType::Native<Ragdoll>());
+            if (ragdolls.empty())
+            {
+                return;
+            }
+            const std::vector<Entity> bodies = With(entities, ComponentType::Native<RagdollBody>());
+            Detail::RagdollOverrides& overrides = Detail::RagdollOverrides::In(scene);
+
+            for (const Entity& skeleton : ragdolls)
+            {
+                const Ragdoll& ragdoll = skeleton.GetComponent<Ragdoll>();
+                if (!Inactivity(scene, skeleton).empty())
+                {
+                    continue; // Tick warned
+                }
+                const std::vector<Driven> driven = DrivenBodies(bodies, skeleton);
+                const bool allFollowing = std::ranges::all_of(
+                    driven, [](const Driven& body) { return body.mapping->state.mode == RagdollMode::Following; });
+
+                // 1. Follow root: while the root body is not following (any body, ADR-0054, but a following root is
+                // where the entity already puts it, and following it would fight a character moving the entity).
+                if (ragdoll.followRoot)
+                {
+                    const auto root = std::ranges::find_if(
+                        driven, [&ragdoll](const Driven& body) { return body.entity == ragdoll.rootBody; });
+                    if (root != driven.end() && root->mapping->state.mode != RagdollMode::Following)
+                    {
+                        FollowRoot(scene, skeleton, root->entity, *root->mapping);
+                    }
+                }
+
+                // 2. Override targets: each simulating or powered body's bone where the body puts it, at weight 1;
+                // how much each counts is gameplay's override weight, never written here.
+                if (!allFollowing)
+                {
+                    Detail::WrittenBones& written = overrides.Of(skeleton);
+                    for (const Driven& body : driven)
+                    {
+                        if (body.mapping->state.mode == RagdollMode::Following)
+                        {
+                            continue;
+                        }
+                        const std::optional<Math::Mat4> bone = BoneWorld(scene, skeleton, body.entity, *body.mapping);
+                        if (!bone)
+                        {
+                            continue;
+                        }
+                        const Detail::Pose pose = Detail::PoseOf(*bone);
+                        Skeletons::SetOverride(scene, skeleton, body.mapping->state.bone,
+                                               Target{.space = PoseSpace::World,
+                                                      .trs = Transform(pose.pos, pose.rot, Vec3(1.0f)),
+                                                      .channels = Channels::Translation | Channels::Rotation,
+                                                      .weight = 1.0f});
+                        written.Add(body.mapping->state.bone);
+                    }
+                    continue;
+                }
+
+                // 3. Clearing: with every body following, the entries hold the last simulated pose while gameplay
+                // ramps the weights down, and go once every weight of the bones written reads 0.
+                Detail::WrittenBones* written = overrides.Find(skeleton);
+                if (written == nullptr)
+                {
+                    continue;
+                }
+                std::erase_if(written->bones, [&scene, &skeleton](std::int32_t bone) {
+                    return !Skeletons::GetOverride(scene, skeleton, bone).has_value(); // cleared by someone else
+                });
+                const bool allZero = std::ranges::all_of(written->bones, [&scene, &skeleton](std::int32_t bone) {
+                    return Skeletons::GetOverrideWeight(scene, skeleton, bone) <= 0.0f;
+                });
+                if (allZero)
+                {
+                    for (const std::int32_t bone : written->bones)
+                    {
+                        Skeletons::ClearOverride(scene, skeleton, bone);
+                    }
+                    overrides.bySkeleton.erase(skeleton.GetId());
+                }
+            }
+        }
     } // namespace
+
+    bool Ragdolls::ClearOverrides(Scene& scene, Entity skeleton)
+    {
+        if (!skeleton.IsValid() || !skeleton.HasComponent<Ragdoll>())
+        {
+            return false;
+        }
+        EntityList& entities = scene.GetEntityList();
+        for (const Entity& body : With(entities, ComponentType::Native<RagdollBody>()))
+        {
+            const RagdollBody& mapping = body.GetComponent<RagdollBody>();
+            if (mapping.ragdoll == skeleton)
+            {
+                Skeletons::ClearOverride(
+                    scene, skeleton,
+                    Skeletons::FindBone(scene, skeleton, mapping.bone.Get().value_or(std::string_view())));
+            }
+        }
+        // Bones of bodies destroyed since they were written.
+        if (Detail::RagdollOverrides* overrides = scene.GetResource<Detail::RagdollOverrides>())
+        {
+            if (const Detail::WrittenBones* written = overrides->Find(skeleton))
+            {
+                for (const std::int32_t bone : written->bones)
+                {
+                    Skeletons::ClearOverride(scene, skeleton, bone);
+                }
+                overrides->bySkeleton.erase(skeleton.GetId());
+            }
+        }
+        return true;
+    }
 
     Ragdolls Ragdolls::Install(App& app)
     {
@@ -239,6 +454,14 @@ namespace Fenrir
                                     if (const auto current = installed.lock())
                                     {
                                         Tick(*current, running);
+                                    }
+                                });
+        // After physics's AfterTicks has interpolated the bodies, before the pose pipeline in PostUpdate.
+        app.AddSequentialSystem(SchedulePriority::Update,
+                                [installed = std::weak_ptr<Detail::RagdollsState>(state)](App& running) {
+                                    if (installed.lock())
+                                    {
+                                        Update(running);
                                     }
                                 });
         return Ragdolls(std::move(state));

@@ -18,6 +18,7 @@
 #include "FenrirPhysics/Joints.hpp"
 #include "FenrirRagdoll/Builder.hpp"
 #include "FenrirRagdoll/Components.hpp"
+#include "FenrirRagdoll/Ragdolls.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirSkeleton/SkeletonPose.hpp"
 #include "FenrirSkeleton/Skeletons.hpp"
@@ -188,6 +189,8 @@ namespace Fenrir
         {
             return;
         }
+        // The glue's override entries are on its bodies' bones; game code's on other bones stay.
+        Ragdolls::ClearOverrides(scene, skeleton);
         const Entity root = skeleton.GetComponent<Ragdoll>().rootBody;
         if (root.IsValid())
         {
@@ -195,16 +198,6 @@ namespace Fenrir
             std::vector<Entity> spawned;
             CollectBelow(parent.IsValid() ? parent : root, spawned);
             EntityList& entities = scene.GetEntityList();
-            for (const Entity& entity : spawned)
-            {
-                // The glue's override entries are on its bodies' bones; game code's on other bones stay.
-                if (entity.HasComponent<RagdollBody>() && entity.GetComponent<RagdollBody>().ragdoll == skeleton)
-                {
-                    const std::int32_t bone =
-                        Skeletons::FindBone(scene, skeleton, NameOf(entity.GetComponent<RagdollBody>().bone));
-                    Skeletons::ClearOverride(scene, skeleton, bone);
-                }
-            }
             for (const Entity& entity : spawned)
             {
                 entities.DestroyEntity(entity);
