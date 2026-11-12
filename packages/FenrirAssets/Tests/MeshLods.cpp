@@ -211,8 +211,12 @@ TEST_CASE("A level's error is a distance in the mesh's units", "[assets][lods]")
     {
         position *= 10.0f;
     }
-    const MeshData result = Fenrir::GenerateLods(sphere);
-    const MeshData largerResult = Fenrir::GenerateLods(larger);
+    // Locked seams keep both spheres on one collapse order: free, a seam's collapses tie more often, and float
+    // rounding at the larger size breaks the ties another way, which measures the order, not the units.
+    LodSettings settings;
+    settings.lockSeams = true;
+    const MeshData result = Fenrir::GenerateLods(sphere, settings);
+    const MeshData largerResult = Fenrir::GenerateLods(larger, settings);
     REQUIRE(result.lods.size() == largerResult.lods.size());
     for (std::size_t level = 0; level < result.lods.size(); ++level)
     {
@@ -377,10 +381,17 @@ TEST_CASE("A skinned mesh keeps its skin, streams and bone bounds through its le
     REQUIRE(test.store.TryGet(handle)->lods.size() == result.lods.size());
 }
 
-TEST_CASE("UV seams stay where they were", "[assets][lods]")
+TEST_CASE("Seams are free by default", "[assets][lods]")
+{
+    REQUIRE_FALSE(LodSettings{}.lockSeams);
+}
+
+TEST_CASE("With lockSeams on, UV seams stay where they were", "[assets][lods]")
 {
     const MeshData sphere = UvSphere(24, 48);
-    const MeshData result = Fenrir::GenerateLods(sphere);
+    LodSettings settings;
+    settings.lockSeams = true;
+    const MeshData result = Fenrir::GenerateLods(sphere, settings);
     INFO("the sphere simplifies, so there are levels to look at");
     REQUIRE_FALSE(result.lods.empty());
 
@@ -403,6 +414,7 @@ TEST_CASE("With lockSeams off the chain goes on past the seam that stops the loc
     Fenrir::LodSettings settings;
     settings.maxLevels = 8;
     settings.minTriangles = 4;
+    settings.lockSeams = true;
     const MeshData locked = Fenrir::GenerateLods(sphere, settings);
     settings.lockSeams = false;
     const MeshData unlocked = Fenrir::GenerateLods(sphere, settings);
