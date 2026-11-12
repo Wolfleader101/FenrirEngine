@@ -100,6 +100,10 @@ endif()
 if(FENRIR_ENABLE_PHYSICS)
     add_subdirectory(packages/FenrirPhysics)
 endif()
+# Ragdolls join physics and skeletons, so they need both (FenrirSkeleton is built with assets).
+if(FENRIR_ENABLE_PHYSICS AND FENRIR_ENABLE_ASSETS)
+    add_subdirectory(packages/FenrirRagdoll)
+endif()
 
 if(FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirScripting)

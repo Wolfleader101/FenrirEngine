@@ -14,12 +14,30 @@
 
 **Touches:** `packages/FenrirRagdoll/` (new), `CMakeLists.txt`, `examples/DemoScaffold/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirRagdollTests`: a full map gives sixteen parts with the spec's radii, masses, limits and joint kinds; a map without hands and feet gives twelve with fractions redistributed; a map not rooted at the hips or naming an unknown bone gives an `error` and `BuildRagdoll` spawns nothing.
-- [ ] `BuildRagdoll` spawns the body and joint entities under one parent, kinematic, in the skeleton entity's group, joints root first with `collideConnected` false and friction set, `Ragdoll` on the skeleton entity with `rootBody`; `DestroyRagdoll` removes them all and `Ragdoll`.
-- [ ] Following: at one and at several ticks per frame every body's world transform equals its simulation bone × offset after each tick; velocities equal the pose delta over `tickRate`; a game write to a body `Transform` is overwritten; bodies pushed through dynamic boxes push them.
-- [ ] A ragdoll on a frame-posed skeleton is inactive with one warning naming `PoseTiming::Tick`, and active again once switched; a renamed bone is skipped with one warning and `state.bone = NoBone`.
-- [ ] A hand-written two-part description builds and follows the chain skeleton.
-- [ ] Two runs are bit-identical over 300 ticks.
-- [ ] The API description is generated; no public header names Jolt; Clang and MSVC x64 debug and release build without new warnings; the package is absent when physics is off.
+- [x] `FenrirRagdollTests`: a full map gives sixteen parts with the spec's radii, masses, limits and joint kinds; a map without hands and feet gives twelve with fractions redistributed; a map not rooted at the hips or naming an unknown bone gives an `error` and `BuildRagdoll` spawns nothing.
+- [x] `BuildRagdoll` spawns the body and joint entities under one parent, kinematic, in the skeleton entity's group, joints root first with `collideConnected` false and friction set, `Ragdoll` on the skeleton entity with `rootBody`; `DestroyRagdoll` removes them all and `Ragdoll`.
+- [x] Following: at one and at several ticks per frame every body's world transform equals its simulation bone × offset after each tick; velocities equal the pose delta over `tickRate`; a game write to a body `Transform` is overwritten; bodies pushed through dynamic boxes push them.
+- [x] A ragdoll on a frame-posed skeleton is inactive with one warning naming `PoseTiming::Tick`, and active again once switched; a renamed bone is skipped with one warning and `state.bone = NoBone`.
+- [x] A hand-written two-part description builds and follows the chain skeleton.
+- [x] Two runs are bit-identical over 300 ticks.
+- [x] The API description is generated; no public header names Jolt; Clang and MSVC x64 debug and release build without new warnings; the package is absent when physics is off.
+
+## Resolved by
+
+Branch `ragdoll/02-tracer-bullet`. The package is `packages/FenrirRagdoll`: `Components.hpp`, `Description.hpp`, `Builder.hpp` and `Ragdolls.hpp` public, `Frames.hpp`, `Describe.cpp`, `Build.cpp` and `Glue.cpp` private, tests in `Tests/` (`RagdollTest.hpp` holds the test app and the two code-built rigs). The Clang and release builds are CI's: only `msvc-x64-debug` was built here. Choices the ticket left open:
+
+- **Built with physics and assets on,** since FenrirSkeleton is built with assets; ADR-0053 amended.
+- **Installed where physics is:** the apps install physics, not the scaffold, so PhysicsDemo's and AnimationDemo's `main.cpp` install `Ragdolls` beside `Physics`. The scaffold itself is unchanged.
+- **An empty slot drops its chain** (an empty spine drops the chest, head and arms), as the ticket says. A filled slot under an empty one is dropped, not hung from the nearest filled slot; a body spans several bones only where the skeleton has unmapped bones between mapped ones (the test rig's `spine_02`).
+- **The stature** is the head slot's bone to a foot slot's; without either it is the rest pose's height.
+- **Bones are resolved by name every tick,** not cached until a rebuild: the same result, and a renamed `RagdollBody::bone` is picked up at once.
+- **Bodies are placed through full matrices** (`skeleton × bone × offset`, scale included, then reduced to position and rotation), so a rig with a scaled armature lines up; scaling the skeleton entity stays out of scope.
+- **The skeleton entity's id 0** (which is no group) gives the group `Entity::Null`, which no live entity's id can be.
+- **The builder applies `jointFriction`** to every joint and turns motors off; a part's `jointFrame` rotation is read, its position is not (`jointAnchor` places the joint).
+- **The builder also refuses** a description with no parts and a skeleton that already has a `Ragdoll`.
+- **`DestroyRagdoll`** finds the parent as the root body's parent, and clears the override entries on its bodies' bones only.
+- **The first following tick writes zero velocity** (no earlier pose); so does the first after a body is skipped or the ragdoll inactive.
+- **Bodies not following are not driven here:** their effective mode is reported, nothing of theirs is written (tickets 03 and 04).
+- **`RagdollBodyState::bone` defaults to the literal -1** (`NoBone`): the API description records literal defaults only.

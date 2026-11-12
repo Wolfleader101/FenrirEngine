@@ -817,15 +817,19 @@ A per-bone scale, default 1, that gameplay sets on a skeleton instance to say ho
 *Avoid:* part (Jolt's), physical bone (Godot's), hitbox component.
 
 **Ragdoll description**
-`RagdollDescription`: the plain-data value a ragdoll is built from: its *ragdoll parts* (each a bone name, a parent, a collision shape, an offset, a mass, a joint kind and a strength scale) and the ragdoll's defaults. Derived from a skeleton and a *humanoid bone map* by `DescribeHumanoid`, or filled by hand, then spawned by `BuildRagdoll` (physics map ticket "From what description is a ragdoll built, and with which bodies, joints, motors and strengths?").
+`RagdollDescription`: the plain-data value a ragdoll is built from: its *ragdoll parts*, root first, and the ragdoll's defaults (a collision group, joint friction and strength), or the error a derivation refused with. Derived from a skeleton and a *humanoid bone map* by `DescribeHumanoid`, or filled by hand, then spawned by `BuildRagdoll` (physics map ticket "From what description is a ragdoll built, and with which bodies, joints, motors and strengths?").
 *Avoid:* physics asset, rig definition, wizard.
+
+**Ragdoll part**
+`RagdollPart`: one entry of a *ragdoll description*: a bone name, its parent part's bone, a collision shape, the body's offset from the bone and its mass in the rest pose, the joint kind to the parent part with the joint's rest frame and anchor in model space, and a strength scale. Built, a part becomes one *ragdoll body* and the joint to its parent's; the live body is never called a part.
+*Avoid:* bone (the skeleton's), physical bone, segment.
 
 **Humanoid bone map**
 `HumanoidBones`: named slots (hips, spine, chest, head, and each side's upper arm, lower arm, hand, upper leg, lower leg, foot) that game code fills with a rig's bone names, any of them empty. The ragdoll derivation never guesses a slot from a name.
 *Avoid:* avatar (Unity's), retarget map.
 
 **Stature**
-A skeleton's head-to-foot distance in its rest pose, which the ragdoll derivation sizes capsule radii and leaf parts from, because bone lengths (a short spine bone) do not scale a body's girth.
+A skeleton's head-to-foot distance in its rest pose (the rest pose's height when the head or both feet are unmapped), which the ragdoll derivation sizes capsule radii and leaf parts from, because bone lengths (a short spine bone) do not scale a body's girth.
 *Avoid:* height (an entity's), scale.
 
 **Strength**
@@ -837,7 +841,7 @@ How hard a powered ragdoll's motors drive towards the base pose: one value in [0
 *Avoid:* kinematic ragdoll, active ragdoll, blend in/out, physics blend weight.
 
 **Ragdoll glue**
-FenrirRagdoll's systems, which join a ragdoll's bodies to its skeleton: each tick they move following bodies to the simulation pose, and each frame they write simulating bodies' poses in as pose overrides and read the base pose for motor targets, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038, ADR-0040, ADR-0053).
+FenrirRagdoll's systems, which join a ragdoll's bodies to its skeleton: each tick they move following bodies to the simulation pose and drive powered bodies' motors towards the base pose, and each frame they write simulating bodies' poses in as pose overrides, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038, ADR-0040, ADR-0053).
 *Avoid:* ragdoll system, physics animation.
 
 **Skinned mesh**

@@ -10,6 +10,7 @@
 
 #ifdef ANIMATION_DEMO_PHYSICS
 #include "FenrirPhysics/Physics.hpp"
+#include "FenrirRagdoll/Ragdolls.hpp"
 #endif
 
 #ifdef FENRIR_DEMO_SCRIPT_ASSEMBLY
@@ -42,6 +43,8 @@ int main()
     // For scene 5's shield and boxes. Before the scaffold, so it ends after it: the scaffold destroys the active scene,
     // its physics world with it, while physics is still there.
     Fenrir::Physics physics = Fenrir::Physics::Install(app);
+    // The ragdoll glue, wherever physics is (ADR-0053). It does nothing until a scene has a Ragdoll.
+    Fenrir::Ragdolls ragdolls = Fenrir::Ragdolls::Install(app);
 #endif
 
     FenrirDemo::DemoConfig config;
