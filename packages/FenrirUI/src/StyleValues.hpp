@@ -93,6 +93,9 @@ namespace Fenrir::Detail
     bool ParseStyleProperty(std::string_view name, std::string_view value, StyleDeclarations& into,
                             StyleParseContext& context);
 
+    /** @brief Copies `property`'s field of `from` to `to`. */
+    void CopyProperty(StyleProperty property, const ResolvedStyle& from, ResolvedStyle& to);
+
     /** @brief Whether `property` is inherited: pointer-events and cursor (the text properties come later). */
     [[nodiscard]] bool IsInherited(StyleProperty property) noexcept;
 } // namespace Fenrir::Detail

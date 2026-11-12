@@ -494,6 +494,7 @@ namespace Fenrir
         ZIndex,
         PointerEvents,
         Cursor,
+        // The transition and animation lists come last: transitions and animations move every property before them.
         TransitionProperty,
         TransitionDuration,
         TransitionTimingFunction,

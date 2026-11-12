@@ -8,9 +8,8 @@
 
 namespace Fenrir
 {
-    namespace
+    namespace Detail
     {
-        /** @brief Copies `property`'s field from `from` to `to`. */
         void CopyProperty(StyleProperty property, const ResolvedStyle& from, ResolvedStyle& to)
         {
             switch (property)
@@ -25,7 +24,9 @@ namespace Fenrir
                 break;
             }
         }
-    } // namespace
+    } // namespace Detail
+
+    using Detail::CopyProperty;
 
     bool StyleDeclarations::IsSet(StyleProperty property) const noexcept
     {

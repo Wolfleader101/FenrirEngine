@@ -227,21 +227,6 @@ namespace Fenrir::Detail
         }
         /** @} */
 
-        void CopyField(StyleProperty property, const ResolvedStyle& from, ResolvedStyle& to)
-        {
-            switch (property)
-            {
-#define FENRIR_UI_COPY_FIELD(Enum, Name, Field, Parse) \
-    case StyleProperty::Enum:                          \
-        to.Field = from.Field;                         \
-        break;
-                FENRIR_UI_STYLE_PROPERTIES(FENRIR_UI_COPY_FIELD)
-#undef FENRIR_UI_COPY_FIELD
-            case StyleProperty::Count:
-                break;
-            }
-        }
-
         bool SameField(StyleProperty property, const ResolvedStyle& a, const ResolvedStyle& b)
         {
             switch (property)
@@ -277,10 +262,13 @@ namespace Fenrir::Detail
             }
         }
 
-        /** @brief Whether a transition or an animation can move `property`: every one but their own lists. */
+        /**
+         * @brief Whether a transition or an animation can move `property`: every one but their own lists, which come
+         * last in StyleProperty.
+         */
         bool IsAnimatable(StyleProperty property) noexcept
         {
-            return property < StyleProperty::TransitionProperty && property != StyleProperty::Count;
+            return property < StyleProperty::TransitionProperty;
         }
 
         template <typename T>
@@ -524,6 +512,9 @@ namespace Fenrir::Detail
         }
 
         std::vector<RunningTransition>& running = motion.transitions;
+        // As CSS: a transition whose property the new lists no longer name stops, showing the cascaded value.
+        std::erase_if(running,
+                      [&](const RunningTransition& t) { return entry[static_cast<std::size_t>(t.property)] == none; });
         for (std::size_t p = 0; p < StylePropertyCount; ++p)
         {
             const auto property = static_cast<StyleProperty>(p);
@@ -535,7 +526,7 @@ namespace Fenrir::Detail
                                                [&](const RunningTransition& t) { return t.property == property; });
             // The value it shows now: part way through a running transition, or its old cascaded value.
             ResolvedStyle current;
-            CopyField(property, before, current);
+            CopyProperty(property, before, current);
             if (existing != running.end())
             {
                 ApplyTransition(*existing, current);
@@ -555,8 +546,8 @@ namespace Fenrir::Detail
             {
                 continue;
             }
-            CopyField(property, current, transition.from);
-            CopyField(property, after, transition.to);
+            CopyProperty(property, current, transition.from);
+            CopyProperty(property, after, transition.to);
             running.push_back(std::move(transition));
         }
     }

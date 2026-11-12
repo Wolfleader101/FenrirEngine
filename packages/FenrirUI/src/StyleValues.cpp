@@ -709,20 +709,33 @@ namespace Fenrir::Detail
             return path->empty() ? std::nullopt : path;
         }
 
+        /** @brief A keyword of `keywords`, or nothing. */
+        template <typename T, std::size_t N>
+        std::optional<T> ReadKeyword(std::string_view text,
+                                     const std::array<std::pair<std::string_view, T>, N>& keywords)
+        {
+            text = Trim(text);
+            for (const auto& [name, keyword] : keywords)
+            {
+                if (EqualsIgnoringCase(text, name))
+                {
+                    return keyword;
+                }
+            }
+            return std::nullopt;
+        }
+
         template <typename T, std::size_t N>
         bool ParseKeyword(std::string_view value, T& out, StyleParseContext& context,
                           const std::array<std::pair<std::string_view, T>, N>& keywords)
         {
-            value = Trim(value);
-            for (const auto& [name, keyword] : keywords)
+            const std::optional<T> keyword = ReadKeyword(value, keywords);
+            if (!keyword)
             {
-                if (EqualsIgnoringCase(value, name))
-                {
-                    out = keyword;
-                    return true;
-                }
+                return Fail(context, "it is not one of the property's keywords");
             }
-            return Fail(context, "it is not one of the property's keywords");
+            out = *keyword;
+            return true;
         }
 
         bool ParseDisplay(std::string_view value, Display& out, StyleParseContext& context)
@@ -1277,12 +1290,9 @@ namespace Fenrir::Detail
                 {"step-start", TimingFunction::Steps(1, Position::JumpStart)},
                 {"step-end", TimingFunction::Steps(1, Position::JumpEnd)},
             }};
-            for (const auto& [name, function] : named)
+            if (const std::optional<TimingFunction> function = ReadKeyword(text, named))
             {
-                if (EqualsIgnoringCase(text, name))
-                {
-                    return function;
-                }
+                return function;
             }
             if (const auto arguments = CallOf(text, "cubic-bezier"))
             {
@@ -1327,14 +1337,12 @@ namespace Fenrir::Detail
                         {"jump-none", Position::JumpNone},
                         {"jump-both", Position::JumpBoth},
                     }};
-                    const auto found = std::find_if(positions.begin(), positions.end(), [&](const auto& entry) {
-                        return EqualsIgnoringCase(parts[1], entry.first);
-                    });
-                    if (found == positions.end())
+                    const std::optional<Position> found = ReadKeyword(parts[1], positions);
+                    if (!found)
                     {
                         return std::nullopt;
                     }
-                    position = found->second;
+                    position = *found;
                 }
                 // CSS: jump-none needs two steps or more, to have a jump at all.
                 if (position == Position::JumpNone && *count < 2.0f)
@@ -1436,22 +1444,6 @@ namespace Fenrir::Detail
                     return count && *count >= 0.0f ? count : std::nullopt;
                 },
                 "a number of zero or more, or infinite");
-        }
-
-        /** @brief A keyword of `keywords`, or nothing. */
-        template <typename T, std::size_t N>
-        std::optional<T> ReadKeyword(std::string_view text,
-                                     const std::array<std::pair<std::string_view, T>, N>& keywords)
-        {
-            text = Trim(text);
-            for (const auto& [name, keyword] : keywords)
-            {
-                if (EqualsIgnoringCase(text, name))
-                {
-                    return keyword;
-                }
-            }
-            return std::nullopt;
         }
 
         bool ParseDirections(std::string_view value, std::vector<AnimationDirection>& out, StyleParseContext& context)
