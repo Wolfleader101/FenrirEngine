@@ -1,0 +1,56 @@
+# FenrirText's C# binding (ADR-0042, ADR-0061, packages/Iris/Tools/Iris.Bindings/README.md): this binding's own
+# FenrirTextScripting.api.json bound to the Fenrir.Text contract and this extension. C# reaches text only through the
+# natives declared here: the Fonts facade and the Paragraph mirror's methods are generated from their @facade marks.
+# Paths are relative to this file. `cmake --build <dir> --target fenrir-generate-bindings` regenerates every output
+# below; they are committed.
+namespace = "Fenrir.Text"
+# Named so the bindings that use this one (the painter's) can read them.
+descriptions = ["FenrirTextScripting.api.json"]
+# The colour and vectors are the math binding's: named as its, never mirrored here.
+uses = ["../../../FenrirScripting/api/FenrirMath.binding.toml"]
+# The scripting SDK's names are its defaults file's (FenrirScripting.binding-defaults.toml): this file states only what is this binding's.
+defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
+
+[csharp]
+contract = "../../Managed/Fenrir.Text"
+generated = "../../Managed/Fenrir.Text/Generated"
+# A paragraph is an id the engine hands out: C# assigns it whole, never its field.
+immutable-structs = ["Fenrir::ScriptText::Paragraph"]
+# A paragraph's lines are written back by the engine, for C# to read.
+readonly-structs = ["Fenrir::LineMetrics"]
+
+[cpp]
+mappings = "../include/FenrirTextScripting/Generated/FenrirTextMappings.hpp"
+# The structs as C# passes them.
+includes = ["FenrirTextScripting/ScriptText.hpp"]
+
+[registration]
+source = "../src/Generated/FenrirTextRegistration.cpp"
+function = "Fenrir::Generated::RegisterText"
+# Makes the extension from its state (ADR-0046): what the package's public function returns.
+maker = "Fenrir::Generated::MakeTextExtension"
+
+[tests]
+cpp = "../Tests/Generated/FenrirTextDefaultsTests.cpp"
+csharp = "../Tests/Generated/FenrirTextDefaults.cs"
+class = "TextScriptFixture.Defaults"
+includes = ["TextScriptingApp.hpp"]
+setup = "Fenrir::Testing::TextScriptingApp app;"
+tags = "[text][scripting][bindings]"
+
+[names]
+"Fenrir::ScriptText::Paragraph" = "Paragraph"
+"Fenrir::ScriptText::TextStyle" = "TextStyle"
+
+# The native functions: tools/describe-api's natives mode reads every function in `sources` taking `context` first (with
+# the extension's state second) into FenrirText.natives.json, and this binding generates from it their C#
+# declarations, the TextNative class, and their registration.
+[natives]
+sources = ["../src/TextScripting.cpp"]
+class = "TextNative"
+header = "../src/Generated/FenrirTextNatives.hpp"
+includes = [
+    # What the natives' declarations name: their extension state and the structs as C# passes them.
+    "FenrirTextScripting/TextScriptingState.hpp",
+    "FenrirTextScripting/ScriptText.hpp",
+]

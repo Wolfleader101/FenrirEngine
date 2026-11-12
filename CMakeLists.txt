@@ -152,6 +152,15 @@ if(FENRIR_ENABLE_RENDERER AND FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirRenderer/Scripting)
 endif()
 
+# Text's builds with text on; the painter's with the painter (built with the renderer), after Text's and Assets's, whose
+# contracts it uses.
+if(FENRIR_ENABLE_TEXT AND FENRIR_ENABLE_SCRIPTING)
+    add_subdirectory(packages/FenrirText/Scripting)
+endif()
+if(FENRIR_ENABLE_RENDERER AND FENRIR_ENABLE_TEXT AND FENRIR_ENABLE_SCRIPTING)
+    add_subdirectory(packages/FenrirPainter/Scripting)
+endif()
+
 # Physics's scripting extension needs both, and comes after FenrirScripting (it builds against the scripting SDK).
 if(FENRIR_ENABLE_PHYSICS AND FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirPhysics/Scripting)

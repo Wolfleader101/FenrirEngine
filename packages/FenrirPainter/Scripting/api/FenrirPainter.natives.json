@@ -1,0 +1,1646 @@
+{
+  "binding": "FenrirPainter",
+  "context": "Fenrir::CallContext",
+  "functions": [
+    {
+      "name": "Overlay",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "A painter over `window`'s overlay at `layer`, for the C# system that calls it: what it paints is submitted to the app's Overlay when that system's changes play back (as it returns, or as its hosted stage's group ends; Overlay::Submit), and the painter ends. Calls for the same window and layer before then give the same painter; one whose changes were discarded (its system threw) paints nothing after its frame. It draws in the window's logical units at a root scale of 1 and blends in gamma space, as UI on the window does, so a paragraph it draws is laid out at its sizes in logical pixels.",
+      "facade": "Painter.Overlay",
+      "facadeReturns": "painter",
+      "returns": {
+        "type": "void",
+        "kind": "void",
+        "doc": "The painter; none when the app has no Overlay (the renderer is not installed) or its asset store has no builtin:painter."
+      },
+      "parameters": [
+        {
+          "name": "window",
+          "type": "Fenrir::WindowId",
+          "kind": "struct",
+          "doc": "The window, as the input and window contracts name it."
+        },
+        {
+          "name": "layer",
+          "type": "std::int32_t",
+          "kind": "i32",
+          "doc": "The overlay layer: lower layers draw first."
+        },
+        {
+          "name": "painter",
+          "type": "Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The painter."
+        }
+      ]
+    },
+    {
+      "name": "Save",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Pushes the transform and the clip (Painter::Save).",
+      "facade": "Painter.Save",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "Restore",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Pops the transform and the clip Save pushed last; with nothing saved, does nothing (Painter::Restore).",
+      "facade": "Painter.Restore",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "Translate",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Moves what is drawn next by `offset`, in UI units, before the current transform (Painter::Translate).",
+      "facade": "Painter.Translate",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "offset",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "Scale",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Scales what is drawn next by `factors`, about the current origin (Painter::Scale).",
+      "facade": "Painter.Scale",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "factors",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "Rotate",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Turns what is drawn next by `radians` about the current origin, clockwise on screen (Painter::Rotate).",
+      "facade": "Painter.Rotate",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radians",
+          "type": "float",
+          "kind": "f32"
+        }
+      ]
+    },
+    {
+      "name": "Concat",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Applies `transform` before the current one (Painter::Concat).",
+      "facade": "Painter.Concat",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "transform",
+          "type": "const Fenrir::Transform2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform2D",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "ClipRect",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Clips to `rect` under the current transform, intersected with the clips already set (Painter::ClipRect).",
+      "facade": "Painter.ClipRect",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "rect",
+          "type": "const Fenrir::Rect2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Rect2D",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "ClipRoundedRect",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Clips to `rect` with corners rounded by `radii`, intersected with the clips already set (Painter::ClipRoundedRect).",
+      "facade": "Painter.ClipRoundedRect",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "rect",
+          "type": "const Fenrir::Rect2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Rect2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radii",
+          "type": "const Fenrir::CornerRadii*",
+          "kind": "pointer",
+          "pointee": "Fenrir::CornerRadii",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "DrawRect",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "`rect` filled with `paint` (Painter::DrawRect).",
+      "facade": "Painter.DrawRect",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "rect",
+          "type": "const Fenrir::Rect2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Rect2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "paint",
+          "type": "const Fenrir::ScriptPainter::Paint*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Paint",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "DrawRoundedRect",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "`rect` with corners rounded by `radii`, filled with `paint`; radii larger than the rectangle allows are scaled down together, as CSS does (Painter::DrawRoundedRect).",
+      "facade": "Painter.DrawRoundedRect",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "rect",
+          "type": "const Fenrir::Rect2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Rect2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radii",
+          "type": "const Fenrir::CornerRadii*",
+          "kind": "pointer",
+          "pointee": "Fenrir::CornerRadii",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "paint",
+          "type": "const Fenrir::ScriptPainter::Paint*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Paint",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "DrawBorder",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "The border inside `rect`, each side its own width and colour, split at the corners' diagonals (Painter::DrawBorder).",
+      "facade": "Painter.DrawBorder",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "rect",
+          "type": "const Fenrir::Rect2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Rect2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radii",
+          "type": "const Fenrir::CornerRadii*",
+          "kind": "pointer",
+          "pointee": "Fenrir::CornerRadii",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "border",
+          "type": "const Fenrir::Border*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Border",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "DrawShadow",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "The box shadow of the rounded rectangle `rect` (Painter::DrawShadow).",
+      "facade": "Painter.DrawShadow",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "rect",
+          "type": "const Fenrir::Rect2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Rect2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radii",
+          "type": "const Fenrir::CornerRadii*",
+          "kind": "pointer",
+          "pointee": "Fenrir::CornerRadii",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "shadow",
+          "type": "const Fenrir::Shadow*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Shadow",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "DrawCircle",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "The disc of `radius` about `centre`, filled with `paint` (Painter::DrawCircle).",
+      "facade": "Painter.DrawCircle",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "centre",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radius",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "paint",
+          "type": "const Fenrir::ScriptPainter::Paint*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Paint",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "DrawArc",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "A band `width` wide centred on the circle of `radius`, from `startRadians` clockwise through `sweepRadians`, with flat ends; a sweep of a whole turn or more is a ring (Painter::DrawArc).",
+      "facade": "Painter.DrawArc",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "centre",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radius",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "startRadians",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "sweepRadians",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "width",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "paint",
+          "type": "const Fenrir::ScriptPainter::Paint*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Paint",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "DrawRing",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "The band between the circles of `outerRadius` and `innerRadius` about `centre` (Painter::DrawRing).",
+      "facade": "Painter.DrawRing",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "centre",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "outerRadius",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "innerRadius",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "paint",
+          "type": "const Fenrir::ScriptPainter::Paint*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Paint",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "DrawImage",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "The image stretched over `rect`, or nine-sliced into it (Painter::DrawImage).",
+      "facade": "Painter.DrawImage",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "rect",
+          "type": "const Fenrir::Rect2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Rect2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "image",
+          "type": "const Fenrir::ScriptPainter::ImageDraw*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::ImageDraw",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "FillPath",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "The region `path` covers by its fill rule, filled with `paint` (Painter::FillPath).",
+      "facade": "Painter.FillPath",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "paint",
+          "type": "const Fenrir::ScriptPainter::Paint*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Paint",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "FillPolygon",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "The closed polygon through `points`, filled non-zero with `paint`: FillPath of a path made by one AddPolygon.",
+      "facade": "Painter.FillPath",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "points",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "The polygon's corners, in UI units."
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "paint",
+          "type": "const Fenrir::ScriptPainter::Paint*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Paint",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "StrokePath",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "`path` stroked with `style` and `paint` (Painter::StrokePath).",
+      "facade": "Painter.StrokePath",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "style",
+          "type": "const Fenrir::ScriptPainter::StrokeStyle*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::StrokeStyle",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "paint",
+          "type": "const Fenrir::ScriptPainter::Paint*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Paint",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "StrokePolyline",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "The line through `points`, back to the first when `closed`, stroked with `style` and `paint`: StrokePath of a path made by one AddPolyline, or AddPolygon when closed.",
+      "facade": "Painter.StrokePath",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "points",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "The line's points, in UI units."
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "closed",
+          "type": "bool",
+          "kind": "bool",
+          "doc": "Whether the line closes back to its first point."
+        },
+        {
+          "name": "style",
+          "type": "const Fenrir::ScriptPainter::StrokeStyle*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::StrokeStyle",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "paint",
+          "type": "const Fenrir::ScriptPainter::Paint*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Paint",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "DrawText",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Every glyph run of `paragraph`, a paragraph of the text extension's, from `point`, its top-left in UI units (Painter::DrawText). The paragraph's positions are target pixels: lay it out with its sizes multiplied by the root scale and the target's pixels per unit. One with text that was never laid out is laid out with the app's FontLibrary to no width limit.",
+      "facade": "Painter.DrawText",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "paragraph",
+          "type": "const Fenrir::ScriptText::Paragraph*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptText::Paragraph",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "The paragraph drawn."
+        },
+        {
+          "name": "point",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "Where its top-left is drawn, in UI units."
+        }
+      ]
+    },
+    {
+      "name": "DrawTextShadowed",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "`paragraph` with `shadow` drawn first: every run again, moved and in the shadow's colour (Painter::DrawText).",
+      "facade": "Painter.DrawText",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "paragraph",
+          "type": "const Fenrir::ScriptText::Paragraph*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptText::Paragraph",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "The paragraph drawn."
+        },
+        {
+          "name": "point",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "Where its top-left is drawn, in UI units."
+        },
+        {
+          "name": "shadow",
+          "type": "const Fenrir::TextShadow*",
+          "kind": "pointer",
+          "pointee": "Fenrir::TextShadow",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "The shadow's offset and colour."
+        }
+      ]
+    },
+    {
+      "name": "BeginGroup",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Begins a group: what is drawn up to its EndGroup draws into an image of its own covering `bounds`, then composited over what is under it at `opacity`, by `blend`, through `filter` (Painter::BeginGroup).",
+      "facade": "Painter.BeginGroup",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "bounds",
+          "type": "const Fenrir::Rect2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Rect2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "opacity",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "blend",
+          "type": "Fenrir::GroupBlend2D",
+          "kind": "enum"
+        },
+        {
+          "name": "filter",
+          "type": "const Fenrir::GroupFilter*",
+          "kind": "pointer",
+          "pointee": "Fenrir::GroupFilter",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "EndGroup",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Ends the innermost group, if it was opened inside the innermost mask's reach or no mask is open (Painter::EndGroup).",
+      "facade": "Painter.EndGroup",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "BeginMask",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Begins a mask: what is drawn up to EndMask has its colour multiplied by the coverage of `mask` filled opaque (Painter::BeginMask).",
+      "facade": "Painter.BeginMask",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "mask",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "EndMask",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Ends the innermost mask's reach, if no group opened inside it is still open (Painter::EndMask).",
+      "facade": "Painter.EndMask",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "BackdropBlur",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Blurs what is already drawn under `rect` by `radius`, a Gaussian's standard deviation in UI units, as a frosted panel's background (Painter::BackdropBlur).",
+      "facade": "Painter.BackdropBlur",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "painter",
+          "type": "const Fenrir::ScriptPainter::PainterId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::PainterId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "rect",
+          "type": "const Fenrir::Rect2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Rect2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radius",
+          "type": "float",
+          "kind": "f32"
+        }
+      ]
+    },
+    {
+      "name": "CreatePath",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "A new empty path, filled non-zero, kept until it is destroyed.",
+      "facade": "Path2D.Create",
+      "facadeReturns": "path",
+      "returns": {
+        "type": "void",
+        "kind": "void",
+        "doc": "The path made."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The path made."
+        }
+      ]
+    },
+    {
+      "name": "DestroyPath",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Destroys the path: its calls do nothing from now on, and its id is never handed out again.",
+      "facade": "Path2D.Destroy",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was a path to destroy."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "ClearPath",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Removes every step, keeping the fill rule.",
+      "facade": "Path2D.Clear",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the path exists."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "MoveTo",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Starts a subpath at `point` (Path::MoveTo).",
+      "facade": "Path2D.MoveTo",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the path exists."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "point",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "LineTo",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "A line to `point` (Path::LineTo).",
+      "facade": "Path2D.LineTo",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the path exists."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "point",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "QuadTo",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "A quadratic curve through `control` to `end` (Path::QuadTo).",
+      "facade": "Path2D.QuadTo",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the path exists."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "control",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "end",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "CubicTo",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "A cubic curve through `control1` and `control2` to `end` (Path::CubicTo).",
+      "facade": "Path2D.CubicTo",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the path exists."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "control1",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "control2",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "end",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "Arc",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "The arc of the circle of `radius` about `centre` from `startRadians` clockwise through `sweepRadians` (negative sweeps go anticlockwise), with a line to its start from the current point if there is one (Path::Arc).",
+      "facade": "Path2D.Arc",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the path exists."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "centre",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radius",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "startRadians",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "sweepRadians",
+          "type": "float",
+          "kind": "f32"
+        }
+      ]
+    },
+    {
+      "name": "ArcTo",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "The browser's arcTo: a line from the current point towards `corner` and an arc of `radius` round it, tangent to the lines to `corner` and on to `towards` (Path::ArcTo).",
+      "facade": "Path2D.ArcTo",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the path exists."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "corner",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "towards",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radius",
+          "type": "float",
+          "kind": "f32"
+        }
+      ]
+    },
+    {
+      "name": "Close",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Closes the current subpath with a line back to its start (Path::Close).",
+      "facade": "Path2D.Close",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the path exists."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "AddRect",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "The rectangle `rect`, a closed subpath wound clockwise (Path::AddRect).",
+      "facade": "Path2D.AddRect",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the path exists."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "rect",
+          "type": "const Fenrir::Rect2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Rect2D",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "AddRoundedRect",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "`rect` with corners rounded by `radii`, scaled down together when they do not fit (Path::AddRoundedRect).",
+      "facade": "Path2D.AddRoundedRect",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the path exists."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "rect",
+          "type": "const Fenrir::Rect2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Rect2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radii",
+          "type": "const Fenrir::CornerRadii*",
+          "kind": "pointer",
+          "pointee": "Fenrir::CornerRadii",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "AddCircle",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "The circle of `radius` about `centre` (Path::AddCircle).",
+      "facade": "Path2D.AddCircle",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the path exists."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "centre",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radius",
+          "type": "float",
+          "kind": "f32"
+        }
+      ]
+    },
+    {
+      "name": "AddEllipse",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "The ellipse of `radii` (half its width and height) about `centre` (Path::AddEllipse).",
+      "facade": "Path2D.AddEllipse",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the path exists."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "centre",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radii",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "AddPolygon",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "The closed polygon through `points` (Path::AddPolygon).",
+      "facade": "Path2D.AddPolygon",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the path exists."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "points",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "The polygon's corners."
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "AddPolyline",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "The open polyline through `points` (Path::AddPolyline).",
+      "facade": "Path2D.AddPolyline",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the path exists."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "points",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "The line's points."
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "SetFillRule",
+      "namespace": "Fenrir::PainterNatives",
+      "source": "../src/PainterScripting.cpp",
+      "state": "Fenrir::PainterScripting",
+      "doc": "Sets the rule its fills use (Path::SetFillRule).",
+      "facade": "Path2D.SetFillRule",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the path exists."
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "type": "const Fenrir::ScriptPainter::Path2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptPainter::Path2D",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "rule",
+          "type": "Fenrir::FillRule",
+          "kind": "enum"
+        }
+      ]
+    }
+  ]
+}

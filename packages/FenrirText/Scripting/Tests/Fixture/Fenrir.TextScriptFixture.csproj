@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- A script assembly that lays text out from C#. The build passes -p:FenrirScriptingSdk=<the SDK folder>/ and
+       -p:FenrirTextContractDir=<the folder holding Fenrir.Text.dll>/. The contract is compile-time only: the host shares
+       its own copy. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <!-- The generated defaults test's C# half (../Generated, from Scripting/api/FenrirText.binding.toml). -->
+  <ItemGroup>
+    <Compile Include="../Generated/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Fenrir.Text">
+      <HintPath>$(FenrirTextContractDir)Fenrir.Text.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Version is part of the contract: the host shares one copy, and a script compiled against a newer minor fails to load. -->
+    <Version>0.1.0</Version>
+    <AssemblyName>Fenrir.Painter</AssemblyName>
+    <RootNamespace>Fenrir.Painter</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- FenrirPainter's scripting contract (ADR-0029, ADR-0061): the Painter facade, paths and paints over the native
+       functions FenrirPainterScripting gives C#, all generated. Built against the scripting SDK (for the generators and
+       Fenrir.Math), the Fenrir.Input contract (for window ids), the Fenrir.Assets contract (for image handles and
+       samplers) and the Fenrir.Text contract (for rectangles and paragraphs); CMake passes
+       -p:FenrirScriptingSdk=<the SDK folder>/ and -p:Fenrir<Package>ContractDir=<the folder holding its dll>/ for each.
+       The host shares it with every script load, after the contracts it builds on. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <ItemGroup Condition="'$(FenrirTextContractDir)' != ''">
+    <Reference Include="Fenrir.Input">
+      <HintPath>$(FenrirInputContractDir)Fenrir.Input.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Assets">
+      <HintPath>$(FenrirAssetsContractDir)Fenrir.Assets.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Text">
+      <HintPath>$(FenrirTextContractDir)Fenrir.Text.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <!-- In an editor, which passes no folders, the contracts come from their source projects. -->
+  <ItemGroup Condition="'$(FenrirTextContractDir)' == ''">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../FenrirInput/Managed/Fenrir.Input/Fenrir.Input.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../FenrirAssets/Managed/Fenrir.Assets/Fenrir.Assets.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../FenrirText/Managed/Fenrir.Text/Fenrir.Text.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

@@ -738,7 +738,28 @@ internal sealed class Describer
             return Overrides(record, list, at, subject);
         }
 
+        if (m_roles[type.TypeName!] != Role.BoundType && NamedConstant(expression) is Expr constant)
+        {
+            return StructDefault(type, constant, at, subject);
+        }
+
         throw UnknownDefault(init, at, subject);
+    }
+
+    /// <summary>
+    /// The initialiser of the constant <paramref name="expression"/> names (<c>Colour::Black</c>, declared
+    /// <c>static const</c> in its class and defined <c>inline constexpr</c> after it), or null for anything else: a nested
+    /// struct's default may be a named constant, recorded as the values its initialiser gives.
+    /// </summary>
+    private static Expr? NamedConstant(Expr expression)
+    {
+        if (expression is not DeclRefExpr { Decl: VarDecl variable })
+        {
+            return null;
+        }
+
+        var definition = variable.Definition as VarDecl ?? variable;
+        return definition.Type.Handle.IsConstQualified ? definition.Init : null;
     }
 
     /// <summary>
@@ -1028,7 +1049,7 @@ internal sealed class Describer
         Error(at, subject,
               $"the default '{SourceText(init)}' is not one the description records: a literal, an enum value, " +
               "std::numeric_limits<T>::infinity(), max() or lowest(), a bound type's constructor with literal " +
-              "arguments, or a nested type's own defaults (T{})");
+              "arguments, or a nested type's own defaults (T{}) or a constant of its type");
 
     private static string Where(Cursor at)
     {

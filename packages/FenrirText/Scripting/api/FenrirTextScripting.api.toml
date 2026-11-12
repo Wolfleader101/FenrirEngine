@@ -1,0 +1,18 @@
+# The text binding's own selection (ADR-0042, tools/describe-api/README.md): what its natives take and give by pointer.
+# FenrirText's headers keep their text style with its family as a std::string, so the style C# passes is this
+# library's (ScriptText.hpp), with the paragraph id; FenrirText's own plain data (the paragraph style, a line's metrics,
+# the enums) and FenrirDraw2D's rectangle are described as FenrirText declares them, so their mirrors are generated
+# from its headers, and the math types are the math binding's.
+headers = ["../include/FenrirTextScripting/ScriptText.hpp"]
+
+[types]
+"Fenrir::ScriptText::Paragraph" = "shared-struct"
+"Fenrir::ScriptText::TextStyle" = "shared-struct"
+"Fenrir::ParagraphStyle" = "shared-struct"
+"Fenrir::LineMetrics" = "shared-struct"
+# FenrirDraw2D's rectangle, which FenrirText's range rectangles are. No other binding mirrors it: this one does, and the
+# painter's names it.
+"Fenrir::Rect2D" = "shared-struct"
+# The math binding's (FenrirMath.api.toml gives them these roles).
+"Fenrir::Colour" = "shared-struct"
+"Fenrir::Math::Vec2" = "bound-type"
