@@ -10,11 +10,11 @@
 
 **Touches:** `examples/UIDemo/`, `examples/CMakeLists.txt`, `README.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The demo builds and runs under the msvc-x64-debug preset with scripting off; the README says what each element shows and which file to edit.
-- [ ] A headless smoke test (null backend) drives the demo's HUD setup one frame and checks the bars' rectangles follow their components.
+- [x] The demo builds and runs under the msvc-x64-debug preset with scripting off; the README says what each element shows and which file to edit.
+- [x] A headless smoke test (null backend) drives the demo's HUD setup one frame and checks the bars' rectangles follow their components.
 
 Hand check: the HUD draws over the room, the compass turns with the camera, the minimap shows the top-down view, hit markers animate in and out, editing the stylesheet's colours changes them live, and clicks still reach the camera.
 
-- [ ] `check_tickets.py` and clang-format pass.
+- [x] `check_tickets.py` and clang-format pass.
