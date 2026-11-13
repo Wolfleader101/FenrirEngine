@@ -6,7 +6,9 @@
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <span>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -385,4 +387,56 @@ TEST_CASE("A label's text-shadow draws before its text, offset and in its colour
     REQUIRE(quads[glyphs][0].colour == Rgba8(0, 0, 255, 255));
     REQUIRE(UITest::Near(quads[0][0].position.x, quads[glyphs][0].position.x + 2.0f));
     REQUIRE(UITest::Near(quads[0][0].position.y, quads[glyphs][0].position.y + 3.0f));
+}
+
+TEST_CASE("A label in an SDF family emits SDF glyph quads over the SDF atlas, beside a bitmap label", "[ui][text][sdf]")
+{
+    TextScene scene;
+    const std::filesystem::path file =
+        std::filesystem::path(FENRIR_TEXT_HARFBUZZ_TEST) / "subset" / "data" / "fonts" / "Roboto-Regular.ttf";
+    const Fenrir::AssetHandle<Fenrir::Font> roboto =
+        scene.test.assets.Store().Load<Fenrir::Font>(file.string(), Fenrir::AssetOwner::App()).handle;
+    REQUIRE_FALSE(roboto.IsEmpty());
+    Fenrir::UIFontFace face;
+    face.family = "Plate";
+    face.font = roboto;
+    face.rendering = Fenrir::FontRendering::Sdf;
+    REQUIRE(scene.test.Roots().AddFontFace(face));
+
+    const Fenrir::ElementId plate = scene.Label(scene.root.GetRootElement(), "North", "font-family: Plate");
+    const Fenrir::ElementId plain = scene.Label(scene.root.GetRootElement(), "Plain");
+    scene.test.Frame();
+
+    INFO("the Plate label lays out in SDF mode and the plain one in bitmap mode");
+    REQUIRE(scene.ParagraphOf(plate).Runs().front().rendering == Fenrir::FontRendering::Sdf);
+    REQUIRE(scene.ParagraphOf(plain).Runs().front().rendering == Fenrir::FontRendering::Bitmap);
+
+    const Fenrir::DrawList2D& list = scene.target->lists.back();
+    const std::vector<Fenrir::PainterVertex> vertices = Vertices(list);
+    std::size_t sdfQuads = 0;
+    std::size_t bitmapQuads = 0;
+    for (std::size_t i = 0; i + 3 < vertices.size(); i += 4)
+    {
+        const auto kind = static_cast<Fenrir::ShapeKind>(vertices[i].kinds[0]);
+        sdfQuads += kind == Fenrir::ShapeKind::SdfGlyph ? 1 : 0;
+        bitmapQuads += kind == Fenrir::ShapeKind::Glyph ? 1 : 0;
+    }
+    INFO("one SDF glyph quad per glyph of North, one bitmap quad per glyph of Plain");
+    REQUIRE(sdfQuads == GlyphCount(scene.ParagraphOf(plate)));
+    REQUIRE(bitmapQuads == GlyphCount(scene.ParagraphOf(plain)));
+
+    INFO("a command samples the font's SDF atlas page in its image slot");
+    const std::span<const Fenrir::AssetHandle<Fenrir::Image>> pages =
+        scene.test.Roots().GetFonts()->AtlasPages(roboto, 0.0f, Fenrir::FontRendering::Sdf);
+    REQUIRE(pages.size() == 1);
+    bool sampled = false;
+    for (const Fenrir::Command2D& command : list.commands)
+    {
+        if (const auto* draw = std::get_if<Fenrir::DrawCommand2D>(&command))
+        {
+            sampled = sampled || (draw->textures.size() > Fenrir::PainterImageSlot &&
+                                  draw->textures[Fenrir::PainterImageSlot].image == pages.front());
+        }
+    }
+    REQUIRE(sampled);
 }

@@ -23,6 +23,22 @@ namespace Fenrir
         Italic,
     };
 
+    /**
+     * @brief How a face's glyphs are rasterised (ADR-0062), chosen when the face is registered with its family
+     * (FontLibrary::AddFace) or by `@font-face`'s `font-rendering`.
+     */
+    enum class FontRendering : std::uint8_t
+    {
+        /** @brief Hinted grayscale bitmaps, one atlas entry per glyph per pixel size: crisp small text. */
+        Bitmap,
+        /**
+         * @brief FreeType's single-channel signed distance field, rasterised once at FontLibraryConfig::sdfSize into
+         * an atlas every size shares, and reconstructed at any size by the painter: world-space, scaled and animated
+         * text, at the cost of hinting at small sizes and rounded corners at large ones.
+         */
+        Sdf,
+    };
+
     /** @brief A line drawn with a run of text, as CSS's `text-decoration-line`. FenrirText only reports it. */
     enum class TextDecoration : std::uint8_t
     {

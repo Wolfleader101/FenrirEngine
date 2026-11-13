@@ -1,6 +1,7 @@
 // The painter's text by what it appends to a 2D draw list (the spec's seam 2): a paragraph's or glyph run's glyphs as
 // quads of shape kind Glyph over their atlas rectangles, the page in the image slot and the text colour as the paint,
-// under the painter's transform and clip; a shadow before its text; a decoration as a rectangle from the run's metrics.
+// under the painter's transform and clip; a shadow before its text; a decoration as a rectangle from the run's metrics;
+// an SDF face's glyphs as quads of shape kind SdfGlyph, carrying the field's spread.
 // Paragraphs are laid out in the embedded default face and HarfBuzz's Roboto, through FenrirText's test fixture.
 
 #include <cstddef>
@@ -60,16 +61,16 @@ namespace
                               static_cast<float>(region.width), static_cast<float>(region.height)});
     }
 
-    /** @brief Whether the glyph quad starting at vertex `first` covers `rect` and samples `region`. */
+    /** @brief Whether the glyph quad starting at vertex `first` is of `kind`, covers `rect` and samples `region`. */
     bool QuadIs(const std::vector<Fenrir::PainterVertex>& vertices, std::size_t first, const Rect2D& rect,
-                const Fenrir::ImageRegion& region)
+                const Fenrir::ImageRegion& region, Fenrir::ShapeKind kind = Fenrir::ShapeKind::Glyph)
     {
         const std::vector<Vec2> positions = Corners(rect);
         const std::vector<Vec2> uvs = Corners(region);
         for (std::size_t i = 0; i < 4; ++i)
         {
             const Fenrir::PainterVertex& vertex = vertices[first + i];
-            if (PainterTest::ShapeOf(vertex) != Fenrir::ShapeKind::Glyph || !Near(vertex.position, positions[i]) ||
+            if (PainterTest::ShapeOf(vertex) != kind || !Near(vertex.position, positions[i]) ||
                 !Near(vertex.uv, uvs[i]))
             {
                 return false;
@@ -362,4 +363,44 @@ TEST_CASE("A glyph run's shadow draws offset and tinted before it", "[painter][t
     REQUIRE(QuadIs(vertices, 0, Moved(run.glyphs.front().quad, {1, 1}), run.glyphs.front().atlas.region));
     REQUIRE(vertices[0].colour == PainterTest::Rgba8(0, 0, 0, 255));
     REQUIRE(QuadIs(vertices, run.glyphs.size() * 4, run.glyphs.front().quad, run.glyphs.front().atlas.region));
+}
+
+TEST_CASE("An SDF face's glyphs are SdfGlyph quads over its SDF atlas, carrying its spread", "[painter][text][sdf]")
+{
+    TextTest::TextApp test;
+    const Fenrir::AssetHandle<Fenrir::Font> roboto =
+        test.store.Load<Fenrir::Font>(TextTest::FullFont("Roboto-Regular.ttf").string(), Fenrir::AssetOwner::App())
+            .handle;
+    test.fonts.AddFace("Field", roboto, Fenrir::FontWeightNormal, Fenrir::FontStyle::Normal,
+                       Fenrir::FontRendering::Sdf);
+    Fenrir::Paragraph paragraph;
+    paragraph.AddRun("Far", TextTest::Style("Field", 21.0f));
+    paragraph.AddRun("near", TextTest::Style("default", 21.0f));
+    paragraph.Layout(test.fonts, Fenrir::UnlimitedWidth);
+    REQUIRE(paragraph.Runs().size() == 2);
+    const Fenrir::GlyphRun& field = paragraph.Runs()[0];
+    REQUIRE(field.rendering == Fenrir::FontRendering::Sdf);
+
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, PainterTest::Config());
+    painter.DrawText(paragraph, {10, 20});
+
+    INFO("the SDF run is a command of its own over the font's SDF atlas page, then the bitmap run over its page");
+    REQUIRE(list.commands.size() == 2);
+    REQUIRE(PainterTest::Draw(list, 0).textures[Fenrir::PainterImageSlot].image ==
+            test.fonts.AtlasPages(roboto, 0.0f, Fenrir::FontRendering::Sdf).front());
+    REQUIRE(PainterTest::Draw(list, 1).textures[Fenrir::PainterImageSlot].image == paragraph.Runs()[1].page);
+
+    INFO(
+        "each SDF glyph is an SdfGlyph quad over its fractional rectangle, sampling its region, the spread in shape.x");
+    const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
+    std::size_t first = 0;
+    for (const Fenrir::PositionedGlyph& glyph : field.glyphs)
+    {
+        REQUIRE(QuadIs(vertices, first, Moved(glyph.quad, {10, 20}), glyph.atlas.region, Fenrir::ShapeKind::SdfGlyph));
+        REQUIRE(vertices[first].shape.x == field.sdfSpread);
+        first += 4;
+    }
+    INFO("and the bitmap run's glyphs stay Glyph quads");
+    REQUIRE(PainterTest::ShapeOf(vertices[first]) == Fenrir::ShapeKind::Glyph);
 }

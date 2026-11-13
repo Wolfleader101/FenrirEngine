@@ -21,7 +21,7 @@ FenrirAssets's `Font` asset is a TrueType or OpenType file's bytes (`.ttf`, `.ot
 
 `FenrirText/FontLibrary.hpp`. A `FontLibrary` over the store is the font family registry, the font cache (one FreeType face and HarfBuzz font per font and size, sizes rounded to a quarter pixel) and the atlases:
 
-- **`AddFace(family, font, weight, style)`** registers a face; **`SetFallbacks(family, {...})`** names the families tried, in order, for a character the family lacks.
+- **`AddFace(family, font, weight, style, rendering)`** registers a face, in bitmap mode by default or in SDF mode with `FontRendering::Sdf` (below); the mode belongs to the registration, so one font may be registered in both under two families; **`SetFallbacks(family, {...})`** names the families tried, in order, for a character the family lacks.
 - **The embedded default face**, JetBrains Mono (SIL Open Font License, `Resources/Fonts`; the debug font's file, embedded again so FenrirText stays independent of the renderer), is the family `default`, the built-in asset `builtin:default-font`, and the last face every family falls back to, so text never vanishes. A family with no faces resolves to it.
 - **`FaceChain(family, weight, style)`** says which faces text is tried in: the family's nearest face (its style if it has one, then the nearest weight, heavier first from 400 up), each fallback family's nearest face, then the default.
 - Changing the families makes every paragraph lay out again on its next `Layout`.
@@ -43,9 +43,11 @@ For text outside a paragraph, `FenrirText/TextSegments.hpp` gives the same `Grap
 
 ## Atlases
 
-`FenrirText/GlyphAtlas.hpp`. One `GlyphAtlas` per face and size: R8 coverage pages, each an `Image` asset it owns, skyline-packed (bottom-left fit) with a pixel of padding. A full page doubles its side up to a limit (2048 by default), then the atlas opens another page. Each rectangle is uploaded as it is added through `AssetStore::UpdateImage`, so `AssetStore::ImageUpdatesSince` names exactly the rectangles added since a revision. Glyphs are rasterised with FreeType's auto-hinter in its light mode (vertical fitting only, so quarter-pixel positions keep their spacing) and grayscale anti-aliasing, once per glyph and quarter-pixel offset.
+`FenrirText/GlyphAtlas.hpp`. One `GlyphAtlas` per bitmap face and size, and one per SDF font: R8 coverage pages, each an `Image` asset it owns, skyline-packed (bottom-left fit) with a pixel of padding. A full page doubles its side up to a limit (2048 by default), then the atlas opens another page. Each rectangle is uploaded as it is added through `AssetStore::UpdateImage`, so `AssetStore::ImageUpdatesSince` names exactly the rectangles added since a revision. Glyphs are rasterised with FreeType's auto-hinter in its light mode (vertical fitting only, so quarter-pixel positions keep their spacing) and grayscale anti-aliasing, once per glyph and quarter-pixel offset.
 
-Not yet: the SDF mode (ADR-0062's opt-in per font), colour emoji, variable fonts and system font fallback. The renderer's `DebugFont` does not use FenrirText.
+**SDF mode** (`FontRendering::Sdf`, ADR-0062's opt-in per face) is for world-space, scaled and animated text. The font is opened once, at `FontLibraryConfig::sdfSize` (48 pixels by default), and every size of it is shaped there by HarfBuzz and scaled, so a paragraph's extents, line metrics and glyph positions are proportional to its size. Its glyphs are rasterised from unhinted outlines in FreeType's single-channel SDF render mode, once per glyph, with a spread of `FontLibraryConfig::sdfSpread` (8 by default) padding each rectangle, into one atlas every size shares (`AtlasPages(font, 0, FontRendering::Sdf)`). Its runs say `rendering == FontRendering::Sdf` and carry `sdfSpread`; its glyphs' quads are their rectangles scaled to the size, at the unrounded pen position. The painter's `SdfGlyph` kind reconstructs coverage from the distance at any size. Small SDF text loses the hinting that keeps bitmap text crisp, and large SDF text rounds sharp corners (multi-channel SDF is not yet).
+
+Not yet: colour emoji, variable fonts and system font fallback. The renderer's `DebugFont` does not use FenrirText.
 
 ## From C#
 

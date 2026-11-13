@@ -1,5 +1,5 @@
-// The painter's text (ADR-0060, ADR-0062): FenrirText's glyph runs as quads of shape kind Glyph over their atlas
-// rectangles, and their decorations as rectangles.
+// The painter's text (ADR-0060, ADR-0062): FenrirText's glyph runs as quads of shape kind Glyph (bitmap mode) or
+// SdfGlyph (SDF mode) over their atlas rectangles, and their decorations as rectangles.
 
 #include <algorithm>
 #include <cmath>
@@ -71,6 +71,7 @@ namespace Fenrir
         const float perPixel = 1.0f / pixelsPerUiUnit;
         const std::uint32_t packed = PainterDetail::PackColour(colour);
 
+        const bool sdf = run.rendering == FontRendering::Sdf;
         PaintSetup setup;
         setup.image = TextureSlot2D{run.page, LinearClamp2D};
         for (const PositionedGlyph& glyph : run.glyphs)
@@ -86,7 +87,8 @@ namespace Fenrir
             quad.centre = Math::Vec2(rect.x, rect.y) + quad.vertex.halfSize;
             quad.min = -quad.vertex.halfSize;
             quad.max = quad.vertex.halfSize;
-            quad.vertex.kinds[0] = static_cast<std::uint8_t>(ShapeKind::Glyph);
+            quad.vertex.kinds[0] = static_cast<std::uint8_t>(sdf ? ShapeKind::SdfGlyph : ShapeKind::Glyph);
+            quad.vertex.shape.x = run.sdfSpread;
             quad.vertex.kinds[1] = static_cast<std::uint8_t>(PaintKind::Solid);
             quad.vertex.kinds[3] = PainterImageSlot;
             quad.vertex.colour = packed;
