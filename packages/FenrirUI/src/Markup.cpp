@@ -857,7 +857,7 @@ namespace Fenrir
             if (files != nullptr && files->files.size() > firstFile)
             {
                 // The files this sheet read are its own, for hot reload to parse it again alone.
-                FileSheet fileSheet{id, name, src.has_value() ? std::string() : text, src.has_value(), {}};
+                FileSheet fileSheet{id, name, src.has_value() ? std::string() : text, {}};
                 fileSheet.files.assign(std::make_move_iterator(files->files.begin() + std::ptrdiff_t(firstFile)),
                                        std::make_move_iterator(files->files.end()));
                 files->files.resize(firstFile);

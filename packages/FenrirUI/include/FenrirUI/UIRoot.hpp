@@ -537,10 +537,10 @@ namespace Fenrir
         bool ReplaceStylesheet(StylesheetId id, Stylesheet sheet, std::vector<MarkupError>& errors);
         /** @brief Hot reload's poll, when it is on and its interval has passed. */
         void PollFiles(double deltaTime);
-        /** @brief Loads the document hot reload remembers at `document` again, taking it unless it has errors. */
-        void ReloadDocument(std::size_t document);
-        /** @brief Parses the sheet hot reload remembers at `sheet` again, taking it unless it has errors. */
-        void ReloadStylesheet(std::size_t sheet);
+        /** @brief Loads the document hot reload remembers at `index` again, taking it unless it has errors. */
+        void ReloadDocument(std::size_t index);
+        /** @brief Parses the sheet hot reload remembers at `index` again, taking it unless it has errors. */
+        void ReloadStylesheet(std::size_t index);
         /** @brief Logs a load's errors with their files and lines. */
         void LogErrors(std::span<const MarkupError> errors) const;
 

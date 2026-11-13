@@ -60,13 +60,13 @@ namespace Fenrir::Detail
     [[nodiscard]] SourceReader ResolverReader(const MarkupResolver& resolver);
 
     /**
-     * @brief Whether a file's modification time is not the one it was read with, now: polls each of `files`, counting
-     * them in `polled`.
+     * @brief Whether any file's modification time now is not the one it was read with. Reads every one of `files`,
+     * adding how many to `filesPolled`.
      */
-    [[nodiscard]] bool AnyChanged(const std::vector<LoadedFile>& files, std::uint32_t& polled);
+    [[nodiscard]] bool AnyChanged(const std::vector<LoadedFile>& files, std::uint32_t& filesPolled);
 
-    /** @brief Takes each file's modification time now, so the version just read is the one compared against. */
-    void TakeTimes(std::vector<LoadedFile>& files);
+    /** @brief Reads each file's modification time again, so the version now on disk is the one compared against. */
+    void ReadModifiedTimes(std::vector<LoadedFile>& files);
 
     /**
      * @brief Parses `text` as the sheet `name`, with each `@import` loaded through `reader` in its place: the
@@ -104,7 +104,6 @@ namespace Fenrir::Detail
         std::string name;
         /** @brief An inline sheet's CSS, its lines at the document's; empty for a file's. */
         std::string text;
-        bool fromFile = true;
         std::vector<LoadedFile> files;
     };
 
@@ -130,6 +129,8 @@ namespace Fenrir::Detail
     {
         bool on = false;
         double sincePoll = 0.0;
+        /** @brief While a new version of a document loads, its sheets' font faces wait to see whether it is taken. */
+        bool holdFontFaces = false;
         std::vector<FileDocument> documents;
         std::vector<FileSheet> sheets;
     };

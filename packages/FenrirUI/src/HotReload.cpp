@@ -17,15 +17,30 @@ namespace Fenrir
 {
     namespace
     {
-        std::filesystem::path AssetRoot(const App& app)
+        /** @brief A reader of files under the app's asset root, adding each file it reads to `files`. */
+        Detail::SourceReader AssetFiles(const App& app, std::vector<Detail::LoadedFile>& files)
         {
             const AssetStore* store = app.TryGetResource<AssetStore>();
-            return store != nullptr ? store->Root() : std::filesystem::path();
+            return Detail::FileReader(store != nullptr ? store->Root() : std::filesystem::path(), files);
         }
 
-        /** @brief The stylesheet at `name`, its imports loaded; nothing, with an error, when it is not there. */
-        std::optional<Stylesheet> BuildFileStylesheet(const std::string& name, const Detail::SourceReader& reader,
-                                                      AssetStore* store, std::vector<MarkupError>& errors)
+        /** @brief The sheet `text`, named `name`, its imports loaded, with its errors in the order written. */
+        Stylesheet BuildSheet(std::string_view text, const std::string& name, const Detail::SourceReader& reader,
+                              AssetStore* store, std::vector<MarkupError>& errors)
+        {
+            Detail::MarkupErrors ordered;
+            std::vector<std::string> loading;
+            Stylesheet sheet = Detail::BuildStylesheet(text, name, reader, store, loading, ordered);
+            for (Detail::OrderedError& error : ordered)
+            {
+                errors.push_back(std::move(error.error));
+            }
+            return sheet;
+        }
+
+        /** @brief The stylesheet file `name`, as BuildSheet builds it; nothing, with an error, when it is not there. */
+        std::optional<Stylesheet> BuildFileSheet(const std::string& name, const Detail::SourceReader& reader,
+                                                 AssetStore* store, std::vector<MarkupError>& errors)
         {
             const std::optional<std::string> text = reader.read(name);
             if (!text.has_value())
@@ -33,21 +48,24 @@ namespace Fenrir
                 errors.push_back({name, 0, "the stylesheet '" + name + "' was not found"});
                 return std::nullopt;
             }
-            Detail::MarkupErrors ordered;
-            std::vector<std::string> loading;
-            Stylesheet sheet = Detail::BuildStylesheet(*text, name, reader, store, loading, ordered);
-            for (Detail::OrderedError& error : ordered)
-            {
-                errors.push_back(std::move(error.error));
-            }
-            return sheet;
+            return BuildSheet(*text, name, reader, store, errors);
+        }
+
+        /**
+         * @brief Hot reload refused a new version of `name`: says so, and reads its files' modification times again,
+         * so it is read again only when it next changes.
+         */
+        void KeepPrevious(const App& app, const std::string& name, std::vector<Detail::LoadedFile>& files)
+        {
+            app.Logger()->Warn("FenrirUI: {}: hot reload kept the version loaded before", name);
+            Detail::ReadModifiedTimes(files);
         }
     } // namespace
 
     MarkupLoad UIRoot::LoadDocument(ElementId parent, std::string_view path)
     {
         Detail::FileLoad files;
-        const Detail::SourceReader reader = Detail::FileReader(AssetRoot(m_state->app), files.files);
+        const Detail::SourceReader reader = AssetFiles(m_state->app, files.files);
         const std::string name = reader.name(path, {});
         MarkupLoad load;
         if (const std::optional<std::string> text = reader.read(name))
@@ -72,16 +90,16 @@ namespace Fenrir
     StylesheetId UIRoot::LoadStylesheet(std::string_view path)
     {
         std::vector<Detail::LoadedFile> files;
-        const Detail::SourceReader reader = Detail::FileReader(AssetRoot(m_state->app), files);
+        const Detail::SourceReader reader = AssetFiles(m_state->app, files);
         const std::string name = reader.name(path, {});
         std::vector<MarkupError> errors;
         std::optional<Stylesheet> sheet =
-            BuildFileStylesheet(name, reader, m_state->app.TryGetResource<AssetStore>(), errors);
+            BuildFileSheet(name, reader, m_state->app.TryGetResource<AssetStore>(), errors);
         StylesheetId id;
         if (sheet.has_value())
         {
             id = AttachStylesheet(std::move(*sheet), errors);
-            m_state->hotReload.sheets.push_back({id, name, {}, true, std::move(files)});
+            m_state->hotReload.sheets.push_back({id, name, {}, std::move(files)});
         }
         LogErrors(errors);
         return id;
@@ -110,7 +128,12 @@ namespace Fenrir
         {
             return;
         }
-        hotReload.sincePoll = 0.0;
+        // Polls keep to the interval's beat; a frame longer than it owes no second poll.
+        hotReload.sincePoll -= HotReloadInterval;
+        if (hotReload.sincePoll >= HotReloadInterval)
+        {
+            hotReload.sincePoll = 0.0;
+        }
         std::uint32_t& polled = m_state->stats.filesPolled;
         for (std::size_t i = 0; i < hotReload.documents.size();)
         {
@@ -163,12 +186,15 @@ namespace Fenrir
         }
 
         Detail::FileLoad files;
-        const Detail::SourceReader reader = Detail::FileReader(AssetRoot(m_state->app), files.files);
+        const Detail::SourceReader reader = AssetFiles(m_state->app, files.files);
         MarkupLoad load;
         if (const std::optional<std::string> text = reader.read(document.name))
         {
+            // The font family registry is every root's: the new version's faces wait until it is taken.
+            hotReload.holdFontFaces = true;
             load = Detail::LoadMarkupDocument(*this, m_state->roots, document.parent, *text, document.name, reader, at,
                                               &files);
+            hotReload.holdFontFaces = false;
         }
         else
         {
@@ -186,8 +212,7 @@ namespace Fenrir
                 RemoveStylesheet(sheet);
             }
             LogErrors(load.errors);
-            m_state->app.Logger()->Warn("FenrirUI: {}: hot reload kept the version loaded before", document.name);
-            Detail::TakeTimes(document.files);
+            KeepPrevious(m_state->app, document.name, document.files);
             return;
         }
 
@@ -199,6 +224,13 @@ namespace Fenrir
         {
             RemoveStylesheet(sheet);
         }
+        std::vector<MarkupError> faceErrors;
+        for (const StylesheetId sheet : load.stylesheets)
+        {
+            Detail::RegisterFontFaces(m_state->roots, m_state->app.TryGetResource<AssetStore>(), *GetStylesheet(sheet),
+                                      faceErrors);
+        }
+        LogErrors(faceErrors);
         const ElementId parent = document.parent;
         document.elements = load.elements;
         document.sheets = load.stylesheets;
@@ -216,30 +248,16 @@ namespace Fenrir
     {
         Detail::FileSheet& sheet = m_state->hotReload.sheets[index];
         std::vector<Detail::LoadedFile> files;
-        const Detail::SourceReader reader = Detail::FileReader(AssetRoot(m_state->app), files);
+        const Detail::SourceReader reader = AssetFiles(m_state->app, files);
         AssetStore* store = m_state->app.TryGetResource<AssetStore>();
         std::vector<MarkupError> errors;
-        std::optional<Stylesheet> built;
-        if (sheet.fromFile)
-        {
-            built = BuildFileStylesheet(sheet.name, reader, store, errors);
-        }
-        else
-        {
-            Detail::MarkupErrors ordered;
-            std::vector<std::string> loading;
-            built = Detail::BuildStylesheet(sheet.text, sheet.name, reader, store, loading, ordered);
-            for (Detail::OrderedError& error : ordered)
-            {
-                errors.push_back(std::move(error.error));
-            }
-        }
-
+        std::optional<Stylesheet> built = sheet.text.empty()
+                                              ? BuildFileSheet(sheet.name, reader, store, errors)
+                                              : BuildSheet(sheet.text, sheet.name, reader, store, errors);
         if (!errors.empty() || !built.has_value())
         {
             LogErrors(errors);
-            m_state->app.Logger()->Warn("FenrirUI: {}: hot reload kept the version loaded before", sheet.name);
-            Detail::TakeTimes(sheet.files);
+            KeepPrevious(m_state->app, sheet.name, sheet.files);
             return;
         }
         std::vector<MarkupError> faceErrors;

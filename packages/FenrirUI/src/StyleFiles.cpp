@@ -85,10 +85,12 @@ namespace Fenrir::Detail
             }
         }
 
+        /** @brief Appends `from`'s items from `next` on to `to`. */
         template <typename T>
-        void Append(std::vector<T>& from, std::vector<T>& to)
+        void Append(std::vector<T>& from, std::vector<T>& to, std::size_t next = 0)
         {
-            to.insert(to.end(), std::make_move_iterator(from.begin()), std::make_move_iterator(from.end()));
+            to.insert(to.end(), std::make_move_iterator(from.begin() + std::ptrdiff_t(next)),
+                      std::make_move_iterator(from.end()));
         }
     } // namespace
 
@@ -131,18 +133,21 @@ namespace Fenrir::Detail
         return reader;
     }
 
-    bool AnyChanged(const std::vector<LoadedFile>& files, std::uint32_t& polled)
+    bool AnyChanged(const std::vector<LoadedFile>& files, std::uint32_t& filesPolled)
     {
         bool changed = false;
         for (const LoadedFile& file : files)
         {
-            ++polled;
-            changed = changed || ModifiedTime(file.path) != file.modified;
+            ++filesPolled;
+            if (ModifiedTime(file.path) != file.modified)
+            {
+                changed = true;
+            }
         }
         return changed;
     }
 
-    void TakeTimes(std::vector<LoadedFile>& files)
+    void ReadModifiedTimes(std::vector<LoadedFile>& files)
     {
         for (LoadedFile& file : files)
         {
@@ -204,14 +209,9 @@ namespace Fenrir::Detail
             Append(importedSheet.fontFaces, merged.fontFaces);
         }
         loading.pop_back();
-        merged.rules.insert(merged.rules.end(), std::make_move_iterator(sheet.rules.begin() + std::ptrdiff_t(rule)),
-                            std::make_move_iterator(sheet.rules.end()));
-        merged.keyframes.insert(merged.keyframes.end(),
-                                std::make_move_iterator(sheet.keyframes.begin() + std::ptrdiff_t(keyframes)),
-                                std::make_move_iterator(sheet.keyframes.end()));
-        merged.fontFaces.insert(merged.fontFaces.end(),
-                                std::make_move_iterator(sheet.fontFaces.begin() + std::ptrdiff_t(face)),
-                                std::make_move_iterator(sheet.fontFaces.end()));
+        Append(sheet.rules, merged.rules, rule);
+        Append(sheet.keyframes, merged.keyframes, keyframes);
+        Append(sheet.fontFaces, merged.fontFaces, face);
         return merged;
     }
 

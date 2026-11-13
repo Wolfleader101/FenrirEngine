@@ -177,8 +177,10 @@ TEST_CASE("Imported rules sit where the import is, so the importing sheet's late
     const ElementId box = scene.root.Create(scene.root.GetRootElement(), "panel");
     scene.root.SetIdString(box, "box");
 
-    const Fenrir::StylesheetId sheet = scene.root.LoadStylesheet("main.css");
-    REQUIRE(sheet.IsValid());
+    {
+        INFO("the sheet and its import load");
+        REQUIRE(scene.root.LoadStylesheet("main.css").IsValid());
+    }
     scene.test.Frame();
 
     INFO("the import's height applies, and its width loses to the importer's rule after the import");
@@ -206,38 +208,60 @@ TEST_CASE("An import loop is one error, and the sheets in it still load", "[ui][
     REQUIRE(scene.root.GetBoxes(scene.Find("menu")).border.height == 60.0f);
 }
 
-TEST_CASE("A missing file loads nothing and says which file", "[ui][files]")
+TEST_CASE("A document that is not there is one error naming it, and loads nothing", "[ui][files]")
+{
+    FileTest scene;
+    const MarkupLoad load = scene.root.LoadDocument(scene.root.GetRootElement(), "nowhere.ui");
+    INFO("the load says which file is missing: " << Errors(load));
+    REQUIRE(load.elements.empty());
+    REQUIRE(load.errors.size() == 1);
+    REQUIRE(load.errors.front().file == "nowhere.ui");
+}
+
+TEST_CASE("A <style src> that is not there is an error at its <style>, and the rest of the document loads",
+          "[ui][files]")
 {
     FileTest scene;
     scene.Write("menu.ui", "<panel id=\"menu\"/><style src=\"missing.css\"/>");
-
-    const MarkupLoad absent = scene.root.LoadDocument(scene.root.GetRootElement(), "nowhere.ui");
-    INFO("a document that is not there is one error naming it, and loads nothing");
-    REQUIRE(absent.elements.empty());
-    REQUIRE(absent.errors.size() == 1);
-    REQUIRE(absent.errors.front().file == "nowhere.ui");
-
     const MarkupLoad load = scene.root.LoadDocument(scene.root.GetRootElement(), "menu.ui");
-    INFO("a sheet that is not there is an error at its <style>, and the rest loads: " << Errors(load));
+    INFO("the panel loads and the one error names the sheet: " << Errors(load));
     REQUIRE(load.elements.size() == 1);
     REQUIRE(load.errors.size() == 1);
     REQUIRE(load.errors.front().message.find("missing.css") != std::string::npos);
+}
 
-    INFO("a sheet loaded by a path that is not there gives no sheet, and is logged");
+TEST_CASE("A stylesheet loaded by a path that is not there gives no sheet, and is logged", "[ui][files]")
+{
+    FileTest scene;
+    INFO("no sheet is added, and the log names the file");
     REQUIRE_FALSE(scene.root.LoadStylesheet("gone.css").IsValid());
     REQUIRE(scene.Logged("gone.css"));
 }
 
+namespace
+{
+    // Copies HarfBuzz's test Roboto under the asset root as fonts/Roboto.ttf, and returns its font asset.
+    Fenrir::AssetHandle<Fenrir::Font> CopyRoboto(FileTest& scene)
+    {
+        const std::filesystem::path roboto =
+            std::filesystem::path(FENRIR_TEXT_HARFBUZZ_TEST) / "subset" / "data" / "fonts" / "Roboto-Regular.ttf";
+        std::filesystem::create_directories(scene.files.path / "fonts");
+        std::filesystem::copy_file(roboto, scene.files.path / "fonts" / "Roboto.ttf");
+        return scene.test.assets.Store().Load<Fenrir::Font>("fonts/Roboto.ttf", Fenrir::AssetOwner::App()).handle;
+    }
+
+    constexpr std::string_view robotoFace =
+        "@font-face {\n  font-family: \"Body Text\";\n  src: url(\"fonts/Roboto.ttf\");\n"
+        "  font-weight: bold;\n  font-style: italic;\n  font-rendering: sdf;\n}\n";
+} // namespace
+
 TEST_CASE("@font-face registers a family that a label then measures with", "[ui][files][text]")
 {
     FileTest scene;
-    const std::filesystem::path roboto =
-        std::filesystem::path(FENRIR_TEXT_HARFBUZZ_TEST) / "subset" / "data" / "fonts" / "Roboto-Regular.ttf";
-    std::filesystem::create_directories(scene.files.path / "fonts");
-    std::filesystem::copy_file(roboto, scene.files.path / "fonts" / "Roboto.ttf");
-    scene.Write("fonts.css", "@font-face {\n  font-family: \"Body Text\";\n  src: url(\"fonts/Roboto.ttf\");\n"
-                             "  font-weight: bold;\n  font-style: italic;\n  font-rendering: sdf;\n}\n"
-                             ".body { font-family: 'Body Text'; font-weight: 700; font-style: italic; }\n");
+    const Fenrir::AssetHandle<Fenrir::Font> font = CopyRoboto(scene);
+    scene.Write("fonts.css", std::string(robotoFace) +
+                                 ".body { font-family: 'Body Text'; font-weight: 700; font-style: italic; }\n");
+    INFO("the sheet with the face loads");
     REQUIRE(scene.root.LoadStylesheet("fonts.css").IsValid());
 
     const ElementId body = scene.root.Create(scene.root.GetRootElement(), "label");
@@ -248,16 +272,23 @@ TEST_CASE("@font-face registers a family that a label then measures with", "[ui]
     scene.root.SetStyleProperty(scene.root.GetRootElement(), "align-items", "flex-start");
     scene.test.Frame();
 
-    const Fenrir::AssetHandle<Fenrir::Font> font =
-        scene.test.assets.Store().Load<Fenrir::Font>("fonts/Roboto.ttf", Fenrir::AssetOwner::App()).handle;
     INFO("the label in Body Text bold italic lays out in the face the sheet named");
     const Fenrir::Paragraph* paragraph = scene.root.GetParagraph(body);
     REQUIRE(paragraph != nullptr);
     REQUIRE(paragraph->Runs().front().font == font);
     INFO("and measures to it: Roboto is narrower than the embedded monospace default");
     REQUIRE(scene.root.GetBoxes(body).content.width < scene.root.GetBoxes(plain).content.width);
+}
 
-    INFO("the face is recorded with its weight, style and the SDF opt-in, for the text mode to read");
+TEST_CASE("@font-face's face is recorded with its weight, style and SDF opt-in", "[ui][files][text]")
+{
+    FileTest scene;
+    const Fenrir::AssetHandle<Fenrir::Font> font = CopyRoboto(scene);
+    scene.Write("fonts.css", robotoFace);
+    INFO("the sheet with the face loads");
+    REQUIRE(scene.root.LoadStylesheet("fonts.css").IsValid());
+
+    INFO("the face is recorded as written, font-rendering: sdf among it, for the SDF text mode to read");
     const std::span<const Fenrir::UIFontFace> faces = scene.test.Roots().GetFontFaces();
     REQUIRE(faces.size() == 1);
     REQUIRE(faces.front().family == "Body Text");
@@ -294,21 +325,26 @@ TEST_CASE("A rewritten stylesheet restyles once 250 ms have ticked past, without
     scene.Write("ui/hud.css", "@import \"colours.css\";\n");
     scene.Write("ui/colours.css", "#title { color: red; }\n");
     scene.root.SetHotReload(true);
-    REQUIRE(scene.root.LoadDocument(scene.root.GetRootElement(), "ui/hud.ui").errors.empty());
-    scene.Tick(0.1);
+    {
+        INFO("the document, its sheet and the import load, and the label is red");
+        REQUIRE(scene.root.LoadDocument(scene.root.GetRootElement(), "ui/hud.ui").errors.empty());
+        scene.Tick(0.1);
+        REQUIRE(Same(scene.root.GetResolvedStyle(scene.Find("title"))->color, red));
+    }
     const ElementId title = scene.Find("title");
-    REQUIRE(Same(scene.root.GetResolvedStyle(title)->color, red));
 
     scene.Write("ui/colours.css", "#title { color: blue; }\n");
     scene.Tick(0.1);
-    INFO("200 ms in, the files have not been polled yet");
-    REQUIRE(Same(scene.root.GetResolvedStyle(title)->color, red));
+    {
+        INFO("200 ms in, the files have not been polled yet");
+        REQUIRE(Same(scene.root.GetResolvedStyle(title)->color, red));
+    }
 
     scene.Tick(0.1);
-    INFO("past 250 ms the rewritten import is read, its sheet parsed again and every style resolved again");
-    REQUIRE(Same(scene.root.GetResolvedStyle(title)->color, blue));
-    INFO("the label is the one it was");
+    INFO("past 250 ms the rewritten import is read, its sheet parsed again and every style resolved again, and the "
+         "label is the one it was");
     REQUIRE(scene.root.IsAlive(title));
+    REQUIRE(Same(scene.root.GetResolvedStyle(title)->color, blue));
 }
 
 TEST_CASE("A rewritten stylesheet with errors keeps the version before and logs them", "[ui][files][hot-reload]")
@@ -318,14 +354,19 @@ TEST_CASE("A rewritten stylesheet with errors keeps the version before and logs 
     const ElementId title = scene.root.Create(scene.root.GetRootElement(), "label");
     scene.root.SetIdString(title, "title");
     scene.root.SetHotReload(true);
-    REQUIRE(scene.root.LoadStylesheet("hud.css").IsValid());
+    {
+        INFO("the sheet loads");
+        REQUIRE(scene.root.LoadStylesheet("hud.css").IsValid());
+    }
     scene.Tick(0.1);
 
     scene.Write("hud.css", "#title { color: blue; colour: green; }\n");
     scene.Tick(0.3);
-    INFO("the unknown property is logged with the file and line, and the sheet before it stays");
-    REQUIRE(Same(scene.root.GetResolvedStyle(title)->color, red));
-    REQUIRE(scene.Logged("hud.css:1"));
+    {
+        INFO("the unknown property is logged with the file and line, and the sheet before it stays");
+        REQUIRE(Same(scene.root.GetResolvedStyle(title)->color, red));
+        REQUIRE(scene.Logged("hud.css:1"));
+    }
 
     scene.Write("hud.css", "#title { color: blue; }\n");
     scene.Tick(0.3);
@@ -342,8 +383,10 @@ TEST_CASE("A rewritten document reloads in its place, its old ids go stale and t
     const ElementId before = scene.root.Create(rootElement, "panel");
     scene.Write("menu.ui", "<panel id=\"menu\"><label id=\"name\">Old</label></panel>");
     scene.root.SetHotReload(true);
-    const MarkupLoad first = scene.root.LoadDocument(rootElement, "menu.ui");
-    REQUIRE(first.errors.empty());
+    {
+        INFO("the document loads between two panels");
+        REQUIRE(scene.root.LoadDocument(rootElement, "menu.ui").errors.empty());
+    }
     const ElementId after = scene.root.Create(rootElement, "panel");
     scene.Tick(0.1);
     const ElementId oldMenu = scene.Find("menu");
@@ -382,7 +425,10 @@ TEST_CASE("A rewritten include reloads the document that includes it", "[ui][fil
     scene.Write("menu.ui", "<panel id=\"menu\"><include src=\"name.ui\"/></panel>");
     scene.Write("name.ui", "<label id=\"name\">Old</label>");
     scene.root.SetHotReload(true);
-    REQUIRE(scene.root.LoadDocument(scene.root.GetRootElement(), "menu.ui").errors.empty());
+    {
+        INFO("the document and its include load");
+        REQUIRE(scene.root.LoadDocument(scene.root.GetRootElement(), "menu.ui").errors.empty());
+    }
     scene.Tick(0.1);
 
     scene.Write("name.ui", "<label id=\"name\">New</label>");
@@ -397,23 +443,44 @@ TEST_CASE("A document rewritten with an error keeps the old tree and logs", "[ui
     Fenrir::EventReader<Fenrir::UIEvent> events;
     scene.Write("menu.ui", "<panel id=\"menu\"/>");
     scene.root.SetHotReload(true);
-    REQUIRE(scene.root.LoadDocument(scene.root.GetRootElement(), "menu.ui").errors.empty());
+    {
+        INFO("the document loads");
+        REQUIRE(scene.root.LoadDocument(scene.root.GetRootElement(), "menu.ui").errors.empty());
+    }
     scene.Tick(0.1);
     const ElementId menu = scene.Find("menu");
     UITest::ReadAll(events, scene.test.app);
 
     scene.Write("menu.ui", "<panel id=\"broken\"><nonsense/></panel>");
     scene.Tick(0.3);
-    INFO("the old tree stays, nothing of the new one is left, and the error is logged with its file and line");
+    INFO("the old tree stays, nothing of the new one is left, the error is logged with its file and line, and no "
+         "reload is sent");
     REQUIRE(scene.root.IsAlive(menu));
     REQUIRE_FALSE(scene.root.IsAlive(scene.root.FindById("broken")));
     REQUIRE(scene.root.GetChildren(scene.root.GetRootElement()).size() == 1);
     REQUIRE(scene.Logged("menu.ui:1"));
-    INFO("no reload was sent");
     for (const Fenrir::UIEvent& event : UITest::ReadAll(events, scene.test.app))
     {
         REQUIRE(event.kind != Fenrir::UIEventKind::DocumentReloaded);
     }
+}
+
+TEST_CASE("A document version refused for its errors registers none of its font faces", "[ui][files][hot-reload]")
+{
+    FileTest scene;
+    CopyRoboto(scene);
+    scene.Write("menu.ui", "<panel id=\"menu\"/>");
+    scene.root.SetHotReload(true);
+    {
+        INFO("the document loads with no faces");
+        REQUIRE(scene.root.LoadDocument(scene.root.GetRootElement(), "menu.ui").errors.empty());
+    }
+    scene.Tick(0.1);
+
+    scene.Write("menu.ui", "<panel id=\"menu\"><nonsense/></panel><style>" + std::string(robotoFace) + "</style>");
+    scene.Tick(0.3);
+    INFO("the font family registry is every root's: a version that is not taken leaves nothing in it");
+    REQUIRE(scene.test.Roots().GetFontFaces().empty());
 }
 
 TEST_CASE("With hot reload off, no file is polled", "[ui][files][hot-reload]")
@@ -421,6 +488,7 @@ TEST_CASE("With hot reload off, no file is polled", "[ui][files][hot-reload]")
     FileTest scene;
     scene.Write("hud.ui", "<label id=\"title\">Hi</label><style src=\"hud.css\"/>");
     scene.Write("hud.css", "#title { color: red; }\n");
+    INFO("hot reload is off by default");
     REQUIRE_FALSE(scene.root.IsHotReloadOn());
     REQUIRE(scene.root.LoadDocument(scene.root.GetRootElement(), "hud.ui").errors.empty());
     const ElementId title = scene.Find("title");
@@ -435,10 +503,24 @@ TEST_CASE("With hot reload off, no file is polled", "[ui][files][hot-reload]")
     INFO("a second of frames polls nothing, and the rewrite is not seen");
     REQUIRE(polled == 0);
     REQUIRE(Same(scene.root.GetResolvedStyle(title)->color, red));
+}
+
+TEST_CASE("Hot reload turned on later polls what was loaded before it", "[ui][files][hot-reload]")
+{
+    FileTest scene;
+    scene.Write("hud.ui", "<label id=\"title\">Hi</label><style src=\"hud.css\"/>");
+    scene.Write("hud.css", "#title { color: red; }\n");
+    {
+        INFO("the document loads with hot reload off");
+        REQUIRE(scene.root.LoadDocument(scene.root.GetRootElement(), "hud.ui").errors.empty());
+    }
+    const ElementId title = scene.Find("title");
+    scene.Tick(0.1);
+    scene.Write("hud.css", "#title { color: blue; }\n");
 
     scene.root.SetHotReload(true);
     scene.Tick(0.3);
-    INFO("switched on, the next poll reads the document and the sheet, and takes the rewrite");
+    INFO("the first poll reads the document and the sheet, and takes the sheet's rewrite alone");
     REQUIRE(scene.root.GetStats().filesPolled == 2);
     REQUIRE(scene.root.IsAlive(title));
     REQUIRE(Same(scene.root.GetResolvedStyle(title)->color, blue));

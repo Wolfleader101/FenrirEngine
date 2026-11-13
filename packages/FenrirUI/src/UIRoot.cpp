@@ -793,7 +793,10 @@ namespace Fenrir
 
     StylesheetId UIRoot::AttachStylesheet(Stylesheet sheet, std::vector<MarkupError>& errors)
     {
-        Detail::RegisterFontFaces(m_state->roots, m_state->app.TryGetResource<AssetStore>(), sheet, errors);
+        if (!m_state->hotReload.holdFontFaces)
+        {
+            Detail::RegisterFontFaces(m_state->roots, m_state->app.TryGetResource<AssetStore>(), sheet, errors);
+        }
         auto entry = std::make_unique<Detail::StylesheetEntry>();
         entry->id = {m_state->nextSheet++};
         entry->sheet = std::move(sheet);
