@@ -285,6 +285,13 @@ namespace Fenrir
          * it was painted with. Null for a stale id.
          */
         [[nodiscard]] const ResolvedStyle* GetResolvedStyle(ElementId element) const noexcept;
+        /**
+         * @brief The style of one of its pseudo-elements as of the last frame, inheriting from it and matching its
+         * pseudo-classes: a scroll view's `::scrollbar` and `::scrollbar-thumb` while it has `overflow: scroll`, a
+         * text entry's `::selection` and `::placeholder`. Null for one it does not have, or a stale id.
+         */
+        [[nodiscard]] const ResolvedStyle* GetPseudoElementStyle(ElementId element,
+                                                                 PseudoElement pseudoElement) const noexcept;
         /** @brief Its rectangles as of the last frame's layout; empty rectangles for a stale id. */
         [[nodiscard]] ElementBoxes GetBoxes(ElementId element) const noexcept;
         /**

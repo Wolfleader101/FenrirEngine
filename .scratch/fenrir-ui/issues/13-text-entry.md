@@ -7,10 +7,10 @@
 
 **Blocked by:** 09, 11
 
-**Touches:** `packages/FenrirUI/`
+**Touches:** `packages/FenrirUI/`, `packages/FenrirText/` (its UAX#29 words, `TextSegments.hpp`)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Headless App tests with the test feed: typing through text events inserts at the caret; a combining sequence deletes as one grapheme; Ctrl+arrow jumps words; Shift+End selects to the end and typing replaces the selection; Ctrl+C then Ctrl+V duplicates through the clipboard (skipped without a display, as FenrirWindow's clipboard tests are); Enter sends submit with the value, Escape blurs; the claims resource shows a text-input claim with a caret rectangle inside the entry while focused and none after blur; max length stops input; password mode measures bullets.
-- [ ] Draw-list test: the selection rectangle and caret draw in the expected positions for a known string.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Headless App tests with the test feed: typing through text events inserts at the caret; a combining sequence deletes as one grapheme; Ctrl+arrow jumps words; Shift+End selects to the end and typing replaces the selection; Ctrl+C then Ctrl+V duplicates through the clipboard (skipped without a display, as FenrirWindow's clipboard tests are); Enter sends submit with the value, Escape blurs; the claims resource shows a text-input claim with a caret rectangle inside the entry while focused and none after blur; max length stops input; password mode measures bullets.
+- [x] Draw-list test: the selection rectangle and caret draw in the expected positions for a known string.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

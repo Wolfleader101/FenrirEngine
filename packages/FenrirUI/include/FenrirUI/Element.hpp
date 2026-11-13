@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include "FenrirDraw2D/DrawList2D.hpp"
 #include "FenrirInput/InputRouter.hpp"
@@ -134,6 +135,18 @@ namespace Fenrir
             (void)app;
             (void)input;
             return RouteResult::Passed;
+        }
+
+        /**
+         * @brief Where text typed into it goes while it has the focus, for the operating system's input method: its
+         * caret, in UI units from the root's top-left. With one, the root's input router claims text input in its
+         * window with that rectangle (scaled to the window's logical units) while the element has the focus, so the
+         * window takes text and places any candidate window there (ADR-0027). None, the default, for an element that
+         * takes no text.
+         */
+        [[nodiscard]] virtual std::optional<Rect2D> GetTextCaret() const
+        {
+            return std::nullopt;
         }
 
       protected:

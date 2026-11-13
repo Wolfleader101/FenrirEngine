@@ -1,9 +1,16 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirMath/Math.hpp"
+#include "FenrirText/TextSegments.hpp"
 #include "FenrirUI/Element.hpp"
 #include "FenrirUI/ElementId.hpp"
 
@@ -13,6 +20,12 @@
 namespace Fenrir
 {
     struct Image;
+    class Paragraph;
+
+    namespace Detail
+    {
+        class ElementText;
+    } // namespace Detail
 
     /**
      * @brief What the interactive controls share: they make themselves focusable, and `disabled` (with `:disabled`)
@@ -299,5 +312,183 @@ namespace Fenrir
         MouseButton m_button = MouseButton::Left;
         Math::Vec2 m_pressPointer{0.0f, 0.0f};
         Math::Vec2 m_pressOffset{0.0f, 0.0f};
+    };
+
+    /**
+     * @brief `textentry`: a single line of UTF-8 text a player types, selects, cuts, copies and pastes in (spec:
+     * "FenrirUI" controls). It holds a value, and a caret and an anchor as byte offsets into it on grapheme boundaries
+     * (UAX#29); the selection is the text between them. While it has the focus:
+     *
+     * - text typed (FenrirInput's TextEvent) replaces the selection, or goes in at the caret, a codepoint at a time;
+     * - Left and Right move the caret a grapheme, or with Ctrl to the start of the word before or the end of the word
+     *   after (FenrirText's Words); with a selection and no Shift they go to its start or end; Home and End go to the
+     *   ends; Shift with any of them moves only the caret, extending the selection;
+     * - Backspace and Delete take the selection, or the grapheme (with Ctrl, the word; a password has none, so all)
+     *   before or after the caret;
+     * - Ctrl+A selects everything; Ctrl+C, Ctrl+X and Ctrl+V copy, cut and paste through FenrirWindow's clipboard (a
+     *   password copies and cuts nothing);
+     * - Enter sends Submit, and Escape takes the focus away.
+     *
+     * A press on it focuses it and puts the caret at the character under the pointer, a drag selects from there, and a
+     * double click selects the word under it. Each edit sends Change; the value is read with GetValue. While focused,
+     * the root claims text input with the caret's rectangle (GetTextCaret), so the window takes text and places the
+     * operating system's input method at it.
+     *
+     * It paints its own text, in its text properties, on one line through its content box, scrolled across to keep
+     * the caret in view; behind the selection its `::selection` style's background colour, over it that style's
+     * colour; the caret, while it has the focus and no selection, a `CaretWidth` bar a line tall in its colour, shown
+     * and hidden every `BlinkSeconds` of FenrirTime from the last edit or move; while the value is empty, its
+     * placeholder in its `::placeholder` style's text properties. Layout measures its content a line tall.
+     */
+    class TextEntry : public Control
+    {
+      public:
+        /** @brief The caret's width, in UI units. */
+        static constexpr float CaretWidth = 1.0f;
+        /** @brief How long the caret is shown, and then hidden, in each blink, in seconds. */
+        static constexpr double BlinkSeconds = 0.5;
+        /** @brief What a password shows for each of its graphemes: U+2022, a bullet, in UTF-8. */
+        static constexpr std::string_view Bullet = "\xE2\x80\xA2";
+
+        TextEntry();
+        TextEntry(const TextEntry&) = delete;
+        TextEntry& operator=(const TextEntry&) = delete;
+        TextEntry(TextEntry&&) = delete;
+        TextEntry& operator=(TextEntry&&) = delete;
+        ~TextEntry() override;
+
+        /**
+         * @brief Makes `utf8` the value, with the caret and anchor at its end; sends no Change. Tabs and line breaks
+         * become spaces and other control characters are dropped, as from a paste; the maximum length is not applied.
+         */
+        void SetValue(std::string_view utf8);
+        /** @brief Its value, UTF-8. */
+        [[nodiscard]] std::string_view GetValue() const noexcept
+        {
+            return m_value;
+        }
+        /** @brief Sets what it shows while its value is empty. */
+        void SetPlaceholder(std::string_view utf8);
+        /** @brief What it shows while its value is empty. */
+        [[nodiscard]] std::string_view GetPlaceholder() const noexcept
+        {
+            return m_placeholder;
+        }
+        /** @brief Shows a bullet for each grapheme of the value instead of the value, and has no words. */
+        void SetPassword(bool password);
+        /** @brief Whether it shows bullets. */
+        [[nodiscard]] bool IsPassword() const noexcept
+        {
+            return m_password;
+        }
+        /**
+         * @brief Sets the most graphemes typing and pasting may make the value; 0 for no limit. What is typed past it
+         * is dropped, whole graphemes at a time; a value already longer keeps its length, and an edit may shorten it
+         * but not lengthen it.
+         */
+        void SetMaxLength(std::size_t graphemes);
+        /** @brief The most graphemes typing and pasting may make the value; 0 for no limit. */
+        [[nodiscard]] std::size_t GetMaxLength() const noexcept
+        {
+            return m_maxLength;
+        }
+
+        /** @brief Sets the anchor and the caret, each moved back to a grapheme boundary within the value. */
+        void Select(std::uint32_t anchor, std::uint32_t caret);
+        /** @brief Selects the whole value, the caret at its end. */
+        void SelectAll();
+        /** @brief The caret, a byte offset into the value on a grapheme boundary. */
+        [[nodiscard]] std::uint32_t GetCaret() const noexcept
+        {
+            return m_caret;
+        }
+        /** @brief The selection's other end; the caret's offset when nothing is selected. */
+        [[nodiscard]] std::uint32_t GetAnchor() const noexcept
+        {
+            return m_anchor;
+        }
+        /** @brief How far its text is scrolled left, in UI units, as of its last paint. */
+        [[nodiscard]] float GetScroll() const noexcept
+        {
+            return m_scroll;
+        }
+        /**
+         * @brief The paragraph it shows, the value or its bullets, laid out in the target's pixels as of its last
+         * paint (a paragraph's units, as UIRoot::GetParagraph's are).
+         */
+        [[nodiscard]] const Paragraph& GetParagraph() const noexcept;
+
+        RouteResult OnInput(App& app, const RoutedInput& input) override;
+        [[nodiscard]] bool HasMeasure() const override
+        {
+            return true;
+        }
+        [[nodiscard]] Math::Vec2 Measure(const MeasureConstraints& constraints) override;
+        void Paint(Painter& painter, const ElementPaint& paint) override;
+        /** @brief Its caret as of its last paint, a line tall; before its first, its content box's left edge. */
+        [[nodiscard]] std::optional<Rect2D> GetTextCaret() const override;
+
+      protected:
+        void OnCreate() override;
+
+      private:
+        [[nodiscard]] bool HasSelection() const noexcept
+        {
+            return m_caret != m_anchor;
+        }
+        /** @brief The largest grapheme boundary of the value at or before `index`. */
+        [[nodiscard]] std::uint32_t Snap(std::uint32_t index) const;
+        [[nodiscard]] std::uint32_t NextGrapheme(std::uint32_t index) const;
+        [[nodiscard]] std::uint32_t PreviousGrapheme(std::uint32_t index) const;
+        [[nodiscard]] std::uint32_t PreviousWordStart(std::uint32_t index) const;
+        [[nodiscard]] std::uint32_t NextWordEnd(std::uint32_t index) const;
+        /** @brief The word at `index`, or the run between words there. */
+        [[nodiscard]] TextRange WordAt(std::uint32_t index) const;
+        /** @brief Where value offset `index` is in the shown text. */
+        [[nodiscard]] std::uint32_t ShownIndex(std::uint32_t index) const;
+        /** @brief The value offset at shown offset `index`. */
+        [[nodiscard]] std::uint32_t ValueIndex(std::uint32_t index) const;
+        /** @brief The value offset under `point`, UI units from the root's top-left, as of the last paint. */
+        [[nodiscard]] std::uint32_t IndexAt(Math::Vec2 point);
+
+        /** @brief Moves the caret to `index`, and the anchor with it unless `extend`. */
+        void MoveCaret(std::uint32_t index, bool extend);
+        /** @brief Puts `text` over [begin, end) within the maximum length, the caret after it; Change if it changed. */
+        void Replace(std::uint32_t begin, std::uint32_t end, std::string_view text);
+        /** @brief Replaces the selection, or inserts at the caret. */
+        void Insert(std::string_view text);
+        /** @brief The value changed: its boundaries, words and shown text follow. */
+        void ValueChanged();
+        RouteResult KeyPressed(App& app, const KeyEvent& key);
+
+        /** @brief Target pixels per UI unit: the root's scale times the target's content scale. */
+        [[nodiscard]] float PixelsPerUnit() const;
+        /** @brief Gives its paragraphs `style` and its placeholder's; true when a line's height may have changed. */
+        bool ApplyStyle(const ResolvedStyle& style);
+        /** @brief Lays its paragraphs out with the app's fonts; false without them. */
+        bool LayOut();
+
+        std::string m_value;
+        std::string m_placeholder;
+        bool m_password = false;
+        std::size_t m_maxLength = 0;
+        std::vector<std::uint32_t> m_graphemes{0};
+        std::vector<TextRange> m_words;
+        std::uint32_t m_caret = 0;
+        std::uint32_t m_anchor = 0;
+        bool m_dragging = false;
+
+        /** @brief What it shows (the value or its bullets), its placeholder, and a space it measures a line by. */
+        std::unique_ptr<Detail::ElementText> m_shown;
+        std::unique_ptr<Detail::ElementText> m_placeholderText;
+        std::unique_ptr<Detail::ElementText> m_line;
+
+        float m_scroll = 0.0f;
+        /** @brief Seconds of FenrirTime since the last edit or move, for the blink. */
+        double m_blink = 0.0;
+        /** @brief Where its text's top-left and its caret were last painted, in UI units; whether they have been. */
+        Math::Vec2 m_origin{0.0f, 0.0f};
+        Rect2D m_caretRect;
+        bool m_painted = false;
     };
 } // namespace Fenrir
