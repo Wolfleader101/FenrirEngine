@@ -430,7 +430,7 @@ TEST_CASE("An image measures its asset's size under each fit, and draws by its f
     REQUIRE(Near(maxX, 101.0f));
 }
 
-TEST_CASE("A covering image inside a rounded overflow clip keeps that clip, and draws only its box", "[ui][controls]")
+TEST_CASE("A covering image is drawn under its ancestor's rounded overflow clip", "[ui][controls]")
 {
     UITestApp test;
     std::shared_ptr<CaptureTarget> target;
@@ -455,8 +455,11 @@ TEST_CASE("A covering image inside a rounded overflow clip keeps that clip, and 
     {
         INFO("vertex at (" << vertex.position.x << ", " << vertex.position.y << "), uv (" << vertex.uv.x << ", "
                            << vertex.uv.y << ")");
+        INFO("the quad is painted with the image");
         REQUIRE(vertex.kinds[1] == static_cast<std::uint8_t>(Fenrir::PaintKind::Image));
-        INFO("the image is clipped per pixel by the frame's round clip, not a rectangle of its own");
+        INFO("the image is clipped per pixel by the frame's round clip, not a rectangle of its own: radii "
+             << vertex.clipRadii.x << ", " << vertex.clipRadii.y << ", " << vertex.clipRadii.z << ", "
+             << vertex.clipRadii.w);
         REQUIRE((vertex.kinds[2] & Fenrir::PainterFlags::Clipped) != 0);
         REQUIRE(Near(vertex.clipRadii.x, 50.0f));
         REQUIRE(Near(vertex.clipRadii.z, 50.0f));
