@@ -115,9 +115,10 @@ namespace Fenrir
             {
                 glyphs[i].glyph = infos[i].codepoint;
                 glyphs[i].cluster = infos[i].cluster;
-                glyphs[i].advance = static_cast<float>(positions[i].x_advance) / 64.0f;
-                glyphs[i].xOffset = static_cast<float>(positions[i].x_offset) / 64.0f;
-                glyphs[i].yOffset = static_cast<float>(positions[i].y_offset) / 64.0f;
+                // An SDF face shapes at its raster face's size: its positions are scaled to its own.
+                glyphs[i].advance = static_cast<float>(positions[i].x_advance) / 64.0f * face.scale;
+                glyphs[i].xOffset = static_cast<float>(positions[i].x_offset) / 64.0f * face.scale;
+                glyphs[i].yOffset = static_cast<float>(positions[i].y_offset) / 64.0f * face.scale;
             }
             return glyphs;
         }
@@ -280,13 +281,13 @@ namespace Fenrir
 
         // A face per grapheme: the first of its style's chain that has every character of it. White space keeps the
         // face before it, so a fallback run is not split at each space.
-        std::map<std::size_t, std::vector<AssetHandle<Font>>> chains;
-        const auto chainOf = [&](std::size_t style) -> const std::vector<AssetHandle<Font>>& {
+        std::map<std::size_t, std::vector<Detail::ChainFace>> chains;
+        const auto chainOf = [&](std::size_t style) -> const std::vector<Detail::ChainFace>& {
             auto [found, added] = chains.try_emplace(style);
             if (added)
             {
                 const TextStyle& s = m_runs[style].style;
-                found->second = fonts.FaceChain(s.family, s.weight, s.style);
+                found->second = library.Chain(s.family, s.weight, s.style);
             }
             return found->second;
         };
@@ -319,13 +320,13 @@ namespace Fenrir
                 chosen = previousFace;
             }
             Detail::SizedFace* firstHaving = nullptr;
-            for (const AssetHandle<Font> font : chainOf(style))
+            for (const Detail::ChainFace& candidate : chainOf(style))
             {
                 if (chosen != nullptr)
                 {
                     break;
                 }
-                Detail::SizedFace* face = library.Face(font, size);
+                Detail::SizedFace* face = library.Face(candidate, size);
                 if (face == nullptr)
                 {
                     continue;
@@ -456,9 +457,9 @@ namespace Fenrir
                 ellipsisItem.level = SBParagraphGetBaseLevel(paragraphOf(begin));
                 const TextStyle& style = m_runs[ellipsisItem.style].style;
                 std::string mark = "\xE2\x80\xA6"; // U+2026 in UTF-8
-                for (const AssetHandle<Font> font : chainOf(ellipsisItem.style))
+                for (const Detail::ChainFace& candidate : chainOf(ellipsisItem.style))
                 {
-                    Detail::SizedFace* face = library.Face(font, style.size);
+                    Detail::SizedFace* face = library.Face(candidate, style.size);
                     if (face != nullptr && face->Has(U'\u2026'))
                     {
                         ellipsisItem.face = face;
@@ -715,13 +716,17 @@ namespace Fenrir
                 {
                     continue;
                 }
-                const AssetHandle<Image> page = item.face->atlas.Pages()[glyph.atlas->page];
+                const Detail::SizedFace& raster = item.face->Raster();
+                const AssetHandle<Image> page = raster.atlas.Pages()[glyph.atlas->page];
+                const bool sdf = item.face->rendering == FontRendering::Sdf;
                 if (run == nullptr || run->page != page)
                 {
                     GlyphRun next;
                     next.font = item.face->font;
                     next.size = item.face->size;
                     next.page = page;
+                    next.rendering = item.face->rendering;
+                    next.sdfSpread = sdf ? static_cast<float>(library.config.sdfSpread) : 0.0f;
                     next.colour = style.colour;
                     next.decoration = style.decoration;
                     next.line = static_cast<std::uint32_t>(l);
@@ -740,9 +745,24 @@ namespace Fenrir
                 positioned.glyph = placed.shaped->glyph;
                 positioned.cluster = &item == &ellipsisItem ? ellipsisItem.begin : placed.shaped->cluster;
                 positioned.origin = origin;
-                positioned.quad = {
-                    whole + static_cast<float>(glyph.left), std::round(origin.y) - static_cast<float>(glyph.top),
-                    static_cast<float>(glyph.atlas->region.width), static_cast<float>(glyph.atlas->region.height)};
+                const float regionWidth = static_cast<float>(glyph.atlas->region.width);
+                const float regionHeight = static_cast<float>(glyph.atlas->region.height);
+                if (sdf)
+                {
+                    // A distance field scales: its bitmap, bearing and spread from the raster face's size to this
+                    // one's, at the pen position as shaped, unrounded.
+                    const float scale = item.face->scale;
+                    const Math::Vec2 pen{penX, origin.y};
+                    positioned.origin = pen;
+                    positioned.quad = {pen.x + static_cast<float>(glyph.left) * scale,
+                                       pen.y - static_cast<float>(glyph.top) * scale, regionWidth * scale,
+                                       regionHeight * scale};
+                }
+                else
+                {
+                    positioned.quad = {whole + static_cast<float>(glyph.left),
+                                       std::round(origin.y) - static_cast<float>(glyph.top), regionWidth, regionHeight};
+                }
                 positioned.atlas = *glyph.atlas;
                 run->glyphs.push_back(positioned);
             }

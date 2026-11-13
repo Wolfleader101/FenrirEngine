@@ -46,8 +46,9 @@ namespace Fenrir
      * rectangles on demand by a skyline packer (bottom-left fit). Each rectangle is uploaded as it is added, through
      * AssetStore::UpdateImage, so the image's updates name exactly the rectangles added. A full page doubles its side
      * (AssetStore::Replace, keeping what it held) up to the configured limit, and then the atlas opens a new page; only
-     * the newest page takes rectangles. FenrirText keeps one per face and pixel size; it is public so that its packing
-     * can be tested and so that other coverage (icons) can be packed alike.
+     * the newest page takes rectangles. FenrirText keeps one per bitmap face and pixel size, and one per SDF font that
+     * every size shares (its pages then hold distance fields, not coverage); it is public so that its packing can be
+     * tested and so that other coverage (icons) can be packed alike.
      *
      * Main thread only, as the asset store is. The store must outlive the atlas, which unloads its pages when it ends
      * or is assigned another's.

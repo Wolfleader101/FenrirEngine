@@ -30,7 +30,10 @@ namespace Fenrir
          * top-left; x is a multiple of a quarter pixel.
          */
         Math::Vec2 origin{0.0f};
-        /** @brief Where the glyph's atlas rectangle is drawn: whole pixels, from the paragraph's top-left. */
+        /**
+         * @brief Where the glyph's atlas rectangle is drawn, from the paragraph's top-left: whole pixels in bitmap
+         * mode; in SDF mode the rectangle scaled from the SDF size, its spread included, in fractional pixels.
+         */
         Rect2D quad;
         /** @brief The glyph's rectangle in its run's atlas page. */
         AtlasRegion atlas;
@@ -48,6 +51,14 @@ namespace Fenrir
         float size = 0.0f;
         /** @brief The atlas page the glyphs' rectangles are on. */
         AssetHandle<Image> page;
+        /** @brief The face's mode: the page holds coverage (Bitmap) or a distance field (Sdf). */
+        FontRendering rendering = FontRendering::Bitmap;
+        /**
+         * @brief In SDF mode, the distance field's spread in the page's texels: a texel of byte value `v` lies
+         * `(v - 128) / 128` spreads inside the outline (negative outside), as FreeType's SDF mode stores it. Zero in
+         * bitmap mode.
+         */
+        float sdfSpread = 0.0f;
         /** @brief The run's text style's colour. */
         Colour colour;
         /** @brief The run's text style's decoration, drawn from the metrics below. */

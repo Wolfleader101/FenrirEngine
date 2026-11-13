@@ -33,6 +33,12 @@ namespace Fenrir
          * page's texels, and the shader multiplies the paint by the coverage it samples (ADR-0062's bitmap mode).
          */
         Glyph = 9,
+        /**
+         * @brief A glyph's quad over its rectangle of an R8 distance-field atlas page, in the image slot, as Glyph's:
+         * the shader reconstructs coverage from the distance it samples, `shape.x` being the field's spread in texels,
+         * with a one-pixel anti-aliasing width in screen pixels whatever the quad's scale (ADR-0062's SDF mode).
+         */
+        SdfGlyph = 10,
     };
 
     /** @brief How a painter quad's pixels are coloured. */
@@ -90,7 +96,8 @@ namespace Fenrir
         Math::Vec4 clipRadii{0.0f};
         /**
          * @brief The shape's own numbers: a border's widths (top, right, bottom, left); a shadow's blur, spread and
-         * offset; an arc's radius, width, middle angle and half its sweep; a ring's outer and inner radii.
+         * offset; an arc's radius, width, middle angle and half its sweep; a ring's outer and inner radii; an SDF
+         * glyph's spread in texels.
          */
         Math::Vec4 shape{0.0f};
         /**

@@ -106,7 +106,7 @@ namespace Fenrir
         {
             return false;
         }
-        fonts->AddFace(face.family, face.font, face.weight, face.style);
+        fonts->AddFace(face.family, face.font, face.weight, face.style, face.rendering);
         const auto same = std::find_if(m_fontFaces.begin(), m_fontFaces.end(), [&](const UIFontFace& registered) {
             return registered.family == face.family && registered.weight == face.weight &&
                    registered.style == face.style;

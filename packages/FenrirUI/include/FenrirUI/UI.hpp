@@ -36,15 +36,6 @@ namespace Fenrir
      */
     [[nodiscard]] std::string_view DefaultStylesheet() noexcept;
 
-    /** @brief How a font face's glyphs are drawn (ADR-0062): hinted bitmaps by default, or a distance field. */
-    enum class FontRendering : std::uint8_t
-    {
-        /** @brief Hinted grayscale bitmaps, one atlas entry per glyph per pixel size: crisp small text. */
-        Bitmap,
-        /** @brief A single-channel distance field at one size for every size: scaled and animated text. */
-        Sdf,
-    };
-
     /**
      * @brief A face of a font family as the UI registered it with the font family registry: from a stylesheet's
      * `@font-face` or from code (UIRoots::AddFontFace).
@@ -56,8 +47,8 @@ namespace Fenrir
         std::uint16_t weight = FontWeightNormal;
         FontStyle style = FontStyle::Normal;
         /**
-         * @brief The face's opt-in to distance-field text, `font-rendering: sdf` in `@font-face`. Recorded here; the
-         * text it draws is bitmaps until FenrirText has an SDF mode.
+         * @brief How the face's glyphs are rasterised (FenrirText's FontRendering): `font-rendering: sdf` in
+         * `@font-face` opts it into the SDF mode.
          */
         FontRendering rendering = FontRendering::Bitmap;
     };
