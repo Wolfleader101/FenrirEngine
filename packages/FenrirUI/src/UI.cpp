@@ -99,6 +99,34 @@ namespace Fenrir
         return m_app.TryGetResource<FontLibrary>();
     }
 
+    bool UIRoots::AddFontFace(const UIFontFace& face)
+    {
+        FontLibrary* fonts = GetFonts();
+        if (fonts == nullptr || face.font.IsEmpty())
+        {
+            return false;
+        }
+        fonts->AddFace(face.family, face.font, face.weight, face.style);
+        const auto same = std::find_if(m_fontFaces.begin(), m_fontFaces.end(), [&](const UIFontFace& registered) {
+            return registered.family == face.family && registered.weight == face.weight &&
+                   registered.style == face.style;
+        });
+        if (same != m_fontFaces.end())
+        {
+            *same = face;
+        }
+        else
+        {
+            m_fontFaces.push_back(face);
+        }
+        return true;
+    }
+
+    std::span<const UIFontFace> UIRoots::GetFontFaces() const noexcept
+    {
+        return m_fontFaces;
+    }
+
     void UIRoots::Frame()
     {
         m_retired.clear();

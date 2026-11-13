@@ -10,8 +10,8 @@
 
 **Touches:** `packages/FenrirUI/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Headless App tests with files in a temporary directory: a document loaded by path with a `<style src>` and an `@import` resolves both relative to their files; an import loop is one error; `@font-face` registers a family that a label then measures with; after the sheet file is rewritten and 250 ms tick past, the label's colour changes without reloading; after the document is rewritten, the new tree is in place, old ids are stale and the reload event was sent; a document rewritten with an error keeps the old tree and logs.
-- [ ] With the switch off, no file is polled.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Headless App tests with files in a temporary directory: a document loaded by path with a `<style src>` and an `@import` resolves both relative to their files; an import loop is one error; `@font-face` registers a family that a label then measures with; after the sheet file is rewritten and 250 ms tick past, the label's colour changes without reloading; after the document is rewritten, the new tree is in place, old ids are stale and the reload event was sent; a document rewritten with an error keeps the old tree and logs.
+- [x] With the switch off, no file is polled.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

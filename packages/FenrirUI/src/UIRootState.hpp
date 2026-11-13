@@ -15,6 +15,7 @@
 #include "InputRouting.hpp"
 #include "LayoutBridge.hpp"
 #include "StyleAnimation.hpp"
+#include "StyleFiles.hpp"
 
 namespace Fenrir
 {
@@ -134,6 +135,8 @@ namespace Fenrir::Detail
         std::vector<ElementId> introducing;
         /** @brief Elements Remove() was called on, waiting for their subtrees' transitions to end. */
         std::vector<ElementId> removing;
+        /** @brief Its hot reload switch and the files it loaded. */
+        HotReloadState hotReload;
 
         /** @brief The slot `id` names, or null when it is stale. */
         [[nodiscard]] ElementSlot* Find(ElementId id) noexcept

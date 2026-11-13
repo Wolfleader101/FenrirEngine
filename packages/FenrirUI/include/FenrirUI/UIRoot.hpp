@@ -105,6 +105,8 @@ namespace Fenrir
         bool virtualCursor = false;
         /** @brief How fast the virtual cursor moves with the stick pushed all the way, in UI units a second. */
         float virtualCursorSpeed = 900.0f;
+        /** @brief Start with hot reload on (UIRoot::SetHotReload): the files the root loaded are polled for changes. */
+        bool hotReload = false;
     };
 
     /**
@@ -140,6 +142,8 @@ namespace Fenrir
         std::uint32_t measures = 0;
         /** @brief Elements painted. */
         std::uint32_t elementsPainted = 0;
+        /** @brief Files whose modification time hot reload read: none but on a frame that polled. */
+        std::uint32_t filesPolled = 0;
     };
 
     /**
@@ -169,6 +173,8 @@ namespace Fenrir
         static constexpr double NavigationRepeatInterval = 0.12;
         /** @brief How far the left stick must lean, of 1, before it moves the virtual cursor. */
         static constexpr float VirtualCursorDeadZone = 0.15f;
+        /** @brief Seconds of FenrirTime between hot reload's polls of the files the root loaded. */
+        static constexpr double HotReloadInterval = 0.25;
 
         /**
          * @brief A root of `roots` in `app`, named `id`; UIRoots::CreateRoot makes them. With FenrirInput installed, it
@@ -288,7 +294,8 @@ namespace Fenrir
          * @brief Parses `text` as a stylesheet named `name` (Stylesheet::Parse), logs what the parser refused with the
          * name and line, and adds it after the root's other sheets: at equal specificity a later sheet's rules win.
          * Every element's style is resolved again on the next frame. The sheet's url()s load from the asset store now;
-         * a declaration whose image cannot be loaded is logged and skipped.
+         * a declaration whose image cannot be loaded is logged and skipped. Its `@font-face`s register their faces
+         * (UIRoots::AddFontFace); one refused is logged. Its `@import`s load nothing: LoadStylesheet loads them.
          */
         StylesheetId AddStylesheet(std::string_view text, std::string_view name);
         /** @brief Adds a sheet already parsed, as AddStylesheet(text, name) does after parsing. */
@@ -355,7 +362,8 @@ namespace Fenrir
          * - `<include src="...">` loads the document the resolver gives for its src in its place, its top-level
          *   elements under the include's parent; an include back into a document being loaded is an error.
          * - `<style>` holds a stylesheet and `<style src="...">` names one by the resolver; either is parsed
-         *   (Stylesheet::Parse) and added after the root's sheets (AddStylesheet), and its errors are the load's.
+         *   (Stylesheet::Parse), its `@import`s loaded in place by the resolver, and added after the root's sheets
+         *   (AddStylesheet), and its errors are the load's.
          *   Inside an inline `<style>` text is CSS as written: no entities, and it ends at `</style>`.
          * - `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`, `&#N;` and `&#xN;` decode in text and attribute values.
          * - `<!-- -->` comments are skipped. Namespaces, processing instructions, DTDs and CDATA are errors.
@@ -368,6 +376,38 @@ namespace Fenrir
          */
         MarkupLoad LoadMarkup(ElementId parent, std::string_view text, std::string_view name,
                               const MarkupResolver& resolver = {});
+        /**
+         * @brief Loads the markup document at `path` under `parent`, as LoadMarkup loads one, from files: `path` is
+         * relative to the asset root (or absolute), and an `<include src>` or `<style src>` is relative to the file it
+         * is written in, as an `@import` is to its sheet. The errors name each file by that path. A document that is
+         * not there is one error and loads nothing. The root remembers the files it read for hot reload, the load
+         * having errors or not.
+         */
+        MarkupLoad LoadDocument(ElementId parent, std::string_view path);
+        /**
+         * @brief Loads the stylesheet at `path`, relative to the asset root (or absolute), and adds it as
+         * AddStylesheet adds one; its `@import`s load as LoadDocument's sheets' do. What it refused is logged with its
+         * file and line. Nothing, logged, for a file that is not there. The root remembers its files for hot reload.
+         */
+        StylesheetId LoadStylesheet(std::string_view path);
+        /**
+         * @brief Turns hot reload on or off. On, every HotReloadInterval of FenrirTime the root reads the modification
+         * time of every file it loaded (documents, includes, sheets and imports) and loads again what changed:
+         *
+         * - A changed sheet or import is parsed again in its sheet's place, and every style resolved again; its
+         *   elements stay as they are.
+         * - A changed document or include loads its document again under the same parent at the same position: the
+         *   elements it made before, and its sheets, are removed at once, their ids going stale, and DocumentReloaded
+         *   is sent at the new first element (at the parent when it made none) for the game to find its ids again.
+         * - A version with any error, or a file that is gone, is not taken: the one before stays, and the errors are
+         *   logged. It is read again when it next changes.
+         *
+         * A document none of whose elements is alive any more, or whose parent is not, and a sheet that was removed,
+         * are not polled again. Off, no file is polled.
+         */
+        void SetHotReload(bool on);
+        /** @brief Whether hot reload is on. */
+        [[nodiscard]] bool IsHotReloadOn() const noexcept;
         /** @} */
 
         /** @name Scrolling
@@ -487,6 +527,22 @@ namespace Fenrir
         void Retire();
         /** @brief SetStyleProperty without the log: false with why in `error`. */
         bool ApplyStyleProperty(ElementId element, std::string_view name, std::string_view value, std::string& error);
+        /**
+         * @brief AddStylesheet(Stylesheet) without the log: registers the sheet's font faces, with what they refused in
+         * `errors`, and adds it.
+         */
+        StylesheetId AttachStylesheet(Stylesheet sheet, std::vector<MarkupError>& errors);
+        /** @brief Puts `sheet` in the place of the sheet `id`, as AttachStylesheet adds one. False when none is `id`.
+         */
+        bool ReplaceStylesheet(StylesheetId id, Stylesheet sheet, std::vector<MarkupError>& errors);
+        /** @brief Hot reload's poll, when it is on and its interval has passed. */
+        void PollFiles(double deltaTime);
+        /** @brief Loads the document hot reload remembers at `document` again, taking it unless it has errors. */
+        void ReloadDocument(std::size_t document);
+        /** @brief Parses the sheet hot reload remembers at `sheet` again, taking it unless it has errors. */
+        void ReloadStylesheet(std::size_t sheet);
+        /** @brief Logs a load's errors with their files and lines. */
+        void LogErrors(std::span<const MarkupError> errors) const;
 
         std::unique_ptr<Detail::UIRootState> m_state;
     };

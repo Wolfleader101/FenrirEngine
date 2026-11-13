@@ -17,6 +17,7 @@
 #include "Rects.hpp"
 #include "Scrolling.hpp"
 #include "StyleAnimation.hpp"
+#include "StyleFiles.hpp"
 #include "StyleValues.hpp"
 #include "UIRootState.hpp"
 
@@ -396,6 +397,7 @@ namespace Fenrir
     {
         m_state->input.id = id;
         m_state->input.cursor.on = m_state->config.virtualCursor;
+        m_state->hotReload.on = m_state->config.hotReload;
         m_state->target = m_state->config.target != nullptr
                               ? m_state->config.target
                               : std::make_shared<WindowOverlayTarget>(m_state->config.window, m_state->config.layer);
@@ -783,6 +785,15 @@ namespace Fenrir
         {
             m_state->app.Logger()->Warn("FenrirUI: {}:{}: {}", sheet.name, diagnostic.line, diagnostic.message);
         }
+        std::vector<MarkupError> errors;
+        const StylesheetId id = AttachStylesheet(std::move(sheet), errors);
+        LogErrors(errors);
+        return id;
+    }
+
+    StylesheetId UIRoot::AttachStylesheet(Stylesheet sheet, std::vector<MarkupError>& errors)
+    {
+        Detail::RegisterFontFaces(m_state->roots, m_state->app.TryGetResource<AssetStore>(), sheet, errors);
         auto entry = std::make_unique<Detail::StylesheetEntry>();
         entry->id = {m_state->nextSheet++};
         entry->sheet = std::move(sheet);
@@ -792,6 +803,26 @@ namespace Fenrir
         Detail::RebuildStyleIndex(*m_state);
         MarkSubtreeStyleDirty(*m_state, m_state->rootElement);
         return id;
+    }
+
+    bool UIRoot::ReplaceStylesheet(StylesheetId id, Stylesheet sheet, std::vector<MarkupError>& errors)
+    {
+        auto& sheets = m_state->sheets;
+        const auto found =
+            std::find_if(sheets.begin(), sheets.end(), [&](const auto& entry) { return entry->id == id; });
+        if (!id.IsValid() || found == sheets.end())
+        {
+            return false;
+        }
+        Detail::RegisterFontFaces(m_state->roots, m_state->app.TryGetResource<AssetStore>(), sheet, errors);
+        auto entry = std::make_unique<Detail::StylesheetEntry>();
+        entry->id = id;
+        entry->sheet = std::move(sheet);
+        Detail::CompileStylesheet(*m_state, *entry);
+        *found = std::move(entry);
+        Detail::RebuildStyleIndex(*m_state);
+        MarkSubtreeStyleDirty(*m_state, m_state->rootElement);
+        return true;
     }
 
     bool UIRoot::RemoveStylesheet(StylesheetId sheet)
@@ -1047,6 +1078,7 @@ namespace Fenrir
         state.scale = state.config.scaleRule == ScaleRule::Height1080 ? state.size.logicalSize.y / 1080.0f : 1.0f;
         const Math::Vec2 uiSize = state.size.logicalSize / state.scale;
         Detail::FrameInput(*this, state, uiSize);
+        PollFiles(state.app.GetTime().deltaTime);
         FontLibrary* fonts = state.roots.GetFonts();
         state.layout.SetFonts(fonts);
         if (const float textPixelsPerUnit = state.scale * contentScale; textPixelsPerUnit != state.textPixelsPerUnit)
