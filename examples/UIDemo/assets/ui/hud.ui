@@ -1,0 +1,36 @@
+<!--
+  UIDemo's HUD (examples/UIDemo/README.md), a markup document loaded into the HUD root and styled by hud.css. It holds
+  structure and ids only: the room's HUD system finds the elements by id each frame and pushes the player's components
+  into them. Edit it while the demo runs and the HUD loads it again.
+-->
+<panel id="hud">
+    <panel id="compass-strip">
+        <compass id="compass"/>
+    </panel>
+
+    <panel id="crosshair"/>
+    <panel id="hit-markers"/>
+
+    <panel id="minimap-frame">
+        <image id="minimap" fit="cover"/>
+        <panel id="minimap-player">
+            <panel class="nose"/>
+        </panel>
+    </panel>
+
+    <panel id="vitals">
+        <panel class="vital">
+            <label class="vital-name">Health</label>
+            <progress id="health" class="bar" min="0" max="100" value="100"/>
+        </panel>
+        <panel class="vital">
+            <label class="vital-name">Stamina</label>
+            <progress id="stamina" class="bar" min="0" max="100" value="100"/>
+        </panel>
+    </panel>
+
+    <panel id="ammo-box">
+        <label id="ammo">30 / 90</label>
+        <label class="caption">AMMO</label>
+    </panel>
+</panel>

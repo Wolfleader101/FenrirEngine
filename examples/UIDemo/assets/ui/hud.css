@@ -1,0 +1,214 @@
+/*
+ * UIDemo's HUD stylesheet (examples/UIDemo/README.md). The demo loads it with hot reload on: edit it while the demo
+ * runs, save, and the HUD restyles within a quarter of a second. The colours are the custom properties on #hud.
+ * Positions are in UI units of a 1080-unit-high screen, so the HUD keeps its proportions at any resolution.
+ */
+
+#hud {
+    --ink: #f2efe8;
+    --ink-dim: rgba(242, 239, 232, 0.45);
+    --panel: rgba(10, 12, 16, 0.55);
+    --health: #e0503c;
+    --stamina: #e8b730;
+    --accent: #59c3ff;
+    --hit: #ffffff;
+
+    width: 100%;
+    height: 100%;
+    /* Nothing in the HUD takes pointer input, so the camera still turns under the mouse. It inherits. */
+    pointer-events: none;
+    color: var(--ink);
+    font-size: 22px;
+    text-shadow: 0 2px rgba(0, 0, 0, 0.6);
+}
+
+/* The compass: a strip at the top centre, painted by the compass element in its colour. */
+#compass-strip {
+    position: absolute;
+    top: 24px;
+    left: 50%;
+    width: 640px;
+    margin-left: -320px;
+    padding: 6px 16px;
+    border-radius: 10px;
+    background-color: var(--panel);
+}
+
+compass {
+    height: 44px;
+    color: var(--ink);
+}
+
+#crosshair {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    margin-left: -3px;
+    margin-top: -3px;
+    border-radius: 3px;
+    background-color: var(--ink-dim);
+}
+
+/* Hit markers: made at the centre by the game, they scale in through :intro and fade out through :outro. */
+#hit-markers {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+}
+
+.hit-marker {
+    position: absolute;
+    left: -22px;
+    top: -22px;
+    width: 44px;
+    height: 44px;
+    transform-origin: 50% 50%;
+    transition: opacity 0.12s ease-out, transform 0.12s ease-out;
+}
+
+.hit-marker:intro {
+    opacity: 0;
+    transform: scale(1.8);
+}
+
+.hit-marker:outro {
+    opacity: 0;
+    transform: scale(0.7);
+    transition-duration: 0.25s;
+}
+
+.hit-stroke {
+    position: absolute;
+    width: 4px;
+    height: 14px;
+    border-radius: 2px;
+    background-color: var(--hit);
+    transform-origin: 50% 50%;
+}
+
+.hit-stroke.top-left {
+    left: 9px;
+    top: 4px;
+    transform: rotate(-45deg);
+}
+
+.hit-stroke.top-right {
+    left: 31px;
+    top: 4px;
+    transform: rotate(45deg);
+}
+
+.hit-stroke.bottom-left {
+    left: 9px;
+    top: 26px;
+    transform: rotate(45deg);
+}
+
+.hit-stroke.bottom-right {
+    left: 31px;
+    top: 26px;
+    transform: rotate(-45deg);
+}
+
+/* The minimap: the top-down camera's image in a round frame, north up, with the player's arrow at its centre. */
+#minimap-frame {
+    position: absolute;
+    top: 40px;
+    right: 40px;
+    width: 240px;
+    height: 240px;
+    border: 3px solid var(--ink-dim);
+    border-radius: 120px;
+    overflow: hidden;
+    background-color: var(--panel);
+}
+
+#minimap {
+    width: 100%;
+    height: 100%;
+}
+
+#minimap-player {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    margin-left: -8px;
+    margin-top: -8px;
+    border-radius: 8px;
+    background-color: var(--accent);
+    transform-origin: 50% 50%;
+
+    > .nose {
+        position: absolute;
+        left: 6px;
+        top: -9px;
+        width: 4px;
+        height: 11px;
+        border-radius: 2px;
+        background-color: var(--accent);
+    }
+}
+
+/* Health and stamina, bottom left: progress bars the game sets from the player's components. */
+#vitals {
+    position: absolute;
+    left: 40px;
+    bottom: 40px;
+    padding: 16px 20px;
+    row-gap: 12px;
+    border-radius: 12px;
+    background-color: var(--panel);
+}
+
+.vital {
+    flex-direction: row;
+    align-items: center;
+    column-gap: 14px;
+}
+
+.vital-name {
+    width: 96px;
+    font-size: 18px;
+    color: var(--ink-dim);
+}
+
+progress.bar {
+    width: 400px;
+    height: 14px;
+    border-radius: 7px;
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+#health > progress-fill {
+    background-color: var(--health);
+}
+
+#stamina > progress-fill {
+    background-color: var(--stamina);
+}
+
+/* The ammo counter, bottom right. */
+#ammo-box {
+    position: absolute;
+    right: 40px;
+    bottom: 40px;
+    padding: 12px 22px;
+    align-items: flex-end;
+    border-radius: 12px;
+    background-color: var(--panel);
+}
+
+#ammo {
+    font-size: 56px;
+    font-weight: bold;
+}
+
+.caption {
+    font-size: 16px;
+    letter-spacing: 4px;
+    color: var(--ink-dim);
+}
