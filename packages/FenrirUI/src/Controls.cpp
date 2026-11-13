@@ -604,10 +604,15 @@ namespace Fenrir
                           fitted.y};
         if (m_fit == ImageFit::Cover)
         {
-            painter.Save();
-            painter.ClipRect(box);
-            painter.DrawImage(rect, draw);
-            painter.Restore();
+            // The box filled with the image laid over `rect`, rather than the image clipped to the box: the painter
+            // evaluates only the innermost clip per pixel, so a clip of its own would take the place of an ancestor's
+            // rounded overflow clip.
+            ImagePattern pattern;
+            pattern.image = m_source;
+            pattern.sampler = draw.sampler;
+            pattern.rect = rect;
+            pattern.tint = draw.tint;
+            painter.DrawRect(box, pattern);
             return;
         }
         painter.DrawImage(rect, draw);
