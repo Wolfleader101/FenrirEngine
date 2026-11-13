@@ -267,7 +267,7 @@ One session, branch and PR per ticket, into `fenrir-ui` or the previous ticket's
 | 11 | [Input routing, hover and focus, `UIEvent` and C++ listeners](issues/11-input-routing-hover-and-focus-uievent-and-cpp-listeners.md) | 07 | `ui/11-input-routing-hover-and-focus-uievent-and-cpp-listeners` | [#340](https://github.com/Wolfleader101/FenrirEngine/pull/340) |
 | 12 | [Controls and the default stylesheet](issues/12-controls-and-the-default-stylesheet.md) | 09, 11 | `ui/12-controls-and-the-default-stylesheet` | [#346](https://github.com/Wolfleader101/FenrirEngine/pull/346) |
 | 13 | [Text entry](issues/13-text-entry.md) | 09, 11 | `ui/13-text-entry` | [#347](https://github.com/Wolfleader101/FenrirEngine/pull/347) |
-| 14 | [Gamepad navigation and the virtual cursor](issues/14-gamepad-navigation-and-the-virtual-cursor.md) | 11, 12 | `ui/14-gamepad-navigation-and-the-virtual-cursor` | |
+| 14 | [Gamepad navigation and the virtual cursor](issues/14-gamepad-navigation-and-the-virtual-cursor.md) | 11, 12 | `ui/14-gamepad-navigation-and-the-virtual-cursor` | [#348](https://github.com/Wolfleader101/FenrirEngine/pull/348) |
 | 15 | [Markup documents](issues/15-markup-documents.md) | 09 | `ui/15-markup-documents` | |
 | 16 | [Stylesheet files, `@import`, `@font-face` and hot reload](issues/16-stylesheet-files-import-font-face-and-hot-reload.md) | 08, 15 | `ui/16-stylesheet-files-import-font-face-and-hot-reload` | |
 | 17 | [UIDemo: the HUD](issues/17-uidemo-the-hud.md) | 04, 10, 15, 16 | `ui/17-uidemo-the-hud` | |
