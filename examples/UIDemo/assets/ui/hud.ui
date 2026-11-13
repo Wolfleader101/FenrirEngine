@@ -12,7 +12,9 @@
     <panel id="hit-markers"/>
 
     <panel id="minimap-frame">
-        <image id="minimap" fit="cover"/>
+        <!-- Stretch, not cover: the image and its box are both square, and cover's own rectangle clip would take the
+             place of the frame's round one. -->
+        <image id="minimap" fit="stretch"/>
         <panel id="minimap-player">
             <panel class="nose"/>
         </panel>
