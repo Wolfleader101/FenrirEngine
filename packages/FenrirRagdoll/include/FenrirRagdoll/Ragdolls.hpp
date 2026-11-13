@@ -29,8 +29,12 @@ namespace Fenrir
      * 1. **Resolve:** each `RagdollBody`'s bone, by engine name. A ragdoll on a frame-posed or not-ready skeleton is
      *    inactive (`state.inactive`), writes nothing and warns once each time it becomes inactive; a body whose name
      *    matches no bone, whose entity has no `RigidBody`, or whose `ragdoll` is not a live `Ragdoll` entity of the
-     *    scene is skipped, warned about once, with `state.bone = NoBone`. Removing `Ragdoll` (or destroying the
-     *    skeleton entity) leaves its bodies so: skipped, each warned about once, where they are.
+     *    scene is skipped, warned about once each time it becomes so, with `state.bone = NoBone`. Each resumes by
+     *    itself once the cause is gone. Names are resolved every tick, so a skeleton asset rebuilt with its bones
+     *    reordered is followed at once. Removing `Ragdoll` (or destroying the skeleton entity) leaves its bodies so:
+     *    skipped, each warned about once, where they are, and turns each one's joint to its parent body off once
+     *    (its motor's mode `Off`, its other fields left), after which the joints are game code's. A powered body made
+     *    so stops being driven; its bones keep their override entries, which `ClearOverrides` still clears.
      * 2. **Modes:** each body's effective mode (`Inherit` takes the ragdoll's), turned into its
      *    `RigidBody::motionType`: kinematic while following, dynamic otherwise. Switching moves no body: one made
      *    dynamic keeps the velocity its `RigidBody` holds, the last following move's, so a running character tumbles
@@ -70,7 +74,14 @@ namespace Fenrir
      *    weight of the bones written reads 0; then the glue clears them. `ClearOverrides` clears them at once. A body
      *    of a partial ragdoll that follows again while others still simulate keeps its held entry until they all
      *    follow: set its subtree's weight to 0 to let the animation through. A skeleton whose `Ragdoll` is removed
-     *    keeps its entries; `Skeletons::ClearOverrides` clears them.
+     *    keeps its entries; `ClearOverrides` (or `Skeletons::ClearOverrides`, every entry) clears them.
+     * 4. **Debug lines:** with `PhysicsDebugCategories::Ragdolls` on in the scene's physics world, each resolved body's
+     *    bone frame and line to the body, and each driven joint's motor target, drawn after the steps above
+     *    (FenrirRagdoll/DebugLines.hpp).
+     *
+     * A paused scene's ragdolls (the scene inactive) change nothing. Destroying the scene, its physics world (the
+     * Physics owner) or this owner under a live ragdoll is clean; without a world the glue still writes the
+     * components, and `anyAwake` reads false.
      */
     class Ragdolls
     {
@@ -81,8 +92,10 @@ namespace Fenrir
         /**
          * @brief Clears the pose override entries of `skeleton`'s ragdoll at once: those on its bodies' bones and on
          * the bones of bodies destroyed since the glue wrote them. Game code's entries on other bones, and every
-         * override weight, stay. False, clearing nothing, when `skeleton` has no `Ragdoll`. While a body simulates the
-         * glue writes its entry again next frame.
+         * override weight, stay. It works after the `Ragdoll` is removed, while its bodies still name `skeleton` or the
+         * glue's record of the bones it wrote is there. False, clearing nothing, when `skeleton` is not a live entity
+         * of `scene`, or has no `Ragdoll`, no body naming it and no record. While a body simulates the glue writes its
+         * entry again next frame.
          */
         static bool ClearOverrides(Scene& scene, Entity skeleton);
 

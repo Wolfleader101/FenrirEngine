@@ -49,7 +49,12 @@ namespace Fenrir
            tyre's `peakSlip`) or PastSlideSlip (either past its `slideSlip`). Probe shapes are not drawn. Disabled and
            inactive vehicles draw nothing; Colliders still draws their chassis. */
         Vehicles = 1u << 6,
-        All = Colliders | Contacts | Velocities | Bounds | Joints | Characters | Vehicles
+        /** @brief Each ragdoll's bodies, drawn by FenrirRagdoll rather than the world (FenrirRagdoll/DebugLines.hpp),
+           each frame after its glue's work: for each body of an active ragdoll, its bone's frame and a line from the
+           bone to the body, coloured by the body's effective mode, and for each powered joint its motor's target as a
+           frame at the joint. The world draws nothing for it; without FenrirRagdoll it draws nothing at all. */
+        Ragdolls = 1u << 7,
+        All = Colliders | Contacts | Velocities | Bounds | Joints | Characters | Vehicles | Ragdolls
     };
 
     /** @brief The categories in `a` or `b`. */

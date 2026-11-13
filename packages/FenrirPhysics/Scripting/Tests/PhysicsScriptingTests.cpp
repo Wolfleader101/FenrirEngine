@@ -300,7 +300,8 @@ TEST_CASE("C# chooses the debug lines a world draws", "[physics][scripting]")
     REQUIRE_FALSE(draw->Tessellate().lines.empty());
 }
 
-TEST_CASE("C#'s debug-draw categories match C++'s, joints, characters and vehicles included", "[physics][scripting]")
+TEST_CASE("C#'s debug-draw categories match C++'s, joints, characters, vehicles and ragdolls included",
+          "[physics][scripting]")
 {
     PhysicsScriptingApp test;
     AddStaticBox(test, Math::Vec3(0.0f, 0.0f, 0.0f));
@@ -320,8 +321,13 @@ TEST_CASE("C#'s debug-draw categories match C++'s, joints, characters and vehicl
     INFO("C#'s Vehicles is C++'s Vehicles");
     REQUIRE(world->DebugDrawCategories() == PhysicsDebugCategories::Vehicles);
 
+    REQUIRE(test.Call<bool>(WorldType, "DrawRagdolls"));
+    INFO("C#'s Ragdolls is C++'s Ragdolls");
+    REQUIRE(world->DebugDrawCategories() == PhysicsDebugCategories::Ragdolls);
+
     REQUIRE(test.Call<bool>(WorldType, "DrawAll"));
-    INFO("C#'s All is C++'s All: every category, joints, characters and vehicles included");
+    INFO("C#'s All is C++'s All: every category, joints, characters, vehicles and ragdolls included");
+    REQUIRE(Includes(world->DebugDrawCategories(), PhysicsDebugCategories::Ragdolls));
     REQUIRE(world->DebugDrawCategories() == PhysicsDebugCategories::All);
 }
 

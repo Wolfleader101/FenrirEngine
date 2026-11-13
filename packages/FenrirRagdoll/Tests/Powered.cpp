@@ -55,8 +55,7 @@ namespace
 
     JointMotorMode MotorMode(const Entity& joint)
     {
-        const Fenrir::JointKind& kind = JointOf(joint).kind;
-        return kind.Is<HingeJoint>() ? kind.As<HingeJoint>().motor.mode : kind.As<SwingTwistJoint>().motor.mode;
+        return RagdollTest::MotorMode(JointOf(joint));
     }
 
     // Bends the base pose in Animate, each listed bone's local rotation set (the test rigs' rest rotations are the

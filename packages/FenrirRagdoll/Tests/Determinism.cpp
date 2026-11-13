@@ -1,6 +1,6 @@
 // Same inputs, same ragdoll (the spec's user story 45): a humanoid walking through a row of boxes for 300 ticks, or
-// walking into them and falling onto them, or stumbling into them powered, gives the same bodies, boxes and bone
-// overrides, byte for byte, in two runs, on one thread and on several.
+// walking into them and falling onto them, or stumbling into them powered, or walking into them as a partial ragdoll,
+// gives the same bodies, boxes and bone overrides, byte for byte, in two runs, on one thread and on several.
 
 #include <cstddef>
 #include <cstdint>
@@ -26,9 +26,19 @@ namespace
         bytes.insert(bytes.end(), begin, begin + sizeof(T));
     }
 
-    // One run: the walk into five boxes, 300 ticks (switched to `mode` after the first 40 unless it is Following),
-    // then every body's and box's world transform and velocities, and every body's bone override.
-    std::vector<std::byte> Run(bool workerThreads, Fenrir::RagdollMode mode)
+    /** @brief Whether a run's arms take modes of their own after the switch. */
+    enum class Arms
+    {
+        /** @brief Both inherit the ragdoll's mode. */
+        Inherit,
+        /** @brief The left simulating and the right powered: a partial ragdoll. */
+        Partial,
+    };
+
+    // One run: the walk into five boxes, 300 ticks (switched to `mode` after the first 40 unless it is Following, and
+    // the arms set as `arms` says from then on), then every body's and box's world transform and velocities, and every
+    // body's bone override.
+    std::vector<std::byte> Run(bool workerThreads, Fenrir::RagdollMode mode, Arms arms = Arms::Inherit)
     {
         Fenrir::PhysicsConfig config = RagdollTest::StepPosesOnly();
         config.useWorkerThreads = workerThreads;
@@ -50,10 +60,17 @@ namespace
             box.AddComponent<Fenrir::Collider>(Fenrir::Collider{Fenrir::BoxShape{Vec3(0.2f)}});
             boxes.push_back(box);
         }
-        if (mode != Fenrir::RagdollMode::Following)
+        if (mode != Fenrir::RagdollMode::Following || arms == Arms::Partial)
         {
             test.Run(40);
             skeleton.GetComponent<Fenrir::Ragdoll>().mode = mode;
+            if (arms == Arms::Partial)
+            {
+                RagdollTest::SetModes(spawned, {"upperarm_l", "lowerarm_l", "hand_l"},
+                                      Fenrir::RagdollBodyMode::Simulating);
+                RagdollTest::SetModes(spawned, {"upperarm_r", "lowerarm_r", "hand_r"},
+                                      Fenrir::RagdollBodyMode::Powered);
+            }
             test.Run(260);
         }
         else
@@ -123,6 +140,20 @@ TEST_CASE("Two runs of a powered ragdoll stumbling into boxes are bit-identical 
         const std::vector<std::byte> second = Run(threads, Fenrir::RagdollMode::Powered);
         INFO((threads ? "on worker threads" : "on one thread")
              << ": every body's, box's and bone override's values match byte for byte");
+        REQUIRE(first.size() == second.size()); // the same entries exist in both runs
+        REQUIRE(std::memcmp(first.data(), second.data(), first.size()) == 0);
+    }
+}
+
+TEST_CASE("Two runs of a partial ragdoll walking into boxes are bit-identical over 300 ticks",
+          "[ragdoll][determinism][partial]")
+{
+    for (const bool threads : {false, true})
+    {
+        const std::vector<std::byte> first = Run(threads, Fenrir::RagdollMode::Following, Arms::Partial);
+        const std::vector<std::byte> second = Run(threads, Fenrir::RagdollMode::Following, Arms::Partial);
+        INFO((threads ? "on worker threads" : "on one thread")
+             << ": a simulating arm and a powered one on a walking ragdoll match byte for byte");
         REQUIRE(first.size() == second.size()); // the same entries exist in both runs
         REQUIRE(std::memcmp(first.data(), second.data(), first.size()) == 0);
     }
