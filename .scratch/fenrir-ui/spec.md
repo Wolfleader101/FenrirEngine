@@ -275,6 +275,6 @@ One session, branch and PR per ticket, into `fenrir-ui` or the previous ticket's
 | 19 | [Scripting: text and painter facades](issues/19-scripting-text-and-painter-facades.md) | 06 | `ui/19-scripting-text-and-painter-facades` | [#341](https://github.com/Wolfleader101/FenrirEngine/pull/341) |
 | 20 | [Scripting: UI handles, events and the hosted paint stage](issues/20-scripting-ui-handles-events-and-the-hosted-paint-stage.md) | 16, 18, 19 | `ui/20-scripting-ui-handles-events-and-the-hosted-paint-stage` | |
 | 21 | [Image-target UI roots and the menu in a texture](issues/21-image-target-ui-roots-and-the-menu-in-a-texture.md) | 18 | `ui/21-image-target-ui-roots-and-the-menu-in-a-texture` | |
-| 22 | [SDF text mode](issues/22-sdf-text-mode.md) | 06, 16 | `ui/22-sdf-text-mode` | |
+| 22 | [SDF text mode](issues/22-sdf-text-mode.md) | 06, 16 | `ui/22-sdf-text-mode` | [#352](https://github.com/Wolfleader101/FenrirEngine/pull/352) |
 | 23 | [World-space 2D target, world UI roots and the pointer ray](issues/23-world-space-2d-target-world-ui-roots-and-the-pointer-ray.md) | 14, 21, 22 | `ui/23-world-space-2d-target-world-ui-roots-and-the-pointer-ray` | |
 | 24 | [The anti-aliasing switch: a painter option and the UI app resource's switch](issues/24-painter-anti-aliasing-switch.md) | 06, 07 | `ui/24-painter-anti-aliasing-switch` | |
