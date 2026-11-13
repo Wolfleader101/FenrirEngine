@@ -20,14 +20,29 @@
 
 namespace Fenrir::Detail
 {
+    Colour Faded(Colour colour, float alpha)
+    {
+        colour.a *= alpha;
+        return colour;
+    }
+
+    bool SameColour(const Colour& a, const Colour& b)
+    {
+        return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+    }
+
+    void PaintRuns(Painter& painter, const Paragraph& paragraph, Math::Vec2 point, const Colour* colour, float alpha)
+    {
+        for (const GlyphRun& run : paragraph.Runs())
+        {
+            GlyphRun tinted = run;
+            tinted.colour = Faded(colour != nullptr ? *colour : run.colour, alpha);
+            painter.DrawGlyphs(tinted, point);
+        }
+    }
+
     namespace
     {
-        Colour Faded(Colour colour, float alpha)
-        {
-            colour.a *= alpha;
-            return colour;
-        }
-
         Rect2D TransformedBounds(const Transform2D& transform, const Rect2D& rect)
         {
             const std::array corners{transform.Apply({rect.x, rect.y}), transform.Apply({rect.x + rect.width, rect.y}),
@@ -275,7 +290,7 @@ namespace Fenrir::Detail
                     const Colour colour = Faded(shadow->colour, alpha);
                     if (colour.a > 0.0f)
                     {
-                        PaintRuns(paragraph, point + shadow->offset, &colour, 1.0f);
+                        PaintRuns(m_painter, paragraph, point + shadow->offset, &colour, 1.0f);
                     }
                 }
                 if (alpha >= 1.0f)
@@ -284,18 +299,7 @@ namespace Fenrir::Detail
                 }
                 else
                 {
-                    PaintRuns(paragraph, point, nullptr, alpha);
-                }
-            }
-
-            /** @brief Every run of `paragraph` at `point`, in `colour` if given, else its own, faded by `alpha`. */
-            void PaintRuns(const Paragraph& paragraph, Math::Vec2 point, const Colour* colour, float alpha)
-            {
-                for (const GlyphRun& run : paragraph.Runs())
-                {
-                    GlyphRun tinted = run;
-                    tinted.colour = Faded(colour != nullptr ? *colour : run.colour, alpha);
-                    m_painter.DrawGlyphs(tinted, point);
+                    PaintRuns(m_painter, paragraph, point, nullptr, alpha);
                 }
             }
 

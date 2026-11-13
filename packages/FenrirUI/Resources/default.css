@@ -14,7 +14,7 @@
 }
 
 /* The controls take pointer input, and so does everything inside them, which passes it up to them. */
-button, checkbox, slider, scroll {
+button, checkbox, slider, scroll, textentry {
     pointer-events: all;
 }
 
@@ -24,7 +24,7 @@ checkbox-mark, slider-fill, slider-thumb, progress-fill {
 }
 
 /* One focus ring for every focusable control. */
-button:focus, checkbox:focus, slider:focus, scroll:focus {
+button:focus, checkbox:focus, slider:focus, scroll:focus, textentry:focus {
     box-shadow: 0 0 0 2px #4a7fd9;
 }
 
@@ -201,4 +201,39 @@ scroll:disabled {
 
 :disabled::scrollbar-thumb {
     background-color: #d6d6d6;
+}
+
+/* A text entry paints its own text, caret and selection on one line through its content box; the caret is in its
+   colour. */
+textentry {
+    width: 200px;
+    padding: 4px 6px;
+    border: 1px solid #8a8a8a;
+    border-radius: 3px;
+    background-color: #ffffff;
+    overflow: hidden;
+    cursor: text;
+}
+
+textentry:hover {
+    border-color: #5c5c5c;
+}
+
+textentry:focus {
+    border-color: #3c6fd1;
+}
+
+textentry:disabled {
+    border-color: #cfcfcf;
+    background-color: #f0f0f0;
+    color: #a0a0a0;
+    cursor: default;
+}
+
+textentry::selection {
+    background-color: #b5cdf5;
+}
+
+textentry::placeholder {
+    color: #8a8a8a;
 }

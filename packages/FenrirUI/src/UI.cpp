@@ -19,6 +19,7 @@ namespace Fenrir
         RegisterElement("progress", [] { return std::make_unique<ProgressBar>(); });
         RegisterElement("image", [] { return std::make_unique<ImageView>(); });
         RegisterElement("scroll", [] { return std::make_unique<ScrollView>(); });
+        RegisterElement("textentry", [] { return std::make_unique<TextEntry>(); });
     }
 
     UIRoots::~UIRoots() = default;

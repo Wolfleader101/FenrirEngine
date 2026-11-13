@@ -5,9 +5,11 @@
 #include "FenrirText/FontLibrary.hpp"
 #include "FenrirText/GlyphAtlas.hpp"
 #include "FenrirText/Paragraph.hpp"
+#include "FenrirText/TextSegments.hpp"
 #include "FenrirText/TextStyle.hpp"
 
-#if defined(FT_FREETYPE_H) || defined(HB_H) || defined(_SB_PUBLIC_SHEENBIDI_H) || defined(LINEBREAK_H)
+#if defined(FT_FREETYPE_H) || defined(HB_H) || defined(_SB_PUBLIC_SHEENBIDI_H) || defined(LINEBREAK_H) || \
+    defined(WORDBREAK_H)
 #error "A FenrirText header includes one of its text libraries."
 #endif
 

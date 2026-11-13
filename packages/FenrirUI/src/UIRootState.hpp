@@ -31,6 +31,13 @@ namespace Fenrir::Detail
         ResolvedStyle thumb;
     };
 
+    /** @brief A text entry's `::selection` and `::placeholder` styles. */
+    struct TextEntryStyles
+    {
+        ResolvedStyle selection;
+        ResolvedStyle placeholder;
+    };
+
     /** @brief One slot of a root's dense tree: an element while `alive`, free for reuse otherwise. */
     struct ElementSlot
     {
@@ -79,6 +86,9 @@ namespace Fenrir::Detail
          * scroll`; null otherwise.
          */
         std::unique_ptr<ScrollbarStyles> scrollbarStyles;
+        /** @brief Its `::selection` and `::placeholder` styles as of its last resolve, while it is a text entry; null
+         * otherwise. */
+        std::unique_ptr<TextEntryStyles> textEntryStyles;
     };
 
     /** @brief A root's tree in dense slots, its Yoga nodes, its target and what its frames keep. */

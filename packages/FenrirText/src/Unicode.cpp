@@ -4,6 +4,7 @@
 
 #include <graphemebreak.h>
 #include <linebreak.h>
+#include <wordbreak.h>
 
 namespace Fenrir::Detail
 {
@@ -16,6 +17,7 @@ namespace Fenrir::Detail
             std::call_once(once, [] {
                 init_linebreak();
                 init_graphemebreak();
+                init_wordbreak();
             });
         }
 
@@ -89,6 +91,27 @@ namespace Fenrir::Detail
         for (std::size_t i = 0; i + 1 < text.size(); ++i)
         {
             if (breaks[i] == GRAPHEMEBREAK_BREAK)
+            {
+                boundaries.push_back(static_cast<std::uint32_t>(i + 1));
+            }
+        }
+        boundaries.push_back(static_cast<std::uint32_t>(text.size()));
+        return boundaries;
+    }
+
+    std::vector<std::uint32_t> WordBoundaries(std::string_view text)
+    {
+        std::vector<std::uint32_t> boundaries{0};
+        if (text.empty())
+        {
+            return boundaries;
+        }
+        InitialiseUnibreak();
+        std::vector<char> breaks(text.size());
+        set_wordbreaks_utf8(Bytes(text), text.size(), nullptr, breaks.data());
+        for (std::size_t i = 0; i + 1 < text.size(); ++i)
+        {
+            if (breaks[i] == WORDBREAK_BREAK)
             {
                 boundaries.push_back(static_cast<std::uint32_t>(i + 1));
             }

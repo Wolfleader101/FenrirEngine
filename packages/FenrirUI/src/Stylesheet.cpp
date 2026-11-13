@@ -80,9 +80,11 @@ namespace Fenrir
             {"root", 0, static_cast<std::uint8_t>(StructuralPseudoClass::Root)},
         }};
 
-        constexpr std::array<std::pair<std::string_view, PseudoElement>, 2> PseudoElements{{
+        constexpr std::array<std::pair<std::string_view, PseudoElement>, 4> PseudoElements{{
             {"scrollbar", PseudoElement::Scrollbar},
             {"scrollbar-thumb", PseudoElement::ScrollbarThumb},
+            {"selection", PseudoElement::Selection},
+            {"placeholder", PseudoElement::Placeholder},
         }};
 
         /** @brief Reads one complex selector; nothing, with `error` saying why, for one FenrirUI cannot match. */

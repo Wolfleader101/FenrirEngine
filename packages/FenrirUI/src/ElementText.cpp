@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "BoxPainting.hpp"
 #include "FenrirText/FontLibrary.hpp"
 
 namespace Fenrir::Detail
@@ -26,11 +27,6 @@ namespace Fenrir::Detail
         {
             return a.family == b.family && a.size == b.size && a.weight == b.weight && a.style == b.style &&
                    a.letterSpacing == b.letterSpacing && a.decoration == b.decoration;
-        }
-
-        bool SameColour(const Colour& a, const Colour& b)
-        {
-            return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
         }
 
         /** @brief Whether two paragraph styles lay text out to the same size: all but the alignment. */
@@ -93,6 +89,12 @@ namespace Fenrir::Detail
         paragraph.lineHeight = LineHeightOf(style);
         paragraph.ellipsis = style.textOverflow == TextOverflow::Ellipsis;
         paragraph.whiteSpace = style.whiteSpace;
+        if (m_singleLine)
+        {
+            paragraph.align = TextAlign::Start;
+            paragraph.ellipsis = false;
+            paragraph.whiteSpace = WhiteSpace::Pre;
+        }
 
         const bool resized =
             !SameShape(text, m_style) || !SameShape(paragraph, m_paragraphStyle) || pixelsPerUnit != m_pixelsPerUnit;

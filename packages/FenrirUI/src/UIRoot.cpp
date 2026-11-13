@@ -11,6 +11,7 @@
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirRenderer/Overlay.hpp"
 #include "FenrirText/FontLibrary.hpp"
+#include "FenrirUI/Controls.hpp"
 #include "FenrirUI/UI.hpp"
 #include "FenrirWindow/Window.hpp"
 #include "Rects.hpp"
@@ -132,15 +133,22 @@ namespace Fenrir
                     Detail::StartTransitions(slot.motion, slot.cascaded, style);
                 }
                 Detail::ReconcileAnimations(slot.motion, style, state.index.keyframes);
+                // Its pseudo-elements are parts of it: they inherit from it and match its pseudo-classes.
+                const auto resolvePart = [&](ResolvedStyle& part, PseudoElement pseudoElement) {
+                    Detail::Inherit(style, part);
+                    std::shared_ptr<const Detail::CustomProperties> partCustom = slot.customProperties;
+                    Detail::Cascade(state, index, part, partCustom, pseudoElement);
+                };
+                if (dynamic_cast<const TextEntry*>(slot.element.get()) != nullptr)
+                {
+                    auto parts = std::make_unique<Detail::TextEntryStyles>();
+                    resolvePart(parts->selection, PseudoElement::Selection);
+                    resolvePart(parts->placeholder, PseudoElement::Placeholder);
+                    slot.textEntryStyles = std::move(parts);
+                }
                 if (style.overflow == Overflow::Scroll)
                 {
-                    // Its scrollbars are parts of it: they inherit from it and match its pseudo-classes.
                     auto parts = std::make_unique<Detail::ScrollbarStyles>();
-                    const auto resolvePart = [&](ResolvedStyle& part, PseudoElement pseudoElement) {
-                        Detail::Inherit(style, part);
-                        std::shared_ptr<const Detail::CustomProperties> partCustom = slot.customProperties;
-                        Detail::Cascade(state, index, part, partCustom, pseudoElement);
-                    };
                     resolvePart(parts->track, PseudoElement::Scrollbar);
                     resolvePart(parts->thumb, PseudoElement::ScrollbarThumb);
                     slot.scrollbarStyles = std::move(parts);
@@ -800,6 +808,31 @@ namespace Fenrir
     {
         const Detail::ElementSlot* slot = m_state->Find(element);
         return slot != nullptr ? &slot->resolved : nullptr;
+    }
+
+    const ResolvedStyle* UIRoot::GetPseudoElementStyle(ElementId element, PseudoElement pseudoElement) const noexcept
+    {
+        const Detail::ElementSlot* slot = m_state->Find(element);
+        if (slot == nullptr)
+        {
+            return nullptr;
+        }
+        const Detail::ScrollbarStyles* bars = slot->scrollbarStyles.get();
+        const Detail::TextEntryStyles* entry = slot->textEntryStyles.get();
+        switch (pseudoElement)
+        {
+        case PseudoElement::Scrollbar:
+            return bars != nullptr ? &bars->track : nullptr;
+        case PseudoElement::ScrollbarThumb:
+            return bars != nullptr ? &bars->thumb : nullptr;
+        case PseudoElement::Selection:
+            return entry != nullptr ? &entry->selection : nullptr;
+        case PseudoElement::Placeholder:
+            return entry != nullptr ? &entry->placeholder : nullptr;
+        case PseudoElement::None:
+            break;
+        }
+        return nullptr;
     }
 
     ElementBoxes UIRoot::GetBoxes(ElementId element) const noexcept

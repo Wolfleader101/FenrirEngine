@@ -59,14 +59,18 @@ namespace Fenrir
 
     /**
      * @brief A pseudo-element a selector may end with: a part of its subject drawn by FenrirUI rather than an element
-     * of the tree. A scroll view's scrollbars are the two there are: `::scrollbar`, a bar's track (its `width` is the
-     * bar's thickness and its padding the thumb's inset), and `::scrollbar-thumb`.
+     * of the tree. A scroll view's scrollbars are two: `::scrollbar`, a bar's track (its `width` is the bar's thickness
+     * and its padding the thumb's inset), and `::scrollbar-thumb`. A text entry's are the other two: `::selection`, its
+     * selected text (`background-color` behind it, `color` for it), and `::placeholder`, the placeholder it shows while
+     * empty (its text properties).
      */
     enum class PseudoElement : std::uint8_t
     {
         None,
         Scrollbar,
         ScrollbarThumb,
+        Selection,
+        Placeholder,
     };
 
     /**
