@@ -107,10 +107,10 @@ namespace Fenrir
      * @brief `slider`: a value from min to max in steps, shown by a `slider-fill` child up to the value and a
      * `slider-thumb` child at it, both placed by their inline style. A press on it sets the value where it lands and
      * drags it; Left and Down step it down and Right and Up step it up while focused, and so do the D-pad's directions
-     * along its axis (the root's gamepad navigation, UIRoot); the wheel over it steps it while focused, and passes on
-     * otherwise. It
-     * sends Change (value the new value) at each change while dragged, from the keys and the wheel, and once more at
-     * the drag's release with `integer` 1. Vertical, the class `vertical` is set on it and min is at the bottom.
+     * along its axis (the root's gamepad navigation, UIRoot), passing at the end they step to; the wheel over it steps
+     * it while focused, and passes on otherwise. It sends Change (value the new value) at each change while dragged,
+     * from the keys and the wheel, and once more at the drag's release with `integer` 1. Vertical, the class `vertical`
+     * is set on it and min is at the bottom.
      */
     class Slider : public Control
     {

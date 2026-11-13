@@ -76,15 +76,22 @@ namespace Fenrir::Detail
         struct
         {
             std::optional<GamepadButton> direction;
+            /** @brief The pad it is held on: only that pad's release ends it. */
             GamepadId pad;
+            /** @brief Held by the stick rather than the D-pad: the stick leaving the direction ends it. */
             bool fromStick = false;
             /** @brief The clock reading at which it moves the focus again. */
             double next = 0.0;
         } held;
-        /** @brief Whether the virtual cursor is on, its element while it is, and whether A holds its press. */
-        bool virtualCursor = false;
-        ElementId cursorElement;
-        bool cursorPressed = false;
+        /** @brief The virtual cursor. */
+        struct
+        {
+            bool on = false;
+            /** @brief Its element, while it is on and has been made. */
+            ElementId element;
+            /** @brief A holds the left press it made. */
+            bool pressed = false;
+        } cursor;
     };
 
     /** @brief Registers the root's router with FenrirInput when the app has input and it is not registered yet. */

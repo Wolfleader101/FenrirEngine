@@ -145,8 +145,9 @@ namespace Fenrir::Detail
         {
             UIRootInput& input = state.input;
             const ElementSlot* focused = state.Find(input.focused);
-            // The gamepad navigates the focus, or moves the virtual cursor.
-            if (const bool gamepad = focused != nullptr || input.virtualCursor;
+            // Only while it navigates the focus or drives the cursor does the UI want the pad: a HUD root never claims
+            // it.
+            if (const bool gamepad = focused != nullptr || input.cursor.on;
                 input.routerId.value != 0 && gamepad != input.gamepadPublished)
             {
                 input.gamepadPublished = gamepad;
@@ -251,12 +252,6 @@ namespace Fenrir::Detail
             default:
                 return {0.0f, 0.0f};
             }
-        }
-
-        bool IsDirection(GamepadButton button)
-        {
-            return button == GamepadButton::DPadUp || button == GamepadButton::DPadDown ||
-                   button == GamepadButton::DPadLeft || button == GamepadButton::DPadRight;
         }
 
         /** @brief The way the stick leans past the navigation dead zone, its larger axis winning; none inside it. */
@@ -391,11 +386,11 @@ namespace Fenrir::Detail
         void PlaceCursor(UIRoot& root, const UIRootState& state)
         {
             const UIRootInput& input = state.input;
-            if (state.Find(input.cursorElement) == nullptr || !input.pointer)
+            if (state.Find(input.cursor.element) == nullptr || !input.pointer)
             {
                 return;
             }
-            if (StyleDeclarations* style = root.EditInlineStyle(input.cursorElement))
+            if (StyleDeclarations* style = root.EditInlineStyle(input.cursor.element))
             {
                 style->SetLeft(Length::Px(input.pointer->x)).SetTop(Length::Px(input.pointer->y));
             }
@@ -794,13 +789,13 @@ namespace Fenrir::Detail
             if (!event.pressed)
             {
                 // Only a press this router consumed brings its release here.
-                if (input.held.direction == event.button && !input.held.fromStick)
+                if (input.held.direction == event.button && !input.held.fromStick && input.held.pad == event.gamepad)
                 {
                     input.held.direction.reset();
                 }
-                if (event.button == GamepadButton::South && input.cursorPressed)
+                if (event.button == GamepadButton::South && input.cursor.pressed)
                 {
-                    input.cursorPressed = false;
+                    input.cursor.pressed = false;
                     const MouseButtonEvent release{m_state->config.window, MouseButton::Left, false, false};
                     (void)Button(release, release);
                 }
@@ -810,14 +805,19 @@ namespace Fenrir::Detail
             const bool hasFocus = m_state->Find(focused) != nullptr;
             if (event.button == GamepadButton::South)
             {
-                if (input.virtualCursor)
+                if (input.cursor.on)
                 {
+                    // The mouse's held buttons keep their elements: A presses nothing while one is down.
+                    if (FirstPressed(input).IsValid())
+                    {
+                        return RouteResult::Consumed;
+                    }
                     // The cursor's press is the mouse's: it goes to the game when there is no UI under the cursor.
                     const MouseButtonEvent press{m_state->config.window, MouseButton::Left, true, false};
                     const RouteResult result = Button(press, press);
                     if (result == RouteResult::Consumed && m_state != nullptr)
                     {
-                        m_state->input.cursorPressed = true;
+                        m_state->input.cursor.pressed = true;
                     }
                     return result;
                 }
@@ -838,7 +838,8 @@ namespace Fenrir::Detail
                 Send(UIEventKind::Cancel, focused);
                 return RouteResult::Consumed;
             }
-            if (IsDirection(event.button) && Navigate(event.gamepad, event.button))
+            if (const Math::Vec2 step = DirectionOf(event.button);
+                (step.x != 0.0f || step.y != 0.0f) && Navigate(event.gamepad, event.button))
             {
                 Hold(event.gamepad, event.button, false);
                 return RouteResult::Consumed;
@@ -854,7 +855,7 @@ namespace Fenrir::Detail
                 return RouteResult::Passed;
             }
             (event.axis == GamepadAxis::LeftX ? input.stick.x : input.stick.y) = event.value;
-            if (input.virtualCursor)
+            if (input.cursor.on)
             {
                 // BeginDispatch moves the cursor by the stick each frame.
                 return RouteResult::Consumed;
@@ -910,6 +911,11 @@ namespace Fenrir::Detail
             {
                 return true;
             }
+            // The element may have given the focus away, or removed itself.
+            if (m_state->Find(m_state->input.focused) == nullptr)
+            {
+                return true;
+            }
             const ElementId next = Nearest(*m_state, m_state->input.focused, direction);
             if (next.IsValid() && Focus(*m_root, *m_state, next) && m_state != nullptr)
             {
@@ -958,7 +964,7 @@ namespace Fenrir::Detail
         void MoveCursor(double seconds)
         {
             const UIRootInput& input = m_state->input;
-            if (!input.virtualCursor || !input.pointer || m_state->scale <= 0.0f)
+            if (!input.cursor.on || !input.pointer || m_state->scale <= 0.0f)
             {
                 return;
             }
@@ -1021,14 +1027,14 @@ namespace Fenrir::Detail
     void FrameInput(UIRoot& root, UIRootState& state, Math::Vec2 uiSize)
     {
         UIRootInput& input = state.input;
-        if (!input.virtualCursor)
+        if (!input.cursor.on)
         {
             return;
         }
-        if (state.Find(input.cursorElement) == nullptr)
+        if (state.Find(input.cursor.element) == nullptr)
         {
-            input.cursorElement = root.Create(state.rootElement, "virtual-cursor");
-            if (StyleDeclarations* style = root.EditInlineStyle(input.cursorElement))
+            input.cursor.element = root.Create(state.rootElement, "virtual-cursor");
+            if (StyleDeclarations* style = root.EditInlineStyle(input.cursor.element))
             {
                 style->SetPosition(Position::Absolute)
                     .SetZIndex(std::numeric_limits<std::int32_t>::max())
@@ -1045,16 +1051,16 @@ namespace Fenrir::Detail
     void SetVirtualCursor(UIRoot& root, UIRootState& state, bool on)
     {
         UIRootInput& input = state.input;
-        if (input.virtualCursor == on)
+        if (input.cursor.on == on)
         {
             return;
         }
-        input.virtualCursor = on;
+        input.cursor.on = on;
         input.stickDirection.reset();
         if (!on)
         {
-            const ElementId cursor = input.cursorElement;
-            input.cursorElement = {};
+            const ElementId cursor = input.cursor.element;
+            input.cursor.element = {};
             if (state.Find(cursor) != nullptr)
             {
                 (void)root.Remove(cursor, RemoveMode::Immediate);

@@ -281,11 +281,13 @@ namespace Fenrir
             const bool horizontal = m_orientation == Orientation::Horizontal;
             const GamepadButton up = horizontal ? GamepadButton::DPadRight : GamepadButton::DPadUp;
             const GamepadButton down = horizontal ? GamepadButton::DPadLeft : GamepadButton::DPadDown;
-            if (pad->button != up && pad->button != down)
+            // At the end it is stepping to, the direction passes, so a row of sliders can still be left that way.
+            const bool rising = pad->button == up;
+            if ((!rising && pad->button != down) || m_value == (rising ? m_max : m_min))
             {
                 return RouteResult::Passed;
             }
-            Move(m_value + (pad->button == up ? step : -step), false);
+            Move(m_value + (rising ? step : -step), false);
             return RouteResult::Consumed;
         }
         if (const auto* scroll = std::get_if<MouseScrollEvent>(&input))

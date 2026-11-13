@@ -718,6 +718,14 @@ C++ attached to one element for one kind of UI event, called when the event happ
 Of an element: a click on it or under it, Tab and Shift+Tab, a gamepad direction and code can give it the focus, which sends it keys and text. Elements are not focusable until made so; the controls make themselves focusable.
 *Avoid:* tab stop, selectable (Unity's).
 
+**Gamepad navigation**
+Moving a UI root's focus with the D-pad or the left stick to the focusable element nearest in that direction, with A activating and B cancelling, while the root has the focus (ADR-0065).
+*Avoid:* spatial navigation (the web's name), selection (Unity's).
+
+**Virtual cursor**
+A per-root switch that turns the left stick into pointer motion and A into a left click, drawn as the root's `virtual-cursor` element.
+*Avoid:* gamepad mouse, fake pointer.
+
 **FenrirAssets**
 The engine's asset package: loads files into plain CPU-side data and owns it behind asset handles. It has no GPU code; FenrirRenderer and animation each turn its data into their own form (ADR-0021).
 *Avoid:* resource manager, asset server, asset database (cooking and an editor database are out of scope).

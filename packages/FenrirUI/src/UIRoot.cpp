@@ -395,7 +395,7 @@ namespace Fenrir
         : m_state(std::make_unique<Detail::UIRootState>(app, roots, std::move(config)))
     {
         m_state->input.id = id;
-        m_state->input.virtualCursor = m_state->config.virtualCursor;
+        m_state->input.cursor.on = m_state->config.virtualCursor;
         m_state->target = m_state->config.target != nullptr
                               ? m_state->config.target
                               : std::make_shared<WindowOverlayTarget>(m_state->config.window, m_state->config.layer);
@@ -974,12 +974,12 @@ namespace Fenrir
 
     bool UIRoot::IsVirtualCursorOn() const noexcept
     {
-        return m_state->input.virtualCursor;
+        return m_state->input.cursor.on;
     }
 
     ElementId UIRoot::GetVirtualCursor() const noexcept
     {
-        return m_state->Find(m_state->input.cursorElement) != nullptr ? m_state->input.cursorElement : ElementId{};
+        return m_state->Find(m_state->input.cursor.element) != nullptr ? m_state->input.cursor.element : ElementId{};
     }
 
     UIListenerId UIRoot::AddListener(ElementId element, UIEventKind kind, UIListener listener)

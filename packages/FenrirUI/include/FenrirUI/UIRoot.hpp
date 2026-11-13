@@ -404,11 +404,12 @@ namespace Fenrir
         /**
          * @brief Turns the virtual cursor on or off. On, the left stick moves the pointer (beyond
          * VirtualCursorDeadZone, up to UIRootConfig::virtualCursorSpeed, kept inside the root) as the mouse would,
-         * hover and drags included, and A presses and releases the left mouse button at it; it starts at the root's
-         * centre when the pointer has not been anywhere yet. Each frame it is on, the root keeps a `virtual-cursor`
-         * element, the root element's child, placed with its left and top at the pointer, above everything (`z-index`
-         * the largest) and taking no pointer input; the stylesheet draws it. Off, its element is removed at once and
-         * the stick is the game's.
+         * hover and drags included, and A presses and releases the left mouse button at it (a press with no UI under it
+         * is the game's, as the mouse's is, and A presses nothing while a mouse button is held); it starts at the
+         * root's centre when the pointer has not been anywhere yet. Each frame it is on, the root keeps a
+         * `virtual-cursor` element, the root element's child (its last when made), placed with its left and top at the
+         * pointer, above everything (`z-index` the largest) and taking no pointer input; the stylesheet draws it. Off,
+         * its element is removed at once and the stick is the game's.
          */
         void SetVirtualCursor(bool on);
         /** @brief Whether the virtual cursor is on. */
