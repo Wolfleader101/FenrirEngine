@@ -430,6 +430,48 @@ TEST_CASE("An image measures its asset's size under each fit, and draws by its f
     REQUIRE(Near(maxX, 101.0f));
 }
 
+TEST_CASE("A covering image is drawn under its ancestor's rounded overflow clip", "[ui][controls]")
+{
+    UITestApp test;
+    std::shared_ptr<CaptureTarget> target;
+    UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
+    // A round frame, as a minimap's, holding a 40 by 20 image covering its 100 square: drawn 200 by 100 at x -50.
+    const ElementId frame = Place(root, root.GetRootElement(), "panel", 0.0f, 0.0f, 100.0f, 100.0f);
+    REQUIRE(root.SetStyleProperty(frame, "overflow", "hidden"));
+    REQUIRE(root.SetStyleProperty(frame, "border-radius", "50px"));
+    const ElementId image = root.Create(frame, "image");
+    REQUIRE(root.SetStyleProperty(image, "width", "100%"));
+    REQUIRE(root.SetStyleProperty(image, "height", "100%"));
+    As<Fenrir::ImageView>(root, image).SetFit(Fenrir::ImageFit::Cover);
+    As<Fenrir::ImageView>(root, image).SetSource(SolidImage(test, 40, 20));
+    test.Frame();
+
+    const Fenrir::DrawList2D& list = target->lists.back();
+    std::vector<Fenrir::PainterVertex> vertices(list.vertices.size() / sizeof(Fenrir::PainterVertex));
+    std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(Fenrir::PainterVertex));
+    INFO("the frame has no background, so the image is the one quad");
+    REQUIRE(vertices.size() == 4);
+    for (const Fenrir::PainterVertex& vertex : vertices)
+    {
+        INFO("vertex at (" << vertex.position.x << ", " << vertex.position.y << "), uv (" << vertex.uv.x << ", "
+                           << vertex.uv.y << ")");
+        INFO("the quad is painted with the image");
+        REQUIRE(vertex.kinds[1] == static_cast<std::uint8_t>(Fenrir::PaintKind::Image));
+        INFO("the image is clipped per pixel by the frame's round clip, not a rectangle of its own: radii "
+             << vertex.clipRadii.x << ", " << vertex.clipRadii.y << ", " << vertex.clipRadii.z << ", "
+             << vertex.clipRadii.w);
+        REQUIRE((vertex.kinds[2] & Fenrir::PainterFlags::Clipped) != 0);
+        REQUIRE(Near(vertex.clipRadii.x, 50.0f));
+        REQUIRE(Near(vertex.clipRadii.z, 50.0f));
+        INFO("it draws over its box and the quad's one-unit margin, not the whole 200-wide image");
+        REQUIRE(vertex.position.x >= -1.5f);
+        REQUIRE(vertex.position.x <= 101.5f);
+        INFO("its box shows the image's middle half across: u from 0.25 to 0.75, past them only by the margin");
+        REQUIRE(vertex.uv.x >= 0.24f);
+        REQUIRE(vertex.uv.x <= 0.76f);
+    }
+}
+
 namespace
 {
     // A 100-square scroll view at the root's top-left, with no border or padding, holding three 100-square rows (the
