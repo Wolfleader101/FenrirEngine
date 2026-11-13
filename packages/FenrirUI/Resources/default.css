@@ -23,6 +23,17 @@ checkbox-mark, slider-fill, slider-thumb, progress-fill {
     pointer-events: none;
 }
 
+/* The virtual cursor, a ring centred on the pointer; the root places it and keeps it above everything. */
+virtual-cursor {
+    width: 18px;
+    height: 18px;
+    margin-left: -9px;
+    margin-top: -9px;
+    border: 2px solid #202020;
+    border-radius: 9px;
+    background-color: rgba(255, 255, 255, 0.85);
+}
+
 /* One focus ring for every focusable control. */
 button:focus, checkbox:focus, slider:focus, scroll:focus, textentry:focus {
     box-shadow: 0 0 0 2px #4a7fd9;

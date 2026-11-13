@@ -52,6 +52,8 @@ namespace Fenrir
         Submit,
         /** @brief A markup document was loaded again into the target's place. Sent by hot reload. */
         DocumentReloaded,
+        /** @brief B on a gamepad (its East button) was pressed while the target had the focus: back out of it. */
+        Cancel,
     };
 
     /**
