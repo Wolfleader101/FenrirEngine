@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -9,6 +10,7 @@
 
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirPainter/Painting.hpp"
+#include "FenrirText/TextStyle.hpp"
 #include "FenrirUI/Element.hpp"
 #include "FenrirUI/UIRoot.hpp"
 
@@ -33,6 +35,32 @@ namespace Fenrir
      * its own from the same start can copy it.
      */
     [[nodiscard]] std::string_view DefaultStylesheet() noexcept;
+
+    /** @brief How a font face's glyphs are drawn (ADR-0062): hinted bitmaps by default, or a distance field. */
+    enum class FontRendering : std::uint8_t
+    {
+        /** @brief Hinted grayscale bitmaps, one atlas entry per glyph per pixel size: crisp small text. */
+        Bitmap,
+        /** @brief A single-channel distance field at one size for every size: scaled and animated text. */
+        Sdf,
+    };
+
+    /**
+     * @brief A face of a font family as the UI registered it with the font family registry: from a stylesheet's
+     * `@font-face` or from code (UIRoots::AddFontFace).
+     */
+    struct UIFontFace
+    {
+        std::string family;
+        AssetHandle<Font> font;
+        std::uint16_t weight = FontWeightNormal;
+        FontStyle style = FontStyle::Normal;
+        /**
+         * @brief The face's opt-in to distance-field text, `font-rendering: sdf` in `@font-face`. Recorded here; the
+         * text it draws is bitmaps until FenrirText has an SDF mode.
+         */
+        FontRendering rendering = FontRendering::Bitmap;
+    };
 
     /** @brief What UI::Install is given. */
     struct UIConfig
@@ -92,6 +120,15 @@ namespace Fenrir
          */
         [[nodiscard]] FontLibrary* GetFonts() const noexcept;
 
+        /**
+         * @brief Registers `face` with the font family registry (FontLibrary::AddFace) and records it, replacing the
+         * face of its family, weight and style registered before. A stylesheet's `@font-face` comes here when its sheet
+         * is added. False, registering nothing, without a font library or with an empty font.
+         */
+        bool AddFontFace(const UIFontFace& face);
+        /** @brief The faces registered through AddFontFace, in the order first registered. */
+        [[nodiscard]] std::span<const UIFontFace> GetFontFaces() const noexcept;
+
         /** @brief Runs every root's frame, in drawing order; the PostUpdate system calls it. */
         void Frame();
 
@@ -113,6 +150,7 @@ namespace Fenrir
         std::uint64_t m_nextOrder = 0;
         std::uint32_t m_nextId = 1;
         std::unordered_map<std::string, ElementFactory> m_factories;
+        std::vector<UIFontFace> m_fontFaces;
     };
 
     /**
