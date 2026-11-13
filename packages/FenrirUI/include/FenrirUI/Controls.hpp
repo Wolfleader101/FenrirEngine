@@ -323,7 +323,8 @@ namespace Fenrir
      * - Left and Right move the caret a grapheme, or with Ctrl to the start of the word before or the end of the word
      *   after (FenrirText's Words); with a selection and no Shift they go to its start or end; Home and End go to the
      *   ends; Shift with any of them moves only the caret, extending the selection;
-     * - Backspace and Delete take the selection, or the grapheme (with Ctrl, the word) before or after the caret;
+     * - Backspace and Delete take the selection, or the grapheme (with Ctrl, the word; a password has none, so all)
+     *   before or after the caret;
      * - Ctrl+A selects everything; Ctrl+C, Ctrl+X and Ctrl+V copy, cut and paste through FenrirWindow's clipboard (a
      *   password copies and cuts nothing);
      * - Enter sends Submit, and Escape takes the focus away.
@@ -382,7 +383,8 @@ namespace Fenrir
         }
         /**
          * @brief Sets the most graphemes typing and pasting may make the value; 0 for no limit. What is typed past it
-         * is dropped, whole graphemes at a time; a value already longer keeps its length.
+         * is dropped, whole graphemes at a time; a value already longer keeps its length, and an edit may shorten it
+         * but not lengthen it.
          */
         void SetMaxLength(std::size_t graphemes);
         /** @brief The most graphemes typing and pasting may make the value; 0 for no limit. */

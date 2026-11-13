@@ -7,7 +7,7 @@
 
 **Blocked by:** 09, 11
 
-**Touches:** `packages/FenrirUI/`
+**Touches:** `packages/FenrirUI/`, `packages/FenrirText/` (its UAX#29 words, `TextSegments.hpp`)
 
 **Status:** resolved
 

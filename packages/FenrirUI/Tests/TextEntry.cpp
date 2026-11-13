@@ -343,7 +343,7 @@ TEST_CASE("Shift+End selects to the end, and typing replaces the selection", "[u
     REQUIRE(scene.Entry().GetAnchor() == 0);
 }
 
-TEST_CASE("Ctrl+C then Ctrl+V duplicates through the clipboard, and Ctrl+X cuts", "[ui][textentry][display]")
+TEST_CASE("Ctrl+C then Ctrl+V duplicates through the clipboard", "[ui][textentry][display]")
 {
     EntryScene<WindowUITestApp> scene;
     if (!scene.test.window.IsValid())
@@ -362,11 +362,22 @@ TEST_CASE("Ctrl+C then Ctrl+V duplicates through the clipboard, and Ctrl+X cuts"
     INFO("Ctrl+V pastes it at the caret");
     REQUIRE(scene.Entry().GetValue() == "abcabc");
     REQUIRE(scene.Entry().GetCaret() == 6);
+}
+
+TEST_CASE("Ctrl+X puts the selection on the clipboard and takes it out", "[ui][textentry][display]")
+{
+    EntryScene<WindowUITestApp> scene;
+    if (!scene.test.window.IsValid())
+    {
+        SKIP("SDL's video could not start (no display), so there is no clipboard");
+    }
+    scene.Focus();
+    scene.Entry().SetValue("abc");
 
     scene.Press(Key::Left, Scancode::Left, Shift);
     scene.Press(Key::X, Scancode::X, Ctrl);
-    INFO("Ctrl+X puts the selection on the clipboard and takes it out");
-    REQUIRE(scene.Entry().GetValue() == "abcab");
+    INFO("the c is cut from the value and is what the clipboard holds");
+    REQUIRE(scene.Entry().GetValue() == "ab");
     REQUIRE(Fenrir::Window::ClipboardText(scene.test.app) == "c");
 }
 
@@ -443,6 +454,28 @@ TEST_CASE("The maximum length stops input past it", "[ui][textentry]")
     REQUIRE(scene.Entry().GetValue() == "ab\xC3\xA9");
 }
 
+TEST_CASE("A value set past the maximum length can be edited shorter but not longer", "[ui][textentry]")
+{
+    Scene scene;
+    scene.Focus();
+    scene.Entry().SetValue("abcdef");
+    scene.Entry().SetMaxLength(3);
+
+    scene.Press(Key::A, Scancode::A, Ctrl);
+    scene.TypeText(U"xy");
+    INFO("typing over the whole value replaces it, the result inside the limit");
+    REQUIRE(scene.Entry().GetValue() == "xy");
+
+    scene.Entry().SetValue("abcdef");
+    scene.Entry().Select(0, 2);
+    scene.TypeText(U"z");
+    INFO("replacing two graphemes of an over-long value with one shortens it");
+    REQUIRE(scene.Entry().GetValue() == "zcdef");
+    scene.TypeText(U"w");
+    INFO("but nothing makes it longer");
+    REQUIRE(scene.Entry().GetValue() == "zcdef");
+}
+
 TEST_CASE("Password mode shows and measures a bullet for each grapheme", "[ui][textentry]")
 {
     Scene scene;
@@ -465,37 +498,49 @@ TEST_CASE("Password mode shows and measures a bullet for each grapheme", "[ui][t
     REQUIRE(scene.Entry().GetCaret() == 0);
 }
 
-TEST_CASE("A click places the caret, a drag selects and a double click selects a word", "[ui][textentry]")
+TEST_CASE("A click focuses it and places the caret at the nearer edge of the character under it", "[ui][textentry]")
 {
     Scene scene;
     scene.Entry().SetValue("hello brave world");
     scene.test.Frame();
-    const float advance = scene.Advance();
 
-    scene.test.Click(scene.At(2) + Vec2(advance * 0.25f, 0.0f));
+    scene.test.Click(scene.At(2) + Vec2(scene.Advance() * 0.25f, 0.0f));
     scene.test.Frame();
-    INFO("a click focuses it and puts the caret at the nearer edge of the character under it");
+    INFO("a quarter into the third character, the caret goes before it");
     REQUIRE(scene.root.GetFocused() == scene.entry);
     REQUIRE(scene.Entry().GetCaret() == 2);
     REQUIRE(scene.Entry().GetAnchor() == 2);
+}
+
+TEST_CASE("A drag selects from where it was pressed to where the pointer is", "[ui][textentry]")
+{
+    Scene scene;
+    scene.Entry().SetValue("hello brave world");
+    scene.test.Frame();
 
     scene.test.Feed().MouseMove(testWindow, scene.At(1), {0.0f, 0.0f});
     scene.test.Feed().MouseButtonDown(testWindow, MouseButton::Left);
     scene.test.Frame();
-    scene.test.Feed().MouseMove(testWindow, scene.At(4) + Vec2(advance * 0.75f, 0.0f), {0.0f, 0.0f});
+    scene.test.Feed().MouseMove(testWindow, scene.At(4) + Vec2(scene.Advance() * 0.75f, 0.0f), {0.0f, 0.0f});
     scene.test.Feed().MouseButtonUp(testWindow, MouseButton::Left);
     scene.test.Frame();
-    INFO("a drag selects from where it was pressed to where it is, past the middle of the fifth character");
+    INFO("pressed before the second character and released past the middle of the fifth, it selects 1 to 5");
     REQUIRE(scene.Entry().GetAnchor() == 1);
     REQUIRE(scene.Entry().GetCaret() == 5);
+}
+
+TEST_CASE("A double click selects the word under it", "[ui][textentry]")
+{
+    Scene scene;
+    scene.Entry().SetValue("hello brave world");
+    scene.test.Frame();
 
     // Two clicks a frame apart, in "brave".
-    scene.test.app.RunFrame(1.0);
     scene.test.Click(scene.At(8));
     scene.test.Frame();
     scene.test.Click(scene.At(8));
     scene.test.Frame();
-    INFO("a double click selects the word under it");
+    INFO("brave, bytes 6 to 11, is selected");
     REQUIRE(scene.Entry().GetAnchor() == 6);
     REQUIRE(scene.Entry().GetCaret() == 11);
 }
@@ -518,7 +563,7 @@ TEST_CASE("The selection and caret draw where the paragraph puts them, in the sh
     std::vector<PaintedRect> painted = Painted(scene.target->lists.back());
     const std::vector<PaintedRect> selection = OfColour(painted, Fenrir::ShapeKind::Rectangle, Rgba8(255, 0, 0, 255));
     REQUIRE(selection.size() == 1);
-    CHECK(Near(selection[0].rect, {content.x + advance, lineTop, advance * 2.0f, lineHeight}, 0.01f));
+    REQUIRE(Near(selection[0].rect, {content.x + advance, lineTop, advance * 2.0f, lineHeight}, 0.01f));
     INFO("with a selection there is no caret");
     REQUIRE(OfColour(painted, Fenrir::ShapeKind::Rectangle, Rgba8(0, 255, 0, 255)).empty());
 
@@ -528,15 +573,32 @@ TEST_CASE("The selection and caret draw where the paragraph puts them, in the sh
     INFO("with none, the caret is a green bar in the text's colour before the fifth character, a line tall");
     const std::vector<PaintedRect> caret = OfColour(painted, Fenrir::ShapeKind::Rectangle, Rgba8(0, 255, 0, 255));
     REQUIRE(caret.size() == 1);
-    CHECK(Near(caret[0].rect, {content.x + advance * 4.0f, lineTop, TextEntry::CaretWidth, lineHeight}, 0.01f));
+    REQUIRE(Near(caret[0].rect, {content.x + advance * 4.0f, lineTop, TextEntry::CaretWidth, lineHeight}, 0.01f));
     REQUIRE(OfColour(painted, Fenrir::ShapeKind::Rectangle, Rgba8(255, 0, 0, 255)).empty());
+}
 
-    INFO("it blinks on FenrirTime: hidden for the second half of each blink, shown again after it");
+TEST_CASE("The caret blinks on FenrirTime from the last move", "[ui][textentry]")
+{
+    Scene scene("textentry { color: #00ff00; }");
+    scene.Entry().SetValue("abcdef");
+    scene.Focus();
+    scene.test.Frame();
+    const auto carets = [&] {
+        return OfColour(Painted(scene.target->lists.back()), Fenrir::ShapeKind::Rectangle, Rgba8(0, 255, 0, 255))
+            .size();
+    };
+    INFO("just focused, it is shown");
+    REQUIRE(carets() == 1);
     scene.test.Frames(36, 1.0 / 60.0);
-    REQUIRE(OfColour(Painted(scene.target->lists.back()), Fenrir::ShapeKind::Rectangle, Rgba8(0, 255, 0, 255)).empty());
+    INFO("past half a second it is hidden");
+    REQUIRE(carets() == 0);
     scene.test.Frames(30, 1.0 / 60.0);
-    REQUIRE(OfColour(Painted(scene.target->lists.back()), Fenrir::ShapeKind::Rectangle, Rgba8(0, 255, 0, 255)).size() ==
-            1);
+    INFO("past a second it is shown again");
+    REQUIRE(carets() == 1);
+    scene.test.Frames(36, 1.0 / 60.0);
+    scene.Press(Key::Left, Scancode::Left);
+    INFO("a move shows it at once, mid-blink");
+    REQUIRE(carets() == 1);
 }
 
 TEST_CASE("The view scrolls to keep the caret inside the entry", "[ui][textentry]")

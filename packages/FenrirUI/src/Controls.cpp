@@ -8,6 +8,7 @@
 #include <variant>
 #include <vector>
 
+#include "BoxPainting.hpp"
 #include "ElementText.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
@@ -682,17 +683,6 @@ namespace Fenrir
                    !(codepoint >= 0xD800 && codepoint <= 0xDFFF) && codepoint <= 0x10FFFF;
         }
 
-        Colour Faded(Colour colour, float alpha)
-        {
-            colour.a *= alpha;
-            return colour;
-        }
-
-        bool SameColour(const Colour& a, const Colour& b)
-        {
-            return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
-        }
-
         /** @brief `paragraph` from `point`, its runs in `colour` when given, faded by `alpha`. */
         void DrawParagraph(Painter& painter, Paragraph& paragraph, Math::Vec2 point, const Colour* colour, float alpha)
         {
@@ -701,12 +691,7 @@ namespace Fenrir
                 painter.DrawText(paragraph, point);
                 return;
             }
-            for (const GlyphRun& run : paragraph.Runs())
-            {
-                GlyphRun tinted = run;
-                tinted.colour = Faded(colour != nullptr ? *colour : run.colour, alpha);
-                painter.DrawGlyphs(tinted, point);
-            }
+            Detail::PaintRuns(painter, paragraph, point, colour, alpha);
         }
 
         /** @brief Where the caret before shown offset `index` is, in pixels from the paragraph's left. */
@@ -759,6 +744,13 @@ namespace Fenrir
             {
                 const TextRange word = WordAt(m_caret);
                 Select(word.begin, word.end);
+            }
+        });
+        // A caret that takes the focus starts its blink shown.
+        GetRoot().AddListener(GetId(), UIEventKind::Focus, [this](UIListenerContext& context) {
+            if (context.GetEvent().target == GetId())
+            {
+                m_blink = 0.0;
             }
         });
     }
@@ -920,10 +912,18 @@ namespace Fenrir
         std::string value = m_value.substr(0, begin) + inserted + m_value.substr(end);
         if (m_maxLength > 0)
         {
-            // Drop the inserted text's last graphemes until the value fits.
+            // Drop the inserted text's last graphemes until the value fits, or is no longer than it was (a value set
+            // longer than the limit may still be edited down). Start at the count the rest leaves room for; a
+            // grapheme that joins the text beside it can let one more in, so the count is checked after.
+            const auto graphemes = [](std::string_view text) { return GraphemeBoundaries(text).size() - 1; };
+            const std::string rest = m_value.substr(0, begin) + m_value.substr(end);
+            const std::size_t limit = std::max(m_maxLength, m_graphemes.size() - 1);
             const std::vector<std::uint32_t> pieces = GraphemeBoundaries(inserted);
-            std::size_t keep = pieces.size() - 1;
-            while (keep > 0 && GraphemeBoundaries(value).size() - 1 > m_maxLength)
+            const std::size_t room = limit - std::min(limit, graphemes(rest));
+            std::size_t keep = std::min(pieces.size() - 1, room + 1);
+            inserted.resize(pieces[keep]);
+            value = m_value.substr(0, begin) + inserted + m_value.substr(end);
+            while (keep > 0 && graphemes(value) > limit)
             {
                 --keep;
                 inserted.resize(pieces[keep]);
@@ -1203,7 +1203,7 @@ namespace Fenrir
                      shown.RangeRects(ShownIndex(std::min(m_caret, m_anchor)), ShownIndex(std::max(m_caret, m_anchor))))
                 {
                     selection.push_back(ToUnits(rect, m_origin, pixelsPerUnit));
-                    const Colour background = Faded(selected->backgroundColor, paint.opacity);
+                    const Colour background = Detail::Faded(selected->backgroundColor, paint.opacity);
                     if (background.a > 0.0f)
                     {
                         painter.DrawRect(selection.back(), background);
@@ -1212,7 +1212,7 @@ namespace Fenrir
             }
             DrawParagraph(painter, shown, m_origin, nullptr, paint.opacity);
             // The selected text again over it, in the selection's colour, when that differs.
-            if (!selection.empty() && !SameColour(selected->color, paint.style.color))
+            if (!selection.empty() && !Detail::SameColour(selected->color, paint.style.color))
             {
                 for (const Rect2D& rect : selection)
                 {
@@ -1225,7 +1225,7 @@ namespace Fenrir
         }
         if (focused && !HasSelection() && std::fmod(m_blink, 2.0 * BlinkSeconds) < BlinkSeconds)
         {
-            painter.DrawRect(m_caretRect, Faded(paint.style.color, paint.opacity));
+            painter.DrawRect(m_caretRect, Detail::Faded(paint.style.color, paint.opacity));
         }
         painter.Restore();
     }
