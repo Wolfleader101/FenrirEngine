@@ -55,6 +55,7 @@ const uint Arc = 6u;
 const uint Ring = 7u;
 const uint Triangle = 8u;
 const uint Glyph = 9u;
+const uint SdfGlyph = 10u;
 
 const uint Solid = 0u;
 const uint LinearGradient = 1u;
@@ -271,6 +272,17 @@ void main()
         // coordinates in vUv, multiplying the paint.
         vec2 texels = vec2(textureSize(image, 0));
         coverage = textureGrad(image, vUv / texels, uvDx / texels, uvDy / texels).r;
+    }
+    else if (kind == SdfGlyph)
+    {
+        // A glyph's quad over its distance field (ADR-0062's SDF mode): FreeType stores a byte v as (v - 128) / 128
+        // of the spread (vShape.x, in texels) inside the outline. The texels a screen pixel spans, from vUv's
+        // derivatives, take the distance to screen pixels, so the edge fades over one pixel at any scale or turn.
+        vec2 texels = vec2(textureSize(image, 0));
+        float field = textureGrad(image, vUv / texels, uvDx / texels, uvDy / texels).r;
+        float texelDistance = (field * 255.0 - 128.0) / 128.0 * vShape.x;
+        float texelsPerPixel = max(length(vec2(length(uvDx), length(uvDy))) * 0.70710678, 1e-4);
+        coverage = clamp(texelDistance / texelsPerPixel + 0.5, 0.0, 1.0);
     }
 
     if ((flags & Clipped) != 0u)

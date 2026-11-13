@@ -8,6 +8,7 @@
 #include <utility>
 
 #include <hb-ft.h>
+#include FT_MODULE_H
 #include FT_OUTLINE_H
 
 #include "FenrirLogger/ILogger.hpp"
@@ -33,6 +34,18 @@ namespace Fenrir
             return static_cast<std::uint32_t>(std::lround(size * 4.0f));
         }
 
+        namespace
+        {
+            /** @brief FaceKey's mark of an SDF face, above every size in quarter pixels. */
+            constexpr std::uint32_t SdfFaceBit = 1u << 31u;
+        } // namespace
+
+        std::uint32_t FaceKey(FontRendering rendering, float size)
+        {
+            const std::uint32_t quarters = std::min(QuarterPixels(size), SdfFaceBit - 1);
+            return rendering == FontRendering::Sdf ? quarters | SdfFaceBit : quarters;
+        }
+
         std::uint64_t FontKey(AssetHandle<Font> font)
         {
             return (std::uint64_t{font.generation} << 32) | font.index;
@@ -40,6 +53,11 @@ namespace Fenrir
 
         SizedFace::~SizedFace()
         {
+            // An SDF face at a size borrows its raster face's.
+            if (raster != nullptr)
+            {
+                return;
+            }
             if (shaper != nullptr)
             {
                 hb_font_destroy(shaper);
@@ -57,29 +75,21 @@ namespace Fenrir
 
         FontLibraryState::~FontLibraryState()
         {
-            // Faces before the library that made them.
+            // Faces before the library that made them, and the faces that borrow from a raster face before it.
             faces.clear();
+            sdfRasters.clear();
             if (library != nullptr)
             {
                 FT_Done_FreeType(library);
             }
         }
 
-        SizedFace* FontLibraryState::Face(AssetHandle<Font> font, float size)
+        std::unique_ptr<SizedFace> FontLibraryState::Open(AssetHandle<Font> font, std::uint32_t faceKey)
         {
             const std::uint64_t key = FontKey(font);
-            const std::uint32_t quarters = QuarterPixels(size);
-            if (const auto found = faces.find({key, quarters}); found != faces.end())
-            {
-                return found->second.get();
-            }
-            // Size zero stands for the whole font: no size of it opens.
-            if (failed.contains({key, 0}) || failed.contains({key, quarters}))
-            {
-                return nullptr;
-            }
-            const auto fail = [&](const char* why, bool everySize) -> SizedFace* {
-                failed.insert({key, everySize ? 0u : quarters});
+            const std::uint32_t quarters = faceKey & ~SdfFaceBit;
+            const auto fail = [&](const char* why, bool everySize) -> std::unique_ptr<SizedFace> {
+                failed.insert({key, everySize ? 0u : faceKey});
                 store->Logger().Error("FenrirText could not open a font: {}", why);
                 return nullptr;
             };
@@ -121,33 +131,113 @@ namespace Fenrir
             sized->lineGap = std::max(0.0f, static_cast<float>(face->height) * scale - sized->ascent - sized->descent);
             sized->underlineOffset = static_cast<float>(-face->underline_position) * scale;
             sized->underlineThickness = std::max(1.0f, static_cast<float>(face->underline_thickness) * scale);
+            return sized;
+        }
 
+        SizedFace* FontLibraryState::Face(AssetHandle<Font> font, FontRendering rendering, float size)
+        {
+            const std::uint64_t key = FontKey(font);
+            const std::uint32_t faceKey = FaceKey(rendering, size);
+            if (const auto found = faces.find({key, faceKey}); found != faces.end())
+            {
+                return found->second.get();
+            }
+            // Size zero stands for the whole font: no size of it opens.
+            if (failed.contains({key, 0}) || failed.contains({key, faceKey}))
+            {
+                return nullptr;
+            }
+            if (rendering == FontRendering::Bitmap)
+            {
+                std::unique_ptr<SizedFace> sized = Open(font, faceKey);
+                if (!sized)
+                {
+                    return nullptr;
+                }
+                SizedFace* result = sized.get();
+                faces.emplace(std::pair{key, faceKey}, std::move(sized));
+                return result;
+            }
+
+            // Every size of an SDF font is shaped and rasterised by one face at the SDF size, and scaled from it.
+            SizedFace* raster = SdfRaster(font);
+            if (raster == nullptr)
+            {
+                return nullptr;
+            }
+            auto sized = std::make_unique<SizedFace>(*store, config.atlas);
+            sized->font = font;
+            sized->size = static_cast<float>(QuarterPixels(size)) / 4.0f;
+            sized->rendering = FontRendering::Sdf;
+            sized->raster = raster;
+            sized->scale = sized->size / raster->size;
+            sized->face = raster->face;
+            sized->shaper = raster->shaper;
+            sized->ascent = raster->ascent * sized->scale;
+            sized->descent = raster->descent * sized->scale;
+            sized->lineGap = raster->lineGap * sized->scale;
+            sized->underlineOffset = raster->underlineOffset * sized->scale;
+            sized->underlineThickness = std::max(1.0f, raster->underlineThickness * sized->scale);
             SizedFace* result = sized.get();
-            faces.emplace(std::pair{key, quarters}, std::move(sized));
+            faces.emplace(std::pair{key, faceKey}, std::move(sized));
             return result;
         }
 
-        const RasterisedGlyph& FontLibraryState::Glyph(SizedFace& face, std::uint32_t glyph, std::uint32_t quarter)
+        SizedFace* FontLibraryState::SdfRaster(AssetHandle<Font> font)
         {
+            const std::uint64_t key = FontKey(font);
+            if (const auto found = sdfRasters.find(key); found != sdfRasters.end())
+            {
+                return found->second.get();
+            }
+            // A failure to size the raster face is recorded under the SDF face key at the SDF size, apart from the
+            // bitmap face of that size; a font that opens at no size fails in both modes.
+            const std::uint32_t rasterKey = FaceKey(FontRendering::Sdf, config.sdfSize);
+            if (failed.contains({key, 0}) || failed.contains({key, rasterKey}))
+            {
+                return nullptr;
+            }
+            std::unique_ptr<SizedFace> raster = Open(font, rasterKey);
+            if (!raster)
+            {
+                return nullptr;
+            }
+            raster->rendering = FontRendering::Sdf;
+            SizedFace* result = raster.get();
+            sdfRasters.emplace(key, std::move(raster));
+            return result;
+        }
+
+        const RasterisedGlyph& FontLibraryState::Glyph(SizedFace& sized, std::uint32_t glyph, std::uint32_t quarter)
+        {
+            SizedFace& face = sized.Raster();
+            const bool sdf = face.rendering == FontRendering::Sdf;
+            if (sdf)
+            {
+                quarter = 0;
+            }
             const std::uint64_t key = std::uint64_t{glyph} * 4 + quarter;
             if (const auto found = face.glyphs.find(key); found != face.glyphs.end())
             {
                 return found->second;
             }
             RasterisedGlyph& rasterised = face.glyphs[key];
-            // FreeType's auto-hinter in its light mode, which fits outlines vertically only, so quarter-pixel
-            // positions across the line keep their spacing; grayscale anti-aliasing (ADR-0062).
-            if (FT_Load_Glyph(face.face, glyph, FT_LOAD_FORCE_AUTOHINT | FT_LOAD_TARGET_LIGHT) != 0)
+            // Bitmap mode: FreeType's auto-hinter in its light mode, which fits outlines vertically only, so
+            // quarter-pixel positions across the line keep their spacing; grayscale anti-aliasing (ADR-0062). SDF mode:
+            // the unhinted outline, whose distance field every size is scaled from.
+            const FT_Int32 loadFlags =
+                sdf ? FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP : FT_LOAD_FORCE_AUTOHINT | FT_LOAD_TARGET_LIGHT;
+            if (FT_Load_Glyph(face.face, glyph, loadFlags) != 0)
             {
                 return rasterised;
             }
             FT_GlyphSlot slot = face.face->glyph;
-            if (slot->format == FT_GLYPH_FORMAT_OUTLINE)
+            if (slot->format == FT_GLYPH_FORMAT_OUTLINE && quarter != 0)
             {
                 // A quarter pixel is 16 in 26.6.
                 FT_Outline_Translate(&slot->outline, static_cast<FT_Pos>(quarter) * 16, 0);
             }
-            if (FT_Render_Glyph(slot, FT_RENDER_MODE_NORMAL) != 0)
+            if (FT_Render_Glyph(slot, sdf ? FT_RENDER_MODE_SDF : FT_RENDER_MODE_NORMAL) != 0)
             {
                 return rasterised;
             }
@@ -172,8 +262,8 @@ namespace Fenrir
             return rasterised;
         }
 
-        std::optional<AssetHandle<Font>> FontLibraryState::Nearest(const FontFamily& family, std::uint16_t weight,
-                                                                   FontStyle style) const
+        std::optional<ChainFace> FontLibraryState::Nearest(const FontFamily& family, std::uint16_t weight,
+                                                           FontStyle style) const
         {
             if (family.faces.empty())
             {
@@ -200,7 +290,32 @@ namespace Fenrir
                     bestDistance = distance;
                 }
             }
-            return best->font;
+            return ChainFace{best->font, best->rendering};
+        }
+
+        std::vector<ChainFace> FontLibraryState::Chain(std::string_view family, std::uint16_t weight,
+                                                       FontStyle style) const
+        {
+            std::vector<ChainFace> chain;
+            const auto add = [&](std::optional<ChainFace> face) {
+                if (face && std::ranges::find(chain, *face) == chain.end())
+                {
+                    chain.push_back(*face);
+                }
+            };
+            if (const auto found = families.find(family); found != families.end())
+            {
+                add(Nearest(found->second, weight, style));
+                for (const std::string& fallback : found->second.fallbacks)
+                {
+                    if (const auto other = families.find(fallback); other != families.end())
+                    {
+                        add(Nearest(other->second, weight, style));
+                    }
+                }
+            }
+            add(ChainFace{defaultFont, FontRendering::Bitmap});
+            return chain;
         }
     } // namespace Detail
 
@@ -214,6 +329,18 @@ namespace Fenrir
             m_state->library = nullptr;
             store.Logger().Error("FenrirText could not start FreeType: no text will be laid out");
         }
+        else
+        {
+            // FreeType's two SDF renderers, from outlines and from bitmaps, each take the spread.
+            FT_UInt spread = std::clamp(config.sdfSpread, 2u, 32u);
+            m_state->config.sdfSpread = spread;
+            FT_Property_Set(m_state->library, "sdf", "spread", &spread);
+            FT_Property_Set(m_state->library, "bsdf", "spread", &spread);
+        }
+        if (!std::isfinite(m_state->config.sdfSize) || m_state->config.sdfSize < 1.0f)
+        {
+            m_state->config.sdfSize = FontLibraryConfig{}.sdfSize;
+        }
         FontData font;
         font.bytes.resize(std::size(Resources::DefaultFont));
         std::memcpy(font.bytes.data(), Resources::DefaultFont, font.bytes.size());
@@ -225,12 +352,13 @@ namespace Fenrir
 
     FontLibrary::~FontLibrary() = default;
 
-    void FontLibrary::AddFace(std::string_view family, AssetHandle<Font> font, std::uint16_t weight, FontStyle style)
+    void FontLibrary::AddFace(std::string_view family, AssetHandle<Font> font, std::uint16_t weight, FontStyle style,
+                              FontRendering rendering)
     {
         Detail::FontFamily& entry = m_state->families[std::string(family)];
         std::erase_if(entry.faces,
                       [&](const Detail::RegisteredFace& face) { return face.weight == weight && face.style == style; });
-        entry.faces.push_back({font, weight, style});
+        entry.faces.push_back({font, weight, style, rendering});
         m_state->generation = Detail::NextGeneration();
     }
 
@@ -249,30 +377,30 @@ namespace Fenrir
                                                           FontStyle style) const
     {
         std::vector<AssetHandle<Font>> chain;
-        const auto add = [&](std::optional<AssetHandle<Font>> font) {
-            if (font && std::ranges::find(chain, *font) == chain.end())
-            {
-                chain.push_back(*font);
-            }
-        };
-        if (const auto found = m_state->families.find(family); found != m_state->families.end())
+        for (const Detail::ChainFace& face : m_state->Chain(family, weight, style))
         {
-            add(m_state->Nearest(found->second, weight, style));
-            for (const std::string& fallback : found->second.fallbacks)
+            // A font registered in both modes along the chain is listed once.
+            if (std::ranges::find(chain, face.font) == chain.end())
             {
-                if (const auto other = m_state->families.find(fallback); other != m_state->families.end())
-                {
-                    add(m_state->Nearest(other->second, weight, style));
-                }
+                chain.push_back(face.font);
             }
         }
-        add(m_state->defaultFont);
         return chain;
     }
 
-    std::span<const AssetHandle<Image>> FontLibrary::AtlasPages(AssetHandle<Font> font, float size) const
+    std::span<const AssetHandle<Image>> FontLibrary::AtlasPages(AssetHandle<Font> font, float size,
+                                                                FontRendering rendering) const
     {
-        const auto found = m_state->faces.find({Detail::FontKey(font), Detail::QuarterPixels(size)});
+        if (rendering == FontRendering::Sdf)
+        {
+            const auto raster = m_state->sdfRasters.find(Detail::FontKey(font));
+            if (raster == m_state->sdfRasters.end())
+            {
+                return {};
+            }
+            return raster->second->atlas.Pages();
+        }
+        const auto found = m_state->faces.find({Detail::FontKey(font), Detail::FaceKey(rendering, size)});
         if (found == m_state->faces.end())
         {
             return {};

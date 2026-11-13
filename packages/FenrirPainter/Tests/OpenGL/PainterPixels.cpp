@@ -1,7 +1,8 @@
 // builtin:painter on OpenGL (the spec's GL check): a rounded rectangle, a radial gradient, a bordered box, a stroked
 // star and a filled ring with a hole painted into an image 2D target (ADR-0060) through the renderer's ImageTargets2D,
 // and read back at their centres, joins and edges; and offscreen groups: a half-opacity group, a blurred disc's edge,
-// a masked gradient and a backdrop blur; and a word of text at two sizes. The image is linear RGBA8, cleared
+// a masked gradient and a backdrop blur; and a word of text at two sizes, and a glyph scaled by 4 through the SDF and
+// the bitmap paths. The image is linear RGBA8, cleared
 // transparent each frame it is drawn, and the root's blend space Linear, so a pixel is the shader's premultiplied
 // linear output to 8 bits; the expected values are worked by hand.
 
@@ -452,4 +453,72 @@ TEST_CASE("A word reads back dark along its baseline and not above it, its exten
     const int smallWidth = small.right - small.left + 1;
     const int largeWidth = large.right - large.left + 1;
     REQUIRE(std::abs(largeWidth - 2 * smallWidth) <= 3);
+}
+
+namespace
+{
+    /** @brief A row of a glyph scaled up: how many of its pixels are part covered, and its darkest red. */
+    struct ScaledRow
+    {
+        int partial = 0;
+        float darkest = 1.0f;
+    };
+
+    /**
+     * @brief "I" in the embedded face at 12 pixels, in `rendering`'s mode, black on white, scaled by 4 about the
+     * target's top-left, drawn and read back along a row through the middle of its stem.
+     */
+    ScaledRow DrawScaledStem(Fenrir::FontRendering rendering)
+    {
+        GlPainter test;
+        Fenrir::FontLibrary fonts(test.scene.assets.Store());
+        fonts.AddFace("Field", fonts.DefaultFont(), Fenrir::FontWeightNormal, Fenrir::FontStyle::Normal,
+                      Fenrir::FontRendering::Sdf);
+        Fenrir::Paragraph paragraph;
+        Fenrir::TextStyle style;
+        style.family = rendering == Fenrir::FontRendering::Sdf ? "Field" : "default";
+        style.size = 12.0f;
+        style.colour = Colour::Black;
+        paragraph.SetText("I", style);
+        paragraph.Layout(fonts, Fenrir::UnlimitedWidth);
+        REQUIRE(paragraph.Runs().size() == 1);
+        const Fenrir::GlyphRun& run = paragraph.Runs().front();
+        REQUIRE(run.rendering == rendering);
+
+        Fenrir::DrawList2D list;
+        Fenrir::Painter painter(list, test.Config());
+        painter.DrawRect({0, 0, 64, 64}, Colour::White);
+        painter.Scale({4.0f, 4.0f});
+        painter.DrawText(paragraph, {2, 0});
+        const GlProbe::Image image = test.Draw(std::move(list));
+        REQUIRE(test.scene.messages->errors.empty());
+
+        // Four pixels above the baseline at 12 pixels is about the middle of a capital's stem, clear of its serifs.
+        const auto row = static_cast<std::uint32_t>(std::lround((run.baseline - 4.0f) * 4.0f));
+        ScaledRow scanned;
+        for (std::uint32_t x = 0; x < Size; ++x)
+        {
+            const float red = image.At(x, row)[0];
+            scanned.darkest = std::min(scanned.darkest, red);
+            scanned.partial += red > 0.1f && red < 0.9f ? 1 : 0;
+        }
+        return scanned;
+    }
+} // namespace
+
+TEST_CASE("A glyph scaled by 4 reads back a smooth edge through the SDF path and a blocky one through the bitmap path",
+          "[painter][gl][text][sdf]")
+{
+    const ScaledRow sdf = DrawScaledStem(Fenrir::FontRendering::Sdf);
+    INFO("SDF: the stem's row has " << sdf.partial << " part-covered pixels, darkest " << sdf.darkest);
+    INFO("the distance field is solid inside the stem and fades over about a screen pixel at each of its two edges");
+    REQUIRE(sdf.darkest < 0.05f);
+    REQUIRE(sdf.partial >= 1);
+    REQUIRE(sdf.partial <= 4);
+
+    const ScaledRow bitmap = DrawScaledStem(Fenrir::FontRendering::Bitmap);
+    INFO("bitmap: the stem's row has " << bitmap.partial << " part-covered pixels, darkest " << bitmap.darkest);
+    INFO("the 12-pixel bitmap's texels are each stretched over four pixels: its edges spread over its texels");
+    REQUIRE(bitmap.partial >= 6);
+    REQUIRE(bitmap.partial > 2 * sdf.partial);
 }

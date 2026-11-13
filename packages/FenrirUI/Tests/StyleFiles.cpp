@@ -276,6 +276,8 @@ TEST_CASE("@font-face registers a family that a label then measures with", "[ui]
     const Fenrir::Paragraph* paragraph = scene.root.GetParagraph(body);
     REQUIRE(paragraph != nullptr);
     REQUIRE(paragraph->Runs().front().font == font);
+    INFO("in the SDF mode the face's font-rendering: sdf chose");
+    REQUIRE(paragraph->Runs().front().rendering == Fenrir::FontRendering::Sdf);
     INFO("and measures to it: Roboto is narrower than the embedded monospace default");
     REQUIRE(scene.root.GetBoxes(body).content.width < scene.root.GetBoxes(plain).content.width);
 }

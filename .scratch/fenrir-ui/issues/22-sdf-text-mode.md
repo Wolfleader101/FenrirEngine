@@ -9,9 +9,9 @@
 
 **Touches:** `packages/FenrirText/`, `packages/FenrirPainter/`, `packages/FenrirUI/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] FenrirText tests: an SDF atlas holds one entry per glyph regardless of size; a paragraph in SDF mode at two sizes has proportional extents.
-- [ ] Draw-list tests: a label in an SDF family emits quads with the SDF kind and the SDF atlas.
-- [ ] GL test (skipped without a display): a glyph scaled by 4 through the SDF path reads back a smooth edge, and the same glyph through the bitmap path reads back blocky.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] FenrirText tests: an SDF atlas holds one entry per glyph regardless of size; a paragraph in SDF mode at two sizes has proportional extents.
+- [x] Draw-list tests: a label in an SDF family emits quads with the SDF kind and the SDF atlas.
+- [x] GL test (skipped without a display): a glyph scaled by 4 through the SDF path reads back a smooth edge, and the same glyph through the bitmap path reads back blocky.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

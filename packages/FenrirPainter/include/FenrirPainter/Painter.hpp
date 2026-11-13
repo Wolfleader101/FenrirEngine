@@ -199,15 +199,17 @@ namespace Fenrir
         /** @} */
 
         /** @name Text
-         * FenrirText's glyphs (ADR-0062) as quads of shape kind Glyph, one a glyph, over their atlas rectangles: the
-         * run's page in the image slot, its colour the solid paint, under the current transform and clip, batched with
-         * the shapes. A run's decoration is a rectangle from its metrics, in its colour, drawn after its glyphs.
+         * FenrirText's glyphs (ADR-0062) as quads of shape kind Glyph (bitmap mode) or SdfGlyph (SDF mode), one a
+         * glyph, over their atlas rectangles: the run's page in the image slot, its colour the solid paint, under the
+         * current transform and clip, batched with the shapes. A run's decoration is a rectangle from its metrics, in
+         * its colour, drawn after its glyphs.
          *
          * A paragraph's positions are pixels of the target: lay it out with its style sizes, and any width, multiplied
          * by the root scale and the target's pixels per unit (`size * scale * pixelsPerUnit`), the exact pixel size
-         * its bitmaps are rasterised at. The painter divides them back, so a glyph's whole-pixel rectangle lands on
-         * whole pixels from `point` (UI units, the paragraph's top-left); with pixel snapping on and the transform
-         * axis-aligned, `point` is moved to a whole pixel first.
+         * its bitmaps are rasterised at. The painter divides them back, so a bitmap glyph's whole-pixel rectangle lands
+         * on whole pixels from `point` (UI units, the paragraph's top-left); with pixel snapping on and the transform
+         * axis-aligned, `point` is moved to a whole pixel first. An SDF glyph's rectangle is fractional and its point
+         * is not snapped: its edge is reconstructed over one screen pixel wherever it lands.
          * @{
          */
         /**
@@ -325,7 +327,10 @@ namespace Fenrir
         [[nodiscard]] std::uint32_t ReserveDraw(const PaintSetup& paint, std::uint32_t vertices, std::uint32_t indices);
         /** @brief `run`'s glyphs and decoration from `point` (already snapped), in `colour`. */
         void DrawRun(const GlyphRun& run, Math::Vec2 point, const Colour& colour);
-        /** @brief `point` moved to a whole pixel, when snapping is on and the transform axis-aligned. */
+        /**
+         * @brief `point` moved to a whole pixel, when snapping is on and the transform axis-aligned. A bitmap glyph
+         * run's point is snapped; an SDF run's is not.
+         */
         [[nodiscard]] Math::Vec2 SnapPoint(Math::Vec2 point) const;
         /** @brief Lays `paragraph` out with PainterConfig::fonts, to no width limit, if it has text never laid out. */
         void LayOutIfNever(Paragraph& paragraph) const;
