@@ -730,6 +730,23 @@ namespace Fenrir
 
     bool UIRoot::SetStyleProperty(ElementId element, std::string_view name, std::string_view value)
     {
+        if (m_state->Find(element) == nullptr)
+        {
+            return false;
+        }
+        std::string error;
+        if (!ApplyStyleProperty(element, name, value, error))
+        {
+            m_state->app.Logger()->Warn("FenrirUI: the inline style property '{}: {}' was not set: {}", name, value,
+                                        error);
+            return false;
+        }
+        return true;
+    }
+
+    bool UIRoot::ApplyStyleProperty(ElementId element, std::string_view name, std::string_view value,
+                                    std::string& error)
+    {
         Detail::ElementSlot* slot = m_state->Find(element);
         if (slot == nullptr)
         {
@@ -748,8 +765,7 @@ namespace Fenrir
         }
         if (!set)
         {
-            m_state->app.Logger()->Warn("FenrirUI: the inline style property '{}: {}' was not set: {}", name, value,
-                                        context.error);
+            error = std::move(context.error);
             return false;
         }
         MarkStyleDirty(*m_state, element);
