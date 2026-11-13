@@ -64,8 +64,8 @@ namespace Fenrir
 
     /**
      * @brief `checkbox`: a box that is checked or not, with a `checkbox-mark` child the default stylesheet shows while
-     * checked. A click and Space while focused toggle it, which gives or takes `:checked` and sends Change (value 1
-     * checked, 0 not).
+     * checked. A click, and Space or Enter while focused, toggle it, which gives or takes `:checked` and sends Change
+     * (value 1 checked, 0 not).
      */
     class Checkbox : public Control
     {
@@ -106,10 +106,11 @@ namespace Fenrir
     /**
      * @brief `slider`: a value from min to max in steps, shown by a `slider-fill` child up to the value and a
      * `slider-thumb` child at it, both placed by their inline style. A press on it sets the value where it lands and
-     * drags it; Left and Down step it down and Right and Up step it up while focused; the wheel over it steps it while
-     * focused, and passes on otherwise. It
-     * sends Change (value the new value) at each change while dragged, from the keys and the wheel, and once more at
-     * the drag's release with `integer` 1. Vertical, the class `vertical` is set on it and min is at the bottom.
+     * drags it; Left and Down step it down and Right and Up step it up while focused, and so do the D-pad's directions
+     * along its axis (the root's gamepad navigation, UIRoot), passing at the end they step to; the wheel over it steps
+     * it while focused, and passes on otherwise. It sends Change (value the new value) at each change while dragged,
+     * from the keys and the wheel, and once more at the drag's release with `integer` 1. Vertical, the class `vertical`
+     * is set on it and min is at the bottom.
      */
     class Slider : public Control
     {
@@ -275,7 +276,8 @@ namespace Fenrir
      * a press on a thumb drags it, and one on a track jumps a page towards the pointer; a press on the content that
      * moves past `DragThreshold` drags the content, taking the press from what it landed on so that sends no click;
      * while it, or something in it that does not take the key, has the focus, the arrows scroll by a step, Page Up and
-     * Page Down by a page, and Home and End to the ends.
+     * Page Down by a page, and Home and End to the ends. Focused itself, the D-pad's directions (the root's gamepad
+     * navigation, UIRoot) scroll it by a step while it can still scroll that way, and pass at the end of its range.
      */
     class ScrollView : public Control
     {
@@ -307,6 +309,7 @@ namespace Fenrir
         RouteResult Press(const MouseButtonEvent& event);
         void Motion();
         RouteResult KeyPressed(const KeyEvent& event);
+        RouteResult DirectionPressed(const GamepadButtonEvent& event);
 
         Drag m_drag = Drag::None;
         MouseButton m_button = MouseButton::Left;

@@ -707,7 +707,7 @@ How a UI root maps its UI units to its target's logical units: by default so tha
 *Avoid:* DPI scale (the window's content scale, one of its inputs), zoom, reference resolution.
 
 **UI event**
-`UIEvent`: the engine event a UI root sends once, at its target element, for each click, press, release, hover, scroll, key, text, focus, blur, change or submit (ADR-0065). Systems read it through an event reader.
+`UIEvent`: the engine event a UI root sends once, at its target element, for each click, press, release, hover, scroll, key, text, focus, blur, change, submit or cancel (ADR-0065). Systems read it through an event reader.
 *Avoid:* UI message, signal, DOM event.
 
 **UI listener**
@@ -715,8 +715,16 @@ C++ attached to one element for one kind of UI event, called when the event happ
 *Avoid:* handler, callback, delegate.
 
 **Focusable**
-Of an element: a click on it or under it, Tab and Shift+Tab, and code can give it the focus, which sends it keys and text. Elements are not focusable until made so; the controls make themselves focusable.
+Of an element: a click on it or under it, Tab and Shift+Tab, a gamepad direction and code can give it the focus, which sends it keys and text. Elements are not focusable until made so; the controls make themselves focusable.
 *Avoid:* tab stop, selectable (Unity's).
+
+**Gamepad navigation**
+Moving a UI root's focus with the D-pad or the left stick to the focusable element nearest in that direction, with A activating and B cancelling, while the root has the focus (ADR-0065).
+*Avoid:* spatial navigation (the web's name), selection (Unity's).
+
+**Virtual cursor**
+A per-root switch that turns the left stick into pointer motion and A into a left click, drawn as the root's `virtual-cursor` element.
+*Avoid:* gamepad mouse, fake pointer.
 
 **FenrirAssets**
 The engine's asset package: loads files into plain CPU-side data and owns it behind asset handles. It has no GPU code; FenrirRenderer and animation each turn its data into their own form (ADR-0021).

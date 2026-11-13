@@ -66,6 +66,32 @@ namespace Fenrir::Detail
         /** @brief The element each held key's press went to, so its release goes there even if the focus moved. */
         std::vector<std::pair<Scancode, ElementId>> keyPresses;
         std::uint32_t nextListener = 1;
+        /** @brief The gamepad claim last published. */
+        bool gamepadPublished = false;
+        /** @brief The left stick as it last moved, from whichever pad moved it: x right, y down. */
+        Math::Vec2 stick{0.0f, 0.0f};
+        /** @brief The direction the stick leans past the navigation dead zone, as its D-pad button; none inside it. */
+        std::optional<GamepadButton> stickDirection;
+        /** @brief The direction held that moved the focus, D-pad or stick, while it repeats. */
+        struct
+        {
+            std::optional<GamepadButton> direction;
+            /** @brief The pad it is held on: only that pad's release ends it. */
+            GamepadId pad;
+            /** @brief Held by the stick rather than the D-pad: the stick leaving the direction ends it. */
+            bool fromStick = false;
+            /** @brief The clock reading at which it moves the focus again. */
+            double next = 0.0;
+        } held;
+        /** @brief The virtual cursor. */
+        struct
+        {
+            bool on = false;
+            /** @brief Its element, while it is on and has been made. */
+            ElementId element;
+            /** @brief A holds the left press it made. */
+            bool pressed = false;
+        } cursor;
     };
 
     /** @brief Registers the root's router with FenrirInput when the app has input and it is not registered yet. */
@@ -80,6 +106,14 @@ namespace Fenrir::Detail
      * :active and :focus-within back on the elements now above them, then publishes the claims.
      */
     void RefreshInput(UIRoot& root, UIRootState& state);
+
+    /**
+     * @brief Each frame with a size, before styles resolve: while the virtual cursor is on, makes its element when it
+     * has none and starts the pointer at the root's centre (`uiSize` halved) when it has not been anywhere.
+     */
+    void FrameInput(UIRoot& root, UIRootState& state, Math::Vec2 uiSize);
+    /** @copydoc Fenrir::UIRoot::SetVirtualCursor */
+    void SetVirtualCursor(UIRoot& root, UIRootState& state, bool on);
 
     /** @copydoc Fenrir::UIRoot::HitTest */
     [[nodiscard]] ElementId HitTest(const UIRootState& state, Math::Vec2 position);
