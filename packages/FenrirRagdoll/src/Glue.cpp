@@ -4,7 +4,9 @@
 // powered child's joint its target from the base pose and its torque and spring from the strength; and the ragdoll's
 // and bodies' states are written. Each frame,
 // after physics interpolates and before the pose pipeline, the skeleton entity follows a simulating root body and each
-// simulating body's bone is written as a world pose override, cleared once every body follows and every weight is 0.
+// simulating body's bone is written as a world pose override, cleared once every body follows and every weight is 0,
+// and with PhysicsDebugCategories::Ragdolls on in the scene's world, each body's bone frame and each powered joint's
+// motor target are drawn.
 
 #include <algorithm>
 #include <cmath>
@@ -22,15 +24,18 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/SkeletonData.hpp"
+#include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirECS/ComponentType.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/DebugLines.hpp"
 #include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirRagdoll/Components.hpp"
+#include "FenrirRagdoll/DebugLines.hpp"
 #include "FenrirRagdoll/Ragdolls.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirScheduler/Scheduler.hpp"
@@ -53,10 +58,10 @@ namespace Fenrir
             App* app;
             /** @brief Each following body's pose last tick, by entity id: the next tick's velocity comes from it. */
             std::unordered_map<std::uint32_t, Pose> lastFollowed;
-            /** @brief Skeleton entities warned about as inactive, until they are active again. */
+            /** @brief Skeleton entities warned about as inactive, until they are active again or lose their Ragdoll. */
             std::unordered_set<std::uint32_t> inactiveWarned;
-            /** @brief Body entities warned about as skipped, with why, until they resolve (or are skipped for another
-             * reason). */
+            /** @brief Body entities warned about as skipped, with why, until they resolve, are skipped for another
+             * reason or lose their RagdollBody. */
             std::unordered_map<std::uint32_t, std::string> skippedWarned;
         };
     } // namespace Detail
@@ -80,11 +85,17 @@ namespace Fenrir
             return "entity " + std::to_string(entity.GetId()) + " ('" + entity.GetComponent<Name>().Get() + "')";
         }
 
+        /** @brief Whether `entity` is a live entity of `entities`. */
+        bool IsLive(EntityList& entities, const Entity& entity)
+        {
+            return entity.IsValid() && entities.HasEntity(entity.GetId()) &&
+                   entities.GetEntity(entity.GetId()) == entity;
+        }
+
         /** @brief Whether `skeleton` is a live entity of `entities` with a `Ragdoll`. */
         bool IsLiveRagdoll(EntityList& entities, const Entity& skeleton)
         {
-            return skeleton.IsValid() && entities.HasEntity(skeleton.GetId()) &&
-                   entities.GetEntity(skeleton.GetId()) == skeleton && skeleton.HasComponent<Ragdoll>();
+            return IsLive(entities, skeleton) && skeleton.HasComponent<Ragdoll>();
         }
 
         RagdollMode EffectiveMode(const Ragdoll& ragdoll, const RagdollBody& body)
@@ -118,15 +129,40 @@ namespace Fenrir
             return {};
         }
 
-        /** @brief Warns once that `body` is skipped for `why`, again only when the reason changes. */
-        void WarnSkipped(Detail::RagdollsState& state, const Entity& body, const std::string& why)
+        /** @brief Warns once that `body` is skipped for `why`, again only when the reason changes; whether it warned
+         * now. */
+        bool WarnSkipped(Detail::RagdollsState& state, const Entity& body, const std::string& why)
         {
             auto [entry, added] = state.skippedWarned.try_emplace(body.GetId(), why);
             if (added || entry->second != why)
             {
                 entry->second = why;
                 state.app->Logger()->Warn("The RagdollBody on " + LogName(body) + " is skipped: " + why);
+                return true;
             }
+            return false;
+        }
+
+        /** @brief The ids of `entities`. */
+        std::unordered_set<std::uint32_t> IdsOf(const std::vector<Entity>& entities)
+        {
+            std::unordered_set<std::uint32_t> ids;
+            for (const Entity& entity : entities)
+            {
+                ids.insert(entity.GetId());
+            }
+            return ids;
+        }
+
+        /** @brief Forgets the warnings about entities that are gone or lost their component, so that their next
+         * transition warns again. */
+        void ForgetWarnings(Detail::RagdollsState& state, const std::vector<Entity>& ragdolls,
+                            const std::vector<Entity>& bodies)
+        {
+            const std::unordered_set<std::uint32_t> skeletons = IdsOf(ragdolls);
+            std::erase_if(state.inactiveWarned, [&skeletons](std::uint32_t id) { return !skeletons.contains(id); });
+            const std::unordered_set<std::uint32_t> mapped = IdsOf(bodies);
+            std::erase_if(state.skippedWarned, [&mapped](const auto& entry) { return !mapped.contains(entry.first); });
         }
 
         /** @brief The rotation `delta` as a rotation vector over `dt`: radians per second about its axis. */
@@ -154,6 +190,25 @@ namespace Fenrir
             else if (kind.Is<SwingTwistJoint>())
             {
                 kind.As<SwingTwistJoint>().motor.mode = JointMotorMode::Off;
+            }
+        }
+
+        /**
+         * @brief Turns off the motor of `body`'s joint to its parent body: the joint whose bodyB is `body` and whose
+         * bodyA is a live body of the same ragdoll, as the builder joins them. Called once, as `body` stops belonging
+         * to a live ragdoll, so a ragdoll whose `Ragdoll` is gone drives nothing; after that the joint is game code's.
+         */
+        void ReleaseJoint(EntityList& entities, const std::vector<Entity>& joints, const Entity& body,
+                          const RagdollBody& mapping)
+        {
+            for (const Entity& entity : joints)
+            {
+                Joint& joint = entity.GetComponent<Joint>();
+                if (joint.bodyB == body && IsLive(entities, joint.bodyA) && joint.bodyA.HasComponent<RagdollBody>() &&
+                    joint.bodyA.GetComponent<RagdollBody>().ragdoll == mapping.ragdoll)
+                {
+                    MotorOff(joint.kind);
+                }
             }
         }
 
@@ -309,14 +364,20 @@ namespace Fenrir
             const float dt = static_cast<float>(app.GetTime().tickRate);
             std::unordered_map<std::uint32_t, Detail::Pose> followed;
 
-            // Bodies whose ragdoll is no Ragdoll entity of this scene belong to no ragdoll the loop below visits.
+            ForgetWarnings(state, ragdolls, bodies);
+
+            // Bodies whose ragdoll is no Ragdoll entity of this scene belong to no ragdoll the loop below visits. As a
+            // body becomes so (its Ragdoll removed, its skeleton entity destroyed), its joint's motor goes off.
             for (const Entity& body : bodies)
             {
                 RagdollBody& mapping = body.GetComponent<RagdollBody>();
                 if (!IsLiveRagdoll(entities, mapping.ragdoll))
                 {
                     mapping.state.bone = NoBone;
-                    WarnSkipped(state, body, "its ragdoll is not a live entity of the scene with a Ragdoll");
+                    if (WarnSkipped(state, body, "its ragdoll is not a live entity of the scene with a Ragdoll"))
+                    {
+                        ReleaseJoint(entities, joints, body, mapping);
+                    }
                 }
             }
 
@@ -434,6 +495,13 @@ namespace Fenrir
             return resolved;
         }
 
+        /** @brief An active ragdoll this frame: its skeleton entity and the bodies that resolved last tick. */
+        struct ActiveRagdoll
+        {
+            Entity skeleton;
+            std::vector<Resolved> bodies;
+        };
+
         /**
          * @brief Where `body` puts its bone, in world space: its world pose × offset⁻¹. The body's pose has no scale,
          * so the bone's simulation-pose world scale is put back first, which makes the inverse of the follow (bone ×
@@ -499,14 +567,105 @@ namespace Fenrir
             SetWorldTransform(skeleton, entity);
         }
 
+        /** @brief The colour of a body's debug lines in `mode`. */
+        const Colour& ModeColour(RagdollMode mode)
+        {
+            switch (mode)
+            {
+            case RagdollMode::Simulating:
+                return RagdollDebugColour::Simulating;
+            case RagdollMode::Powered:
+                return RagdollDebugColour::Powered;
+            case RagdollMode::Following:
+                break;
+            }
+            return RagdollDebugColour::Following;
+        }
+
+        /** @brief How long a bone frame's axes are drawn, in metres. */
+        constexpr float BoneAxisLength = 0.1f;
+        /** @brief How long a motor target frame's axes are drawn, in metres. */
+        constexpr float TargetAxisLength = 0.06f;
+
+        /** @brief A joint motor's target as frameB's rotation from frameA (a hinge's is a turn about X), or `nullopt`
+         * for a kind the glue drives no motor of: game code may join two ragdoll bodies with any kind. */
+        std::optional<Quat> MotorTarget(const Joint& joint)
+        {
+            if (joint.kind.Is<HingeJoint>())
+            {
+                return Math::AngleAxis(joint.kind.As<HingeJoint>().motor.targetPosition, Vec3(1.0f, 0.0f, 0.0f));
+            }
+            if (joint.kind.Is<SwingTwistJoint>())
+            {
+                return joint.kind.As<SwingTwistJoint>().motor.targetRotation;
+            }
+            return std::nullopt;
+        }
+
+        /**
+         * @brief `Update` step 4 for one active ragdoll (FenrirRagdoll/DebugLines.hpp), from the modes and targets the
+         * last tick wrote: each resolved body's bone frame and its line to the body in its mode's colour, then each
+         * driven joint's motor target as a frame at the joint.
+         */
+        void DrawRagdoll(DebugDraw& draw, Scene& scene, const Entity& skeleton, const std::vector<Resolved>& resolved,
+                         const std::vector<Entity>& joints)
+        {
+            const ShapeOptions options{.group = PhysicsDebugGroup};
+            for (const Resolved& body : resolved)
+            {
+                const std::optional<Math::Mat4> bone =
+                    Skeletons::GetBoneWorldMatrix(scene, skeleton, body.mapping->state.bone, PoseKind::Simulation);
+                if (!bone)
+                {
+                    continue;
+                }
+                const Colour& colour = ModeColour(body.mapping->state.mode);
+                const Vec3 origin((*bone)[3]);
+                for (int axis = 0; axis < 3; ++axis)
+                {
+                    const Vec3 direction((*bone)[axis]);
+                    const float length = Math::Magnitude(direction);
+                    draw.Line(origin, length > 0.0f ? origin + direction * (BoneAxisLength / length) : origin, colour,
+                              options);
+                }
+                draw.Line(origin, GetWorldTransform(body.entity).pos, colour, options);
+            }
+
+            // A joint is driven while both its bodies resolved and its child is powered (Tick's ApplyJointMotors).
+            const auto find = [&resolved](const Entity& entity) {
+                return std::ranges::find_if(resolved,
+                                            [&entity](const Resolved& body) { return body.entity == entity; });
+            };
+            for (const Entity& entity : joints)
+            {
+                const Joint& joint = entity.GetComponent<Joint>();
+                const auto child = find(joint.bodyB);
+                if (child == resolved.end() || child->mapping->state.mode != RagdollMode::Powered ||
+                    find(joint.bodyA) == resolved.end())
+                {
+                    continue;
+                }
+                const std::optional<Quat> target = MotorTarget(joint);
+                if (!target)
+                {
+                    continue;
+                }
+                const Transform parent = GetWorldTransform(joint.bodyA);
+                const Transform frame(parent.pos + Math::Rotate(parent.rot, joint.frameA.position),
+                                      Math::Normalized(parent.rot * joint.frameA.rotation * *target), Vec3(1.0f));
+                draw.Axes(TransformToMat4(frame), TargetAxisLength, options);
+            }
+        }
+
         void Update(App& app)
         {
             Scene& scene = app.GetActiveScene();
             EntityList& entities = scene.GetEntityList();
-            // A skeleton that lost its Ragdoll, or is gone, keeps its entries (ADR-0038) but no record of them.
+            // A skeleton entity that is gone keeps no record. One that lost its Ragdoll keeps its entries (ADR-0038)
+            // and their record, so Ragdolls::ClearOverrides still clears the bones of bodies destroyed since.
             if (Detail::RagdollOverrides* written = scene.GetResource<Detail::RagdollOverrides>())
             {
-                written->Prune([&entities](const Entity& skeleton) { return IsLiveRagdoll(entities, skeleton); });
+                written->Prune([&entities](const Entity& skeleton) { return IsLive(entities, skeleton); });
             }
             const std::vector<Entity> ragdolls = With(entities, ComponentType::Native<Ragdoll>());
             if (ragdolls.empty())
@@ -515,6 +674,7 @@ namespace Fenrir
             }
             const std::vector<Entity> bodies = With(entities, ComponentType::Native<RagdollBody>());
             Detail::RagdollOverrides& overrides = Detail::RagdollOverrides::In(scene);
+            std::vector<ActiveRagdoll> active;
 
             for (const Entity& skeleton : ragdolls)
             {
@@ -523,7 +683,8 @@ namespace Fenrir
                 {
                     continue; // Tick warned
                 }
-                const std::vector<Resolved> resolved = ResolvedBodies(bodies, skeleton);
+                const std::vector<Resolved>& resolved =
+                    active.emplace_back(ActiveRagdoll{skeleton, ResolvedBodies(bodies, skeleton)}).bodies;
                 const bool allFollowing = std::ranges::all_of(
                     resolved, [](const Resolved& body) { return body.mapping->state.mode == RagdollMode::Following; });
 
@@ -584,21 +745,37 @@ namespace Fenrir
                     overrides.Clear(scene, skeleton);
                 }
             }
+
+            // 4. Debug lines last, so they show the skeleton entity and bodies as this frame left them.
+            const PhysicsWorld* world = PhysicsWorld::Of(scene);
+            DebugDraw* draw = scene.GetResource<DebugDraw>();
+            if (world != nullptr && draw != nullptr &&
+                Includes(world->DebugDrawCategories(), PhysicsDebugCategories::Ragdolls))
+            {
+                const std::vector<Entity> joints = With(entities, ComponentType::Native<Joint>());
+                for (const ActiveRagdoll& ragdoll : active)
+                {
+                    DrawRagdoll(*draw, scene, ragdoll.skeleton, ragdoll.bodies, joints);
+                }
+            }
         }
     } // namespace
 
     bool Ragdolls::ClearOverrides(Scene& scene, Entity skeleton)
     {
-        if (!skeleton.IsValid() || !skeleton.HasComponent<Ragdoll>())
+        EntityList& entities = scene.GetEntityList();
+        if (!IsLive(entities, skeleton))
         {
             return false;
         }
-        EntityList& entities = scene.GetEntityList();
+        // A ragdoll is there while the skeleton has its Ragdoll, a body naming it, or a record of entries written.
+        bool ragdoll = skeleton.HasComponent<Ragdoll>();
         for (const Entity& body : With(entities, ComponentType::Native<RagdollBody>()))
         {
             const RagdollBody& mapping = body.GetComponent<RagdollBody>();
             if (mapping.ragdoll == skeleton)
             {
+                ragdoll = true;
                 Skeletons::ClearOverride(scene, skeleton,
                                          Skeletons::FindBone(scene, skeleton, Detail::NameOf(mapping.bone)));
             }
@@ -606,9 +783,10 @@ namespace Fenrir
         // And the bones of bodies destroyed since they were written.
         if (Detail::RagdollOverrides* overrides = scene.GetResource<Detail::RagdollOverrides>())
         {
+            ragdoll = ragdoll || overrides->Find(skeleton) != nullptr;
             overrides->Clear(scene, skeleton);
         }
-        return true;
+        return ragdoll;
     }
 
     Ragdolls Ragdolls::Install(App& app)

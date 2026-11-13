@@ -3,6 +3,7 @@
 // or definitions reach a user of FenrirRagdoll (this test target is one), the build fails here.
 #include "FenrirRagdoll/Builder.hpp"
 #include "FenrirRagdoll/Components.hpp"
+#include "FenrirRagdoll/DebugLines.hpp"
 #include "FenrirRagdoll/Description.hpp"
 #include "FenrirRagdoll/Ragdolls.hpp"
 

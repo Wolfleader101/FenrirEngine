@@ -28,6 +28,10 @@ public enum PhysicsDebugCategories : uint
     /// <summary>Each wheel of each active, enabled vehicle: its suspension, the wheel with one spoke, and its contact
     /// coloured by grip (gripping, past its tyre's peak slip, or past its slide slip).</summary>
     Vehicles = 1u << 6,
+    /// <summary>Each ragdoll body's bone frame and a line from the bone to the body, coloured by its effective mode
+    /// (following grey, simulating orange, powered green), and each powered joint's motor target as a frame at the
+    /// joint. Drawn by the ragdoll package, not the world.</summary>
+    Ragdolls = 1u << 7,
     /// <summary>Every category.</summary>
-    All = Colliders | Contacts | Velocities | Bounds | Joints | Characters | Vehicles,
+    All = Colliders | Contacts | Velocities | Bounds | Joints | Characters | Vehicles | Ragdolls,
 }

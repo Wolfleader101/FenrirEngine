@@ -8,6 +8,7 @@ add_library(FenrirRagdoll STATIC
     include/FenrirRagdoll/Description.hpp
     include/FenrirRagdoll/Builder.hpp
     include/FenrirRagdoll/Ragdolls.hpp
+    include/FenrirRagdoll/DebugLines.hpp
 
     src/Frames.hpp
     src/Overrides.hpp
@@ -17,7 +18,7 @@ add_library(FenrirRagdoll STATIC
 )
 
 target_link_libraries(FenrirRagdoll PUBLIC FenrirPhysics FenrirSkeleton FenrirAssets FenrirApp FenrirScene FenrirECS
-                                           FenrirMath FenrirLogger FenrirTime)
+                                           FenrirMath FenrirLogger FenrirTime FenrirDebugDraw)
 
 target_include_directories(FenrirRagdoll PUBLIC include PRIVATE src)
 

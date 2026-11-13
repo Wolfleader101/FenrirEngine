@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <string>
@@ -396,6 +397,26 @@ namespace RagdollTest
             }
         }
         return nullptr;
+    }
+
+    /** @brief A ragdoll joint's motor mode: a hinge's or a swing-twist joint's, the two kinds a ragdoll's joints are.
+     */
+    inline Fenrir::JointMotorMode MotorMode(const Fenrir::Joint& joint)
+    {
+        return joint.kind.Is<Fenrir::HingeJoint>() ? joint.kind.As<Fenrir::HingeJoint>().motor.mode
+                                                   : joint.kind.As<Fenrir::SwingTwistJoint>().motor.mode;
+    }
+
+    /** @brief Sets the per-body mode of each of `spawned`'s bodies named in `bones`. */
+    inline void SetModes(const Fenrir::SpawnedRagdoll& spawned, std::initializer_list<std::string_view> bones,
+                         Fenrir::RagdollBodyMode mode)
+    {
+        for (const std::string_view bone : bones)
+        {
+            const Fenrir::Entity body = BodyOf(spawned, bone);
+            REQUIRE(body.IsValid());
+            body.GetComponent<Fenrir::RagdollBody>().mode = mode;
+        }
     }
 
     /** @brief A humanoid standing on the ground, optionally walking along +X, its ragdoll built and following. */
