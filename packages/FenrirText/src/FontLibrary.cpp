@@ -84,11 +84,12 @@ namespace Fenrir
             }
         }
 
-        std::unique_ptr<SizedFace> FontLibraryState::Open(AssetHandle<Font> font, std::uint32_t quarters)
+        std::unique_ptr<SizedFace> FontLibraryState::Open(AssetHandle<Font> font, std::uint32_t faceKey)
         {
             const std::uint64_t key = FontKey(font);
+            const std::uint32_t quarters = faceKey & ~SdfFaceBit;
             const auto fail = [&](const char* why, bool everySize) -> std::unique_ptr<SizedFace> {
-                failed.insert({key, everySize ? 0u : quarters});
+                failed.insert({key, everySize ? 0u : faceKey});
                 store->Logger().Error("FenrirText could not open a font: {}", why);
                 return nullptr;
             };
@@ -189,17 +190,16 @@ namespace Fenrir
             {
                 return found->second.get();
             }
-            const std::uint32_t quarters = QuarterPixels(config.sdfSize);
-            // The raster face's failure is recorded under its size, as a bitmap face's: an SDF font that opens at no
-            // size fails as a bitmap one does.
-            if (failed.contains({key, 0}) || failed.contains({key, quarters | SdfFaceBit}))
+            // A failure to size the raster face is recorded under the SDF face key at the SDF size, apart from the
+            // bitmap face of that size; a font that opens at no size fails in both modes.
+            const std::uint32_t rasterKey = FaceKey(FontRendering::Sdf, config.sdfSize);
+            if (failed.contains({key, 0}) || failed.contains({key, rasterKey}))
             {
                 return nullptr;
             }
-            std::unique_ptr<SizedFace> raster = Open(font, quarters);
+            std::unique_ptr<SizedFace> raster = Open(font, rasterKey);
             if (!raster)
             {
-                failed.insert({key, quarters | SdfFaceBit});
                 return nullptr;
             }
             raster->rendering = FontRendering::Sdf;

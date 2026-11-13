@@ -57,6 +57,7 @@ namespace Fenrir::Detail
         AssetHandle<Font> font;
         /** @brief The size in pixels, a multiple of a quarter pixel. */
         float size = 0.0f;
+        /** @brief Bitmap, or SDF: an SDF raster face, or an SDF face at a size borrowing one. */
         FontRendering rendering = FontRendering::Bitmap;
         /** @brief The SDF raster face whose FreeType face, HarfBuzz font, atlas and glyphs this face uses; null for its
          * own. */
@@ -86,7 +87,7 @@ namespace Fenrir::Detail
         }
     };
 
-    /** @brief One face a family registered: its font, weight and style. */
+    /** @brief One face a family registered: its font, weight, style and mode. */
     struct RegisteredFace
     {
         AssetHandle<Font> font;
@@ -142,11 +143,17 @@ namespace Fenrir::Detail
          */
         [[nodiscard]] SizedFace* Face(AssetHandle<Font> font, FontRendering rendering, float size);
 
+        /** @brief Face, for a face of a chain. */
+        [[nodiscard]] SizedFace* Face(const ChainFace& face, float size)
+        {
+            return Face(face.font, face.rendering, size);
+        }
+
         /**
-         * @brief The glyph `glyph` of `face` at quarter-pixel offset `quarter`, rasterised on first use into the atlas
-         * of the face's raster face. An SDF glyph is rasterised once whatever the offset or size, at offset zero.
+         * @brief The glyph `glyph` of `sized` at quarter-pixel offset `quarter`, rasterised on first use into the atlas
+         * of its raster face. An SDF glyph is rasterised once whatever the offset or size, at offset zero.
          */
-        [[nodiscard]] const RasterisedGlyph& Glyph(SizedFace& face, std::uint32_t glyph, std::uint32_t quarter);
+        [[nodiscard]] const RasterisedGlyph& Glyph(SizedFace& sized, std::uint32_t glyph, std::uint32_t quarter);
 
         /** @brief The registered face of `family` nearest `weight` and `style`, or none if it has no faces. */
         [[nodiscard]] std::optional<ChainFace> Nearest(const FontFamily& family, std::uint16_t weight,
@@ -156,16 +163,18 @@ namespace Fenrir::Detail
         [[nodiscard]] std::vector<ChainFace> Chain(std::string_view family, std::uint16_t weight,
                                                    FontStyle style) const;
 
-        /** @brief `font` opened in FreeType and HarfBuzz at `quarters` quarter pixels, its metrics read; null if not.
+        /**
+         * @brief `font` opened in FreeType and HarfBuzz at the size `faceKey` (FaceKey) names, its metrics read; null,
+         * with the failure recorded under `faceKey` (or every size) and logged, if it cannot be.
          */
-        [[nodiscard]] std::unique_ptr<SizedFace> Open(AssetHandle<Font> font, std::uint32_t quarters);
+        [[nodiscard]] std::unique_ptr<SizedFace> Open(AssetHandle<Font> font, std::uint32_t faceKey);
 
         /** @brief `font`'s SDF raster face at the SDF size, opened on first use; null, as Face, if it cannot be. */
         [[nodiscard]] SizedFace* SdfRaster(AssetHandle<Font> font);
 
         /**
-         * @brief The fonts and sizes that failed to open, so each is logged once: by font and size in quarter pixels,
-         * size zero for a font that opens at no size.
+         * @brief The fonts and sizes that failed to open, so each is logged once: by font and FaceKey, zero for a font
+         * that opens at no size.
          */
         std::set<std::pair<std::uint64_t, std::uint32_t>> failed;
     };

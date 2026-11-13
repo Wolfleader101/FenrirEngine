@@ -80,6 +80,7 @@ TEST_CASE("An SDF face's atlas holds one entry per glyph whatever the size", "[t
     INFO("no bitmap atlas was opened for the face at either size");
     REQUIRE(test.fonts.AtlasPages(roboto, 12.0f).empty());
     REQUIRE(test.fonts.AtlasPages(roboto, 64.0f).empty());
+    INFO("and nothing was logged as an error");
     REQUIRE(test.errors->empty());
 }
 

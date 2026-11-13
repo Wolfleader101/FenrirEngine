@@ -320,13 +320,13 @@ namespace Fenrir
                 chosen = previousFace;
             }
             Detail::SizedFace* firstHaving = nullptr;
-            for (const Detail::ChainFace& font : chainOf(style))
+            for (const Detail::ChainFace& candidate : chainOf(style))
             {
                 if (chosen != nullptr)
                 {
                     break;
                 }
-                Detail::SizedFace* face = library.Face(font.font, font.rendering, size);
+                Detail::SizedFace* face = library.Face(candidate, size);
                 if (face == nullptr)
                 {
                     continue;
@@ -342,9 +342,7 @@ namespace Fenrir
             }
             if (chosen == nullptr)
             {
-                chosen = firstHaving != nullptr
-                             ? firstHaving
-                             : library.Face(chainOf(style).back().font, chainOf(style).back().rendering, size);
+                chosen = firstHaving != nullptr ? firstHaving : library.Face(chainOf(style).back(), size);
             }
             std::fill(faceAt.begin() + begin, faceAt.begin() + end, chosen);
             previousFace = chosen;
@@ -459,9 +457,9 @@ namespace Fenrir
                 ellipsisItem.level = SBParagraphGetBaseLevel(paragraphOf(begin));
                 const TextStyle& style = m_runs[ellipsisItem.style].style;
                 std::string mark = "\xE2\x80\xA6"; // U+2026 in UTF-8
-                for (const Detail::ChainFace& font : chainOf(ellipsisItem.style))
+                for (const Detail::ChainFace& candidate : chainOf(ellipsisItem.style))
                 {
-                    Detail::SizedFace* face = library.Face(font.font, font.rendering, style.size);
+                    Detail::SizedFace* face = library.Face(candidate, style.size);
                     if (face != nullptr && face->Has(U'\u2026'))
                     {
                         ellipsisItem.face = face;

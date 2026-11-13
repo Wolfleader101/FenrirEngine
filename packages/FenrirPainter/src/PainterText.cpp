@@ -31,32 +31,30 @@ namespace Fenrir
     void Painter::DrawText(Paragraph& paragraph, Math::Vec2 point)
     {
         LayOutIfNever(paragraph);
-        const Math::Vec2 origin = SnapPoint(point);
         for (const GlyphRun& run : paragraph.Runs())
         {
-            DrawRun(run, origin, run.colour);
+            DrawRun(run, point, run.colour);
         }
     }
 
     void Painter::DrawText(Paragraph& paragraph, Math::Vec2 point, const TextShadow& shadow)
     {
         LayOutIfNever(paragraph);
-        const Math::Vec2 shadowOrigin = SnapPoint(point + shadow.offset);
         for (const GlyphRun& run : paragraph.Runs())
         {
-            DrawRun(run, shadowOrigin, shadow.colour);
+            DrawRun(run, point + shadow.offset, shadow.colour);
         }
         DrawText(paragraph, point);
     }
 
     void Painter::DrawGlyphs(const GlyphRun& run, Math::Vec2 point)
     {
-        DrawRun(run, SnapPoint(point), run.colour);
+        DrawRun(run, point, run.colour);
     }
 
     void Painter::DrawGlyphs(const GlyphRun& run, Math::Vec2 point, const TextShadow& shadow)
     {
-        DrawRun(run, SnapPoint(point + shadow.offset), shadow.colour);
+        DrawRun(run, point + shadow.offset, shadow.colour);
         DrawGlyphs(run, point);
     }
 
@@ -72,6 +70,12 @@ namespace Fenrir
         const std::uint32_t packed = PainterDetail::PackColour(colour);
 
         const bool sdf = run.rendering == FontRendering::Sdf;
+        // A bitmap's whole-pixel rectangles land on whole pixels from a snapped point. A distance field draws at any
+        // offset, so moving SDF text glides rather than stepping a pixel at a time.
+        if (!sdf)
+        {
+            point = SnapPoint(point);
+        }
         PaintSetup setup;
         setup.image = TextureSlot2D{run.page, LinearClamp2D};
         for (const PositionedGlyph& glyph : run.glyphs)

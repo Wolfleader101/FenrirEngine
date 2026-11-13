@@ -404,3 +404,31 @@ TEST_CASE("An SDF face's glyphs are SdfGlyph quads over its SDF atlas, carrying 
     INFO("and the bitmap run's glyphs stay Glyph quads");
     REQUIRE(PainterTest::ShapeOf(vertices[first]) == Fenrir::ShapeKind::Glyph);
 }
+
+TEST_CASE("Under pixel snapping an SDF run draws at its fractional point and a bitmap run at a whole pixel",
+          "[painter][text][sdf]")
+{
+    TextTest::TextApp test;
+    test.fonts.AddFace("Field", test.fonts.DefaultFont(), Fenrir::FontWeightNormal, Fenrir::FontStyle::Normal,
+                       Fenrir::FontRendering::Sdf);
+    Fenrir::Paragraph field;
+    field.SetText("I", TextTest::Style("Field", 16.0f));
+    field.Layout(test.fonts, Fenrir::UnlimitedWidth);
+    Fenrir::Paragraph crisp = LaidOut(test, "I");
+
+    Fenrir::PainterConfig config = PainterTest::Config();
+    config.snapToPixels = true;
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, config);
+    painter.DrawText(field, {10.3f, 20.6f});
+    painter.DrawText(crisp, {10.3f, 20.6f});
+
+    const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
+    REQUIRE(vertices.size() == 8);
+    INFO("the SDF glyph is moved by the point as given, so text moving smoothly does not step");
+    const Fenrir::PositionedGlyph& sdf = field.Runs().front().glyphs.front();
+    REQUIRE(QuadIs(vertices, 0, Moved(sdf.quad, {10.3f, 20.6f}), sdf.atlas.region, Fenrir::ShapeKind::SdfGlyph));
+    INFO("the bitmap glyph's point is snapped to (10, 21), its whole-pixel rectangle on whole pixels");
+    const Fenrir::PositionedGlyph& bitmap = crisp.Runs().front().glyphs.front();
+    REQUIRE(QuadIs(vertices, 4, Moved(bitmap.quad, {10.0f, 21.0f}), bitmap.atlas.region));
+}
