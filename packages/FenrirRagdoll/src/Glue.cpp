@@ -1,11 +1,14 @@
 // The ragdoll glue (ADR-0054, amended by the spike): each tick, after FenrirSkeleton's tick pass and before physics
 // steps, every active ragdoll's bodies get their motion types and its following bodies are moved onto their bones in
-// the simulation pose, with the velocity of the move, and the ragdoll's and bodies' states are written. Each frame,
+// the simulation pose, with the velocity of the move; each joint between two of its bodies gets its motor mode, and a
+// powered child's joint its target from the base pose and its torque and spring from the strength; and the ragdoll's
+// and bodies' states are written. Each frame,
 // after physics interpolates and before the pose pipeline, the skeleton entity follows a simulating root body and each
 // simulating body's bone is written as a world pose override, cleared once every body follows and every weight is 0.
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -17,12 +20,15 @@
 #include <vector>
 
 #include "FenrirApp/App.hpp"
+#include "FenrirAssets/AssetStore.hpp"
+#include "FenrirAssets/SkeletonData.hpp"
 #include "FenrirECS/ComponentType.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirRagdoll/Components.hpp"
 #include "FenrirRagdoll/Ragdolls.hpp"
@@ -137,12 +143,168 @@ namespace Fenrir
             return axis * (angle / sine / dt);
         }
 
+        /** @brief Turns a ragdoll joint's motor off, every other field left: hinges and swing-twist joints, the two
+         * kinds a ragdoll's joints are. */
+        void MotorOff(JointKind& kind)
+        {
+            if (kind.Is<HingeJoint>())
+            {
+                kind.As<HingeJoint>().motor.mode = JointMotorMode::Off;
+            }
+            else if (kind.Is<SwingTwistJoint>())
+            {
+                kind.As<SwingTwistJoint>().motor.mode = JointMotorMode::Off;
+            }
+        }
+
+        /**
+         * @brief frameB's rotation relative to frameA with both bodies where the base pose puts them: the child bone's
+         * base-pose rotation relative to its parent bone (its base local when the parent part's bone is its parent
+         * bone, else from both bones' base model matrices, across the unmapped bones between), through both offsets
+         * and the joint's frames. `nullopt` when the pose cannot be read.
+         */
+        std::optional<Quat> BaseTarget(Scene& scene, const Entity& skeleton, const SkeletonData* data,
+                                       const RagdollBody& parent, const RagdollBody& child, const Joint& joint)
+        {
+            Math::Mat4 parentModel(1.0f);
+            Math::Mat4 childModel(1.0f);
+            const auto bone = static_cast<std::size_t>(child.state.bone);
+            if (data != nullptr && bone < data->BoneCount() && data->bones[bone].parent == parent.state.bone)
+            {
+                const std::optional<Transform> local =
+                    Skeletons::GetBaseLocal(scene, skeleton, child.state.bone, PoseKind::Simulation);
+                if (!local)
+                {
+                    return std::nullopt;
+                }
+                childModel = TransformToMat4(*local);
+            }
+            else
+            {
+                const std::optional<Math::Mat4> parentBase =
+                    Skeletons::GetBaseModel(scene, skeleton, parent.state.bone, PoseKind::Simulation);
+                const std::optional<Math::Mat4> childBase =
+                    Skeletons::GetBaseModel(scene, skeleton, child.state.bone, PoseKind::Simulation);
+                if (!parentBase || !childBase)
+                {
+                    return std::nullopt;
+                }
+                parentModel = *parentBase;
+                childModel = *childBase;
+            }
+            const Quat parentBody = Detail::PoseOf(parentModel * TransformToMat4(parent.offset)).rot;
+            const Quat childBody = Detail::PoseOf(childModel * TransformToMat4(child.offset)).rot;
+            return Math::Normalized(Math::Conjugate(joint.frameA.rotation) * Math::Conjugate(parentBody) * childBody *
+                                    joint.frameB.rotation);
+        }
+
+        /** @brief The turn of `rotation` about its X axis, in radians within a half turn either way: a hinge's angle.
+         */
+        float AngleAboutX(Quat rotation)
+        {
+            rotation = rotation.w < 0.0f ? -rotation : rotation;
+            return 2.0f * std::atan2(rotation.x, rotation.w);
+        }
+
+        /** @brief Full strength's maximum torque per kilogram of the child body (the spec's strength decision). */
+        constexpr float TorquePerKilogram = 30.0f;
+
+        /** @brief Where a ragdoll's base pose is read: its skeleton entity, and its skeleton asset when the store has
+         * it (to tell a bone's skeleton parent). */
+        struct PoseSource
+        {
+            Scene& scene;
+            const Entity& skeleton;
+            const SkeletonData* data;
+        };
+
+        /**
+         * @brief Drives `joint`'s motor towards the base pose (`Tick` step 4): Position mode, the target from
+         * `BaseTarget`, no target velocity, and the torque and spring of `strength` (taken within [0, 1]) and the
+         * child's strength scale. A pose that cannot be read keeps the last target.
+         */
+        void Drive(const PoseSource& pose, float strength, const Entity& parentBody, const Entity& childBody,
+                   Joint& joint)
+        {
+            const RagdollBody& child = childBody.GetComponent<RagdollBody>();
+            strength = std::clamp(strength, 0.0f, 1.0f);
+            const float torque = std::max(0.0f, strength * child.strengthScale * TorquePerKilogram *
+                                                    childBody.GetComponent<RigidBody>().mass);
+            const JointSpring spring{.frequency = Math::Lerp(1.0f, 10.0f, strength), .damping = 1.0f};
+            const std::optional<Quat> target =
+                BaseTarget(pose.scene, pose.skeleton, pose.data, parentBody.GetComponent<RagdollBody>(), child, joint);
+            if (joint.kind.Is<HingeJoint>())
+            {
+                JointMotor& motor = joint.kind.As<HingeJoint>().motor;
+                motor.mode = JointMotorMode::Position;
+                motor.targetVelocity = 0.0f;
+                if (target)
+                {
+                    motor.targetPosition = AngleAboutX(*target);
+                }
+                motor.maxForce = torque;
+                motor.spring = spring;
+            }
+            else if (joint.kind.Is<SwingTwistJoint>())
+            {
+                SwingTwistMotor& motor = joint.kind.As<SwingTwistJoint>().motor;
+                motor.mode = JointMotorMode::Position;
+                motor.targetAngularVelocity = Vec3(0.0f);
+                if (target)
+                {
+                    motor.targetRotation = *target;
+                }
+                motor.maxTorque = torque;
+                motor.spring = spring;
+            }
+        }
+
+        /**
+         * @brief `Tick` steps 2 and 4 for the joints. A ragdoll's joints are those between two of its bodies (bodyA
+         * the parent, bodyB the child, as the builder joins them): each is driven while both bodies resolved this tick
+         * and its child is powered, and turned off otherwise (a powered body skipped since included). Joints game code
+         * made to anything else, the root body's included, are left alone: the root gets no drive. Each joint is
+         * written on its own, so the order joints are visited in does not matter.
+         */
+        void ApplyJointMotors(EntityList& entities, const PoseSource& pose, const Ragdoll& ragdoll,
+                              const std::unordered_map<std::uint32_t, Entity>& resolved,
+                              const std::vector<Entity>& joints)
+        {
+            const auto ofThisRagdoll = [&entities, &pose](const Entity& body) {
+                return body.IsValid() && entities.HasEntity(body.GetId()) && entities.GetEntity(body.GetId()) == body &&
+                       body.HasComponent<RagdollBody>() && body.GetComponent<RagdollBody>().ragdoll == pose.skeleton;
+            };
+            const auto resolvedThisTick = [&resolved](const Entity& body) {
+                const auto found = resolved.find(body.GetId());
+                return found != resolved.end() && found->second == body;
+            };
+            for (const Entity& entity : joints)
+            {
+                Joint& joint = entity.GetComponent<Joint>();
+                if (!ofThisRagdoll(joint.bodyA) || !ofThisRagdoll(joint.bodyB))
+                {
+                    continue;
+                }
+                if (resolvedThisTick(joint.bodyA) && resolvedThisTick(joint.bodyB) &&
+                    joint.bodyB.GetComponent<RagdollBody>().state.mode == RagdollMode::Powered)
+                {
+                    Drive(pose, ragdoll.strength, joint.bodyA, joint.bodyB, joint);
+                }
+                else
+                {
+                    MotorOff(joint.kind);
+                }
+            }
+        }
+
         void Tick(Detail::RagdollsState& state, App& app)
         {
             Scene& scene = app.GetActiveScene();
             EntityList& entities = scene.GetEntityList();
             const std::vector<Entity> bodies = With(entities, ComponentType::Native<RagdollBody>());
             const std::vector<Entity> ragdolls = With(entities, ComponentType::Native<Ragdoll>());
+            const std::vector<Entity> joints = With(entities, ComponentType::Native<Joint>());
+            const AssetStore* store = app.TryGetResource<AssetStore>();
             const PhysicsWorld* world = PhysicsWorld::Of(scene);
             const float dt = static_cast<float>(app.GetTime().tickRate);
             std::unordered_map<std::uint32_t, Detail::Pose> followed;
@@ -174,6 +336,7 @@ namespace Fenrir
                 state.inactiveWarned.erase(skeleton.GetId());
 
                 RagdollState next;
+                std::unordered_map<std::uint32_t, Entity> resolved;
                 for (const Entity& body : bodies)
                 {
                     RagdollBody& mapping = body.GetComponent<RagdollBody>();
@@ -200,13 +363,15 @@ namespace Fenrir
                         continue;
                     }
                     state.skippedWarned.erase(body.GetId());
+                    resolved.emplace(body.GetId(), body);
                     ++next.bodies;
                     if (world != nullptr && !world->IsSleeping(body))
                     {
                         next.anyAwake = true;
                     }
-                    // 2. Modes. A body made dynamic is not moved and keeps the velocity its RigidBody holds: the last
-                    // following move's. One made kinematic is not moved either: the follow below takes it there.
+                    // 2. Modes (the joints' motors after the loop). A body made dynamic is not moved and keeps the
+                    // velocity its RigidBody holds: the last following move's. One made kinematic is not moved either:
+                    // the follow below takes it there.
                     RigidBody& rigid = body.GetComponent<RigidBody>();
                     if (mapping.state.mode != RagdollMode::Following)
                     {
@@ -235,7 +400,12 @@ namespace Fenrir
                     }
                     followed[body.GetId()] = pose;
                 }
-                // 4. State.
+                // 2 and 4. Motors: off, or for a powered child towards the base pose.
+                const PoseSource pose{scene, skeleton,
+                                      store == nullptr ? nullptr
+                                                       : store->TryGet(skeleton.GetComponent<SkeletonPose>().skeleton)};
+                ApplyJointMotors(entities, pose, ragdoll, resolved, joints);
+                // 5. State.
                 ragdoll.state = next;
             }
             // A body that stopped following, was skipped or is gone starts again with no earlier pose.

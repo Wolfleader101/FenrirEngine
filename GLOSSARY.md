@@ -833,7 +833,7 @@ A skeleton's head-to-foot distance in its rest pose (the rest pose's height when
 *Avoid:* height (an entity's), scale.
 
 **Strength**
-How hard a powered ragdoll's motors drive towards the base pose: one value in [0, 1] on the ragdoll, scaled per part, that the glue turns into each motor's maximum torque, frequency and damping, so it means the same on every rig.
+How hard a powered ragdoll's motors drive towards the base pose: one value in [0, 1] on the ragdoll, scaled per part, that the glue turns into each motor's maximum torque (per kilogram of the driven body) and its spring's frequency, critically damped, so it means the same on every rig.
 *Avoid:* stiffness, blend weight (an *override weight* is how much the simulated pose shows, not how hard it is driven).
 
 **Ragdoll mode**

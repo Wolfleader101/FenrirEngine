@@ -9,10 +9,13 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
+
+#include <catch2/catch_test_macros.hpp>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
@@ -22,7 +25,11 @@
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirMath/Math.hpp"
+#include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/Physics.hpp"
+#include "FenrirRagdoll/Builder.hpp"
+#include "FenrirRagdoll/Description.hpp"
 #include "FenrirRagdoll/Ragdolls.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirScheduler/Scheduler.hpp"
@@ -362,4 +369,115 @@ namespace RagdollTest
         test.app.AddSequentialSystems(Fenrir::SchedulePriority::PostTick,
                                       {[check = std::move(check)](Fenrir::App&) { check(); }});
     }
+    /** @brief Physics with no gravity: bodies move only as they are pushed. */
+    inline Fenrir::PhysicsConfig Weightless()
+    {
+        Fenrir::PhysicsConfig config = StepPosesOnly();
+        config.gravity = Fenrir::Math::Vec3(0.0f);
+        return config;
+    }
+
+    /** @brief `matrix` decomposed into a position, rotation and scale. */
+    inline Fenrir::Transform Decomposed(const Fenrir::Math::Mat4& matrix)
+    {
+        Fenrir::Transform out;
+        Fenrir::Math::Decompose(matrix, out.pos, out.rot, out.scale);
+        return out;
+    }
+
+    /** @brief The joint whose child body (bodyB) is `body`, or null. */
+    inline Fenrir::Joint* JointTo(const Fenrir::SpawnedRagdoll& spawned, const Fenrir::Entity& body)
+    {
+        for (const Fenrir::Entity& joint : spawned.joints)
+        {
+            if (joint.GetComponent<Fenrir::Joint>().bodyB == body)
+            {
+                return &joint.GetComponent<Fenrir::Joint>();
+            }
+        }
+        return nullptr;
+    }
+
+    /** @brief A humanoid standing on the ground, optionally walking along +X, its ragdoll built and following. */
+    struct Character
+    {
+        RagdollApp test;
+        Fenrir::Entity skeleton;
+        Fenrir::SpawnedRagdoll spawned;
+
+        explicit Character(const Fenrir::PhysicsConfig& config = StepPosesOnly(), float walk = 0.0f,
+                           const Fenrir::Transform& place = {})
+            : test(config)
+        {
+            test.AddGround();
+            skeleton = test.AddSkeleton(Humanoid());
+            skeleton.GetComponent<Fenrir::Transform>() = place;
+            if (walk != 0.0f)
+            {
+                AddWalk(test, walk);
+            }
+            spawned = Fenrir::BuildRagdoll(test.app, test.level, skeleton,
+                                           Fenrir::DescribeHumanoid(test.DataOf(skeleton), HumanoidMap()));
+            REQUIRE(spawned.error.empty());
+        }
+
+        /** @brief The skeleton entity's `Ragdoll`. */
+        Fenrir::Ragdoll& Ragdoll()
+        {
+            return skeleton.GetComponent<Fenrir::Ragdoll>();
+        }
+
+        /** @brief The skeleton's bone named `name`, or `NoBone`. */
+        std::int32_t Bone(std::string_view name)
+        {
+            return Fenrir::Skeletons::FindBone(test.level, skeleton, name);
+        }
+
+        /** @brief The bone `body`'s `RagdollBody` names. */
+        std::int32_t BoneOf(const Fenrir::Entity& body)
+        {
+            return Bone(Text(body.GetComponent<Fenrir::RagdollBody>().bone));
+        }
+
+        /** @brief The pose override entry on `body`'s bone, if any. */
+        std::optional<Fenrir::Target> OverrideOf(const Fenrir::Entity& body)
+        {
+            return Fenrir::Skeletons::GetOverride(test.level, skeleton, BoneOf(body));
+        }
+
+        /** @brief The override weight of `body`'s bone. */
+        float WeightOf(const Fenrir::Entity& body)
+        {
+            return Fenrir::Skeletons::GetOverrideWeight(test.level, skeleton, BoneOf(body));
+        }
+
+        /** @brief Runs until the ragdoll's bodies are all asleep, at least a second and at most `frames` frames;
+         * whether they slept. */
+        bool RunUntilAsleep(int frames)
+        {
+            test.Run(60);
+            for (int i = 60; i < frames; ++i)
+            {
+                test.Run(1);
+                if (!Ragdoll().state.anyAwake)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /** @brief Sets every body moving as one rigid body: turning at `spin` about an axis through the root body,
+         * drifting at `drift`. */
+        void Throw(const Fenrir::Math::Vec3& spin, const Fenrir::Math::Vec3& drift)
+        {
+            const Fenrir::Math::Vec3 root = Fenrir::GetWorldTransform(Ragdoll().rootBody).pos;
+            for (const Fenrir::Entity& body : spawned.bodies)
+            {
+                Fenrir::RigidBody& rigid = body.GetComponent<Fenrir::RigidBody>();
+                rigid.angularVelocity = spin;
+                rigid.linearVelocity = drift + Fenrir::Math::Cross(spin, Fenrir::GetWorldTransform(body).pos - root);
+            }
+        }
+    };
 } // namespace RagdollTest
