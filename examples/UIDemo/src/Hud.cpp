@@ -39,7 +39,7 @@ namespace UIDemo
             return store.Root();
         }
 
-        /** @brief The element of `root` with id `id` as a `T`, or null when there is none or it is another class. */
+        /** @brief `element`'s behaviour as a `T`, or null when it is stale or of another class. */
         template <typename T>
         T* As(const Fenrir::UIRoot& root, Fenrir::ElementId element)
         {
@@ -62,8 +62,8 @@ namespace UIDemo
         const std::filesystem::path stylesheet = files / StylesheetFile;
         m_stylesheetPath = stylesheet.generic_string();
         m_stylesheet = m_root->LoadStylesheet(m_stylesheetPath);
-        const Fenrir::MarkupLoad load =
-            m_root->LoadDocument(m_root->GetRootElement(), (files / DocumentFile).generic_string());
+        const std::string document = (files / DocumentFile).generic_string();
+        const Fenrir::MarkupLoad load = m_root->LoadDocument(m_root->GetRootElement(), document);
 
         // FenrirUI logs each problem as a warning; a HUD missing a part is an error, so a smoke run fails on it.
         if (!m_stylesheet.IsValid())
@@ -78,8 +78,8 @@ namespace UIDemo
         }
         if (!load.element.IsValid() || !load.errors.empty())
         {
-            app.Logger()->Error("UIDemo: the HUD's document {} loaded with {} problems, logged above",
-                                (files / DocumentFile).generic_string(), load.errors.size());
+            app.Logger()->Error("UIDemo: the HUD's document {} loaded with {} problems, logged above", document,
+                                load.errors.size());
         }
         app.Logger()->Info("UIDemo: the HUD's stylesheet is {}; edit it while the demo runs to restyle the HUD",
                            m_stylesheetPath);
@@ -102,16 +102,24 @@ namespace UIDemo
     void Hud::Show(const HudFrame& frame)
     {
         Fenrir::UIRoot& root = *m_root;
-        if (auto* health = As<Fenrir::ProgressBar>(root, Find("health")))
-        {
-            health->SetRange(0.0f, frame.health.max);
-            health->SetValue(frame.health.current);
-        }
-        if (auto* stamina = As<Fenrir::ProgressBar>(root, Find("stamina")))
-        {
-            stamina->SetRange(0.0f, frame.stamina.max);
-            stamina->SetValue(frame.stamina.current);
-        }
+        // A bar's setters restyle its fill, so a bar is written only when what it shows changes.
+        const auto showBar = [&](const char* id, float current, float max) {
+            auto* bar = As<Fenrir::ProgressBar>(root, Find(id));
+            if (bar == nullptr)
+            {
+                return;
+            }
+            if (bar->GetMin() != 0.0f || bar->GetMax() != max)
+            {
+                bar->SetRange(0.0f, max);
+            }
+            if (bar->GetValue() != current)
+            {
+                bar->SetValue(current);
+            }
+        };
+        showBar("health", frame.health.current, frame.health.max);
+        showBar("stamina", frame.stamina.current, frame.stamina.max);
 
         const Fenrir::ElementId ammo = Find("ammo");
         const std::string ammoText = std::format("{} / {}", frame.ammo.loaded, frame.ammo.reserve);

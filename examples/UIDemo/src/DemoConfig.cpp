@@ -41,7 +41,7 @@ namespace UIDemo
         config.appName = "UIDemo";
         config.scenes = {Room()};
         config.msaa = 4;
-        // The switches' window.
+        // The room lists its switches in an ImGui window, as LightingDemo does.
         config.imguiOverlay = true;
         config.installPackages = [hud = std::move(hud)](Fenrir::App& app) -> std::shared_ptr<void> {
             auto packages = std::make_shared<UIPackages>(app, Fenrir::UI::Install(app));

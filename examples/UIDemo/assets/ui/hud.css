@@ -1,7 +1,7 @@
 /*
  * UIDemo's HUD stylesheet (examples/UIDemo/README.md). The demo loads it with hot reload on: edit it while the demo
  * runs, save, and the HUD restyles within a quarter of a second. The colours are the custom properties on #hud.
- * Positions are in UI units of a 1080-unit-high screen, so the HUD keeps its proportions at any resolution.
+ * Positions are in UI units of a target 1080 units high, so the HUD keeps its proportions at any resolution.
  */
 
 #hud {

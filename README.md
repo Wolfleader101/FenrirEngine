@@ -50,8 +50,9 @@ The [examples](examples) are the quickest way to see what the engine does, and t
 | [ScriptingDemo](examples/ScriptingDemo/README.md) | C# scripts driving a scene | renderer, scripting |
 | [AnimationDemo](examples/AnimationDemo/README.md) | Playback, skeletons, skinning, blending, attachments, going limp and a crowd; C# scenes with scripting | renderer |
 | [LightingDemo](examples/LightingDemo/README.md) | Image-based lighting, tonemapping and bloom: a material grid and showcase models (fetched, `FENRIR_FETCH_DEMO_ASSETS`) | renderer |
+| [UIDemo](examples/UIDemo/README.md) | FenrirUI: a HUD from a markup document and a hot-reloading stylesheet over a lit room | renderer, UI |
 
-All five sit on the [demo scaffold](examples/DemoScaffold/README.md), which documents the shared keys and the smoke-run switches.
+All six sit on the [demo scaffold](examples/DemoScaffold/README.md), which documents the shared keys and the smoke-run switches.
 
 ## Documentation
 

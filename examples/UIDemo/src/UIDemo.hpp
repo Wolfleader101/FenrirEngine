@@ -90,7 +90,7 @@ namespace UIDemo
         /** @brief Shows `frame`: the bars' values, the ammo counter's text, the compass's heading and the minimap. */
         void Show(const HudFrame& frame);
 
-        /** @brief Adds a hit marker at the centre of the screen, which shows, and leaves through its outro. */
+        /** @brief Adds a hit marker at the centre of the root, which shows, and leaves through its outro. */
         void AddHitMarker();
 
         /** @brief Ages the hit markers by `seconds`, removing those past HitMarkerSeconds (their outros run on). */
