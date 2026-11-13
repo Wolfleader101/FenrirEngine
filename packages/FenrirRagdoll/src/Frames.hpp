@@ -7,11 +7,13 @@
 
 #include <cmath>
 #include <cstddef>
+#include <string_view>
 #include <vector>
 
 #include "FenrirAssets/SkeletonData.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirMath/Math.hpp"
+#include "FenrirSkeleton/BoneAttachment.hpp"
 
 namespace Fenrir::Detail
 {
@@ -21,6 +23,12 @@ namespace Fenrir::Detail
         Math::Vec3 pos = Math::Vec3(0.0f);
         Math::Quat rot = Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
     };
+
+    /** @brief A bone name's text, empty when its buffer is malformed. */
+    inline std::string_view NameOf(const BoneName& name)
+    {
+        return name.Get().value_or(std::string_view());
+    }
 
     /** @brief Every bone's rest-pose model matrix, parents first: the parent's × the bone's rest transform. */
     inline std::vector<Math::Mat4> RestModels(const SkeletonData& skeleton)

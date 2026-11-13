@@ -4,8 +4,8 @@
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
-add_executable(FenrirRagdollTests PublicHeaders.cpp Describe.cpp Build.cpp Following.cpp Determinism.cpp
-                                  RagdollTest.hpp)
+add_executable(FenrirRagdollTests PublicHeaders.cpp Describe.cpp Build.cpp Following.cpp Simulating.cpp
+                                  Determinism.cpp RagdollTest.hpp)
 target_link_libraries(FenrirRagdollTests PRIVATE FenrirRagdoll FenrirDebugDraw Catch2::Catch2WithMain)
 add_test(NAME FenrirRagdoll COMMAND FenrirRagdollTests)
 set_tests_properties(FenrirRagdoll PROPERTIES TIMEOUT 600) # a deadlocked step fails rather than hangs

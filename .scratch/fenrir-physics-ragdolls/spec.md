@@ -140,7 +140,7 @@ struct Ragdoll // on the skeleton entity (the SkeletonPose entity); one per skel
 {
     RagdollMode mode = RagdollMode::Following;
     float strength = 1.0f;         // [0, 1], Powered only
-    bool followRoot = true;        // the skeleton entity follows the root body while any body simulates
+    bool followRoot = true;        // the skeleton entity follows the root body while it is not following
     std::uint32_t group = 0;       // the collision group the builder gave its bodies (informational)
     Entity rootBody;               // the hips' body entity
     RagdollState state;
@@ -234,7 +234,7 @@ void DestroyRagdoll(Scene& scene, Entity skeleton);
   4. **Motor targets.** For each powered body: the child bone's base-pose rotation relative to its parent bone (`GetBaseLocal` with `PoseKind::Simulation`; `GetBaseModel` where middle slots are empty, both bones' model matrices), re-expressed in the joint's frames, written as `SwingTwistMotor::targetRotation` or `JointMotor::targetPosition`, with the strength's torque and spring. No target velocity; the root body gets no drive.
   5. **State.** `RagdollState` and each `RagdollBodyState`.
 - **`Update`** (after physics's `AfterTicks`), per active ragdoll:
-  1. **Follow root.** While any body is not following and `followRoot` is true: the skeleton entity is moved so that the root body's horizontal world position and yaw land where the hips bone's base pose puts the hips relative to the entity; the entity keeps its height and stays upright. The character body under it is game code's (the demo disables it on the drop and teleports and re-enables it on getting up).
+  1. **Follow root.** While the root body is not following and `followRoot` is true (*amended by ticket 03, 2026-11-12*: "any body" would make a partial ragdoll's following root drag back an entity its character moved; ADR-0054): the skeleton entity is moved so that the root body's horizontal world position and yaw land where the hips bone's base pose puts the hips relative to the entity; the entity keeps its height and stays upright. The character body under it is game code's (the demo disables it on the drop and teleports and re-enables it on getting up).
   2. **Override targets.** For each simulating or powered body: `body (interpolated world) × offset⁻¹` as `SetOverride(skeleton, bone, Target { World, trs, Translation | Rotation, weight 1 })`. The glue never writes override weights.
   3. **Clearing.** When every body is following, the glue keeps its entries (holding the last simulated pose for the blend-back) until every weight of the bones it wrote reads 0, then clears them. `Ragdolls::ClearOverrides(scene, skeleton)` clears at once.
 - **Switching repositions nothing.** Bodies already sit on their bones when they go dynamic and keep the velocity written in step 3. Override weights stay gameplay's: the docs say "set the weights to 1 when you drop, ramp them to 0 as you get up".

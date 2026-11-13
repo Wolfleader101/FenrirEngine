@@ -18,6 +18,7 @@
 #include "FenrirPhysics/Joints.hpp"
 #include "FenrirRagdoll/Builder.hpp"
 #include "FenrirRagdoll/Components.hpp"
+#include "FenrirRagdoll/Ragdolls.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirSkeleton/SkeletonPose.hpp"
 #include "FenrirSkeleton/Skeletons.hpp"
@@ -27,11 +28,6 @@ namespace Fenrir
 {
     namespace
     {
-        std::string_view NameOf(const BoneName& name)
-        {
-            return name.Get().value_or(std::string_view());
-        }
-
         SpawnedRagdoll Refused(std::string error)
         {
             SpawnedRagdoll refused;
@@ -101,13 +97,13 @@ namespace Fenrir
         for (std::size_t i = 0; i < description.parts.size(); ++i)
         {
             const RagdollPart& part = description.parts[i];
-            const std::string_view name = NameOf(part.bone);
+            const std::string_view name = Detail::NameOf(part.bone);
             bones.push_back(data->FindBone(name));
             if (bones.back() == NoBone)
             {
                 return Refused("no bone is named '" + std::string(name) + "'");
             }
-            const std::string_view parent = NameOf(part.parent);
+            const std::string_view parent = Detail::NameOf(part.parent);
             if ((i == 0) != parent.empty() || (i > 0 && !partOf.contains(parent)))
             {
                 return Refused("part '" + std::string(name) + "' names parent '" + std::string(parent) +
@@ -138,7 +134,7 @@ namespace Fenrir
                 Detail::PoseOf(skeletonWorld * rest[static_cast<std::size_t>(bones[i])] * TransformToMat4(part.offset));
 
             Entity entity = entities.CreateEntity();
-            entity.GetComponent<Name>().Set((std::string(NameOf(part.bone)) + " body").c_str());
+            entity.GetComponent<Name>().Set((std::string(Detail::NameOf(part.bone)) + " body").c_str());
             spawned.parent.AddChild(entity);
             SetWorldTransform(entity, Transform(body.pos, body.rot, Math::Vec3(1.0f)));
             entity.AddComponent<RigidBody>(RigidBody{.motionType = MotionType::Kinematic, .mass = part.mass});
@@ -157,13 +153,13 @@ namespace Fenrir
         for (std::size_t i = 1; i < description.parts.size(); ++i)
         {
             const RagdollPart& part = description.parts[i];
-            const Entity& parentBody = spawned.bodies[partOf.at(NameOf(part.parent))];
+            const Entity& parentBody = spawned.bodies[partOf.at(Detail::NameOf(part.parent))];
             const JointFrame anchor{Math::Vec3(skeletonWorld * Math::Vec4(part.jointAnchor, 1.0f)),
                                     Math::Normalized(skeletonTurn * part.jointFrame.rotation)};
             const JointFrames frames = FrameFromWorld(parentBody, spawned.bodies[i], anchor);
 
             Entity entity = entities.CreateEntity();
-            entity.GetComponent<Name>().Set((std::string(NameOf(part.bone)) + " joint").c_str());
+            entity.GetComponent<Name>().Set((std::string(Detail::NameOf(part.bone)) + " joint").c_str());
             spawned.parent.AddChild(entity);
             entity.AddComponent<Joint>(Joint{.bodyA = parentBody,
                                              .bodyB = spawned.bodies[i],
@@ -188,6 +184,8 @@ namespace Fenrir
         {
             return;
         }
+        // The glue's override entries are on its bodies' bones; game code's on other bones stay.
+        Ragdolls::ClearOverrides(scene, skeleton);
         const Entity root = skeleton.GetComponent<Ragdoll>().rootBody;
         if (root.IsValid())
         {
@@ -195,16 +193,6 @@ namespace Fenrir
             std::vector<Entity> spawned;
             CollectBelow(parent.IsValid() ? parent : root, spawned);
             EntityList& entities = scene.GetEntityList();
-            for (const Entity& entity : spawned)
-            {
-                // The glue's override entries are on its bodies' bones; game code's on other bones stay.
-                if (entity.HasComponent<RagdollBody>() && entity.GetComponent<RagdollBody>().ragdoll == skeleton)
-                {
-                    const std::int32_t bone =
-                        Skeletons::FindBone(scene, skeleton, NameOf(entity.GetComponent<RagdollBody>().bone));
-                    Skeletons::ClearOverride(scene, skeleton, bone);
-                }
-            }
             for (const Entity& entity : spawned)
             {
                 entities.DestroyEntity(entity);

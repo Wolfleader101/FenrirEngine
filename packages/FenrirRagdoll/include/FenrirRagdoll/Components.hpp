@@ -61,12 +61,18 @@ namespace Fenrir
      */
     struct Ragdoll
     {
-        /** @brief How every body moves, unless a body's own `mode` says otherwise. */
+        /**
+         * @brief How every body moves, unless a body's own `mode` says otherwise. Switching moves no body. While a
+         * body simulates, its bone is drawn where the body is only as far as the bone's override weight says, and the
+         * glue never sets weights (ADR-0038): set the weights to 1 when you drop, ramp them to 0 as you get up
+         * (`Skeletons::SetOverrideWeight`, on the subtree for a partial ragdoll). Once every body follows and every
+         * weight reads 0, the glue clears its override entries.
+         */
         RagdollMode mode = RagdollMode::Following;
         /** @brief How hard powered bodies' motors drive, in [0, 1]: read while `Powered` only. */
         float strength = 1.0f;
-        /** @brief Whether the skeleton entity follows the root body horizontally and in yaw while any body is not
-         * following. */
+        /** @brief Whether the skeleton entity follows the root body horizontally and in yaw while the root body is not
+         * following, keeping its height. */
         bool followRoot = true;
         /** @brief The collision group the builder gave the bodies; informational: the bodies' own `CollisionGroup`s
          * are what physics reads. */

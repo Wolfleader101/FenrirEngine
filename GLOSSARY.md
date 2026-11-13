@@ -841,7 +841,7 @@ How hard a powered ragdoll's motors drive towards the base pose: one value in [0
 *Avoid:* kinematic ragdoll, active ragdoll, blend in/out, physics blend weight.
 
 **Ragdoll glue**
-FenrirRagdoll's systems, which join a ragdoll's bodies to its skeleton: each tick they move following bodies to the simulation pose and drive powered bodies' motors towards the base pose, and each frame they write simulating bodies' poses in as pose overrides, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038, ADR-0040, ADR-0053).
+FenrirRagdoll's systems, which join a ragdoll's bodies to its skeleton: each tick they move following bodies to the simulation pose and drive powered bodies' motors towards the base pose, and each frame they move the skeleton entity under a simulating root body and write simulating bodies' poses in as pose overrides, which they clear once every override weight is 0, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038, ADR-0040, ADR-0053).
 *Avoid:* ragdoll system, physics animation.
 
 **Skinned mesh**
