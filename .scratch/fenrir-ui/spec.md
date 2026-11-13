@@ -270,7 +270,7 @@ One session, branch and PR per ticket, into `fenrir-ui` or the previous ticket's
 | 14 | [Gamepad navigation and the virtual cursor](issues/14-gamepad-navigation-and-the-virtual-cursor.md) | 11, 12 | `ui/14-gamepad-navigation-and-the-virtual-cursor` | [#348](https://github.com/Wolfleader101/FenrirEngine/pull/348) |
 | 15 | [Markup documents](issues/15-markup-documents.md) | 09 | `ui/15-markup-documents` | [#349](https://github.com/Wolfleader101/FenrirEngine/pull/349) |
 | 16 | [Stylesheet files, `@import`, `@font-face` and hot reload](issues/16-stylesheet-files-import-font-face-and-hot-reload.md) | 08, 15 | `ui/16-stylesheet-files-import-font-face-and-hot-reload` | [#351](https://github.com/Wolfleader101/FenrirEngine/pull/351) |
-| 17 | [UIDemo: the HUD](issues/17-uidemo-the-hud.md) | 04, 10, 15, 16 | `ui/17-uidemo-the-hud` | |
+| 17 | [UIDemo: the HUD](issues/17-uidemo-the-hud.md) | 04, 10, 15, 16 | `ui/17-uidemo-the-hud` | [#354](https://github.com/Wolfleader101/FenrirEngine/pull/354) |
 | 18 | [UIDemo: the pause menu](issues/18-uidemo-the-pause-menu.md) | 12, 13, 14, 17 | `ui/18-uidemo-the-pause-menu` | |
 | 19 | [Scripting: text and painter facades](issues/19-scripting-text-and-painter-facades.md) | 06 | `ui/19-scripting-text-and-painter-facades` | [#341](https://github.com/Wolfleader101/FenrirEngine/pull/341) |
 | 20 | [Scripting: UI handles, events and the hosted paint stage](issues/20-scripting-ui-handles-events-and-the-hosted-paint-stage.md) | 16, 18, 19 | `ui/20-scripting-ui-handles-events-and-the-hosted-paint-stage` | |
