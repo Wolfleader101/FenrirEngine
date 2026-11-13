@@ -25,15 +25,40 @@ namespace Fenrir
     namespace Detail
     {
         class ElementText;
+
+        /**
+         * @brief A range control's `min`, `max` and `value` attributes as written, so each later one fits the value
+         * written to the range there is then, whatever order they come in.
+         */
+        struct AuthoredRange
+        {
+            std::optional<float> min;
+            std::optional<float> max;
+            std::optional<float> value;
+        };
     } // namespace Detail
 
     /**
+     * @brief `label`: an element whose text (UIRoot::SetText) is its content, measured from its paragraph. In markup
+     * its text is its text content, or a `text` attribute.
+     */
+    class Label : public Element
+    {
+      public:
+        /** @brief `text`: its text. */
+        AttributeResult SetAttribute(std::string_view name, std::string_view value) override;
+    };
+
+    /**
      * @brief What the interactive controls share: they make themselves focusable, and `disabled` (with `:disabled`)
-     * takes their input and focus away.
+     * takes their input and focus away. In markup, `disabled` is `true` or `false` (bare, true).
      */
     class Control : public Element
     {
       public:
+        /** @brief `disabled`: SetDisabled. */
+        AttributeResult SetAttribute(std::string_view name, std::string_view value) override;
+
         /**
          * @brief Disables or enables it: a disabled control carries `:disabled`, cannot take the focus (it loses it
          * if it has it), and its root sends it no press, release, click or scroll.
@@ -54,11 +79,14 @@ namespace Fenrir
 
     /**
      * @brief `button`: its text is the element's (UIRoot::SetText), measured as a label's. A press and release inside
-     * it is a Click, which the root sends; Enter and Space while it has the focus send a Click too.
+     * it is a Click, which the root sends; Enter and Space while it has the focus send a Click too. In markup its
+     * caption is its text content, or a `text` attribute.
      */
     class Button : public Control
     {
       public:
+        /** @brief `text`, and Control's. */
+        AttributeResult SetAttribute(std::string_view name, std::string_view value) override;
         RouteResult OnInput(App& app, const RoutedInput& input) override;
     };
 
@@ -70,6 +98,8 @@ namespace Fenrir
     class Checkbox : public Control
     {
       public:
+        /** @brief `checked` (`true` or `false`; bare, true), and Control's. */
+        AttributeResult SetAttribute(std::string_view name, std::string_view value) override;
         /** @brief Checks or unchecks it, with `:checked`; sends no Change. */
         void SetChecked(bool checked);
         /** @brief Whether it is checked. */
@@ -115,6 +145,12 @@ namespace Fenrir
     class Slider : public Control
     {
       public:
+        /**
+         * @brief `min`, `max`, `step` and `value` (numbers) and `orientation` (`horizontal` or `vertical`), and
+         * Control's. The value written is fitted again whenever the range or step is, so the attributes may come in
+         * any order.
+         */
+        AttributeResult SetAttribute(std::string_view name, std::string_view value) override;
         /** @brief Sets min and max (swapped when max is below min) and keeps the value within them. */
         void SetRange(float min, float max);
         /** @brief Sets the step the value snaps to from min; 0 for none (the keys and wheel then move a hundredth). */
@@ -179,6 +215,7 @@ namespace Fenrir
         float m_max = 1.0f;
         float m_step = 0.0f;
         float m_value = 0.0f;
+        Detail::AuthoredRange m_authored;
         Orientation m_orientation = Orientation::Horizontal;
         bool m_dragging = false;
         ElementId m_fill;
@@ -189,6 +226,11 @@ namespace Fenrir
     class ProgressBar : public Element
     {
       public:
+        /**
+         * @brief `min`, `max` and `value` (numbers). The value written is fitted again whenever the range is, so the
+         * attributes may come in any order.
+         */
+        AttributeResult SetAttribute(std::string_view name, std::string_view value) override;
         /** @brief Sets min and max (swapped when max is below min) and keeps the value within them. */
         void SetRange(float min, float max);
         /** @brief Sets the value, clamped to the range. */
@@ -198,6 +240,16 @@ namespace Fenrir
         [[nodiscard]] float GetValue() const noexcept
         {
             return m_value;
+        }
+        /** @brief Its range's low end. */
+        [[nodiscard]] float GetMin() const noexcept
+        {
+            return m_min;
+        }
+        /** @brief Its range's high end. */
+        [[nodiscard]] float GetMax() const noexcept
+        {
+            return m_max;
         }
         /** @brief How far the value is from min to max, 0 to 1 (0 for an empty range). */
         [[nodiscard]] float GetFraction() const noexcept;
@@ -216,6 +268,7 @@ namespace Fenrir
         float m_min = 0.0f;
         float m_max = 1.0f;
         float m_value = 0.0f;
+        Detail::AuthoredRange m_authored;
         ElementId m_fill;
     };
 
@@ -238,6 +291,11 @@ namespace Fenrir
     class ImageView : public Element
     {
       public:
+        /**
+         * @brief `src`, an image asset's path, loaded from the app's asset store as given (Invalid when it does not
+         * load), and `fit` (`stretch`, `contain` or `cover`).
+         */
+        AttributeResult SetAttribute(std::string_view name, std::string_view value) override;
         /** @brief Sets the image, measuring it again. */
         void SetSource(AssetHandle<Image> image);
         /** @brief Sets the fit. */
@@ -421,6 +479,11 @@ namespace Fenrir
          */
         [[nodiscard]] const Paragraph& GetParagraph() const noexcept;
 
+        /**
+         * @brief `value` and `placeholder` (text), `password` (`true` or `false`; bare, true) and `maxlength` (a
+         * count of graphemes), and Control's.
+         */
+        AttributeResult SetAttribute(std::string_view name, std::string_view value) override;
         RouteResult OnInput(App& app, const RoutedInput& input) override;
         [[nodiscard]] bool HasMeasure() const override
         {

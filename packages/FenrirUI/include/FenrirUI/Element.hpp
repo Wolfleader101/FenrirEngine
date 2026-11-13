@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string_view>
 
 #include "FenrirDraw2D/DrawList2D.hpp"
 #include "FenrirInput/InputRouter.hpp"
@@ -22,6 +24,17 @@ namespace Fenrir
         Undefined,
         Exactly,
         AtMost,
+    };
+
+    /** @brief What Element::SetAttribute did with an attribute. */
+    enum class AttributeResult : std::uint8_t
+    {
+        /** @brief It took the value. */
+        Set,
+        /** @brief It has no attribute of that name. */
+        Unknown,
+        /** @brief It has the attribute, and could not read the value. */
+        Invalid,
     };
 
     /** @brief The space layout offers a measured element's content box, in UI units. */
@@ -147,6 +160,19 @@ namespace Fenrir
         [[nodiscard]] virtual std::optional<Rect2D> GetTextCaret() const
         {
             return std::nullopt;
+        }
+
+        /**
+         * @brief Gives it the attribute `name` with `value` as written in a markup document (ADR-0064), which it parses
+         * itself: a control's own attributes, and a custom element's. The document's text content between the tags
+         * comes as `text`. `id`, `class`, `style` and `focusable` are every element's and never reach it. A plain
+         * Element has no attributes: Unknown.
+         */
+        virtual AttributeResult SetAttribute(std::string_view name, std::string_view value)
+        {
+            (void)name;
+            (void)value;
+            return AttributeResult::Unknown;
         }
 
       protected:

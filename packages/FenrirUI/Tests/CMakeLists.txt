@@ -7,7 +7,7 @@ fenrir_add_catch2()
 
 add_executable(FenrirUITests PublicHeaders.cpp Layout.cpp Tree.cpp Painting.cpp StylesheetParser.cpp Cascade.cpp
                              Input.cpp Focus.cpp Listeners.cpp Motion.cpp Text.cpp Controls.cpp DefaultStylesheet.cpp
-                             TextEntry.cpp Gamepad.cpp
+                             TextEntry.cpp Gamepad.cpp Markup.cpp
                              UITestApp.hpp
                              fixtures/YogaFixtures.inc)
 target_link_libraries(FenrirUITests PRIVATE FenrirUI FenrirAssets FenrirApp FenrirWindow Catch2::Catch2WithMain)

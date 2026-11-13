@@ -10,8 +10,8 @@
 
 **Touches:** `packages/FenrirUI/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Parser tests: a document with nested panels, labels with text content, an image, classes and ids loads to the expected tree and resolved attributes; entities decode; comments are skipped; an include splices in place and a recursive include is one error; each error kind (unknown tag, unknown attribute, text in an element with no text, unclosed tag, bad entity) reports its line and the rest still loads.
-- [ ] Headless App test: a loaded document with an inline sheet lays out as the same tree built from code.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Parser tests: a document with nested panels, labels with text content, an image, classes and ids loads to the expected tree and resolved attributes; entities decode; comments are skipped; an include splices in place and a recursive include is one error; each error kind (unknown tag, unknown attribute, text in an element with no text, unclosed tag, bad entity) reports its line and the rest still loads.
+- [x] Headless App test: a loaded document with an inline sheet lays out as the same tree built from code.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
