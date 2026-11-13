@@ -13,8 +13,10 @@
 
 #include "AttributeValues.hpp"
 #include "FenrirApp/App.hpp"
+#include "FenrirAssets/AssetStore.hpp"
 #include "FenrirUI/UI.hpp"
 #include "FenrirUI/UIRoot.hpp"
+#include "StyleFiles.hpp"
 #include "StyleValues.hpp"
 #include "UIRootState.hpp"
 
@@ -133,14 +135,8 @@ namespace Fenrir
             std::uint32_t contentLine = 0;
         };
 
-        /** @brief An error and the line of the document it is ordered by (for an included one's, the include's). */
-        struct OrderedError
-        {
-            std::uint32_t at = 0;
-            MarkupError error;
-        };
-
-        using MarkupErrors = std::vector<OrderedError>;
+        using Detail::MarkupErrors;
+        using Detail::OrderedError;
 
         void AddError(MarkupErrors& errors, std::string_view file, std::uint32_t line, std::string message)
         {
@@ -555,8 +551,13 @@ namespace Fenrir
     {
         UIRoot& root;
         const UIRoots& roots;
-        const MarkupResolver& resolver;
+        const SourceReader& reader;
+        AssetStore* store;
         MarkupLoad& load;
+        /** @brief Where the next top-level element goes among the parent's children; UIRoot::End for after them. */
+        std::size_t insertAt = UIRoot::End;
+        /** @brief Where the sheets that read files go, for hot reload; null when nothing is read from files. */
+        FileLoad* files = nullptr;
         /** @brief The documents being loaded, outermost first: an include of one of them recurses. */
         std::vector<std::string> documents;
 
@@ -611,10 +612,14 @@ namespace Fenrir
                 document.Error(node.line, "<" + node.tag + "> is not an element tag: none is registered");
                 return;
             }
-            const ElementId element = root.Create(parent, node.tag);
+            const ElementId element = root.Create(parent, node.tag, topLevel ? insertAt : UIRoot::End);
             if (topLevel)
             {
                 load.elements.push_back(element);
+                if (insertAt != UIRoot::End)
+                {
+                    ++insertAt;
+                }
             }
             // `focusable` comes last, so it wins over what `disabled` does to the focus wherever it is written.
             const MarkupAttribute* focusable = nullptr;
@@ -750,18 +755,6 @@ namespace Fenrir
             }
         }
 
-        /** @brief The text the resolver gives for `src`, or an error at the node. */
-        std::optional<std::string> Resolve(MarkupDocument& document, const MarkupNode& node, const std::string& src,
-                                           std::string_view what)
-        {
-            std::optional<std::string> text = resolver ? resolver(src) : std::nullopt;
-            if (!text.has_value())
-            {
-                document.Error(node.line, "the " + std::string(what) + " '" + src + "' was not found");
-            }
-            return text;
-        }
-
         /** @brief The node's `src`, refusing its other attributes and anything in it; nothing when it has none. */
         std::optional<std::string> Source(MarkupDocument& document, const MarkupNode& node, bool required)
         {
@@ -796,17 +789,19 @@ namespace Fenrir
             {
                 return;
             }
-            if (std::find(documents.begin(), documents.end(), *src) != documents.end())
+            const std::string name = reader.name(*src, document.file);
+            if (std::find(documents.begin(), documents.end(), name) != documents.end())
             {
                 document.Error(node.line, "the include of '" + *src + "' recurses: it is being loaded");
                 return;
             }
-            const std::optional<std::string> text = Resolve(document, node, *src, "document");
+            const std::optional<std::string> text = reader.read(name);
             if (!text.has_value())
             {
+                document.Error(node.line, "the document '" + *src + "' was not found");
                 return;
             }
-            for (OrderedError& error : LoadDocument(*text, *src, parent, topLevel))
+            for (OrderedError& error : LoadDocument(*text, name, parent, topLevel))
             {
                 document.errors.push_back({node.line, std::move(error.error)});
             }
@@ -815,20 +810,20 @@ namespace Fenrir
         void Style(MarkupDocument& document, const MarkupNode& node)
         {
             const std::optional<std::string> src = Source(document, node, false);
-            Stylesheet sheet;
+            // The files read from here on, the src sheet's and its imports', are the sheet's, not the document's.
+            const std::size_t firstFile = files != nullptr ? files->files.size() : 0;
+            std::string name;
+            std::string text;
             if (src.has_value())
             {
-                const std::optional<std::string> text = Resolve(document, node, *src, "stylesheet");
-                if (!text.has_value())
+                name = reader.name(*src, document.file);
+                std::optional<std::string> read = reader.read(name);
+                if (!read.has_value())
                 {
+                    document.Error(node.line, "the stylesheet '" + *src + "' was not found");
                     return;
                 }
-                sheet = Stylesheet::Parse(*text, *src);
-                for (StyleDiagnostic& diagnostic : sheet.diagnostics)
-                {
-                    document.errors.push_back(
-                        {node.line, MarkupError{*src, diagnostic.line, std::move(diagnostic.message)}});
-                }
+                text = std::move(*read);
             }
             else if (Detail::Trim(node.text).empty())
             {
@@ -838,31 +833,52 @@ namespace Fenrir
             else
             {
                 // Blank lines before the CSS put its lines, and so its errors', at the document's.
-                std::string text(node.contentLine - 1, '\n');
+                name = std::string(document.file);
+                text = std::string(node.contentLine - 1, '\n');
                 text += node.text;
-                sheet = Stylesheet::Parse(text, document.file);
-                for (StyleDiagnostic& diagnostic : sheet.diagnostics)
-                {
-                    document.Error(diagnostic.line, std::move(diagnostic.message));
-                }
             }
-            // The load logs them with the rest; AddStylesheet would log them again.
-            sheet.diagnostics.clear();
-            load.stylesheets.push_back(root.AddStylesheet(std::move(sheet)));
+            // A src sheet's errors are ordered at its <style>, an inline one's at their own lines.
+            const auto order = [&](std::uint32_t line) { return src.has_value() ? node.line : line; };
+            MarkupErrors errors;
+            std::vector<std::string> loading;
+            Stylesheet sheet = BuildStylesheet(text, name, reader, store, loading, errors);
+            for (OrderedError& error : errors)
+            {
+                document.errors.push_back({order(error.at), std::move(error.error)});
+            }
+            std::vector<MarkupError> attachErrors;
+            const StylesheetId id = root.AttachStylesheet(std::move(sheet), attachErrors);
+            for (MarkupError& error : attachErrors)
+            {
+                const std::uint32_t at = order(error.line);
+                document.errors.push_back({at, std::move(error)});
+            }
+            load.stylesheets.push_back(id);
+            if (files != nullptr && files->files.size() > firstFile)
+            {
+                // The files this sheet read are its own, for hot reload to parse it again alone.
+                FileSheet fileSheet{id, name, src.has_value() ? std::string() : text, {}};
+                fileSheet.files.assign(std::make_move_iterator(files->files.begin() + std::ptrdiff_t(firstFile)),
+                                       std::make_move_iterator(files->files.end()));
+                files->files.resize(firstFile);
+                files->sheets.push_back(std::move(fileSheet));
+            }
         }
     };
 
-    MarkupLoad UIRoot::LoadMarkup(ElementId parent, std::string_view text, std::string_view name,
-                                  const MarkupResolver& resolver)
+    MarkupLoad Detail::LoadMarkupDocument(UIRoot& root, const UIRoots& roots, ElementId parent, std::string_view text,
+                                          std::string_view name, const SourceReader& reader, std::size_t index,
+                                          FileLoad* files)
     {
         MarkupLoad load;
-        if (!IsAlive(parent))
+        if (!root.IsAlive(parent))
         {
             load.errors.push_back({std::string(name), 0, "the parent to load into is not an element of the root"});
         }
         else
         {
-            Detail::MarkupLoader loader{*this, m_state->roots, resolver, load, {}};
+            MarkupLoader loader{root, roots, reader, root.GetApp().TryGetResource<AssetStore>(),
+                                load, index, files,  {}};
             for (OrderedError& error : loader.LoadDocument(text, name, parent, true))
             {
                 load.errors.push_back(std::move(error.error));
@@ -872,10 +888,23 @@ namespace Fenrir
         {
             load.element = load.elements.front();
         }
-        for (const MarkupError& error : load.errors)
+        return load;
+    }
+
+    MarkupLoad UIRoot::LoadMarkup(ElementId parent, std::string_view text, std::string_view name,
+                                  const MarkupResolver& resolver)
+    {
+        const Detail::SourceReader reader = Detail::ResolverReader(resolver);
+        MarkupLoad load = Detail::LoadMarkupDocument(*this, m_state->roots, parent, text, name, reader, End, nullptr);
+        LogErrors(load.errors);
+        return load;
+    }
+
+    void UIRoot::LogErrors(std::span<const MarkupError> errors) const
+    {
+        for (const MarkupError& error : errors)
         {
             m_state->app.Logger()->Warn("FenrirUI: {}:{}: {}", error.file, error.line, error.message);
         }
-        return load;
     }
 } // namespace Fenrir

@@ -38,6 +38,7 @@ add_library(FenrirUI STATIC
     src/ElementGeometry.hpp
     src/ElementText.cpp
     src/ElementText.hpp
+    src/HotReload.cpp
     src/InputRouting.cpp
     src/InputRouting.hpp
     src/LayoutBridge.cpp
@@ -49,6 +50,8 @@ add_library(FenrirUI STATIC
     src/Style.cpp
     src/StyleAnimation.cpp
     src/StyleAnimation.hpp
+    src/StyleFiles.cpp
+    src/StyleFiles.hpp
     src/StyleValues.cpp
     src/StyleValues.hpp
     src/Stylesheet.cpp

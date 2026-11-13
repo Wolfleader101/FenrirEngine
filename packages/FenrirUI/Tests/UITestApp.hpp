@@ -74,6 +74,14 @@ namespace UITest
     // through FenrirInput's feed. Input is declared before the UI so the roots leave its routers before it ends.
     struct UITestApp
     {
+        UITestApp() = default;
+
+        // An app whose asset root is `assets`, logging to `logger`.
+        explicit UITestApp(Fenrir::AssetsConfig assetsConfig, std::unique_ptr<Fenrir::ILogger> logger)
+            : app(std::move(logger), 1), assets(Fenrir::Assets::Install(app, std::move(assetsConfig)))
+        {
+        }
+
         Fenrir::App app{std::make_unique<SilentLogger>(), 1};
         Fenrir::Assets assets = Fenrir::Assets::Install(app);
         Fenrir::Input input = Fenrir::Input::Install(app);
