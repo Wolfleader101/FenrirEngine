@@ -34,13 +34,25 @@ namespace Fenrir
      * 2. **Modes:** each body's effective mode (`Inherit` takes the ragdoll's), turned into its
      *    `RigidBody::motionType`: kinematic while following, dynamic otherwise. Switching moves no body: one made
      *    dynamic keeps the velocity its `RigidBody` holds, the last following move's, so a running character tumbles
-     *    forward; one made kinematic is taken back onto its bone by the follow below over the next step.
+     *    forward; one made kinematic is taken back onto its bone by the follow below over the next step. Each joint
+     *    between two of the ragdoll's bodies (`bodyA` the parent, `bodyB` the child: as the builder joins them) gets
+     *    its motor's mode: `Position` while its child body is powered, `Off` otherwise (a powered body skipped
+     *    included), its other fields left. Joints game code made to anything else are left alone.
      * 3. **Follow:** each following body's `Transform` is written so its world transform is
      *    `GetBoneWorldMatrix(skeleton, bone, PoseKind::Simulation) × offset`, so physics moves it there over the step,
      *    with no lag at any number of ticks per frame. Its `RigidBody::linearVelocity` and `angularVelocity` are
      *    written from this and its previous following pose over `Time::tickRate` (0 on its first following tick), so
      *    a body that becomes dynamic keeps moving as it did.
-     * 4. **State:** `Ragdoll::state` and each `RagdollBody::state`; `state.anyAwake` is false once every body sleeps.
+     * 4. **Motor targets:** each powered child's joint is aimed at the child bone's base-pose rotation relative to
+     *    its parent bone (`GetBaseLocal` with `PoseKind::Simulation`, or both bones' `GetBaseModel` where unmapped
+     *    bones lie between them), through both bodies' offsets and the joint's frames: a swing-twist joint's
+     *    `SwingTwistMotor::targetRotation`, a hinge's `JointMotor::targetPosition` (the turn about its axis). No target
+     *    velocity: it is written 0. The strength gives the drive: `maxTorque` (a hinge's `maxForce`) is `strength ×
+     *    strengthScale × 30 N m` per kilogram of the child body, and the spring `lerp(1 Hz, 10 Hz, strength)`,
+     *    damping 1, with `strength` taken within [0, 1]. The root body has no joint to a parent, so it is undriven: a
+     *    powered ragdoll holds its own shape but not its balance, and one standing up falls over. Joints are written
+     *    one by one, so their order does not matter.
+     * 5. **State:** `Ragdoll::state` and each `RagdollBody::state`; `state.anyAwake` is false once every body sleeps.
      *
      * **Each frame**, in `Update` (after physics interpolates the bodies in `AfterTicks`, before the pose pipeline in
      * `PostUpdate`), for every active ragdoll, from the modes the last tick applied:

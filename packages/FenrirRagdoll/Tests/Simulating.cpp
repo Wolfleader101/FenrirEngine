@@ -28,103 +28,15 @@ using Fenrir::SpawnedRagdoll;
 using Fenrir::Math::Quat;
 using Fenrir::Math::Vec3;
 using RagdollTest::BodyOf;
+using RagdollTest::Character;
+using RagdollTest::Decomposed;
+using RagdollTest::JointTo;
 using RagdollTest::Near;
 using RagdollTest::Text;
+using RagdollTest::Weightless;
 
 namespace
 {
-    // A humanoid standing on the ground, optionally walking along +X, its ragdoll built and following.
-    struct Character
-    {
-        RagdollTest::RagdollApp test;
-        Entity skeleton;
-        SpawnedRagdoll spawned;
-
-        explicit Character(const Fenrir::PhysicsConfig& config = RagdollTest::StepPosesOnly(), float walk = 0.0f,
-                           const Fenrir::Transform& place = {})
-            : test(config)
-        {
-            test.AddGround();
-            skeleton = test.AddSkeleton(RagdollTest::Humanoid());
-            skeleton.GetComponent<Fenrir::Transform>() = place;
-            if (walk != 0.0f)
-            {
-                RagdollTest::AddWalk(test, walk);
-            }
-            spawned = Fenrir::BuildRagdoll(test.app, test.level, skeleton,
-                                           Fenrir::DescribeHumanoid(test.DataOf(skeleton), RagdollTest::HumanoidMap()));
-            REQUIRE(spawned.error.empty());
-        }
-
-        Fenrir::Ragdoll& Ragdoll()
-        {
-            return skeleton.GetComponent<Fenrir::Ragdoll>();
-        }
-
-        std::int32_t Bone(std::string_view name)
-        {
-            return Skeletons::FindBone(test.level, skeleton, name);
-        }
-
-        std::int32_t BoneOf(const Entity& body)
-        {
-            return Bone(Text(body.GetComponent<Fenrir::RagdollBody>().bone));
-        }
-
-        std::optional<Fenrir::Target> OverrideOf(const Entity& body)
-        {
-            return Skeletons::GetOverride(test.level, skeleton, BoneOf(body));
-        }
-
-        float WeightOf(const Entity& body)
-        {
-            return Skeletons::GetOverrideWeight(test.level, skeleton, BoneOf(body));
-        }
-
-        // Runs until the ragdoll's bodies are all asleep, at least a second and at most `frames` frames; whether
-        // they slept.
-        bool RunUntilAsleep(int frames)
-        {
-            test.Run(60);
-            for (int i = 60; i < frames; ++i)
-            {
-                test.Run(1);
-                if (!Ragdoll().state.anyAwake)
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        // Sets every body moving as one rigid body: turning at `spin` about an axis through the root body, drifting at
-        // `drift`.
-        void Throw(const Vec3& spin, const Vec3& drift)
-        {
-            const Vec3 root = Fenrir::GetWorldTransform(Ragdoll().rootBody).pos;
-            for (const Entity& body : spawned.bodies)
-            {
-                Fenrir::RigidBody& rigid = body.GetComponent<Fenrir::RigidBody>();
-                rigid.angularVelocity = spin;
-                rigid.linearVelocity = drift + Fenrir::Math::Cross(spin, Fenrir::GetWorldTransform(body).pos - root);
-            }
-        }
-    };
-
-    Fenrir::PhysicsConfig Weightless()
-    {
-        Fenrir::PhysicsConfig config = RagdollTest::StepPosesOnly();
-        config.gravity = Vec3(0.0f);
-        return config;
-    }
-
-    Fenrir::Transform Decomposed(const Fenrir::Math::Mat4& matrix)
-    {
-        Fenrir::Transform out;
-        Fenrir::Math::Decompose(matrix, out.pos, out.rot, out.scale);
-        return out;
-    }
-
     // Where the render pose has `bone` now, in world space.
     Fenrir::Transform RenderBone(Character& character, std::int32_t bone)
     {
@@ -142,18 +54,6 @@ namespace
     bool Upright(const Quat& rotation)
     {
         return Near(Fenrir::Math::Rotate(rotation, Vec3(0.0f, 1.0f, 0.0f)), Vec3(0.0f, 1.0f, 0.0f), 1e-4f);
-    }
-
-    const Fenrir::Joint* JointTo(const SpawnedRagdoll& spawned, const Entity& body)
-    {
-        for (const Entity& joint : spawned.joints)
-        {
-            if (joint.GetComponent<Fenrir::Joint>().bodyB == body)
-            {
-                return &joint.GetComponent<Fenrir::Joint>();
-            }
-        }
-        return nullptr;
     }
 
     // How far apart a joint's two anchors are: where each body puts it.

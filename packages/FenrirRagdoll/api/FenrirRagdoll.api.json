@@ -474,7 +474,7 @@
         {
           "name": "Powered",
           "value": 2,
-          "doc": "Dynamic, with each joint's motor driving towards the base pose at `Ragdoll::strength`."
+          "doc": "Dynamic, with each joint's motor driving towards the base pose at `Ragdoll::strength`, drawn through the overrides as while simulating. The base pose is whatever animation produces: pause the character's locomotion clip, or swap it for an idle or get-up pose, when you power the ragdoll, or its powered legs walk on the ground. The root body is undriven, so a powered ragdoll keeps its shape but not its balance."
         }
       ]
     },
@@ -530,7 +530,7 @@
           "offset": 4,
           "kind": "f32",
           "default": 1,
-          "doc": "How hard powered bodies' motors drive, in [0, 1]: read while `Powered` only."
+          "doc": "How hard powered bodies' motors drive, in [0, 1] (taken within it): read while `Powered` only. Each powered body's joint to its parent gets a maximum torque of `strength × strengthScale × 30 N m` per kilogram of the body, and a spring of `lerp(1 Hz, 10 Hz, strength)`, damping 1. A motor is a spring: a limb held against gravity settles a few degrees under its weight."
         },
         {
           "name": "followRoot",
@@ -711,7 +711,7 @@
           "offset": 316,
           "kind": "f32",
           "default": 1,
-          "doc": "Multiplies `Ragdoll::strength` for this body's joint to its parent while powered."
+          "doc": "Multiplies `Ragdoll::strength` in the maximum torque of this body's joint to its parent while powered (not its spring): 0 leaves the joint without drive."
         },
         {
           "name": "state",

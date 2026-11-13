@@ -17,7 +17,12 @@ namespace Fenrir
         Following,
         /** @brief Every body dynamic, the glue writing each body's pose into the skeleton as a world pose override. */
         Simulating,
-        /** @brief Dynamic, with each joint's motor driving towards the base pose at `Ragdoll::strength`. */
+        /**
+         * @brief Dynamic, with each joint's motor driving towards the base pose at `Ragdoll::strength`, drawn through
+         * the overrides as while simulating. The base pose is whatever animation produces: pause the character's
+         * locomotion clip, or swap it for an idle or get-up pose, when you power the ragdoll, or its powered legs walk
+         * on the ground. The root body is undriven, so a powered ragdoll keeps its shape but not its balance.
+         */
         Powered,
     };
 
@@ -69,7 +74,12 @@ namespace Fenrir
          * weight reads 0, the glue clears its override entries.
          */
         RagdollMode mode = RagdollMode::Following;
-        /** @brief How hard powered bodies' motors drive, in [0, 1]: read while `Powered` only. */
+        /**
+         * @brief How hard powered bodies' motors drive, in [0, 1] (taken within it): read while `Powered` only. Each
+         * powered body's joint to its parent gets a maximum torque of `strength × strengthScale × 30 N m` per kilogram
+         * of the body, and a spring of `lerp(1 Hz, 10 Hz, strength)`, damping 1. A motor is a spring: a limb held
+         * against gravity settles a few degrees under its weight.
+         */
         float strength = 1.0f;
         /** @brief Whether the skeleton entity follows the root body horizontally and in yaw while the root body is not
          * following, keeping its height. */
@@ -118,7 +128,8 @@ namespace Fenrir
         Transform offset;
         /** @brief This body's own mode, or its ragdoll's. */
         RagdollBodyMode mode = RagdollBodyMode::Inherit;
-        /** @brief Multiplies `Ragdoll::strength` for this body's joint to its parent while powered. */
+        /** @brief Multiplies `Ragdoll::strength` in the maximum torque of this body's joint to its parent while powered
+         * (not its spring): 0 leaves the joint without drive. */
         float strengthScale = 1.0f;
         /** @brief What the glue found last tick. Glue-owned. */
         RagdollBodyState state;
