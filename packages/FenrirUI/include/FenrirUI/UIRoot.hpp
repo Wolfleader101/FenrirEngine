@@ -13,6 +13,7 @@
 #include "FenrirInput/InputTypes.hpp"
 #include "FenrirUI/Element.hpp"
 #include "FenrirUI/ElementId.hpp"
+#include "FenrirUI/Markup.hpp"
 #include "FenrirUI/Style.hpp"
 #include "FenrirUI/Stylesheet.hpp"
 #include "FenrirUI/UIEvent.hpp"
@@ -28,6 +29,8 @@ namespace Fenrir
     {
         /** @brief A root's tree, Yoga nodes and frame state. Defined in FenrirUI's sources. */
         struct UIRootState;
+        /** @brief What builds a markup document's elements into a root. Defined in FenrirUI's sources. */
+        struct MarkupLoader;
     } // namespace Detail
 
     /** @brief How a UI root maps its UI units to its target's logical units (the scale rule). */
@@ -331,6 +334,42 @@ namespace Fenrir
         void InvalidateMeasure(ElementId element);
         /** @} */
 
+        /** @name Markup documents
+         * @{
+         */
+        /**
+         * @brief Loads the markup document `text` (UTF-8), named `name` in its errors, under `parent`, after its
+         * children (ADR-0064): structure with no logic. Each load makes elements of its own.
+         *
+         * - **Tags** are the registered element tags (UIRoots::IsRegistered: `panel`, `label`, the controls and any
+         *   custom element), each made through its factory as Create makes it, in document order, with `<tag/>` for
+         *   one with nothing in it. Names are case-sensitive.
+         * - **Attributes** are `name="value"` (or single quotes), or a bare name for an empty value. Every element
+         *   takes `id` (SetIdString), `class` (classes split on whitespace), `style` (inline declarations, as
+         *   SetStyleProperty reads them) and `focusable` (`true` or `false`, applied after the element's OnCreate and
+         * its other attributes, so it wins over what `disabled` does to the focus); the rest go to
+         * Element::SetAttribute, which each control parses (Controls.hpp).
+         * - **Text content** between tags, with the whitespace at its ends trimmed, is the attribute `text`, which a
+         *   `label` and a `button` take; text in an element that takes none, or in one with a `text` attribute, is an
+         * error.
+         * - `<include src="...">` loads the document the resolver gives for its src in its place, its top-level
+         *   elements under the include's parent; an include back into a document being loaded is an error.
+         * - `<style>` holds a stylesheet and `<style src="...">` names one by the resolver; either is parsed
+         *   (Stylesheet::Parse) and added after the root's sheets (AddStylesheet), and its errors are the load's.
+         *   Inside an inline `<style>` text is CSS as written: no entities, and it ends at `</style>`.
+         * - `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`, `&#N;` and `&#xN;` decode in text and attribute values.
+         * - `<!-- -->` comments are skipped. Namespaces, processing instructions, DTDs and CDATA are errors.
+         *
+         * An unknown tag (with what is in it), an unknown attribute or one whose value its element refuses, text where
+         * none is taken, a bad entity, a tag left open or a closing tag that closes none, an unquoted or repeated
+         * attribute, attributes with no whitespace between them, an empty `<style>`, and every error of a sheet are
+         * errors with their file and line, logged as warnings too; the rest of the document loads. A stale parent loads
+         * nothing. The resolver may be empty when the document includes nothing.
+         */
+        MarkupLoad LoadMarkup(ElementId parent, std::string_view text, std::string_view name,
+                              const MarkupResolver& resolver = {});
+        /** @} */
+
         /** @name Scrolling
          * An element with `overflow: scroll` clips its children to its padding box, as `hidden` does, and moves them
          * up and left by its scroll offset: they are laid out, painted and hit-tested where the offset puts them. Its
@@ -442,9 +481,12 @@ namespace Fenrir
 
       private:
         friend class UIRoots;
+        friend struct Detail::MarkupLoader;
 
         /** @brief Leaves FenrirInput before the root is freed, which UIRoots puts off to its next frame. */
         void Retire();
+        /** @brief SetStyleProperty without the log: false with why in `error`. */
+        bool ApplyStyleProperty(ElementId element, std::string_view name, std::string_view value, std::string& error);
 
         std::unique_ptr<Detail::UIRootState> m_state;
     };

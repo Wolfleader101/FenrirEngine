@@ -8,6 +8,7 @@
 #include <variant>
 #include <vector>
 
+#include "AttributeValues.hpp"
 #include "BoxPainting.hpp"
 #include "ElementText.hpp"
 #include "FenrirApp/App.hpp"
@@ -48,12 +49,65 @@ namespace Fenrir
             return key != nullptr && key->pressed ? key : nullptr;
         }
 
+        /** @brief The `text` attribute, the element's text (UIRoot::SetText); Unknown for any other name. */
+        AttributeResult SetTextAttribute(const Element& element, std::string_view name, std::string_view value)
+        {
+            if (name != "text")
+            {
+                return AttributeResult::Unknown;
+            }
+            element.GetRoot().SetText(element.GetId(), value);
+            return AttributeResult::Set;
+        }
+
+        /**
+         * @brief Gives a range control the `min`, `max` or `value` attribute `number`, then fits the value written to
+         * the range it has now.
+         */
+        template <typename TControl>
+        void SetRangeAttribute(TControl& control, Detail::AuthoredRange& authored, std::string_view name, float number)
+        {
+            if (name == "value")
+            {
+                authored.value = number;
+            }
+            else
+            {
+                (name == "min" ? authored.min : authored.max) = number;
+                control.SetRange(authored.min.value_or(control.GetMin()), authored.max.value_or(control.GetMax()));
+            }
+            if (authored.value.has_value())
+            {
+                control.SetValue(*authored.value);
+            }
+        }
+
         bool Inside(const Rect2D& rect, Math::Vec2 point)
         {
             return point.x >= rect.x && point.y >= rect.y && point.x < rect.x + rect.width &&
                    point.y < rect.y + rect.height;
         }
     } // namespace
+
+    AttributeResult Label::SetAttribute(std::string_view name, std::string_view value)
+    {
+        return SetTextAttribute(*this, name, value);
+    }
+
+    AttributeResult Control::SetAttribute(std::string_view name, std::string_view value)
+    {
+        if (name != "disabled")
+        {
+            return AttributeResult::Unknown;
+        }
+        const std::optional<bool> disabled = Detail::ParseBoolAttribute(value);
+        if (!disabled.has_value())
+        {
+            return AttributeResult::Invalid;
+        }
+        SetDisabled(*disabled);
+        return AttributeResult::Set;
+    }
 
     void Control::SetDisabled(bool disabled)
     {
@@ -66,6 +120,12 @@ namespace Fenrir
     void Control::OnCreate()
     {
         GetRoot().SetFocusable(GetId(), !m_disabled);
+    }
+
+    AttributeResult Button::SetAttribute(std::string_view name, std::string_view value)
+    {
+        const AttributeResult result = SetTextAttribute(*this, name, value);
+        return result == AttributeResult::Unknown ? Control::SetAttribute(name, value) : result;
     }
 
     RouteResult Button::OnInput(App& app, const RoutedInput& input)
@@ -81,6 +141,21 @@ namespace Fenrir
             SendClick(*this);
         }
         return RouteResult::Consumed;
+    }
+
+    AttributeResult Checkbox::SetAttribute(std::string_view name, std::string_view value)
+    {
+        if (name != "checked")
+        {
+            return Control::SetAttribute(name, value);
+        }
+        const std::optional<bool> checked = Detail::ParseBoolAttribute(value);
+        if (!checked.has_value())
+        {
+            return AttributeResult::Invalid;
+        }
+        SetChecked(*checked);
+        return AttributeResult::Set;
     }
 
     void Checkbox::SetChecked(bool checked)
@@ -124,6 +199,39 @@ namespace Fenrir
         UIEvent change = MakeEvent(*this, UIEventKind::Change);
         change.value = m_checked ? 1.0f : 0.0f;
         GetRoot().SendEvent(change);
+    }
+
+    AttributeResult Slider::SetAttribute(std::string_view name, std::string_view value)
+    {
+        if (name == "orientation")
+        {
+            if (value != "horizontal" && value != "vertical")
+            {
+                return AttributeResult::Invalid;
+            }
+            SetOrientation(value == "vertical" ? Orientation::Vertical : Orientation::Horizontal);
+            return AttributeResult::Set;
+        }
+        if (name != "min" && name != "max" && name != "step" && name != "value")
+        {
+            return Control::SetAttribute(name, value);
+        }
+        const std::optional<float> number = Detail::ParseNumberAttribute(value);
+        if (!number.has_value())
+        {
+            return AttributeResult::Invalid;
+        }
+        if (name != "step")
+        {
+            SetRangeAttribute(*this, m_authored, name, *number);
+            return AttributeResult::Set;
+        }
+        SetStep(*number);
+        if (m_authored.value.has_value())
+        {
+            SetValue(*m_authored.value);
+        }
+        return AttributeResult::Set;
     }
 
     void Slider::SetRange(float min, float max)
@@ -326,6 +434,21 @@ namespace Fenrir
         }
     }
 
+    AttributeResult ProgressBar::SetAttribute(std::string_view name, std::string_view value)
+    {
+        if (name != "min" && name != "max" && name != "value")
+        {
+            return AttributeResult::Unknown;
+        }
+        const std::optional<float> number = Detail::ParseNumberAttribute(value);
+        if (!number.has_value())
+        {
+            return AttributeResult::Invalid;
+        }
+        SetRangeAttribute(*this, m_authored, name, *number);
+        return AttributeResult::Set;
+    }
+
     void ProgressBar::SetRange(float min, float max)
     {
         m_min = std::min(min, max);
@@ -357,6 +480,46 @@ namespace Fenrir
         {
             fill->SetWidth(Length::Percent(GetFraction() * 100.0f));
         }
+    }
+
+    AttributeResult ImageView::SetAttribute(std::string_view name, std::string_view value)
+    {
+        if (name == "fit")
+        {
+            if (value == "stretch")
+            {
+                SetFit(ImageFit::Stretch);
+            }
+            else if (value == "contain")
+            {
+                SetFit(ImageFit::Contain);
+            }
+            else if (value == "cover")
+            {
+                SetFit(ImageFit::Cover);
+            }
+            else
+            {
+                return AttributeResult::Invalid;
+            }
+            return AttributeResult::Set;
+        }
+        if (name != "src")
+        {
+            return AttributeResult::Unknown;
+        }
+        AssetStore* store = GetRoot().GetApp().TryGetResource<AssetStore>();
+        if (store == nullptr || value.empty())
+        {
+            return AttributeResult::Invalid;
+        }
+        const LoadResult<Image> loaded = store->Load<Image>(value, AssetOwner::App());
+        if (!loaded.Ok())
+        {
+            return AttributeResult::Invalid;
+        }
+        SetSource(loaded.handle);
+        return AttributeResult::Set;
     }
 
     void ImageView::SetSource(AssetHandle<Image> image)
@@ -805,6 +968,41 @@ namespace Fenrir
                 m_blink = 0.0;
             }
         });
+    }
+
+    AttributeResult TextEntry::SetAttribute(std::string_view name, std::string_view value)
+    {
+        if (name == "value")
+        {
+            SetValue(value);
+        }
+        else if (name == "placeholder")
+        {
+            SetPlaceholder(value);
+        }
+        else if (name == "password")
+        {
+            const std::optional<bool> password = Detail::ParseBoolAttribute(value);
+            if (!password.has_value())
+            {
+                return AttributeResult::Invalid;
+            }
+            SetPassword(*password);
+        }
+        else if (name == "maxlength")
+        {
+            const std::optional<std::size_t> graphemes = Detail::ParseCountAttribute(value);
+            if (!graphemes.has_value())
+            {
+                return AttributeResult::Invalid;
+            }
+            SetMaxLength(*graphemes);
+        }
+        else
+        {
+            return Control::SetAttribute(name, value);
+        }
+        return AttributeResult::Set;
     }
 
     void TextEntry::SetValue(std::string_view utf8)

@@ -18,6 +18,7 @@ add_library(FenrirUI STATIC
     include/FenrirUI/Controls.hpp
     include/FenrirUI/Element.hpp
     include/FenrirUI/ElementId.hpp
+    include/FenrirUI/Markup.hpp
     include/FenrirUI/Style.hpp
     include/FenrirUI/Stylesheet.hpp
     include/FenrirUI/UIEvent.hpp
@@ -25,6 +26,7 @@ add_library(FenrirUI STATIC
     include/FenrirUI/UIRoot.hpp
     include/FenrirUI/UITarget.hpp
 
+    src/AttributeValues.hpp
     src/BoxPainting.cpp
     src/BoxPainting.hpp
     src/Cascade.cpp
@@ -40,6 +42,7 @@ add_library(FenrirUI STATIC
     src/InputRouting.hpp
     src/LayoutBridge.cpp
     src/LayoutBridge.hpp
+    src/Markup.cpp
     src/Rects.hpp
     src/Scrolling.cpp
     src/Scrolling.hpp

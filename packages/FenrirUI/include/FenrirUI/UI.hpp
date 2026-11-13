@@ -42,8 +42,9 @@ namespace Fenrir
 
     /**
      * @brief The UI's app resource, which UI::Install adds: it makes and destroys the UI roots, which several may share
-     * the app, ordered by layer; holds the registry of element tags, which starts with the controls' (Controls.hpp:
-     * `button`, `checkbox`, `slider`, `progress`, `image` and `scroll`); and holds the switches. Its frame system runs
+     * the app, ordered by layer; holds the registry of element tags, which starts with `panel` (a plain Element),
+     * `label` and the controls' (Controls.hpp: `button`, `checkbox`, `slider`, `progress`, `image`, `scroll` and
+     * `textentry`), and which a markup document's tags are looked up in; and holds the switches. Its frame system runs
      * every root's frame in PostUpdate, lowest layer first, roots of one layer in the order they were made.
      */
     class UIRoots
@@ -75,6 +76,8 @@ namespace Fenrir
         void RegisterElement(std::string_view tag, ElementFactory factory);
         /** @brief An element of `tag` from its registered factory, or a plain Element for an unregistered tag. */
         [[nodiscard]] std::unique_ptr<Element> MakeElement(std::string_view tag) const;
+        /** @brief Whether a factory is registered for `tag`: a markup document may name only those. */
+        [[nodiscard]] bool IsRegistered(std::string_view tag) const;
 
         /** @brief `builtin:painter`, which every root paints with. */
         [[nodiscard]] AssetHandle<Shader> GetPainterShader() const noexcept

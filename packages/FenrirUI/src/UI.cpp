@@ -13,6 +13,8 @@ namespace Fenrir
     UIRoots::UIRoots(App& app, AssetHandle<Shader> painterShader, const UIConfig& config)
         : settings(config.settings), m_app(app), m_painterShader(painterShader)
     {
+        RegisterElement("panel", [] { return std::make_unique<Element>(); });
+        RegisterElement("label", [] { return std::make_unique<Label>(); });
         RegisterElement("button", [] { return std::make_unique<Button>(); });
         RegisterElement("checkbox", [] { return std::make_unique<Checkbox>(); });
         RegisterElement("slider", [] { return std::make_unique<Slider>(); });
@@ -69,6 +71,12 @@ namespace Fenrir
     void UIRoots::RegisterElement(std::string_view tag, ElementFactory factory)
     {
         m_factories.insert_or_assign(std::string(tag), std::move(factory));
+    }
+
+    bool UIRoots::IsRegistered(std::string_view tag) const
+    {
+        const auto it = m_factories.find(std::string(tag));
+        return it != m_factories.end() && it->second;
     }
 
     std::unique_ptr<Element> UIRoots::MakeElement(std::string_view tag) const
