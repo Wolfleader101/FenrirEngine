@@ -395,6 +395,7 @@ namespace Fenrir
         : m_state(std::make_unique<Detail::UIRootState>(app, roots, std::move(config)))
     {
         m_state->input.id = id;
+        m_state->input.cursor.on = m_state->config.virtualCursor;
         m_state->target = m_state->config.target != nullptr
                               ? m_state->config.target
                               : std::make_shared<WindowOverlayTarget>(m_state->config.window, m_state->config.layer);
@@ -966,6 +967,21 @@ namespace Fenrir
         return Detail::HitTest(*m_state, position);
     }
 
+    void UIRoot::SetVirtualCursor(bool on)
+    {
+        Detail::SetVirtualCursor(*this, *m_state, on);
+    }
+
+    bool UIRoot::IsVirtualCursorOn() const noexcept
+    {
+        return m_state->input.cursor.on;
+    }
+
+    ElementId UIRoot::GetVirtualCursor() const noexcept
+    {
+        return m_state->Find(m_state->input.cursor.element) != nullptr ? m_state->input.cursor.element : ElementId{};
+    }
+
     UIListenerId UIRoot::AddListener(ElementId element, UIEventKind kind, UIListener listener)
     {
         Detail::ElementSlot* slot = m_state->Find(element);
@@ -1014,6 +1030,7 @@ namespace Fenrir
         const float contentScale = state.size.contentScale > 0.0f ? state.size.contentScale : 1.0f;
         state.scale = state.config.scaleRule == ScaleRule::Height1080 ? state.size.logicalSize.y / 1080.0f : 1.0f;
         const Math::Vec2 uiSize = state.size.logicalSize / state.scale;
+        Detail::FrameInput(*this, state, uiSize);
         FontLibrary* fonts = state.roots.GetFonts();
         state.layout.SetFonts(fonts);
         if (const float textPixelsPerUnit = state.scale * contentScale; textPixelsPerUnit != state.textPixelsPerUnit)

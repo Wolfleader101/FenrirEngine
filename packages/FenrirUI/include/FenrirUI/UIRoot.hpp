@@ -95,6 +95,13 @@ namespace Fenrir
          * specific one, as CSS orders them. Off, the controls have no look but what the root's sheets give them.
          */
         bool defaultStylesheet = true;
+        /**
+         * @brief Start with the virtual cursor on (UIRoot::SetVirtualCursor): the left stick moves the pointer and A
+         * presses and releases the left button under it.
+         */
+        bool virtualCursor = false;
+        /** @brief How fast the virtual cursor moves with the stick pushed all the way, in UI units a second. */
+        float virtualCursorSpeed = 900.0f;
     };
 
     /**
@@ -151,6 +158,14 @@ namespace Fenrir
       public:
         /** @brief Where Create puts an element when no index is given: after its last sibling. */
         static constexpr std::size_t End = std::numeric_limits<std::size_t>::max();
+        /** @brief How far the left stick must lean along an axis, of 1, before it moves the focus that way. */
+        static constexpr float NavigationDeadZone = 0.5f;
+        /** @brief Seconds a direction is held before the focus moves again. */
+        static constexpr double NavigationRepeatDelay = 0.4;
+        /** @brief Seconds between the moves after that while it is still held. */
+        static constexpr double NavigationRepeatInterval = 0.12;
+        /** @brief How far the left stick must lean, of 1, before it moves the virtual cursor. */
+        static constexpr float VirtualCursorDeadZone = 0.15f;
 
         /**
          * @brief A root of `roots` in `app`, named `id`; UIRoots::CreateRoot makes them. With FenrirInput installed, it
@@ -337,12 +352,25 @@ namespace Fenrir
         /** @} */
 
         /** @name Input and focus
+         * A gamepad moves the focus too (ADR-0065). While one of the root's elements has the focus, the D-pad, and the
+         * left stick past NavigationDeadZone, are directions: each is first offered to the focused element alone as a
+         * GamepadButtonEvent press of the D-pad button that way (a slider steps, a scroll view scrolls), and when it
+         * does not take it the focus moves to the focusable element nearest that way, among those with nothing
+         * focusable under them. The nearest is Unity's and Godot's rule: of the elements whose centre lies past the
+         * focused one's far edge, the least distance along the direction plus twice the gap across it, less how much
+         * the two overlap across it; equal ones by tree order. Held, a direction repeats after NavigationRepeatDelay
+         * every NavigationRepeatInterval. When no root of the app has the focus, the first direction gives it to the
+         * root's first focusable element in tree order. A (the South button) is an Enter press at the focused element,
+         * so it activates a control as Enter does, and B (East) sends Cancel at it. Each scroll view above an element
+         * the focus moves to by direction or Tab scrolls just far enough to show its border box. The root consumes the
+         * buttons and the left stick it acts on, and claims the gamepad, only while it has the focus or its virtual
+         * cursor is on; the rest reaches the game.
          * @{
          */
         /**
-         * @brief Makes `element` focusable or not: whether a click on it or under it, Tab and Shift+Tab, and Focus can
-         * give it the focus. Elements are not focusable until made so (the controls make themselves focusable).
-         * Making the focused element unfocusable blurs it.
+         * @brief Makes `element` focusable or not: whether a click on it or under it, Tab and Shift+Tab, a gamepad
+         * direction and Focus can give it the focus. Elements are not focusable until made so (the controls make
+         * themselves focusable). Making the focused element unfocusable blurs it.
          */
         void SetFocusable(ElementId element, bool focusable);
         /** @brief Whether it is focusable. */
@@ -373,6 +401,21 @@ namespace Fenrir
          * then tree order, inside rounded corners, under transforms, within overflow clips. Nothing when none is.
          */
         [[nodiscard]] ElementId HitTest(Math::Vec2 position) const;
+        /**
+         * @brief Turns the virtual cursor on or off. On, the left stick moves the pointer (beyond
+         * VirtualCursorDeadZone, up to UIRootConfig::virtualCursorSpeed, kept inside the root) as the mouse would,
+         * hover and drags included, and A presses and releases the left mouse button at it (a press with no UI under it
+         * is the game's, as the mouse's is, and A presses nothing while a mouse button is held); it starts at the
+         * root's centre when the pointer has not been anywhere yet. Each frame it is on, the root keeps a
+         * `virtual-cursor` element, the root element's child (its last when made), placed with its left and top at the
+         * pointer, above everything (`z-index` the largest) and taking no pointer input; the stylesheet draws it. Off,
+         * its element is removed at once and the stick is the game's.
+         */
+        void SetVirtualCursor(bool on);
+        /** @brief Whether the virtual cursor is on. */
+        [[nodiscard]] bool IsVirtualCursorOn() const noexcept;
+        /** @brief The virtual cursor's element; nothing while it is off or before the first frame it was on. */
+        [[nodiscard]] ElementId GetVirtualCursor() const noexcept;
         /**
          * @brief Attaches `listener` to `element` for UIEvents of `kind`: it runs when one happens to the element or
          * bubbles up to it, after the listeners of the elements under it and, on one element, in the order added. It

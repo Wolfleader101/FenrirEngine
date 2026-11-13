@@ -107,7 +107,7 @@ namespace Fenrir
     {
         (void)app;
         const KeyEvent* key = KeyPress(input);
-        if (key == nullptr || key->key != Key::Space)
+        if (key == nullptr || (key->key != Key::Space && key->key != Key::Enter && key->key != Key::KeypadEnter))
         {
             return RouteResult::Passed;
         }
@@ -275,6 +275,21 @@ namespace Fenrir
             return RouteResult::Passed;
         }
         const float step = m_step > 0.0f ? m_step : (m_max - m_min) / 100.0f;
+        if (const auto* pad = std::get_if<GamepadButtonEvent>(&input); pad != nullptr && pad->pressed)
+        {
+            // Along its own axis only, so the focus leaves it across.
+            const bool horizontal = m_orientation == Orientation::Horizontal;
+            const GamepadButton up = horizontal ? GamepadButton::DPadRight : GamepadButton::DPadUp;
+            const GamepadButton down = horizontal ? GamepadButton::DPadLeft : GamepadButton::DPadDown;
+            // At the end it is stepping to, the direction passes, so a row of sliders can still be left that way.
+            const bool rising = pad->button == up;
+            if ((!rising && pad->button != down) || m_value == (rising ? m_max : m_min))
+            {
+                return RouteResult::Passed;
+            }
+            Move(m_value + (rising ? step : -step), false);
+            return RouteResult::Consumed;
+        }
         if (const auto* scroll = std::get_if<MouseScrollEvent>(&input))
         {
             // Unfocused, the wheel passes on, so a scroll view round it scrolls past it.
@@ -483,7 +498,44 @@ namespace Fenrir
         {
             return KeyPressed(*key);
         }
+        if (const auto* pad = std::get_if<GamepadButtonEvent>(&input); pad != nullptr && pad->pressed)
+        {
+            return DirectionPressed(*pad);
+        }
         return RouteResult::Passed;
+    }
+
+    RouteResult ScrollView::DirectionPressed(const GamepadButtonEvent& event)
+    {
+        Math::Vec2 step{0.0f, 0.0f};
+        switch (event.button)
+        {
+        case GamepadButton::DPadUp:
+            step.y = -ScrollStep;
+            break;
+        case GamepadButton::DPadDown:
+            step.y = ScrollStep;
+            break;
+        case GamepadButton::DPadLeft:
+            step.x = -ScrollStep;
+            break;
+        case GamepadButton::DPadRight:
+            step.x = ScrollStep;
+            break;
+        default:
+            return RouteResult::Passed;
+        }
+        // At the end of its range the direction passes, so the focus moves on out of it.
+        const Math::Vec2 offset = GetOffset();
+        const Math::Vec2 range = GetRoot().GetScrollRange(GetId());
+        const Math::Vec2 to(std::clamp(offset.x + step.x, 0.0f, std::max(range.x, 0.0f)),
+                            std::clamp(offset.y + step.y, 0.0f, std::max(range.y, 0.0f)));
+        if (to.x == offset.x && to.y == offset.y)
+        {
+            return RouteResult::Passed;
+        }
+        SetOffset(to);
+        return RouteResult::Consumed;
     }
 
     RouteResult ScrollView::Press(const MouseButtonEvent& event)

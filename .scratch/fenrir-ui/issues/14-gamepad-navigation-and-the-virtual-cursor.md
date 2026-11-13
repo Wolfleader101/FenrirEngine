@@ -11,8 +11,8 @@
 
 **Touches:** `packages/FenrirUI/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Headless App tests with the test feed's gamepad: a grid of buttons navigates right, down, left and up to the geometrically right neighbours, including an offset row; a direction with no candidate keeps focus; A clicks the focused button; B sends cancel; a focused element inside a scroll view scrolls into view; a root without focus takes it on the first direction; the gamepad claim is published while the UI has focus and not otherwise.
-- [ ] Virtual cursor tests: stick motion moves the cursor and hover follows it; a button press clicks under it; with the switch off nothing moves.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Headless App tests with the test feed's gamepad: a grid of buttons navigates right, down, left and up to the geometrically right neighbours, including an offset row; a direction with no candidate keeps focus; A clicks the focused button; B sends cancel; a focused element inside a scroll view scrolls into view; a root without focus takes it on the first direction; the gamepad claim is published while the UI has focus and not otherwise.
+- [x] Virtual cursor tests: stick motion moves the cursor and hover follows it; a button press clicks under it; with the switch off nothing moves.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
