@@ -9,8 +9,8 @@
 # SCRIPTS names the directory of the app's C# scripts project, `<name>.Scripts.csproj`. With scripting built
 # (FENRIR_ENABLE_SCRIPTING) it is built against the scripting SDK and the contracts (Fenrir.Input, Fenrir.Window,
 # Fenrir.Assets, Fenrir.Renderer, Fenrir.DebugDraw and the scaffold's Fenrir.Demo, whose folders it gets as -p:Fenrir<Name>ContractDir=,
-# and Fenrir.Physics's, Fenrir.Skeleton's and Fenrir.Animation's too when their scripting extensions are built, for an
-# app that installs those packages),
+# and Fenrir.Physics's, Fenrir.Skeleton's, Fenrir.Animation's, Fenrir.Text's, Fenrir.Painter's and Fenrir.UI's too when
+# their scripting extensions are built, for an app that installs those packages),
 # and copied to `scripts/` beside the executable, with the contracts and what scripting needs at run time; the app's
 # sources get FENRIR_DEMO_SCRIPT_ASSEMBLY, its path relative to the executable's directory, for
 # DemoConfig::scriptAssembly. Without scripting, SCRIPTS is ignored.
@@ -90,11 +90,11 @@ function(fenrir_add_demo_scripts name scripts_dir)
     # Built into a folder of its own, then copied beside the executable: the contracts are compile-time only (the host
     # shares its own copies), so the folder holds the scripts alone.
     set(out "${CMAKE_CURRENT_BINARY_DIR}/${name}-scripts")
-    # Physics, Skeleton and Animation are the app's to install, not the scaffold's, but each one's contract is passed like
-    # the others when it is built.
+    # Physics, Skeleton, Animation, Text, Painter and UI are the app's to install, not the scaffold's, but each one's
+    # contract is passed like the others when it is built.
     set(optional_args "")
     set(optional_depends "")
-    foreach(optional IN ITEMS Physics Skeleton Animation)
+    foreach(optional IN ITEMS Physics Skeleton Animation Text Painter UI)
         string(TOUPPER "${optional}" OPTIONAL_UPPER)
         if(TARGET Fenrir${optional}Contract)
             list(APPEND optional_args "-p:Fenrir${optional}ContractDir=${FENRIR_${OPTIONAL_UPPER}_CONTRACT_DIR}/")

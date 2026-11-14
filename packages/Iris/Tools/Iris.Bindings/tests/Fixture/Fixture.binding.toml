@@ -50,6 +50,15 @@ class = "FixtureNative"
 header = "Native/Generated/FixtureNatives.hpp"
 types = { "Fixture::EntityId" = "Entity" }
 
+# The stages the extension hosts (ADR-0039): a class of constants naming them for [StageSystem], and the registration's
+# extension.stages, from the one list.
+[stages]
+class = "FixtureStages"
+summary = "The fixture's stages, which C# systems join with [StageSystem(FixtureStages.Early)]."
+[stages.names]
+Early = { name = "Fixture.Bindings.Early", summary = "Runs first: what a <Stage> summary says, escaped." }
+Late = { name = "Fixture.Bindings.Late", summary = "Runs last." }
+
 # Vector3's defaults go through its constructor, Quaternion's set components by name, and Handle's own default is not
 # all zero bytes (its id is all bits set), so it names the expression that makes it. Each names its mapping's header,
 # written once into the mappings header. Ticket is the Host SDK's, in the defaults file.

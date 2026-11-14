@@ -25,9 +25,11 @@ namespace Fenrir
 {
     /**
      * @brief The painter extension's state, which every painter native function is given second: the overlay painters
-     * of the running C# system and the paths scripts made, by id, and the text extension's state, whose paragraphs
-     * DrawText draws. Made by Painting::ScriptingExtension and kept by the Scripting given the extension. In a header
-     * of its own because the generated registration declares the natives, which name it. The text the natives warn with
+     * of the running C# system, the painters other extensions lend C# (Lend), and the paths scripts made, by id, and
+     * the text extension's state, whose paragraphs DrawText draws. Made by Painting::ScriptingExtension and kept by the
+     * Scripting given the extension. Public so that another extension can share it (ScriptingExtension::GetState) and
+     * lend C# a painter of its own, as FenrirUI's does for its paint stage; the generated registration declares the
+     * natives, which name it. The text the natives warn with
      * is named here, so the package's rules read in one place and its rules tests name them.
      */
     struct PainterScripting
@@ -48,8 +50,9 @@ namespace Fenrir
         static constexpr std::string_view NoPath = "the path was destroyed or never made, so it does nothing";
 
         /**
-         * @brief An overlay painter: the window and layer it paints, the draw list it records into, and the painter
-         * over the list. Kept behind a pointer, since the painter refers to the list.
+         * @brief A painter C# was given: an overlay painter (the window and layer it paints, the draw list it records
+         * into, and the painter over the list), or one another extension lent (`lent`, owned by that extension).
+         * Kept behind a pointer, since the painter refers to the list.
          */
         struct Recording
         {
@@ -59,6 +62,9 @@ namespace Fenrir
             std::uint64_t frame = 0;
             DrawList2D list;
             std::optional<Painter> painter;
+            /** @brief A lent painter, which its lender keeps until it takes it back (EndLent); null for an overlay's.
+             */
+            Painter* lent = nullptr;
         };
 
         /**
@@ -70,7 +76,10 @@ namespace Fenrir
             const NativeGuard guard(context, warnings);
             const auto found = painters.find(painter.value);
             const bool current = found != painters.end() && found->second->frame == FrameOf(context.GetApp());
-            return guard.Require(current ? &*found->second->painter : nullptr, std::string(NoPainter));
+            Painter* given = !current                         ? nullptr
+                             : found->second->lent != nullptr ? found->second->lent
+                                                              : &*found->second->painter;
+            return guard.Require(given, std::string(NoPainter));
         }
 
         /** @brief The frame `app` is running (Time::frameCount), which a painter is given in. */
@@ -92,8 +101,37 @@ namespace Fenrir
                     ++it;
                     continue;
                 }
-                overlays.erase({it->second->window.value, it->second->layer});
+                if (it->second->lent == nullptr)
+                {
+                    overlays.erase({it->second->window.value, it->second->layer});
+                }
                 it = painters.erase(it);
+            }
+        }
+
+        /**
+         * @brief Gives C# `painter`, which the caller owns, for this frame in `app`: the id C# paints through with the
+         * Painter facade, as an overlay painter's. The caller takes it back with EndLent before the painter ends, and
+         * calls on the id do nothing after that (or in a later frame). Nothing is submitted: what C# paints is the
+         * lender's.
+         */
+        ScriptPainter::PainterId Lend(const App& app, Painter& painter)
+        {
+            auto recording = std::make_unique<Recording>();
+            recording->frame = FrameOf(app);
+            recording->lent = &painter;
+            const std::uint64_t id = nextPainter++;
+            painters.emplace(id, std::move(recording));
+            return {.value = id};
+        }
+
+        /** @brief Takes back a painter Lend gave: its id paints nothing from now on. */
+        void EndLent(ScriptPainter::PainterId painter)
+        {
+            const auto found = painters.find(painter.value);
+            if (found != painters.end() && found->second->lent != nullptr)
+            {
+                painters.erase(found);
             }
         }
 
@@ -145,7 +183,7 @@ namespace Fenrir
             return text->Find(context, paragraph);
         }
 
-        /** @brief The overlay painters given and not yet submitted, by id. */
+        /** @brief The overlay painters given and not yet submitted, and the lent painters not yet taken back, by id. */
         std::unordered_map<std::uint64_t, std::unique_ptr<Recording>> painters;
         /** @brief Which of them paints each window and layer, by the window's value and the layer. */
         std::map<std::pair<std::uint32_t, std::int32_t>, std::uint64_t> overlays;

@@ -9,6 +9,8 @@
 
 #include "Cascade.hpp"
 #include "ElementText.hpp"
+#include "FenrirDraw2D/DrawList2D.hpp"
+#include "FenrirPainter/Painter.hpp"
 #include "FenrirPainter/StopTexture.hpp"
 #include "FenrirUI/Element.hpp"
 #include "FenrirUI/UIRoot.hpp"
@@ -92,6 +94,18 @@ namespace Fenrir::Detail
         std::unique_ptr<TextEntryStyles> textEntryStyles;
     };
 
+    /**
+     * @brief What the paint stage painted into one element this frame (UIRoot::PaintInto): its own list, and the
+     * painter over it, set up with the element's transform and clips. Kept behind a pointer, since the painter refers
+     * to the list.
+     */
+    struct StagePaint
+    {
+        ElementId element;
+        DrawList2D list;
+        std::optional<Painter> painter;
+    };
+
     /** @brief A root's tree in dense slots, its Yoga nodes, its target and what its frames keep. */
     struct UIRootState
     {
@@ -137,6 +151,16 @@ namespace Fenrir::Detail
         std::vector<ElementId> removing;
         /** @brief Its hot reload switch and the files it loaded. */
         HotReloadState hotReload;
+        /** @brief Between its layout and its painting: PaintInto gives painters. */
+        bool paintStageOpen = false;
+        /** @brief What the paint stage painted into its elements this frame, appended as they paint. */
+        std::vector<std::unique_ptr<StagePaint>> stagePaints;
+
+        /** @brief The content scale its last frame read from its target: its pixels per logical unit, 1 for none. */
+        [[nodiscard]] float ContentScale() const noexcept
+        {
+            return size.contentScale > 0.0f ? size.contentScale : 1.0f;
+        }
 
         /** @brief The slot `id` names, or null when it is stale. */
         [[nodiscard]] ElementSlot* Find(ElementId id) noexcept

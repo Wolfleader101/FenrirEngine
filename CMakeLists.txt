@@ -160,6 +160,10 @@ endif()
 if(FENRIR_ENABLE_RENDERER AND FENRIR_ENABLE_TEXT AND FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirPainter/Scripting)
 endif()
+# The UI's builds with the UI (built with the renderer and text), after the painter's, whose contract it uses.
+if(FENRIR_ENABLE_UI AND FENRIR_ENABLE_RENDERER AND FENRIR_ENABLE_TEXT AND FENRIR_ENABLE_SCRIPTING)
+    add_subdirectory(packages/FenrirUI/Scripting)
+endif()
 
 # Physics's scripting extension needs both, and comes after FenrirScripting (it builds against the scripting SDK).
 if(FENRIR_ENABLE_PHYSICS AND FENRIR_ENABLE_SCRIPTING)

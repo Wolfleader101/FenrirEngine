@@ -22,12 +22,12 @@
 #include "FenrirPainter/Painting.hpp"
 #include "FenrirPainter/Path.hpp"
 #include "FenrirPainterScripting/PainterScripting.hpp"
+#include "FenrirPainterScripting/PainterScriptingState.hpp"
 #include "FenrirPainterScripting/ScriptPainter.hpp"
 #include "FenrirRenderer/Overlay.hpp"
 #include "FenrirTextScripting/ScriptText.hpp"
 #include "FenrirTextScripting/TextScripting.hpp"
 #include "FenrirTextScripting/TextScriptingState.hpp"
-#include "PainterScriptingState.hpp"
 
 namespace
 {

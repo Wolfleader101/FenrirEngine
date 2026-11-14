@@ -1,0 +1,78 @@
+# FenrirUI's C# binding (ADR-0042, ADR-0061, packages/Iris/Tools/Iris.Bindings/README.md): this binding's own
+# FenrirUIScripting.api.json bound to the Fenrir.UI contract and this extension. C# reaches the UI only through the
+# natives declared here: the UIRoot mirror's methods are generated from their @facade marks, the UIStages class from
+# [stages], and nothing of the contract is written by hand.
+# Paths are relative to this file. `cmake --build <dir> --target fenrir-generate-bindings` regenerates every output
+# below; they are committed.
+namespace = "Fenrir.UI"
+# The window id, key and mouse button are the input binding's, the rectangle the text binding's, the painter id the
+# painter binding's and the vector the math binding's: named as theirs, never mirrored here.
+uses = [
+    "../../../FenrirScripting/api/FenrirMath.binding.toml",
+    "../../../FenrirInput/Scripting/api/FenrirInput.binding.toml",
+    "../../../FenrirAssets/Scripting/api/FenrirAssets.binding.toml",
+    "../../../FenrirText/Scripting/api/FenrirText.binding.toml",
+    "../../../FenrirPainter/Scripting/api/FenrirPainter.binding.toml",
+]
+# The scripting SDK's names are its defaults file's (FenrirScripting.binding-defaults.toml): this file states only what is this binding's.
+defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
+
+[csharp]
+contract = "../../Managed/Fenrir.UI"
+generated = "../../Managed/Fenrir.UI/Generated"
+readonly-events = true
+# An element id is one the engine hands out: C# assigns it whole, never a field. A root's id is a number a game may
+# keep and pass, as a painter id is.
+immutable-structs = ["Fenrir::ElementId"]
+
+[cpp]
+mappings = "../src/Generated/FenrirUIMappings.hpp"
+# The structs as C# passes them, and FenrirUI's.
+includes = [
+    "FenrirUIScripting/ScriptUI.hpp",
+    "FenrirUI/Element.hpp",
+    "FenrirUI/ElementId.hpp",
+    "FenrirUI/UIEvent.hpp",
+    "FenrirUI/UIRoot.hpp",
+]
+
+[registration]
+source = "../src/Generated/FenrirUIRegistration.cpp"
+function = "Fenrir::Generated::RegisterUI"
+# Makes the extension from its state (ADR-0046): what the package's public function returns, its stage placed.
+maker = "Fenrir::Generated::MakeUIExtension"
+
+[tests]
+cpp = "../Tests/Generated/FenrirUIDefaultsTests.cpp"
+csharp = "../Tests/Generated/FenrirUIDefaults.cs"
+class = "UIScriptFixture.Defaults"
+includes = ["UIScriptingApp.hpp"]
+setup = "Fenrir::Testing::UIScriptingApp app;"
+tags = "[ui][scripting][bindings]"
+
+[names]
+# C# names a root by its id, and calls the root's methods on it, as C++ calls UIRoot's.
+"Fenrir::UIRootId" = "UIRoot"
+"Fenrir::ScriptUI::RootSettings" = "RootSettings"
+
+# The stage the extension hosts (ADR-0039): UIRoots' paint stage, which C# systems join with
+# [StageSystem(UIStages.Paint, Order = ...)].
+[stages]
+class = "UIStages"
+summary = "FenrirUI's extension stage (ADR-0039, ADR-0061), which C# systems join with [StageSystem(UIStages.Paint, Order = ...)]: each runs inside the UI's frame, by its order among the C++ work of the stage, after C++ work of an equal order. Structural changes a stage system records happen when the stage ends. Without the UI installed it never runs."
+[stages.names]
+Paint = { name = "Fenrir.UI.Paint", summary = "Once a frame, after every UI root has laid out and before any paints: a system paints into elements through UIRoot.PaintInto and the Painter facade, in the root's UI units, the rectangles GetBoxes gives. What it paints is part of the element, after its own boxes and before its children." }
+
+# The native functions: tools/describe-api's natives mode reads every function in `sources` taking `context` first (with
+# the extension's state second) into FenrirUI.natives.json, and this binding generates from it their C# declarations,
+# the UINative class, their registration, and from their @facade marks the UIRoot mirror's methods.
+[natives]
+sources = ["../src/UIScripting.cpp"]
+class = "UINative"
+header = "../src/Generated/FenrirUINatives.hpp"
+includes = [
+    # What the natives' declarations name: their extension state and the structs as C# passes them.
+    "UIScriptingState.hpp",
+    "FenrirUIScripting/ScriptUI.hpp",
+    "FenrirPainterScripting/ScriptPainter.hpp",
+]

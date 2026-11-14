@@ -9,7 +9,7 @@
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/NativeFunctionMake.hpp"
 #include "FenrirScripting/ZeroingOutputs.hpp"
-#include "PainterScriptingState.hpp"
+#include "FenrirPainterScripting/PainterScriptingState.hpp"
 #include "FenrirPainterScripting/ScriptPainter.hpp"
 
 #include <memory>

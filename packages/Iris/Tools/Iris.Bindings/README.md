@@ -111,6 +111,12 @@ make = "My::NativeFunction::Make"      # Each registration is make<&F>("Namespac
 zero-outputs = "My::ZeroingOutputs"    # A native with outputs is made as make<&zero-outputs<&F, i, j>::Call>(...) (below).
 types = { "My::EntityId" = "Entity" }  # The C# type of an alias a native takes, by its C++ name.
 
+[stages]                               # Optional, with [registration]: the stages the extension hosts (ADR-0039).
+class = "PhysicsStages"                # The static class of their names, in the mirrors' directory.
+summary = "Physics's stages, which C# systems join with [StageSystem(PhysicsStages.Step)]."
+[stages.names]                         # Each stage: its constant, full name and summary, in the order listed.
+Step = { name = "My.Physics.Step", summary = "Inside each physics step, before contacts are reported." }
+
 [bound-types]                          # The C# type of each bound type, and optionally its constructor's components.
 "Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"], include = "MyScripting/BoundMappings.hpp" }  # Its mapping's header (below).
 "Math::Quat" = { type = "Quaternion" }  # No constructor: defaults set the components by name, new() { X = 0, ... }.
@@ -130,8 +136,9 @@ types = { "My::EntityId" = "Entity" }  # The C# type of an alias a native takes,
 | Output | Contents |
 | --- | --- |
 | `<generated>/<Type>.cs` | A `partial struct` per described struct and tagged union, an `enum` per enum. Bound types have their own C# types and get none. With natives, a struct's holds the methods the `@facade <Type>.Method` marks give it ("Facade parts" below). |
+| `<generated>/<class>.cs` | With `[stages]`: `public static class <class>`, documented by its summary, with one `public const string <Constant> = "<name>";` per stage, documented by its summary, for `[StageSystem(...)]` to name. |
 | `[cpp] mappings` | An `Iris::StructMapping<T>` per struct and tagged union, every field as `Iris::Field<Kind>("Name", offset)`, and an `Iris::EnumMapping<T>` per enum, each with a `static_assert` of the size and alignment the description records (bound types get only the assert: the binding maps them, and the header includes each bound type's `include`). |
-| `[registration] source` | The function that sets the extension's `components`, `events` and `sharedStructs`, each `Make...<T>("Namespace.Type")`, and, when `[registration]` names a resource factory, its `resources`. A type in `by-hand` is in none of the lists. The source includes the mappings header and, with natives, the natives header; it declares nothing itself. With `maker`, the function is in an anonymous namespace and the **extension maker** is defined beside it: `<extension> <maker>(std::shared_ptr<State> state)`, `State` the extension state the natives take, sets the extension's `name` to the binding's name (the configuration's `<Name>`), `SetState(std::move(state))`, `sharedAssemblies` to `{"<namespace>.dll"}` (the contract's file name), calls the function and returns it. |
+| `[registration] source` | The function that sets the extension's `components`, `events` and `sharedStructs`, each `Make...<T>("Namespace.Type")`, and, when `[registration]` names a resource factory, its `resources`. A type in `by-hand` is in none of the lists. The source includes the mappings header and, with natives, the natives header; it declares nothing itself. With `maker`, the function is in an anonymous namespace and the **extension maker** is defined beside it: `<extension> <maker>(std::shared_ptr<State> state)`, `State` the extension state the natives take, sets the extension's `name` to the binding's name (the configuration's `<Name>`), `SetState(std::move(state))`, `sharedAssemblies` to `{"<namespace>.dll"}` (the contract's file name), calls the function and returns it. With `[stages]`, the function also sets `extension.stages` to their full names, in order, so the C# constants and the stages the extension declares come from one list; the extension still places and removes its stages' groups itself. |
 
 A type in `exclude` gets none of these: no mirror, mapping, registration or test case. It is for a type the binding
 carries in another form, such as a struct C# holds with a smaller handle than C++'s, which the binding then describes
@@ -331,7 +338,7 @@ type or a pointer among its parameters or result), two marks giving one class an
 facade class named as a used binding's mirror, an enum or tagged union mirrored here, a bound type's C# type or the
 `[natives] class`, a mark on a mirror naming one of its fields as the method, a `returns` on a mark that names anything but
 the declaration's one `out` or sits on a native whose result is neither `bool` nor nothing, a
-`facade` that is not `Class.Method`, a `[tests]` still naming the natives test (`natives-cpp`, `natives-csharp`,
+`facade` that is not `Class.Method`, a `[stages]` without `[registration]`, with no stage, with a stage that is not a table of `name` and `summary`, with two constants naming one stage, or whose class is named as a mirror, a facade class or the `[natives] class`, a `[tests]` still naming the natives test (`natives-cpp`, `natives-csharp`,
 `natives-class`), which the zeroing registration replaced, a `[registration] includes`, which moved to
 `[natives] includes` with the declarations it served, or a `[registration] maker` without `[natives]`, whose natives
 take no extension state, or whose natives take two.
@@ -346,7 +353,7 @@ mirror, a by-hand type, a type of the binding it uses (`tests/Fixture/Uses`, a b
 taking text, an enum and wrappers; the five marked `@facade` give two facade parts, one method taking by value what
 its declaration takes `in`, one a span, and two of one name told apart by their parameters, and two methods on the
 mirror `Body`, one on `this` from a native taking a `const Body*` first and one static from a native filling a
-`Body*`, with a mark on a mirror whose native takes it elsewhere giving a static method; a mark a binding cannot
+`Body*`, with a mark on a mirror whose native takes it elsewhere giving a static method; the fixture's two stages give their class, in order, with an escaped summary, and the registration's `extension.stages`, and a `[stages]` the binding cannot honour fails saying why; a mark a binding cannot
 honour fails naming the native and the mark, and a facade class no mark names is deleted; a changed default changes
 exactly its initialiser; the natives header declares each native and the registration function and the
 registration declares nothing; a configuration keeping `[registration] includes` is told where they moved; with a

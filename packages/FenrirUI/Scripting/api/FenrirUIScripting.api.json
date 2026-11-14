@@ -1,0 +1,956 @@
+{
+  "package": "FenrirUIScripting",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fenrir::Rect2D",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A rectangle in local 2D coordinates: logical units from the top-left, Y down.",
+      "fields": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "width",
+          "offset": 8,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "height",
+          "offset": 12,
+          "kind": "f32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ElementBoxes",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 64,
+      "alignment": 4,
+      "doc": "An element's laid-out rectangles, in UI units from its root's top-left, before any transform: its border box, padding box (inside the border) and content box (inside the padding), and the clip its ancestors' `overflow: hidden` sets on it (their padding boxes intersected; the root's whole box when none clips).",
+      "fields": [
+        {
+          "name": "border",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Rect2D",
+          "default": {}
+        },
+        {
+          "name": "padding",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fenrir::Rect2D",
+          "default": {}
+        },
+        {
+          "name": "content",
+          "offset": 32,
+          "kind": "struct",
+          "type": "Fenrir::Rect2D",
+          "default": {}
+        },
+        {
+          "name": "clip",
+          "offset": 48,
+          "kind": "struct",
+          "type": "Fenrir::Rect2D",
+          "default": {}
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ElementId",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 8,
+      "alignment": 4,
+      "doc": "An element id (ADR-0066): an index and a version naming one element of a UI root. Removing the element makes it stale, and a slot used again gets a new version, so a stale id never names the new element. It is not an entity. Default constructed, it names nothing.",
+      "fields": [
+        {
+          "name": "index",
+          "offset": 0,
+          "kind": "u32",
+          "default": 4294967295,
+          "doc": "The element's slot in its root."
+        },
+        {
+          "name": "version",
+          "offset": 4,
+          "kind": "u32",
+          "default": 0,
+          "doc": "The slot's version when the element was made."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Key",
+      "category": "enum",
+      "size": 2,
+      "alignment": 2,
+      "doc": "A key code: which key was pressed as the keyboard layout names it. The key that types Z on an AZERTY keyboard is `Key::W` on QWERTY and `Key::Z` on AZERTY. Use it for shortcuts named by letter. A key the layout names with a character outside this list is `Unknown`.",
+      "underlying": "u16",
+      "values": [
+        {
+          "name": "Unknown",
+          "value": 0
+        },
+        {
+          "name": "A",
+          "value": 1
+        },
+        {
+          "name": "B",
+          "value": 2
+        },
+        {
+          "name": "C",
+          "value": 3
+        },
+        {
+          "name": "D",
+          "value": 4
+        },
+        {
+          "name": "E",
+          "value": 5
+        },
+        {
+          "name": "F",
+          "value": 6
+        },
+        {
+          "name": "G",
+          "value": 7
+        },
+        {
+          "name": "H",
+          "value": 8
+        },
+        {
+          "name": "I",
+          "value": 9
+        },
+        {
+          "name": "J",
+          "value": 10
+        },
+        {
+          "name": "K",
+          "value": 11
+        },
+        {
+          "name": "L",
+          "value": 12
+        },
+        {
+          "name": "M",
+          "value": 13
+        },
+        {
+          "name": "N",
+          "value": 14
+        },
+        {
+          "name": "O",
+          "value": 15
+        },
+        {
+          "name": "P",
+          "value": 16
+        },
+        {
+          "name": "Q",
+          "value": 17
+        },
+        {
+          "name": "R",
+          "value": 18
+        },
+        {
+          "name": "S",
+          "value": 19
+        },
+        {
+          "name": "T",
+          "value": 20
+        },
+        {
+          "name": "U",
+          "value": 21
+        },
+        {
+          "name": "V",
+          "value": 22
+        },
+        {
+          "name": "W",
+          "value": 23
+        },
+        {
+          "name": "X",
+          "value": 24
+        },
+        {
+          "name": "Y",
+          "value": 25
+        },
+        {
+          "name": "Z",
+          "value": 26
+        },
+        {
+          "name": "Num0",
+          "value": 27
+        },
+        {
+          "name": "Num1",
+          "value": 28
+        },
+        {
+          "name": "Num2",
+          "value": 29
+        },
+        {
+          "name": "Num3",
+          "value": 30
+        },
+        {
+          "name": "Num4",
+          "value": 31
+        },
+        {
+          "name": "Num5",
+          "value": 32
+        },
+        {
+          "name": "Num6",
+          "value": 33
+        },
+        {
+          "name": "Num7",
+          "value": 34
+        },
+        {
+          "name": "Num8",
+          "value": 35
+        },
+        {
+          "name": "Num9",
+          "value": 36
+        },
+        {
+          "name": "Escape",
+          "value": 37
+        },
+        {
+          "name": "Enter",
+          "value": 38
+        },
+        {
+          "name": "Tab",
+          "value": 39
+        },
+        {
+          "name": "Backspace",
+          "value": 40
+        },
+        {
+          "name": "Space",
+          "value": 41
+        },
+        {
+          "name": "Minus",
+          "value": 42
+        },
+        {
+          "name": "Equals",
+          "value": 43
+        },
+        {
+          "name": "LeftBracket",
+          "value": 44
+        },
+        {
+          "name": "RightBracket",
+          "value": 45
+        },
+        {
+          "name": "Backslash",
+          "value": 46
+        },
+        {
+          "name": "Semicolon",
+          "value": 47
+        },
+        {
+          "name": "Apostrophe",
+          "value": 48
+        },
+        {
+          "name": "Grave",
+          "value": 49
+        },
+        {
+          "name": "Comma",
+          "value": 50
+        },
+        {
+          "name": "Period",
+          "value": 51
+        },
+        {
+          "name": "Slash",
+          "value": 52
+        },
+        {
+          "name": "CapsLock",
+          "value": 53
+        },
+        {
+          "name": "F1",
+          "value": 54
+        },
+        {
+          "name": "F2",
+          "value": 55
+        },
+        {
+          "name": "F3",
+          "value": 56
+        },
+        {
+          "name": "F4",
+          "value": 57
+        },
+        {
+          "name": "F5",
+          "value": 58
+        },
+        {
+          "name": "F6",
+          "value": 59
+        },
+        {
+          "name": "F7",
+          "value": 60
+        },
+        {
+          "name": "F8",
+          "value": 61
+        },
+        {
+          "name": "F9",
+          "value": 62
+        },
+        {
+          "name": "F10",
+          "value": 63
+        },
+        {
+          "name": "F11",
+          "value": 64
+        },
+        {
+          "name": "F12",
+          "value": 65
+        },
+        {
+          "name": "F13",
+          "value": 66
+        },
+        {
+          "name": "F14",
+          "value": 67
+        },
+        {
+          "name": "F15",
+          "value": 68
+        },
+        {
+          "name": "F16",
+          "value": 69
+        },
+        {
+          "name": "F17",
+          "value": 70
+        },
+        {
+          "name": "F18",
+          "value": 71
+        },
+        {
+          "name": "F19",
+          "value": 72
+        },
+        {
+          "name": "F20",
+          "value": 73
+        },
+        {
+          "name": "F21",
+          "value": 74
+        },
+        {
+          "name": "F22",
+          "value": 75
+        },
+        {
+          "name": "F23",
+          "value": 76
+        },
+        {
+          "name": "F24",
+          "value": 77
+        },
+        {
+          "name": "PrintScreen",
+          "value": 78
+        },
+        {
+          "name": "ScrollLock",
+          "value": 79
+        },
+        {
+          "name": "Pause",
+          "value": 80
+        },
+        {
+          "name": "Insert",
+          "value": 81
+        },
+        {
+          "name": "Delete",
+          "value": 82
+        },
+        {
+          "name": "Home",
+          "value": 83
+        },
+        {
+          "name": "End",
+          "value": 84
+        },
+        {
+          "name": "PageUp",
+          "value": 85
+        },
+        {
+          "name": "PageDown",
+          "value": 86
+        },
+        {
+          "name": "Left",
+          "value": 87
+        },
+        {
+          "name": "Right",
+          "value": 88
+        },
+        {
+          "name": "Up",
+          "value": 89
+        },
+        {
+          "name": "Down",
+          "value": 90
+        },
+        {
+          "name": "NumLock",
+          "value": 91
+        },
+        {
+          "name": "KeypadDivide",
+          "value": 92
+        },
+        {
+          "name": "KeypadMultiply",
+          "value": 93
+        },
+        {
+          "name": "KeypadMinus",
+          "value": 94
+        },
+        {
+          "name": "KeypadPlus",
+          "value": 95
+        },
+        {
+          "name": "KeypadEnter",
+          "value": 96
+        },
+        {
+          "name": "KeypadPeriod",
+          "value": 97
+        },
+        {
+          "name": "Keypad0",
+          "value": 98
+        },
+        {
+          "name": "Keypad1",
+          "value": 99
+        },
+        {
+          "name": "Keypad2",
+          "value": 100
+        },
+        {
+          "name": "Keypad3",
+          "value": 101
+        },
+        {
+          "name": "Keypad4",
+          "value": 102
+        },
+        {
+          "name": "Keypad5",
+          "value": 103
+        },
+        {
+          "name": "Keypad6",
+          "value": 104
+        },
+        {
+          "name": "Keypad7",
+          "value": 105
+        },
+        {
+          "name": "Keypad8",
+          "value": 106
+        },
+        {
+          "name": "Keypad9",
+          "value": 107
+        },
+        {
+          "name": "Menu",
+          "value": 108
+        },
+        {
+          "name": "LeftCtrl",
+          "value": 109
+        },
+        {
+          "name": "LeftShift",
+          "value": 110
+        },
+        {
+          "name": "LeftAlt",
+          "value": 111
+        },
+        {
+          "name": "LeftSuper",
+          "value": 112
+        },
+        {
+          "name": "RightCtrl",
+          "value": 113
+        },
+        {
+          "name": "RightShift",
+          "value": 114
+        },
+        {
+          "name": "RightAlt",
+          "value": 115
+        },
+        {
+          "name": "RightSuper",
+          "value": 116
+        },
+        {
+          "name": "Count",
+          "value": 117,
+          "doc": "How many keys there are, `Unknown` included: a size, not a key."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Math::Vec2",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::MouseButton",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "A mouse button. `X1` and `X2` are the side buttons, back and forward.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Left",
+          "value": 0
+        },
+        {
+          "name": "Right",
+          "value": 1
+        },
+        {
+          "name": "Middle",
+          "value": 2
+        },
+        {
+          "name": "X1",
+          "value": 3
+        },
+        {
+          "name": "X2",
+          "value": 4
+        },
+        {
+          "name": "Count",
+          "value": 5,
+          "doc": "How many mouse buttons there are: a size, not a button."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::RemoveMode",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How UIRoot::Remove takes an element away.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Outro",
+          "value": 0,
+          "doc": "Give it `:outro`, and remove it once its and its descendants' transitions have ended (ADR-0066)."
+        },
+        {
+          "name": "Immediate",
+          "value": 1,
+          "doc": "Remove it and everything under it at once."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScaleRule",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How a UI root maps its UI units to its target's logical units (the scale rule).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Height1080",
+          "value": 0,
+          "doc": "1080 UI units span the target's pixel height: scale = pixel height / 1080 / content scale logical units per UI unit, so a UI authored at 1080p keeps its proportions at every resolution."
+        },
+        {
+          "name": "ContentScale",
+          "value": 1,
+          "doc": "One UI unit is one logical unit, which follows the operating system's content scale."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptPainter::PainterId",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 8,
+      "alignment": 8,
+      "doc": "A painter over the window overlay (Painter.Overlay), which the engine keeps while the C# system that got it runs: a number, so copying it copies no painter. Every Painter call takes one. When the system returns, what it painted is submitted to the overlay and the painter ends; its id is never handed out again, so a later call on it does nothing. The default names none.",
+      "fields": [
+        {
+          "name": "value",
+          "offset": 0,
+          "kind": "u64",
+          "default": 0,
+          "doc": "Which painter: zero for none."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::WindowId",
+      "category": "struct",
+      "role": "nested",
+      "size": 4,
+      "alignment": 4,
+      "doc": "Which window an input came from. A plain number chosen by whoever feeds the input (FenrirWindow, which keys its windows by it, or a test); FenrirInput only compares it.",
+      "fields": [
+        {
+          "name": "value",
+          "offset": 0,
+          "kind": "u32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptUI::RootSettings",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 20,
+      "alignment": 4,
+      "doc": "What a script makes a UI root with (UIRoot.Create): a root on a window's overlay at a layer, blending in the overlay's gamma space. A root drawn into an image or the world is made in C++.",
+      "fields": [
+        {
+          "name": "window",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::WindowId",
+          "default": {
+            "value": 1
+          },
+          "doc": "The window whose overlay it draws on."
+        },
+        {
+          "name": "layer",
+          "offset": 4,
+          "kind": "i32",
+          "default": 0,
+          "doc": "The overlay layer it draws on; roots draw lowest layer first, then in the order they were made."
+        },
+        {
+          "name": "scaleRule",
+          "offset": 8,
+          "kind": "enum",
+          "type": "Fenrir::ScaleRule",
+          "default": "Height1080",
+          "doc": "How its UI units map to the window's logical units."
+        },
+        {
+          "name": "snapToPixels",
+          "offset": 9,
+          "kind": "bool",
+          "default": true,
+          "doc": "Snap laid-out rectangles to whole pixels."
+        },
+        {
+          "name": "inputPriority",
+          "offset": 12,
+          "kind": "i32",
+          "default": 0,
+          "doc": "Its input router's priority: routers run highest first, so give a root drawn over another a higher one."
+        },
+        {
+          "name": "defaultStylesheet",
+          "offset": 16,
+          "kind": "bool",
+          "default": true,
+          "doc": "Give it FenrirUI's default stylesheet before its own sheets."
+        },
+        {
+          "name": "virtualCursor",
+          "offset": 17,
+          "kind": "bool",
+          "default": false,
+          "doc": "Start with the virtual cursor on: the left stick moves the pointer and A clicks under it."
+        },
+        {
+          "name": "hotReload",
+          "offset": 18,
+          "kind": "bool",
+          "default": false,
+          "doc": "Start with hot reload on: the files it loads are polled for changes."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::UIEventKind",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "What happened to a UIEvent's target.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "PointerEnter",
+          "value": 0,
+          "doc": "The pointer came over the target: it is now the topmost element under the pointer that takes it."
+        },
+        {
+          "name": "PointerLeave",
+          "value": 1,
+          "doc": "The pointer left the target."
+        },
+        {
+          "name": "PointerMove",
+          "value": 2,
+          "doc": "The pointer moved over the target."
+        },
+        {
+          "name": "PointerPress",
+          "value": 3,
+          "doc": "A mouse button went down over the target."
+        },
+        {
+          "name": "PointerRelease",
+          "value": 4,
+          "doc": "A mouse button pressed over the target went up, wherever the pointer is now."
+        },
+        {
+          "name": "Click",
+          "value": 5,
+          "doc": "A button was pressed and released over the target."
+        },
+        {
+          "name": "DoubleClick",
+          "value": 6,
+          "doc": "The second click of a button on the target in quick succession, sent after its Click."
+        },
+        {
+          "name": "Scroll",
+          "value": 7,
+          "doc": "The wheel turned over the target."
+        },
+        {
+          "name": "KeyPress",
+          "value": 8,
+          "doc": "A key went down, or repeated, while the target had the focus."
+        },
+        {
+          "name": "KeyRelease",
+          "value": 9,
+          "doc": "A key went up while the target had the focus."
+        },
+        {
+          "name": "TextInput",
+          "value": 10,
+          "doc": "A codepoint was typed while the target had the focus."
+        },
+        {
+          "name": "Focus",
+          "value": 11,
+          "doc": "The target took the focus."
+        },
+        {
+          "name": "Blur",
+          "value": 12,
+          "doc": "The target lost the focus."
+        },
+        {
+          "name": "Change",
+          "value": 13,
+          "doc": "A control's value changed. Sent by the controls."
+        },
+        {
+          "name": "Submit",
+          "value": 14,
+          "doc": "A control was submitted, such as Enter in a text entry. Sent by the controls."
+        },
+        {
+          "name": "DocumentReloaded",
+          "value": 15,
+          "doc": "A markup document was loaded again into the target's place. Sent by hot reload."
+        },
+        {
+          "name": "Cancel",
+          "value": 16,
+          "doc": "B on a gamepad (its East button) was pressed while the target had the focus: back out of it."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::UIRootId",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 4,
+      "alignment": 4,
+      "doc": "Names a UI root; UIRoots gives each root its own when it is made. Zero names none.",
+      "fields": [
+        {
+          "name": "value",
+          "offset": 0,
+          "kind": "u32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::UIEvent",
+      "category": "struct",
+      "role": "event",
+      "size": 36,
+      "alignment": 4,
+      "doc": "A UI event (ADR-0065): an engine event (ADR-0012) a UI root sends once for each thing that happens to one of its elements, read through `EventReader<UIEvent>`. It is sent at its target only; listeners on the target's ancestors see it as it bubbles, the queue does not. Plain data.",
+      "fields": [
+        {
+          "name": "root",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::UIRootId",
+          "default": {},
+          "doc": "The root whose element it happened to."
+        },
+        {
+          "name": "target",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::ElementId",
+          "default": {},
+          "doc": "The element it happened to."
+        },
+        {
+          "name": "kind",
+          "offset": 12,
+          "kind": "enum",
+          "type": "Fenrir::UIEventKind",
+          "default": "PointerMove"
+        },
+        {
+          "name": "position",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 0,
+            "y": 0
+          },
+          "doc": "Where the pointer is, in the root's UI units from its top-left, for every kind."
+        },
+        {
+          "name": "button",
+          "offset": 24,
+          "kind": "enum",
+          "type": "Fenrir::MouseButton",
+          "default": "Left",
+          "doc": "The mouse button, for a press, release, click or double click."
+        },
+        {
+          "name": "key",
+          "offset": 26,
+          "kind": "enum",
+          "type": "Fenrir::Key",
+          "default": "Unknown",
+          "doc": "The key, for a key press or release."
+        },
+        {
+          "name": "value",
+          "offset": 28,
+          "kind": "f32",
+          "default": 0,
+          "doc": "The vertical wheel notches for a scroll (positive away from the user), 1 for a key press that is a held key's repeat, and a control's value for a change."
+        },
+        {
+          "name": "integer",
+          "offset": 32,
+          "kind": "i32",
+          "default": 0,
+          "doc": "The modifiers (KeyModifiers' bits) for a key press or release, the codepoint for text input, and the click count for a click (1) or double click (2)."
+        }
+      ]
+    }
+  ]
+}

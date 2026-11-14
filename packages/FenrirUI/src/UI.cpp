@@ -1,7 +1,9 @@
 #include "FenrirUI/UI.hpp"
 
 #include <algorithm>
+#include <functional>
 #include <utility>
+#include <vector>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
@@ -127,12 +129,55 @@ namespace Fenrir
         return m_fontFaces;
     }
 
+    PaintStageHandle UIRoots::AddPaintStage(std::int32_t order, std::function<void()> work)
+    {
+        const PaintStageHandle handle{m_nextPaintStage++};
+        // After every entry of a lower or equal order: equal orders run in the order added.
+        const auto at =
+            std::upper_bound(m_paintStage.begin(), m_paintStage.end(), order,
+                             [](std::int32_t value, const PaintStageEntry& entry) { return value < entry.order; });
+        m_paintStage.insert(at, PaintStageEntry{handle, order, std::move(work)});
+        return handle;
+    }
+
+    bool UIRoots::RemovePaintStage(PaintStageHandle handle)
+    {
+        const auto found = std::find_if(m_paintStage.begin(), m_paintStage.end(),
+                                        [&](const PaintStageEntry& entry) { return entry.handle == handle; });
+        if (handle.id == 0 || found == m_paintStage.end())
+        {
+            return false;
+        }
+        m_paintStage.erase(found);
+        return true;
+    }
+
     void UIRoots::Frame()
     {
         m_retired.clear();
+        std::vector<UIRoot*> laidOut;
         for (const RootEntry& entry : m_roots)
         {
-            entry.root->Frame();
+            if (entry.root->LayOut())
+            {
+                laidOut.push_back(entry.root.get());
+            }
+        }
+        // Work added or removed while the stage runs takes effect next frame.
+        const std::vector<PaintStageEntry> stage = m_paintStage;
+        for (const PaintStageEntry& entry : stage)
+        {
+            entry.work();
+        }
+        for (UIRoot* root : laidOut)
+        {
+            // A root the stage destroyed paints no more.
+            const bool alive =
+                std::ranges::any_of(m_roots, [&](const RootEntry& entry) { return entry.root.get() == root; });
+            if (alive)
+            {
+                root->PaintAndSubmit();
+            }
         }
     }
 

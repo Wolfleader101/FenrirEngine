@@ -10,8 +10,8 @@
 
 **Touches:** `packages/FenrirUI/Scripting/`, `packages/FenrirUI/Managed/`, `packages/FenrirUI/src/`, `packages/FenrirScripting/`, `examples/UIDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Scripting tests: a script builds the same three-panel tree a C++ test builds and reads the same rectangles; a script loads a document by path and finds an element by id; a click fed through the test feed arrives in the script's `EventReader<UIEvent>` with the target id; a script's paint-stage system's draws appear in the element's captured list after the element's own box; a stale id's natives do nothing and return false.
-- [ ] UIDemo builds with scripting on and the speedometer draws.
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] Scripting tests: a script builds the same three-panel tree a C++ test builds and reads the same rectangles; a script loads a document by path and finds an element by id; a click fed through the test feed arrives in the script's `EventReader<UIEvent>` with the target id; a script's paint-stage system's draws appear in the element's captured list after the element's own box; a stale id's natives do nothing and return false.
+- [x] UIDemo builds with scripting on and the speedometer draws.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

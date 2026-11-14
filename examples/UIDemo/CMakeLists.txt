@@ -15,8 +15,14 @@ target_include_directories(UIDemoCore PUBLIC src)
 target_link_libraries(UIDemoCore PUBLIC FenrirDemoScaffold FenrirUI FenrirAssets PRIVATE FenrirPainter)
 target_compile_definitions(UIDemoCore PRIVATE UIDEMO_SOURCE_ASSETS="${CMAKE_CURRENT_SOURCE_DIR}/assets")
 
-fenrir_add_demo_app(UIDemo SOURCES src/main.cpp ASSETS assets)
+fenrir_add_demo_app(UIDemo SOURCES src/main.cpp ASSETS assets SCRIPTS scripts)
 target_link_libraries(UIDemo PRIVATE UIDemoCore FenrirLogger)
+# The C# variant (README, "The C# variant"): the text, painter and UI scripting extensions, and their contracts beside
+# the executable.
+if(FENRIR_ENABLE_SCRIPTING AND TARGET FenrirUIScripting)
+    target_link_libraries(UIDemo PRIVATE FenrirUIScripting FenrirPainterScripting FenrirTextScripting)
+    fenrir_deploy_scripting(UIDemo EXTENSIONS Text Painter UI)
+endif()
 
 # The HUD's tests: the app's own setup, on the null backend.
 if(FENRIR_BUILD_TESTS)

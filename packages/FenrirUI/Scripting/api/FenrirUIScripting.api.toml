@@ -1,0 +1,30 @@
+# The UI binding's own selection (ADR-0042, tools/describe-api/README.md): what its natives take and give by pointer,
+# and the event it shares. FenrirUI's root config holds its target as a shared pointer and its blend space as an
+# optional, so the settings C# makes a root with are this library's (ScriptUI.hpp); FenrirUI's own plain data (the
+# element and root ids, the UI event, an element's rectangles and the enums) is described as FenrirUI declares it, so
+# its mirrors are generated from FenrirUI's headers. The window id, key and mouse button are the input binding's, the
+# rectangle the text binding's, the painter id the painter binding's and the vector the math binding's.
+headers = [
+    "../include/FenrirUIScripting/ScriptUI.hpp",
+    "../../include/FenrirUI/ElementId.hpp",
+    "../../include/FenrirUI/UIEvent.hpp",
+    "../../include/FenrirUI/Element.hpp",
+    "../../include/FenrirUI/UIRoot.hpp",
+    "../../../FenrirPainter/Scripting/include/FenrirPainterScripting/ScriptPainter.hpp",
+]
+
+[types]
+"Fenrir::ScriptUI::RootSettings" = "shared-struct"
+"Fenrir::ElementId" = "shared-struct"
+"Fenrir::UIRootId" = "shared-struct"
+"Fenrir::ElementBoxes" = "shared-struct"
+# The UI's event, read from C# through EventReader<UIEvent>.
+"Fenrir::UIEvent" = "event"
+# The enum a native takes by value, which no struct here holds.
+"Fenrir::RemoveMode" = "enum"
+# The painter binding's (FenrirPainterScripting.api.toml gives it this role).
+"Fenrir::ScriptPainter::PainterId" = "shared-struct"
+# The text binding's.
+"Fenrir::Rect2D" = "shared-struct"
+# The math binding's.
+"Fenrir::Math::Vec2" = "bound-type"
