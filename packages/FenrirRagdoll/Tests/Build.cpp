@@ -328,3 +328,92 @@ TEST_CASE("DestroyRagdoll clears the overrides on its bodies' bones and leaves t
     INFO("the neck, which no body follows, keeps game code's entry");
     REQUIRE(Fenrir::Skeletons::GetOverride(built.test.level, built.skeleton, neck).has_value());
 }
+
+namespace
+{
+    // Entities made as a caller hands them out before the build (C#'s Build): alive, with the defaults only.
+    SpawnedRagdoll Reserved(Fenrir::EntityList& entities, std::size_t bodies, std::size_t joints)
+    {
+        SpawnedRagdoll into;
+        into.parent = entities.CreateEntity();
+        for (std::size_t i = 0; i < bodies; ++i)
+        {
+            into.bodies.push_back(entities.CreateEntity());
+        }
+        for (std::size_t i = 0; i < joints; ++i)
+        {
+            into.joints.push_back(entities.CreateEntity());
+        }
+        return into;
+    }
+} // namespace
+
+TEST_CASE("BuildRagdoll onto given entities builds the ragdoll there, as onto its own", "[ragdoll][build]")
+{
+    Unbuilt unbuilt;
+    const SpawnedRagdoll into = Reserved(unbuilt.test.Entities(), 16, 15);
+
+    const SpawnedRagdoll spawned =
+        Fenrir::BuildRagdoll(unbuilt.test.app, unbuilt.test.level, unbuilt.skeleton, unbuilt.good, into);
+
+    INFO("it built: " << spawned.error);
+    REQUIRE(spawned.error.empty());
+    INFO("onto exactly the entities given, in their order");
+    REQUIRE(spawned.parent == into.parent);
+    REQUIRE(spawned.bodies == into.bodies);
+    REQUIRE(spawned.joints == into.joints);
+    for (std::size_t i = 0; i < into.bodies.size(); ++i)
+    {
+        const Entity& body = into.bodies[i];
+        INFO("body " << i << " is a kinematic ragdoll body under the parent");
+        REQUIRE(body.GetComponent<Fenrir::Relationship>().parent == into.parent);
+        REQUIRE(body.GetComponent<Fenrir::RigidBody>().motionType == Fenrir::MotionType::Kinematic);
+        REQUIRE(Text(body.GetComponent<Fenrir::RagdollBody>().bone) == Text(unbuilt.good.parts[i].bone));
+    }
+    for (std::size_t i = 0; i < into.joints.size(); ++i)
+    {
+        INFO("joint " << i << " joins body " << i + 1 << " under the parent");
+        REQUIRE(into.joints[i].GetComponent<Fenrir::Relationship>().parent == into.parent);
+        REQUIRE(into.joints[i].GetComponent<Fenrir::Joint>().bodyB == into.bodies[i + 1]);
+    }
+    INFO("the Ragdoll's root body is the first body given");
+    REQUIRE(unbuilt.skeleton.GetComponent<Fenrir::Ragdoll>().rootBody == into.bodies.front());
+    INFO("and it follows like any other");
+    unbuilt.test.Run(2);
+    REQUIRE(unbuilt.test.warnings->empty());
+    REQUIRE(unbuilt.skeleton.GetComponent<Fenrir::Ragdoll>().state.bodies == 16);
+}
+
+TEST_CASE("BuildRagdoll onto given entities refuses entities that do not fit the description, changing none",
+          "[ragdoll][build]")
+{
+    Unbuilt unbuilt;
+    Fenrir::EntityList& entities = unbuilt.test.Entities();
+
+    SECTION("too few bodies")
+    {
+        const SpawnedRagdoll into = Reserved(entities, 15, 15);
+        const SpawnedRagdoll spawned =
+            Fenrir::BuildRagdoll(unbuilt.test.app, unbuilt.test.level, unbuilt.skeleton, unbuilt.good, into);
+        REQUIRE_FALSE(spawned.error.empty());
+        REQUIRE(spawned.bodies.empty());
+        REQUIRE_FALSE(into.bodies.front().HasComponent<Fenrir::RigidBody>());
+    }
+    SECTION("too many joints")
+    {
+        const SpawnedRagdoll into = Reserved(entities, 16, 16);
+        REQUIRE_FALSE(Fenrir::BuildRagdoll(unbuilt.test.app, unbuilt.test.level, unbuilt.skeleton, unbuilt.good, into)
+                          .error.empty());
+    }
+    SECTION("an entity that is not alive")
+    {
+        SpawnedRagdoll into = Reserved(entities, 16, 15);
+        entities.DestroyEntity(into.joints.back());
+        const SpawnedRagdoll spawned =
+            Fenrir::BuildRagdoll(unbuilt.test.app, unbuilt.test.level, unbuilt.skeleton, unbuilt.good, into);
+        REQUIRE_FALSE(spawned.error.empty());
+        REQUIRE_FALSE(into.bodies.front().HasComponent<Fenrir::RigidBody>());
+    }
+    INFO("and the skeleton entity gets no Ragdoll");
+    REQUIRE_FALSE(unbuilt.skeleton.HasComponent<Fenrir::Ragdoll>());
+}

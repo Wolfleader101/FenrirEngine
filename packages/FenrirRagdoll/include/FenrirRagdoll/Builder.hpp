@@ -46,6 +46,21 @@ namespace Fenrir
     SpawnedRagdoll BuildRagdoll(App& app, Scene& scene, Entity skeleton, const RagdollDescription& description);
 
     /**
+     * @brief Builds `description` as `BuildRagdoll` above does, onto entities the caller made rather than new ones:
+     * `into.parent`, one of `into.bodies` per part and one of `into.joints` per part but the root, in the description's
+     * order, each alive in `scene`, at the top of it, with no components beyond the defaults every entity gets
+     * (`Transform`, `Name`, `Relationship`): the caller's promise, which only the counts and liveness are checked
+     * against (components already there are overwritten or kept as they are). For a caller that must hand the entities
+     * out before the build runs, as a C# native does, whose structural changes play back later (ADR-0029). Returns
+     * `into` on success.
+     *
+     * Refuses as the other does, and also when the counts do not fit the description or an entity given is not alive;
+     * a refusal changes none of the given entities, which stay the caller's.
+     */
+    SpawnedRagdoll BuildRagdoll(App& app, Scene& scene, Entity skeleton, const RagdollDescription& description,
+                                const SpawnedRagdoll& into);
+
+    /**
      * @brief Removes `skeleton`'s ragdoll: the parent entity `BuildRagdoll` spawned (the root body's parent) and every
      * entity under it, the glue's pose override entries (as `Ragdolls::ClearOverrides` clears them: game code's
      * entries on other bones stay), and its `Ragdoll`. Bodies game code added elsewhere are left, as inactive ragdoll

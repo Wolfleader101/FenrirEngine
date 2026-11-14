@@ -1,0 +1,62 @@
+# FenrirRagdoll's C# binding (the ragdolls spec, ticket 56; ADR-0042 to ADR-0046, packages/Iris/Tools/Iris.Bindings/README.md):
+# ../../api/FenrirRagdoll.api.json and this library's own FenrirRagdollScripting.api.json (the description handle)
+# bound to the Fenrir.Ragdoll contract and Ragdolls::ScriptingExtension(). Paths are relative to this file. `cmake
+# --build <dir> --target fenrir-generate-bindings` regenerates every output below; they are committed.
+namespace = "Fenrir.Ragdoll"
+# The engine's Entity and Transform are the built-in binding's, the vectors the math binding's, and the bone name
+# FenrirSkeleton's (ADR-0044): named as theirs, never mirrored here. The skeleton binding uses the assets binding.
+uses = [
+    "../../../FenrirScripting/api/FenrirScripting.binding.toml",
+    "../../../FenrirScripting/api/FenrirMath.binding.toml",
+    "../../../FenrirAssets/Scripting/api/FenrirAssets.binding.toml",
+    "../../../FenrirSkeleton/Scripting/api/FenrirSkeleton.binding.toml",
+]
+# The scripting SDK's names are its defaults file's (FenrirScripting.binding-defaults.toml): this file states only what is this binding's.
+defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
+
+[csharp]
+contract = "../../Managed/Fenrir.Ragdoll"
+generated = "../../Managed/Fenrir.Ragdoll/Generated"
+# The glue writes these back every tick: C# reads them in place through Ref<Ragdoll> and Ref<RagdollBody>, never writes
+# them.
+readonly-structs = ["Fenrir::RagdollState", "Fenrir::RagdollBodyState"]
+# A handle C# holds and passes back whole, never edits.
+immutable-structs = ["Fenrir::RagdollDescriptionHandle"]
+
+[cpp]
+mappings = "../src/Generated/FenrirRagdollMappings.hpp"
+includes = [
+    "FenrirRagdoll/Components.hpp",
+    "FenrirRagdoll/Description.hpp",
+    "FenrirRagdollScripting/RagdollMappings.hpp",
+]
+
+[registration]
+source = "../src/Generated/FenrirRagdollRegistration.cpp"
+function = "Fenrir::Generated::RegisterRagdoll"
+# Makes the extension from its state (ADR-0046): what the package's public function returns.
+maker = "Fenrir::Generated::MakeRagdollExtension"
+
+[tests]
+cpp = "../Tests/Generated/FenrirRagdollDefaultsTests.cpp"
+csharp = "../Tests/Generated/FenrirRagdollDefaults.cs"
+class = "Fenrir.RagdollScriptFixture.Defaults"
+includes = ["RagdollScriptingApp.hpp"]
+setup = "Fenrir::Testing::RagdollScriptingApp app;"
+tags = "[ragdoll][scripting][bindings]"
+
+# The native functions behind Ragdoll's static methods: tools/describe-api's natives mode reads every function in
+# `sources` taking `context` first (with the extension's state second) into FenrirRagdoll.natives.json, and this
+# binding generates from it their C# declarations, the RagdollNative class, their registration, and from their @facade
+# marks the generated methods on the Ragdoll mirror.
+[natives]
+sources = ["../src/RagdollScripting.cpp"]
+class = "RagdollNative"
+header = "../src/Generated/FenrirRagdollNatives.hpp"
+includes = [
+    # What the natives' declarations name: their extension state, the bone map, the handle and the engine's entity.
+    "RagdollScriptingState.hpp",
+    "FenrirRagdoll/Description.hpp",
+    "FenrirRagdollScripting/RagdollDescriptionHandle.hpp",
+    "FenrirECS/Entity.hpp",
+]

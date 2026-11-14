@@ -62,120 +62,167 @@ namespace Fenrir
             entity.ForEachChild([&](const Entity& child) { CollectBelow(child, out); });
             out.push_back(entity);
         }
+        /** @brief Why `into` cannot take `description`'s entities, or nothing when it can. */
+        std::string MisfitOf(Scene& scene, const RagdollDescription& description, const SpawnedRagdoll& into)
+        {
+            const std::size_t parts = description.parts.size();
+            if (into.bodies.size() != parts || into.joints.size() + 1 != parts)
+            {
+                return "the entities given are " + std::to_string(into.bodies.size()) + " bodies and " +
+                       std::to_string(into.joints.size()) + " joints, where the description needs " +
+                       std::to_string(parts) + " and " + std::to_string(parts - 1);
+            }
+            EntityList& entities = scene.GetEntityList();
+            const auto alive = [&](const Entity& entity) {
+                return entity.IsValid() && entities.HasEntity(entity.GetId()) &&
+                       entities.HandleOf(entity.GetId()) == entity;
+            };
+            bool all = alive(into.parent);
+            for (const Entity& entity : into.bodies)
+            {
+                all = all && alive(entity);
+            }
+            for (const Entity& entity : into.joints)
+            {
+                all = all && alive(entity);
+            }
+            return all ? std::string() : "an entity given is not alive in the scene";
+        }
+
+        // Both builders: onto `into`'s entities when it is given, onto new ones otherwise.
+        SpawnedRagdoll Spawn(App& app, Scene& scene, Entity skeleton, const RagdollDescription& description,
+                             const SpawnedRagdoll* into)
+        {
+            // Everything is checked before anything is spawned, so a refusal leaves the scene as it was.
+            if (!description.error.empty())
+            {
+                return Refused("the description was refused: " + description.error);
+            }
+            if (description.parts.empty())
+            {
+                return Refused("the description has no parts");
+            }
+            if (!skeleton.IsValid() || !skeleton.HasComponent<SkeletonPose>() ||
+                Skeletons::GetPoseState(scene, skeleton) != PoseState::Ready)
+            {
+                return Refused("the entity has no Ready SkeletonPose");
+            }
+            if (skeleton.HasComponent<Ragdoll>())
+            {
+                return Refused("the skeleton entity already has a Ragdoll");
+            }
+            const AssetStore* store = app.TryGetResource<AssetStore>();
+            const SkeletonData* data =
+                store == nullptr ? nullptr : store->TryGet(skeleton.GetComponent<SkeletonPose>().skeleton);
+            if (data == nullptr)
+            {
+                return Refused("the skeleton asset is not in the asset store");
+            }
+            std::vector<std::int32_t> bones;
+            bones.reserve(description.parts.size());
+            std::unordered_map<std::string_view, std::size_t> partOf;
+            for (std::size_t i = 0; i < description.parts.size(); ++i)
+            {
+                const RagdollPart& part = description.parts[i];
+                const std::string_view name = Detail::NameOf(part.bone);
+                bones.push_back(data->FindBone(name));
+                if (bones.back() == NoBone)
+                {
+                    return Refused("no bone is named '" + std::string(name) + "'");
+                }
+                const std::string_view parent = Detail::NameOf(part.parent);
+                if ((i == 0) != parent.empty() || (i > 0 && !partOf.contains(parent)))
+                {
+                    return Refused("part '" + std::string(name) + "' names parent '" + std::string(parent) +
+                                   "': the first part is the root, with no parent, and every other part's parent is an "
+                                   "earlier part's bone");
+                }
+                partOf.emplace(name, i);
+            }
+            if (into != nullptr)
+            {
+                const std::string misfit = MisfitOf(scene, description, *into);
+                if (!misfit.empty())
+                {
+                    return Refused(misfit);
+                }
+            }
+
+            const std::vector<Math::Mat4> rest = Detail::RestModels(*data);
+            const Math::Mat4 skeletonWorld = GetWorldMatrix(skeleton);
+            const Math::Quat skeletonTurn = Detail::PoseOf(skeletonWorld).rot;
+            // The id 0 is no group: Entity::Null is never a live entity's id, so no other ragdoll takes it by default.
+            const std::uint32_t group =
+                description.group != 0 ? description.group : (skeleton.GetId() != 0 ? skeleton.GetId() : Entity::Null);
+
+            EntityList& entities = scene.GetEntityList();
+            SpawnedRagdoll spawned;
+            spawned.parent = into != nullptr ? into->parent : entities.CreateEntity();
+            spawned.parent.GetComponent<Name>().Set(
+                ("Ragdoll of " + std::string(skeleton.GetComponent<Name>().Get())).c_str());
+
+            for (std::size_t i = 0; i < description.parts.size(); ++i)
+            {
+                const RagdollPart& part = description.parts[i];
+                // skeleton × bone × offset, as the glue follows it, then reduced to a position and rotation.
+                const Detail::Pose body = Detail::PoseOf(skeletonWorld * rest[static_cast<std::size_t>(bones[i])] *
+                                                         TransformToMat4(part.offset));
+
+                Entity entity = into != nullptr ? into->bodies[i] : entities.CreateEntity();
+                entity.GetComponent<Name>().Set((std::string(Detail::NameOf(part.bone)) + " body").c_str());
+                spawned.parent.AddChild(entity);
+                SetWorldTransform(entity, Transform(body.pos, body.rot, Math::Vec3(1.0f)));
+                entity.AddComponent<RigidBody>(RigidBody{.motionType = MotionType::Kinematic, .mass = part.mass});
+                entity.AddComponent<Collider>(Collider{part.shape});
+                entity.AddComponent<CollisionGroup>(CollisionGroup{group});
+                RagdollBody mapping;
+                mapping.ragdoll = skeleton;
+                mapping.bone = part.bone;
+                mapping.offset = part.offset;
+                mapping.strengthScale = part.strengthScale;
+                entity.AddComponent<RagdollBody>(mapping);
+                spawned.bodies.push_back(entity);
+            }
+
+            // Joints after every body, root first: each joint's frames come from both bodies' rest world poses.
+            for (std::size_t i = 1; i < description.parts.size(); ++i)
+            {
+                const RagdollPart& part = description.parts[i];
+                const Entity& parentBody = spawned.bodies[partOf.at(Detail::NameOf(part.parent))];
+                const JointFrame anchor{Math::Vec3(skeletonWorld * Math::Vec4(part.jointAnchor, 1.0f)),
+                                        Math::Normalized(skeletonTurn * part.jointFrame.rotation)};
+                const JointFrames frames = FrameFromWorld(parentBody, spawned.bodies[i], anchor);
+
+                Entity entity = into != nullptr ? into->joints[i - 1] : entities.CreateEntity();
+                entity.GetComponent<Name>().Set((std::string(Detail::NameOf(part.bone)) + " joint").c_str());
+                spawned.parent.AddChild(entity);
+                entity.AddComponent<Joint>(Joint{.bodyA = parentBody,
+                                                 .bodyB = spawned.bodies[i],
+                                                 .frameA = frames.frameA,
+                                                 .frameB = frames.frameB,
+                                                 .kind = AsSpawned(part.joint, description.jointFriction),
+                                                 .collideConnected = false});
+                spawned.joints.push_back(entity);
+            }
+
+            Ragdoll ragdoll;
+            ragdoll.strength = description.strength;
+            ragdoll.group = group;
+            ragdoll.rootBody = spawned.bodies.front();
+            skeleton.AddComponent<Ragdoll>(ragdoll);
+            return spawned;
+        }
     } // namespace
 
     SpawnedRagdoll BuildRagdoll(App& app, Scene& scene, Entity skeleton, const RagdollDescription& description)
     {
-        // Everything is checked before anything is spawned, so a refusal leaves the scene as it was.
-        if (!description.error.empty())
-        {
-            return Refused("the description was refused: " + description.error);
-        }
-        if (description.parts.empty())
-        {
-            return Refused("the description has no parts");
-        }
-        if (!skeleton.IsValid() || !skeleton.HasComponent<SkeletonPose>() ||
-            Skeletons::GetPoseState(scene, skeleton) != PoseState::Ready)
-        {
-            return Refused("the entity has no Ready SkeletonPose");
-        }
-        if (skeleton.HasComponent<Ragdoll>())
-        {
-            return Refused("the skeleton entity already has a Ragdoll");
-        }
-        const AssetStore* store = app.TryGetResource<AssetStore>();
-        const SkeletonData* data =
-            store == nullptr ? nullptr : store->TryGet(skeleton.GetComponent<SkeletonPose>().skeleton);
-        if (data == nullptr)
-        {
-            return Refused("the skeleton asset is not in the asset store");
-        }
-        std::vector<std::int32_t> bones;
-        bones.reserve(description.parts.size());
-        std::unordered_map<std::string_view, std::size_t> partOf;
-        for (std::size_t i = 0; i < description.parts.size(); ++i)
-        {
-            const RagdollPart& part = description.parts[i];
-            const std::string_view name = Detail::NameOf(part.bone);
-            bones.push_back(data->FindBone(name));
-            if (bones.back() == NoBone)
-            {
-                return Refused("no bone is named '" + std::string(name) + "'");
-            }
-            const std::string_view parent = Detail::NameOf(part.parent);
-            if ((i == 0) != parent.empty() || (i > 0 && !partOf.contains(parent)))
-            {
-                return Refused("part '" + std::string(name) + "' names parent '" + std::string(parent) +
-                               "': the first part is the root, with no parent, and every other part's parent is an "
-                               "earlier part's bone");
-            }
-            partOf.emplace(name, i);
-        }
+        return Spawn(app, scene, skeleton, description, nullptr);
+    }
 
-        const std::vector<Math::Mat4> rest = Detail::RestModels(*data);
-        const Math::Mat4 skeletonWorld = GetWorldMatrix(skeleton);
-        const Math::Quat skeletonTurn = Detail::PoseOf(skeletonWorld).rot;
-        // The id 0 is no group: Entity::Null is never a live entity's id, so no other ragdoll takes it by default.
-        const std::uint32_t group =
-            description.group != 0 ? description.group : (skeleton.GetId() != 0 ? skeleton.GetId() : Entity::Null);
-
-        EntityList& entities = scene.GetEntityList();
-        SpawnedRagdoll spawned;
-        spawned.parent = entities.CreateEntity();
-        spawned.parent.GetComponent<Name>().Set(
-            ("Ragdoll of " + std::string(skeleton.GetComponent<Name>().Get())).c_str());
-
-        for (std::size_t i = 0; i < description.parts.size(); ++i)
-        {
-            const RagdollPart& part = description.parts[i];
-            // skeleton × bone × offset, as the glue follows it, then reduced to a position and rotation.
-            const Detail::Pose body =
-                Detail::PoseOf(skeletonWorld * rest[static_cast<std::size_t>(bones[i])] * TransformToMat4(part.offset));
-
-            Entity entity = entities.CreateEntity();
-            entity.GetComponent<Name>().Set((std::string(Detail::NameOf(part.bone)) + " body").c_str());
-            spawned.parent.AddChild(entity);
-            SetWorldTransform(entity, Transform(body.pos, body.rot, Math::Vec3(1.0f)));
-            entity.AddComponent<RigidBody>(RigidBody{.motionType = MotionType::Kinematic, .mass = part.mass});
-            entity.AddComponent<Collider>(Collider{part.shape});
-            entity.AddComponent<CollisionGroup>(CollisionGroup{group});
-            RagdollBody mapping;
-            mapping.ragdoll = skeleton;
-            mapping.bone = part.bone;
-            mapping.offset = part.offset;
-            mapping.strengthScale = part.strengthScale;
-            entity.AddComponent<RagdollBody>(mapping);
-            spawned.bodies.push_back(entity);
-        }
-
-        // Joints after every body, root first: each joint's frames come from both bodies' rest world poses.
-        for (std::size_t i = 1; i < description.parts.size(); ++i)
-        {
-            const RagdollPart& part = description.parts[i];
-            const Entity& parentBody = spawned.bodies[partOf.at(Detail::NameOf(part.parent))];
-            const JointFrame anchor{Math::Vec3(skeletonWorld * Math::Vec4(part.jointAnchor, 1.0f)),
-                                    Math::Normalized(skeletonTurn * part.jointFrame.rotation)};
-            const JointFrames frames = FrameFromWorld(parentBody, spawned.bodies[i], anchor);
-
-            Entity entity = entities.CreateEntity();
-            entity.GetComponent<Name>().Set((std::string(Detail::NameOf(part.bone)) + " joint").c_str());
-            spawned.parent.AddChild(entity);
-            entity.AddComponent<Joint>(Joint{.bodyA = parentBody,
-                                             .bodyB = spawned.bodies[i],
-                                             .frameA = frames.frameA,
-                                             .frameB = frames.frameB,
-                                             .kind = AsSpawned(part.joint, description.jointFriction),
-                                             .collideConnected = false});
-            spawned.joints.push_back(entity);
-        }
-
-        Ragdoll ragdoll;
-        ragdoll.strength = description.strength;
-        ragdoll.group = group;
-        ragdoll.rootBody = spawned.bodies.front();
-        skeleton.AddComponent<Ragdoll>(ragdoll);
-        return spawned;
+    SpawnedRagdoll BuildRagdoll(App& app, Scene& scene, Entity skeleton, const RagdollDescription& description,
+                                const SpawnedRagdoll& into)
+    {
+        return Spawn(app, scene, skeleton, description, &into);
     }
 
     void DestroyRagdoll(Scene& scene, Entity skeleton)

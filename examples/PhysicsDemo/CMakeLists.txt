@@ -16,10 +16,11 @@ fenrir_add_demo_app(PhysicsDemo
     SCRIPTS scripts
 )
 target_link_libraries(PhysicsDemo PRIVATE FenrirPhysics FenrirRagdoll FenrirAssets FenrirDebugDraw)
-# Physics's scripting extension, which the C# scenes use, and its contract beside the executable.
+# Physics's scripting extension, which the C# scenes use, and the ragdoll one beside it (with the skeleton extension,
+# whose bone names its contract builds against), and their contracts beside the executable.
 if(FENRIR_ENABLE_SCRIPTING)
-    target_link_libraries(PhysicsDemo PRIVATE FenrirPhysicsScripting)
-    fenrir_deploy_scripting(PhysicsDemo EXTENSIONS Physics)
+    target_link_libraries(PhysicsDemo PRIVATE FenrirPhysicsScripting FenrirSkeletonScripting FenrirRagdollScripting)
+    fenrir_deploy_scripting(PhysicsDemo EXTENSIONS Physics Skeleton Ragdoll)
 endif()
 
 # Each scene's log, checked: a smoke run of the scene alone, long enough for its keys to be pressed about a second apart
