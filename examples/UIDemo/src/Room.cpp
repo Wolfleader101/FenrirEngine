@@ -292,7 +292,7 @@ namespace UIDemo
                 // The settings' field of view, on the camera drawing into the window.
                 if (auto& lens = camera.GetComponent<Fenrir::Camera>().projection; lens.Is<Fenrir::Perspective>())
                 {
-                    lens.As<Fenrir::Perspective>().verticalFov = settings.fieldOfView * Pi / 180.0f;
+                    lens.As<Fenrir::Perspective>().verticalFov = Fenrir::Math::DegToRad(settings.fieldOfView);
                 }
                 const auto& transform = camera.GetComponent<Fenrir::Transform>();
                 heading = Heading(transform.rot);

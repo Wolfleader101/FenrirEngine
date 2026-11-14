@@ -9,7 +9,7 @@ add_library(UIDemoCore STATIC
     src/Compass.cpp
     src/Menu.cpp
     src/Room.cpp
-    src/UIFiles.hpp
+    src/DemoUI.hpp
 )
 target_include_directories(UIDemoCore PUBLIC src)
 target_link_libraries(UIDemoCore PUBLIC FenrirDemoScaffold FenrirUI FenrirAssets PRIVATE FenrirPainter)

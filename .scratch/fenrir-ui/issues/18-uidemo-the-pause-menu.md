@@ -7,7 +7,7 @@
 
 **Blocked by:** 12, 13, 14, 17
 
-**Touches:** `examples/UIDemo/`
+**Touches:** `examples/UIDemo/`; in the build also `packages/FenrirUI/` (`backdrop-filter: blur()`, which no ticket had styled) and `examples/DemoScaffold/` (the `FreeFlyLook` resource for invert look)
 
 **Status:** resolved
 

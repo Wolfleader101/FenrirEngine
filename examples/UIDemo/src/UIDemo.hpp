@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "FenrirApp/App.hpp"
@@ -228,8 +229,12 @@ namespace UIDemo
         /** @brief Writes the kept settings into the settings panel's controls. */
         void ShowSettings();
         void OnEvent(const Fenrir::UIEvent& event);
-        /** @brief Loads `file` under `parent`, logging an error when it loads with problems. */
-        void Load(Fenrir::ElementId parent, const char* file);
+        /** @brief Loads `file` under `parent`, logging an error when it loads with problems; its first element. */
+        Fenrir::ElementId Load(Fenrir::ElementId parent, const char* file);
+        /** @brief Whether `element` is the open menu's `#menu` or under it. */
+        [[nodiscard]] bool Holds(Fenrir::ElementId element) const;
+        /** @brief The element with `id` at or under `under`; nothing when there is none or `under` is stale. */
+        [[nodiscard]] Fenrir::ElementId Find(Fenrir::ElementId under, std::string_view id) const;
 
         Fenrir::App& m_app;
         Fenrir::UIRoot* m_root = nullptr;
@@ -238,8 +243,10 @@ namespace UIDemo
         Fenrir::StylesheetId m_stylesheet;
         Fenrir::EventReader<Fenrir::UIEvent> m_events;
         Settings m_settings;
+        /** @brief The open menu's `#menu`, and its settings panel while that is open. */
+        Fenrir::ElementId m_menu;
+        Fenrir::ElementId m_panel;
         bool m_open = false;
-        bool m_settingsOpen = false;
     };
 
     /** @brief The room: a lit room with the player, a top-down camera for the minimap and the HUD's system. */

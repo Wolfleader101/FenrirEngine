@@ -36,8 +36,8 @@ root; Settings loads `assets/ui/settings.ui` beside it; Back, B on a gamepad, or
 then out of the menu, and Resume closes it. Each panel comes in through `:intro` (moving up and growing) and leaves
 through `:outro`, its elements removed once the outro ends; the backing that dims the room fades.
 
-- The **panels** are frosted: `backdrop-filter: blur(14px)` blurs the room under them, under a dark tint, inside their
-  rounded corners. They move rather than fade, because a fading element draws through an offscreen group, and a blur
+- The **panels** are frosted: `backdrop-filter: blur(14px)` blurs the room under them, under a dark tint. The blur is
+  square-cornered (the renderer's backdrop composite takes no mask), so the panels' corners are only slightly round. They move rather than fade, because a fading element draws through an offscreen group, and a blur
   inside one would blur the group's image instead of the room.
 - The **buttons** lighten and slide on hover, shrink while pressed, and show the focus ring (`:focus`), which Tab,
   Shift+Tab and the gamepad's D-pad and left stick move; A presses the focused control.

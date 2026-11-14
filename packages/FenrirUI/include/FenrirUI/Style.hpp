@@ -411,9 +411,10 @@ namespace Fenrir
         std::vector<Shadow> boxShadow;
         /**
          * @brief `backdrop-filter: blur(r)`: what is already drawn under the border box blurred by `r` UI units (a
-         * Gaussian's standard deviation) before the element paints, as a frosted panel's background, masked to its
-         * rounded corners; 0 for `none`. Inside an ancestor drawn through an offscreen group it blurs that group's
-         * image, not what is under the group.
+         * Gaussian's standard deviation) before the element paints, as a frosted panel's background; 0 for `none`.
+         * The blurred rectangle is square-cornered whatever the border radius (the renderer's backdrop composite
+         * takes no mask), and is not faded by opacity. Inside an ancestor drawn through an offscreen group it blurs
+         * that group's image, not what is under the group.
          */
         float backdropBlur = 0.0f;
         float opacity = 1.0f;

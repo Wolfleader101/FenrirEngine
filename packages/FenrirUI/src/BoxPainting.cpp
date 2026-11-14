@@ -171,27 +171,15 @@ namespace Fenrir::Detail
             }
 
             /**
-             * @brief `backdrop-filter`: what is drawn under the border box blurred, before the element's own boxes. A
-             * group's composite is a rectangle, so a rounded box masks it to its corners.
+             * @brief `backdrop-filter`: what is drawn under the border box blurred, before the element's own boxes.
+             * The renderer composites a backdrop as a rectangle and no mask reaches it, so it ignores the corners'
+             * radii.
              */
             void PaintBackdrop(const ResolvedStyle& style, const Rect2D& border)
             {
-                if (style.backdropBlur <= 0.0f)
+                if (style.backdropBlur > 0.0f)
                 {
-                    return;
-                }
-                const CornerRadii radii = RadiiOf(style);
-                const bool rounded = radii != CornerRadii{};
-                if (rounded)
-                {
-                    Path mask;
-                    mask.AddRoundedRect(border, radii);
-                    m_painter.BeginMask(mask);
-                }
-                m_painter.BackdropBlur(border, style.backdropBlur);
-                if (rounded)
-                {
-                    m_painter.EndMask();
+                    m_painter.BackdropBlur(border, style.backdropBlur);
                 }
             }
 

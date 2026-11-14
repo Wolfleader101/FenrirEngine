@@ -7,6 +7,7 @@
 #include <string>
 
 #include "Compass.hpp"
+#include "DemoUI.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirUI/Controls.hpp"
@@ -14,7 +15,6 @@
 #include "FenrirUI/UI.hpp"
 #include "FenrirUI/UIRoot.hpp"
 #include "UIDemo.hpp"
-#include "UIFiles.hpp"
 
 namespace UIDemo
 {
@@ -23,12 +23,6 @@ namespace UIDemo
         constexpr const char* DocumentFile = "ui/hud.ui";
         constexpr const char* StylesheetFile = "ui/hud.css";
 
-        /** @brief `element`'s behaviour as a `T`, or null when it is stale or of another class. */
-        template <typename T>
-        T* As(const Fenrir::UIRoot& root, Fenrir::ElementId element)
-        {
-            return dynamic_cast<T*>(root.GetElement(element));
-        }
     } // namespace
 
     Hud::Hud(Fenrir::App& app, const HudConfig& config) : m_app(app)

@@ -2,6 +2,7 @@
 #include <string>
 #include <string_view>
 
+#include "DemoUI.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirInput/Input.hpp"
@@ -10,7 +11,6 @@
 #include "FenrirUI/UI.hpp"
 #include "FenrirUI/UIRoot.hpp"
 #include "UIDemo.hpp"
-#include "UIFiles.hpp"
 
 namespace UIDemo
 {
@@ -19,13 +19,6 @@ namespace UIDemo
         constexpr const char* MenuDocument = "ui/menu.ui";
         constexpr const char* SettingsDocument = "ui/settings.ui";
         constexpr const char* StylesheetFile = "ui/menu.css";
-
-        /** @brief `element`'s behaviour as a `T`, or null when it is stale or of another class. */
-        template <typename T>
-        T* As(const Fenrir::UIRoot& root, Fenrir::ElementId element)
-        {
-            return dynamic_cast<T*>(root.GetElement(element));
-        }
     } // namespace
 
     Menu::Menu(Fenrir::App& app, const MenuConfig& config) : m_app(app)
@@ -65,7 +58,7 @@ namespace UIDemo
         }
     }
 
-    void Menu::Load(Fenrir::ElementId parent, const char* file)
+    Fenrir::ElementId Menu::Load(Fenrir::ElementId parent, const char* file)
     {
         const std::string path = (std::filesystem::path(m_files) / file).generic_string();
         const Fenrir::MarkupLoad load = m_root->LoadDocument(parent, path);
@@ -74,6 +67,37 @@ namespace UIDemo
             m_app.Logger()->Error("UIDemo: the menu's document {} loaded with {} problems, logged above", path,
                                   load.errors.size());
         }
+        return load.element;
+    }
+
+    bool Menu::Holds(Fenrir::ElementId element) const
+    {
+        for (Fenrir::ElementId up = element; m_menu.IsValid() && up.IsValid(); up = m_root->GetParent(up))
+        {
+            if (up == m_menu)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    Fenrir::ElementId Menu::Find(Fenrir::ElementId under, std::string_view id) const
+    {
+        // Searched under the open menu, not the whole root: a menu closed a moment ago is still there in its outro,
+        // with the same ids.
+        if (!under.IsValid() || m_root->GetIdString(under) == id)
+        {
+            return under;
+        }
+        for (const Fenrir::ElementId child : m_root->GetChildren(under))
+        {
+            if (const Fenrir::ElementId found = Find(child, id); found.IsValid())
+            {
+                return found;
+            }
+        }
+        return {};
     }
 
     void Menu::Open()
@@ -83,9 +107,9 @@ namespace UIDemo
             return;
         }
         // A new document each time: its elements come in through :intro, and leave through :outro on Close.
-        Load(m_root->GetRootElement(), MenuDocument);
+        m_menu = Load(m_root->GetRootElement(), MenuDocument);
+        m_panel = {};
         m_open = true;
-        m_settingsOpen = false;
         m_root->SetVirtualCursor(m_settings.virtualCursor);
     }
 
@@ -98,47 +122,44 @@ namespace UIDemo
         m_root->Blur();
         m_root->SetVirtualCursor(false);
         // Its settings panel is under it, so it goes too.
-        m_root->Remove(m_root->FindById("menu"));
+        m_root->Remove(m_menu);
+        m_menu = {};
+        m_panel = {};
         m_open = false;
-        m_settingsOpen = false;
     }
 
     void Menu::OpenSettings()
     {
-        const Fenrir::ElementId menu = m_root->FindById("menu");
-        if (m_settingsOpen || !menu.IsValid())
+        if (m_panel.IsValid() || !m_menu.IsValid())
         {
             return;
         }
-        Load(menu, SettingsDocument);
-        m_settingsOpen = true;
+        m_panel = Load(m_menu, SettingsDocument);
         ShowSettings();
     }
 
     void Menu::CloseSettings()
     {
-        if (!m_settingsOpen)
+        if (!m_panel.IsValid())
         {
             return;
         }
         // The focus goes back to the button that opened the panel, so a gamepad is not left with none.
-        const Fenrir::ElementId panel = m_root->FindById("settings-panel");
-        const Fenrir::ElementId focused = m_root->GetFocused();
-        for (Fenrir::ElementId up = focused; up.IsValid(); up = m_root->GetParent(up))
+        for (Fenrir::ElementId up = m_root->GetFocused(); up.IsValid(); up = m_root->GetParent(up))
         {
-            if (up == panel)
+            if (up == m_panel)
             {
-                m_root->Focus(m_root->FindById("settings"));
+                m_root->Focus(Find(m_menu, "settings"));
                 break;
             }
         }
-        m_root->Remove(panel);
-        m_settingsOpen = false;
+        m_root->Remove(m_panel);
+        m_panel = {};
     }
 
     void Menu::Back()
     {
-        if (m_settingsOpen)
+        if (m_panel.IsValid())
         {
             CloseSettings();
         }
@@ -151,16 +172,16 @@ namespace UIDemo
     void Menu::ShowSettings()
     {
         Fenrir::UIRoot& root = *m_root;
-        if (auto* volume = As<Fenrir::Slider>(root, root.FindById("volume")))
+        if (auto* volume = As<Fenrir::Slider>(root, Find(m_panel, "volume")))
         {
             volume->SetValue(m_settings.volume);
         }
-        if (auto* fov = As<Fenrir::Slider>(root, root.FindById("field-of-view")))
+        if (auto* fov = As<Fenrir::Slider>(root, Find(m_panel, "field-of-view")))
         {
             fov->SetValue(m_settings.fieldOfView);
         }
         const auto check = [&](const char* id, bool on) {
-            if (auto* box = As<Fenrir::Checkbox>(root, root.FindById(id)))
+            if (auto* box = As<Fenrir::Checkbox>(root, Find(m_panel, id)))
             {
                 box->SetChecked(on);
             }
@@ -168,7 +189,7 @@ namespace UIDemo
         check("invert-look", m_settings.invertLook);
         check("show-hud", m_settings.showHud);
         check("virtual-cursor", m_settings.virtualCursor);
-        if (auto* name = As<Fenrir::TextEntry>(root, root.FindById("player-name")))
+        if (auto* name = As<Fenrir::TextEntry>(root, Find(m_panel, "player-name")))
         {
             name->SetValue(m_settings.playerName);
         }
@@ -187,7 +208,7 @@ namespace UIDemo
             }
             else if (id == "settings")
             {
-                m_settingsOpen ? CloseSettings() : OpenSettings();
+                m_panel.IsValid() ? CloseSettings() : OpenSettings();
             }
             else if (id == "back")
             {
@@ -242,10 +263,24 @@ namespace UIDemo
             }
             break;
         case Fenrir::UIEventKind::DocumentReloaded:
-            // Hot reload made a document's elements again: the menu's takes its settings panel with it. Show the kept
-            // settings in the new controls.
-            m_settingsOpen = root.FindById("settings-panel").IsValid();
-            ShowSettings();
+            // Hot reload made a document's elements again, sending this at its new first element: the menu's takes
+            // its settings panel with it. Show the kept settings in the new controls.
+            if (!m_open)
+            {
+                // A closed menu's document saved during its outro loads again: it is not wanted.
+                root.Remove(event.target, Fenrir::RemoveMode::Immediate);
+                break;
+            }
+            if (id == "menu")
+            {
+                m_menu = event.target;
+                m_panel = {};
+            }
+            else if (id == "settings-panel")
+            {
+                m_panel = event.target;
+                ShowSettings();
+            }
             break;
         default:
             break;
@@ -254,14 +289,23 @@ namespace UIDemo
 
     void Menu::Update()
     {
-        // Escape reaches the game while none of the menu's elements has the focus.
-        if (m_app.GetResource<Fenrir::Keyboard>().JustPressed(Fenrir::Key::Escape))
+        // Escape reaches the game while none of the menu's elements has the focus, and so does Tab: it then gives
+        // Resume the focus, as a gamepad's first direction does.
+        const auto& keyboard = m_app.GetResource<Fenrir::Keyboard>();
+        if (keyboard.JustPressed(Fenrir::Key::Escape))
         {
             m_open ? Back() : Open();
         }
+        else if (m_open && keyboard.JustPressed(Fenrir::Key::Tab) && !m_root->GetFocused().IsValid())
+        {
+            m_root->Focus(Find(m_menu, "resume"));
+        }
         for (const Fenrir::UIEvent& event : m_events.Read(m_app))
         {
-            if (event.root == m_root->GetId())
+            // A menu closed a moment ago is still there in its outro, hit-tested: what happens to it is not the open
+            // menu's. A reloaded document's first element is new, so it is taken as it comes.
+            if (event.root == m_root->GetId() &&
+                (event.kind == Fenrir::UIEventKind::DocumentReloaded || Holds(event.target)))
             {
                 OnEvent(event);
             }

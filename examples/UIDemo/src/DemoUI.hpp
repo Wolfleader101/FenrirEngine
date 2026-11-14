@@ -4,7 +4,9 @@
 #include <system_error>
 
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirUI/UIRoot.hpp"
 
+// What the HUD's and the menu's sources share: where their files are read from, and their elements' behaviours.
 namespace UIDemo
 {
     /**
@@ -25,5 +27,12 @@ namespace UIDemo
         (void)probe;
 #endif
         return store.Root();
+    }
+
+    /** @brief `element`'s behaviour as a `T`, or null when it is stale or of another class. */
+    template <typename T>
+    T* As(const Fenrir::UIRoot& root, Fenrir::ElementId element)
+    {
+        return dynamic_cast<T*>(root.GetElement(element));
     }
 } // namespace UIDemo

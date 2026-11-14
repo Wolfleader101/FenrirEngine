@@ -23,7 +23,7 @@
 // one, and UI units are the window's logical units.
 namespace UIDemoTest
 {
-    // A logger that keeps its error lines: a second ConsoleLogger in one process throws.
+    /** @brief A logger that keeps its error lines: a second ConsoleLogger in one process throws. */
     class ErrorLogger : public Fenrir::ILogger
     {
       public:
@@ -60,6 +60,7 @@ namespace UIDemoTest
         std::shared_ptr<std::vector<std::string>> m_errors;
     };
 
+    /** @brief A 1920 by 1080 2D target at a content scale of one that keeps every list a root submits to it. */
     class CaptureTarget : public Fenrir::UITarget
     {
       public:
@@ -74,9 +75,10 @@ namespace UIDemoTest
         std::vector<Fenrir::DrawList2D> lists;
     };
 
-    // The window FenrirInput's feed sends to: the roots on custom targets still route the main window's input.
+    /** @brief The window FenrirInput's feed sends to: the roots on custom targets still route its input. */
     inline constexpr Fenrir::WindowId Window{1};
 
+    /** @brief UIDemo installed as main installs it, its HUD and menu roots drawing into capture targets. */
     struct DemoApp
     {
         std::shared_ptr<std::vector<std::string>> errors = std::make_shared<std::vector<std::string>>();
@@ -99,11 +101,13 @@ namespace UIDemoTest
             return FenrirDemo::DemoScaffold::Install(app, std::move(config));
         }
 
+        /** @brief Runs one frame of 1/60 s. */
         void Frame()
         {
             app.RunFrame(1.0 / 60.0);
         }
 
+        /** @brief Runs `count` frames of 1/60 s. */
         void Frames(int count)
         {
             for (int i = 0; i < count; ++i)
@@ -112,28 +116,32 @@ namespace UIDemoTest
             }
         }
 
+        /** @brief FenrirInput's test feed. */
         Fenrir::InputFeed& Feed()
         {
             return app.GetResource<Fenrir::InputFeed>();
         }
 
-        // Presses and releases `key`, fed for the next frame.
+        /** @brief Presses and releases `key`, fed for the next frame. */
         void Tap(Fenrir::Key key, Fenrir::Scancode scancode)
         {
             Feed().KeyDown(Window, key, scancode);
             Feed().KeyUp(Window, key, scancode);
         }
 
+        /** @brief The HUD's root. */
         Fenrir::UIRoot& HudRoot()
         {
             return app.GetResource<UIDemo::Hud>().Root();
         }
 
+        /** @brief The pause menu. */
         UIDemo::Menu& Menu()
         {
             return app.GetResource<UIDemo::Menu>();
         }
 
+        /** @brief The room's player, the entity with Health; null before the room is entered. */
         Fenrir::Entity Player()
         {
             Fenrir::EntityList& entities = app.GetActiveScene().GetEntityList();
@@ -143,7 +151,7 @@ namespace UIDemoTest
             return found;
         }
 
-        // The share of a progress bar's content box its fill covers.
+        /** @brief The share of the HUD's progress bar `bar`'s content box its fill covers. */
         float FillShare(std::string_view bar)
         {
             Fenrir::UIRoot& root = HudRoot();
@@ -152,7 +160,7 @@ namespace UIDemoTest
             return root.GetBoxes(fill).border.width / root.GetBoxes(element).content.width;
         }
 
-        // The centre of `element`'s border box, in UI units.
+        /** @brief The centre of `element`'s border box, in UI units. */
         static Fenrir::Math::Vec2 Centre(const Fenrir::UIRoot& root, Fenrir::ElementId element)
         {
             const Fenrir::ElementBoxes boxes = root.GetBoxes(element);

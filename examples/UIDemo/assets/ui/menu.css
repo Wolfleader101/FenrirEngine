@@ -47,13 +47,14 @@
     opacity: 0;
 }
 
-/* A frosted card: the room behind it blurred, under a dark tint. */
+/* A frosted card: the room behind it blurred, under a dark tint. The blur is square-cornered whatever the radius, so
+   a larger radius shows blurred corners outside the card's. */
 .card {
     width: 380px;
     padding: 32px;
     row-gap: 14px;
     border: 1px solid var(--edge);
-    border-radius: 18px;
+    border-radius: 6px;
     background-color: var(--card);
     backdrop-filter: blur(14px);
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
