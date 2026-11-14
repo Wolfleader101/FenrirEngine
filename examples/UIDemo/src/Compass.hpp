@@ -10,7 +10,7 @@ namespace UIDemo
     /**
      * @brief `compass`, a custom element (FenrirUI's Element subclassed in C++): a strip of the headings round the one
      * the camera looks along, painted with the painter as ticks every 15 degrees, taller at the cardinal points, each
-     * cardinal point's letter over its tick, and a needle at the centre. Its strokes and letters are its `color`,
+     * cardinal point's letter over its tick, and a needle under the centre. Its strokes and letters are its `color`,
      * fading towards its ends. The letters are paragraphs in SdfFamily, the embedded face in SDF mode (ADR-0062).
      */
     class Compass : public Fenrir::Element

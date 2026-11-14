@@ -56,7 +56,7 @@ namespace UIDemo
             const float offset = Wrap(tick - m_heading);
             const float x = centreX + offset * unitsPerDegree;
             const bool cardinal = std::fmod(std::abs(Wrap(tick)), 90.0f) < 0.5f;
-            const float length = box.height * (cardinal ? 0.6f : 0.3f);
+            const float length = box.height * (cardinal ? 0.45f : 0.25f);
             stroke.width = cardinal ? 3.0f : 1.5f;
             // Ticks fade towards the strip's ends, so it reads as a band round the heading.
             Fenrir::Colour faded = colour;
@@ -83,7 +83,7 @@ namespace UIDemo
             }
         }
 
-        // The baseline, and the needle at the heading.
+        // The baseline, and the needle at the heading, pointing up from under it, clear of the letters.
         stroke.width = 1.0f;
         Fenrir::Colour baseline = colour;
         baseline.a *= 0.5f;
@@ -93,7 +93,7 @@ namespace UIDemo
 
         stroke.width = 2.0f;
         Fenrir::Path needle;
-        needle.MoveTo({centreX - 7.0f, box.y}).LineTo({centreX, box.y + 9.0f}).LineTo({centreX + 7.0f, box.y});
+        needle.MoveTo({centreX - 7.0f, bottom + 5.0f}).LineTo({centreX, bottom - 4.0f}).LineTo({centreX + 7.0f, bottom + 5.0f});
         painter.StrokePath(needle, stroke, colour);
     }
 } // namespace UIDemo
