@@ -63,6 +63,7 @@ add_library(FenrirUI STATIC
     src/UIRootState.hpp
     src/UITarget.cpp
     src/UIWorldTarget.cpp
+    src/Utf8.hpp
 )
 target_include_directories(FenrirUI PUBLIC include PRIVATE src)
 target_link_libraries(FenrirUI PUBLIC FenrirPainter FenrirInput FenrirApp FenrirAssets

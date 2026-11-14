@@ -25,4 +25,11 @@ namespace Fenrir::Detail
         const float y1 = std::max(a.y + a.height, b.y + b.height);
         return {x0, y0, x1 - x0, y1 - y0};
     }
+
+    /** @brief Whether `point` is inside `rect`: its left and top edges included, its right and bottom edges not. */
+    [[nodiscard]] inline bool Contains(const Rect2D& rect, Math::Vec2 point)
+    {
+        return point.x >= rect.x && point.y >= rect.y && point.x < rect.x + rect.width &&
+               point.y < rect.y + rect.height;
+    }
 } // namespace Fenrir::Detail
