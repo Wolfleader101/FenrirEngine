@@ -97,7 +97,7 @@ the scaffold, never through an engine package. A scene makes ImGui windows from 
 | F1 | Shows or hides the help panel: the app, the scene and the scene's keys. Showing it also logs it. The panel is debug screen text in the window's bottom-left corner, clear of the on-screen messages, which stack from its top-left. |
 | F2 | The app's (`DemoConfig::appKeyHelp` says what it does). |
 | F3 | Turns the free-fly camera on or off. A scene that spawns an enabled `Camera` of its own starts with the free-fly camera off; F3 then switches between the two. |
-| Right mouse button | Held, the mouse looks around, and WASD moves the free-fly camera (by key position), Shift makes it faster and the wheel changes its speed. Without it, WASD and the wheel are the scene's. |
+| Right mouse button | Held, the mouse looks around (up and down the other way with the `FreeFlyLook` app resource's `invertPitch`), and WASD moves the free-fly camera (by key position), Shift makes it faster and the wheel changes its speed. Without it, WASD and the wheel are the scene's. |
 | Left click | Sends `DemoSceneClickEvent`, the ray (`Renderer::ScreenPointToRay`) from the camera drawn at the clicked point (`Renderer::CameraAt`) through it. A click where no camera draws sends nothing. |
 
 Every other key is the scene's.

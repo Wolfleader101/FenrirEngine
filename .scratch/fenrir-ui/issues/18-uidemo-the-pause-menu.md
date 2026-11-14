@@ -7,12 +7,12 @@
 
 **Blocked by:** 12, 13, 14, 17
 
-**Touches:** `examples/UIDemo/`
+**Touches:** `examples/UIDemo/`; in the build also `packages/FenrirUI/` (`backdrop-filter: blur()`, which no ticket had styled) and `examples/DemoScaffold/` (the `FreeFlyLook` resource for invert look)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Headless smoke test: opening the menu through the test feed's Escape makes the root take pointer input; a direction and A through the gamepad feed click Resume and close it.
+- [x] Headless smoke test: opening the menu through the test feed's Escape makes the root take pointer input; a direction and A through the gamepad feed click Resume and close it.
 
 Hand check: the menu blurs the room behind it, animates in and out, every control works with the mouse, Tab and the controller, the name typed shows on the HUD, and the sliders change the demo.
 
-- [ ] `check_tickets.py` and clang-format pass.
+- [x] `check_tickets.py` and clang-format pass.

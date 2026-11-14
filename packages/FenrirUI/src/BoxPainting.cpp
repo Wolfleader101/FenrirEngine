@@ -89,6 +89,7 @@ namespace Fenrir::Detail
                 {
                     m_painter.BeginGroup(LocalBounds(index), style.opacity);
                 }
+                PaintBackdrop(style, boxes.border);
                 PaintBox(style, boxes.border, ownAlpha);
                 // Overflow clips the content and the children to the padding box, not the element's own box.
                 if (style.overflow != Overflow::Visible)
@@ -166,6 +167,19 @@ namespace Fenrir::Detail
                 {
                     PaintBox(slot.scrollbarStyles->track, bars.horizontalTrack, alpha);
                     PaintBox(slot.scrollbarStyles->thumb, bars.horizontalThumb, alpha);
+                }
+            }
+
+            /**
+             * @brief `backdrop-filter`: what is drawn under the border box blurred, before the element's own boxes.
+             * The renderer composites a backdrop as a rectangle and no mask reaches it, so it ignores the corners'
+             * radii.
+             */
+            void PaintBackdrop(const ResolvedStyle& style, const Rect2D& border)
+            {
+                if (style.backdropBlur > 0.0f)
+                {
+                    m_painter.BackdropBlur(border, style.backdropBlur);
                 }
             }
 

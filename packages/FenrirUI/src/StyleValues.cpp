@@ -903,6 +903,30 @@ namespace Fenrir::Detail
             return true;
         }
 
+        bool ParseBackdropFilter(std::string_view value, float& out, StyleParseContext& context)
+        {
+            value = Trim(value);
+            if (EqualsIgnoringCase(value, "none"))
+            {
+                out = 0.0f;
+                return true;
+            }
+            // `blur(<length>)`, the one filter function the backdrop takes.
+            constexpr std::string_view Open = "blur(";
+            if (value.size() > Open.size() && EqualsIgnoringCase(value.substr(0, Open.size()), Open) &&
+                value.back() == ')')
+            {
+                const std::optional<float> radius =
+                    Pixels(Trim(value.substr(Open.size(), value.size() - Open.size() - 1)));
+                if (radius && *radius >= 0.0f)
+                {
+                    out = *radius;
+                    return true;
+                }
+            }
+            return Fail(context, "it is not none or blur() of a length of zero or more in px");
+        }
+
         bool ParseInteger(std::string_view value, std::int32_t& out, StyleParseContext& context)
         {
             value = Trim(value);
@@ -1683,10 +1707,13 @@ namespace Fenrir::Detail
             "background", "flex",    "gap",    "transition",   "animation",
         };
 
-        // The spec's property set that the style does not hold yet: the scrollbars, the filters and
+        // The spec's property set that the style does not hold yet: the scrollbars, `filter` and
         // background-position.
-        constexpr std::array<std::string_view, 5> LaterLonghands{
-            "filter", "backdrop-filter", "background-position", "scrollbar-color", "scrollbar-width",
+        constexpr std::array<std::string_view, 4> LaterLonghands{
+            "filter",
+            "background-position",
+            "scrollbar-color",
+            "scrollbar-width",
         };
 
         bool IsTimingFunction(std::string_view text)

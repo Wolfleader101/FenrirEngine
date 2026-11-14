@@ -10,8 +10,8 @@ namespace UIDemo
     namespace
     {
         /**
-         * @brief What installPackages hands the scaffold to keep: FenrirUI, and the Hud resource over it, which goes
-         * first, so its root is destroyed while the UI is still there.
+         * @brief What installPackages hands the scaffold to keep: FenrirUI, and the Menu and Hud resources over it,
+         * which go first, so their roots are destroyed while the UI is still there.
          */
         struct UIPackages
         {
@@ -27,6 +27,10 @@ namespace UIDemo
             UIPackages& operator=(UIPackages&&) = delete;
             ~UIPackages()
             {
+                if (app->TryGetResource<Menu>() != nullptr)
+                {
+                    app->RemoveResource<Menu>();
+                }
                 if (app->TryGetResource<Hud>() != nullptr)
                 {
                     app->RemoveResource<Hud>();
@@ -35,7 +39,7 @@ namespace UIDemo
         };
     } // namespace
 
-    FenrirDemo::DemoConfig MakeDemoConfig(HudConfig hud)
+    FenrirDemo::DemoConfig MakeDemoConfig(HudConfig hud, MenuConfig menu)
     {
         FenrirDemo::DemoConfig config;
         config.appName = "UIDemo";
@@ -43,11 +47,13 @@ namespace UIDemo
         config.msaa = 4;
         // The room lists its switches in an ImGui window, as LightingDemo does.
         config.imguiOverlay = true;
-        config.installPackages = [hud = std::move(hud)](Fenrir::App& app) -> std::shared_ptr<void> {
+        config.installPackages = [hud = std::move(hud),
+                                  menu = std::move(menu)](Fenrir::App& app) -> std::shared_ptr<void> {
             auto packages = std::make_shared<UIPackages>(app, Fenrir::UI::Install(app));
             if (packages->ui.IsValid())
             {
                 app.AddResource<Hud>(app, hud);
+                app.AddResource<Menu>(app, menu);
             }
             return packages;
         };

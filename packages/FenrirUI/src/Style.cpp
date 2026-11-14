@@ -256,6 +256,11 @@ namespace Fenrir
         return Set(StyleProperty::BoxShadow, &ResolvedStyle::boxShadow, std::move(shadows));
     }
 
+    StyleDeclarations& StyleDeclarations::SetBackdropBlur(float radius)
+    {
+        return Set(StyleProperty::BackdropFilter, &ResolvedStyle::backdropBlur, radius);
+    }
+
     StyleDeclarations& StyleDeclarations::SetOpacity(float value)
     {
         return Set(StyleProperty::Opacity, &ResolvedStyle::opacity, value);

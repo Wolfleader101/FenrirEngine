@@ -21,6 +21,8 @@
     </panel>
 
     <panel id="vitals">
+        <!-- The player's name, set in the pause menu's settings. -->
+        <label id="player-name">Player</label>
         <panel class="vital">
             <label class="vital-name">Health</label>
             <progress id="health" class="bar" min="0" max="100" value="100"/>

@@ -164,6 +164,12 @@ compass {
     background-color: var(--panel);
 }
 
+#player-name {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--accent);
+}
+
 .vital {
     flex-direction: row;
     align-items: center;

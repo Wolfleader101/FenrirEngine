@@ -7,6 +7,7 @@
 #include <string>
 
 #include "Compass.hpp"
+#include "DemoUI.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirUI/Controls.hpp"
@@ -22,29 +23,6 @@ namespace UIDemo
         constexpr const char* DocumentFile = "ui/hud.ui";
         constexpr const char* StylesheetFile = "ui/hud.css";
 
-        /**
-         * @brief Where the HUD's files are read from: the source tree's examples/UIDemo/assets while it is there, so
-         * an edit to the stylesheet there is what hot reload shows and a rebuild keeps, and the asset root otherwise.
-         */
-        std::filesystem::path HudFileRoot(const Fenrir::AssetStore& store)
-        {
-#ifdef UIDEMO_SOURCE_ASSETS
-            const std::filesystem::path source{UIDEMO_SOURCE_ASSETS};
-            std::error_code error;
-            if (std::filesystem::exists(source / StylesheetFile, error))
-            {
-                return source;
-            }
-#endif
-            return store.Root();
-        }
-
-        /** @brief `element`'s behaviour as a `T`, or null when it is stale or of another class. */
-        template <typename T>
-        T* As(const Fenrir::UIRoot& root, Fenrir::ElementId element)
-        {
-            return dynamic_cast<T*>(root.GetElement(element));
-        }
     } // namespace
 
     Hud::Hud(Fenrir::App& app, const HudConfig& config) : m_app(app)
@@ -58,7 +36,7 @@ namespace UIDemo
         rootConfig.hotReload = true;
         m_root = &roots.CreateRoot(rootConfig);
 
-        const std::filesystem::path files = HudFileRoot(app.GetResource<Fenrir::AssetStore>());
+        const std::filesystem::path files = UIFileRoot(app.GetResource<Fenrir::AssetStore>(), StylesheetFile);
         const std::filesystem::path stylesheet = files / StylesheetFile;
         m_stylesheetPath = stylesheet.generic_string();
         m_stylesheet = m_root->LoadStylesheet(m_stylesheetPath);
@@ -102,6 +80,21 @@ namespace UIDemo
     void Hud::Show(const HudFrame& frame)
     {
         Fenrir::UIRoot& root = *m_root;
+        // The menu's "show HUD": the top element hidden or shown, written only when it changes (or is new).
+        const Fenrir::ElementId top = Find("hud");
+        if (top.IsValid() && (top != m_top || frame.shown != m_shown))
+        {
+            root.SetStyleProperty(top, "display", frame.shown ? "flex" : "none");
+            m_top = top;
+            m_shown = frame.shown;
+        }
+
+        const Fenrir::ElementId name = Find("player-name");
+        if (name.IsValid() && root.GetText(name) != frame.playerName)
+        {
+            root.SetText(name, frame.playerName);
+        }
+
         // A bar's setters restyle its fill, so a bar is written only when what it shows changes.
         const auto showBar = [&](const char* id, float current, float max) {
             auto* bar = As<Fenrir::ProgressBar>(root, Find(id));

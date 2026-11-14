@@ -156,6 +156,7 @@ namespace Fenrir::Detail
     X(BorderBottomRightRadius, "border-bottom-right-radius", borderBottomRightRadius, ParsePixels)            \
     X(BorderBottomLeftRadius, "border-bottom-left-radius", borderBottomLeftRadius, ParsePixels)               \
     X(BoxShadow, "box-shadow", boxShadow, ParseBoxShadow)                                                     \
+    X(BackdropFilter, "backdrop-filter", backdropBlur, ParseBackdropFilter)                                   \
     X(Opacity, "opacity", opacity, ParseOpacity)                                                              \
     X(Transform, "transform", transform, ParseTransform)                                                      \
     X(TransformOriginX, "transform-origin-x", transformOriginX, ParseLength)                                  \
