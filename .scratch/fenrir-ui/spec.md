@@ -273,7 +273,7 @@ One session, branch and PR per ticket, into `fenrir-ui` or the previous ticket's
 | 17 | [UIDemo: the HUD](issues/17-uidemo-the-hud.md) | 04, 10, 15, 16 | `ui/17-uidemo-the-hud` | [#354](https://github.com/Wolfleader101/FenrirEngine/pull/354) |
 | 18 | [UIDemo: the pause menu](issues/18-uidemo-the-pause-menu.md) | 12, 13, 14, 17 | `ui/18-uidemo-the-pause-menu` | [#358](https://github.com/Wolfleader101/FenrirEngine/pull/358) |
 | 19 | [Scripting: text and painter facades](issues/19-scripting-text-and-painter-facades.md) | 06 | `ui/19-scripting-text-and-painter-facades` | [#341](https://github.com/Wolfleader101/FenrirEngine/pull/341) |
-| 20 | [Scripting: UI handles, events and the hosted paint stage](issues/20-scripting-ui-handles-events-and-the-hosted-paint-stage.md) | 16, 18, 19 | `ui/20-scripting-ui-handles-events-and-the-hosted-paint-stage` | |
+| 20 | [Scripting: UI handles, events and the hosted paint stage](issues/20-scripting-ui-handles-events-and-the-hosted-paint-stage.md) | 16, 18, 19 | `ui/20-scripting-ui-handles-events-and-the-hosted-paint-stage` | [#360](https://github.com/Wolfleader101/FenrirEngine/pull/360) |
 | 21 | [Image-target UI roots and the menu in a texture](issues/21-image-target-ui-roots-and-the-menu-in-a-texture.md) | 18 | `ui/21-image-target-ui-roots-and-the-menu-in-a-texture` | [#359](https://github.com/Wolfleader101/FenrirEngine/pull/359) |
 | 22 | [SDF text mode](issues/22-sdf-text-mode.md) | 06, 16 | `ui/22-sdf-text-mode` | [#352](https://github.com/Wolfleader101/FenrirEngine/pull/352) |
 | 23 | [World-space 2D target, world UI roots and the pointer ray](issues/23-world-space-2d-target-world-ui-roots-and-the-pointer-ray.md) | 14, 21, 22 | `ui/23-world-space-2d-target-world-ui-roots-and-the-pointer-ray` | |
