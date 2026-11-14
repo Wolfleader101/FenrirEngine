@@ -2,8 +2,8 @@
 
 What a game gets from the UI stack (`.scratch/fenrir-ui/spec.md`, "UIDemo"): FenrirUI's elements, stylesheets, markup
 documents, transitions and custom elements, over a lit room, on the demo scaffold (`examples/DemoScaffold/README.md`,
-for the keys every demo app shares and the smoke-run switches). It runs with scripting on or off; it has no C# of its
-own yet.
+for the keys every demo app shares and the smoke-run switches). It runs with scripting on or off; with it on, a C# script
+adds a speedometer to the HUD and logs the menu's clicks ("The C# variant").
 
 ```sh
 cmake --build out/build/clang-x64-debug --target UIDemo
@@ -63,6 +63,23 @@ live one's, its controls show the kept settings, and its focus ring is on the el
 menu closed, the screen shows the pause panel. Its root has hot reload on too, so an edit to the menu's files restyles
 the screen as well.
 
+## The C# variant
+
+With scripting built (`FENRIR_ENABLE_SCRIPTING`), the app runs `scripts/` (`UIDemo.Scripts.dll`) with the text, painter
+and UI scripting extensions (ADR-0061), all of it C# over the generated Fenrir.UI and Fenrir.Painter contracts:
+
+- **The speedometer** (`scripts/Speedometer.cs`): a second HUD element, made and painted from C#. An Update system finds
+  the HUD root C++ made (`UIRoot.Find` on the main window at `HudLayer`), makes a panel `#speedometer` bottom right
+  over the ammo counter, with a `label` under it reading the window camera's speed in metres a second (from how far the
+  camera moved since the last frame), and makes them again if they are gone. A system in the UI's paint stage
+  (`[StageSystem(UIStages.Paint)]`) gets a painter for the panel (`UIRoot.PaintInto`) and paints its gauge through the
+  Painter facade: a dark disc, a track of three quarters of a turn, the speed's share of it (full at 20 metres a
+  second) and a needle. The gauge is the panel's content, so the readout label draws over it. Logged once: "the
+  speedometer is on the HUD, painted from C#".
+- **The menu's clicks** (`scripts/MenuClicks.cs`): an Update system reads `UIEvent`s through `EventReader<UIEvent>`,
+  the queue the C++ `Menu` reads too, and logs each click on the menu root by the id of the element clicked or its
+  nearest ancestor with one: "the menu's resume was clicked", and settings, quit, back and the settings' controls.
+
 ## Editing the HUD and the menu while they run
 
 The HUD root has hot reload on: save `examples/UIDemo/assets/ui/hud.css` and the HUD restyles within a quarter of a
@@ -107,3 +124,6 @@ On OpenGL, in The HUD:
 - Changing a colour in `menu.css` while the menu is open restyles it within a moment.
 - The screen on the north wall shows the menu, crisp at its native size: the pause panel with the menu closed, and,
   with it open, the settings panel, the settings and the focus ring as the live menu has them.
+- With scripting built, the speedometer sits bottom right over the ammo counter: its needle and the blue share of its
+  track rise as the camera flies (WASD, Shift for faster) and fall back when it stops, under a readout of the speed;
+  clicking Resume, Settings or Back in the menu logs "the menu's ... was clicked" from C#.

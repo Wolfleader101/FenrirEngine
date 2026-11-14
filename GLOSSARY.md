@@ -714,6 +714,10 @@ How a UI root maps its UI units to its target's logical units: by default so tha
 C++ attached to one element for one kind of UI event, called when the event happens to the element or bubbles up to it from an element under it, until one stops its propagation. Unlike an event reader, it is called at the time; C# reads the UI event instead.
 *Avoid:* handler, callback, delegate.
 
+**Paint stage**
+The work `UIRoots` runs each frame after every UI root has laid out and before any paints (`UIRoots::AddPaintStage`), lowest order first: it paints into elements through `UIRoot::PaintInto`, whose painter draws under the element's transform and clips into a list of the element's own, which the root's paint appends after the element's boxes and before its children. C# systems join it as the extension stage `Fenrir.UI.Paint` (`UIStages.Paint`) and paint through the Painter facade (ADR-0039, ADR-0061).
+*Avoid:* render stage (the renderer's), paint pass (the root's painting of its tree), draw callback.
+
 **Focusable**
 Of an element: a click on it or under it, Tab and Shift+Tab, a gamepad direction and code can give it the focus, which sends it keys and text. Elements are not focusable until made so; the controls make themselves focusable.
 *Avoid:* tab stop, selectable (Unity's).

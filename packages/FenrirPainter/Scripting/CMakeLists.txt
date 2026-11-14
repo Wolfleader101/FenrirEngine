@@ -12,7 +12,7 @@ fenrir_scripting_extension(Painter
         include/FenrirPainterScripting/PainterScripting.hpp
         include/FenrirPainterScripting/ScriptPainter.hpp
         src/PainterScripting.cpp
-        src/PainterScriptingState.hpp
+        include/FenrirPainterScripting/PainterScriptingState.hpp
     LINK FenrirPainter FenrirRenderer FenrirTextScripting FenrirAssetsScripting FenrirInputScripting
     DESCRIPTIONS api/FenrirPainterScripting.api.json
 )

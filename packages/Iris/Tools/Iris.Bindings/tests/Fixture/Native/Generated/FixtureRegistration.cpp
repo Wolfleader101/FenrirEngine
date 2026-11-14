@@ -26,6 +26,7 @@ namespace Fixture::Bindings
             Host::MakeAppResource<Fixture::Sky>("Fixture.Bindings.Sky"),
             Host::MakeSceneResource<Fixture::Weather>("Fixture.Bindings.Weather"),
         };
+        extension.stages = {"Fixture.Bindings.Early", "Fixture.Bindings.Late"};
         extension.functions = {
             Host::NativeFunction::Make<&Fixture::Natives::Push>("Fixture.Bindings.FixtureNative.Push"),
             Host::NativeFunction::Make<&Host::ZeroingOutputs<&Fixture::Natives::Find, 4>::Call>("Fixture.Bindings.FixtureNative.Find"),

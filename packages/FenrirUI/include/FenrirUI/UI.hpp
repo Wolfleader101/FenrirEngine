@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -18,6 +20,8 @@ namespace Fenrir
 {
     class App;
     class FontLibrary;
+    // Only named here: FenrirUIScripting defines UI::ScriptingExtension().
+    struct ScriptingExtension;
 
     /** @brief The UI's switches for every root (ADR-0063: each technique is a switch). */
     struct UISettings
@@ -62,6 +66,14 @@ namespace Fenrir
     struct UIConfig
     {
         UISettings settings;
+    };
+
+    /** @brief Names work in the paint stage (UIRoots::AddPaintStage), for RemovePaintStage. Zero names none. */
+    struct PaintStageHandle
+    {
+        std::uint64_t id = 0;
+
+        friend constexpr bool operator==(PaintStageHandle, PaintStageHandle) noexcept = default;
     };
 
     /**
@@ -125,7 +137,20 @@ namespace Fenrir
         /** @brief The faces registered through AddFontFace, in the order first registered. */
         [[nodiscard]] std::span<const UIFontFace> GetFontFaces() const noexcept;
 
-        /** @brief Runs every root's frame, in drawing order; the PostUpdate system calls it. */
+        /**
+         * @brief Adds `work` to the paint stage (ADR-0039, ADR-0061): each frame, once every root has laid out and
+         * before any paints, the stage runs its work, lowest order first and equal orders in the order added. Work
+         * paints into elements through UIRoot::PaintInto. C# systems join it as the extension stage `Fenrir.UI.Paint`.
+         * Work may read the roots and change their elements' style, but what it changes is laid out next frame.
+         */
+        PaintStageHandle AddPaintStage(std::int32_t order, std::function<void()> work);
+        /** @brief Takes work out of the paint stage. False when it names none. */
+        bool RemovePaintStage(PaintStageHandle handle);
+
+        /**
+         * @brief Runs every root's frame, in drawing order; the PostUpdate system calls it. Each root lays out, then
+         * the paint stage runs, then each root paints and submits (UIRoot::Frame's two halves).
+         */
         void Frame();
 
         /** @brief The switches; a change takes effect on the next frame. */
@@ -138,6 +163,13 @@ namespace Fenrir
             std::uint64_t order = 0;
         };
 
+        struct PaintStageEntry
+        {
+            PaintStageHandle handle;
+            std::int32_t order = 0;
+            std::function<void()> work;
+        };
+
         App& m_app;
         AssetHandle<Shader> m_painterShader;
         std::vector<RootEntry> m_roots;
@@ -147,6 +179,9 @@ namespace Fenrir
         std::uint32_t m_nextId = 1;
         std::unordered_map<std::string, ElementFactory> m_factories;
         std::vector<UIFontFace> m_fontFaces;
+        /** @brief The paint stage's work, by order, equal orders in the order added. */
+        std::vector<PaintStageEntry> m_paintStage;
+        std::uint64_t m_nextPaintStage = 1;
     };
 
     /**
@@ -164,6 +199,13 @@ namespace Fenrir
          * with a UI already installed, it logs why and returns an owner whose IsValid is false.
          */
         [[nodiscard]] static UI Install(App& app, UIConfig config = {});
+
+        /**
+         * @brief The UI's scripting extension, defined by FenrirUIScripting (`FenrirUIScripting/UIScripting.hpp`): UI
+         * roots, elements and UIEvent for C#, and the extension stage `Fenrir.UI.Paint`, whose systems paint into
+         * elements through `painter`, the painter extension (Painting::ScriptingExtension), whose state it shares.
+         */
+        [[nodiscard]] static Fenrir::ScriptingExtension ScriptingExtension(const Fenrir::ScriptingExtension& painter);
 
         UI(UI&& other) noexcept;
         UI& operator=(UI&& other) noexcept;

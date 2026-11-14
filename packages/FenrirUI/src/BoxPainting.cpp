@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
+#include <memory>
 #include <numbers>
+#include <numeric>
 #include <optional>
 #include <variant>
 #include <vector>
@@ -12,6 +15,8 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirPainter/Painter.hpp"
+#include "FenrirPainter/PainterVertex.hpp"
+#include "FenrirPainter/StopTexture.hpp"
 #include "FenrirText/Paragraph.hpp"
 #include "FenrirUI/UI.hpp"
 #include "Rects.hpp"
@@ -58,11 +63,83 @@ namespace Fenrir::Detail
             return {low.x, low.y, high.x - low.x, high.y - low.y};
         }
 
+        /**
+         * @brief Whether every group and mask `list` opens it closes, in order: a group's end that masks opens a
+         * mask's reach, which an EndMask2D closes.
+         */
+        bool IsBalanced(const DrawList2D& list)
+        {
+            // What is open, innermost last: true for a mask's reach, false for a group.
+            std::vector<bool> open;
+            for (const Command2D& command : list.commands)
+            {
+                if (std::holds_alternative<BeginGroup2D>(command))
+                {
+                    open.push_back(false);
+                }
+                else if (const auto* end = std::get_if<EndGroup2D>(&command))
+                {
+                    if (open.empty() || open.back())
+                    {
+                        return false;
+                    }
+                    open.back() = end->mask;
+                    if (!end->mask)
+                    {
+                        open.pop_back();
+                    }
+                }
+                else if (std::holds_alternative<EndMask2D>(command))
+                {
+                    if (open.empty() || !open.back())
+                    {
+                        return false;
+                    }
+                    open.pop_back();
+                }
+            }
+            return open.empty();
+        }
+
+        /** @brief An RGBA8 premultiplied colour, every channel multiplied by `alpha`. */
+        std::uint32_t FadedRgba8(std::uint32_t colour, float alpha)
+        {
+            std::uint32_t faded = 0;
+            for (std::uint32_t shift = 0; shift < 32; shift += 8)
+            {
+                const auto channel = static_cast<float>((colour >> shift) & 0xFFu);
+                faded |= static_cast<std::uint32_t>(std::lround(channel * alpha)) << shift;
+            }
+            return faded;
+        }
+
+        /**
+         * @brief Fades every painter vertex of `list` by `alpha`: its colours are premultiplied, so every channel of
+         * each is multiplied, as a box's colours are faded. A gradient's stop rows and an image's texels are faded
+         * through the colours that tint them.
+         */
+        void Fade(DrawList2D& list, float alpha)
+        {
+            std::vector<PainterVertex> vertices(list.vertices.size() / sizeof(PainterVertex));
+            std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(PainterVertex));
+            for (PainterVertex& vertex : vertices)
+            {
+                vertex.colour = FadedRgba8(vertex.colour, alpha);
+                vertex.colour2 = FadedRgba8(vertex.colour2, alpha);
+                for (std::uint32_t& border : vertex.borderColours)
+                {
+                    border = FadedRgba8(border, alpha);
+                }
+            }
+            std::memcpy(list.vertices.data(), vertices.data(), vertices.size() * sizeof(PainterVertex));
+        }
+
         class TreePainter
         {
           public:
-            TreePainter(UIRootState& state, Painter& painter, AssetStore* store)
-                : m_state(state), m_painter(painter), m_store(store), m_groups(state.roots.settings.offscreenGroups)
+            TreePainter(UIRootState& state, Painter& painter, DrawList2D& list, AssetStore* store)
+                : m_state(state), m_painter(painter), m_list(list), m_store(store),
+                  m_groups(state.roots.settings.offscreenGroups)
             {
             }
 
@@ -102,6 +179,7 @@ namespace Fenrir::Detail
                 });
                 PaintText(slot, ownAlpha);
                 slot.element->Paint(m_painter, ElementPaint{boxes, style, ownAlpha});
+                PaintStaged(ElementId{index, slot.version}, ownAlpha);
                 for (const ElementId child : children)
                 {
                     PaintElement(child.index, ownAlpha);
@@ -115,6 +193,39 @@ namespace Fenrir::Detail
             }
 
           private:
+            /**
+             * @brief What the paint stage painted into the element, appended to the list as it was recorded (its
+             * painter already drew under the element's transform and clips), its colours faded by `alpha` as the
+             * element's own content is. A list that leaves a group or a mask open would unbalance the root's list,
+             * which the renderer then skips whole, so it is dropped, logged.
+             */
+            void PaintStaged(ElementId element, float alpha)
+            {
+                for (const std::unique_ptr<StagePaint>& staged : m_state.stagePaints)
+                {
+                    if (staged->element != element)
+                    {
+                        continue;
+                    }
+                    if (!IsBalanced(staged->list))
+                    {
+                        m_state.app.Logger()->Warn(
+                            "FenrirUI: what the paint stage painted into an element left a group or a mask open, so it "
+                            "is not drawn");
+                        return;
+                    }
+                    if (alpha >= 1.0f)
+                    {
+                        AppendList(m_list, staged->list);
+                        return;
+                    }
+                    DrawList2D faded = staged->list;
+                    Fade(faded, alpha);
+                    AppendList(m_list, faded);
+                    return;
+                }
+            }
+
             /**
              * @brief What the element and everything under it may cover, before its own transform: its border box,
              * its shadows, and its children's bounds (clipped to its padding box when it hides overflow).
@@ -334,37 +445,71 @@ namespace Fenrir::Detail
 
             UIRootState& m_state;
             Painter& m_painter;
+            DrawList2D& m_list;
             AssetStore* m_store;
             bool m_groups;
         };
     } // namespace
 
+    namespace
+    {
+        /** @brief The root's stop texture, made on the first frame that paints with an asset store. */
+        StopTexture* StopsOf(UIRootState& state, AssetStore* store)
+        {
+            if (!state.stops && store != nullptr)
+            {
+                const AssetHandle<Image> image = store->Add<Image>(StopTexture::Blank(64), AssetOwner::App());
+                if (!image.IsEmpty())
+                {
+                    state.stops.emplace(image, 64);
+                }
+            }
+            return state.stops ? &*state.stops : nullptr;
+        }
+
+        /** @brief What the root paints with this frame: PaintRoot's painter and the paint stage's are made with it. */
+        PainterConfig RootPainterConfig(UIRootState& state, AssetStore* store, float contentScale)
+        {
+            PainterConfig config;
+            config.shader = state.roots.GetPainterShader();
+            config.scale = state.scale;
+            // The root resolved its blend space from its target when it was made.
+            config.blendSpace = *state.config.blendSpace;
+            config.snapToPixels = state.config.snapToPixels;
+            config.pixelsPerUnit = contentScale;
+            config.stops = StopsOf(state, store);
+            config.fonts = state.roots.GetFonts();
+            config.antiAliasing = state.roots.settings.antiAliasing;
+            return config;
+        }
+
+        /** @brief `size` rounded up to a multiple of `multiple`. */
+        std::size_t RoundUp(std::size_t size, std::size_t multiple)
+        {
+            return (size + multiple - 1) / multiple * multiple;
+        }
+
+        /** @brief The bytes a vertex of `pipeline` takes. */
+        std::size_t StrideOf(const PipelineDescription2D& pipeline)
+        {
+            return std::max<std::size_t>(pipeline.vertexLayout.stride, 1);
+        }
+
+        /** @brief The bytes an index of `pipeline` takes. */
+        std::size_t IndexSizeOf(const PipelineDescription2D& pipeline)
+        {
+            return pipeline.indexType == IndexType2D::UInt16 ? 2 : 4;
+        }
+    } // namespace
+
     void PaintRoot(UIRootState& state, DrawList2D& list, float contentScale)
     {
         AssetStore* store = state.app.TryGetResource<AssetStore>();
-        if (!state.stops && store != nullptr)
-        {
-            const AssetHandle<Image> image = store->Add<Image>(StopTexture::Blank(64), AssetOwner::App());
-            if (!image.IsEmpty())
-            {
-                state.stops.emplace(image, 64);
-            }
-        }
+        Painter painter(list, RootPainterConfig(state, store, contentScale));
+        TreePainter(state, painter, list, store).PaintElement(state.rootElement.index, 1.0f);
 
-        PainterConfig config;
-        config.shader = state.roots.GetPainterShader();
-        config.scale = state.scale;
-        // The root resolved its blend space from its target when it was made.
-        config.blendSpace = *state.config.blendSpace;
-        config.snapToPixels = state.config.snapToPixels;
-        config.pixelsPerUnit = contentScale;
-        config.stops = state.stops ? &*state.stops : nullptr;
-        config.fonts = state.roots.GetFonts();
-        config.antiAliasing = state.roots.settings.antiAliasing;
-        Painter painter(list, config);
-        TreePainter(state, painter, store).PaintElement(state.rootElement.index, 1.0f);
-
-        // The stop rows this frame's gradients use reach the image before the list is drawn.
+        // The stop rows this frame's gradients use (the paint stage's among them) reach the image before the list is
+        // drawn.
         if (state.stops && store != nullptr)
         {
             const bool used = state.stops->RowCount() > 0;
@@ -373,6 +518,72 @@ namespace Fenrir::Detail
                 store->Replace(state.stops->GetImage(), state.stops->TakeImageData());
             }
             state.stopsUsed = used;
+        }
+    }
+
+    StagePaint& OpenStagePaint(UIRootState& state, std::uint32_t index)
+    {
+        auto staged = std::make_unique<StagePaint>();
+        staged->element = ElementId{index, state.slots[index].version};
+        AssetStore* store = state.app.TryGetResource<AssetStore>();
+        Painter& painter = staged->painter.emplace(staged->list, RootPainterConfig(state, store, state.ContentScale()));
+
+        // The element's ancestors from the root down, then the element: what PaintElement applies before its content.
+        std::vector<std::uint32_t> chain;
+        for (ElementId at = staged->element; at.IsValid(); at = state.slots[at.index].parent)
+        {
+            chain.push_back(at.index);
+        }
+        for (auto at = chain.rbegin(); at != chain.rend(); ++at)
+        {
+            const ElementSlot& slot = state.slots[*at];
+            if (!slot.resolved.transform.empty())
+            {
+                painter.Concat(ElementTransform(slot.resolved, slot.boxes.border));
+            }
+            if (slot.resolved.overflow != Overflow::Visible)
+            {
+                painter.ClipRoundedRect(slot.boxes.padding, InnerRadiiOf(slot.resolved));
+            }
+        }
+        state.stagePaints.push_back(std::move(staged));
+        return *state.stagePaints.back();
+    }
+
+    void AppendList(DrawList2D& into, const DrawList2D& from)
+    {
+        // Every stride and index size the appended commands read at, so that each one's base vertex and index offset
+        // are whole numbers of them in the joined bytes.
+        std::size_t vertexAlign = 1;
+        std::size_t indexAlign = 1;
+        for (const PipelineDescription2D& pipeline : from.pipelines)
+        {
+            vertexAlign = std::lcm(vertexAlign, StrideOf(pipeline));
+            indexAlign = std::lcm(indexAlign, IndexSizeOf(pipeline));
+        }
+        into.vertices.resize(RoundUp(into.vertices.size(), vertexAlign));
+        into.indices.resize(RoundUp(into.indices.size(), indexAlign));
+        const std::size_t vertexBytes = into.vertices.size();
+        const std::size_t indexBytes = into.indices.size();
+        into.vertices.insert(into.vertices.end(), from.vertices.begin(), from.vertices.end());
+        into.indices.insert(into.indices.end(), from.indices.begin(), from.indices.end());
+
+        std::vector<std::uint32_t> pipelines;
+        pipelines.reserve(from.pipelines.size());
+        for (const PipelineDescription2D& pipeline : from.pipelines)
+        {
+            pipelines.push_back(into.AddPipeline(pipeline));
+        }
+        for (Command2D command : from.commands)
+        {
+            if (auto* draw = std::get_if<DrawCommand2D>(&command))
+            {
+                const PipelineDescription2D& pipeline = from.pipelines[draw->pipeline];
+                draw->pipeline = pipelines[draw->pipeline];
+                draw->baseVertex += static_cast<std::int32_t>(vertexBytes / StrideOf(pipeline));
+                draw->indexOffset += static_cast<std::uint32_t>(indexBytes / IndexSizeOf(pipeline));
+            }
+            into.commands.push_back(std::move(command));
         }
     }
 } // namespace Fenrir::Detail

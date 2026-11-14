@@ -1071,7 +1071,32 @@ namespace Fenrir
         Detail::SendUIEvent(*m_state, event);
     }
 
+    Painter* UIRoot::PaintInto(ElementId element)
+    {
+        Detail::UIRootState& state = *m_state;
+        if (!state.paintStageOpen || state.Find(element) == nullptr)
+        {
+            return nullptr;
+        }
+        for (const std::unique_ptr<Detail::StagePaint>& staged : state.stagePaints)
+        {
+            if (staged->element == element)
+            {
+                return &*staged->painter;
+            }
+        }
+        return &*Detail::OpenStagePaint(state, element.index).painter;
+    }
+
     void UIRoot::Frame()
+    {
+        if (LayOut())
+        {
+            PaintAndSubmit();
+        }
+    }
+
+    bool UIRoot::LayOut()
     {
         Detail::UIRootState& state = *m_state;
         Detail::StartInput(*this, state);
@@ -1079,9 +1104,9 @@ namespace Fenrir
         state.size = state.target->GetSize(state.app);
         if (state.size.logicalSize.x <= 0.0f || state.size.logicalSize.y <= 0.0f)
         {
-            return;
+            return false;
         }
-        const float contentScale = state.size.contentScale > 0.0f ? state.size.contentScale : 1.0f;
+        const float contentScale = state.ContentScale();
         state.scale = state.config.scaleRule == ScaleRule::Height1080 ? state.size.logicalSize.y / 1080.0f : 1.0f;
         const Math::Vec2 uiSize = state.size.logicalSize / state.scale;
         Detail::FrameInput(*this, state, uiSize);
@@ -1146,9 +1171,18 @@ namespace Fenrir
                 }
             }
         }
+        state.paintStageOpen = true;
+        return true;
+    }
 
+    void UIRoot::PaintAndSubmit()
+    {
+        Detail::UIRootState& state = *m_state;
+        state.paintStageOpen = false;
+        const float contentScale = state.ContentScale();
         DrawList2D list;
         Detail::PaintRoot(state, list, contentScale);
+        state.stagePaints.clear();
         state.target->Submit(state.app, std::move(list));
 
         // Removals wait for painting, so an outro's last frame is seen. Those already gone (under another removal, or

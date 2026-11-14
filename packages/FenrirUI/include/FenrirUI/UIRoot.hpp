@@ -22,6 +22,7 @@
 namespace Fenrir
 {
     class App;
+    class Painter;
     class Paragraph;
     class UIRoots;
 
@@ -519,9 +520,22 @@ namespace Fenrir
         /** @} */
 
         /**
+         * @brief A painter over a list of `element`'s own for this frame, for work in the paint stage
+         * (UIRoots::AddPaintStage) and the C# systems of `Fenrir.UI.Paint`: what it draws is painted after the
+         * element's own boxes, text and Paint, and before its children, as part of the element (ADR-0061). It draws
+         * in the root's UI units, the units GetBoxes gives the element's rectangles in, under the element's transform
+         * and inside the clips the element's content is drawn in, faded with the element's content when its opacity
+         * fades it box by box; a list that leaves a group or a mask open is not drawn, and is logged; an element that
+         * does not paint (display none, or under one) drops it. Calls for one element in one frame give one painter,
+         * good until the stage ends. Null outside the paint stage, for a stale id, or on a frame the root's target has
+         * no size.
+         */
+        [[nodiscard]] Painter* PaintInto(ElementId element);
+
+        /**
          * @brief Runs one frame of the root: resolves the dirty styles, lays out if anything laid out is dirty,
          * snaps the rectangles, paints every element and submits the list to the target. UIRoots runs it for every
-         * root in PostUpdate.
+         * root in PostUpdate, in two halves with the paint stage between them.
          */
         void Frame();
 
@@ -529,6 +543,14 @@ namespace Fenrir
         friend class UIRoots;
         friend struct Detail::MarkupLoader;
 
+        /**
+         * @brief Frame's first half: input, hot reload, motion, styles and layout. False on a frame its target has no
+         * size, when the second half does nothing either; true opens PaintInto until PaintAndSubmit.
+         */
+        bool LayOut();
+        /** @brief Frame's second half: paints every element and the paint stage's lists, submits, then removes outros.
+         */
+        void PaintAndSubmit();
         /** @brief Leaves FenrirInput before the root is freed, which UIRoots puts off to its next frame. */
         void Retire();
         /** @brief SetStyleProperty without the log: false with why in `error`. */

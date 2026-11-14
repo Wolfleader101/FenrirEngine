@@ -5,6 +5,8 @@
 # Paths are relative to this file. `cmake --build <dir> --target fenrir-generate-bindings` regenerates every output
 # below; they are committed.
 namespace = "Fenrir.Painter"
+# Named so the bindings that use this one (FenrirUI's, whose natives give painter ids) can read them.
+descriptions = ["FenrirPainterScripting.api.json"]
 # The rectangle and paragraph are the text binding's, the sampler and image handle the assets binding's, the window id
 # the input binding's, the colour and vectors the math binding's: named as theirs, never mirrored here.
 uses = [
@@ -58,6 +60,6 @@ class = "PainterNative"
 header = "../src/Generated/FenrirPainterNatives.hpp"
 includes = [
     # What the natives' declarations name: their extension state and the structs as C# passes them.
-    "PainterScriptingState.hpp",
+    "FenrirPainterScripting/PainterScriptingState.hpp",
     "FenrirPainterScripting/ScriptPainter.hpp",
 ]
