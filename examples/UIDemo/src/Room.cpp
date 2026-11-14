@@ -5,6 +5,7 @@
 #include <numbers>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include <imgui.h>
 
@@ -13,8 +14,11 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirInput/Input.hpp"
+#include "FenrirInput/InputRouter.hpp"
 #include "FenrirRenderer/Components.hpp"
+#include "FenrirRenderer/Renderer.hpp"
 #include "FenrirRenderer/SpawnModel.hpp"
+#include "FenrirRenderer/WorldTargets2D.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirUI/UIRoot.hpp"
 #include "UIDemo.hpp"
@@ -37,6 +41,15 @@ namespace UIDemo
         // The menu's screen on the north wall: its width in metres, and how high its centre is.
         constexpr float ScreenMetres = 3.2f;
         constexpr float ScreenCentreHeight = 2.0f;
+        // The light terminal: where its quad's centre is, turned towards the camera's start and tilted back a little.
+        const Vec3 TerminalPosition{2.6f, 1.35f, 2.2f};
+        constexpr float TerminalYaw = -0.7f;
+        constexpr float TerminalTilt = -0.3f;
+        // The capsule and its name plate, which floats over it and turns to face the camera.
+        const Vec3 CapsulePosition{-2.6f, 0.8f, 1.8f};
+        constexpr float PlateHeight = 2.05f;
+        constexpr float PlateWidth = 1.0f;
+        constexpr float PlateDepth = 0.32f;
 
         /** @brief The room's own state, a scene resource. */
         struct RoomState
@@ -46,6 +59,10 @@ namespace UIDemo
             Fenrir::AssetHandle<Fenrir::Image> minimap;
             std::optional<Vec3> lastCameraPosition;
             Fenrir::EventReader<FenrirDemo::DemoSceneClickEvent> clicks;
+            /** @brief The lamps, which take the terminal's colour. */
+            std::vector<Fenrir::Entity> lamps;
+            /** @brief The name plate's quad, turned to the camera each frame. */
+            Fenrir::Entity plate;
         };
 
         Fenrir::Math::Quat YawPitch(float yaw, float pitch)
@@ -152,19 +169,47 @@ namespace UIDemo
             sun.AddComponent<Fenrir::Transform>().rot = YawPitch(0.7f, -1.0f);
             sun.AddComponent<Fenrir::DirectionalLight>().intensity = 0.6f;
             const std::array<Vec3, 3> lamps{Vec3{-5.5f, 3.2f, 0.0f}, Vec3{5.5f, 3.2f, -4.0f}, Vec3{0.0f, 3.2f, 5.5f}};
+            RoomState state;
             for (const Vec3& position : lamps)
             {
                 Fenrir::Entity lamp = entities.CreateEntity();
                 lamp.AddComponent<Fenrir::Transform>().pos = position;
                 Fenrir::PointLight light;
-                light.colour = Fenrir::Colour::FromSrgb(0xFFD8A8FF);
+                light.colour = Fenrir::Colour::FromSrgb(WorldUI::WarmLight);
                 light.intensity = 6.0f;
                 light.range = 9.0f;
                 lamp.AddComponent<Fenrir::PointLight>(light);
+                state.lamps.push_back(lamp);
             }
             scene.AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour{0.05f, 0.06f, 0.08f, 1.0f}});
 
-            RoomState state;
+            // The world roots (ADR-0060): the light terminal on a stand, and a capsule with its name plate. Each is a
+            // quad entity the room places; the UI draws a root on it, in the scene's Transparent pass.
+            if (WorldUI* world = app.TryGetResource<WorldUI>(); world != nullptr)
+            {
+                const Fenrir::Math::Quat facing = YawPitch(TerminalYaw, TerminalTilt);
+                const auto dark = material(0x16181CFF, 0.4f);
+                // A post from the floor to the terminal's lower edge, and a dark backing just behind its quad.
+                const float post = TerminalPosition.y - TerminalHeight * 0.45f;
+                place(cube.handle, dark, {TerminalPosition.x, post * 0.5f, TerminalPosition.z}, {0.12f, post, 0.12f});
+                Fenrir::Entity backing = place(cube.handle, dark, TerminalPosition + facing * Vec3(0.0f, 0.0f, -0.03f),
+                                               {TerminalWidth + 0.08f, TerminalHeight + 0.08f, 0.04f});
+                backing.GetComponent<Fenrir::Transform>().rot = facing;
+                Fenrir::Entity terminal = entities.CreateEntity();
+                auto& terminalTransform = terminal.AddComponent<Fenrir::Transform>();
+                terminalTransform.pos = TerminalPosition;
+                terminalTransform.rot = facing;
+                terminal.AddComponent<Fenrir::WorldQuad2D>(
+                    Fenrir::WorldQuad2D{{TerminalWidth, TerminalHeight}, WorldUnitsPerMetre});
+
+                place(sphere.handle, material(0xC89A50FF, 0.35f), CapsulePosition, {0.6f, 1.6f, 0.6f});
+                state.plate = entities.CreateEntity();
+                state.plate.AddComponent<Fenrir::Transform>().pos = {CapsulePosition.x, PlateHeight, CapsulePosition.z};
+                state.plate.AddComponent<Fenrir::WorldQuad2D>(
+                    Fenrir::WorldQuad2D{{PlateWidth, PlateDepth}, WorldUnitsPerMetre});
+                world->Attach(terminal, state.plate);
+            }
+
             // The player is the components the HUD shows; the free-fly camera is its eyes.
             state.player = entities.CreateEntity();
             state.player.AddComponent<Health>();
@@ -220,8 +265,11 @@ namespace UIDemo
             return degrees < 0.0f ? degrees + 360.0f : degrees;
         }
 
-        /** @brief The game's side of the player: firing, reloading, taking hits and stamina. */
-        void RunPlayer(Fenrir::App& app, RoomState& state, Hud& hud, float delta, float cameraSpeed)
+        /**
+         * @brief The game's side of the player: firing, reloading, taking hits and stamina. A click on the terminal
+         * (`aimed` at it) is the terminal's, not a shot.
+         */
+        void RunPlayer(Fenrir::App& app, RoomState& state, Hud& hud, float delta, float cameraSpeed, bool aimed)
         {
             const auto& keyboard = app.GetResource<Fenrir::Keyboard>();
             auto& ammo = state.player.GetComponent<Ammo>();
@@ -232,7 +280,7 @@ namespace UIDemo
             std::int32_t shots = keyboard.JustPressed(Fenrir::Key::F) ? 1 : 0;
             for ([[maybe_unused]] const FenrirDemo::DemoSceneClickEvent& click : state.clicks.Read(app))
             {
-                ++shots;
+                shots += aimed ? 0 : 1;
             }
             for (; shots > 0 && ammo.loaded > 0; --shots)
             {
@@ -274,6 +322,7 @@ namespace UIDemo
             ImGui::TextUnformatted("H: take a hit (health down; refills at zero)");
             ImGui::TextUnformatted("Right mouse + WASD: move (stamina drains)");
             ImGui::TextUnformatted("Escape: the pause menu (B on a gamepad backs out)");
+            ImGui::TextUnformatted("Aim at the terminal and click: its buttons and slider set the lamps");
             ImGui::SeparatorText("Hot reload");
             bool hotReload = hud.Root().IsHotReloadOn();
             if (ImGui::Checkbox("Reload the HUD's files when they change", &hotReload))
@@ -337,10 +386,40 @@ namespace UIDemo
                 above.pos = {transform.pos.x, above.pos.y, transform.pos.z};
             }
 
+            // The terminal's pointer: a ray from the window's camera through the cursor, while nothing on the window
+            // (the menu, the ImGui overlay) has the pointer and the camera is not being turned.
+            bool aimed = false;
+            if (WorldUI* world = app.TryGetResource<WorldUI>(); world != nullptr)
+            {
+                std::optional<Fenrir::Math::Ray> ray;
+                bool pressed = false;
+                const auto& mouse = app.GetResource<Fenrir::Mouse>();
+                const auto* claims = app.TryGetResource<Fenrir::InputClaims>();
+                const bool taken = claims != nullptr && claims->For(Fenrir::WindowId{1}).pointer;
+                const Fenrir::Entity camera = WindowCamera(scene);
+                if (camera.IsValid() && !menu->IsOpen() && !taken && !mouse.IsDown(Fenrir::MouseButton::Right))
+                {
+                    ray = Fenrir::Renderer::ScreenPointToRay(app, camera, mouse.Position());
+                    pressed = mouse.IsDown(Fenrir::MouseButton::Left);
+                }
+                aimed = world->Update(ray, pressed);
+                for (const Fenrir::Entity& lamp : state->lamps)
+                {
+                    lamp.GetComponent<Fenrir::PointLight>().colour = world->GetLightColour();
+                }
+                // The name plate turns about Y to face the camera.
+                if (camera.IsValid() && state->plate.IsValid())
+                {
+                    const Vec3 eye = camera.GetComponent<Fenrir::Transform>().pos;
+                    auto& plate = state->plate.GetComponent<Fenrir::Transform>();
+                    plate.rot = YawPitch(std::atan2(eye.x - plate.pos.x, eye.z - plate.pos.z), 0.0f);
+                }
+            }
+
             // While the menu is open the game is paused: the room's keys do nothing.
             if (!menu->IsOpen())
             {
-                RunPlayer(app, *state, *hud, delta, cameraSpeed);
+                RunPlayer(app, *state, *hud, delta, cameraSpeed, aimed);
             }
 
             // The HUD's system: what the player's components hold, pushed into the HUD's elements (ADR-0065).

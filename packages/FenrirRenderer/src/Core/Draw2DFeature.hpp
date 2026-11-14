@@ -48,6 +48,24 @@ namespace Fenrir::Render
         std::vector<DrawList2D> lists;
     };
 
+    /**
+     * @brief A world-space 2D target's lists for one frame (ADR-0060): a quad in the world, and the lists drawn on it
+     * in submission order.
+     */
+    struct WorldSubmission2D
+    {
+        /**
+         * @brief From the lists' local units (top-left origin, Y down) to world space: the quad's world matrix and its
+         * scale and offset.
+         */
+        Math::Mat4 localToWorld{1.0f};
+        /** @brief The quad's size in the lists' local units. */
+        Math::Vec2 logicalSize{0.0f};
+        /** @brief The world point it sorts with the transparent items by: its entity's origin. */
+        Math::Vec3 origin{0.0f};
+        std::vector<DrawList2D> lists;
+    };
+
     /** @brief A filter's radius, in pixels, past which its blur runs at half the image's resolution (ADR-0060). */
     inline constexpr float HalfResolutionBlur2D = 8.0f;
     /** @brief The most taps a pass of a filter's blur takes on each side of the centre; wider blurs space them out. */
@@ -68,6 +86,8 @@ namespace Fenrir::Render
         Graphics::TextureDesc targetDesc;
         /** @brief The image 2D targets, in the order of their first submission, each drawn before the overlay. */
         std::vector<ImageSubmission2D> images;
+        /** @brief The world-space 2D targets, drawn in each view's Transparent pass through SceneRenderer. */
+        std::vector<WorldSubmission2D> worlds;
     };
 
     /** @brief What the 2D render feature drew in its last frame, for RendererStats. */
@@ -151,7 +171,7 @@ namespace Fenrir::Render
      * than MaxTextureSlots2D texture slots or MaxParameterBytes2D parameter bytes, a pipeline index or an index range
      * outside its list, or a shader that is stale or not a 2D shader.
      */
-    class Draw2DFeature final : public RenderFeature
+    class Draw2DFeature final : public RenderFeature, public WorldQuads
     {
       public:
         /** @brief Draws on `device`, sampling the images `images` prepares. */
@@ -196,6 +216,27 @@ namespace Fenrir::Render
 
         void AddPasses(RenderGraph& graph, const FrameContext& frame) override;
 
+        /** @name The world-space 2D target (ADR-0060), which the scene renderer's views draw (WorldQuads)
+         * Each WorldSubmission2D is a `World 2D` target of its own: local units at a content scale of 1 over the
+         * quad's logical size, with no hardware scissor (a command's is ignored) and no pass of its own. Its draws
+         * are recorded into a view's Transparent pass, depth tested without writing depth, into the view's scene
+         * colour at its samples; a Gamma blend space draws as Linear (logged). Its groups draw into transient images
+         * in the Transparent stage, before the views that composite them; a backdrop filter on the quad itself reads
+         * nothing, logged once, and its group draws without one. Its lists sample image 2D targets as they were
+         * before this frame. A quad whose lists draw nothing is not given to the views.
+         * @{
+         */
+        std::vector<Quad> ResolveWorldQuads(RenderGraph& graph, const FrameContext& frame,
+                                            Graphics::TextureFormat colour, std::uint32_t samples,
+                                            std::size_t views) override;
+        [[nodiscard]] std::vector<GraphResource> WorldQuadSamples(std::size_t quad) const override;
+        [[nodiscard]] Graphics::BindingGroupHandle WorldQuadTarget(std::uint64_t frameIndex, std::size_t quad,
+                                                                   std::size_t view,
+                                                                   const Math::Mat4& viewProjection) override;
+        void RecordWorldQuad(PassContext& context, std::size_t quad, Graphics::BindingGroupHandle target,
+                             Graphics::PixelRect viewport) override;
+        /** @} */
+
       private:
         friend struct Fenrir::RendererProbe;
 
@@ -211,11 +252,22 @@ namespace Fenrir::Render
             std::map<const ShaderVariant*, Graphics::BindingGroupLayoutHandle> layouts;
         };
 
+        /** @brief What a 2D pass draws into, as a pipeline is made for it. */
+        struct PassFormat
+        {
+            Graphics::TextureFormat format = Graphics::TextureFormat::Rgba8Srgb;
+            std::uint32_t samples = 1;
+            /** @brief A world quad's: depth tested against the view's Depth32Float depth, without writing it. */
+            bool world = false;
+
+            friend auto operator<=>(const PassFormat&, const PassFormat&) = default;
+        };
+
         /** @brief A realised pipeline: what it was made for, and what it draws with. */
         struct PipelineEntry
         {
             PipelineDescription2D description;
-            Graphics::TextureFormat format = Graphics::TextureFormat::Rgba8Srgb;
+            PassFormat format;
             /** @brief Whether it is the shader's `MASK` variant, for draws a mask reaches. */
             bool masked = false;
             Graphics::PipelineHandle pipeline;
@@ -273,8 +325,15 @@ namespace Fenrir::Render
          */
         struct TargetPass
         {
-            /** @brief The pass's label: `Overlay 2D`, `Image 2D`, `Group 2D`, `Blur 2D` or `Backdrop 2D`. */
+            /** @brief The pass's label: `Overlay 2D`, `Image 2D`, `World 2D`, `Group 2D`, `Blur 2D` or `Backdrop 2D`.
+             */
             std::string name;
+            /** @brief The stage it is added in: `Overlay`, or `Transparent` for a world quad's groups. */
+            RenderStage stage = RenderStage::Overlay;
+            /** @brief A world quad's root: recorded into views' Transparent passes, never added as a pass. */
+            bool world = false;
+            /** @brief Its MSAA samples: a world quad's are its view's, 1 for every other pass. */
+            std::uint32_t sampleCount = 1;
             /** @brief Empty for a group until it ends with something drawn in it, or a backdrop reads it. */
             GraphResource target;
             /** @brief Load for the overlay, which draws over the views; clear to transparent for an image. */
@@ -334,8 +393,7 @@ namespace Fenrir::Render
             std::unique_ptr<ShaderContainer> container;
             /** @brief By CompositeKind. */
             std::array<Variant, 3> variants;
-            std::map<std::tuple<CompositeKind, Graphics::BlendMode, Graphics::TextureFormat>, Graphics::PipelineHandle>
-                pipelines;
+            std::map<std::tuple<CompositeKind, Graphics::BlendMode, PassFormat>, Graphics::PipelineHandle> pipelines;
         };
 
         /** @brief One quad an image is drawn with: its corners in its pass's local units and its UV rectangle. */
@@ -370,12 +428,25 @@ namespace Fenrir::Render
          * @brief The pipeline `description` draws with into `format`, its `MASK` variant when `masked`; null when it
          * cannot be made (logged once).
          */
-        [[nodiscard]] const PipelineEntry* Pipeline(const PipelineDescription2D& description,
-                                                    Graphics::TextureFormat format, bool masked);
+        [[nodiscard]] const PipelineEntry* Pipeline(const PipelineDescription2D& description, const PassFormat& format,
+                                                    bool masked);
         /** @brief The pipeline a composite of `kind` draws with by `blend` into `format`; empty if it cannot be made.
          */
         [[nodiscard]] Graphics::PipelineHandle CompositePipeline(CompositeKind kind, Graphics::BlendMode blend,
-                                                                 Graphics::TextureFormat format);
+                                                                 const PassFormat& format);
+        /** @brief What `pass` draws into. */
+        [[nodiscard]] static PassFormat FormatOf(const TargetPass& pass) noexcept
+        {
+            return {pass.format, pass.sampleCount, pass.world};
+        }
+        /**
+         * @brief Starts frame `frameIndex` once, from whichever of AddPasses and ResolveWorldQuads comes first: frees
+         * the last frame's groups and takes the frame SetFrame gave.
+         */
+        void BeginFrame(std::uint64_t frameIndex);
+        /** @brief Records `draws` with `target` at set 0, each scissored to `scissor` or, when it has none, its own. */
+        void RecordDraws(PassContext& context, const std::vector<Draw>& draws, Graphics::BindingGroupHandle target,
+                         const std::optional<Graphics::PixelRect>& scissor);
         /**
          * @brief Draws `list`'s commands into `target`'s root pass and the group passes its groups open, adding its
          * bytes to the frame's; false (logged once) when its groups do not balance and it is skipped. A backdrop in
@@ -460,7 +531,30 @@ namespace Fenrir::Render
         std::vector<std::pair<std::size_t, std::size_t>> m_parameterEntries;
         /** @} */
 
+        /** @brief One world quad given to the views: its root pass, its matrix and its size in local units. */
+        struct WorldQuad
+        {
+            std::size_t pass = 0;
+            Math::Mat4 localToWorld{1.0f};
+            Math::Vec2 logicalSize{0.0f};
+        };
+
         Frame2D m_frame;
+        /** @brief The frame being drawn, taken from m_frame by BeginFrame. */
+        Frame2D m_drawn;
+        /** @brief The frame BeginFrame last started; none before the first. */
+        std::optional<std::uint64_t> m_begun;
+        /** @brief Whether AddPasses ran in that frame: world quads resolved after it would draw nothing. */
+        bool m_passesAdded = false;
+        /** @brief The stage the passes made while resolving a list are added in. */
+        RenderStage m_listStage = RenderStage::Overlay;
+        std::vector<WorldQuad> m_worlds;
+        /** @brief The world quads' set 0 blocks: one per quad and view. */
+        std::unique_ptr<BlockRing> m_worldBlocks;
+        /** @brief The frame's vertex, index and parameter buffers, once AddPasses has written them. */
+        Graphics::BufferHandle m_vertexBuffer;
+        Graphics::BufferHandle m_indexBuffer;
+        Graphics::BufferHandle m_parameterBuffer;
         Stats2D m_stats;
         bool m_offscreenGroups = true;
         std::set<std::string> m_logged;

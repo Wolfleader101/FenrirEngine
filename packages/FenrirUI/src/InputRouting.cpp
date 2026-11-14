@@ -154,8 +154,10 @@ namespace Fenrir::Detail
                 Input::SetGamepadClaim(state.app, input.routerId, gamepad);
             }
             WindowInputClaims claims;
-            claims.pointer = state.Find(input.hovered) != nullptr;
-            claims.pointerCapture = state.Find(FirstPressed(input)) != nullptr;
+            // A world root's pointer is the game's ray, not the window's mouse: it claims neither.
+            const bool windowPointer = !state.target->TakesPointerRay();
+            claims.pointer = windowPointer && state.Find(input.hovered) != nullptr;
+            claims.pointerCapture = windowPointer && state.Find(FirstPressed(input)) != nullptr;
             claims.keyboardFocus = focused != nullptr;
             // A focused element that takes text, a text entry, has the window take it, with the IME at its caret.
             if (const std::optional<Rect2D> caret =
@@ -460,9 +462,19 @@ namespace Fenrir::Detail
             }
             // A listener that destroys the root drops the root's and FenrirInput's hold on this router mid-route.
             const std::shared_ptr<RootRouter> keep = shared_from_this();
+            // A world root's pointer is the game's ray (Ray): the window's mouse is never its.
+            const bool windowPointer = !m_state->target->TakesPointerRay();
             const RouteResult result = std::visit(
                 [&](const auto& event) -> RouteResult {
                     using Event = std::decay_t<decltype(event)>;
+                    if constexpr (std::is_same_v<Event, MouseMotionEvent> || std::is_same_v<Event, MouseButtonEvent> ||
+                                  std::is_same_v<Event, MouseScrollEvent>)
+                    {
+                        if (!windowPointer)
+                        {
+                            return RouteResult::Passed;
+                        }
+                    }
                     if constexpr (std::is_same_v<Event, MouseMotionEvent>)
                     {
                         return Motion(event, input);
@@ -503,6 +515,56 @@ namespace Fenrir::Detail
                 PublishClaims(*m_state);
             }
             return result;
+        }
+
+        /**
+         * @brief The game's pointer ray this frame (UIRoot::SetPointerRay): `point`, where it meets the root's plane in
+         * logical units, inside its size or not (`inside`), or none; and its left button. Moves the pointer there, as
+         * the mouse's motion would, then presses or releases as `pressed` changed. Whether the pointer is over an
+         * element, or a press is held on one.
+         */
+        bool Ray(std::optional<Math::Vec2> point, bool inside, bool pressed)
+        {
+            if (m_state == nullptr)
+            {
+                return false;
+            }
+            const std::shared_ptr<RootRouter> keep = shared_from_this();
+            UIRootInput& input = m_state->input;
+            const WindowId window = m_state->config.window;
+            const bool held = m_state->Find(FirstPressed(input)) != nullptr;
+            // Past the quad's edges the pointer follows the ray only while a press is held, so a drag goes on.
+            if (point && (inside || held) && m_state->scale > 0.0f)
+            {
+                const Math::Vec2 from = input.pointer.value_or(*point / m_state->scale) * m_state->scale;
+                const MouseMotionEvent motion{window, *point, *point - from};
+                (void)Motion(motion, motion);
+            }
+            else if (input.pointer)
+            {
+                input.pointer.reset();
+                Hover({}, false);
+            }
+            if (m_state != nullptr && !point && m_state->Find(FirstPressed(m_state->input)) != nullptr)
+            {
+                // With no ray a held press is let go of as cancelled, whatever the button does: it clicks nothing.
+                m_state->input.rayPressed = pressed;
+                const MouseButtonEvent cancel{window, MouseButton::Left, false, true};
+                (void)Button(cancel, cancel);
+            }
+            else if (m_state != nullptr && pressed != m_state->input.rayPressed)
+            {
+                m_state->input.rayPressed = pressed;
+                const MouseButtonEvent button{window, MouseButton::Left, pressed, false};
+                (void)Button(button, button);
+            }
+            if (m_state == nullptr)
+            {
+                return false;
+            }
+            PublishClaims(*m_state);
+            return m_state->Find(m_state->input.hovered) != nullptr ||
+                   m_state->Find(FirstPressed(m_state->input)) != nullptr;
         }
 
       private:
@@ -1048,6 +1110,25 @@ namespace Fenrir::Detail
             input.pointer = uiSize * 0.5f;
         }
         PlaceCursor(root, state);
+    }
+
+    bool PointerRay(UIRoot& root, UIRootState& state, const std::optional<Math::Ray>& ray, bool pressed)
+    {
+        if (!state.target->TakesPointerRay())
+        {
+            return false;
+        }
+        UIRootInput& input = state.input;
+        // A root with no FenrirInput still follows its ray: its router is made, unregistered.
+        if (input.router == nullptr)
+        {
+            input.router = std::make_shared<RootRouter>(root, state);
+        }
+        std::optional<Math::Vec2> point = ray ? state.target->PointerAt(state.app, *ray) : std::nullopt;
+        const Math::Vec2 size = state.size.logicalSize;
+        const bool inside = point && size.x > 0.0f && size.y > 0.0f && point->x >= 0.0f && point->y >= 0.0f &&
+                            point->x <= size.x && point->y <= size.y;
+        return input.router->Ray(point, inside, pressed);
     }
 
     void SetVirtualCursor(UIRoot& root, UIRootState& state, bool on)

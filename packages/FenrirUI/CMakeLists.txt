@@ -26,6 +26,7 @@ add_library(FenrirUI STATIC
     include/FenrirUI/UIImageTarget.hpp
     include/FenrirUI/UIRoot.hpp
     include/FenrirUI/UITarget.hpp
+    include/FenrirUI/UIWorldTarget.hpp
 
     src/AttributeValues.hpp
     src/BoxPainting.cpp
@@ -60,6 +61,8 @@ add_library(FenrirUI STATIC
     src/UIImageTarget.cpp
     src/UIRoot.cpp
     src/UIRootState.hpp
+    src/UITarget.cpp
+    src/UIWorldTarget.cpp
 )
 target_include_directories(FenrirUI PUBLIC include PRIVATE src)
 target_link_libraries(FenrirUI PUBLIC FenrirPainter FenrirInput FenrirApp FenrirAssets

@@ -7,10 +7,10 @@ fenrir_add_catch2()
 
 add_executable(FenrirUITests PublicHeaders.cpp Layout.cpp Tree.cpp Painting.cpp PaintStage.cpp StylesheetParser.cpp Cascade.cpp
                              Input.cpp Focus.cpp Listeners.cpp Motion.cpp Text.cpp Controls.cpp DefaultStylesheet.cpp
-                             TextEntry.cpp Gamepad.cpp Markup.cpp StyleFiles.cpp
+                             TextEntry.cpp Gamepad.cpp Markup.cpp StyleFiles.cpp WorldRoots.cpp
                              UITestApp.hpp
                              fixtures/YogaFixtures.inc)
-target_link_libraries(FenrirUITests PRIVATE FenrirUI FenrirAssets FenrirApp FenrirWindow Catch2::Catch2WithMain)
+target_link_libraries(FenrirUITests PRIVATE FenrirUI FenrirAssets FenrirApp FenrirWindow FenrirRenderer Catch2::Catch2WithMain)
 # Text.cpp registers a family from HarfBuzz's test fonts, where FenrirText's submodule keeps them.
 target_compile_definitions(FenrirUITests
                            PRIVATE FENRIR_TEXT_HARFBUZZ_TEST="${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirText/libs/harfbuzz/test")
@@ -24,7 +24,7 @@ add_test(NAME FenrirUI COMMAND FenrirUITests)
 # RendererTestApp, as FenrirPainterTests reads its pipelines.
 set(renderer_tests "${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirRenderer/Tests")
 set(renderer_src "${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirRenderer/src")
-add_executable(FenrirUIRendererTests ImageRoots.cpp)
+add_executable(FenrirUIRendererTests ImageRoots.cpp WorldRootDraws.cpp)
 target_include_directories(FenrirUIRendererTests PRIVATE "${renderer_tests}" "${renderer_src}")
 target_link_libraries(FenrirUIRendererTests PRIVATE FenrirUI FenrirRenderer FenrirRendererCore Catch2::Catch2WithMain)
 # RendererTestApp's material shader sampling one texture, which its helpers name.

@@ -3,8 +3,14 @@
 #include <array>
 #include <cmath>
 
+#include "FenrirApp/App.hpp"
 #include "FenrirPainter/Painter.hpp"
 #include "FenrirPainter/Path.hpp"
+#include "FenrirText/FontLibrary.hpp"
+#include "FenrirText/TextStyle.hpp"
+#include "FenrirUI/UI.hpp"
+#include "FenrirUI/UIRoot.hpp"
+#include "UIDemo.hpp"
 
 namespace UIDemo
 {
@@ -35,6 +41,12 @@ namespace UIDemo
 
         Fenrir::StrokeStyle stroke;
         stroke.cap = Fenrir::LineCap::Round;
+        // The letters lay out in the target's pixels (Painter's text), which the painter divides back to UI units.
+        const Fenrir::UIRoot& root = GetRoot();
+        const auto* roots = root.GetApp().TryGetResource<Fenrir::UIRoots>();
+        Fenrir::FontLibrary* fonts = roots != nullptr ? roots->GetFonts() : nullptr;
+        const float pixels = root.GetScale() * root.GetTargetSize().contentScale;
+        constexpr std::array<const char*, 4> letters{"N", "E", "S", "W"};
 
         // Every tick within the span, from the first multiple of TickDegrees at or past its left end.
         const float leftHeading = m_heading - SpanDegrees * 0.5f;
@@ -44,7 +56,7 @@ namespace UIDemo
             const float offset = Wrap(tick - m_heading);
             const float x = centreX + offset * unitsPerDegree;
             const bool cardinal = std::fmod(std::abs(Wrap(tick)), 90.0f) < 0.5f;
-            const float length = box.height * (cardinal ? 0.6f : 0.3f);
+            const float length = box.height * (cardinal ? 0.45f : 0.25f);
             stroke.width = cardinal ? 3.0f : 1.5f;
             // Ticks fade towards the strip's ends, so it reads as a band round the heading.
             Fenrir::Colour faded = colour;
@@ -54,22 +66,24 @@ namespace UIDemo
             line.MoveTo({x, bottom}).LineTo({x, bottom - length});
             painter.StrokePath(line, stroke, faded);
 
-            // North gets a filled triangle over its tick.
-            if (std::abs(Wrap(tick)) < 0.5f)
+            // A cardinal point's letter over its tick, in the SDF family.
+            if (cardinal && fonts != nullptr && pixels > 0.0f)
             {
-                const float top = bottom - length - 4.0f;
-                const std::array<Fenrir::Math::Vec2, 3> marker{
-                    Fenrir::Math::Vec2{x - 6.0f, top - 10.0f},
-                    Fenrir::Math::Vec2{x + 6.0f, top - 10.0f},
-                    Fenrir::Math::Vec2{x, top},
-                };
-                Fenrir::Path triangle;
-                triangle.AddPolygon(marker);
-                painter.FillPath(triangle, faded);
+                const auto quarter = static_cast<std::size_t>(std::lround((Wrap(tick) + 360.0f) / 90.0f)) % 4;
+                Fenrir::Paragraph& label = m_labels.at(quarter);
+                Fenrir::TextStyle text;
+                text.family = SdfFamily;
+                text.size = LabelSize * pixels;
+                text.weight = Fenrir::FontWeightBold;
+                text.colour = faded;
+                label.SetText(letters.at(quarter), text);
+                label.Layout(*fonts, Fenrir::UnlimitedWidth);
+                const Fenrir::Math::Vec2 size = label.Size() / pixels;
+                painter.DrawText(label, {x - size.x * 0.5f, bottom - length - size.y});
             }
         }
 
-        // The baseline, and the needle at the heading.
+        // The baseline, and the needle at the heading, pointing up from under it, clear of the letters.
         stroke.width = 1.0f;
         Fenrir::Colour baseline = colour;
         baseline.a *= 0.5f;
@@ -79,7 +93,7 @@ namespace UIDemo
 
         stroke.width = 2.0f;
         Fenrir::Path needle;
-        needle.MoveTo({centreX - 7.0f, box.y}).LineTo({centreX, box.y + 9.0f}).LineTo({centreX + 7.0f, box.y});
+        needle.MoveTo({centreX - 7.0f, bottom + 5.0f}).LineTo({centreX, bottom - 4.0f}).LineTo({centreX + 7.0f, bottom + 5.0f});
         painter.StrokePath(needle, stroke, colour);
     }
 } // namespace UIDemo

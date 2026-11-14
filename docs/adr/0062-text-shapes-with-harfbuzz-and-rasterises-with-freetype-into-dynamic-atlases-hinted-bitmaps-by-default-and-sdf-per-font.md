@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Text shapes with HarfBuzz and rasterises with FreeType into dynamic atlases, hinted bitmaps by default and SDF per font

@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # The painter records into DrawList2D with analytic shapes and tessellated paths in one fat vertex, and DrawList2D gains offscreen groups
@@ -27,7 +27,7 @@ Three families fit a stencil-less device. CPU triangles with fringes for everyth
 
 ## Targets
 
-**The image 2D target is in scope**, because groups need it, and with it a UI drawn into an `Image` asset any material samples. **The world-space target is specified and built last**: a quad in the scene drawing a list whose scissor and clips are realised in the shader, which the fat vertex already carries, and whose text wants the SDF mode of ADR-0062. Both were planned by ADR-0027 and this ADR does not change their shape.
+**The image 2D target is in scope**, because groups need it, and with it a UI drawn into an `Image` asset any material samples. **The world-space target is specified and built last**: a quad in the scene drawing a list whose scissor and clips are realised in the shader, which the fat vertex already carries, and whose text wants the SDF mode of ADR-0062. Both were planned by ADR-0027 and this ADR does not change their shape. *Amended 2026-11-14 (FenrirUI ticket 23):* the world-space target is FenrirRenderer's `WorldQuad2D` component (the quad's size in world units and its logical units per world unit) and the `WorldTargets2D` resource lists are submitted to by entity; each camera's `Transparent` pass draws a quad's lists as one item sorted with the transparent items by its origin, culled with them, depth tested without writing depth, through set 0's `localToClip` from the quad's world matrix and the view. With no hardware scissor only a list's innermost clip cuts what it draws, which is the per-pixel clip's reach on every target. Its groups draw at one pixel per logical unit in the `Transparent` stage; a backdrop filter on the quad itself has no target to copy and draws without one.
 
 ## Considered
 

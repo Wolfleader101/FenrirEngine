@@ -4,7 +4,7 @@
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
-add_executable(UIDemoTests DemoApp.hpp HudSetup.cpp MenuSetup.cpp ScreenSetup.cpp)
+add_executable(UIDemoTests DemoApp.hpp HudSetup.cpp MenuSetup.cpp ScreenSetup.cpp WorldSetup.cpp)
 target_link_libraries(UIDemoTests PRIVATE UIDemoCore FenrirLogger Catch2::Catch2WithMain)
 add_custom_command(TARGET UIDemoTests POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_directory "${FENRIR_DEMO_SHARED_ASSETS}" "$<TARGET_FILE_DIR:UIDemoTests>/assets"

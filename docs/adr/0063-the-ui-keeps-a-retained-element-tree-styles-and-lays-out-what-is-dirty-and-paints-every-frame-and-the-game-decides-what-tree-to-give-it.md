@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # The UI keeps a retained element tree, styles and lays out what is dirty, paints every frame, and the game decides what tree to give it

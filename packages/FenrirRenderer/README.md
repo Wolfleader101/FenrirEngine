@@ -165,6 +165,24 @@ app.GetResource<Fenrir::ImageTargets2D>().Submit(image, std::move(list));
 - **`RendererConfig::offscreenGroups2D`** (on by default) turns groups off: their commands draw flat, composites and filters are ignored, and a mask's shape draws nothing and masks nothing.
 - **`RendererStats`** counts the frame's 2D lists drawn (`lists2D`), their commands of every kind (`commands2D`), the groups drawn into transient images (`groups2D`) and the bytes of every transient image the 2D passes take, groups', blurs' and backdrops' (`transientImageBytes2D`).
 
+## The world-space 2D target
+
+A 2D draw list can be drawn on a quad in the world through the `WorldTargets2D` app resource
+(`FenrirRenderer/WorldTargets2D.hpp`, ADR-0060), on an entity of the active scene with a `WorldQuad2D` component.
+
+```cpp
+Fenrir::Entity quad = scene.GetEntityList().CreateEntity();
+quad.GetComponent<Fenrir::Transform>().pos = {2.0f, 1.5f, 0.0f};
+quad.AddComponent<Fenrir::WorldQuad2D>(Fenrir::WorldQuad2D{{1.6f, 1.0f}, 500.0f}); // metres, units a metre
+app.GetResource<Fenrir::WorldTargets2D>().Submit(quad, std::move(list)); // a list 800 by 500 units covers it
+```
+
+- **The quad** lies in the entity's XY plane, centred on its origin, `size` world units across and up, facing +Z and drawn from both sides. The game owns the entity's transform, read as the frame renders. A list's local coordinates are logical units from the quad's top-left, Y down, `unitsPerWorldUnit` to a world unit; nothing cuts what draws past the quad's edges.
+- **When:** `Submit(entity, list)` any time before `Render`, from any system; the renderer draws the submissions that frame and drops them after it, each entity's lists in submission order. A submission to an entity not valid in the active scene, or with no `WorldQuad2D`, is dropped and logged once per entity.
+- **Drawing:** in every camera's `Transparent` pass, as one item among the transparent items, sorted back to front with them by the view depth of the entity's origin, depth tested against the opaque items without writing depth, into the view's linear floating-point scene colour at its samples. A quad whose corners are all past one side of a view, or all behind its camera, is culled from it. Set 0's `localToClip` is the view and projection times the quad's world matrix times its scale and offset, at a content scale of 1. The scene is lit linear, so a list's `Gamma` blend space is logged and draws as `Linear`; lighting does not reach the lists.
+- **Clips:** there is no hardware scissor: a command's scissor is ignored and the pass draws over the whole view, so clips are the painter's, realised per pixel in `builtin:painter` from each vertex's clip data (ADR-0060), exact under any turn of the quad. Only a list's innermost clip cuts what it draws, as on the other targets the per-pixel clip does; their scissor also cuts to the bounds of the clips around it, which here nothing does.
+- **Groups** draw into transient images at one pixel per logical unit, bounded by the quad, in `Group 2D` passes of the `Transparent` stage, before the views that composite them on the quad. A backdrop filter on the quad itself, outside any group, has no image of what is under it to read: it is logged once and its group draws without it. A list sampling an image 2D target reads what the image held before the frame.
+
 ## Skinning
 
 Skinned meshes (ADR-0035) are drawn on the GPU from their skeleton's palette. The renderer never links FenrirSkeleton (ADR-0041): it reaches skeleton poses through FenrirAssets' `SkinningSource`, which `Skeletons::Install` registers as the app resource `SkinningSourceRegistration`, and looks it up each `Render`, so install order does not matter. With no source, rigid meshes draw as usual and skinned ones are skipped.

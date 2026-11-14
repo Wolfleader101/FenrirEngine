@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # The UI stack is native in FenrirText, FenrirPainter and FenrirUI, and C# is a client through generated bindings

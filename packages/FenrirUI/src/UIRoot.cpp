@@ -405,6 +405,10 @@ namespace Fenrir
         {
             m_state->config.blendSpace = m_state->target->GetDefaultBlendSpace();
         }
+        if (!m_state->config.scaleRule)
+        {
+            m_state->config.scaleRule = m_state->target->GetDefaultScaleRule();
+        }
         Detail::ElementSlot& slot = m_state->slots.emplace_back();
         slot.version = 1;
         slot.alive = true;
@@ -1021,6 +1025,11 @@ namespace Fenrir
         return Detail::HitTest(*m_state, position);
     }
 
+    bool UIRoot::SetPointerRay(const std::optional<Math::Ray>& ray, bool pressed)
+    {
+        return Detail::PointerRay(*this, *m_state, ray, pressed);
+    }
+
     void UIRoot::SetVirtualCursor(bool on)
     {
         Detail::SetVirtualCursor(*this, *m_state, on);
@@ -1107,7 +1116,7 @@ namespace Fenrir
             return false;
         }
         const float contentScale = state.ContentScale();
-        state.scale = state.config.scaleRule == ScaleRule::Height1080 ? state.size.logicalSize.y / 1080.0f : 1.0f;
+        state.scale = *state.config.scaleRule == ScaleRule::Height1080 ? state.size.logicalSize.y / 1080.0f : 1.0f;
         const Math::Vec2 uiSize = state.size.logicalSize / state.scale;
         Detail::FrameInput(*this, state, uiSize);
         PollFiles(state.app.GetTime().deltaTime);

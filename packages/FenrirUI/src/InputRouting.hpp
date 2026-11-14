@@ -52,6 +52,8 @@ namespace Fenrir::Detail
         std::vector<ElementId> focusChain;
         /** @brief The claims last published for the root's window. */
         WindowInputClaims published;
+        /** @brief Whether the game's pointer ray last said its button was pressed (UIRoot::SetPointerRay). */
+        bool rayPressed = false;
         /** @brief Seconds of frames the router has seen, for double clicks. */
         double clock = 0.0;
         /** @brief The last click, for the double click a second one makes. */
@@ -112,6 +114,8 @@ namespace Fenrir::Detail
      * has none and starts the pointer at the root's centre (`uiSize` halved) when it has not been anywhere.
      */
     void FrameInput(UIRoot& root, UIRootState& state, Math::Vec2 uiSize);
+    /** @copydoc Fenrir::UIRoot::SetPointerRay */
+    bool PointerRay(UIRoot& root, UIRootState& state, const std::optional<Math::Ray>& ray, bool pressed);
     /** @copydoc Fenrir::UIRoot::SetVirtualCursor */
     void SetVirtualCursor(UIRoot& root, UIRootState& state, bool on);
 
