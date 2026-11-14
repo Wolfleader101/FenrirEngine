@@ -125,8 +125,9 @@ namespace UIDemo
                 transform.pos = crates.at(i);
                 transform.rot = YawPitch(0.4f * static_cast<float>(i), 0.0f);
             }
-            // The screen on the north wall, facing the camera's start: an unlit material showing the image the menu's
-            // screen root draws into, in a dark bezel. The screen is 16 by 9, as its image is.
+            // The screen faces the camera's start, so the menu in a texture is in view at once. Its material is unlit
+            // so the image shows the colours the menu was styled in, and it is 16 by 9, as its image is, so the menu
+            // is not stretched.
             if (const Menu* menu = app.TryGetResource<Menu>(); menu != nullptr)
             {
                 const float height = ScreenMetres * static_cast<float>(ScreenHeight) / static_cast<float>(ScreenWidth);

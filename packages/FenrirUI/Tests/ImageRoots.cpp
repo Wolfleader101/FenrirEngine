@@ -59,6 +59,38 @@ namespace
     }
 } // namespace
 
+TEST_CASE("An image root's image exists before its first frame: a render target of the root's size", "[ui][image]")
+{
+    RendererTestApp test;
+    const Fenrir::UI ui = Fenrir::UI::Install(test.app);
+    auto target = std::make_shared<Fenrir::UIImageTarget>(test.app, 640, 360);
+    (void)PanelRoot(test, target);
+
+    const Fenrir::ImageData* data = test.Store().TryGet(target->GetImage());
+    INFO("the image is missing, or not a 640 by 360 sRGB image with no pixels");
+    REQUIRE(data != nullptr);
+    REQUIRE(data->width == 640);
+    REQUIRE(data->height == 360);
+    REQUIRE(data->colourSpace == Fenrir::ColourSpace::Srgb);
+    REQUIRE(data->pixels.empty());
+}
+
+TEST_CASE("An image root blends linear unless its config names a blend space", "[ui][image]")
+{
+    RendererTestApp test;
+    const Fenrir::UI ui = Fenrir::UI::Install(test.app);
+    Fenrir::UIRoots& roots = test.app.GetResource<Fenrir::UIRoots>();
+    Fenrir::UIRootConfig unset;
+    unset.target = std::make_shared<Fenrir::UIImageTarget>(test.app, 64, 64);
+    Fenrir::UIRootConfig gamma = unset;
+    gamma.blendSpace = Fenrir::BlendSpace2D::Gamma;
+
+    INFO("a root in an image with no blend space did not take Linear (ADR-0065)");
+    REQUIRE(roots.CreateRoot(unset).GetConfig().blendSpace == Fenrir::BlendSpace2D::Linear);
+    INFO("a root in an image told Gamma did not keep it");
+    REQUIRE(roots.CreateRoot(gamma).GetConfig().blendSpace == Fenrir::BlendSpace2D::Gamma);
+}
+
 TEST_CASE("An image root submits a list to an image 2D target of its size each frame, in the linear blend space",
           "[ui][image]")
 {
@@ -68,17 +100,7 @@ TEST_CASE("An image root submits a list to an image 2D target of its size each f
     REQUIRE(ui.IsValid());
     auto target = std::make_shared<Fenrir::UIImageTarget>(test.app, 640, 360);
     Fenrir::UIRoot& root = PanelRoot(test, target);
-
-    INFO("the image asset exists before the first frame: a render target of the root's size with no pixels");
     const Fenrir::AssetHandle<Fenrir::Image> image = target->GetImage();
-    const Fenrir::ImageData* data = test.Store().TryGet(image);
-    REQUIRE(data != nullptr);
-    REQUIRE(data->width == 640);
-    REQUIRE(data->height == 360);
-    REQUIRE(data->colourSpace == Fenrir::ColourSpace::Srgb);
-    REQUIRE(data->pixels.empty());
-    INFO("a root drawn into an image blends linear by default (ADR-0065)");
-    REQUIRE(root.GetConfig().blendSpace == Fenrir::BlendSpace2D::Linear);
 
     for (int frame = 0; frame < 3; ++frame)
     {

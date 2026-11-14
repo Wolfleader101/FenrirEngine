@@ -354,7 +354,8 @@ namespace Fenrir::Detail
         PainterConfig config;
         config.shader = state.roots.GetPainterShader();
         config.scale = state.scale;
-        config.blendSpace = state.config.blendSpace.value_or(BlendSpace2D::Gamma);
+        // The root resolved its blend space from its target when it was made.
+        config.blendSpace = *state.config.blendSpace;
         config.snapToPixels = state.config.snapToPixels;
         config.pixelsPerUnit = contentScale;
         config.stops = state.stops ? &*state.stops : nullptr;

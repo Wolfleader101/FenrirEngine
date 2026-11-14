@@ -233,7 +233,7 @@ namespace UIDemo
         /** @brief The menu's root. */
         [[nodiscard]] Fenrir::UIRoot& Root() const noexcept
         {
-            return *m_root;
+            return *m_live.root;
         }
 
         /** @brief The screen's root, drawing the menu into ScreenImage. */
@@ -246,8 +246,8 @@ namespace UIDemo
         [[nodiscard]] Fenrir::AssetHandle<Fenrir::Image> ScreenImage() const;
 
       private:
-        /** @brief The menu's document as one root holds it: its `#menu`, and its settings panel while that is open. */
-        struct Copy
+        /** @brief The menu's document in one root: its `#menu`, and its settings panel while that is open. */
+        struct MenuInstance
         {
             Fenrir::UIRoot* root = nullptr;
             Fenrir::ElementId menu;
@@ -260,12 +260,17 @@ namespace UIDemo
         void CloseSettings();
         /** @brief Steps back: closes the settings panel when it is open, and the menu otherwise. */
         void Back();
-        /** @brief Writes the kept settings into `copy`'s settings panel's controls. */
-        void ShowSettings(const Copy& copy) const;
+        /** @brief Writes the kept settings into `instance`'s settings panel's controls. */
+        void ShowSettings(const MenuInstance& instance) const;
         void OnEvent(const Fenrir::UIEvent& event);
         /** @brief What a UI event of the screen's root changes: only hot reload sends one. */
         void OnScreenEvent(const Fenrir::UIEvent& event);
-        /** @brief Makes the screen's copy show what the live menu does. */
+        /**
+         * @brief Takes `first`, the first element of a document hot reload loaded again into `instance`'s root, as its
+         * `#menu` or its settings panel. True when it was the settings panel.
+         */
+        static bool TakeReloaded(MenuInstance& instance, Fenrir::ElementId first);
+        /** @brief Makes the screen's instance show what the live menu does. */
         void MirrorScreen();
         /**
          * @brief Loads `file` under `parent` in `root`, logging an error when it loads with problems; its first
@@ -278,23 +283,20 @@ namespace UIDemo
          */
         [[nodiscard]] static Fenrir::ElementId Find(const Fenrir::UIRoot& root, Fenrir::ElementId under,
                                                     std::string_view id);
-        /** @brief The element with `id` at or under `under` in the live root. */
-        [[nodiscard]] Fenrir::ElementId Find(Fenrir::ElementId under, std::string_view id) const;
 
         Fenrir::App& m_app;
-        Fenrir::UIRoot* m_root = nullptr;
         std::string m_files;
         std::string m_stylesheetPath;
         Fenrir::EventReader<Fenrir::UIEvent> m_events;
         Settings m_settings;
-        /** @brief The open menu's `#menu`, and its settings panel while that is open. */
-        Fenrir::ElementId m_menu;
-        Fenrir::ElementId m_panel;
+        /** @brief The live menu: its root on the window, and the open menu's document in it. */
+        MenuInstance m_live;
         bool m_open = false;
-        /** @brief The screen's image target, its copy of the document, and the settings its controls last showed. */
+        /** @brief The screen's image target and its root's instance of the document. */
         std::shared_ptr<Fenrir::UIImageTarget> m_screenTarget;
-        Copy m_screen;
-        std::optional<Settings> m_screenShows;
+        MenuInstance m_screen;
+        /** @brief The settings the screen's controls last showed; none when they show nothing yet. */
+        std::optional<Settings> m_screenSettings;
     };
 
     /** @brief The room: a lit room with the player, a top-down camera for the minimap and the HUD's system. */
