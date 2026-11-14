@@ -20,6 +20,8 @@ Each package gets its C# contract the way every engine extension does (ADR-0042)
 
 *Amended 2026-11-12 (FenrirUI ticket 19):* outside FenrirUI, a C# system gets its painter from the overlay, by window and layer, for the frame (`Painter.Overlay`): the painter's scripting extension owns the draw list it records into and submits it to the `Overlay` resource when the calling system returns, so C# holds no draw list and calls no submit, and the extension links FenrirRenderer for the header-only `Overlay` while FenrirPainter stays renderer-free. Every C# surface of FenrirText and FenrirPainter is generated; the painter's extension draws the text extension's paragraphs by sharing its state.
 
+*Amended 2026-11-14 (FenrirUI ticket 20, recorded at the close-out):* elements are not wrapper handles. C# names a root by its `UIRoot` mirror and an element by an `ElementId` mirror, plain data as in C++ (ADR-0066), and every element call (children, classes, style, text, attributes and values, focus, boxes) is a native on the `UIRoot` mirror; UI events reach C# as the `UIEvent` engine event, not through natives.
+
 **A Razor-style syntax is a separate, later effort**: a C# source generator over the same element API, as s&box's Razor is a convenience over its Panel API. Nothing in this stack assumes it.
 
 ## Considered

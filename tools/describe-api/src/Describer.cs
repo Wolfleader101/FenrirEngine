@@ -1101,7 +1101,7 @@ internal sealed class Describer
         Error(at, subject,
               $"the default '{SourceText(init)}' is not one the description records: a literal, an enum value, " +
               "std::numeric_limits<T>::infinity(), max() or lowest(), a bound type's constructor with literal " +
-              "arguments, or a nested type's own defaults (T{}) or a constant of its type");
+              "arguments, a nested type's own defaults (T{}), or a constant of its type");
 
     private static string Where(Cursor at)
     {

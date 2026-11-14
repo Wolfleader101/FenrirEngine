@@ -48,8 +48,8 @@ namespace Fenrir::Detail
         /** @brief A shorthand, expanded by ExpandShorthand. */
         Shorthand,
         /**
-         * @brief A longhand of the spec's property set that the style does not hold yet (text, filters, scrollbars,
-         * background-position): parsed and kept, and styling nothing until the ticket that adds it.
+         * @brief A longhand of the spec's property set that the style does not hold (`filter`, `background-position`,
+         * `scrollbar-color`, `scrollbar-width`): parsed and kept, and styling nothing.
          */
         NotYetStyled,
     };

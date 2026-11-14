@@ -1,6 +1,7 @@
 # UIDemo (examples/UIDemo/README.md): what a game gets from FenrirUI, over a lit room. Its code is UIDemoCore, which the
-# app and its tests both link; its HUD's document and stylesheet are in assets/ui, read from this source tree while it
-# is there (UIDEMO_SOURCE_ASSETS), so an edit to them hot-reloads and a rebuild keeps it.
+# app and its tests both link; its documents and stylesheets (the HUD's, the menu's, the screen's and the world roots')
+# are in assets/ui, read from this source tree while it is there (UIDEMO_SOURCE_ASSETS), so an edit to them hot-reloads
+# and a rebuild keeps it.
 add_library(UIDemoCore STATIC
     src/UIDemo.hpp
     src/DemoConfig.cpp
@@ -25,7 +26,7 @@ if(FENRIR_ENABLE_SCRIPTING AND TARGET FenrirUIScripting)
     fenrir_deploy_scripting(UIDemo EXTENSIONS Text Painter UI)
 endif()
 
-# The HUD's tests: the app's own setup, on the null backend.
+# UIDemo's tests: the app's own setup of the HUD, the menu, the screen and the world roots, on the null backend.
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)
 endif()

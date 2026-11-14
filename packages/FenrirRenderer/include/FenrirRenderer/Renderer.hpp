@@ -212,13 +212,16 @@ namespace Fenrir
          * shadowed point light (six times over for items whose shader draws its six faces one at a time).
          */
         std::uint32_t shadowDraws = 0;
-        /** @brief 2D draw lists drawn, on the overlay and into image 2D targets; skipped lists are not counted. */
+        /**
+         * @brief 2D draw lists drawn, on the overlay, into image 2D targets and on world quads; skipped lists are not
+         * counted.
+         */
         std::uint32_t lists2D = 0;
         /** @brief The commands of those lists, draws and the begins and ends of offscreen groups alike. */
         std::uint32_t commands2D = 0;
         /** @brief Offscreen groups drawn into a transient image (ADR-0060). */
         std::uint32_t groups2D = 0;
-        /** @brief The bytes of those groups' transient images, four a pixel. */
+        /** @brief The bytes of the 2D transient images, four a pixel: the groups', and their blurs' and backdrops'. */
         std::uint32_t transientImageBytes2D = 0;
     };
 

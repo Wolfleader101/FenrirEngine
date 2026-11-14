@@ -63,6 +63,7 @@ namespace Fenrir::Render
         Math::Vec2 logicalSize{0.0f};
         /** @brief The world point it sorts with the transparent items by: its entity's origin. */
         Math::Vec3 origin{0.0f};
+        /** @brief The lists drawn on it, in submission order. */
         std::vector<DrawList2D> lists;
     };
 
@@ -93,29 +94,31 @@ namespace Fenrir::Render
     /** @brief What the 2D render feature drew in its last frame, for RendererStats. */
     struct Stats2D
     {
-        /** @brief Lists drawn, on the overlay and into images; a skipped list is not counted. */
+        /** @brief Lists drawn, on the overlay, into images and on world quads; a skipped list is not counted. */
         std::uint32_t lists = 0;
         /** @brief The commands of those lists, of every kind. */
         std::uint32_t commands = 0;
         /** @brief Offscreen groups drawn into a transient image. */
         std::uint32_t groups = 0;
-        /** @brief The bytes of those groups' transient images. */
+        /** @brief The bytes of the transient images: the groups', and their blurs' and backdrops'. */
         std::uint32_t transientImageBytes = 0;
     };
 
     /**
-     * @brief The 2D render feature (ADR-0027, ADR-0060): draws 2D draw lists into 2D targets. Two are built: the window
-     * overlay, one `Overlay 2D` pass after every view's Output, before the debug feature's Overlay pass, so debug
-     * screen text stays the fixed top layer; and the image 2D target, one `Image 2D` pass per image, drawn before the
+     * @brief The 2D render feature (ADR-0027, ADR-0060): draws 2D draw lists into 2D targets. Three are built: the
+     * window overlay, one `Overlay 2D` pass after every view's Output, before the debug feature's Overlay pass, so
+     * debug screen text stays the fixed top layer; the image 2D target, one `Image 2D` pass per image, drawn before the
      * overlay and before any view that samples the image (the graph orders them, an imported texture being one resource
-     * however many features import it). A frame with nothing submitted adds no pass, nor does an overlay whose lists
-     * draw nothing.
+     * however many features import it); and the world-space 2D target, each quad's lists drawn in every view's
+     * `Transparent` pass through the scene renderer's WorldQuads hook (below). A frame with nothing submitted adds no
+     * pass, nor does an overlay whose lists draw nothing.
      *
      * **A target** maps local logical coordinates (top-left origin, Y down) to clip space through set 0 of every 2D
      * shader (`Fenrir/2D.glsl`): over the window's logical size, its pixel size divided by the content scale, or over
-     * an image's pixels at a content scale of 1. There is no depth and no culling. A command's scissor is scaled by the
-     * content scale, rounded outwards to whole pixels and clamped to the target; one that covers no pixel draws
-     * nothing. An image 2D target is cleared to transparent before its lists draw.
+     * an image's pixels at a content scale of 1. The overlay and an image have no depth and no culling; a world quad's
+     * target is its world matrix and the view, depth tested and culled with the transparent items. A command's scissor
+     * is scaled by the content scale, rounded outwards to whole pixels and clamped to the target; one that covers no
+     * pixel draws nothing. An image 2D target is cleared to transparent before its lists draw.
      *
      * **Order:** the images in the frame's order, each image's lists in order; then the overlay's layers lowest first,
      * then submission order; then each list's command order.

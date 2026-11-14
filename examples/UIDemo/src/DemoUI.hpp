@@ -6,7 +6,8 @@
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirUI/UIRoot.hpp"
 
-// What the HUD's and the menu's sources share: where their files are read from, and their elements' behaviours.
+// What the HUD's, the menu's and the world roots' sources share: where their files are read from, and their elements'
+// behaviours.
 namespace UIDemo
 {
     /**

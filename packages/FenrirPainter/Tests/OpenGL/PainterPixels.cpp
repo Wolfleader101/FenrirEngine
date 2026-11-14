@@ -293,7 +293,7 @@ TEST_CASE("A half-opacity group draws over a solid colour as one, half and half"
     Fenrir::Painter painter(list, test.Config());
     painter.DrawRect({0, 0, 64, 64}, Colour::Blue);
     painter.BeginGroup({0, 0, 64, 64}, 0.5f);
-    // Two overlapping rectangles: in a group they are one layer, so the overlap is no redder than the rest.
+    // Two overlapping rectangles: in a group they are one image, so the overlap is no redder than the rest.
     painter.DrawRect({16, 16, 24, 32}, Colour::Red);
     painter.DrawRect({24, 16, 24, 32}, Colour::Red);
     painter.EndGroup();
