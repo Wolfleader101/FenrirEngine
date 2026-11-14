@@ -3,8 +3,14 @@
 #include <array>
 #include <cmath>
 
+#include "FenrirApp/App.hpp"
 #include "FenrirPainter/Painter.hpp"
 #include "FenrirPainter/Path.hpp"
+#include "FenrirText/FontLibrary.hpp"
+#include "FenrirText/TextStyle.hpp"
+#include "FenrirUI/UI.hpp"
+#include "FenrirUI/UIRoot.hpp"
+#include "UIDemo.hpp"
 
 namespace UIDemo
 {
@@ -35,6 +41,12 @@ namespace UIDemo
 
         Fenrir::StrokeStyle stroke;
         stroke.cap = Fenrir::LineCap::Round;
+        // The letters lay out in the target's pixels (Painter's text), which the painter divides back to UI units.
+        const Fenrir::UIRoot& root = GetRoot();
+        const auto* roots = root.GetApp().TryGetResource<Fenrir::UIRoots>();
+        Fenrir::FontLibrary* fonts = roots != nullptr ? roots->GetFonts() : nullptr;
+        const float pixels = root.GetScale() * root.GetTargetSize().contentScale;
+        constexpr std::array<const char*, 4> letters{"N", "E", "S", "W"};
 
         // Every tick within the span, from the first multiple of TickDegrees at or past its left end.
         const float leftHeading = m_heading - SpanDegrees * 0.5f;
@@ -54,18 +66,20 @@ namespace UIDemo
             line.MoveTo({x, bottom}).LineTo({x, bottom - length});
             painter.StrokePath(line, stroke, faded);
 
-            // North gets a filled triangle over its tick.
-            if (std::abs(Wrap(tick)) < 0.5f)
+            // A cardinal point's letter over its tick, in the SDF family.
+            if (cardinal && fonts != nullptr && pixels > 0.0f)
             {
-                const float top = bottom - length - 4.0f;
-                const std::array<Fenrir::Math::Vec2, 3> marker{
-                    Fenrir::Math::Vec2{x - 6.0f, top - 10.0f},
-                    Fenrir::Math::Vec2{x + 6.0f, top - 10.0f},
-                    Fenrir::Math::Vec2{x, top},
-                };
-                Fenrir::Path triangle;
-                triangle.AddPolygon(marker);
-                painter.FillPath(triangle, faded);
+                const auto quarter = static_cast<std::size_t>(std::lround((Wrap(tick) + 360.0f) / 90.0f)) % 4;
+                Fenrir::Paragraph& label = m_labels.at(quarter);
+                Fenrir::TextStyle text;
+                text.family = SdfFamily;
+                text.size = LabelSize * pixels;
+                text.weight = Fenrir::FontWeightBold;
+                text.colour = faded;
+                label.SetText(letters.at(quarter), text);
+                label.Layout(*fonts, Fenrir::UnlimitedWidth);
+                const Fenrir::Math::Vec2 size = label.Size() / pixels;
+                painter.DrawText(label, {x - size.x * 0.5f, bottom - length - size.y});
             }
         }
 

@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # UI data is pushed by systems, UI events are engine events, pointer input is opt-in per element, and UI on the window blends in gamma

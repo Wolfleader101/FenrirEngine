@@ -10,6 +10,9 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
+#include "FenrirECS/Entity.hpp"
+#include "FenrirMath/Colour.hpp"
+#include "FenrirMath/Math.hpp"
 #include "FenrirUI/ElementId.hpp"
 #include "FenrirUI/Stylesheet.hpp"
 #include "FenrirUI/UIEvent.hpp"
@@ -297,6 +300,92 @@ namespace UIDemo
         MenuInstance m_screen;
         /** @brief The settings the screen's controls last showed; none when they show nothing yet. */
         std::optional<Settings> m_screenSettings;
+    };
+
+    /**
+     * @brief The font family the world roots' text and the compass's labels are set in: the engine's embedded face
+     * registered in SDF mode (ADR-0062), so it stays crisp when a quad is near, far or turned. MakeDemoConfig registers
+     * it with the UI.
+     */
+    inline constexpr const char* SdfFamily = "ui-sdf";
+
+    /** @brief The terminal's quad: its size in metres, and its UI units to a metre. */
+    inline constexpr float TerminalWidth = 1.6f;
+    inline constexpr float TerminalHeight = 1.0f;
+    inline constexpr float WorldUnitsPerMetre = 500.0f;
+
+    /**
+     * @brief The room's UI in the world, an app resource (ADR-0060, ADR-0066): the light terminal and the name plate,
+     * each a UI root on a quad entity of the room's (Fenrir::UIWorldTarget), both styled by `ui/world.css` with hot
+     * reload on. The terminal, `ui/terminal.ui`, takes the pointer ray the room's system gives it each frame (from the
+     * camera through the cursor): its buttons pick the lamps' colour and its slider turns its hue. The name plate,
+     * `ui/plate.ui`, takes no input; the room turns its quad to face the camera.
+     */
+    class WorldUI
+    {
+      public:
+        /** @brief The lamps' colour before the terminal changes it, sRGB. */
+        static constexpr std::uint32_t WarmLight = 0xFFD8A8FF;
+        static constexpr std::uint32_t CoolLight = 0xB8D4FFFF;
+
+        explicit WorldUI(Fenrir::App& app);
+        WorldUI(const WorldUI&) = delete;
+        WorldUI& operator=(const WorldUI&) = delete;
+        WorldUI(WorldUI&&) = delete;
+        WorldUI& operator=(WorldUI&&) = delete;
+        /** @brief Destroys the roots. */
+        ~WorldUI();
+
+        /**
+         * @brief Puts the terminal on `terminal`'s quad and the name plate on `plate`'s, each an entity with a
+         * WorldQuad2D, making their roots and loading their documents; the room's spawn calls it. Again, for a room
+         * entered again, the old roots go first.
+         */
+        void Attach(Fenrir::Entity terminal, Fenrir::Entity plate);
+
+        /**
+         * @brief The terminal's system, run once a frame: gives its root `ray` and whether the left button is
+         * `pressed` (UIRoot::SetPointerRay), then reads its UI events. Whether the ray is over the terminal or a press
+         * is held on it, so the room's clicks are not shots.
+         */
+        bool Update(const std::optional<Fenrir::Math::Ray>& ray, bool pressed);
+
+        /** @brief The lamps' colour, as the terminal last set it, linear. */
+        [[nodiscard]] Fenrir::Colour GetLightColour() const noexcept
+        {
+            return m_light;
+        }
+
+        /** @brief The terminal's root; null before Attach. */
+        [[nodiscard]] Fenrir::UIRoot* TerminalRoot() const noexcept
+        {
+            return m_terminal;
+        }
+
+        /** @brief The name plate's root; null before Attach. */
+        [[nodiscard]] Fenrir::UIRoot* PlateRoot() const noexcept
+        {
+            return m_plate;
+        }
+
+      private:
+        /** @brief A root on `entity`'s quad holding `document`, styled by the stylesheet. */
+        Fenrir::UIRoot& MakeRoot(Fenrir::Entity entity, const char* document);
+        void DestroyRoots();
+        /** @brief Sets the lamps' colour, `srgb` packed as Colour::FromSrgb takes it, the swatch and the reading. */
+        void SetLight(std::uint32_t srgb, std::string_view reading);
+
+        Fenrir::App& m_app;
+        std::string m_files;
+        Fenrir::EventReader<Fenrir::UIEvent> m_events;
+        Fenrir::UIRoot* m_terminal = nullptr;
+        Fenrir::UIRoot* m_plate = nullptr;
+        Fenrir::Colour m_light;
+        std::uint32_t m_lightSrgb = WarmLight;
+        /** @brief What the terminal's reading says of the light. */
+        std::string m_reading = "Warm white";
+        /** @brief The slider's hue, in degrees. */
+        float m_hue = 30.0f;
     };
 
     /** @brief The room: a lit room with the player, a top-down camera for the minimap and the HUD's system. */

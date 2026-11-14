@@ -196,6 +196,34 @@ namespace Fenrir::Render
             std::vector<std::string_view>{}, std::vector<std::string_view>{"BLUR"},
             std::vector<std::string_view>{"BLUR", "SHADOW"}};
 
+        /**
+         * @brief A 2D pipeline's depth, formats and samples for a pass drawing into `format`: no depth (ADR-0027), but
+         * a world quad's tests its view's reversed-Z depth without writing it, as transparent items do.
+         */
+        void SetTargetState(PipelineDesc& desc, TextureFormat colour, std::uint32_t samples, bool world)
+        {
+            desc.depth.test = world;
+            desc.depth.write = false;
+            desc.depth.compare = CompareOp::GreaterEqual;
+            if (world)
+            {
+                desc.depthFormat = TextureFormat::Depth32Float;
+            }
+            else
+            {
+                desc.depthFormat.reset();
+            }
+            desc.colourFormats = {colour};
+            desc.samples = samples;
+        }
+
+        /** @brief `resources` sorted by id, each once. */
+        void SortUnique(std::vector<GraphResource>& resources)
+        {
+            std::sort(resources.begin(), resources.end(), [](GraphResource a, GraphResource b) { return a.id < b.id; });
+            resources.erase(std::unique(resources.begin(), resources.end()), resources.end());
+        }
+
         /** @brief The target block of a pass of `pixels` at `scale` whose top-left is (`originX`, `originY`). */
         TargetBlock BlockOf(PixelSize pixels, float scale, std::int32_t originX, std::int32_t originY)
         {
@@ -252,6 +280,8 @@ namespace Fenrir::Render
     {
         m_targetLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "2D target");
         m_targetBlocks = std::make_unique<BlockRing>(m_device, m_targetLayout, false, sizeof(TargetBlock), "2D target");
+        m_worldBlocks =
+            std::make_unique<BlockRing>(m_device, m_targetLayout, false, sizeof(TargetBlock), "2D world target");
         m_vertices = std::make_unique<ByteRing>(m_device, BufferUsage::Vertex, "2D vertices");
         m_indices = std::make_unique<ByteRing>(m_device, BufferUsage::Index, "2D indices");
         m_parameters = std::make_unique<ByteRing>(m_device, BufferUsage::Uniform, "2D parameters");
@@ -302,6 +332,7 @@ namespace Fenrir::Render
             m_device.Destroy(variant.layout);
         }
         m_targetBlocks.reset();
+        m_worldBlocks.reset();
         m_vertices.reset();
         m_indices.reset();
         m_parameters.reset();
@@ -399,7 +430,7 @@ namespace Fenrir::Render
     }
 
     const Draw2DFeature::PipelineEntry* Draw2DFeature::Pipeline(const PipelineDescription2D& description,
-                                                                TextureFormat format, bool masked)
+                                                                const PassFormat& format, bool masked)
     {
         const auto cached = std::find_if(m_pipelines.begin(), m_pipelines.end(), [&](const PipelineEntry& entry) {
             return entry.format == format && entry.masked == masked && entry.description == description;
@@ -411,11 +442,11 @@ namespace Fenrir::Render
 
         const ShaderEntry& shader = m_shaders.at(KeyOf(description.shader));
         bool gamma = description.blendSpace == BlendSpace2D::Gamma;
-        if (gamma && format != TextureFormat::Rgba8Srgb)
+        if (gamma && format.format != TextureFormat::Rgba8Srgb)
         {
             m_logger.Error("FenrirRenderer: a 2D pipeline description with shader {} asks for the Gamma blend space, "
                            "which needs an 8-bit sRGB target, but its target is {}; it draws as Linear",
-                           description.shader.index, formatNames.at(static_cast<std::size_t>(format)));
+                           description.shader.index, formatNames.at(static_cast<std::size_t>(format.format)));
             gamma = false;
         }
         std::vector<std::string_view> keys;
@@ -472,15 +503,11 @@ namespace Fenrir::Render
         desc.shader = entry.variant;
         desc.sets = {m_targetLayout, entry.layout, BindingGroupLayoutHandle{}, BindingGroupLayoutHandle{}};
         desc.vertexBuffers = {DeviceLayout(description.vertexLayout)};
-        // Every 2D target's rules: no depth and no culling (ADR-0027).
+        // Every 2D target's rules: no depth and no culling (ADR-0027); a world quad's tests the view's depth.
         desc.cull = CullMode::None;
-        desc.depth.test = false;
-        desc.depth.write = false;
-        desc.depthFormat.reset();
+        SetTargetState(desc, format.format, format.samples, format.world);
         desc.blend = deviceBlends.at(static_cast<std::size_t>(description.blendMode));
         desc.encodeSrgb = !gamma;
-        desc.colourFormats = {format};
-        desc.samples = 1;
         const PipelineResult made = m_device.CreatePipeline(desc, shader.container->name);
         entry.pipeline = made.pipeline;
         if (entry.pipeline.IsEmpty())
@@ -492,7 +519,8 @@ namespace Fenrir::Render
         return &entry;
     }
 
-    PipelineHandle Draw2DFeature::CompositePipeline(CompositeKind kind, Graphics::BlendMode blend, TextureFormat format)
+    PipelineHandle Draw2DFeature::CompositePipeline(CompositeKind kind, Graphics::BlendMode blend,
+                                                    const PassFormat& format)
     {
         const auto key = std::make_tuple(kind, blend, format);
         if (const auto found = m_composite.pipelines.find(key); found != m_composite.pipelines.end())
@@ -510,13 +538,9 @@ namespace Fenrir::Render
         desc.sets = {m_targetLayout, variant.layout, BindingGroupLayoutHandle{}, BindingGroupLayoutHandle{}};
         desc.vertexBuffers = {DeviceLayout(Vertex2DLayout())};
         desc.cull = CullMode::None;
-        desc.depth.test = false;
-        desc.depth.write = false;
-        desc.depthFormat.reset();
+        SetTargetState(desc, format.format, format.samples, format.world);
         desc.blend = blend;
         desc.encodeSrgb = true;
-        desc.colourFormats = {format};
-        desc.samples = 1;
         const PipelineResult made = m_device.CreatePipeline(desc, "2D composite");
         pipeline = made.pipeline;
         if (pipeline.IsEmpty())
@@ -579,7 +603,9 @@ namespace Fenrir::Render
             return false;
         }
         Draw draw;
-        draw.scissor = command.scissor
+        // A world quad has no hardware scissor: its view's viewport is set as it is recorded, and the painter's shader
+        // realises the clips.
+        draw.scissor = command.scissor && !pass.world
                            ? ScissorPixels(*command.scissor, pass.scale, pass.originX, pass.originY, pass.pixels)
                            : PixelRect{0, 0, pass.pixels.width, pass.pixels.height};
         if (draw.scissor.width == 0 || draw.scissor.height == 0)
@@ -587,7 +613,7 @@ namespace Fenrir::Render
             return false;
         }
         const bool masked = mask != nullptr && mask->kind == MaskState::Kind::Image;
-        const PipelineEntry* pipeline = Pipeline(description, pass.format, masked);
+        const PipelineEntry* pipeline = Pipeline(description, FormatOf(pass), masked);
         if (pipeline == nullptr)
         {
             return false;
@@ -694,7 +720,7 @@ namespace Fenrir::Render
     void Draw2DFeature::AddImageQuad(TargetPass& into, const ImageQuad& quad, GraphResource source, CompositeKind kind,
                                      Graphics::BlendMode blend, const BlurBlock* block)
     {
-        const PipelineHandle pipeline = CompositePipeline(kind, blend, into.format);
+        const PipelineHandle pipeline = CompositePipeline(kind, blend, FormatOf(into));
         if (pipeline.IsEmpty())
         {
             return;
@@ -796,6 +822,7 @@ namespace Fenrir::Render
 
         TargetPass pass;
         pass.name = "Blur 2D";
+        pass.stage = m_listStage;
         pass.target = blurred.image;
         pass.load = LoadOp::DontCare;
         pass.format = format;
@@ -852,6 +879,7 @@ namespace Fenrir::Render
         }
         TargetPass next;
         next.name = m_passes[into].name;
+        next.stage = m_passes[into].stage;
         next.target = m_passes[into].target;
         next.load = LoadOp::Load;
         next.format = m_passes[into].format;
@@ -863,6 +891,7 @@ namespace Fenrir::Render
         // What it holds under them, copied, then blurred across and down.
         TargetPass copy;
         copy.name = "Backdrop 2D";
+        copy.stage = m_listStage;
         copy.format = next.format;
         copy.pixels = copied;
         copy.target = TransientImage(graph, "2D backdrop", copied, next.format);
@@ -1004,6 +1033,7 @@ namespace Fenrir::Render
                 group.originX = static_cast<std::int32_t>(left);
                 group.originY = static_cast<std::int32_t>(top);
                 group.scale = outer.scale;
+                group.stage = m_listStage;
                 m_passes.push_back(std::move(group));
                 open.emplace_back(Open::Realised, m_passes.size() - 1);
                 realised.push_back(m_passes.size() - 1);
@@ -1057,7 +1087,14 @@ namespace Fenrir::Render
                           scale / static_cast<float>(shape.pixels.height)}});
                     continue;
                 }
-                if (backdrop)
+                if (backdrop && m_passes[realised.back()].world)
+                {
+                    // A world quad's lists draw into the view's scene colour as they are recorded: there is no image
+                    // of what is under them to copy.
+                    LogOnce("world backdrop", "a backdrop filter on a world-space 2D target's quad has no target to "
+                                              "read, so its group draws without one");
+                }
+                else if (backdrop)
                 {
                     moveOn(AddBackdrop(graph, index, realised.back(), sigma));
                 }
@@ -1114,29 +1151,158 @@ namespace Fenrir::Render
         return true;
     }
 
-    void Draw2DFeature::AddPasses(RenderGraph& graph, const FrameContext& frame)
+    void Draw2DFeature::BeginFrame(std::uint64_t frameIndex)
     {
+        if (m_begun == frameIndex)
+        {
+            return;
+        }
+        m_begun = frameIndex;
         for (const BindingGroupHandle group : m_frameGroups)
         {
             m_device.Destroy(group);
         }
         m_frameGroups.clear();
         m_stats = {};
-        Frame2D drawn = std::move(m_frame);
+        m_drawn = std::move(m_frame);
         m_frame = {};
-        if (drawn.submissions.empty() && drawn.images.empty())
-        {
-            return;
-        }
-
         m_passes.clear();
         m_finished.clear();
+        m_worlds.clear();
         m_vertexBytes.clear();
         m_indexBytes.clear();
         m_parameterBytes.clear();
         m_parameterEntries.clear();
         m_pendingGroups.clear();
         m_deferredGroups.clear();
+        m_vertexBuffer = {};
+        m_indexBuffer = {};
+        m_parameterBuffer = {};
+        m_passesAdded = false;
+    }
+
+    std::vector<WorldQuads::Quad> Draw2DFeature::ResolveWorldQuads(RenderGraph& graph, const FrameContext& frame,
+                                                                   TextureFormat colour, std::uint32_t samples,
+                                                                   std::size_t views)
+    {
+        // The scene renderer is added before this feature (Renderer::Install), so its passes, and this call, come
+        // before AddPasses, which writes the bytes and groups the quads' draws record with.
+        BeginFrame(frame.frameIndex);
+        if (m_passesAdded)
+        {
+            LogOnce("world order", "the world-space 2D target's quads were resolved after the 2D feature added its "
+                                   "passes, so they draw nothing");
+            return {};
+        }
+        std::vector<Quad> quads;
+        // Its lists sample image 2D targets as they were: those are drawn after the views.
+        static const std::map<AssetKey, GraphResource> earlierImages;
+        m_listStage = RenderStage::Transparent;
+        for (const WorldSubmission2D& world : m_drawn.worlds)
+        {
+            TargetPass root;
+            root.name = "World 2D";
+            root.stage = RenderStage::Transparent;
+            root.world = true;
+            root.format = colour;
+            root.sampleCount = samples;
+            root.pixels = {static_cast<std::uint32_t>(std::ceil(std::max(world.logicalSize.x, 0.0f))),
+                           static_cast<std::uint32_t>(std::ceil(std::max(world.logicalSize.y, 0.0f)))};
+            if (root.pixels.width == 0 || root.pixels.height == 0)
+            {
+                continue;
+            }
+            m_passes.push_back(std::move(root));
+            ListTarget target{m_passes.size() - 1, AssetKey{}, &earlierImages};
+            for (const DrawList2D& list : world.lists)
+            {
+                DrawList(list, target, graph);
+            }
+            if (m_passes[target.root].draws.empty())
+            {
+                continue;
+            }
+            m_worlds.push_back({target.root, world.localToWorld, world.logicalSize});
+            Quad& quad = quads.emplace_back();
+            quad.origin = world.origin;
+            const Math::Vec2 size = world.logicalSize;
+            const std::array<Math::Vec2, 4> corners{{{0.0f, 0.0f}, {size.x, 0.0f}, {size.x, size.y}, {0.0f, size.y}}};
+            for (std::size_t c = 0; c < corners.size(); ++c)
+            {
+                quad.corners.at(c) = Math::Vec3(world.localToWorld * Math::Vec4(corners.at(c), 0.0f, 1.0f));
+            }
+        }
+        m_listStage = RenderStage::Overlay;
+        m_worldBlocks->Reserve(std::max<std::size_t>(m_worlds.size() * views, 1));
+        return quads;
+    }
+
+    std::vector<GraphResource> Draw2DFeature::WorldQuadSamples(std::size_t quad) const
+    {
+        std::vector<GraphResource> samples = m_passes.at(m_worlds.at(quad).pass).samples;
+        SortUnique(samples);
+        return samples;
+    }
+
+    BindingGroupHandle Draw2DFeature::WorldQuadTarget(std::uint64_t frameIndex, std::size_t quad, std::size_t view,
+                                                      const Math::Mat4& viewProjection)
+    {
+        // The list's local units through the quad's world matrix and the view, at a content scale of 1 over the
+        // quad's logical size.
+        const WorldQuad& world = m_worlds.at(quad);
+        const TargetBlock block{viewProjection * world.localToWorld,
+                                Math::Vec4(world.logicalSize.x, world.logicalSize.y, 0.0f, 0.0f),
+                                Math::Vec4(1.0f, 0.0f, 0.0f, 0.0f)};
+        const std::size_t slot = view * m_worlds.size() + quad;
+        m_worldBlocks->Write(frameIndex, slot, std::as_bytes(std::span(&block, 1)));
+        return m_worldBlocks->Group(frameIndex, slot);
+    }
+
+    void Draw2DFeature::RecordWorldQuad(PassContext& context, std::size_t quad, BindingGroupHandle target,
+                                        PixelRect viewport)
+    {
+        context.Encoder().SetViewport(viewport);
+        RecordDraws(context, m_passes.at(m_worlds.at(quad).pass).draws, target, viewport);
+    }
+
+    void Draw2DFeature::RecordDraws(PassContext& context, const std::vector<Draw>& draws, BindingGroupHandle target,
+                                    const std::optional<PixelRect>& scissor)
+    {
+        PassEncoder& encoder = context.Encoder();
+        for (const Draw& draw : draws)
+        {
+            BindingGroupHandle group = draw.group;
+            if (!draw.composite.IsEmpty())
+            {
+                group = CompositeGroup(draw.compositeKind, context.Texture(draw.composite), m_parameterBuffer,
+                                       draw.compositeParameters);
+            }
+            else if (!draw.mask.IsEmpty())
+            {
+                BindingGroupDesc desc = draw.maskedGroup;
+                desc.entries.at(draw.maskEntry).texture = context.Texture(draw.mask);
+                group = m_device.CreateBindingGroup(desc, "2D command");
+                m_frameGroups.push_back(group);
+            }
+            encoder.SetPipeline(draw.pipeline);
+            encoder.SetBindingGroup(0, target);
+            if (!group.IsEmpty())
+            {
+                encoder.SetBindingGroup(1, group);
+            }
+            encoder.SetVertexBuffer(0, m_vertexBuffer, draw.vertexOffset);
+            encoder.SetIndexBuffer(m_indexBuffer, draw.indexFormat, draw.indexOffset);
+            encoder.SetScissor(scissor.value_or(draw.scissor));
+            encoder.DrawIndexed(
+                {.indexCount = draw.indexCount, .firstIndex = draw.firstIndex, .baseVertex = draw.baseVertex});
+        }
+    }
+
+    void Draw2DFeature::AddPasses(RenderGraph& graph, const FrameContext& frame)
+    {
+        BeginFrame(frame.frameIndex);
+        m_passesAdded = true;
+        const Frame2D& drawn = m_drawn;
 
         // The images first, each a pass of its own, cleared, at a content scale of 1; an image a later list samples
         // runs before it.
@@ -1191,7 +1357,7 @@ namespace Fenrir::Render
                 m_finished.push_back(target.root);
             }
         }
-        if (m_finished.empty())
+        if (m_finished.empty() && m_worlds.empty())
         {
             return;
         }
@@ -1202,14 +1368,13 @@ namespace Fenrir::Render
             m_vertices->Write(frameIndex, m_vertexBytes);
             m_indices->Write(frameIndex, m_indexBytes);
         }
-        BufferHandle parameterBuffer;
         if (!m_parameterBytes.empty())
         {
             m_parameters->Write(frameIndex, m_parameterBytes);
-            parameterBuffer = m_parameters->Current(frameIndex);
+            m_parameterBuffer = m_parameters->Current(frameIndex);
             for (const auto& [group, entry] : m_parameterEntries)
             {
-                m_pendingGroups.at(group).entries.at(entry).buffer = parameterBuffer;
+                m_pendingGroups.at(group).entries.at(entry).buffer = m_parameterBuffer;
             }
         }
         std::vector<BindingGroupHandle> groups;
@@ -1223,30 +1388,7 @@ namespace Fenrir::Render
                 m_frameGroups.push_back(groups.back());
             }
         }
-
-        m_targetBlocks->Reserve(m_finished.size());
-        const BufferHandle vertexBuffer = m_vertices->Current(frameIndex);
-        const BufferHandle indexBuffer = m_indices->Current(frameIndex);
-        for (std::size_t slot = 0; slot < m_finished.size(); ++slot)
-        {
-            TargetPass& pass = m_passes[m_finished[slot]];
-            if (pass.copy)
-            {
-                // A backdrop's copy: what the target holds under it, into the copy's image.
-                graph.AddPass(
-                    pass.name, RenderStage::Overlay, QueueKind::Copy,
-                    [source = pass.copy->source, target = pass.target](PassBuilder& builder) {
-                        builder.CopySource(source);
-                        builder.CopyDestination(target);
-                    },
-                    [source = pass.copy->source, region = pass.copy->region,
-                     target = pass.target](PassContext& context) {
-                        context.Encoder().CopyTexture({context.Texture(source), region, context.Texture(target), 0, 0});
-                    });
-                continue;
-            }
-            const TargetBlock block = BlockOf(pass.pixels, pass.scale, pass.originX, pass.originY);
-            m_targetBlocks->Write(frameIndex, slot, std::as_bytes(std::span(&block, 1)));
+        const auto bindGroups = [&](TargetPass& pass) {
             for (Draw& draw : pass.draws)
             {
                 if (draw.groupIndex == 0)
@@ -1262,16 +1404,46 @@ namespace Fenrir::Render
                     draw.maskedGroup = m_pendingGroups.at(draw.groupIndex - 1);
                 }
             }
-            std::sort(pass.samples.begin(), pass.samples.end(),
-                      [](GraphResource a, GraphResource b) { return a.id < b.id; });
-            pass.samples.erase(std::unique(pass.samples.begin(), pass.samples.end()), pass.samples.end());
+        };
+        // The world quads' draws stay here, for the views' Transparent passes to record.
+        for (const WorldQuad& world : m_worlds)
+        {
+            bindGroups(m_passes[world.pass]);
+        }
+
+        m_targetBlocks->Reserve(m_finished.size());
+        m_vertexBuffer = m_vertices->Current(frameIndex);
+        m_indexBuffer = m_indices->Current(frameIndex);
+        for (std::size_t slot = 0; slot < m_finished.size(); ++slot)
+        {
+            TargetPass& pass = m_passes[m_finished[slot]];
+            if (pass.copy)
+            {
+                // A backdrop's copy: what the target holds under it, into the copy's image.
+                graph.AddPass(
+                    pass.name, pass.stage, QueueKind::Copy,
+                    [source = pass.copy->source, target = pass.target](PassBuilder& builder) {
+                        builder.CopySource(source);
+                        builder.CopyDestination(target);
+                    },
+                    [source = pass.copy->source, region = pass.copy->region,
+                     target = pass.target](PassContext& context) {
+                        context.Encoder().CopyTexture({context.Texture(source), region, context.Texture(target), 0, 0});
+                    });
+                continue;
+            }
+            const TargetBlock block = BlockOf(pass.pixels, pass.scale, pass.originX, pass.originY);
+            m_targetBlocks->Write(frameIndex, slot, std::as_bytes(std::span(&block, 1)));
+            bindGroups(pass);
+            SortUnique(pass.samples);
 
             const BindingGroupHandle targetGroup = m_targetBlocks->Group(frameIndex, slot);
             const PixelRect viewport{0, 0, pass.pixels.width, pass.pixels.height};
-            // Every 2D pass is in the Overlay stage: the overlay's after each view's Output and before the debug
-            // feature's Overlay pass, an image's and a group's before what samples them, as the graph orders them.
+            // The overlay's passes are in the Overlay stage, after each view's Output and before the debug feature's
+            // Overlay pass, an image's and a group's before what samples them, as the graph orders them; a world
+            // quad's groups are in the Transparent stage, before the views' Transparent passes that composite them.
             graph.AddPass(
-                pass.name, RenderStage::Overlay, QueueKind::Graphics,
+                pass.name, pass.stage, QueueKind::Graphics,
                 [target = pass.target, load = pass.load, samples = pass.samples](PassBuilder& builder) {
                     builder.ColourAttachment(target, load, {0.0f, 0.0f, 0.0f, 0.0f});
                     for (const GraphResource sampled : samples)
@@ -1279,38 +1451,9 @@ namespace Fenrir::Render
                         builder.Sample(sampled);
                     }
                 },
-                [this, recorded = std::move(pass.draws), viewport, vertexBuffer, indexBuffer, parameterBuffer,
-                 targetGroup](PassContext& context) {
-                    PassEncoder& encoder = context.Encoder();
-                    encoder.SetViewport(viewport);
-                    for (const Draw& draw : recorded)
-                    {
-                        BindingGroupHandle group = draw.group;
-                        if (!draw.composite.IsEmpty())
-                        {
-                            group = CompositeGroup(draw.compositeKind, context.Texture(draw.composite), parameterBuffer,
-                                                   draw.compositeParameters);
-                        }
-                        else if (!draw.mask.IsEmpty())
-                        {
-                            BindingGroupDesc desc = draw.maskedGroup;
-                            desc.entries.at(draw.maskEntry).texture = context.Texture(draw.mask);
-                            group = m_device.CreateBindingGroup(desc, "2D command");
-                            m_frameGroups.push_back(group);
-                        }
-                        encoder.SetPipeline(draw.pipeline);
-                        encoder.SetBindingGroup(0, targetGroup);
-                        if (!group.IsEmpty())
-                        {
-                            encoder.SetBindingGroup(1, group);
-                        }
-                        encoder.SetVertexBuffer(0, vertexBuffer, draw.vertexOffset);
-                        encoder.SetIndexBuffer(indexBuffer, draw.indexFormat, draw.indexOffset);
-                        encoder.SetScissor(draw.scissor);
-                        encoder.DrawIndexed({.indexCount = draw.indexCount,
-                                             .firstIndex = draw.firstIndex,
-                                             .baseVertex = draw.baseVertex});
-                    }
+                [this, recorded = std::move(pass.draws), viewport, targetGroup](PassContext& context) {
+                    context.Encoder().SetViewport(viewport);
+                    RecordDraws(context, recorded, targetGroup, std::nullopt);
                 });
         }
     }

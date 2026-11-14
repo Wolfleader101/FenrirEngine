@@ -1,0 +1,24 @@
+<!--
+  UIDemo's light terminal (examples/UIDemo/README.md), loaded into a root on a quad in the room (a world root) and
+  styled by world.css. Aim at it with the mouse: the room's system casts a ray from the camera through the cursor and
+  gives it to the root each frame. Its buttons pick the lamps' colour and its slider turns the colour's hue.
+-->
+<panel id="terminal">
+    <panel class="header">
+        <label class="title">Lamps</label>
+        <panel id="swatch"/>
+    </panel>
+
+    <panel class="presets">
+        <button id="warm">Warm</button>
+        <button id="cool">Cool</button>
+        <button id="hue-on">Hue</button>
+    </panel>
+
+    <panel class="hue-row">
+        <label class="name">Hue</label>
+        <slider id="hue" min="0" max="360" step="1"/>
+    </panel>
+
+    <label id="reading" class="reading">Warm white</label>
+</panel>

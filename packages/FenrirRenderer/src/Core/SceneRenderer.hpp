@@ -92,6 +92,50 @@ namespace Fenrir::Render
     };
 
     /**
+     * @brief What each view's Transparent pass draws among its transparent items besides them: the world-space 2D
+     * target's quads (ADR-0060), which the 2D render feature resolves and records, given to the scene renderer through
+     * SceneRenderer::SetWorldQuads.
+     */
+    class WorldQuads
+    {
+      public:
+        /** @brief One quad, in world space: the point it sorts by and the corners it is culled by. */
+        struct Quad
+        {
+            Math::Vec3 origin{0.0f};
+            std::array<Math::Vec3, 4> corners{};
+        };
+
+        WorldQuads() = default;
+        WorldQuads(const WorldQuads&) = delete;
+        WorldQuads& operator=(const WorldQuads&) = delete;
+        WorldQuads(WorldQuads&&) = delete;
+        WorldQuads& operator=(WorldQuads&&) = delete;
+
+        /**
+         * @brief The frame's quads, by index, resolved to draw into a view's `colour` scene colour at `samples` and its
+         * Depth32Float depth, the passes their groups draw in added; called once a frame by a scene renderer drawing
+         * `views` views, before it adds their passes.
+         */
+        virtual std::vector<Quad> ResolveWorldQuads(RenderGraph& graph, const FrameContext& frame,
+                                                    Graphics::TextureFormat colour, std::uint32_t samples,
+                                                    std::size_t views) = 0;
+        /** @brief The images `quad`'s draws sample, which a pass drawing it declares. */
+        [[nodiscard]] virtual std::vector<GraphResource> WorldQuadSamples(std::size_t quad) const = 0;
+        /** @brief The set 0 group `quad` draws with in the frame's view `view`, seen through `viewProjection`. */
+        [[nodiscard]] virtual Graphics::BindingGroupHandle WorldQuadTarget(std::uint64_t frameIndex, std::size_t quad,
+                                                                           std::size_t view,
+                                                                           const Math::Mat4& viewProjection) = 0;
+        /** @brief Records `quad`'s draws in the pass being recorded, with `target` at set 0, scissored to `viewport`.
+         */
+        virtual void RecordWorldQuad(PassContext& context, std::size_t quad, Graphics::BindingGroupHandle target,
+                                     Graphics::PixelRect viewport) = 0;
+
+      protected:
+        ~WorldQuads() = default;
+    };
+
+    /**
      * @brief The render feature that draws the scene (ADR-0019, ADR-0023, ADR-0024): the GPU side of the meshes,
      * shaders and materials the facade prepares, and each frame's draw list and views.
      *
@@ -333,6 +377,16 @@ namespace Fenrir::Render
         void SetClusteredLights(bool on) noexcept
         {
             m_clusteredLights = on;
+        }
+
+        /**
+         * @brief The world-space 2D target's quads each view's Transparent pass draws (ADR-0060), sorted with its
+         * transparent items by the view depth of each quad's origin and culled from a view whose one side, or whose
+         * camera's back, all four of its corners are past; null for none. Kept, not owned: it outlives the frame.
+         */
+        void SetWorldQuads(WorldQuads* quads) noexcept
+        {
+            m_worldQuads = quads;
         }
 
         /**
@@ -854,6 +908,7 @@ namespace Fenrir::Render
         bool m_computeSkinning;
         /** @brief RendererConfig::clusteredLights: whether views with lights get a LightClusters pass. */
         bool m_clusteredLights = true;
+        WorldQuads* m_worldQuads = nullptr;
         /** @brief How each view's sun cascades are made (RendererConfig's shadow members). */
         CascadeConfig m_cascades;
 

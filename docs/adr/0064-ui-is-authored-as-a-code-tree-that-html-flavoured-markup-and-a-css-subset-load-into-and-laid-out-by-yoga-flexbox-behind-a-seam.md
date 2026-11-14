@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # UI is authored as a code tree that HTML-flavoured markup and a CSS subset load into, and laid out by Yoga flexbox behind a seam
