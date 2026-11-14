@@ -72,7 +72,7 @@
 }
 
 #settings-panel {
-    width: 560px;
+    width: 600px;
 }
 
 .title {
@@ -133,7 +133,8 @@
 }
 
 .name {
-    width: 170px;
+    width: 200px;
+    white-space: nowrap;
     color: var(--ink-dim);
 }
 
