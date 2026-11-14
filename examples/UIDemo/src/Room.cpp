@@ -232,7 +232,7 @@ namespace UIDemo
         }
 
         /** @brief The switches, listed on screen in an ImGui window as LightingDemo lists its own. */
-        void ShowSwitches(Hud& hud)
+        void ShowSwitches(Hud& hud, const Menu& menu)
         {
             ImGui::SetNextWindowPos({12.0f, 12.0f}, ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowSize({380.0f, 0.0f}, ImGuiCond_FirstUseEver);
@@ -242,6 +242,7 @@ namespace UIDemo
             ImGui::TextUnformatted("R: reload");
             ImGui::TextUnformatted("H: take a hit (health down; refills at zero)");
             ImGui::TextUnformatted("Right mouse + WASD: move (stamina drains)");
+            ImGui::TextUnformatted("Escape: the pause menu (B on a gamepad backs out)");
             ImGui::SeparatorText("Hot reload");
             bool hotReload = hud.Root().IsHotReloadOn();
             if (ImGui::Checkbox("Reload the HUD's files when they change", &hotReload))
@@ -250,6 +251,18 @@ namespace UIDemo
             }
             ImGui::TextUnformatted("Edit this stylesheet while the demo runs:");
             ImGui::TextWrapped("%s", hud.StylesheetPath().c_str());
+            bool menuReload = menu.Root().IsHotReloadOn();
+            if (ImGui::Checkbox("Reload the menu's files when they change", &menuReload))
+            {
+                menu.Root().SetHotReload(menuReload);
+            }
+            ImGui::TextUnformatted("The menu's stylesheet:");
+            ImGui::TextWrapped("%s", menu.StylesheetPath().c_str());
+            ImGui::SeparatorText("Settings");
+            const Settings& settings = menu.GetSettings();
+            // The engine has no audio yet: the volume is only kept and shown.
+            ImGui::Text("Volume: %.0f (no audio yet)", settings.volume);
+            ImGui::Text("Field of view: %.0f degrees", settings.fieldOfView);
             ImGui::End();
         }
 
@@ -257,16 +270,30 @@ namespace UIDemo
         {
             RoomState* state = scene.GetResource<RoomState>();
             Hud* hud = app.TryGetResource<Hud>();
-            if (state == nullptr || hud == nullptr || !state->player.IsValid())
+            Menu* menu = app.TryGetResource<Menu>();
+            if (state == nullptr || hud == nullptr || menu == nullptr || !state->player.IsValid())
             {
                 return;
             }
             const float delta = static_cast<float>(app.GetTime().deltaTime);
 
+            // The menu's system: Escape and the menu root's UI events.
+            menu->Update();
+            const Settings& settings = menu->GetSettings();
+            if (auto* look = app.TryGetResource<FenrirDemo::FreeFlyLook>())
+            {
+                look->invertPitch = settings.invertLook;
+            }
+
             float heading = 0.0f;
             float cameraSpeed = 0.0f;
             if (const Fenrir::Entity camera = WindowCamera(scene); camera.IsValid())
             {
+                // The settings' field of view, on the camera drawing into the window.
+                if (auto& lens = camera.GetComponent<Fenrir::Camera>().projection; lens.Is<Fenrir::Perspective>())
+                {
+                    lens.As<Fenrir::Perspective>().verticalFov = settings.fieldOfView * Pi / 180.0f;
+                }
                 const auto& transform = camera.GetComponent<Fenrir::Transform>();
                 heading = Heading(transform.rot);
                 if (state->lastCameraPosition && delta > 0.0f)
@@ -279,7 +306,11 @@ namespace UIDemo
                 above.pos = {transform.pos.x, above.pos.y, transform.pos.z};
             }
 
-            RunPlayer(app, *state, *hud, delta, cameraSpeed);
+            // While the menu is open the game is paused: the room's keys do nothing.
+            if (!menu->IsOpen())
+            {
+                RunPlayer(app, *state, *hud, delta, cameraSpeed);
+            }
 
             // The HUD's system: what the player's components hold, pushed into the HUD's elements (ADR-0065).
             HudFrame frame;
@@ -288,10 +319,12 @@ namespace UIDemo
             frame.ammo = state->player.GetComponent<Ammo>();
             frame.heading = heading;
             frame.minimap = state->minimap;
+            frame.playerName = settings.playerName;
+            frame.shown = settings.showHud;
             hud->Show(frame);
             hud->Update(delta);
 
-            ShowSwitches(*hud);
+            ShowSwitches(*hud, *menu);
         }
     } // namespace
 
@@ -300,8 +333,11 @@ namespace UIDemo
         FenrirDemo::DemoScene scene;
         scene.name = "The HUD";
         scene.keyHelp =
-            "F or left click: fire. R: reload. H: take a hit. Right mouse and WASD: move, draining stamina.";
-        scene.keys = {Fenrir::Key::F, Fenrir::Key::F, Fenrir::Key::H, Fenrir::Key::F, Fenrir::Key::R, Fenrir::Key::H};
+            "F or left click: fire. R: reload. H: take a hit. Right mouse and WASD: move, draining stamina. Escape: "
+            "the pause menu.";
+        // The smoke keys end by opening the menu and closing it again.
+        scene.keys = {Fenrir::Key::F, Fenrir::Key::F, Fenrir::Key::H,      Fenrir::Key::F,
+                      Fenrir::Key::R, Fenrir::Key::H, Fenrir::Key::Escape, Fenrir::Key::Escape};
         scene.camera = {{0.0f, 1.7f, 5.0f}, 0.0f, -0.1f};
         scene.spawn = Spawn;
         scene.update = Update;

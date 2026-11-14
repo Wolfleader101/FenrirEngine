@@ -525,3 +525,73 @@ TEST_CASE("Overflow hidden clips an element's own content to its padding box", "
     REQUIRE(Near(quads[1].clipHalfSize.x, 17.5f));
     REQUIRE(Near(quads[1].clipHalfSize.y, 15.0f));
 }
+
+TEST_CASE("A backdrop filter blurs what is under the element's border box before its background", "[ui][paint]")
+{
+    UITest::UITestApp test;
+    std::shared_ptr<UITest::CaptureTarget> target;
+    Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
+    const Fenrir::ElementId panel = ColouredPanel(root, "#ff0000");
+    REQUIRE(root.SetStyleProperty(panel, "width", "100px"));
+    REQUIRE(root.SetStyleProperty(panel, "backdrop-filter", "blur(8px)"));
+    test.Frame();
+    REQUIRE(root.GetResolvedStyle(panel)->backdropBlur == 8.0f);
+
+    const Fenrir::DrawList2D& list = target->lists.back();
+    INFO("an empty backdrop group over the panel, then the panel's background");
+    REQUIRE(list.commands.size() == 3);
+    REQUIRE(std::holds_alternative<Fenrir::BeginGroup2D>(list.commands[0]));
+    const auto& begin = std::get<Fenrir::BeginGroup2D>(list.commands[0]);
+    REQUIRE(Near(begin.bounds.width, 100.0f));
+    REQUIRE(Near(begin.bounds.height, 10.0f));
+    REQUIRE(std::holds_alternative<Fenrir::EndGroup2D>(list.commands[1]));
+    const auto& end = std::get<Fenrir::EndGroup2D>(list.commands[1]);
+    REQUIRE(end.filter == Fenrir::GroupFilter2D::BackdropBlur);
+    REQUIRE(Near(end.radius, 8.0f));
+    REQUIRE(std::holds_alternative<Fenrir::DrawCommand2D>(list.commands[2]));
+}
+
+TEST_CASE("A rounded element's backdrop blur is masked to its rounded border box", "[ui][paint]")
+{
+    UITest::UITestApp test;
+    std::shared_ptr<UITest::CaptureTarget> target;
+    Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
+    const Fenrir::ElementId panel = ColouredPanel(root, "#ff0000");
+    REQUIRE(root.SetStyleProperty(panel, "width", "100px"));
+    REQUIRE(root.SetStyleProperty(panel, "border-radius", "5px"));
+    REQUIRE(root.SetStyleProperty(panel, "backdrop-filter", "blur(8px)"));
+    test.Frame();
+
+    const Fenrir::DrawList2D& list = target->lists.back();
+    const auto backdrop = std::find_if(list.commands.begin(), list.commands.end(), [](const Fenrir::Command2D& c) {
+        const auto* end = std::get_if<Fenrir::EndGroup2D>(&c);
+        return end != nullptr && end->filter == Fenrir::GroupFilter2D::BackdropBlur;
+    });
+    REQUIRE(backdrop != list.commands.end());
+    INFO("a mask before the backdrop group, and the mask's end after it, before the background");
+    const auto mask = std::find_if(list.commands.begin(), backdrop, [](const Fenrir::Command2D& c) {
+        const auto* end = std::get_if<Fenrir::EndGroup2D>(&c);
+        return end != nullptr && end->mask;
+    });
+    REQUIRE(mask != backdrop);
+    REQUIRE(std::next(backdrop) != list.commands.end());
+    REQUIRE(std::holds_alternative<Fenrir::EndMask2D>(*std::next(backdrop)));
+    REQUIRE(std::holds_alternative<Fenrir::DrawCommand2D>(list.commands.back()));
+}
+
+TEST_CASE("Backdrop filter reads blur() or none, and refuses the rest", "[ui][style]")
+{
+    UITest::UITestApp test;
+    std::shared_ptr<UITest::CaptureTarget> target;
+    Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
+    const Fenrir::ElementId panel = root.Create(root.GetRootElement(), "panel");
+    REQUIRE(root.SetStyleProperty(panel, "backdrop-filter", "blur(12px)"));
+    REQUIRE_FALSE(root.SetStyleProperty(panel, "backdrop-filter", "blur(-2px)"));
+    REQUIRE_FALSE(root.SetStyleProperty(panel, "backdrop-filter", "grayscale(1)"));
+    REQUIRE_FALSE(root.SetStyleProperty(panel, "backdrop-filter", "blur(4)"));
+    test.Frame();
+    REQUIRE(root.GetResolvedStyle(panel)->backdropBlur == 12.0f);
+    REQUIRE(root.SetStyleProperty(panel, "backdrop-filter", "none"));
+    test.Frame();
+    REQUIRE(root.GetResolvedStyle(panel)->backdropBlur == 0.0f);
+}
