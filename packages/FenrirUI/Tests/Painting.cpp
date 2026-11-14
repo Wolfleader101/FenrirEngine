@@ -221,6 +221,45 @@ TEST_CASE("Without offscreen groups, or with no children, opacity fades each box
     REQUIRE((childAlpha == 127 || childAlpha == 128));
 }
 
+TEST_CASE("The anti-aliasing switch reaches the painter of every root", "[ui][paint]")
+{
+    UITest::UITestApp test;
+    INFO("the UI's anti-aliasing switch is off by default");
+    REQUIRE(test.Roots().settings.antiAliasing);
+    std::shared_ptr<UITest::CaptureTarget> first;
+    std::shared_ptr<UITest::CaptureTarget> second;
+    for (Fenrir::UIRoot* root : {&test.MakeRoot(first, {200.0f, 100.0f}), &test.MakeRoot(second, {300.0f, 100.0f})})
+    {
+        const Fenrir::ElementId panel = root->Create(root->GetRootElement(), "panel");
+        REQUIRE(root->SetStyleProperty(panel, "height", "10px"));
+        REQUIRE(root->SetStyleProperty(panel, "background-color", "#ff0000"));
+        REQUIRE(root->SetStyleProperty(panel, "border-radius", "4px"));
+    }
+    const auto hardEdged = [](const Fenrir::DrawList2D& list, bool hard) {
+        const std::vector<Fenrir::PainterVertex> vertices = Vertices(list);
+        return !vertices.empty() && std::ranges::all_of(vertices, [hard](const Fenrir::PainterVertex& vertex) {
+            return ((vertex.kinds[2] & Fenrir::PainterFlags::HardEdge) != 0) == hard;
+        });
+    };
+
+    test.Frame();
+    INFO("on by default: every root's box fades over a pixel");
+    REQUIRE(hardEdged(first->lists.back(), false));
+    REQUIRE(hardEdged(second->lists.back(), false));
+
+    test.Roots().settings.antiAliasing = false;
+    test.Frame();
+    INFO("off: every root's painter flags its vertices hard-edged");
+    REQUIRE(hardEdged(first->lists.back(), true));
+    REQUIRE(hardEdged(second->lists.back(), true));
+
+    test.Roots().settings.antiAliasing = true;
+    test.Frame();
+    INFO("and on again");
+    REQUIRE(hardEdged(first->lists.back(), false));
+    REQUIRE(hardEdged(second->lists.back(), false));
+}
+
 namespace
 {
     // A panel 10 high, full width, of `colour`, under the root element.

@@ -33,7 +33,8 @@ namespace Fenrir::PainterDetail
     /**
      * @brief A fill as triangles: each boundary vertex appears twice, moved half the fringe inwards (coverage 1) and
      * half outwards (coverage 0). The solid triangles join the inner vertices; the fringe triangles join each boundary
-     * edge's inner and outer pairs. Coordinates are those of the contours.
+     * edge's inner and outer pairs. With no fringe, each boundary vertex appears once, where it is (coverage 1), and
+     * there are only the solid triangles. Coordinates are those of the contours.
      */
     struct Tessellation
     {
@@ -45,7 +46,7 @@ namespace Fenrir::PainterDetail
     /**
      * @brief The region `contours` cover under `rule` (each closed, whatever its flag says): split by winding into
      * boundary loops that cross nowhere, holes bridged into the loops round them, ear-clipped, with a `fringe` wide
-     * ring about every loop.
+     * ring about every loop, or none when `fringe` is not above zero.
      */
     [[nodiscard]] Tessellation Tessellate(const std::vector<Contour>& contours, FillRule rule, float fringe);
 } // namespace Fenrir::PainterDetail

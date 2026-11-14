@@ -345,6 +345,7 @@ namespace Fenrir::Detail
         config.pixelsPerUnit = contentScale;
         config.stops = state.stops ? &*state.stops : nullptr;
         config.fonts = state.roots.GetFonts();
+        config.antiAliasing = state.roots.settings.antiAliasing;
         Painter painter(list, config);
         TreePainter(state, painter, store).PaintElement(state.rootElement.index, 1.0f);
 
