@@ -73,31 +73,14 @@ namespace UIDemo
     Fenrir::UIRoot& Menu::MakeRoot(Fenrir::UIRootConfig config)
     {
         Fenrir::UIRoot& root = m_app.GetResource<Fenrir::UIRoots>().CreateRoot(std::move(config));
-        const Fenrir::StylesheetId stylesheet = root.LoadStylesheet(m_stylesheetPath);
-        // FenrirUI logs each problem as a warning; a menu missing a part is an error, so a smoke run fails on it.
-        if (!stylesheet.IsValid())
-        {
-            m_app.Logger()->Error("UIDemo: the menu's stylesheet {} did not load", m_stylesheetPath);
-        }
-        else if (const Fenrir::Stylesheet* sheet = root.GetStylesheet(stylesheet);
-                 sheet != nullptr && !sheet->diagnostics.empty())
-        {
-            m_app.Logger()->Error("UIDemo: the menu's stylesheet {} has {} problems, logged above", m_stylesheetPath,
-                                  sheet->diagnostics.size());
-        }
+        LoadStylesheetReporting(m_app, root, m_stylesheetPath, "the menu's");
         return root;
     }
 
     Fenrir::ElementId Menu::Load(Fenrir::UIRoot& root, Fenrir::ElementId parent, const char* file)
     {
         const std::string path = (std::filesystem::path(m_files) / file).generic_string();
-        const Fenrir::MarkupLoad load = root.LoadDocument(parent, path);
-        if (!load.element.IsValid() || !load.errors.empty())
-        {
-            m_app.Logger()->Error("UIDemo: the menu's document {} loaded with {} problems, logged above", path,
-                                  load.errors.size());
-        }
-        return load.element;
+        return LoadDocumentReporting(m_app, root, parent, path, "the menu's").element;
     }
 
     bool Menu::Holds(Fenrir::ElementId element) const

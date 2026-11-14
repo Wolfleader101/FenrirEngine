@@ -39,26 +39,9 @@ namespace UIDemo
         const std::filesystem::path files = UIFileRoot(app.GetResource<Fenrir::AssetStore>(), StylesheetFile);
         const std::filesystem::path stylesheet = files / StylesheetFile;
         m_stylesheetPath = stylesheet.generic_string();
-        m_stylesheet = m_root->LoadStylesheet(m_stylesheetPath);
-        const std::string document = (files / DocumentFile).generic_string();
-        const Fenrir::MarkupLoad load = m_root->LoadDocument(m_root->GetRootElement(), document);
-
-        // FenrirUI logs each problem as a warning; a HUD missing a part is an error, so a smoke run fails on it.
-        if (!m_stylesheet.IsValid())
-        {
-            app.Logger()->Error("UIDemo: the HUD's stylesheet {} did not load", m_stylesheetPath);
-        }
-        else if (const Fenrir::Stylesheet* sheet = m_root->GetStylesheet(m_stylesheet);
-                 sheet != nullptr && !sheet->diagnostics.empty())
-        {
-            app.Logger()->Error("UIDemo: the HUD's stylesheet {} has {} problems, logged above", m_stylesheetPath,
-                                sheet->diagnostics.size());
-        }
-        if (!load.element.IsValid() || !load.errors.empty())
-        {
-            app.Logger()->Error("UIDemo: the HUD's document {} loaded with {} problems, logged above", document,
-                                load.errors.size());
-        }
+        m_stylesheet = LoadStylesheetReporting(app, *m_root, m_stylesheetPath, "the HUD's");
+        LoadDocumentReporting(app, *m_root, m_root->GetRootElement(), (files / DocumentFile).generic_string(),
+                              "the HUD's");
         app.Logger()->Info("UIDemo: the HUD's stylesheet is {}; edit it while the demo runs to restyle the HUD",
                            m_stylesheetPath);
     }
