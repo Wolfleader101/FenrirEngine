@@ -533,8 +533,9 @@ namespace Fenrir::Render
 
         /**
          * @brief The world-space 2D target's quads each view's Transparent pass draws (ADR-0060), sorted with its
-         * transparent items by the view depth of each quad's origin and culled from a view whose one side, or whose
-         * camera's back, all four of its corners are past; null for none. Kept, not owned: it outlives the frame.
+         * transparent items by the view depth of each quad's origin and culled with them (ADR-0057): the box round a
+         * quad's corners against the view's frustum, the frozen one while culling is frozen; null for none. Kept, not
+         * owned: it outlives the frame.
          */
         void SetWorldQuads(WorldQuads* quads) noexcept
         {
@@ -1404,6 +1405,7 @@ namespace Fenrir::Render
         bool m_computeSkinning;
         /** @brief RendererConfig::clusteredLights: whether views with lights get a LightClusters pass. */
         bool m_clusteredLights = true;
+        /** @brief SetWorldQuads: the world-space 2D target's quads, or null for none. */
         WorldQuads* m_worldQuads = nullptr;
         /** @brief RendererConfig::gpuCulling: whether each view's cull pass gets the view's planes. */
         bool m_gpuCulling = true;

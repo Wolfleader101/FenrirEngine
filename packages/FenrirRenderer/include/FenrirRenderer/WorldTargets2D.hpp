@@ -70,8 +70,9 @@ namespace Fenrir
      *
      * **Drawing.** Every camera's view draws each quad in its `Transparent` pass, depth tested against the opaque items
      * without writing depth, sorted back to front with the transparent items by the view depth of the entity's origin;
-     * the quad's lists draw in submission order, each list's commands in order, as one item. A quad whose corners are
-     * all outside one side of a view, or all behind its camera, is culled from that view. Local coordinates reach clip
+     * the quad's lists draw in submission order, each list's commands in order, as one item. It is culled as the
+     * transparent items are (ADR-0057): a quad the box round its corners keeps outside a view's frustum (the frozen
+     * one while culling is frozen) is left out of that view. Local coordinates reach clip
      * space through the quad's world matrix and the view (set 0's `localToClip`, `Fenrir/2D.glsl`), at a content scale
      * of 1, so `pixelSize` is the quad's size in logical units.
      *
