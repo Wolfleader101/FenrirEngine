@@ -8,7 +8,9 @@ namespace Fenrir.Painter;
 /// each draws). A C# system is given a painter over a window's overlay at one layer (<see cref="Overlay"/>), paints
 /// through it, and what it painted is drawn over the game that frame, submitted when the system returns. Shapes are
 /// analytic and anti-aliased, paths are filled and stroked with a one-pixel fringe, text is FenrirText's glyphs, and
-/// offscreen groups, masks and backdrop blurs are recorded for the renderer to realise.
+/// offscreen groups, masks and backdrop blurs are recorded for the renderer to realise. A system in the UI's paint stage
+/// gets a painter for an element instead (<c>Fenrir.UI.UIRoot.PaintInto</c>), which paints in the element's root's UI
+/// units and ends as the stage ends.
 /// </summary>
 /// <remarks>
 /// Coordinates are the window's logical units. Paths are <see cref="Path2D"/>s, or spans of points for a polygon or

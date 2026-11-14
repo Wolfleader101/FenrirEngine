@@ -14,6 +14,7 @@
 #include "FenrirPainter/Paint.hpp"
 #include "FenrirPainter/Painter.hpp"
 #include "FenrirPainter/Path.hpp"
+#include "FenrirPainterScripting/PainterScriptingState.hpp"
 #include "FenrirPainterScripting/ScriptPainter.hpp"
 #include "FenrirRenderer/Overlay.hpp"
 #include "FenrirScripting/NativeGuard.hpp"
@@ -23,7 +24,6 @@
 #include "FenrirText/Paragraph.hpp"
 #include "FenrirTextScripting/ScriptText.hpp"
 #include "Generated/FenrirPainterNatives.hpp"
-#include "PainterScriptingState.hpp"
 
 // Everything C# sees of the painter is generated (api/FenrirPainter.binding.toml): the mirrors of ScriptPainter.hpp's
 // structs and of the painter's plain data, their mappings, checked against the Fenrir.Painter contract whenever a

@@ -214,6 +214,12 @@ internal static class CppWriter
             List(text, "resources", binding.Listed.Where(Binding.IsResource), type => binding.ResourceFactory(registration, type)!,
                  binding.RegisteredName);
         }
+        if (binding.Config.Stages is { } stages)
+        {
+            // The stages the C# constants name: the extension declares them, so a script's [StageSystem] finds them.
+            text.Line($"extension.stages = {{{string.Join(", ", stages.Stages.Select(stage => $"\"{stage.Name}\""))}}};");
+        }
+
         if (natives != null)
         {
             var config = binding.Config.Natives!;
