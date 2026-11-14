@@ -19,3 +19,15 @@ if(MSVC)
     target_compile_options(FenrirUITests PRIVATE /bigobj)
 endif()
 add_test(NAME FenrirUI COMMAND FenrirUITests)
+
+# Image roots on the renderer's null backend (seam 4), read back through the renderer tests' RendererProbe and
+# RendererTestApp, as FenrirPainterTests reads its pipelines.
+set(renderer_tests "${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirRenderer/Tests")
+set(renderer_src "${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirRenderer/src")
+add_executable(FenrirUIRendererTests ImageRoots.cpp)
+target_include_directories(FenrirUIRendererTests PRIVATE "${renderer_tests}" "${renderer_src}")
+target_link_libraries(FenrirUIRendererTests PRIVATE FenrirUI FenrirRenderer FenrirRendererCore Catch2::Catch2WithMain)
+# RendererTestApp's material shader sampling one texture, which its helpers name.
+fenrir_add_shaders(FenrirUIRendererTests PROGRAM SampledPicture VERTEX "${renderer_src}/../Shaders/Builtin/mesh.vert"
+                   FRAGMENT "${renderer_tests}/fixtures/sampled.frag" EMBED)
+add_test(NAME FenrirUI-Renderer COMMAND FenrirUIRendererTests)

@@ -9,10 +9,10 @@
 
 **Touches:** `packages/FenrirUI/`, `examples/UIDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Headless App test (null backend): an image root submits a list to an image target of its size each frame, with the painter's pipeline in the linear blend space; the image asset exists and has the root's size.
+- [x] Headless App test (null backend): an image root submits a list to an image target of its size each frame, with the painter's pipeline in the linear blend space; the image asset exists and has the root's size.
 
 Hand check: the screen in the room shows the menu, crisp at its native size.
 
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

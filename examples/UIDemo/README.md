@@ -52,6 +52,17 @@ through `:outro`, its elements removed once the outro ends; the backing that dim
   keyboard). It keeps the settings, and writes them back into the controls each time the settings panel loads, or a
   hot reload loads it again.
 
+## The screen
+
+A screen on the room's north wall, facing the camera's start, shows the menu in a texture: a third UI root, drawn into
+an image (`UIImageTarget`, ScreenWidth by ScreenHeight, 1280 by 720) that the screen's unlit material shows, in a dark
+bezel. It holds the menu's document from the start, styled by the same `menu.css`, in the linear blend space an image
+root takes by default; its 1080 UI units span the image's 720 pixels, so it is drawn at the image's own resolution. It
+takes no input. The menu's system mirrors the live menu into it each frame: its settings panel opens and closes with the
+live one's, its controls show the kept settings, and its focus ring is on the element with the live focus's id. With the
+menu closed, the screen shows the pause panel. Its root has hot reload on too, so an edit to the menu's files restyles
+the screen as well.
+
 ## Editing the HUD and the menu while they run
 
 The HUD root has hot reload on: save `examples/UIDemo/assets/ui/hud.css` and the HUD restyles within a quarter of a
@@ -70,7 +81,9 @@ share of their bars the player's health and stamina hold, the ammo counter reads
 the HUD's elements hits none of them and reaches the game's `Mouse`. The menu root draws into a second capturing target:
 Escape opens the menu, whose root then takes a right press away from the game; a gamepad direction and A click Resume,
 which closes it, and once its outro ends the game has the mouse again; and a name typed into the settings panel's entry
-shows on the HUD.
+shows on the HUD. The screen's root is checked through the same app: it holds the pause panel from the start, in an image
+of 1280 by 720 at a scale of 720 / 1080, blending linear, and its settings panel, its name entry and its focus follow the
+live menu's.
 
 ## Hand checks
 
@@ -92,3 +105,5 @@ On OpenGL, in The HUD:
   invert look turns the camera the other way up and down.
 - The right mouse button does not turn the camera while the menu is open.
 - Changing a colour in `menu.css` while the menu is open restyles it within a moment.
+- The screen on the north wall shows the menu, crisp at its native size: the pause panel with the menu closed, and,
+  with it open, the settings panel, the settings and the focus ring as the live menu has them.

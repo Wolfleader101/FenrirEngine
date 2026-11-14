@@ -80,12 +80,18 @@ namespace Fenrir
         std::int32_t layer = 0;
         /** @brief How its UI units map to its target's logical units. */
         ScaleRule scaleRule = ScaleRule::Height1080;
-        /** @brief Blending on the window overlay is in gamma space by default, as browsers and designers do (ADR-0065).
+        /**
+         * @brief The blend space it paints in; unset, its target's default (UITarget::GetDefaultBlendSpace): gamma on
+         * the window overlay, as browsers and designers blend, and linear in an image (ADR-0065). GetConfig gives the
+         * one it paints in.
          */
-        BlendSpace2D blendSpace = BlendSpace2D::Gamma;
+        std::optional<BlendSpace2D> blendSpace;
         /** @brief Snap laid-out rectangles to the target's whole pixels. */
         bool snapToPixels = true;
-        /** @brief Where it draws instead of its window's overlay; null for the overlay. */
+        /**
+         * @brief Where it draws instead of its window's overlay; null for the overlay. A UIImageTarget draws it into an
+         * image, and makes it a root with no input router: its input comes from code.
+         */
         std::shared_ptr<UITarget> target;
         /**
          * @brief Its input router's priority (ADR-0027): routers run highest first, so give a root drawn over another
@@ -187,7 +193,7 @@ namespace Fenrir
         UIRoot& operator=(UIRoot&&) = delete;
         ~UIRoot();
 
-        /** @brief What it was made with. */
+        /** @brief What it was made with, its blend space set to the one it paints in. */
         [[nodiscard]] const UIRootConfig& GetConfig() const noexcept;
         /** @brief Its id, which its UIEvents carry. */
         [[nodiscard]] UIRootId GetId() const noexcept;

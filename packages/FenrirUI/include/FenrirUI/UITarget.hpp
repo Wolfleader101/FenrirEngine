@@ -18,8 +18,8 @@ namespace Fenrir
 
     /**
      * @brief Where a UI root draws: what size it is this frame, and what takes the root's draw list each frame. A root
-     * made with none draws on its window's overlay layer (UIRootConfig::window and layer). A game, or a test that
-     * captures the list, may give a root a target of its own.
+     * made with none draws on its window's overlay layer (UIRootConfig::window and layer); one made with a
+     * UIImageTarget draws into an image. A game, or a test that captures the list, may give a root a target of its own.
      */
     class UITarget
     {
@@ -36,5 +36,24 @@ namespace Fenrir
 
         /** @brief Takes the root's draw list for this frame, in the target's logical units. */
         virtual void Submit(App& app, DrawList2D list) = 0;
+
+        /**
+         * @brief The blend space a root made with no UIRootConfig::blendSpace paints in (ADR-0065): `Gamma`, as on the
+         * window overlay, unless the target says otherwise; an image target says `Linear`.
+         */
+        [[nodiscard]] virtual BlendSpace2D GetDefaultBlendSpace() const noexcept
+        {
+            return BlendSpace2D::Gamma;
+        }
+
+        /**
+         * @brief Whether a root drawing here takes its window's input through an input router (ADR-0027), as one on
+         * the window overlay does. False for a target that is not on the window, such as an image: its root's elements
+         * then see only what code sends them.
+         */
+        [[nodiscard]] virtual bool TakesWindowInput() const noexcept
+        {
+            return true;
+        }
     };
 } // namespace Fenrir

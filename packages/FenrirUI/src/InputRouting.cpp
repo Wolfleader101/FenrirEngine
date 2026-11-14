@@ -997,7 +997,9 @@ namespace Fenrir::Detail
     void StartInput(UIRoot& root, UIRootState& state)
     {
         UIRootInput& input = state.input;
-        if (input.routerId.value != 0 || state.app.TryGetResource<InputFeed>() == nullptr)
+        // A root off the window, such as one in an image, takes its input from code only.
+        if (input.routerId.value != 0 || !state.target->TakesWindowInput() ||
+            state.app.TryGetResource<InputFeed>() == nullptr)
         {
             return;
         }

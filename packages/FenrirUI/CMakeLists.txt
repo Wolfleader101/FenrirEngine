@@ -23,6 +23,7 @@ add_library(FenrirUI STATIC
     include/FenrirUI/Stylesheet.hpp
     include/FenrirUI/UIEvent.hpp
     include/FenrirUI/UI.hpp
+    include/FenrirUI/UIImageTarget.hpp
     include/FenrirUI/UIRoot.hpp
     include/FenrirUI/UITarget.hpp
 
@@ -56,6 +57,7 @@ add_library(FenrirUI STATIC
     src/StyleValues.hpp
     src/Stylesheet.cpp
     src/UI.cpp
+    src/UIImageTarget.cpp
     src/UIRoot.cpp
     src/UIRootState.hpp
 )

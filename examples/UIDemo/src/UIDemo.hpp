@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -16,7 +17,9 @@
 namespace Fenrir
 {
     class App;
+    class UIImageTarget;
     class UIRoot;
+    struct UIRootConfig;
     class UITarget;
 } // namespace Fenrir
 
@@ -150,6 +153,10 @@ namespace UIDemo
     /** @brief The menu root's input priority: over the HUD's, so its elements see input first, under ImGui's. */
     inline constexpr int MenuInputPriority = 10;
 
+    /** @brief The room's screen image, in pixels: 16 by 9, so the menu's 1080 UI units span its 720 pixels. */
+    inline constexpr std::uint32_t ScreenWidth = 1280;
+    inline constexpr std::uint32_t ScreenHeight = 720;
+
     /** @brief What the settings panel sets, kept by the menu while its elements come and go. */
     struct Settings
     {
@@ -165,6 +172,8 @@ namespace UIDemo
         bool virtualCursor = false;
         /** @brief The name the HUD shows over the vitals. */
         std::string playerName = "Player";
+
+        friend bool operator==(const Settings&, const Settings&) = default;
     };
 
     /**
@@ -174,6 +183,12 @@ namespace UIDemo
      * they leave through `:outro`. The menu is game code (ADR-0063): the game decides when it is there, and its Update,
      * the menu's system, reads the root's UI events (ADR-0065) and keeps the Settings. While it is open, its
      * full-window backing takes pointer input, so the camera does not turn under it.
+     *
+     * The menu also shows on the room's screen: a second root, drawn into an image (Fenrir::UIImageTarget) of
+     * ScreenWidth by ScreenHeight that the screen's material shows, holds the same document from the start, styled by
+     * the same stylesheet. It takes no input; the menu's system mirrors the live menu into it each frame: its settings
+     * panel opens and closes with the live one's, its controls show the kept settings, and the focus is on the element
+     * with the live focus's id.
      */
     class Menu
     {
@@ -218,35 +233,70 @@ namespace UIDemo
         /** @brief The menu's root. */
         [[nodiscard]] Fenrir::UIRoot& Root() const noexcept
         {
-            return *m_root;
+            return *m_live.root;
         }
 
+        /** @brief The screen's root, drawing the menu into ScreenImage. */
+        [[nodiscard]] Fenrir::UIRoot& ScreenRoot() const noexcept
+        {
+            return *m_screen.root;
+        }
+
+        /** @brief The image the screen's root draws into, for the screen's material. */
+        [[nodiscard]] Fenrir::AssetHandle<Fenrir::Image> ScreenImage() const;
+
       private:
+        /** @brief The menu's document in one root: its `#menu`, and its settings panel while that is open. */
+        struct MenuInstance
+        {
+            Fenrir::UIRoot* root = nullptr;
+            Fenrir::ElementId menu;
+            Fenrir::ElementId panel;
+        };
+
+        /** @brief Makes a root for the menu over `config` and loads the stylesheet into it. */
+        Fenrir::UIRoot& MakeRoot(Fenrir::UIRootConfig config);
         void OpenSettings();
         void CloseSettings();
         /** @brief Steps back: closes the settings panel when it is open, and the menu otherwise. */
         void Back();
-        /** @brief Writes the kept settings into the settings panel's controls. */
-        void ShowSettings();
+        /** @brief Writes the kept settings into `instance`'s settings panel's controls. */
+        void ShowSettings(const MenuInstance& instance) const;
         void OnEvent(const Fenrir::UIEvent& event);
-        /** @brief Loads `file` under `parent`, logging an error when it loads with problems; its first element. */
-        Fenrir::ElementId Load(Fenrir::ElementId parent, const char* file);
+        /** @brief What a UI event of the screen's root changes: only hot reload sends one. */
+        void OnScreenEvent(const Fenrir::UIEvent& event);
+        /**
+         * @brief Takes `first`, the first element of a document hot reload loaded again into `instance`'s root, as its
+         * `#menu` or its settings panel. True when it was the settings panel.
+         */
+        static bool TakeReloaded(MenuInstance& instance, Fenrir::ElementId first);
+        /** @brief Makes the screen's instance show what the live menu does. */
+        void MirrorScreen();
+        /**
+         * @brief Loads `file` under `parent` in `root`, logging an error when it loads with problems; its first
+         * element.
+         */
+        Fenrir::ElementId Load(Fenrir::UIRoot& root, Fenrir::ElementId parent, const char* file);
         /** @brief Whether `element` is the open menu's `#menu` or under it. */
         [[nodiscard]] bool Holds(Fenrir::ElementId element) const;
-        /** @brief The element with `id` at or under `under`; nothing when there is none or `under` is stale. */
-        [[nodiscard]] Fenrir::ElementId Find(Fenrir::ElementId under, std::string_view id) const;
+        /** @brief The element with `id` at or under `under` in `root`; nothing when there is none or `under` is stale.
+         */
+        [[nodiscard]] static Fenrir::ElementId Find(const Fenrir::UIRoot& root, Fenrir::ElementId under,
+                                                    std::string_view id);
 
         Fenrir::App& m_app;
-        Fenrir::UIRoot* m_root = nullptr;
         std::string m_files;
         std::string m_stylesheetPath;
-        Fenrir::StylesheetId m_stylesheet;
         Fenrir::EventReader<Fenrir::UIEvent> m_events;
         Settings m_settings;
-        /** @brief The open menu's `#menu`, and its settings panel while that is open. */
-        Fenrir::ElementId m_menu;
-        Fenrir::ElementId m_panel;
+        /** @brief The live menu: its root on the window, and the open menu's document in it. */
+        MenuInstance m_live;
         bool m_open = false;
+        /** @brief The screen's image target and its root's instance of the document. */
+        std::shared_ptr<Fenrir::UIImageTarget> m_screenTarget;
+        MenuInstance m_screen;
+        /** @brief The settings the screen's controls last showed; none when they show nothing yet. */
+        std::optional<Settings> m_screenSettings;
     };
 
     /** @brief The room: a lit room with the player, a top-down camera for the minimap and the HUD's system. */
