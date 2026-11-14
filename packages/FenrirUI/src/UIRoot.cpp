@@ -401,6 +401,10 @@ namespace Fenrir
         m_state->target = m_state->config.target != nullptr
                               ? m_state->config.target
                               : std::make_shared<WindowOverlayTarget>(m_state->config.window, m_state->config.layer);
+        if (!m_state->config.blendSpace)
+        {
+            m_state->config.blendSpace = m_state->target->GetDefaultBlendSpace();
+        }
         Detail::ElementSlot& slot = m_state->slots.emplace_back();
         slot.version = 1;
         slot.alive = true;

@@ -34,6 +34,9 @@ namespace UIDemo
         constexpr float StaminaDrain = 30.0f;
         constexpr float StaminaRefill = 20.0f;
         constexpr float HitDamage = 15.0f;
+        // The menu's screen on the north wall: its width in metres, and how high its centre is.
+        constexpr float ScreenMetres = 3.2f;
+        constexpr float ScreenCentreHeight = 2.0f;
 
         /** @brief The room's own state, a scene resource. */
         struct RoomState
@@ -49,6 +52,19 @@ namespace UIDemo
         {
             return Fenrir::Math::AngleAxis(yaw, Vec3(0.0f, 1.0f, 0.0f)) *
                    Fenrir::Math::AngleAxis(pitch, Vec3(1.0f, 0.0f, 0.0f));
+        }
+
+        /** @brief A quad of `width` by `height` in the XY plane facing +Z, with UV (0, 0) at its top-left corner. */
+        Fenrir::MeshData ScreenQuad(float width, float height)
+        {
+            Fenrir::MeshData mesh;
+            const float w = width * 0.5f;
+            const float h = height * 0.5f;
+            mesh.positions = {Vec3(-w, -h, 0.0f), Vec3(w, -h, 0.0f), Vec3(w, h, 0.0f), Vec3(-w, h, 0.0f)};
+            mesh.normals = {Vec3(0, 0, 1), Vec3(0, 0, 1), Vec3(0, 0, 1), Vec3(0, 0, 1)};
+            mesh.uv0 = {{0.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 0.0f}, {0.0f, 0.0f}};
+            mesh.indices = {0, 1, 2, 0, 2, 3};
+            return mesh;
         }
 
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
@@ -109,6 +125,21 @@ namespace UIDemo
                 transform.pos = crates.at(i);
                 transform.rot = YawPitch(0.4f * static_cast<float>(i), 0.0f);
             }
+            // The screen faces the camera's start, so the menu in a texture is in view at once. Its material is unlit
+            // so the image shows the colours the menu was styled in, and it is 16 by 9, as its image is, so the menu
+            // is not stretched.
+            if (const Menu* menu = app.TryGetResource<Menu>(); menu != nullptr)
+            {
+                const float height = ScreenMetres * static_cast<float>(ScreenHeight) / static_cast<float>(ScreenWidth);
+                place(cube.handle, material(0x16181CFF, 0.4f), {0.0f, ScreenCentreHeight, -6.99f},
+                      {ScreenMetres + 0.16f, height + 0.16f, 0.02f});
+                const auto unlit = store.Load<Fenrir::Shader>("builtin:unlit", scene).handle;
+                const auto screen = store.CreateMaterial(unlit, scene);
+                store.SetTexture(screen, "baseColourTexture", menu->ScreenImage());
+                const auto quad = store.Add<Fenrir::Mesh>(ScreenQuad(ScreenMetres, height), scene);
+                place(quad, screen, {0.0f, ScreenCentreHeight, -6.975f}, Vec3(1.0f));
+            }
+
             constexpr std::array<std::uint32_t, 3> ballColours{0xD04040FF, 0x40A060FF, 0x4070E0FF};
             for (std::size_t i = 0; i < ballColours.size(); ++i)
             {
