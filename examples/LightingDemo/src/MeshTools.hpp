@@ -6,8 +6,9 @@
 #include "FenrirAssets/MeshData.hpp"
 #include "FenrirMath/Math.hpp"
 
-// Mesh and instance-list tools for the scenes that draw thousands of copies of fetched meshes, which the renderer has
-// no LODs for.
+// Mesh and instance-list tools for the scenes that draw thousands of copies of fetched meshes. The forest clearing
+// simplifies its meshes by hand with these; the asteroid ring draws the renderer's generated levels of detail instead
+// (GenerateLods, ADR-0057).
 namespace LightingDemo
 {
     /**

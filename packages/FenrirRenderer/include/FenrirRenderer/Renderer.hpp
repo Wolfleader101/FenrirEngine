@@ -6,6 +6,7 @@
 
 #include "FenrirECS/Entity.hpp"
 #include "FenrirInput/InputTypes.hpp"
+#include "FenrirMath/Frustum.hpp"
 #include "FenrirMath/Math.hpp"
 #include "FenrirRenderer/Components.hpp"
 
@@ -84,6 +85,34 @@ namespace Fenrir
          * Renderer::SetClusteredLights.
          */
         bool clusteredLights = true;
+        /**
+         * @brief Whether each camera's cull pass drops the opaque and masked copies outside its frustum on the GPU
+         * (ADR-0057): each candidate's bounding sphere, then its box's eight corners, against the camera's planes;
+         * off, the pass keeps every candidate, for comparison, and only the coarse cull of whole entities on the CPU
+         * culls. Changeable later with Renderer::SetGpuCulling.
+         */
+        bool gpuCulling = true;
+        /**
+         * @brief Whether each camera's cull pass also drops the copies hidden behind others (ADR-0057): what was
+         * visible last frame is drawn into the depth prepass first, a Hi-Z pyramid is built from it, and the rest
+         * are tested against it before they are drawn, so a copy wholly behind a wall costs no shading. Off, every
+         * copy inside the frustum is drawn, for comparison; off with `gpuCulling` off. Shadow views never cull by
+         * occlusion. Changeable later with Renderer::SetOcclusionCulling.
+         */
+        bool occlusionCulling = true;
+        /**
+         * @brief How many pixels a level of detail's error may project to (ADR-0057): each camera's cull pass draws
+         * each copy of a mesh with levels (`MeshData::lods`) at the coarsest level whose error, scaled by the copy's
+         * largest axis scale and projected at its distance from the camera, is under this; 1 by default, so no level
+         * departs from full detail by a pixel. With `gpuCulling` off every copy draws level 0, for comparison.
+         */
+        float lodErrorPixels = 1.0f;
+        /**
+         * @brief The pixels a copy's bounding sphere's radius must project to for the cull pass to draw it at all
+         * (ADR-0057): smaller copies are dropped as if outside the camera. 0 by default, dropping none; off with
+         * `gpuCulling` off.
+         */
+        float minProjectedPixels = 0.0f;
         /** @brief How many shadow cascades the DirectionalLight has per camera (ADR-0050): 1 to 4, 4 by default. */
         std::uint32_t shadowCascades = 4;
         /**
@@ -126,7 +155,10 @@ namespace Fenrir
         bool offscreenGroups2D = true;
     };
 
-    /** @brief What the renderer did in its last drawn frame (ADR-0023). */
+    /**
+     * @brief What the renderer did in its last drawn frame (ADR-0023), except `instancesDrawn` and `drawnByLod`, read
+     * back from the most recent frame that has left flight (ADR-0057).
+     */
     struct RendererStats
     {
         /**
@@ -139,6 +171,25 @@ namespace Fenrir
          * InstancedMeshRenderer's instance list, one per copy per view.
          */
         std::uint32_t instances = 0;
+        /**
+         * @brief MeshRenderers and instance list copies the GPU drew after each camera's cull pass (ADR-0057),
+         * summed over cameras, read back from the most recent frame that has left flight: usually two frames behind
+         * `instances`, the candidates this frame submitted. 0 until a frame has been read back.
+         */
+        std::uint32_t instancesDrawn = 0;
+        /**
+         * @brief `instancesDrawn` by the level of detail each was drawn at (ADR-0057): entry `i` the MeshRenderers
+         * and copies drawn at level `i` of their mesh (level 0 its full detail), the last entry those drawn at that
+         * level or any coarser, so the entries sum to `instancesDrawn`.
+         */
+        std::uint32_t drawnByLod[8] = {};
+        /**
+         * @brief `instancesDrawn` by the occlusion culling phase each was drawn in (ADR-0057): the first entry the
+         * MeshRenderers and copies drawn as visible last frame (every survivor of a camera without occlusion
+         * culling), the second those drawn after the Hi-Z pyramid test showed them, so the two sum to
+         * `instancesDrawn`.
+         */
+        std::uint32_t drawnByPhase[2] = {};
         /** @brief Render passes run. */
         std::uint32_t passes = 0;
         /**
@@ -235,6 +286,35 @@ namespace Fenrir
         void SetClusteredLights(bool on);
 
         /**
+         * @brief Turns the GPU frustum test (RendererConfig::gpuCulling, ADR-0057) on or off from the next frame. An
+         * invalid owner does nothing.
+         */
+        void SetGpuCulling(bool on);
+
+        /**
+         * @brief Turns occlusion culling (RendererConfig::occlusionCulling, ADR-0057) on or off from the next frame:
+         * on, each camera's cull pass runs a second phase that drops the copies hidden behind what was visible last
+         * frame. An invalid owner does nothing.
+         */
+        void SetOcclusionCulling(bool on);
+
+        /**
+         * @brief Freezes culling from the next frame (ADR-0057): each camera then keeps culling, on the CPU and in its
+         * cull pass, against the frustum it has in that frame, while it draws from wherever it moves to, so flying
+         * out of the frozen volume shows what was kept; the Debug stage draws the frozen frustum's edges. Off, every
+         * camera culls by where it is again. An invalid owner does nothing.
+         */
+        void SetCullingFrozen(bool on);
+
+        /**
+         * @brief Sets the level-of-detail thresholds (RendererConfig::lodErrorPixels and minProjectedPixels,
+         * ADR-0057) from the next frame: each copy of a mesh with levels draws at the coarsest level whose projected
+         * error is under `lodErrorPixels` pixels, and a copy whose projected radius is under `minProjectedPixels` is
+         * dropped, 0 dropping none. An invalid owner does nothing.
+         */
+        void SetLodSelection(float lodErrorPixels, float minProjectedPixels);
+
+        /**
          * @brief Sets how many SpotLights may cast shadows (RendererConfig::spotShadowBudget, ADR-0050) from the next
          * frame, which makes the spot shadow atlas again at the new budget's size. An invalid owner does nothing.
          */
@@ -249,8 +329,12 @@ namespace Fenrir
 
         /**
          * @brief The box around `entity`'s drawn mesh in world space, from the mesh's local bounds and the entity's
-         * world matrix now. Empty if the entity is not alive, has no MeshRenderer, its mesh does not resolve, or this
-         * owner is invalid.
+         * world matrix now. Empty if the entity is not alive, has neither a MeshRenderer nor an InstancedMeshRenderer,
+         * its mesh does not resolve, or this owner is invalid.
+         *
+         * An InstancedMeshRenderer's (ADR-0057) is the box around every copy of its list's mesh box, under the
+         * entity's world matrix: as the renderer computed it when it uploaded the list, or from the list now before
+         * its first frame. Empty for a list that does not resolve or has no copies.
          *
          * A skinned mesh's (ADR-0035) comes from its skeleton's pose now: each bone's box moved by the bone's palette
          * matrix, with the box of its unweighted vertices, under the skeleton entity's world matrix. It is
@@ -259,7 +343,10 @@ namespace Fenrir
          */
         [[nodiscard]] std::optional<Math::AABB> GetWorldBounds(const Entity& entity) const;
 
-        /** @brief What the last drawn frame did; zeros before the first and for an invalid owner. */
+        /**
+         * @brief What the last drawn frame did (`instancesDrawn` what the most recent frame out of flight drew);
+         * zeros before the first and for an invalid owner.
+         */
         [[nodiscard]] RendererStats Stats() const;
 
         /** @name Picking
@@ -277,6 +364,13 @@ namespace Fenrir
         [[nodiscard]] std::optional<Math::Ray> ScreenPointToRay(const Entity& camera, Math::Vec2 point) const;
         /** @brief Where `point` appears in `camera`'s target. Empty for a point behind the camera. */
         [[nodiscard]] std::optional<Math::Vec2> WorldToScreenPoint(const Entity& camera, Math::Vec3 point) const;
+        /**
+         * @brief The volume `camera` sees now (ADR-0057), as its Math::Frustum in world space from its world matrix
+         * and its target's size: what the renderer culls its transparent items by, for a game that culls or streams
+         * its own entities by it. Empty as ScreenPointToRay's is: a stale entity, no Camera, or a camera that draws
+         * nothing.
+         */
+        [[nodiscard]] std::optional<Math::Frustum> GetFrustum(const Entity& camera) const;
         /**
          * @brief The camera drawn last at `point` of `window`: the highest-order enabled camera in the active scene
          * whose viewport holds it, of equal orders the highest entity id. A null Entity if there is none, or the
@@ -298,12 +392,17 @@ namespace Fenrir
         static void SetAutomaticInstancing(App& app, bool on);
         static void SetComputeSkinning(App& app, bool on);
         static void SetClusteredLights(App& app, bool on);
+        static void SetGpuCulling(App& app, bool on);
+        static void SetOcclusionCulling(App& app, bool on);
+        static void SetCullingFrozen(App& app, bool on);
+        static void SetLodSelection(App& app, float lodErrorPixels, float minProjectedPixels);
         static void SetSpotShadowBudget(App& app, std::uint32_t budget);
         static void SetPointShadowBudget(App& app, std::uint32_t budget);
         [[nodiscard]] static std::optional<Math::Ray> ScreenPointToRay(App& app, const Entity& camera,
                                                                        Math::Vec2 point);
         [[nodiscard]] static std::optional<Math::Vec2> WorldToScreenPoint(App& app, const Entity& camera,
                                                                           Math::Vec3 point);
+        [[nodiscard]] static std::optional<Math::Frustum> GetFrustum(App& app, const Entity& camera);
         [[nodiscard]] static Entity CameraAt(App& app, WindowId window, Math::Vec2 point);
         /** @} */
 

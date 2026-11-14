@@ -93,7 +93,9 @@ namespace Fenrir::Render
      * **Each view** whose ViewRequest::drawDebug is set gets a `Debug` pass into its SceneColor, testing its SceneDepth
      * without writing it: the depth-tested triangles and lines, then the on-top ones (a pipeline with no depth test),
      * then world text. Lines are read from a storage buffer and expanded in the vertex shader into quads their
-     * thickness in pixels across; triangles alpha-blend, unsorted. World text is centred on its point's place in the
+     * thickness in pixels across; triangles alpha-blend, unsorted. While culling is frozen (ADR-0057), the twelve
+     * edges of each camera's frozen frustum (SceneRenderer::FrozenCulls) are lines of the feature's own, amber, two
+     * pixels wide and on top, drawn in every view with the scene's. World text is centred on its point's place in the
      * view, at a constant pixel size (times the content scale in a view of the window), never occluded, and skipped
      * behind the camera. Shapes and text are uploaded each frame into per-frame ring buffers (ADR-0019).
      *

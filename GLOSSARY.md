@@ -148,7 +148,7 @@ The shared assembly `Fenrir.Scripting` that every script assembly compiles again
 *Avoid:* engine API assembly, SDK (that is the contract plus its source generator).
 
 **Math contract**
-The shared assembly `Fenrir.Math` (ADR-0029): FenrirMath's types for C# (`Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Matrix4x4`, `Colour`, `Ray`, `Bounds`), each laid out as its C++ counterpart, with no native functions. The built-in extension shares it before the scripting contract, which is built on it, so every package's contract can use it. The generated bindings name its `Vector3` and `Quaternion` for FenrirMath's vector and quaternion, which FenrirMath's API description records as bound types. Since ADR-0043, `Colour`, `Ray` and `Bounds` are generated mirrors from that description, through the math binding, and the glm-backed five are bound types; `Bounds` is the one C# type for `Math::AABB`.
+The shared assembly `Fenrir.Math` (ADR-0029): FenrirMath's types for C# (`Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Matrix4x4`, `Colour`, `Ray`, `Bounds`, `Frustum`), each laid out as its C++ counterpart, with no native functions. The built-in extension shares it before the scripting contract, which is built on it, so every package's contract can use it. The generated bindings name its `Vector3` and `Quaternion` for FenrirMath's vector and quaternion, which FenrirMath's API description records as bound types. Since ADR-0043, `Colour`, `Ray`, `Bounds` and `Frustum` are generated mirrors from that description, through the math binding, and the glm-backed five are bound types; `Bounds` is the one C# type for `Math::AABB`.
 *Avoid:* math library (FenrirMath's functions stay in C++).
 
 **Scripting extension**
@@ -453,7 +453,7 @@ One step of the render graph: the resources it uses and how, a render stage, and
 *Avoid:* pass (alone, when a graphics device pass could be meant), render node.
 
 **Render stage**
-Where in the frame a render pass runs, from a fixed list: `Shadow`, `Opaque`, `Background`, `Transparent`, `Debug`, `PostProcess`, `Output`, `Overlay`.
+Where in the frame a render pass runs, from a fixed list: `Cull`, `Prepare`, `Skinning`, `Shadow`, `DepthPrepass`, `Opaque`, `Background`, `Transparent`, `Debug`, `PostProcess`, `Output`, `Overlay` (ADR-0049, ADR-0050, ADR-0057).
 *Avoid:* phase (a *phase* is FenrirApp's, such as `Render`), layer, queue.
 
 **Render feature**
@@ -607,6 +607,30 @@ A component that lights the scene from its entity: a *directional light* (the su
 **Instance list**
 An asset holding the placements of many copies of one mesh, each a transform relative to the entity that draws them and an optional colour. An `InstancedMeshRenderer` draws one, with no entity per copy.
 *Avoid:* instance buffer, multimesh, batch.
+
+**Frustum**
+The volume a view sees, as the planes that bound it in world space: `Math::Frustum` (FenrirMath, public, ADR-0057), built from a reversed-Z view-projection, five planes for a perspective view whose far plane is at infinity and six for an orthographic one, with a sphere test and a box test that moves a box's eight corners by a matrix and keeps the box unless every corner is outside one plane. `Renderer::GetFrustum` gives a camera's; the renderer leaves every item or instance list whose world bounds are outside it out of the view on the CPU, and the cull pass repeats its tests on the GPU over each remaining opaque or masked copy (`RendererConfig::gpuCulling` turns that half off).
+*Avoid:* view volume, clip volume, culling planes.
+
+**Indirect draw**
+A draw whose arguments the GPU reads from a buffer of commands (`DrawIndexedIndirectCommand`: index count, instance count, first index, base vertex, base instance) rather than from the command list: `CmdDrawIndexedIndirect` names the buffer, an offset, how many commands and their stride, and a pass declares `IndirectRead` on the buffer. The cull pass writes the commands a view draws (ADR-0057).
+*Avoid:* GPU draw, GPU-driven draw, draw call. A *multi-draw* is one indirect draw of many commands.
+
+**Cull pass**
+The compute pass, one per view and per *shadow view* and first in the frame (the `Cull` stage), that decides which of the view's *candidates*, its opaque and masked runs' items and instance list copies, are drawn (ADR-0057), run a second time after the prepass's first draws, in the `DepthPrepass` stage, for *occlusion culling*: it copies each run's *command template* (its indirect command with no instances) over the view's command buffer, then counts each candidate it keeps into the command of the *level of detail* it chooses for it (the coarsest whose error projects under `RendererConfig::lodErrorPixels` at the candidate's distance, one command per run and level) and writes the candidate's entry into the view's *indirection*, one `(record, copy)` per instance drawn, declared in `Fenrir/Draw.glsl` as `fenrirVisible` and read by its `CurrentDraw()` at the instance's index. A *group table* entry per 64 candidates names a work group's run, so one dispatch culls the view; a *level table* entry per command template holds its level's error, which level of its run's it is, which the pass chooses by, and how many instances a kept candidate draws as (six for a point light's instanced faces). At the frame's end the view's commands are copied into a *readback ring*, read `FramesInFlight` frames later into `RendererStats::instancesDrawn` and `drawnByLod`; `Renderer::SetCullingFrozen` keeps each camera's planes while its view follows it.
+*Avoid:* culling shader, visibility buffer (that is another technique), compaction pass.
+
+**Occlusion culling**
+Dropping, per camera, the candidates wholly behind what the camera already sees (ADR-0057; `RendererConfig::occlusionCulling`, on by default; `Renderer::SetOcclusionCulling`), in two phases of the *cull pass*: the first keeps the candidates *visible* last frame (a word per candidate the second phase writes, kept while the camera's candidates keep their order, identity and count), the depth prepass draws them, the camera's *Hi-Z pyramid* is built from that depth, and the second tests every candidate inside the frustum by its box's screen rectangle against the pyramid level whose texels cover it in at most 2 x 2, drawing what shows and was not drawn. `RendererStats::drawnByPhase` counts each phase's draws. Shadow views never cull by occlusion.
+*Avoid:* occlusion query, Hi-Z culling (the test is one part of it), visibility buffer, the GTAO sense of "occlusion" (ambient occlusion is a lighting term).
+
+**Hi-Z pyramid**
+A camera's pyramid of depth (ADR-0056, ADR-0057): an RG32F texture at the view's size with a full mip chain, red the nearest and green the farthest reversed-Z depth of each texel's footprint, level 0 the prepass's depth (the nearest and the farthest of each pixel's samples under MSAA) and each level below the largest nearest and the smallest farthest of the 2 x 2 texels above it, the third row or column folded into the last texel where a level's side is odd. Built by `HiZ` fragment passes, one a level: after the prepass's first phase for *occlusion culling*, and again from the complete depth for a reflecting camera's `ReflectionTrace`, which marches its nearest depth; a reflecting camera keeps two, swapping each frame, so last frame's survives.
+*Avoid:* depth mipmap, HZB (write it out), Z-buffer pyramid.
+
+**Shadow view**
+One cascade of a camera's sun shadow, one shadowed spot light's atlas tile, or one shadowed point light's cube, as a view of the *cull pass* (ADR-0057): each gets a cull of its own over the *shadow candidates* (the opaque and masked runs whose renderer casts), against the light's volume rather than a camera's frustum (a cascade's box with its near plane left open, `Core/ShadowViews.hpp`'s `CascadeCullVolume`; a spot light's cone; a point light's range sphere, `WithinRange`), choosing each caster's *level of detail* by the camera the shadows are for, never by the light, and the shadow passes draw from its command buffer. A point light's six faces draw from its one cull. Shadow views never cull by occlusion.
+*Avoid:* light view, shadow camera, light frustum (a point light has none).
 
 **Shadow cascade**
 One of the directional light's shadow maps for one camera: an orthographic view along the light round a slice of the camera's view, nearer slices smaller and so sharper, out to the light's shadow distance. Each is a sphere snapped to whole texels, so its shadows hold still as the camera moves and turns (ADR-0050).
@@ -765,6 +789,10 @@ The asset a model file loads as: its whole node tree, bones included, pointing a
 **Sub-asset**
 An asset inside a model file, loadable on its own by label: `hero.fbx#Run`.
 *Avoid:* sub-resource, embedded asset.
+
+**Level of detail**
+One of a mesh's coarser triangle lists over its own vertex streams (`MeshLod`), with the greatest distance in local units by which it departs from full detail, its *error*. Level 0 is the mesh's own indices, with error 0; `MeshData::lods` holds the rest, coarser and with a larger error each. `GenerateLods` makes them through meshoptimizer; the renderer picks the coarsest whose error projects below a pixel threshold (ADR-0057).
+*Avoid:* LOD mesh (a level is not a mesh of its own), LOD group, mip (for geometry).
 
 ## FenrirEngine animation
 

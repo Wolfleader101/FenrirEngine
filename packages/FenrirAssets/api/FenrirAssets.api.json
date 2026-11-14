@@ -76,6 +76,44 @@
       "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
     },
     {
+      "name": "Fenrir::LodSettings",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 4,
+      "doc": "What `GenerateLods` aims for; the defaults suit most meshes.",
+      "fields": [
+        {
+          "name": "ratio",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0.5,
+          "doc": "The share of the previous level's triangles each level aims for."
+        },
+        {
+          "name": "maxLevels",
+          "offset": 4,
+          "kind": "u32",
+          "default": 4,
+          "doc": "How many levels to make at most, not counting the mesh's own full detail."
+        },
+        {
+          "name": "minTriangles",
+          "offset": 8,
+          "kind": "u32",
+          "default": 32,
+          "doc": "No level is coarser than this many triangles; a level already at or below it is the last."
+        },
+        {
+          "name": "lockSeams",
+          "offset": 12,
+          "kind": "bool",
+          "default": false,
+          "doc": "Whether every vertex on an attribute seam (a position several vertices share: a hard edge, a UV island's border) is locked where it is. Off, the default, meshoptimizer still keeps a seam's two sides together, so no crack opens, but the seam itself may collapse along its length: a mesh of many small UV islands, such as a scanned rock, goes on to a few dozen triangles unlocked and stalls at a few hundred locked. On keeps hard edges and UV islands exactly where they were, for a mesh whose seams must not move."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::SamplerFilter",
       "category": "enum",
       "size": 1,

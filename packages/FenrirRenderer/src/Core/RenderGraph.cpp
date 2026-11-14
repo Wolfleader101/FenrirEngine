@@ -18,7 +18,7 @@ namespace Fenrir::Render
         Graphics::TextureUsage TextureUsageOf(ResourceUsage usage)
         {
             // Indexed by ResourceUsage, in its order.
-            constexpr std::array<Graphics::TextureUsage, 9> byUsage{
+            constexpr std::array<Graphics::TextureUsage, 10> byUsage{
                 Graphics::TextureUsage::ColourAttachment,
                 Graphics::TextureUsage::DepthAttachment,
                 Graphics::TextureUsage::DepthAttachment,
@@ -27,6 +27,7 @@ namespace Fenrir::Render
                 Graphics::TextureUsage::Storage,
                 Graphics::TextureUsage::CopySource,
                 Graphics::TextureUsage::CopyDestination,
+                Graphics::TextureUsage::None,
                 Graphics::TextureUsage::None,
             };
             return byUsage.at(static_cast<std::size_t>(usage));
@@ -45,6 +46,8 @@ namespace Fenrir::Render
                 return Graphics::BufferUsage::CopyDestination;
             case ResourceUsage::VertexInput:
                 return Graphics::BufferUsage::Vertex;
+            case ResourceUsage::IndirectRead:
+                return Graphics::BufferUsage::Indirect;
             default:
                 return Graphics::BufferUsage::None;
             }
@@ -120,9 +123,20 @@ namespace Fenrir::Render
         Use(resource, ResourceUsage::StorageRead, true, false);
     }
 
+    void PassBuilder::StorageReadPrevious(GraphResource buffer)
+    {
+        Use(buffer, ResourceUsage::StorageRead, true, false);
+        m_graph.m_passes[m_pass].accesses.back().previous = true;
+    }
+
     void PassBuilder::StorageWrite(GraphResource resource)
     {
         Use(resource, ResourceUsage::StorageWrite, false, true);
+    }
+
+    void PassBuilder::IndirectRead(GraphResource buffer)
+    {
+        Use(buffer, ResourceUsage::IndirectRead, true, false);
     }
 
     void PassBuilder::VertexInput(GraphResource buffer)

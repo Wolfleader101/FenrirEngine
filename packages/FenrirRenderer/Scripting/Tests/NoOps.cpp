@@ -10,6 +10,7 @@
 
 #include "NativeCallHarness.hpp"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -21,6 +22,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
+#include "FenrirMath/Frustum.hpp"
 #include "FenrirMath/Math.hpp"
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirRenderer/Renderer.hpp"
@@ -67,7 +69,8 @@ namespace
     const Math::Vec3 origin(0.0f);
 } // namespace
 
-TEST_CASE("With no renderer, picking, bounds and stats do nothing, leave their outputs zeroed and say so once",
+TEST_CASE("With no renderer, picking, bounds, stats, the frustum and the culling setters do nothing, leave their "
+          "outputs zeroed and say so once",
           "[renderer][scripting][noops]")
 {
     Testing::NativeCallHarness harness({Renderer::ScriptingExtension()});
@@ -99,10 +102,20 @@ TEST_CASE("With no renderer, picking, bounds and stats do nothing, leave their o
         stats.draws = 3;
         REQUIRE_FALSE(harness.Call<bool>("RendererNative.Stats", &stats));
         REQUIRE(stats.draws == 0);
+        Math::Frustum frustum = Math::Frustum::FromPlanes(std::array{Math::Vec4(0.0f, 1.0f, 0.0f, 1.0f)});
+        REQUIRE_FALSE(harness.Call<bool>("RendererNative.GetFrustum", &camera, &frustum));
+        REQUIRE(frustum.Planes().empty());
+        REQUIRE_FALSE(harness.Call<bool>("RendererNative.SetGpuCulling", false));
+        REQUIRE_FALSE(harness.Call<bool>("RendererNative.SetOcclusionCulling", false));
+        REQUIRE_FALSE(harness.Call<bool>("RendererNative.SetCullingFrozen", true));
+        REQUIRE_FALSE(harness.Call<bool>("RendererNative.SetLodSelection", 2.0f, 1.0f));
     }
     INFO("Each native should warn once in a debug build, and never in a release build, that there is no renderer");
-    for (const char* native : {"RendererNative.ScreenPointToRay", "RendererNative.WorldToScreenPoint",
-                               "RendererNative.CameraAt", "RendererNative.GetWorldBounds", "RendererNative.Stats"})
+    for (const char* native :
+         {"RendererNative.ScreenPointToRay", "RendererNative.WorldToScreenPoint", "RendererNative.CameraAt",
+          "RendererNative.GetWorldBounds", "RendererNative.Stats", "RendererNative.GetFrustum",
+          "RendererNative.SetGpuCulling", "RendererNative.SetOcclusionCulling", "RendererNative.SetCullingFrozen",
+          "RendererNative.SetLodSelection"})
     {
         INFO(native);
         REQUIRE(harness.WarnedOnce(native, RendererScripting::NoRenderer));
@@ -183,6 +196,10 @@ TEST_CASE("A dead entity, no Camera, a stale or empty model or a dead parent do 
         REQUIRE_FALSE(harness.Call<bool>("RendererNative.ScreenPointToRay", &plain, &centre, &out));
         Math::AABB box{};
         REQUIRE_FALSE(harness.Call<bool>("RendererNative.GetWorldBounds", &deadEntity, &box));
+        Math::Frustum frustum;
+        REQUIRE_FALSE(harness.Call<bool>("RendererNative.GetFrustum", &deadEntity, &frustum));
+        REQUIRE_FALSE(harness.Call<bool>("RendererNative.GetFrustum", &plain, &frustum));
+        REQUIRE(frustum.Planes().empty());
         Entity root;
         REQUIRE_FALSE(harness.Call<bool>("RendererNative.SpawnModel", &unloaded, &noEntity, &root));
         REQUIRE_FALSE(harness.Call<bool>("RendererNative.SpawnModel", &empty, &noEntity, &root));
@@ -197,6 +214,8 @@ TEST_CASE("A dead entity, no Camera, a stale or empty model or a dead parent do 
     REQUIRE(harness.WarnedOnce("RendererNative.ScreenPointToRay", NativeGuard::NotAlive));
     REQUIRE(harness.WarnedOnce("RendererNative.ScreenPointToRay", RendererScripting::NoCamera));
     REQUIRE(harness.WarnedOnce("RendererNative.GetWorldBounds", NativeGuard::NotAlive));
+    REQUIRE(harness.WarnedOnce("RendererNative.GetFrustum", NativeGuard::NotAlive));
+    REQUIRE(harness.WarnedOnce("RendererNative.GetFrustum", RendererScripting::NoCamera));
     {
         INFO("A stale and the empty model handle should warn once from the one place SpawnModel resolves them, in "
              "Assets' words");

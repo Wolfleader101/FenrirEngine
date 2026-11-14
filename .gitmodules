@@ -49,3 +49,6 @@
 [submodule "packages/FenrirUI/libs/yoga"]
 	path = packages/FenrirUI/libs/yoga
 	url = https://github.com/facebook/yoga
+[submodule "packages/FenrirAssets/libs/meshoptimizer"]
+	path = packages/FenrirAssets/libs/meshoptimizer
+	url = https://github.com/zeux/meshoptimizer

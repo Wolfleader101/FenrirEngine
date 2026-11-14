@@ -270,7 +270,7 @@
       "name": "Fixture::Body",
       "category": "struct",
       "role": "component",
-      "size": 288,
+      "size": 320,
       "alignment": 8,
       "doc": "A component using each kind of field: enums, bound types, nested structs, arrays and pointers. Its doc comment is wrapped over three lines.",
       "fields": [
@@ -433,20 +433,66 @@
           ]
         },
         {
+          "name": "pair",
+          "offset": 260,
+          "kind": "array",
+          "elementKind": "f32",
+          "length": 2,
+          "default": [
+            3,
+            4
+          ],
+          "doc": "A std::array is the C array it holds: the same kind, with its braces elided or not."
+        },
+        {
+          "name": "wrapped",
+          "offset": 268,
+          "kind": "array",
+          "elementKind": "i16",
+          "length": 2,
+          "default": [
+            5,
+            6
+          ]
+        },
+        {
+          "name": "blank",
+          "offset": 272,
+          "kind": "array",
+          "elementKind": "u8",
+          "length": 2,
+          "default": [
+            0,
+            0
+          ]
+        },
+        {
+          "name": "coils",
+          "offset": 276,
+          "kind": "array",
+          "elementKind": "struct",
+          "elementType": "Fixture::Spring",
+          "length": 2,
+          "default": [
+            {},
+            {}
+          ]
+        },
+        {
           "name": "userData",
-          "offset": 264,
+          "offset": 296,
           "kind": "pointer",
           "default": null
         },
         {
           "name": "next",
-          "offset": 272,
+          "offset": 304,
           "kind": "pointer",
           "default": null
         },
         {
           "name": "stiff",
-          "offset": 280,
+          "offset": 312,
           "kind": "struct",
           "type": "Fixture::Spring",
           "default": {

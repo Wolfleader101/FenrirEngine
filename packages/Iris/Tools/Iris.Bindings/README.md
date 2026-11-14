@@ -187,7 +187,7 @@ too; one holding an `immutable-structs` mirror (a value C# assigns whole, a link
 interface, an event the event attribute and interface, and a scene or app resource the resource attribute and interface (a
 tagged union's mirror too); a resource in `read-only` gets the read-only interface and, unless it is a tagged union, is a
 `readonly struct`. A struct in `internal-structs` is `internal`, and a public mirror cannot hold one. An array is an `[InlineArray(N)]` struct nested in its mirror
-(`SamplesArray Samples`, with `N` as its `Length` constant), filled by the constructor, since C# cannot initialise one; an array in `fixed-buffers` is a
+(`SamplesArray Samples`, with `N` as its `Length` constant; a private field `planes` gets `PlanesArray`), filled by the constructor, since C# cannot initialise one; an array in `fixed-buffers` is a
 `fixed` buffer (`public fixed byte Text[256];`) in an `unsafe` mirror instead, which a read-only mirror cannot hold. A
 field in `private-fields` is `private`, and its mirror turns off the compiler's unused-field warnings: native code reads
 it. A pointer is `pointer-type` at its offset, an empty struct an empty struct.

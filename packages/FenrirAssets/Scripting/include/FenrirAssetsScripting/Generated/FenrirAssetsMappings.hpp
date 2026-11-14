@@ -8,6 +8,7 @@
 #include "Iris/Iris.hpp"
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirAssets/MaterialData.hpp"
+#include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
 #include "FenrirAssetsScripting/ScriptAssets.hpp"
 #include "FenrirAssetsScripting/AssetMappings.hpp"
@@ -51,6 +52,20 @@ static_assert(sizeof(Fenrir::AssetHandle<Fenrir::Shader>) == 8 && alignof(Fenrir
 
 static_assert(sizeof(Fenrir::AssetHandle<Fenrir::Skeleton>) == 8 && alignof(Fenrir::AssetHandle<Fenrir::Skeleton>) == 4,
               "Fenrir::AssetHandle<Fenrir::Skeleton> is not the layout FenrirAssets.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fenrir::LodSettings>
+{
+    static constexpr std::string_view typeName = "Fenrir.Assets.LodSettings";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<float>("Ratio", 0),
+        Iris::Field<std::uint32_t>("MaxLevels", 4),
+        Iris::Field<std::uint32_t>("MinTriangles", 8),
+        Iris::Field<bool>("LockSeams", 12));
+};
+static_assert(sizeof(Fenrir::LodSettings) == 16 && alignof(Fenrir::LodSettings) == 4,
+              "Fenrir::LodSettings is not the layout FenrirAssets.api.json describes: "
               "regenerate the description, then this binding");
 
 template <>

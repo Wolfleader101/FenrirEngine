@@ -481,10 +481,11 @@ TEST_CASE("A camera with reflections at intensity 0 has no reflection pass", "[r
     AddReflectingCamera(test).reflections.intensity = 0.0f;
 
     test.Frame();
-    INFO("enabled, but at intensity 0: no trace, no pyramid, nothing kept");
+    INFO("enabled, but at intensity 0: no trace, and only occlusion culling's one build of the pyramid, no history");
     REQUIRE(Labelled(test.Passes(), "ReflectionTrace").empty());
-    REQUIRE(Labelled(test.Passes(), "HiZ").empty());
-    REQUIRE(RendererProbe::Reflections(test.renderer).empty());
+    REQUIRE(Labelled(test.Passes(), "HiZ").size() == 11);
+    REQUIRE(RendererProbe::Reflections(test.renderer).size() == 1);
+    REQUIRE(RendererProbe::Reflections(test.renderer).at(0).history.IsEmpty());
 }
 
 TEST_CASE("A camera showing its reflections has Output draw last frame's history at its hits, before SceneHistory "

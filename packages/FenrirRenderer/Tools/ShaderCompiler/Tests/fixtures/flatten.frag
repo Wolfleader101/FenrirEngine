@@ -1,6 +1,6 @@
 #version 460
 // With flatten.vert: a uniform block at set 2 binding 0 (material), textures at set 2 bindings 1 and 3 (first, second),
-// and a storage block at set 3 binding 3 (lights).
+// and a storage block at set 3 binding 4 (lights), after Draw.glsl's four.
 
 layout(set = 2, binding = 0, std140) uniform MaterialParams
 {
@@ -8,7 +8,7 @@ layout(set = 2, binding = 0, std140) uniform MaterialParams
 } material;
 layout(set = 2, binding = 1) uniform sampler2D first;
 layout(set = 2, binding = 3) uniform sampler2D second;
-layout(set = 3, binding = 3, std430) readonly buffer Lights
+layout(set = 3, binding = 4, std430) readonly buffer Lights
 {
     vec4 colours[];
 } lights;

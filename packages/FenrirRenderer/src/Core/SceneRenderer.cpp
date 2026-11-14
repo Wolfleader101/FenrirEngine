@@ -3,8 +3,11 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <format>
+#include <optional>
+#include <span>
 #include <string_view>
 #include <type_traits>
 #include <variant>
@@ -13,6 +16,7 @@
 #include "Core/ColourGrading.hpp"
 #include "Core/ImageReads.hpp"
 #include "Core/ImageUpload.hpp"
+#include "Core/ShadowViews.hpp"
 #include "Core/Skinning.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
@@ -92,10 +96,17 @@ namespace Fenrir::Render
             std::uint32_t instanceCount = 0;
             /** @brief Linear, multiplying the vertex colour: white for every record the CPU writes. */
             Math::Vec4 colour{1.0f};
+            /**
+             * @brief The item's box for culling (ADR-0057), xyz with w unused: for an item its world bounds, so a
+             * cull tests it under the identity; for an instance list its mesh's local bounds, moved by each copy.
+             */
+            Math::Vec4 boundsMin{0.0f};
+            Math::Vec4 boundsMax{0.0f};
         };
-        static_assert(sizeof(DrawBlock) == 160);
+        static_assert(sizeof(DrawBlock) == 192);
         static_assert(offsetof(DrawBlock, paletteOffset) == 128 && offsetof(DrawBlock, worldSign) == 132 &&
-                      offsetof(DrawBlock, instanceCount) == 140 && offsetof(DrawBlock, colour) == 144);
+                      offsetof(DrawBlock, instanceCount) == 140 && offsetof(DrawBlock, colour) == 144 &&
+                      offsetof(DrawBlock, boundsMin) == 160 && offsetof(DrawBlock, boundsMax) == 176);
 
         /** @brief One copy of an instance list, as `Fenrir/Draw.glsl`'s FenrirInstance declares it (std430). */
         struct InstanceBlock
@@ -165,6 +176,69 @@ namespace Fenrir::Render
         static_assert(sizeof(ClusterJobBlock) == 160);
         /** @brief builtin:light-clusters' work group size, one invocation a cluster. */
         constexpr std::uint32_t LightClustersGroupSize = 64;
+
+        /** @brief builtin:cull's work group size, one invocation a candidate; no group straddles two runs. */
+        constexpr std::uint32_t CullGroupSize = 64;
+
+        /** @brief A Cull pass's job block, as `builtin:cull` declares it (std140). */
+        struct CullJobBlock
+        {
+            /**
+             * @brief The view's first entry in the group table, how many it has, how many of `planes` are the view's
+             * (0 keeps every candidate: RendererConfig::gpuCulling off), and the view's first template's index in the
+             * frame's level table.
+             */
+            std::array<std::uint32_t, 4> groups{};
+            /**
+             * @brief The view's planes (Math::Frustum::Planes, world space, `vec4(n, d)`, inside when
+             * `dot(n, p) + d >= 0`): five for a camera, six for an orthographic view; the rest unused.
+             */
+            std::array<Math::Vec4, 6> planes{};
+            /** @brief The camera's position (LodView::position) and, in w, its LodView::pixelsPerUnit. */
+            Math::Vec4 camera{};
+            /**
+             * @brief The level selection's settings: the error pixels a level must be under, the pixels a copy's
+             * radius must reach (0 for none), the near distance (LodView::near), and 1 for a perspective view, 0 for
+             * an orthographic one (LodView::perspective). The first two are 0 with GPU culling off: level 0, nothing
+             * dropped.
+             */
+            Math::Vec4 lod{};
+            /**
+             * @brief The occlusion phase: 0 for the one phase of a view without occlusion culling, 1 for the first, 2
+             * for the second; then 1 when the view's visibility words are stale, so every candidate counts as visible
+             * last frame; how many commands after a run's first its second-phase command is; and how many levels the
+             * pyramid has.
+             */
+            std::array<std::uint32_t, 4> occlusion{};
+            /** @brief The view's size in pixels, the pyramid's level 0; the rest unused. */
+            Math::Vec4 screen{};
+            /** @brief World to clip space, which the second phase takes each box's screen rectangle in. */
+            Math::Mat4 viewProjection{1.0f};
+            /**
+             * @brief A point light's range sphere (CullView::sphere): its centre and, in w, its radius, 0 for a view
+             * with none, or with GPU culling off.
+             */
+            Math::Vec4 sphere{};
+        };
+        static_assert(sizeof(CullJobBlock) == 256);
+        static_assert(offsetof(CullJobBlock, planes) == 16);
+        static_assert(offsetof(CullJobBlock, camera) == 112);
+        static_assert(offsetof(CullJobBlock, lod) == 128);
+        static_assert(offsetof(CullJobBlock, occlusion) == 144);
+        static_assert(offsetof(CullJobBlock, screen) == 160);
+        static_assert(offsetof(CullJobBlock, viewProjection) == 176);
+        static_assert(offsetof(CullJobBlock, sphere) == 240);
+
+        /** @brief One entry of a view's indirection, as `Fenrir/DrawRecord.glsl` lays it: a record and a copy. */
+        struct IndirectionEntry
+        {
+            std::uint32_t record = 0;
+            std::uint32_t copy = 0;
+        };
+        static_assert(sizeof(IndirectionEntry) == 8);
+        /** @brief `Fenrir/DrawRecord.glsl`'s FenrirNoCopy and FenrirNoIndirection. */
+        constexpr std::uint32_t NoCopy = 0xFFFFFFFFu;
+        constexpr std::uint32_t NoIndirection = 0xFFFFFFFFu;
 
         /** @brief The background block, as `builtin:background` declares it (std140). */
         struct BackgroundBlock
@@ -249,8 +323,9 @@ namespace Fenrir::Render
         // many as the frame has, and the shadowed spot lights' records, with their atlas, then the shadowed point
         // lights' records, with the point shadow cubes (ADR-0050). Set 1's textures are the view's ambient occlusion
         // (ADR-0049), its sun's shadow atlas (ADR-0050), and its reflections' hit target and history (ADR-0056); its
-        // storage block the view's light clusters (ADR-0049).
-        [[maybe_unused]] constexpr std::array<FixedBinding, 20> FixedBindings{{
+        // storage block the view's light clusters (ADR-0049). Set 3's fourth storage block is the view's indirection
+        // (ADR-0057).
+        [[maybe_unused]] constexpr std::array<FixedBinding, 21> FixedBindings{{
             {0, 0, ShaderBindingKind::UniformBuffer, sizeof(FrameBlock)},
             {0, 1, ShaderBindingKind::Texture, 0},
             {0, 2, ShaderBindingKind::Texture, 0},
@@ -271,6 +346,7 @@ namespace Fenrir::Render
             {3, 0, ShaderBindingKind::StorageBuffer, sizeof(DrawBlock)},
             {3, 1, ShaderBindingKind::StorageBuffer, sizeof(InstanceBlock)},
             {3, 2, ShaderBindingKind::StorageBuffer, sizeof(GpuBone)},
+            {3, 3, ShaderBindingKind::StorageBuffer, sizeof(IndirectionEntry)},
         }};
 
         /** @brief The binding set of the material. */
@@ -648,6 +724,17 @@ namespace Fenrir::Render
         }
     } // namespace
 
+    void SceneRenderer::GrownRing::Reserve(GraphicsDevice& device, std::size_t bytes, BufferUsage usage,
+                                           std::string_view label)
+    {
+        if (ring != nullptr && bytes <= capacity)
+        {
+            return;
+        }
+        capacity = std::max(bytes, capacity * 2);
+        ring = std::make_unique<FrameRingBuffer>(device, BufferDesc{capacity, usage}, label);
+    }
+
     // ---- SceneRenderer ----
 
     SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples,
@@ -655,8 +742,8 @@ namespace Fenrir::Render
                                  ShadowBudgetConfig spotShadows, ShadowBudgetConfig pointShadows)
         : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1)),
           m_automaticInstancing(automaticInstancing), m_computeSkinning(computeSkinning), m_cascades(cascades),
-          m_clusterTargetGroups(device), m_skyGroups(device), m_viewGroups(device), m_outputGroups(device),
-          m_reflectionOutputGroups(device)
+          m_clusterTargetGroups(device), m_cullTargetGroups(device), m_skyGroups(device), m_drawGroups(device),
+          m_viewGroups(device), m_outputGroups(device), m_reflectionOutputGroups(device)
     {
         m_cascades.count = std::clamp(m_cascades.count, 1u, MaxCascades);
         m_cascades.mapSize = std::max(m_cascades.mapSize, 1u);
@@ -682,7 +769,8 @@ namespace Fenrir::Render
         m_outputBlockLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Output");
         m_drawLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::StorageBuffer},
                                                            {1, ShaderBindingKind::StorageBuffer},
-                                                           {2, ShaderBindingKind::StorageBuffer}}},
+                                                           {2, ShaderBindingKind::StorageBuffer},
+                                                           {3, ShaderBindingKind::StorageBuffer}}},
                                                          "Draw");
 
         // The default textures (ADR-0024): 1x1 white, black and the flat tangent-space normal, linear.
@@ -867,6 +955,36 @@ namespace Fenrir::Render
         constexpr std::array<std::uint32_t, 4> noClusters{};
         m_noClusters = m_device.CreateBuffer({sizeof(noClusters), BufferUsage::Storage},
                                              std::as_bytes(std::span(noClusters)), "No light clusters");
+        // GPU culling (ADR-0057): without its pipeline, every pass draws directly, as before it.
+        m_cullJobLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Cull job");
+        m_cullTargetLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::StorageBuffer},
+                                                                 {1, ShaderBindingKind::StorageBuffer},
+                                                                 {2, ShaderBindingKind::StorageBuffer},
+                                                                 {3, ShaderBindingKind::StorageBuffer},
+                                                                 {4, ShaderBindingKind::StorageBuffer},
+                                                                 {5, ShaderBindingKind::StorageBuffer},
+                                                                 {6, ShaderBindingKind::StorageBuffer},
+                                                                 {7, ShaderBindingKind::Texture}}},
+                                                               "Cull target");
+        m_cullSampler = m_device.CreateSampler(NearestClampedSampler(), "Cull sampler");
+        m_cullJobs = std::make_unique<BlockRing>(m_device, m_cullJobLayout, false, sizeof(CullJobBlock), "Cull jobs");
+        m_cull = ReadBuiltin(BuiltinProgram::Cull, m_logger);
+        if (const ShaderVariant* variant = BaseVariant(m_cull))
+        {
+            PipelineResult made =
+                m_device.CreateComputePipeline({variant, {m_cullJobLayout, m_cullTargetLayout, {}, {}}}, "Cull");
+            m_cullPipeline = made.pipeline;
+            if (m_cullPipeline.IsEmpty())
+            {
+                m_logger.Error("FenrirRenderer: no cull pipeline, so every pass draws directly: {}", made.diagnostic);
+            }
+        }
+        constexpr IndirectionEntry noIndirection{NoIndirection, NoCopy};
+        m_noIndirection = m_device.CreateBuffer({sizeof(noIndirection), BufferUsage::Storage}, BytesOf(noIndirection),
+                                                "No indirection");
+        constexpr std::uint32_t noVisibility = 1;
+        m_noVisibility =
+            m_device.CreateBuffer({sizeof(noVisibility), BufferUsage::Storage}, BytesOf(noVisibility), "No visibility");
         m_frameBlocks->Reserve(1);
         m_lightBlocks->Reserve(1);
     }
@@ -917,10 +1035,7 @@ namespace Fenrir::Render
         m_outputGroups.Clear();
         m_reflectionOutputGroups.Clear();
         m_viewGroups.Clear();
-        for (const DrawGroup& group : m_drawGroups)
-        {
-            m_device.Destroy(group.group);
-        }
+        m_drawGroups.Clear();
         for (const FrameGroup& group : m_frameGroups)
         {
             if (group.unshadowed != group.group)
@@ -956,6 +1071,27 @@ namespace Fenrir::Render
         m_clusterJobs.reset();
         m_clusterBuffers.clear();
         m_device.Destroy(m_noClusters);
+        m_cullTargetGroups.Clear();
+        m_cullJobs.reset();
+        m_cullTemplates.ring.reset();
+        m_cullLevels.ring.reset();
+        m_cullGroups.ring.reset();
+        for (const CullRings& rings : m_cullRings)
+        {
+            m_device.Destroy(rings.visibility);
+        }
+        m_cullRings.clear();
+        for (const CullReadback& readback : m_cullReadbacks)
+        {
+            m_device.Destroy(readback.buffer);
+        }
+        m_cullReadbacks.clear();
+        m_device.Destroy(m_noIndirection);
+        m_device.Destroy(m_noVisibility);
+        m_device.Destroy(m_cullSampler);
+        m_device.Destroy(m_cullPipeline);
+        m_device.Destroy(m_cullJobLayout);
+        m_device.Destroy(m_cullTargetLayout);
         m_device.Destroy(m_lightClustersPipeline);
         m_device.Destroy(m_clusterJobLayout);
         m_device.Destroy(m_clusterTargetLayout);
@@ -1341,6 +1477,7 @@ namespace Fenrir::Render
             entry.boneCount = mesh.skin->boneCount;
         }
         entry.vertexCount = static_cast<std::uint32_t>(mesh.positions.size());
+        entry.bounds = mesh.bounds;
         if (!vertices.empty())
         {
             // A skinned mesh's is also builtin:skinning's source, read as storage (ADR-0050).
@@ -1356,8 +1493,18 @@ namespace Fenrir::Render
         }
         if (!mesh.indices.empty())
         {
-            const std::span<const std::byte> indices = std::as_bytes(std::span(mesh.indices));
-            entry.indices = m_device.CreateBuffer({indices.size(), BufferUsage::Index}, indices, "Mesh indices");
+            // Level 0 then each coarser level back to back, so a run's commands draw any level from the one buffer,
+            // each from its first index (ADR-0057).
+            std::vector<std::uint32_t> indices = mesh.indices;
+            entry.levels.push_back({0, static_cast<std::uint32_t>(mesh.indices.size()), 0.0f});
+            for (const MeshLod& lod : mesh.lods)
+            {
+                entry.levels.push_back({static_cast<std::uint32_t>(indices.size()),
+                                        static_cast<std::uint32_t>(lod.indices.size()), lod.error});
+                indices.insert(indices.end(), lod.indices.begin(), lod.indices.end());
+            }
+            const std::span<const std::byte> bytes = std::as_bytes(std::span(indices));
+            entry.indices = m_device.CreateBuffer({bytes.size(), BufferUsage::Index}, bytes, "Mesh indices");
             entry.indexCount = static_cast<std::uint32_t>(mesh.indices.size());
         }
         ++m_stats.uploads;
@@ -1655,11 +1802,14 @@ namespace Fenrir::Render
         return found != m_instanceLists.end() && found->second.revision == revision;
     }
 
-    void SceneRenderer::PrepareInstanceList(AssetKey key, std::uint32_t revision, const InstanceListData& list)
+    void SceneRenderer::PrepareInstanceList(AssetKey key, std::uint32_t revision, const InstanceListData& list,
+                                            const Math::AABB& meshBounds)
     {
         InstanceListEntry& entry = m_instanceLists[key];
         entry.revision = revision;
         entry.range.count = static_cast<std::uint32_t>(list.transforms.size());
+        entry.meshBounds = meshBounds;
+        entry.bounds = CopiesBounds(list.transforms, meshBounds);
         entry.records.resize(list.transforms.size() * sizeof(InstanceBlock));
         for (std::size_t i = 0; i < list.transforms.size(); ++i)
         {
@@ -1677,6 +1827,28 @@ namespace Fenrir::Render
         }
         m_instancesChanged = true;
         ++m_stats.uploads;
+    }
+
+    std::optional<Math::AABB> SceneRenderer::InstanceListBounds(AssetKey key, const Math::AABB& meshBounds)
+    {
+        const auto found = m_instanceLists.find(key);
+        if (found == m_instanceLists.end() || found->second.range.count == 0)
+        {
+            return std::nullopt;
+        }
+        InstanceListEntry& entry = found->second;
+        if (entry.meshBounds.min != meshBounds.min || entry.meshBounds.max != meshBounds.max)
+        {
+            // Another mesh than the list was uploaded with: its copies' transforms are read back from their records.
+            std::vector<Math::Mat4> transforms(entry.range.count);
+            for (std::size_t i = 0; i < transforms.size(); ++i)
+            {
+                std::memcpy(&transforms[i], entry.records.data() + (i * sizeof(InstanceBlock)), sizeof(Math::Mat4));
+            }
+            entry.meshBounds = meshBounds;
+            entry.bounds = CopiesBounds(transforms, meshBounds);
+        }
+        return entry.bounds;
     }
 
     void SceneRenderer::ReleaseInstanceList(AssetKey key)
@@ -1719,6 +1891,7 @@ namespace Fenrir::Render
         }
         m_device.Destroy(m_instanceListBuffer);
         m_instanceListBuffer = m_device.CreateBuffer({packed.size(), BufferUsage::Storage}, packed, "Instance lists");
+        m_instanceListBytes = packed.size();
         m_instancesChanged = false;
     }
 
@@ -2097,6 +2270,22 @@ namespace Fenrir::Render
             draw.pointShadow = pointShadow;
             draw.pointShadowLayered = pointShadowLayered;
             draw.instances = list == nullptr ? InstanceRange{} : list->range;
+            if (list == nullptr)
+            {
+                // The record carries the item's world bounds: its skinned bounds when the facade gave them (ADR-0035),
+                // else its mesh's box under its world matrix.
+                draw.recordBounds = request.bounds.value_or(Math::Moved(mesh->second.bounds, request.world));
+                draw.worldBounds = draw.recordBounds;
+            }
+            else
+            {
+                // An instance list's record carries the mesh's local box, which each copy moves; the list as a whole
+                // is culled by the box around every copy, under the entity's world matrix.
+                draw.recordBounds = mesh->second.bounds;
+                draw.worldBounds = Math::Moved(
+                    InstanceListBounds(request.instances, mesh->second.bounds).value_or(mesh->second.bounds),
+                    request.world);
+            }
             if (computeSkinned)
             {
                 const auto [skin, added] = skinIndex.try_emplace({&mesh->second, request.paletteOffset}, skins.size());
@@ -2142,6 +2331,8 @@ namespace Fenrir::Render
                                                               DrawPass pass) const
     {
         const auto pipelineOf = [&](std::size_t i) { return PipelineOf(draws[i], pass); };
+        // Drawing a point light's cube faces as instances, each item or copy is six, one a face.
+        const std::uint32_t instances = pass == DrawPass::PointShadowLayered ? CubeFaceCount : 1u;
         std::vector<DrawRun> runs;
         for (const std::size_t i : order)
         {
@@ -2160,7 +2351,7 @@ namespace Fenrir::Render
                     continue;
                 }
             }
-            runs.push_back({i, 1});
+            runs.push_back({i, 1, instances});
         }
         return runs;
     }
@@ -2169,17 +2360,28 @@ namespace Fenrir::Render
                                     const std::vector<BindingGroupHandle>& groups, const std::vector<DrawRun>& runs,
                                     BindingGroupHandle frameGroup, BindingGroupHandle viewGroup,
                                     BindingGroupHandle drawGroup, BufferHandle skinned, PixelRect viewport,
-                                    DrawPass pass) const
+                                    DrawPass pass, BufferHandle commands, std::uint32_t commandOffset) const
     {
         encoder.SetViewport(viewport);
         const PipelineEntry* current = nullptr;
         BindingGroupHandle material;
+        // Each run's commands in the view's buffer: one per level of detail of its mesh, as PrepareCull laid them,
+        // from the phase's first command.
+        std::uint32_t command = commandOffset;
         for (const DrawRun& run : runs)
         {
             const std::size_t i = run.first;
             const ResolvedDraw& draw = draws[i];
             const BindingGroupHandle group = groups[i];
+            const auto levels = static_cast<std::uint32_t>(draw.mesh->levels.size());
+            const std::uint32_t firstCommand = command;
+            command += levels;
             const PipelineEntry* pipeline = PipelineOf(draw, pass);
+            if (pipeline == nullptr)
+            {
+                // Not drawn in this pass (an item with no prepass draw): its commands stay in the view's buffer.
+                continue;
+            }
             const bool newPipeline = pipeline != current;
             if (newPipeline)
             {
@@ -2215,14 +2417,23 @@ namespace Fenrir::Render
                 }
             }
             encoder.SetIndexBuffer(draw.mesh->indices, IndexFormat::UInt32);
+            if (!commands.IsEmpty())
+            {
+                // The run's commands, one per level of detail, counted into by the view's cull pass (ADR-0057), as
+                // one multi-draw: each command's instances read the view's indirection from its base instance, which
+                // Fenrir/Draw.glsl composes as a direct draw's.
+                encoder.DrawIndexedIndirect({.buffer = commands,
+                                             .offset = firstCommand * sizeof(DrawIndexedIndirectCommand),
+                                             .drawCount = levels});
+                continue;
+            }
             // Each item reads its own record of the draw buffer, by its place in the draw list; an instance list's
             // copies all read its one record, which Fenrir/Draw.glsl composes with each copy's. Drawing a point light's
-            // cube faces as instances, each is six, one a face.
+            // cube faces as instances, each is six, one a face (the run's instances).
             const std::uint32_t instances = draw.instances.count == 0 ? run.count : draw.instances.count;
-            encoder.DrawIndexed(
-                {.indexCount = draw.mesh->indexCount,
-                 .instanceCount = pass == DrawPass::PointShadowLayered ? instances * CubeFaceCount : instances,
-                 .firstInstance = static_cast<std::uint32_t>(i)});
+            encoder.DrawIndexed({.indexCount = draw.mesh->indexCount,
+                                 .instanceCount = instances * run.instances,
+                                 .firstInstance = static_cast<std::uint32_t>(i)});
         }
     }
 
@@ -2371,31 +2582,441 @@ namespace Fenrir::Render
         return {buffer, resource};
     }
 
-    BindingGroupHandle SceneRenderer::DrawGroupFor(std::uint64_t frameIndex)
+    BindingGroupHandle SceneRenderer::DrawGroupFor(std::uint64_t frameIndex, BufferHandle indirection)
     {
         const BufferHandle draws = m_drawBlocks->Buffer(frameIndex);
         const BufferHandle palette = m_paletteBlocks->Buffer(frameIndex);
-        // One group per copy, made again when either ring has remade its buffers, or the instance lists were packed.
-        const std::size_t copies = std::max<std::size_t>(m_device.FramesInFlight(), 1);
-        m_drawGroups.resize(copies);
-        DrawGroup& group = m_drawGroups[static_cast<std::size_t>(frameIndex % copies)];
-        if (group.group.IsEmpty() || group.draws != draws || group.palette != palette ||
-            group.instanceLists != m_instanceListBuffer)
+        const BufferHandle bound = indirection.IsEmpty() ? m_noIndirection : indirection;
+        // One group per frame in flight's buffers and indirection (a view's, or none), kept while they all live: a
+        // ring remaking its buffers, the instance lists packed again or a view's indirection grown makes a new one.
+        return m_drawGroups.Get({BindingGroupKeyPart::Of(draws), BindingGroupKeyPart::Of(palette),
+                                 BindingGroupKeyPart::Of(m_instanceListBuffer), BindingGroupKeyPart::Of(bound)},
+                                frameIndex, [&] {
+                                    BindingGroupEntry drawEntry;
+                                    drawEntry.binding = 0;
+                                    drawEntry.buffer = draws;
+                                    BindingGroupEntry instanceEntry;
+                                    instanceEntry.binding = 1;
+                                    instanceEntry.buffer = m_instanceListBuffer;
+                                    BindingGroupEntry paletteEntry;
+                                    paletteEntry.binding = 2;
+                                    paletteEntry.buffer = palette;
+                                    BindingGroupEntry indirectionEntry;
+                                    indirectionEntry.binding = 3;
+                                    indirectionEntry.buffer = bound;
+                                    return m_device.CreateBindingGroup(
+                                        {m_drawLayout, {drawEntry, instanceEntry, paletteEntry, indirectionEntry}},
+                                        "Draw");
+                                });
+    }
+
+    SceneRenderer::CullFrame SceneRenderer::BeginCullFrame(RenderGraph& graph, std::uint64_t frameIndex,
+                                                           std::size_t views, const std::vector<ResolvedDraw>& draws)
+    {
+        // The most the frame can take, so the rings are their final size before any view's pass binds them: every
+        // opaque draw a run of its own, with a template per level in each of two phases and a group per 64 copies,
+        // in every view. A merged run of n items takes one template per level and at most n groups, under this.
+        std::size_t templates = 0;
+        std::size_t groups = 0;
+        for (const ResolvedDraw& draw : draws)
         {
-            m_device.Destroy(group.group);
-            BindingGroupEntry drawEntry;
-            drawEntry.binding = 0;
-            drawEntry.buffer = draws;
-            BindingGroupEntry paletteEntry;
-            paletteEntry.binding = 2;
-            paletteEntry.buffer = palette;
-            BindingGroupEntry instanceEntry;
-            instanceEntry.binding = 1;
-            instanceEntry.buffer = m_instanceListBuffer;
-            group = {draws, palette, m_instanceListBuffer,
-                     m_device.CreateBindingGroup({m_drawLayout, {drawEntry, paletteEntry, instanceEntry}}, "Draw")};
+            if (draw.transparent)
+            {
+                continue;
+            }
+            const std::uint32_t count = std::max<std::uint32_t>(draw.instances.count, 1);
+            templates += draw.mesh->levels.size() * 2;
+            groups += (count + CullGroupSize - 1) / CullGroupSize;
         }
-        return group.group;
+        CullFrame frame;
+        if (templates == 0 || m_cullPipeline.IsEmpty())
+        {
+            return frame;
+        }
+        templates *= views;
+        groups *= views;
+        m_cullTemplates.Reserve(m_device, templates * sizeof(DrawIndexedIndirectCommand), BufferUsage::CopySource,
+                                "Cull templates");
+        m_cullLevels.Reserve(m_device, templates * sizeof(CullLevelEntry), BufferUsage::Storage, "Cull levels");
+        m_cullGroups.Reserve(m_device, groups * sizeof(CullGroupEntry), BufferUsage::Storage, "Cull groups");
+        frame.templates = m_cullTemplates.ring->Current(frameIndex);
+        frame.levels = m_cullLevels.ring->Current(frameIndex);
+        frame.groups = m_cullGroups.ring->Current(frameIndex);
+        frame.records = m_drawBlocks->Buffer(frameIndex);
+        frame.templatesResource =
+            graph.ImportBuffer("CullTemplates", frame.templates, {m_cullTemplates.capacity, BufferUsage::CopySource});
+        frame.levelsResource =
+            graph.ImportBuffer("CullLevels", frame.levels, {m_cullLevels.capacity, BufferUsage::Storage});
+        frame.groupsResource =
+            graph.ImportBuffer("CullGroups", frame.groups, {m_cullGroups.capacity, BufferUsage::Storage});
+        frame.recordsResource = graph.ImportBuffer(
+            "DrawRecords", frame.records, {m_drawBlocks->Capacity() * m_drawBlocks->SlotSize(), BufferUsage::Storage});
+        frame.copiesResource =
+            graph.ImportBuffer("InstanceLists", m_instanceListBuffer, {m_instanceListBytes, BufferUsage::Storage});
+        return frame;
+    }
+
+    SceneRenderer::CullView SceneRenderer::PrepareCull(
+        RenderGraph& graph, std::uint64_t frameIndex, std::size_t view, const CullVolume& volume, const LodView& lod,
+        const std::vector<ResolvedDraw>& draws, const std::vector<DrawRun>& runs, const CullFrame& frame,
+        const CullOcclusion* occlusion, std::vector<DrawIndexedIndirectCommand>& templates,
+        std::vector<CullLevelEntry>& levels, std::vector<std::uint32_t>& phases, std::vector<CullGroupEntry>& groups)
+    {
+        CullView cull;
+        cull.frustum = volume.frustum;
+        cull.sphere = volume.sphere;
+        cull.lod = lod;
+        if (runs.empty() || frame.IsEmpty())
+        {
+            return cull;
+        }
+        cull.phases = occlusion != nullptr ? 2 : 1;
+        // Each run's templates, one per level of detail of its mesh, contiguous, with no instances until the pass
+        // counts them, and the base instance where the level's region of the indirection starts, each region sized
+        // for the whole run, as any copy may land in any level; and its groups, each culling up to 64 of its
+        // candidates, so none straddles runs. With two phases the templates come again after the first phase's, each
+        // region after the first phase's regions, over the same groups.
+        cull.templateOffset = templates.size() * sizeof(DrawIndexedIndirectCommand);
+        cull.firstTemplate = static_cast<std::uint32_t>(templates.size());
+        cull.firstGroup = static_cast<std::uint32_t>(groups.size());
+        std::uint32_t candidates = 0;
+        std::uint32_t entries = 0;
+        std::uint32_t perPhase = 0;
+        for (const DrawRun& run : runs)
+        {
+            const ResolvedDraw& draw = draws[run.first];
+            const std::uint32_t count = draw.instances.count == 0 ? run.count : draw.instances.count;
+            perPhase += static_cast<std::uint32_t>(draw.mesh->levels.size());
+            candidates += count;
+        }
+        cull.commandsPerPhase = perPhase;
+        std::vector<CullRunIdentity> order;
+        for (std::uint32_t set = 0; set < cull.phases; ++set)
+        {
+            std::uint32_t firstCandidate = 0;
+            for (const DrawRun& run : runs)
+            {
+                const ResolvedDraw& draw = draws[run.first];
+                const std::uint32_t count = draw.instances.count == 0 ? run.count : draw.instances.count;
+                const auto command = static_cast<std::uint32_t>(templates.size()) - cull.firstTemplate;
+                const auto levelCount = static_cast<std::uint32_t>(draw.mesh->levels.size());
+                for (std::uint32_t level = 0; level < levelCount; ++level)
+                {
+                    const MeshLevel& meshLevel = draw.mesh->levels[level];
+                    templates.push_back({.indexCount = meshLevel.indexCount,
+                                         .firstIndex = meshLevel.firstIndex,
+                                         .baseInstance = entries + level * count});
+                    levels.push_back({.error = meshLevel.error,
+                                      .level = level,
+                                      .levels = levelCount,
+                                      .firstCandidate = firstCandidate,
+                                      .instances = run.instances});
+                    phases.push_back(set);
+                }
+                if (set == 0)
+                {
+                    for (std::uint32_t first = 0; first < count; first += CullGroupSize)
+                    {
+                        groups.push_back({.command = command,
+                                          .record = static_cast<std::uint32_t>(run.first),
+                                          .count = count,
+                                          .first = first});
+                    }
+                    // A run's candidates keep their visibility while the same run draws the same count at the same
+                    // place in the view's order.
+                    order.push_back({static_cast<std::uint32_t>(run.first), count, draw.instances.first, draw.mesh});
+                }
+                firstCandidate += count;
+                entries += count * levelCount;
+            }
+        }
+        cull.runs = static_cast<std::uint32_t>(runs.size());
+        cull.candidates = candidates;
+        cull.templateBytes = (templates.size() - cull.firstTemplate) * sizeof(DrawIndexedIndirectCommand);
+        cull.groups = static_cast<std::uint32_t>(groups.size()) - cull.firstGroup;
+
+        // The view's command buffer and indirection, sized to this frame's runs and candidates, kept between frames and
+        // grown as the room needs, a copy per frame in flight, so this frame's pass never writes what an earlier
+        // frame's draws may still read.
+        if (m_cullRings.size() <= view)
+        {
+            m_cullRings.resize(view + 1);
+        }
+        CullRings& rings = m_cullRings[view];
+        constexpr BufferUsage commandUsage =
+            BufferUsage::Indirect | BufferUsage::Storage | BufferUsage::CopyDestination;
+        rings.commands.Reserve(m_device, cull.templateBytes, commandUsage, "Cull commands");
+        rings.indirection.Reserve(m_device, std::size_t{entries} * sizeof(IndirectionEntry), BufferUsage::Storage,
+                                  "Cull indirection");
+        cull.commands = rings.commands.ring->Current(frameIndex);
+        cull.indirection = rings.indirection.ring->Current(frameIndex);
+        cull.commandsResource =
+            graph.ImportBuffer("CullCommands", cull.commands, {rings.commands.capacity, commandUsage});
+        cull.indirectionResource =
+            graph.ImportBuffer("CullIndirection", cull.indirection, {rings.indirection.capacity, BufferUsage::Storage});
+        if (occlusion == nullptr)
+        {
+            // Nothing is kept of a frame without the second phase: the next frame with it starts stale.
+            rings.order.clear();
+            return cull;
+        }
+        // The visibility words, one buffer the pass alone reads and writes: stale, so every candidate counts as
+        // visible, when the candidates' order changed or the buffer was remade.
+        const std::size_t visibilityBytes = std::size_t{candidates} * sizeof(std::uint32_t);
+        bool stale = rings.order != order;
+        if (rings.visibility.IsEmpty() || rings.visibilityCapacity < visibilityBytes)
+        {
+            m_device.Destroy(rings.visibility);
+            rings.visibilityCapacity = std::max(visibilityBytes, rings.visibilityCapacity * 2);
+            rings.visibility =
+                m_device.CreateBuffer({rings.visibilityCapacity, BufferUsage::Storage}, {}, "Cull visibility");
+            stale = true;
+        }
+        rings.order = std::move(order);
+        cull.visibility = rings.visibility;
+        cull.visibilityStale = stale;
+        cull.visibilityResource =
+            graph.ImportBuffer("CullVisibility", cull.visibility, {rings.visibilityCapacity, BufferUsage::Storage});
+        cull.history = occlusion->history;
+        cull.viewProjection = occlusion->viewProjection;
+        return cull;
+    }
+
+    void SceneRenderer::WriteCullTables(std::uint64_t frameIndex, std::span<const DrawIndexedIndirectCommand> templates,
+                                        std::span<const CullLevelEntry> levels, std::span<const CullGroupEntry> groups)
+    {
+        if (templates.empty() || m_cullTemplates.ring == nullptr)
+        {
+            return;
+        }
+        m_cullTemplates.ring->Write(frameIndex, 0, std::as_bytes(templates));
+        m_cullLevels.ring->Write(frameIndex, 0, std::as_bytes(levels));
+        m_cullGroups.ring->Write(frameIndex, 0, std::as_bytes(groups));
+    }
+
+    void SceneRenderer::AddCullPass(RenderGraph& graph, std::uint64_t frameIndex, const CullFrame& frame,
+                                    const CullView& cull, CullPhase phase, std::size_t jobSlot, RenderStage stage)
+    {
+        // The view's planes go with the job, or none when GPU culling is off, so the pass keeps every candidate,
+        // draws every copy at level 0 and the draws keep their shape for comparison.
+        CullJobBlock job{{cull.firstGroup, cull.groups, 0, cull.firstTemplate}};
+        job.camera = Math::Vec4(cull.lod.position, cull.lod.pixelsPerUnit);
+        job.lod = Math::Vec4(0.0f, 0.0f, cull.lod.near, cull.lod.perspective ? 1.0f : 0.0f);
+        if (m_gpuCulling)
+        {
+            job.sphere = Math::Vec4(cull.sphere.centre, cull.sphere.radius);
+            const std::span<const Math::Vec4> planes = cull.frustum.Planes();
+            job.groups[2] = static_cast<std::uint32_t>(planes.size());
+            std::ranges::copy(planes, job.planes.begin());
+            job.lod.x = m_lodErrorPixels;
+            job.lod.y = m_minProjectedPixels;
+        }
+        const bool twoPhase = phase != CullPhase::Single;
+        job.occlusion = {static_cast<std::uint32_t>(phase), cull.visibilityStale ? 1u : 0u, cull.commandsPerPhase,
+                         cull.history.mips};
+        job.screen = Math::Vec4(static_cast<float>(cull.history.size.width),
+                                static_cast<float>(cull.history.size.height), 0.0f, 0.0f);
+        job.viewProjection = cull.viewProjection;
+        m_cullJobs->Write(frameIndex, jobSlot, BytesOf(job));
+        // A view with one phase binds a word the pass never reads and the default texture it never samples.
+        const BufferHandle visibility = twoPhase ? cull.visibility : m_noVisibility;
+        const TextureHandle pyramid = twoPhase ? cull.history.pyramidTexture : GetDefaultTexture(DefaultTexture::Black);
+        const BindingGroupHandle targetGroup = m_cullTargetGroups.Get(
+            {BindingGroupKeyPart::Of(frame.records), BindingGroupKeyPart::Of(frame.groups),
+             BindingGroupKeyPart::Of(cull.commands), BindingGroupKeyPart::Of(cull.indirection),
+             BindingGroupKeyPart::Of(m_instanceListBuffer), BindingGroupKeyPart::Of(frame.levels),
+             BindingGroupKeyPart::Of(visibility), BindingGroupKeyPart::Of(pyramid)},
+            frameIndex, [&] {
+                std::array<BindingGroupEntry, 8> entries;
+                for (std::uint32_t binding = 0; binding < entries.size(); ++binding)
+                {
+                    entries.at(binding).binding = binding;
+                }
+                entries[0].buffer = frame.records;
+                entries[1].buffer = frame.groups;
+                entries[2].buffer = cull.commands;
+                entries[3].buffer = cull.indirection;
+                entries[4].buffer = m_instanceListBuffer;
+                entries[5].buffer = frame.levels;
+                entries[6].buffer = visibility;
+                entries[7].texture = pyramid;
+                entries[7].sampler = m_cullSampler;
+                return m_device.CreateBindingGroup({m_cullTargetLayout, {entries.begin(), entries.end()}},
+                                                   "Cull target");
+            });
+        // The templates over the view's commands (the first phase of the frame's only), then one dispatch over its
+        // groups; the view's DepthPrepass and Opaque passes declare reading both results, which the backend's
+        // barriers follow (ADR-0057). The second phase reads the visibility phase one read and writes it for next
+        // frame, and samples the pyramid built from the first phase's depth.
+        const bool copies = phase != CullPhase::Second;
+        graph.AddPass(
+            "Cull", stage, QueueKind::Compute,
+            [=](PassBuilder& pass) {
+                if (copies)
+                {
+                    pass.CopySource(frame.templatesResource);
+                    pass.CopyDestination(cull.commandsResource);
+                }
+                pass.StorageRead(frame.groupsResource);
+                pass.StorageRead(frame.levelsResource);
+                pass.StorageRead(frame.recordsResource);
+                pass.StorageRead(frame.copiesResource);
+                pass.StorageWrite(cull.commandsResource);
+                pass.StorageWrite(cull.indirectionResource);
+                if (phase == CullPhase::First)
+                {
+                    // Last frame's words, which the second phase then overwrites.
+                    pass.StorageReadPrevious(cull.visibilityResource);
+                }
+                else if (phase == CullPhase::Second)
+                {
+                    pass.StorageRead(cull.visibilityResource);
+                    pass.StorageWrite(cull.visibilityResource);
+                    pass.Sample(cull.history.pyramid);
+                }
+            },
+            [pipeline = m_cullPipeline, jobGroup = m_cullJobs->Group(frameIndex, jobSlot), targetGroup,
+             templateBuffer = frame.templates, cull, copies](PassContext& context) {
+                PassEncoder& encoder = context.Encoder();
+                if (copies)
+                {
+                    encoder.CopyBuffer({.source = templateBuffer,
+                                        .sourceOffset = cull.templateOffset,
+                                        .destination = cull.commands,
+                                        .size = cull.templateBytes});
+                }
+                encoder.SetPipeline(pipeline);
+                encoder.SetBindingGroup(0, jobGroup);
+                encoder.SetBindingGroup(1, targetGroup);
+                encoder.Dispatch({.groupsX = cull.groups});
+            });
+    }
+
+    void SceneRenderer::ReadCulled(std::uint64_t frameIndex)
+    {
+        const std::size_t slots = std::max<std::size_t>(m_device.FramesInFlight(), 1);
+        if (m_cullReadbacks.size() != slots || frameIndex < slots)
+        {
+            return;
+        }
+        // The slot this frame will fill again holds the frame FramesInFlight ago, the most recent to have left
+        // flight; one with no runs counts 0, and a slot that frame did not fill leaves the last count standing.
+        const CullReadback& readback = m_cullReadbacks[static_cast<std::size_t>(frameIndex % slots)];
+        if (readback.frame != frameIndex - slots)
+        {
+            return;
+        }
+        std::vector<DrawIndexedIndirectCommand> commands(readback.commands);
+        if (!commands.empty() && !m_device.ReadBuffer(readback.buffer, 0, std::as_writable_bytes(std::span(commands))))
+        {
+            return;
+        }
+        std::uint32_t drawn = 0;
+        std::array<std::uint32_t, LodLevelsCounted> byLod{};
+        std::array<std::uint32_t, 2> byPhase{};
+        for (std::size_t c = 0; c < commands.size(); ++c)
+        {
+            drawn += commands[c].instanceCount;
+            byLod.at(std::min<std::size_t>(readback.levels.at(c), LodLevelsCounted - 1)) += commands[c].instanceCount;
+            byPhase.at(readback.phases.at(c)) += commands[c].instanceCount;
+        }
+        m_stats.instancesDrawn = drawn;
+        m_stats.drawnByLod = byLod;
+        m_stats.drawnByPhase = byPhase;
+    }
+
+    void SceneRenderer::AddCullReadback(RenderGraph& graph, std::uint64_t frameIndex,
+                                        const std::vector<CullView>& views, std::span<const CullLevelEntry> levels,
+                                        std::span<const std::uint32_t> phases)
+    {
+        const std::size_t slots = std::max<std::size_t>(m_device.FramesInFlight(), 1);
+        m_cullReadbacks.resize(slots);
+        CullReadback& readback = m_cullReadbacks[static_cast<std::size_t>(frameIndex % slots)];
+        readback.frame = frameIndex;
+        readback.commands = static_cast<std::uint32_t>(levels.size());
+        readback.levels.clear();
+        for (const CullLevelEntry& level : levels)
+        {
+            readback.levels.push_back(level.level);
+        }
+        readback.phases.assign(phases.begin(), phases.end());
+        const std::size_t commandBytes = levels.size() * sizeof(DrawIndexedIndirectCommand);
+        if (commandBytes == 0)
+        {
+            return;
+        }
+        // The slot was read at the frame's start, so it can be made again now without losing a frame's count.
+        constexpr BufferUsage usage = BufferUsage::CopyDestination | BufferUsage::Readback;
+        if (readback.buffer.IsEmpty() || readback.capacity < commandBytes)
+        {
+            m_device.Destroy(readback.buffer);
+            readback.capacity = std::max(commandBytes, readback.capacity * 2);
+            readback.buffer = m_device.CreateBuffer({readback.capacity, usage}, {}, "Cull readback");
+        }
+        const GraphResource resource = graph.ImportBuffer("CullReadback", readback.buffer, {readback.capacity, usage});
+        // Each view's commands at its templates' offset, so the slot reads as the frame's template ring did, with
+        // the counts the passes left: last in the frame, after every pass that reads the commands.
+        std::vector<CullView> copied;
+        for (const CullView& cull : views)
+        {
+            if (!cull.commands.IsEmpty())
+            {
+                copied.push_back(cull);
+            }
+        }
+        graph.AddPass(
+            "CullReadback", RenderStage::Overlay, QueueKind::Compute,
+            [=](PassBuilder& pass) {
+                for (const CullView& cull : copied)
+                {
+                    pass.CopySource(cull.commandsResource);
+                }
+                pass.CopyDestination(resource);
+            },
+            [copied, destination = readback.buffer](PassContext& context) {
+                for (const CullView& cull : copied)
+                {
+                    context.Encoder().CopyBuffer({.source = cull.commands,
+                                                  .destination = destination,
+                                                  .destinationOffset = cull.templateOffset,
+                                                  .size = cull.templateBytes});
+                }
+            });
+    }
+
+    SceneRenderer::CullCamera SceneRenderer::CullCameraOf(const ViewRequest& request, const Math::Frustum& frustum)
+    {
+        if (!m_cullingFrozen)
+        {
+            return {frustum, request.position};
+        }
+        for (const FrozenCull& frozen : m_frozenCulls)
+        {
+            if (frozen.camera == request.camera)
+            {
+                return {frozen.frustum, frozen.position};
+            }
+        }
+        // The camera's first frozen frame keeps what it sees now, its corners unprojected from clip space: the near
+        // ones at depth 1, the far ones at depth 0, or, for a perspective view whose far plane is at infinity (w of 0
+        // there), a fixed way along each near corner's ray from the camera.
+        FrozenCull frozen{request.camera, frustum, request.position};
+        const Math::Mat4 inverse = glm::inverse(request.projection * request.view);
+        for (std::size_t corner = 0; corner < 4; ++corner)
+        {
+            const float x = (corner & 1) != 0 ? 1.0f : -1.0f;
+            const float y = (corner & 2) != 0 ? 1.0f : -1.0f;
+            const Math::Vec4 near = inverse * Math::Vec4(x, y, 1.0f, 1.0f);
+            const Math::Vec4 far = inverse * Math::Vec4(x, y, 0.0f, 1.0f);
+            frozen.corners.at(corner) = Math::Vec3(near) / near.w;
+            frozen.corners.at(corner + 4) =
+                std::abs(far.w) > 1e-6f
+                    ? Math::Vec3(far) / far.w
+                    : request.position +
+                          glm::normalize(frozen.corners.at(corner) - request.position) * FrozenFarDistance;
+        }
+        m_frozenCulls.push_back(frozen);
+        return {frozen.frustum, frozen.position};
     }
 
     const SceneRenderer::FrameGroup& SceneRenderer::FrameGroupFor(std::uint64_t frameIndex)
@@ -2595,13 +3216,15 @@ namespace Fenrir::Render
         m_stats.skinnedDraws = 0;
         m_stats.shadowDraws = 0;
         m_drawnViews.clear();
+        m_drawnShadowViews.clear();
+        ReadCulled(frame.frameIndex);
         PackInstanceLists();
         m_skyImages->AddPasses(graph);
         m_skyLighting->AddPasses(graph, SkySourceOf(m_frame.lighting));
         if (m_frame.views.empty())
         {
-            // No camera keeps its reflection history.
-            m_sceneHistory->BeginFrame({});
+            // No camera keeps its pyramid or reflection history.
+            m_sceneHistory->BeginFrame({}, false);
             m_sceneHistory->EndFrame();
             AddWindowClear(graph, frame);
             return;
@@ -2675,6 +3298,8 @@ namespace Fenrir::Render
             block.worldSign = WorldSign(draw.world);
             block.instanceFirst = draw.instances.first;
             block.instanceCount = draw.instances.count;
+            block.boundsMin = Math::Vec4(draw.recordBounds.min, 0.0f);
+            block.boundsMax = Math::Vec4(draw.recordBounds.max, 0.0f);
             m_drawBlocks->Write(frameIndex, i, BytesOf(block));
         }
         // Every palette written again each frame (ADR-0035): nothing is kept across frames.
@@ -2696,11 +3321,6 @@ namespace Fenrir::Render
         m_stats.palettes = m_frame.palettes;
         const auto skinnedDraws = static_cast<std::uint32_t>(
             std::count_if(draws->begin(), draws->end(), [](const ResolvedDraw& draw) { return draw.skinned; }));
-        std::uint32_t instances = 0;
-        for (const ResolvedDraw& draw : *draws)
-        {
-            instances += std::max<std::uint32_t>(draw.instances.count, 1);
-        }
         const std::vector<ViewRequest>& views = m_frame.views;
         const ViewBlockSlots slots{views.size(), spotCount, pointCount};
         m_viewBlocks->Reserve(slots.Count());
@@ -2711,8 +3331,11 @@ namespace Fenrir::Render
         const std::uint32_t faceSize = m_pointShadows->Config().mapSize;
         const GraphResource spotAtlas = spotFrame.map;
         const GraphResource pointShadowCubes = pointFrame.map;
+        // Occlusion culling (ADR-0057) wants a pyramid per camera, built twice; never while frozen, when the
+        // planes are not the view's, nor with GPU culling off, which keeps one path accepting everything.
+        const bool occlusionCulling = m_occlusionCulling && m_gpuCulling && !m_cullingFrozen;
         m_gtao->BeginFrame(views.size());
-        m_sceneHistory->BeginFrame(views);
+        m_sceneHistory->BeginFrame(views, occlusionCulling);
         m_reflectionTrace->BeginFrame(views.size());
         m_clusterJobs->Reserve(views.size());
         m_backgroundBlocks->Reserve(views.size());
@@ -2780,7 +3403,73 @@ namespace Fenrir::Render
         const FrameGroup& frameGroups = FrameGroupFor(frameIndex);
         const BindingGroupHandle frameGroup = frameGroups.group;
         const BindingGroupHandle unshadowedFrame = frameGroups.unshadowed;
+        // The draw set of every direct draw (the shadow and transparent passes), with no indirection (ADR-0057).
         const BindingGroupHandle drawGroup = DrawGroupFor(frameIndex);
+        // Each view's cull pass (ADR-0057): the frame's rings are reserved now, so each view's passes bind them, and
+        // the templates, level table and groups gathered here are written after the views.
+        std::vector<CullView> culls;
+        std::vector<DrawIndexedIndirectCommand> cullTemplates;
+        std::vector<CullLevelEntry> cullLevels;
+        std::vector<std::uint32_t> cullPhases;
+        std::vector<CullGroupEntry> cullGroups;
+        // What each camera culls against and chooses levels of detail by (ADR-0057): its own frustum and position,
+        // or, frozen, the ones it had when it froze. Found before the shadow passes, since a shadow view chooses
+        // levels by its camera: a cascade's, or, for a spot or point light's map, every camera's, the first drawn
+        // this frame.
+        std::vector<CullCamera> cullCameras(views.size());
+        std::vector<LodView> cameraLods(views.size());
+        std::optional<LodView> firstCameraLod;
+        for (std::size_t v = 0; v < views.size(); ++v)
+        {
+            const ViewRequest& request = views[v];
+            if (!request.target.IsEmpty() && !m_targets.contains(request.target))
+            {
+                continue;
+            }
+            cullCameras[v] =
+                CullCameraOf(request, Math::Frustum::FromViewProjection(request.projection * request.view));
+            cameraLods[v] = LodViewOf(request.projection, request.viewport.height, cullCameras[v].position);
+            if (!firstCameraLod)
+            {
+                firstCameraLod = cameraLods[v];
+            }
+        }
+        // The shadow views the frame can have (ADR-0057): each camera's cascades, and each shadowed spot and point
+        // light; each gets cull rings of its own after the cameras', and a job slot after the cameras' two.
+        const std::size_t cascadeViews = views.size() * std::clamp(m_cascades.count, 1u, MaxCascades);
+        const std::size_t shadowViews = cascadeViews + spotCount + pointCount;
+        const CullFrame cullFrame = BeginCullFrame(graph, frameIndex, views.size() + shadowViews, *draws);
+        m_cullJobs->Reserve(views.size() * 2 + shadowViews);
+        std::size_t shadowRing = views.size();
+        std::size_t shadowJob = views.size() * 2;
+        // A shadow view's cull (ADR-0057): one phase against the light's volume, never by occlusion, choosing levels
+        // by `lod`, the camera's, and its draws through its own draw set, or directly without a cull pipeline.
+        const auto cullShadowView = [&](ShadowViewKind kind, std::optional<std::size_t> view, std::uint32_t index,
+                                        const CullVolume& volume, const LodView& lod,
+                                        const std::vector<DrawRun>& runs) {
+            const CullView cull = PrepareCull(graph, frameIndex, shadowRing++, volume, lod, *draws, runs, cullFrame,
+                                              nullptr, cullTemplates, cullLevels, cullPhases, cullGroups);
+            m_drawnShadowViews.push_back(
+                {kind, view, index, volume, cull.lod, cull.commands, cull.indirection, cull.runs, cull.candidates});
+            if (!cull.commands.IsEmpty())
+            {
+                AddCullPass(graph, frameIndex, cullFrame, cull, CullPhase::Single, shadowJob++, RenderStage::Cull);
+            }
+            return cull;
+        };
+        const auto shadowDrawGroup = [&](const CullView& cull) {
+            return cull.indirection.IsEmpty() ? drawGroup : DrawGroupFor(frameIndex, cull.indirection);
+        };
+        // What a pass drawing from a view's cull declares: the commands it reads and the indirection its instances
+        // read.
+        const auto declareCulled = [](PassBuilder& pass, const CullView& cull) {
+            if (!cull.commands.IsEmpty())
+            {
+                pass.IndirectRead(cull.commandsResource);
+                pass.StorageRead(cull.indirectionResource);
+            }
+        };
+        const LodView shadowLod = firstCameraLod.value_or(LodView{});
 
         if (spotCount > 0)
         {
@@ -2803,6 +3492,8 @@ namespace Fenrir::Render
             // by.
             std::vector<BindingGroupHandle> tileGroups;
             std::vector<PixelRect> tiles;
+            std::vector<CullView> spotCulls;
+            std::vector<BindingGroupHandle> spotDrawGroups;
             for (std::uint32_t t = 0; t < spotCount; ++t)
             {
                 const SpotShadow& shadow = spotFrame.shadows[t];
@@ -2819,21 +3510,30 @@ namespace Fenrir::Render
                 m_viewBlocks->Write(frameIndex, slots.Tile(t), BytesOf(tileBlock));
                 tileGroups.push_back(ViewGroupFor(frameIndex, slots.Tile(t), GetDefaultTexture(DefaultTexture::White)));
                 tiles.push_back(tile);
+                // Its cull (ADR-0057): the casters against its cone's planes, at the levels the cameras see them.
+                spotCulls.push_back(cullShadowView(ShadowViewKind::Spot, std::nullopt, t,
+                                                   {Math::Frustum::FromViewProjection(shadow.viewProjection), {}},
+                                                   shadowLod, *spotRuns));
+                spotDrawGroups.push_back(shadowDrawGroup(spotCulls.back()));
             }
             // Every shadowed spot light into its tile of the atlas, in one pass, binding the frame group that does not
-            // read the atlas it draws.
+            // read the atlas it draws, each tile's draws from its cull's commands.
             graph.AddPass(
                 "SpotShadows", RenderStage::Shadow, QueueKind::Graphics,
                 [=](PassBuilder& pass) {
                     pass.DepthAttachment(spotAtlas, LoadOp::Clear, 0.0f);
                     readSkinned(pass);
+                    for (const CullView& cull : spotCulls)
+                    {
+                        declareCulled(pass, cull);
+                    }
                 },
-                [this, draws, spotGroups, spotRuns, unshadowedFrame, tileGroups, tiles, drawGroup,
+                [this, draws, spotGroups, spotRuns, unshadowedFrame, tileGroups, tiles, spotCulls, spotDrawGroups,
                  skinned](PassContext& context) {
                     for (std::size_t t = 0; t < tiles.size(); ++t)
                     {
                         RecordDraws(context.Encoder(), *draws, *spotGroups, *spotRuns, unshadowedFrame, tileGroups[t],
-                                    drawGroup, skinned, tiles[t], DrawPass::Shadow);
+                                    spotDrawGroups[t], skinned, tiles[t], DrawPass::Shadow, spotCulls[t].commands);
                     }
                 });
             m_stats.shadowDraws += static_cast<std::uint32_t>(spotRuns->size() * tiles.size());
@@ -2861,6 +3561,17 @@ namespace Fenrir::Render
                 RunsOf(*draws, *pointGroups, layered, DrawPass::PointShadowLayered));
             auto facedRuns =
                 std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *pointGroups, faced, DrawPass::PointShadow));
+            // One cull per light over both (ADR-0057): the instanced runs' commands first, six instances a kept
+            // candidate, then the faced runs', which each face's pass draws from the same buffer.
+            std::vector<DrawRun> pointRuns(*layeredRuns);
+            pointRuns.insert(pointRuns.end(), facedRuns->begin(), facedRuns->end());
+            std::uint32_t layeredCommands = 0;
+            for (const DrawRun& run : *layeredRuns)
+            {
+                layeredCommands += static_cast<std::uint32_t>((*draws)[run.first].mesh->levels.size());
+            }
+            std::vector<CullView> pointCulls;
+            std::vector<BindingGroupHandle> pointDrawGroups;
             // Each light's view blocks: one from the light, not turned, naming its cube for the instanced faces, and
             // one per face. The camera is the light, its range in w, which builtin:shadow's POINT_SHADOW variant reads.
             const PixelRect face{0, 0, faceSize, faceSize};
@@ -2890,6 +3601,11 @@ namespace Fenrir::Render
                     m_viewBlocks->Write(frameIndex, slots.Face(c, f), BytesOf(blockFor(shadow.faceViews.at(f))));
                     faceGroups.push_back(ViewGroupFor(frameIndex, slots.Face(c, f), white));
                 }
+                // Its cull (ADR-0057): the casters against its range sphere, once for all six faces.
+                pointCulls.push_back(cullShadowView(ShadowViewKind::Point, std::nullopt, c,
+                                                    {Math::Frustum{}, Math::Sphere{light.position, light.range}},
+                                                    shadowLod, pointRuns));
+                pointDrawGroups.push_back(shadowDrawGroup(pointCulls.back()));
             }
             // The instanced faces of every shadowed point light, in one pass attaching every layer, binding the frame
             // group that does not read the cubes it draws.
@@ -2900,13 +3616,18 @@ namespace Fenrir::Render
                     [=](PassBuilder& pass) {
                         pass.LayeredDepthAttachment(pointShadowCubes, LoadOp::Clear, 0.0f);
                         readSkinned(pass);
-                    },
-                    [this, draws, pointGroups, layeredRuns, unshadowedFrame, cubeGroups, face, drawGroup,
-                     skinned](PassContext& context) {
-                        for (const BindingGroupHandle cube : cubeGroups)
+                        for (const CullView& cull : pointCulls)
                         {
-                            RecordDraws(context.Encoder(), *draws, *pointGroups, *layeredRuns, unshadowedFrame, cube,
-                                        drawGroup, skinned, face, DrawPass::PointShadowLayered);
+                            declareCulled(pass, cull);
+                        }
+                    },
+                    [this, draws, pointGroups, layeredRuns, unshadowedFrame, cubeGroups, face, pointCulls,
+                     pointDrawGroups, skinned](PassContext& context) {
+                        for (std::size_t c = 0; c < cubeGroups.size(); ++c)
+                        {
+                            RecordDraws(context.Encoder(), *draws, *pointGroups, *layeredRuns, unshadowedFrame,
+                                        cubeGroups[c], pointDrawGroups[c], skinned, face, DrawPass::PointShadowLayered,
+                                        pointCulls[c].commands);
                         }
                     });
                 m_stats.shadowDraws += static_cast<std::uint32_t>(layeredRuns->size() * pointCount);
@@ -2918,16 +3639,19 @@ namespace Fenrir::Render
                 for (std::uint32_t layer = 0; layer < pointCount * CubeFaceCount; ++layer)
                 {
                     const BindingGroupHandle faceGroup = faceGroups[layer];
+                    const CullView& cull = pointCulls[layer / CubeFaceCount];
+                    const BindingGroupHandle cubeDrawGroup = pointDrawGroups[layer / CubeFaceCount];
                     graph.AddPass(
                         "PointShadowFaces", RenderStage::Shadow, QueueKind::Graphics,
                         [=](PassBuilder& pass) {
                             pass.DepthAttachmentLayer(pointShadowCubes, layer, load, 0.0f);
                             readSkinned(pass);
+                            declareCulled(pass, cull);
                         },
-                        [this, draws, pointGroups, facedRuns, unshadowedFrame, faceGroup, face, drawGroup,
-                         skinned](PassContext& context) {
+                        [this, draws, pointGroups, facedRuns, unshadowedFrame, faceGroup, face, cubeDrawGroup, skinned,
+                         commands = cull.commands, layeredCommands](PassContext& context) {
                             RecordDraws(context.Encoder(), *draws, *pointGroups, *facedRuns, unshadowedFrame, faceGroup,
-                                        drawGroup, skinned, face, DrawPass::PointShadow);
+                                        cubeDrawGroup, skinned, face, DrawPass::PointShadow, commands, layeredCommands);
                         });
                 }
                 m_stats.shadowDraws += static_cast<std::uint32_t>(facedRuns->size() * pointCount * CubeFaceCount);
@@ -3129,24 +3853,36 @@ namespace Fenrir::Render
                 shadowDesc.usage = TextureUsage::DepthAttachment | TextureUsage::Sampled;
                 shadowAtlas = graph.CreateTexture("ShadowAtlas", shadowDesc);
             }
-            m_drawnViews.push_back({v, sceneColour, sceneDepth, sceneNormals, shadowAtlas, viewGroup});
 
-            // Opaque items in draw-list order, and those of them in the depth prepass; transparent ones back to front
-            // by the view-space depth of their world origins, the farthest (most negative view z) first.
+            // Opaque items in draw-list order and transparent ones back to front by the view-space depth of their sort
+            // points, the farthest (most negative view z) first; either kind outside the view's frustum, by its world
+            // bounds (a list's the box around every copy), is left out of the view (ADR-0057): the coarse cull by
+            // entity, which the cull pass then refines by copy. Frozen, the frustum is the camera's when it froze.
             auto opaque = std::make_shared<std::vector<std::size_t>>();
-            auto prepassed = std::make_shared<std::vector<std::size_t>>();
             auto transparent = std::make_shared<std::vector<std::size_t>>();
             // Each draw's set 2 in the prepass: a Masked item's prepass group, else its material group.
             auto prepassGroups = std::make_shared<std::vector<BindingGroupHandle>>(*groups);
             std::vector<float> depth(draws->size(), 0.0f);
+            const Math::Frustum& frustum = cullCameras[v].frustum;
+            // What the pass chooses levels of detail by (ADR-0057): the camera's position, frozen with the planes.
+            const LodView& lod = cameraLods[v];
+            std::uint32_t instances = 0;
             for (std::size_t i = 0; i < draws->size(); ++i)
             {
                 const ResolvedDraw& draw = (*draws)[i];
-                (draw.transparent ? *transparent : *opaque).push_back(i);
-                if (draw.prepass != nullptr)
+                if (!frustum.Intersects(draw.worldBounds))
                 {
-                    prepassed->push_back(i);
+                    continue;
                 }
+                if (draw.transparent)
+                {
+                    transparent->push_back(i);
+                }
+                else
+                {
+                    opaque->push_back(i);
+                }
+                instances += std::max<std::uint32_t>(draw.instances.count, 1);
                 if (draw.prepassMasked)
                 {
                     (*prepassGroups)[i] = PrepassGroup(*draw.material, replaced[v]);
@@ -3178,10 +3914,31 @@ namespace Fenrir::Render
             std::stable_sort(order->begin(), order->end(),
                              [](const TransparentEntry& a, const TransparentEntry& b) { return a.depth < b.depth; });
             // Matching opaque and masked items merge into instanced draws (ADR-0051); transparent ones stay single,
-            // in their depth order.
-            auto prepassRuns =
-                std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *prepassGroups, *prepassed, DrawPass::Prepass));
+            // in their depth order. The opaque runs are the view's cull pass's candidates (ADR-0057): DepthPrepass and
+            // Opaque draw each by its commands in the view's command buffer, one per level of detail, the prepass
+            // skipping the runs it has no pipeline for, reading the view's indirection through the view's own draw
+            // set.
             auto opaqueRuns = std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *groups, *opaque, DrawPass::Main));
+            // The view's Hi-Z pyramid (ADR-0056, ADR-0057), for its occlusion phase and its reflections, and with the
+            // latter its history; kept across frames by its camera.
+            const HistoryView history =
+                m_sceneHistory->Import(graph, request, {rect.width, rect.height}, viewProjection, occlusionCulling);
+            const CullOcclusion cullOcclusion{history, viewProjection};
+            const CullView cull = PrepareCull(graph, frameIndex, v, {frustum, {}}, lod, *draws, *opaqueRuns, cullFrame,
+                                              occlusionCulling && !history.IsEmpty() ? &cullOcclusion : nullptr,
+                                              cullTemplates, cullLevels, cullPhases, cullGroups);
+            culls.push_back(cull);
+            m_drawnViews.push_back({v, sceneColour, sceneDepth, sceneNormals, shadowAtlas, viewGroup, cull.commands,
+                                    cull.indirection, cull.runs, cull.candidates, cull.phases, cull.commandsPerPhase});
+            if (!cull.commands.IsEmpty())
+            {
+                // The one phase, or the first: first in the frame.
+                AddCullPass(graph, frameIndex, cullFrame, cull, cull.phases == 2 ? CullPhase::First : CullPhase::Single,
+                            2 * v, RenderStage::Cull);
+            }
+            const BindingGroupHandle viewDrawGroup =
+                cull.indirection.IsEmpty() ? drawGroup : DrawGroupFor(frameIndex, cull.indirection);
+            const auto readCulled = [cull, declareCulled](PassBuilder& pass) { declareCulled(pass, cull); };
 
             if (!shadowAtlas.IsEmpty())
             {
@@ -3198,7 +3955,17 @@ namespace Fenrir::Render
                 auto shadowRuns =
                     std::make_shared<std::vector<DrawRun>>(RunsOf(*draws, *shadowGroups, casters, DrawPass::Shadow));
                 const std::uint32_t mapSize = m_cascades.mapSize;
-                // Every cascade into its tile of the atlas, in one pass.
+                // Each cascade's cull (ADR-0057): the casters against its box's sides and far plane, open towards the
+                // light, at the levels this camera sees them.
+                std::vector<CullView> cascadeCulls;
+                std::vector<BindingGroupHandle> cascadeDrawGroups;
+                for (std::uint32_t c = 0; c < cascadeCount; ++c)
+                {
+                    cascadeCulls.push_back(cullShadowView(ShadowViewKind::Cascade, v, c,
+                                                          {CascadeCullVolume(cascades[c]), {}}, lod, *shadowRuns));
+                    cascadeDrawGroups.push_back(shadowDrawGroup(cascadeCulls.back()));
+                }
+                // Every cascade into its tile of the atlas, in one pass, each from its cull's commands.
                 graph.AddPass(
                     "ShadowCascades", RenderStage::Shadow, QueueKind::Graphics,
                     [=](PassBuilder& pass) {
@@ -3208,14 +3975,19 @@ namespace Fenrir::Render
                             pass.Sample(image);
                         }
                         readSkinned(pass);
+                        for (const CullView& cull : cascadeCulls)
+                        {
+                            declareCulled(pass, cull);
+                        }
                     },
-                    [this, draws, shadowGroups, shadowRuns, frameGroup, cascadeGroups, drawGroup, skinned,
-                     mapSize](PassContext& context) {
+                    [this, draws, shadowGroups, shadowRuns, frameGroup, cascadeGroups, cascadeCulls, cascadeDrawGroups,
+                     skinned, mapSize](PassContext& context) {
                         for (std::size_t c = 0; c < cascadeGroups.size(); ++c)
                         {
                             const PixelRect tile{static_cast<std::int32_t>(c * mapSize), 0, mapSize, mapSize};
                             RecordDraws(context.Encoder(), *draws, *shadowGroups, *shadowRuns, frameGroup,
-                                        cascadeGroups[c], drawGroup, skinned, tile, DrawPass::Shadow);
+                                        cascadeGroups[c], cascadeDrawGroups[c], skinned, tile, DrawPass::Shadow,
+                                        cascadeCulls[c].commands);
                         }
                     });
                 m_stats.shadowDraws += static_cast<std::uint32_t>(shadowRuns->size() * cascadeGroups.size());
@@ -3228,31 +4000,54 @@ namespace Fenrir::Render
             const bool worldDrawn =
                 std::any_of(order->begin(), order->end(), [](const TransparentEntry& entry) { return entry.world; });
 
-            // Depth and normals first (ADR-0049), so Opaque shades each pixel once, by equal depth.
-            graph.AddPass(
-                "DepthPrepass", RenderStage::DepthPrepass, QueueKind::Graphics,
-                [=](PassBuilder& pass) {
-                    pass.ColourAttachment(sceneNormals, LoadOp::Clear, {0.0f, 0.0f, 0.0f, 0.0f});
-                    pass.DepthAttachment(sceneDepth, LoadOp::Clear, 0.0f);
-                    for (const GraphResource image : samples)
-                    {
-                        pass.Sample(image);
-                    }
-                    readSkinned(pass);
-                },
-                [this, draws, prepassGroups, prepassRuns, frameGroup, viewGroup, drawGroup, skinned,
-                 viewport](PassContext& context) {
-                    RecordDraws(context.Encoder(), *draws, *prepassGroups, *prepassRuns, frameGroup, viewGroup,
-                                drawGroup, skinned, viewport, DrawPass::Prepass);
-                });
+            // Depth and normals first (ADR-0049), so Opaque shades each pixel once, by equal depth: the first phase's
+            // survivors, then, after the pyramid is built from them and the second phase has tested the rest against
+            // it, the second phase's (ADR-0057), loaded over the first's.
+            const auto addPrepass = [&](std::uint32_t set) {
+                const bool first = set == 0;
+                graph.AddPass(
+                    "DepthPrepass", RenderStage::DepthPrepass, QueueKind::Graphics,
+                    [=](PassBuilder& pass) {
+                        if (first)
+                        {
+                            pass.ColourAttachment(sceneNormals, LoadOp::Clear, {0.0f, 0.0f, 0.0f, 0.0f});
+                            pass.DepthAttachment(sceneDepth, LoadOp::Clear, 0.0f);
+                        }
+                        else
+                        {
+                            pass.ColourAttachment(sceneNormals, LoadOp::Load);
+                            pass.DepthAttachment(sceneDepth, LoadOp::Load);
+                        }
+                        for (const GraphResource image : samples)
+                        {
+                            pass.Sample(image);
+                        }
+                        readSkinned(pass);
+                        readCulled(pass);
+                    },
+                    [this, draws, prepassGroups, opaqueRuns, frameGroup, viewGroup, viewDrawGroup, skinned, viewport,
+                     commands = cull.commands, offset = first ? 0u : cull.commandsPerPhase](PassContext& context) {
+                        RecordDraws(context.Encoder(), *draws, *prepassGroups, *opaqueRuns, frameGroup, viewGroup,
+                                    viewDrawGroup, skinned, viewport, DrawPass::Prepass, commands, offset);
+                    });
+            };
+            addPrepass(0);
+            if (cull.phases == 2)
+            {
+                m_sceneHistory->AddHiZPasses(graph, frameIndex, history, sceneDepth);
+                AddCullPass(graph, frameIndex, cullFrame, cull, CullPhase::Second, 2 * v + 1,
+                            RenderStage::DepthPrepass);
+                addPrepass(1);
+            }
             // GTAO from the prepass's depth and normals, when the camera has it; Opaque samples what it makes.
             const GraphResource occlusion = m_gtao->AddPasses(
                 graph, frameIndex,
                 {sceneDepth, sceneNormals, {rect.width, rect.height}, request.projection, request.ambientOcclusion});
-            // Its reflections' Hi-Z pyramid of the prepass's depth, after GTAO's passes, when the camera has them.
-            const HistoryView history =
-                m_sceneHistory->Import(graph, request, {rect.width, rect.height}, viewProjection);
-            m_sceneHistory->AddHiZPasses(graph, frameIndex, history, sceneDepth);
+            // Its reflections' Hi-Z pyramid of the complete depth, after GTAO's passes, when the camera has them.
+            if (history.HasReflections())
+            {
+                m_sceneHistory->AddHiZPasses(graph, frameIndex, history, sceneDepth);
+            }
             // Its mirror rays marched through that pyramid; Opaque samples the hits, and last frame's colour by them.
             const GraphResource reflectionHits = m_reflectionTrace->AddPass(
                 graph, frameIndex, {sceneNormals, history, request.projection, request.view, request.reflections});
@@ -3285,18 +4080,25 @@ namespace Fenrir::Render
                         pass.StorageRead(clusters);
                     }
                     readSkinned(pass);
+                    readCulled(pass);
                 },
-                [this, draws, groups, opaqueRuns, frameGroup, drawGroup, skinned, viewport, occlusion, shadowAtlas,
-                 clusterBuffer, viewSlot, reflectionHits, sceneHistory](PassContext& context) {
+                [this, draws, groups, opaqueRuns, frameGroup, viewDrawGroup, skinned, viewport, occlusion, shadowAtlas,
+                 clusterBuffer, viewSlot, reflectionHits, sceneHistory, commands = cull.commands, phases = cull.phases,
+                 perPhase = cull.commandsPerPhase](PassContext& context) {
                     const auto textureOf = [&](GraphResource resource) {
                         return resource.IsEmpty() ? TextureHandle{} : context.Texture(resource);
                     };
-                    const TextureHandle occlusionTexture =
+                    const TextureHandle gtao =
                         occlusion.IsEmpty() ? GetDefaultTexture(DefaultTexture::White) : context.Texture(occlusion);
-                    RecordDraws(context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup,
-                                ViewGroupFor(context.FrameIndex(), viewSlot, occlusionTexture, textureOf(shadowAtlas),
-                                             clusterBuffer, textureOf(reflectionHits), textureOf(sceneHistory)),
-                                drawGroup, skinned, viewport, DrawPass::Main);
+                    const BindingGroupHandle shadedView =
+                        ViewGroupFor(context.FrameIndex(), viewSlot, gtao, textureOf(shadowAtlas), clusterBuffer,
+                                     textureOf(reflectionHits), textureOf(sceneHistory));
+                    // Both phases' survivors (ADR-0057): the second phase's commands follow the first's.
+                    for (std::uint32_t set = 0; set < phases; ++set)
+                    {
+                        RecordDraws(context.Encoder(), *draws, *groups, *opaqueRuns, frameGroup, shadedView,
+                                    viewDrawGroup, skinned, viewport, DrawPass::Main, commands, set * perPhase);
+                    }
                 });
             if (!transparent->empty() || worldDrawn)
             {
@@ -3455,6 +4257,8 @@ namespace Fenrir::Render
                     encoder.Draw({.vertexCount = 3});
                 });
         }
+        WriteCullTables(frameIndex, cullTemplates, cullLevels, cullGroups);
+        AddCullReadback(graph, frameIndex, culls, cullLevels, cullPhases);
         m_bloom->AddPasses(graph, frameIndex, blooms);
         m_sceneHistory->EndFrame();
         if (!cleared.contains(AssetKey{}))
@@ -3490,6 +4294,17 @@ namespace Fenrir::Render
         }
         return {static_cast<std::int32_t>(left), static_cast<std::int32_t>(top),
                 static_cast<std::uint32_t>(right - left), static_cast<std::uint32_t>(bottom - top)};
+    }
+
+    Math::AABB CopiesBounds(std::span<const Math::Mat4> copies, const Math::AABB& box)
+    {
+        std::optional<Math::AABB> bounds;
+        for (const Math::Mat4& copy : copies)
+        {
+            const Math::AABB moved = Math::Moved(box, copy);
+            bounds = bounds ? Math::Union(*bounds, moved) : moved;
+        }
+        return bounds.value_or(Math::AABB{Math::Vec3(0.0f), Math::Vec3(0.0f)});
     }
 
     Math::Mat4 ReversedZPerspective(float verticalFov, float aspect, float near)

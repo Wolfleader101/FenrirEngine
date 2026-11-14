@@ -5,7 +5,7 @@ headers = ["../include/FenrirRenderer/Components.hpp", "../include/FenrirRendere
 
 # SkinnedMesh holds the engine's Entity, which keeps its value and entity list private: described here as nested with the
 # layout FenrirECS shares, and mirrored by the built-in binding.
-private-members = ["Fenrir::Entity"]
+private-members = ["Fenrir::Entity", "Fenrir::Math::Frustum"]
 
 [types]
 "Fenrir::MeshRenderer" = "component"
@@ -20,10 +20,11 @@ private-members = ["Fenrir::Entity"]
 "Fenrir::SkyLight" = "scene-resource"
 "Fenrir::RendererStats" = "shared-struct"
 
-# FenrirMath's ray and box, which the natives fill through pointers: selected with the math description's role, so this
-# binding names them as the math binding's Ray and Bounds.
+# FenrirMath's ray, box and frustum, which the natives fill through pointers: selected with the math description's role,
+# so this binding names them as the math binding's Ray, Bounds and Frustum (whose planes are private there too).
 "Fenrir::Math::Ray" = "shared-struct"
 "Fenrir::Math::AABB" = "shared-struct"
+"Fenrir::Math::Frustum" = "shared-struct"
 
 # Other packages' types the components hold: FenrirAssets's handles and FenrirMath's colour are those packages' (named by
 # their bindings), FenrirInput's WindowId is described through WindowTarget.
@@ -33,3 +34,4 @@ private-members = ["Fenrir::Entity"]
 "Fenrir::AssetHandle<Fenrir::InstanceList>" = "bound-type"
 "Fenrir::Math::Vec2" = "bound-type"
 "Fenrir::Math::Vec3" = "bound-type"
+"Fenrir::Math::Vec4" = "bound-type"

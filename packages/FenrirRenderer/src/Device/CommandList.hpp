@@ -23,7 +23,9 @@ namespace Fenrir::Graphics
 
     /**
      * @brief How a pass uses a resource. Passes declare every use, and each backend derives its barriers from them, so
-     * the renderer never sees a barrier (ADR-0016); the OpenGL backend derives none.
+     * the renderer never sees a barrier (ADR-0016): the OpenGL backend's are the memory barriers between a pass that
+     * writes a buffer as storage and a later pass that reads it as storage, vertex input, indirect commands or a copy
+     * source.
      */
     enum class ResourceUsage : std::uint8_t
     {
@@ -37,6 +39,8 @@ namespace Fenrir::Graphics
         CopyDestination,
         /** @brief Read as vertex input, as the skinned vertex buffer a compute pass wrote is (ADR-0050). */
         VertexInput,
+        /** @brief Read as the commands of a CmdDrawIndexedIndirect, as a buffer the cull pass wrote is (ADR-0057). */
+        IndirectRead,
     };
 
     /** @brief One declared use of a texture or a buffer by a pass: exactly one of the two handles is set. */
@@ -209,6 +213,38 @@ namespace Fenrir::Graphics
         std::uint32_t firstInstance = 0;
         friend bool operator==(const CmdDrawIndexed&, const CmdDrawIndexed&) = default;
     };
+    /**
+     * @brief One indexed draw as an indirect command buffer holds it, the layout GL's DrawElementsIndirectCommand and
+     * Vulkan's VkDrawIndexedIndirectCommand share (ADR-0057): CmdDrawIndexed's fields, written by the GPU or the CPU.
+     * A command with no instances draws nothing.
+     */
+    struct DrawIndexedIndirectCommand
+    {
+        std::uint32_t indexCount = 0;
+        std::uint32_t instanceCount = 0;
+        std::uint32_t firstIndex = 0;
+        /** @brief Added to each index; unsigned here as the APIs lay it, so a negative base is its two's complement. */
+        std::uint32_t baseVertex = 0;
+        /** @brief The first instance's record, which Fenrir/Draw.glsl adds each instance's index to (ADR-0051). */
+        std::uint32_t baseInstance = 0;
+        friend bool operator==(const DrawIndexedIndirectCommand&, const DrawIndexedIndirectCommand&) = default;
+    };
+    static_assert(sizeof(DrawIndexedIndirectCommand) == 5 * sizeof(std::uint32_t),
+                  "an indirect command is five words, as the GPU reads it");
+
+    /**
+     * @brief Draws through the index buffer `drawCount` times, each draw's arguments read by the GPU from a
+     * DrawIndexedIndirectCommand in `buffer`: the first at `offset` bytes, each next one `stride` bytes on (at least
+     * the command's size, a multiple of four). The pass declares `IndirectRead` on the buffer (ADR-0057).
+     */
+    struct CmdDrawIndexedIndirect
+    {
+        BufferHandle buffer;
+        std::size_t offset = 0;
+        std::uint32_t drawCount = 1;
+        std::uint32_t stride = sizeof(DrawIndexedIndirectCommand);
+        friend bool operator==(const CmdDrawIndexedIndirect&, const CmdDrawIndexedIndirect&) = default;
+    };
     /** @brief Runs the compute pipeline over a grid of work groups. */
     struct CmdDispatch
     {
@@ -244,8 +280,8 @@ namespace Fenrir::Graphics
 
     /** @brief Any one command. */
     using Command = std::variant<CmdBeginPass, CmdEndPass, CmdSetPipeline, CmdSetBindingGroup, CmdSetVertexBuffer,
-                                 CmdSetIndexBuffer, CmdSetViewport, CmdSetScissor, CmdDraw, CmdDrawIndexed, CmdDispatch,
-                                 CmdCopyBuffer, CmdCopyTexture>;
+                                 CmdSetIndexBuffer, CmdSetViewport, CmdSetScissor, CmdDraw, CmdDrawIndexed,
+                                 CmdDrawIndexedIndirect, CmdDispatch, CmdCopyBuffer, CmdCopyTexture>;
 
     /**
      * @brief The commands of one or more passes as plain structs, owned by the renderer, recorded through a
@@ -334,6 +370,12 @@ namespace Fenrir::Graphics
 
         /** @brief Records a draw through the index buffer. */
         void DrawIndexed(const CmdDrawIndexed& draw)
+        {
+            Record(draw);
+        }
+
+        /** @brief Records indexed draws whose arguments the GPU reads from an indirect command buffer. */
+        void DrawIndexedIndirect(const CmdDrawIndexedIndirect& draw)
         {
             Record(draw);
         }

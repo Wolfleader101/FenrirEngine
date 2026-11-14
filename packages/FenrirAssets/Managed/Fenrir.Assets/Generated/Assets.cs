@@ -40,6 +40,54 @@ public static partial class Assets
         AssetsNative.ReplaceMesh(in mesh, positions, normals, uvs, indices);
 
     /// <summary>
+    /// Gives `mesh` levels of detail made by meshoptimizer, as C++'s GenerateLods does (ADR-0057): its data is replaced
+    /// by GenerateLods(data, settings), levels it already had included, and its revision bumped so every user sees the
+    /// change. A mesh GenerateLods leaves as it is (no whole triangles, more than one submesh) comes back with no
+    /// levels.
+    /// </summary>
+    /// <param name="settings">What the chain aims for: C#'s `new LodSettings()` is C++'s default.</param>
+    /// <returns>Whether it was done: false for a stale handle.</returns>
+    public static bool GenerateLods(AssetHandle<Mesh> mesh, LodSettings settings) =>
+        AssetsNative.GenerateLods(in mesh, in settings);
+
+    /// <summary>
+    /// Appends a level of detail to `mesh` by hand (ADR-0057): `indices` into its vertex streams, three per triangle,
+    /// with `error` the greatest distance, in the mesh's units, by which the level departs from full detail, greater
+    /// than the previous level's (0 for the mesh's own triangles). Its revision is bumped. ReplaceMesh drops every
+    /// level.
+    /// </summary>
+    /// <returns>
+    /// Whether the store accepted it: false for a stale handle, or a level that breaks the store's rules (not whole
+    /// triangles, an index past the positions, an error not greater than the previous level's, or a mesh of more than
+    /// one submesh), logged, which leaves the mesh unchanged.
+    /// </returns>
+    public static bool AddMeshLod(AssetHandle<Mesh> mesh, ReadOnlySpan<uint> indices, float error) =>
+        AssetsNative.AddMeshLod(in mesh, indices, error);
+
+    /// <summary>
+    /// Copies the error of each of `mesh`'s levels of detail into `errors`, coarsest last, as many as fit: level `i +
+    /// 1`'s at entry `i` (level 0, the mesh's own triangles, has error 0 and no entry).
+    /// </summary>
+    /// <returns>
+    /// How many levels the mesh has beyond its own triangles, so a result larger than the span says how large a span
+    /// would hold them all; zero for a mesh drawn at full detail only, or a stale handle.
+    /// </returns>
+    public static int GetMeshLodErrors(AssetHandle<Mesh> mesh, Span<float> errors) =>
+        AssetsNative.GetMeshLodErrors(in mesh, errors);
+
+    /// <summary>
+    /// Copies the indices of `mesh`'s level of detail `level` into `indices`, as many as fit: level 0 is the mesh's own
+    /// triangles, level `i` its `i`th coarser level.
+    /// </summary>
+    /// <param name="mesh">One handle, not a span of them, though `level` follows it.</param>
+    /// <returns>
+    /// How many indices the level holds, so a result larger than the span says how large a span would hold them all;
+    /// zero for a level the mesh does not have, or a stale handle.
+    /// </returns>
+    public static int GetMeshLodIndices(AssetHandle<Mesh> mesh, int level, Span<uint> indices) =>
+        AssetsNative.GetMeshLodIndices(in mesh, level, indices);
+
+    /// <summary>
     /// Adds a render target for `owner`: an RGBA8 sRGB image of this size with no pixels, which a camera draws into and
     /// materials sample (ADR-0026).
     /// </summary>

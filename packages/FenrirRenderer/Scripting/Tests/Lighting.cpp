@@ -205,7 +205,7 @@ TEST_CASE("An instance list made in C# draws as one instanced draw of its copies
         REQUIRE(data->transforms.size() == 5);
         REQUIRE(data->colours.size() == 5);
     }
-    const std::vector<RecordedDraw> opaque = DrawsIn(test.Submitted(), "Opaque");
+    const std::vector<RecordedDraw> opaque = DrawsIn(test, "Opaque");
     INFO("The Opaque pass should hold one draw of C#'s five copies");
     REQUIRE(opaque.size() == 1);
     REQUIRE(opaque.front().draw.instanceCount == 5);
@@ -226,7 +226,7 @@ TEST_CASE("An instance list C# replaces is uploaded again and draws its new copi
         REQUIRE(test.Call<bool>(InstanceListCallsType, "Replace", 8));
     }
     test.Frame();
-    const std::vector<RecordedDraw> opaque = DrawsIn(test.Submitted(), "Opaque");
+    const std::vector<RecordedDraw> opaque = DrawsIn(test, "Opaque");
     INFO("The Opaque pass should draw the replaced list's eight copies, uploaded again at revision 2");
     REQUIRE(opaque.size() == 1);
     REQUIRE(opaque.front().draw.instanceCount == 8);
@@ -269,7 +269,7 @@ TEST_CASE("Every RendererStats count crosses between C++ and C# in its own place
 TEST_CASE("The spot shadow budget C# sets decides whether a shadowed spot light draws shadows", "[renderer][scripting]")
 {
     RendererScriptingApp test;
-    // A casting mesh at (1, 2, 3) and a camera at (0, 0, 5), and a spot light behind the mesh pointing at it along -Z.
+    // A casting mesh at (1, 2, 3) and a camera at (1, 2, 5), and a spot light behind the mesh pointing at it along -Z.
     test.Call<void>(SceneBuilderType, "Arm");
     test.ApplyChanges();
     Entity spot = test.Entities().CreateEntity();
@@ -295,7 +295,7 @@ TEST_CASE("The point shadow budget C# sets decides whether a shadowed point ligh
           "[renderer][scripting]")
 {
     RendererScriptingApp test;
-    // A casting mesh at (1, 2, 3) and a camera at (0, 0, 5), and a point light just behind the mesh.
+    // A casting mesh at (1, 2, 3) and a camera at (1, 2, 5), and a point light just behind the mesh.
     test.Call<void>(SceneBuilderType, "Arm");
     test.ApplyChanges();
     Entity point = test.Entities().CreateEntity();

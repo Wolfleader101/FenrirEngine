@@ -168,7 +168,7 @@ TEST_CASE("A camera's streaks run in PostProcess beside its bloom, from bloom's 
     const std::vector<PassRecord> passes = test.Passes();
     INFO("the streaks' downsamples read bloom's level 0 before bloom's upsamples blend over it; the rest of their "
          "passes follow bloom's composite");
-    std::vector<std::string> expected{"BrdfLut", "DepthPrepass", "Opaque", "Background"};
+    std::vector<std::string> expected{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background"};
     expected.insert(expected.end(), 6, "BloomDownsample");
     expected.insert(expected.end(), 8, "StreakDownsample");
     expected.insert(expected.end(), 5, "BloomUpsample");
@@ -176,7 +176,8 @@ TEST_CASE("A camera's streaks run in PostProcess beside its bloom, from bloom's 
     expected.insert(expected.end(), 7, "StreakUpsample");
     expected.emplace_back("StreakComposite");
     expected.emplace_back("Output");
-    REQUIRE(Labels(passes) == expected);
+    expected.emplace_back("CullReadback");
+    REQUIRE(Labels(passes) == RendererTest::WithOcclusion(expected));
 
     const TextureHandle sceneColour = RendererTest::Labelled(passes, "Opaque").at(0).pass.colour.at(0).texture;
     const TextureHandle bloomLevel0 = RendererTest::Labelled(passes, "BloomDownsample").at(0).pass.colour.at(0).texture;
@@ -255,13 +256,14 @@ TEST_CASE("A camera with bloom off still streaks, running bloom's first downsamp
 
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
-    std::vector<std::string> expected{"BrdfLut", "DepthPrepass", "Opaque", "Background", "BloomDownsample"};
+    std::vector<std::string> expected{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background", "BloomDownsample"};
     expected.insert(expected.end(), 8, "StreakDownsample");
     expected.insert(expected.end(), 7, "StreakUpsample");
     expected.emplace_back("StreakComposite");
     expected.emplace_back("Output");
+    expected.emplace_back("CullReadback");
     INFO("one downsample of SceneColor into a level 0, then the streaks' passes; no bloom upsample or composite");
-    REQUIRE(Labels(passes) == expected);
+    REQUIRE(Labels(passes) == RendererTest::WithOcclusion(expected));
 
     const PassRecord level0 = RendererTest::Labelled(passes, "BloomDownsample").at(0);
     const TextureHandle sceneColour = RendererTest::Labelled(passes, "Opaque").at(0).pass.colour.at(0).texture;

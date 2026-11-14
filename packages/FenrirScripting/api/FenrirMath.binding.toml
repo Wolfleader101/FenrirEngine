@@ -10,10 +10,13 @@ descriptions = ["../../FenrirMath/api/FenrirMath.api.json"]
 [csharp]
 contract = "../../FenrirMath/Managed/Fenrir.Math"
 generated = "../../FenrirMath/Managed/Fenrir.Math/Generated"
+# The frustum's planes and their count are private in C++ (Planes() gives the first `count`), so they are private here
+# too, and the hand-written part (Frustum.cs) gives them back through Count, the indexer and the Intersects tests.
+private-fields = ["Fenrir::Math::Frustum::m_planes", "Fenrir::Math::Frustum::m_count"]
 
 [cpp]
 mappings = "../include/FenrirScripting/Generated/FenrirMathMappings.hpp"
-includes = ["FenrirMath/Colour.hpp", "FenrirMath/Math.hpp"]
+includes = ["FenrirMath/Colour.hpp", "FenrirMath/Math.hpp", "FenrirMath/Frustum.hpp"]
 
 # No registration: the built-in extension shares the Fenrir.Math assembly. The defaults test runs in the built-in
 # binding's fixture.
@@ -39,3 +42,5 @@ tags = "[scripting][bindings]"
 [names]
 "Fenrir::Math::AABB" = "Bounds"
 "Fenrir::Math::Ray::dir" = "Direction"
+"Fenrir::Math::Frustum::m_planes" = "planes"
+"Fenrir::Math::Frustum::m_count" = "count"
