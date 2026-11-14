@@ -1,0 +1,17 @@
+<!--
+  UIDemo's pause menu (examples/UIDemo/README.md), a markup document the menu loads into its root each time it opens
+  and removes when it closes, styled by menu.css. Structure and ids only: the menu's system reads the buttons' clicks
+  as UI events by their ids. Settings loads settings.ui under #menu, after the pause panel.
+-->
+<panel id="menu">
+    <!-- The backing over the whole window: it dims the room and takes the pointer, so the camera does not turn. -->
+    <panel id="backing"/>
+
+    <panel id="pause" class="card">
+        <label class="title">Paused</label>
+        <label class="subtitle">The room waits.</label>
+        <button id="resume">Resume</button>
+        <button id="settings">Settings</button>
+        <button id="quit">Quit</button>
+    </panel>
+</panel>

@@ -525,3 +525,54 @@ TEST_CASE("Overflow hidden clips an element's own content to its padding box", "
     REQUIRE(Near(quads[1].clipHalfSize.x, 17.5f));
     REQUIRE(Near(quads[1].clipHalfSize.y, 15.0f));
 }
+
+TEST_CASE("A backdrop filter blurs what is under the element's border box before its background", "[ui][paint]")
+{
+    UITest::UITestApp test;
+    std::shared_ptr<UITest::CaptureTarget> target;
+    Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
+    const Fenrir::ElementId panel = ColouredPanel(root, "#ff0000");
+    REQUIRE(root.SetStyleProperty(panel, "width", "100px"));
+    REQUIRE(root.SetStyleProperty(panel, "backdrop-filter", "blur(8px)"));
+    test.Frame();
+
+    const Fenrir::DrawList2D& list = target->lists.back();
+    INFO("an empty backdrop group over the panel, then the panel's background: " << list.commands.size()
+                                                                                 << " commands");
+    REQUIRE(list.commands.size() == 3);
+    REQUIRE(std::holds_alternative<Fenrir::BeginGroup2D>(list.commands[0]));
+    REQUIRE(std::holds_alternative<Fenrir::EndGroup2D>(list.commands[1]));
+    REQUIRE(std::holds_alternative<Fenrir::DrawCommand2D>(list.commands[2]));
+    const auto& begin = std::get<Fenrir::BeginGroup2D>(list.commands[0]);
+    INFO("the group covers the panel's 100 by 10 border box, not " << begin.bounds.width << " by "
+                                                                   << begin.bounds.height);
+    REQUIRE(Near(begin.bounds.width, 100.0f));
+    REQUIRE(Near(begin.bounds.height, 10.0f));
+    const auto& end = std::get<Fenrir::EndGroup2D>(list.commands[1]);
+    INFO("the group ends as a backdrop blur of radius 8, not " << end.radius);
+    REQUIRE(end.filter == Fenrir::GroupFilter2D::BackdropBlur);
+    REQUIRE(Near(end.radius, 8.0f));
+}
+
+TEST_CASE("Backdrop filter reads blur() or none, and refuses the rest", "[ui][style]")
+{
+    UITest::UITestApp test;
+    std::shared_ptr<UITest::CaptureTarget> target;
+    Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
+    const Fenrir::ElementId panel = root.Create(root.GetRootElement(), "panel");
+    INFO("blur() of a length in px");
+    REQUIRE(root.SetStyleProperty(panel, "backdrop-filter", "blur(12px)"));
+    INFO("a negative radius");
+    REQUIRE_FALSE(root.SetStyleProperty(panel, "backdrop-filter", "blur(-2px)"));
+    INFO("a filter function the backdrop does not take");
+    REQUIRE_FALSE(root.SetStyleProperty(panel, "backdrop-filter", "grayscale(1)"));
+    INFO("a radius without a unit");
+    REQUIRE_FALSE(root.SetStyleProperty(panel, "backdrop-filter", "blur(4)"));
+    test.Frame();
+    INFO("the refused values leave blur(12px)");
+    REQUIRE(root.GetResolvedStyle(panel)->backdropBlur == 12.0f);
+    REQUIRE(root.SetStyleProperty(panel, "backdrop-filter", "none"));
+    test.Frame();
+    INFO("none clears it");
+    REQUIRE(root.GetResolvedStyle(panel)->backdropBlur == 0.0f);
+}

@@ -538,7 +538,9 @@ namespace FenrirDemo
 
                 const Fenrir::Math::Vec2 motion = mouse.Motion();
                 yaw -= motion.x * LookPerUnit;
-                pitch = std::clamp(pitch - motion.y * LookPerUnit, -MaxPitch, MaxPitch);
+                const FreeFlyLook* look = app->TryGetResource<FreeFlyLook>();
+                const float pitchMotion = look != nullptr && look->invertPitch ? -motion.y : motion.y;
+                pitch = std::clamp(pitch - pitchMotion * LookPerUnit, -MaxPitch, MaxPitch);
 
                 const float notches = mouse.Scroll().y;
                 if (notches != 0.0f)
@@ -724,6 +726,10 @@ namespace FenrirDemo
         state->run = run;
         state->config = std::move(config);
         state->holderScene = app.GetActiveScene().GetName();
+        if (app.TryGetResource<FreeFlyLook>() == nullptr)
+        {
+            app.AddResource<FreeFlyLook>();
+        }
         app.Logger()->AddLogger(state->errors);
         for (const std::string& problem : problems)
         {

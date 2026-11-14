@@ -409,6 +409,14 @@ namespace Fenrir
         float borderBottomLeftRadius = 0.0f;
         /** @brief `box-shadow`: outset shadows, the first drawn on top, as CSS. */
         std::vector<Shadow> boxShadow;
+        /**
+         * @brief `backdrop-filter: blur(r)`: what is already drawn under the border box blurred by `r` UI units (a
+         * Gaussian's standard deviation) before the element paints, as a frosted panel's background; 0 for `none`.
+         * The blurred rectangle is square-cornered whatever the border radius (the renderer's backdrop composite
+         * takes no mask), and is not faded by opacity. Inside an ancestor drawn through an offscreen group it blurs
+         * that group's image, not what is under the group.
+         */
+        float backdropBlur = 0.0f;
         float opacity = 1.0f;
         std::vector<TransformStep> transform;
         /** @brief `transform-origin`, from the border box's top-left; a percentage is of its size. */
@@ -538,6 +546,7 @@ namespace Fenrir
         BorderBottomRightRadius,
         BorderBottomLeftRadius,
         BoxShadow,
+        BackdropFilter,
         Opacity,
         Transform,
         TransformOriginX,
@@ -674,6 +683,8 @@ namespace Fenrir
         StyleDeclarations& SetBorderRadius(const CornerRadii& radii);
         /** @brief `box-shadow`. */
         StyleDeclarations& SetBoxShadow(std::vector<Shadow> shadows);
+        /** @brief `backdrop-filter: blur(radius)`, in UI units; 0 for `none`. */
+        StyleDeclarations& SetBackdropBlur(float radius);
         /** @brief `opacity`, 0 to 1. */
         StyleDeclarations& SetOpacity(float value);
         /** @brief `transform`. */
