@@ -12,10 +12,16 @@
 
 **Touches:** `packages/FenrirRagdoll/Scripting/`, `packages/FenrirRagdoll/Managed/`, `packages/FenrirRagdoll/api/`, `examples/DemoScaffold/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `RagdollScriptingTests` with a fixture: the mirrors validate against their native layouts; each `new` equals C++'s `{}`.
-- [ ] A C# system fills `HumanoidBones`, calls `DescribeHumanoid` and `Build` on a code-built rig, gets the body and joint entities, sets `Mode = Simulating`, and after playback reads `State.AnyAwake` and a body's `State.Mode`; `Destroy` removes them; `ClearOverrides` clears.
-- [ ] The natives are no-ops with one warning on an unready skeleton or an unknown bone map; a handle never built is dropped at scene end without a leak.
-- [ ] Compile-fail cases: writing `Ragdoll.State` or `RagdollBody.State`, or a field of either, through `Ref<T>` does not compile.
-- [ ] The extension is absent when physics, assets or scripting is off; the API description is regenerated.
+- [x] `RagdollScriptingTests` with a fixture: the mirrors validate against their native layouts; each `new` equals C++'s `{}`.
+- [x] A C# system fills `HumanoidBones`, calls `DescribeHumanoid` and `Build` on a code-built rig, gets the body and joint entities, sets `Mode = Simulating`, and after playback reads `State.AnyAwake` and a body's `State.Mode`; `Destroy` removes them; `ClearOverrides` clears.
+- [x] The natives are no-ops with one warning on an unready skeleton or an unknown bone map; a handle never built is dropped at scene end without a leak.
+- [x] Compile-fail cases: writing `Ragdoll.State` or `RagdollBody.State`, or a field of either, through `Ref<T>` does not compile.
+- [x] The extension is absent when physics, assets or scripting is off; the API description is regenerated.
+
+**Resolved by:** branch `ragdoll/07-csharp`. `FenrirRagdollScripting` and `Fenrir.Ragdoll` (`packages/FenrirRagdoll/Scripting/`, `Managed/`), built with physics, assets and scripting on and installed by PhysicsDemo, the demo that installs the glue, beside the physics and skeleton extensions. The proof is `FenrirRagdollScriptingTests` (.NET, the fixture `Tests/Fixture/Ragdolls.cs` and the generated defaults case), `FenrirRagdollScriptingRulesTests` (each no-op rule, no .NET), the five `RagdollCompile-*` cases, and the full CTest run on `msvc-x64-debug`; release, Clang and the demo build are CI's. Choices the ticket left open:
+- **The handle** is `RagdollDescriptionHandle`, a one-`u32` wrapper described by the library's own selection and mirrored as an immutable struct with `None`. The description stays C++'s: the extension keeps it on a shelf the scene owns (a C++-only scene resource, placed by a recorded change), so one never built goes with its scene; a native resource in the ticket's sense, held natively and named from C#, not a mirrored `[NativeResource]`.
+- **Build** is a count-then-fill pair within ADR-0044: `Ragdoll.PartCount(handle)` and the span-out `Ragdoll.Build(skeleton, handle, Span<Entity> bodies, Span<Entity> joints, out Entity parent)`, both generated; the hand-written `Ragdoll.Build(skeleton, handle)` does both and returns a `SpawnedRagdoll` (or `null`). A native may not change the scene (ADR-0029), so `Build` hands out entities the change buffer creates at once and records the build onto them: FenrirRagdoll gained a `BuildRagdoll` overload taking the entities (`SpawnedRagdoll into`). The handle is dropped when the build is recorded; an unready skeleton, an existing `Ragdoll` or short buffers keep it. `Destroy` is recorded likewise; `ClearOverrides` acts at once. Since both play back after the system, a second `Build` of one skeleton in the same system is destroyed at playback, and a `Destroy` right after a `Build` does nothing (documented on both).
+- **No-op warnings**, once per call site: not alive (the guard's), not a Ready skeleton entity, a refused bone map (with FenrirRagdoll's reason), a stale handle, a skeleton that already has a ragdoll, buffers too small. No description (`None`), and `Destroy` or `ClearOverrides` of an entity with no ragdoll, are silent, as C++'s calls are. None needs a physics world.
+- **ExpectCompile** takes several MSBuild properties separated by `|`, since the ragdoll contract builds against two others.

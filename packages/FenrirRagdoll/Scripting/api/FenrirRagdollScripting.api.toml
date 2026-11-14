@@ -1,0 +1,7 @@
+# FenrirRagdollScripting's own selection: what C# holds of FenrirRagdoll that FenrirRagdoll does not share in that form. A
+# ragdoll description holds vectors and text, so it stays C++'s, kept by the extension per scene, and C# holds this
+# handle to it (src/RagdollScripting.cpp).
+headers = ["../include/FenrirRagdollScripting/RagdollDescriptionHandle.hpp"]
+
+[types]
+"Fenrir::RagdollDescriptionHandle" = "shared-struct"

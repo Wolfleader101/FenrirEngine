@@ -817,7 +817,7 @@ A per-bone scale, default 1, that gameplay sets on a skeleton instance to say ho
 *Avoid:* part (Jolt's), physical bone (Godot's), hitbox component.
 
 **Ragdoll description**
-`RagdollDescription`: the plain-data value a ragdoll is built from: its *ragdoll parts*, root first, and the ragdoll's defaults (a collision group, joint friction and strength), or the error a derivation refused with. Derived from a skeleton and a *humanoid bone map* by `DescribeHumanoid`, or filled by hand, then spawned by `BuildRagdoll` (physics map ticket "From what description is a ragdoll built, and with which bodies, joints, motors and strengths?").
+`RagdollDescription`: the plain-data value a ragdoll is built from: its *ragdoll parts*, root first, and the ragdoll's defaults (a collision group, joint friction and strength), or the error a derivation refused with. Derived from a skeleton and a *humanoid bone map* by `DescribeHumanoid`, or filled by hand, then spawned by `BuildRagdoll` (physics map ticket "From what description is a ragdoll built, and with which bodies, joints, motors and strengths?"). C# never holds one: `Ragdoll.DescribeHumanoid` keeps it natively for the scene it was described in and gives C# a `RagdollDescriptionHandle`, which `Ragdoll.Build` takes; one never built goes with its scene.
 *Avoid:* physics asset, rig definition, wizard.
 
 **Ragdoll part**

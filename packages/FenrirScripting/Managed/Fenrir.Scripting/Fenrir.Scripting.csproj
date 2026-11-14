@@ -24,6 +24,7 @@
     <InternalsVisibleTo Include="Fenrir.DebugDrawScriptFixture" />
     <InternalsVisibleTo Include="Fenrir.SkeletonScriptFixture" />
     <InternalsVisibleTo Include="Fenrir.AnimationScriptFixture" />
+    <InternalsVisibleTo Include="Fenrir.RagdollScriptFixture" />
   </ItemGroup>
   <ItemGroup>
     <!-- The engine's own components (Transform, Name, Relationship) live in this assembly, so the generator that gives

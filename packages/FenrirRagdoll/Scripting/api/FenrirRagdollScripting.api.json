@@ -1,0 +1,24 @@
+{
+  "package": "FenrirRagdollScripting",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fenrir::RagdollDescriptionHandle",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 4,
+      "alignment": 4,
+      "doc": "A ragdoll description C# asked `Ragdoll.DescribeHumanoid` for, kept natively for the scene it was described in until `Ragdoll.Build` takes it or the scene ends. The id 0 is no description (C#'s `None`), what a refused description gives.",
+      "fields": [
+        {
+          "name": "id",
+          "offset": 0,
+          "kind": "u32",
+          "default": 0,
+          "doc": "Which description: 0 for none. Ids are never reused while the extension lasts."
+        }
+      ]
+    }
+  ]
+}

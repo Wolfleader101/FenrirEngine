@@ -11,6 +11,8 @@ namespace Fenrir
 {
     class App;
     class Scene;
+    // Only named here: FenrirRagdollScripting defines Ragdolls::ScriptingExtension().
+    struct ScriptingExtension;
 
     namespace Detail
     {
@@ -98,6 +100,15 @@ namespace Fenrir
          * entry again next frame.
          */
         static bool ClearOverrides(Scene& scene, Entity skeleton);
+
+        /**
+         * @brief FenrirRagdoll's scripting extension (the ragdolls spec, ticket 56): the Fenrir.Ragdoll contract's
+         * mirrors and its natives `Ragdoll.DescribeHumanoid`, `Build`, `Destroy` and `ClearOverrides`. Only named here:
+         * FenrirRagdollScripting defines it, built with FENRIR_ENABLE_PHYSICS, FENRIR_ENABLE_ASSETS and
+         * FENRIR_ENABLE_SCRIPTING. Give Scripting the skeleton extension too, whose Fenrir.Skeleton contract (the bone
+         * names) this one builds against.
+         */
+        [[nodiscard]] static Fenrir::ScriptingExtension ScriptingExtension();
 
         Ragdolls(Ragdolls&& other) noexcept;
         Ragdolls& operator=(Ragdolls&& other) noexcept;

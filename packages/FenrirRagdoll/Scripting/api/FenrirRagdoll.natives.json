@@ -1,0 +1,181 @@
+{
+  "binding": "FenrirRagdoll",
+  "context": "Fenrir::CallContext",
+  "functions": [
+    {
+      "name": "DescribeHumanoid",
+      "namespace": "Fenrir::RagdollNatives",
+      "source": "../src/RagdollScripting.cpp",
+      "state": "Fenrir::RagdollScripting",
+      "doc": "Derives a humanoid ragdoll description from the skeleton entity's skeleton asset and `bones` (C++'s DescribeHumanoid, whose documentation gives the parts, capsules, masses and joints), and keeps it for the active scene until Build takes it or the scene ends.",
+      "returns": {
+        "type": "Fenrir::RagdollDescriptionHandle",
+        "kind": "struct",
+        "doc": "The description's handle; no description (id 0) when the entity is not a Ready skeleton entity or the bone map is refused, warning once."
+      },
+      "parameters": [
+        {
+          "name": "skeleton",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity, whose SkeletonPose names the asset."
+        },
+        {
+          "name": "bones",
+          "type": "const Fenrir::HumanoidBones*",
+          "kind": "pointer",
+          "pointee": "Fenrir::HumanoidBones",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The humanoid bone map: the bone of each slot, by engine name."
+        },
+        {
+          "name": "totalMass",
+          "type": "float",
+          "kind": "f32",
+          "doc": "The ragdoll's mass in kilograms, shared out over the parts."
+        }
+      ]
+    },
+    {
+      "name": "PartCount",
+      "namespace": "Fenrir::RagdollNatives",
+      "source": "../src/RagdollScripting.cpp",
+      "state": "Fenrir::RagdollScripting",
+      "doc": "How many parts the description has: how many body entities Build spawns from it (and one fewer joint), to size its buffers.",
+      "facade": "Ragdoll.PartCount",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "The part count; 0 for no description or one the active scene does not hold."
+      },
+      "parameters": [
+        {
+          "name": "description",
+          "type": "Fenrir::RagdollDescriptionHandle",
+          "kind": "struct"
+        }
+      ]
+    },
+    {
+      "name": "Build",
+      "namespace": "Fenrir::RagdollNatives",
+      "source": "../src/RagdollScripting.cpp",
+      "state": "Fenrir::RagdollScripting",
+      "doc": "Builds the description as the skeleton entity's ragdoll (C++'s BuildRagdoll), and drops the handle. The entities are alive at once and written to the caller's buffers: the parent entity they sit under, one body per part in the description's order (the root part's first), and one joint per part but the root. Their components, and the skeleton entity's Ragdoll, are added when the calling system returns: a structural change. A refusal FenrirRagdoll makes only then (the skeleton entity died, or got a Ragdoll, since) destroys them, logging why: so a second Build of one skeleton in the same system passes here and is destroyed at playback. Build once per skeleton per system.",
+      "facade": "Ragdoll.Build",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was built: false, keeping the handle, when the entity is not a Ready skeleton entity, already has a Ragdoll or a buffer is too small; false for no description or a stale handle; each warning once but no description, which DescribeHumanoid already warned about."
+      },
+      "parameters": [
+        {
+          "name": "skeleton",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity the description was derived for."
+        },
+        {
+          "name": "description",
+          "type": "Fenrir::RagdollDescriptionHandle",
+          "kind": "struct"
+        },
+        {
+          "name": "bodies",
+          "type": "Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "doc": "Where to write the body entities: at least PartCount of them."
+        },
+        {
+          "name": "bodyCapacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "joints",
+          "type": "Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "doc": "Where to write the joint entities: at least PartCount less one."
+        },
+        {
+          "name": "jointCapacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "parent",
+          "type": "Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The entity the bodies and joints sit under; no entity when nothing was built."
+        }
+      ]
+    },
+    {
+      "name": "Destroy",
+      "namespace": "Fenrir::RagdollNatives",
+      "source": "../src/RagdollScripting.cpp",
+      "state": "Fenrir::RagdollScripting",
+      "doc": "Removes the skeleton entity's ragdoll (C++'s DestroyRagdoll) when the calling system returns: the entities Build spawned, the glue's pose override entries and the Ragdoll. A structural change, so the ragdoll is there until then.",
+      "facade": "Ragdoll.Destroy",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was recorded: false, with nothing to remove, for an entity with no Ragdoll (silently, as C++'s does nothing; so also right after a Build in the same system, whose Ragdoll is not added yet), or one that is not alive (warning once)."
+      },
+      "parameters": [
+        {
+          "name": "skeleton",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        }
+      ]
+    },
+    {
+      "name": "ClearOverrides",
+      "namespace": "Fenrir::RagdollNatives",
+      "source": "../src/RagdollScripting.cpp",
+      "state": "Fenrir::RagdollScripting",
+      "doc": "Clears the pose override entries of the skeleton entity's ragdoll at once (C++'s Ragdolls::ClearOverrides): those on its bodies' bones and on the bones of bodies destroyed since the glue wrote them. Game code's entries on other bones, and every override weight, stay. It works after the Ragdoll is removed, while its bodies still name the entity. While a body simulates the glue writes its entry again next frame.",
+      "facade": "Ragdoll.ClearOverrides",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was a ragdoll to clear: false for an entity with no Ragdoll and no body naming it, or one that is not alive (warning once)."
+      },
+      "parameters": [
+        {
+          "name": "skeleton",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "The skeleton entity."
+        }
+      ]
+    }
+  ]
+}

@@ -11,6 +11,8 @@
 
 #ifdef FENRIR_DEMO_SCRIPT_ASSEMBLY
 #include "FenrirPhysicsScripting/PhysicsScripting.hpp"
+#include "FenrirRagdollScripting/RagdollScripting.hpp"
+#include "FenrirSkeletonScripting/SkeletonScripting.hpp"
 #endif
 
 int main()
@@ -45,8 +47,10 @@ int main()
 #ifdef FENRIR_DEMO_SCRIPT_ASSEMBLY
     config.scenes.push_back(PhysicsDemo::VehiclesCSharp());
     config.scriptAssembly = FENRIR_DEMO_SCRIPT_ASSEMBLY;
-    // Physics from C#: the physics components, PhysicsWorld's functions and the Fenrir.Physics contract.
-    config.scriptingExtensions = {Fenrir::Physics::ScriptingExtension()};
+    // Physics from C#: the physics components, PhysicsWorld's functions and the Fenrir.Physics contract; ragdolls beside
+    // it, after the skeleton extension whose bone names the Fenrir.Ragdoll contract uses.
+    config.scriptingExtensions = {Fenrir::Physics::ScriptingExtension(), Fenrir::Skeletons::ScriptingExtension(),
+                                  Fenrir::Ragdolls::ScriptingExtension()};
 #endif
     PhysicsDemo::AddDebugCategoryCycling(app);
 

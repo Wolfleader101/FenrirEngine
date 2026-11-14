@@ -139,6 +139,10 @@ endif()
 if(FENRIR_ENABLE_PHYSICS AND FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirPhysics/Scripting)
 endif()
+# Ragdolls' builds with physics, assets and scripting on, after Skeleton's and Assets's, whose contracts it uses.
+if(FENRIR_ENABLE_PHYSICS AND FENRIR_ENABLE_ASSETS AND FENRIR_ENABLE_SCRIPTING)
+    add_subdirectory(packages/FenrirRagdoll/Scripting)
+endif()
 
 if(FENRIR_BUILD_EXAMPLES)
     add_subdirectory(examples)
