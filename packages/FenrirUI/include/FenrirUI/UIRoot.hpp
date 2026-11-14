@@ -79,8 +79,12 @@ namespace Fenrir
         WindowId window{1};
         /** @brief The overlay layer it draws on; roots draw lowest layer first, then in the order they were made. */
         std::int32_t layer = 0;
-        /** @brief How its UI units map to its target's logical units. */
-        ScaleRule scaleRule = ScaleRule::Height1080;
+        /**
+         * @brief How its UI units map to its target's logical units; unset, its target's default
+         * (UITarget::GetDefaultScaleRule): `Height1080` on the window and in an image, `ContentScale` on a world quad,
+         * whose logical units are UI units. GetConfig gives the one it lays out by.
+         */
+        std::optional<ScaleRule> scaleRule;
         /**
          * @brief The blend space it paints in; unset, its target's default (UITarget::GetDefaultBlendSpace): gamma on
          * the window overlay, as browsers and designers blend, and linear in an image (ADR-0065). GetConfig gives the
@@ -91,7 +95,8 @@ namespace Fenrir
         bool snapToPixels = true;
         /**
          * @brief Where it draws instead of its window's overlay; null for the overlay. A UIImageTarget draws it into an
-         * image, and makes it a root with no input router: its input comes from code.
+         * image, and makes it a root with no input router: its input comes from code. A UIWorldTarget draws it on a
+         * quad in the world, its pointer the ray the game gives it (UIRoot::SetPointerRay).
          */
         std::shared_ptr<UITarget> target;
         /**
@@ -473,8 +478,29 @@ namespace Fenrir
         [[nodiscard]] ElementId GetFocused() const noexcept;
         /** @brief The topmost element under the pointer that takes pointer input; nothing when none is. */
         [[nodiscard]] ElementId GetHovered() const noexcept;
-        /** @brief Where the pointer last was in the root's window, in UI units; none before it moved there. */
+        /**
+         * @brief Where the pointer last was in the root's window, in UI units; none before it moved there. On a world
+         * root, where the pointer ray last met the quad; none while it misses.
+         */
         [[nodiscard]] std::optional<Math::Vec2> GetPointer() const noexcept;
+        /**
+         * @brief Gives a world root (UITarget::TakesPointerRay, a UIWorldTarget's) its pointer for this frame: `ray`,
+         * in world space, from whatever camera and cursor, or controller, the game chooses (ADR-0057's line), and
+         * whether its left button is `pressed`; none when there is no pointer. The root meets the ray with its quad,
+         * from either side, and runs hit testing, hover, press, click and focus at that point in UI units, as the
+         * window's mouse does on an overlay root: a change of `pressed` is a press or a release there. A ray that
+         * misses the quad, or none, hovers nothing and leaves the root with no pointer, but while a press is held the
+         * pointer follows the ray across the quad's plane past its edges, so a drag goes on; with no ray, or one that
+         * never meets the plane, the held press is released as cancelled, with no click, whatever `pressed` says. A
+         * press with nothing under it takes the focus from the root, as a click off an overlay root does; one on an
+         * element blurs the window's other roots.
+         *
+         * Returns whether the pointer is over one of the root's elements that takes pointer input, or a press is held
+         * on one. On any other root it does nothing and returns false. Call it once a frame, after FenrirInput's
+         * dispatch (in an Update system, say), with the ray as the camera sees it that frame; the layout it hits is the
+         * last frame's, as the mouse's is.
+         */
+        bool SetPointerRay(const std::optional<Math::Ray>& ray, bool pressed);
         /**
          * @brief Gives the buttons held now to `element`, as a scroll view does when a press on its content becomes a
          * drag: what they were pressed on loses them (and `:active`), their motion and releases go to `element`, and

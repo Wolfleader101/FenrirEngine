@@ -327,6 +327,38 @@ namespace Fenrir::Render
             return mode == Fenrir::BlendMode::AlphaBlend || mode == Fenrir::BlendMode::Additive;
         }
 
+        /** @brief One thing a view's Transparent pass draws: a transparent item, or a world quad with its set 0. */
+        struct TransparentEntry
+        {
+            bool world = false;
+            /** @brief The item's place in the frame's draws, or the quad's in the frame's world quads. */
+            std::size_t index = 0;
+            /** @brief The view depth it sorts by: the most negative, the farthest, first. */
+            float depth = 0.0f;
+            BindingGroupHandle target;
+        };
+
+        /**
+         * @brief Whether `corners` are all past one side of the clip space `viewProjection` maps them into, or all
+         * behind its camera: the transparent items' cull (ADR-0057's corner test). Reversed-Z, so the near plane is z
+         * equal to w and there is no far plane.
+         */
+        bool OutsideView(const std::array<Math::Vec3, 4>& corners, const Math::Mat4& viewProjection)
+        {
+            std::array<Math::Vec4, 4> clip{};
+            for (std::size_t i = 0; i < corners.size(); ++i)
+            {
+                clip.at(i) = viewProjection * Math::Vec4(corners.at(i), 1.0f);
+            }
+            const auto all = [&](auto outside) { return std::all_of(clip.begin(), clip.end(), outside); };
+            return all([](const Math::Vec4& c) { return c.w <= 0.0f; }) ||
+                   all([](const Math::Vec4& c) { return c.x < -c.w; }) ||
+                   all([](const Math::Vec4& c) { return c.x > c.w; }) ||
+                   all([](const Math::Vec4& c) { return c.y < -c.w; }) ||
+                   all([](const Math::Vec4& c) { return c.y > c.w; }) ||
+                   all([](const Math::Vec4& c) { return c.z > c.w; });
+        }
+
         /** @brief How the device blends a material of `mode`. */
         constexpr Graphics::BlendMode DeviceBlendOf(Fenrir::BlendMode mode) noexcept
         {
@@ -2901,6 +2933,11 @@ namespace Fenrir::Render
                 m_stats.shadowDraws += static_cast<std::uint32_t>(facedRuns->size() * pointCount * CubeFaceCount);
             }
         }
+        // The world-space 2D target's quads (ADR-0060), drawn among every view's transparent items.
+        const std::vector<WorldQuads::Quad> worldQuads =
+            m_worldQuads == nullptr
+                ? std::vector<WorldQuads::Quad>{}
+                : m_worldQuads->ResolveWorldQuads(graph, frame, TextureFormat::Rgba16Float, m_samples, views.size());
         // The targets drawn into so far: the first view into each clears it. The window's key is empty.
         std::set<AssetKey> cleared;
         std::vector<BloomView> blooms;
@@ -3118,6 +3155,28 @@ namespace Fenrir::Render
             }
             std::stable_sort(transparent->begin(), transparent->end(),
                              [&](std::size_t a, std::size_t b) { return depth[a] < depth[b]; });
+            // The world quads in front of the camera, each between the transparent items by its origin's depth.
+            auto order = std::make_shared<std::vector<TransparentEntry>>();
+            for (const std::size_t i : *transparent)
+            {
+                order->push_back({false, i, depth[i], {}});
+            }
+            std::vector<GraphResource> worldSamples;
+            for (std::size_t q = 0; q < worldQuads.size(); ++q)
+            {
+                if (OutsideView(worldQuads[q].corners, viewProjection))
+                {
+                    continue;
+                }
+                const float quadDepth = (request.view * Math::Vec4(worldQuads[q].origin, 1.0f)).z;
+                order->push_back({true, q, quadDepth, m_worldQuads->WorldQuadTarget(frameIndex, q, v, viewProjection)});
+                for (const GraphResource image : m_worldQuads->WorldQuadSamples(q))
+                {
+                    worldSamples.push_back(image);
+                }
+            }
+            std::stable_sort(order->begin(), order->end(),
+                             [](const TransparentEntry& a, const TransparentEntry& b) { return a.depth < b.depth; });
             // Matching opaque and masked items merge into instanced draws (ADR-0051); transparent ones stay single,
             // in their depth order.
             auto prepassRuns =
@@ -3166,6 +3225,8 @@ namespace Fenrir::Render
             {
                 transparentRuns->push_back({i, 1});
             }
+            const bool worldDrawn =
+                std::any_of(order->begin(), order->end(), [](const TransparentEntry& entry) { return entry.world; });
 
             // Depth and normals first (ADR-0049), so Opaque shades each pixel once, by equal depth.
             graph.AddPass(
@@ -3237,7 +3298,7 @@ namespace Fenrir::Render
                                              clusterBuffer, textureOf(reflectionHits), textureOf(sceneHistory)),
                                 drawGroup, skinned, viewport, DrawPass::Main);
                 });
-            if (!transparent->empty())
+            if (!transparent->empty() || worldDrawn)
             {
                 // Depth tested against the opaque items, without writing it (ADR-0024).
                 graph.AddPass(
@@ -3246,6 +3307,10 @@ namespace Fenrir::Render
                         pass.ColourAttachment(sceneColour, LoadOp::Load);
                         pass.DepthReadOnly(sceneDepth);
                         for (const GraphResource image : samples)
+                        {
+                            pass.Sample(image);
+                        }
+                        for (const GraphResource image : worldSamples)
                         {
                             pass.Sample(image);
                         }
@@ -3267,16 +3332,35 @@ namespace Fenrir::Render
                         }
                         readSkinned(pass);
                     },
-                    [this, draws, groups, transparentRuns, frameGroup, viewGroup, drawGroup, skinned, viewport,
-                     shadowAtlas, clusterBuffer, viewSlot](PassContext& context) {
+                    [this, draws, groups, order, frameGroup, viewGroup, drawGroup, skinned, viewport, shadowAtlas,
+                     clusterBuffer, viewSlot](PassContext& context) {
                         // Shadowed, but never darkened by the occlusion of what is behind it.
                         const BindingGroupHandle shadowedView =
                             shadowAtlas.IsEmpty()
                                 ? viewGroup
                                 : ViewGroupFor(context.FrameIndex(), viewSlot, GetDefaultTexture(DefaultTexture::White),
                                                context.Texture(shadowAtlas), clusterBuffer);
-                        RecordDraws(context.Encoder(), *draws, *groups, *transparentRuns, frameGroup, shadowedView,
-                                    drawGroup, skinned, viewport, DrawPass::Main);
+                        // Back to front: each run of items between world quads at once, then the quad.
+                        std::vector<DrawRun> items;
+                        const auto flush = [&] {
+                            if (!items.empty())
+                            {
+                                RecordDraws(context.Encoder(), *draws, *groups, items, frameGroup, shadowedView,
+                                            drawGroup, skinned, viewport, DrawPass::Main);
+                                items.clear();
+                            }
+                        };
+                        for (const TransparentEntry& entry : *order)
+                        {
+                            if (!entry.world)
+                            {
+                                items.push_back({entry.index, 1});
+                                continue;
+                            }
+                            flush();
+                            m_worldQuads->RecordWorldQuad(context, entry.index, entry.target, viewport);
+                        }
+                        flush();
                     });
             }
             m_stats.draws += static_cast<std::uint32_t>(opaqueRuns->size() + transparentRuns->size());

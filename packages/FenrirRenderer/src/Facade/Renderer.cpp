@@ -1,5 +1,6 @@
 #include "FenrirRenderer/Renderer.hpp"
 #include "FenrirRenderer/ImageTargets2D.hpp"
+#include "FenrirRenderer/WorldTargets2D.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1384,6 +1385,63 @@ namespace Fenrir
         }
 
         /**
+         * @brief The WorldTargets2D submissions this frame (ADR-0060), taken so it starts the next frame empty, grouped
+         * by entity in the order of each entity's first submission, with what their lists name prepared, each quad
+         * placed by its entity's world matrix as it is now. A submission to an entity not valid in `scene`, or with no
+         * WorldQuad2D, is dropped, logged once per entity. With `draw` false they are only taken.
+         */
+        std::vector<Render::WorldSubmission2D> ReadWorldTargets(Detail::RendererState& state, const AssetStore* store,
+                                                                Scene* scene, bool draw)
+        {
+            std::vector<Render::WorldSubmission2D> worlds;
+            WorldTargets2D* targets = state.app->TryGetResource<WorldTargets2D>();
+            if (targets == nullptr)
+            {
+                return worlds;
+            }
+            auto taken = Detail::WorldTargetSubmissions::Take(*targets);
+            if (!draw || store == nullptr || scene == nullptr)
+            {
+                return worlds;
+            }
+            std::vector<std::uint32_t> entities;
+            EntityList& list = scene->GetEntityList();
+            for (auto& [entity, drawList] : taken)
+            {
+                const bool inScene = entity.IsValid() && list.GetEntity(entity.GetId()) == entity;
+                if (!inScene || !entity.HasComponent<WorldQuad2D>() || !entity.GetComponent<WorldQuad2D>().IsDrawable())
+                {
+                    if (state.loggedWorldTargets.insert(entity.GetId()).second)
+                    {
+                        state.app->Logger()->Warn("FenrirRenderer: a 2D draw list was submitted to entity {}, which "
+                                                  "{}, so it is dropped",
+                                                  entity.GetId(),
+                                                  inScene ? "has no WorldQuad2D with a size and units above zero"
+                                                          : "is not an entity of the active scene");
+                    }
+                    continue;
+                }
+                PrepareList(state, *store, drawList);
+                const auto found = std::find(entities.begin(), entities.end(), entity.GetId());
+                if (found != entities.end())
+                {
+                    worlds[static_cast<std::size_t>(found - entities.begin())].lists.push_back(std::move(drawList));
+                    continue;
+                }
+                // The lists' units to the entity's XY plane, then to the world.
+                const WorldQuad2D& quad = entity.GetComponent<WorldQuad2D>();
+                const Math::Mat4 world = GetWorldMatrix(entity);
+                entities.push_back(entity.GetId());
+                Render::WorldSubmission2D& submission = worlds.emplace_back();
+                submission.localToWorld = world * quad.LocalToEntity();
+                submission.logicalSize = quad.LogicalSize();
+                submission.origin = Math::Vec3(world[3]);
+                submission.lists.push_back(std::move(drawList));
+            }
+            return worlds;
+        }
+
+        /**
          * @brief The Overlay's submissions this frame (ADR-0027), taken so it starts the next frame empty, with the
          * shaders and images they name prepared. A submission to a window other than the main window is dropped, logged
          * once per window. With `draw` false (a minimised window, or no store) they are only taken.
@@ -1462,6 +1520,8 @@ namespace Fenrir
             state.debug->SetFrame(std::move(debug));
             Render::Frame2D frame2D = ReadOverlay(state, store, !size.IsEmpty());
             frame2D.images = ReadImageTargets(state, store, !size.IsEmpty());
+            frame2D.worlds =
+                ReadWorldTargets(state, store, store != nullptr ? &app.GetActiveScene() : nullptr, !size.IsEmpty());
             state.draw2D->SetFrame(std::move(frame2D));
 
             const Render::FrameReport report = state.core->RenderFrame();
@@ -1598,6 +1658,7 @@ namespace Fenrir
                 app->RemoveResource<InstalledRenderer>();
                 app->RemoveResource<Overlay>();
                 app->RemoveResource<ImageTargets2D>();
+                app->RemoveResource<WorldTargets2D>();
             }
         }
     } // namespace Detail
@@ -1670,6 +1731,8 @@ namespace Fenrir
         // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).
         auto draw2D = std::make_unique<Render::Draw2DFeature>(state->core->Device(), *app.Logger(), *scene);
         draw2D->SetOffscreenGroups(config.offscreenGroups2D);
+        // Every view's Transparent pass draws the world-space 2D target's quads among its transparent items.
+        scene->SetWorldQuads(draw2D.get());
         state->draw2D = draw2D.get();
         // Debug drawing goes into the views the scene renderer drew, so it is added after it.
         auto debug = std::make_unique<Render::DebugFeature>(state->core->Device(), *app.Logger(), *scene);
@@ -1692,6 +1755,7 @@ namespace Fenrir
         app.AddResource<Detail::InstalledRenderer>(Detail::InstalledRenderer{state});
         app.AddResource<Overlay>();
         app.AddResource<ImageTargets2D>();
+        app.AddResource<WorldTargets2D>();
         return Renderer(std::move(state));
     }
 

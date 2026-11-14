@@ -10,12 +10,12 @@
 
 **Touches:** `packages/FenrirRenderer/src/Core/Draw2DFeature.cpp`, `packages/FenrirRenderer/src/Core/Draw2DFeature.hpp`, `packages/FenrirRenderer/src/Facade/`, `packages/FenrirRenderer/include/FenrirRenderer/`, `packages/FenrirRenderer/Tests/`, `packages/FenrirRenderer/README.md`, `packages/FenrirUI/`, `examples/UIDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Null-backend tests: a world root's list draws as one transparent-stage draw with the scissor off and the quad's matrix in set 0; a root behind the camera is culled with the other transparents.
-- [ ] Headless App tests: a ray through the quad's centre hovers and clicks the element there; a ray that misses clears hover; a rotated quad maps the hit correctly; a world root takes gamepad navigation when focused and publishes the gamepad claim.
-- [ ] GL test (skipped without a display): a world quad with a rounded clip drawn at an angle reads back a clipped edge where the clip says, not at the quad's edge.
+- [x] Null-backend tests: a world root's list draws as one transparent-stage draw with the scissor off and the quad's matrix in set 0; a root behind the camera is culled with the other transparents.
+- [x] Headless App tests: a ray through the quad's centre hovers and clicks the element there; a ray that misses clears hover; a rotated quad maps the hit correctly; a world root takes gamepad navigation when focused and publishes the gamepad claim.
+- [x] GL test (skipped without a display): a world quad with a rounded clip drawn at an angle reads back a clipped edge where the clip says, not at the quad's edge.
 
 Hand check: the terminal's buttons light the room, the slider drags under the cursor from several camera angles, the name plate's text stays crisp as the camera approaches.
 
-- [ ] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] All passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.

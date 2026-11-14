@@ -9,6 +9,7 @@
 #include <iterator>
 #include <memory>
 #include <numbers>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -181,6 +182,8 @@ namespace RendererTest
         Fenrir::Graphics::BufferHandle indexBuffer;
         /** @brief The viewport last set in its pass before it. */
         Fenrir::Graphics::PixelRect viewport;
+        /** @brief The scissor last set in its pass before it; none when none was. */
+        std::optional<Fenrir::Graphics::PixelRect> scissor;
         Fenrir::Graphics::CmdDrawIndexed draw;
     };
 
@@ -226,6 +229,10 @@ namespace RendererTest
                 else if (const auto* viewport = std::get_if<CmdSetViewport>(&command))
                 {
                     bound.viewport = viewport->rect;
+                }
+                else if (const auto* scissor = std::get_if<CmdSetScissor>(&command))
+                {
+                    bound.scissor = scissor->rect;
                 }
                 else if (const auto* draw = std::get_if<CmdDrawIndexed>(&command))
                 {

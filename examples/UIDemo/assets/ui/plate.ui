@@ -1,0 +1,8 @@
+<!--
+  UIDemo's name plate (examples/UIDemo/README.md), loaded into a root on a quad over the capsule in the room, which turns
+  to face the camera each frame, and styled by world.css. Its text is in the SDF family, so it stays crisp close up.
+-->
+<panel id="plate">
+    <label id="plate-name">Wanderer</label>
+    <label class="plate-role">Keeper of the lamps</label>
+</panel>

@@ -2,7 +2,8 @@
 // star and a filled ring with a hole painted into an image 2D target (ADR-0060) through the renderer's ImageTargets2D,
 // and read back at their centres, joins and edges; and offscreen groups: a half-opacity group, a blurred disc's edge,
 // a masked gradient and a backdrop blur; and a word of text at two sizes, and a glyph scaled by 4 through the SDF and
-// the bitmap paths. The image is linear RGBA8, cleared
+// the bitmap paths; and a world-space quad, turned from the camera, cut by its round clip in the scene. The image is
+// linear RGBA8, cleared
 // transparent each frame it is drawn, and the root's blend space Linear, so a pixel is the shader's premultiplied
 // linear output to 8 bits; the expected values are worked by hand.
 
@@ -10,15 +11,20 @@
 #include <cmath>
 #include <cstdint>
 #include <numbers>
+#include <optional>
 #include <utility>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirECS/EntityList.hpp"
+#include "FenrirECS/WorldTransform.hpp"
 #include "FenrirPainter/Painter.hpp"
 #include "FenrirPainter/Painting.hpp"
 #include "FenrirPainter/Path.hpp"
 #include "FenrirRenderer/ImageTargets2D.hpp"
+#include "FenrirRenderer/WorldTargets2D.hpp"
 #include "FenrirText/FontLibrary.hpp"
 #include "FenrirText/Paragraph.hpp"
 #include "GlScene.hpp"
@@ -552,4 +558,55 @@ TEST_CASE("A glyph scaled by 4 reads back a smooth edge through the SDF path and
     INFO("the 12-pixel bitmap's texels are each stretched over four pixels: its edges spread over its texels");
     REQUIRE(bitmap.partial >= 6);
     REQUIRE(bitmap.partial > 2 * sdf.partial);
+}
+
+TEST_CASE("A world quad turned away from the camera is cut by its round clip, not by its own edge",
+          "[painter][gl][world]")
+{
+    GlPainter test;
+    Fenrir::Entity camera = test.scene.app.GetActiveScene().GetEntityList().CreateEntity();
+    camera.AddComponent<Fenrir::Camera>().look.bloom.intensity = 0.0f;
+    // A 2 by 2 quad two units ahead, turned 40 degrees about Y: its list is 200 by 200 units, 100 to a world unit.
+    Fenrir::Entity quad = test.scene.app.GetActiveScene().GetEntityList().CreateEntity();
+    quad.GetComponent<Fenrir::Transform>().pos = {0.0f, 0.0f, -2.0f};
+    quad.GetComponent<Fenrir::Transform>().rot =
+        Fenrir::Math::AngleAxis(40.0f * std::numbers::pi_v<float> / 180.0f, Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f));
+    quad.AddComponent<Fenrir::WorldQuad2D>(Fenrir::WorldQuad2D{{2.0f, 2.0f}, 100.0f});
+
+    // Red over the whole quad, inside a circle of radius 50 at its centre: a rounded rectangle clip.
+    Fenrir::DrawList2D list;
+    Fenrir::Painter painter(list, test.Config());
+    painter.Save();
+    painter.ClipRoundedRect({50.0f, 50.0f, 100.0f, 100.0f}, Fenrir::CornerRadii::All(50.0f));
+    painter.DrawRect({0.0f, 0.0f, 200.0f, 200.0f}, Colour::Red);
+    painter.Restore();
+    test.scene.app.GetResource<Fenrir::WorldTargets2D>().Submit(quad, std::move(list));
+    const GlProbe::Image image = test.scene.Frame();
+
+    // Where a point of the list appears on screen, in the scene colour's pixels.
+    const Fenrir::Math::Mat4 world = Fenrir::GetWorldMatrix(quad);
+    const float pixelsPerUnit = static_cast<float>(image.width) / static_cast<float>(GlTest::GlScene::Size);
+    const auto at = [&](float u, float v) {
+        const Fenrir::Math::Vec3 point(world * Fenrir::Math::Vec4(u / 100.0f - 1.0f, 1.0f - v / 100.0f, 0.0f, 1.0f));
+        const std::optional<Fenrir::Math::Vec2> screen = test.scene.renderer.WorldToScreenPoint(camera, point);
+        REQUIRE(screen.has_value());
+        const auto x = static_cast<std::uint32_t>(std::clamp(screen->x * pixelsPerUnit, 0.0f, image.width - 1.0f));
+        const auto y = static_cast<std::uint32_t>(std::clamp(screen->y * pixelsPerUnit, 0.0f, image.height - 1.0f));
+        return image.At(x, y);
+    };
+    const auto red = [](const GlProbe::Pixel& pixel) { return pixel[0] > 0.9f && pixel[1] < 0.05f; };
+    const auto unpainted = [](const GlProbe::Pixel& pixel) { return pixel[0] < 0.05f; };
+
+    INFO("red inside the circle: at its centre, and a fifth of its radius in from its top, left and right");
+    REQUIRE(red(at(100.0f, 100.0f)));
+    REQUIRE(red(at(100.0f, 70.0f)));
+    REQUIRE(red(at(60.0f, 100.0f)));
+    REQUIRE(red(at(140.0f, 100.0f)));
+    INFO("nothing outside it on the quad: past its top and its sides, which the quad's own edges would not cut");
+    REQUIRE(unpainted(at(100.0f, 25.0f)));
+    REQUIRE(unpainted(at(25.0f, 100.0f)));
+    REQUIRE(unpainted(at(175.0f, 100.0f)));
+    INFO("nor in its rounded-off corner, inside the clip's square bounds");
+    REQUIRE(unpainted(at(58.0f, 58.0f)));
+    REQUIRE(test.scene.messages->errors.empty());
 }

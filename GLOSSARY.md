@@ -657,8 +657,12 @@ A plain value saying how a 2D draw list's triangles are drawn: shader, vertex la
 *Avoid:* material (a 3D asset), pipeline handle (the device's).
 
 **2D target**
-Where FenrirRenderer's 2D render feature draws a 2D draw list, supplying the transform from local to clip space, depth and how a scissor is realised. The window overlay and the image 2D target (a list drawn into an image asset, ADR-0060) are built; a world-space target is planned.
+Where FenrirRenderer's 2D render feature draws a 2D draw list, supplying the transform from local to clip space, depth and how a scissor is realised. The window overlay, the image 2D target (a list drawn into an image asset, ADR-0060) and the world-space 2D target are built.
 *Avoid:* render target (a camera's image), canvas, layer.
+
+**World-space 2D target**
+A quad in the scene a 2D draw list is drawn on: an entity with `WorldQuad2D` (its size in world units and logical units per world unit), drawn among each view's transparent items with no hardware scissor, its clips the painter's per-pixel ones (ADR-0060). A UI root on one is a world root.
+*Avoid:* world canvas, billboard (it turns only if the game turns it), screen (the image root's quad in UIDemo).
 
 **Overlay layer**
 The integer a 2D draw list is submitted to a window's overlay with: layers draw lowest first, and debug screen text draws above them all.
@@ -725,6 +729,10 @@ Of an element: a click on it or under it, Tab and Shift+Tab, a gamepad direction
 **Gamepad navigation**
 Moving a UI root's focus with the D-pad or the left stick to the focusable element nearest in that direction, with A activating and B cancelling, while the root has the focus (ADR-0065).
 *Avoid:* spatial navigation (the web's name), selection (Unity's).
+
+**Pointer ray**
+The ray, in world space, a game gives a world root each frame with its button's state (`UIRoot::SetPointerRay`): the root meets it with its quad and hit-tests there. Which camera and cursor, or controller, it comes from is the game's choice (ADR-0057's line).
+*Avoid:* raycast (physics's), pick ray (the renderer's picking), cursor (the window's mouse, or the virtual cursor).
 
 **Virtual cursor**
 A per-root switch that turns the left stick into pointer motion and A into a left click, drawn as the root's `virtual-cursor` element.
