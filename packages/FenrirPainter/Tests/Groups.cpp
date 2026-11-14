@@ -83,7 +83,10 @@ TEST_CASE("Groups nest, each end closing the innermost, as recorded", "[painter]
     painter.EndGroup();
     painter.EndGroup();
 
-    REQUIRE(Kinds(list) == "BDBDEE");
+    {
+        INFO("the nested groups are not recorded as begin, draw, begin, draw, end, end");
+        REQUIRE(Kinds(list) == "BDBDEE");
+    }
     INFO("the inner group's end carries the inner opacity, the outer's the outer");
     REQUIRE(Command<Fenrir::EndGroup2D>(list, 4).opacity == 0.75f);
     REQUIRE(Command<Fenrir::EndGroup2D>(list, 5).opacity == 0.25f);
@@ -146,10 +149,16 @@ TEST_CASE("A blurred group's radius, and a drop shadow's radius and offset, are 
     painter.EndGroup();
 
     const auto& blur = Command<Fenrir::EndGroup2D>(list, 1);
-    REQUIRE(blur.filter == Fenrir::GroupFilter2D::Blur);
-    REQUIRE(PainterTest::Near(blur.radius, 8.0f));
+    {
+        INFO("the blurred group's end is not a blur of radius 4 under the root scale 2");
+        REQUIRE(blur.filter == Fenrir::GroupFilter2D::Blur);
+        REQUIRE(PainterTest::Near(blur.radius, 8.0f));
+    }
     const auto& drop = Command<Fenrir::EndGroup2D>(list, 3);
-    REQUIRE(drop.filter == Fenrir::GroupFilter2D::DropShadow);
+    {
+        INFO("the shadowed group's end is not a drop shadow");
+        REQUIRE(drop.filter == Fenrir::GroupFilter2D::DropShadow);
+    }
     INFO("under the root scale 2 and the painter's scale 1.5");
     REQUIRE(PainterTest::Near(drop.radius, 9.0f));
     REQUIRE(PainterTest::Near(drop.offset, Vec2(6.0f, -3.0f)));
@@ -223,9 +232,16 @@ TEST_CASE("A backdrop blur records an empty group over the rectangle with the ra
     painter.BackdropBlur({10, 20, 30, 40}, 5.0f);
     painter.DrawRect({0, 0, 10, 10}, Colour::White);
 
-    REQUIRE(Kinds(list) == "DBED");
-    REQUIRE(Near(Command<Fenrir::BeginGroup2D>(list, 1).bounds, Rect2D{20, 40, 60, 80}));
+    {
+        INFO("the backdrop blur is not one empty group between the draws on either side");
+        REQUIRE(Kinds(list) == "DBED");
+    }
+    {
+        INFO("the group does not cover the rectangle under the root scale 2");
+        REQUIRE(Near(Command<Fenrir::BeginGroup2D>(list, 1).bounds, Rect2D{20, 40, 60, 80}));
+    }
     const auto& end = Command<Fenrir::EndGroup2D>(list, 2);
+    INFO("the group's end is not an unmasked backdrop blur of radius 5 under the root scale 2");
     REQUIRE(end.filter == Fenrir::GroupFilter2D::BackdropBlur);
     REQUIRE(PainterTest::Near(end.radius, 10.0f));
     REQUIRE_FALSE(end.mask);

@@ -329,43 +329,120 @@ TEST_CASE("An empty group draws nothing and makes no image", "[renderer][overlay
     REQUIRE(test.messages->errors.empty());
 }
 
-TEST_CASE("With offscreen groups off, groups draw flat, filters are ignored, a mask's shape is not drawn and no "
-          "transient image is made",
-          "[renderer][overlay][groups]")
+namespace
 {
-    Fenrir::RendererConfig config = RendererTest::NullBackend();
-    config.offscreenGroups2D = false;
-    RendererTestApp test(config);
+    /** @brief The null backend with offscreen groups off. */
+    Fenrir::RendererConfig FlatGroupsConfig()
+    {
+        Fenrir::RendererConfig config = RendererTest::NullBackend();
+        config.offscreenGroups2D = false;
+        return config;
+    }
+
+    /** @brief A group over (0, 0)-(16, 16) holding one quad, blurred by 4. */
+    void AddBlurredGroup(Fenrir::DrawList2D& list)
+    {
+        list.BeginGroup({0.0f, 0.0f, 16.0f, 16.0f});
+        AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
+        Fenrir::EndGroup2D blur;
+        blur.filter = Fenrir::GroupFilter2D::Blur;
+        blur.radius = 4.0f;
+        list.EndGroup(blur);
+    }
+
+    /** @brief The NestedGroups list, then a blurred group, then a mask whose shape is one quad over one masked quad. */
+    Fenrir::DrawList2D GroupsFilterAndMask(RendererTestApp& test)
+    {
+        Fenrir::DrawList2D list = NestedGroups(test);
+        AddBlurredGroup(list);
+        list.BeginGroup({0.0f, 0.0f, 16.0f, 16.0f});
+        AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
+        Fenrir::EndGroup2D mask;
+        mask.mask = true;
+        list.EndGroup(mask);
+        AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
+        list.commands.emplace_back(Fenrir::EndMask2D{});
+        return list;
+    }
+} // namespace
+
+TEST_CASE("With offscreen groups off, groups draw flat on the overlay", "[renderer][overlay][groups]")
+{
+    RendererTestApp test(FlatGroupsConfig());
     test.AddCamera();
-    Fenrir::DrawList2D list = NestedGroups(test);
-    list.BeginGroup({0.0f, 0.0f, 16.0f, 16.0f});
-    AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
-    Fenrir::EndGroup2D blur;
-    blur.filter = Fenrir::GroupFilter2D::Blur;
-    blur.radius = 4.0f;
-    list.EndGroup(blur);
-    list.BeginGroup({0.0f, 0.0f, 16.0f, 16.0f});
-    AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
-    Fenrir::EndGroup2D mask;
-    mask.mask = true;
-    list.EndGroup(mask);
-    AddQuad(list, 0, {0.0f, 0.0f}, {16.0f, 16.0f});
-    list.commands.emplace_back(Fenrir::EndMask2D{});
+    test.app.GetResource<Fenrir::Overlay>().Submit(MainWindow, 0, GroupsFilterAndMask(test));
+
+    test.Frame();
+
+    {
+        INFO("a group made a pass of its own, though offscreen groups are off");
+        REQUIRE(RendererTest::Labelled(test.Passes(), "Group 2D").empty());
+    }
+    for (const RendererTest::RecordedDraw& draw : test.Draws("Overlay 2D"))
+    {
+        INFO("a draw on the overlay did not bind its own 2D command's group, as a flat draw does");
+        REQUIRE(test.GroupLabel(draw, 1) == "2D command");
+    }
+    {
+        INFO("a group was counted as drawn offscreen");
+        REQUIRE(test.renderer.Stats().groups2D == 0);
+    }
+    INFO("drawing the groups flat logged an error");
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("With offscreen groups off, a group's filter is ignored", "[renderer][overlay][groups]")
+{
+    RendererTestApp test(FlatGroupsConfig());
+    test.AddCamera();
+    Fenrir::DrawList2D list = List(test);
+    AddBlurredGroup(list);
     test.app.GetResource<Fenrir::Overlay>().Submit(MainWindow, 0, std::move(list));
 
     test.Frame();
 
-    REQUIRE(RendererTest::Labelled(test.Passes(), "Group 2D").empty());
-    INFO("the nested groups' five quads, the blurred group's quad and the masked quad draw on the overlay; the mask's "
-         "shape does not");
-    const std::vector<RendererTest::RecordedDraw> draws = test.Draws("Overlay 2D");
-    REQUIRE(draws.size() == 7);
-    for (const RendererTest::RecordedDraw& draw : draws)
     {
-        REQUIRE(test.GroupLabel(draw, 1) == "2D command");
+        INFO("the blurred group made a pass to filter it");
+        REQUIRE(RendererTest::Labelled(test.Passes(), "Group 2D").empty());
     }
-    REQUIRE(test.renderer.Stats().groups2D == 0);
-    REQUIRE(test.renderer.Stats().transientImageBytes2D == 0);
+    {
+        INFO("the blurred group's quad did not draw unfiltered on the overlay");
+        REQUIRE(test.Draws("Overlay 2D").size() == 1);
+    }
+    INFO("ignoring the filter logged an error");
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("With offscreen groups off, a mask's shape is not drawn", "[renderer][overlay][groups]")
+{
+    RendererTestApp test(FlatGroupsConfig());
+    test.AddCamera();
+    test.app.GetResource<Fenrir::Overlay>().Submit(MainWindow, 0, GroupsFilterAndMask(test));
+
+    test.Frame();
+
+    {
+        INFO("the nested groups' five quads, the blurred group's quad and the masked quad should draw on the overlay, "
+             "and the mask's shape should not");
+        REQUIRE(test.Draws("Overlay 2D").size() == 7);
+    }
+    INFO("dropping the mask's shape logged an error");
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("With offscreen groups off, no transient image is made", "[renderer][overlay][groups]")
+{
+    RendererTestApp test(FlatGroupsConfig());
+    test.AddCamera();
+    test.app.GetResource<Fenrir::Overlay>().Submit(MainWindow, 0, GroupsFilterAndMask(test));
+
+    test.Frame();
+
+    {
+        INFO("groups, a filter and a mask made transient images, though offscreen groups are off");
+        REQUIRE(test.renderer.Stats().transientImageBytes2D == 0);
+    }
+    INFO("drawing without transient images logged an error");
     REQUIRE(test.messages->errors.empty());
 }
 
@@ -569,12 +646,23 @@ TEST_CASE("A backdrop blur in an image 2D target copies from the image", "[rende
 
     test.Frame();
 
-    REQUIRE(Passes2D(test) == std::vector<std::string>{"Group 2D", "Image 2D", "Backdrop 2D", "Blur 2D", "Image 2D"});
+    {
+        INFO("the image pass up to the backdrop, the copy, the blur across and the image pass again did not run in "
+             "that order");
+        REQUIRE(Passes2D(test) ==
+                std::vector<std::string>{"Group 2D", "Image 2D", "Backdrop 2D", "Blur 2D", "Image 2D"});
+    }
     const std::vector<Fenrir::Graphics::CmdCopyTexture> copies = Copies(test);
-    REQUIRE(copies.size() == 1);
-    REQUIRE(copies[0].source == RendererProbe::ImageTexture(test.renderer, image));
-    INFO("the second image pass draws the backdrop back, then the group over it");
-    REQUIRE(test.Draws("Image 2D").size() == 3);
+    {
+        INFO("the backdrop was not one copy from the target image");
+        REQUIRE(copies.size() == 1);
+        REQUIRE(copies[0].source == RendererProbe::ImageTexture(test.renderer, image));
+    }
+    {
+        INFO("the second image pass draws the backdrop back, then the group over it");
+        REQUIRE(test.Draws("Image 2D").size() == 3);
+    }
+    INFO("the backdrop blur in an image 2D target logged an error");
     REQUIRE(test.messages->errors.empty());
 }
 

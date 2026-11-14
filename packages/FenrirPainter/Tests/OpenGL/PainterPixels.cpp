@@ -589,6 +589,7 @@ TEST_CASE("A world quad turned away from the camera is cut by its round clip, no
     const auto at = [&](float u, float v) {
         const Fenrir::Math::Vec3 point(world * Fenrir::Math::Vec4(u / 100.0f - 1.0f, 1.0f - v / 100.0f, 0.0f, 1.0f));
         const std::optional<Fenrir::Math::Vec2> screen = test.scene.renderer.WorldToScreenPoint(camera, point);
+        INFO("the list's point (" << u << ", " << v << ") on the quad is not on screen");
         REQUIRE(screen.has_value());
         const auto x = static_cast<std::uint32_t>(std::clamp(screen->x * pixelsPerUnit, 0.0f, image.width - 1.0f));
         const auto y = static_cast<std::uint32_t>(std::clamp(screen->y * pixelsPerUnit, 0.0f, image.height - 1.0f));

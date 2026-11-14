@@ -2,6 +2,7 @@
 // specificity and order, under inline style, with inheritance, custom properties and what a change restyles.
 #include <array>
 #include <memory>
+#include <string_view>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -29,28 +30,59 @@ namespace
     };
 } // namespace
 
-TEST_CASE("A stylesheet styles elements by type, and a class beats a type and an id a class", "[ui][cascade]")
+namespace
+{
+    // An id, a class and a type rule for width, written most specific first.
+    constexpr std::string_view specificitySheet = "#hero { width: 30px; }\n"
+                                                  ".card { width: 20px; }\n"
+                                                  "panel { width: 10px; }\n";
+} // namespace
+
+TEST_CASE("A stylesheet's type rule styles an element of that type", "[ui][cascade]")
 {
     SheetTest t;
     Fenrir::UIRoot& root = t.root;
-    REQUIRE(root.AddStylesheet("#hero { width: 30px; }\n"
-                               ".card { width: 20px; }\n"
-                               "panel { width: 10px; }\n",
-                               "specificity")
-                .IsValid());
+    {
+        INFO("the stylesheet did not attach");
+        REQUIRE(root.AddStylesheet(specificitySheet, "specificity").IsValid());
+    }
     const Fenrir::ElementId plain = root.Create(root.GetRootElement(), "panel");
+    t.test.Frame();
+
+    INFO("the type rule does not style a plain panel");
+    REQUIRE(WidthOf(root, plain) == 10.0f);
+}
+
+TEST_CASE("A class rule beats a type rule, though written before it", "[ui][cascade]")
+{
+    SheetTest t;
+    Fenrir::UIRoot& root = t.root;
+    {
+        INFO("the stylesheet did not attach");
+        REQUIRE(root.AddStylesheet(specificitySheet, "specificity").IsValid());
+    }
     const Fenrir::ElementId card = root.Create(root.GetRootElement(), "panel");
     root.AddClass(card, "card");
+    t.test.Frame();
+
+    INFO("the type rule, written after the class rule, won over it");
+    REQUIRE(WidthOf(root, card) == 20.0f);
+}
+
+TEST_CASE("An id rule beats a class rule and a type rule", "[ui][cascade]")
+{
+    SheetTest t;
+    Fenrir::UIRoot& root = t.root;
+    {
+        INFO("the stylesheet did not attach");
+        REQUIRE(root.AddStylesheet(specificitySheet, "specificity").IsValid());
+    }
     const Fenrir::ElementId hero = root.Create(root.GetRootElement(), "panel");
     root.AddClass(hero, "card");
     root.SetIdString(hero, "hero");
     t.test.Frame();
 
-    INFO("the type rule styles a plain panel");
-    REQUIRE(WidthOf(root, plain) == 10.0f);
-    INFO("the class rule wins over the type rule, though written before it");
-    REQUIRE(WidthOf(root, card) == 20.0f);
-    INFO("the id rule wins over both");
+    INFO("the class or type rule, written after the id rule, won over it");
     REQUIRE(WidthOf(root, hero) == 30.0f);
 }
 

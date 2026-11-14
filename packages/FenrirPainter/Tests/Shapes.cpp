@@ -124,7 +124,10 @@ TEST_CASE("A border carries its widths and colours per side", "[painter][shapes]
     painter.DrawBorder({0, 0, 40, 30}, Fenrir::CornerRadii::All(5), border);
 
     const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
-    REQUIRE(vertices.size() == 4);
+    {
+        INFO("the border is not drawn as one quad");
+        REQUIRE(vertices.size() == 4);
+    }
     INFO("a border of half size (20, 15) and radius 5, its widths top, right, bottom, left");
     REQUIRE(PainterTest::ShapeOf(vertices[0]) == Fenrir::ShapeKind::Border);
     REQUIRE(Near(vertices[0].halfSize, Vec2(20, 15)));

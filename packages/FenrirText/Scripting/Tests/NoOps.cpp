@@ -101,7 +101,8 @@ TEST_CASE("A paragraph destroyed or never made does nothing, returns zero and sa
     {
         for (int call = 0; call < 2; ++call)
         {
-            INFO("Paragraph " << paragraph.id << ", call " << call);
+            INFO("A native on paragraph " << paragraph.id << " (destroyed or never made), call " << call
+                                          << ", did something: it returned true or non-zero");
             REQUIRE_FALSE(harness.Call<bool>("TextNative.DestroyParagraph", &paragraph));
             REQUIRE_FALSE(harness.Call<bool>("TextNative.SetText", &paragraph, "hello"sv, "default"sv, &style));
             REQUIRE_FALSE(harness.Call<bool>("TextNative.AddRun", &paragraph, "hello"sv, "default"sv, &style));

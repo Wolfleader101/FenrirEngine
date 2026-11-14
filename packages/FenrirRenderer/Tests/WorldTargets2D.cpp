@@ -54,6 +54,7 @@ namespace
     {
         const std::vector<Fenrir::Graphics::BindingGroupEntry> entries =
             RendererProbe::Entries(test.Device(), draw.groups.at(0));
+        INFO("the world quad's draw does not bind its local-to-clip matrix as the one entry of its set 0 group");
         REQUIRE(entries.size() == 1);
         const std::vector<std::byte> bytes = RendererProbe::Bytes(test.Device(), entries[0].buffer);
         Fenrir::Math::Mat4 matrix(1.0f);

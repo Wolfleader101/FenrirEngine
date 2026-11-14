@@ -47,7 +47,10 @@ TEST_CASE("A rectangle clip is the command's scissor and the vertex's clip", "[p
     painter.ClipRect({10, 10, 50, 20});
     painter.DrawRect({0, 0, 100, 100}, Colour::White);
 
-    REQUIRE(list.commands.size() == 1);
+    {
+        INFO("the clipped rectangle is not one command");
+        REQUIRE(list.commands.size() == 1);
+    }
     INFO("the scissor is the clip in logical units, at root scale 2");
     REQUIRE(PainterTest::Draw(list, 0).scissor.has_value());
     REQUIRE(Near(*PainterTest::Draw(list, 0).scissor, Rect2D{20, 20, 100, 40}));
