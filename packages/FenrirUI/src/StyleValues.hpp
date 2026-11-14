@@ -26,6 +26,11 @@ namespace Fenrir::Detail
 
     /** @brief Whether `c` is CSS whitespace. */
     [[nodiscard]] bool IsSpace(char c);
+    /**
+     * @brief Whether `c` may be part of a CSS name (an identifier, a keyframes or custom property name): an ASCII
+     * letter, digit, `-` or `_`, or any byte of a character past ASCII.
+     */
+    [[nodiscard]] bool IsNameChar(char c);
     /** @brief `text` without the CSS whitespace at its ends. */
     [[nodiscard]] std::string_view Trim(std::string_view text);
     /** @brief `c` in lower case, for ASCII. */

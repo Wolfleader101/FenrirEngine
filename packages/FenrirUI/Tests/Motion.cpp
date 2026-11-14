@@ -179,6 +179,20 @@ TEST_CASE("An infinite keyframe animation starts each iteration again from its f
     REQUIRE(UITest::Near(t.Width(loop), 25.0f));
 }
 
+TEST_CASE("An animation-name outside ASCII names the @keyframes rule of that name", "[ui][motion]")
+{
+    MotionTest t;
+    // "élan", spelled in UTF-8 bytes: a CSS identifier may hold any character past ASCII.
+    t.root.AddStylesheet("@keyframes \xC3\xA9lan { from { width: 0px; } to { width: 100px; } }\n"
+                         ".loop { animation-name: \xC3\xA9lan; animation-duration: 1s; "
+                         "animation-timing-function: linear; }",
+                         "sheet");
+    const ElementId loop = t.Make("loop");
+    t.test.Frames(5, eighth);
+    INFO("half way through the animation the width shows 50, so the name found its rule");
+    REQUIRE(UITest::Near(t.Width(loop), 50.0f));
+}
+
 TEST_CASE("An alternate keyframe animation plays its odd iterations backwards", "[ui][motion]")
 {
     MotionTest t;

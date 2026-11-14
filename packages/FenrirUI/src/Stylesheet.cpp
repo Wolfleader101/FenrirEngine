@@ -14,14 +14,9 @@ namespace Fenrir
 {
     namespace
     {
+        using Detail::IsNameChar;
         using Detail::IsSpace;
         using Detail::Trim;
-
-        bool IsNameChar(char c)
-        {
-            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
-                   static_cast<unsigned char>(c) >= 0x80;
-        }
 
         /** @brief `text` cut at each top-level comma, keeping what is inside parentheses and strings whole. */
         std::vector<std::string_view> SplitCommas(std::string_view text)
