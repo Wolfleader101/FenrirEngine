@@ -27,6 +27,11 @@ namespace Fenrir
          * they fade as one. Off, each of its boxes is drawn at its own opacity instead, overlaps showing through.
          */
         bool offscreenGroups = true;
+        /**
+         * @brief Anti-alias every root's edges (FenrirPainter's PainterConfig::antiAliasing): shapes, borders,
+         * shadows' boxes, paths and clips fade over one pixel. Off, for a pixel-art UI, they cover a pixel or do not.
+         */
+        bool antiAliasing = true;
     };
 
     /**

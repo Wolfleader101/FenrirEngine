@@ -103,6 +103,37 @@ TEST_CASE("A rounded rectangle is solid inside, half covered on an edge through 
     REQUIRE(test.scene.messages->errors.empty());
 }
 
+TEST_CASE("With anti-aliasing off a rounded rectangle's edge reads back only fully covered or empty pixels",
+          "[painter][gl][anti-aliasing]")
+{
+    GlPainter test;
+    Fenrir::DrawList2D list;
+    Fenrir::PainterConfig config = test.Config();
+    config.antiAliasing = false;
+    Fenrir::Painter painter(list, config);
+    // Its left edge a quarter pixel into column 8: anti-aliased, that column would be three quarters covered.
+    painter.DrawRoundedRect({8.25f, 8.25f, 47.5f, 47.5f}, Fenrir::CornerRadii::All(12), Colour::Red);
+
+    const GlProbe::Image image = test.Draw(std::move(list));
+
+    INFO("every pixel opaque red or transparent, the curved corners' edges too");
+    for (std::uint32_t y = 0; y < Size; ++y)
+    {
+        for (std::uint32_t x = 0; x < Size; ++x)
+        {
+            const GlProbe::Pixel pixel = image.At(x, y);
+            INFO("pixel (" << x << ", " << y << ")");
+            REQUIRE((GlProbe::Near(pixel, {1.0f, 0.0f, 0.0f, 1.0f}, Tolerance) ||
+                     GlProbe::Near(pixel, Transparent, Tolerance)));
+        }
+    }
+    INFO("column 8, whose centre is inside, is covered; column 7 is not; nor is the rounded-off corner");
+    REQUIRE(GlProbe::Near(image.At(8, 32), {1.0f, 0.0f, 0.0f, 1.0f}, Tolerance));
+    REQUIRE(GlProbe::Near(image.At(7, 32), Transparent, Tolerance));
+    REQUIRE(GlProbe::Near(image.At(10, 10), Transparent, Tolerance));
+    REQUIRE(test.scene.messages->errors.empty());
+}
+
 TEST_CASE("A radial gradient blends from its centre out to its radius", "[painter][gl]")
 {
     GlPainter test;

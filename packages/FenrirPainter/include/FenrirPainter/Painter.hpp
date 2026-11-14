@@ -58,6 +58,13 @@ namespace Fenrir
          * without one such a paragraph draws nothing.
          */
         FontLibrary* fonts = nullptr;
+        /**
+         * @brief Anti-alias edges: a path's fill and a stroke get their one-pixel fringe, and the shapes and the
+         * per-pixel clip fade over one pixel. Off, for a pixel-art UI, a fill and a stroke are their solid triangles
+         * alone, and every vertex carries PainterFlags::HardEdge, so the shapes and the clip cover a pixel whose centre
+         * is inside and nothing else. A glyph's own coverage is its atlas's either way.
+         */
+        bool antiAliasing = true;
     };
 
     /** @brief A text shadow: the text drawn again under itself, moved by `offset` (UI units) and in `colour`. */
@@ -106,8 +113,8 @@ namespace Fenrir
     /**
      * @brief The painter (ADR-0060): a value over one 2D draw list that appends shapes, each one quad of PainterVertex
      * evaluated in the painter's shader, and paths, filled and stroked as triangles of the same vertex with a
-     * one-pixel anti-aliasing fringe, with a paint per call, under a save/restore stack of transform and clip. It keeps
-     * nothing between frames: make one over each frame's list.
+     * one-pixel anti-aliasing fringe (none with PainterConfig::antiAliasing off), with a paint per call, under a
+     * save/restore stack of transform and clip. It keeps nothing between frames: make one over each frame's list.
      *
      * Coordinates are UI units, multiplied by the root scale into the list's logical units. Consecutive draws with the
      * same texture slots and scissor extend one command; a texture in a slot another draw of the command filled, or a
@@ -155,7 +162,8 @@ namespace Fenrir
         /** @} */
 
         /** @name Draws
-         * Each appends one quad (a nine-slice image, nine), anti-aliased over one pixel by the shader.
+         * Each appends one quad (a nine-slice image, nine), anti-aliased over one pixel by the shader, or with
+         * PainterConfig::antiAliasing off cut hard at the pixel centres.
          * @{
          */
         /** @brief `rect` filled with `paint`. */
@@ -184,6 +192,7 @@ namespace Fenrir
          * A path is flattened under the current transform to the configured tolerance, split by winding into loops
          * that cross nowhere, its holes bridged, and ear-clipped into triangles of shape kind Triangle, with a fringe
          * ring a pixel wide round every loop: half a pixel inside the edge fully covered, half a pixel outside it not.
+         * With PainterConfig::antiAliasing off there is no fringe: the triangles end at the edge.
          * @{
          */
         /** @brief The region `path` covers by its fill rule, filled with `paint`. */
@@ -191,9 +200,9 @@ namespace Fenrir
         /**
          * @brief `path` stroked with `style` and `paint`: the fill of `path.StrokeOutline(style)` at the configured
          * tolerance. A hairline is one pixel wide, and so is a stroke thinner than a pixel, its colour faded to the
-         * width it has. A circle, or in a colour a rectangle or rounded rectangle, made by one
-         * helper and stroked with no dashes is one analytic ring or border quad instead, unless its sharp corners
-         * would not miter.
+         * width it has (with anti-aliasing off, not faded). A circle, or in a colour a rectangle or rounded rectangle,
+         * made by one helper and stroked with no dashes is one analytic ring or border quad instead, unless its sharp
+         * corners would not miter.
          */
         void StrokePath(const Path& path, const StrokeStyle& style, const Paint& paint);
         /** @} */
@@ -310,6 +319,8 @@ namespace Fenrir
         [[nodiscard]] bool SetPaint(PainterVertex& vertex, PaintSetup& setup, const Paint& paint) const;
         /** @brief Sets the quad's paint and emits it, unless the paint has nothing to draw. */
         void DrawShape(Quad quad, const Paint& paint);
+        /** @brief Sets the clip's fields and flag in `vertex`, and the hard-edge flag when anti-aliasing is off. */
+        void SetClipAndHardEdge(PainterVertex& vertex) const;
         /** @brief Appends the quad's four vertices and six indices, its paint set up by `paint`. */
         void Emit(const Quad& quad, const PaintSetup& paint);
         /** @brief The target's pixels per logical unit, one when the configuration gives none. */

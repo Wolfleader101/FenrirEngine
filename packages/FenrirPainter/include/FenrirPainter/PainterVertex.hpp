@@ -61,6 +61,12 @@ namespace Fenrir
         inline constexpr std::uint8_t Inset = 1u << 2u;
         /** @brief The quad is clipped per pixel by the clip fields. */
         inline constexpr std::uint8_t Clipped = 1u << 3u;
+        /**
+         * @brief Anti-aliasing is off (PainterConfig::antiAliasing): the shape's and the clip's edges cover a pixel
+         * whose centre is inside them fully and any other not at all, rather than fading over one pixel. A shadow's
+         * blur stays a blur; a glyph's coverage stays its atlas's.
+         */
+        inline constexpr std::uint8_t HardEdge = 1u << 4u;
     } // namespace PainterFlags
 
     /**

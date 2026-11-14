@@ -1,8 +1,9 @@
 #version 460
 // builtin:painter, the fragment stage (ADR-0060): each quad's shape evaluated as a signed distance in its own space and
-// anti-aliased over one pixel, a tessellated path's triangle covered as its vertices say, or a glyph covered as its atlas
-// page says, coloured by its paint and cut by its clip. Colours arrive sRGB-encoded and premultiplied (the painter's
-// vertex colours and stop texture both), and are worked in that form. The output is premultiplied
+// anti-aliased over one pixel (or, with the HardEdge flag, cut at the pixel centres), a tessellated path's triangle
+// covered as its vertices say, or a glyph covered as its atlas page says, coloured by its paint and cut by its clip.
+// Colours arrive sRGB-encoded and premultiplied (the painter's vertex colours and stop texture both), and are worked in
+// that form. The output is premultiplied
 // (PremultipliedAlpha): linear by default, the target encoding it, or, in the GAMMA variant (the Gamma blend space),
 // sRGB-encoded as it is, so blending happens in sRGB as a browser's does (ADR-0065).
 
@@ -66,6 +67,10 @@ const uint Repeat = 1u;
 const uint StopRow = 2u;
 const uint Inset = 4u;
 const uint Clipped = 8u;
+const uint HardEdge = 16u;
+
+// Anti-aliasing is off (the quad's HardEdge flag), so Coverage covers a pixel or does not.
+bool hardEdge = false;
 
 vec3 Decode(vec3 srgb)
 {
@@ -77,9 +82,14 @@ vec3 Encode(vec3 linear)
     return mix(linear * 12.92, 1.055 * pow(linear, vec3(1.0 / 2.4)) - 0.055, greaterThan(linear, vec3(0.0031308)));
 }
 
-// How much of a pixel `px` units wide lies inside, for a signed distance `d` (negative inside).
+// How much of a pixel `px` units wide lies inside, for a signed distance `d` (negative inside) from its centre; with
+// anti-aliasing off, all of it when the centre is inside and none otherwise.
 float Coverage(float d, float px)
 {
+    if (hardEdge)
+    {
+        return d < 0.0 ? 1.0 : 0.0;
+    }
     return clamp(0.5 - d / px, 0.0, 1.0);
 }
 
@@ -183,6 +193,7 @@ void main()
     uint kind = vKinds.x;
     uint paint = vKinds.y;
     uint flags = vKinds.z;
+    hardEdge = (flags & HardEdge) != 0u;
     // A pixel's size in the shape's and the clip's spaces, and the uv's derivatives, taken here, where every pixel of
     // the quad runs.
     float px = max(0.5 * (length(dFdx(p)) + length(dFdy(p))), 1e-6);

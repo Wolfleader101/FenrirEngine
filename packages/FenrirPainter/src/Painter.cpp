@@ -339,12 +339,7 @@ namespace Fenrir
         }
         const Transform2D toLogical = ToLogical();
         PainterVertex vertex = quad.vertex;
-        if (m_state.clip)
-        {
-            vertex.kinds[2] |= PainterFlags::Clipped;
-            vertex.clipHalfSize = m_state.clip->halfSize;
-            vertex.clipRadii = m_state.clip->radii;
-        }
+        SetClipAndHardEdge(vertex);
 
         const std::uint32_t first = ReserveDraw(paint, 4, 6);
         const std::array<Math::Vec2, 4> corners{quad.min, Math::Vec2(quad.max.x, quad.min.y), quad.max,
@@ -364,6 +359,20 @@ namespace Fenrir
         }
         m_list.AppendVertices(std::span<const PainterVertex>(vertices));
         AppendIndices(m_list, m_config.indexType, QuadIndices, first);
+    }
+
+    void Painter::SetClipAndHardEdge(PainterVertex& vertex) const
+    {
+        if (m_state.clip)
+        {
+            vertex.kinds[2] |= PainterFlags::Clipped;
+            vertex.clipHalfSize = m_state.clip->halfSize;
+            vertex.clipRadii = m_state.clip->radii;
+        }
+        if (!m_config.antiAliasing)
+        {
+            vertex.kinds[2] |= PainterFlags::HardEdge;
+        }
     }
 
     bool Painter::SetPaint(PainterVertex& vertex, PaintSetup& setup, const Paint& paint) const
@@ -651,7 +660,8 @@ namespace Fenrir
         if (pixelWidth < 1.0f)
         {
             // Thinner than a pixel, the fringes either side would fold over each other: it is stroked after the
-            // transform one pixel wide, its dashes scaled with the path, and in a colour faded to the width it has.
+            // transform one pixel wide, its dashes scaled with the path, and in a colour faded to the width it has;
+            // with anti-aliasing off it covers its pixels or not, so it is not faded.
             StrokeStyle hairline = style;
             hairline.width = 1.0f / PixelsPerUnit();
             const float scale = std::sqrt(area);
@@ -661,7 +671,8 @@ namespace Fenrir
             }
             hairline.dashOffset *= scale;
             Paint faded = paint;
-            if (Colour* colour = std::get_if<Colour>(&faded); colour != nullptr && pixelWidth > 0.0f)
+            if (Colour* colour = std::get_if<Colour>(&faded);
+                colour != nullptr && pixelWidth > 0.0f && m_config.antiAliasing)
             {
                 colour->a *= pixelWidth;
             }
@@ -798,7 +809,7 @@ namespace Fenrir
             return;
         }
         const PainterDetail::Tessellation tessellation =
-            PainterDetail::Tessellate(contours, rule, 1.0f / PixelsPerUnit());
+            PainterDetail::Tessellate(contours, rule, m_config.antiAliasing ? 1.0f / PixelsPerUnit() : 0.0f);
         if (tessellation.indices.empty())
         {
             return;
@@ -811,12 +822,7 @@ namespace Fenrir
         {
             return;
         }
-        if (m_state.clip)
-        {
-            vertex.kinds[2] |= PainterFlags::Clipped;
-            vertex.clipHalfSize = m_state.clip->halfSize;
-            vertex.clipRadii = m_state.clip->radii;
-        }
+        SetClipAndHardEdge(vertex);
         // The paint is placed in UI units, as a shape's is.
         const Transform2D toUi = ToLogical().Inverse();
         std::vector<PainterVertex> vertices(tessellation.positions.size(), vertex);

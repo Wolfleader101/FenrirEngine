@@ -1130,16 +1130,25 @@ namespace Fenrir::PainterDetail
         }
 
         // Every loop's vertices, each in two copies: half the fringe in and half out, moved along the corner's miter.
+        // With no fringe, each is one copy where it is.
+        const bool fringed = fringe > 0.0f;
+        const std::uint32_t copies = fringed ? 2 : 1;
         Tessellation result;
         std::vector<std::uint32_t> first(loops.size());
         for (std::size_t l = 0; l < loops.size(); ++l)
         {
             const std::vector<std::uint32_t>& loop = loops[l];
-            first[l] = static_cast<std::uint32_t>(result.positions.size() / 2);
+            first[l] = static_cast<std::uint32_t>(result.positions.size() / copies);
             const std::size_t n = loop.size();
             for (std::size_t i = 0; i < n; ++i)
             {
                 const Vec2 p = positions[loop[i]];
+                if (!fringed)
+                {
+                    result.positions.push_back(p);
+                    result.coverage.push_back(1.0f);
+                    continue;
+                }
                 const Vec2 n0 = Math::Normalized(Right(p - positions[loop[(i + n - 1) % n]]));
                 const Vec2 n1 = Math::Normalized(Right(positions[loop[(i + 1) % n]] - p));
                 Vec2 miter = (n0 + n1) * 0.5f;
@@ -1156,7 +1165,7 @@ namespace Fenrir::PainterDetail
         }
         // Loop vertex references, for the ear clipping, as the inner copies' indices.
         const auto reference = [&](std::size_t l, std::size_t i) { return first[l] + static_cast<std::uint32_t>(i); };
-        std::vector<Vec2> loopPositions(result.positions.size() / 2);
+        std::vector<Vec2> loopPositions(result.positions.size() / copies);
         for (std::size_t l = 0; l < loops.size(); ++l)
         {
             for (std::size_t i = 0; i < loops[l].size(); ++i)
@@ -1205,7 +1214,11 @@ namespace Fenrir::PainterDetail
 
         for (const std::uint32_t r : solid)
         {
-            result.indices.push_back(r * 2);
+            result.indices.push_back(r * copies);
+        }
+        if (!fringed)
+        {
+            return result;
         }
         for (std::size_t l = 0; l < loops.size(); ++l)
         {

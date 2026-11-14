@@ -11,7 +11,7 @@ set(renderer_src "${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirRenderer/src")
 
 add_executable(FenrirPainterTests PainterTest.hpp Shapes.cpp Paints.cpp ClipsAndBatching.cpp Pipelines.cpp Paths.cpp
                                   Strokes.cpp
-                                  Groups.cpp Text.cpp)
+                                  Groups.cpp Text.cpp AntiAliasing.cpp)
 # Text.cpp lays paragraphs out through FenrirText's test fixture, in HarfBuzz's test fonts where its submodule keeps
 # them.
 set(text_tests "${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirText/Tests")
