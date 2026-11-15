@@ -46,7 +46,7 @@ public static class RazorRuntime
 
         public IElementSeam Seam { get; } = seam;
 
-        public List<MountedRazorComponent> Entries { get; } = [];
+        public List<MountedRazorComponent> Mounted { get; } = [];
     }
 
     private static readonly List<RootGroup> groups = [];
@@ -55,8 +55,8 @@ public static class RazorRuntime
 
     /// <summary>
     /// Runs one frame of the Razor components (ADR-0068), from <c>Fenrir.UI.Build</c>: the Razor dispatcher calls it with
-    /// its context. First the Razor components of a destroyed root, or whose host is gone, are dropped (one liveness
-    /// check per root a frame). Then each Razor component builds, in mount order, when it was just mounted, when
+    /// its context. First the Razor components of a destroyed root are dropped (one liveness check per root a frame),
+    /// and one whose host someone else removed is dropped when it would next build. Then each Razor component builds, in mount order, when it was just mounted, when
     /// <c>StateHasChanged</c> asked, or when its <c>BuildHash</c> changed; at most once. One mounted while this runs
     /// builds next frame. One whose build or hook throws is logged with its type and turned off until the next reload.
     /// </summary>
@@ -64,7 +64,7 @@ public static class RazorRuntime
     {
         DropDeadRoots();
         foreach (RootGroup group in groups)
-            building.AddRange(group.Entries);
+            building.AddRange(group.Mounted);
         try
         {
             foreach (MountedRazorComponent entry in building)
@@ -90,7 +90,7 @@ public static class RazorRuntime
         // The latest first, so a Razor component mounted into another's elements goes before the element it is under.
         for (int g = groups.Count - 1; g >= 0; --g)
         {
-            List<MountedRazorComponent> entries = groups[g].Entries;
+            List<MountedRazorComponent> entries = groups[g].Mounted;
             for (int i = entries.Count - 1; i >= 0; --i)
             {
                 MountedRazorComponent entry = entries[i];
@@ -109,6 +109,7 @@ public static class RazorRuntime
     {
         foreach (RootGroup group in groups)
         {
+            // Only a production seam over this root: a test's fake for the default root is never handed out.
             if (group.Root.Value == root.Value && group.Seam is RootSeam)
                 return group.Seam;
         }
@@ -133,7 +134,7 @@ public static class RazorRuntime
         }
         var entry = new MountedRazorComponent(component, seam, host);
         component.Mounted = entry;
-        GroupOf(root, seam).Entries.Add(entry);
+        GroupOf(root, seam).Mounted.Add(entry);
         return entry;
     }
 
@@ -141,11 +142,7 @@ public static class RazorRuntime
     {
         if (!entry.IsMounted)
             return false;
-        foreach (RootGroup group in groups)
-        {
-            if (group.Entries.Remove(entry))
-                break;
-        }
+        Unregister(entry);
         Forget(entry);
         if (entry.Seam.IsAlive(entry.Host))
             entry.Seam.Remove(entry.Host, mode);
@@ -159,19 +156,26 @@ public static class RazorRuntime
         try
         {
             bool first = !entry.Built;
-            if (first)
-            {
-                entry.MountHookRan = true;
-                component.CallOnMount();
-                if (!entry.IsMounted)
-                    return;
-            }
-            else
+            if (!first)
             {
                 int hash = component.CallBuildHash();
                 bool changed = hash != entry.LastHash;
                 entry.LastHash = hash;
                 if (!changed && !entry.Dirty)
+                    return;
+            }
+            // A host someone else removed while its root lives is found here, when it would build.
+            if (!entry.Seam.IsAlive(entry.Host))
+            {
+                Unregister(entry);
+                Forget(entry);
+                return;
+            }
+            if (first)
+            {
+                entry.MountHookRan = true;
+                component.CallOnMount();
+                if (!entry.IsMounted)
                     return;
             }
             // Cleared before the build, so StateHasChanged from the build itself or OnBuilt asks for next frame's.
@@ -190,24 +194,36 @@ public static class RazorRuntime
         }
     }
 
-    /// <summary>Drops the Razor components of destroyed roots, and those whose host someone else removed.</summary>
+    /// <summary>
+    /// Drops the Razor components of destroyed roots: one liveness check of each root's oldest host a frame, and of every
+    /// host in that root only when that one is gone (its root destroyed, or that host removed by someone else).
+    /// </summary>
     private static void DropDeadRoots()
     {
         for (int g = groups.Count - 1; g >= 0; --g)
         {
             RootGroup group = groups[g];
-            if (group.Entries.Count != 0 && group.Seam.IsAlive(group.Entries[0].Host))
+            if (group.Mounted.Count != 0 && group.Seam.IsAlive(group.Mounted[0].Host))
                 continue;
-            for (int i = group.Entries.Count - 1; i >= 0; --i)
+            for (int i = group.Mounted.Count - 1; i >= 0; --i)
             {
-                MountedRazorComponent entry = group.Entries[i];
-                if (i != 0 && entry.Seam.IsAlive(entry.Host))
+                MountedRazorComponent mount = group.Mounted[i];
+                if (i != 0 && mount.Seam.IsAlive(mount.Host))
                     continue;
-                group.Entries.RemoveAt(i);
-                Forget(entry);
+                group.Mounted.RemoveAt(i);
+                Forget(mount);
             }
-            if (group.Entries.Count == 0)
+            if (group.Mounted.Count == 0)
                 groups.RemoveAt(g);
+        }
+    }
+
+    private static void Unregister(MountedRazorComponent mount)
+    {
+        foreach (RootGroup group in groups)
+        {
+            if (group.Mounted.Remove(mount))
+                return;
         }
     }
 

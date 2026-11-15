@@ -163,13 +163,13 @@ A rebuild finds each element again by its compile-time sequence number and its o
 
 - `OnMount()`, before the first build;
 - `OnBuilt(bool first)`, after each build;
-- `OnUnmount()`, when the component is forgotten after `OnMount` ran: unmounted, its root destroyed or its host removed, or released by a reload.
+- `OnUnmount()`, when the component is forgotten after `OnMount` ran: unmounted, released by a reload, in the frame after its root is destroyed, or when it would build after someone else removed its host.
 
 A component whose build or hook throws is logged with its type. It is not built again until the next reload, and its elements stay as they were.
 
 **Reload.** The shipped `RazorDispatcher.cs`, compiled into the script, runs the builds. Its `OnDestroy` calls `RazorRuntime.Release()`, which removes every mounted host at once with no outro and forgets every component and cache. The runtime then holds nothing of the released generation, and UI-local fields are lost. The new generation's `OnCreate` mounts again.
 
-**Tests.** `Fenrir.UI.Razor.Tests` (CTest `FenrirUIRazorTests`) builds real `.razor` files against a recording fake of the builder's element seam. It pins the native calls of a first build and of each kind of change: none for a rebuild that changes nothing, one `SetText` for a text change, a class token added and removed, a declaration changed and one reset, a keyed row appended, removed and reversed, an `@if` element made in place and removed, a folded block built once and moved, and generated labels. It also checks indices counting an outgoing row, the hooks, `BuildHash`, one build a frame, a throwing build, a destroyed root, the unrecognised-directive warning, and the markup parser. `FenrirUIScripting`'s Razor cases mount the fixture's components on a real root: `StateHasChanged` from `Update` shows the same frame, a changed `BuildHash` rebuilds once, `Unmount` leaves the host outgoing, a throwing build turns off only its component until a reload, and a reload removes, collects and mounts again.
+**Tests.** `Fenrir.UI.Razor.Tests` (CTest `FenrirUIRazorTests`) builds real `.razor` files against a recording fake of the builder's element seam. It pins the native calls of a first build and of each kind of change: none for a rebuild that changes nothing, one `SetText` for a text change, a class token added and removed, a declaration changed and one reset, a keyed row appended, removed and reversed, an `@if` element made in place and removed, a folded block built once and moved, and generated labels. It also checks indices counting an outgoing row, the hooks, `BuildHash`, one build a frame, a throwing build, a destroyed root and a removed host, the unrecognised-directive warning, and the markup parser. `FenrirUIScripting`'s Razor cases mount the fixture's components on a real root: `StateHasChanged` from `Update` shows the same frame, a changed `BuildHash` rebuilds once and an unchanged one never, `Unmount` leaves the host outgoing, a throwing build turns off only its component, a reload brings it back, and a reload removes, collects and mounts again.
 
 ## Tests
 

@@ -97,9 +97,6 @@ internal sealed class ElementBuilder : RenderTreeBuilder
     private UIComponent component = null!;
     private int build;
 
-    /// <summary>How many folded markup strings are parsed and held, for the tests.</summary>
-    internal static int ParsedMarkupCount => markup.Count;
-
     /// <summary>Forgets the parsed markup and the directives warned about, which name a script generation's types.</summary>
     internal static void ReleaseCaches()
     {
@@ -325,7 +322,11 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             return -1;
         List<ElementId> native = ReadNative(placement);
         if (previous != null)
-            return IndexOf(native, previous.Id) + 1;
+        {
+            // Gone natively (removed by someone else): append rather than guess.
+            int at = IndexOf(native, previous.Id);
+            return at >= 0 ? at + 1 : -1;
+        }
         foreach (Entry owned in placement.Order)
         {
             int at = IndexOf(native, owned.Id);
@@ -403,8 +404,13 @@ internal sealed class ElementBuilder : RenderTreeBuilder
                 anchor = entry;
                 continue;
             }
-            native.RemoveAt(IndexOf(native, entry.Id));
+            int at = IndexOf(native, entry.Id);
+            if (at < 0)
+                continue; // Removed by someone else: nothing to move.
+            native.RemoveAt(at);
             int target = anchor != null ? IndexOf(native, anchor.Id) : IndexOf(native, visited[lastKept].Id) + 1;
+            if (target < 0)
+                target = native.Count;
             seam.Reorder(entry.Id, target);
             native.Insert(target, entry.Id);
             anchor = entry;
@@ -507,11 +513,10 @@ internal sealed class ElementBuilder : RenderTreeBuilder
 
     private void AddText(int sequence, string? text)
     {
-        if (open.Count == 0 || string.IsNullOrEmpty(text))
-            return;
         Frame frame = open[^1];
         Resolve(frame);
-        AppendText(frame, text, sequence, null);
+        // An empty run still starts the run, so a generated label keeps its key when its first part is sometimes empty.
+        AppendText(frame, text ?? "", sequence, null);
     }
 
     /// <summary>

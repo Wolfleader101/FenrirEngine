@@ -215,7 +215,7 @@ TEST_CASE("StateHasChanged from an Update system rebuilds the same frame", "[ui]
     RebuildScriptingApp test;
     test.Frame();
     {
-        INFO("The first frame built the Ticker once");
+        INFO("The first frame did not build the Ticker exactly once");
         REQUIRE(test.TickerText() == "Value: 0");
         REQUIRE(test.Builds() == 1);
     }
@@ -223,30 +223,36 @@ TEST_CASE("StateHasChanged from an Update system rebuilds the same frame", "[ui]
     test.Call<void>(RebuildProbeType, "ShowFromUpdate", std::int32_t{5});
     test.Frame();
 
-    INFO("The Update system's StateHasChanged was built in that frame's build stage");
+    INFO("The Update system's StateHasChanged was not built in that frame's build stage");
     REQUIRE(test.TickerText() == "Value: 5");
     REQUIRE(test.Builds() == 2);
 }
 
-TEST_CASE("A changed BuildHash rebuilds a Razor component and an unchanged one does not", "[ui][scripting][razor]")
+TEST_CASE("A changed BuildHash rebuilds a Razor component once", "[ui][scripting][razor]")
 {
     RebuildScriptingApp test;
     test.Frame();
-    test.Frame();
-    {
-        INFO("An unchanged BuildHash rebuilt the Ticker");
-        REQUIRE(test.Builds() == 1);
-    }
 
     test.Call<void>(RebuildProbeType, "SetHash", std::int32_t{42});
     test.Frame();
     {
-        INFO("The changed BuildHash did not rebuild the Ticker once");
+        INFO("The changed BuildHash did not rebuild the Ticker");
         REQUIRE(test.Builds() == 2);
     }
     test.Frame();
-    INFO("The same BuildHash again rebuilt it");
+    INFO("The same BuildHash a second frame rebuilt it again");
     REQUIRE(test.Builds() == 2);
+}
+
+TEST_CASE("An unchanged BuildHash does not rebuild a Razor component", "[ui][scripting][razor]")
+{
+    RebuildScriptingApp test;
+    test.Frame();
+    test.Frame();
+    test.Frame();
+
+    INFO("An unchanged BuildHash rebuilt the Ticker");
+    REQUIRE(test.Builds() == 1);
 }
 
 TEST_CASE("Unmount removes a Razor component's host with its outro", "[ui][scripting][razor]")
@@ -260,26 +266,21 @@ TEST_CASE("Unmount removes a Razor component's host with its outro", "[ui][scrip
         INFO("Unmount reported nothing mounted");
         REQUIRE(test.Call<bool>(RebuildProbeType, "UnmountTicker"));
     }
-    INFO("The host is outgoing, not removed at once");
+    INFO("The host was removed at once, or without its outro");
     REQUIRE(root.IsAlive(host));
     REQUIRE(root.HasPseudoClass(host, PseudoClass::Outro));
 }
 
-TEST_CASE("A throwing build turns off only its Razor component, and a reload brings it back", "[ui][scripting][razor]")
+TEST_CASE("A throwing build turns off only its Razor component", "[ui][scripting][razor]")
 {
     RebuildScriptingApp test;
     test.Frame();
-    {
-        INFO("The first frame built both Razor components");
-        REQUIRE(test.FragileText() == "Fragile: 0");
-        REQUIRE(test.TickerText() == "Value: 0");
-    }
 
     test.Call<void>(RebuildProbeType, "RebuildFragile", std::int32_t{1}, std::int32_t{1});
     test.Call<void>(RebuildProbeType, "ShowFromUpdate", std::int32_t{1});
     test.Frame();
     {
-        INFO("The Fragile's elements stay as they were; the Ticker still built");
+        INFO("The throwing build changed the Fragile's elements, or stopped the Ticker");
         REQUIRE(test.FragileText() == "Fragile: 0");
         REQUIRE(test.TickerText() == "Value: 1");
     }
@@ -287,20 +288,25 @@ TEST_CASE("A throwing build turns off only its Razor component, and a reload bri
     test.Call<void>(RebuildProbeType, "RebuildFragile", std::int32_t{2}, std::int32_t{0});
     test.Call<void>(RebuildProbeType, "ShowFromUpdate", std::int32_t{2});
     test.Frame();
-    {
-        INFO("The turned-off Fragile built again before a reload, or the Ticker stopped");
-        REQUIRE(test.FragileText() == "Fragile: 0");
-        REQUIRE(test.TickerText() == "Value: 2");
-    }
+    INFO("The turned-off Fragile built again before a reload, or the Ticker stopped");
+    REQUIRE(test.FragileText() == "Fragile: 0");
+    REQUIRE(test.TickerText() == "Value: 2");
+}
 
+TEST_CASE("A script reload brings back a Razor component a throw turned off", "[ui][scripting][razor]")
+{
+    RebuildScriptingApp test;
+    test.Frame();
+    test.Call<void>(RebuildProbeType, "RebuildFragile", std::int32_t{1}, std::int32_t{1});
+    test.Frame();
     {
         INFO("The reload did not succeed");
         REQUIRE(test.scripting.Reload().Succeeded());
     }
     test.Frame();
-    INFO("The new generation's Fragile builds");
-    REQUIRE(test.FragileText() == "Fragile: 0");
+
     test.Call<void>(RebuildProbeType, "RebuildFragile", std::int32_t{3}, std::int32_t{0});
     test.Frame();
+    INFO("The new generation's Fragile did not rebuild");
     REQUIRE(test.FragileText() == "Fragile: 3");
 }

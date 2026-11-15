@@ -48,8 +48,6 @@ public static class RebuildProbe
 
     public static ulong TickerHost() => Ids.Pack(Ticker.Host);
 
-    public static ulong FragileHost() => Ids.Pack(Fragile.Host);
-
     public static bool UnmountTicker() => Ticker.Unmount();
 
     // Sets the Fragile's value and asks for a rebuild, which throws when told to.

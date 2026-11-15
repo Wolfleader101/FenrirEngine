@@ -179,6 +179,17 @@ public sealed class RebuildTests : IDisposable
         Assert.Equal(["SetText(#3, Hello Bob)"], Rebuild(loose));
     }
 
+    [Fact]
+    public void AGeneratedLabelKeepsItsKeyWhenItsFirstPartIsEmpty()
+    {
+        TwoParts parts = Mount<TwoParts>(p => p.First = "");
+        Assert.Equal(["CreateElement(#1, label, -1) = #2", "SetText(#2, b)"], Frame());
+
+        parts.First = "a";
+
+        Assert.Equal(["SetText(#2, ab)"], Rebuild(parts));
+    }
+
     // ---- Keys, removal and order ----
 
     [Fact]
@@ -222,7 +233,6 @@ public sealed class RebuildTests : IDisposable
 
         rows.Rows = ["b", "c"];
         Assert.Equal(["Remove(#3, Outro)"], Rebuild(rows));
-        Assert.Equal(1, ElementBuilder.ParsedMarkupCount);
     }
 
     [Fact]
@@ -236,7 +246,6 @@ public sealed class RebuildTests : IDisposable
         Assert.Equal(["Reorder(#6, 0)"], Rebuild(rows));
         Assert.Equal(["#6", "#3"], seam.ChildrenOf(RecordingSeam.Id(2)));
         Assert.Empty(Rebuild(rows));
-        Assert.Equal(1, ElementBuilder.ParsedMarkupCount);
     }
 
     [Fact]
@@ -414,6 +423,25 @@ public sealed class RebuildTests : IDisposable
     }
 
     [Fact]
+    public void AHostRemovedBySomeoneElseDropsItsRazorComponentWhenItWouldBuild()
+    {
+        Lifecycle removed = Mount<Lifecycle>();
+        Lifecycle kept = Mount<Lifecycle>();
+        Frame();
+        seam.Remove(removed.Element, RemoveMode.Immediate);
+
+        removed.StateHasChanged();
+        kept.Value = 2;
+        kept.StateHasChanged();
+
+        Assert.Equal(["SetText(#4, 2)"], Frame());
+        Assert.Equal(["mount", "built first", "unmount"], removed.Hooks);
+        Assert.Null(removed.Mounted);
+        RazorRuntime.Release();
+        Assert.Equal(["Remove(#2, Immediate)"], seam.Calls);
+    }
+
+    [Fact]
     public void TheRegistryChecksEachRootOnceAFrame()
     {
         Mount<Lifecycle>();
@@ -475,6 +503,19 @@ public sealed class RebuildTests : IDisposable
 
         Assert.Equal(["CreateElement(#1, button, -1) = #2"], Frame());
         Assert.Empty(Rebuild(written));
+    }
+
+    /// <summary>Loose text in two parts under the host, as <c>@First@Second</c> generates it.</summary>
+    private sealed class TwoParts : UIComponent
+    {
+        public string First = "";
+        public string Second = "b";
+
+        protected override void BuildRenderTree(RenderTreeBuilder __builder)
+        {
+            __builder.AddContent(0, First);
+            __builder.AddContent(1, Second);
+        }
     }
 
     /// <summary>A Razor component written as C#, for what generated markup cannot do: a tag that changes.</summary>

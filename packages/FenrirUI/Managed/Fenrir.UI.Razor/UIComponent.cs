@@ -60,13 +60,14 @@ public abstract class UIComponent : ComponentBase
     }
 
     /// <summary>
-    /// Runs once when it is forgotten after <see cref="OnMount"/> ran: on <c>Unmount</c>, when its root or host went,
-    /// and when a script reload releases it.
+    /// Runs once when it is forgotten after <see cref="OnMount"/> ran: on <c>Unmount</c>, in the frame after its root is
+    /// destroyed, when it would build after someone else removed its host, and when a script reload releases it.
     /// </summary>
     protected virtual void OnUnmount()
     {
     }
 
+    // The runtime's ways into the protected members, which the builder and RazorRuntime call.
     internal void BuildInto(RenderTreeBuilder builder) => BuildRenderTree(builder);
 
     internal int CallBuildHash() => BuildHash();

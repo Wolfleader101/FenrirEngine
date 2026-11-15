@@ -11,6 +11,7 @@ internal static class RazorDiagnostics
     /// <summary>Takes each message in place of the log, with whether it is an error; null logs.</summary>
     internal static Action<bool, string>? Sink { get; set; }
 
+    /// <summary>Logs a warning, or hands it to the sink.</summary>
     public static void Warn(string message)
     {
         if (Sink != null)
@@ -19,6 +20,7 @@ internal static class RazorDiagnostics
             Log.Warn(message);
     }
 
+    /// <summary>Logs an error, or hands it to the sink.</summary>
     public static void Error(string message)
     {
         if (Sink != null)
