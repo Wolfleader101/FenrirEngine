@@ -15,6 +15,6 @@ public static class UIRootRazor
     public static ComponentRef<T> Mount<T>(this UIRoot root, ElementId parent, int index = -1, Action<T>? init = null)
         where T : UIComponent, new()
     {
-        return new ComponentRef<T>(RazorRuntime.Mount(root, new RootSeam(root), parent, index, init));
+        return new ComponentRef<T>(RazorRuntime.Mount(root, RazorRuntime.SeamFor(root), parent, index, init));
     }
 }

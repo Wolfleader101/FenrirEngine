@@ -1,0 +1,11 @@
+@* A Razor component whose text, class tokens and style declarations come from fields (RebuildTests). *@
+<panel class="row @(Active ? "active" : "")" style="width: @(Width)px; @(Tall ? "height: 40px" : "")" id="row">
+    <label>Count: @Count</label>
+</panel>
+
+@code {
+    public bool Active;
+    public int Width = 100;
+    public bool Tall = true;
+    public int Count;
+}

@@ -7,6 +7,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 #include "FenrirInput/InputTypes.hpp"
@@ -50,6 +51,47 @@ namespace
         ElementId Host()
         {
             return Unpacked(Call<std::uint64_t>(RazorProbeType, "Host"));
+        }
+    };
+
+    constexpr const char* RebuildProbeType = "UIScriptFixture.RebuildProbe";
+    // The overlay layer the fixture's RebuildMounter finds its root at (RazorRebuilds.cs).
+    constexpr std::int32_t RebuildLayer = 8;
+
+    /** @brief The UI packages and a root on window 1's overlay at RebuildLayer, made before scripting loads. */
+    struct RebuildPackages : UIPackages
+    {
+        explicit RebuildPackages(App& app) : UIPackages(app)
+        {
+            UIRootConfig config;
+            config.window = WindowId{1};
+            config.layer = RebuildLayer;
+            root = &Roots().CreateRoot(config);
+        }
+
+        UIRoot* root = nullptr;
+    };
+
+    /** @brief The fixture with a Ticker and a Fragile mounted from OnCreate (RebuildMounter). */
+    struct RebuildScriptingApp : ExtensionTestApp<RebuildPackages>
+    {
+        RebuildScriptingApp() : ExtensionTestApp(FixtureFromEnvironment("FENRIR_TEST_UI_FIXTURE"), UIExtensions())
+        {
+        }
+
+        int Builds()
+        {
+            return Call<std::int32_t>(RebuildProbeType, "Builds");
+        }
+
+        std::string TickerText()
+        {
+            return std::string(root->GetText(root->FindById("ticker")));
+        }
+
+        std::string FragileText()
+        {
+            return std::string(root->GetText(root->FindById("fragile")));
         }
     };
 
@@ -166,4 +208,99 @@ TEST_CASE("After a script reload the new generation mounts its Razor component a
     REQUIRE(root.IsAlive(board));
     REQUIRE(root.GetParent(board) == newHost);
     REQUIRE(root.GetText(root.FindById("score")) == "Score: 42");
+}
+
+TEST_CASE("StateHasChanged from an Update system rebuilds the same frame", "[ui][scripting][razor]")
+{
+    RebuildScriptingApp test;
+    test.Frame();
+    {
+        INFO("The first frame built the Ticker once");
+        REQUIRE(test.TickerText() == "Value: 0");
+        REQUIRE(test.Builds() == 1);
+    }
+
+    test.Call<void>(RebuildProbeType, "ShowFromUpdate", std::int32_t{5});
+    test.Frame();
+
+    INFO("The Update system's StateHasChanged was built in that frame's build stage");
+    REQUIRE(test.TickerText() == "Value: 5");
+    REQUIRE(test.Builds() == 2);
+}
+
+TEST_CASE("A changed BuildHash rebuilds a Razor component and an unchanged one does not", "[ui][scripting][razor]")
+{
+    RebuildScriptingApp test;
+    test.Frame();
+    test.Frame();
+    {
+        INFO("An unchanged BuildHash rebuilt the Ticker");
+        REQUIRE(test.Builds() == 1);
+    }
+
+    test.Call<void>(RebuildProbeType, "SetHash", std::int32_t{42});
+    test.Frame();
+    {
+        INFO("The changed BuildHash did not rebuild the Ticker once");
+        REQUIRE(test.Builds() == 2);
+    }
+    test.Frame();
+    INFO("The same BuildHash again rebuilt it");
+    REQUIRE(test.Builds() == 2);
+}
+
+TEST_CASE("Unmount removes a Razor component's host with its outro", "[ui][scripting][razor]")
+{
+    RebuildScriptingApp test;
+    UIRoot& root = *test.root;
+    test.Frame();
+    const ElementId host = Unpacked(test.Call<std::uint64_t>(RebuildProbeType, "TickerHost"));
+
+    {
+        INFO("Unmount reported nothing mounted");
+        REQUIRE(test.Call<bool>(RebuildProbeType, "UnmountTicker"));
+    }
+    INFO("The host is outgoing, not removed at once");
+    REQUIRE(root.IsAlive(host));
+    REQUIRE(root.HasPseudoClass(host, PseudoClass::Outro));
+}
+
+TEST_CASE("A throwing build turns off only its Razor component, and a reload brings it back", "[ui][scripting][razor]")
+{
+    RebuildScriptingApp test;
+    test.Frame();
+    {
+        INFO("The first frame built both Razor components");
+        REQUIRE(test.FragileText() == "Fragile: 0");
+        REQUIRE(test.TickerText() == "Value: 0");
+    }
+
+    test.Call<void>(RebuildProbeType, "RebuildFragile", std::int32_t{1}, std::int32_t{1});
+    test.Call<void>(RebuildProbeType, "ShowFromUpdate", std::int32_t{1});
+    test.Frame();
+    {
+        INFO("The Fragile's elements stay as they were; the Ticker still built");
+        REQUIRE(test.FragileText() == "Fragile: 0");
+        REQUIRE(test.TickerText() == "Value: 1");
+    }
+
+    test.Call<void>(RebuildProbeType, "RebuildFragile", std::int32_t{2}, std::int32_t{0});
+    test.Call<void>(RebuildProbeType, "ShowFromUpdate", std::int32_t{2});
+    test.Frame();
+    {
+        INFO("The turned-off Fragile built again before a reload, or the Ticker stopped");
+        REQUIRE(test.FragileText() == "Fragile: 0");
+        REQUIRE(test.TickerText() == "Value: 2");
+    }
+
+    {
+        INFO("The reload did not succeed");
+        REQUIRE(test.scripting.Reload().Succeeded());
+    }
+    test.Frame();
+    INFO("The new generation's Fragile builds");
+    REQUIRE(test.FragileText() == "Fragile: 0");
+    test.Call<void>(RebuildProbeType, "RebuildFragile", std::int32_t{3}, std::int32_t{0});
+    test.Frame();
+    REQUIRE(test.FragileText() == "Fragile: 3");
 }
