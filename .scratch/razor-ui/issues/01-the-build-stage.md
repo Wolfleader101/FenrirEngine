@@ -10,9 +10,9 @@
 
 **Touches:** `packages/FenrirUI/include/FenrirUI/UI.hpp`, `packages/FenrirUI/src/`, `packages/FenrirUI/Tests/`, `packages/FenrirUI/Scripting/`, `packages/FenrirUI/Managed/Fenrir.UI/Generated/`, `packages/FenrirUI/README.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] C++ test: an element created in a build stage's work has a laid-out rectangle and appears in the root's captured draw list on the same frame. Two works run in order. A removed work stops running.
-- [ ] Scripting test: a `[StageSystem(UIStages.Build)]` creates an element under a root, and a paint stage system reads its rectangle in the same frame.
-- [ ] Without the UI installed, a build stage system never runs and the script still loads.
-- [ ] Everything passes under the msvc-x64-debug preset. `check_tickets.py`, clang-format and the binding regeneration check pass.
+- [x] C++ test: an element created in a build stage's work has a laid-out rectangle and appears in the root's captured draw list on the same frame. Two works run in order. A removed work stops running.
+- [x] Scripting test: a `[StageSystem(UIStages.Build)]` creates an element under a root, and a paint stage system reads its rectangle in the same frame.
+- [x] Without the UI installed, a build stage system never runs and the script still loads.
+- [x] Everything passes under the msvc-x64-debug preset. `check_tickets.py`, clang-format and the binding regeneration check pass.

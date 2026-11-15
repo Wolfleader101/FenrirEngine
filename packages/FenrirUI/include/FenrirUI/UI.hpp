@@ -68,6 +68,14 @@ namespace Fenrir
         UISettings settings;
     };
 
+    /** @brief Names work in the build stage (UIRoots::AddBuildStage), for RemoveBuildStage. Zero names none. */
+    struct BuildStageHandle
+    {
+        std::uint64_t id = 0;
+
+        friend constexpr bool operator==(BuildStageHandle, BuildStageHandle) noexcept = default;
+    };
+
     /** @brief Names work in the paint stage (UIRoots::AddPaintStage), for RemovePaintStage. Zero names none. */
     struct PaintStageHandle
     {
@@ -75,6 +83,17 @@ namespace Fenrir
 
         friend constexpr bool operator==(PaintStageHandle, PaintStageHandle) noexcept = default;
     };
+
+    namespace Detail
+    {
+        /** @brief Work in UIRoots' build or paint stage, named by its handle's id. */
+        struct StageWork
+        {
+            std::uint64_t id = 0;
+            std::int32_t order = 0;
+            std::function<void()> work;
+        };
+    } // namespace Detail
 
     /**
      * @brief The UI's app resource, which UI::Install adds: it makes and destroys the UI roots, which several may share
@@ -138,6 +157,18 @@ namespace Fenrir
         [[nodiscard]] std::span<const UIFontFace> GetFontFaces() const noexcept;
 
         /**
+         * @brief Adds `work` to the build stage (ADR-0039, ADR-0068): each frame, as the first work of the UI's frame,
+         * before any root advances its transitions or resolves its styles, the stage runs its work, lowest order first
+         * and equal orders in the order added. Work makes, changes and removes elements, and what it does is styled,
+         * laid out and painted the same frame. C# systems join it as the extension stage `Fenrir.UI.Build`; the Razor
+         * dispatcher builds its components there. It runs whether or not any root exists.
+         * @return The handle RemoveBuildStage takes.
+         */
+        BuildStageHandle AddBuildStage(std::int32_t order, std::function<void()> work);
+        /** @brief Takes work out of the build stage. False when it names none. */
+        bool RemoveBuildStage(BuildStageHandle handle);
+
+        /**
          * @brief Adds `work` to the paint stage (ADR-0039, ADR-0061): each frame, once every root has laid out and
          * before any paints, the stage runs its work, lowest order first and equal orders in the order added. Work
          * paints into elements through UIRoot::PaintInto. C# systems join it as the extension stage `Fenrir.UI.Paint`.
@@ -148,8 +179,9 @@ namespace Fenrir
         bool RemovePaintStage(PaintStageHandle handle);
 
         /**
-         * @brief Runs every root's frame, in drawing order; the PostUpdate system calls it. Each root lays out, then
-         * the paint stage runs, then each root paints and submits (UIRoot::Frame's two halves).
+         * @brief Runs every root's frame, in drawing order; the PostUpdate system calls it. The build stage runs, then
+         * each root lays out, then the paint stage runs, then each root paints and submits (UIRoot::Frame's two
+         * halves).
          */
         void Frame();
 
@@ -163,13 +195,6 @@ namespace Fenrir
             std::uint64_t order = 0;
         };
 
-        struct PaintStageEntry
-        {
-            PaintStageHandle handle;
-            std::int32_t order = 0;
-            std::function<void()> work;
-        };
-
         App& m_app;
         AssetHandle<Shader> m_painterShader;
         std::vector<RootEntry> m_roots;
@@ -179,8 +204,11 @@ namespace Fenrir
         std::uint32_t m_nextId = 1;
         std::unordered_map<std::string, ElementFactory> m_factories;
         std::vector<UIFontFace> m_fontFaces;
+        /** @brief The build stage's work, by order, equal orders in the order added. */
+        std::vector<Detail::StageWork> m_buildStage;
+        std::uint64_t m_nextBuildStage = 1;
         /** @brief The paint stage's work, by order, equal orders in the order added. */
-        std::vector<PaintStageEntry> m_paintStage;
+        std::vector<Detail::StageWork> m_paintStage;
         std::uint64_t m_nextPaintStage = 1;
     };
 
