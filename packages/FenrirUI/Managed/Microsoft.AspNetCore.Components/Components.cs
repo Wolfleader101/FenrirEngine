@@ -24,3 +24,40 @@ public abstract class ComponentBase : IComponent
     {
     }
 }
+
+/// <summary>
+/// Marks a Razor component's property as a parameter: a parent's markup sets it by name as an attribute of the
+/// component's tag (<c>&lt;Badge Text="@title" /&gt;</c>). A property of type <see cref="RenderFragment"/> named
+/// <c>ChildContent</c> takes the markup between the tag's start and end.
+/// </summary>
+[AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
+public sealed class ParameterAttribute : Attribute
+{
+}
+
+/// <summary>A piece of markup a Razor component was handed, built where the component places it.</summary>
+public delegate void RenderFragment(RenderTreeBuilder builder);
+
+/// <summary>A piece of markup made from a value, as a templated parameter takes it.</summary>
+public delegate RenderFragment RenderFragment<TValue>(TValue value);
+
+/// <summary>
+/// What <c>@ref</c> on an element captures: the engine's element, opaque here. <c>Fenrir.UI.Razor</c>'s
+/// <c>UIComponent.ElementOf</c> turns it into an <c>ElementId</c>. The default names no element, as the capture is
+/// handed when the element is removed.
+/// </summary>
+public readonly struct ElementReference
+{
+    /// <summary>A reference to the engine's element <paramref name="value"/>.</summary>
+    public ElementReference(ulong value)
+    {
+        Value = value;
+        HasValue = true;
+    }
+
+    /// <summary>The engine's element, as the engine wrote it; meaningless when <see cref="HasValue"/> is false.</summary>
+    public ulong Value { get; }
+
+    /// <summary>Whether it names an element.</summary>
+    public bool HasValue { get; }
+}

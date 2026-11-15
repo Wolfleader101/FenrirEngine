@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Fenrir.Scripting;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
@@ -23,24 +24,45 @@ public abstract class UIComponent : ComponentBase
 
     /// <summary>
     /// Its root element: the host panel its mount made, which carries its readable class and holds the elements its
-    /// markup builds.
+    /// markup builds. A child Razor component has no host: it is the element the parent placed it in.
     /// </summary>
     public ElementId Element { get; internal set; }
 
     /// <summary>The frame's system context while it builds, for reading game state from the ECS.</summary>
     public SystemContext Context { get; internal set; }
 
+    /// <summary>The mount it builds in: its own, or for a child Razor component its parent's.</summary>
     internal MountedRazorComponent? Mounted { get; set; }
+
+    /// <summary>What the builder keeps for it as a child Razor component; null for a mounted one.</summary>
+    internal ChildComponent? ChildRecord { get; set; }
 
     /// <summary>
     /// Asks for a rebuild in this frame's <c>Fenrir.UI.Build</c>, or the next one's when it is called from that stage,
-    /// its own build among it.
+    /// its own build among it. On a child Razor component, its parents' markup runs again to reach it, but only it
+    /// builds whatever its parameters.
     /// </summary>
     public void StateHasChanged()
     {
-        if (Mounted != null)
-            Mounted.Dirty = true;
+        if (Mounted == null)
+            return;
+        Mounted.Dirty = true;
+        ChildRecord?.MarkDirty();
     }
+
+    /// <summary>
+    /// The element an <c>@ref</c> on an element captured (<c>&lt;panel @ref="box"&gt;</c> with an
+    /// <c>ElementReference box</c> field); none before the element is made and after it is removed.
+    /// </summary>
+    protected static ElementId ElementOf(ElementReference reference)
+    {
+        if (!reference.HasValue)
+            return new ElementId();
+        ulong value = reference.Value;
+        return Unsafe.As<ulong, ElementId>(ref value);
+    }
+
+    internal static ElementReference ReferenceTo(ElementId element) => new(Unsafe.As<ElementId, ulong>(ref element));
 
     /// <summary>
     /// A hash of what it shows, checked every frame before the builds: when it differs from the frame before's, it
@@ -54,6 +76,15 @@ public abstract class UIComponent : ComponentBase
     {
     }
 
+    /// <summary>
+    /// On a child Razor component, runs after its parent set its parameters and before the build they cause: before the
+    /// first build (after <see cref="OnMount"/>), and before each rebuild where a parameter changed by <c>Equals</c> (a
+    /// <c>RenderFragment</c> always counts as changed).
+    /// </summary>
+    protected virtual void OnParametersSet()
+    {
+    }
+
     /// <summary>Runs after each build; <paramref name="first"/> is true after the first.</summary>
     protected virtual void OnBuilt(bool first)
     {
@@ -61,7 +92,8 @@ public abstract class UIComponent : ComponentBase
 
     /// <summary>
     /// Runs once when it is forgotten after <see cref="OnMount"/> ran: on <c>Unmount</c>, in the frame after its root is
-    /// destroyed, when it would build after someone else removed its host, and when a script reload releases it.
+    /// destroyed, when it would build after someone else removed its host, and when a script reload releases it. A
+    /// child Razor component is also forgotten when its parent's markup no longer places it, and before its parent.
     /// </summary>
     protected virtual void OnUnmount()
     {
@@ -73,6 +105,8 @@ public abstract class UIComponent : ComponentBase
     internal int CallBuildHash() => BuildHash();
 
     internal void CallOnMount() => OnMount();
+
+    internal void CallOnParametersSet() => OnParametersSet();
 
     internal void CallOnBuilt(bool first) => OnBuilt(first);
 

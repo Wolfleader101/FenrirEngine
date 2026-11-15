@@ -102,6 +102,7 @@ public static class RazorRuntime
         groups.Clear();
         building.Clear();
         ElementBuilder.ReleaseCaches();
+        ComponentParameters.Release();
     }
 
     /// <summary>The seam for <paramref name="root"/>: the one its mounted Razor components share, or a new one.</summary>
@@ -161,6 +162,8 @@ public static class RazorRuntime
                 int hash = component.CallBuildHash();
                 bool changed = hash != entry.LastHash;
                 entry.LastHash = hash;
+                if (ChildHashesChanged(entry.Tree, context))
+                    changed = true;
                 if (!changed && !entry.Dirty)
                     return;
             }
@@ -192,6 +195,26 @@ public static class RazorRuntime
             RazorDiagnostics.Error($"The Razor component {component.GetType().FullName} failed and is off until the " +
                                    $"next script reload, its elements left as they were: {exception}");
         }
+    }
+
+    /// <summary>
+    /// Checks every child Razor component's <c>BuildHash</c> against last frame's, marking each that changed (and the
+    /// ones above it) to build; returns whether any did. They build inside their mount's build, which this then asks for.
+    /// </summary>
+    private static bool ChildHashesChanged(RetainedTree tree, in SystemContext context)
+    {
+        bool any = false;
+        foreach (ChildComponent child in tree.Children)
+        {
+            child.Component.Context = context;
+            int hash = child.Component.CallBuildHash();
+            if (hash == child.LastHash)
+                continue;
+            child.LastHash = hash;
+            child.MarkDirty();
+            any = true;
+        }
+        return any;
     }
 
     /// <summary>
@@ -227,11 +250,22 @@ public static class RazorRuntime
         }
     }
 
-    /// <summary>Marks it unmounted and runs its <c>OnUnmount</c> when owed; the host is the caller's.</summary>
+    /// <summary>
+    /// Marks it unmounted, forgets its tree (every <c>@ref</c> handed none, every child Razor component unmounted) and
+    /// runs its own <c>OnUnmount</c> when owed; the host is the caller's.
+    /// </summary>
     private static void Forget(MountedRazorComponent entry)
     {
         entry.IsMounted = false;
         entry.Component.Mounted = null;
+        try
+        {
+            ElementBuilder.ForgetTree(entry.Tree);
+        }
+        catch (Exception exception)
+        {
+            RazorDiagnostics.Error($"Forgetting the Razor component {entry.Component.GetType().FullName}'s children threw: {exception}");
+        }
         if (!entry.MountHookRan)
             return;
         entry.MountHookRan = false;

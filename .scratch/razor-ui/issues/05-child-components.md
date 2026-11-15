@@ -14,12 +14,12 @@
 
 Stacked on 04.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Fake-seam tests:
+- [x] Fake-seam tests:
   - a child's parameter change costs only the child's changed values, and an unchanged parameter rebuilds nothing;
   - a `ChildContent` fragment's elements keep their keys across parent rebuilds;
   - `@ref` is set, then cleared on removal.
-- [ ] A scripting test: a two-level tree with a frame component wrapping `ChildContent` appears, and a parent field passed as a parameter updates the child's text the same frame.
-- [ ] After a reload the setter cache holds nothing of the old generation (the unload check passes).
-- [ ] Everything passes under the msvc-x64-debug preset. `check_tickets.py` and clang-format pass.
+- [x] A scripting test: a two-level tree with a frame component wrapping `ChildContent` appears, and a parent field passed as a parameter updates the child's text the same frame.
+- [x] After a reload the setter cache holds nothing of the old generation (the unload check passes).
+- [x] Everything passes under the msvc-x64-debug preset. `check_tickets.py` and clang-format pass.

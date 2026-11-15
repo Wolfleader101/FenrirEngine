@@ -1,0 +1,16 @@
+@* A Shell's ChildContent from fields, then a label of its own after it (ChildComponentTests). *@
+<Shell @ref="Wrapper">
+    <label class="inner">@Inner</label>
+    @if (Extra)
+    {
+        <label class="extra">Extra</label>
+    }
+</Shell>
+<label class="outside">@Outside</label>
+
+@code {
+    public string Inner = "in";
+    public bool Extra;
+    public string Outside = "out";
+    public Shell? Wrapper;
+}

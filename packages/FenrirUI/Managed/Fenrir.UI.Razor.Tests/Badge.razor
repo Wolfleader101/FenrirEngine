@@ -1,0 +1,20 @@
+@* A child Razor component with parameters, recording its hooks; Suffix and Hash are its own state (ChildComponentTests). *@
+<label class="badge" style="width: @(Width)px">@Text@Suffix</label>
+
+@code {
+    [Parameter] public string Text { get; set; } = "";
+    [Parameter] public int Width { get; set; } = 10;
+    public string Suffix = "";
+    public int Hash;
+    public List<string> Hooks = [];
+
+    protected override int BuildHash() => Hash;
+
+    protected override void OnMount() => Hooks.Add("mount");
+
+    protected override void OnParametersSet() => Hooks.Add($"parameters {Text}");
+
+    protected override void OnBuilt(bool first) => Hooks.Add(first ? "built first" : "built");
+
+    protected override void OnUnmount() => Hooks.Add("unmount");
+}
