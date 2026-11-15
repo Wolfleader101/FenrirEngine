@@ -1,0 +1,64 @@
+<Project>
+  <!--
+    Razor components in a script project (ADR-0067, ADR-0068). Import this file after Fenrir.Scripting.props. A
+    project with no .razor file is left exactly as it was; one with any gets:
+
+      * the running .NET SDK's own Razor source generator, from its Microsoft.NET.Sdk.Razor folder (never a pinned
+        version), which compiles each .razor file into a class over the engine's stand-in, Microsoft.AspNetCore.Components;
+      * the stand-in and Fenrir.UI.Razor, compile-time only (the host shares its own copies, as for every contract);
+      * default imports: Fenrir.UI, Fenrir.UI.Razor, and @inherits UIComponent. A project's own _Imports.razor at its
+        root replaces them and must say the same;
+      * the Razor dispatcher, RazorDispatcher.cs, compiled into the script so its stage system is scheduled.
+
+    The project also needs the Fenrir.UI contract, as any script that uses the UI does. Installed, this file sits in a
+    folder beside Fenrir.UI.Razor.dll, Microsoft.AspNetCore.Components.dll, RazorDispatcher.cs and _Imports.razor. In
+    this repository's source tree, which an editor opens with no folders passed, the two contracts come from their
+    source projects instead (see Fenrir.UI.Razor.InRepo.props).
+  -->
+  <PropertyGroup>
+    <FenrirRazorDir>$(MSBuildThisFileDirectory)</FenrirRazorDir>
+    <!-- The language version the generator compiles .razor files as, which it requires; a project may set its own. -->
+    <RazorLangVersion Condition="'$(RazorLangVersion)' == ''">10.0</RazorLangVersion>
+    <!-- The SDK building this project ships the generator; its folder is the SDK's own, found by its version. -->
+    <FenrirRazorGeneratorDir Condition="'$(FenrirRazorGeneratorDir)' == ''">$(NetCoreRoot)sdk\$(NETCoreSdkVersion)\Sdks\Microsoft.NET.Sdk.Razor\source-generators\</FenrirRazorGeneratorDir>
+    <FenrirRazorGeneratorDir Condition="!Exists('$(FenrirRazorGeneratorDir)Microsoft.CodeAnalysis.Razor.Compiler.dll')">$([MSBuild]::EnsureTrailingSlash('$(MSBuildExtensionsPath)'))Sdks\Microsoft.NET.Sdk.Razor\source-generators\</FenrirRazorGeneratorDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <_FenrirRazorComponent Include="**\*.razor" Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'@(_FenrirRazorComponent)' != ''">
+    <Analyzer Include="$(FenrirRazorGeneratorDir)Microsoft.CodeAnalysis.Razor.Compiler.dll" />
+    <Analyzer Include="$(FenrirRazorGeneratorDir)Microsoft.AspNetCore.Razor.Utilities.Shared.dll" />
+    <AdditionalFiles Include="@(_FenrirRazorComponent)" />
+    <!-- The default imports, placed at the project's root: the generator reads TargetPath base-64 encoded, as the
+         Razor SDK writes it, and this is "_Imports.razor". A file with none is placed by its own path. -->
+    <AdditionalFiles Include="$(FenrirRazorDir)_Imports.razor" TargetPath="X0ltcG9ydHMucmF6b3I="
+                     Condition="!Exists('$(MSBuildProjectDirectory)\_Imports.razor')" />
+    <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="TargetPath" />
+    <CompilerVisibleProperty Include="RazorLangVersion" />
+    <CompilerVisibleProperty Include="RootNamespace" />
+    <CompilerVisibleProperty Include="MSBuildProjectDirectory" />
+    <Compile Include="$(FenrirRazorDir)RazorDispatcher.cs" Link="Razor\RazorDispatcher.cs" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'@(_FenrirRazorComponent)' != '' And Exists('$(FenrirRazorDir)Fenrir.UI.Razor.dll')">
+    <Reference Include="Microsoft.AspNetCore.Components">
+      <HintPath>$(FenrirRazorDir)Microsoft.AspNetCore.Components.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.UI.Razor">
+      <HintPath>$(FenrirRazorDir)Fenrir.UI.Razor.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup Condition="'@(_FenrirRazorComponent)' != '' And !Exists('$(FenrirRazorDir)Fenrir.UI.Razor.dll')">
+    <ProjectReference Include="$(FenrirRazorDir)Microsoft.AspNetCore.Components/Microsoft.AspNetCore.Components.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(FenrirRazorDir)Fenrir.UI.Razor/Fenrir.UI.Razor.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

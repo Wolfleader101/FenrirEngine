@@ -165,6 +165,28 @@ public sealed class BindingTests
     }
 
     [Fact]
+    public void TheMadeExtensionSharesTheAssembliesListedAfterItsContract()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace("function = \"Fixture::Bindings::Register\"\n", "function = \"Fixture::Bindings::Register\"\nmaker = \"Fixture::Bindings::MakeExtension\"\nshares = [\"First.dll\", \"Second.dll\"]\n", StringComparison.Ordinal));
+
+        var registration = Output(Generator.Generate(config, [FixtureDescription]), "FixtureRegistration.cpp");
+
+        const string shared = "        extension.sharedAssemblies = {\"Fixture.Bindings.dll\", \"First.dll\", \"Second.dll\"};\n";
+        Assert.True(registration.Contains(shared, StringComparison.Ordinal), $"The registration should hold\n{shared}\nbut is:\n{registration}");
+    }
+
+    [Fact]
+    public void SharesWithoutAMakerIsAnError()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace("function = \"Fixture::Bindings::Register\"\n", "function = \"Fixture::Bindings::Register\"\nshares = [\"First.dll\"]\n", StringComparison.Ordinal));
+
+        var error = Assert.Throws<BindingException>(() => Generator.Generate(config, [FixtureDescription]));
+        Assert.Contains("[registration] shares needs maker", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WithoutAMakerTheHeaderDeclaresTheRegisterFunctionAndTheRegistrationDefinesItAlone()
     {
         var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);

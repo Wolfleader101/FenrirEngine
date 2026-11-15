@@ -90,6 +90,7 @@ make-app-resource = "My::MakeAppResource"
 make-read-only-app-resource = "My::MakeReadOnlyAppResource"
 read-only = ["My::Hierarchy", "My::Clock"]  # Components and resources registered (and mirrored) read-only.
 by-hand = ["My::Gravity"]              # Optional: registered by the extension itself, so not in the generated lists.
+shares = ["My.Physics.Extras.dll"]     # Optional, with a maker: assemblies the made extension shares after its contract.
 
 [tests]                                # Optional: the defaults test.
 cpp = "Tests/Generated/MyPhysicsDefaultsTests.cpp"
@@ -138,7 +139,7 @@ Step = { name = "My.Physics.Step", summary = "Inside each physics step, before c
 | `<generated>/<Type>.cs` | A `partial struct` per described struct and tagged union, an `enum` per enum. Bound types have their own C# types and get none. With natives, a struct's holds the methods the `@facade <Type>.Method` marks give it ("Facade parts" below). |
 | `<generated>/<class>.cs` | With `[stages]`: `public static class <class>`, documented by its summary, with one `public const string <Constant> = "<name>";` per stage, documented by its summary, for `[StageSystem(...)]` to name. |
 | `[cpp] mappings` | An `Iris::StructMapping<T>` per struct and tagged union, every field as `Iris::Field<Kind>("Name", offset)`, and an `Iris::EnumMapping<T>` per enum, each with a `static_assert` of the size and alignment the description records (bound types get only the assert: the binding maps them, and the header includes each bound type's `include`). |
-| `[registration] source` | The function that sets the extension's `components`, `events` and `sharedStructs`, each `Make...<T>("Namespace.Type")`, and, when `[registration]` names a resource factory, its `resources`. A type in `by-hand` is in none of the lists. The source includes the mappings header and, with natives, the natives header; it declares nothing itself. With `maker`, the function is in an anonymous namespace and the **extension maker** is defined beside it: `<extension> <maker>(std::shared_ptr<State> state)`, `State` the extension state the natives take, sets the extension's `name` to the binding's name (the configuration's `<Name>`), `SetState(std::move(state))`, `sharedAssemblies` to `{"<namespace>.dll"}` (the contract's file name), calls the function and returns it. With `[stages]`, the function also sets `extension.stages` to their full names, in order, so the C# constants and the stages the extension declares come from one list; the extension still places and removes its stages' groups itself. |
+| `[registration] source` | The function that sets the extension's `components`, `events` and `sharedStructs`, each `Make...<T>("Namespace.Type")`, and, when `[registration]` names a resource factory, its `resources`. A type in `by-hand` is in none of the lists. The source includes the mappings header and, with natives, the natives header; it declares nothing itself. With `maker`, the function is in an anonymous namespace and the **extension maker** is defined beside it: `<extension> <maker>(std::shared_ptr<State> state)`, `State` the extension state the natives take, sets the extension's `name` to the binding's name (the configuration's `<Name>`), `SetState(std::move(state))`, `sharedAssemblies` to `{"<namespace>.dll"}` (the contract's file name) followed by `shares`, calls the function and returns it. With `[stages]`, the function also sets `extension.stages` to their full names, in order, so the C# constants and the stages the extension declares come from one list; the extension still places and removes its stages' groups itself. |
 
 A type in `exclude` gets none of these: no mirror, mapping, registration or test case. It is for a type the binding
 carries in another form, such as a struct C# holds with a smaller handle than C++'s, which the binding then describes
@@ -358,7 +359,8 @@ honour fails naming the native and the mark, and a facade class no mark names is
 exactly its initialiser; the natives header declares each native and the registration function and the
 registration declares nothing; a configuration keeping `[registration] includes` is told where they moved; with a
 `maker` the header declares it in the function's place and the registration defines it setting the name, state and
-assembly, and a maker with no natives, no state or two states fails saying so; the registration zeroes a
+assemblies, with `shares` after the contract, and a maker with no natives, no state or two states, or `shares` with no
+maker, fails saying so; the registration zeroes a
 native's output (and both of a native with two) and nothing of a native with inputs only, an output span or a pointer
 read and written, and a native added with an output is declared and registered so; running
 twice rewrites nothing and a mirror no longer described is deleted; each diagnostic above; the generated C# compiles

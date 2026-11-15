@@ -10,6 +10,9 @@
        and, for the UI, Painter, Text, Assets and Input contracts, -p:Fenrir<Package>ContractDir=<the folder holding its dll>/. The contracts are
        compile-time only: the host shares its own copies. -->
   <Import Project="$(MSBuildThisFileDirectory)../../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <!-- Its Razor components compile as any script project's do; the build passes -p:FenrirUIRazorContractDir=<the Razor
+       folder>/ (and the stand-in's folder, unused here). -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../Managed/Fenrir.UI.Razor.InRepo.props" />
   <!-- The generated defaults test's C# half (../Generated, from Scripting/api/FenrirUI.binding.toml). -->
   <ItemGroup>
     <Compile Include="../Generated/*.cs" />

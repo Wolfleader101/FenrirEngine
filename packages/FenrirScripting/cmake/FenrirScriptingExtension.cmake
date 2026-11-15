@@ -9,13 +9,16 @@
 # target, cache variable, csproj property and environment variable from <Pkg> (as in `Input`) and the calling directory,
 # and a package passes a keyword only where it deviates:
 #
-#   fenrir_scripting_contract(<Pkg> [USES <Pkg>...])
-#       Builds ../Managed/Fenrir.<Pkg>/Fenrir.<Pkg>.csproj into ${CMAKE_BINARY_DIR}/fenrir-<pkg>/contract with the .NET
-#       SDK Iris found, against the scripting SDK (Fenrir.Scripting and Fenrir.Math) and each used package's contract
-#       (-p:Fenrir<Used>ContractDir=), rebuilt whenever any of them is. Sets the FENRIR_<PKG>_CONTRACT_DIR cache
-#       variable, adds the Fenrir<Pkg>Contract target, and records the contract so fenrir_deploy_scripting(<target>
-#       EXTENSIONS <Pkg>) can copy it next to an executable, beside the scripting contract, where Scripting::Install finds
-#       the extension's relative path.
+#   fenrir_scripting_contract(<Pkg> [ASSEMBLY <name>] [USES <Pkg>...] [SHARED_BY <Pkg>...] [DEPENDS <files>...])
+#       Builds ../Managed/<assembly>/<assembly>.csproj into ${CMAKE_BINARY_DIR}/fenrir-<pkg>/contract with the .NET SDK
+#       Iris found, against the scripting SDK (Fenrir.Scripting and Fenrir.Math) and each used contract
+#       (-p:Fenrir<Used>ContractDir=), rebuilt whenever any of them is, or a file in DEPENDS (one the project copies
+#       into its folder) changes. The assembly is Fenrir.<Pkg> unless ASSEMBLY names another: a contract a package
+#       shares beside its own, such as FenrirUI's Razor contracts. Sets the FENRIR_<PKG>_CONTRACT_DIR cache variable,
+#       adds the Fenrir<Pkg>Contract target, and records the contract so fenrir_deploy_scripting(<target> EXTENSIONS
+#       <Pkg>) can copy it next to an executable, beside the scripting contract, where Scripting::Install finds the
+#       extension's relative path. SHARED_BY names the extensions that share this contract after their own (their
+#       binding's [registration] shares): deploying one of them deploys this contract too.
 #   fenrir_scripting_extension(<Pkg> SOURCES <files...> LINK <targets...> [NO_SELECTION] [DESCRIPTIONS <api.json...>])
 #       The Fenrir<Pkg>Scripting library: SOURCES are the hand-written files; the generated ones (the natives header,
 #       the registration and the mappings header, ADR-0042 to ADR-0046) are listed here. `include` is public, `src`
@@ -27,8 +30,9 @@
 #         cmake --build <dir> --target fenrir-describe-api
 #         cmake --build <dir> --target fenrir-generate-bindings
 #   fenrir_script_fixture(<Pkg> [USES <Pkg>...])
-#       The fixture script assembly Fenrir.<Pkg>ScriptFixture.dll from Fixture/ and Generated/*.cs (the generated
-#       defaults test's C# class), compiled against the scripting SDK, the package's contract and each used package's,
+#       The fixture script assembly Fenrir.<Pkg>ScriptFixture.dll from Fixture/ (its .cs and .razor files) and
+#       Generated/*.cs (the generated defaults test's C# class), compiled against the scripting SDK, the package's
+#       contract and each used contract,
 #       none copied (the host shares its own copies), into ${CMAKE_CURRENT_BINARY_DIR}/fixture; the
 #       Fenrir<Pkg>ScriptFixture target.
 #   fenrir_scripting_tests(<Pkg> SOURCES <files...> [TEST_ARGS <args...>])
@@ -56,6 +60,15 @@ define_property(GLOBAL PROPERTY FENRIR_SCRIPTING_CONTRACTS
     BRIEF_DOCS "Each scripting extension's contract directory, as <Pkg>=<dir>"
     FULL_DOCS "Appended by fenrir_scripting_contract; fenrir_deploy_scripting copies the contracts it names from here.")
 
+# Sets <out> to the name of the assembly fenrir_scripting_contract(<pkg>) builds: Fenrir.<pkg> unless it named another.
+function(fenrir_scripting_contract_assembly pkg out)
+    get_property(assembly GLOBAL PROPERTY FENRIR_SCRIPTING_CONTRACT_ASSEMBLY_${pkg})
+    if(NOT assembly)
+        set(assembly "Fenrir.${pkg}")
+    endif()
+    set(${out} "${assembly}" PARENT_SCOPE)
+endfunction()
+
 # Sets <out> to the directory fenrir_scripting_contract(<pkg>) built its contract into, or fails naming the caller.
 function(fenrir_scripting_contract_dir pkg out)
     get_property(contracts GLOBAL PROPERTY FENRIR_SCRIPTING_CONTRACTS)
@@ -71,12 +84,17 @@ function(fenrir_scripting_contract_dir pkg out)
 endfunction()
 
 function(fenrir_scripting_contract pkg)
-    cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "USES")
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "ASSEMBLY" "USES;SHARED_BY;DEPENDS")
     string(TOUPPER "${pkg}" PKG)
     string(TOLOWER "${pkg}" pkg_lower)
+    set(assembly "Fenrir.${pkg}")
+    if(arg_ASSEMBLY)
+        set(assembly "${arg_ASSEMBLY}")
+    endif()
+    set_property(GLOBAL PROPERTY FENRIR_SCRIPTING_CONTRACT_ASSEMBLY_${pkg} "${assembly}")
     set(contract_dir "${CMAKE_BINARY_DIR}/fenrir-${pkg_lower}/contract")
-    set(FENRIR_${PKG}_CONTRACT_DIR "${contract_dir}" CACHE INTERNAL "Where the Fenrir.${pkg} contract is built")
-    set(managed_dir "${CMAKE_CURRENT_SOURCE_DIR}/../Managed/Fenrir.${pkg}")
+    set(FENRIR_${PKG}_CONTRACT_DIR "${contract_dir}" CACHE INTERNAL "Where the ${assembly} contract is built")
+    set(managed_dir "${CMAKE_CURRENT_SOURCE_DIR}/../Managed/${assembly}")
     file(GLOB sources CONFIGURE_DEPENDS "${managed_dir}/*.cs" "${managed_dir}/Generated/*.cs")
 
     set(properties "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/")
@@ -85,25 +103,36 @@ function(fenrir_scripting_contract pkg)
     set(targets FenrirScriptingContract)
     foreach(used IN LISTS arg_USES)
         fenrir_scripting_contract_dir(${used} used_dir)
+        fenrir_scripting_contract_assembly(${used} used_assembly)
         list(APPEND properties "-p:Fenrir${used}ContractDir=${used_dir}/")
-        list(APPEND depends Fenrir${used}Contract "${used_dir}/Fenrir.${used}.dll")
+        list(APPEND depends Fenrir${used}Contract "${used_dir}/${used_assembly}.dll")
         list(APPEND targets Fenrir${used}Contract)
     endforeach()
 
+    # A named assembly gets an intermediate folder of its own: two contracts built from one directory would otherwise
+    # share one restore.
+    set(obj_dir "${CMAKE_CURRENT_BINARY_DIR}/contract-obj/")
+    if(arg_ASSEMBLY)
+        set(obj_dir "${CMAKE_CURRENT_BINARY_DIR}/contract-obj-${assembly}/")
+    endif()
     add_custom_command(
-        OUTPUT "${contract_dir}/Fenrir.${pkg}.dll"
-        COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${managed_dir}/Fenrir.${pkg}.csproj"
+        OUTPUT "${contract_dir}/${assembly}.dll"
+        COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${managed_dir}/${assembly}.csproj"
             --configuration Release --output "${contract_dir}" -nologo -v:q ${properties}
-            "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/contract-obj/"
-        DEPENDS ${sources} "${managed_dir}/Fenrir.${pkg}.csproj" ${depends}
-        COMMENT "Building the Fenrir.${pkg} contract"
+            "-p:BaseIntermediateOutputPath=${obj_dir}"
+        DEPENDS ${sources} "${managed_dir}/${assembly}.csproj" ${depends} ${arg_DEPENDS}
+        COMMENT "Building the ${assembly} contract"
         VERBATIM
     )
-    add_custom_target(Fenrir${pkg}Contract ALL DEPENDS "${contract_dir}/Fenrir.${pkg}.dll")
+    add_custom_target(Fenrir${pkg}Contract ALL DEPENDS "${contract_dir}/${assembly}.dll")
     add_dependencies(Fenrir${pkg}Contract ${targets})
     set_property(GLOBAL APPEND PROPERTY FENRIR_SCRIPTING_CONTRACTS "${pkg}=${contract_dir}")
-    # Deploying this extension deploys the contracts it builds against too.
+    # Deploying this extension deploys the contracts it builds against too, and deploying an extension that shares this
+    # contract deploys this one.
     set_property(GLOBAL PROPERTY FENRIR_SCRIPTING_CONTRACT_USES_${pkg} "${arg_USES}")
+    foreach(owner IN LISTS arg_SHARED_BY)
+        set_property(GLOBAL APPEND PROPERTY FENRIR_SCRIPTING_CONTRACT_SHARED_WITH_${owner} ${pkg})
+    endforeach()
 endfunction()
 
 function(fenrir_scripting_extension pkg)
@@ -144,14 +173,16 @@ function(fenrir_script_fixture pkg)
     string(TOUPPER "${pkg}" PKG)
     string(TOLOWER "${pkg}" pkg_lower)
     set(fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture")
-    file(GLOB sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs" "${CMAKE_CURRENT_SOURCE_DIR}/Generated/*.cs")
+    file(GLOB sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs" "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.razor"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Generated/*.cs")
 
     set(properties "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/")
     set(depends "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.dll" "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Math.dll")
     foreach(contract IN ITEMS ${pkg} ${arg_USES})
         fenrir_scripting_contract_dir(${contract} contract_dir)
+        fenrir_scripting_contract_assembly(${contract} contract_assembly)
         list(APPEND properties "-p:Fenrir${contract}ContractDir=${contract_dir}/")
-        list(APPEND depends Fenrir${contract}Contract "${contract_dir}/Fenrir.${contract}.dll")
+        list(APPEND depends Fenrir${contract}Contract "${contract_dir}/${contract_assembly}.dll")
     endforeach()
 
     add_custom_command(

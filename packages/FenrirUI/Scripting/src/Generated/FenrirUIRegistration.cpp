@@ -72,7 +72,7 @@ namespace Fenrir::Generated
         Fenrir::ScriptingExtension extension;
         extension.name = "FenrirUI";
         extension.SetState(std::move(state));
-        extension.sharedAssemblies = {"Fenrir.UI.dll"};
+        extension.sharedAssemblies = {"Fenrir.UI.dll", "Microsoft.AspNetCore.Components.dll", "Fenrir.UI.Razor.dll"};
         Fenrir::Generated::RegisterUI(extension);
         return extension;
     }

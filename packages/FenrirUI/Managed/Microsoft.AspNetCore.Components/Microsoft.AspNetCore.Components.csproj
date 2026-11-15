@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Version is part of the contract: the host shares one copy, and a script compiled against a newer minor fails to load. -->
+    <Version>0.1.0</Version>
+    <AssemblyName>Microsoft.AspNetCore.Components</AssemblyName>
+    <RootNamespace>Microsoft.AspNetCore.Components</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- The engine's stand-in for Blazor's components assembly (ADR-0067): the few names the stock SDK's Razor generator
+       emits calls to, with no engine dependency, so .razor files compile with no ASP.NET Core reference. The generator
+       finds components and directive attributes only in assemblies named Microsoft.AspNetCore.*, and uses
+       AddComponentParameter only from a file named Microsoft.AspNetCore.Components.dll, so the name is fixed; the
+       namespaces follow Blazor's, so generated code resolves unchanged. The builder is abstract: Fenrir.UI.Razor's
+       ElementBuilder implements it. Built as a contract (CMake passes the scripting SDK's folder, which it does not
+       use) and shared by FenrirUI's scripting extension after Fenrir.UI. -->
+</Project>
