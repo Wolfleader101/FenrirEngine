@@ -112,7 +112,7 @@ imports `Fenrir.UI.Razor.InRepo.props`, so its `.razor` files are compiled by th
     row comes in from the left through `:intro` and leaves to the right through `:outro`, and the rows around it keep
     their elements.
   - `<Document Src="ui/credits.ui" />` placing a small markup document, `assets/ui/credits.ui`, under a heading.
-  - `Section`, a child component with a title and `ChildContent`: the key bindings and the credits are each written
+  - `Section`, a child Razor component with a title and `ChildContent`: the key bindings and the credits are each written
     inside a `<Section>` tag.
   - A scoped sheet: `Settings.razor.css` matches only the page's own elements, its `ChildContent` among them, and
     reaches Section's headings and the credits document's labels with `::deep`. The page's controls take `menu.css`'s
@@ -124,7 +124,7 @@ imports `Fenrir.UI.Razor.InRepo.props`, so its `.razor` files are compiled by th
 
 ### Editing the Razor components while they run
 
-The menu's and the HUD's roots have hot reload on, and a component's sheet is loaded from the path the build recorded,
+The menu's and the HUD's roots have hot reload on, and a Razor component's sheet is loaded from the path the build recorded,
 the file in `examples/UIDemo/scripts/`. So with the menu open, save `Settings.razor.css` (try `.binding:outro`'s
 `transform`, or `.page ::deep .heading`'s `color`) and the page restyles within a quarter of a second, scoped as before.
 `Speedometer.razor.css` restyles the gauge the same way. A sheet edited while the demo is closed is recorded into the

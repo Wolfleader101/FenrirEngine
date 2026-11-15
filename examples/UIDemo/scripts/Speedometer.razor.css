@@ -1,6 +1,6 @@
-/* The speedometer's sheet (Speedometer.razor), scoped to it: what were Speedometer.cs's inline styles. The host panel
-   carries the readable class speedometer and the scope class, so .speedometer styles it. Bottom right, over the ammo
-   counter; the gauge is painted into it, and the readout sits at its foot. */
+/* The speedometer's sheet (Speedometer.razor), scoped to it, in place of inline styles. The host panel carries the
+   readable class speedometer and the scope class, so .speedometer styles it. Bottom right, over the ammo counter; the
+   gauge is painted into it, and the readout sits at its foot. */
 
 .speedometer {
     position: absolute;

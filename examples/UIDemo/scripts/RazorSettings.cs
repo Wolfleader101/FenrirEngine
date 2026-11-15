@@ -16,7 +16,9 @@ public sealed class DemoSettings
     public string PlayerName = "Wanderer";
 
     // The key bindings, in order. Each has an id of its own, the @key its row is matched by across rebuilds.
-    public readonly List<KeyBinding> Bindings = [new(1, "Q", "Lean left"), new(2, "E", "Lean right")];
+    private readonly List<KeyBinding> bindings = [new(1, "Q", "Lean left"), new(2, "E", "Lean right")];
+
+    public IReadOnlyList<KeyBinding> Bindings => bindings;
 
     // The bindings Add takes from, in turn.
     private static readonly (string Key, string Action)[] Spare =
@@ -31,9 +33,11 @@ public sealed class DemoSettings
     {
         (string key, string action) = Spare[nextSpare++ % Spare.Length];
         var binding = new KeyBinding(nextId++, key, action);
-        Bindings.Add(binding);
+        bindings.Add(binding);
         return binding;
     }
+
+    public void Remove(KeyBinding binding) => bindings.Remove(binding);
 }
 
 public sealed record KeyBinding(int Id, string Key, string Action);
@@ -58,7 +62,11 @@ public sealed class SettingsSetup : ISystem
             return;
         ElementId slot = menu.FindById("razor-settings");
         if (!menu.IsAlive(slot))
+        {
+            // The menu closed and its outro ended, taking the page's host: forget the page now, not at the next open.
+            page.Unmount(RemoveMode.Immediate);
             return;
+        }
         if (page.IsMounted && menu.IsAlive(page.Host) && menu.GetParent(page.Host).Equals(slot))
             return;
         // The page's host went with the last menu's document: let it go before mounting into the new slot.

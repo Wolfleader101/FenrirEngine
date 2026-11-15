@@ -36,9 +36,9 @@ public sealed class SpeedometerSetup : ISystem
             Vector3 position = transform.Position;
             if (last is { } before && deltaTime > 0)
             {
-                float now = (position - before).Length / deltaTime;
+                float measured = (position - before).Length / deltaTime;
                 // Eased over a few frames, so the needle does not shake with the frame time.
-                speed += (now - speed) * MathF.Min(1, deltaTime * 8);
+                speed += (measured - speed) * MathF.Min(1, deltaTime * 8);
             }
             last = position;
             break;
