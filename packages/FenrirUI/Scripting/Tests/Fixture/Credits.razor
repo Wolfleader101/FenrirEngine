@@ -1,0 +1,9 @@
+@* A markup document placed after a title label (RazorPaint.cpp): the test sets Src and Title. *@
+@namespace UIScriptFixture
+<label id="credits-title">@Title</label>
+<Document Src="@Src" />
+
+@code {
+    public string? Src;
+    public string Title = "Credits";
+}

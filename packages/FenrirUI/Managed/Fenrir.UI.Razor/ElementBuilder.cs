@@ -569,6 +569,51 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         return true;
     }
 
+    // ---- Documents ----
+
+    /// <summary>
+    /// <c>&lt;Document&gt;</c>'s build (ADR-0067): a host <c>panel</c> at <paramref name="sequence"/>, with the class
+    /// <c>document</c>, whose children are the document's, unowned: no build visits, updates or removes them. When
+    /// <paramref name="src"/> is not what was last loaded, the host's children are removed at once, with no outro, and
+    /// <paramref name="src"/> loaded after them (nothing for null or empty). A failed load is not retried until
+    /// <paramref name="src"/> changes; the native logs its errors.
+    /// </summary>
+    internal void PlaceDocument(int sequence, string? src)
+    {
+        // In a <style>, an element is nothing: the sheet takes only text.
+        if (open[^1].IsStyle)
+            return;
+        OpenElement(sequence, "panel");
+        AddAttribute(sequence, "class", "document");
+        Entry host = Resolve(open[^1]);
+        host.Placement!.HoldsUnowned = true;
+        string? load = string.IsNullOrEmpty(src) ? null : src;
+        if (host.Document != load)
+        {
+            if (host.Document != null)
+                RemoveAllChildren(host.Id);
+            host.Document = load;
+            if (load != null)
+                seam.LoadDocument(host.Id, load);
+        }
+        CloseElement();
+    }
+
+    /// <summary>Removes every child of the element at once: what a document loaded, which no entry names.</summary>
+    private void RemoveAllChildren(ElementId element)
+    {
+        int count = seam.GetChildren(element, children);
+        if (count > children.Length)
+        {
+            children = new ElementId[System.Math.Max(count, children.Length * 2)];
+            count = seam.GetChildren(element, children);
+        }
+        // Copied out first: the scratch array is the builder's, and each removal changes the native list.
+        ElementId[] gone = children[..System.Math.Min(count, children.Length)];
+        foreach (ElementId child in gone)
+            seam.Remove(child, RemoveMode.Immediate);
+    }
+
     // ---- Regions ----
 
     /// <summary>

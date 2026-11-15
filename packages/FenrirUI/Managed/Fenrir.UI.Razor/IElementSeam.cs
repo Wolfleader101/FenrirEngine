@@ -1,3 +1,5 @@
+using Fenrir.Painter;
+
 namespace Fenrir.UI.Razor;
 
 /// <summary>
@@ -63,6 +65,18 @@ internal interface IElementSeam
     /// frame, takes no pointer events; a release build logs nothing (ADR-0069).
     /// </summary>
     void WarnIfTakesNoPointer(ElementId element, string message);
+
+    /// <summary>
+    /// Loads the markup document at <paramref name="path"/> under <paramref name="parent"/>, after its children, and
+    /// returns whether it loaded with no errors; the native logs its errors with their files and lines.
+    /// </summary>
+    bool LoadDocument(ElementId parent, string path);
+
+    /// <summary>A painter for the element, in <c>Fenrir.UI.Paint</c>; none outside it, for a stale id, or on a frame the root does not paint.</summary>
+    PainterId PaintInto(ElementId element);
+
+    /// <summary>The element's laid-out rectangles, in the root's UI units.</summary>
+    ElementBoxes GetBoxes(ElementId element);
 }
 
 /// <summary>The element seam over one UI root's natives.</summary>
@@ -110,4 +124,10 @@ internal sealed class RootSeam(UIRoot root) : IElementSeam
     }
 
     public void WarnIfTakesNoPointer(ElementId element, string message) => root.WarnIfTakesNoPointer(element, message);
+
+    public bool LoadDocument(ElementId parent, string path) => root.LoadDocument(parent, path, out _);
+
+    public PainterId PaintInto(ElementId element) => root.PaintInto(element);
+
+    public ElementBoxes GetBoxes(ElementId element) => root.GetBoxes(element);
 }

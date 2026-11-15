@@ -42,6 +42,33 @@ internal sealed class Region
         occurrences[sequence] = count + 1;
         return count;
     }
+
+    /// <summary>
+    /// The first element placed here as the last build left it, its child Razor components' and fragments' among them
+    /// (all go under the same element); null when it placed none.
+    /// </summary>
+    public Entry? FirstPlaced()
+    {
+        Entry? first = null;
+        foreach (Entry entry in Entries.Values)
+        {
+            if (first == null || entry.OrderIndex < first.OrderIndex)
+                first = entry;
+        }
+        if (Components != null)
+        {
+            foreach (ChildComponent child in Components.Values)
+                first = Earlier(first, child.Region.FirstPlaced());
+        }
+        if (Fragments != null)
+        {
+            foreach (Region fragment in Fragments.Values)
+                first = Earlier(first, fragment.FirstPlaced());
+        }
+        return first;
+    }
+
+    private static Entry? Earlier(Entry? a, Entry? b) => a == null || (b != null && b.OrderIndex < a.OrderIndex) ? b : a;
 }
 
 /// <summary>
@@ -150,6 +177,9 @@ internal sealed class Entry(ElementId id, string tag)
 
     /// <summary>Whether its pointer check is queued or done: each element is checked once.</summary>
     public bool PointerChecked;
+
+    /// <summary>For a <c>&lt;Document&gt;</c>'s host panel, the path last loaded into it; null when none was.</summary>
+    public string? Document;
 }
 
 /// <summary>

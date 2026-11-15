@@ -9,15 +9,15 @@
 
 **Touches:** `packages/FenrirUI/Managed/Fenrir.UI.Razor/`, `packages/FenrirUI/Managed/Fenrir.UI.Razor.props`, `packages/FenrirUI/Managed/Fenrir.UI.Razor.Tests/`, `packages/FenrirUI/Scripting/Tests/`, `packages/FenrirUI/README.md`
 
-Stacked on 07.
+Stacked on 06 (built before 07, which waits for ticket 02's PR).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Scripting tests:
+- [x] Scripting tests:
   - an `OnPaint` override's draws appear in the root's captured list after the element's own box;
   - a component without the override is never called in the paint stage;
   - `<Document Src>` places a document's elements, which C++ finds by id;
   - a rebuild of the placing component leaves those elements untouched;
   - changing `Src` replaces them;
   - unmounting removes them with the host.
-- [ ] Everything passes under the msvc-x64-debug preset. `check_tickets.py` and clang-format pass.
+- [x] Everything passes under the msvc-x64-debug preset. `check_tickets.py` and clang-format pass.

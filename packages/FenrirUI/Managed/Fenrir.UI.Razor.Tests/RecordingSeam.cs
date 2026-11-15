@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Fenrir.Painter;
 
 namespace Fenrir.UI.Razor.Tests;
 
@@ -8,7 +9,8 @@ namespace Fenrir.UI.Razor.Tests;
 /// The element seam's recording fake: it hands out element ids #1, #2 and so on, in the order they are made, and
 /// records every call as text, ids written as #index. It keeps the tree as a root would: children in order, an element
 /// removed with its outro staying among its parent's children until <see cref="FinishOutros"/>. <c>IsAlive</c>, the
-/// registry's liveness check, is counted in <see cref="AliveChecks"/> rather than recorded.
+/// registry's liveness check, is counted in <see cref="AliveChecks"/> rather than recorded. A document it loads is one
+/// element per name in <see cref="Documents"/>, and a painter is the element's index plus 1000.
 /// </summary>
 internal sealed class RecordingSeam : IElementSeam
 {
@@ -36,6 +38,12 @@ internal sealed class RecordingSeam : IElementSeam
     public List<string> Calls { get; } = [];
 
     public int AliveChecks { get; private set; }
+
+    /// <summary>
+    /// The documents <see cref="LoadDocument"/> knows, by path: each loads one panel per id string given, under the
+    /// parent, after its children. A path not here loads nothing and fails, as a missing file does.
+    /// </summary>
+    public Dictionary<string, string[]> Documents { get; } = [];
 
     /// <summary>An element id with this index, as the fake writes it.</summary>
     public static ElementId Id(uint index)
@@ -162,6 +170,39 @@ internal sealed class RecordingSeam : IElementSeam
 
     public void WarnIfTakesNoPointer(ElementId element, string message) =>
         Calls.Add($"WarnIfTakesNoPointer({Name(element)}, {message})");
+
+    public bool LoadDocument(ElementId parent, string path)
+    {
+        Calls.Add($"LoadDocument({Name(parent)}, {path})");
+        if (!Documents.TryGetValue(path, out string[]? elementIds))
+            return false;
+        foreach (string id in elementIds)
+        {
+            ElementId made = Id(next++);
+            nodes[made.Index] = new Node { Parent = parent.Index };
+            NodeOf(parent.Index).Children.Add(made.Index);
+            ids[id] = made.Index;
+        }
+        return true;
+    }
+
+    /// <summary>The element's painter: none for a dead element, else its index plus 1000.</summary>
+    public PainterId PaintInto(ElementId element)
+    {
+        Calls.Add($"PaintInto({Name(element)})");
+        return !destroyed && nodes.ContainsKey(element.Index) ? new PainterId { Value = element.Index + 1000 }
+                                                              : new PainterId();
+    }
+
+    /// <summary>The element's boxes: a border box at x = its index, the others empty.</summary>
+    public ElementBoxes GetBoxes(ElementId element)
+    {
+        Calls.Add($"GetBoxes({Name(element)})");
+        return new ElementBoxes { Border = new Fenrir.Text.Rect2D { X = element.Index, Width = 10, Height = 10 } };
+    }
+
+    /// <summary>Whether the element is made and not gone, read with no call recorded or counted.</summary>
+    public bool Exists(ElementId element) => nodes.ContainsKey(element.Index);
 
     private Node NodeOf(uint index)
     {

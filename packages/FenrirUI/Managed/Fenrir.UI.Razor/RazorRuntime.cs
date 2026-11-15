@@ -1,4 +1,6 @@
+using System.Reflection;
 using System.Text;
+using Fenrir.Painter;
 using Fenrir.Scripting;
 
 namespace Fenrir.UI.Razor;
@@ -55,6 +57,12 @@ public static class RazorRuntime
     private static readonly List<RootGroup> groups = [];
     private static readonly List<MountedRazorComponent> building = [];
     private static readonly ElementBuilder builder = new();
+
+    /// <summary>Whether each Razor component type seen in the paint stage overrides <c>OnPaint</c>, found once per type.</summary>
+    private static readonly Dictionary<Type, bool> paints = [];
+
+    /// <summary>This frame's paint calls: the mount, the Razor component, and the element it paints into.</summary>
+    private static readonly List<(MountedRazorComponent Mount, UIComponent Component, ElementId Element)> painting = [];
 
     /// <summary>
     /// Runs one frame of the Razor components (ADR-0068, ADR-0069), from <c>Fenrir.UI.Build</c>: the Razor dispatcher
@@ -129,10 +137,81 @@ public static class RazorRuntime
     }
 
     /// <summary>
+    /// Paints the mounted Razor components (ADR-0068), from <c>Fenrir.UI.Paint</c>: the Razor dispatcher's paint system
+    /// calls it with its context. Each mounted Razor component whose type overrides <c>OnPaint</c>, from its first build
+    /// on, is handed a painter for its host and the host's boxes; each child Razor component whose type overrides it,
+    /// after its mount's, one for the first element its markup places. One whose element has no painter this frame is
+    /// skipped. One that throws is logged and turns its mount off until the next reload.
+    /// </summary>
+    public static void Paint(in SystemContext context)
+    {
+        // Gathered first, so an OnPaint that unmounts or mounts changes no list being walked.
+        foreach (RootGroup group in groups)
+        {
+            foreach (MountedRazorComponent mount in group.Mounted)
+            {
+                if (!mount.IsMounted || mount.Disabled || !mount.Built)
+                    continue;
+                if (Paints(mount.Component.GetType()))
+                    painting.Add((mount, mount.Component, mount.Host));
+                foreach (ChildComponent child in mount.Tree.Children)
+                {
+                    if (Paints(child.Component.GetType()) && child.Region.FirstPlaced() is { } first)
+                        painting.Add((mount, child.Component, first.Id));
+                }
+            }
+        }
+        try
+        {
+            foreach ((MountedRazorComponent mount, UIComponent component, ElementId element) in painting)
+            {
+                if (mount.IsMounted && !mount.Disabled)
+                    PaintOne(mount, component, element, context);
+            }
+        }
+        finally
+        {
+            painting.Clear();
+        }
+    }
+
+    private static void PaintOne(MountedRazorComponent mount, UIComponent component, ElementId element,
+                                 in SystemContext context)
+    {
+        PainterId painter = mount.Seam.PaintInto(element);
+        if (painter.Value == 0)
+            return;
+        component.Context = context;
+        try
+        {
+            component.CallOnPaint(painter, mount.Seam.GetBoxes(element));
+        }
+        catch (Exception exception)
+        {
+            mount.Disabled = true;
+            RazorDiagnostics.Error($"The Razor component {component.GetType().FullName} failed in OnPaint, and " +
+                                   $"{mount.Component.GetType().FullName} is off until the next script reload: {exception}");
+        }
+    }
+
+    /// <summary>Whether the type overrides <c>OnPaint</c>: looked up once per type, until <see cref="Release"/>.</summary>
+    private static bool Paints(Type type)
+    {
+        if (!paints.TryGetValue(type, out bool overrides))
+        {
+            MethodInfo? method = type.GetMethod("OnPaint", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                                                [typeof(PainterId), typeof(ElementBoxes)]);
+            overrides = method != null && method.DeclaringType != typeof(UIComponent);
+            paints.Add(type, overrides);
+        }
+        return overrides;
+    }
+
+    /// <summary>
     /// Lets go of the script generation (ADR-0068): runs each Razor component's <c>OnUnmount</c>, removes every mounted
     /// host still alive at once, with no outro, and forgets every Razor component and every cache naming the
     /// generation's types, so nothing here refers to its objects: the handler tables go with their roots'
-    /// groups. The Razor dispatcher calls it from its
+    /// groups, and the paint overrides found are forgotten. The Razor dispatcher calls it from its
     /// <c>OnDestroy</c>, before the generation is released.
     /// </summary>
     public static void Release()
@@ -151,6 +230,8 @@ public static class RazorRuntime
         }
         groups.Clear();
         building.Clear();
+        painting.Clear();
+        paints.Clear();
         ElementBuilder.ReleaseCaches();
         ComponentParameters.Release();
     }
