@@ -206,6 +206,22 @@ TEST_CASE("A script reload removes a Razor component's elements at once", "[ui][
     REQUIRE(!root.IsAlive(oldBoard));
 }
 
+TEST_CASE("A Razor component whose host C++ removed is not mounted, before any frame", "[ui][scripting][razor]")
+{
+    RazorScriptingApp test;
+    UIRoot& root = *test.root;
+    test.Frame();
+    {
+        INFO("The mounted Scoreboard did not report itself mounted");
+        REQUIRE(test.Call<bool>(RazorProbeType, "IsMounted"));
+    }
+
+    REQUIRE(root.Remove(test.Host(), RemoveMode::Immediate));
+
+    INFO("IsMounted still answered true with the host gone");
+    REQUIRE(!test.Call<bool>(RazorProbeType, "IsMounted"));
+}
+
 TEST_CASE("A script generation with a mounted Razor component is collected when released", "[ui][scripting][razor]")
 {
     RazorScriptingApp test;

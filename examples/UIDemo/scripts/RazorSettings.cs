@@ -61,15 +61,12 @@ public sealed class SettingsSetup : ISystem
         if (menu.Value == 0)
             return;
         ElementId slot = menu.FindById("razor-settings");
+        // IsMounted turns false, forgetting the page, once the closed menu's outro ends and takes the page's host.
+        if (page.IsMounted && menu.GetParent(page.Host).Equals(slot))
+            return;
         if (!menu.IsAlive(slot))
-        {
-            // The menu closed and its outro ended, taking the page's host: forget the page now, not at the next open.
-            page.Unmount(RemoveMode.Immediate);
             return;
-        }
-        if (page.IsMounted && menu.IsAlive(page.Host) && menu.GetParent(page.Host).Equals(slot))
-            return;
-        // The page's host went with the last menu's document: let it go before mounting into the new slot.
+        // A page still in the last menu's slot, in its outro: let it go before mounting into the new one.
         page.Unmount(RemoveMode.Immediate);
         menu.AddClass(slot, "filled");
         page = menu.Mount<Settings>(slot, init: p => p.State = settings);

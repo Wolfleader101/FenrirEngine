@@ -152,7 +152,7 @@ A script project can write UI as `.razor` files of FenrirUI tags with embedded C
 - Markup with no C# in it, which Razor folds into one string, is parsed once and built the same way. A `<style>` makes no element: its text is a scoped sheet (below).
 - An attribute that reaches the builder spelled as a directive (`@onclick`, `@bind`, or `onclick` and the other event names) means the directive was not recognised. It is left out and logged once per place in the file, suggesting the missing `@using`.
 
-**Mounting.** `root.Mount<T>(parent, index = -1, init)` makes `T`'s host `panel` under `parent` at once, carrying the readable class (its type name in kebab case: `HealthBar` is `health-bar`). It then runs `init` and queues the first build for the next `Fenrir.UI.Build`. It returns a `ComponentRef<T>`, whose `Unmount(mode = Outro)` removes the host with its outro. Mount from a system's `OnCreate`, so each script generation mounts its own.
+**Mounting.** `root.Mount<T>(parent, index = -1, init)` makes `T`'s host `panel` under `parent` at once, carrying the readable class (its type name in kebab case: `HealthBar` is `health-bar`). It then runs `init` and queues the first build for the next `Fenrir.UI.Build`. It returns a `ComponentRef<T>`, whose `Unmount(mode = Outro)` removes the host with its outro. Its `IsMounted` is false at once when something else removed the host (a markup reload, the game removing the slot it is in), so `if (!gauge.IsMounted) gauge = root.Mount<Gauge>(...)` remounts it. Mount from a system's `OnCreate`, so each script generation mounts its own.
 
 **Rebuilds.** Every mounted component is built in `Fenrir.UI.Build`, so its elements are styled, laid out and painted that frame. Each one builds at most once a frame:
 
@@ -164,7 +164,7 @@ A rebuild finds each element again by its compile-time sequence number and its o
 
 - `OnMount()`, before the first build;
 - `OnBuilt(bool first)`, after each build;
-- `OnUnmount()`, when the component is forgotten after `OnMount` ran: unmounted, released by a reload, in the frame after its root is destroyed, or when it would build after someone else removed its host.
+- `OnUnmount()`, when the component is forgotten after `OnMount` ran: unmounted, released by a reload, in the frame after its root is destroyed, or, after someone else removed its host, when it would next build or its `IsMounted` is asked.
 
 A component whose build or hook throws is logged with its type. It is not built again until the next reload, and its elements stay as they were.
 
