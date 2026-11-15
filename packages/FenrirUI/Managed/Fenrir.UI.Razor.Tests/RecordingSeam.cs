@@ -41,7 +41,7 @@ internal sealed class RecordingSeam : IElementSeam
 
     /// <summary>
     /// The documents <see cref="LoadDocument"/> knows, by path: each loads one panel per id string given, under the
-    /// parent, after its children. A path not here loads nothing and fails, as a missing file does.
+    /// parent, after its children. A path not here loads nothing, as a missing file does.
     /// </summary>
     public Dictionary<string, string[]> Documents { get; } = [];
 
@@ -171,11 +171,11 @@ internal sealed class RecordingSeam : IElementSeam
     public void WarnIfTakesNoPointer(ElementId element, string message) =>
         Calls.Add($"WarnIfTakesNoPointer({Name(element)}, {message})");
 
-    public bool LoadDocument(ElementId parent, string path)
+    public void LoadDocument(ElementId parent, string path)
     {
         Calls.Add($"LoadDocument({Name(parent)}, {path})");
         if (!Documents.TryGetValue(path, out string[]? elementIds))
-            return false;
+            return;
         foreach (string id in elementIds)
         {
             ElementId made = Id(next++);
@@ -183,7 +183,6 @@ internal sealed class RecordingSeam : IElementSeam
             NodeOf(parent.Index).Children.Add(made.Index);
             ids[id] = made.Index;
         }
-        return true;
     }
 
     /// <summary>The element's painter: none for a dead element, else its index plus 1000.</summary>

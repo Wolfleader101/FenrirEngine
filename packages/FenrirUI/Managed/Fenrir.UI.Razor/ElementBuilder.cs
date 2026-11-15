@@ -588,11 +588,11 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         Entry host = Resolve(open[^1]);
         host.Placement!.HoldsUnowned = true;
         string? load = string.IsNullOrEmpty(src) ? null : src;
-        if (host.Document != load)
+        if (host.LoadedDocumentPath != load)
         {
-            if (host.Document != null)
+            if (host.LoadedDocumentPath != null)
                 RemoveAllChildren(host.Id);
-            host.Document = load;
+            host.LoadedDocumentPath = load;
             if (load != null)
                 seam.LoadDocument(host.Id, load);
         }
@@ -602,14 +602,8 @@ internal sealed class ElementBuilder : RenderTreeBuilder
     /// <summary>Removes every child of the element at once: what a document loaded, which no entry names.</summary>
     private void RemoveAllChildren(ElementId element)
     {
-        int count = seam.GetChildren(element, children);
-        if (count > children.Length)
-        {
-            children = new ElementId[System.Math.Max(count, children.Length * 2)];
-            count = seam.GetChildren(element, children);
-        }
         // Copied out first: the scratch array is the builder's, and each removal changes the native list.
-        ElementId[] gone = children[..System.Math.Min(count, children.Length)];
+        ElementId[] gone = ReadChildren(element).ToArray();
         foreach (ElementId child in gone)
             seam.Remove(child, RemoveMode.Immediate);
     }
@@ -1082,17 +1076,24 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             placement.Native = owned;
             return owned;
         }
-        int count = seam.GetChildren(placement.Element, children);
+        ReadOnlySpan<ElementId> read = ReadChildren(placement.Element);
+        var native = new List<ElementId>(read.Length);
+        foreach (ElementId child in read)
+            native.Add(child);
+        placement.Native = native;
+        return native;
+    }
+
+    /// <summary>The element's native children, in order, in the builder's scratch array (grown when they do not fit).</summary>
+    private ReadOnlySpan<ElementId> ReadChildren(ElementId element)
+    {
+        int count = seam.GetChildren(element, children);
         if (count > children.Length)
         {
             children = new ElementId[System.Math.Max(count, children.Length * 2)];
-            count = seam.GetChildren(placement.Element, children);
+            count = seam.GetChildren(element, children);
         }
-        var native = new List<ElementId>(count);
-        for (int i = 0; i < count && i < children.Length; ++i)
-            native.Add(children[i]);
-        placement.Native = native;
-        return native;
+        return children.AsSpan(0, System.Math.Min(count, children.Length));
     }
 
     private static int IndexOf(List<ElementId> list, ElementId element)

@@ -59,7 +59,7 @@ public static class RazorRuntime
     private static readonly ElementBuilder builder = new();
 
     /// <summary>Whether each Razor component type seen in the paint stage overrides <c>OnPaint</c>, found once per type.</summary>
-    private static readonly Dictionary<Type, bool> paints = [];
+    private static readonly Dictionary<Type, bool> overridesOnPaint = [];
 
     /// <summary>This frame's paint calls: the mount, the Razor component, and the element it paints into.</summary>
     private static readonly List<(MountedRazorComponent Mount, UIComponent Component, ElementId Element)> painting = [];
@@ -152,11 +152,11 @@ public static class RazorRuntime
             {
                 if (!mount.IsMounted || mount.Disabled || !mount.Built)
                     continue;
-                if (Paints(mount.Component.GetType()))
+                if (OverridesOnPaint(mount.Component.GetType()))
                     painting.Add((mount, mount.Component, mount.Host));
                 foreach (ChildComponent child in mount.Tree.Children)
                 {
-                    if (Paints(child.Component.GetType()) && child.Region.FirstPlaced() is { } first)
+                    if (OverridesOnPaint(child.Component.GetType()) && child.Region.FirstPlaced() is { } first)
                         painting.Add((mount, child.Component, first.Id));
                 }
             }
@@ -195,14 +195,14 @@ public static class RazorRuntime
     }
 
     /// <summary>Whether the type overrides <c>OnPaint</c>: looked up once per type, until <see cref="Release"/>.</summary>
-    private static bool Paints(Type type)
+    private static bool OverridesOnPaint(Type type)
     {
-        if (!paints.TryGetValue(type, out bool overrides))
+        if (!overridesOnPaint.TryGetValue(type, out bool overrides))
         {
             MethodInfo? method = type.GetMethod("OnPaint", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
                                                 [typeof(PainterId), typeof(ElementBoxes)]);
             overrides = method != null && method.DeclaringType != typeof(UIComponent);
-            paints.Add(type, overrides);
+            overridesOnPaint.Add(type, overrides);
         }
         return overrides;
     }
@@ -231,7 +231,7 @@ public static class RazorRuntime
         groups.Clear();
         building.Clear();
         painting.Clear();
-        paints.Clear();
+        overridesOnPaint.Clear();
         ElementBuilder.ReleaseCaches();
         ComponentParameters.Release();
     }

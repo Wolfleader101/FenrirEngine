@@ -67,10 +67,10 @@ internal interface IElementSeam
     void WarnIfTakesNoPointer(ElementId element, string message);
 
     /// <summary>
-    /// Loads the markup document at <paramref name="path"/> under <paramref name="parent"/>, after its children, and
-    /// returns whether it loaded with no errors; the native logs its errors with their files and lines.
+    /// Loads the markup document at <paramref name="path"/> under <paramref name="parent"/>, after its children; the
+    /// native logs its errors with their files and lines.
     /// </summary>
-    bool LoadDocument(ElementId parent, string path);
+    void LoadDocument(ElementId parent, string path);
 
     /// <summary>A painter for the element, in <c>Fenrir.UI.Paint</c>; none outside it, for a stale id, or on a frame the root does not paint.</summary>
     PainterId PaintInto(ElementId element);
@@ -125,7 +125,7 @@ internal sealed class RootSeam(UIRoot root) : IElementSeam
 
     public void WarnIfTakesNoPointer(ElementId element, string message) => root.WarnIfTakesNoPointer(element, message);
 
-    public bool LoadDocument(ElementId parent, string path) => root.LoadDocument(parent, path, out _);
+    public void LoadDocument(ElementId parent, string path) => root.LoadDocument(parent, path, out _);
 
     public PainterId PaintInto(ElementId element) => root.PaintInto(element);
 

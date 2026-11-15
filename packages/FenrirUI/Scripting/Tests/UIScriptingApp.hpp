@@ -10,7 +10,9 @@
 #include "ExtensionTestApp.hpp"
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -21,6 +23,7 @@
 #include "FenrirDraw2D/DrawList2D.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirInputScripting/InputScripting.hpp"
+#include "FenrirPainter/PainterVertex.hpp"
 #include "FenrirPainterScripting/PainterScripting.hpp"
 #include "FenrirTextScripting/TextScripting.hpp"
 #include "FenrirUI/UI.hpp"
@@ -49,6 +52,47 @@ namespace Fenrir::Testing
     inline bool Near(float a, float b)
     {
         return std::abs(a - b) <= 1e-3f;
+    }
+
+    // Opaque colours as the painter writes them: RGBA8, red in the lowest byte.
+    inline constexpr std::uint32_t Red = 0xFF0000FFu;
+    inline constexpr std::uint32_t Green = 0xFF00FF00u;
+    inline constexpr std::uint32_t Blue = 0xFFFF0000u;
+    inline constexpr std::uint32_t Yellow = 0xFF00FFFFu;
+    inline constexpr std::uint32_t Magenta = 0xFFFF00FFu;
+    inline constexpr std::uint32_t White = 0xFFFFFFFFu;
+
+    /** @brief The list's painter vertices, copied out of its byte stream. */
+    inline std::vector<PainterVertex> Vertices(const DrawList2D& list)
+    {
+        std::vector<PainterVertex> vertices(list.vertices.size() / sizeof(PainterVertex));
+        std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(PainterVertex));
+        return vertices;
+    }
+
+    /** @brief Each painter quad's colour, in the order drawn: every box and every rectangle is one quad of four
+     * vertices. */
+    inline std::vector<std::uint32_t> QuadColours(const DrawList2D& list)
+    {
+        std::vector<std::uint32_t> colours;
+        const std::vector<PainterVertex> vertices = Vertices(list);
+        for (std::size_t i = 0; i < vertices.size(); i += 4)
+        {
+            colours.push_back(vertices[i].colour);
+        }
+        return colours;
+    }
+
+    /** @brief The centre of the list's `quad`th painter quad: the mean of its four corners. */
+    inline Math::Vec2 QuadCentre(const DrawList2D& list, std::size_t quad)
+    {
+        const std::vector<PainterVertex> vertices = Vertices(list);
+        Math::Vec2 sum(0.0f);
+        for (std::size_t i = 0; i < 4; ++i)
+        {
+            sum += vertices[quad * 4 + i].position;
+        }
+        return sum / 4.0f;
     }
 
     /** @brief A 2D target of a fixed size that keeps every list a root submits to it. */

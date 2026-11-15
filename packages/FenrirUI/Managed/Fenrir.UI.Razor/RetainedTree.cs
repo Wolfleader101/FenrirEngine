@@ -179,7 +179,7 @@ internal sealed class Entry(ElementId id, string tag)
     public bool PointerChecked;
 
     /// <summary>For a <c>&lt;Document&gt;</c>'s host panel, the path last loaded into it; null when none was.</summary>
-    public string? Document;
+    public string? LoadedDocumentPath;
 }
 
 /// <summary>

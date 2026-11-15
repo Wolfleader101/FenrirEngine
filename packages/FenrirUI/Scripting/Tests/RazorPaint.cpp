@@ -8,7 +8,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -17,7 +16,6 @@
 #include <string_view>
 #include <vector>
 
-#include "FenrirPainter/PainterVertex.hpp"
 #include "FenrirUI/UIRoot.hpp"
 #include "UIScriptingApp.hpp"
 
@@ -28,45 +26,6 @@ namespace
 {
     constexpr const char* NeedleProbeType = "UIScriptFixture.NeedleProbe";
     constexpr const char* CreditsProbeType = "UIScriptFixture.CreditsProbe";
-
-    // Opaque colours as the painter writes them: RGBA8, red in the lowest byte.
-    constexpr std::uint32_t Red = 0xFF0000FFu;
-    constexpr std::uint32_t Green = 0xFF00FF00u;
-    constexpr std::uint32_t Blue = 0xFFFF0000u;
-    constexpr std::uint32_t Yellow = 0xFF00FFFFu;
-    constexpr std::uint32_t Magenta = 0xFFFF00FFu;
-    constexpr std::uint32_t White = 0xFFFFFFFFu;
-
-    std::vector<PainterVertex> Vertices(const DrawList2D& list)
-    {
-        std::vector<PainterVertex> vertices(list.vertices.size() / sizeof(PainterVertex));
-        std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(PainterVertex));
-        return vertices;
-    }
-
-    // Each painter quad's colour, in the order drawn: every box and every rectangle drawn is one quad of four vertices.
-    std::vector<std::uint32_t> QuadColours(const DrawList2D& list)
-    {
-        std::vector<std::uint32_t> colours;
-        const std::vector<PainterVertex> vertices = Vertices(list);
-        for (std::size_t i = 0; i < vertices.size(); i += 4)
-        {
-            colours.push_back(vertices[i].colour);
-        }
-        return colours;
-    }
-
-    // The centre of the list's `quad`th painter quad: the mean of its four corners.
-    Math::Vec2 QuadCentre(const DrawList2D& list, std::size_t quad)
-    {
-        const std::vector<PainterVertex> vertices = Vertices(list);
-        Math::Vec2 sum(0.0f);
-        for (std::size_t i = 0; i < 4; ++i)
-        {
-            sum += vertices[quad * 4 + i].position;
-        }
-        return sum / 4.0f;
-    }
 
     /** @brief The fixture with a Needle and a Quiet mounted on a capturing root, built, laid out and painted once. */
     struct NeedleScriptingApp : UIScriptingApp
@@ -122,18 +81,26 @@ TEST_CASE("A Razor component's OnPaint draws into its host after the host's own 
           "[ui][scripting][razor][paint]")
 {
     NeedleScriptingApp test;
-    INFO("The paint system called the override once, in the frame the Needle first built");
-    REQUIRE(test.Call<int>(NeedleProbeType, "NeedlePaints") == 1);
-    INFO("The host's box, the Needle's square, the dot, the Pip's panel and its square, then the Quiet's panel alone");
-    REQUIRE(QuadColours(test.target->lists.back()) ==
-            std::vector<std::uint32_t>{Red, Green, Blue, Yellow, Magenta, White});
-    INFO("The square is where the Needle drew it: 20 wide, 10 in from the host's top-left");
+    {
+        INFO("The paint system called the override once, in the frame the Needle first built");
+        REQUIRE(test.Call<int>(NeedleProbeType, "NeedlePaints") == 1);
+    }
+    {
+        INFO("The host's box, the Needle's square, the dot, the Pip's panel and its square, then the Quiet's panel");
+        REQUIRE(QuadColours(test.target->lists.back()) ==
+                std::vector<std::uint32_t>{Red, Green, Blue, Yellow, Magenta, White});
+    }
     const Math::Vec2 centre = QuadCentre(test.target->lists.back(), 1);
+    INFO("The square is not where the Needle drew it, 20 wide and 10 in from the host's top-left: at (20, 20)");
     REQUIRE(Near(centre.x, 20.0f));
     REQUIRE(Near(centre.y, 20.0f));
+}
 
+TEST_CASE("A Razor component's OnPaint is called again each frame", "[ui][scripting][razor][paint]")
+{
+    NeedleScriptingApp test;
     test.Frame();
-    INFO("It paints every frame");
+    INFO("The second frame did not call the override a second time");
     REQUIRE(test.Call<int>(NeedleProbeType, "NeedlePaints") == 2);
 }
 
@@ -141,23 +108,35 @@ TEST_CASE("A child Razor component's OnPaint draws into the first element its ma
           "[ui][scripting][razor][paint]")
 {
     NeedleScriptingApp test;
-    REQUIRE(test.Call<int>(NeedleProbeType, "PipPaints") == 1);
-    const ElementId pip = test.root.FindById("pip");
-    INFO("The Pip was handed its panel's boxes, below the Needle's dot, not the Needle's host's");
-    REQUIRE(Near(test.Call<float>(NeedleProbeType, "PipBorderY"), test.root.GetBoxes(pip).border.y));
-    REQUIRE(test.root.GetBoxes(pip).border.y > 0.0f);
+    {
+        INFO("The Pip's override was not called in the first frame");
+        REQUIRE(test.Call<int>(NeedleProbeType, "PipPaints") == 1);
+    }
+    const Rect2D pip = test.root.GetBoxes(test.root.FindById("pip")).border;
+    {
+        INFO("The Pip's panel is not below the Needle's dot, so its boxes cannot be told from the Needle's host's");
+        REQUIRE(pip.y > 0.0f);
+    }
+    INFO("The Pip was not handed its own panel's boxes");
+    REQUIRE(Near(test.Call<float>(NeedleProbeType, "PipBorderY"), pip.y));
 }
 
-TEST_CASE("Unmounted, a Razor component's OnPaint is no longer called and a Razor component without one paints as C++ "
-          "does",
+TEST_CASE("An unmounted Razor component's OnPaint is no longer called", "[ui][scripting][razor][paint]")
+{
+    NeedleScriptingApp test;
+    test.Call<void>(NeedleProbeType, "UnmountNeedle");
+    test.Frame();
+    INFO("The Needle was painted after it was unmounted");
+    REQUIRE(test.Call<int>(NeedleProbeType, "NeedlePaints") == 1);
+}
+
+TEST_CASE("A Razor component without an OnPaint override paints only as C++ paints its elements",
           "[ui][scripting][razor][paint]")
 {
     NeedleScriptingApp test;
     test.Call<void>(NeedleProbeType, "UnmountNeedle");
     test.Frame();
-    INFO("The Needle was not painted again");
-    REQUIRE(test.Call<int>(NeedleProbeType, "NeedlePaints") == 1);
-    INFO("The Quiet's panel is all that is drawn");
+    INFO("Something besides the Quiet's panel's box was drawn");
     REQUIRE(QuadColours(test.target->lists.back()) == std::vector<std::uint32_t>{White});
 }
 
@@ -182,13 +161,15 @@ TEST_CASE("<Document Src> places a document's elements in a host panel, which C+
     CreditsScriptingApp test;
     const ElementId credit = test.Find("credit-first");
     const ElementId panel = test.root.GetParent(credit);
-    INFO("The document's label is in the Document's panel, which is in the Credits' host after its title");
-    REQUIRE(test.root.GetParent(panel) == test.host);
+    {
+        INFO("The document's label is not the loaded label, with its text");
+        REQUIRE(test.root.GetText(credit) == "credit-first");
+    }
     const std::span<const ElementId> children = test.root.GetChildren(test.host);
+    INFO("The document's label is not in the Document's panel, the Credits' host's child after its title");
     REQUIRE(children.size() == 2);
     REQUIRE(children[0] == test.Find("credits-title"));
     REQUIRE(children[1] == panel);
-    REQUIRE(test.root.GetText(credit) == "credit-first");
 }
 
 TEST_CASE("A rebuild of the Razor component placing a document leaves the document's elements untouched",
