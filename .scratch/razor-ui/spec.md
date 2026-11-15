@@ -121,7 +121,7 @@ UIDemo shows two things. Its speedometer becomes one `.razor` file. A Razor sett
   - `CompilerServices.RuntimeHelpers`.
 
   It also holds two discovery classes:
-  - **`EventHandlers`**, with an `[EventHandler]` per ADR-0069 name, each naming the handler's argument type. That is `Fenrir.UI`'s `UIEvent` when the generator accepts a struct there; the stand-in may reference the `Fenrir.UI` contract for it. Otherwise it is a small `UIEventArgs` class wrapping one, and `Action<UIEvent>` handlers are adapted through `EventCallback.Factory`'s overloads. Ticket 03 records which.
+  - **`EventHandlers`**, with an `[EventHandler]` per ADR-0069 name, each naming the handler's argument type. That is `Fenrir.UI`'s `UIEvent` when the generator accepts a struct there; the stand-in may reference the `Fenrir.UI` contract for it. Otherwise it is a small `UIEventArgs` class wrapping one, and `Action<UIEvent>` handlers are adapted through `EventCallback.Factory`'s overloads. Ticket 06 records which.
   - **`BindAttributes`**, with `[BindElement]` for `slider`, `progress`, `checkbox` and `textentry`, binding the value attribute and the `onchange` event.
 - Its version is part of the contract, as for every contract. Its namespace layout follows Blazor's, so generated code resolves unchanged.
 
@@ -150,7 +150,7 @@ UIDemo shows two things. Its speedometer becomes one `.razor` file. A Razor sett
   A child component's entry holds the child object and its region.
 - **Resolution.** `OpenElement` buffers the tag and attributes. The element is resolved, found by key or created at the end of its parent, at the first non-attribute call: `SetKey`, content, a child, or `CloseElement`. A tag change at the same key removes the old element and makes a new one.
 - **Applying values:**
-  - **Attributes.** `class` splits into tokens and diffs them (`AddClass`/`RemoveClass`). `style` splits into declarations and diffs them (`SetStyle`; a dropped declaration is reset by `SetStyle(name, "")`, which ticket 01 confirms or adds as a reset). `id` uses `SetIdString`. `value` uses `SetValue`, or `SetEntryText` for a `textentry`, chosen by tag. Any other attribute uses `SetAttribute`. Each native is called only when the value changed.
+  - **Attributes.** `class` splits into tokens and diffs them (`AddClass`/`RemoveClass`). `style` splits into declarations and diffs them (`SetStyle`; a dropped declaration is reset by `SetStyle(name, "")`, which ticket 02 confirms or adds as a reset). `id` uses `SetIdString`. `value` uses `SetValue`, or `SetEntryText` for a `textentry`, chosen by tag. Any other attribute uses `SetAttribute`. Each native is called only when the value changed.
   - **Text.** Content runs within one element are concatenated and pushed with one `SetText` when the result changed. That applies in a `label` or `button`. In any other element, a run between child elements becomes a generated `label` child, keyed by the run's first sequence number.
   - **Folded markup.** `AddMarkupContent` strings are parsed by `MarkupFragment`, a C# parser for the well-formed HTML subset Razor's encoder emits: elements, attributes, text, the entities Razor emits, void elements and `<style>`. Each string is parsed once and cached per string instance. Its elements become entries keyed `(sequence, occurrence, child path)`, through the same apply rules. Whitespace-only runs are ignored.
   - **`<style>`.** A `<style>` element, folded or not, adds its text as a scoped sheet once per root and component type (ticket 07). It makes no element.
@@ -216,7 +216,7 @@ A good test drives a public seam and asserts on what comes out: elements and the
    - edit a `.razor.css` written to a temporary directory and see the resolved style change;
    - release the generation and check that the hosts are gone and the generation is collected.
 2. **The builder against a recording fake element seam**, in a managed test project, `packages/FenrirUI/Managed/Fenrir.UI.Razor.Tests/`, run by CTest like the other managed checks (prior art: `packages/Iris/Tools/Iris.Bindings/tests`). Its components are real `.razor` files compiled by the same props. These tests pin native-call counts: the first build, a no-change rebuild (zero), a text change, a class token, a style declaration, a keyed insert, remove and reverse, an `@if` appearing and disappearing, a folded block, generated labels, a child's parameter change, and `@ref` set and cleared.
-3. **FenrirUI's C++ stylesheet tests** (prior art: ticket 08's cascade tests and ticket 16's hot reload tests): scoped rules land on the rightmost compound, `::deep`, nesting, `@import` with a scope, `::deep` in an unscoped sheet as an error, dedup, and hot reload keeping the scope.
+3. **FenrirUI's C++ stylesheet tests** (prior art: FenrirUI ticket 08's cascade tests and FenrirUI ticket 16's hot reload tests): scoped rules land on the rightmost compound, `::deep`, nesting, `@import` with a scope, `::deep` in an unscoped sheet as an error, dedup, and hot reload keeping the scope.
 4. **A compile test**: a fixture project with `.razor` files builds against the stand-in alone, with no ASP.NET Core reference. A second fixture with a missing `@using` builds and logs the unrecognised-directive warning at mount.
 
 No golden images; UIDemo is the visual check. Build and test under the msvc-x64-debug preset. CI runs what `.github/workflows/build-and-test.yml` runs; read it before claiming coverage.
@@ -236,7 +236,7 @@ No golden images; UIDemo is the visual check. Build and test under the msvc-x64-
 ## Further Notes
 
 - **Research**: `research/razor-compilation-and-builder.md` holds the experiment's facts: the stand-in that builds, the generated code's calls, build-time measurements, the keying and cost sketch, and the open questions this spec answers (outro indices, `<style>` per instance, entities in folded markup) or leaves (Rider, the SDK's generator path across versions).
-- **Ticket shape**: native stylesheet scoping and the build stage first, beside the stand-in and the builder, which is pure managed code; then mounting and the dispatcher, which meet in the engine; then handlers, styles and paint over the dispatcher; UIDemo last.
+- **Ticket shape**: the build stage first, as the prefactor. Then a tracer bullet: a static `.razor` component compiled, mounted and on screen, through every layer, with reload. Then rebuilds in place, child components, and handlers and binding over it. Native scoping runs beside the tracer, and the component stylesheets join it. Paint overrides and documents follow, and UIDemo comes last.
 - **Branches**: an integration branch `razor-ui` cut from the base this spec merges into, one ticket session, branch and PR per ticket into `razor-ui` (or the previous ticket's branch when stacked), and a trunk PR from `razor-ui` to its base describing the whole stack.
 - **Vocabulary**: see GLOSSARY.md's "FenrirEngine painting and UI" section (Razor component, mount, Razor dispatcher, build stage, scope class), beside element, element id, UI root and stylesheet.
 
@@ -244,16 +244,20 @@ No golden images; UIDemo is the visual check. Build and test under the msvc-x64-
 
 One session, branch and PR per ticket, into `razor-ui` or the previous ticket's branch when stacked. The PR column is kept current as each opens.
 
-Stacks, from the Touches lines: 01 → 02 (FenrirUI's native files and binding), and 03 → 04 (the managed contracts and their tests). The two stacks run side by side. 05 starts once both have merged into `razor-ui`. 05 → 06 → 07 → 08 stack on `Fenrir.UI.Razor`, and 09 comes last.
+Stacks, from the Touches lines:
+- 01 → 02, on FenrirUI's native files.
+- 03 is cut from `razor-ui` once 01 has merged, and runs beside 02.
+- 03 → 04 → 05 → 06 → 07 → 08 stack on `Fenrir.UI.Razor`, with 07 cut once 02 has merged.
+- 09 comes last.
 
 | # | Ticket | Blocked by | Branch | PR |
 |---|---|---|---|---|
-| 01 | [Scoped stylesheets and stylesheets from text](issues/01-scoped-stylesheets-and-stylesheets-from-text.md) | none | `razor/01-scoped-stylesheets-and-stylesheets-from-text` | |
-| 02 | [The build stage](issues/02-the-build-stage.md) | none | `razor/02-the-build-stage` | |
-| 03 | [The stand-in contract and `.razor` compilation in script projects](issues/03-the-stand-in-contract-and-razor-compilation-in-script-projects.md) | none | `razor/03-the-stand-in-contract-and-razor-compilation-in-script-projects` | |
-| 04 | [The in-place builder](issues/04-the-in-place-builder.md) | 03 | `razor/04-the-in-place-builder` | |
-| 05 | [Mounting, the dispatcher, rebuilds and reload](issues/05-mounting-the-dispatcher-rebuilds-and-reload.md) | 02, 04 | `razor/05-mounting-the-dispatcher-rebuilds-and-reload` | |
-| 06 | [Handlers and two-way binding](issues/06-handlers-and-two-way-binding.md) | 05 | `razor/06-handlers-and-two-way-binding` | |
-| 07 | [Scoped component stylesheets](issues/07-scoped-component-stylesheets.md) | 01, 05 | `razor/07-scoped-component-stylesheets` | |
-| 08 | [Paint overrides and `<Document>`](issues/08-paint-overrides-and-document.md) | 05 | `razor/08-paint-overrides-and-document` | |
+| 01 | [The build stage](issues/01-the-build-stage.md) | none | `razor/01-the-build-stage` | |
+| 02 | [Native scoped stylesheets](issues/02-native-scoped-stylesheets.md) | none | `razor/02-native-scoped-stylesheets` | |
+| 03 | [Tracer: a static Razor component on screen](issues/03-tracer-a-static-razor-component-on-screen.md) | 01 | `razor/03-tracer-a-static-razor-component-on-screen` | |
+| 04 | [Rebuilds in place](issues/04-rebuilds-in-place.md) | 03 | `razor/04-rebuilds-in-place` | |
+| 05 | [Child components](issues/05-child-components.md) | 04 | `razor/05-child-components` | |
+| 06 | [Handlers and two-way binding](issues/06-handlers-and-two-way-binding.md) | 04, 05 | `razor/06-handlers-and-two-way-binding` | |
+| 07 | [Scoped component stylesheets](issues/07-scoped-component-stylesheets.md) | 02, 04 | `razor/07-scoped-component-stylesheets` | |
+| 08 | [Paint overrides and `<Document>`](issues/08-paint-overrides-and-document.md) | 04 | `razor/08-paint-overrides-and-document` | |
 | 09 | [UIDemo: the Razor speedometer and settings page](issues/09-uidemo-the-razor-speedometer-and-settings-page.md) | 06, 07, 08 | `razor/09-uidemo-the-razor-speedometer-and-settings-page` | |

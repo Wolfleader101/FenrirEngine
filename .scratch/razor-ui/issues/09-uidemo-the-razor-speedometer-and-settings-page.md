@@ -14,8 +14,8 @@
   - `<Document Src>` placing a small credits document;
   - a child component with `ChildContent`;
   - a scoped sheet using `::deep`.
-- `UIDemo.Scripts.csproj` imports `Fenrir.UI.Razor.props`. `MenuClicks.cs` stays.
-- The demo's README describes the Razor variant, what each part proves, and how to edit `Settings.razor.css` live and rebuild `.razor` files for a reload.
+- `UIDemo.Scripts.csproj` imports `Fenrir.UI.Razor.props`, and `MenuClicks.cs` stays.
+- The demo's README describes the Razor variant, what each part proves, and how to edit `Settings.razor.css` live and rebuild the `.razor` files for a reload.
 
 **Blocked by:** 06, 07, 08
 
@@ -24,7 +24,10 @@
 **Status:** ready-for-agent
 
 - [ ] UIDemo builds with scripting on, and the speedometer draws and reads out the speed as before.
-- [ ] The settings page shows inside the pause menu. Its controls change the bound fields (logged). Rows add and remove with their outros. The credits document shows.
-- [ ] Editing `Settings.razor.css` while the demo runs restyles the page. Rebuilding the scripts brings the page back after the reload.
+- [ ] The settings page shows inside the pause menu:
+  - its controls change the bound fields (logged);
+  - rows add and remove with their outros;
+  - the credits document shows.
+- [ ] Editing `Settings.razor.css` while the demo runs restyles the page, and rebuilding the scripts brings the page back after the reload.
 - [ ] UIDemo still builds and runs with scripting off, unchanged.
 - [ ] Everything passes under the msvc-x64-debug preset. `check_tickets.py` and clang-format pass.
