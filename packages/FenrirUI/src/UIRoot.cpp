@@ -764,8 +764,20 @@ namespace Fenrir
         }
         Detail::StyleParseContext context = Detail::MakeParseContext(*m_state);
         const std::string lower = Detail::Lowered(name);
+        const Detail::PropertyKind kind = Detail::ClassifyProperty(lower);
+        if (Detail::Trim(value).empty() &&
+            (kind == Detail::PropertyKind::Styled || kind == Detail::PropertyKind::Shorthand))
+        {
+            // An empty value takes the declaration back: the property is not set inline any more.
+            for (const StyleProperty property : Detail::PropertiesOf(lower))
+            {
+                slot->inlineStyle.Unset(property);
+            }
+            MarkStyleDirty(*m_state, element);
+            return true;
+        }
         bool set = false;
-        if (Detail::ClassifyProperty(lower) == Detail::PropertyKind::NotYetStyled)
+        if (kind == Detail::PropertyKind::NotYetStyled)
         {
             context.error = "FenrirUI does not style it yet";
         }
@@ -782,9 +794,42 @@ namespace Fenrir
         return true;
     }
 
-    StylesheetId UIRoot::AddStylesheet(std::string_view text, std::string_view name)
+    StylesheetId Detail::PruneAndFindScopedSheet(UIRootState& state, const ScopedSheet& key)
     {
-        return AddStylesheet(Stylesheet::Parse(text, name));
+        if (key.scope.empty())
+        {
+            return {};
+        }
+        std::erase_if(state.scopedSheets, [&](const ScopedSheet& held) {
+            return std::none_of(state.sheets.begin(), state.sheets.end(),
+                                [&](const auto& entry) { return entry->id == held.id; });
+        });
+        const auto found =
+            std::find_if(state.scopedSheets.begin(), state.scopedSheets.end(), [&](const ScopedSheet& held) {
+                return held.source == key.source && held.name == key.name && held.scope == key.scope;
+            });
+        return found != state.scopedSheets.end() ? found->id : StylesheetId{};
+    }
+
+    void Detail::RememberScopedSheet(UIRootState& state, ScopedSheet sheet)
+    {
+        if (!sheet.scope.empty() && sheet.id.IsValid())
+        {
+            state.scopedSheets.push_back(std::move(sheet));
+        }
+    }
+
+    StylesheetId UIRoot::AddStylesheet(std::string_view text, std::string_view name, std::string_view scope)
+    {
+        Detail::ScopedSheet key{Detail::SheetSource::Text, std::string(name), std::string(scope), {}};
+        if (const StylesheetId held = Detail::PruneAndFindScopedSheet(*m_state, key); held.IsValid())
+        {
+            return held;
+        }
+        key.id = AddStylesheet(Stylesheet::Parse(text, name, scope));
+        const StylesheetId id = key.id;
+        Detail::RememberScopedSheet(*m_state, std::move(key));
+        return id;
     }
 
     StylesheetId UIRoot::AddStylesheet(Stylesheet sheet)

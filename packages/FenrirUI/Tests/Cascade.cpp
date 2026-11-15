@@ -89,6 +89,42 @@ TEST_CASE("Inline style wins over every rule", "[ui][cascade]")
     REQUIRE(root.GetResolvedStyle(element)->height == Length::Px(7.0f));
 }
 
+TEST_CASE("An inline declaration set to an empty value is not set any more, and the rules' value shows through",
+          "[ui][cascade]")
+{
+    SheetTest t;
+    Fenrir::UIRoot& root = t.root;
+    root.AddStylesheet("#x { width: 50px; margin-left: 3px; }", "sheet");
+    const Fenrir::ElementId element = root.Create(root.GetRootElement(), "panel");
+    root.SetIdString(element, "x");
+    {
+        INFO("the inline longhand and shorthand are set, and win over the rule");
+        REQUIRE(root.SetStyleProperty(element, "width", "5px"));
+        REQUIRE(root.SetStyleProperty(element, "margin", "9px"));
+        t.test.Frame();
+        REQUIRE(WidthOf(root, element) == 5.0f);
+        REQUIRE(root.GetResolvedStyle(element)->marginLeft == Length::Px(9.0f));
+    }
+
+    INFO("an empty value resets a longhand, and a shorthand's every longhand, and the rule's values show through");
+    REQUIRE(root.SetStyleProperty(element, "width", ""));
+    REQUIRE(root.SetStyleProperty(element, "margin", " "));
+    REQUIRE(!root.GetInlineStyle(element)->IsSet(Fenrir::StyleProperty::Width));
+    REQUIRE(!root.GetInlineStyle(element)->IsSet(Fenrir::StyleProperty::MarginTop));
+    t.test.Frame();
+    REQUIRE(WidthOf(root, element) == 50.0f);
+    REQUIRE(root.GetResolvedStyle(element)->marginLeft == Length::Px(3.0f));
+    REQUIRE(root.GetResolvedStyle(element)->marginTop != Length::Px(9.0f));
+}
+
+TEST_CASE("An empty value for an unknown inline property is refused", "[ui][cascade]")
+{
+    SheetTest t;
+    const Fenrir::ElementId element = t.root.Create(t.root.GetRootElement(), "panel");
+    INFO("an unknown property is refused, empty or not");
+    REQUIRE(!t.root.SetStyleProperty(element, "colour", ""));
+}
+
 TEST_CASE("An inherited property reaches down three levels, and a rule below overrides it", "[ui][cascade]")
 {
     SheetTest t;

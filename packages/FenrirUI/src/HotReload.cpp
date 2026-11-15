@@ -24,13 +24,16 @@ namespace Fenrir
             return Detail::FileReader(store != nullptr ? store->Root() : std::filesystem::path(), files);
         }
 
-        /** @brief The sheet `text`, named `name`, its imports loaded, with its errors in the order written. */
-        Stylesheet BuildSheet(std::string_view text, const std::string& name, const Detail::SourceReader& reader,
-                              AssetStore* store, std::vector<MarkupError>& errors)
+        /**
+         * @brief The sheet `text`, named `name` and scoped to `scope` (none when empty), its imports loaded, with its
+         * errors in the order written.
+         */
+        Stylesheet BuildSheet(std::string_view text, const std::string& name, std::string_view scope,
+                              const Detail::SourceReader& reader, AssetStore* store, std::vector<MarkupError>& errors)
         {
             Detail::MarkupErrors ordered;
             std::vector<std::string> loading;
-            Stylesheet sheet = Detail::BuildStylesheet(text, name, reader, store, loading, ordered);
+            Stylesheet sheet = Detail::BuildStylesheet(text, name, reader, store, loading, ordered, scope);
             for (Detail::OrderedError& error : ordered)
             {
                 errors.push_back(std::move(error.error));
@@ -39,8 +42,9 @@ namespace Fenrir
         }
 
         /** @brief The stylesheet file `name`, as BuildSheet builds it; nothing, with an error, when it is not there. */
-        std::optional<Stylesheet> BuildFileSheet(const std::string& name, const Detail::SourceReader& reader,
-                                                 AssetStore* store, std::vector<MarkupError>& errors)
+        std::optional<Stylesheet> BuildFileSheet(const std::string& name, std::string_view scope,
+                                                 const Detail::SourceReader& reader, AssetStore* store,
+                                                 std::vector<MarkupError>& errors)
         {
             const std::optional<std::string> text = reader.read(name);
             if (!text.has_value())
@@ -48,7 +52,7 @@ namespace Fenrir
                 errors.push_back({name, 0, "the stylesheet '" + name + "' was not found"});
                 return std::nullopt;
             }
-            return BuildSheet(*text, name, reader, store, errors);
+            return BuildSheet(*text, name, scope, reader, store, errors);
         }
 
         /**
@@ -87,19 +91,26 @@ namespace Fenrir
         return load;
     }
 
-    StylesheetId UIRoot::LoadStylesheet(std::string_view path)
+    StylesheetId UIRoot::LoadStylesheet(std::string_view path, std::string_view scope)
     {
         std::vector<Detail::LoadedFile> files;
         const Detail::SourceReader reader = AssetFiles(m_state->app, files);
         const std::string name = reader.name(path, {});
+        Detail::ScopedSheet key{Detail::SheetSource::File, name, std::string(scope), {}};
+        if (const StylesheetId held = Detail::PruneAndFindScopedSheet(*m_state, key); held.IsValid())
+        {
+            return held;
+        }
         std::vector<MarkupError> errors;
         std::optional<Stylesheet> sheet =
-            BuildFileSheet(name, reader, m_state->app.TryGetResource<AssetStore>(), errors);
+            BuildFileSheet(name, scope, reader, m_state->app.TryGetResource<AssetStore>(), errors);
         StylesheetId id;
         if (sheet.has_value())
         {
             id = AttachStylesheet(std::move(*sheet), errors);
-            m_state->hotReload.sheets.push_back({id, name, {}, std::move(files)});
+            m_state->hotReload.sheets.push_back({id, name, {}, std::string(scope), std::move(files)});
+            key.id = id;
+            Detail::RememberScopedSheet(*m_state, std::move(key));
         }
         LogErrors(errors);
         return id;
@@ -252,8 +263,8 @@ namespace Fenrir
         AssetStore* store = m_state->app.TryGetResource<AssetStore>();
         std::vector<MarkupError> errors;
         std::optional<Stylesheet> built = sheet.text.empty()
-                                              ? BuildFileSheet(sheet.name, reader, store, errors)
-                                              : BuildSheet(sheet.text, sheet.name, reader, store, errors);
+                                              ? BuildFileSheet(sheet.name, sheet.scope, reader, store, errors)
+                                              : BuildSheet(sheet.text, sheet.name, sheet.scope, reader, store, errors);
         if (!errors.empty() || !built.has_value())
         {
             LogErrors(errors);
