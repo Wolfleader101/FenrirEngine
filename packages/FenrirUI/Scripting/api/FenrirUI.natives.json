@@ -1083,7 +1083,7 @@
       "namespace": "Fenrir::UINatives",
       "source": "../src/UIScripting.cpp",
       "state": "Fenrir::UIScripting",
-      "doc": "The check behind a Razor pointer handler (ADR-0069): in a debug build, warns once with `message` when the element's resolved style, as of the last frame, takes no pointer events (`pointer-events` is not `all`). A release build checks nothing.",
+      "doc": "The check behind a Razor pointer handler (ADR-0069): in a debug build, warns once with `message` when the element's resolved style, as of the last frame, takes no pointer events (`pointer-events` is not `all`). A release build logs nothing.",
       "facade": "UIRoot.WarnIfTakesNoPointer",
       "returns": {
         "type": "bool",

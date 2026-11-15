@@ -11,8 +11,10 @@
 #include <string>
 #include <string_view>
 
+#include "FenrirApp/App.hpp"
 #include "FenrirInput/InputTypes.hpp"
 #include "FenrirUI/Controls.hpp"
+#include "FenrirUI/UIEvent.hpp"
 #include "FenrirUI/UIRoot.hpp"
 #include "UIScriptingApp.hpp"
 
@@ -37,6 +39,7 @@ namespace
         ElementId Find(std::string_view id)
         {
             const ElementId element = root.FindById(id);
+            INFO("The Mixer built no element with the id " << id);
             REQUIRE(root.IsAlive(element));
             return element;
         }
@@ -110,6 +113,7 @@ TEST_CASE("An Action<UIEvent> handler receives the event's kind and position", "
     test.Press(at);
     test.Handle();
 
+    INFO("The cell's handler was handed the press, at the place it was fed");
     REQUIRE(test.Count("PressedKind") == static_cast<int>(UIEventKind::PointerPress));
     REQUIRE(Near(test.Value("PressedX"), at.x));
     REQUIRE(Near(test.Value("PressedY"), at.y));
@@ -123,6 +127,7 @@ TEST_CASE("An ancestor's handler runs when nothing nearer handles the kind", "[u
     test.Click(test.Centre(test.Find("cell")));
     test.Handle();
 
+    INFO("The row's handler took the click once, and the button's did not run");
     REQUIRE(test.Count("RowClicks") == 1);
     REQUIRE(test.Count("Count") == 0);
 }
@@ -158,11 +163,22 @@ TEST_CASE("A field changed by code moves the slider and sends no Change back", "
     MixerScriptingApp test;
     const ElementId volume = test.Find("volume");
     auto& slider = dynamic_cast<Slider&>(*test.root.GetElement(volume));
+    EventReader<UIEvent> events;
+    (void)events.Read(test.app);
 
     test.Call<void>(MixerProbeType, "SetFields", 0.8f, 0.25f);
     test.Frame();
     test.Frame();
 
+    int changes = 0;
+    for (const UIEvent& event : events.Read(test.app))
+    {
+        changes += event.kind == UIEventKind::Change && event.target == volume ? 1 : 0;
+    }
+    {
+        INFO("Pushing the field sent no Change from the slider");
+        REQUIRE(changes == 0);
+    }
     INFO("The slider shows the field, which nothing wrote back, and @bind:after did not run");
     REQUIRE(Near(slider.GetValue(), 0.8f));
     REQUIRE(Near(test.Value("Volume"), 0.8f));

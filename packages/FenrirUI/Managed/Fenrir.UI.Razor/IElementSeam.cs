@@ -60,7 +60,7 @@ internal interface IElementSeam
 
     /// <summary>
     /// In a debug build, warns once with <paramref name="message"/> when the element's resolved style, as of the last
-    /// frame, takes no pointer events; a release build checks nothing (ADR-0069).
+    /// frame, takes no pointer events; a release build logs nothing (ADR-0069).
     /// </summary>
     void WarnIfTakesNoPointer(ElementId element, string message);
 }

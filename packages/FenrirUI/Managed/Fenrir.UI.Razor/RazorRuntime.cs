@@ -75,10 +75,15 @@ public static class RazorRuntime
         BuildAll(context);
     }
 
-    /// <summary>Runs one frame with no UI events: <see cref="Build(in SystemContext, EventRange{UIEvent})"/>.</summary>
+    /// <summary>
+    /// Runs one frame with no UI events, as <see cref="Build(in SystemContext, EventRange{UIEvent})"/> does with some.
+    /// </summary>
     public static void Build(in SystemContext context) => Build(context, ReadOnlySpan<UIEvent>.Empty);
 
-    /// <summary>Runs one frame with these UI events, as the tests give them.</summary>
+    /// <summary>
+    /// Runs one frame with these UI events, as the tests give them: the public overload's steps over a span, since an
+    /// <c>EventRange</c> is the engine's queue and a test has none.
+    /// </summary>
     internal static void Build(in SystemContext context, ReadOnlySpan<UIEvent> events)
     {
         BeginFrame();
@@ -126,7 +131,8 @@ public static class RazorRuntime
     /// <summary>
     /// Lets go of the script generation (ADR-0068): runs each Razor component's <c>OnUnmount</c>, removes every mounted
     /// host still alive at once, with no outro, and forgets every Razor component and every cache naming the
-    /// generation's types, so nothing here refers to its objects: the handler tables go with their roots' groups. The Razor dispatcher calls it from its
+    /// generation's types, so nothing here refers to its objects: the handler tables go with their roots'
+    /// groups. The Razor dispatcher calls it from its
     /// <c>OnDestroy</c>, before the generation is released.
     /// </summary>
     public static void Release()

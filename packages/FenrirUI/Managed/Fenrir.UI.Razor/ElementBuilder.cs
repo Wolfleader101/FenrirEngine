@@ -1339,7 +1339,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
     // ---- Handlers ----
 
     /// <summary>A handler attribute (ADR-0069): recorded on the open element's entry by kind, buffered until it is found.</summary>
-    private void AddHandler(int sequence, string name, MulticastDelegate? callback, IHandleEvent? receiver)
+    private void AddHandler(int sequence, string name, MulticastDelegate? handler, IHandleEvent? receiver)
     {
         Frame frame = open[^1];
         if (frame.Kind != FrameKind.Element)
@@ -1353,7 +1353,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         }
         var pending = new PendingHandler
         {
-            Sequence = sequence, Name = name, Kind = kind, Delegate = callback, Receiver = receiver,
+            Sequence = sequence, Name = name, Kind = kind, Delegate = handler, Receiver = receiver,
         };
         if (frame.Resolved)
             ApplyHandler(frame.Entry!, pending);
@@ -1374,7 +1374,9 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         Handler handler = entry.Handlers[pending.Kind] ??= new Handler();
         handler.Delegate = pending.Delegate;
         handler.Owner = pending.Receiver as UIComponent ?? component;
-        handler.Directive = "@" + pending.Name;
+        // A kind has one name, so the directive is spelled once per handler, not each build.
+        if (handler.Directive.Length == 0)
+            handler.Directive = "@" + pending.Name;
         handler.Seen = build;
         tree.Handlers.Add(entry);
         if (HandlerKinds.IsPointer(pending.Kind) && !entry.PointerChecked)

@@ -196,7 +196,7 @@ public partial struct UIRoot
     /// <summary>
     /// The check behind a Razor pointer handler (ADR-0069): in a debug build, warns once with `message` when the
     /// element's resolved style, as of the last frame, takes no pointer events (`pointer-events` is not `all`). A
-    /// release build checks nothing.
+    /// release build logs nothing.
     /// </summary>
     /// <returns>Whether the element is alive.</returns>
     public bool WarnIfTakesNoPointer(ElementId element, ReadOnlySpan<char> message) =>

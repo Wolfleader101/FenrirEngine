@@ -21,10 +21,7 @@ public readonly struct EventCallbackWorkItem
         callback = @delegate;
     }
 
-    /// <summary>
-    /// Runs the delegate: an <c>Action</c>, or one taking <paramref name="arg"/>; a <c>Func</c> returning a
-    /// <c>Task</c> runs to its first <c>await</c>, since a stage has no synchronisation context to finish it on.
-    /// </summary>
+    /// <summary>Runs the delegate: an <c>Action</c>, or one taking <paramref name="arg"/>.</summary>
     public Task InvokeAsync(object? arg) => EventCallbackInvoker.Invoke(callback, arg);
 }
 
@@ -110,10 +107,10 @@ internal static class EventCallbackInvoker
             case Action action:
                 action();
                 return Task.CompletedTask;
-            case Func<Task> run:
-                return run();
             default:
-                return callback.DynamicInvoke(arg) as Task ?? Task.CompletedTask;
+                // An Action<T> (the factory makes no other), whose T is only known here as the argument's.
+                callback.DynamicInvoke(arg);
+                return Task.CompletedTask;
         }
     }
 }
@@ -167,7 +164,10 @@ public static class EventCallbackFactoryBinderExtensions
         return new(receiver as IHandleEvent, (Action<ChangeEventArgs>)(e => setter(BindConverter.ConvertTo<T>(e.Value))));
     }
 
-    /// <summary>The setter <c>@bind:after</c> makes: it sets the field and runs the after-code.</summary>
+    /// <summary>
+    /// The setter <c>@bind:after</c> makes: it sets the field and runs the after-code, returning that code's task,
+    /// which is always complete (an async after-method does not compile, ADR-0069).
+    /// </summary>
     public static EventCallback<ChangeEventArgs> CreateBinder<T>(this EventCallbackFactory factory, object receiver,
                                                                  Func<T, Task> setter, T existingValue,
                                                                  System.Globalization.CultureInfo? culture = null)

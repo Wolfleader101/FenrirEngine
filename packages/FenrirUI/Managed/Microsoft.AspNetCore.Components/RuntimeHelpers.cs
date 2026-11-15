@@ -13,7 +13,10 @@ public static class RuntimeHelpers
         return EventCallback.Factory.Create(receiver, callback);
     }
 
-    /// <summary><c>@bind-Value</c> with <c>@bind-Value:after</c>: the setter runs the field's set, then the after-code.</summary>
+    /// <summary>
+    /// <c>@bind-Value</c> with <c>@bind-Value:after</c>: the setter runs the field's set, then the after-code. The
+    /// generated setter returns the after-code's task, always complete (<see cref="InvokeAsynchronousDelegate"/>).
+    /// </summary>
     public static EventCallback<T> CreateInferredEventCallback<T>(object receiver, Func<T, Task> callback, T value)
     {
         _ = value;
@@ -41,16 +44,14 @@ public static class RuntimeHelpers
         return Task.CompletedTask;
     }
 
-    /// <summary>Runs <c>@bind:after</c>'s code when the generator cannot tell it returns nothing: an <c>Action</c>.</summary>
+    /// <summary>
+    /// Runs <c>@bind:after</c>'s code, which the generator calls this for whenever it names a method. Only an
+    /// <c>Action</c> is taken: there is no overload for a <c>Func&lt;Task&gt;</c>, so an async after-method does not
+    /// compile, as a stage has no synchronisation context to finish it on (ADR-0069).
+    /// </summary>
     public static Task InvokeAsynchronousDelegate(Action callback)
     {
         callback();
         return Task.CompletedTask;
     }
-
-    /// <summary>
-    /// Runs <c>@bind:after</c>'s code returning a <c>Task</c>, to its first <c>await</c>: a stage has no
-    /// synchronisation context to finish the rest on (ADR-0069).
-    /// </summary>
-    public static Task InvokeAsynchronousDelegate(Func<Task> callback) => callback();
 }

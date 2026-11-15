@@ -52,7 +52,10 @@ internal static class HandlerKinds
         return found;
     }
 
-    /// <summary>Whether the kind is the pointer's, which an element takes only with <c>pointer-events: all</c>.</summary>
+    /// <summary>
+    /// Whether the kind is the pointer's, which an element takes only with <c>pointer-events: all</c>: the generated
+    /// enum lists the pointer's kinds first, up to <see cref="UIEventKind.Scroll"/>.
+    /// </summary>
     public static bool IsPointer(int kind) => kind <= (int)UIEventKind.Scroll;
 }
 
@@ -69,8 +72,7 @@ internal sealed class HandlerTable
     private readonly Dictionary<ulong, Entry> entries = [];
     private readonly List<(Entry Entry, string Message)> checks = [];
 
-    public int Count => entries.Count;
-
+    /// <summary>Puts the entry in the table, so events reach its handlers; once, however often it is given one.</summary>
     public void Add(Entry entry)
     {
         if (entry.InHandlerTable)
@@ -79,6 +81,7 @@ internal sealed class HandlerTable
         entries[Key(entry.Id)] = entry;
     }
 
+    /// <summary>Takes the entry out: it has no handlers left, or it is forgotten.</summary>
     public void Remove(Entry entry)
     {
         if (!entry.InHandlerTable)
@@ -103,7 +106,8 @@ internal sealed class HandlerTable
 
     /// <summary>
     /// Runs the handler of the event's kind nearest its target, walking up through the parents; returns whether one was
-    /// found. Its Razor component then rebuilds; a throw turns the component's mount off, as a throwing build does.
+    /// found. Only that one is offered the event: when its mount is off, nothing runs. Its Razor component then
+    /// rebuilds; a throw turns the component's mount off, as a throwing build does.
     /// </summary>
     public bool Dispatch(in UIEvent e, IElementSeam seam, in SystemContext context)
     {
@@ -167,7 +171,8 @@ internal sealed class HandlerTable
 
     /// <summary>
     /// A changed control's value, read from the control, which the entry then records as what the control holds: the
-    /// next build pushes the value only if the field it binds came out different. <paramref name="moved"/> is whether
+    /// next build pushes the value only if the field it binds came out different. This holds for any change handler on
+    /// the control, so a <c>value="@x"</c> whose handler leaves <c>x</c> as it was puts the control back to it. <paramref name="moved"/> is whether
     /// it differs from what the entry last recorded; any other element gives the event's value, as moved.
     /// </summary>
     private static object? ReadControl(Entry entry, IElementSeam seam, in UIEvent e, out bool moved)
