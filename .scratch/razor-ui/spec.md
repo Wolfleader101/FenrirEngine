@@ -101,7 +101,7 @@ UIDemo shows two things. Its speedometer becomes one `.razor` file. A Razor sett
 - `Stylesheet::Parse` takes the scope. After nesting is resolved, it appends `.scope` to the rightmost compound selector of every rule (`.a .b` becomes `.a .b.s-x`, `.a > label` becomes `.a > label.s-x`).
 - `::deep` is a combinator marker, legal only in a scoped sheet: `.a ::deep .b` puts the scope on `.a` and drops the marker, leaving a descendant combinator. An unscoped sheet that uses `::deep` logs an error for that rule.
 - `@keyframes` names and `@font-face` are not scoped. `@import`ed sheets inherit the scope.
-- Hot reload keeps each file's scope. A sheet named twice with the same scope is added once (dedup by path or name plus scope).
+- Hot reload keeps each file's scope. A scoped sheet added again under the same path or name and scope is added once. Unscoped sheets add every time, as before (decided 2026-11-15 in ticket 02, so a game re-adding a same-named sheet with new text is not silently dropped).
 - The C# binding gains `LoadStylesheet` with a scope and `AddStylesheet(root, text, name, scope)`. Both are generated, as ticket 20's natives are.
 
 ### FenrirUI: the build stage (ADR-0068)
