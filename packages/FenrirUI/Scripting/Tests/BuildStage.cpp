@@ -5,7 +5,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <cmath>
 #include <cstdint>
 #include <memory>
 
@@ -17,21 +16,6 @@
 
 using namespace Fenrir;
 using namespace Fenrir::Testing;
-
-namespace
-{
-    constexpr const char* BuildProbeType = "UIScriptFixture.BuildProbe";
-
-    bool Near(float a, float b)
-    {
-        return std::abs(a - b) <= 1e-3f;
-    }
-
-    std::uint64_t Packed(ElementId element)
-    {
-        return (static_cast<std::uint64_t>(element.index) << 32u) | element.version;
-    }
-} // namespace
 
 TEST_CASE("A script's build stage system makes an element laid out and painted the same frame",
           "[ui][scripting][build]")
@@ -53,7 +37,7 @@ TEST_CASE("A script's build stage system makes an element laid out and painted t
     REQUIRE(target->lists.back().vertices.size() == 4 * sizeof(PainterVertex));
 }
 
-TEST_CASE("A build stage system's structural changes play back when the stage ends", "[ui][scripting][build]")
+TEST_CASE("A build stage system's structural changes play back when the build stage ends", "[ui][scripting][build]")
 {
     UIScriptingApp test;
     std::shared_ptr<CaptureTarget> target;
@@ -61,9 +45,11 @@ TEST_CASE("A build stage system's structural changes play back when the stage en
     test.Call<void>(BuildProbeType, "Arm", root.GetId().value);
     test.Frame();
 
+    INFO("The paint stage of the same frame saw the entity's Transform: the build stage's own end played it back");
+    REQUIRE(test.Call<bool>(BuildProbeType, "PlayedBackBeforePaint"));
     const auto made = test.Call<std::uint32_t>(BuildProbeType, "MadeEntity");
     const Entity entity = test.Entities().GetEntity(made);
-    INFO("The entity it made in the stage has its Transform: the stage's changes were played back");
+    INFO("And it keeps it after the frame");
     REQUIRE((entity.IsValid() && entity.HasComponent<Transform>()));
 }
 
@@ -71,7 +57,9 @@ TEST_CASE("Without the UI installed a script with a build stage system loads and
           "[ui][scripting][build]")
 {
     ExtensionTestApp<NoPackages> test(FixtureFromEnvironment("FENRIR_TEST_UI_FIXTURE"), UIExtensions());
+    INFO("The fixture, with its build stage system, loaded with no UI installed");
+    REQUIRE(test.scripting.HasScripts());
     test.Run(3);
-    INFO("The fixture loaded (ExtensionTestApp requires it), and its build stage system ran no frame");
+    INFO("Its build stage system ran no frame");
     REQUIRE(test.Call<int>(BuildProbeType, "RunCount") == 0);
 }

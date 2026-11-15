@@ -84,17 +84,6 @@ namespace Fenrir
         friend constexpr bool operator==(PaintStageHandle, PaintStageHandle) noexcept = default;
     };
 
-    namespace Detail
-    {
-        /** @brief Work in UIRoots' build or paint stage, named by its handle's id. */
-        struct StageWork
-        {
-            std::uint64_t id = 0;
-            std::int32_t order = 0;
-            std::function<void()> work;
-        };
-    } // namespace Detail
-
     /**
      * @brief The UI's app resource, which UI::Install adds: it makes and destroys the UI roots, which several may share
      * the app, ordered by layer; holds the registry of element tags, which starts with `panel` (a plain Element),
@@ -195,6 +184,14 @@ namespace Fenrir
             std::uint64_t order = 0;
         };
 
+        /** @brief Work in the build or the paint stage, named by its handle's id. */
+        struct StageWork
+        {
+            std::uint64_t id = 0;
+            std::int32_t order = 0;
+            std::function<void()> work;
+        };
+
         App& m_app;
         AssetHandle<Shader> m_painterShader;
         std::vector<RootEntry> m_roots;
@@ -205,10 +202,10 @@ namespace Fenrir
         std::unordered_map<std::string, ElementFactory> m_factories;
         std::vector<UIFontFace> m_fontFaces;
         /** @brief The build stage's work, by order, equal orders in the order added. */
-        std::vector<Detail::StageWork> m_buildStage;
+        std::vector<StageWork> m_buildStage;
         std::uint64_t m_nextBuildStage = 1;
         /** @brief The paint stage's work, by order, equal orders in the order added. */
-        std::vector<Detail::StageWork> m_paintStage;
+        std::vector<StageWork> m_paintStage;
         std::uint64_t m_nextPaintStage = 1;
     };
 

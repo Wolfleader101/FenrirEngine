@@ -131,19 +131,25 @@ namespace Fenrir
 
     namespace
     {
+        // The build and paint stages' work lists, whose entries (UIRoots' private StageWork) have an id, an order and
+        // the work.
+
         // Adds `work` after every entry of a lower or equal order: equal orders run in the order added.
-        void AddStageWork(std::vector<Detail::StageWork>& stage, std::uint64_t id, std::int32_t order,
-                          std::function<void()> work)
+        template <class Entry>
+        void AddStageWork(std::vector<Entry>& stage, std::uint64_t id, std::int32_t order, std::function<void()> work)
         {
-            const auto at = std::upper_bound(
-                stage.begin(), stage.end(), order,
-                [](std::int32_t value, const Detail::StageWork& entry) { return value < entry.order; });
-            stage.insert(at, Detail::StageWork{id, order, std::move(work)});
+            const auto at =
+                std::upper_bound(stage.begin(), stage.end(), order,
+                                 [](std::int32_t value, const Entry& entry) { return value < entry.order; });
+            stage.insert(at, Entry{id, order, std::move(work)});
         }
 
-        bool RemoveStageWork(std::vector<Detail::StageWork>& stage, std::uint64_t id)
+        // Takes out the entry `id` names. False when it names none (zero names none).
+        template <class Entry>
+        bool RemoveStageWork(std::vector<Entry>& stage, std::uint64_t id)
         {
-            const auto found = std::ranges::find(stage, id, &Detail::StageWork::id);
+            const auto found =
+                std::find_if(stage.begin(), stage.end(), [&](const Entry& entry) { return entry.id == id; });
             if (id == 0 || found == stage.end())
             {
                 return false;
@@ -152,11 +158,12 @@ namespace Fenrir
             return true;
         }
 
-        // Work added or removed while the stage runs takes effect next frame.
-        void RunStage(const std::vector<Detail::StageWork>& stage)
+        // Runs a copy of the stage's work: work added or removed while the stage runs takes effect next frame.
+        template <class Entry>
+        void RunStage(const std::vector<Entry>& stage)
         {
-            const std::vector<Detail::StageWork> running = stage;
-            for (const Detail::StageWork& entry : running)
+            const std::vector<Entry> running = stage;
+            for (const Entry& entry : running)
             {
                 entry.work();
             }

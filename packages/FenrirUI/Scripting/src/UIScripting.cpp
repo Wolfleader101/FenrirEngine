@@ -659,8 +659,9 @@ namespace Fenrir
 
     namespace
     {
-        // The full name of the build stage, as the binding's [stages] declares it (the paint stage is the other).
-        constexpr std::string_view BuildStage = "Fenrir.UI.Build";
+        // The stages' full names, as the binding's [stages] declares them.
+        constexpr std::string_view BuildStageName = "Fenrir.UI.Build";
+        constexpr std::string_view PaintStageName = "Fenrir.UI.Paint";
 
         // Plays back the stage changes the loaded script's systems recorded: the end of each stage.
         void PlayBackChanges(const std::weak_ptr<UIScripting>& weak)
@@ -687,11 +688,11 @@ namespace Fenrir
             constexpr std::int32_t end = std::numeric_limits<std::int32_t>::max();
             for (StageGroup& group : groups)
             {
-                if (group.Stage() == BuildStage)
+                if (group.Stage() == BuildStageName)
                 {
                     state->placedBuild.push_back(roots->AddBuildStage(group.Order(), [group] { group.Run(); }));
                 }
-                else
+                else if (group.Stage() == PaintStageName)
                 {
                     state->placedPaint.push_back(roots->AddPaintStage(group.Order(), [group] { group.Run(); }));
                 }

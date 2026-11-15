@@ -189,11 +189,12 @@ public sealed class PanelBuilder : ISystem
         root.SetStyle(panel, "background-color", "#f00");
         BuildProbe.Made = panel;
         BuildProbe.HasMade = true;
-        BuildProbe.Entity = context.CreateEntity().Value;
+        BuildProbe.Spawned = context.CreateEntity();
     }
 }
 
-// A paint stage system that reads the built panel's rectangle in the frame the build stage made it.
+// A paint stage system that reads, in the frame the build stage made them, the built panel's rectangle and whether the
+// entity made beside it has its Transform: whether the build stage's changes played back as that stage ended.
 [StageSystem(UIStages.Paint)]
 public sealed class BuiltReader : ISystem
 {
@@ -202,6 +203,7 @@ public sealed class BuiltReader : ISystem
         if (!BuildProbe.Armed || !BuildProbe.HasMade)
             return;
         BuildProbe.SeenInPaint = Ids.Root(BuildProbe.Root).GetBoxes(BuildProbe.Made).Border;
+        BuildProbe.EntityPlayedBackBeforePaint = BuildProbe.Spawned.Has<Transform>();
     }
 }
 
@@ -213,7 +215,8 @@ public static class BuildProbe
     internal static ElementId Made;
     internal static bool HasMade;
     internal static Rect2D SeenInPaint;
-    internal static uint Entity;
+    internal static Entity Spawned;
+    internal static bool EntityPlayedBackBeforePaint;
 
     // Arms the build stage system on root `root`: its next run makes the panel.
     public static void Arm(uint root)
@@ -222,6 +225,7 @@ public static class BuildProbe
         Armed = true;
         HasMade = false;
         SeenInPaint = default;
+        EntityPlayedBackBeforePaint = false;
     }
 
     // How many times the build stage system has run.
@@ -236,7 +240,10 @@ public static class BuildProbe
     public static float SeenHeight() => SeenInPaint.Height;
 
     // The entity the build stage made.
-    public static uint MadeEntity() => Entity;
+    public static uint MadeEntity() => Spawned.Value;
+
+    // Whether the paint stage of the frame that made the entity saw its Transform.
+    public static bool PlayedBackBeforePaint() => EntityPlayedBackBeforePaint;
 }
 
 // A paint stage system that paints a green square into the armed element, as UIDemo's speedometer paints its gauge.

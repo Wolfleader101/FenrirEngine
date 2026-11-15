@@ -1,13 +1,16 @@
 #pragma once
 
-// The UI scripting tests' part of FenrirScripting's ExtensionTestApp, shared by Roots.cpp and the generated defaults
-// test (Generated/FenrirUIDefaultsTests.cpp): the fixture CTest names in FENRIR_TEST_UI_FIXTURE, assets, input and the
-// UI installed (the UI installs the painter and the app's FontLibrary), and the input, assets, text, painter and UI
-// extensions, the first four the ones the UI's contract builds on. Roots draw into capturing targets of a fixed size,
-// so they lay out with no window; a script reaches one by its id, and what it painted is read from the captured list.
+// The UI scripting tests' part of FenrirScripting's ExtensionTestApp, shared by Roots.cpp, BuildStage.cpp and the
+// generated defaults test (Generated/FenrirUIDefaultsTests.cpp): the fixture CTest names in FENRIR_TEST_UI_FIXTURE,
+// assets, input and the UI installed (the UI installs the painter and the app's FontLibrary), and the input, assets,
+// text, painter and UI extensions, the first four the ones the UI's contract builds on. Roots draw into capturing
+// targets of a fixed size, so they lay out with no window; a script reaches one by its id, and what it painted is read
+// from the captured list.
 
 #include "ExtensionTestApp.hpp"
 
+#include <cmath>
+#include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -29,6 +32,18 @@ namespace Fenrir::Testing
     inline constexpr const char* TreeCallsType = "UIScriptFixture.TreeCalls";
     inline constexpr const char* ClicksType = "UIScriptFixture.Clicks";
     inline constexpr const char* PaintProbeType = "UIScriptFixture.PaintProbe";
+    inline constexpr const char* BuildProbeType = "UIScriptFixture.BuildProbe";
+
+    /** @brief An element id as the fixture packs it: its index in the high half, its version in the low. */
+    inline std::uint64_t Packed(ElementId element)
+    {
+        return (static_cast<std::uint64_t>(element.index) << 32u) | element.version;
+    }
+
+    inline bool Near(float a, float b)
+    {
+        return std::abs(a - b) <= 1e-3f;
+    }
 
     /** @brief A 2D target of a fixed size that keeps every list a root submits to it. */
     class CaptureTarget : public UITarget

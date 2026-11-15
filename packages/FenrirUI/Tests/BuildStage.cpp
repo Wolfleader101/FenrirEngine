@@ -2,29 +2,16 @@
 // build stage runs as the first work of the UI's frame, so what it makes and changes is styled, laid out and painted in
 // the same frame.
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "FenrirPainter/PainterVertex.hpp"
 #include "UITestApp.hpp"
 
 namespace
 {
-    // Each quad's colour, in the order drawn: every painter box is one quad of four vertices.
-    std::vector<std::uint32_t> Colours(const Fenrir::DrawList2D& list)
-    {
-        std::vector<Fenrir::PainterVertex> vertices(list.vertices.size() / sizeof(Fenrir::PainterVertex));
-        std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(Fenrir::PainterVertex));
-        std::vector<std::uint32_t> colours;
-        for (std::size_t i = 0; i < vertices.size(); i += 4)
-        {
-            colours.push_back(vertices[i].colour);
-        }
-        return colours;
-    }
+    using UITest::Colours;
 
     // Opaque colours as the painter writes them: RGBA8, red in the lowest byte.
     constexpr std::uint32_t Red = 0xFF0000FFu;
@@ -44,6 +31,7 @@ TEST_CASE("An element made in build stage work is laid out and painted the same 
             return;
         }
         made = root.Create(root.GetRootElement(), "panel");
+        INFO("The build stage styles the panel it made");
         REQUIRE(root.SetStyleProperty(made, "background-color", "#f00"));
         REQUIRE(root.SetStyleProperty(made, "width", "120px"));
         REQUIRE(root.SetStyleProperty(made, "height", "40px"));
@@ -68,10 +56,12 @@ TEST_CASE("A style changed in build stage work is painted the same frame", "[ui]
     std::shared_ptr<UITest::CaptureTarget> target;
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
     const Fenrir::ElementId panel = root.Create(root.GetRootElement(), "panel");
+    INFO("A red panel of 10 by 10, styled before the first frame");
     REQUIRE(root.SetStyleProperty(panel, "background-color", "#f00"));
     REQUIRE(root.SetStyleProperty(panel, "width", "10px"));
     REQUIRE(root.SetStyleProperty(panel, "height", "10px"));
     test.Frame();
+    INFO("Red before the build stage changes it");
     REQUIRE(Colours(target->lists.back()) == std::vector<std::uint32_t>{Red});
 
     test.Roots().AddBuildStage(0, [&] { REQUIRE(root.SetStyleProperty(panel, "background-color", "#00f")); });
@@ -105,8 +95,9 @@ TEST_CASE("Build stage work that is removed runs no more", "[ui][build][stage]")
     test.Frame();
     INFO("Removing it the first time takes it out");
     REQUIRE(test.Roots().RemoveBuildStage(work));
-    INFO("A second removal names nothing, and the empty handle names none");
+    INFO("A second removal names nothing");
     REQUIRE_FALSE(test.Roots().RemoveBuildStage(work));
+    INFO("The empty handle names none");
     REQUIRE_FALSE(test.Roots().RemoveBuildStage(Fenrir::BuildStageHandle{}));
     test.Frame();
     INFO("It ran once, before it was removed");
