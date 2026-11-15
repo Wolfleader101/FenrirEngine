@@ -157,7 +157,8 @@ public sealed class ScopeTests : IDisposable
 
         List<string> calls = Calls();
         Assert.Equal($"LoadStylesheet({SheetPath<Titled>()}, {Scope<Titled>()})", calls[^2]);
-        Assert.Equal($"AddStylesheet({SheetPath<Titled>()}, {Scope<Titled>()}): .title {{ color: red; }}\n", calls[^1]);
+        string text = typeof(Titled).GetCustomAttribute<ComponentStylesheetAttribute>()!.Text;
+        Assert.Equal($"AddStylesheet({SheetPath<Titled>()}, {Scope<Titled>()}): {text}", calls[^1]);
     }
 
     [Fact]
@@ -198,12 +199,18 @@ public sealed class ScopeTests : IDisposable
         Assert.True(Path.IsPathRooted(sheet.Path));
         Assert.EndsWith("Sheets/Titled.razor.css", sheet.Path.Replace('\\', '/'));
         Assert.Equal(File.ReadAllText(sheet.Path), sheet.Text);
+    }
+
+    [Fact]
+    public void AComponentWithNoSheetBesideItHasNone()
+    {
         Assert.Null(typeof(Styled).GetCustomAttribute<ComponentStylesheetAttribute>());
     }
 
     [Theory]
     [InlineData(typeof(Some.Where.Spaced))]
     [InlineData(typeof(Imported.Space.Deeper.Inner))]
+    [InlineData(typeof(_2d_sheets.Corner))]
     public void TheGeneratorNamesTheComponentAsRazorDoes(Type component)
     {
         // A name Razor did not give would make a class of its own, with no markup and no base.

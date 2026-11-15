@@ -27,7 +27,7 @@ namespace
     constexpr const char* SheetsProbeType = "UIScriptFixture.SheetsProbe";
 
     /** @brief Whether the colour is (r, g, b) and opaque. */
-    bool Is(const Colour& colour, float r, float g, float b)
+    bool HasColour(const Colour& colour, float r, float g, float b)
     {
         return Near(colour.r, r) && Near(colour.g, g) && Near(colour.b, b) && Near(colour.a, 1.0f);
     }
@@ -39,13 +39,22 @@ namespace
         {
         }
 
-        /** @brief The text colour the element resolved to, by its id string. */
+        /** @brief The text colour the element with this id string resolved to. */
         Colour ColourOf(std::string_view id)
         {
             const ElementId element = root.FindById(id);
-            INFO("Nothing has the id " << id);
-            REQUIRE(root.IsAlive(element));
+            {
+                INFO("Nothing has the id " << id);
+                REQUIRE(root.IsAlive(element));
+            }
+            return ColourOf(element);
+        }
+
+        /** @brief The text colour the element resolved to. */
+        Colour ColourOf(ElementId element)
+        {
             const ResolvedStyle* style = root.GetResolvedStyle(element);
+            INFO("The element has no resolved style: it was not styled in the frames run");
             REQUIRE(style != nullptr);
             return style->color;
         }
@@ -89,6 +98,18 @@ namespace
         }
     }
 
+    /** @brief The fixture with hot reload on and a Hot mounted and built. */
+    struct HotSheetApp : SheetsScriptingApp
+    {
+        HotSheetApp()
+        {
+            root.SetHotReload(true);
+            Call<void>(SheetsProbeType, "MountHot", root.GetId().value);
+            Frame();
+            Frame();
+        }
+    };
+
     /** @brief Removes Hot's sheet when the test ends, so another test finds it gone. */
     struct HotSheetRemoved
     {
@@ -100,44 +121,54 @@ namespace
     };
 } // namespace
 
-TEST_CASE("Two Razor components' sheets that both style .title each colour only their own",
+TEST_CASE("Alpha's sheet colours its own .title", "[ui][scripting][razor][sheets]")
+{
+    MountedSheetsApp test;
+    INFO("Alpha.razor.css did not colour Alpha's title red, or Beta's or Inline's .title rule reached it");
+    REQUIRE(HasColour(test.ColourOf("alpha-title"), 1.0f, 0.0f, 0.0f));
+}
+
+TEST_CASE("Beta's sheet colours its own .title, which Alpha's sheet also styles, and Alpha's does not reach it",
           "[ui][scripting][razor][sheets]")
 {
     MountedSheetsApp test;
-    {
-        INFO("Alpha.razor.css did not colour Alpha's title red, or Beta's or Inline's sheet reached it");
-        REQUIRE(Is(test.ColourOf("alpha-title"), 1.0f, 0.0f, 0.0f));
-    }
-    INFO("Beta.razor.css did not colour Beta's title blue, or Alpha's or Inline's sheet reached it");
-    REQUIRE(Is(test.ColourOf("beta-title"), 0.0f, 0.0f, 1.0f));
+    INFO("Beta.razor.css did not colour Beta's title blue, or Alpha's or Inline's .title rule reached it");
+    REQUIRE(HasColour(test.ColourOf("beta-title"), 0.0f, 0.0f, 1.0f));
 }
 
-TEST_CASE("A Razor component's ::deep rule reaches a child's label, and its plain label rule does not",
-          "[ui][scripting][razor][sheets]")
+TEST_CASE("A Razor component's ::deep rule reaches a child's label", "[ui][scripting][razor][sheets]")
 {
     MountedSheetsApp test;
-    {
-        INFO("Outer's .list ::deep label did not colour the Leaf in its list green");
-        REQUIRE(Is(test.ColourOf("leaf-inside"), 0.0f, 1.0f, 0.0f));
-    }
-    {
-        INFO("Outer's plain label rule did not colour its own label magenta");
-        REQUIRE(Is(test.ColourOf("outer-own"), 1.0f, 0.0f, 1.0f));
-    }
-    INFO("Outer's plain label rule reached the Leaf beside its list, whose label is the child's, not Outer's");
-    REQUIRE_FALSE(Is(test.ColourOf("leaf-outside"), 1.0f, 0.0f, 1.0f));
-    REQUIRE_FALSE(Is(test.ColourOf("leaf-outside"), 0.0f, 1.0f, 0.0f));
+    INFO("Outer's .list ::deep label did not colour the Leaf in its list green");
+    REQUIRE(HasColour(test.ColourOf("leaf-inside"), 0.0f, 1.0f, 0.0f));
 }
 
-TEST_CASE("A <style> block in a Razor component is scoped as its sheet file would be", "[ui][scripting][razor][sheets]")
+TEST_CASE("A Razor component's plain rule styles its own elements", "[ui][scripting][razor][sheets]")
 {
     MountedSheetsApp test;
-    {
-        INFO("Inline's <style> block did not colour its own title cyan");
-        REQUIRE(Is(test.ColourOf("inline-title"), 0.0f, 1.0f, 1.0f));
-    }
-    INFO("Inline's <style> block reached Alpha's title");
-    REQUIRE(Is(test.ColourOf("alpha-title"), 1.0f, 0.0f, 0.0f));
+    INFO("Outer's plain label rule did not colour its own label magenta");
+    REQUIRE(HasColour(test.ColourOf("outer-own"), 1.0f, 0.0f, 1.0f));
+}
+
+TEST_CASE("A Razor component's plain rule does not reach a child's elements", "[ui][scripting][razor][sheets]")
+{
+    MountedSheetsApp test;
+    INFO("Outer's plain label rule coloured the label of the Leaf beside its list, which is the child's, not Outer's");
+    REQUIRE_FALSE(HasColour(test.ColourOf("leaf-outside"), 1.0f, 0.0f, 1.0f));
+}
+
+TEST_CASE("A <style> block in a Razor component styles its own elements", "[ui][scripting][razor][sheets]")
+{
+    MountedSheetsApp test;
+    INFO("Inline's <style> block did not colour its own title cyan");
+    REQUIRE(HasColour(test.ColourOf("inline-title"), 0.0f, 1.0f, 1.0f));
+}
+
+TEST_CASE("A <style> block in a Razor component does not reach another's elements", "[ui][scripting][razor][sheets]")
+{
+    MountedSheetsApp test;
+    INFO("Inline's <style> block, a .title rule, reached Alpha's title");
+    REQUIRE(HasColour(test.ColourOf("alpha-title"), 1.0f, 0.0f, 0.0f));
 }
 
 TEST_CASE("A game's own sheet styles a Razor component's host by its readable class", "[ui][scripting][razor][sheets]")
@@ -148,7 +179,16 @@ TEST_CASE("A game's own sheet styles a Razor component's host by its readable cl
     test.Frame();
     test.Frame();
     INFO("The game's .alpha rule did not colour Alpha's host yellow");
-    REQUIRE(Is(test.root.GetResolvedStyle(host)->color, 1.0f, 1.0f, 0.0f));
+    REQUIRE(HasColour(test.ColourOf(host), 1.0f, 1.0f, 0.0f));
+}
+
+TEST_CASE("A Razor component's sheet loads from its file when the file is there", "[ui][scripting][razor][sheets]")
+{
+    const HotSheetRemoved removed;
+    WriteHotSheet(".title { color: #00ff00; }\n");
+    HotSheetApp test;
+    INFO("Hot's sheet did not load from its file, green, but from the text the build recorded, red");
+    REQUIRE(HasColour(test.ColourOf("hot-title"), 0.0f, 1.0f, 0.0f));
 }
 
 TEST_CASE("Editing a Razor component's sheet file restyles it at the next reload poll",
@@ -156,21 +196,13 @@ TEST_CASE("Editing a Razor component's sheet file restyles it at the next reload
 {
     const HotSheetRemoved removed;
     WriteHotSheet(".title { color: #00ff00; }\n");
-    SheetsScriptingApp test;
-    test.root.SetHotReload(true);
-    test.Call<void>(SheetsProbeType, "MountHot", test.root.GetId().value);
-    test.Frame();
-    test.Frame();
-    {
-        INFO("Hot's sheet did not load from its file, green, but from the text the build recorded, red");
-        REQUIRE(Is(test.ColourOf("hot-title"), 0.0f, 1.0f, 0.0f));
-    }
+    HotSheetApp test;
 
     WriteHotSheet(".title { color: #0000ff; }\n");
     test.Frame(0.3);
     test.Frame();
     INFO("The rewritten sheet was not read again with Hot's scope at the next poll, 250 ms on");
-    REQUIRE(Is(test.ColourOf("hot-title"), 0.0f, 0.0f, 1.0f));
+    REQUIRE(HasColour(test.ColourOf("hot-title"), 0.0f, 0.0f, 1.0f));
 }
 
 TEST_CASE("A Razor component's sheet loads from the text the build recorded when its file is not there",
@@ -178,12 +210,9 @@ TEST_CASE("A Razor component's sheet loads from the text the build recorded when
 {
     std::error_code ignored;
     std::filesystem::remove(HotSheet(), ignored);
-    SheetsScriptingApp test;
-    test.Call<void>(SheetsProbeType, "MountHot", test.root.GetId().value);
-    test.Frame();
-    test.Frame();
+    HotSheetApp test;
     INFO("Hot's recorded text did not colour its title red");
-    REQUIRE(Is(test.ColourOf("hot-title"), 1.0f, 0.0f, 0.0f));
+    REQUIRE(HasColour(test.ColourOf("hot-title"), 1.0f, 0.0f, 0.0f));
 }
 
 TEST_CASE("A script generation with scoped Razor component sheets is collected when released",

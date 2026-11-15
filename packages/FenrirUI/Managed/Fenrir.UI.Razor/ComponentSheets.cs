@@ -54,8 +54,7 @@ internal static class ComponentScope
 internal sealed class ComponentSheets
 {
     private readonly HashSet<Type> types = [];
-    private readonly HashSet<(Type Type, int Sequence, string Text)> blocks = [];
-    private readonly Dictionary<(Type Type, int Sequence), int> blocksAt = [];
+    private readonly HashSet<(Type Type, int Sequence, int Ordinal)> blocks = [];
 
     /// <summary>
     /// Loads the type's own sheet with its scope, the first time the type is seen here: by path when the file is
@@ -75,16 +74,15 @@ internal sealed class ComponentSheets
     }
 
     /// <summary>
-    /// Adds a <c>&lt;style&gt;</c> block of the type with its scope, once per sequence and text: a block written as
-    /// one string is one sheet, named by the type and the block's sequence.
+    /// Adds a <c>&lt;style&gt;</c> block of the type with its scope, the first time the block is seen here, named by
+    /// the type and the block's sequence (and its ordinal, for a folded string's second block and later). A block is
+    /// read once: text that changes in a later build (a block with C# in it) is not read again.
     /// </summary>
-    public void AddBlock(Type type, int sequence, string css, IElementSeam seam)
+    public void AddBlock(Type type, int sequence, int ordinal, string css, IElementSeam seam)
     {
-        if (!blocks.Add((type, sequence, css)))
+        if (!blocks.Add((type, sequence, ordinal)))
             return;
-        int earlier = blocksAt.GetValueOrDefault((type, sequence));
-        blocksAt[(type, sequence)] = earlier + 1;
-        string name = $"{type.FullName}.razor <style> at sequence {sequence}" + (earlier == 0 ? "" : $" ({earlier + 1})");
+        string name = $"{type.FullName}.razor <style> at sequence {sequence}" + (ordinal == 0 ? "" : $" ({ordinal + 1})");
         seam.AddStylesheet(css, name, ComponentScope.ClassOf(type));
     }
 }

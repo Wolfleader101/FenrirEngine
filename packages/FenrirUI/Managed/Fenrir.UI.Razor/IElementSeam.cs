@@ -41,7 +41,8 @@ internal interface IElementSeam
 
     /// <summary>
     /// Loads the stylesheet file at <paramref name="path"/> into the root with the scope, deduplicated by path and
-    /// scope; hot reload re-reads it with the scope. False when nothing was added.
+    /// scope; hot reload re-reads it with the scope. True when it was added or is held already; false when the root
+    /// took nothing (no such file, or a destroyed root).
     /// </summary>
     bool LoadStylesheet(string path, string scope);
 

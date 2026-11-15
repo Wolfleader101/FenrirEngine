@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 
@@ -49,8 +50,7 @@ public sealed class ComponentStylesheetGenerator : IIncrementalGenerator
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         IncrementalValuesProvider<SourceFile> files = context.AdditionalTextsProvider
-            .Where(static file => file.Path.EndsWith(RazorSuffix, StringComparison.OrdinalIgnoreCase) ||
-                                  file.Path.EndsWith(SheetSuffix, StringComparison.OrdinalIgnoreCase))
+            .Where(static file => file.Path.EndsWith(RazorSuffix, StringComparison.OrdinalIgnoreCase) || IsSheet(file.Path))
             .Combine(context.AnalyzerConfigOptionsProvider)
             .Select(static (pair, token) =>
             {
@@ -78,7 +78,7 @@ public sealed class ComponentStylesheetGenerator : IIncrementalGenerator
         var imports = new Dictionary<string, SourceFile>(StringComparer.OrdinalIgnoreCase);
         foreach (SourceFile file in files)
         {
-            if (file.Path.EndsWith(SheetSuffix, StringComparison.OrdinalIgnoreCase))
+            if (IsSheet(file.Path))
                 continue;
             if (FileName(file.RelativePath).Equals(ImportsName, StringComparison.OrdinalIgnoreCase))
                 imports[Folder(file.RelativePath)] = file;
@@ -87,7 +87,7 @@ public sealed class ComponentStylesheetGenerator : IIncrementalGenerator
         }
 
         var emitted = new HashSet<string>(StringComparer.Ordinal);
-        foreach (SourceFile sheet in files.Where(static file => file.Path.EndsWith(SheetSuffix, StringComparison.OrdinalIgnoreCase))
+        foreach (SourceFile sheet in files.Where(static file => IsSheet(file.Path))
                                           .OrderBy(static file => file.Path, StringComparer.Ordinal))
         {
             string componentPath = sheet.Path.Substring(0, sheet.Path.Length - ".css".Length);
@@ -97,40 +97,46 @@ public sealed class ComponentStylesheetGenerator : IIncrementalGenerator
                                                           sheet.Path, FileName(componentPath)));
                 continue;
             }
-            string? ns = NamespaceOf(component, imports, project.RootNamespace);
-            string name = Identifier(FileName(component.RelativePath).Substring(0, FileName(component.RelativePath).Length - RazorSuffix.Length));
+            string markup = RazorComment.Replace(component.Text, "");
+            string? ns = NamespaceOf(component.RelativePath, markup, imports, project.RootNamespace);
+            string fileName = FileName(component.RelativePath);
+            string name = Identifier(fileName.Substring(0, fileName.Length - RazorSuffix.Length));
             string full = ns == null ? name : $"{ns}.{name}";
             if (!emitted.Add(full))
                 continue;
-            output.AddSource($"{full}.ComponentStylesheet.g.cs", SourceText.From(Partial(ns, name, TypeParameters(component.Text), sheet), Encoding.UTF8));
+            output.AddSource($"{full}.ComponentStylesheet.g.cs",
+                             SourceText.From(Partial(ns, name, TypeParameters(markup), sheet), Encoding.UTF8));
         }
     }
 
-    /// <summary>The namespace Razor gives the component; null for the global namespace.</summary>
-    private static string? NamespaceOf(SourceFile component, Dictionary<string, SourceFile> imports, string rootNamespace)
+    /// <summary>The namespace Razor gives the component, from its markup with comments stripped; null for the global one.</summary>
+    private static string? NamespaceOf(string relativePath, string markup, Dictionary<string, SourceFile> imports,
+                                       string rootNamespace)
     {
-        string folder = Folder(component.RelativePath);
-        if (DirectiveIn(component.Text) is { } own)
+        string folder = Folder(relativePath);
+        if (DirectiveIn(markup) is { } own)
             return own;
 
         // The nearest _Imports.razor above the file with a @namespace, the folders below it appended.
-        for (string? at = folder; at != null; at = Parent(at))
+        for (string? at = folder; at != null; at = at.Length == 0 ? null : Folder(at))
         {
-            if (imports.TryGetValue(at, out SourceFile? import) && DirectiveIn(import.Text) is { } imported)
+            if (imports.TryGetValue(at, out SourceFile? import) && DirectiveIn(RazorComment.Replace(import.Text, "")) is { } imported)
                 return Joined(imported, Below(folder, at));
         }
         return Joined(rootNamespace, folder) is { Length: > 0 } joined ? joined : null;
     }
 
-    private static string? DirectiveIn(string text)
+    private static bool IsSheet(string path) => path.EndsWith(SheetSuffix, StringComparison.OrdinalIgnoreCase);
+
+    private static string? DirectiveIn(string markup)
     {
-        Match match = NamespaceDirective.Match(RazorComment.Replace(text, ""));
+        Match match = NamespaceDirective.Match(markup);
         return match.Success ? match.Groups[1].Value : null;
     }
 
-    private static string TypeParameters(string text)
+    private static string TypeParameters(string markup)
     {
-        string[] names = TypeParamDirective.Matches(RazorComment.Replace(text, "")).Cast<Match>()
+        string[] names = TypeParamDirective.Matches(markup).Cast<Match>()
                                            .Select(static match => match.Groups[1].Value).ToArray();
         return names.Length == 0 ? "" : $"<{string.Join(", ", names)}>";
     }
@@ -158,14 +164,19 @@ public sealed class ComponentStylesheetGenerator : IIncrementalGenerator
         return string.Join(".", new[] { ns }.Concat(segments).Where(static part => part.Length > 0));
     }
 
-    /// <summary>A C# identifier from a name, as Razor sanitizes one: a leading digit gets an underscore, others become underscores.</summary>
+    /// <summary>
+    /// A C# identifier from a name, as Razor's <c>CSharpIdentifier.SanitizeIdentifier</c> makes one: an underscore before
+    /// a first character that may be in an identifier but not start one (a digit), and an underscore for each character
+    /// that may not be in one.
+    /// </summary>
     private static string Identifier(string name)
     {
         var identifier = new StringBuilder(name.Length + 1);
-        if (name.Length == 0 || !(char.IsLetter(name[0]) || name[0] == '_'))
+        if (name.Length != 0 && !SyntaxFacts.IsIdentifierStartCharacter(name[0]) &&
+            SyntaxFacts.IsIdentifierPartCharacter(name[0]))
             identifier.Append('_');
         foreach (char c in name)
-            identifier.Append(char.IsLetterOrDigit(c) || c == '_' ? c : '_');
+            identifier.Append(SyntaxFacts.IsIdentifierPartCharacter(c) ? c : '_');
         return identifier.ToString();
     }
 
@@ -194,14 +205,6 @@ public sealed class ComponentStylesheetGenerator : IIncrementalGenerator
     {
         int slash = relative.LastIndexOf('/');
         return slash < 0 ? "" : relative.Substring(0, slash);
-    }
-
-    private static string? Parent(string folder)
-    {
-        if (folder.Length == 0)
-            return null;
-        int slash = folder.LastIndexOf('/');
-        return slash < 0 ? "" : folder.Substring(0, slash);
     }
 
     private static string Below(string folder, string ancestor) =>

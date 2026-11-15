@@ -147,6 +147,8 @@ internal sealed class ElementBuilder : RenderTreeBuilder
     private UIComponent component = null!;
     private ChildComponent? building;
     private int build;
+    /// <summary>The <c>&lt;style&gt;</c> blocks of the folded markup string being built so far, which tells them apart.</summary>
+    private int foldedStyles;
 
     /// <summary>Forgets the parsed markup and the directives warned about, which name a script generation's types.</summary>
     internal static void ReleaseCaches()
@@ -204,7 +206,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             throw new InvalidOperationException("CloseElement with no element open");
         if (frame.IsStyle)
         {
-            AddSheet(frame.Sequence, frame.Text.ToString());
+            AddSheet(frame.Sequence, 0, frame.Text.ToString());
         }
         else
         {
@@ -243,6 +245,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         }
         // In a label or a button, folded text joins the text around it (AppendText); elsewhere it is a generated label.
         int occurrence = frame.ChildRegion!.NextOccurrence(sequence, build);
+        foldedStyles = 0;
         for (int part = 0; part < fragment.Nodes.Count; ++part)
             Replay(fragment.Nodes[part], frame, sequence, new EntryKey(sequence, occurrence, null, part));
     }
@@ -1171,7 +1174,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
                 AppendText(frame, node.Text, sequence, key);
                 break;
             case MarkupFragment.NodeKind.Style:
-                AddSheet(sequence, node.Text);
+                AddSheet(sequence, foldedStyles++, node.Text);
                 break;
             case MarkupFragment.NodeKind.Element:
                 Open(sequence, node.Text, key);
@@ -1189,11 +1192,12 @@ internal sealed class ElementBuilder : RenderTreeBuilder
 
     /// <summary>
     /// A <c>&lt;style&gt;</c>'s sheet, folded or not: added with the scope of the Razor component that wrote it, once per
-    /// root, type and block (ADR-0070). It makes no element.
+    /// root, type and block, a block being its sequence and, in a folded string, its place among the string's
+    /// <c>&lt;style&gt;</c>s (ADR-0070). It makes no element.
     /// </summary>
-    private void AddSheet(int sequence, string css)
+    private void AddSheet(int sequence, int ordinal, string css)
     {
-        tree.Sheets?.AddBlock(component.GetType(), sequence, css, seam);
+        tree.Sheets?.AddBlock(component.GetType(), sequence, ordinal, css, seam);
     }
 
     // ---- Attributes ----

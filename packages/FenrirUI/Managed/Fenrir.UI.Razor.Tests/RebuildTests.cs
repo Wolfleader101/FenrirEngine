@@ -497,7 +497,7 @@ public sealed class RebuildTests : IDisposable
     }
 
     [Fact]
-    public void AFoldedStyleMakesNoElementAndAddsItsSheetOnce()
+    public void AFoldedStyleMakesNoElement()
     {
         Handwritten written = Mount<Handwritten>(w => w.Markup = "<style>.a { color: red; }</style>");
 

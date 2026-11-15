@@ -16,7 +16,7 @@ public sealed class GeneratorTests
 {
     private const string Project = "C:/game/Scripts";
 
-    private sealed class File(string path, string text) : AdditionalText
+    private sealed class MemoryFile(string path, string text) : AdditionalText
     {
         public override string Path { get; } = path;
 
@@ -48,12 +48,12 @@ public sealed class GeneratorTests
         });
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
             [new ComponentStylesheetGenerator().AsSourceGenerator()],
-            files.Select(file => (AdditionalText)new File($"{Project}/{file.Path}", file.Text)).ToImmutableArray(),
+            files.Select(file => (AdditionalText)new MemoryFile($"{Project}/{file.Path}", file.Text)).ToImmutableArray(),
             optionsProvider: new Provider(global));
         return driver.RunGenerators(CSharpCompilation.Create("Scripts")).GetRunResult();
     }
 
-    private static string Only(GeneratorDriverRunResult result)
+    private static string OnlySource(GeneratorDriverRunResult result)
     {
         Assert.Empty(result.Diagnostics);
         return Assert.Single(Assert.Single(result.Results).GeneratedSources).SourceText.ToString();
@@ -62,7 +62,7 @@ public sealed class GeneratorTests
     [Fact]
     public void ASheetBesideAComponentIsRecordedOnItWithItsPathAndText()
     {
-        string source = Only(Run(("Hud/Health.razor", "<label>hp</label>"), ("Hud/Health.razor.css", ".bar { color: \"red\"; }")));
+        string source = OnlySource(Run(("Hud/Health.razor", "<label>hp</label>"), ("Hud/Health.razor.css", ".bar { color: \"red\"; }")));
 
         Assert.Contains("namespace Game.Hud;", source);
         Assert.Contains("partial class Health", source);
@@ -73,7 +73,7 @@ public sealed class GeneratorTests
     [Fact]
     public void TheNamespaceInTheFileNamesTheComponent()
     {
-        string source = Only(Run(("Hud/Health.razor", "@* @namespace Not.This *@\n@namespace Ui.Bars\n<label/>"),
+        string source = OnlySource(Run(("Hud/Health.razor", "@* @namespace Not.This *@\n@namespace Ui.Bars\n<label/>"),
                                  ("Hud/Health.razor.css", "")));
 
         Assert.Contains("namespace Ui.Bars;", source);
@@ -82,7 +82,7 @@ public sealed class GeneratorTests
     [Fact]
     public void TheNearestImportsNamespaceNamesTheComponentWithTheFoldersBelowIt()
     {
-        string source = Only(Run(("_Imports.razor", "@namespace Top"), ("Hud/_Imports.razor", "@using X\n@namespace Ui"),
+        string source = OnlySource(Run(("_Imports.razor", "@namespace Top"), ("Hud/_Imports.razor", "@using X\n@namespace Ui"),
                                  ("Hud/Bars/Health.razor", "<label/>"), ("Hud/Bars/Health.razor.css", "")));
 
         Assert.Contains("namespace Ui.Bars;", source);
@@ -91,15 +91,15 @@ public sealed class GeneratorTests
     [Fact]
     public void FolderNamesBecomeIdentifiersAsRazorMakesThem()
     {
-        string source = Only(Run(("2d/my-hud/Health.razor", "<label/>"), ("2d/my-hud/Health.razor.css", "")));
+        string source = OnlySource(Run(("2d/my-hud/-x/Health.razor", "<label/>"), ("2d/my-hud/-x/Health.razor.css", "")));
 
-        Assert.Contains("namespace Game._2d.my_hud;", source);
+        Assert.Contains("namespace Game._2d.my_hud._x;", source);
     }
 
     [Fact]
     public void AGenericComponentsPartialHasItsTypeParameters()
     {
-        string source = Only(Run(("List.razor", "@typeparam TItem\n@typeparam TKey\n<label/>"), ("List.razor.css", "")));
+        string source = OnlySource(Run(("List.razor", "@typeparam TItem\n@typeparam TKey\n<label/>"), ("List.razor.css", "")));
 
         Assert.Contains("partial class List<TItem, TKey>", source);
     }
