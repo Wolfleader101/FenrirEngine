@@ -30,7 +30,7 @@
 #         cmake --build <dir> --target fenrir-describe-api
 #         cmake --build <dir> --target fenrir-generate-bindings
 #   fenrir_script_fixture(<Pkg> [USES <Pkg>...])
-#       The fixture script assembly Fenrir.<Pkg>ScriptFixture.dll from Fixture/ (its .cs and .razor files) and
+#       The fixture script assembly Fenrir.<Pkg>ScriptFixture.dll from Fixture/ (its .cs, .razor and .razor.css files) and
 #       Generated/*.cs (the generated defaults test's C# class), compiled against the scripting SDK, the package's
 #       contract and each used contract,
 #       none copied (the host shares its own copies), into ${CMAKE_CURRENT_BINARY_DIR}/fixture; the
@@ -180,6 +180,7 @@ function(fenrir_script_fixture pkg)
     string(TOLOWER "${pkg}" pkg_lower)
     set(fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture")
     file(GLOB sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs" "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.razor"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.razor.css"
         "${CMAKE_CURRENT_SOURCE_DIR}/Generated/*.cs")
 
     set(properties "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/")

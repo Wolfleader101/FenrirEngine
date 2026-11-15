@@ -1,0 +1,3 @@
+/* ::deep reaches the labels of the children in the list; the plain rule only Outer's own (RazorSheets.cpp). */
+.list ::deep label { color: #00ff00; }
+label { color: #ff00ff; }

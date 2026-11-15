@@ -204,7 +204,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             throw new InvalidOperationException("CloseElement with no element open");
         if (frame.IsStyle)
         {
-            AddSheet(frame.Text.ToString());
+            AddSheet(frame.Sequence, frame.Text.ToString());
         }
         else
         {
@@ -449,6 +449,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             instance.ChildRecord = child;
             region.Components.Add(key, child);
             tree.Children.Add(child);
+            tree.Sheets?.Load(frame.ComponentType!, seam);
         }
         child.Visited = build;
         bool changed = made || ParametersChanged(child.Parameters, frame.Parameters);
@@ -728,6 +729,8 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             Entry? previous = placement.Visited.Count > 0 ? placement.Visited[^1] : null;
             int index = InsertIndex(placement, previous);
             ElementId made = seam.CreateElement(placement.Element, tag, index);
+            // The scope of the Razor component whose markup this is: a fragment's writer's, a child's own (ADR-0070).
+            seam.AddScope(made, ComponentScope.ClassOf(component.GetType()));
             entry = new Entry(made, tag);
             region.Entries.Add(key, entry);
             if (placement.Native != null)
@@ -1168,7 +1171,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
                 AppendText(frame, node.Text, sequence, key);
                 break;
             case MarkupFragment.NodeKind.Style:
-                AddSheet(node.Text);
+                AddSheet(sequence, node.Text);
                 break;
             case MarkupFragment.NodeKind.Element:
                 Open(sequence, node.Text, key);
@@ -1185,12 +1188,12 @@ internal sealed class ElementBuilder : RenderTreeBuilder
     }
 
     /// <summary>
-    /// A <c>&lt;style&gt;</c>'s sheet. Ticket 07 adds it as a scoped sheet once per root and Razor component type; until
-    /// then it is dropped, and makes no element either way.
+    /// A <c>&lt;style&gt;</c>'s sheet, folded or not: added with the scope of the Razor component that wrote it, once per
+    /// root, type and block (ADR-0070). It makes no element.
     /// </summary>
-    private void AddSheet(string css)
+    private void AddSheet(int sequence, string css)
     {
-        _ = css;
+        tree.Sheets?.AddBlock(component.GetType(), sequence, css, seam);
     }
 
     // ---- Attributes ----

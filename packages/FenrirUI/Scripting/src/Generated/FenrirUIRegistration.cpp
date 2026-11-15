@@ -63,6 +63,7 @@ namespace Fenrir::Generated
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::GetFocused, 3>::Call>("Fenrir.UI.UINative.GetFocused"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::LoadDocument, 5>::Call>("Fenrir.UI.UINative.LoadDocument"),
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::LoadStylesheet>("Fenrir.UI.UINative.LoadStylesheet"),
+                Fenrir::NativeFunction::Make<&Fenrir::UINatives::AddStylesheet>("Fenrir.UI.UINative.AddStylesheet"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::PaintInto, 4>::Call>("Fenrir.UI.UINative.PaintInto"),
             };
         }

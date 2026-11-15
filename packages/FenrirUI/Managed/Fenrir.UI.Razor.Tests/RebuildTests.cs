@@ -497,11 +497,17 @@ public sealed class RebuildTests : IDisposable
     }
 
     [Fact]
-    public void AFoldedStyleMakesNoElement()
+    public void AFoldedStyleMakesNoElementAndAddsItsSheetOnce()
     {
         Handwritten written = Mount<Handwritten>(w => w.Markup = "<style>.a { color: red; }</style>");
 
-        Assert.Equal(["CreateElement(#1, button, -1) = #2"], Frame());
+        Assert.Equal(
+            [
+                "CreateElement(#1, button, -1) = #2",
+                $"AddStylesheet({typeof(Handwritten).FullName}.razor <style> at sequence 4, " +
+                $"{ComponentScope.ClassOf(typeof(Handwritten))}): .a {{ color: red; }}",
+            ],
+            Frame());
         Assert.Empty(Rebuild(written));
     }
 
