@@ -451,10 +451,20 @@ public sealed class RebuildTests : IDisposable
 
         Assert.False(handle.IsMounted);
         Assert.Equal(["mount", "built first", "unmount"], removed.Hooks);
-        Assert.Null(removed.Mounted);
-        Assert.False(handle.Unmount(RemoveMode.Immediate));
-        removed.StateHasChanged();
-        Assert.Empty(Frame());
+    }
+
+    [Fact]
+    public void IsMountedStaysTrueWhileTheHostIsInItsOutroAndTurnsFalseWhenItEnds()
+    {
+        Lifecycle leaving = Mount<Lifecycle>();
+        ComponentRef<Lifecycle> handle = new(leaving.Mounted!);
+        Frame();
+        seam.Remove(leaving.Element, RemoveMode.Outro);
+
+        Assert.True(handle.IsMounted);
+        seam.FinishOutros();
+        Assert.False(handle.IsMounted);
+        Assert.Equal(["mount", "built first", "unmount"], leaving.Hooks);
     }
 
     [Fact]

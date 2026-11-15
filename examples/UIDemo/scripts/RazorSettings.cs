@@ -61,7 +61,7 @@ public sealed class SettingsSetup : ISystem
         if (menu.Value == 0)
             return;
         ElementId slot = menu.FindById("razor-settings");
-        // IsMounted turns false, forgetting the page, once the closed menu's outro ends and takes the page's host.
+        // No Unmount on close: once the closed menu's outro ends and takes the page's host, IsMounted forgets the page.
         if (page.IsMounted && menu.GetParent(page.Host).Equals(slot))
             return;
         if (!menu.IsAlive(slot))

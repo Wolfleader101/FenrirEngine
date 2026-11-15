@@ -56,7 +56,7 @@ public sealed class SpeedometerSetup : ISystem
         // IsMounted is false at once when something else removed the host, a hot reload of the HUD's markup say.
         if (hud.Value == 0 || gauge.IsMounted)
             return;
-        gauge =hud.Mount<Speedometer>(hud.GetRootElement(), init: s => s.Speed = speed);
+        gauge = hud.Mount<Speedometer>(hud.GetRootElement(), init: s => s.Speed = speed);
         context.Log.Info("UIDemo: the speedometer is on the HUD, a Razor component painted from C#");
     }
 }

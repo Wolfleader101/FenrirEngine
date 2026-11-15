@@ -74,10 +74,9 @@ public static class RazorRuntime
     /// would next build, or sooner when its <c>IsMounted</c> is asked. Then each event runs the handler of its kind
     /// nearest its target, walking up through the parents, and that handler's Razor component is marked to build (a
     /// <c>Change</c> on a bound control first writes the control's value into the bound field). Then each Razor
-    /// component builds, in mount order, when it was just
-    /// mounted, when <c>StateHasChanged</c> or a handler asked, or when its <c>BuildHash</c> changed; at most once. One
-    /// mounted while this runs builds next frame. One whose build, hook or handler throws is logged with its type and
-    /// turned off until the next reload.
+    /// component builds, in mount order, when it was just mounted, when <c>StateHasChanged</c> or a handler asked, or
+    /// when its <c>BuildHash</c> changed; at most once. One mounted while this runs builds next frame. One whose build,
+    /// hook or handler throws is logged with its type and turned off until the next reload.
     /// </summary>
     public static void Build(in SystemContext context, EventRange<UIEvent> events)
     {
@@ -298,7 +297,7 @@ public static class RazorRuntime
     /// reload, the game removing its parent, the root destroyed) is dropped here, its <c>OnUnmount</c> run, as a build
     /// would drop it. A host still in its outro is alive, so it stays mounted until the outro ends.
     /// </summary>
-    internal static bool CheckMounted(MountedRazorComponent entry)
+    internal static bool StillMounted(MountedRazorComponent entry)
     {
         if (!entry.IsMounted)
             return false;
@@ -327,7 +326,7 @@ public static class RazorRuntime
                     return;
             }
             // A host someone else removed while its root lives is found here, when it would build.
-            if (!CheckMounted(entry))
+            if (!StillMounted(entry))
                 return;
             if (first)
             {
