@@ -252,7 +252,7 @@ Stacks, from the Touches lines:
 
 | # | Ticket | Blocked by | Branch | PR |
 |---|---|---|---|---|
-| 01 | [The build stage](issues/01-the-build-stage.md) | none | `razor/01-the-build-stage` | |
+| 01 | [The build stage](issues/01-the-build-stage.md) | none | `razor/01-the-build-stage` | [#364](https://github.com/Wolfleader101/FenrirEngine/pull/364) |
 | 02 | [Native scoped stylesheets](issues/02-native-scoped-stylesheets.md) | none | `razor/02-native-scoped-stylesheets` | |
 | 03 | [Tracer: a static Razor component on screen](issues/03-tracer-a-static-razor-component-on-screen.md) | 01 | `razor/03-tracer-a-static-razor-component-on-screen` | |
 | 04 | [Rebuilds in place](issues/04-rebuilds-in-place.md) | 03 | `razor/04-rebuilds-in-place` | |
