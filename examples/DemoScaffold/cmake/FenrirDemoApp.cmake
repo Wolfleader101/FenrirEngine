@@ -98,10 +98,9 @@ function(fenrir_add_demo_scripts name scripts_dir)
     foreach(optional IN ITEMS Physics Skeleton Animation Text Painter UI RazorComponents UIRazor)
         string(TOUPPER "${optional}" OPTIONAL_UPPER)
         if(TARGET Fenrir${optional}Contract)
-            fenrir_scripting_contract_assembly(${optional} optional_assembly)
+            fenrir_scripting_contract_dll(${optional} optional_dll)
             list(APPEND optional_args "-p:Fenrir${optional}ContractDir=${FENRIR_${OPTIONAL_UPPER}_CONTRACT_DIR}/")
-            list(APPEND optional_depends Fenrir${optional}Contract
-                "${FENRIR_${OPTIONAL_UPPER}_CONTRACT_DIR}/${optional_assembly}.dll")
+            list(APPEND optional_depends Fenrir${optional}Contract "${optional_dll}")
         endif()
     endforeach()
     add_custom_command(

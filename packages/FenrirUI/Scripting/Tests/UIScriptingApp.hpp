@@ -1,11 +1,11 @@
 #pragma once
 
-// The UI scripting tests' part of FenrirScripting's ExtensionTestApp, shared by Roots.cpp, BuildStage.cpp and the
-// generated defaults test (Generated/FenrirUIDefaultsTests.cpp): the fixture CTest names in FENRIR_TEST_UI_FIXTURE,
-// assets, input and the UI installed (the UI installs the painter and the app's FontLibrary), and the input, assets,
-// text, painter and UI extensions, the first four the ones the UI's contract builds on. Roots draw into capturing
-// targets of a fixed size, so they lay out with no window; a script reaches one by its id, and what it painted is read
-// from the captured list.
+// The UI scripting tests' part of FenrirScripting's ExtensionTestApp, shared by Roots.cpp, BuildStage.cpp, Razor.cpp
+// and the generated defaults test (Generated/FenrirUIDefaultsTests.cpp): the fixture CTest names in
+// FENRIR_TEST_UI_FIXTURE, assets, input and the UI installed (the UI installs the painter and the app's FontLibrary),
+// and the input, assets, text, painter and UI extensions, the first four the ones the UI's contract builds on. Roots
+// draw into capturing targets of a fixed size, so they lay out with no window; a script reaches one by its id, and what
+// it painted is read from the captured list.
 
 #include "ExtensionTestApp.hpp"
 
@@ -38,6 +38,12 @@ namespace Fenrir::Testing
     inline std::uint64_t Packed(ElementId element)
     {
         return (static_cast<std::uint64_t>(element.index) << 32u) | element.version;
+    }
+
+    /** @brief The element id the fixture packed (see Packed). */
+    inline ElementId Unpacked(std::uint64_t packed)
+    {
+        return ElementId{static_cast<std::uint32_t>(packed >> 32u), static_cast<std::uint32_t>(packed)};
     }
 
     inline bool Near(float a, float b)

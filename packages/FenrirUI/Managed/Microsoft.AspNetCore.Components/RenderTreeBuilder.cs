@@ -1,7 +1,7 @@
 namespace Microsoft.AspNetCore.Components.Rendering;
 
 /// <summary>
-/// The calls a component's generated <c>BuildRenderTree</c> makes, with Blazor's signatures. Every sequence number is
+/// The calls a Razor component's generated <c>BuildRenderTree</c> makes, with Blazor's signatures. Every sequence number is
 /// an integer literal the Razor generator numbers per file, from 0. The engine supplies the implementation, which builds
 /// FenrirUI elements in place.
 /// </summary>

@@ -17,7 +17,7 @@ public interface IComponent
 public abstract class ComponentBase : IComponent
 {
     /// <summary>
-    /// The component's markup, which the generated class overrides: one call on <paramref name="__builder"/> per
+    /// The Razor component's markup, which the generated class overrides: one call on <paramref name="__builder"/> per
     /// element, attribute and text run, each with its compile-time sequence number.
     /// </summary>
     protected virtual void BuildRenderTree(RenderTreeBuilder __builder)

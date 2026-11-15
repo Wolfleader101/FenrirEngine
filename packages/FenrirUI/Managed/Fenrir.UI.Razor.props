@@ -43,6 +43,11 @@
     <Compile Include="$(FenrirRazorDir)RazorDispatcher.cs" Link="Razor\RazorDispatcher.cs" Visible="false" />
   </ItemGroup>
 
+  <Target Name="_FenrirRazorGeneratorExists" BeforeTargets="CoreCompile"
+          Condition="'@(_FenrirRazorComponent)' != '' And !Exists('$(FenrirRazorGeneratorDir)Microsoft.CodeAnalysis.Razor.Compiler.dll')">
+    <Error Text="The .NET SDK building this project ($(NETCoreSdkVersion)) has no Razor source generator at $(FenrirRazorGeneratorDir), so its .razor files cannot compile. Set FenrirRazorGeneratorDir to the SDK's Sdks\Microsoft.NET.Sdk.Razor\source-generators\ folder." />
+  </Target>
+
   <ItemGroup Condition="'@(_FenrirRazorComponent)' != '' And Exists('$(FenrirRazorDir)Fenrir.UI.Razor.dll')">
     <Reference Include="Microsoft.AspNetCore.Components">
       <HintPath>$(FenrirRazorDir)Microsoft.AspNetCore.Components.dll</HintPath>

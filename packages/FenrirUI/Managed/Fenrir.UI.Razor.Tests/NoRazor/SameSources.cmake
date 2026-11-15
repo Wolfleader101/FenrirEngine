@@ -1,6 +1,6 @@
 # Builds the NoRazor project twice, without and with Fenrir.UI.Razor.props, writing the generators' sources out, and
-# fails unless both builds generated the same files with the same text: a script project with no .razor file is left
-# as it was. Run by CTest in script mode:
+# fails unless both builds generated the same files with the same text and the project evaluates to the same compiler
+# inputs both ways: a script project with no .razor file is left as it was. Run by CTest in script mode:
 #   cmake -DDOTNET=... -DPROJECT=<NoRazor.csproj> -DSDK=<scripting SDK dir>/ -DRAZOR=<Razor folder>/ -DWORK=<dir>
 #       -P SameSources.cmake
 foreach(required DOTNET PROJECT SDK RAZOR WORK)
@@ -46,3 +46,28 @@ foreach(file IN LISTS plain_files)
 endforeach()
 list(LENGTH plain_files count)
 message(STATUS "Both builds generated the same ${count} file(s).")
+
+# And the project evaluates to the same compiler inputs: no analyzer, reference, source, additional file or
+# compiler-visible property leaks in.
+set(items Analyzer Reference ProjectReference Compile AdditionalFiles CompilerVisibleProperty CompilerVisibleItemMetadata)
+list(TRANSFORM items PREPEND "-getItem:" OUTPUT_VARIABLE get_items)
+foreach(variant plain razor)
+    set(import false)
+    if(variant STREQUAL "razor")
+        set(import true)
+    endif()
+    execute_process(
+        COMMAND "${DOTNET}" msbuild "${PROJECT}" -nologo ${get_items}
+            "-p:FenrirScriptingSdk=${SDK}" "-p:FenrirUIRazorContractDir=${RAZOR}" "-p:ImportRazor=${import}"
+        RESULT_VARIABLE result
+        OUTPUT_VARIABLE ${variant}_items
+        ERROR_VARIABLE error_output
+    )
+    if(NOT result EQUAL 0)
+        message(FATAL_ERROR "Evaluating the ${variant} NoRazor project failed:\n${${variant}_items}${error_output}")
+    endif()
+endforeach()
+if(NOT plain_items STREQUAL razor_items)
+    message(FATAL_ERROR "With Fenrir.UI.Razor.props the evaluated items changed.\nWithout:\n${plain_items}\nWith:\n${razor_items}")
+endif()
+message(STATUS "Both evaluate to the same items: ${items}.")

@@ -6,9 +6,9 @@ namespace Fenrir.UI.Razor;
 /// </summary>
 public readonly struct ComponentRef<T> where T : UIComponent
 {
-    private readonly MountedComponent? mounted;
+    private readonly MountedRazorComponent? mounted;
 
-    internal ComponentRef(MountedComponent mounted)
+    internal ComponentRef(MountedRazorComponent mounted)
     {
         this.mounted = mounted;
     }

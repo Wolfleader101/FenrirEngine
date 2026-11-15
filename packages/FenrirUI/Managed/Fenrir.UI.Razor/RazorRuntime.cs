@@ -4,7 +4,7 @@ using Fenrir.Scripting;
 namespace Fenrir.UI.Razor;
 
 /// <summary>One mount of a Razor component: the object, the seam to its root and its host element.</summary>
-internal sealed class MountedComponent(UIComponent component, IElementSeam seam, ElementId host)
+internal sealed class MountedRazorComponent(UIComponent component, IElementSeam seam, ElementId host)
 {
     public UIComponent Component { get; } = component;
 
@@ -22,9 +22,9 @@ internal sealed class MountedComponent(UIComponent component, IElementSeam seam,
 /// </summary>
 public static class RazorRuntime
 {
-    private static readonly List<MountedComponent> mounted = [];
-    private static List<MountedComponent> queued = [];
-    private static List<MountedComponent> building = [];
+    private static readonly List<MountedRazorComponent> mounted = [];
+    private static List<MountedRazorComponent> queued = [];
+    private static List<MountedRazorComponent> building = [];
 
     /// <summary>
     /// Builds the Razor components waiting for their first build, in the order they were mounted. The Razor dispatcher
@@ -36,7 +36,7 @@ public static class RazorRuntime
         (queued, building) = (building, queued);
         try
         {
-            foreach (MountedComponent entry in building)
+            foreach (MountedRazorComponent entry in building)
             {
                 if (!entry.IsMounted)
                     continue;
@@ -67,7 +67,7 @@ public static class RazorRuntime
         // The latest first, so a Razor component mounted into another's elements goes before the element it is under.
         for (int i = mounted.Count - 1; i >= 0; --i)
         {
-            MountedComponent entry = mounted[i];
+            MountedRazorComponent entry = mounted[i];
             entry.IsMounted = false;
             entry.Seam.Remove(entry.Host, RemoveMode.Immediate);
         }
@@ -76,7 +76,7 @@ public static class RazorRuntime
         building.Clear();
     }
 
-    internal static MountedComponent Mount<T>(UIRoot root, IElementSeam seam, ElementId parent, int index,
+    internal static MountedRazorComponent Mount<T>(UIRoot root, IElementSeam seam, ElementId parent, int index,
                                               Action<T>? init)
         where T : UIComponent, new()
     {
@@ -92,13 +92,13 @@ public static class RazorRuntime
             seam.Remove(host, RemoveMode.Immediate);
             throw;
         }
-        var entry = new MountedComponent(component, seam, host);
+        var entry = new MountedRazorComponent(component, seam, host);
         mounted.Add(entry);
         queued.Add(entry);
         return entry;
     }
 
-    internal static bool Unmount(MountedComponent entry, RemoveMode mode)
+    internal static bool Unmount(MountedRazorComponent entry, RemoveMode mode)
     {
         if (!entry.IsMounted)
             return false;

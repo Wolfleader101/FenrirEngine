@@ -25,11 +25,13 @@ internal sealed class ElementBuilder(IElementSeam seam) : RenderTreeBuilder
 
     private readonly List<OpenFrame> open = [];
     private ElementId host = new();
+    private string componentName = "";
 
     /// <summary>Runs the Razor component's markup, making its elements under <paramref name="hostElement"/>.</summary>
     public void Build(UIComponent component, ElementId hostElement)
     {
         host = hostElement;
+        componentName = component.GetType().FullName ?? component.GetType().Name;
         open.Clear();
         component.BuildInto(this);
         if (open.Count != 0)
@@ -38,7 +40,7 @@ internal sealed class ElementBuilder(IElementSeam seam) : RenderTreeBuilder
 
     public override void OpenElement(int sequence, string elementName)
     {
-        ElementId parent = open.Count == 0 ? host : Made(open[^1]);
+        ElementId parent = open.Count == 0 ? host : ElementOf(open[^1]);
         open.Add(new OpenFrame(elementName, parent));
     }
 
@@ -47,7 +49,7 @@ internal sealed class ElementBuilder(IElementSeam seam) : RenderTreeBuilder
         if (open.Count == 0)
             throw new InvalidOperationException("CloseElement with no element open");
         OpenFrame frame = open[^1];
-        ElementId element = Made(frame);
+        ElementId element = ElementOf(frame);
         if (frame.Text is { Length: > 0 } text)
             seam.SetText(element, text.ToString());
         open.RemoveAt(open.Count - 1);
@@ -55,27 +57,32 @@ internal sealed class ElementBuilder(IElementSeam seam) : RenderTreeBuilder
 
     public override void AddMarkupContent(int sequence, string? markupContent)
     {
-        // Whitespace between elements is layout's business, never an element. Folded markup holding elements is not
-        // built yet.
+        // Whitespace between elements is layout's business, never an element.
+        if (string.IsNullOrWhiteSpace(markupContent))
+            return;
+        // Razor folds an element with no C# in it into one markup string, which this builder does not build yet; say
+        // so rather than let the element vanish without a word.
+        Fenrir.Scripting.Log.Warn($"The Razor component {componentName} has static markup at sequence {sequence}, " +
+                                  "which is not built yet: give the element an expression, such as id=\"@(\"x\")\"");
     }
 
     public override void AddContent(int sequence, string? textContent) => AddText(textContent);
 
     public override void AddContent(int sequence, object? textContent) => AddText(textContent?.ToString());
 
-    public override void AddAttribute(int sequence, string name) => Attribute(name, "");
+    public override void AddAttribute(int sequence, string name) => BufferAttribute(name, "");
 
     public override void AddAttribute(int sequence, string name, bool value)
     {
         // As in HTML, a false boolean attribute is left out.
         if (value)
-            Attribute(name, "true");
+            BufferAttribute(name, "true");
     }
 
     public override void AddAttribute(int sequence, string name, string? value)
     {
         if (value != null)
-            Attribute(name, value);
+            BufferAttribute(name, value);
     }
 
     public override void AddAttribute(int sequence, string name, object? value)
@@ -83,7 +90,7 @@ internal sealed class ElementBuilder(IElementSeam seam) : RenderTreeBuilder
         if (value is bool flag)
             AddAttribute(sequence, name, flag);
         else if (value?.ToString() is { } text)
-            Attribute(name, text);
+            BufferAttribute(name, text);
     }
 
     private void AddText(string? text)
@@ -91,12 +98,12 @@ internal sealed class ElementBuilder(IElementSeam seam) : RenderTreeBuilder
         if (open.Count == 0 || string.IsNullOrEmpty(text))
             return;
         OpenFrame frame = open[^1];
-        Made(frame);
+        ElementOf(frame);
         if (TakesText(frame.Tag))
             (frame.Text ??= new StringBuilder()).Append(text);
     }
 
-    private void Attribute(string name, string value)
+    private void BufferAttribute(string name, string value)
     {
         if (open.Count == 0)
             throw new InvalidOperationException($"The attribute {name} came with no element open");
@@ -107,7 +114,7 @@ internal sealed class ElementBuilder(IElementSeam seam) : RenderTreeBuilder
             frame.Attributes.Add(new(name, value));
     }
 
-    private ElementId Made(OpenFrame frame)
+    private ElementId ElementOf(OpenFrame frame)
     {
         if (frame.Made)
             return frame.Element;

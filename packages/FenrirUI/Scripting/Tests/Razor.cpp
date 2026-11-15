@@ -49,8 +49,7 @@ namespace
         /** @brief The host element of the Scoreboard the loaded generation mounted. */
         ElementId Host()
         {
-            const auto packed = Call<std::uint64_t>(RazorProbeType, "Host");
-            return ElementId{static_cast<std::uint32_t>(packed >> 32u), static_cast<std::uint32_t>(packed)};
+            return Unpacked(Call<std::uint64_t>(RazorProbeType, "Host"));
         }
     };
 
@@ -112,28 +111,47 @@ TEST_CASE("A Razor component mounted from OnCreate is on its root after the firs
     }
 }
 
-TEST_CASE("A script reload removes a Razor component at once, collects its generation and mounts it again",
-          "[ui][scripting][razor]")
+TEST_CASE("A script reload removes a Razor component's elements at once", "[ui][scripting][razor]")
 {
     RazorScriptingApp test;
     UIRoot& root = *test.root;
     test.Frame();
     const ElementId oldHost = test.Host();
     const ElementId oldBoard = root.FindById("board");
-    REQUIRE(root.IsAlive(oldBoard));
+    {
+        INFO("The first frame did not build the Razor component");
+        REQUIRE(root.IsAlive(oldBoard));
+    }
 
     {
         INFO("The reload did not succeed");
         REQUIRE(test.scripting.Reload().Succeeded());
     }
+    INFO("The old generation's host and its elements are gone before any frame, with no outro");
+    REQUIRE(!root.IsAlive(oldHost));
+    REQUIRE(!root.IsAlive(oldBoard));
+}
+
+TEST_CASE("A script generation with a mounted Razor component is collected when released", "[ui][scripting][razor]")
+{
+    RazorScriptingApp test;
+    test.Frame();
     {
-        INFO("The old generation's host and its elements are gone before any frame, with no outro");
-        REQUIRE(!root.IsAlive(oldHost));
-        REQUIRE(!root.IsAlive(oldBoard));
+        INFO("The reload did not succeed");
+        REQUIRE(test.scripting.Reload().Succeeded());
     }
+    INFO("The released generation was not collected: the Razor runtime still holds something of it");
+    REQUIRE(test.scripting.PendingUnloadCount() == 0);
+}
+
+TEST_CASE("After a script reload the new generation mounts its Razor component again", "[ui][scripting][razor]")
+{
+    RazorScriptingApp test;
+    UIRoot& root = *test.root;
+    test.Frame();
     {
-        INFO("The released generation was collected: the Razor runtime holds nothing of it");
-        REQUIRE(test.scripting.PendingUnloadCount() == 0);
+        INFO("The reload did not succeed");
+        REQUIRE(test.scripting.Reload().Succeeded());
     }
 
     const ElementId newHost = test.Host();
@@ -144,7 +162,7 @@ TEST_CASE("A script reload removes a Razor component at once, collects its gener
     }
     test.Frame();
     const ElementId board = root.FindById("board");
-    INFO("And its first frame built the Razor component under it");
+    INFO("Its first frame built the Razor component under the new host");
     REQUIRE(root.IsAlive(board));
     REQUIRE(root.GetParent(board) == newHost);
     REQUIRE(root.GetText(root.FindById("score")) == "Score: 42");

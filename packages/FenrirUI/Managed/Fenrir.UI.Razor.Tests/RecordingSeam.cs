@@ -30,23 +30,23 @@ internal sealed class RecordingSeam : IElementSeam
     public ElementId CreateElement(ElementId parent, string tag, int index)
     {
         ElementId made = Id(next++);
-        Calls.Add($"CreateElement({N(parent)}, {tag}, {index}) = {N(made)}");
+        Calls.Add($"CreateElement({Name(parent)}, {tag}, {index}) = {Name(made)}");
         return made;
     }
 
-    public void Remove(ElementId element, RemoveMode mode) => Calls.Add($"Remove({N(element)}, {mode})");
+    public void Remove(ElementId element, RemoveMode mode) => Calls.Add($"Remove({Name(element)}, {mode})");
 
-    public void AddClass(ElementId element, string name) => Calls.Add($"AddClass({N(element)}, {name})");
+    public void AddClass(ElementId element, string name) => Calls.Add($"AddClass({Name(element)}, {name})");
 
     public void SetStyle(ElementId element, string name, string value) =>
-        Calls.Add($"SetStyle({N(element)}, {name}, {value})");
+        Calls.Add($"SetStyle({Name(element)}, {name}, {value})");
 
-    public void SetIdString(ElementId element, string id) => Calls.Add($"SetIdString({N(element)}, {id})");
+    public void SetIdString(ElementId element, string id) => Calls.Add($"SetIdString({Name(element)}, {id})");
 
-    public void SetText(ElementId element, string text) => Calls.Add($"SetText({N(element)}, {text})");
+    public void SetText(ElementId element, string text) => Calls.Add($"SetText({Name(element)}, {text})");
 
     public void SetAttribute(ElementId element, string name, string value) =>
-        Calls.Add($"SetAttribute({N(element)}, {name}, {value})");
+        Calls.Add($"SetAttribute({Name(element)}, {name}, {value})");
 
-    private static string N(ElementId element) => $"#{element.Index}";
+    private static string Name(ElementId element) => $"#{element.Index}";
 }
