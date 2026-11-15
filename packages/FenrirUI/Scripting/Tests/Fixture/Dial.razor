@@ -1,0 +1,10 @@
+@* A child control with a bindable Value (Mixer.razor, Razor.cpp): its slider shows Value, and a change raises
+   ValueChanged, which @bind-Value on the parent's tag sets the parent's field through. *@
+@namespace UIScriptFixture
+<slider id="dial" style="position: absolute; left: 0px; top: 200px; width: 200px; height: 20px" value="@Value"
+        @onchange="e => ValueChanged.InvokeAsync(e.Value)" />
+
+@code {
+    [Parameter] public float Value { get; set; }
+    [Parameter] public EventCallback<float> ValueChanged { get; set; }
+}

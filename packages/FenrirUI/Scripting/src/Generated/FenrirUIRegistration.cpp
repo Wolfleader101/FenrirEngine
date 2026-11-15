@@ -55,6 +55,7 @@ namespace Fenrir::Generated
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::SetValue>("Fenrir.UI.UINative.SetValue"),
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::GetEntryText>("Fenrir.UI.UINative.GetEntryText"),
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::SetEntryText>("Fenrir.UI.UINative.SetEntryText"),
+                Fenrir::NativeFunction::Make<&Fenrir::UINatives::WarnIfTakesNoPointer>("Fenrir.UI.UINative.WarnIfTakesNoPointer"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::GetBoxes, 4>::Call>("Fenrir.UI.UINative.GetBoxes"),
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::SetFocusable>("Fenrir.UI.UINative.SetFocusable"),
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::Focus>("Fenrir.UI.UINative.Focus"),

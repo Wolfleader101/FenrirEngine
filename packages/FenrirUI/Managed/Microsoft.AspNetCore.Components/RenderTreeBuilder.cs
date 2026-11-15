@@ -43,6 +43,21 @@ public abstract class RenderTreeBuilder
     /// <summary>An attribute from a delegate: a Razor component's <c>ChildContent</c> or another fragment parameter.</summary>
     public abstract void AddAttribute(int sequence, string name, MulticastDelegate? value);
 
+    /// <summary>A handler (<c>@onclick</c> and the others) or a Razor component's event parameter.</summary>
+    public abstract void AddAttribute(int sequence, string name, EventCallback value);
+
+    /// <summary>
+    /// A handler taking an argument: <c>@onclick</c> and the others with a <c>UIEvent</c>, <c>@bind</c>'s change callback
+    /// with a <c>ChangeEventArgs</c>, or a Razor component's event parameter.
+    /// </summary>
+    public abstract void AddAttribute<TArgument>(int sequence, string name, EventCallback<TArgument> value);
+
+    /// <summary>
+    /// After <c>@bind</c>'s attributes: the open element's change callback updates the attribute named
+    /// <paramref name="updatesAttributeName"/>.
+    /// </summary>
+    public abstract void SetUpdatesAttributeName(string updatesAttributeName);
+
     /// <summary>Opens a child Razor component of type <typeparamref name="TComponent"/>; its parameters follow.</summary>
     public abstract void OpenComponent<TComponent>(int sequence) where TComponent : IComponent;
 

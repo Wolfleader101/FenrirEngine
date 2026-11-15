@@ -8,7 +8,10 @@
 #   * Fenrir.UI.Razor.Tests, the builder and mounting against a recording fake of the element seam, run by CTest, and
 #     FenrirUIRazorNoRazor: a script project with no .razor file that imports the props generates the same sources as
 #     one that does not.
-fenrir_scripting_contract(RazorComponents ASSEMBLY Microsoft.AspNetCore.Components SHARED_BY UI)
+fenrir_scripting_contract(RazorComponents ASSEMBLY Microsoft.AspNetCore.Components
+    USES UI Input Assets Text Painter
+    SHARED_BY UI
+)
 fenrir_scripting_contract(UIRazor ASSEMBLY Fenrir.UI.Razor
     USES UI RazorComponents Input Assets Text Painter
     SHARED_BY UI

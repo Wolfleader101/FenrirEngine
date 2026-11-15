@@ -1,0 +1,23 @@
+@* Handlers on elements (HandlerTests): a button's @onclick, an Action<UIEvent> on a panel, and an ancestor's handler
+   reached from a child that has none of that kind. *@
+<panel id="outer" @onclick="() => ++OuterClicks">
+    <button id="add" @onclick="Add">Add @Count</button>
+    <panel id="pad" @onpointerdown="e => Pressed = e">
+        <label id="inner">inner</label>
+    </panel>
+    @if (Bad)
+    {
+        <button id="bad" @onclick="Throw">Bad</button>
+    }
+</panel>
+
+@code {
+    public int Count;
+    public int OuterClicks;
+    public bool Bad;
+    public UIEvent? Pressed;
+
+    private void Add() => ++Count;
+
+    private void Throw() => throw new InvalidOperationException("the handler failed");
+}

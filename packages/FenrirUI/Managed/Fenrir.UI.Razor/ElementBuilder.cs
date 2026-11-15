@@ -40,6 +40,15 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         public string Value;
     }
 
+    private struct PendingHandler
+    {
+        public int Sequence;
+        public string Name;
+        public int Kind;
+        public MulticastDelegate? Delegate;
+        public IHandleEvent? Receiver;
+    }
+
     private enum FrameKind
     {
         /// <summary>An element: its attributes, then its content.</summary>
@@ -74,6 +83,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         public bool HasText;
         public readonly StringBuilder Text = new();
         public readonly List<PendingAttribute> Attributes = [];
+        public readonly List<PendingHandler> Handlers = [];
         public bool RunOpen;
         public EntryKey RunKey;
         public readonly StringBuilder Run = new();
@@ -104,6 +114,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             HasText = false;
             Text.Clear();
             Attributes.Clear();
+            Handlers.Clear();
             RunOpen = false;
             RunKey = default;
             Run.Clear();
@@ -311,6 +322,26 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         // ticket 06's.
         if (IsUnrecognisedDirective(name))
             WarnDirective(sequence, name);
+    }
+
+    public override void AddAttribute(int sequence, string name, EventCallback value)
+    {
+        if (!TakeParameter(name, value))
+            AddHandler(sequence, name, value.Delegate, value.Receiver);
+    }
+
+    public override void AddAttribute<TArgument>(int sequence, string name, EventCallback<TArgument> value)
+    {
+        if (!TakeParameter(name, value))
+            AddHandler(sequence, name, value.Delegate, value.Receiver);
+    }
+
+    /// <summary>
+    /// After <c>@bind</c>'s change callback: nothing to do, as the dispatcher reads a bound control's value on its
+    /// change (ADR-0069).
+    /// </summary>
+    public override void SetUpdatesAttributeName(string updatesAttributeName)
+    {
     }
 
     public override void AddComponentParameter(int sequence, string name, object? value)
@@ -617,6 +648,9 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         foreach (PendingAttribute attribute in frame.Attributes)
             Apply(entry, attribute.Sequence, attribute.Name, attribute.Value);
         frame.Attributes.Clear();
+        foreach (PendingHandler handler in frame.Handlers)
+            ApplyHandler(entry, handler);
+        frame.Handlers.Clear();
         if (frame.ElementReference != null)
         {
             SetReference(entry, frame.ElementReference);
@@ -817,10 +851,12 @@ internal sealed class ElementBuilder : RenderTreeBuilder
     /// <summary>
     /// Forgets an element that is going, natively with everything under it: its <c>@ref</c> is handed none, and what
     /// its children region holds is forgotten with no native call. Every removal of an entry comes through here, so
-    /// what an entry holds beyond its element (ticket 06's handlers) is let go here too.
+    /// its handlers leave the root's handler table here too.
     /// </summary>
     private static void Forgotten(Entry entry, in Forgetting forgetting, UIComponent? owner)
     {
+        forgetting.Tree.Handlers?.Remove(entry);
+        entry.Handlers = null;
         if (entry.Reference is { } reference)
         {
             entry.Reference = null;
@@ -1286,6 +1322,8 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         }
         if (entry.ValueSeen != build)
             entry.Value = null;
+        if (entry.Handlers != null)
+            FinishHandlers(entry);
         if (entry.Attributes == null)
             return;
         for (int i = entry.Attributes.Count - 1; i >= 0; --i)
@@ -1297,6 +1335,76 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             seam.SetAttribute(entry.Id, held.Name, held.Value == "true" ? "false" : "");
         }
     }
+
+    // ---- Handlers ----
+
+    /// <summary>A handler attribute (ADR-0069): recorded on the open element's entry by kind, buffered until it is found.</summary>
+    private void AddHandler(int sequence, string name, MulticastDelegate? callback, IHandleEvent? receiver)
+    {
+        Frame frame = open[^1];
+        if (frame.Kind != FrameKind.Element)
+            throw new InvalidOperationException($"The handler {name} came with no element open");
+        if (frame.IsStyle)
+            return;
+        if (!HandlerKinds.TryKind(name, out int kind))
+        {
+            WarnDirective(sequence, name);
+            return;
+        }
+        var pending = new PendingHandler
+        {
+            Sequence = sequence, Name = name, Kind = kind, Delegate = callback, Receiver = receiver,
+        };
+        if (frame.Resolved)
+            ApplyHandler(frame.Entry!, pending);
+        else
+            frame.Handlers.Add(pending);
+    }
+
+    /// <summary>
+    /// Gives the entry this build's handler of the kind, replacing the last (a lambda is a new delegate each build, and
+    /// replacing it costs nothing native). A null delegate gives none. An element's first pointer handler queues its
+    /// one pointer check for after its first layout.
+    /// </summary>
+    private void ApplyHandler(Entry entry, in PendingHandler pending)
+    {
+        if (pending.Delegate == null || tree.Handlers == null)
+            return;
+        entry.Handlers ??= new Handler?[HandlerKinds.Count];
+        Handler handler = entry.Handlers[pending.Kind] ??= new Handler();
+        handler.Delegate = pending.Delegate;
+        handler.Owner = pending.Receiver as UIComponent ?? component;
+        handler.Directive = "@" + pending.Name;
+        handler.Seen = build;
+        tree.Handlers.Add(entry);
+        if (HandlerKinds.IsPointer(pending.Kind) && !entry.PointerChecked)
+        {
+            entry.PointerChecked = true;
+            tree.Handlers.QueuePointerCheck(entry, PointerWarning(handler, pending.Sequence, entry.Tag));
+        }
+    }
+
+    /// <summary>Drops the handlers this build did not give; an entry left with none leaves the handler table.</summary>
+    private void FinishHandlers(Entry entry)
+    {
+        Handler?[] handlers = entry.Handlers!;
+        bool any = false;
+        for (int kind = 0; kind < handlers.Length; ++kind)
+        {
+            if (handlers[kind] is { } handler && handler.Seen != build)
+                handlers[kind] = null;
+            any |= handlers[kind] != null;
+        }
+        if (any)
+            return;
+        entry.Handlers = null;
+        tree.Handlers?.Remove(entry);
+    }
+
+    private static string PointerWarning(Handler handler, int sequence, string tag) =>
+        $"The Razor component {handler.Owner.GetType().FullName} has {handler.Directive} at sequence {sequence} on a " +
+        $"<{tag}> whose style takes no pointer events, so the pointer never reaches it: give the element " +
+        "pointer-events: all in a stylesheet (ADR-0065).";
 
     private static float ParseValue(string value)
     {

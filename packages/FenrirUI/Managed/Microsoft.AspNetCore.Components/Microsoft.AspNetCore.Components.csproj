@@ -10,10 +10,41 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
   </PropertyGroup>
   <!-- The engine's stand-in for Blazor's components assembly (ADR-0067): the few names the stock SDK's Razor generator
-       emits calls to, with no engine dependency, so .razor files compile with no ASP.NET Core reference. The generator
-       finds components and directive attributes only in assemblies named Microsoft.AspNetCore.*, and uses
-       AddComponentParameter only from a file named Microsoft.AspNetCore.Components.dll, so the name is fixed; the
-       namespaces follow Blazor's, so generated code resolves unchanged. The builder is abstract: Fenrir.UI.Razor's
-       ElementBuilder implements it. Built as a contract (CMake passes the scripting SDK's folder, which it does not
-       use) and shared by FenrirUI's scripting extension after Fenrir.UI. -->
+       emits calls to, so .razor files compile with no ASP.NET Core reference. The generator finds components and
+       directive attributes only in assemblies named Microsoft.AspNetCore.*, and uses AddComponentParameter only from a
+       file named Microsoft.AspNetCore.Components.dll, so the name is fixed; the namespaces follow Blazor's, so generated
+       code resolves unchanged. The builder is abstract: Fenrir.UI.Razor's ElementBuilder implements it. Its one engine
+       type is Fenrir.UI's UIEvent, the argument every handler EventHandlers declares takes (ADR-0069), so it is built
+       against the Fenrir.UI contract and the contracts that builds on; CMake passes -p:FenrirScriptingSdk=<the SDK
+       folder>/ and -p:Fenrir<Name>ContractDir=<the folder holding its dll>/ for each. Shared by FenrirUI's scripting
+       extension after Fenrir.UI. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <ItemGroup Condition="'$(FenrirUIContractDir)' != ''">
+    <Reference Include="Fenrir.UI">
+      <HintPath>$(FenrirUIContractDir)Fenrir.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Input">
+      <HintPath>$(FenrirInputContractDir)Fenrir.Input.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Assets">
+      <HintPath>$(FenrirAssetsContractDir)Fenrir.Assets.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Text">
+      <HintPath>$(FenrirTextContractDir)Fenrir.Text.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Painter">
+      <HintPath>$(FenrirPainterContractDir)Fenrir.Painter.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <!-- In an editor, which passes no folders, the contracts come from their source projects. -->
+  <ItemGroup Condition="'$(FenrirUIContractDir)' == ''">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../Fenrir.UI/Fenrir.UI.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
 </Project>

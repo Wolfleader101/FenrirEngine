@@ -27,6 +27,9 @@ internal sealed class RecordingSeam : IElementSeam
     }
 
     private readonly Dictionary<uint, Node> nodes = [];
+    private readonly Dictionary<string, uint> ids = [];
+    private readonly Dictionary<uint, float> values = [];
+    private readonly Dictionary<uint, string> texts = [];
     private uint next = 1;
     private bool destroyed;
 
@@ -51,6 +54,19 @@ internal sealed class RecordingSeam : IElementSeam
         foreach (uint outgoing in nodes.Where(pair => pair.Value.Outgoing).Select(pair => pair.Key).ToList())
             Detach(outgoing);
     }
+
+    /// <summary>The element last given the id string <paramref name="id"/>.</summary>
+    public ElementId ElementWithId(string id) => Id(ids[id]);
+
+    /// <summary>A control's value as it holds it, in invariant text; null when nothing set one.</summary>
+    public string? ValueOf(ElementId element) =>
+        values.TryGetValue(element.Index, out float value) ? value.ToString(CultureInfo.InvariantCulture) : null;
+
+    /// <summary>The player moves a slider or ticks a checkbox: the control's value changes, with no call recorded.</summary>
+    public void UserSetsValue(ElementId element, float value) => values[element.Index] = value;
+
+    /// <summary>The player types into a text entry: its text changes, with no call recorded.</summary>
+    public void UserTypes(ElementId element, string text) => texts[element.Index] = text;
 
     /// <summary>Destroys the root: every element, made or not, is dead from now on.</summary>
     public void DestroyRoot() => destroyed = true;
@@ -105,17 +121,47 @@ internal sealed class RecordingSeam : IElementSeam
     public void SetStyle(ElementId element, string name, string value) =>
         Calls.Add($"SetStyle({Name(element)}, {name}, {value})");
 
-    public void SetIdString(ElementId element, string id) => Calls.Add($"SetIdString({Name(element)}, {id})");
+    public void SetIdString(ElementId element, string id)
+    {
+        Calls.Add($"SetIdString({Name(element)}, {id})");
+        ids[id] = element.Index;
+    }
 
     public void SetText(ElementId element, string text) => Calls.Add($"SetText({Name(element)}, {text})");
 
     public void SetAttribute(ElementId element, string name, string value) =>
         Calls.Add($"SetAttribute({Name(element)}, {name}, {value})");
 
-    public void SetValue(ElementId element, float value) =>
+    public void SetValue(ElementId element, float value)
+    {
         Calls.Add($"SetValue({Name(element)}, {value.ToString(CultureInfo.InvariantCulture)})");
+        values[element.Index] = value;
+    }
 
-    public void SetEntryText(ElementId element, string text) => Calls.Add($"SetEntryText({Name(element)}, {text})");
+    public void SetEntryText(ElementId element, string text)
+    {
+        Calls.Add($"SetEntryText({Name(element)}, {text})");
+        texts[element.Index] = text;
+    }
+
+    /// <summary>The element's parent; none for one the fake did not make, or a removed one. Not recorded, as the walk reads it.</summary>
+    public ElementId GetParent(ElementId element) =>
+        nodes.TryGetValue(element.Index, out Node? node) && node.Parent != 0 ? Id(node.Parent) : new ElementId();
+
+    public bool GetValue(ElementId element, out float value)
+    {
+        Calls.Add($"GetValue({Name(element)})");
+        return values.TryGetValue(element.Index, out value);
+    }
+
+    public string GetEntryText(ElementId element)
+    {
+        Calls.Add($"GetEntryText({Name(element)})");
+        return texts.GetValueOrDefault(element.Index, "");
+    }
+
+    public void WarnIfTakesNoPointer(ElementId element, string message) =>
+        Calls.Add($"WarnIfTakesNoPointer({Name(element)}, {message})");
 
     private Node NodeOf(uint index)
     {

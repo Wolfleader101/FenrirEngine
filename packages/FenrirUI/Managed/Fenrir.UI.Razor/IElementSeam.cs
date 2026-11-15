@@ -48,6 +48,21 @@ internal interface IElementSeam
 
     /// <summary>Sets a text entry's value, sending no Change.</summary>
     void SetEntryText(ElementId element, string text);
+
+    /// <summary>The element's parent; none for the root element or a stale id.</summary>
+    ElementId GetParent(ElementId element);
+
+    /// <summary>A slider's or progress bar's value, or 1 for a checked checkbox and 0 for one that is not.</summary>
+    bool GetValue(ElementId element, out float value);
+
+    /// <summary>A text entry's text.</summary>
+    string GetEntryText(ElementId element);
+
+    /// <summary>
+    /// In a debug build, warns once with <paramref name="message"/> when the element's resolved style, as of the last
+    /// frame, takes no pointer events; a release build checks nothing (ADR-0069).
+    /// </summary>
+    void WarnIfTakesNoPointer(ElementId element, string message);
 }
 
 /// <summary>The element seam over one UI root's natives.</summary>
@@ -78,4 +93,21 @@ internal sealed class RootSeam(UIRoot root) : IElementSeam
     public void SetValue(ElementId element, float value) => root.SetValue(element, value);
 
     public void SetEntryText(ElementId element, string text) => root.SetEntryText(element, text);
+
+    public ElementId GetParent(ElementId element) => root.GetParent(element);
+
+    public bool GetValue(ElementId element, out float value) => root.GetValue(element, out value);
+
+    public string GetEntryText(ElementId element)
+    {
+        Span<char> text = stackalloc char[256];
+        int length = root.GetEntryText(element, text);
+        if (length <= text.Length)
+            return new string(text[..length]);
+        var longer = new char[length];
+        length = root.GetEntryText(element, longer);
+        return new string(longer, 0, System.Math.Min(length, longer.Length));
+    }
+
+    public void WarnIfTakesNoPointer(ElementId element, string message) => root.WarnIfTakesNoPointer(element, message);
 }

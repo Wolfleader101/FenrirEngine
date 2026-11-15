@@ -15,9 +15,9 @@
 
 Stacked on 05.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Scripting tests with the input test feed:
+- [x] Scripting tests with the input test feed:
   - a click on a button's label runs the button's `@onclick` once, and the component's text shows the change the same frame;
   - an `Action<UIEvent>` handler receives the event's position and kind;
   - an ancestor's handler runs when nothing nearer handles the kind;
@@ -25,5 +25,5 @@ Stacked on 05.
   - a field changed by code moves the slider and sends no `Change` back;
   - a text entry binds both ways;
   - a child's `@bind-Value` round-trips through its parent.
-- [ ] The debug warning logs once for `@onclick` on a panel without `pointer-events: all`, and not for a button.
-- [ ] Everything passes under the msvc-x64-debug preset. `check_tickets.py` and clang-format pass.
+- [x] The debug warning logs once for `@onclick` on a panel without `pointer-events: all`, and not for a button.
+- [x] Everything passes under the msvc-x64-debug preset. `check_tickets.py` and clang-format pass.
