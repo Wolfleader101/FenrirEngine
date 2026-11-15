@@ -259,5 +259,5 @@ Stacks, from the Touches lines:
 | 05 | [Child components](issues/05-child-components.md) | 04 | `razor/05-child-components` | [#368](https://github.com/Wolfleader101/FenrirEngine/pull/368) |
 | 06 | [Handlers and two-way binding](issues/06-handlers-and-two-way-binding.md) | 04, 05 | `razor/06-handlers-and-two-way-binding` | [#369](https://github.com/Wolfleader101/FenrirEngine/pull/369) |
 | 07 | [Scoped component stylesheets](issues/07-scoped-component-stylesheets.md) | 02, 04 | `razor/07-scoped-component-stylesheets` | |
-| 08 | [Paint overrides and `<Document>`](issues/08-paint-overrides-and-document.md) | 04 | `razor/08-paint-overrides-and-document` | |
+| 08 | [Paint overrides and `<Document>`](issues/08-paint-overrides-and-document.md) | 04 | `razor/08-paint-overrides-and-document` | [#370](https://github.com/Wolfleader101/FenrirEngine/pull/370) |
 | 09 | [UIDemo: the Razor speedometer and settings page](issues/09-uidemo-the-razor-speedometer-and-settings-page.md) | 06, 07, 08 | `razor/09-uidemo-the-razor-speedometer-and-settings-page` | |
