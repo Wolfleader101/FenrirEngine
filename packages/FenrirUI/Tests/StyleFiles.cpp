@@ -527,3 +527,77 @@ TEST_CASE("Hot reload turned on later polls what was loaded before it", "[ui][fi
     REQUIRE(scene.root.IsAlive(title));
     REQUIRE(Same(scene.root.GetResolvedStyle(title)->color, blue));
 }
+
+TEST_CASE("A stylesheet loaded with a scope scopes the sheets it imports", "[ui][files][scope]")
+{
+    FileTest scene;
+    scene.Write("component.css", "@import \"theme.css\";\n.title { height: 30px; }\n");
+    scene.Write("theme.css", ".title { width: 40px; }\n");
+    const ElementId top = scene.root.GetRootElement();
+    const ElementId scoped = scene.root.Create(top, "label");
+    scene.root.AddClass(scoped, "title");
+    scene.root.AddClass(scoped, "s-x");
+    const ElementId plain = scene.root.Create(top, "label");
+    scene.root.AddClass(plain, "title");
+    {
+        INFO("the sheet and its import load");
+        REQUIRE(scene.root.LoadStylesheet("component.css", "s-x").IsValid());
+    }
+    scene.test.Frame();
+
+    INFO("the imported rule styles the scoped label as the importing sheet's does, and the unscoped label neither");
+    REQUIRE(scene.root.GetBoxes(scoped).border.width == 40.0f);
+    REQUIRE(scene.root.GetBoxes(scoped).border.height == 30.0f);
+    REQUIRE(scene.root.GetBoxes(plain).border.width != 40.0f);
+    REQUIRE(scene.root.GetBoxes(plain).border.height != 30.0f);
+}
+
+TEST_CASE("A stylesheet loaded again with the same path and scope is the sheet already loaded", "[ui][files][scope]")
+{
+    FileTest scene;
+    scene.Write("component.css", ".title { width: 40px; }\n");
+    const Fenrir::StylesheetId sheet = scene.root.LoadStylesheet("component.css", "s-x");
+    {
+        INFO("the first load makes a sheet");
+        REQUIRE(sheet.IsValid());
+    }
+    INFO("the same path and scope gives back its id; another scope is a sheet of its own");
+    REQUIRE(scene.root.LoadStylesheet("component.css", "s-x") == sheet);
+    const Fenrir::StylesheetId other = scene.root.LoadStylesheet("component.css", "s-y");
+    REQUIRE(other.IsValid());
+    REQUIRE(other != sheet);
+}
+
+TEST_CASE("An unscoped stylesheet file's ::deep is logged at its file and line", "[ui][files][scope]")
+{
+    FileTest scene;
+    scene.Write("plain.css", ".ok { width: 1px; }\n.list ::deep label { width: 2px; }\n");
+    INFO("the sheet loads, and the refused rule is logged at plain.css:2");
+    REQUIRE(scene.root.LoadStylesheet("plain.css").IsValid());
+    REQUIRE(scene.Logged("plain.css:2"));
+}
+
+TEST_CASE("Hot reload re-reads a scoped stylesheet with its scope", "[ui][files][hot-reload][scope]")
+{
+    FileTest scene;
+    scene.Write("component.css", ".title { color: red; }\n");
+    const ElementId top = scene.root.GetRootElement();
+    const ElementId scoped = scene.root.Create(top, "label");
+    scene.root.AddClass(scoped, "title");
+    scene.root.AddClass(scoped, "s-x");
+    const ElementId plain = scene.root.Create(top, "label");
+    scene.root.AddClass(plain, "title");
+    scene.root.SetHotReload(true);
+    {
+        INFO("the scoped sheet loads, and the scoped label is red");
+        REQUIRE(scene.root.LoadStylesheet("component.css", "s-x").IsValid());
+        scene.Tick(0.1);
+        REQUIRE(Same(scene.root.GetResolvedStyle(scoped)->color, red));
+    }
+
+    scene.Write("component.css", ".title { color: blue; }\n");
+    scene.Tick(0.3);
+    INFO("the rewrite applies to the scoped label alone");
+    REQUIRE(Same(scene.root.GetResolvedStyle(scoped)->color, blue));
+    REQUIRE(!Same(scene.root.GetResolvedStyle(plain)->color, blue));
+}

@@ -156,9 +156,10 @@ namespace Fenrir::Detail
     }
 
     Stylesheet BuildStylesheet(std::string_view text, const std::string& name, const SourceReader& reader,
-                               AssetStore* store, std::vector<std::string>& loading, MarkupErrors& errors)
+                               AssetStore* store, std::vector<std::string>& loading, MarkupErrors& errors,
+                               std::string_view scope)
     {
-        Stylesheet sheet = Stylesheet::Parse(text, name);
+        Stylesheet sheet = Stylesheet::Parse(text, name, scope);
         const auto error = [&](std::uint32_t line, std::string message) {
             errors.push_back({line, MarkupError{name, line, std::move(message)}});
         };
@@ -177,6 +178,7 @@ namespace Fenrir::Detail
         loading.push_back(name);
         Stylesheet merged;
         merged.name = sheet.name;
+        merged.scope = sheet.scope;
         merged.imports = sheet.imports;
         std::size_t rule = 0;
         std::size_t keyframes = 0;
@@ -199,7 +201,8 @@ namespace Fenrir::Detail
                 continue;
             }
             MarkupErrors importErrors;
-            Stylesheet importedSheet = BuildStylesheet(*importedText, imported, reader, store, loading, importErrors);
+            Stylesheet importedSheet =
+                BuildStylesheet(*importedText, imported, reader, store, loading, importErrors, scope);
             for (OrderedError& importError : importErrors)
             {
                 errors.push_back({import.line, std::move(importError.error)});

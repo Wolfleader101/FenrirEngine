@@ -149,15 +149,29 @@ namespace Fenrir
      * `@import`, and what the parser refused. Parse never fails as a whole: a malformed declaration, an unknown
      * property or a declaration whose value cannot be read is skipped; a malformed rule or one with an unknown
      * pseudo-class is skipped whole; each is a diagnostic with its line, and the rest of the sheet stands.
+     *
+     * A sheet parsed with a scope (ADR-0070) styles only elements carrying the scope class: once nesting is resolved,
+     * the class is added to the rightmost compound selector of every rule (`.a .b` is `.a .b.s-x`, `.a > label` is
+     * `.a > label.s-x`), adding a class's weight to its specificity. `::deep` is a marker between two compounds that
+     * puts the scope on the compound before it instead, leaving a descendant combinator (`.list ::deep label` is
+     * `.list.s-x label`; a leading `::deep .b` is `.s-x .b`). It is legal once in a selector, with a compound after
+     * it, and only in a scoped sheet: elsewhere its rule is skipped with a diagnostic. `@keyframes` names and
+     * `@font-face`s are not scoped.
      */
     class Stylesheet
     {
       public:
-        /** @brief Parses `text`; `name` names it in what the root logs. */
-        [[nodiscard]] static Stylesheet Parse(std::string_view text, std::string_view name);
+        /**
+         * @brief Parses `text`; `name` names it in what the root logs. A non-empty `scope` is the class name its
+         * rules are scoped to; empty, the sheet is unscoped.
+         */
+        [[nodiscard]] static Stylesheet Parse(std::string_view text, std::string_view name,
+                                              std::string_view scope = {});
 
         /** @brief What it is called in what the root logs. */
         std::string name;
+        /** @brief The class its rules are scoped to; empty for an unscoped sheet. */
+        std::string scope;
         /**
          * @brief Its style rules in the order written: a nested rule after the rule it is in, and the declarations
          * written after a nested rule as a rule of their own after it, with the outer rule's selectors (CSS nesting).
