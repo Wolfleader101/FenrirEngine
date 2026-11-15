@@ -39,8 +39,8 @@ public abstract class UIComponent : ComponentBase
 
     /// <summary>
     /// Asks for a rebuild in this frame's <c>Fenrir.UI.Build</c>, or the next one's when it is called from that stage,
-    /// its own build among it. On a child Razor component, its parents' markup runs again to reach it, but only it
-    /// builds whatever its parameters.
+    /// its own build among it. On a child Razor component, the Razor components above it build too, to reach it (a
+    /// rebuild that changes nothing makes no native call); its siblings with unchanged parameters do not.
     /// </summary>
     public void StateHasChanged()
     {

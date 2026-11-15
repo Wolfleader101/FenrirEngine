@@ -27,7 +27,7 @@ namespace Fenrir.UI.Razor;
 /// <c>RenderFragment</c> always counts), or when it asked; otherwise its elements are kept where they are with no call.
 /// A fragment runs in a region of its own too.</item>
 /// <item>Whatever is removed is forgotten, its subtree with it: an <c>@ref</c> is handed none, and a child Razor
-/// component is unmounted.</item>
+/// component's <c>OnUnmount</c> runs.</item>
 /// </list>
 /// One builder serves every Razor component, one build at a time; between builds it holds nothing.
 /// </summary>
@@ -154,12 +154,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         build = ++tree.Build;
         try
         {
-            Frame host = Rent();
-            host.Kind = FrameKind.Region;
-            host.Resolved = true;
-            host.ChildRegion = tree.Root;
-            host.ChildPlacement = tree.Host;
-            open.Add(host);
+            Frame host = OpenRegion(tree.Root, tree.Host, null, false);
             component.BuildInto(this);
             if (open.Count != 1)
                 throw new InvalidOperationException($"{open.Count - 1} element(s) were opened and never closed");
@@ -181,11 +176,11 @@ internal sealed class ElementBuilder : RenderTreeBuilder
 
     /// <summary>
     /// Forgets a mounted Razor component's whole tree, whose host is going: every <c>@ref</c> is handed none and every
-    /// child Razor component unmounted, children first. It makes no native call.
+    /// child Razor component forgotten (its <c>OnUnmount</c> run), children first. It makes no native call.
     /// </summary>
-    internal static void ForgetTree(RetainedTree retained)
+    internal static void ForgetTree(RetainedTree retained, UIComponent owner)
     {
-        ForgetRegion(retained.Root, null, null, retained);
+        ForgetRegion(retained.Root, null, new Forgetting(retained, null, logErrors: true), owner);
         retained.Children.Clear();
     }
 
@@ -263,7 +258,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         }
         region.Visited = build;
 
-        Frame inner = OpenRegion(frame, region);
+        Frame inner = OpenRegion(region, frame.ChildPlacement!, TextTargetOf(frame), frame.IsStyle);
         UIComponent outer = component;
         // Its directives are the writer's to warn about, when the writer is a Razor component (not a loop's closure).
         if (fragment.Target is UIComponent writer)
@@ -362,7 +357,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         if (!typeof(UIComponent).IsAssignableFrom(typeof(TComponent)))
         {
             throw new InvalidOperationException(
-                $"The component {typeof(TComponent).FullName} does not derive from {typeof(UIComponent).FullName}");
+                $"The Razor component {typeof(TComponent).FullName} does not derive from {typeof(UIComponent).FullName}");
         }
         Frame parent = open[^1];
         Resolve(parent);
@@ -409,7 +404,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             else
             {
                 region.Components.Remove(key);
-                ForgetChild(found, placement, seam, tree);
+                ForgetChild(found, placement, DuringBuild());
             }
         }
         bool made = child == null;
@@ -438,7 +433,8 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         open.RemoveAt(open.Count - 1);
         Return(frame);
 
-        if (made || changed || child.Dirty)
+        // One whose text joins an enclosing label's, button's or style's builds every time: kept, its text would be lost.
+        if (made || changed || child.Dirty || textTarget != null)
             BuildChild(child, placement, textTarget, isStyle, made, changed);
         else
             KeepPlaced(child.Region, placement);
@@ -474,14 +470,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
     private void BuildChild(ChildComponent child, Placement placement, Frame? textTarget, bool isStyle, bool made,
                             bool changed)
     {
-        Frame region = Rent();
-        region.Kind = FrameKind.Region;
-        region.Resolved = true;
-        region.ChildRegion = child.Region;
-        region.ChildPlacement = placement;
-        region.TextTarget = textTarget;
-        region.IsStyle = isStyle;
-        open.Add(region);
+        Frame region = OpenRegion(child.Region, placement, textTarget, isStyle);
 
         UIComponent outer = component;
         ChildComponent? outerChild = building;
@@ -500,8 +489,8 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             built.CallOnParametersSet();
         built.BuildInto(this);
         CloseRegion(region, child.Region);
-        if (made)
-            child.LastHash = built.CallBuildHash();
+        // After every build, so a hash its new parameters changed does not ask for another next frame.
+        child.LastHash = built.CallBuildHash();
         built.CallOnBuilt(made);
         component = outer;
         building = outerChild;
@@ -551,16 +540,19 @@ internal sealed class ElementBuilder : RenderTreeBuilder
 
     // ---- Regions ----
 
-    /// <summary>Opens a key space whose elements go under <paramref name="enclosing"/>'s element.</summary>
-    private Frame OpenRegion(Frame enclosing, Region region)
+    /// <summary>
+    /// Opens a key space whose elements go into <paramref name="placement"/>, its text joining
+    /// <paramref name="textTarget"/>'s when there is one.
+    /// </summary>
+    private Frame OpenRegion(Region region, Placement placement, Frame? textTarget, bool isStyle)
     {
         Frame frame = Rent();
         frame.Kind = FrameKind.Region;
         frame.Resolved = true;
         frame.ChildRegion = region;
-        frame.ChildPlacement = enclosing.ChildPlacement;
-        frame.TextTarget = TextTargetOf(enclosing);
-        frame.IsStyle = enclosing.IsStyle;
+        frame.ChildPlacement = placement;
+        frame.TextTarget = textTarget;
+        frame.IsStyle = isStyle;
         open.Add(frame);
         return frame;
     }
@@ -649,7 +641,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             }
             if (entry.Tag != tag)
             {
-                Forgotten(entry, tree);
+                Forgotten(entry, DuringBuild(), component);
                 seam.Remove(entry.Id, RemoveMode.Outro);
                 region.Entries.Remove(key);
                 placement.MayHoldOutgoing = true;
@@ -747,7 +739,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         {
             Entry gone = region.Entries[key];
             region.Entries.Remove(key);
-            Forgotten(gone, tree);
+            Forgotten(gone, DuringBuild(), component);
             seam.Remove(gone.Id, RemoveMode.Outro);
             placement.MayHoldOutgoing = true;
         }
@@ -764,7 +756,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             {
                 ChildComponent gone = region.Components[key];
                 region.Components.Remove(key);
-                ForgetChild(gone, placement, seam, tree);
+                ForgetChild(gone, placement, DuringBuild());
             }
             unvisited.Clear();
         }
@@ -780,7 +772,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             {
                 Region gone = region.Fragments[key];
                 region.Fragments.Remove(key);
-                ForgetRegion(gone, placement, seam, tree);
+                ForgetRegion(gone, placement, DuringBuild(), component);
             }
             unvisited.Clear();
         }
@@ -789,33 +781,67 @@ internal sealed class ElementBuilder : RenderTreeBuilder
     // ---- Forgetting ----
 
     /// <summary>
+    /// What a forget walk needs besides the region: the tree whose child list it updates, the seam that removes a
+    /// placement's elements, and whether a throwing hook is logged and the walk goes on (a mount's whole tree going)
+    /// or the throw fails the build (a removal during one).
+    /// </summary>
+    private readonly struct Forgetting(RetainedTree tree, IElementSeam? seam, bool logErrors)
+    {
+        public RetainedTree Tree { get; } = tree;
+
+        public IElementSeam? Seam { get; } = seam;
+
+        /// <summary>Calls a Razor component's hook or a <c>@ref</c> action, as <see cref="Forgetting"/> says.</summary>
+        public void Call<T>(Action<T> callback, T argument, UIComponent? owner)
+        {
+            if (!logErrors)
+            {
+                callback(argument);
+                return;
+            }
+            try
+            {
+                callback(argument);
+            }
+            catch (Exception exception)
+            {
+                RazorDiagnostics.Error($"Forgetting the Razor component {owner?.GetType().FullName}'s elements threw: " +
+                                       $"{exception}");
+            }
+        }
+    }
+
+    /// <summary>A removal during this build: a throwing hook fails it.</summary>
+    private Forgetting DuringBuild() => new(tree, seam, logErrors: false);
+
+    /// <summary>
     /// Forgets an element that is going, natively with everything under it: its <c>@ref</c> is handed none, and what
     /// its children region holds is forgotten with no native call. Every removal of an entry comes through here, so
     /// what an entry holds beyond its element (ticket 06's handlers) is let go here too.
     /// </summary>
-    private static void Forgotten(Entry entry, RetainedTree retained)
+    private static void Forgotten(Entry entry, in Forgetting forgetting, UIComponent? owner)
     {
         if (entry.Reference is { } reference)
         {
             entry.Reference = null;
-            reference(default);
+            forgetting.Call(reference, default, owner);
         }
         if (entry.Children != null)
-            ForgetRegion(entry.Children, null, null, retained);
+            ForgetRegion(entry.Children, null, forgetting, owner);
     }
 
     /// <summary>
     /// Forgets everything in a region. With a placement, its elements are the placement's children, each removed with
     /// its outro; without, they are going with an element above them.
     /// </summary>
-    private static void ForgetRegion(Region region, Placement? placement, IElementSeam? elementSeam, RetainedTree retained)
+    private static void ForgetRegion(Region region, Placement? placement, in Forgetting forgetting, UIComponent? owner)
     {
         foreach (Entry entry in region.Entries.Values)
         {
-            Forgotten(entry, retained);
+            Forgotten(entry, forgetting, owner);
             if (placement != null)
             {
-                elementSeam!.Remove(entry.Id, RemoveMode.Outro);
+                forgetting.Seam!.Remove(entry.Id, RemoveMode.Outro);
                 placement.MayHoldOutgoing = true;
             }
         }
@@ -823,38 +849,37 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         if (region.Components != null)
         {
             foreach (ChildComponent child in region.Components.Values)
-                ForgetChild(child, placement, elementSeam, retained);
+                ForgetChild(child, placement, forgetting);
             region.Components.Clear();
         }
         if (region.Fragments != null)
         {
             foreach (Region fragment in region.Fragments.Values)
-                ForgetRegion(fragment, placement, elementSeam, retained);
+                ForgetRegion(fragment, placement, forgetting, owner);
             region.Fragments.Clear();
         }
     }
 
     /// <summary>
     /// Forgets a child Razor component: its elements as <see cref="ForgetRegion"/> does, then its <c>OnUnmount</c>
-    /// when owed, after those of the components under it, and its <c>@ref</c> is handed null.
+    /// when owed, after those of the Razor components under it, and its <c>@ref</c> is handed null.
     /// </summary>
-    private static void ForgetChild(ChildComponent child, Placement? placement, IElementSeam? elementSeam,
-                                    RetainedTree retained)
+    private static void ForgetChild(ChildComponent child, Placement? placement, in Forgetting forgetting)
     {
-        ForgetRegion(child.Region, placement, elementSeam, retained);
-        retained.Children.Remove(child);
         UIComponent gone = child.Component;
+        ForgetRegion(child.Region, placement, forgetting, gone);
+        forgetting.Tree.Children.Remove(child);
         gone.Mounted = null;
         gone.ChildRecord = null;
         if (child.MountHookRan)
         {
             child.MountHookRan = false;
-            gone.CallOnUnmount();
+            forgetting.Call(static component => component.CallOnUnmount(), gone, gone);
         }
         if (child.Reference is { } reference)
         {
             child.Reference = null;
-            reference(null!);
+            forgetting.Call(reference, null!, gone);
         }
     }
 

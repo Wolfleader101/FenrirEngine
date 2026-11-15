@@ -27,7 +27,7 @@ public abstract class ComponentBase : IComponent
 
 /// <summary>
 /// Marks a Razor component's property as a parameter: a parent's markup sets it by name as an attribute of the
-/// component's tag (<c>&lt;Badge Text="@title" /&gt;</c>). A property of type <see cref="RenderFragment"/> named
+/// Razor component's tag (<c>&lt;Badge Text="@title" /&gt;</c>). A property of type <see cref="RenderFragment"/> named
 /// <c>ChildContent</c> takes the markup between the tag's start and end.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
@@ -35,7 +35,7 @@ public sealed class ParameterAttribute : Attribute
 {
 }
 
-/// <summary>A piece of markup a Razor component was handed, built where the component places it.</summary>
+/// <summary>A piece of markup a Razor component was handed, built where that Razor component places it.</summary>
 public delegate void RenderFragment(RenderTreeBuilder builder);
 
 /// <summary>A piece of markup made from a value, as a templated parameter takes it.</summary>

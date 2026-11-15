@@ -11,7 +11,7 @@ A `.razor` file compiles to a class whose `@code` fields its markup reads (ADR-0
 - **A Razor component is a `UIComponent` object**, mounted into an element of a UI root: `root.Mount<T>(parent, index, init)` returns a reference to it, and `Unmount()` removes it with its outro. Its fields hold UI-local state only (which tab is open, a typed filter). Game state stays in the ECS and is read when the component builds, through `Context`, the frame's `SystemContext`. Elements stay FenrirUI's (ADR-0066): a component holds `ElementId`s, never elements.
 - **Its surface:**
   - `[Parameter]` properties, with `ChildContent` and other `RenderFragment` slots;
-  - `@ref` on an element (an `ElementId`, reset to none when the element goes) or on a component;
+  - `@ref` on an element (an `ElementReference`, which `ElementOf` turns into the `ElementId`, reset to none when the element goes) or on a component;
   - `@key`;
   - the hooks `OnMount`, `OnParametersSet`, `OnBuilt(bool first)` and `OnUnmount`;
   - `Root` and `Element`, its UI root and its own root element.

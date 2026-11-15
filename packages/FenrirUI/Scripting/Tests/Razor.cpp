@@ -366,9 +366,15 @@ TEST_CASE("A two-level tree of Razor components with a frame wrapping ChildConte
         REQUIRE(root.GetChildren(frame)[0] == title);
         REQUIRE(root.GetChildren(frame)[1] == gauge);
     }
-    INFO("The Gauge did not show the parameter the Dashboard passed, or its @ref was not captured");
-    REQUIRE(root.GetText(title) == "Dashboard");
-    REQUIRE(root.GetText(gauge) == "Level: 0");
+    {
+        INFO("The ChildContent's title lost its text");
+        REQUIRE(root.GetText(title) == "Dashboard");
+    }
+    {
+        INFO("The Gauge did not show the parameter the Dashboard passed");
+        REQUIRE(root.GetText(gauge) == "Level: 0");
+    }
+    INFO("The Dashboard's @ref on the Gauge was not captured");
     REQUIRE(test.Call<std::int32_t>(DashboardProbeType, "ShownValue") == 0);
 }
 
@@ -382,9 +388,15 @@ TEST_CASE("A parent field passed as a parameter updates the child's text the sam
     test.Call<void>(DashboardProbeType, "ShowFromUpdate", std::int32_t{7});
     test.Frame();
 
-    INFO("The Gauge's label did not show the new level that frame, or was made again");
-    REQUIRE(root.FindById("gauge") == gauge);
-    REQUIRE(root.GetText(gauge) == "Level: 7");
+    {
+        INFO("The Gauge's label was made again rather than kept");
+        REQUIRE(root.FindById("gauge") == gauge);
+    }
+    {
+        INFO("The Gauge's label did not show the new level that frame");
+        REQUIRE(root.GetText(gauge) == "Level: 7");
+    }
+    INFO("The Gauge was not given the new level as its parameter");
     REQUIRE(test.Call<std::int32_t>(DashboardProbeType, "ShownValue") == 7);
 }
 

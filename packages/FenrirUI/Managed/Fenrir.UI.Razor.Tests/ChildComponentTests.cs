@@ -153,7 +153,53 @@ public sealed class ChildComponentTests : IDisposable
     }
 
     [Fact]
-    public void ReleaseUnmountsChildRazorComponents()
+    public void AHashItsNewParametersChangedAsksForNoSecondBuild()
+    {
+        Pair pair = Mount<Pair>();
+        RunFrame();
+        pair.First!.HashFromText = true;
+        RunFrame();
+        int builds = pair.First.Hooks.Count(hook => hook == "built");
+
+        pair.Title = "longer";
+        Rebuild(pair);
+        RunFrame();
+
+        Assert.Equal(builds + 1, pair.First.Hooks.Count(hook => hook == "built"));
+    }
+
+    [Fact]
+    public void AChildsTextInALabelIsKeptWhenItsParentRebuildsForSomethingElse()
+    {
+        Sentence sentence = Mount<Sentence>();
+        Assert.Contains("SetText(#2, Score: ten)", RunFrame());
+
+        sentence.Other = "p";
+        Assert.Equal(["SetText(#3, p)"], Rebuild(sentence));
+
+        sentence.Word = "nine";
+        Assert.Equal(["SetText(#2, Score: nine)"], Rebuild(sentence));
+    }
+
+    [Fact]
+    public void AThrowingOnUnmountIsLoggedAndTheOtherChildrenAreStillForgotten()
+    {
+        Pair pair = Mount<Pair>();
+        RunFrame();
+        Badge first = pair.First!;
+        Badge @fixed = pair.Fixed!;
+        first.ThrowOnUnmount = true;
+
+        RazorRuntime.Release();
+
+        Assert.Single(errors);
+        errors.Clear();
+        Assert.Equal("unmount", @fixed.Hooks[^1]);
+        Assert.Null(pair.Fixed);
+    }
+
+    [Fact]
+    public void ReleaseForgetsChildRazorComponents()
     {
         Pair pair = Mount<Pair>();
         RunFrame();
@@ -231,28 +277,36 @@ public sealed class ChildComponentTests : IDisposable
         RunFrame();
         Assert.Equal(RecordingSeam.Id(3), refs.BoxElement);
         Assert.True(refs.Box.HasValue);
-        Assert.Equal("ref", refs.Child!.Text);
 
         refs.Show = false;
-        Assert.Equal(["Remove(#3, Outro)", "Remove(#4, Outro)"], Rebuild(refs));
+        Assert.Equal(["Remove(#3, Outro)", "Remove(#5, Outro)"], Rebuild(refs));
         Assert.False(refs.Box.HasValue);
         Assert.Equal(new ElementId(), refs.BoxElement);
-        Assert.Null(refs.Child);
     }
 
     [Fact]
     public void ARefIsClearedWhenAnAncestorOfItsElementIsRemoved()
     {
-        Pair pair = Mount<Pair>();
+        Refs refs = Mount<Refs>();
         RunFrame();
-        Badge first = pair.First!;
+        Assert.True(refs.Inner.HasValue);
 
-        pair.ShowFirst = false;
-        Rebuild(pair);
+        refs.Show = false;
+        Rebuild(refs);
 
-        // The Badge's @ref on Pair went with it; the fixed one stays.
-        Assert.Null(pair.First);
-        Assert.NotNull(pair.Fixed);
-        Assert.Equal("unmount", first.Hooks[^1]);
+        // The inner panel went natively with the box, with no call of its own, and its @ref was still handed none.
+        Assert.False(refs.Inner.HasValue);
+    }
+
+    [Fact]
+    public void ARazorComponentsRefIsSetAndThenClearedWhenItIsForgotten()
+    {
+        Refs refs = Mount<Refs>();
+        RunFrame();
+        Assert.Equal("ref", refs.Child!.Text);
+
+        refs.Show = false;
+        Rebuild(refs);
+        Assert.Null(refs.Child);
     }
 }

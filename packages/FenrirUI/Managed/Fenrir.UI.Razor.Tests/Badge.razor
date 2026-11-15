@@ -6,9 +6,11 @@
     [Parameter] public int Width { get; set; } = 10;
     public string Suffix = "";
     public int Hash;
+    public bool HashFromText;
+    public bool ThrowOnUnmount;
     public List<string> Hooks = [];
 
-    protected override int BuildHash() => Hash;
+    protected override int BuildHash() => HashFromText ? Text.Length : Hash;
 
     protected override void OnMount() => Hooks.Add("mount");
 
@@ -16,5 +18,10 @@
 
     protected override void OnBuilt(bool first) => Hooks.Add(first ? "built first" : "built");
 
-    protected override void OnUnmount() => Hooks.Add("unmount");
+    protected override void OnUnmount()
+    {
+        Hooks.Add("unmount");
+        if (ThrowOnUnmount)
+            throw new InvalidOperationException("OnUnmount threw");
+    }
 }

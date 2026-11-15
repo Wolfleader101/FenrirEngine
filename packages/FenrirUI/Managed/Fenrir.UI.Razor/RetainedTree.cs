@@ -144,7 +144,7 @@ internal sealed class Entry(ElementId id, string tag)
 }
 
 /// <summary>
-/// A child Razor component a parent's markup placed (spec: "The builder" child components, ADR-0068): the object, its
+/// A child Razor component a parent's markup placed (spec: "The builder" child components, ADR-0067): the object, its
 /// region, the parameters it was last given, and its own state for the rebuild rules. It has no element of its own:
 /// its elements go under the element it was placed in.
 /// </summary>

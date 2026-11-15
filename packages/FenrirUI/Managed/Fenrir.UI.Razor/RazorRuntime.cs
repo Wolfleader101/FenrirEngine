@@ -251,21 +251,15 @@ public static class RazorRuntime
     }
 
     /// <summary>
-    /// Marks it unmounted, forgets its tree (every <c>@ref</c> handed none, every child Razor component unmounted) and
+    /// Marks it unmounted, forgets its tree (every <c>@ref</c> handed none, every child Razor component's <c>OnUnmount</c> run) and
     /// runs its own <c>OnUnmount</c> when owed; the host is the caller's.
     /// </summary>
     private static void Forget(MountedRazorComponent entry)
     {
         entry.IsMounted = false;
         entry.Component.Mounted = null;
-        try
-        {
-            ElementBuilder.ForgetTree(entry.Tree);
-        }
-        catch (Exception exception)
-        {
-            RazorDiagnostics.Error($"Forgetting the Razor component {entry.Component.GetType().FullName}'s children threw: {exception}");
-        }
+        // Each hook that throws is logged and the walk goes on.
+        ElementBuilder.ForgetTree(entry.Tree, entry.Component);
         if (!entry.MountHookRan)
             return;
         entry.MountHookRan = false;
