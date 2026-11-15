@@ -762,6 +762,26 @@ The ray, in world space, a game gives a world root each frame with its button's 
 A per-root switch that turns the left stick into pointer motion and A into a left click, drawn as the root's `virtual-cursor` element.
 *Avoid:* gamepad mouse, fake pointer.
 
+**Razor component**
+A C# class compiled from a `.razor` file, whose markup and `@code` describe the elements it keeps in a UI root. One managed object per mounted instance, holding UI-local state only (ADR-0067, ADR-0068). Always say *Razor component*: a bare *component* is the ECS's.
+*Avoid:* panel (s&box's), view, widget, component (alone).
+
+**Mount**
+To place a Razor component into an element of a UI root, which builds it there and keeps it until it is unmounted or its script generation is released. (An asset root is never "mounted".)
+*Avoid:* attach, spawn, instantiate.
+
+**Razor dispatcher**
+The one C# stage system that runs every mounted Razor component: it runs their handlers for the frame's UI events, rebuilds the ones that need it, and calls their paint overrides (ADR-0068).
+*Avoid:* renderer (Blazor's word, and the engine's renderer), UI manager.
+
+**Build stage**
+FenrirUI's hosted work at the start of each frame's styling, before transitions and the cascade, in which elements are made and changed for that frame's layout. C# systems join it as the extension stage `Fenrir.UI.Build`, and the Razor dispatcher runs there.
+*Avoid:* update stage, render tree pass.
+
+**Scope class**
+The class a Razor component's builder gives every element it makes, and which its scoped stylesheets require on every rule's last selector, so that a component's styles reach only its own elements unless `::deep` says otherwise (ADR-0070).
+*Avoid:* scope attribute (Blazor's), CSS module.
+
 **FenrirAssets**
 The engine's asset package: loads files into plain CPU-side data and owns it behind asset handles. It has no GPU code; FenrirRenderer and animation each turn its data into their own form (ADR-0021).
 *Avoid:* resource manager, asset server, asset database (cooking and an editor database are out of scope).

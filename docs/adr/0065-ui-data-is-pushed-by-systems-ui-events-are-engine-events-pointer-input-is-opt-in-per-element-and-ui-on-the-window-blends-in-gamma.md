@@ -25,5 +25,7 @@ Browsers, Figma, Skia by default and s&box blend UI colours and anti-aliasing in
 ## Considered
 
 - **A `{{ }}` binding language in markup now.** It is what RmlUi and Gameface offer and what makes markup feel complete, but it needs a native typed data model, name resolution and dirty tracking that C# fills by name, a second way to move data beside components, and the Razor-style effort will want expressions of its own.
+
+*Amended 2026-11-15 (ADR-0069):* the binding language is Razor's `@bind`, in C# only, over the same queue: a Razor handler runs from the dispatcher's read of `UIEvent`, bubbling in C# to the nearest handler, and markup documents stay without bindings.
 - **Web default `pointer-events: auto`.** Every HUD would start by turning it off.
 - **Linear blending for all UI.** Physically right and consistent with the 3D frame, and wrong against every reference a UI designer works from.
