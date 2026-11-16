@@ -258,6 +258,7 @@ TEST_CASE("A combining sequence moves and deletes as one grapheme", "[ui][texten
     scene.Focus();
     // e, a combining acute accent (U+0301, two bytes) and x: two graphemes in four bytes.
     scene.TypeText(U"éx");
+    INFO("the typed text is e, a combining acute accent and x");
     REQUIRE(scene.Entry().GetValue() == "e\xCC\x81x");
 
     scene.Press(Key::Left, Scancode::Left);
@@ -555,6 +556,7 @@ TEST_CASE("The selection and caret draw where the paragraph puts them, in the sh
     const float advance = scene.Advance();
     const Fenrir::Rect2D content = scene.Content();
     const Fenrir::Paragraph& paragraph = scene.Entry().GetParagraph();
+    INFO("the entry's text lays out on one line");
     REQUIRE(paragraph.Lines().size() == 1);
     const float lineHeight = paragraph.Lines().front().height;
     const float lineTop = content.y + (content.height - lineHeight) / 2.0f;

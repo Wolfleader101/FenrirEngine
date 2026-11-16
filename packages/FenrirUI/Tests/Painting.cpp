@@ -193,6 +193,7 @@ TEST_CASE("Without offscreen groups, or with no children, opacity fades each box
     std::shared_ptr<UITest::CaptureTarget> target;
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
     const Fenrir::ElementId leaf = root.Create(root.GetRootElement(), "panel");
+    INFO("the leaf's style is taken");
     REQUIRE(root.SetStyleProperty(leaf, "height", "10px"));
     REQUIRE(root.SetStyleProperty(leaf, "background-color", "#ffffff"));
     REQUIRE(root.SetStyleProperty(leaf, "opacity", "0.5"));
@@ -291,6 +292,7 @@ TEST_CASE("Siblings paint by z-index, equal ones in tree order", "[ui][paint]")
     const Fenrir::ElementId red = ColouredPanel(root, "#ff0000");
     ColouredPanel(root, "#00ff00");
     ColouredPanel(root, "#0000ff");
+    INFO("the red panel takes its z-index");
     REQUIRE(root.SetStyleProperty(red, "z-index", "1"));
     test.Frame();
 
@@ -309,6 +311,7 @@ TEST_CASE("An element with display none paints nothing", "[ui][paint]")
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
     ColouredPanel(root, "#ff0000");
     const Fenrir::ElementId hidden = ColouredPanel(root, "#00ff00");
+    INFO("the green panel takes display none");
     REQUIRE(root.SetStyleProperty(hidden, "display", "none"));
     test.Frame();
 
@@ -326,6 +329,7 @@ TEST_CASE("A transform turns the element's boxes about its origin", "[ui][paint]
     std::shared_ptr<UITest::CaptureTarget> target;
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
     const Fenrir::ElementId panel = root.Create(root.GetRootElement(), "panel");
+    INFO("the panel's style is taken");
     REQUIRE(root.SetStyleProperty(panel, "width", "100px"));
     REQUIRE(root.SetStyleProperty(panel, "height", "50px"));
     REQUIRE(root.SetStyleProperty(panel, "background-color", "#ffffff"));
@@ -362,6 +366,7 @@ TEST_CASE("A background image paints as a gradient or as the image, which its co
     std::shared_ptr<UITest::CaptureTarget> target;
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
     const Fenrir::ElementId gradient = root.Create(root.GetRootElement(), "panel");
+    INFO("the gradient panel's style is taken");
     REQUIRE(root.SetStyleProperty(gradient, "height", "100px"));
     REQUIRE(root.SetStyleProperty(gradient, "background-image", "linear-gradient(90deg, #000000, #ffffff)"));
     const Fenrir::AssetHandle<Fenrir::Image> image = WhiteImage(test);
@@ -399,6 +404,7 @@ TEST_CASE("The root scale takes UI units to the list's logical units", "[ui][pai
     // 1080-height on a 540-high target: half a logical unit per UI unit.
     Fenrir::UIRoot& root = test.MakeRoot(target, {960.0f, 540.0f}, 1.0f, Fenrir::ScaleRule::Height1080);
     const Fenrir::ElementId panel = root.Create(root.GetRootElement(), "panel");
+    INFO("the panel's style is taken");
     REQUIRE(root.SetStyleProperty(panel, "height", "100px"));
     REQUIRE(root.SetStyleProperty(panel, "background-color", "#ffffff"));
     test.Frame();
@@ -417,6 +423,7 @@ TEST_CASE("A value or property it cannot read is refused and changes nothing", "
     std::shared_ptr<UITest::CaptureTarget> target;
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
     const Fenrir::ElementId panel = root.Create(root.GetRootElement(), "panel");
+    INFO("a value it can read is taken");
     REQUIRE(root.SetStyleProperty(panel, "width", "10px"));
     INFO("an unknown property");
     REQUIRE_FALSE(root.SetStyleProperty(panel, "colour", "red"));
@@ -465,6 +472,7 @@ TEST_CASE("Transform lists read their functions and angle units in order", "[ui]
     std::shared_ptr<UITest::CaptureTarget> target;
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
     const Fenrir::ElementId panel = root.Create(root.GetRootElement(), "panel");
+    INFO("the transform list is taken");
     REQUIRE(root.SetStyleProperty(panel, "transform", "rotate(0.25turn) scale(2)"));
     test.Frame();
 
@@ -532,6 +540,7 @@ TEST_CASE("A backdrop filter blurs what is under the element's border box before
     std::shared_ptr<UITest::CaptureTarget> target;
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
     const Fenrir::ElementId panel = ColouredPanel(root, "#ff0000");
+    INFO("the panel's style is taken");
     REQUIRE(root.SetStyleProperty(panel, "width", "100px"));
     REQUIRE(root.SetStyleProperty(panel, "backdrop-filter", "blur(8px)"));
     test.Frame();

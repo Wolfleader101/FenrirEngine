@@ -64,6 +64,7 @@ namespace
 TEST_CASE("Type, class, id and compound selectors parse with CSS's specificity", "[ui][stylesheet]")
 {
     const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse("panel {} .card {} #title {} button.primary#ok {}", "t");
+    INFO("the stylesheet parses with no errors into its four rules");
     REQUIRE(sheet.diagnostics.empty());
     REQUIRE(sheet.rules.size() == 4);
 
@@ -91,6 +92,7 @@ TEST_CASE("Type, class, id and compound selectors parse with CSS's specificity",
 TEST_CASE("Descendant and child combinators and selector lists parse", "[ui][stylesheet]")
 {
     const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse(".menu   .item>label, #hud > .bar {}", "t");
+    INFO("the stylesheet parses with no errors into one rule");
     REQUIRE(sheet.diagnostics.empty());
     REQUIRE(sheet.rules.size() == 1);
     REQUIRE(sheet.rules[0].selectors.size() == 2);
@@ -465,6 +467,7 @@ TEST_CASE("Nesting flattens to the selectors CSS nesting means", "[ui][styleshee
         }
     )",
                                                                "nesting");
+    INFO("the stylesheet parses with no errors");
     REQUIRE(sheet.diagnostics.empty());
     INFO("the outer rule comes first, then each nested rule in order, each selector of the outer list in turn");
     REQUIRE(SelectorTexts(sheet) == std::vector<std::string>{
@@ -485,6 +488,7 @@ TEST_CASE("A nested selector's & weighs as the outer list's highest specificity,
 {
     const Fenrir::Stylesheet sheet =
         Fenrir::Stylesheet::Parse(".card, #hero { &:hover {} > label {} .x { & .y {} } }", "is");
+    INFO("the stylesheet parses with no errors into the outer rule and its four nested ones");
     REQUIRE(sheet.diagnostics.empty());
     REQUIRE(sheet.rules.size() == 5);
     INFO("&:hover under .card, #hero is :is(.card, #hero):hover, an id and a class for both selectors");
@@ -502,6 +506,7 @@ TEST_CASE("Declarations after a nested rule apply after it, as a rule of the out
 {
     const Fenrir::Stylesheet sheet =
         Fenrir::Stylesheet::Parse(".a {\n  width: 1px;\n  &.b { width: 2px; }\n  width: 3px;\n}\n", "after");
+    INFO("the stylesheet parses with no errors");
     REQUIRE(sheet.diagnostics.empty());
     INFO("the outer rule, the nested rule, then a rule of .a holding what came after the nested one");
     REQUIRE(SelectorTexts(sheet) == std::vector<std::string>{".a", ".a.b", ".a"});
@@ -540,6 +545,7 @@ TEST_CASE("Imports are recorded with their url and line", "[ui][stylesheet]")
 {
     const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse(
         "@import url(\"base.css\");\n@import 'theme.css';\npanel { width: 1px; }\n", "imports");
+    INFO("the stylesheet parses with no errors");
     REQUIRE(sheet.diagnostics.empty());
     INFO("url() and a bare string both name the sheet, without their quotes");
     REQUIRE(sheet.imports.size() == 2);
@@ -559,6 +565,7 @@ TEST_CASE("A keyframes rule keeps its name, and each block's offsets and declara
                                                                "  to { opacity: 1; }\n"
                                                                "}\n",
                                                                "keyframes");
+    INFO("the stylesheet parses with no errors into one keyframes rule");
     REQUIRE(sheet.diagnostics.empty());
     REQUIRE(sheet.keyframes.size() == 1);
     const Fenrir::StyleKeyframes& pulse = sheet.keyframes[0];
@@ -581,6 +588,7 @@ TEST_CASE("A font face keeps its descriptors as written", "[ui][stylesheet]")
                                                                "  font-weight: 700;\n"
                                                                "}\n",
                                                                "fonts");
+    INFO("the stylesheet parses with no errors into one font face");
     REQUIRE(sheet.diagnostics.empty());
     REQUIRE(sheet.fontFaces.size() == 1);
     INFO("each descriptor keeps its name and its value, quotes and url() included");

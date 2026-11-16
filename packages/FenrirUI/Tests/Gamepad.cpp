@@ -159,6 +159,7 @@ TEST_CASE("The D-pad moves the focus to the nearest button in its direction acro
     UIRoot& root = pad.MakeRoot();
     const std::vector<ElementId> grid = MakeGrid(root);
     pad.test.Frame();
+    INFO("the grid's first button takes the focus");
     REQUIRE(root.Focus(grid[0]));
 
     struct Step
@@ -193,6 +194,7 @@ TEST_CASE("A direction with no focusable element that way keeps the focus", "[ui
     UIRoot& root = pad.MakeRoot();
     const std::vector<ElementId> grid = MakeGrid(root);
     pad.test.Frame();
+    INFO("the grid's top-right button takes the focus");
     REQUIRE(root.Focus(grid[2]));
     Fenrir::EventReader<UIEvent> events;
 
@@ -210,6 +212,7 @@ TEST_CASE("The left stick moves the focus only past its dead zone", "[ui][gamepa
     UIRoot& root = pad.MakeRoot();
     const std::vector<ElementId> row = MakeRow(root, 2);
     pad.test.Frame();
+    INFO("the row's first button takes the focus");
     REQUIRE(root.Focus(row[0]));
 
     pad.Stick(GamepadAxis::LeftX, 0.4f);
@@ -229,6 +232,7 @@ TEST_CASE("A direction held on the stick repeats after a delay, at an interval, 
     UIRoot& root = pad.MakeRoot();
     const std::vector<ElementId> row = MakeRow(root, 5);
     pad.test.Frame();
+    INFO("the row's first button takes the focus");
     REQUIRE(root.Focus(row[0]));
     pad.Stick(GamepadAxis::LeftX, 0.9f);
     pad.test.Frame();
@@ -262,6 +266,7 @@ TEST_CASE("A on the gamepad clicks the focused button, as Enter does", "[ui][gam
     UIRoot& root = pad.MakeRoot();
     const ElementId button = Place(root, root.GetRootElement(), "button", 0.0f, 0.0f, 50.0f, 30.0f);
     pad.test.Frame();
+    INFO("the button takes the focus");
     REQUIRE(root.Focus(button));
     Fenrir::EventReader<UIEvent> events;
 
@@ -276,6 +281,7 @@ TEST_CASE("A on the gamepad toggles the focused checkbox", "[ui][gamepad]")
     UIRoot& root = pad.MakeRoot();
     const ElementId box = Place(root, root.GetRootElement(), "checkbox", 0.0f, 0.0f, 20.0f, 20.0f);
     pad.test.Frame();
+    INFO("the checkbox takes the focus");
     REQUIRE(root.Focus(box));
 
     pad.Tap(GamepadButton::South);
@@ -290,6 +296,7 @@ TEST_CASE("B on the gamepad sends cancel at the focused element, which bubbles",
     const ElementId panel = Place(root, root.GetRootElement(), "div", 0.0f, 0.0f, 200.0f, 100.0f);
     const ElementId button = Place(root, panel, "button", 0.0f, 0.0f, 50.0f, 30.0f);
     pad.test.Frame();
+    INFO("the button in the panel takes the focus");
     REQUIRE(root.Focus(button));
     int bubbled = 0;
     root.AddListener(panel, UIEventKind::Cancel, [&](Fenrir::UIListenerContext&) { ++bubbled; });
@@ -315,6 +322,7 @@ TEST_CASE("A slider takes the D-pad along its axis, and the focus leaves it acro
     slider.SetStep(1.0f);
     slider.SetValue(5.0f);
     pad.test.Frame();
+    INFO("the slider takes the focus");
     REQUIRE(root.Focus(element));
 
     pad.Tap(GamepadButton::DPadRight);
@@ -341,6 +349,7 @@ TEST_CASE("A slider at the end of its range lets the focus leave that way", "[ui
     slider.SetStep(1.0f);
     slider.SetValue(10.0f);
     pad.test.Frame();
+    INFO("the slider takes the focus");
     REQUIRE(root.Focus(element));
 
     pad.Tap(GamepadButton::DPadRight);
@@ -360,6 +369,7 @@ TEST_CASE("A focused element inside a scroll view is scrolled into view", "[ui][
         items.push_back(Place(root, view, "button", 0.0f, 50.0f * static_cast<float>(i), 100.0f, 40.0f));
     }
     pad.test.Frame();
+    INFO("the scroll view's first item takes the focus");
     REQUIRE(root.Focus(items[0]));
     const Fenrir::Rect2D inside = root.GetBoxes(view).padding;
     const Fenrir::Rect2D first = root.GetBoxes(items[0]).border;
@@ -449,6 +459,7 @@ TEST_CASE("Gamepad input the UI acts on is kept from the game while it has the f
     UIRoot& root = pad.MakeRoot();
     const ElementId button = Place(root, root.GetRootElement(), "button", 0.0f, 0.0f, 50.0f, 30.0f);
     pad.test.Frame();
+    INFO("the button takes the focus");
     REQUIRE(root.Focus(button));
 
     pad.test.Feed().GamepadButtonDown(testPad, GamepadButton::South);

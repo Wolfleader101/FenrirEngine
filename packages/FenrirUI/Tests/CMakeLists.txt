@@ -10,7 +10,7 @@ add_executable(FenrirUITests PublicHeaders.cpp Layout.cpp Tree.cpp Painting.cpp 
                              TextEntry.cpp Gamepad.cpp Markup.cpp StyleFiles.cpp ScopedStylesheets.cpp WorldRoots.cpp
                              UITestApp.hpp
                              fixtures/YogaFixtures.inc)
-target_link_libraries(FenrirUITests PRIVATE FenrirUI FenrirAssets FenrirApp FenrirWindow FenrirRenderer Catch2::Catch2WithMain)
+target_link_libraries(FenrirUITests PRIVATE FenrirUI FenrirUITestSupport FenrirAssets FenrirApp FenrirWindow FenrirRenderer Catch2::Catch2WithMain)
 # Text.cpp registers a family from HarfBuzz's test fonts, where FenrirText's submodule keeps them.
 target_compile_definitions(FenrirUITests
                            PRIVATE FENRIR_TEXT_HARFBUZZ_TEST="${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirText/libs/harfbuzz/test")

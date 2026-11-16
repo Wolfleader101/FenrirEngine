@@ -34,6 +34,7 @@ namespace
 TEST_CASE("The default stylesheet is embedded and every declaration in it is one FenrirUI reads", "[ui][default]")
 {
     const std::string_view text = Fenrir::DefaultStylesheet();
+    INFO("the default stylesheet is embedded");
     REQUIRE_FALSE(text.empty());
     const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse(text, "default.css");
     INFO("the parser refused nothing");
@@ -149,6 +150,7 @@ TEST_CASE("A root made without the default stylesheet gives its controls no look
     UIRoot& root = test.Roots().CreateRoot(config);
     const ElementId button = root.Create(root.GetRootElement(), "button");
     test.Frame();
+    INFO("a button on a root without the default stylesheet has no background");
     REQUIRE(root.GetResolvedStyle(button)->backgroundColor.a == 0.0f);
     INFO("it still behaves as a button");
     REQUIRE(root.IsFocusable(button));

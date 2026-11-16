@@ -10,6 +10,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "CaptureTarget.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirDraw2D/DrawList2D.hpp"
@@ -48,27 +49,8 @@ namespace UITest
         }
     };
 
-    // A 2D target of a fixed size that keeps every list a root submits to it: the spec's capturing test target.
-    class CaptureTarget : public Fenrir::UITarget
-    {
-      public:
-        explicit CaptureTarget(Fenrir::UITargetSize size) : size(size)
-        {
-        }
-
-        Fenrir::UITargetSize GetSize(Fenrir::App&) override
-        {
-            return size;
-        }
-
-        void Submit(Fenrir::App&, Fenrir::DrawList2D list) override
-        {
-            lists.push_back(std::move(list));
-        }
-
-        Fenrir::UITargetSize size;
-        std::vector<Fenrir::DrawList2D> lists;
-    };
+    // The capturing test target, from FenrirUI's test support.
+    using Fenrir::Testing::CaptureTarget;
 
     // The window input is fed to: the roots' default window.
     inline constexpr Fenrir::WindowId testWindow{1};

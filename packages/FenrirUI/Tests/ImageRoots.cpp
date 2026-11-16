@@ -97,6 +97,7 @@ TEST_CASE("An image root submits a list to an image 2D target of its size each f
     RendererTestApp test;
     const Fenrir::Input input = Fenrir::Input::Install(test.app);
     const Fenrir::UI ui = Fenrir::UI::Install(test.app);
+    INFO("the UI installs on the renderer test app");
     REQUIRE(ui.IsValid());
     auto target = std::make_shared<Fenrir::UIImageTarget>(test.app, 640, 360);
     Fenrir::UIRoot& root = PanelRoot(test, target);

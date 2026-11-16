@@ -106,6 +106,7 @@ TEST_CASE("A click fed through the test feed reaches the script's EventReader<UI
     std::shared_ptr<CaptureTarget> target;
     UIRoot& root = test.MakeRoot(target);
     const ElementId button = root.Create(root.GetRootElement(), "button");
+    INFO("the button's size is taken");
     REQUIRE(root.SetStyleProperty(button, "width", "100px"));
     REQUIRE(root.SetStyleProperty(button, "height", "40px"));
     test.Frame();

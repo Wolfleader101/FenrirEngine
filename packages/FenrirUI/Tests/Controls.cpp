@@ -182,6 +182,7 @@ TEST_CASE("A disabled button carries :disabled, takes no focus and sends no clic
     std::shared_ptr<CaptureTarget> target;
     UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
     const ElementId button = Place(root, root.GetRootElement(), "button", 10.0f, 10.0f, 100.0f, 40.0f);
+    INFO("the button takes the focus before it is disabled");
     REQUIRE(root.Focus(button));
     As<Fenrir::Button>(root, button).SetDisabled(true);
     test.Frame();
@@ -375,6 +376,7 @@ TEST_CASE("A click on a control's own part names the control", "[ui][controls]")
     As<Fenrir::Checkbox>(root, box).SetChecked(true);
     test.Frame();
     const Fenrir::Rect2D mark = root.GetBoxes(As<Fenrir::Checkbox>(root, box).GetMark()).border;
+    INFO("the checked checkbox lays out a mark to click");
     REQUIRE(mark.width > 0.0f);
     Fenrir::EventReader<UIEvent> events;
 
@@ -397,6 +399,7 @@ TEST_CASE("The wheel over a slider without the focus passes to the scroll view r
     slider.SetStep(1.0f);
     slider.SetValue(5.0f);
     const ElementId filler = root.Create(view, "div");
+    INFO("the filler that makes the scroll view scroll takes its height");
     REQUIRE(root.SetStyleProperty(filler, "height", "400px"));
     test.Frame();
     const Vec2 over = Centre(root.GetBoxes(element).border);
@@ -420,6 +423,7 @@ TEST_CASE("A vertical slider runs from min at the bottom to max at the top", "[u
     slider.SetRange(0.0f, 10.0f);
     slider.SetStep(1.0f);
     test.Frame();
+    INFO("a slider set vertical carries .vertical");
     REQUIRE(root.HasClass(element, "vertical"));
 
     Press(test, {20.0f, 150.0f});
@@ -446,6 +450,7 @@ TEST_CASE("A progress bar's fill is the fraction of its track", "[ui][controls]"
     progress.SetValue(10.0f);
     test.Frame();
 
+    INFO("a value of 10 in a range of 0 to 40 is a quarter of the track");
     REQUIRE(progress.GetFraction() == 0.25f);
     const Fenrir::Rect2D track = root.GetBoxes(element).content;
     const Fenrir::Rect2D fill = root.GetBoxes(progress.GetFill()).border;
@@ -541,6 +546,7 @@ TEST_CASE("A covering image is drawn under its ancestor's rounded overflow clip"
     UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
     // A round frame, as a minimap's, holding a 40 by 20 image covering its 100 square: drawn 200 by 100 at x -50.
     const ElementId frame = Place(root, root.GetRootElement(), "panel", 0.0f, 0.0f, 100.0f, 100.0f);
+    INFO("the round frame takes its clip");
     REQUIRE(root.SetStyleProperty(frame, "overflow", "hidden"));
     REQUIRE(root.SetStyleProperty(frame, "border-radius", "50px"));
     const ElementId image = root.Create(frame, "image");
@@ -613,6 +619,7 @@ TEST_CASE("A scroll view scrolls by the wheel and clamps at its content's end", 
 {
     ScrollFixture fixture;
     UITestApp& test = fixture.test;
+    INFO("the scroll view can scroll 200 down and not across");
     REQUIRE(fixture.root.GetScrollRange(fixture.view) == Vec2(0.0f, 200.0f));
 
     Move(test, {50.0f, 50.0f});
@@ -664,6 +671,7 @@ TEST_CASE("A scroll view's bar drags it", "[ui][controls][scroll]")
     fixture.root.AddStylesheet("::scrollbar { padding: 0; }", "game.css");
     test.Frame();
     const Fenrir::ScrollbarBoxes bars = fixture.root.GetScrollbars(fixture.view);
+    INFO("the scroll view has a vertical bar to drag and no horizontal one");
     REQUIRE(bars.vertical);
     REQUIRE_FALSE(bars.horizontal);
     INFO("the thumb is a third of the track: the view shows a third of its content");
@@ -719,6 +727,7 @@ TEST_CASE("A focused scroll view scrolls by the keyboard", "[ui][controls][scrol
 {
     ScrollFixture fixture;
     UITestApp& test = fixture.test;
+    INFO("the scroll view takes the focus");
     REQUIRE(fixture.root.Focus(fixture.view));
 
     test.Type(Key::Down, Scancode::Down);
@@ -778,6 +787,7 @@ TEST_CASE("A scroll view's bars take their look from its pseudo-elements", "[ui]
     fixture.root.AddStylesheet("#list::scrollbar { width: 14px; padding: 0; }", "game.css");
     fixture.test.Frame();
     const Fenrir::ScrollbarBoxes bars = fixture.root.GetScrollbars(fixture.view);
+    INFO("the vertical track is the sheet's 14 wide down the scroll view's right edge");
     REQUIRE(Near(bars.verticalTrack, {86.0f, 0.0f, 14.0f, 100.0f}));
     INFO("with no padding on the track the thumb fills its width");
     REQUIRE(Near(bars.verticalThumb.width, 14.0f));
