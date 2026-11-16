@@ -299,7 +299,8 @@ namespace Fenrir
          * rad, grad or turn), times in `s` or `ms` and timing functions (the CSS named set, `cubic-bezier()`,
          * `steps()`) in the transition and animation lists. An unknown property, one the style does not hold yet (the
          * filter and scrollbar properties, which a stylesheet parses and keeps), or a value it cannot read is
-         * logged, with both named, and changes nothing: false.
+         * logged, with both named, and changes nothing: false. An empty (or all-whitespace) value resets the
+         * property, or each longhand of a shorthand, to not set, so the cascade's value shows through: true.
          */
         bool SetStyleProperty(ElementId element, std::string_view name, std::string_view value);
         /**
@@ -308,8 +309,12 @@ namespace Fenrir
          * Every element's style is resolved again on the next frame. The sheet's url()s load from the asset store now;
          * a declaration whose image cannot be loaded is logged and skipped. Its `@font-face`s register their faces
          * (UIRoots::AddFontFace); one refused is logged. Its `@import`s load nothing: LoadStylesheet loads them.
+         *
+         * With a non-empty `scope`, the sheet is parsed scoped to that class (Stylesheet::Parse, ADR-0070), and a
+         * scoped sheet the root still holds under the same name and scope is not added again: its id is given back.
+         * An unscoped sheet is added each time.
          */
-        StylesheetId AddStylesheet(std::string_view text, std::string_view name);
+        StylesheetId AddStylesheet(std::string_view text, std::string_view name, std::string_view scope = {});
         /** @brief Adds a sheet already parsed, as AddStylesheet(text, name) does after parsing. */
         StylesheetId AddStylesheet(Stylesheet sheet);
         /** @brief Takes a sheet away and resolves every style again next frame. False when it names none of the root's.
@@ -400,8 +405,12 @@ namespace Fenrir
          * @brief Loads the stylesheet at `path`, relative to the asset root (or absolute), and adds it as
          * AddStylesheet adds one; its `@import`s load as LoadDocument's sheets' do. What it refused is logged with its
          * file and line. Nothing, logged, for a file that is not there. The root remembers its files for hot reload.
+         *
+         * With a non-empty `scope`, the sheet and its `@import`s are parsed scoped to that class (Stylesheet::Parse,
+         * ADR-0070), hot reload re-reads it with the same scope, and a scoped sheet the root still holds from the same
+         * path and scope is not loaded again: its id is given back. An unscoped sheet is loaded each time.
          */
-        StylesheetId LoadStylesheet(std::string_view path);
+        StylesheetId LoadStylesheet(std::string_view path, std::string_view scope = {});
         /**
          * @brief Turns hot reload on or off. On, every HotReloadInterval of FenrirTime the root reads the modification
          * time of every file it loaded (documents, includes, sheets and imports) and loads again what changed:

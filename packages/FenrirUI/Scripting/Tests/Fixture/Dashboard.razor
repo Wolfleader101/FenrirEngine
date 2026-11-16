@@ -1,0 +1,12 @@
+@* A two-level tree for the child component tests (Razor.cpp): a Frame whose ChildContent holds a title and a Gauge
+   given the Level field. *@
+@namespace UIScriptFixture
+<Frame>
+    <label class="title" id="title">Dashboard</label>
+    <Gauge Value="@Level" @ref="Shown" />
+</Frame>
+
+@code {
+    public int Level;
+    public Gauge? Shown;
+}

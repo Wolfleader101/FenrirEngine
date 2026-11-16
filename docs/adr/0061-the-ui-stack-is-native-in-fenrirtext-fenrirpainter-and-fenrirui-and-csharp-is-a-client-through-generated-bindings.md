@@ -22,7 +22,7 @@ Each package gets its C# contract the way every engine extension does (ADR-0042)
 
 *Amended 2026-11-14 (FenrirUI ticket 20, recorded at the close-out):* elements are not wrapper handles. C# names a root by its `UIRoot` mirror and an element by an `ElementId` mirror, plain data as in C++ (ADR-0066), and every element call (children, classes, style, text, attributes and values, focus, boxes) is a native on the `UIRoot` mirror; UI events reach C# as the `UIEvent` engine event, not through natives.
 
-**A Razor-style syntax is a separate, later effort**: a C# source generator over the same element API, as s&box's Razor is a convenience over its Panel API. Nothing in this stack assumes it.
+**A Razor-style syntax is a separate, later effort**: a C# source generator over the same element API, as s&box's Razor is a convenience over its Panel API. Nothing in this stack assumes it. *Amended 2026-11-15:* that effort is ADR-0067 to ADR-0070: the stock SDK's Razor generator against an engine stand-in of `Microsoft.AspNetCore.Components`, a builder that makes and updates elements in place through the same natives, components as managed objects run by one dispatcher in a second hosted stage, `Fenrir.UI.Build`, and stylesheets scoped natively.
 
 ## Considered
 

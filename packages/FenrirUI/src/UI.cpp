@@ -129,32 +129,77 @@ namespace Fenrir
         return m_fontFaces;
     }
 
+    namespace
+    {
+        // The build and paint stages' work lists, whose entries (UIRoots' private StageWork) have an id, an order and
+        // the work.
+
+        // Adds `work` after every entry of a lower or equal order: equal orders run in the order added.
+        template <class Entry>
+        void AddStageWork(std::vector<Entry>& stage, std::uint64_t id, std::int32_t order, std::function<void()> work)
+        {
+            const auto at =
+                std::upper_bound(stage.begin(), stage.end(), order,
+                                 [](std::int32_t value, const Entry& entry) { return value < entry.order; });
+            stage.insert(at, Entry{id, order, std::move(work)});
+        }
+
+        // Takes out the entry `id` names. False when it names none (zero names none).
+        template <class Entry>
+        bool RemoveStageWork(std::vector<Entry>& stage, std::uint64_t id)
+        {
+            const auto found =
+                std::find_if(stage.begin(), stage.end(), [&](const Entry& entry) { return entry.id == id; });
+            if (id == 0 || found == stage.end())
+            {
+                return false;
+            }
+            stage.erase(found);
+            return true;
+        }
+
+        // Runs a copy of the stage's work: work added or removed while the stage runs takes effect next frame.
+        template <class Entry>
+        void RunStage(const std::vector<Entry>& stage)
+        {
+            const std::vector<Entry> running = stage;
+            for (const Entry& entry : running)
+            {
+                entry.work();
+            }
+        }
+    } // namespace
+
+    BuildStageHandle UIRoots::AddBuildStage(std::int32_t order, std::function<void()> work)
+    {
+        const BuildStageHandle handle{m_nextBuildStage++};
+        AddStageWork(m_buildStage, handle.id, order, std::move(work));
+        return handle;
+    }
+
+    bool UIRoots::RemoveBuildStage(BuildStageHandle handle)
+    {
+        return RemoveStageWork(m_buildStage, handle.id);
+    }
+
     PaintStageHandle UIRoots::AddPaintStage(std::int32_t order, std::function<void()> work)
     {
         const PaintStageHandle handle{m_nextPaintStage++};
-        // After every entry of a lower or equal order: equal orders run in the order added.
-        const auto at =
-            std::upper_bound(m_paintStage.begin(), m_paintStage.end(), order,
-                             [](std::int32_t value, const PaintStageEntry& entry) { return value < entry.order; });
-        m_paintStage.insert(at, PaintStageEntry{handle, order, std::move(work)});
+        AddStageWork(m_paintStage, handle.id, order, std::move(work));
         return handle;
     }
 
     bool UIRoots::RemovePaintStage(PaintStageHandle handle)
     {
-        const auto found = std::find_if(m_paintStage.begin(), m_paintStage.end(),
-                                        [&](const PaintStageEntry& entry) { return entry.handle == handle; });
-        if (handle.id == 0 || found == m_paintStage.end())
-        {
-            return false;
-        }
-        m_paintStage.erase(found);
-        return true;
+        return RemoveStageWork(m_paintStage, handle.id);
     }
 
     void UIRoots::Frame()
     {
         m_retired.clear();
+        // First, before any root advances its transitions or resolves its styles: what the build stage makes and
+        // changes is laid out and painted this frame.
+        RunStage(m_buildStage);
         std::vector<UIRoot*> laidOut;
         for (const RootEntry& entry : m_roots)
         {
@@ -163,12 +208,7 @@ namespace Fenrir
                 laidOut.push_back(entry.root.get());
             }
         }
-        // Work added or removed while the stage runs takes effect next frame.
-        const std::vector<PaintStageEntry> stage = m_paintStage;
-        for (const PaintStageEntry& entry : stage)
-        {
-            entry.work();
-        }
+        RunStage(m_paintStage);
         for (UIRoot* root : laidOut)
         {
             // A root the stage destroyed paints no more.

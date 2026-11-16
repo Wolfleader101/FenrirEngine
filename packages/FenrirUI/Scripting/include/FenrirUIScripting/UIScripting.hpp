@@ -17,9 +17,11 @@
 // the root's id) and their elements by ElementId, through natives on UIRoot for every UIRoot call a script needs:
 // making, removing and moving elements, names, classes, inline style, text, control values, rectangles, queries,
 // focus, and loading documents and stylesheets by path. UIEvent is an engine event, read through EventReader<UIEvent>.
-// The extension hosts the stage Fenrir.UI.Paint, UIRoots' paint stage: a C# system there gets a painter for an
-// element (UIRoot.PaintInto), lent through the painter extension and taken back as the stage ends, and paints into the
-// element through the Painter facade. All of the contract is generated.
+// The extension hosts two stages: Fenrir.UI.Build, UIRoots' build stage, where a C# system makes and changes elements
+// for the frame's layout; and Fenrir.UI.Paint, UIRoots' paint stage, where a C# system gets a painter for an element
+// (UIRoot.PaintInto), lent through the painter extension and taken back as the stage ends, and paints into the element
+// through the Painter facade. The structural changes a stage's systems record play back as that stage ends. All of the
+// contract is generated.
 //
 // A native that does nothing (no UI installed, a root destroyed or never made, a stale element) returns false, zero or
 // an id that names nothing, and warns in debug builds once per call site.

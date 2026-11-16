@@ -25,7 +25,7 @@ namespace Fenrir::Generated
                 Fenrir::MakeSharedStruct<Fenrir::ScriptUI::RootSettings>("Fenrir.UI.RootSettings"),
                 Fenrir::MakeSharedStruct<Fenrir::UIRootId>("Fenrir.UI.UIRoot"),
             };
-            extension.stages = {"Fenrir.UI.Paint"};
+            extension.stages = {"Fenrir.UI.Build", "Fenrir.UI.Paint"};
             extension.functions = {
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::CreateRoot, 3>::Call>("Fenrir.UI.UINative.CreateRoot"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::FindRoot, 4>::Call>("Fenrir.UI.UINative.FindRoot"),
@@ -55,6 +55,7 @@ namespace Fenrir::Generated
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::SetValue>("Fenrir.UI.UINative.SetValue"),
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::GetEntryText>("Fenrir.UI.UINative.GetEntryText"),
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::SetEntryText>("Fenrir.UI.UINative.SetEntryText"),
+                Fenrir::NativeFunction::Make<&Fenrir::UINatives::WarnIfTakesNoPointer>("Fenrir.UI.UINative.WarnIfTakesNoPointer"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::GetBoxes, 4>::Call>("Fenrir.UI.UINative.GetBoxes"),
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::SetFocusable>("Fenrir.UI.UINative.SetFocusable"),
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::Focus>("Fenrir.UI.UINative.Focus"),
@@ -62,6 +63,7 @@ namespace Fenrir::Generated
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::GetFocused, 3>::Call>("Fenrir.UI.UINative.GetFocused"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::LoadDocument, 5>::Call>("Fenrir.UI.UINative.LoadDocument"),
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::LoadStylesheet>("Fenrir.UI.UINative.LoadStylesheet"),
+                Fenrir::NativeFunction::Make<&Fenrir::UINatives::AddStylesheet>("Fenrir.UI.UINative.AddStylesheet"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::PaintInto, 4>::Call>("Fenrir.UI.UINative.PaintInto"),
             };
         }
@@ -72,7 +74,7 @@ namespace Fenrir::Generated
         Fenrir::ScriptingExtension extension;
         extension.name = "FenrirUI";
         extension.SetState(std::move(state));
-        extension.sharedAssemblies = {"Fenrir.UI.dll"};
+        extension.sharedAssemblies = {"Fenrir.UI.dll", "Microsoft.AspNetCore.Components.dll", "Fenrir.UI.Razor.dll"};
         Fenrir::Generated::RegisterUI(extension);
         return extension;
     }

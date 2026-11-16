@@ -1,0 +1,20 @@
+@* Two Badges between two labels, the first from fields and behind an @if, with @ref (ChildComponentTests). *@
+<panel class="pair">
+    <label class="before">@Before</label>
+    @if (ShowFirst)
+    {
+        <Badge Text="@Title" Width="@Width" @ref="First" />
+    }
+    <Badge Text="fixed" @ref="Fixed" />
+    <label class="after">@After</label>
+</panel>
+
+@code {
+    public bool ShowFirst = true;
+    public string Title = "one";
+    public int Width = 10;
+    public string Before = "b";
+    public string After = "a";
+    public Badge? First;
+    public Badge? Fixed;
+}

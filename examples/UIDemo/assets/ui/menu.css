@@ -75,6 +75,16 @@
     width: 600px;
 }
 
+/* The C# variant's slot (menu.ui), out of the layout until its script mounts the Razor settings page in it and gives it
+   the class filled. */
+#razor-settings {
+    display: none;
+}
+
+#razor-settings.filled {
+    display: flex;
+}
+
 .title {
     font-size: 44px;
     font-weight: bold;

@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Fenrir.UI.Razor.Tests</RootNamespace>
+    <!-- NoRazor is a project of its own, which CTest builds (see ../CMakeLists.txt). -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**;NoRazor/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- The builder and mounting against a recording fake of the element seam (spec: "Testing Decisions", seam 2). Its
+       Razor components are real .razor files, compiled by Fenrir.UI.Razor.props as a script project's are, against the
+       scripting SDK and the contracts. CMake passes -p:FenrirScriptingSdk=<the SDK folder>/,
+       -p:FenrirUIRazorContractDir=<the Razor folder>/ and -p:Fenrir<Package>ContractDir=<the folder holding its dll>/
+       for the UI and the contracts it builds on; an editor passes nothing, and the source projects are referenced. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <Import Project="$(MSBuildThisFileDirectory)../Fenrir.UI.Razor.InRepo.props" />
+
+  <ItemGroup Condition="'$(FenrirUIContractDir)' != ''">
+    <Reference Include="Fenrir.UI" HintPath="$(FenrirUIContractDir)Fenrir.UI.dll" />
+    <Reference Include="Fenrir.Input" HintPath="$(FenrirInputContractDir)Fenrir.Input.dll" />
+    <Reference Include="Fenrir.Assets" HintPath="$(FenrirAssetsContractDir)Fenrir.Assets.dll" />
+    <Reference Include="Fenrir.Text" HintPath="$(FenrirTextContractDir)Fenrir.Text.dll" />
+    <Reference Include="Fenrir.Painter" HintPath="$(FenrirPainterContractDir)Fenrir.Painter.dll" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(FenrirUIContractDir)' == ''">
+    <ProjectReference Include="../Fenrir.UI/Fenrir.UI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.0" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+  <!-- FenrirUI's Razor generator as a library too, driven over files in memory (GeneratorTests). -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+    <ProjectReference Include="../Fenrir.UI.Razor.Generators/Fenrir.UI.Razor.Generators.csproj" />
+  </ItemGroup>
+
+  <!-- A script project's contracts are compile-time only, as the host shares them; a test runs them itself. -->
+  <ItemGroup>
+    <Reference Update="@(Reference)" Private="true" />
+    <ProjectReference Update="@(ProjectReference)" Private="true" />
+  </ItemGroup>
+</Project>

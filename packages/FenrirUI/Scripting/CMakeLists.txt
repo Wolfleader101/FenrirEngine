@@ -5,6 +5,8 @@
 # on. The binding (api/FenrirUI.binding.toml) binds this library's own description, api/FenrirUIScripting.api.json:
 # the settings C# makes a root with (include/.../ScriptUI.hpp) and FenrirUI's plain data they and the natives name.
 fenrir_scripting_contract(UI USES Input Assets Text Painter)
+# The Razor components' contracts, which the extension shares after Fenrir.UI, and their tests.
+add_subdirectory(../Managed "${CMAKE_CURRENT_BINARY_DIR}/../Managed")
 fenrir_scripting_extension(UI
     SOURCES
         include/FenrirUIScripting/ScriptUI.hpp

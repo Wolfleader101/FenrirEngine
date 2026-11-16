@@ -1,0 +1,6 @@
+@* A button whose text is its ChildContent (ChildComponentTests). *@
+<button class="caption">@ChildContent</button>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

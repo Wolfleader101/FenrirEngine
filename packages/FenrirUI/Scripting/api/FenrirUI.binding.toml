@@ -41,6 +41,9 @@ source = "../src/Generated/FenrirUIRegistration.cpp"
 function = "Fenrir::Generated::RegisterUI"
 # Makes the extension from its state (ADR-0046): what the package's public function returns, its stage placed.
 maker = "Fenrir::Generated::MakeUIExtension"
+# The Razor components' two contracts (ADR-0067): the engine's stand-in and the runtime built on it, shared after
+# Fenrir.UI, whose types the runtime uses.
+shares = ["Microsoft.AspNetCore.Components.dll", "Fenrir.UI.Razor.dll"]
 
 [tests]
 cpp = "../Tests/Generated/FenrirUIDefaultsTests.cpp"
@@ -55,12 +58,13 @@ tags = "[ui][scripting][bindings]"
 "Fenrir::UIRootId" = "UIRoot"
 "Fenrir::ScriptUI::RootSettings" = "RootSettings"
 
-# The stage the extension hosts (ADR-0039): UIRoots' paint stage, which C# systems join with
-# [StageSystem(UIStages.Paint, Order = ...)].
+# The stages the extension hosts (ADR-0039, ADR-0068): UIRoots' build and paint stages, which C# systems join with
+# [StageSystem(UIStages.Build, Order = ...)] and [StageSystem(UIStages.Paint, Order = ...)].
 [stages]
 class = "UIStages"
-summary = "FenrirUI's extension stage (ADR-0039, ADR-0061), which C# systems join with [StageSystem(UIStages.Paint, Order = ...)]: each runs inside the UI's frame, by its order among the C++ work of the stage, after C++ work of an equal order. Structural changes a stage system records happen when the stage ends. Without the UI installed it never runs."
+summary = "FenrirUI's extension stages (ADR-0039, ADR-0061, ADR-0068), which C# systems join with [StageSystem(UIStages.Build, Order = ...)] or [StageSystem(UIStages.Paint, Order = ...)]: each runs inside the UI's frame, by its order among the C++ work of the stage, after C++ work of an equal order. Structural changes a stage system records happen when its stage ends. Without the UI installed they never run."
 [stages.names]
+Build = { name = "Fenrir.UI.Build", summary = "Once a frame, as the first work of the UI's frame, before any UI root advances its transitions or resolves its styles: a system makes, changes and removes elements, and what it does is styled, laid out and painted the same frame. The Razor dispatcher builds its components here." }
 Paint = { name = "Fenrir.UI.Paint", summary = "Once a frame, after every UI root has laid out and before any paints: a system paints into elements through UIRoot.PaintInto and the Painter facade, in the root's UI units, the rectangles GetBoxes gives. What it paints is part of the element, after its own boxes and before its children." }
 
 # The native functions: tools/describe-api's natives mode reads every function in `sources` taking `context` first (with

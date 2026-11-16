@@ -82,9 +82,24 @@ namespace Fenrir
             {"placeholder", PseudoElement::Placeholder},
         }};
 
-        /** @brief Reads one complex selector; nothing, with `error` saying why, for one FenrirUI cannot match. */
-        std::optional<Selector> ParseSelector(std::string_view text, std::string& error)
+        /** @brief The marker that moves a scoped sheet's scope left (ADR-0070). */
+        constexpr std::string_view Deep = "::deep";
+
+        /** @brief Whether a `::deep` marker starts at `i`: the name alone, not the start of a longer one. */
+        bool IsDeepAt(std::string_view text, std::size_t i)
         {
+            return text.size() - i >= Deep.size() && Detail::Lowered(text.substr(i, Deep.size())) == Deep &&
+                   (i + Deep.size() == text.size() || !IsNameChar(text[i + Deep.size()]));
+        }
+
+        /**
+         * @brief Reads one complex selector; nothing, with `error` saying why, for one FenrirUI cannot match. A
+         * `::deep` in it is no compound: `deep` is how many compounds are before it.
+         */
+        std::optional<Selector> ParseSelector(std::string_view text, std::string& error,
+                                              std::optional<std::size_t>& deep)
+        {
+            deep.reset();
             Selector selector;
             bool ended = false;
             std::size_t i = 0;
@@ -124,6 +139,22 @@ namespace Fenrir
                     ++i;
                     continue;
                 }
+                if (IsDeepAt(text, i))
+                {
+                    if (deep.has_value())
+                    {
+                        error = "it has ::deep twice";
+                        return std::nullopt;
+                    }
+                    deep = selector.compounds.size();
+                    i += Deep.size();
+                    if (!selector.compounds.empty() && !pending)
+                    {
+                        // `.a::deep .b` is `.a ::deep .b`: the marker always stands between two compounds.
+                        pending = SelectorCombinator::Descendant;
+                    }
+                    continue;
+                }
                 CompoundSelector compound;
                 const std::size_t compoundStart = i;
                 if (IsNameChar(text[i]))
@@ -137,6 +168,12 @@ namespace Fenrir
                     {
                         ++i;
                         const std::string lower = Detail::Lowered(readName());
+                        if (lower == "deep")
+                        {
+                            // `.a::deep`: the compound ends here, and the marker is read after it.
+                            i -= Deep.size();
+                            break;
+                        }
                         const auto found =
                             std::find_if(PseudoElements.begin(), PseudoElements.end(),
                                          [&](const auto& pseudoElement) { return pseudoElement.first == lower; });
@@ -192,19 +229,25 @@ namespace Fenrir
                     error = "it is empty";
                     return std::nullopt;
                 }
+                if ((!selector.compounds.empty() || deep.has_value()) && pending != SelectorCombinator::Child &&
+                    compound.tag.empty() && compound.id.empty() && compound.classes.empty() &&
+                    compound.pseudoClasses == 0 && compound.structural == 0)
+                {
+                    // `a ::scrollbar` is the scrollbar of any element under `a`, which no index bucket holds.
+                    error = "a pseudo-element must follow a compound selector";
+                    return std::nullopt;
+                }
                 if (!selector.compounds.empty())
                 {
-                    if (pending != SelectorCombinator::Child && compound.tag.empty() && compound.id.empty() &&
-                        compound.classes.empty() && compound.pseudoClasses == 0 && compound.structural == 0)
-                    {
-                        // `a ::scrollbar` is the scrollbar of any element under `a`, which no index bucket holds.
-                        error = "a pseudo-element must follow a compound selector";
-                        return std::nullopt;
-                    }
                     selector.combinators.push_back(pending.value_or(SelectorCombinator::Descendant));
                 }
                 pending.reset();
                 selector.compounds.push_back(std::move(compound));
+            }
+            if (deep.has_value() && *deep == selector.compounds.size())
+            {
+                error = "a ::deep has no compound selector after it";
+                return std::nullopt;
             }
             if (selector.compounds.empty())
             {
@@ -231,6 +274,66 @@ namespace Fenrir
             selector.specificity =
                 (std::min(ids, 1023u) << 20u) | (std::min(classes, 1023u) << 10u) | std::min(tags, 1023u);
             return selector;
+        }
+
+        void AppendCompound(std::string& out, const CompoundSelector& compound);
+
+        /**
+         * @brief The selector as CSS writes it (Selector::ToString), with a `::deep` marker after its first `deep`
+         * compounds: the text a rule nested in it is resolved against.
+         */
+        std::string Render(const Selector& selector, std::optional<std::size_t> deep)
+        {
+            std::string out;
+            if (deep == 0u)
+            {
+                out += "::deep ";
+            }
+            for (std::size_t i = 0; i < selector.compounds.size(); ++i)
+            {
+                if (i > 0)
+                {
+                    out += selector.combinators[i - 1] == SelectorCombinator::Child ? " > " : " ";
+                    if (deep == i)
+                    {
+                        out += "::deep ";
+                    }
+                }
+                AppendCompound(out, selector.compounds[i]);
+            }
+            for (const auto& [name, value] : PseudoElements)
+            {
+                if (value == selector.pseudoElement)
+                {
+                    out += "::";
+                    out += name;
+                }
+            }
+            return out;
+        }
+
+        /**
+         * @brief Adds the scope class to the rightmost compound, or with a `::deep` to the compound before it (a
+         * compound of the scope alone when it is first), with a class's weight (ADR-0070).
+         */
+        void ApplyScope(Selector& selector, std::optional<std::size_t> deep, const std::string& scope)
+        {
+            if (deep == 0u)
+            {
+                CompoundSelector scoped;
+                scoped.classes.push_back(scope);
+                selector.compounds.insert(selector.compounds.begin(), std::move(scoped));
+                selector.combinators.insert(selector.combinators.begin(), SelectorCombinator::Descendant);
+            }
+            else
+            {
+                const std::size_t at = deep.has_value() ? *deep - 1 : selector.compounds.size() - 1;
+                selector.compounds[at].classes.push_back(scope);
+            }
+            if (((selector.specificity >> 10u) & 1023u) < 1023u)
+            {
+                selector.specificity += 1u << 10u;
+            }
         }
 
         /** @brief Whether `value` ends in `!important`, which FenrirUI does not support. */
@@ -589,14 +692,21 @@ namespace Fenrir
                 for (const Flattened& item : flattened)
                 {
                     std::string error;
-                    std::optional<Selector> selector = ParseSelector(item.text, error);
+                    std::optional<std::size_t> deep;
+                    std::optional<Selector> selector = ParseSelector(item.text, error, deep);
+                    if (selector && deep.has_value() && m_sheet.scope.empty())
+                    {
+                        selector.reset();
+                        error = "::deep is only allowed in a scoped sheet";
+                    }
                     if (!selector)
                     {
                         Diagnose(start, "the rule '" + std::string(prelude) + "' was skipped: " + error);
                         SkipBlock();
                         return;
                     }
-                    inner.texts.push_back(selector->ToString());
+                    // Nested rules resolve against the selector as written: the scope is added to each rule after.
+                    inner.texts.push_back(Render(*selector, deep));
                     inner.written.push_back(selector->specificity);
                     if (parents != nullptr)
                     {
@@ -605,6 +715,10 @@ namespace Fenrir
                             selector->specificity - item.uses * item.outer + item.uses * parents->specificity;
                     }
                     inner.specificity = std::max(inner.specificity, selector->specificity);
+                    if (!m_sheet.scope.empty())
+                    {
+                        ApplyScope(*selector, deep, m_sheet.scope);
+                    }
                     rule.selectors.push_back(std::move(*selector));
                 }
                 // The rule comes before the rules nested in it, which ParseBlock adds after it.
@@ -836,30 +950,14 @@ namespace Fenrir
 
     std::string Selector::ToString() const
     {
-        std::string out;
-        for (std::size_t i = 0; i < compounds.size(); ++i)
-        {
-            if (i > 0)
-            {
-                out += combinators[i - 1] == SelectorCombinator::Child ? " > " : " ";
-            }
-            AppendCompound(out, compounds[i]);
-        }
-        for (const auto& [name, value] : PseudoElements)
-        {
-            if (value == pseudoElement)
-            {
-                out += "::";
-                out += name;
-            }
-        }
-        return out;
+        return Render(*this, std::nullopt);
     }
 
-    Stylesheet Stylesheet::Parse(std::string_view text, std::string_view name)
+    Stylesheet Stylesheet::Parse(std::string_view text, std::string_view name, std::string_view scope)
     {
         Stylesheet sheet;
         sheet.name = std::string(name);
+        sheet.scope = std::string(scope);
         Parser parser(std::string(text), sheet);
         parser.Run();
         std::stable_sort(sheet.diagnostics.begin(), sheet.diagnostics.end(),

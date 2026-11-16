@@ -50,7 +50,8 @@ internal sealed record CppConfig(string Mappings, IReadOnlyList<string> Includes
 /// The registration lists: the source, its function, the extension's type, the maker (<c>maker</c>, optional: the
 /// function that makes the extension from its state, which takes the register function's place in the natives header
 /// and makes the register function file-local), and the factory each kind of registration is made by (each only when the
-/// generated lists hold a type of that kind), the types registered read-only, and those the extension registers by hand.
+/// generated lists hold a type of that kind), the types registered read-only, those the extension registers by hand, and
+/// the assemblies the made extension shares after its contract (<c>shares</c>, with a maker only).
 /// What the source includes comes through the natives header (<c>[natives] includes</c>).
 /// </summary>
 internal sealed record RegistrationConfig(
@@ -67,7 +68,8 @@ internal sealed record RegistrationConfig(
     string? MakeAppResource,
     string? MakeReadOnlyAppResource,
     IReadOnlySet<string> ReadOnly,
-    IReadOnlySet<string> ByHand);
+    IReadOnlySet<string> ByHand,
+    IReadOnlyList<string> Shares);
 
 /// <summary>The defaults test: its two sources, the C# class, and how a test case reaches the loaded C# assembly.</summary>
 internal sealed record TestsConfig(
@@ -197,7 +199,7 @@ internal sealed record BindingConfig(
             reader.Keys(section, "registration", "source", "function", "extension", "maker", "make-component",
                         "make-read-only-component", "make-event", "make-shared-struct", "make-scene-resource",
                         "make-read-only-scene-resource", "make-app-resource", "make-read-only-app-resource", "read-only",
-                        "by-hand");
+                        "by-hand", "shares");
             registration = new RegistrationConfig(
                 reader.PathOf(section, "source"), reader.String(section, "function"),
                 reader.String(section, "extension"), reader.OptionalString(section, "maker"),
@@ -208,7 +210,12 @@ internal sealed record BindingConfig(
                 reader.OptionalString(section, "make-app-resource"),
                 reader.OptionalString(section, "make-read-only-app-resource"),
                 reader.Strings(section, "read-only").ToHashSet(StringComparer.Ordinal),
-                reader.Strings(section, "by-hand").ToHashSet(StringComparer.Ordinal));
+                reader.Strings(section, "by-hand").ToHashSet(StringComparer.Ordinal), reader.Strings(section, "shares"));
+            if (registration.Shares.Count != 0 && registration.Maker == null)
+            {
+                throw new BindingException(
+                    $"{path}: [registration] shares needs maker: the maker sets the assemblies the extension shares");
+            }
         }
 
         TestsConfig? tests = null;

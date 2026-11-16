@@ -171,6 +171,81 @@ public static class Clicks
     public static uint LastRoot() => clicks[^1].Root.Value;
 }
 
+// A build stage system that makes a panel of 120 by 40 under the armed root's root element, once, and records an entity
+// made in the same stage, whose components appear only when the stage's changes play back.
+[StageSystem(UIStages.Build)]
+public sealed class PanelBuilder : ISystem
+{
+    public void OnUpdate(in SystemContext context)
+    {
+        ++BuildProbe.Runs;
+        if (!BuildProbe.Armed || BuildProbe.HasMade)
+            return;
+        UIRoot root = Ids.Root(BuildProbe.Root);
+        ElementId panel = root.CreateElement(root.GetRootElement(), "panel", -1);
+        root.SetIdString(panel, "built");
+        root.SetStyle(panel, "width", "120px");
+        root.SetStyle(panel, "height", "40px");
+        root.SetStyle(panel, "background-color", "#f00");
+        BuildProbe.Made = panel;
+        BuildProbe.HasMade = true;
+        BuildProbe.Spawned = context.CreateEntity();
+    }
+}
+
+// A paint stage system that reads, in the frame the build stage made them, the built panel's rectangle and whether the
+// entity made beside it has its Transform: whether the build stage's changes played back as that stage ended.
+[StageSystem(UIStages.Paint)]
+public sealed class BuiltReader : ISystem
+{
+    public void OnUpdate(in SystemContext context)
+    {
+        if (!BuildProbe.Armed || !BuildProbe.HasMade)
+            return;
+        BuildProbe.SeenInPaint = Ids.Root(BuildProbe.Root).GetBoxes(BuildProbe.Made).Border;
+        BuildProbe.EntityPlayedBackBeforePaint = BuildProbe.Spawned.Has<Transform>();
+    }
+}
+
+public static class BuildProbe
+{
+    internal static uint Root;
+    internal static bool Armed;
+    internal static int Runs;
+    internal static ElementId Made;
+    internal static bool HasMade;
+    internal static Rect2D SeenInPaint;
+    internal static Entity Spawned;
+    internal static bool EntityPlayedBackBeforePaint;
+
+    // Arms the build stage system on root `root`: its next run makes the panel.
+    public static void Arm(uint root)
+    {
+        Root = root;
+        Armed = true;
+        HasMade = false;
+        SeenInPaint = default;
+        EntityPlayedBackBeforePaint = false;
+    }
+
+    // How many times the build stage system has run.
+    public static int RunCount() => Runs;
+
+    // The panel the build stage made, packed as the tests compare it.
+    public static ulong Built() => Ids.Pack(Made);
+
+    // The width and height the paint stage read of it, in the same frame.
+    public static float SeenWidth() => SeenInPaint.Width;
+
+    public static float SeenHeight() => SeenInPaint.Height;
+
+    // The entity the build stage made.
+    public static uint MadeEntity() => Spawned.Value;
+
+    // Whether the paint stage of the frame that made the entity saw its Transform.
+    public static bool PlayedBackBeforePaint() => EntityPlayedBackBeforePaint;
+}
+
 // A paint stage system that paints a green square into the armed element, as UIDemo's speedometer paints its gauge.
 [StageSystem(UIStages.Paint)]
 public sealed class SquarePainter : ISystem

@@ -1079,6 +1079,42 @@
       ]
     },
     {
+      "name": "WarnIfTakesNoPointer",
+      "namespace": "Fenrir::UINatives",
+      "source": "../src/UIScripting.cpp",
+      "state": "Fenrir::UIScripting",
+      "doc": "The check behind a Razor pointer handler (ADR-0069): in a debug build, warns once with `message` when the element's resolved style, as of the last frame, takes no pointer events (`pointer-events` is not `all`). A release build logs nothing.",
+      "facade": "UIRoot.WarnIfTakesNoPointer",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the element is alive."
+      },
+      "parameters": [
+        {
+          "name": "root",
+          "type": "const Fenrir::UIRootId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::UIRootId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "element",
+          "type": "const Fenrir::ElementId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ElementId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "message",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
       "name": "GetBoxes",
       "namespace": "Fenrir::UINatives",
       "source": "../src/UIScripting.cpp",
@@ -1293,12 +1329,12 @@
       "namespace": "Fenrir::UINatives",
       "source": "../src/UIScripting.cpp",
       "state": "Fenrir::UIScripting",
-      "doc": "Loads the stylesheet at `path` (relative to the asset root, or absolute) and adds it after the root's other sheets (UIRoot::LoadStylesheet). What it refused is logged with its file and line.",
+      "doc": "Loads the stylesheet at `path` (relative to the asset root, or absolute) and adds it after the root's other sheets (UIRoot::LoadStylesheet). With a scope class, every rule's rightmost compound also needs that class and `::deep` may mark where it goes instead; the same path with the same scope is added once, and hot reload re-reads the file with its scope. What it refused is logged with its file and line.",
       "facade": "UIRoot.LoadStylesheet",
       "returns": {
         "type": "bool",
         "kind": "bool",
-        "doc": "Whether the file was there and was added."
+        "doc": "Whether the file was there and was added, or was held already with that scope."
       },
       "parameters": [
         {
@@ -1314,6 +1350,53 @@
           "type": "std::string_view",
           "kind": "string",
           "doc": "The stylesheet's path."
+        },
+        {
+          "name": "scope",
+          "type": "std::string_view",
+          "kind": "string",
+          "doc": "The scope class name; empty for an unscoped sheet."
+        }
+      ]
+    },
+    {
+      "name": "AddStylesheet",
+      "namespace": "Fenrir::UINatives",
+      "source": "../src/UIScripting.cpp",
+      "state": "Fenrir::UIScripting",
+      "doc": "Parses `text` as a stylesheet named `name` and adds it after the root's other sheets (UIRoot::AddStylesheet). With a scope class, every rule's rightmost compound also needs that class and `::deep` may mark where it goes instead; the same name with the same scope is added once, the later text ignored. What it refused is logged with the name and its line.",
+      "facade": "UIRoot.AddStylesheet",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was added, or was held already with that scope."
+      },
+      "parameters": [
+        {
+          "name": "root",
+          "type": "const Fenrir::UIRootId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::UIRootId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "text",
+          "type": "std::string_view",
+          "kind": "string",
+          "doc": "The stylesheet's text."
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string",
+          "doc": "The name its diagnostics give."
+        },
+        {
+          "name": "scope",
+          "type": "std::string_view",
+          "kind": "string",
+          "doc": "The scope class name; empty for an unscoped sheet, which is added every time."
         }
       ]
     },

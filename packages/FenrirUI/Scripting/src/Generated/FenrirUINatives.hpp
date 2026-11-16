@@ -45,13 +45,15 @@ namespace Fenrir::UINatives
     bool SetValue(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element, float value);
     std::int32_t GetEntryText(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element, char16_t* text, std::int32_t capacity);
     bool SetEntryText(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element, std::string_view text);
+    bool WarnIfTakesNoPointer(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element, std::string_view message);
     void GetBoxes(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element, Fenrir::ElementBoxes* boxes);
     bool SetFocusable(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element, bool focusable);
     bool Focus(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element);
     bool Blur(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root);
     void GetFocused(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, Fenrir::ElementId* element);
     bool LoadDocument(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* parent, std::string_view path, Fenrir::ElementId* first);
-    bool LoadStylesheet(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, std::string_view path);
+    bool LoadStylesheet(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, std::string_view path, std::string_view scope);
+    bool AddStylesheet(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, std::string_view text, std::string_view name, std::string_view scope);
     void PaintInto(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element, Fenrir::ScriptPainter::PainterId* painter);
 } // namespace Fenrir::UINatives
 

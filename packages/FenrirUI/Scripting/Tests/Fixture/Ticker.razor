@@ -1,0 +1,13 @@
+@* A readout that counts its builds and rebuilds when its BuildHash changes, for the rebuild tests (Razor.cpp). *@
+@namespace UIScriptFixture
+<label id="ticker">Value: @Value</label>
+
+@code {
+    public int Value;
+    public int Hash;
+    public int Builds;
+
+    protected override int BuildHash() => Hash;
+
+    protected override void OnBuilt(bool first) => ++Builds;
+}

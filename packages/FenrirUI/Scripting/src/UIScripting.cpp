@@ -24,9 +24,10 @@
 
 // Everything C# sees of the UI is generated (api/FenrirUI.binding.toml): the mirrors of ScriptUI.hpp's settings and of
 // FenrirUI's plain data (ElementId, UIRootId as UIRoot, UIEvent, ElementBoxes and the enums), their mappings, checked
-// against the Fenrir.UI contract whenever a script assembly loads, the UIStages class of the stage it hosts, and from
+// against the Fenrir.UI contract whenever a script assembly loads, the UIStages class of the stages it hosts, and from
 // the native functions below (described into api/FenrirUI.natives.json) their C# declarations, UINative, the UIRoot
-// mirror's methods, and this registration of them all. The paint stage's groups are placed by hand, at the end.
+// mirror's methods, and this registration of them all. The build and paint stages' groups are placed by hand, at the
+// end.
 
 namespace Fenrir
 {
@@ -510,6 +511,30 @@ namespace Fenrir
         }
 
         /**
+         * @brief The check behind a Razor pointer handler (ADR-0069): in a debug build, warns once with `message` when
+         * the element's resolved style, as of the last frame, takes no pointer events (`pointer-events` is not `all`).
+         * A release build logs nothing.
+         * @return Whether the element is alive.
+         * @facade UIRoot.WarnIfTakesNoPointer
+         */
+        bool WarnIfTakesNoPointer(const CallContext& context, UIScripting& ui, const UIRootId* root,
+                                  const ElementId* element, std::string_view message)
+        {
+            const UIRoot* found = ui.RootWith(context, *root, *element);
+            if (found == nullptr)
+            {
+                return false;
+            }
+            const ResolvedStyle* style = found->GetResolvedStyle(*element);
+            if (style != nullptr && style->pointerEvents != PointerEvents::All)
+            {
+                const NativeGuard guard(context, ui.warnings);
+                guard.Warn(std::string(message));
+            }
+            return true;
+        }
+
+        /**
          * @brief The element's rectangles as of the last frame's layout, in UI units from the root's top-left.
          * @param[out] boxes Its border, padding, content and clip boxes.
          * @return Its rectangles; empty ones for a stale id.
@@ -604,15 +629,37 @@ namespace Fenrir
 
         /**
          * @brief Loads the stylesheet at `path` (relative to the asset root, or absolute) and adds it after the root's
-         * other sheets (UIRoot::LoadStylesheet). What it refused is logged with its file and line.
+         * other sheets (UIRoot::LoadStylesheet). With a scope class, every rule's rightmost compound also needs that
+         * class and `::deep` may mark where it goes instead; the same path with the same scope is added once, and hot
+         * reload re-reads the file with its scope. What it refused is logged with its file and line.
          * @param path The stylesheet's path.
-         * @return Whether the file was there and was added.
+         * @param scope The scope class name; empty for an unscoped sheet.
+         * @return Whether the file was there and was added, or was held already with that scope.
          * @facade UIRoot.LoadStylesheet
          */
-        bool LoadStylesheet(const CallContext& context, UIScripting& ui, const UIRootId* root, std::string_view path)
+        bool LoadStylesheet(const CallContext& context, UIScripting& ui, const UIRootId* root, std::string_view path,
+                            std::string_view scope)
         {
             UIRoot* found = ui.RootOf(context, *root);
-            return found != nullptr && found->LoadStylesheet(path).IsValid();
+            return found != nullptr && found->LoadStylesheet(path, scope).IsValid();
+        }
+
+        /**
+         * @brief Parses `text` as a stylesheet named `name` and adds it after the root's other sheets
+         * (UIRoot::AddStylesheet). With a scope class, every rule's rightmost compound also needs that class and
+         * `::deep` may mark where it goes instead; the same name with the same scope is added once, the later text
+         * ignored. What it refused is logged with the name and its line.
+         * @param text The stylesheet's text.
+         * @param name The name its diagnostics give.
+         * @param scope The scope class name; empty for an unscoped sheet, which is added every time.
+         * @return Whether it was added, or was held already with that scope.
+         * @facade UIRoot.AddStylesheet
+         */
+        bool AddStylesheet(const CallContext& context, UIScripting& ui, const UIRootId* root, std::string_view text,
+                           std::string_view name, std::string_view scope)
+        {
+            UIRoot* found = ui.RootOf(context, *root);
+            return found != nullptr && found->AddStylesheet(text, name, scope).IsValid();
         }
 
         /**
@@ -658,8 +705,22 @@ namespace Fenrir
 
     namespace
     {
-        // Places the loaded script's paint stage groups in UIRoots' paint stage, each at its order, and after them all
-        // the stage's end, which takes back the painters lent and plays back the stage changes.
+        // The stages' full names, as the binding's [stages] declares them.
+        constexpr std::string_view BuildStageName = "Fenrir.UI.Build";
+        constexpr std::string_view PaintStageName = "Fenrir.UI.Paint";
+
+        // Plays back the stage changes the loaded script's systems recorded: the end of each stage.
+        void PlayBackChanges(const std::weak_ptr<UIScripting>& weak)
+        {
+            if (const std::shared_ptr<UIScripting> running = weak.lock(); running && running->changes)
+            {
+                running->changes->PlayBack();
+            }
+        }
+
+        // Places the loaded script's stage groups, each in its stage at its order: Fenrir.UI.Build's in UIRoots' build
+        // stage, followed by the stage's end, which plays back the stage changes; Fenrir.UI.Paint's in the paint stage,
+        // followed by its end, which takes back the painters lent, then plays back the changes.
         void PlaceStages(const std::weak_ptr<UIScripting>& weak, App& app, std::vector<StageGroup> groups,
                          StageChanges changes)
         {
@@ -670,19 +731,25 @@ namespace Fenrir
                 return;
             }
             state->changes = std::move(changes);
+            constexpr std::int32_t end = std::numeric_limits<std::int32_t>::max();
             for (StageGroup& group : groups)
             {
-                state->placed.push_back(roots->AddPaintStage(group.Order(), [group] { group.Run(); }));
+                if (group.Stage() == BuildStageName)
+                {
+                    state->placedBuild.push_back(roots->AddBuildStage(group.Order(), [group] { group.Run(); }));
+                }
+                else if (group.Stage() == PaintStageName)
+                {
+                    state->placedPaint.push_back(roots->AddPaintStage(group.Order(), [group] { group.Run(); }));
+                }
             }
-            state->placed.push_back(roots->AddPaintStage(std::numeric_limits<std::int32_t>::max(), [weak] {
+            state->placedBuild.push_back(roots->AddBuildStage(end, [weak] { PlayBackChanges(weak); }));
+            state->placedPaint.push_back(roots->AddPaintStage(end, [weak] {
                 if (const std::shared_ptr<UIScripting> running = weak.lock())
                 {
                     running->EndStage();
-                    if (running->changes)
-                    {
-                        running->changes->PlayBack();
-                    }
                 }
+                PlayBackChanges(weak);
             }));
         }
 
@@ -695,12 +762,17 @@ namespace Fenrir
             }
             if (UIRoots* roots = app.TryGetResource<UIRoots>())
             {
-                for (const PaintStageHandle handle : state->placed)
+                for (const BuildStageHandle handle : state->placedBuild)
+                {
+                    (void)roots->RemoveBuildStage(handle);
+                }
+                for (const PaintStageHandle handle : state->placedPaint)
                 {
                     (void)roots->RemovePaintStage(handle);
                 }
             }
-            state->placed.clear();
+            state->placedBuild.clear();
+            state->placedPaint.clear();
             state->EndStage();
             state->changes.reset();
         }
