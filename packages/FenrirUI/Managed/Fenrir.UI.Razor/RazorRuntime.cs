@@ -52,6 +52,9 @@ public static class RazorRuntime
 
         /// <summary>The root's elements with handlers, of all its Razor components.</summary>
         public HandlerTable Handlers { get; } = new();
+
+        /// <summary>The Razor component sheets loaded into the root, each type's once.</summary>
+        public ComponentSheets Sheets { get; } = new();
     }
 
     private static readonly List<RootGroup> groups = [];
@@ -210,8 +213,9 @@ public static class RazorRuntime
     /// <summary>
     /// Lets go of the script generation (ADR-0068): runs each Razor component's <c>OnUnmount</c>, removes every mounted
     /// host still alive at once, with no outro, and forgets every Razor component and every cache naming the
-    /// generation's types, so nothing here refers to its objects: the handler tables go with their roots'
-    /// groups, and the paint overrides found are forgotten. The Razor dispatcher calls it from its
+    /// generation's types, so nothing here refers to its objects: the handler tables and the sheets loaded go with their
+    /// roots' groups, and the paint overrides and scope classes found are forgotten. The sheets themselves stay in their
+    /// roots, as any sheet a script added does. The Razor dispatcher calls it from its
     /// <c>OnDestroy</c>, before the generation is released.
     /// </summary>
     public static void Release()
@@ -232,6 +236,7 @@ public static class RazorRuntime
         building.Clear();
         painting.Clear();
         overridesOnPaint.Clear();
+        ComponentScope.Release();
         ElementBuilder.ReleaseCaches();
         ComponentParameters.Release();
     }
@@ -254,6 +259,8 @@ public static class RazorRuntime
     {
         ElementId host = seam.CreateElement(parent, "panel", index);
         seam.AddClass(host, ReadableClass(typeof(T)));
+        // The host is the Razor component's own element too, so its sheet can style it (the readable class is for others').
+        seam.AddScope(host, ComponentScope.ClassOf(typeof(T)));
         var component = new T { Root = root, Element = host };
         try
         {
@@ -268,7 +275,9 @@ public static class RazorRuntime
         component.Mounted = entry;
         RootGroup group = GroupOf(root, seam);
         entry.Tree.Handlers = group.Handlers;
+        entry.Tree.Sheets = group.Sheets;
         group.Mounted.Add(entry);
+        group.Sheets.Load(typeof(T), seam);
         return entry;
     }
 

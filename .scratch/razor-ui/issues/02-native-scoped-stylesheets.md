@@ -14,9 +14,9 @@
 
 Stacked on 01 (the same native files). It runs beside 03, whose files are disjoint.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] C++ tests:
+- [x] C++ tests:
   - `.a .b` scoped to `s-x` matches `.b.s-x` under `.a`, and not a `.b` without the class;
   - child combinators and nested rules are scoped;
   - `.list ::deep label` matches a label without the class under a scoped `.list`;
@@ -25,4 +25,4 @@ Stacked on 01 (the same native files). It runs beside 03, whose files are disjoi
   - one sheet added twice with one scope is one sheet;
   - hot reload of a scoped file keeps the scope;
   - an inline declaration set to `""` falls back to the stylesheet's value.
-- [ ] Everything passes under the msvc-x64-debug preset. `check_tickets.py` and clang-format pass.
+- [x] Everything passes under the msvc-x64-debug preset. `check_tickets.py` and clang-format pass.

@@ -85,7 +85,7 @@ function(fenrir_add_demo_scripts name scripts_dir)
     if(NOT EXISTS "${project}")
         message(FATAL_ERROR "fenrir_add_demo_app(${name}): SCRIPTS has no ${name}.Scripts.csproj in ${scripts_dir}")
     endif()
-    file(GLOB_RECURSE sources CONFIGURE_DEPENDS "${scripts_dir}/*.cs" "${scripts_dir}/*.razor")
+    file(GLOB_RECURSE sources CONFIGURE_DEPENDS "${scripts_dir}/*.cs" "${scripts_dir}/*.razor" "${scripts_dir}/*.razor.css")
     list(FILTER sources EXCLUDE REGEX "/(obj|bin)/")
 
     # Built into a folder of its own, then copied beside the executable: the contracts are compile-time only (the host

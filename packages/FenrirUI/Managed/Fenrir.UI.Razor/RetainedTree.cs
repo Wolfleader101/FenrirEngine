@@ -240,4 +240,7 @@ internal sealed class RetainedTree(ElementId host)
 
     /// <summary>Its root's handler table, which its entries with handlers are in; null until mounted.</summary>
     public HandlerTable? Handlers { get; set; }
+
+    /// <summary>The Razor component sheets its root has loaded, which its types' sheets join; null until mounted.</summary>
+    public ComponentSheets? Sheets { get; set; }
 }

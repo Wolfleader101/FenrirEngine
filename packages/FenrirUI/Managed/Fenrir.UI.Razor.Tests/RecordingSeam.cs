@@ -10,7 +10,9 @@ namespace Fenrir.UI.Razor.Tests;
 /// records every call as text, ids written as #index. It keeps the tree as a root would: children in order, an element
 /// removed with its outro staying among its parent's children until <see cref="FinishOutros"/>. <c>IsAlive</c>, the
 /// registry's liveness check, is counted in <see cref="AliveChecks"/> rather than recorded. A document it loads is one
-/// element per name in <see cref="Documents"/>, and a painter is the element's index plus 1000.
+/// element per name in <see cref="Documents"/>, and a painter is the element's index plus 1000. The scope class every
+/// made element gets (one <c>AddScope</c> each, ADR-0070) is kept in <see cref="ScopeOf"/> and recorded only when
+/// <see cref="RecordScopes"/> is on, so the other tests' lists stay about what they test.
 /// </summary>
 internal sealed class RecordingSeam : IElementSeam
 {
@@ -32,12 +34,22 @@ internal sealed class RecordingSeam : IElementSeam
     private readonly Dictionary<string, uint> ids = [];
     private readonly Dictionary<uint, float> values = [];
     private readonly Dictionary<uint, string> texts = [];
+    private readonly Dictionary<uint, string> scopes = [];
     private uint next = 1;
     private bool destroyed;
 
     public List<string> Calls { get; } = [];
 
     public int AliveChecks { get; private set; }
+
+    /// <summary>Whether <c>AddScope</c> calls are recorded among <see cref="Calls"/>.</summary>
+    public bool RecordScopes { get; set; }
+
+    /// <summary>What <see cref="LoadStylesheet"/> answers: whether the root took the file.</summary>
+    public bool LoadsStylesheets { get; set; } = true;
+
+    /// <summary>The scope class the element was given; null when none.</summary>
+    public string? ScopeOf(ElementId element) => scopes.GetValueOrDefault(element.Index);
 
     /// <summary>
     /// The documents <see cref="LoadDocument"/> knows, by path: each loads one panel per id string given, under the
@@ -125,6 +137,25 @@ internal sealed class RecordingSeam : IElementSeam
     public void AddClass(ElementId element, string name) => Calls.Add($"AddClass({Name(element)}, {name})");
 
     public void RemoveClass(ElementId element, string name) => Calls.Add($"RemoveClass({Name(element)}, {name})");
+
+    public void AddScope(ElementId element, string scope)
+    {
+        if (scopes.ContainsKey(element.Index))
+            throw new InvalidOperationException($"{Name(element)} was given a second scope, {scope}");
+        scopes[element.Index] = scope;
+        if (RecordScopes)
+            Calls.Add($"AddScope({Name(element)}, {scope})");
+    }
+
+    public bool LoadStylesheet(string path, string scope)
+    {
+        Calls.Add($"LoadStylesheet({path}, {scope})");
+        return LoadsStylesheets;
+    }
+
+    /// <summary>Recorded with the text after a colon: <c>AddStylesheet(name, scope): text</c>.</summary>
+    public void AddStylesheet(string text, string name, string scope) =>
+        Calls.Add($"AddStylesheet({name}, {scope}): {text}");
 
     public void SetStyle(ElementId element, string name, string value) =>
         Calls.Add($"SetStyle({Name(element)}, {name}, {value})");

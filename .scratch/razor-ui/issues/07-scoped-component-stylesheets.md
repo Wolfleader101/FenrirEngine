@@ -11,17 +11,17 @@
 
 **Touches:** `packages/FenrirUI/Scripting/`, `packages/FenrirUI/Managed/Fenrir.UI/Generated/`, `packages/FenrirUI/Managed/Fenrir.UI.Razor/`, `packages/FenrirUI/Managed/Fenrir.UI.Razor.Generators/`, `packages/FenrirUI/Managed/Fenrir.UI.Razor.props`, `packages/FenrirUI/Managed/Fenrir.UI.Razor.Tests/`, `packages/FenrirUI/README.md`
 
-Stacked on 06, cut once 02 has merged into `razor-ui`.
+Stacked on 08 (the user's choice), with ticket 02's branch merged in under it while its PR (#365) is open.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A test pins the scope class of a known type name.
-- [ ] Scripting tests:
+- [x] A test pins the scope class of a known type name.
+- [x] Scripting tests:
   - two components that both style `.title` each colour only their own;
   - a parent's `::deep label` reaches a child's label, and a plain `label` rule does not;
   - a `<style>` block scopes like a file;
   - a game sheet's rule on the readable class applies;
   - editing a `.razor.css` written to a temporary directory changes the resolved style at the next reload poll;
   - a component whose namespace comes from `@namespace` finds its sheet.
-- [ ] A second mount of the same type into the same root adds no second sheet.
-- [ ] Everything passes under the msvc-x64-debug preset. `check_tickets.py`, clang-format and the binding regeneration check pass.
+- [x] A second mount of the same type into the same root adds no second sheet.
+- [x] Everything passes under the msvc-x64-debug preset. `check_tickets.py`, clang-format and the binding regeneration check pass.

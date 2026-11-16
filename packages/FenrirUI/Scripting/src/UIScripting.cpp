@@ -629,15 +629,37 @@ namespace Fenrir
 
         /**
          * @brief Loads the stylesheet at `path` (relative to the asset root, or absolute) and adds it after the root's
-         * other sheets (UIRoot::LoadStylesheet). What it refused is logged with its file and line.
+         * other sheets (UIRoot::LoadStylesheet). With a scope class, every rule's rightmost compound also needs that
+         * class and `::deep` may mark where it goes instead; the same path with the same scope is added once, and hot
+         * reload re-reads the file with its scope. What it refused is logged with its file and line.
          * @param path The stylesheet's path.
-         * @return Whether the file was there and was added.
+         * @param scope The scope class name; empty for an unscoped sheet.
+         * @return Whether the file was there and was added, or was held already with that scope.
          * @facade UIRoot.LoadStylesheet
          */
-        bool LoadStylesheet(const CallContext& context, UIScripting& ui, const UIRootId* root, std::string_view path)
+        bool LoadStylesheet(const CallContext& context, UIScripting& ui, const UIRootId* root, std::string_view path,
+                            std::string_view scope)
         {
             UIRoot* found = ui.RootOf(context, *root);
-            return found != nullptr && found->LoadStylesheet(path).IsValid();
+            return found != nullptr && found->LoadStylesheet(path, scope).IsValid();
+        }
+
+        /**
+         * @brief Parses `text` as a stylesheet named `name` and adds it after the root's other sheets
+         * (UIRoot::AddStylesheet). With a scope class, every rule's rightmost compound also needs that class and
+         * `::deep` may mark where it goes instead; the same name with the same scope is added once, the later text
+         * ignored. What it refused is logged with the name and its line.
+         * @param text The stylesheet's text.
+         * @param name The name its diagnostics give.
+         * @param scope The scope class name; empty for an unscoped sheet, which is added every time.
+         * @return Whether it was added, or was held already with that scope.
+         * @facade UIRoot.AddStylesheet
+         */
+        bool AddStylesheet(const CallContext& context, UIScripting& ui, const UIRootId* root, std::string_view text,
+                           std::string_view name, std::string_view scope)
+        {
+            UIRoot* found = ui.RootOf(context, *root);
+            return found != nullptr && found->AddStylesheet(text, name, scope).IsValid();
         }
 
         /**

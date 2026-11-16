@@ -191,7 +191,7 @@ UIDemo shows two things. Its speedometer becomes one `.razor` file. A Razor sett
 ### Scoped component stylesheets (ADR-0070)
 
 - **Scope class.** `s-` followed by eight hex digits of FNV-1a over the component type's full name. It is computed in C#, and a test pins the value for a known name.
-- **Classes.** The builder adds the scope class to every element it creates, generated labels and folded-markup elements included, but not a placed document's elements. The host element gets the readable class: kebab case of the type name, without generic arity.
+- **Classes.** The builder adds the scope class to every element it creates, generated labels and folded-markup elements included, but not a placed document's elements. The host element gets the readable class: kebab case of the type name, without generic arity. It gets the scope class too, so the component's own sheet can style it (ticket 07).
 - **Loading.** On the first mount of a type into a root, the runtime loads the type's `[ComponentStylesheet]` with its scope: by path when the file exists, through `LoadStylesheet(path, scope)`, so hot reload applies; otherwise through `AddStylesheet(text, name, scope)`. `<style>` blocks load once per root and type, named by type and sequence.
 
 ### UIDemo

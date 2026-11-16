@@ -8,12 +8,16 @@
       * the stand-in and Fenrir.UI.Razor, compile-time only (the host shares its own copies, as for every contract);
       * default imports: Fenrir.UI, Fenrir.UI.Razor, Microsoft.AspNetCore.Components.Web (the handler directives), and
         @inherits UIComponent. A project's own _Imports.razor at its root replaces them and must say the same;
-      * the Razor dispatcher, RazorDispatcher.cs, compiled into the script so its stage system is scheduled.
+      * the Razor dispatcher, RazorDispatcher.cs, compiled into the script so its stage system is scheduled;
+      * FenrirUI's Razor generator, Fenrir.UI.Razor.Generators, with the .razor.css files as additional files: each
+        Foo.razor.css beside a Foo.razor is recorded on Foo as [ComponentStylesheet(path, text)], which the runtime
+        loads scoped to Foo's elements (ADR-0070).
 
     The project also needs the Fenrir.UI contract, as any script that uses the UI does. Installed, this file sits in a
-    folder beside Fenrir.UI.Razor.dll, Microsoft.AspNetCore.Components.dll, RazorDispatcher.cs and _Imports.razor. In
+    folder beside Fenrir.UI.Razor.dll, Microsoft.AspNetCore.Components.dll, RazorDispatcher.cs, _Imports.razor and
+    analyzers/Fenrir.UI.Razor.Generators.dll. In
     this repository's source tree, which an editor opens with no folders passed, the two contracts come from their
-    source projects instead (see Fenrir.UI.Razor.InRepo.props).
+    source projects instead, and the generator from its project (see Fenrir.UI.Razor.InRepo.props).
   -->
   <PropertyGroup>
     <FenrirRazorDir>$(MSBuildThisFileDirectory)</FenrirRazorDir>
@@ -26,12 +30,15 @@
 
   <ItemGroup>
     <_FenrirRazorComponent Include="**\*.razor" Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder)" />
+    <_FenrirRazorStylesheet Include="**\*.razor.css" Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder)" />
   </ItemGroup>
 
   <ItemGroup Condition="'@(_FenrirRazorComponent)' != ''">
     <Analyzer Include="$(FenrirRazorGeneratorDir)Microsoft.CodeAnalysis.Razor.Compiler.dll" />
     <Analyzer Include="$(FenrirRazorGeneratorDir)Microsoft.AspNetCore.Razor.Utilities.Shared.dll" />
     <AdditionalFiles Include="@(_FenrirRazorComponent)" />
+    <!-- Razor's generator reads only .razor and .cshtml files; FenrirUI's reads these. -->
+    <AdditionalFiles Include="@(_FenrirRazorStylesheet)" />
     <!-- The default imports, placed at the project's root: the generator reads TargetPath base-64 encoded, as the
          Razor SDK writes it, and this is "_Imports.razor". A file with none is placed by its own path. -->
     <AdditionalFiles Include="$(FenrirRazorDir)_Imports.razor" TargetPath="X0ltcG9ydHMucmF6b3I="
@@ -57,6 +64,7 @@
       <HintPath>$(FenrirRazorDir)Fenrir.UI.Razor.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Analyzer Include="$(FenrirRazorDir)analyzers/Fenrir.UI.Razor.Generators.dll" />
   </ItemGroup>
   <ItemGroup Condition="'@(_FenrirRazorComponent)' != '' And !Exists('$(FenrirRazorDir)Fenrir.UI.Razor.dll')">
     <ProjectReference Include="$(FenrirRazorDir)Microsoft.AspNetCore.Components/Microsoft.AspNetCore.Components.csproj">
@@ -65,5 +73,7 @@
     <ProjectReference Include="$(FenrirRazorDir)Fenrir.UI.Razor/Fenrir.UI.Razor.csproj">
       <Private>false</Private>
     </ProjectReference>
+    <ProjectReference Include="$(FenrirRazorDir)Fenrir.UI.Razor.Generators/Fenrir.UI.Razor.Generators.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

@@ -74,10 +74,11 @@ namespace Fenrir::Detail
      * sheet in `loading` (the sheets being loaded, outermost first) is an error and loads nothing. Each `@font-face` is
      * read (ReadFontFace), and one refused is left out. Every error, of the sheet and of its imports, is in `errors`,
      * ordered at its line for the sheet's own and at the import's line for an import's; the sheet has no diagnostics.
+     * A non-empty `scope` scopes the sheet and every sheet it imports (Stylesheet::Parse).
      */
     [[nodiscard]] Stylesheet BuildStylesheet(std::string_view text, const std::string& name, const SourceReader& reader,
-                                             AssetStore* store, std::vector<std::string>& loading,
-                                             MarkupErrors& errors);
+                                             AssetStore* store, std::vector<std::string>& loading, MarkupErrors& errors,
+                                             std::string_view scope = {});
 
     /**
      * @brief Reads a `@font-face` (`font-family`, `src: url()`, `font-weight`, `font-style` and `font-rendering`) and
@@ -104,6 +105,8 @@ namespace Fenrir::Detail
         std::string name;
         /** @brief An inline sheet's CSS, its lines at the document's; empty for a file's. */
         std::string text;
+        /** @brief The class it was loaded scoped to, which a reload keeps; empty for an unscoped sheet. */
+        std::string scope;
         std::vector<LoadedFile> files;
     };
 
