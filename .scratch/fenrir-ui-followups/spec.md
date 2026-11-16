@@ -114,3 +114,17 @@ Tickets 01, 03, 04, 05, 06 and 07 share FenrirUI's tests and README, so they are
 - `border-image-width`, `-outset` and `-repeat`, and several background layers.
 - UIDemo's volume slider applying a volume: it waits on an audio package.
 - ADR-0027's 2D material limits (4 texture slots, 128 parameter bytes) are still the first version's; nothing here needs more.
+
+## Tickets
+
+Built on the integration branch `ui-followups`, one session, branch (`uif/NN-<slug>`) and PR per ticket, stacked as "Order" says. The orchestrator fills the PR column; ticket sessions leave this table alone.
+
+| Ticket | Branch | Stacked on | PR |
+| --- | --- | --- | --- |
+| 01 One CaptureTarget and test cleanups | `uif/01-test-support` | `ui-followups` | |
+| 02 Demo helpers in DemoScaffold | `uif/02-demo-helpers` | `ui-followups` | |
+| 03 Element filters and blurred text shadows | `uif/03-filters` | 01 | |
+| 04 The window cursor from `cursor` | `uif/04-cursor` | 03 | |
+| 05 `background-position` and the scrollbar properties | `uif/05-longhands` | 04 | |
+| 06 `inset`, `border-image` and `currentcolor` | `uif/06-currentcolor` | 05 | |
+| 07 Image and world roots from C# | `uif/07-csharp-roots` | 06 | |
