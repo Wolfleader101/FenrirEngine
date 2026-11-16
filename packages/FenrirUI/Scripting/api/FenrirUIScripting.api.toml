@@ -10,6 +10,7 @@ headers = [
     "../../include/FenrirUI/UIEvent.hpp",
     "../../include/FenrirUI/Element.hpp",
     "../../include/FenrirUI/UIRoot.hpp",
+    "../../include/FenrirUI/Style.hpp",
     "../../../FenrirPainter/Scripting/include/FenrirPainterScripting/ScriptPainter.hpp",
 ]
 
@@ -20,8 +21,9 @@ headers = [
 "Fenrir::ElementBoxes" = "shared-struct"
 # The UI's event, read from C# through EventReader<UIEvent>.
 "Fenrir::UIEvent" = "event"
-# The enum a native takes by value, which no struct here holds.
+# The enums a native takes or gives by value, which no struct here holds.
 "Fenrir::RemoveMode" = "enum"
+"Fenrir::Cursor" = "enum"
 # The painter binding's (FenrirPainterScripting.api.toml gives it this role).
 "Fenrir::ScriptPainter::PainterId" = "shared-struct"
 # The text binding's.

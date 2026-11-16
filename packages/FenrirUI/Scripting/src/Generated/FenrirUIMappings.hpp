@@ -22,6 +22,15 @@
 #include <string_view>
 
 template <>
+struct Iris::EnumMapping<Fenrir::Cursor>
+{
+    static constexpr std::string_view typeName = "Fenrir.UI.Cursor";
+};
+static_assert(sizeof(Fenrir::Cursor) == 1 && alignof(Fenrir::Cursor) == 1,
+              "Fenrir::Cursor is not the layout FenrirUIScripting.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
 struct Iris::StructMapping<Fenrir::ElementBoxes>
 {
     static constexpr std::string_view typeName = "Fenrir.UI.ElementBoxes";

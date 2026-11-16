@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "FenrirAssets/AssetHandle.hpp"
@@ -170,7 +171,8 @@ namespace Fenrir
         bool RemovePaintStage(PaintStageHandle handle);
 
         /**
-         * @brief Runs every root's frame, in drawing order; the PostUpdate system calls it. The build stage runs, then
+         * @brief Runs every root's frame, in drawing order; the PostUpdate system calls it. First, input having been
+         * routed, the roots on each window set its cursor (UIRootConfig::applyCursor). Then the build stage runs, then
          * each root lays out, then the paint stage runs, then each root paints and submits (UIRoot::Frame's two
          * halves).
          */
@@ -180,6 +182,9 @@ namespace Fenrir
         UISettings settings;
 
       private:
+        /** @brief Sets each window's cursor from its roots, as UIRootConfig::applyCursor says. */
+        void ApplyCursors();
+
         struct RootEntry
         {
             std::unique_ptr<UIRoot> root;
@@ -209,6 +214,8 @@ namespace Fenrir
         /** @brief The paint stage's work, by order, equal orders in the order added. */
         std::vector<StageWork> m_paintStage;
         std::uint64_t m_nextPaintStage = 1;
+        /** @brief The cursor FenrirUI last set on each window it set one on; a window not listed has the arrow. */
+        std::vector<std::pair<WindowId, Cursor>> m_windowCursors;
     };
 
     /**

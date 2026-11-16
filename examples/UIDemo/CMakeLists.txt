@@ -14,7 +14,7 @@ add_library(UIDemoCore STATIC
     src/DemoUI.hpp
 )
 target_include_directories(UIDemoCore PUBLIC src)
-target_link_libraries(UIDemoCore PUBLIC FenrirDemoScaffold FenrirUI FenrirAssets PRIVATE FenrirPainter FenrirText)
+target_link_libraries(UIDemoCore PUBLIC FenrirDemoScaffold FenrirUI FenrirAssets PRIVATE FenrirPainter FenrirText FenrirWindow)
 target_compile_definitions(UIDemoCore PRIVATE UIDEMO_SOURCE_ASSETS="${CMAKE_CURRENT_SOURCE_DIR}/assets")
 
 fenrir_add_demo_app(UIDemo SOURCES src/main.cpp ASSETS assets SCRIPTS scripts)

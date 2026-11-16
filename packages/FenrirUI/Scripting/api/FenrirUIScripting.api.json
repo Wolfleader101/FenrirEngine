@@ -4,6 +4,60 @@
   "alignment": "natural",
   "types": [
     {
+      "name": "Fenrir::Cursor",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "`cursor`: the shape the pointer should take over the element. Inherited. A root on the window sets the window's cursor shape from its hovered element's (UIRootConfig::applyCursor); any root gives it through UIRoot::GetHoveredCursor.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Auto",
+          "value": 0
+        },
+        {
+          "name": "Default",
+          "value": 1
+        },
+        {
+          "name": "Pointer",
+          "value": 2
+        },
+        {
+          "name": "Text",
+          "value": 3
+        },
+        {
+          "name": "Move",
+          "value": 4
+        },
+        {
+          "name": "NotAllowed",
+          "value": 5
+        },
+        {
+          "name": "EwResize",
+          "value": 6
+        },
+        {
+          "name": "NsResize",
+          "value": 7
+        },
+        {
+          "name": "NwseResize",
+          "value": 8
+        },
+        {
+          "name": "NeswResize",
+          "value": 9
+        },
+        {
+          "name": "None",
+          "value": 10
+        }
+      ]
+    },
+    {
       "name": "Fenrir::Rect2D",
       "category": "struct",
       "role": "shared-struct",

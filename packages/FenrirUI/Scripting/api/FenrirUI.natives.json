@@ -1279,6 +1279,29 @@
       ]
     },
     {
+      "name": "GetHoveredCursor",
+      "namespace": "Fenrir::UINatives",
+      "source": "../src/UIScripting.cpp",
+      "state": "Fenrir::UIScripting",
+      "doc": "The cursor the root's hovered element wants (UIRoot::GetHoveredCursor): over a scroll view's bar its part's, `auto` resolved to `Text` over a text entry and `Default` elsewhere.",
+      "facade": "UIRoot.GetHoveredCursor",
+      "returns": {
+        "type": "Fenrir::Cursor",
+        "kind": "enum",
+        "doc": "The cursor; `Auto` with nothing hovered or no such root. A root on the window sets the window's cursor from it itself; a script applies a world root's."
+      },
+      "parameters": [
+        {
+          "name": "root",
+          "type": "const Fenrir::UIRootId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::UIRootId",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
       "name": "LoadDocument",
       "namespace": "Fenrir::UINatives",
       "source": "../src/UIScripting.cpp",

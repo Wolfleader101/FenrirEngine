@@ -94,7 +94,7 @@ TEST_CASE("Every cursor mode and shape can be set on a hidden window", "[window]
     for (const CursorShape shape :
          {CursorShape::Text, CursorShape::ResizeEastWest, CursorShape::ResizeNorthSouth,
           CursorShape::ResizeNorthWestSouthEast, CursorShape::ResizeNorthEastSouthWest, CursorShape::Hand,
-          CursorShape::NotAllowed, CursorShape::Hidden, CursorShape::Arrow})
+          CursorShape::NotAllowed, CursorShape::Move, CursorShape::Hidden, CursorShape::Arrow})
     {
         INFO("cursor shape " << static_cast<int>(shape) << " is accepted");
         REQUIRE(Window::SetCursorShape(test.app, main, shape));
@@ -120,4 +120,23 @@ TEST_CASE("A window's cursor mode reads back as it was last set", "[window][serv
     }
     INFO("a window that does not exist reads as normal");
     REQUIRE(Window::GetCursorMode(test.app, Fenrir::WindowId{99}) == CursorMode::Normal);
+}
+
+TEST_CASE("A window's cursor shape reads back as it was last set", "[window][services][display]")
+{
+    WindowTestApp test;
+    test.RequireDisplay();
+    const Fenrir::WindowId main = Window::MainWindow();
+    INFO("the cursor starts as the arrow");
+    REQUIRE(Window::GetCursorShape(test.app, main) == CursorShape::Arrow);
+    test.app.RunFrame(oneTick);
+
+    for (const CursorShape shape : {CursorShape::Move, CursorShape::Hand, CursorShape::Hidden, CursorShape::Arrow})
+    {
+        REQUIRE(Window::SetCursorShape(test.app, main, shape));
+        INFO("cursor shape " << static_cast<int>(shape) << " reads back as set");
+        REQUIRE(Window::GetCursorShape(test.app, main) == shape);
+    }
+    INFO("a window that does not exist reads as the arrow");
+    REQUIRE(Window::GetCursorShape(test.app, Fenrir::WindowId{99}) == CursorShape::Arrow);
 }
