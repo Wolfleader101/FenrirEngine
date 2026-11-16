@@ -156,15 +156,22 @@ namespace Fenrir::Detail
                 const bool transformed = !style.transform.empty();
                 const bool group = m_groups && style.opacity < 1.0f && !slot.children.empty();
                 const float ownAlpha = group ? alpha : alpha * style.opacity;
+                const std::vector<FilterGroup> filters = Filters(index);
 
                 m_painter.Save();
                 if (transformed)
                 {
                     m_painter.Concat(ElementTransform(style, boxes.border));
                 }
+                // CSS's order: the filters, then opacity, so the opacity's group is outside the filters'; the last
+                // filter is the outermost of those, the first applied to what the element draws.
                 if (group)
                 {
                     m_painter.BeginGroup(LocalBounds(index), style.opacity);
+                }
+                for (auto filter = filters.rbegin(); filter != filters.rend(); ++filter)
+                {
+                    m_painter.BeginGroup(filter->bounds, 1.0f, GroupBlend2D::Normal, filter->filter);
                 }
                 PaintBackdrop(style, boxes.border);
                 PaintBox(style, boxes.border, ownAlpha);
@@ -185,6 +192,10 @@ namespace Fenrir::Detail
                     PaintElement(child.index, ownAlpha);
                 }
                 PaintScrollbars(m_state.slots[index], ownAlpha);
+                for (std::size_t i = 0; i < filters.size(); ++i)
+                {
+                    m_painter.EndGroup();
+                }
                 if (group)
                 {
                     m_painter.EndGroup();
@@ -226,22 +237,79 @@ namespace Fenrir::Detail
                 }
             }
 
+            /** @brief One of the element's filter groups: what it covers, and what its image is drawn through. */
+            struct FilterGroup
+            {
+                Rect2D bounds;
+                GroupFilter filter;
+            };
+
             /**
-             * @brief What the element and everything under it may cover, before its own transform: its border box,
-             * its shadows, and its children's bounds (clipped to its padding box when it hides overflow).
+             * @brief The element's filter groups, the first function's (the innermost) first, each covering the one
+             * inside it, or what the element and its subtree cover, grown by its function's reach. None with groups
+             * off, and none for a blur of 0, which changes nothing.
+             */
+            std::vector<FilterGroup> Filters(std::uint32_t index) const
+            {
+                std::vector<FilterGroup> groups;
+                const std::vector<FilterStep>& steps = m_state.slots[index].resolved.filter;
+                if (!m_groups || steps.empty())
+                {
+                    return groups;
+                }
+                Rect2D bounds = CoveredBounds(index);
+                for (const FilterStep& step : steps)
+                {
+                    if (step.kind == FilterStep::Kind::Blur)
+                    {
+                        if (step.radius <= 0.0f)
+                        {
+                            continue;
+                        }
+                        bounds = Grown(bounds, step.radius);
+                        groups.push_back({bounds, GroupFilter::Blur(step.radius)});
+                    }
+                    else
+                    {
+                        bounds = Union(bounds, Grown(bounds, step.radius, step.offset));
+                        groups.push_back({bounds, GroupFilter::DropShadow(step.offset, step.radius, step.colour)});
+                    }
+                }
+                return groups;
+            }
+
+            /**
+             * @brief What the element and everything under it may draw over, before its own transform: what they
+             * cover, grown by the reach of its filters.
              */
             Rect2D LocalBounds(std::uint32_t index) const
+            {
+                const std::vector<FilterGroup> filters = Filters(index);
+                return filters.empty() ? CoveredBounds(index) : filters.back().bounds;
+            }
+
+            /**
+             * @brief What the element and everything under it cover, before its own transform and filters: its
+             * border box, its box and text shadows, and its children's bounds (clipped to its padding box when it
+             * hides overflow).
+             */
+            Rect2D CoveredBounds(std::uint32_t index) const
             {
                 const ElementSlot& slot = m_state.slots[index];
                 const ResolvedStyle& style = slot.resolved;
                 Rect2D bounds = slot.boxes.border;
                 for (const Shadow& shadow : style.boxShadow)
                 {
-                    const float reach = shadow.spread + shadow.blur;
-                    bounds = Union(bounds,
-                                   {slot.boxes.border.x + shadow.offset.x - reach,
-                                    slot.boxes.border.y + shadow.offset.y - reach,
-                                    slot.boxes.border.width + 2.0f * reach, slot.boxes.border.height + 2.0f * reach});
+                    bounds = Union(bounds, Grown(slot.boxes.border, shadow.spread + shadow.blur, shadow.offset));
+                }
+                if (slot.text != nullptr)
+                {
+                    const Math::Vec2 size = slot.text->GetParagraph().Size() / slot.text->PixelsPerUnit();
+                    const Rect2D paragraph{slot.boxes.content.x, slot.boxes.content.y, size.x, size.y};
+                    for (const Shadow& shadow : style.textShadow)
+                    {
+                        bounds = Union(bounds, Grown(paragraph, shadow.blur, shadow.offset));
+                    }
                 }
                 for (const ElementId child : slot.children)
                 {
@@ -399,7 +467,9 @@ namespace Fenrir::Detail
 
             /**
              * @brief The element's paragraph at its content box's top-left: its text shadows first (the first on top,
-             * so drawn last), each its runs again moved and in its colour, then the runs in their own.
+             * so drawn last), each its runs again moved and in its colour, inside a blur group over the paragraph's
+             * box at the shadow's offset grown by its blur when it has one and groups are on, then the runs in their
+             * own colours.
              */
             void PaintText(const ElementSlot& slot, float alpha)
             {
@@ -409,13 +479,25 @@ namespace Fenrir::Detail
                 }
                 Paragraph& paragraph = slot.text->GetParagraph();
                 const Math::Vec2 point{slot.boxes.content.x, slot.boxes.content.y};
+                const Math::Vec2 size = paragraph.Size() / slot.text->PixelsPerUnit();
                 for (auto shadow = slot.resolved.textShadow.rbegin(); shadow != slot.resolved.textShadow.rend();
                      ++shadow)
                 {
                     const Colour colour = Faded(shadow->colour, alpha);
-                    if (colour.a > 0.0f)
+                    if (colour.a <= 0.0f)
                     {
-                        PaintRuns(m_painter, paragraph, point + shadow->offset, &colour, 1.0f);
+                        continue;
+                    }
+                    const bool blurred = m_groups && shadow->blur > 0.0f;
+                    if (blurred)
+                    {
+                        m_painter.BeginGroup(Grown({point.x, point.y, size.x, size.y}, shadow->blur, shadow->offset),
+                                             1.0f, GroupBlend2D::Normal, GroupFilter::Blur(shadow->blur));
+                    }
+                    PaintRuns(m_painter, paragraph, point + shadow->offset, &colour, 1.0f);
+                    if (blurred)
+                    {
+                        m_painter.EndGroup();
                     }
                 }
                 if (alpha >= 1.0f)

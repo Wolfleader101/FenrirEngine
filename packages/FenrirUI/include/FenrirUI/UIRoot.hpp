@@ -296,9 +296,10 @@ namespace Fenrir
          * `#rrggbbaa`, `rgb()`, `rgba()`, `hsl()`, `hsla()` or a CSS colour name, `url(path)` for an image asset loaded
          * from the asset store, `linear-gradient()` and `radial-gradient()`, `box-shadow` lists, and `transform`
          * lists of `translate()`, `translateX()`, `translateY()`, `scale()`, `scaleX()`, `scaleY()`, `rotate()` (deg,
-         * rad, grad or turn), times in `s` or `ms` and timing functions (the CSS named set, `cubic-bezier()`,
-         * `steps()`) in the transition and animation lists. An unknown property, one the style does not hold yet (the
-         * filter and scrollbar properties, which a stylesheet parses and keeps), or a value it cannot read is
+         * rad, grad or turn), `filter` lists of `blur()` and `drop-shadow()`, times in `s` or `ms` and timing
+         * functions (the CSS named set, `cubic-bezier()`, `steps()`) in the transition and animation lists. An unknown
+         * property, one the style does not hold yet (`background-position` and the scrollbar properties, which a
+         * stylesheet parses and keeps), or a value it cannot read is
          * logged, with both named, and changes nothing: false. An empty (or all-whitespace) value resets the
          * property, or each longhand of a shorthand, to not set, so the cascade's value shows through: true.
          */

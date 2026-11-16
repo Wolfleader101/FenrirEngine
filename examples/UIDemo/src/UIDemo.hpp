@@ -77,6 +77,8 @@ namespace UIDemo
         std::string playerName;
         /** @brief Whether the HUD shows at all. */
         bool shown = true;
+        /** @brief Whether the pause menu is open: the HUD's top element has the class `paused`, which blurs it. */
+        bool paused = false;
     };
 
     /**

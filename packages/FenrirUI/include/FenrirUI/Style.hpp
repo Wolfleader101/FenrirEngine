@@ -228,6 +228,48 @@ namespace Fenrir
     };
 
     /**
+     * @brief One function of a `filter` list: what an element and its subtree are drawn through, in an offscreen group
+     * of their own (ADR-0060). Lengths are UI units.
+     */
+    struct FilterStep
+    {
+        /** @brief Which function. */
+        enum class Kind : std::uint8_t
+        {
+            Blur,
+            DropShadow,
+        };
+
+        Kind kind = Kind::Blur;
+        /** @brief The blur's, or the drop shadow's blur, radius: a Gaussian's standard deviation, 0 or more. */
+        float radius = 0.0f;
+        /** @brief Where a drop shadow is drawn from the element. */
+        Math::Vec2 offset{0.0f};
+        /** @brief A drop shadow's colour, straight alpha; black when left out. */
+        Colour colour = Colour::Black;
+
+        /** @brief `blur(radius)`. */
+        [[nodiscard]] static FilterStep Blur(float radius)
+        {
+            FilterStep step;
+            step.kind = Kind::Blur;
+            step.radius = radius;
+            return step;
+        }
+
+        /** @brief `drop-shadow(offset-x offset-y radius colour)`. */
+        [[nodiscard]] static FilterStep DropShadow(Math::Vec2 offset, float radius, const Colour& colour)
+        {
+            FilterStep step;
+            step.kind = Kind::DropShadow;
+            step.radius = radius;
+            step.offset = offset;
+            step.colour = colour;
+            return step;
+        }
+    };
+
+    /**
      * @brief CSS's easing function, which maps a transition's or a keyframe interval's progress (0 to 1) to how far
      * between its two values it shows: a cubic Bézier from (0, 0) to (1, 1) through two control points, or a run of
      * steps. The named functions are Bézier curves (`linear` is the straight one).
@@ -420,6 +462,13 @@ namespace Fenrir
          * that group's image, not what is under the group.
          */
         float backdropBlur = 0.0f;
+        /**
+         * @brief `filter`: the element and its subtree drawn through one offscreen group per function, the first
+         * innermost as CSS applies them in order; empty for `none`. Each group covers what they cover grown by its
+         * function's reach (a blur's radius; a drop shadow's offset and blur), and an opacity group is outside them
+         * all. A blur of 0 draws no group. Ignored with UISettings::offscreenGroups off.
+         */
+        std::vector<FilterStep> filter;
         float opacity = 1.0f;
         std::vector<TransformStep> transform;
         /** @brief `transform-origin`, from the border box's top-left; a percentage is of its size. */
@@ -459,8 +508,9 @@ namespace Fenrir
         /** @brief `letter-spacing`: added after each glyph, and may be negative. */
         float letterSpacing = 0.0f;
         /**
-         * @brief `text-shadow`: the text drawn again under itself, the first on top, as CSS. A shadow's blur is kept
-         * and not drawn yet: shadows are sharp, offset and tinted.
+         * @brief `text-shadow`: the text drawn again under itself, offset and tinted, the first on top, as CSS. A
+         * shadow with a blur draws its runs inside an offscreen group blurred by it, bounded by the paragraph's box at
+         * the shadow's offset grown by the blur; with UISettings::offscreenGroups off every shadow draws sharp.
          */
         std::vector<Shadow> textShadow;
         /** @brief `white-space`: Normal wraps at the width, NoWrap keeps one line; both collapse spaces. */
@@ -549,6 +599,7 @@ namespace Fenrir
         BorderBottomRightRadius,
         BorderBottomLeftRadius,
         BoxShadow,
+        Filter,
         BackdropFilter,
         Opacity,
         Transform,
@@ -686,6 +737,8 @@ namespace Fenrir
         StyleDeclarations& SetBorderRadius(const CornerRadii& radii);
         /** @brief `box-shadow`. */
         StyleDeclarations& SetBoxShadow(std::vector<Shadow> shadows);
+        /** @brief `filter`: its functions in order; empty for `none`. */
+        StyleDeclarations& SetFilter(std::vector<FilterStep> steps);
         /** @brief `backdrop-filter: blur(radius)`, in UI units; 0 for `none`. */
         StyleDeclarations& SetBackdropBlur(float radius);
         /** @brief `opacity`, 0 to 1. */

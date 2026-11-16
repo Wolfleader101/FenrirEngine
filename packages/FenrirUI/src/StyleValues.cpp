@@ -945,6 +945,64 @@ namespace Fenrir::Detail
             return Fail(context, "it is not none or blur() of a length of zero or more in px");
         }
 
+        bool ParseFilter(std::string_view value, std::vector<FilterStep>& out, StyleParseContext& context)
+        {
+            if (EqualsIgnoringCase(Trim(value), "none"))
+            {
+                out.clear();
+                return true;
+            }
+            const auto fail = [&] {
+                return Fail(context, "it is not a list of blur(<length>) and drop-shadow(<offset-x> <offset-y> "
+                                     "[<blur>] [<colour>]), lengths in px and blurs of zero or more, or none");
+            };
+            std::vector<FilterStep> steps;
+            for (const std::string_view function : Split(value, ' '))
+            {
+                if (const std::optional<std::string_view> blur = CallOf(function, "blur"))
+                {
+                    const std::optional<float> radius = Pixels(*blur);
+                    if (!radius || *radius < 0.0f)
+                    {
+                        return fail();
+                    }
+                    steps.push_back(FilterStep::Blur(*radius));
+                    continue;
+                }
+                const std::optional<std::string_view> shadow = CallOf(function, "drop-shadow");
+                if (!shadow)
+                {
+                    return fail();
+                }
+                std::vector<float> lengths;
+                std::optional<Colour> colour;
+                for (const std::string_view word : Split(*shadow, ' '))
+                {
+                    if (const std::optional<float> pixels = Pixels(word); pixels && !colour)
+                    {
+                        lengths.push_back(*pixels);
+                    }
+                    else if (const std::optional<Colour> read = ReadColour(word); read && !colour)
+                    {
+                        colour = read;
+                    }
+                    else
+                    {
+                        return fail();
+                    }
+                }
+                if (lengths.size() < 2 || lengths.size() > 3 || (lengths.size() == 3 && lengths[2] < 0.0f))
+                {
+                    return fail();
+                }
+                // CSS's default is currentcolor, which the style cannot hold yet.
+                steps.push_back(FilterStep::DropShadow(
+                    {lengths[0], lengths[1]}, lengths.size() == 3 ? lengths[2] : 0.0f, colour.value_or(Colour::Black)));
+            }
+            out = std::move(steps);
+            return true;
+        }
+
         bool ParseInteger(std::string_view value, std::int32_t& out, StyleParseContext& context)
         {
             value = Trim(value);
@@ -1720,10 +1778,8 @@ namespace Fenrir::Detail
             "background", "flex",    "gap",    "transition",   "animation",
         };
 
-        // The spec's property set that the style does not hold yet: the scrollbars, `filter` and
-        // background-position.
-        constexpr std::array<std::string_view, 4> LaterLonghands{
-            "filter",
+        // The spec's property set that the style does not hold yet: the scrollbars and background-position.
+        constexpr std::array<std::string_view, 3> LaterLonghands{
             "background-position",
             "scrollbar-color",
             "scrollbar-width",

@@ -71,6 +71,12 @@ namespace UIDemo
             m_top = top;
             m_shown = frame.shown;
         }
+        // The pause menu's blur, which hud.css transitions; a class changed only when it differs, so a hot-reloaded
+        // document's new top element takes it too.
+        if (top.IsValid() && root.HasClass(top, "paused") != frame.paused)
+        {
+            frame.paused ? root.AddClass(top, "paused") : root.RemoveClass(top, "paused");
+        }
 
         const Fenrir::ElementId name = Find("player-name");
         if (name.IsValid() && root.GetText(name) != frame.playerName)
@@ -135,8 +141,8 @@ namespace UIDemo
         {
             return;
         }
-        // Four strokes round the centre, which the stylesheet places and turns; the marker's :intro and :outro
-        // transitions animate it in and out.
+        // Four strokes round the centre, which the stylesheet places and turns, and a word; the marker's :intro and
+        // :outro transitions animate it in and out.
         const Fenrir::ElementId marker = root.Create(markers, "panel");
         root.AddClass(marker, "hit-marker");
         for (const char* corner : {"top-left", "top-right", "bottom-left", "bottom-right"})
@@ -145,6 +151,10 @@ namespace UIDemo
             root.AddClass(stroke, "hit-stroke");
             root.AddClass(stroke, corner);
         }
+        // Under the strokes, a word that glows through its blurred text shadow.
+        const Fenrir::ElementId text = root.Create(marker, "label");
+        root.AddClass(text, "hit-text");
+        root.SetText(text, "HIT");
         m_hitMarkers.push_back({marker, 0.0f});
     }
 

@@ -28,7 +28,9 @@ namespace Fenrir
     {
         /**
          * @brief Draw an element with an opacity under one and children through an offscreen group (ADR-0060), so
-         * they fade as one. Off, each of its boxes is drawn at its own opacity instead, overlaps showing through.
+         * they fade as one, an element with a `filter` through a group per function, and a text shadow with a blur
+         * through a blur group. Off, each of its boxes is drawn at its own opacity instead, overlaps showing through,
+         * filters are ignored and text shadows draw sharp.
          */
         bool offscreenGroups = true;
         /**
