@@ -442,6 +442,44 @@ public sealed class RebuildTests : IDisposable
     }
 
     [Fact]
+    public void IsMountedIsFalseAtOnceAfterSomeoneElseRemovesTheHost()
+    {
+        Lifecycle removed = Mount<Lifecycle>();
+        ComponentRef<Lifecycle> handle = new(removed.Mounted!);
+        Frame();
+        seam.Remove(removed.Element, RemoveMode.Immediate);
+
+        Assert.False(handle.IsMounted);
+        Assert.Equal(["mount", "built first", "unmount"], removed.Hooks);
+    }
+
+    [Fact]
+    public void IsMountedStaysTrueWhileTheHostIsInItsOutroAndTurnsFalseWhenItEnds()
+    {
+        Lifecycle leaving = Mount<Lifecycle>();
+        ComponentRef<Lifecycle> handle = new(leaving.Mounted!);
+        Frame();
+        seam.Remove(leaving.Element, RemoveMode.Outro);
+
+        Assert.True(handle.IsMounted);
+        seam.FinishOutros();
+        Assert.False(handle.IsMounted);
+        Assert.Equal(["mount", "built first", "unmount"], leaving.Hooks);
+    }
+
+    [Fact]
+    public void IsMountedStaysTrueWhileTheHostIsAlive()
+    {
+        Lifecycle kept = Mount<Lifecycle>();
+        ComponentRef<Lifecycle> handle = new(kept.Mounted!);
+
+        Assert.True(handle.IsMounted);
+        Frame();
+        Assert.True(handle.IsMounted);
+        Assert.Equal(["mount", "built first"], kept.Hooks);
+    }
+
+    [Fact]
     public void TheRegistryChecksEachRootOnceAFrame()
     {
         Mount<Lifecycle>();

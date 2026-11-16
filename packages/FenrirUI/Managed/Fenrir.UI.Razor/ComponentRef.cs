@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Fenrir.UI.Razor;
 
 /// <summary>
@@ -20,9 +22,14 @@ public readonly struct ComponentRef<T> where T : UIComponent
     public ElementId Host => mounted?.Host ?? new ElementId();
 
     /// <summary>
-    /// Whether it is still mounted: false after <see cref="Unmount"/>, and after a script reload released the runtime.
+    /// Whether it is still mounted: false after <see cref="Unmount"/>, after a script reload released the runtime, and
+    /// at once after something else removed its host (a markup reload, the game removing the host's parent, the root
+    /// destroyed; once the host's outro ends, if it had one). Asking it then forgets the Razor component, running its
+    /// <c>OnUnmount</c>, as its next build would have; so a game remounts with <c>if (!gauge.IsMounted)</c> alone. Hidden
+    /// from the debugger's variable views, so inspecting a reference runs no hook.
     /// </summary>
-    public bool IsMounted => mounted is { IsMounted: true };
+    [DebuggerBrowsable(DebuggerBrowsableState.Never)]
+    public bool IsMounted => mounted != null && RazorRuntime.StillMounted(mounted);
 
     /// <summary>
     /// Removes the host element with everything under it (after its <c>:outro</c> transitions by default) and forgets

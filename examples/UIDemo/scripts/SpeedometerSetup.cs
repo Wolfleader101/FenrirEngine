@@ -53,10 +53,9 @@ public sealed class SpeedometerSetup : ISystem
     private void MountIfLost(in SystemContext context)
     {
         UIRoot hud = UIRoot.Find(Window, HudLayer);
-        if (hud.Value == 0 || (gauge.IsMounted && hud.IsAlive(gauge.Host)))
+        // IsMounted is false at once when something else removed the host, a hot reload of the HUD's markup say.
+        if (hud.Value == 0 || gauge.IsMounted)
             return;
-        // A host someone else removed is still registered until it would build: let it go first.
-        gauge.Unmount(RemoveMode.Immediate);
         gauge = hud.Mount<Speedometer>(hud.GetRootElement(), init: s => s.Speed = speed);
         context.Log.Info("UIDemo: the speedometer is on the HUD, a Razor component painted from C#");
     }

@@ -93,8 +93,9 @@ public abstract class UIComponent : ComponentBase, IHandleEvent
 
     /// <summary>
     /// Runs once when it is forgotten after <see cref="OnMount"/> ran: on <c>Unmount</c>, in the frame after its root is
-    /// destroyed, when it would build after someone else removed its host, and when a script reload releases it. A
-    /// child Razor component is also forgotten when its parent's markup no longer places it, and before its parent.
+    /// destroyed, after someone else removed its host when it would next build or its <c>IsMounted</c> is asked, and
+    /// when a script reload releases it. A child Razor component is also forgotten when its parent's markup no longer
+    /// places it, and before its parent.
     /// </summary>
     protected virtual void OnUnmount()
     {
