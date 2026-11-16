@@ -161,5 +161,5 @@ The art-deco texture set comes with the scene that uses it.
 
 `FenrirDemoScaffoldTests` (CTest `FenrirDemoScaffold`) runs a demo app on the null backend with no window, its input
 fed through FenrirInput's feed and the App driven one frame at a time, or run as a smoke run: the scene list, the free-
-fly camera, the scene click, the help, the smoke runs and the ImGui overlay taking input from the scene, and the helpers, `YawPitch`
-and `ScreenQuad`, on their own.
+fly camera, the scene click, the help, the smoke runs and the ImGui overlay taking input from the scene; and the
+helpers, `YawPitch` and `ScreenQuad`, on their own.
