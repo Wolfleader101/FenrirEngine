@@ -54,6 +54,7 @@ namespace
     {
         const std::vector<Fenrir::Graphics::BindingGroupEntry> entries =
             RendererProbe::Entries(test.Device(), draw.groups.at(0));
+        INFO("the world quad's draw does not bind its local-to-clip matrix as the one entry of its set 0 group");
         REQUIRE(entries.size() == 1);
         const std::vector<std::byte> bytes = RendererProbe::Bytes(test.Device(), entries[0].buffer);
         Fenrir::Math::Mat4 matrix(1.0f);
@@ -104,7 +105,6 @@ TEST_CASE("A world quad's list draws as one draw in the Transparent pass, with n
     REQUIRE_FALSE(state.depth.write);
     REQUIRE(state.cull == Fenrir::Graphics::CullMode::None);
     INFO("nothing draws on the window's overlay");
-    INFO("nothing draws on the window's overlay");
     REQUIRE(test.Draws("Overlay 2D").empty());
     INFO("nothing logged an error");
     REQUIRE(test.messages->errors.empty());
@@ -135,8 +135,13 @@ TEST_CASE("A world quad's set 0 maps its list's units through the quad's world m
     INFO("a 2 x 1 quad is twice as wide as it is high on screen, under a square view's aspect");
     const Fenrir::Math::Vec3 topRight = Ndc(facing, {200.0f, 0.0f});
     REQUIRE(Near(topRight.x, -topLeft.x));
+}
 
-    // Turned a quarter about Y, the quad is seen edge on: its left and right edges meet the centre's column.
+TEST_CASE("A world quad turned a quarter about Y is seen edge on", "[renderer][world]")
+{
+    RendererTestApp test;
+    test.AddCamera({0.0f, 0.0f, 5.0f});
+    Fenrir::Entity quad = AddWorldQuad(test);
     quad.GetComponent<Fenrir::Transform>().rot =
         Fenrir::Math::AngleAxis(std::numbers::pi_v<float> * 0.5f, Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f));
     WorldTargetsOf(test).Submit(quad, CornerScissoredQuad(test));
@@ -172,7 +177,7 @@ TEST_CASE("A world quad sorts with the transparent items by its origin's depth, 
     REQUIRE(test.DrawPosition(draws[2]).z == 1.0f);
 }
 
-TEST_CASE("A world quad behind the camera is culled with the transparent items", "[renderer][world]")
+TEST_CASE("A world quad behind the camera is left out of the view", "[renderer][world]")
 {
     RendererTestApp test;
     test.AddCamera({0.0f, 0.0f, 5.0f});
@@ -185,13 +190,42 @@ TEST_CASE("A world quad behind the camera is culled with the transparent items",
     REQUIRE(RendererTest::Labelled(test.Passes(), "Transparent").empty());
     INFO("nothing logged an error");
     REQUIRE(test.messages->errors.empty());
+}
 
-    // Brought round in front, it draws.
+TEST_CASE("A world quad in front of the camera draws beside one behind it that does not", "[renderer][world]")
+{
+    RendererTestApp test;
+    test.AddCamera({0.0f, 0.0f, 5.0f});
+    const Fenrir::Entity behind = AddWorldQuad(test, {0.0f, 0.0f, 8.0f});
     const Fenrir::Entity ahead = AddWorldQuad(test, {0.0f, 0.0f, 0.0f});
     WorldTargetsOf(test).Submit(behind, CornerScissoredQuad(test));
     WorldTargetsOf(test).Submit(ahead, CornerScissoredQuad(test));
+
     test.Frame();
+
     INFO("the quad ahead draws, the one behind does not");
+    REQUIRE(test.Draws("Transparent").size() == 1);
+}
+
+TEST_CASE("While culling is frozen a world quad is culled by the frozen frustum, as the transparent items are",
+          "[renderer][world][culling][frozen]")
+{
+    RendererTestApp test;
+    Fenrir::Entity camera = test.AddCamera({0.0f, 0.0f, 5.0f});
+    const Fenrir::Entity quad = AddWorldQuad(test);
+    WorldTargetsOf(test).Submit(quad, CornerScissoredQuad(test));
+    test.Frame();
+    test.renderer.SetCullingFrozen(true);
+    WorldTargetsOf(test).Submit(quad, CornerScissoredQuad(test));
+    test.Frame();
+
+    // The camera turns to face +X, away from the quad, which the frozen frustum still holds.
+    camera.GetComponent<Fenrir::Transform>().rot =
+        Fenrir::Math::AngleAxis(-std::numbers::pi_v<float> * 0.5f, Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f));
+    WorldTargetsOf(test).Submit(quad, CornerScissoredQuad(test));
+    test.Frame();
+
+    INFO("frozen, the quad the camera turned away from is still drawn, as the frozen frustum holds it");
     REQUIRE(test.Draws("Transparent").size() == 1);
 }
 

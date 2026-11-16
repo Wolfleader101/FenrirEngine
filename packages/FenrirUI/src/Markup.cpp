@@ -19,6 +19,7 @@
 #include "StyleFiles.hpp"
 #include "StyleValues.hpp"
 #include "UIRootState.hpp"
+#include "Utf8.hpp"
 
 namespace Fenrir
 {
@@ -33,32 +34,6 @@ namespace Fenrir
         bool IsMarkupNameChar(char c)
         {
             return IsMarkupNameStart(c) || (c >= '0' && c <= '9') || c == '-' || c == '.' || c == ':';
-        }
-
-        void AppendUtf8(std::string& out, std::uint32_t code)
-        {
-            if (code < 0x80)
-            {
-                out += static_cast<char>(code);
-            }
-            else if (code < 0x800)
-            {
-                out += static_cast<char>(0xC0 | (code >> 6));
-                out += static_cast<char>(0x80 | (code & 0x3F));
-            }
-            else if (code < 0x10000)
-            {
-                out += static_cast<char>(0xE0 | (code >> 12));
-                out += static_cast<char>(0x80 | ((code >> 6) & 0x3F));
-                out += static_cast<char>(0x80 | (code & 0x3F));
-            }
-            else
-            {
-                out += static_cast<char>(0xF0 | (code >> 18));
-                out += static_cast<char>(0x80 | ((code >> 12) & 0x3F));
-                out += static_cast<char>(0x80 | ((code >> 6) & 0x3F));
-                out += static_cast<char>(0x80 | (code & 0x3F));
-            }
         }
 
         /** @brief The text an entity's name (between `&` and `;`) stands for; false for no entity. */
@@ -101,7 +76,7 @@ namespace Fenrir
                 {
                     return false;
                 }
-                AppendUtf8(out, code);
+                Detail::AppendUtf8(out, code);
             }
             else
             {

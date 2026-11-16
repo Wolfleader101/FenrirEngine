@@ -53,7 +53,7 @@ namespace UIDemo
         std::int32_t reserve = 90;
     };
 
-    /** @brief Where the HUD draws. */
+    /** @brief Where the HUD draws: the tests' seam, which captures it; the app leaves it at the window's overlay. */
     struct HudConfig
     {
         /** @brief The HUD root's 2D target; null draws on the main window's overlay, on HudLayer. */
@@ -143,7 +143,9 @@ namespace UIDemo
         bool m_shown = true;
     };
 
-    /** @brief Where the pause menu draws. */
+    /**
+     * @brief Where the pause menu draws: the tests' seam, which captures it; the app leaves it at the window's overlay.
+     */
     struct MenuConfig
     {
         /** @brief The menu root's 2D target; null draws on the main window's overlay, on MenuLayer. */

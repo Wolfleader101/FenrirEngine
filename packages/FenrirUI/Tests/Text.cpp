@@ -326,6 +326,28 @@ TEST_CASE("font-family resolves through the app's font library, with families re
     REQUIRE(scene.ParagraphOf(plain).Runs().front().font == fonts->DefaultFont());
 }
 
+TEST_CASE("A quoted font-family keeps the commas inside its quotes as part of the name", "[ui][text]")
+{
+    TextScene scene;
+    Fenrir::FontLibrary* fonts = scene.test.Roots().GetFonts();
+    INFO("the UI app has a font library");
+    REQUIRE(fonts != nullptr);
+    const std::filesystem::path file =
+        std::filesystem::path(FENRIR_TEXT_HARFBUZZ_TEST) / "subset" / "data" / "fonts" / "Roboto-Regular.ttf";
+    const Fenrir::AssetHandle<Fenrir::Font> roboto =
+        scene.test.assets.Store().Load<Fenrir::Font>(file.string(), Fenrir::AssetOwner::App()).handle;
+    INFO("the test font loads");
+    REQUIRE_FALSE(roboto.IsEmpty());
+    fonts->AddFace("Body, Display", roboto);
+
+    const Fenrir::ElementId label =
+        scene.Label(scene.root.GetRootElement(), "Body", "font-family: \"Body, Display\", sans-serif");
+    scene.test.Frame();
+
+    INFO("the family is the whole quoted name, Body, Display, so the label is in Roboto");
+    REQUIRE(scene.ParagraphOf(label).Runs().front().font == roboto);
+}
+
 TEST_CASE("New text on any element measures it again", "[ui][text]")
 {
     TextScene scene;

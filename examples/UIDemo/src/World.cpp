@@ -109,25 +109,9 @@ namespace UIDemo
         config.hotReload = true;
         Fenrir::UIRoot& root = m_app.GetResource<Fenrir::UIRoots>().CreateRoot(std::move(config));
         const std::string stylesheet = (std::filesystem::path(m_files) / StylesheetFile).generic_string();
-        const Fenrir::StylesheetId sheet = root.LoadStylesheet(stylesheet);
-        // FenrirUI logs each problem as a warning; a world root missing a part is an error, so a smoke run fails on it.
-        if (!sheet.IsValid())
-        {
-            m_app.Logger()->Error("UIDemo: the world roots' stylesheet {} did not load", stylesheet);
-        }
-        else if (const Fenrir::Stylesheet* parsed = root.GetStylesheet(sheet);
-                 parsed != nullptr && !parsed->diagnostics.empty())
-        {
-            m_app.Logger()->Error("UIDemo: the world roots' stylesheet {} has {} problems, logged above", stylesheet,
-                                  parsed->diagnostics.size());
-        }
-        const std::string path = (std::filesystem::path(m_files) / document).generic_string();
-        const Fenrir::MarkupLoad load = root.LoadDocument(root.GetRootElement(), path);
-        if (!load.element.IsValid() || !load.errors.empty())
-        {
-            m_app.Logger()->Error("UIDemo: the world root's document {} loaded with {} problems, logged above", path,
-                                  load.errors.size());
-        }
+        LoadStylesheetReporting(m_app, root, stylesheet, "the world roots'");
+        LoadDocumentReporting(m_app, root, root.GetRootElement(),
+                              (std::filesystem::path(m_files) / document).generic_string(), "the world root's");
         return root;
     }
 

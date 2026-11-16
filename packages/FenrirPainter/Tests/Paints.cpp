@@ -115,7 +115,10 @@ TEST_CASE("The stop texture's row holds the gradient's colours, premultiplied", 
     const std::vector<Fenrir::GradientStop> ramp{
         {0.0f, Colour::Red}, {0.5f, Colour{0.0f, 0.0f, 1.0f, 0.0f}}, {1.0f, Colour::White}};
 
-    REQUIRE(stops.AddRow(ramp).has_value());
+    {
+        INFO("a stop texture with room for 2 rows refused its first");
+        REQUIRE(stops.AddRow(ramp).has_value());
+    }
     const Fenrir::ImageData image = stops.TakeImageData();
 
     INFO("an RGBA8 image 256 wide and 2 rows high, stored linear");

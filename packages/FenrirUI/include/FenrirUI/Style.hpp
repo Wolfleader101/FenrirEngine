@@ -129,7 +129,10 @@ namespace Fenrir
         All,
     };
 
-    /** @brief `cursor`: the shape the pointer takes over the element. Inherited. */
+    /**
+     * @brief `cursor`: the shape the pointer should take over the element. Inherited. Resolved and kept for the game to
+     * read; FenrirUI does not set the window's cursor from it.
+     */
     enum class Cursor : std::uint8_t
     {
         Auto,

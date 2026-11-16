@@ -178,22 +178,48 @@ TEST_CASE("With no Overlay or no builtin:painter in the app, no painter is given
     REQUIRE(harness.WarnedOnce("PainterNative.Overlay", PainterScripting::NoPainterShader));
 }
 
-TEST_CASE("One system's calls for a window and layer share a painter, which ends when the system returns",
-          "[painter][scripting][noops]")
+TEST_CASE("One system's calls for a window and layer share a painter", "[painter][scripting][noops]")
 {
     Testing::NativeCallHarness harness(Extensions());
     const Installed installed(harness.GetApp());
     const PainterId painter = OverlayPainter(harness);
-    REQUIRE(painter.value != 0);
-    REQUIRE(OverlayPainter(harness).value == painter.value);
+    {
+        INFO("The first call for the window's layer 0 gave no painter");
+        REQUIRE(painter.value != 0);
+    }
+    {
+        INFO("A second call for the same window and layer gave a painter other than the first's");
+        REQUIRE(OverlayPainter(harness).value == painter.value);
+    }
     const PainterId above = OverlayPainter(harness, 1);
-    REQUIRE(above.value != 0);
-    REQUIRE(above.value != painter.value);
-    INFO("Each painter's submission waits for the system to return");
+    {
+        INFO("A call for layer 1 gave no painter, or layer 0's painter");
+        REQUIRE(above.value != 0);
+        REQUIRE(above.value != painter.value);
+    }
+    INFO("Each painter's submission should wait for the system to return, one for each layer");
     REQUIRE(harness.PendingChanges() == 2);
+}
 
-    REQUIRE(harness.ApplyChanges().applied == 2);
+TEST_CASE("A system's call after the last one returned gets a new painter", "[painter][scripting][noops]")
+{
+    Testing::NativeCallHarness harness(Extensions());
+    const Installed installed(harness.GetApp());
+    const PainterId painter = OverlayPainter(harness);
+    const PainterId above = OverlayPainter(harness, 1);
+    {
+        INFO("The calls for layers 0 and 1 did not give two painters");
+        REQUIRE(painter.value != 0);
+        REQUIRE(above.value != 0);
+        REQUIRE(above.value != painter.value);
+    }
+
+    {
+        INFO("The system's return did not play back both painters' submissions");
+        REQUIRE(harness.ApplyChanges().applied == 2);
+    }
     const PainterId next = OverlayPainter(harness);
+    INFO("The call after the return gave no painter, or one of the ended painters");
     REQUIRE(next.value != 0);
     REQUIRE(next.value != painter.value);
     REQUIRE(next.value != above.value);

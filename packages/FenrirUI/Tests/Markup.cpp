@@ -426,8 +426,12 @@ TEST_CASE("Each load of a document makes elements of its own", "[ui][markup]")
     constexpr std::string_view document = "<panel class=\"card\"><label>hi</label></panel>";
     const MarkupLoad first = t.Load(document);
     const MarkupLoad second = t.Load(document);
-    REQUIRE(first.errors.empty());
-    REQUIRE(second.errors.empty());
+    {
+        INFO("the document reported errors: " << Describe(first.errors) << Describe(second.errors));
+        REQUIRE(first.errors.empty());
+        REQUIRE(second.errors.empty());
+    }
+    INFO("the second load did not make a tree of its own beside the first");
     REQUIRE(first.element != second.element);
     REQUIRE(t.root.FindByClass("card").size() == 2);
     REQUIRE(t.root.GetChildren(t.root.GetRootElement()).size() == 2);

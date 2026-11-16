@@ -219,7 +219,10 @@ TEST_CASE("A text shadow draws offset and tinted before its text", "[painter][te
     painter.DrawText(paragraph, {10, 10}, Fenrir::TextShadow{{2, 3}, Colour::Black});
 
     const std::vector<Fenrir::PainterVertex> vertices = PainterTest::Vertices(list);
-    REQUIRE(vertices.size() == glyphs * 8);
+    {
+        INFO("the shadowed text is not two quads a glyph, one for its shadow and one for its text");
+        REQUIRE(vertices.size() == glyphs * 8);
+    }
     INFO("the shadow's glyphs first, moved by its offset, in its colour");
     REQUIRE(QuadIs(vertices, 0, Moved(glyph.quad, {12, 13}), glyph.atlas.region));
     REQUIRE(vertices[0].colour == PainterTest::Rgba8(0, 0, 0, 255));

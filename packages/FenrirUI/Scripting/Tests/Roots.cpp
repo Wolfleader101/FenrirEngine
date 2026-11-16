@@ -53,7 +53,10 @@ TEST_CASE("A script builds the three-panel tree C++ builds and reads the same re
     UIRoot& scripted = test.MakeRoot(scriptTarget);
     const std::vector<ElementId> panels = CppThreePanels(cpp);
     const std::uint32_t root = scripted.GetId().value;
-    REQUIRE(test.Call<int>(TreeCallsType, "BuildThreePanels", root) == 3);
+    {
+        INFO("The script did not build its three panels");
+        REQUIRE(test.Call<int>(TreeCallsType, "BuildThreePanels", root) == 3);
+    }
     test.ApplyChanges();
     test.Frame();
 
@@ -180,7 +183,7 @@ TEST_CASE("A paint stage system that paints nothing leaves the element as C++ pa
     REQUIRE(QuadColours(target->lists.back()) == std::vector<std::uint32_t>{Red});
 }
 
-TEST_CASE("A stale element's and a destroyed root's natives do nothing and return false", "[ui][scripting]")
+TEST_CASE("A stale element's natives do nothing and return false", "[ui][scripting]")
 {
     UIScriptingApp test;
     std::shared_ptr<CaptureTarget> target;
@@ -188,17 +191,38 @@ TEST_CASE("A stale element's and a destroyed root's natives do nothing and retur
     const ElementId removed = root.Create(root.GetRootElement(), "panel");
     root.SetIdString(removed, "gone");
     const std::uint32_t id = root.GetId().value;
-    REQUIRE(test.Call<int>(TreeCallsType, "Keep", id, std::string_view("gone")) == 1);
-    REQUIRE(root.Remove(removed, RemoveMode::Immediate));
+    {
+        INFO("The script did not find and keep the element by its id string");
+        REQUIRE(test.Call<int>(TreeCallsType, "Keep", id, std::string_view("gone")) == 1);
+    }
+    {
+        INFO("The kept element could not be removed");
+        REQUIRE(root.Remove(removed, RemoveMode::Immediate));
+    }
 
-    INFO("Every call on the kept, now stale, id returns false, zero or none");
-    REQUIRE(test.Call<int>(TreeCallsType, "StaleCallsThatSucceeded", id) == 0);
-    INFO("...and changed nothing: the root element still has no children");
+    {
+        INFO("A call on the kept, now stale, id returned true, non-zero or an element");
+        REQUIRE(test.Call<int>(TreeCallsType, "StaleCallsThatSucceeded", id) == 0);
+    }
+    INFO("A call on the stale id changed the tree: the root element has children");
     REQUIRE(root.GetChildren(root.GetRootElement()).empty());
+}
 
-    INFO("The script destroys the root");
-    REQUIRE(test.Call<bool>(TreeCallsType, "DestroyRoot", id));
-    INFO("A destroyed root's calls do nothing: a second destroy, and a create");
-    REQUIRE_FALSE(test.Call<bool>(TreeCallsType, "DestroyRoot", id));
+TEST_CASE("A destroyed root's natives do nothing and return false", "[ui][scripting]")
+{
+    UIScriptingApp test;
+    std::shared_ptr<CaptureTarget> target;
+    UIRoot& root = test.MakeRoot(target);
+    const std::uint32_t id = root.GetId().value;
+
+    {
+        INFO("The script could not destroy the root");
+        REQUIRE(test.Call<bool>(TreeCallsType, "DestroyRoot", id));
+    }
+    {
+        INFO("A second destroy of the destroyed root returned true");
+        REQUIRE_FALSE(test.Call<bool>(TreeCallsType, "DestroyRoot", id));
+    }
+    INFO("A create under the destroyed root made an element");
     REQUIRE(test.Call<std::uint64_t>(TreeCallsType, "CreateUnderRoot", id) == Packed(ElementId{}));
 }

@@ -122,7 +122,10 @@ TEST_CASE("builtin:painter's variants compile for both blend spaces", "[painter]
     test.Frame();
     const std::vector<RendererTest::RecordedDraw> draws = test.Draws("Overlay 2D");
 
-    REQUIRE(draws.size() == 2);
+    {
+        INFO("the two roots' lists did not make one draw each");
+        REQUIRE(draws.size() == 2);
+    }
     INFO("the Linear root's draw uses the base variant, encoding into the sRGB backbuffer");
     REQUIRE(RendererProbe::Keys(test.Device(), draws[0].pipeline).empty());
     REQUIRE(RendererProbe::State(test.Device(), draws[0].pipeline).encodeSrgb);

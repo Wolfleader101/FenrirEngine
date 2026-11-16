@@ -414,27 +414,6 @@ namespace Fenrir::Render
             BindingGroupHandle target;
         };
 
-        /**
-         * @brief Whether `corners` are all past one side of the clip space `viewProjection` maps them into, or all
-         * behind its camera: the transparent items' cull (ADR-0057's corner test). Reversed-Z, so the near plane is z
-         * equal to w and there is no far plane.
-         */
-        bool OutsideView(const std::array<Math::Vec3, 4>& corners, const Math::Mat4& viewProjection)
-        {
-            std::array<Math::Vec4, 4> clip{};
-            for (std::size_t i = 0; i < corners.size(); ++i)
-            {
-                clip.at(i) = viewProjection * Math::Vec4(corners.at(i), 1.0f);
-            }
-            const auto all = [&](auto outside) { return std::all_of(clip.begin(), clip.end(), outside); };
-            return all([](const Math::Vec4& c) { return c.w <= 0.0f; }) ||
-                   all([](const Math::Vec4& c) { return c.x < -c.w; }) ||
-                   all([](const Math::Vec4& c) { return c.x > c.w; }) ||
-                   all([](const Math::Vec4& c) { return c.y < -c.w; }) ||
-                   all([](const Math::Vec4& c) { return c.y > c.w; }) ||
-                   all([](const Math::Vec4& c) { return c.z > c.w; });
-        }
-
         /** @brief How the device blends a material of `mode`. */
         constexpr Graphics::BlendMode DeviceBlendOf(Fenrir::BlendMode mode) noexcept
         {
@@ -3900,7 +3879,15 @@ namespace Fenrir::Render
             std::vector<GraphResource> worldSamples;
             for (std::size_t q = 0; q < worldQuads.size(); ++q)
             {
-                if (OutsideView(worldQuads[q].corners, viewProjection))
+                // Culled as the transparent items are, by the box round its corners against the view's frustum (the
+                // frozen one while culling is frozen); a box round a turned quad only keeps more, never drops one seen.
+                const std::array<Math::Vec3, 4>& corners = worldQuads[q].corners;
+                Math::AABB box{corners[0], corners[0]};
+                for (const Math::Vec3& corner : corners)
+                {
+                    box = Math::Union(box, Math::AABB{corner, corner});
+                }
+                if (!frustum.Intersects(box))
                 {
                     continue;
                 }

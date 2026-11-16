@@ -293,7 +293,7 @@ TEST_CASE("A half-opacity group draws over a solid colour as one, half and half"
     Fenrir::Painter painter(list, test.Config());
     painter.DrawRect({0, 0, 64, 64}, Colour::Blue);
     painter.BeginGroup({0, 0, 64, 64}, 0.5f);
-    // Two overlapping rectangles: in a group they are one layer, so the overlap is no redder than the rest.
+    // Two overlapping rectangles: in a group they are one image, so the overlap is no redder than the rest.
     painter.DrawRect({16, 16, 24, 32}, Colour::Red);
     painter.DrawRect({24, 16, 24, 32}, Colour::Red);
     painter.EndGroup();
@@ -589,6 +589,7 @@ TEST_CASE("A world quad turned away from the camera is cut by its round clip, no
     const auto at = [&](float u, float v) {
         const Fenrir::Math::Vec3 point(world * Fenrir::Math::Vec4(u / 100.0f - 1.0f, 1.0f - v / 100.0f, 0.0f, 1.0f));
         const std::optional<Fenrir::Math::Vec2> screen = test.scene.renderer.WorldToScreenPoint(camera, point);
+        INFO("the list's point (" << u << ", " << v << ") on the quad is not on screen");
         REQUIRE(screen.has_value());
         const auto x = static_cast<std::uint32_t>(std::clamp(screen->x * pixelsPerUnit, 0.0f, image.width - 1.0f));
         const auto y = static_cast<std::uint32_t>(std::clamp(screen->y * pixelsPerUnit, 0.0f, image.height - 1.0f));

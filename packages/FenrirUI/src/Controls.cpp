@@ -19,6 +19,8 @@
 #include "FenrirUI/UI.hpp"
 #include "FenrirUI/UIRoot.hpp"
 #include "FenrirWindow/Window.hpp"
+#include "Rects.hpp"
+#include "Utf8.hpp"
 
 namespace Fenrir
 {
@@ -47,6 +49,24 @@ namespace Fenrir
         {
             const auto* key = std::get_if<KeyEvent>(&input);
             return key != nullptr && key->pressed ? key : nullptr;
+        }
+
+        /**
+         * @brief Enter, keypad Enter or Space pressed at `element` clicks it (a repeat is taken and clicks nothing);
+         * any other input is passed. What a button and a checkbox do with keys.
+         */
+        RouteResult ClickOnActivationKey(const Element& element, const RoutedInput& input)
+        {
+            const KeyEvent* key = KeyPress(input);
+            if (key == nullptr || (key->key != Key::Enter && key->key != Key::KeypadEnter && key->key != Key::Space))
+            {
+                return RouteResult::Passed;
+            }
+            if (!key->repeat)
+            {
+                SendClick(element);
+            }
+            return RouteResult::Consumed;
         }
 
         /** @brief The `text` attribute, the element's text (UIRoot::SetText); Unknown for any other name. */
@@ -82,11 +102,6 @@ namespace Fenrir
             }
         }
 
-        bool Inside(const Rect2D& rect, Math::Vec2 point)
-        {
-            return point.x >= rect.x && point.y >= rect.y && point.x < rect.x + rect.width &&
-                   point.y < rect.y + rect.height;
-        }
     } // namespace
 
     AttributeResult Label::SetAttribute(std::string_view name, std::string_view value)
@@ -131,16 +146,7 @@ namespace Fenrir
     RouteResult Button::OnInput(App& app, const RoutedInput& input)
     {
         (void)app;
-        const KeyEvent* key = KeyPress(input);
-        if (key == nullptr || (key->key != Key::Enter && key->key != Key::KeypadEnter && key->key != Key::Space))
-        {
-            return RouteResult::Passed;
-        }
-        if (!key->repeat)
-        {
-            SendClick(*this);
-        }
-        return RouteResult::Consumed;
+        return ClickOnActivationKey(*this, input);
     }
 
     AttributeResult Checkbox::SetAttribute(std::string_view name, std::string_view value)
@@ -181,16 +187,7 @@ namespace Fenrir
     RouteResult Checkbox::OnInput(App& app, const RoutedInput& input)
     {
         (void)app;
-        const KeyEvent* key = KeyPress(input);
-        if (key == nullptr || (key->key != Key::Space && key->key != Key::Enter && key->key != Key::KeypadEnter))
-        {
-            return RouteResult::Passed;
-        }
-        if (!key->repeat)
-        {
-            SendClick(*this);
-        }
-        return RouteResult::Consumed;
+        return ClickOnActivationKey(*this, input);
     }
 
     void Checkbox::Toggle()
@@ -721,9 +718,9 @@ namespace Fenrir
         m_pressPointer = pointer;
         m_pressOffset = GetOffset();
         const Rect2D page = root.GetBoxes(GetId()).padding;
-        if (bars.vertical && Inside(bars.verticalTrack, pointer))
+        if (bars.vertical && Detail::Contains(bars.verticalTrack, pointer))
         {
-            if (Inside(bars.verticalThumb, pointer))
+            if (Detail::Contains(bars.verticalThumb, pointer))
             {
                 m_drag = Drag::VerticalThumb;
             }
@@ -734,9 +731,9 @@ namespace Fenrir
             }
             return RouteResult::Consumed;
         }
-        if (bars.horizontal && Inside(bars.horizontalTrack, pointer))
+        if (bars.horizontal && Detail::Contains(bars.horizontalTrack, pointer))
         {
-            if (Inside(bars.horizontalThumb, pointer))
+            if (Detail::Contains(bars.horizontalThumb, pointer))
             {
                 m_drag = Drag::HorizontalThumb;
             }
@@ -844,35 +841,6 @@ namespace Fenrir
 
     namespace
     {
-        /** @brief `codepoint` as UTF-8, appended to `out`. */
-        void AppendUtf8(std::string& out, char32_t codepoint)
-        {
-            const auto byte = [&](std::uint32_t value) { out.push_back(static_cast<char>(value)); };
-            const auto value = static_cast<std::uint32_t>(codepoint);
-            if (value < 0x80u)
-            {
-                byte(value);
-            }
-            else if (value < 0x800u)
-            {
-                byte(0xC0u | (value >> 6u));
-                byte(0x80u | (value & 0x3Fu));
-            }
-            else if (value < 0x10000u)
-            {
-                byte(0xE0u | (value >> 12u));
-                byte(0x80u | ((value >> 6u) & 0x3Fu));
-                byte(0x80u | (value & 0x3Fu));
-            }
-            else
-            {
-                byte(0xF0u | (value >> 18u));
-                byte(0x80u | ((value >> 12u) & 0x3Fu));
-                byte(0x80u | ((value >> 6u) & 0x3Fu));
-                byte(0x80u | (value & 0x3Fu));
-            }
-        }
-
         /**
          * @brief `utf8` made fit for one line: tabs and line breaks become spaces and the other C0 controls and DEL
          * are dropped. Multi-byte sequences pass as they are.
@@ -1230,7 +1198,7 @@ namespace Fenrir
             if (IsTypedText(text->codepoint))
             {
                 std::string utf8;
-                AppendUtf8(utf8, text->codepoint);
+                Detail::AppendUtf8(utf8, static_cast<std::uint32_t>(text->codepoint));
                 Insert(utf8);
             }
             return RouteResult::Consumed;

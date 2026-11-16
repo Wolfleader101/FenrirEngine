@@ -14,6 +14,7 @@
 #include "FenrirInput/Input.hpp"
 #include "FenrirUI/UI.hpp"
 #include "FenrirUI/UIRoot.hpp"
+#include "Rects.hpp"
 #include "Scrolling.hpp"
 #include "UIRootState.hpp"
 
@@ -43,11 +44,8 @@ namespace Fenrir::Detail
             if (style.overflow == Overflow::Scroll && style.pointerEvents == PointerEvents::All)
             {
                 const ScrollbarBoxes bars = ScrollbarsOf(slot);
-                const auto inside = [&](const Rect2D& rect) {
-                    return point.x >= rect.x && point.y >= rect.y && point.x < rect.x + rect.width &&
-                           point.y < rect.y + rect.height;
-                };
-                if ((bars.vertical && inside(bars.verticalTrack)) || (bars.horizontal && inside(bars.horizontalTrack)))
+                if ((bars.vertical && Detail::Contains(bars.verticalTrack, point)) ||
+                    (bars.horizontal && Detail::Contains(bars.horizontalTrack, point)))
                 {
                     return id;
                 }

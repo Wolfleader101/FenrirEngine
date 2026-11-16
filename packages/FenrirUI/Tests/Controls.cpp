@@ -44,6 +44,7 @@ namespace
     TControl& As(UIRoot& root, ElementId element)
     {
         auto* control = dynamic_cast<TControl*>(root.GetElement(element));
+        INFO("the element was not made as the control its tag names");
         REQUIRE(control != nullptr);
         return *control;
     }
@@ -101,12 +102,30 @@ TEST_CASE("Every control is made under its tag name as its own class", "[ui][con
     std::shared_ptr<CaptureTarget> target;
     UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
     const ElementId parent = root.GetRootElement();
-    (void)As<Fenrir::Button>(root, root.Create(parent, "button"));
-    (void)As<Fenrir::Checkbox>(root, root.Create(parent, "checkbox"));
-    (void)As<Fenrir::Slider>(root, root.Create(parent, "slider"));
-    (void)As<Fenrir::ProgressBar>(root, root.Create(parent, "progress"));
-    (void)As<Fenrir::ImageView>(root, root.Create(parent, "image"));
-    (void)As<Fenrir::ScrollView>(root, root.Create(parent, "scroll"));
+    {
+        INFO("<button> is not made as a Button");
+        (void)As<Fenrir::Button>(root, root.Create(parent, "button"));
+    }
+    {
+        INFO("<checkbox> is not made as a Checkbox");
+        (void)As<Fenrir::Checkbox>(root, root.Create(parent, "checkbox"));
+    }
+    {
+        INFO("<slider> is not made as a Slider");
+        (void)As<Fenrir::Slider>(root, root.Create(parent, "slider"));
+    }
+    {
+        INFO("<progress> is not made as a ProgressBar");
+        (void)As<Fenrir::ProgressBar>(root, root.Create(parent, "progress"));
+    }
+    {
+        INFO("<image> is not made as an ImageView");
+        (void)As<Fenrir::ImageView>(root, root.Create(parent, "image"));
+    }
+    {
+        INFO("<scroll> is not made as a ScrollView");
+        (void)As<Fenrir::ScrollView>(root, root.Create(parent, "scroll"));
+    }
 }
 
 TEST_CASE("A button clicked sends click, and not when the release is outside it", "[ui][controls]")
@@ -223,8 +242,7 @@ TEST_CASE("A checkbox toggles on click and Space, with :checked and change", "[u
     REQUIRE(Of(events, test.app, UIEventKind::Change, box).empty());
 }
 
-TEST_CASE("A slider dragged to its middle reports the mid value snapped to its step, and arrows move a step",
-          "[ui][controls]")
+TEST_CASE("A slider dragged reports the value under the pointer snapped to its step", "[ui][controls]")
 {
     UITestApp test;
     std::shared_ptr<CaptureTarget> target;
@@ -238,49 +256,113 @@ TEST_CASE("A slider dragged to its middle reports the mid value snapped to its s
 
     Press(test, {20.0f, 20.0f});
     test.Frame();
-    INFO("the press sets the value where it lands: a tenth of the way is 10");
-    REQUIRE(slider.GetValue() == 10.0f);
-    std::vector<UIEvent> changes = Of(events, test.app, UIEventKind::Change, element);
-    REQUIRE(changes.size() == 1);
-    REQUIRE(changes[0].value == 10.0f);
+    {
+        INFO("the press did not set the value where it lands: a tenth of the way is 10, with one change of 10");
+        REQUIRE(slider.GetValue() == 10.0f);
+        std::vector<UIEvent> changes = Of(events, test.app, UIEventKind::Change, element);
+        REQUIRE(changes.size() == 1);
+        REQUIRE(changes[0].value == 10.0f);
+    }
     Move(test, {103.0f, 25.0f});
     test.Frame();
-    INFO("dragged to 103 of 200 is 51.5, snapped to 50, with a change while dragging");
-    REQUIRE(slider.GetValue() == 50.0f);
-    changes = Of(events, test.app, UIEventKind::Change, element);
-    REQUIRE(changes.size() == 1);
-    REQUIRE(changes[0].value == 50.0f);
-    REQUIRE(changes[0].integer == 0);
+    {
+        INFO("dragged to 103 of 200 is 51.5, which should snap to 50 with one change while dragging (integer 0)");
+        REQUIRE(slider.GetValue() == 50.0f);
+        std::vector<UIEvent> changes = Of(events, test.app, UIEventKind::Change, element);
+        REQUIRE(changes.size() == 1);
+        REQUIRE(changes[0].value == 50.0f);
+        REQUIRE(changes[0].integer == 0);
+    }
 
     Move(test, {500.0f, 25.0f});
     Release(test);
     test.Frame();
-    INFO("dragged past its end it stops at max, and the release sends its final change");
+    INFO("dragged past its end it should stop at max, and the release send its final change (integer 1)");
     REQUIRE(slider.GetValue() == 100.0f);
-    changes = Of(events, test.app, UIEventKind::Change, element);
+    std::vector<UIEvent> changes = Of(events, test.app, UIEventKind::Change, element);
     REQUIRE(changes.size() == 2);
     REQUIRE(changes.back().value == 100.0f);
     REQUIRE(changes.back().integer == 1);
+}
 
-    INFO("the press focused it: Left steps it down by 10, Right back up");
-    REQUIRE(root.GetFocused() == element);
+TEST_CASE("Arrow keys step a slider its press focused by its step", "[ui][controls]")
+{
+    UITestApp test;
+    std::shared_ptr<CaptureTarget> target;
+    UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
+    const ElementId element = Place(root, root.GetRootElement(), "slider", 0.0f, 10.0f, 200.0f, 20.0f);
+    auto& slider = As<Fenrir::Slider>(root, element);
+    slider.SetRange(0.0f, 100.0f);
+    slider.SetStep(10.0f);
+    test.Frame();
+    Press(test, {20.0f, 20.0f});
+    test.Frame();
+    Move(test, {500.0f, 25.0f});
+    Release(test);
+    test.Frame();
+    {
+        INFO("dragged past its end the slider is not at its max of 100");
+        REQUIRE(slider.GetValue() == 100.0f);
+    }
+
+    {
+        INFO("the press did not focus the slider");
+        REQUIRE(root.GetFocused() == element);
+    }
     test.Type(Key::Left, Scancode::Left);
     test.Frame();
-    REQUIRE(slider.GetValue() == 90.0f);
+    {
+        INFO("Left did not step it down by 10");
+        REQUIRE(slider.GetValue() == 90.0f);
+    }
     test.Type(Key::Right, Scancode::Right);
     test.Frame();
-    REQUIRE(slider.GetValue() == 100.0f);
+    {
+        INFO("Right did not step it back up by 10");
+        REQUIRE(slider.GetValue() == 100.0f);
+    }
     test.Type(Key::Down, Scancode::Down);
     test.Frame();
+    INFO("Down did not step it down by 10");
     REQUIRE(slider.GetValue() == 90.0f);
+}
 
-    INFO("a wheel notch towards the user over it steps it down");
+TEST_CASE("A wheel notch towards the user over a focused slider steps it down", "[ui][controls]")
+{
+    UITestApp test;
+    std::shared_ptr<CaptureTarget> target;
+    UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
+    const ElementId element = Place(root, root.GetRootElement(), "slider", 0.0f, 10.0f, 200.0f, 20.0f);
+    auto& slider = As<Fenrir::Slider>(root, element);
+    slider.SetRange(0.0f, 100.0f);
+    slider.SetStep(10.0f);
+    slider.SetValue(90.0f);
+    test.Frame();
+    {
+        INFO("the slider could not be focused");
+        REQUIRE(root.Focus(element));
+    }
+
     Move(test, {100.0f, 20.0f});
     test.Feed().Scroll(testWindow, {0.0f, -1.0f});
     test.Frame();
+    INFO("a wheel notch towards the user did not step it down from 90 to 80");
     REQUIRE(slider.GetValue() == 80.0f);
+}
 
-    INFO("its thumb is placed at the value, 80% along (the default stylesheet's transform centres it there)");
+TEST_CASE("A slider's thumb is placed at its value", "[ui][controls]")
+{
+    UITestApp test;
+    std::shared_ptr<CaptureTarget> target;
+    UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
+    const ElementId element = Place(root, root.GetRootElement(), "slider", 0.0f, 10.0f, 200.0f, 20.0f);
+    auto& slider = As<Fenrir::Slider>(root, element);
+    slider.SetRange(0.0f, 100.0f);
+    slider.SetStep(10.0f);
+    slider.SetValue(80.0f);
+    test.Frame();
+
+    INFO("its thumb is not at the value, 80% along (the default stylesheet's transform centres it there)");
     REQUIRE(Near(root.GetBoxes(slider.GetThumb()).border.x, 160.0f, 0.5f));
 }
 
@@ -377,7 +459,7 @@ TEST_CASE("A progress bar's fill is the fraction of its track", "[ui][controls]"
     REQUIRE(Near(root.GetBoxes(progress.GetFill()).border.width, track.width));
 }
 
-TEST_CASE("An image measures its asset's size under each fit, and draws by its fit", "[ui][controls]")
+TEST_CASE("An image with no size measures its asset's size under each fit", "[ui][controls]")
 {
     UITestApp test;
     std::shared_ptr<CaptureTarget> target;
@@ -385,28 +467,47 @@ TEST_CASE("An image measures its asset's size under each fit, and draws by its f
     const Fenrir::AssetHandle<Fenrir::Image> picture = SolidImage(test, 40, 30);
     for (const Fenrir::ImageFit fit : {Fenrir::ImageFit::Stretch, Fenrir::ImageFit::Contain, Fenrir::ImageFit::Cover})
     {
+        INFO("fit " << static_cast<int>(fit));
         const ElementId element = root.Create(root.GetRootElement(), "image");
-        REQUIRE(root.SetStyleProperty(element, "align-self", "flex-start"));
+        {
+            INFO("the image's align-self was not set");
+            REQUIRE(root.SetStyleProperty(element, "align-self", "flex-start"));
+        }
         As<Fenrir::ImageView>(root, element).SetFit(fit);
         As<Fenrir::ImageView>(root, element).SetSource(picture);
         test.Frame();
-        INFO("with no size given it is the image's 40 by 30");
+        INFO("with no size given it is not the image's 40 by 30");
         const Fenrir::Rect2D content = root.GetBoxes(element).content;
         REQUIRE(Near(content.width, 40.0f));
         REQUIRE(Near(content.height, 30.0f));
         root.Remove(element, Fenrir::RemoveMode::Immediate);
     }
+}
 
-    INFO("given only a width, its height follows the image's aspect");
+TEST_CASE("An image given only a width takes its height from its asset's aspect", "[ui][controls]")
+{
+    UITestApp test;
+    std::shared_ptr<CaptureTarget> target;
+    UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
+    const Fenrir::AssetHandle<Fenrir::Image> picture = SolidImage(test, 40, 30);
     const ElementId wide = root.Create(root.GetRootElement(), "image");
-    REQUIRE(root.SetStyleProperty(wide, "width", "80px"));
-    REQUIRE(root.SetStyleProperty(wide, "align-self", "flex-start"));
+    {
+        INFO("the image's width and align-self were not set");
+        REQUIRE(root.SetStyleProperty(wide, "width", "80px"));
+        REQUIRE(root.SetStyleProperty(wide, "align-self", "flex-start"));
+    }
     As<Fenrir::ImageView>(root, wide).SetSource(picture);
     test.Frame();
+    INFO("given only a width of 80, a 40 by 30 image's height is not 60");
     REQUIRE(Near(root.GetBoxes(wide).content.height, 60.0f));
-    root.Remove(wide, Fenrir::RemoveMode::Immediate);
+}
 
-    INFO("a 40 by 20 image contained in a 100 square draws 100 by 50, centred");
+TEST_CASE("A contained image draws at its fit, centred in its box", "[ui][controls]")
+{
+    UITestApp test;
+    std::shared_ptr<CaptureTarget> target;
+    UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
+    INFO("a 40 by 20 image contained in a 100 square should draw 100 by 50, centred");
     const ElementId boxed = Place(root, root.GetRootElement(), "image", 0.0f, 0.0f, 100.0f, 100.0f);
     As<Fenrir::ImageView>(root, boxed).SetFit(Fenrir::ImageFit::Contain);
     As<Fenrir::ImageView>(root, boxed).SetSource(SolidImage(test, 40, 20));
@@ -414,7 +515,10 @@ TEST_CASE("An image measures its asset's size under each fit, and draws by its f
     const Fenrir::DrawList2D& list = target->lists.back();
     std::vector<Fenrir::PainterVertex> vertices(list.vertices.size() / sizeof(Fenrir::PainterVertex));
     std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(Fenrir::PainterVertex));
-    REQUIRE(vertices.size() == 4);
+    {
+        INFO("the image is not drawn as one quad");
+        REQUIRE(vertices.size() == 4);
+    }
     float minY = 1e9f;
     float maxY = -1e9f;
     float maxX = -1e9f;
@@ -641,16 +745,29 @@ TEST_CASE("A scroll view scrolls horizontally when its content is wider", "[ui][
 {
     ScrollFixture fixture;
     UITestApp& test = fixture.test;
-    REQUIRE(fixture.root.SetStyleProperty(fixture.rows[0], "width", "250px"));
+    {
+        INFO("the first row's width was not set");
+        REQUIRE(fixture.root.SetStyleProperty(fixture.rows[0], "width", "250px"));
+    }
     test.Frame();
-    REQUIRE(fixture.root.GetScrollRange(fixture.view) == Vec2(150.0f, 200.0f));
-    REQUIRE(fixture.root.GetScrollbars(fixture.view).horizontal);
+    {
+        INFO("a 250-wide row in a 100-wide view does not give it 150 to scroll across");
+        REQUIRE(fixture.root.GetScrollRange(fixture.view) == Vec2(150.0f, 200.0f));
+    }
+    {
+        INFO("content wider than the view does not show a horizontal bar");
+        REQUIRE(fixture.root.GetScrollbars(fixture.view).horizontal);
+    }
 
     Move(test, {50.0f, 50.0f});
     test.Feed().Scroll(testWindow, {1.0f, 0.0f});
     test.Frame();
-    REQUIRE(fixture.Scroll().GetOffset() == Vec2(Fenrir::ScrollView::ScrollStep, 0.0f));
+    {
+        INFO("a sideways wheel notch does not scroll it a step across");
+        REQUIRE(fixture.Scroll().GetOffset() == Vec2(Fenrir::ScrollView::ScrollStep, 0.0f));
+    }
     test.Frame();
+    INFO("its rows do not move left by the offset");
     REQUIRE(Near(fixture.root.GetBoxes(fixture.rows[0]).border.x, -Fenrir::ScrollView::ScrollStep));
 }
 

@@ -20,6 +20,12 @@ namespace Fenrir::Detail
         return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
     }
 
+    bool IsNameChar(char c)
+    {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+               static_cast<unsigned char>(c) >= 0x80;
+    }
+
     std::string_view Trim(std::string_view text)
     {
         while (!text.empty() && IsSpace(text.front()))
@@ -61,17 +67,29 @@ namespace Fenrir::Detail
 
         /**
          * @brief `text` cut at each top-level `separator` (a comma, or any run of spaces when it is a space), keeping
-         * what is inside parentheses whole.
+         * what is inside parentheses and strings whole.
          */
         std::vector<std::string_view> Split(std::string_view text, char separator)
         {
             std::vector<std::string_view> parts;
             int depth = 0;
+            char quote = 0;
             std::size_t start = 0;
             for (std::size_t i = 0; i <= text.size(); ++i)
             {
                 const bool atEnd = i == text.size();
                 const char c = atEnd ? '\0' : text[i];
+                if (quote != 0 && !atEnd)
+                {
+                    // A string runs to its closing quote, or to the end of its line, where CSS ends a bad string.
+                    quote = c == quote || c == '\n' ? 0 : quote;
+                    continue;
+                }
+                if (c == '"' || c == '\'')
+                {
+                    quote = c;
+                    continue;
+                }
                 if (c == '(')
                 {
                     ++depth;
@@ -1394,11 +1412,6 @@ namespace Fenrir::Detail
             return true;
         }
 
-        bool IsNameChar(char c)
-        {
-            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_';
-        }
-
         bool IsIdentifier(std::string_view text)
         {
             if (text.empty() || (text.front() >= '0' && text.front() <= '9'))
@@ -1798,8 +1811,8 @@ namespace Fenrir::Detail
             {
                 out.emplace_back("border-" + std::string(side) + "-width", widthText);
             }
-            // CSS's initial border colour is currentcolor; the style has no color property yet, and its border colours
-            // start black.
+            // CSS's initial border colour is currentcolor, which FenrirUI's values do not have: a border colour left
+            // out is black, as the style's border colours start.
             for (const std::string_view side : {"top", "right", "bottom", "left"})
             {
                 out.emplace_back("border-" + std::string(side) + "-color", std::string(colour.value_or("black")));

@@ -1,5 +1,5 @@
-# UIDemo's tests: the app's HUD set up as main sets it up, on the null backend with no window, driven a frame at a
-# time, its root drawing into a capturing target. The scaffold's asset root is `assets` beside the executable, so the
+# UIDemo's tests: the app's HUD, menu, screen and world roots set up as main sets them up, on the null backend with no
+# window, driven a frame at a time, the window roots drawing into capturing targets. The scaffold's asset root is `assets` beside the executable, so the
 # shared demo assets and the app's own are copied there, as fenrir_add_demo_app copies them beside the app.
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()

@@ -1622,7 +1622,7 @@
           "offset": 76,
           "kind": "u32",
           "default": 0,
-          "doc": "2D draw lists drawn, on the overlay and into image 2D targets; skipped lists are not counted."
+          "doc": "2D draw lists drawn, on the overlay, into image 2D targets and on world quads; skipped lists are not counted."
         },
         {
           "name": "commands2D",
@@ -1643,7 +1643,7 @@
           "offset": 88,
           "kind": "u32",
           "default": 0,
-          "doc": "The bytes of those groups' transient images, four a pixel."
+          "doc": "The bytes of the 2D transient images, four a pixel: the groups', and their blurs' and backdrops'."
         }
       ]
     },
