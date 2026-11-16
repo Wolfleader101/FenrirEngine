@@ -9,7 +9,7 @@ namespace Fenrir.UI.Razor.Tests;
 /// The element seam's recording fake: it hands out element ids #1, #2 and so on, in the order they are made, and
 /// records every call as text, ids written as #index. It keeps the tree as a root would: children in order, an element
 /// removed with its outro staying among its parent's children until <see cref="FinishOutros"/>. <c>IsAlive</c>, the
-/// registry's liveness check, is counted in <see cref="AliveChecks"/> rather than recorded. A document it loads is one
+/// runtime's liveness check, is counted in <see cref="AliveChecks"/> rather than recorded. A document it loads is one
 /// element per name in <see cref="Documents"/>, and a painter is the element's index plus 1000. The scope class every
 /// made element gets (one <c>AddScope</c> each, ADR-0070) is kept in <see cref="ScopeOf"/> and recorded only when
 /// <see cref="RecordScopes"/> is on, so the other tests' lists stay about what they test.

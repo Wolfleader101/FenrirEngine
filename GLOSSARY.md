@@ -767,7 +767,7 @@ A C# class compiled from a `.razor` file, whose markup and `@code` describe the 
 *Avoid:* panel (s&box's), view, widget, component (alone).
 
 **Mount**
-To place a Razor component into an element of a UI root, which builds it there and keeps it until it is unmounted or its script generation is released. (An asset root is never "mounted".)
+To place a Razor component into an element of a UI root, which builds it there and keeps it until it is unmounted, its host or root goes, or its script generation is released. (An asset root is never "mounted".)
 *Avoid:* attach, spawn, instantiate.
 
 **Razor dispatcher**
@@ -779,7 +779,7 @@ FenrirUI's hosted work at the start of each frame's styling, before transitions 
 *Avoid:* update stage, render tree pass.
 
 **Scope class**
-The class a Razor component's builder gives every element it makes, and which its scoped stylesheets require on every rule's last selector, so that a component's styles reach only its own elements unless `::deep` says otherwise (ADR-0070).
+The class every element a Razor component builds carries, its mounted host included, and which its scoped stylesheets require on every rule's last selector, so that a Razor component's styles reach only its own elements unless `::deep` says otherwise (ADR-0070).
 *Avoid:* scope attribute (Blazor's), CSS module.
 
 **FenrirAssets**

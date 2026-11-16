@@ -58,3 +58,4 @@ ADR-0029 settled what the renderer's packages give C#: plain-data components and
 - *Refines ADR-0033*: FenrirSkeleton's stage registration (`AddModifier` and its `Animate` and `Late` counterparts) returns a handle that removes the work, outside the pipeline, so script reloads can replace their groups.
 - AnimationDemo's C# twins are *Playback (C#)* and *Bone attachments (C#)* (ticket 34). The Playback twin also crossfades and adds one masked layer, so blending gets no twin of its own.
 - Later: zero-copy pose spans if C# crowds show copying in a profile, and C# stages for other packages' work as the mechanism allows.
+- *Amended 2026-11-16 (ADR-0068):* FenrirUI declares two stages, `Fenrir.UI.Build`, the first work of its `PostUpdate`, where the Razor dispatcher builds, and `Fenrir.UI.Paint`; each plays back its C# systems' structural changes when it ends.

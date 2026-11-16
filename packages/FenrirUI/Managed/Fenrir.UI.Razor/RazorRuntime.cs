@@ -35,7 +35,7 @@ internal sealed class MountedRazorComponent(UIComponent component, IElementSeam 
 }
 
 /// <summary>
-/// The registry of mounted Razor components, which the Razor dispatcher drives (ADR-0068). It lives in a shared
+/// The mounted Razor components, per UI root, which the Razor dispatcher drives (ADR-0068). It lives in a shared
 /// contract that never reloads, so it holds the current script generation's Razor components only until
 /// <see cref="Release"/>, which the dispatcher calls when the generation is released.
 /// </summary>
@@ -89,7 +89,7 @@ public static class RazorRuntime
     /// <summary>
     /// Runs one frame with no UI events, as <see cref="Build(in SystemContext, EventRange{UIEvent})"/> does with some.
     /// </summary>
-    public static void Build(in SystemContext context) => Build(context, ReadOnlySpan<UIEvent>.Empty);
+    internal static void Build(in SystemContext context) => Build(context, ReadOnlySpan<UIEvent>.Empty);
 
     /// <summary>
     /// Runs one frame with these UI events, as the tests give them: the public overload's steps over a span, since an

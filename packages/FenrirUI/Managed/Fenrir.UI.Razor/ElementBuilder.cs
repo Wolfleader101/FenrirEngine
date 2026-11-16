@@ -7,7 +7,7 @@ namespace Fenrir.UI.Razor;
 
 /// <summary>
 /// Builds a Razor component's elements in place as its generated <c>BuildRenderTree</c> runs, through the element seam
-/// (spec: "The builder", ADR-0067). There is no virtual DOM: each element is an entry of the component's
+/// (spec: "The builder", ADR-0067). There is no virtual DOM: each element is an entry of the Razor component's
 /// <see cref="RetainedTree"/>, keyed by its sequence number and occurrence (or <c>@key</c>) within its parent, and a
 /// rebuild finds it again and calls a native only for a value that changed, so a rebuild that changes nothing makes no
 /// native call.
@@ -129,12 +129,6 @@ internal sealed class ElementBuilder : RenderTreeBuilder
     private static readonly Dictionary<string, MarkupFragment> markup = new(ReferenceEqualityComparer.Instance);
     private static readonly HashSet<(Type Type, int Sequence)> warnedDirectives = [];
 
-    private static readonly HashSet<string> KnownEvents = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "onclick", "ondblclick", "onpointerdown", "onpointerup", "onpointerenter", "onpointerleave", "onpointermove",
-        "onwheel", "onkeydown", "onkeyup", "ontextinput", "onfocus", "onblur", "onchange", "onsubmit", "oncancel",
-    };
-
     private readonly List<Frame> open = [];
     private readonly List<Frame> pool = [];
     private readonly List<EntryKey> unvisited = [];
@@ -180,6 +174,10 @@ internal sealed class ElementBuilder : RenderTreeBuilder
                 Return(frame);
             open.Clear();
             kept.Clear();
+            // A build that throws midway leaves these filled, and a @key in them can be a script generation's object.
+            unvisited.Clear();
+            tokens.Clear();
+            declarations.Clear();
             seam = null!;
             tree = null!;
             component = null!;
@@ -1471,7 +1469,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
     }
 
     private static bool IsUnrecognisedDirective(string name) =>
-        name.StartsWith('@') || KnownEvents.Contains(name);
+        name.StartsWith('@') || HandlerKinds.IsNameInAnyCase(name);
 
     private void WarnDirective(int sequence, string name)
     {
