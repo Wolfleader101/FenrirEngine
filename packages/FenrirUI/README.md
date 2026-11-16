@@ -167,9 +167,27 @@ A rebuild finds each element again by its compile-time sequence number and its o
 
 A component whose build or hook throws is logged with its type. It is not built again until the next reload, and its elements stay as they were.
 
+**Child Razor components.** An uppercase tag places another Razor component, with its `[Parameter]` properties as attributes and, between its tags, its `ChildContent`:
+
+```razor
+<Frame>
+    <label>Score</label>
+    <Gauge Value="@Level" @ref="gauge" />
+</Frame>
+```
+
+- The child has no host of its own: its elements go under the element it is placed in (here, `Frame`'s panel), among their siblings in markup order. Its `Element` is that element.
+- It is found again by its tag's sequence number and occurrence, or its `@key`, as an element is, and its own markup is keyed in a region of its own. So is each fragment it builds (`@ChildContent`, or any `RenderFragment` parameter), whose elements keep their keys across its parent's rebuilds. A fragment's text inside a `label` or `button` joins that element's text.
+- Parameters are set by name (ignoring case) through setters bound once per type and kept until the reload. A name with no `[Parameter]` property, or a value of the wrong type, fails the build.
+- When its parent builds, the child builds only when it is new, when a parameter changed by `Equals` (a `RenderFragment` is new every build, so it always counts as changed), or when it asked to. Otherwise its elements stay as they are, with no native call. A child whose text joins an enclosing `label`'s or `button`'s builds every time. Parents build first, and the child's `OnParametersSet()` runs before a build its parameters caused (after `OnMount()` on the first).
+- A child asks to build with `StateHasChanged()` or a changed `BuildHash()`, both checked every frame. The Razor components above it build too, to reach it, while its siblings with unchanged parameters do not. A throw in a child turns off its whole mount.
+- A child its parent no longer places is removed with its outro and forgotten: `OnUnmount()` runs, its children's first. Unmounting its mount or reloading forgets every child the same way.
+
+**References.** `@ref` on an element hands an `ElementReference` field the element when it is made; `ElementOf(field)` in the Razor component gives its `ElementId`. When the element is removed, by itself or with an element or Razor component above it, the field is handed none again. `@ref` on a Razor component's tag hands the field the child, and null when it is forgotten.
+
 **Reload.** The shipped `RazorDispatcher.cs`, compiled into the script, runs the builds. Its `OnDestroy` calls `RazorRuntime.Release()`, which removes every mounted host at once with no outro and forgets every component and cache. The runtime then holds nothing of the released generation, and UI-local fields are lost. The new generation's `OnCreate` mounts again.
 
-**Tests.** `Fenrir.UI.Razor.Tests` (CTest `FenrirUIRazorTests`) builds real `.razor` files against a recording fake of the builder's element seam. It pins the native calls of a first build and of each kind of change: none for a rebuild that changes nothing, one `SetText` for a text change, a class token added and removed, a declaration changed and one reset, a keyed row appended, removed and reversed, an `@if` element made in place and removed, a folded block built once and moved, and generated labels. It also checks indices counting an outgoing row, the hooks, `BuildHash`, one build a frame, a throwing build, a destroyed root and a removed host, the unrecognised-directive warning, and the markup parser. `FenrirUIScripting`'s Razor cases mount the fixture's components on a real root: `StateHasChanged` from `Update` shows the same frame, a changed `BuildHash` rebuilds once and an unchanged one never, `Unmount` leaves the host outgoing, a throwing build turns off only its component, a reload brings it back, and a reload removes, collects and mounts again.
+**Tests.** `Fenrir.UI.Razor.Tests` (CTest `FenrirUIRazorTests`) builds real `.razor` files against a recording fake of the builder's element seam. It pins the native calls of a first build and of each kind of change: none for a rebuild that changes nothing, one `SetText` for a text change, a class token added and removed, a declaration changed and one reset, a keyed row appended, removed and reversed, an `@if` element made in place and removed, a folded block built once and moved, and generated labels. It pins child Razor components too: a parameter change costs only the child's changed values, an unchanged one builds nothing, keyed children reversed are one `Reorder`, a `ChildContent` fragment's elements keep their keys, and `@ref` is set and cleared. It also checks indices counting an outgoing row, the hooks, `BuildHash`, one build a frame, a throwing build, a destroyed root and a removed host, the unrecognised-directive warning, and the markup parser. `FenrirUIScripting`'s Razor cases mount the fixture's components on a real root: `StateHasChanged` from `Update` shows the same frame, a changed `BuildHash` rebuilds once and an unchanged one never, `Unmount` leaves the host outgoing, a throwing build turns off only its component, a reload brings it back, a reload removes, collects and mounts again, and a two-level tree with a frame wrapping `ChildContent` appears, takes a parent field as a parameter the same frame, and is collected when released.
 
 ## Tests
 

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
 
 namespace Fenrir.UI.Razor;
@@ -21,6 +22,12 @@ namespace Fenrir.UI.Razor;
 /// <item>Folded markup is parsed once per string (<see cref="MarkupFragment"/>) and built through the same rules.</item>
 /// <item>At an element's close, children not visited are removed with their outro, and the visited ones are moved into
 /// order, those outside the longest increasing subsequence of their old places only.</item>
+/// <item>An uppercase tag places a child Razor component in a region of its own, keyed where it is placed, its elements
+/// going under the enclosing element. It builds when made, when a parameter changed by <c>Equals</c> (a
+/// <c>RenderFragment</c> always counts), or when it asked; otherwise its elements are kept where they are with no call.
+/// A fragment runs in a region of its own too.</item>
+/// <item>Whatever is removed is forgotten, its subtree with it: an <c>@ref</c> is handed none, and a child Razor
+/// component's <c>OnUnmount</c> runs.</item>
 /// </list>
 /// One builder serves every Razor component, one build at a time; between builds it holds nothing.
 /// </summary>
@@ -33,9 +40,25 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         public string Value;
     }
 
-    /// <summary>An element open in this build, or the host at the bottom of the stack.</summary>
+    private enum FrameKind
+    {
+        /// <summary>An element: its attributes, then its content.</summary>
+        Element,
+
+        /// <summary>A child Razor component's tag: its parameters only, applied at its close.</summary>
+        Component,
+
+        /// <summary>
+        /// A key space building under the frame below's element: the host at the bottom of the stack, a child Razor
+        /// component's build, or a fragment's.
+        /// </summary>
+        Region,
+    }
+
+    /// <summary>An element, a child Razor component's tag or a region open in this build.</summary>
     private sealed class Frame
     {
+        public FrameKind Kind;
         public int Sequence;
         public string Tag = "";
         public object? Key;
@@ -55,8 +78,17 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         public EntryKey RunKey;
         public readonly StringBuilder Run = new();
 
+        /// <summary>For a region, the label, button or style below it whose text its text joins; null when none.</summary>
+        public Frame? TextTarget;
+
+        public Type? ComponentType;
+        public readonly List<KeyValuePair<string, object?>> Parameters = [];
+        public Action<object>? ComponentReference;
+        public Action<ElementReference>? ElementReference;
+
         public void Reset()
         {
+            Kind = FrameKind.Element;
             Sequence = 0;
             Tag = "";
             Key = null;
@@ -75,6 +107,11 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             RunOpen = false;
             RunKey = default;
             Run.Clear();
+            TextTarget = null;
+            ComponentType = null;
+            Parameters.Clear();
+            ComponentReference = null;
+            ElementReference = null;
         }
     }
 
@@ -90,11 +127,14 @@ internal sealed class ElementBuilder : RenderTreeBuilder
     private readonly List<Frame> open = [];
     private readonly List<Frame> pool = [];
     private readonly List<EntryKey> unvisited = [];
+    private readonly List<Entry> kept = [];
     private readonly HashSet<string> tokens = [];
     private readonly List<KeyValuePair<string, string>> declarations = [];
     private ElementId[] children = new ElementId[16];
     private IElementSeam seam = null!;
+    private RetainedTree tree = null!;
     private UIComponent component = null!;
+    private ChildComponent? building;
     private int build;
 
     /// <summary>Forgets the parsed markup and the directives warned about, which name a script generation's types.</summary>
@@ -105,18 +145,16 @@ internal sealed class ElementBuilder : RenderTreeBuilder
     }
 
     /// <summary>Runs the Razor component's markup, building into its retained tree under its host.</summary>
-    public void Build(UIComponent target, RetainedTree tree, IElementSeam elementSeam)
+    public void Build(UIComponent target, RetainedTree retained, IElementSeam elementSeam)
     {
         seam = elementSeam;
+        tree = retained;
         component = target;
+        building = null;
         build = ++tree.Build;
         try
         {
-            Frame host = Rent();
-            host.Resolved = true;
-            host.ChildRegion = tree.Root;
-            host.ChildPlacement = tree.Host;
-            open.Add(host);
+            Frame host = OpenRegion(tree.Root, tree.Host, null, false);
             component.BuildInto(this);
             if (open.Count != 1)
                 throw new InvalidOperationException($"{open.Count - 1} element(s) were opened and never closed");
@@ -128,18 +166,31 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             foreach (Frame frame in open)
                 Return(frame);
             open.Clear();
+            kept.Clear();
             seam = null!;
+            tree = null!;
             component = null!;
+            building = null;
         }
+    }
+
+    /// <summary>
+    /// Forgets a mounted Razor component's whole tree, whose host is going: every <c>@ref</c> is handed none and every
+    /// child Razor component forgotten (its <c>OnUnmount</c> run), children first. It makes no native call.
+    /// </summary>
+    internal static void ForgetTree(RetainedTree retained, UIComponent owner)
+    {
+        ForgetRegion(retained.Root, null, new Forgetting(retained, null, logErrors: true), owner);
+        retained.Children.Clear();
     }
 
     public override void OpenElement(int sequence, string elementName) => Open(sequence, elementName, null);
 
     public override void CloseElement()
     {
-        if (open.Count < 2)
-            throw new InvalidOperationException("CloseElement with no element open");
         Frame frame = open[^1];
+        if (frame.Kind != FrameKind.Element)
+            throw new InvalidOperationException("CloseElement with no element open");
         if (frame.IsStyle)
         {
             AddSheet(frame.Text.ToString());
@@ -189,10 +240,44 @@ internal sealed class ElementBuilder : RenderTreeBuilder
 
     public override void AddContent(int sequence, object? textContent) => AddText(sequence, textContent?.ToString());
 
-    public override void AddAttribute(int sequence, string name) => BufferAttribute(sequence, name, "");
+    public override void AddContent(int sequence, RenderFragment? fragment)
+    {
+        Frame frame = open[^1];
+        Resolve(frame);
+        FlushRun(frame);
+        if (fragment == null)
+            return;
+        // Its own key space, keyed here: the numbers inside it are the file's that wrote it, not this one's.
+        Region parent = frame.ChildRegion!;
+        var key = new EntryKey(sequence, parent.NextOccurrence(sequence, build), null, -1);
+        parent.Fragments ??= [];
+        if (!parent.Fragments.TryGetValue(key, out Region? region))
+        {
+            region = new Region();
+            parent.Fragments.Add(key, region);
+        }
+        region.Visited = build;
+
+        Frame inner = OpenRegion(region, frame.ChildPlacement!, TextTargetOf(frame), frame.IsStyle);
+        UIComponent outer = component;
+        // Its directives are the writer's to warn about, when the writer is a Razor component (not a loop's closure).
+        if (fragment.Target is UIComponent writer)
+            component = writer;
+        fragment(this);
+        component = outer;
+        CloseRegion(inner, region);
+    }
+
+    public override void AddAttribute(int sequence, string name)
+    {
+        if (!TakeParameter(name, true))
+            BufferAttribute(sequence, name, "");
+    }
 
     public override void AddAttribute(int sequence, string name, bool value)
     {
+        if (TakeParameter(name, value))
+            return;
         // As in HTML, a false boolean attribute is left out.
         if (value)
             BufferAttribute(sequence, name, "true");
@@ -200,12 +285,14 @@ internal sealed class ElementBuilder : RenderTreeBuilder
 
     public override void AddAttribute(int sequence, string name, string? value)
     {
-        if (value != null)
+        if (!TakeParameter(name, value) && value != null)
             BufferAttribute(sequence, name, value);
     }
 
     public override void AddAttribute(int sequence, string name, object? value)
     {
+        if (TakeParameter(name, value))
+            return;
         if (value is bool flag)
             AddAttribute(sequence, name, flag);
         else if (value is IFormattable formattable)
@@ -214,15 +301,276 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             BufferAttribute(sequence, name, text);
     }
 
+    public override void AddAttribute(int sequence, string name, MulticastDelegate? value)
+    {
+        if (TakeParameter(name, value))
+            return;
+        if (open[^1].Kind != FrameKind.Element)
+            throw new InvalidOperationException($"The attribute {name} came with no element open");
+        // An element has no delegate attributes of its own: one spelled as a directive was not recognised. Handlers are
+        // ticket 06's.
+        if (IsUnrecognisedDirective(name))
+            WarnDirective(sequence, name);
+    }
+
+    public override void AddComponentParameter(int sequence, string name, object? value)
+    {
+        if (!TakeParameter(name, value))
+            throw new InvalidOperationException($"The parameter {name} came with no Razor component open");
+    }
+
     public override void SetKey(object? value)
     {
-        if (open.Count < 2)
-            throw new InvalidOperationException("SetKey with no element open");
         Frame frame = open[^1];
+        if (frame.Kind == FrameKind.Region)
+            throw new InvalidOperationException("SetKey with no element or Razor component open");
         if (frame.Resolved)
             throw new InvalidOperationException($"SetKey on <{frame.Tag}> after its content");
         frame.Key = value;
     }
+
+    public override void AddElementReferenceCapture(int sequence, Action<ElementReference> elementReferenceCaptureAction)
+    {
+        Frame frame = open[^1];
+        if (frame.Kind != FrameKind.Element)
+            throw new InvalidOperationException("An element's @ref came with no element open");
+        if (frame.IsStyle)
+            return;
+        if (frame.Resolved)
+            SetReference(frame.Entry!, elementReferenceCaptureAction);
+        else
+            frame.ElementReference = elementReferenceCaptureAction;
+    }
+
+    public override void AddComponentReferenceCapture(int sequence, Action<object> componentReferenceCaptureAction)
+    {
+        Frame frame = open[^1];
+        if (frame.Kind != FrameKind.Component)
+            throw new InvalidOperationException("A Razor component's @ref came with no Razor component open");
+        frame.ComponentReference = componentReferenceCaptureAction;
+    }
+
+    // ---- Child Razor components ----
+
+    public override void OpenComponent<TComponent>(int sequence)
+    {
+        if (!typeof(UIComponent).IsAssignableFrom(typeof(TComponent)))
+        {
+            throw new InvalidOperationException(
+                $"The Razor component {typeof(TComponent).FullName} does not derive from {typeof(UIComponent).FullName}");
+        }
+        Frame parent = open[^1];
+        Resolve(parent);
+        FlushRun(parent);
+        Frame frame = Rent();
+        frame.Kind = FrameKind.Component;
+        frame.Sequence = sequence;
+        frame.Tag = typeof(TComponent).Name;
+        frame.ComponentType = typeof(TComponent);
+        frame.Region = parent.ChildRegion!;
+        frame.Placement = parent.ChildPlacement!;
+        frame.TextTarget = TextTargetOf(parent);
+        frame.IsStyle = parent.IsStyle;
+        open.Add(frame);
+    }
+
+    /// <summary>
+    /// Finds or makes the child Razor component at its key, sets its parameters when one changed, and builds it when
+    /// it is new, a parameter changed, or it asked to; otherwise keeps its elements where they are.
+    /// </summary>
+    public override void CloseComponent()
+    {
+        Frame frame = open[^1];
+        if (frame.Kind != FrameKind.Component)
+            throw new InvalidOperationException("CloseComponent with no Razor component open");
+        Region region = frame.Region;
+        Placement placement = frame.Placement;
+        EntryKey key = frame.Key != null ? new EntryKey(frame.Sequence, 0, frame.Key, -1)
+                                         : new EntryKey(frame.Sequence, region.NextOccurrence(frame.Sequence, build), null, -1);
+        placement.Begin(build);
+        region.Components ??= [];
+        ChildComponent? child = null;
+        if (region.Components.TryGetValue(key, out ChildComponent? found))
+        {
+            if (found.Visited == build)
+            {
+                throw new InvalidOperationException(
+                    $"Two {frame.Tag} siblings at sequence {key.Sequence} have the same @key, {key.Key}");
+            }
+            if (found.Component.GetType() == frame.ComponentType)
+            {
+                child = found;
+            }
+            else
+            {
+                region.Components.Remove(key);
+                ForgetChild(found, placement, DuringBuild());
+            }
+        }
+        bool made = child == null;
+        if (child == null)
+        {
+            var instance = (UIComponent)Activator.CreateInstance(frame.ComponentType!)!;
+            instance.Root = component.Root;
+            instance.Element = placement.Element;
+            instance.Mounted = component.Mounted;
+            child = new ChildComponent(instance, building);
+            instance.ChildRecord = child;
+            region.Components.Add(key, child);
+            tree.Children.Add(child);
+        }
+        child.Visited = build;
+        bool changed = made || ParametersChanged(child.Parameters, frame.Parameters);
+        if (changed)
+        {
+            child.Parameters.Clear();
+            child.Parameters.AddRange(frame.Parameters);
+            ComponentParameters.Set(child.Component, child.Parameters);
+        }
+        Action<object>? reference = frame.ComponentReference;
+        Frame? textTarget = frame.TextTarget;
+        bool isStyle = frame.IsStyle;
+        open.RemoveAt(open.Count - 1);
+        Return(frame);
+
+        // One whose text joins an enclosing label's, button's or style's builds every time: kept, its text would be lost.
+        if (made || changed || child.Dirty || textTarget != null)
+            BuildChild(child, placement, textTarget, isStyle, made, changed);
+        else
+            KeepPlaced(child.Region, placement);
+
+        if (reference != null && (child.Reference == null || !child.Reference.Equals(reference)))
+        {
+            child.Reference = reference;
+            reference(child.Component);
+        }
+    }
+
+    /// <summary>
+    /// Whether the parameters given this build differ from those last set: by name and order, and by <c>Equals</c>, a
+    /// fragment always counting as changed (it is a new delegate each build, and what it builds may differ).
+    /// </summary>
+    private static bool ParametersChanged(List<KeyValuePair<string, object?>> last, List<KeyValuePair<string, object?>> next)
+    {
+        if (last.Count != next.Count)
+            return true;
+        for (int i = 0; i < next.Count; ++i)
+        {
+            if (last[i].Key != next[i].Key || IsFragment(next[i].Value) || !Equals(last[i].Value, next[i].Value))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool IsFragment(object? value) =>
+        value is RenderFragment ||
+        (value is Delegate && value.GetType().IsGenericType &&
+         value.GetType().GetGenericTypeDefinition() == typeof(RenderFragment<>));
+
+    private void BuildChild(ChildComponent child, Placement placement, Frame? textTarget, bool isStyle, bool made,
+                            bool changed)
+    {
+        Frame region = OpenRegion(child.Region, placement, textTarget, isStyle);
+
+        UIComponent outer = component;
+        ChildComponent? outerChild = building;
+        UIComponent built = child.Component;
+        component = built;
+        building = child;
+        built.Context = outer.Context;
+        // Cleared before the build, so StateHasChanged from the build itself or OnBuilt asks for next frame's.
+        child.Dirty = false;
+        if (made)
+        {
+            child.MountHookRan = true;
+            built.CallOnMount();
+        }
+        if (changed)
+            built.CallOnParametersSet();
+        built.BuildInto(this);
+        CloseRegion(region, child.Region);
+        // After every build, so a hash its new parameters changed does not ask for another next frame.
+        child.LastHash = built.CallBuildHash();
+        built.CallOnBuilt(made);
+        component = outer;
+        building = outerChild;
+    }
+
+    /// <summary>
+    /// Keeps a child Razor component that did not build where it is: its elements, and those of the components and
+    /// fragments in it, are visited in their places, so the enclosing element's close neither removes nor moves them.
+    /// </summary>
+    private void KeepPlaced(Region region, Placement placement)
+    {
+        kept.Clear();
+        CollectPlaced(region, kept);
+        kept.Sort(static (a, b) => a.OrderIndex.CompareTo(b.OrderIndex));
+        foreach (Entry entry in kept)
+        {
+            entry.Visited = build;
+            placement.Visited.Add(entry);
+        }
+        kept.Clear();
+    }
+
+    private static void CollectPlaced(Region region, List<Entry> into)
+    {
+        into.AddRange(region.Entries.Values);
+        if (region.Components != null)
+        {
+            foreach (ChildComponent child in region.Components.Values)
+                CollectPlaced(child.Region, into);
+        }
+        if (region.Fragments != null)
+        {
+            foreach (Region fragment in region.Fragments.Values)
+                CollectPlaced(fragment, into);
+        }
+    }
+
+    /// <summary>Records a parameter of the open child Razor component; false when the open frame is not one.</summary>
+    private bool TakeParameter(string name, object? value)
+    {
+        Frame frame = open[^1];
+        if (frame.Kind != FrameKind.Component)
+            return false;
+        frame.Parameters.Add(new(name, value));
+        return true;
+    }
+
+    // ---- Regions ----
+
+    /// <summary>
+    /// Opens a key space whose elements go into <paramref name="placement"/>, its text joining
+    /// <paramref name="textTarget"/>'s when there is one.
+    /// </summary>
+    private Frame OpenRegion(Region region, Placement placement, Frame? textTarget, bool isStyle)
+    {
+        Frame frame = Rent();
+        frame.Kind = FrameKind.Region;
+        frame.Resolved = true;
+        frame.ChildRegion = region;
+        frame.ChildPlacement = placement;
+        frame.TextTarget = textTarget;
+        frame.IsStyle = isStyle;
+        open.Add(frame);
+        return frame;
+    }
+
+    /// <summary>Ends a region: its loose text, then the removal of what it no longer built.</summary>
+    private void CloseRegion(Frame frame, Region region)
+    {
+        if (open[^1] != frame)
+            throw new InvalidOperationException("An element opened in a fragment or a Razor component was never closed");
+        FlushRun(frame);
+        RemoveUnvisited(region, frame.ChildPlacement!);
+        open.RemoveAt(open.Count - 1);
+        Return(frame);
+    }
+
+    /// <summary>The label, button or style a region opened in <paramref name="frame"/> joins its text to.</summary>
+    private static Frame? TextTargetOf(Frame frame) =>
+        frame.TextTarget ?? (frame.Kind == FrameKind.Element && (frame.TakesText || frame.IsStyle) ? frame : null);
 
     // ---- Opening, resolving and closing ----
 
@@ -232,6 +580,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         Resolve(parent);
         FlushRun(parent);
         Frame frame = Rent();
+        frame.Kind = FrameKind.Element;
         frame.Sequence = sequence;
         frame.Tag = tag;
         frame.FixedKey = fixedKey;
@@ -248,6 +597,11 @@ internal sealed class ElementBuilder : RenderTreeBuilder
     /// <summary>Finds or makes the frame's element, at its first call that is not an attribute, and applies its attributes.</summary>
     private Entry Resolve(Frame frame)
     {
+        if (frame.Kind == FrameKind.Component)
+        {
+            throw new InvalidOperationException(
+                $"Content came inside the Razor component <{frame.Tag}>'s tag, outside a fragment");
+        }
         if (frame.Resolved)
             return frame.Entry!;
         frame.Resolved = true;
@@ -263,6 +617,11 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         foreach (PendingAttribute attribute in frame.Attributes)
             Apply(entry, attribute.Sequence, attribute.Name, attribute.Value);
         frame.Attributes.Clear();
+        if (frame.ElementReference != null)
+        {
+            SetReference(entry, frame.ElementReference);
+            frame.ElementReference = null;
+        }
         return entry;
     }
 
@@ -282,6 +641,7 @@ internal sealed class ElementBuilder : RenderTreeBuilder
             }
             if (entry.Tag != tag)
             {
+                Forgotten(entry, DuringBuild(), component);
                 seam.Remove(entry.Id, RemoveMode.Outro);
                 region.Entries.Remove(key);
                 placement.MayHoldOutgoing = true;
@@ -349,6 +709,25 @@ internal sealed class ElementBuilder : RenderTreeBuilder
     /// <summary>Removes the children not visited this build, and moves the visited ones into the order visited.</summary>
     private void FinishChildren(Region region, Placement placement)
     {
+        RemoveUnvisited(region, placement);
+        MoveIntoOrder(placement);
+
+        (placement.Order, placement.Visited) = (placement.Visited, placement.Order);
+        placement.Visited.Clear();
+        for (int i = 0; i < placement.Order.Count; ++i)
+            placement.Order[i].OrderIndex = i;
+        placement.Tail = placement.Order.Count > 0 ? placement.Order[^1] : null;
+        if (placement.Native != null && placement.Native.Count == placement.Order.Count)
+            placement.MayHoldOutgoing = false;
+        placement.Native = null;
+    }
+
+    /// <summary>
+    /// Removes and forgets what the region did not build this build: its elements, with their outros, and the child
+    /// Razor components and fragments it no longer placed, with all their elements.
+    /// </summary>
+    private void RemoveUnvisited(Region region, Placement placement)
+    {
         placement.Begin(build);
         unvisited.Clear();
         foreach ((EntryKey key, Entry entry) in region.Entries)
@@ -360,21 +739,157 @@ internal sealed class ElementBuilder : RenderTreeBuilder
         {
             Entry gone = region.Entries[key];
             region.Entries.Remove(key);
+            Forgotten(gone, DuringBuild(), component);
             seam.Remove(gone.Id, RemoveMode.Outro);
             placement.MayHoldOutgoing = true;
         }
         unvisited.Clear();
 
-        MoveIntoOrder(placement);
+        if (region.Components != null)
+        {
+            foreach ((EntryKey key, ChildComponent child) in region.Components)
+            {
+                if (child.Visited != build)
+                    unvisited.Add(key);
+            }
+            foreach (EntryKey key in unvisited)
+            {
+                ChildComponent gone = region.Components[key];
+                region.Components.Remove(key);
+                ForgetChild(gone, placement, DuringBuild());
+            }
+            unvisited.Clear();
+        }
 
-        (placement.Order, placement.Visited) = (placement.Visited, placement.Order);
-        placement.Visited.Clear();
-        for (int i = 0; i < placement.Order.Count; ++i)
-            placement.Order[i].OrderIndex = i;
-        placement.Tail = placement.Order.Count > 0 ? placement.Order[^1] : null;
-        if (placement.Native != null && placement.Native.Count == placement.Order.Count)
-            placement.MayHoldOutgoing = false;
-        placement.Native = null;
+        if (region.Fragments != null)
+        {
+            foreach ((EntryKey key, Region fragment) in region.Fragments)
+            {
+                if (fragment.Visited != build)
+                    unvisited.Add(key);
+            }
+            foreach (EntryKey key in unvisited)
+            {
+                Region gone = region.Fragments[key];
+                region.Fragments.Remove(key);
+                ForgetRegion(gone, placement, DuringBuild(), component);
+            }
+            unvisited.Clear();
+        }
+    }
+
+    // ---- Forgetting ----
+
+    /// <summary>
+    /// What a forget walk needs besides the region: the tree whose child list it updates, the seam that removes a
+    /// placement's elements, and whether a throwing hook is logged and the walk goes on (a mount's whole tree going)
+    /// or the throw fails the build (a removal during one).
+    /// </summary>
+    private readonly struct Forgetting(RetainedTree tree, IElementSeam? seam, bool logErrors)
+    {
+        public RetainedTree Tree { get; } = tree;
+
+        public IElementSeam? Seam { get; } = seam;
+
+        /// <summary>Calls a Razor component's hook or a <c>@ref</c> action, as <see cref="Forgetting"/> says.</summary>
+        public void Call<T>(Action<T> callback, T argument, UIComponent? owner)
+        {
+            if (!logErrors)
+            {
+                callback(argument);
+                return;
+            }
+            try
+            {
+                callback(argument);
+            }
+            catch (Exception exception)
+            {
+                RazorDiagnostics.Error($"Forgetting the Razor component {owner?.GetType().FullName}'s elements threw: " +
+                                       $"{exception}");
+            }
+        }
+    }
+
+    /// <summary>A removal during this build: a throwing hook fails it.</summary>
+    private Forgetting DuringBuild() => new(tree, seam, logErrors: false);
+
+    /// <summary>
+    /// Forgets an element that is going, natively with everything under it: its <c>@ref</c> is handed none, and what
+    /// its children region holds is forgotten with no native call. Every removal of an entry comes through here, so
+    /// what an entry holds beyond its element (ticket 06's handlers) is let go here too.
+    /// </summary>
+    private static void Forgotten(Entry entry, in Forgetting forgetting, UIComponent? owner)
+    {
+        if (entry.Reference is { } reference)
+        {
+            entry.Reference = null;
+            forgetting.Call(reference, default, owner);
+        }
+        if (entry.Children != null)
+            ForgetRegion(entry.Children, null, forgetting, owner);
+    }
+
+    /// <summary>
+    /// Forgets everything in a region. With a placement, its elements are the placement's children, each removed with
+    /// its outro; without, they are going with an element above them.
+    /// </summary>
+    private static void ForgetRegion(Region region, Placement? placement, in Forgetting forgetting, UIComponent? owner)
+    {
+        foreach (Entry entry in region.Entries.Values)
+        {
+            Forgotten(entry, forgetting, owner);
+            if (placement != null)
+            {
+                forgetting.Seam!.Remove(entry.Id, RemoveMode.Outro);
+                placement.MayHoldOutgoing = true;
+            }
+        }
+        region.Entries.Clear();
+        if (region.Components != null)
+        {
+            foreach (ChildComponent child in region.Components.Values)
+                ForgetChild(child, placement, forgetting);
+            region.Components.Clear();
+        }
+        if (region.Fragments != null)
+        {
+            foreach (Region fragment in region.Fragments.Values)
+                ForgetRegion(fragment, placement, forgetting, owner);
+            region.Fragments.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Forgets a child Razor component: its elements as <see cref="ForgetRegion"/> does, then its <c>OnUnmount</c>
+    /// when owed, after those of the Razor components under it, and its <c>@ref</c> is handed null.
+    /// </summary>
+    private static void ForgetChild(ChildComponent child, Placement? placement, in Forgetting forgetting)
+    {
+        UIComponent gone = child.Component;
+        ForgetRegion(child.Region, placement, forgetting, gone);
+        forgetting.Tree.Children.Remove(child);
+        gone.Mounted = null;
+        gone.ChildRecord = null;
+        if (child.MountHookRan)
+        {
+            child.MountHookRan = false;
+            forgetting.Call(static component => component.CallOnUnmount(), gone, gone);
+        }
+        if (child.Reference is { } reference)
+        {
+            child.Reference = null;
+            forgetting.Call(reference, null!, gone);
+        }
+    }
+
+    /// <summary>Hands an element's <c>@ref</c> the element, when it is new or the action is not the one it had.</summary>
+    private static void SetReference(Entry entry, Action<ElementReference> reference)
+    {
+        if (entry.Reference != null && entry.Reference.Equals(reference))
+            return;
+        entry.Reference = reference;
+        reference(UIComponent.ReferenceTo(entry.Id));
     }
 
     /// <summary>
@@ -525,10 +1040,11 @@ internal sealed class ElementBuilder : RenderTreeBuilder
     /// </summary>
     private void AppendText(Frame frame, string text, int sequence, EntryKey? runKey)
     {
-        if (frame.IsStyle || frame.TakesText)
+        Frame target = frame.TextTarget ?? frame;
+        if (target.IsStyle || target.TakesText)
         {
-            frame.Text.Append(text);
-            frame.HasText = true;
+            target.Text.Append(text);
+            target.HasText = true;
             return;
         }
         if (!frame.RunOpen)
@@ -599,9 +1115,9 @@ internal sealed class ElementBuilder : RenderTreeBuilder
 
     private void BufferAttribute(int sequence, string name, string value)
     {
-        if (open.Count < 2)
-            throw new InvalidOperationException($"The attribute {name} came with no element open");
         Frame frame = open[^1];
+        if (frame.Kind != FrameKind.Element)
+            throw new InvalidOperationException($"The attribute {name} came with no element open");
         if (frame.IsStyle)
             return;
         if (frame.Resolved)

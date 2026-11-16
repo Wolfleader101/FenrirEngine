@@ -2,7 +2,8 @@
 // fixture's Scoreboard.razor, compiled by the stock SDK's Razor generator against the stand-in, is mounted from a
 // system's OnCreate on a root C++ made before the script loaded, and its first build in Fenrir.UI.Build makes
 // elements C++ reads back as tags, classes, inline style and text. A script reload removes it at once, the released
-// generation is collected, and the new generation mounts it again.
+// generation is collected, and the new generation mounts it again. The fixture's Dashboard nests child Razor
+// components: a Frame wrapping its ChildContent, and in it a Gauge given a parent field as a parameter.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -92,6 +93,37 @@ namespace
         std::string FragileText()
         {
             return std::string(root->GetText(root->FindById("fragile")));
+        }
+    };
+
+    constexpr const char* DashboardProbeType = "UIScriptFixture.DashboardProbe";
+    // The overlay layer the fixture's DashboardMounter finds its root at (RazorChildren.cs).
+    constexpr std::int32_t DashboardLayer = 9;
+
+    /** @brief The UI packages and a root on window 1's overlay at DashboardLayer, made before scripting loads. */
+    struct DashboardPackages : UIPackages
+    {
+        explicit DashboardPackages(App& app) : UIPackages(app)
+        {
+            UIRootConfig config;
+            config.window = WindowId{1};
+            config.layer = DashboardLayer;
+            root = &Roots().CreateRoot(config);
+        }
+
+        UIRoot* root = nullptr;
+    };
+
+    /** @brief The fixture with a Dashboard (a Frame around a title and a Gauge) mounted from OnCreate. */
+    struct DashboardScriptingApp : ExtensionTestApp<DashboardPackages>
+    {
+        DashboardScriptingApp() : ExtensionTestApp(FixtureFromEnvironment("FENRIR_TEST_UI_FIXTURE"), UIExtensions())
+        {
+        }
+
+        ElementId Host()
+        {
+            return Unpacked(Call<std::uint64_t>(DashboardProbeType, "Host"));
         }
     };
 
@@ -309,4 +341,75 @@ TEST_CASE("A script reload brings back a Razor component a throw turned off", "[
     test.Frame();
     INFO("The new generation's Fragile did not rebuild");
     REQUIRE(test.FragileText() == "Fragile: 3");
+}
+
+TEST_CASE("A two-level tree of Razor components with a frame wrapping ChildContent appears on the first frame",
+          "[ui][scripting][razor]")
+{
+    DashboardScriptingApp test;
+    UIRoot& root = *test.root;
+    test.Frame();
+
+    const ElementId host = test.Host();
+    const ElementId frame = root.FindById("frame");
+    const ElementId title = root.FindById("title");
+    const ElementId gauge = root.FindById("gauge");
+    {
+        INFO("The Frame's panel is not under the Dashboard's host");
+        REQUIRE(root.IsAlive(frame));
+        REQUIRE(root.GetParent(frame) == host);
+        REQUIRE(root.HasClass(frame, "frame"));
+    }
+    {
+        INFO("The ChildContent's title and the Gauge's label are not the Frame's panel's children, in markup order");
+        REQUIRE(root.GetChildren(frame).size() == 2);
+        REQUIRE(root.GetChildren(frame)[0] == title);
+        REQUIRE(root.GetChildren(frame)[1] == gauge);
+    }
+    {
+        INFO("The ChildContent's title lost its text");
+        REQUIRE(root.GetText(title) == "Dashboard");
+    }
+    {
+        INFO("The Gauge did not show the parameter the Dashboard passed");
+        REQUIRE(root.GetText(gauge) == "Level: 0");
+    }
+    INFO("The Dashboard's @ref on the Gauge was not captured");
+    REQUIRE(test.Call<std::int32_t>(DashboardProbeType, "ShownValue") == 0);
+}
+
+TEST_CASE("A parent field passed as a parameter updates the child's text the same frame", "[ui][scripting][razor]")
+{
+    DashboardScriptingApp test;
+    UIRoot& root = *test.root;
+    test.Frame();
+    const ElementId gauge = root.FindById("gauge");
+
+    test.Call<void>(DashboardProbeType, "ShowFromUpdate", std::int32_t{7});
+    test.Frame();
+
+    {
+        INFO("The Gauge's label was made again rather than kept");
+        REQUIRE(root.FindById("gauge") == gauge);
+    }
+    {
+        INFO("The Gauge's label did not show the new level that frame");
+        REQUIRE(root.GetText(gauge) == "Level: 7");
+    }
+    INFO("The Gauge was not given the new level as its parameter");
+    REQUIRE(test.Call<std::int32_t>(DashboardProbeType, "ShownValue") == 7);
+}
+
+TEST_CASE("A script generation with child Razor components is collected when released", "[ui][scripting][razor]")
+{
+    DashboardScriptingApp test;
+    test.Frame();
+    test.Call<void>(DashboardProbeType, "ShowFromUpdate", std::int32_t{3});
+    test.Frame();
+    {
+        INFO("The reload did not succeed");
+        REQUIRE(test.scripting.Reload().Succeeded());
+    }
+    INFO("The released generation was not collected: the parameter setters or the children are still held");
+    REQUIRE(test.scripting.PendingUnloadCount() == 0);
 }

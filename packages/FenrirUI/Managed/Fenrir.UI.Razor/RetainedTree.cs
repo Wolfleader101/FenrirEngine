@@ -9,8 +9,10 @@ internal readonly record struct EntryKey(int Sequence, int Occurrence, object? K
 
 /// <summary>
 /// A key space: the entries made at one level of one Razor component's markup, found again by key on each build. Each
-/// element has one for its children, and a mounted Razor component has one under its host. (Ticket 05 adds one per child
-/// Razor component and per fragment, placed under the element they run in.)
+/// element has one for its children, and a mounted Razor component has one under its host. Each child Razor component
+/// and each fragment (<c>ChildContent</c> or another <c>RenderFragment</c>) has one of its own, keyed in the region it
+/// was placed in, whose elements go under the element it runs in: their sequence numbers are unrelated to those around
+/// them.
 /// </summary>
 internal sealed class Region
 {
@@ -18,6 +20,15 @@ internal sealed class Region
     private int stamp = -1;
 
     public Dictionary<EntryKey, Entry> Entries { get; } = [];
+
+    /// <summary>The child Razor components placed here, by key; null until the first.</summary>
+    public Dictionary<EntryKey, ChildComponent>? Components { get; set; }
+
+    /// <summary>The fragments run here, each a region of its own, by key; null until the first.</summary>
+    public Dictionary<EntryKey, Region>? Fragments { get; set; }
+
+    /// <summary>For a fragment's region, the build that last ran it.</summary>
+    public int Visited { get; set; } = -1;
 
     /// <summary>How many times <paramref name="sequence"/> has run here this build before now.</summary>
     public int NextOccurrence(int sequence, int build)
@@ -127,6 +138,52 @@ internal sealed class Entry(ElementId id, string tag)
 
     /// <summary>The text last set, for a <c>label</c>, a <c>button</c> or a generated label; null when never set.</summary>
     public string? Text;
+
+    /// <summary>Its <c>@ref</c>, handed the element when made and none when the element is forgotten.</summary>
+    public Action<Microsoft.AspNetCore.Components.ElementReference>? Reference;
+}
+
+/// <summary>
+/// A child Razor component a parent's markup placed (spec: "The builder" child components, ADR-0067): the object, its
+/// region, the parameters it was last given, and its own state for the rebuild rules. It has no element of its own:
+/// its elements go under the element it was placed in.
+/// </summary>
+internal sealed class ChildComponent(UIComponent component, ChildComponent? parent)
+{
+    public UIComponent Component { get; } = component;
+
+    /// <summary>The child Razor component whose build places it; null when its mount's own markup does.</summary>
+    public ChildComponent? Parent { get; } = parent;
+
+    public Region Region { get; } = new();
+
+    /// <summary>The parameters as last set, in the order given.</summary>
+    public List<KeyValuePair<string, object?>> Parameters { get; } = [];
+
+    /// <summary>The build that last placed it.</summary>
+    public int Visited { get; set; } = -1;
+
+    /// <summary>
+    /// Whether it must build when next placed although its parameters are the same: it, or a child Razor component
+    /// under it, asked with <c>StateHasChanged</c> or a changed <c>BuildHash</c>.
+    /// </summary>
+    public bool Dirty { get; set; }
+
+    /// <summary>Whether <c>OnMount</c> ran, so <c>OnUnmount</c> is owed.</summary>
+    public bool MountHookRan { get; set; }
+
+    /// <summary>What <c>BuildHash</c> returned last frame.</summary>
+    public int LastHash { get; set; }
+
+    /// <summary>Its <c>@ref</c> in the parent's markup, handed the object, and null when it is forgotten.</summary>
+    public Action<object>? Reference { get; set; }
+
+    /// <summary>Marks it and the child Razor components above it to build, so the build reaches it.</summary>
+    public void MarkDirty()
+    {
+        for (ChildComponent? child = this; child != null; child = child.Parent)
+            child.Dirty = true;
+    }
 }
 
 /// <summary>What the builder keeps for one mounted Razor component: its root region and its host's placement.</summary>
@@ -138,4 +195,7 @@ internal sealed class RetainedTree(ElementId host)
 
     /// <summary>The number of the build running or last run; the first is 1.</summary>
     public int Build { get; set; }
+
+    /// <summary>Every child Razor component in the tree, at any depth, for the frame's <c>BuildHash</c> checks.</summary>
+    public List<ChildComponent> Children { get; } = [];
 }

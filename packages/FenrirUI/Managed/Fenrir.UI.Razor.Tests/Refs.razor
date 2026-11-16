@@ -1,0 +1,16 @@
+@* @ref on an element, on one inside it, and on a Razor component, all behind an @if (ChildComponentTests). *@
+<panel class="refs">
+    @if (Show)
+    {
+        <panel class="box" @ref="Box"><panel class="inner" @ref="Inner"></panel></panel>
+        <Badge Text="ref" @ref="Child" />
+    }
+</panel>
+
+@code {
+    public bool Show = true;
+    public ElementReference Box;
+    public ElementReference Inner;
+    public Badge? Child;
+    public ElementId BoxElement => ElementOf(Box);
+}
