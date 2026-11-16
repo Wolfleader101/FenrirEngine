@@ -1,6 +1,6 @@
 # UIDemo
 
-What a game gets from the UI stack (`.scratch/fenrir-ui/spec.md`, "UIDemo"): FenrirUI's elements, stylesheets, markup
+What a game gets from the UI stack (ADR-0060 to ADR-0066): FenrirUI's elements, stylesheets, markup
 documents, transitions and custom elements, over a lit room, on the demo scaffold (`examples/DemoScaffold/README.md`,
 for the keys every demo app shares and the smoke-run switches). It runs with scripting on or off; with it on, C# scripts
 add a Razor speedometer to the HUD and a Razor settings page to the pause menu, and log the menu's clicks ("The C#
