@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: built (2026-11-16: tickets 01 to 24 in PRs #326 to #361, the close-out review #362 with `fenrir-ui` rebased onto main, all into `fenrir-ui`; trunk #378 into main; the Razor UI spec built on top of it, #376)
 
 # FenrirUI: a 2D painter over FenrirDraw2D, a text stack, and a retained element tree with markup and stylesheets, with UIDemo
 
