@@ -41,6 +41,9 @@ source = "../src/Generated/FenrirUIRegistration.cpp"
 function = "Fenrir::Generated::RegisterUI"
 # Makes the extension from its state (ADR-0046): what the package's public function returns, its stage placed.
 maker = "Fenrir::Generated::MakeUIExtension"
+# The Razor components' two contracts (ADR-0067): the engine's stand-in and the runtime built on it, shared after
+# Fenrir.UI, whose types the runtime uses.
+shares = ["Microsoft.AspNetCore.Components.dll", "Fenrir.UI.Razor.dll"]
 
 [tests]
 cpp = "../Tests/Generated/FenrirUIDefaultsTests.cpp"

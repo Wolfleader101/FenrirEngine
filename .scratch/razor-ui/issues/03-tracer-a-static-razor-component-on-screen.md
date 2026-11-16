@@ -18,11 +18,11 @@
 
 Cut from `razor-ui` once 01 has merged into it.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A scripting test with a headless App: a `.razor` component mounted from `OnCreate` appears on the first frame, read from C++ as tags, classes, inline style and text. One of its texts comes from a field.
-- [ ] Reload: after a reload the old host is gone the same frame, the new generation mounts again, and the released generation is collected (the scripting tests' unload check).
-- [ ] A fake-seam test records the first build's native calls.
-- [ ] No `Microsoft.AspNetCore.*` assembly other than the stand-in is referenced, and a script project without `.razor` files generates the same sources as before.
-- [ ] The test project's build time, clean and incremental, is recorded in the PR.
-- [ ] Everything passes under the msvc-x64-debug preset. `check_tickets.py` and clang-format pass.
+- [x] A scripting test with a headless App: a `.razor` component mounted from `OnCreate` appears on the first frame, read from C++ as tags, classes, inline style and text. One of its texts comes from a field.
+- [x] Reload: after a reload the old host is gone the same frame, the new generation mounts again, and the released generation is collected (the scripting tests' unload check).
+- [x] A fake-seam test records the first build's native calls.
+- [x] No `Microsoft.AspNetCore.*` assembly other than the stand-in is referenced, and a script project without `.razor` files generates the same sources as before.
+- [x] The test project's build time, clean and incremental, is recorded in the PR.
+- [x] Everything passes under the msvc-x64-debug preset. `check_tickets.py` and clang-format pass.
