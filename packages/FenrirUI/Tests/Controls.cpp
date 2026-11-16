@@ -32,6 +32,7 @@ namespace
     ElementId Place(UIRoot& root, ElementId parent, std::string_view tag, float x, float y, float width, float height)
     {
         const ElementId element = root.Create(parent, tag);
+        INFO("the placed element takes its position and size");
         REQUIRE(root.SetStyleProperty(element, "position", "absolute"));
         REQUIRE(root.SetStyleProperty(element, "left", std::to_string(x) + "px"));
         REQUIRE(root.SetStyleProperty(element, "top", std::to_string(y) + "px"));
@@ -546,7 +547,7 @@ TEST_CASE("A covering image is drawn under its ancestor's rounded overflow clip"
     UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
     // A round frame, as a minimap's, holding a 40 by 20 image covering its 100 square: drawn 200 by 100 at x -50.
     const ElementId frame = Place(root, root.GetRootElement(), "panel", 0.0f, 0.0f, 100.0f, 100.0f);
-    INFO("the round frame takes its clip");
+    INFO("the round frame and its image take their style");
     REQUIRE(root.SetStyleProperty(frame, "overflow", "hidden"));
     REQUIRE(root.SetStyleProperty(frame, "border-radius", "50px"));
     const ElementId image = root.Create(frame, "image");
@@ -596,6 +597,7 @@ namespace
 
         ScrollFixture()
         {
+            INFO("the scroll view and its rows take their style");
             REQUIRE(root.SetStyleProperty(view, "border", "0"));
             REQUIRE(root.SetStyleProperty(view, "padding", "0"));
             for (int i = 0; i < 3; ++i)

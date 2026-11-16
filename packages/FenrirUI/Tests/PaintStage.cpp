@@ -35,6 +35,7 @@ namespace
                             const char* height)
     {
         const Fenrir::ElementId panel = root.Create(parent, "panel");
+        INFO("the panel takes its colour and size");
         REQUIRE(root.SetStyleProperty(panel, "background-color", colour));
         REQUIRE(root.SetStyleProperty(panel, "width", width));
         REQUIRE(root.SetStyleProperty(panel, "height", height));

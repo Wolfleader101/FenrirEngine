@@ -130,7 +130,7 @@ TEST_CASE("A change mid-transition continues from the value shown", "[ui][motion
     t.test.Frames(1, eighth);
     t.root.AddClass(box, "wide");
     t.test.Frames(5, eighth);
-    INFO("the first transition has reached the wide width");
+    INFO("half a second into the first transition, from 0 to 100, it shows 50");
     REQUIRE(UITest::Near(t.Width(box), 50.0f));
 
     t.root.RemoveClass(box, "wide");
@@ -153,7 +153,7 @@ TEST_CASE("A transition stops when the transition lists stop naming its property
     t.test.Frames(1, eighth);
     t.root.AddClass(box, "wide");
     t.test.Frames(5, eighth);
-    INFO("the transition has reached the wide width");
+    INFO("half a second into the transition, from 0 to 100, it shows 50");
     REQUIRE(UITest::Near(t.Width(box), 50.0f));
     t.root.AddClass(box, "still");
     t.test.Frames(1, eighth);

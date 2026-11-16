@@ -54,6 +54,7 @@ namespace
                 root.AddStylesheet(sheet, "test.css");
             }
             entry = root.Create(root.GetRootElement(), "textentry");
+            INFO("the text entry takes its position and size");
             REQUIRE(root.SetStyleProperty(entry, "position", "absolute"));
             REQUIRE(root.SetStyleProperty(entry, "left", "20px"));
             REQUIRE(root.SetStyleProperty(entry, "top", "20px"));
@@ -75,12 +76,14 @@ namespace
         TextEntry& Entry()
         {
             auto* control = dynamic_cast<TextEntry*>(root.GetElement(entry));
+            INFO("the element is a text entry");
             REQUIRE(control != nullptr);
             return *control;
         }
 
         void Focus()
         {
+            INFO("the text entry takes the focus");
             REQUIRE(root.Focus(entry));
         }
 
@@ -107,6 +110,7 @@ namespace
         float Advance()
         {
             const Fenrir::Paragraph& paragraph = Entry().GetParagraph();
+            INFO("the entry has text to measure");
             REQUIRE_FALSE(paragraph.Text().empty());
             return paragraph.Size().x / static_cast<float>(Entry().GetValue().size());
         }

@@ -153,8 +153,9 @@ TEST_CASE("A label's laid-out size is its paragraph's, laid out in target pixels
     REQUIRE(UITest::Near(paragraph.Runs().front().size, 40.0f));
     const Fenrir::Rect2D content = scene.root.GetBoxes(label).content;
     const Fenrir::Math::Vec2 expected = scene.OwnParagraphSize("Hello, labels", 40.0f);
-    INFO("the content box is the text's size at 40 pixels divided back by 2");
+    INFO("the test's own paragraph of the text has a width");
     REQUIRE(expected.x > 0.0f);
+    INFO("the content box is the text's size at 40 pixels divided back by 2");
     REQUIRE(UITest::Near(content.width, expected.x / 2.0f));
     REQUIRE(UITest::Near(content.height, expected.y / 2.0f));
 }
@@ -172,9 +173,10 @@ TEST_CASE("A label wraps at its parent's width", "[ui][text]")
     REQUIRE(lines.Lines().size() > 1);
     REQUIRE(lines.Size().x <= 120.0f);
     REQUIRE(UITest::Near(scene.root.GetBoxes(wrapped).content.width, 120.0f));
-    // The root snaps the box to whole pixels; the text's height is fractional.
-    REQUIRE(UITest::Near(scene.root.GetBoxes(wrapped).content.height, scene.OwnParagraphSize(LongText, 16.0f, 120.0f).y,
-                         1.0f));
+    // A label lays its paragraph out a 64th of a pixel wider than its box, so text that fitted the box still fits; the
+    // root snaps the box to whole pixels, and the text's height is fractional.
+    const float height = scene.OwnParagraphSize(LongText, 16.0f, 120.0f + 1.0f / 64.0f).y;
+    REQUIRE(UITest::Near(scene.root.GetBoxes(wrapped).content.height, height, 1.0f));
 }
 
 TEST_CASE("white-space: nowrap keeps a label on one line past its parent's width", "[ui][text]")

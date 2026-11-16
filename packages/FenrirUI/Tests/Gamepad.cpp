@@ -85,6 +85,7 @@ namespace
     ElementId Place(UIRoot& root, ElementId parent, std::string_view tag, float x, float y, float width, float height)
     {
         const ElementId element = root.Create(parent, tag);
+        INFO("the placed element takes its position and size");
         REQUIRE(root.SetStyleProperty(element, "position", "absolute"));
         REQUIRE(root.SetStyleProperty(element, "left", std::to_string(x) + "px"));
         REQUIRE(root.SetStyleProperty(element, "top", std::to_string(y) + "px"));
@@ -138,6 +139,7 @@ namespace
     TControl& As(UIRoot& root, ElementId element)
     {
         auto* control = dynamic_cast<TControl*>(root.GetElement(element));
+        INFO("the element is the control asked for");
         REQUIRE(control != nullptr);
         return *control;
     }

@@ -267,6 +267,7 @@ namespace
     Fenrir::ElementId ColouredPanel(Fenrir::UIRoot& root, const char* colour)
     {
         const Fenrir::ElementId element = root.Create(root.GetRootElement(), "panel");
+        INFO("the panel takes its height and colour");
         REQUIRE(root.SetStyleProperty(element, "height", "10px"));
         REQUIRE(root.SetStyleProperty(element, "background-color", colour));
         return element;

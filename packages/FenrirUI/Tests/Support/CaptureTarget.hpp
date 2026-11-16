@@ -11,7 +11,7 @@
 namespace Fenrir::Testing
 {
     /**
-     * @brief The capturing test target: a 2D target that keeps every draw list a root submits to it, for a test to
+     * @brief The capturing test target: a 2D target that keeps every 2D draw list a root submits to it, for a test to
      * read back. Its size, and the blend space and scale rule it gives a root made without them, are the test's to
      * set; it takes window input and no pointer ray, as a target on the window does.
      */
@@ -53,7 +53,7 @@ namespace Fenrir::Testing
         std::optional<BlendSpace2D> blendSpace;
         /** @brief The scale rule a root made with no UIRootConfig::scaleRule lays out by; none for UITarget's. */
         std::optional<ScaleRule> scaleRule;
-        /** @brief Every list submitted, oldest first: one a frame for each frame the root drew. */
+        /** @brief Every 2D draw list submitted, oldest first: one a frame for each frame the root drew. */
         std::vector<DrawList2D> lists;
     };
 } // namespace Fenrir::Testing

@@ -26,6 +26,7 @@ namespace
         Fenrir::UIRoot& root = test.app.GetResource<Fenrir::UIRoots>().CreateRoot(config);
         const Fenrir::ElementId panel = root.Create(root.GetRootElement(), "panel");
         Fenrir::StyleDeclarations* style = root.EditInlineStyle(panel);
+        INFO("the panel has an inline style to edit");
         REQUIRE(style != nullptr);
         style->SetWidth(Fenrir::Length::Percent(100.0f))
             .SetHeight(Fenrir::Length::Percent(100.0f))
