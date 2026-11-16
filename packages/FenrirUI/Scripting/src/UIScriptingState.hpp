@@ -109,9 +109,11 @@ namespace Fenrir
         std::shared_ptr<PainterScripting> painting;
         /** @brief The painters lent in the running paint stage, taken back as it ends. */
         std::vector<Lent> lent;
+        /** @brief What placeStages put in the build stage for the loaded script: its groups and the stage's end. */
+        std::vector<BuildStageHandle> placedBuild;
         /** @brief What placeStages put in the paint stage for the loaded script: its groups and the stage's end. */
-        std::vector<PaintStageHandle> placed;
-        /** @brief The loaded script's stage changes, played back as the paint stage ends. */
+        std::vector<PaintStageHandle> placedPaint;
+        /** @brief The loaded script's stage changes, played back as each stage ends. */
         std::optional<StageChanges> changes;
         /** @brief What the natives have warned about, so that each place warns once. */
         WarnOnceRecord warnings{"UI scripting"};

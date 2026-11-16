@@ -25,7 +25,7 @@ namespace Fenrir::Generated
                 Fenrir::MakeSharedStruct<Fenrir::ScriptUI::RootSettings>("Fenrir.UI.RootSettings"),
                 Fenrir::MakeSharedStruct<Fenrir::UIRootId>("Fenrir.UI.UIRoot"),
             };
-            extension.stages = {"Fenrir.UI.Paint"};
+            extension.stages = {"Fenrir.UI.Build", "Fenrir.UI.Paint"};
             extension.functions = {
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::CreateRoot, 3>::Call>("Fenrir.UI.UINative.CreateRoot"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::FindRoot, 4>::Call>("Fenrir.UI.UINative.FindRoot"),

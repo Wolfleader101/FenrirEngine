@@ -6,7 +6,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -25,17 +24,6 @@ using namespace Fenrir::Testing;
 
 namespace
 {
-    // An element id as the fixture packs it: its index in the high half, its version in the low.
-    std::uint64_t Packed(ElementId element)
-    {
-        return (static_cast<std::uint64_t>(element.index) << 32u) | element.version;
-    }
-
-    bool Near(float a, float b)
-    {
-        return std::abs(a - b) <= 1e-3f;
-    }
-
     // Each painter quad's colour, in the order drawn: every box is one quad of four vertices.
     std::vector<std::uint32_t> QuadColours(const DrawList2D& list)
     {

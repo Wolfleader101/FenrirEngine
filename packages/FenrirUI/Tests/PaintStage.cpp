@@ -4,7 +4,6 @@
 // the element's own content is drawn in.
 #include <algorithm>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <variant>
 #include <vector>
@@ -17,29 +16,8 @@
 
 namespace
 {
-    // Each quad's first vertex, in the order drawn: every painter box is one quad of four.
-    std::vector<Fenrir::PainterVertex> Quads(const Fenrir::DrawList2D& list)
-    {
-        std::vector<Fenrir::PainterVertex> vertices(list.vertices.size() / sizeof(Fenrir::PainterVertex));
-        std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(Fenrir::PainterVertex));
-        std::vector<Fenrir::PainterVertex> quads;
-        for (std::size_t i = 0; i < vertices.size(); i += 4)
-        {
-            quads.push_back(vertices[i]);
-        }
-        return quads;
-    }
-
-    // Every quad's colour, in the order drawn.
-    std::vector<std::uint32_t> Colours(const Fenrir::DrawList2D& list)
-    {
-        std::vector<std::uint32_t> colours;
-        for (const Fenrir::PainterVertex& quad : Quads(list))
-        {
-            colours.push_back(quad.colour);
-        }
-        return colours;
-    }
+    using UITest::Colours;
+    using UITest::Quads;
 
     bool IsClipped(const Fenrir::PainterVertex& vertex)
     {

@@ -24,9 +24,10 @@
 
 // Everything C# sees of the UI is generated (api/FenrirUI.binding.toml): the mirrors of ScriptUI.hpp's settings and of
 // FenrirUI's plain data (ElementId, UIRootId as UIRoot, UIEvent, ElementBoxes and the enums), their mappings, checked
-// against the Fenrir.UI contract whenever a script assembly loads, the UIStages class of the stage it hosts, and from
+// against the Fenrir.UI contract whenever a script assembly loads, the UIStages class of the stages it hosts, and from
 // the native functions below (described into api/FenrirUI.natives.json) their C# declarations, UINative, the UIRoot
-// mirror's methods, and this registration of them all. The paint stage's groups are placed by hand, at the end.
+// mirror's methods, and this registration of them all. The build and paint stages' groups are placed by hand, at the
+// end.
 
 namespace Fenrir
 {
@@ -658,8 +659,22 @@ namespace Fenrir
 
     namespace
     {
-        // Places the loaded script's paint stage groups in UIRoots' paint stage, each at its order, and after them all
-        // the stage's end, which takes back the painters lent and plays back the stage changes.
+        // The stages' full names, as the binding's [stages] declares them.
+        constexpr std::string_view BuildStageName = "Fenrir.UI.Build";
+        constexpr std::string_view PaintStageName = "Fenrir.UI.Paint";
+
+        // Plays back the stage changes the loaded script's systems recorded: the end of each stage.
+        void PlayBackChanges(const std::weak_ptr<UIScripting>& weak)
+        {
+            if (const std::shared_ptr<UIScripting> running = weak.lock(); running && running->changes)
+            {
+                running->changes->PlayBack();
+            }
+        }
+
+        // Places the loaded script's stage groups, each in its stage at its order: Fenrir.UI.Build's in UIRoots' build
+        // stage, followed by the stage's end, which plays back the stage changes; Fenrir.UI.Paint's in the paint stage,
+        // followed by its end, which takes back the painters lent, then plays back the changes.
         void PlaceStages(const std::weak_ptr<UIScripting>& weak, App& app, std::vector<StageGroup> groups,
                          StageChanges changes)
         {
@@ -670,19 +685,25 @@ namespace Fenrir
                 return;
             }
             state->changes = std::move(changes);
+            constexpr std::int32_t end = std::numeric_limits<std::int32_t>::max();
             for (StageGroup& group : groups)
             {
-                state->placed.push_back(roots->AddPaintStage(group.Order(), [group] { group.Run(); }));
+                if (group.Stage() == BuildStageName)
+                {
+                    state->placedBuild.push_back(roots->AddBuildStage(group.Order(), [group] { group.Run(); }));
+                }
+                else if (group.Stage() == PaintStageName)
+                {
+                    state->placedPaint.push_back(roots->AddPaintStage(group.Order(), [group] { group.Run(); }));
+                }
             }
-            state->placed.push_back(roots->AddPaintStage(std::numeric_limits<std::int32_t>::max(), [weak] {
+            state->placedBuild.push_back(roots->AddBuildStage(end, [weak] { PlayBackChanges(weak); }));
+            state->placedPaint.push_back(roots->AddPaintStage(end, [weak] {
                 if (const std::shared_ptr<UIScripting> running = weak.lock())
                 {
                     running->EndStage();
-                    if (running->changes)
-                    {
-                        running->changes->PlayBack();
-                    }
                 }
+                PlayBackChanges(weak);
             }));
         }
 
@@ -695,12 +716,17 @@ namespace Fenrir
             }
             if (UIRoots* roots = app.TryGetResource<UIRoots>())
             {
-                for (const PaintStageHandle handle : state->placed)
+                for (const BuildStageHandle handle : state->placedBuild)
+                {
+                    (void)roots->RemoveBuildStage(handle);
+                }
+                for (const PaintStageHandle handle : state->placedPaint)
                 {
                     (void)roots->RemovePaintStage(handle);
                 }
             }
-            state->placed.clear();
+            state->placedBuild.clear();
+            state->placedPaint.clear();
             state->EndStage();
             state->changes.reset();
         }

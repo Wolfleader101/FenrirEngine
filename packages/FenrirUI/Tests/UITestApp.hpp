@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <memory>
 #include <string_view>
 #include <utility>
@@ -12,6 +14,7 @@
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirDraw2D/DrawList2D.hpp"
 #include "FenrirInput/Input.hpp"
+#include "FenrirPainter/PainterVertex.hpp"
 #include "FenrirUI/UI.hpp"
 
 namespace UITest
@@ -149,6 +152,30 @@ namespace UITest
             events.push_back(event);
         }
         return events;
+    }
+
+    // Each quad's first vertex, in the order drawn: every painter box is one quad of four.
+    inline std::vector<Fenrir::PainterVertex> Quads(const Fenrir::DrawList2D& list)
+    {
+        std::vector<Fenrir::PainterVertex> vertices(list.vertices.size() / sizeof(Fenrir::PainterVertex));
+        std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(Fenrir::PainterVertex));
+        std::vector<Fenrir::PainterVertex> quads;
+        for (std::size_t i = 0; i < vertices.size(); i += 4)
+        {
+            quads.push_back(vertices[i]);
+        }
+        return quads;
+    }
+
+    // Every quad's colour, in the order drawn.
+    inline std::vector<std::uint32_t> Colours(const Fenrir::DrawList2D& list)
+    {
+        std::vector<std::uint32_t> colours;
+        for (const Fenrir::PainterVertex& quad : Quads(list))
+        {
+            colours.push_back(quad.colour);
+        }
+        return colours;
     }
 
     inline bool Near(float a, float b, float tolerance = 1e-3f)
