@@ -174,7 +174,7 @@ UIDemo shows two things. Its speedometer becomes one `.razor` file. A Razor sett
   2. collect the components to rebuild: queued mounts, `StateHasChanged`, handler-touched, and a changed `BuildHash` (checked for every mounted component);
   3. build them parents first, each once per frame, with children rebuilt by parameter change inside their parent's build.
 
-  In the paint stage, it calls `OnPaint` for each mounted component whose type overrides it (found once per type), with `PaintInto(Element)`.
+  In the paint stage, it calls `OnPaint` for each mounted component whose type overrides it (found once per type), with `PaintInto(Element)`. A child component, whose `Element` is the element it was placed in, paints into the first element its own markup places (ticket 08), so two children side by side each get their own boxes.
 - **Reload.** The dispatcher's `OnDestroy` calls `RazorRuntime.Release()`. That removes every mounted host with `RemoveMode.Immediate`, clears the registry, the per-type setter, override and stylesheet caches, and the parsed-markup cache, and leaves no static reference to a generation type. A test checks that the released generation is collected.
 - **Exceptions.** A component's build or handler that throws is logged with the component's type, and that component is disabled (not built again) until the next reload, as a throwing stage system is. Its elements stay as they were.
 

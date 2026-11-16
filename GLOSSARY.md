@@ -771,7 +771,7 @@ To place a Razor component into an element of a UI root, which builds it there a
 *Avoid:* attach, spawn, instantiate.
 
 **Razor dispatcher**
-The one C# stage system that runs every mounted Razor component: it runs their handlers for the frame's UI events, rebuilds the ones that need it, and calls their paint overrides (ADR-0068).
+The shipped C# stage systems that run every mounted Razor component, one in `Fenrir.UI.Build` and one in `Fenrir.UI.Paint`: they run the Razor components' handlers for the frame's UI events, rebuild the ones that need it, and call their paint overrides (ADR-0068).
 *Avoid:* renderer (Blazor's word, and the engine's renderer), UI manager.
 
 **Build stage**

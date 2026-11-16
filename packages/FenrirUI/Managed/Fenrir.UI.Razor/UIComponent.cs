@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Fenrir.Painter;
 using Fenrir.Scripting;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
@@ -100,6 +101,18 @@ public abstract class UIComponent : ComponentBase, IHandleEvent
     }
 
     /// <summary>
+    /// Paints into its root element each frame, in <c>Fenrir.UI.Paint</c>, after the element's own boxes and before its
+    /// children, through the Painter facade (<c>Painter.DrawArc(painter, ...)</c>), in the root's UI units. For a mounted
+    /// Razor component the element is <see cref="Element"/>, its host; for a child Razor component, the first element its
+    /// markup places. <paramref name="boxes"/> are that element's laid-out rectangles. Only a Razor component whose type
+    /// overrides it is called: from its first build on, while it is mounted, and not on a frame its root does not paint.
+    /// If it throws, the error is logged and the Razor component it builds in is off until the next script reload.
+    /// </summary>
+    protected virtual void OnPaint(PainterId painter, ElementBoxes boxes)
+    {
+    }
+
+    /// <summary>
     /// An <c>EventCallback</c> it wrote, run by whoever raises it (a child's <c>ValueChanged</c> for
     /// <c>@bind-Value</c>): the delegate runs, then it asks for a rebuild, as after one of its handlers.
     /// </summary>
@@ -122,4 +135,6 @@ public abstract class UIComponent : ComponentBase, IHandleEvent
     internal void CallOnBuilt(bool first) => OnBuilt(first);
 
     internal void CallOnUnmount() => OnUnmount();
+
+    internal void CallOnPaint(PainterId painter, ElementBoxes boxes) => OnPaint(painter, boxes);
 }

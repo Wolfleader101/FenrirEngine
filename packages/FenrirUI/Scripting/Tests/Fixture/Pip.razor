@@ -1,0 +1,20 @@
+@* A child Razor component that paints into the first element its markup places, a yellow panel (RazorPaint.cpp). *@
+@namespace UIScriptFixture
+@using Fenrir.Math
+@using Fenrir.Painter
+@using Fenrir.Text
+<panel id="pip" style="width: 30px; height: 30px; background-color: #ff0" />
+
+@code {
+    public int Paints;
+    public float BorderY;
+
+    protected override void OnPaint(PainterId painter, ElementBoxes boxes)
+    {
+        Rect2D box = boxes.Border;
+        BorderY = box.Y;
+        Painter.DrawRect(painter, new Rect2D { X = box.X + 2, Y = box.Y + 2, Width = 4, Height = 4 },
+                         new Paint { Colour = new Colour(1, 0, 1, 1) });
+        ++Paints;
+    }
+}

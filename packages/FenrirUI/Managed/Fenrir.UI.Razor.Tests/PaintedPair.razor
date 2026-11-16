@@ -1,0 +1,15 @@
+@* Two painting children in a panel, after a label of the parent's own, and the parent paints too (PaintTests). *@
+@using Fenrir.Painter
+<panel class="pair">
+    <label class="own">own</label>
+    <Painted @ref="First" Text="one" />
+    <Painted @ref="Second" Text="two" />
+</panel>
+
+@code {
+    public Painted? First;
+    public Painted? Second;
+    public List<ulong> Painters = [];
+
+    protected override void OnPaint(PainterId painter, ElementBoxes boxes) => Painters.Add(painter.Value);
+}

@@ -3,6 +3,8 @@
 # on). Roots draw into capturing targets: C# builds trees and reads rectangles beside the same calls made in C++, reads
 # clicks fed through FenrirInput's test feed, makes elements in the Fenrir.UI.Build stage and paints into an element in
 # the Fenrir.UI.Paint stage. The fixture imports Fenrir.UI.Razor.props and holds Razor components, which the tests
-# mount and read back from C++, and see go when the script reloads.
-fenrir_scripting_tests(UI SOURCES UIScriptingApp.hpp Roots.cpp BuildStage.cpp Razor.cpp RazorHandlers.cpp)
+# mount and read back from C++, and see go when the script reloads: rebuilds, child components, handlers, paint
+# overrides and placed documents among them.
+fenrir_scripting_tests(UI SOURCES UIScriptingApp.hpp Roots.cpp BuildStage.cpp Razor.cpp RazorHandlers.cpp
+    RazorPaint.cpp)
 fenrir_script_fixture(UI USES Input Assets Text Painter UIRazor RazorComponents)
