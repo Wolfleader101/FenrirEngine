@@ -106,7 +106,7 @@ namespace
     }
 } // namespace
 
-TEST_CASE("filter reads blur(), drop-shadow(), a list of them in order, and none", "[ui][style][filter]")
+TEST_CASE("filter reads its functions in the order written, or none, into the resolved list", "[ui][style][filter]")
 {
     UITest::UITestApp test;
     std::shared_ptr<UITest::CaptureTarget> target;
@@ -182,6 +182,7 @@ TEST_CASE("A filter a stylesheet cannot read is logged with its line and skipped
     REQUIRE(HasDiagnosticOnLine(sheet, 3, "filter"));
     INFO("a drop shadow without its offset is refused, on line 4");
     REQUIRE(HasDiagnosticOnLine(sheet, 4, "filter"));
+    INFO("those three are the sheet's only diagnostics");
     REQUIRE(sheet.diagnostics.size() == 3);
     INFO("the three declarations are skipped and the rest of the rule stands");
     REQUIRE(sheet.rules.at(0).declarations.size() == 1);
@@ -220,7 +221,7 @@ TEST_CASE("filter: blur() draws the element and its subtree through one blur gro
     REQUIRE(end.opacity == 1.0f);
 }
 
-TEST_CASE("A filter list nests its first function innermost, and opacity outside them all", "[ui][paint][filter]")
+TEST_CASE("A filter list draws its first function in the innermost group", "[ui][paint][filter]")
 {
     UITest::UITestApp test;
     std::shared_ptr<UITest::CaptureTarget> target;
@@ -260,8 +261,15 @@ TEST_CASE("A filter list nests its first function innermost, and opacity outside
         INFO("the blur's group covers that grown by 5");
         REQUIRE(UITest::Near(outerBegin.bounds, {3.0f, 4.0f, 118.0f, 68.0f}));
     }
+}
 
-    Style(root, panel, {{"opacity", "0.5"}});
+TEST_CASE("An element's opacity group is outside its filter groups", "[ui][paint][filter]")
+{
+    UITest::UITestApp test;
+    std::shared_ptr<UITest::CaptureTarget> target;
+    Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
+    const ElementId panel = PanelWithChild(root);
+    Style(root, panel, {{"filter", "drop-shadow(2px 3px 4px red) blur(5px)"}, {"opacity", "0.5"}});
     test.Frame();
     {
         const Fenrir::DrawList2D& list = target->lists.back();
@@ -320,8 +328,7 @@ TEST_CASE("A filter transition between lists of different functions switches at 
     REQUIRE(FilterOf(root, box)[0].radius == 10.0f);
 }
 
-TEST_CASE("A text shadow with a blur draws its runs inside a blur group; one without draws them directly",
-          "[ui][paint][text][filter]")
+TEST_CASE("A text shadow without a blur draws its runs directly, in no group", "[ui][paint][text][filter]")
 {
     UITest::UITestApp test;
     std::shared_ptr<UITest::CaptureTarget> target;
@@ -332,8 +339,17 @@ TEST_CASE("A text shadow with a blur draws its runs inside a blur group; one wit
     test.Frame();
     INFO("a sharp text shadow draws in no group");
     REQUIRE_FALSE(HasGroup(target->lists.back()));
+}
 
-    Style(root, label, {{"text-shadow", "2px 3px 4px #ff0000"}});
+TEST_CASE("A text shadow with a blur draws its runs inside a blur group over the paragraph's box",
+          "[ui][paint][text][filter]")
+{
+    UITest::UITestApp test;
+    std::shared_ptr<UITest::CaptureTarget> target;
+    Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
+    const ElementId label = root.Create(root.GetRootElement(), "label");
+    root.SetText(label, "Glow");
+    Style(root, label, {{"color", "#0000ff"}, {"text-shadow", "2px 3px 4px #ff0000"}});
     test.Frame();
     const Fenrir::DrawList2D& list = target->lists.back();
     INFO("a group round the shadow's runs, then the text's own: " << list.commands.size() << " commands");
@@ -359,26 +375,70 @@ TEST_CASE("A text shadow with a blur draws its runs inside a blur group; one wit
     REQUIRE(UITest::Near(begin.bounds, {content.x - 2.0f, content.y - 1.0f, size.x + 8.0f, size.y + 8.0f}));
 }
 
-TEST_CASE("With offscreen groups off, filters are ignored and text shadows draw sharp", "[ui][paint][filter]")
+TEST_CASE("Each blurred text shadow draws in a blur group of its own, the last drawn first",
+          "[ui][paint][text][filter]")
 {
     UITest::UITestApp test;
     std::shared_ptr<UITest::CaptureTarget> target;
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
-    const ElementId panel = PanelWithChild(root);
-    Style(root, panel, {{"filter", "drop-shadow(2px 3px 4px red) blur(5px)"}});
     const ElementId label = root.Create(root.GetRootElement(), "label");
     root.SetText(label, "Glow");
-    Style(root, label, {{"text-shadow", "2px 3px 4px #ff0000"}});
+    Style(root, label, {{"text-shadow", "1px 1px 2px #ff0000, 0 0 6px #00ff00"}});
     test.Frame();
-    INFO("with groups on, the filter and the shadow draw groups");
-    REQUIRE(HasGroup(target->lists.back()));
-    const std::size_t indices = AllIndices(target->lists.back());
 
-    test.Roots().settings.offscreenGroups = false;
-    test.Frame();
-    const Fenrir::DrawList2D& flat = target->lists.back();
-    INFO("with groups off, no group is drawn");
-    REQUIRE_FALSE(HasGroup(flat));
-    INFO("and the same boxes and glyphs are drawn, the shadow's among them");
-    REQUIRE(AllIndices(flat) == indices);
+    const Fenrir::DrawList2D& list = target->lists.back();
+    INFO("two groups, each round one shadow's runs, then the text's own: " << list.commands.size() << " commands");
+    REQUIRE(list.commands.size() == 7);
+    REQUIRE(IsBegin(list.commands[0]));
+    REQUIRE(IsEnd(list.commands[2]));
+    REQUIRE(IsBegin(list.commands[3]));
+    REQUIRE(IsEnd(list.commands[5]));
+    REQUIRE(IsDraw(list.commands[6]));
+    INFO("the second shadow, under the first, draws first: blurred by 6, then the first's 2");
+    REQUIRE(UITest::Near(std::get<Fenrir::EndGroup2D>(list.commands[2]).radius, 6.0f));
+    REQUIRE(UITest::Near(std::get<Fenrir::EndGroup2D>(list.commands[5]).radius, 2.0f));
+}
+
+namespace
+{
+    // The list drawn with groups on, then the one drawn with them off, for a root `setUp` made.
+    template <typename SetUp>
+    std::pair<Fenrir::DrawList2D, Fenrir::DrawList2D> OnAndOff(SetUp setUp)
+    {
+        UITest::UITestApp test;
+        std::shared_ptr<UITest::CaptureTarget> target;
+        Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
+        setUp(root);
+        test.Frame();
+        Fenrir::DrawList2D on = target->lists.back();
+        test.Roots().settings.offscreenGroups = false;
+        test.Frame();
+        return {std::move(on), target->lists.back()};
+    }
+} // namespace
+
+TEST_CASE("With offscreen groups off, an element's filter is ignored", "[ui][paint][filter]")
+{
+    const auto [on, off] = OnAndOff([](Fenrir::UIRoot& root) {
+        Style(root, PanelWithChild(root), {{"filter", "drop-shadow(2px 3px 4px red) blur(5px)"}});
+    });
+    INFO("with groups on, the filter draws groups");
+    REQUIRE(HasGroup(on));
+    INFO("with groups off, it draws none, and the same boxes are drawn");
+    REQUIRE_FALSE(HasGroup(off));
+    REQUIRE(AllIndices(off) == AllIndices(on));
+}
+
+TEST_CASE("With offscreen groups off, a blurred text shadow draws sharp", "[ui][paint][text][filter]")
+{
+    const auto [on, off] = OnAndOff([](Fenrir::UIRoot& root) {
+        const ElementId label = root.Create(root.GetRootElement(), "label");
+        root.SetText(label, "Glow");
+        Style(root, label, {{"text-shadow", "2px 3px 4px #ff0000"}});
+    });
+    INFO("with groups on, the shadow draws in a group");
+    REQUIRE(HasGroup(on));
+    INFO("with groups off, it draws in none, and the shadow's glyphs are still drawn");
+    REQUIRE_FALSE(HasGroup(off));
+    REQUIRE(AllIndices(off) == AllIndices(on));
 }

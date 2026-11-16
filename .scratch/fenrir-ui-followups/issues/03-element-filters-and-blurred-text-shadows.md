@@ -14,12 +14,13 @@
 
 **Touches:** `packages/FenrirUI/src/` (`StyleValues.cpp`, `Style.cpp`, `StyleAnimation.cpp`, `BoxPainting.cpp`), `packages/FenrirUI/include/FenrirUI/Style.hpp`, `packages/FenrirUI/Tests/`, `packages/FenrirUI/README.md`, `examples/UIDemo/assets/ui/hud.css`, `examples/UIDemo/src/Menu.cpp`, `examples/UIDemo/README.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Parsing: `blur(4px)`, `drop-shadow(2px 3px 4px red)`, a list of both and `none` give the expected lists; `blur(-1px)`, `sepia(1)` and `drop-shadow(red)` are logged errors.
-- [ ] A panel with a child and `filter: blur(4px)` records one begin group whose bounds cover both grown by 4, the panel's and the child's draws inside, and an end group with a blur of 4.
-- [ ] `filter: drop-shadow(...) blur(...)` records the drop-shadow group inside the blur group; with `opacity: 0.5` too, the opacity group is outermost.
-- [ ] A transition from `blur(0px)` to `blur(10px)` gives `blur(5px)` halfway (a linear timing function).
-- [ ] A text shadow with a blur records a blur group round its runs; one without records none.
-- [ ] With `UISettings::offscreenGroups` off, neither records a group.
-- [ ] Hand check: in UIDemo the compass and ammo counter cast shadows, the hit marker glows, and the HUD blurs in as the pause menu opens and clears as it closes.
+- [x] Parsing: `blur(4px)`, `drop-shadow(2px 3px 4px red)`, a list of both and `none` give the expected lists; `blur(-1px)`, `sepia(1)` and `drop-shadow(red)` are logged errors.
+- [x] A panel with a child and `filter: blur(4px)` records one begin group whose bounds cover both grown by 4, the panel's and the child's draws inside, and an end group with a blur of 4.
+- [x] `filter: drop-shadow(...) blur(...)` records the drop-shadow group inside the blur group; with `opacity: 0.5` too, the opacity group is outermost.
+- [x] A transition from `blur(0px)` to `blur(10px)` gives `blur(5px)` halfway (a linear timing function).
+- [x] A text shadow with a blur records a blur group round its runs; one without records none.
+- [x] With `UISettings::offscreenGroups` off, neither records a group.
+
+Hand check: in UIDemo the compass and ammo counter cast shadows, the hit marker glows, and the HUD blurs in as the pause menu opens and clears as it closes.

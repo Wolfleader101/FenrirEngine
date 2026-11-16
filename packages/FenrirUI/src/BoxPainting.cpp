@@ -167,7 +167,7 @@ namespace Fenrir::Detail
                 // filter is the outermost of those, the first applied to what the element draws.
                 if (group)
                 {
-                    m_painter.BeginGroup(LocalBounds(index), style.opacity);
+                    m_painter.BeginGroup(filters.empty() ? CoveredBounds(index) : filters.back().bounds, style.opacity);
                 }
                 for (auto filter = filters.rbegin(); filter != filters.rend(); ++filter)
                 {
@@ -253,7 +253,11 @@ namespace Fenrir::Detail
             {
                 std::vector<FilterGroup> groups;
                 const std::vector<FilterStep>& steps = m_state.slots[index].resolved.filter;
-                if (!m_groups || steps.empty())
+                // A list of blurs of 0, as a transition's resting end, draws nothing: the subtree is not walked.
+                const bool drawn = std::any_of(steps.begin(), steps.end(), [](const FilterStep& step) {
+                    return step.kind != FilterStep::Kind::Blur || step.radius > 0.0f;
+                });
+                if (!m_groups || !drawn)
                 {
                     return groups;
                 }
@@ -304,8 +308,7 @@ namespace Fenrir::Detail
                 }
                 if (slot.text != nullptr)
                 {
-                    const Math::Vec2 size = slot.text->GetParagraph().Size() / slot.text->PixelsPerUnit();
-                    const Rect2D paragraph{slot.boxes.content.x, slot.boxes.content.y, size.x, size.y};
+                    const Rect2D paragraph = ParagraphBox(slot);
                     for (const Shadow& shadow : style.textShadow)
                     {
                         bounds = Union(bounds, Grown(paragraph, shadow.blur, shadow.offset));
@@ -465,6 +468,13 @@ namespace Fenrir::Detail
                 }
             }
 
+            /** @brief What the element's paragraph covers, in UI units, from its content box's top-left. */
+            static Rect2D ParagraphBox(const ElementSlot& slot)
+            {
+                const Math::Vec2 size = slot.text->GetParagraph().Size() / slot.text->PixelsPerUnit();
+                return {slot.boxes.content.x, slot.boxes.content.y, size.x, size.y};
+            }
+
             /**
              * @brief The element's paragraph at its content box's top-left: its text shadows first (the first on top,
              * so drawn last), each its runs again moved and in its colour, inside a blur group over the paragraph's
@@ -479,7 +489,7 @@ namespace Fenrir::Detail
                 }
                 Paragraph& paragraph = slot.text->GetParagraph();
                 const Math::Vec2 point{slot.boxes.content.x, slot.boxes.content.y};
-                const Math::Vec2 size = paragraph.Size() / slot.text->PixelsPerUnit();
+                const Rect2D box = ParagraphBox(slot);
                 for (auto shadow = slot.resolved.textShadow.rbegin(); shadow != slot.resolved.textShadow.rend();
                      ++shadow)
                 {
@@ -491,8 +501,8 @@ namespace Fenrir::Detail
                     const bool blurred = m_groups && shadow->blur > 0.0f;
                     if (blurred)
                     {
-                        m_painter.BeginGroup(Grown({point.x, point.y, size.x, size.y}, shadow->blur, shadow->offset),
-                                             1.0f, GroupBlend2D::Normal, GroupFilter::Blur(shadow->blur));
+                        m_painter.BeginGroup(Grown(box, shadow->blur, shadow->offset), 1.0f, GroupBlend2D::Normal,
+                                             GroupFilter::Blur(shadow->blur));
                     }
                     PaintRuns(m_painter, paragraph, point + shadow->offset, &colour, 1.0f);
                     if (blurred)

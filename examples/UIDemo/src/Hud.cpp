@@ -75,7 +75,14 @@ namespace UIDemo
         // document's new top element takes it too.
         if (top.IsValid() && root.HasClass(top, "paused") != frame.paused)
         {
-            frame.paused ? root.AddClass(top, "paused") : root.RemoveClass(top, "paused");
+            if (frame.paused)
+            {
+                root.AddClass(top, "paused");
+            }
+            else
+            {
+                root.RemoveClass(top, "paused");
+            }
         }
 
         const Fenrir::ElementId name = Find("player-name");
