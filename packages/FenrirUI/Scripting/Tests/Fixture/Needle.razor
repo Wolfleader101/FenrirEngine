@@ -1,0 +1,21 @@
+@* A Razor component that paints (RazorPaint.cpp): a green square into its host, after the host's own box and before
+   its children, a blue dot and a Pip child that paints into its own panel. *@
+@namespace UIScriptFixture
+@using Fenrir.Math
+@using Fenrir.Painter
+@using Fenrir.Text
+<panel id="needle-dot" style="width: 10px; height: 10px; background-color: #00f" />
+<Pip @ref="PipRef" />
+
+@code {
+    public int Paints;
+    public Pip? PipRef;
+
+    protected override void OnPaint(PainterId painter, ElementBoxes boxes)
+    {
+        Rect2D box = boxes.Border;
+        Painter.DrawRect(painter, new Rect2D { X = box.X + 10, Y = box.Y + 10, Width = 20, Height = 20 },
+                         new Paint { Colour = new Colour(0, 1, 0, 1) });
+        ++Paints;
+    }
+}

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- A script project with no .razor file, built by SameSources.cmake with and without Fenrir.UI.Razor.props
+       (-p:ImportRazor=true): the props must leave it exactly as it was. The build passes -p:FenrirScriptingSdk=<the SDK
+       folder>/ and -p:FenrirUIRazorContractDir=<the Razor folder>/. -->
+  <Import Project="$(FenrirScriptingSdk)Fenrir.Scripting.props" />
+  <Import Project="$(FenrirUIRazorContractDir)Fenrir.UI.Razor.props" Condition="'$(ImportRazor)' == 'true'" />
+</Project>

@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Version is part of the contract: the host shares one copy, and a script compiled against a newer minor fails to load. -->
+    <Version>0.1.0</Version>
+    <AssemblyName>Fenrir.UI.Razor</AssemblyName>
+    <RootNamespace>Fenrir.UI.Razor</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- The Razor components' runtime contract (ADR-0067, ADR-0068): UIComponent, mounting (UIRoot.Mount), the registry
+       of mounted Razor components the Razor dispatcher drives, and the builder that makes FenrirUI elements in place
+       through the element seam. Written by hand over the generated Fenrir.UI contract, and built against the scripting
+       SDK, the stand-in (Microsoft.AspNetCore.Components) and the Fenrir.UI contract with the contracts it builds on;
+       CMake passes -p:FenrirScriptingSdk=<the SDK folder>/ and -p:Fenrir<Name>ContractDir=<the folder holding its dll>/
+       for each. The host shares it with every script load, after Fenrir.UI and the stand-in, so it never reloads: it
+       holds nothing of a released script generation (RazorRuntime.Release). -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <ItemGroup>
+    <InternalsVisibleTo Include="Fenrir.UI.Razor.Tests" />
+  </ItemGroup>
+  <!-- Its folder is what a script project imports Fenrir.UI.Razor.props from: the props, the files it adds to the
+       project, and both contracts, the stand-in copied beside this one. -->
+  <ItemGroup>
+    <None Include="../Fenrir.UI.Razor.props;../RazorDispatcher.cs;../_Imports.razor" CopyToOutputDirectory="PreserveNewest"
+          Visible="false" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(FenrirUIContractDir)' != ''">
+    <Reference Include="Microsoft.AspNetCore.Components">
+      <HintPath>$(FenrirRazorComponentsContractDir)Microsoft.AspNetCore.Components.dll</HintPath>
+    </Reference>
+    <Reference Include="Fenrir.UI">
+      <HintPath>$(FenrirUIContractDir)Fenrir.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Input">
+      <HintPath>$(FenrirInputContractDir)Fenrir.Input.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Assets">
+      <HintPath>$(FenrirAssetsContractDir)Fenrir.Assets.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Text">
+      <HintPath>$(FenrirTextContractDir)Fenrir.Text.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Painter">
+      <HintPath>$(FenrirPainterContractDir)Fenrir.Painter.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <!-- In an editor, which passes no folders, the contracts come from their source projects. -->
+  <ItemGroup Condition="'$(FenrirUIContractDir)' == ''">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../Microsoft.AspNetCore.Components/Microsoft.AspNetCore.Components.csproj" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../Fenrir.UI/Fenrir.UI.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../FenrirInput/Managed/Fenrir.Input/Fenrir.Input.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../FenrirAssets/Managed/Fenrir.Assets/Fenrir.Assets.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../FenrirText/Managed/Fenrir.Text/Fenrir.Text.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../FenrirPainter/Managed/Fenrir.Painter/Fenrir.Painter.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

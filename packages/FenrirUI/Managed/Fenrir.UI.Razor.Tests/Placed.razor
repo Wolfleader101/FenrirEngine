@@ -1,0 +1,13 @@
+@* A markup document placed between two of its own elements (DocumentTests): Src and Title are the test's to change. *@
+<label class="title">@Title</label>
+@if (Shown)
+{
+    <Document Src="@Src" />
+}
+<label class="after">after</label>
+
+@code {
+    public string? Src = "credits.ui";
+    public string Title = "Credits";
+    public bool Shown = true;
+}

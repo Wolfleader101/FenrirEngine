@@ -106,6 +106,28 @@ namespace Fenrir::Detail
         std::optional<Painter> painter;
     };
 
+    /** @brief Where a sheet a root holds came from, which keeps a file's path and a text's name apart. */
+    enum class SheetSource : std::uint8_t
+    {
+        /** @brief Loaded from a file (UIRoot::LoadStylesheet). */
+        File,
+        /** @brief Added from text with a name (UIRoot::AddStylesheet). */
+        Text,
+    };
+
+    /** @brief A scoped sheet a root holds, by what it was added under: its source, name or path, and scope. */
+    struct ScopedSheet
+    {
+        /** @brief From a file or from text. */
+        SheetSource source = SheetSource::Text;
+        /** @brief The file's path as loaded, or the text's name. */
+        std::string name;
+        /** @brief The class it is scoped to; never empty. */
+        std::string scope;
+        /** @brief The sheet; one the root may since have removed. */
+        StylesheetId id;
+    };
+
     /** @brief A root's tree in dense slots, its Yoga nodes, its target and what its frames keep. */
     struct UIRootState
     {
@@ -138,6 +160,11 @@ namespace Fenrir::Detail
         std::unique_ptr<StylesheetEntry> defaultSheet;
         /** @brief Its stylesheets, in the order added. */
         std::vector<std::unique_ptr<StylesheetEntry>> sheets;
+        /**
+         * @brief The scoped sheets added (AddStylesheet) or loaded (LoadStylesheet), by name or path and scope, so one
+         * is not added twice; an entry whose sheet was removed is dropped when next looked up.
+         */
+        std::vector<ScopedSheet> scopedSheets;
         std::uint32_t nextSheet = 1;
         StyleIndex index;
         /** @brief Scratch for matching, kept to reuse their storage. */
@@ -178,4 +205,13 @@ namespace Fenrir::Detail
             return const_cast<UIRootState*>(this)->Find(id);
         }
     };
+
+    /**
+     * @brief The sheet the root still holds under `key`'s source, name and scope (its id is not read); none for an
+     * empty scope or when it holds none. Forgets, on the way, every scoped sheet the root has removed.
+     */
+    [[nodiscard]] StylesheetId PruneAndFindScopedSheet(UIRootState& state, const ScopedSheet& key);
+
+    /** @brief Remembers `sheet` for PruneAndFindScopedSheet; nothing for an unscoped one or no sheet. */
+    void RememberScopedSheet(UIRootState& state, ScopedSheet sheet);
 } // namespace Fenrir::Detail

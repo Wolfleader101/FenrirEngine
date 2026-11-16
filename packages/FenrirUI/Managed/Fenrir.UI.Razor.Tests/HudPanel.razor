@@ -1,0 +1,12 @@
+<panel class="hud @Mode" style="width: @(Width)px; height: 40px" id="hud">
+    <label class="title">HP: @Health</label>
+    <button class="ok" tooltip="@Tooltip">@Caption</button>
+</panel>
+
+@code {
+    public string Mode = "calm";
+    public int Width = 120;
+    public int Health = 75;
+    public string Caption = "OK";
+    public string Tooltip = "Close";
+}

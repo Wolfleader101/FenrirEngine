@@ -1,0 +1,9 @@
+@* A child control with a bindable Value (HandlerTests): its slider's change raises ValueChanged. *@
+<slider id="knob" value="@Value" @onchange="Changed" />
+
+@code {
+    [Parameter] public float Value { get; set; }
+    [Parameter] public EventCallback<float> ValueChanged { get; set; }
+
+    private void Changed(UIEvent e) => ValueChanged.InvokeAsync(e.Value);
+}

@@ -280,7 +280,9 @@ internal static class CppWriter
             text.Line($"{registration.Extension} extension;");
             text.Line($"extension.name = \"{binding.Config.Name}\";");
             text.Line("extension.SetState(std::move(state));");
-            text.Line($"extension.sharedAssemblies = {{\"{binding.Config.Namespace}.dll\"}};");
+            var assemblies = string.Join(", ", new[] { $"{binding.Config.Namespace}.dll" }.Concat(registration.Shares)
+                                                   .Select(assembly => $"\"{assembly}\""));
+            text.Line($"extension.sharedAssemblies = {{{assemblies}}};");
             text.Line($"{registration.Function}(extension);");
             text.Line("return extension;");
             text.Outdent();

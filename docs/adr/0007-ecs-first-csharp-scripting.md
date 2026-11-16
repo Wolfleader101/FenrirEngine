@@ -16,3 +16,4 @@ The engine's C++ side puts data in components and logic in systems. C# scripting
 - EnTT 3.13 has no pool whose element type is only known at runtime, so the engine adds one byte-storage pool class, registered under a different name for each C# component type.
 - `Ref<T>` points into EnTT storage, so a C# system's structural changes are deferred until the system returns, as with DOTS command buffers. A component added during a system is readable only from the next system on.
 - C# components cannot hold managed references, such as strings or objects.
+- *Amended 2026-11-15 (ADR-0068):* the later layer's first use is UI: a Razor component is a managed object holding UI-local state, run by one dispatching system, beside ECS state rather than instead of it.

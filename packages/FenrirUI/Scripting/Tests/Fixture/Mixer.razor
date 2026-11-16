@@ -1,0 +1,31 @@
+@* Handlers and binding from the input feed (Razor.cpp, ADR-0069): a button whose label takes the click, an
+   Action<UIEvent> on a cell inside a row whose handler takes the clicks the cell does not, a slider and a text entry
+   bound to fields, a Dial child bound with @bind-Value, and a bare panel with @onclick and no pointer-events: all. Each
+   element is placed absolutely, so the test clicks at its rectangle. *@
+@namespace UIScriptFixture
+<button id="add" style="position: absolute; left: 0px; top: 0px; width: 100px; height: 40px" @onclick="() => ++Count">
+    <label id="add-label">Add</label>
+</button>
+<label id="count" style="position: absolute; left: 120px; top: 0px">Count @Count</label>
+<panel id="row" style="position: absolute; left: 0px; top: 60px; width: 200px; height: 40px; pointer-events: all"
+       @onclick="() => ++RowClicks">
+    <panel id="cell" style="position: absolute; left: 0px; top: 0px; width: 50px; height: 40px; pointer-events: all"
+           @onpointerdown="e => Pressed = e" />
+</panel>
+<slider id="volume" style="position: absolute; left: 0px; top: 120px; width: 200px; height: 20px" @bind="Volume"
+        @bind:after="() => ++VolumeChanges" />
+<textentry id="name" style="position: absolute; left: 0px; top: 160px; width: 200px; height: 30px" @bind="Name" />
+<Dial @bind-Value="Level" />
+<label id="level" style="position: absolute; left: 220px; top: 200px">Level @Level</label>
+<panel id="bare" style="position: absolute; left: 300px; top: 0px; width: 50px; height: 20px" @onclick="() => ++BareClicks" />
+
+@code {
+    public int Count;
+    public int RowClicks;
+    public int BareClicks;
+    public UIEvent? Pressed;
+    public float Volume = 0.5f;
+    public int VolumeChanges;
+    public string Name = "Ada";
+    public float Level = 0.25f;
+}

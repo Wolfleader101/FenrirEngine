@@ -6,9 +6,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -16,7 +14,6 @@
 #include <string_view>
 #include <vector>
 
-#include "FenrirPainter/PainterVertex.hpp"
 #include "FenrirUI/UIRoot.hpp"
 #include "UIScriptingApp.hpp"
 
@@ -25,34 +22,6 @@ using namespace Fenrir::Testing;
 
 namespace
 {
-    // An element id as the fixture packs it: its index in the high half, its version in the low.
-    std::uint64_t Packed(ElementId element)
-    {
-        return (static_cast<std::uint64_t>(element.index) << 32u) | element.version;
-    }
-
-    bool Near(float a, float b)
-    {
-        return std::abs(a - b) <= 1e-3f;
-    }
-
-    // Each painter quad's colour, in the order drawn: every box is one quad of four vertices.
-    std::vector<std::uint32_t> QuadColours(const DrawList2D& list)
-    {
-        std::vector<PainterVertex> vertices(list.vertices.size() / sizeof(PainterVertex));
-        std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(PainterVertex));
-        std::vector<std::uint32_t> colours;
-        for (std::size_t i = 0; i < vertices.size(); i += 4)
-        {
-            colours.push_back(vertices[i].colour);
-        }
-        return colours;
-    }
-
-    // Opaque colours as the painter writes them: RGBA8, red in the lowest byte.
-    constexpr std::uint32_t Red = 0xFF0000FFu;
-    constexpr std::uint32_t Green = 0xFF00FF00u;
-
     // The fixture's three-panel tree (TreeCalls.BuildThreePanels), built in C++: a row 600 by 200 with 10 of padding
     // holding three panels that share its width, each with a margin of 5, the middle one twice as wide.
     std::vector<ElementId> CppThreePanels(UIRoot& root)
@@ -167,18 +136,6 @@ namespace
         return root;
     }
 
-    // The centre of the list's `quad`th painter quad: the mean of its four corners.
-    Math::Vec2 QuadCentre(const DrawList2D& list, std::size_t quad)
-    {
-        std::vector<PainterVertex> vertices(list.vertices.size() / sizeof(PainterVertex));
-        std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(PainterVertex));
-        Math::Vec2 sum(0.0f);
-        for (std::size_t i = 0; i < 4; ++i)
-        {
-            sum += vertices[quad * 4 + i].position;
-        }
-        return sum / 4.0f;
-    }
 } // namespace
 
 TEST_CASE("A script's paint stage system paints into an element after the element's own box", "[ui][scripting]")

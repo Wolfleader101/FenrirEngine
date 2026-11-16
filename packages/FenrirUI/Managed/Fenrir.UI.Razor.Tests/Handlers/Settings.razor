@@ -1,0 +1,15 @@
+@* @bind on the four value controls (HandlerTests), with @bind:after on the slider. *@
+<slider id="volume" @bind="Volume" @bind:after="VolumeSet" />
+<checkbox id="muted" @bind="Muted" />
+<textentry id="name" @bind="Name" />
+<progress id="loading" @bind="Loading" />
+
+@code {
+    public float Volume = 0.5f;
+    public bool Muted;
+    public string Name = "Ada";
+    public float Loading = 0.25f;
+    public int AfterCount;
+
+    private void VolumeSet() => ++AfterCount;
+}

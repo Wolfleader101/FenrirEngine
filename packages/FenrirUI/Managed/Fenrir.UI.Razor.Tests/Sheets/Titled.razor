@@ -1,0 +1,9 @@
+@* A component with its own sheet beside it (ScopeTests): a label, folded markup and loose text, each made here. *@
+<label class="title">@Text</label>
+<panel class="row"><label>folded</label></panel>
+@Loose
+
+@code {
+    public string Text = "title";
+    public string Loose = "loose";
+}

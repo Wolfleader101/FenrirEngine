@@ -8,12 +8,16 @@
     <RootNamespace>UIDemo.Scripts</RootNamespace>
     <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
   </PropertyGroup>
-  <!-- UIDemo's C# variant (examples/UIDemo/README.md): a speedometer painted on the HUD in the Fenrir.UI.Paint stage,
-       and the pause menu's clicks read through EventReader<UIEvent>. fenrir_add_demo_app's SCRIPTS builds it, passing
-       -p:FenrirScriptingSdk=<the SDK folder>/ and the folder of each contract (-p:Fenrir<Name>ContractDir=), the
-       Text, Painter and UI ones among them whenever their scripting extensions are built. The contracts are
-       compile-time only: the host shares its own copies. -->
+  <!-- UIDemo's C# variant (examples/UIDemo/README.md): Razor components, a speedometer on the HUD and a settings page
+       in the pause menu, and the pause menu's clicks read through EventReader<UIEvent>. fenrir_add_demo_app's SCRIPTS
+       builds it, passing -p:FenrirScriptingSdk=<the SDK folder>/ and the folder of each contract
+       (-p:Fenrir<Name>ContractDir=), the Text, Painter and UI ones among them whenever their scripting extensions are
+       built, and the Razor components' folder (-p:FenrirUIRazorContractDir=). The contracts are compile-time only: the
+       host shares its own copies. -->
   <Import Project="$(MSBuildThisFileDirectory)../../../packages/FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <!-- The .razor files: the SDK's Razor generator, the stand-in and Fenrir.UI.Razor's contracts, the default imports,
+       the Razor dispatcher, and the .razor.css sheets (packages/FenrirUI/README.md, "Razor components"). -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../packages/FenrirUI/Managed/Fenrir.UI.Razor.InRepo.props" />
   <ItemGroup Condition="'$(FenrirDemoContractDir)' != ''">
     <Reference Include="Fenrir.Input">
       <HintPath>$(FenrirInputContractDir)Fenrir.Input.dll</HintPath>

@@ -10,7 +10,8 @@
 # (FENRIR_ENABLE_SCRIPTING) it is built against the scripting SDK and the contracts (Fenrir.Input, Fenrir.Window,
 # Fenrir.Assets, Fenrir.Renderer, Fenrir.DebugDraw and the scaffold's Fenrir.Demo, whose folders it gets as -p:Fenrir<Name>ContractDir=,
 # and Fenrir.Physics's, Fenrir.Skeleton's, Fenrir.Animation's, Fenrir.Text's, Fenrir.Painter's and Fenrir.UI's too when
-# their scripting extensions are built, for an app that installs those packages),
+# their scripting extensions are built, for an app that installs those packages, with the Razor components' folder,
+# -p:FenrirUIRazorContractDir=, for a project that imports Fenrir.UI.Razor.InRepo.props),
 # and copied to `scripts/` beside the executable, with the contracts and what scripting needs at run time; the app's
 # sources get FENRIR_DEMO_SCRIPT_ASSEMBLY, its path relative to the executable's directory, for
 # DemoConfig::scriptAssembly. Without scripting, SCRIPTS is ignored.
@@ -84,22 +85,22 @@ function(fenrir_add_demo_scripts name scripts_dir)
     if(NOT EXISTS "${project}")
         message(FATAL_ERROR "fenrir_add_demo_app(${name}): SCRIPTS has no ${name}.Scripts.csproj in ${scripts_dir}")
     endif()
-    file(GLOB_RECURSE sources CONFIGURE_DEPENDS "${scripts_dir}/*.cs")
+    file(GLOB_RECURSE sources CONFIGURE_DEPENDS "${scripts_dir}/*.cs" "${scripts_dir}/*.razor" "${scripts_dir}/*.razor.css")
     list(FILTER sources EXCLUDE REGEX "/(obj|bin)/")
 
     # Built into a folder of its own, then copied beside the executable: the contracts are compile-time only (the host
     # shares its own copies), so the folder holds the scripts alone.
     set(out "${CMAKE_CURRENT_BINARY_DIR}/${name}-scripts")
     # Physics, Skeleton, Animation, Text, Painter and UI are the app's to install, not the scaffold's, but each one's
-    # contract is passed like the others when it is built.
+    # contract is passed like the others when it is built, and the UI's Razor contracts with it.
     set(optional_args "")
     set(optional_depends "")
-    foreach(optional IN ITEMS Physics Skeleton Animation Text Painter UI)
+    foreach(optional IN ITEMS Physics Skeleton Animation Text Painter UI RazorComponents UIRazor)
         string(TOUPPER "${optional}" OPTIONAL_UPPER)
         if(TARGET Fenrir${optional}Contract)
+            fenrir_scripting_contract_dll(${optional} optional_dll)
             list(APPEND optional_args "-p:Fenrir${optional}ContractDir=${FENRIR_${OPTIONAL_UPPER}_CONTRACT_DIR}/")
-            list(APPEND optional_depends Fenrir${optional}Contract
-                "${FENRIR_${OPTIONAL_UPPER}_CONTRACT_DIR}/Fenrir.${optional}.dll")
+            list(APPEND optional_depends Fenrir${optional}Contract "${optional_dll}")
         endif()
     endforeach()
     add_custom_command(

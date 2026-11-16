@@ -1,0 +1,20 @@
+/* The speedometer's sheet (Speedometer.razor), scoped to it, in place of inline styles. The host panel carries the
+   readable class speedometer and the scope class, so .speedometer styles it. Bottom right, over the ammo counter; the
+   gauge is painted into it, and the readout sits at its foot. */
+
+.speedometer {
+    position: absolute;
+    right: 48px;
+    bottom: 170px;
+    width: 180px;
+    height: 180px;
+    justify-content: flex-end;
+    align-items: center;
+    padding-bottom: 24px;
+    pointer-events: none;
+}
+
+.readout {
+    color: #e8eef6;
+    font-size: 22px;
+}

@@ -1,0 +1,11 @@
+@* Rows keyed by @key, each a panel holding a folded label and its name as loose text (RebuildTests). *@
+<panel id="@("rows")">
+    @foreach (string row in Rows)
+    {
+        <panel @key="row" class="row"><label class="static">Row &amp; more</label>@row</panel>
+    }
+</panel>
+
+@code {
+    public List<string> Rows = [];
+}

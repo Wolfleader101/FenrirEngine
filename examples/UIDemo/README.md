@@ -2,8 +2,9 @@
 
 What a game gets from the UI stack (`.scratch/fenrir-ui/spec.md`, "UIDemo"): FenrirUI's elements, stylesheets, markup
 documents, transitions and custom elements, over a lit room, on the demo scaffold (`examples/DemoScaffold/README.md`,
-for the keys every demo app shares and the smoke-run switches). It runs with scripting on or off; with it on, a C# script
-adds a speedometer to the HUD and logs the menu's clicks ("The C# variant").
+for the keys every demo app shares and the smoke-run switches). It runs with scripting on or off; with it on, C# scripts
+add a Razor speedometer to the HUD and a Razor settings page to the pause menu, and log the menu's clicks ("The C#
+variant").
 
 ```sh
 cmake --build out/build/clang-x64-debug --target UIDemo
@@ -85,19 +86,61 @@ on), their text in the `ui-sdf` family. `WorldUI` (`src/World.cpp`) makes them w
 ## The C# variant
 
 With scripting built (`FENRIR_ENABLE_SCRIPTING`), the app runs `scripts/` (`UIDemo.Scripts.dll`) with the text, painter
-and UI scripting extensions (ADR-0061), all of it C# over the generated Fenrir.UI and Fenrir.Painter contracts:
+and UI scripting extensions (ADR-0061), all of it C# over the generated Fenrir.UI and Fenrir.Painter contracts. Most of
+it is Razor components (ADR-0067 to ADR-0070; `packages/FenrirUI/README.md`, "Razor components"): the scripts project
+imports `Fenrir.UI.Razor.InRepo.props`, so its `.razor` files are compiled by the SDK's Razor generator and its
+`.razor.css` files are their scoped sheets.
 
-- **The speedometer** (`scripts/Speedometer.cs`): a second HUD element, made and painted from C#. An Update system finds
-  the HUD root C++ made (`UIRoot.Find` on the main window at `HudLayer`), makes a panel `#speedometer` bottom right
-  over the ammo counter, with a `label` under it reading the window camera's speed in metres a second (from how far the
-  camera moved since the last frame), and makes them again if they are gone. A system in the UI's paint stage
-  (`[StageSystem(UIStages.Paint)]`) gets a painter for the panel (`UIRoot.PaintInto`) and paints its gauge through the
-  Painter facade: a dark disc, a track of three quarters of a turn, the speed's share of it (full at 20 metres a
-  second) and a needle. The gauge is the panel's content, so the readout label draws over it. Logged once: "the
-  speedometer is on the HUD, painted from C#".
+- **The speedometer** (`scripts/Speedometer.razor`, `Speedometer.razor.css`, `SpeedometerSetup.cs`): a Razor component
+  on the HUD. An Update system finds the HUD root C++ made (`UIRoot.Find` on the main window at `HudLayer`) and mounts
+  it there from `OnCreate`, and again whenever the root has lost it; each frame it gives it the window camera's speed,
+  smoothed, from how far the camera moved since the last frame. Its host panel, bottom right over the ammo counter, is
+  styled by its scoped sheet through its readable class, `.speedometer`, in place of inline styles. Its readout label
+  shows the speed in metres a second, and its `BuildHash` is the speed rounded to the readout's one decimal, so it
+  rebuilds only when the readout changes. Its `OnPaint` paints the gauge into the host every frame in the UI's paint
+  stage, through the Painter facade: a dark disc, a track of three quarters of a turn, the speed's share of it (full at
+  20 metres a second) and a needle. The gauge is the host's content, so the readout draws over it. Logged once: "the
+  speedometer is on the HUD, a Razor component painted from C#".
+- **The Razor settings page** (`scripts/Settings.razor`, `Settings.razor.css`, `Section.razor`, `RazorSettings.cs`): a
+  card beside the pause panel, in the `razor-settings` slot of `assets/ui/menu.ui`. The slot is `display: none` in
+  `menu.css` until the script mounts the page into it and gives it the class `filled`, so without scripting the menu is
+  as it was. The menu loads its document each time it opens, so the script mounts the page each time it finds a slot
+  the page is not in; what the page edits, a `DemoSettings`, is the script's and outlives it. It shows:
+  - `@bind` on a volume slider, a subtitles checkbox and a player-name text entry, each logging its new value through
+    `@bind:after` ("UIDemo (Razor): the volume is 40"). The engine has no audio or subtitles: the values are only kept.
+  - A keyed `@foreach` list of key bindings (`@key` by each binding's id), with Add and Remove buttons (`@onclick`). A
+    row comes in from the left through `:intro` and leaves to the right through `:outro`, and the rows around it keep
+    their elements.
+  - `<Document Src="ui/credits.ui" />` placing a small markup document, `assets/ui/credits.ui`, under a heading.
+  - `Section`, a child Razor component with a title and `ChildContent`: the key bindings and the credits are each written
+    inside a `<Section>` tag.
+  - A scoped sheet: `Settings.razor.css` matches only the page's own elements, its `ChildContent` among them, and
+    reaches Section's headings and the credits document's labels with `::deep`. The page's controls take `menu.css`'s
+    unscoped rules too, so they look like the menu's own.
 - **The menu's clicks** (`scripts/MenuClicks.cs`): an Update system reads `UIEvent`s through `EventReader<UIEvent>`,
   the queue the C++ `Menu` reads too, and logs each click on the menu root by the id of the element clicked or its
-  nearest ancestor with one: "the menu's resume was clicked", and settings, quit, back and the settings' controls.
+  nearest ancestor with one: "the menu's resume was clicked", and settings, quit, back and the settings' controls. A
+  click in the Razor page logs as the slot's, `razor-settings`, beside the page's own handler.
+
+### Editing the Razor components while they run
+
+The menu's and the HUD's roots have hot reload on, and a Razor component's sheet is loaded from the path the build recorded,
+the file in `examples/UIDemo/scripts/`. So with the menu open, save `Settings.razor.css` (try `.binding:outro`'s
+`transform`, or `.page ::deep .heading`'s `color`) and the page restyles within a quarter of a second, scoped as before.
+`Speedometer.razor.css` restyles the gauge the same way. A sheet edited while the demo is closed is recorded into the
+scripts at the next build.
+
+A `.razor` file is code: edit `Settings.razor` (a label's text, another binding in `RazorSettings.cs`'s spares) and
+rebuild only the scripts while the demo runs:
+
+```sh
+cmake --build out/build/clang-x64-debug --target UIDemoDeployScripts
+```
+
+The demo notices the new build and reloads it between frames (`Scripting: reloaded 'UIDemo.Scripts.dll'`): the old
+scripts' Razor components are unmounted, their elements removed at once, and the new scripts mount theirs, the
+speedometer from `OnCreate` and the settings page as soon as the menu has its slot. The kept settings are the old
+scripts' and go with them, so the page starts again from `DemoSettings`'s defaults. Smoke runs turn hot reload off.
 
 ## Editing the HUD and the menu while they run
 
@@ -152,3 +195,8 @@ On OpenGL, in The HUD:
 - With scripting built, the speedometer sits bottom right over the ammo counter: its needle and the blue share of its
   track rise as the camera flies (WASD, Shift for faster) and fall back when it stops, under a readout of the speed;
   clicking Resume, Settings or Back in the menu logs "the menu's ... was clicked" from C#.
+- With scripting built, the pause menu shows the Razor settings page beside the pause panel: its slider, checkbox and
+  name entry log their values ("UIDemo (Razor): ..."), and keep them when the menu is closed and opened again; Add a
+  binding slides a row in, Remove slides it out, and the credits show under their heading. Saving
+  `Settings.razor.css` with the menu open restyles the page; rebuilding the scripts brings the page back after the
+  reload. Built without scripting, the pause panel is centred alone, as before.

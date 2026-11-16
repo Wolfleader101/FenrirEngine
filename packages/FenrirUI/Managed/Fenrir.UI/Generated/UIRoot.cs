@@ -193,6 +193,15 @@ public partial struct UIRoot
     public bool SetEntryText(ElementId element, ReadOnlySpan<char> text) =>
         UINative.SetEntryText(in this, in element, text);
 
+    /// <summary>
+    /// The check behind a Razor pointer handler (ADR-0069): in a debug build, warns once with `message` when the
+    /// element's resolved style, as of the last frame, takes no pointer events (`pointer-events` is not `all`). A
+    /// release build logs nothing.
+    /// </summary>
+    /// <returns>Whether the element is alive.</returns>
+    public bool WarnIfTakesNoPointer(ElementId element, ReadOnlySpan<char> message) =>
+        UINative.WarnIfTakesNoPointer(in this, in element, message);
+
     /// <summary>The element's rectangles as of the last frame's layout, in UI units from the root's top-left.</summary>
     /// <returns>Its border, padding, content and clip boxes; the C++ default when the call did nothing.</returns>
     public ElementBoxes GetBoxes(ElementId element)
@@ -235,11 +244,28 @@ public partial struct UIRoot
 
     /// <summary>
     /// Loads the stylesheet at `path` (relative to the asset root, or absolute) and adds it after the root's other
-    /// sheets (UIRoot::LoadStylesheet). What it refused is logged with its file and line.
+    /// sheets (UIRoot::LoadStylesheet). With a scope class, every rule's rightmost compound also needs that class and
+    /// `::deep` may mark where it goes instead; the same path with the same scope is added once, and hot reload
+    /// re-reads the file with its scope. What it refused is logged with its file and line.
     /// </summary>
     /// <param name="path">The stylesheet's path.</param>
-    /// <returns>Whether the file was there and was added.</returns>
-    public bool LoadStylesheet(ReadOnlySpan<char> path) => UINative.LoadStylesheet(in this, path);
+    /// <param name="scope">The scope class name; empty for an unscoped sheet.</param>
+    /// <returns>Whether the file was there and was added, or was held already with that scope.</returns>
+    public bool LoadStylesheet(ReadOnlySpan<char> path, ReadOnlySpan<char> scope) =>
+        UINative.LoadStylesheet(in this, path, scope);
+
+    /// <summary>
+    /// Parses `text` as a stylesheet named `name` and adds it after the root's other sheets (UIRoot::AddStylesheet).
+    /// With a scope class, every rule's rightmost compound also needs that class and `::deep` may mark where it goes
+    /// instead; the same name with the same scope is added once, the later text ignored. What it refused is logged with
+    /// the name and its line.
+    /// </summary>
+    /// <param name="text">The stylesheet's text.</param>
+    /// <param name="name">The name its diagnostics give.</param>
+    /// <param name="scope">The scope class name; empty for an unscoped sheet, which is added every time.</param>
+    /// <returns>Whether it was added, or was held already with that scope.</returns>
+    public bool AddStylesheet(ReadOnlySpan<char> text, ReadOnlySpan<char> name, ReadOnlySpan<char> scope) =>
+        UINative.AddStylesheet(in this, text, name, scope);
 
     /// <summary>
     /// A painter for the element, inside a Fenrir.UI.Paint stage system (UIRoot::PaintInto): what it draws through the
