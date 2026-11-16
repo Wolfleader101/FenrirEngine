@@ -9,8 +9,11 @@
 
 #include "FenrirApp/App.hpp"
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirLogger/ILogger.hpp"
+#include "FenrirUI/UIRoot.hpp"
+#include "FenrirUI/UITarget.hpp"
 
 namespace DemoScaffoldTests
 {
@@ -93,6 +96,24 @@ namespace DemoScaffoldTests
         std::vector<std::shared_ptr<ILogger>> m_sinks;
     };
 
+    /**
+     * @brief The demo UI kit's 2D target in the tests: the null backend's 1280 by 720 surface at a content scale of
+     * one, so the window's logical units are its own, keeping every list the kit's root submits.
+     */
+    class CaptureTarget : public Fenrir::UITarget
+    {
+      public:
+        Fenrir::UITargetSize GetSize(Fenrir::App&) override
+        {
+            return {{1280.0f, 720.0f}, 1.0f};
+        }
+        void Submit(Fenrir::App&, Fenrir::DrawList2D list) override
+        {
+            lists.push_back(std::move(list));
+        }
+        std::vector<Fenrir::DrawList2D> lists;
+    };
+
     // The App's default fixed step: a frame of `oneFrame` seconds runs exactly one tick.
     inline constexpr double oneFrame = 1.0 / 60.0;
 
@@ -117,13 +138,42 @@ namespace DemoScaffoldTests
     struct DemoTestApp
     {
         std::shared_ptr<LoggedMessages> logged = std::make_shared<LoggedMessages>();
+        std::shared_ptr<CaptureTarget> uiTarget = std::make_shared<CaptureTarget>();
         Fenrir::App app{std::make_unique<RecordingLogger>(logged), 2};
         FenrirDemo::DemoScaffold demo;
 
         explicit DemoTestApp(std::vector<FenrirDemo::DemoScene> scenes, FenrirDemo::DemoRunOptions run = NullRun(),
-                             bool imguiOverlay = false)
-            : demo(Install(app, std::move(scenes), std::move(run), imguiOverlay))
+                             bool imguiOverlay = false, std::vector<FenrirDemo::DemoKeyRow> appKeyRows = {})
+            : demo(Install(app, std::move(scenes), std::move(run), imguiOverlay, uiTarget, std::move(appKeyRows)))
         {
+        }
+
+        /** @brief The demo UI kit. */
+        FenrirDemo::DemoUI& Kit()
+        {
+            return app.GetResource<FenrirDemo::DemoUI>();
+        }
+
+        /** @brief The centre of `element`'s border box in the window's logical units, where a press on it goes. */
+        Fenrir::Math::Vec2 Centre(Fenrir::ElementId element)
+        {
+            const Fenrir::UIRoot& root = Kit().Root();
+            const Fenrir::ElementBoxes boxes = root.GetBoxes(element);
+            const Fenrir::Math::Vec2 centre{boxes.border.x + boxes.border.width * 0.5f,
+                                            boxes.border.y + boxes.border.height * 0.5f};
+            return centre * root.GetScale();
+        }
+
+        /** @brief Moves the pointer to `position` and presses and releases the left button there, across frames. */
+        void Click(Fenrir::Math::Vec2 position)
+        {
+            Fenrir::InputFeed& feed = app.GetResource<Fenrir::InputFeed>();
+            feed.MouseMove(Fenrir::WindowId{1}, position, {0.0f, 0.0f});
+            Frames();
+            feed.MouseButtonDown(Fenrir::WindowId{1}, Fenrir::MouseButton::Left);
+            Frames();
+            feed.MouseButtonUp(Fenrir::WindowId{1}, Fenrir::MouseButton::Left);
+            Frames();
         }
 
         /** @brief Runs `count` frames of one tick each. */
@@ -159,9 +209,13 @@ namespace DemoScaffoldTests
 
       private:
         static FenrirDemo::DemoScaffold Install(Fenrir::App& app, std::vector<FenrirDemo::DemoScene> scenes,
-                                                FenrirDemo::DemoRunOptions run, bool imguiOverlay)
+                                                FenrirDemo::DemoRunOptions run, bool imguiOverlay,
+                                                std::shared_ptr<CaptureTarget> uiTarget,
+                                                std::vector<FenrirDemo::DemoKeyRow> appKeyRows)
         {
             FenrirDemo::DemoConfig config;
+            config.demoUITarget = std::move(uiTarget);
+            config.appKeyRows = std::move(appKeyRows);
             config.appName = "TestDemo";
             config.scenes = std::move(scenes);
             config.run = std::move(run);

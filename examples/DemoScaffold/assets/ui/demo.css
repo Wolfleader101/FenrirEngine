@@ -1,0 +1,131 @@
+/*
+ * The demo UI kit's stylesheet (examples/DemoScaffold/README.md, "The demo UI kit"), for demo.ui and the sections, rows
+ * and help the kit makes in it. Every demo app loads it with hot reload on (not in a smoke run): edit it while a demo
+ * runs, save, and the kit restyles. The theme is the custom properties on #demo-kit. Sizes are in UI units of a window
+ * 1080 units high. Text is FenrirText's embedded default face.
+ *
+ * Only the panels' boxes take the pointer, so the free-fly camera's right-drag and the scene click pass everywhere
+ * else.
+ */
+
+#demo-kit {
+    --demo-ink: #e8ecf2;
+    --demo-ink-dim: rgba(232, 236, 242, 0.62);
+    --demo-panel: rgba(14, 18, 26, 0.78);
+    --demo-edge: rgba(255, 255, 255, 0.12);
+    --demo-control: rgba(255, 255, 255, 0.06);
+    --demo-control-hover: rgba(255, 255, 255, 0.14);
+    --demo-accent: #6cc4ff;
+
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    color: var(--demo-ink);
+    font-family: default;
+    font-size: 17px;
+}
+
+/* A panel: dark, translucent, and the only part of the kit that takes the pointer (it inherits to what is inside). */
+.demo-box {
+    position: absolute;
+    padding: 12px;
+    row-gap: 10px;
+    border: 1px solid var(--demo-edge);
+    border-radius: 6px;
+    background-color: var(--demo-panel);
+    pointer-events: all;
+}
+
+/* The demo panel, on the right, scrolling when taller than the window. */
+#demo-panel {
+    right: 16px;
+    top: 16px;
+    width: 360px;
+    max-height: 94%;
+}
+
+#demo-panel-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--demo-accent);
+}
+
+.demo-sections {
+    row-gap: 10px;
+}
+
+/* The help, at the bottom left, clear of the on-screen messages stacked from the top left. */
+#demo-help {
+    left: 16px;
+    bottom: 16px;
+    max-width: 760px;
+}
+
+/* A section's heading, and the help's title: a flat button across the box that collapses what is under it. */
+.demo-section-title,
+.demo-help-title {
+    justify-content: flex-start;
+    padding: 4px 8px;
+    border: 0px solid transparent;
+    border-radius: 4px;
+    background-color: var(--demo-control);
+    color: var(--demo-ink);
+    font-weight: bold;
+}
+
+.demo-section-title:hover,
+.demo-help-title:hover {
+    background-color: var(--demo-control-hover);
+}
+
+.demo-section-title:active,
+.demo-help-title:active {
+    background-color: var(--demo-edge);
+}
+
+.demo-section {
+    row-gap: 6px;
+}
+
+.demo-section-body {
+    padding: 0 8px;
+    row-gap: 4px;
+}
+
+/* A collapsed section's heading is dimmed; the kit takes its body out of the layout. */
+.demo-closed > .demo-section-title {
+    color: var(--demo-ink-dim);
+}
+
+.demo-text {
+    color: var(--demo-ink);
+}
+
+.demo-disabled {
+    color: var(--demo-ink-dim);
+}
+
+/* The help: the app and the scene, then a table of key rows, the keys in a column of their own. */
+.demo-help-heading {
+    color: var(--demo-accent);
+    padding-bottom: 4px;
+}
+
+.demo-key-row {
+    flex-direction: row;
+    column-gap: 12px;
+}
+
+.demo-keys {
+    width: 200px;
+    flex-shrink: 0;
+    color: var(--demo-accent);
+}
+
+.demo-what {
+    flex-shrink: 1;
+    flex-grow: 1;
+    color: var(--demo-ink);
+}

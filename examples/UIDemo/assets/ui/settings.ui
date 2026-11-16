@@ -45,7 +45,7 @@
         <panel class="entry"><label class="key">D-pad</label><label>Move the focus</label></panel>
         <panel class="entry"><label class="key">A</label><label>Press</label></panel>
         <panel class="entry"><label class="key">B</label><label>Back</label></panel>
-        <panel class="entry"><label class="key">F1</label><label>Help</label></panel>
+        <panel class="entry"><label class="key">F1</label><label>Demo UI kit</label></panel>
         <panel class="entry"><label class="key">F3</label><label>Free-fly camera</label></panel>
     </scroll>
 

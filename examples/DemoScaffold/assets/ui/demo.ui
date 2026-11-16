@@ -1,0 +1,16 @@
+<!--
+  The demo UI kit (examples/DemoScaffold/README.md, "The demo UI kit"): the document its root holds, styled by
+  demo.css. Structure and ids only: the kit (src/DemoUI.cpp) finds these containers by their ids and makes the
+  sections, their rows and the help in them, again whenever this file is loaded again.
+-->
+<panel id="demo-kit">
+    <!-- The demo panel, on the right: the app's sections, then the scene's. It scrolls when taller than the window. -->
+    <scroll id="demo-panel" class="demo-box">
+        <label id="demo-panel-title"/>
+        <panel id="demo-app-sections" class="demo-sections"/>
+        <panel id="demo-scene-sections" class="demo-sections"/>
+    </scroll>
+
+    <!-- The help, at the bottom left: its title collapses it; under it the app and scene, then the key rows. -->
+    <panel id="demo-help" class="demo-box"/>
+</panel>

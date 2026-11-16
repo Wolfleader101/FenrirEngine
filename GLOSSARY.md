@@ -1077,7 +1077,7 @@ One executable under `examples/` per feature area (RendererDemo, ScriptingDemo, 
 *Avoid:* DemoApp (the legacy single app, which the demo apps replaced), sample, example (alone).
 
 **Demo scaffold**
-What every demo app is built on: the `FenrirDemoScaffold` library (`examples/DemoScaffold/`), its `fenrir_add_demo_app` CMake function and its `Fenrir.Demo` C# assembly. It installs the engine packages, and holds the free-fly camera, the scene list, the scene-click event, the help panel, the smoke-run switches and the optional ImGui overlay.
+What every demo app is built on: the `FenrirDemoScaffold` library (`examples/DemoScaffold/`), its `fenrir_add_demo_app` CMake function and its `Fenrir.Demo` C# assembly. It installs the engine packages, FenrirUI among them, and holds the demo UI kit, the free-fly camera, the scene list, the scene-click event, the help, the smoke-run switches and the optional ImGui overlay.
 *Avoid:* demo framework, demo base, harness.
 
 **Demo UI kit**

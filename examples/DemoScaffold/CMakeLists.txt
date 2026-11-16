@@ -2,15 +2,21 @@
 # fenrir_add_demo_app, which makes a demo app. Built with the examples when the renderer is on.
 add_library(FenrirDemoScaffold STATIC
     include/FenrirDemoScaffold/DemoScaffold.hpp
+    include/FenrirDemoScaffold/DemoUI.hpp
     src/DemoScaffold.cpp
+    src/DemoUI.cpp
     src/ImGuiOverlay.hpp
     src/ImGuiOverlay.cpp
 )
 target_include_directories(FenrirDemoScaffold PUBLIC include)
 target_link_libraries(FenrirDemoScaffold
-    PUBLIC FenrirApp FenrirRenderer FenrirInput FenrirMath FenrirECS
+    PUBLIC FenrirApp FenrirRenderer FenrirInput FenrirMath FenrirECS FenrirUI
     PRIVATE FenrirWindow FenrirAssets FenrirDebugDraw FenrirLogger
 )
+# The demo UI kit's files (assets/ui, copied into every demo app's asset root by fenrir_add_demo_app) are read from this
+# source tree while it is there, so an edit to them hot-reloads and a rebuild keeps it.
+set(FENRIR_DEMO_SCAFFOLD_ASSETS "${CMAKE_CURRENT_SOURCE_DIR}/assets" CACHE INTERNAL "The demo UI kit's files")
+target_compile_definitions(FenrirDemoScaffold PRIVATE FENRIR_DEMO_SOURCE_ASSETS="${FENRIR_DEMO_SCAFFOLD_ASSETS}")
 
 # Dear ImGui (libs/imgui), for the ImGuiOverlay. PUBLIC, so a demo app's scenes make their ImGui windows with ImGui's
 # own functions; no engine package ever links it (ADR-0027).
@@ -27,6 +33,12 @@ if(FENRIR_ENABLE_SCRIPTING)
     target_link_libraries(FenrirDemoScaffold PUBLIC FenrirScripting
                                              PRIVATE FenrirInputScripting FenrirWindowScripting FenrirAssetsScripting
                                                      FenrirRendererScripting FenrirDebugDrawScripting)
+    # The scaffold installs FenrirUI, so its scripting extension and the text and painter ones it builds on are the
+    # scaffold's too, wherever they are built.
+    if(TARGET FenrirUIScripting)
+        target_link_libraries(FenrirDemoScaffold PRIVATE FenrirTextScripting FenrirPainterScripting FenrirUIScripting)
+        target_compile_definitions(FenrirDemoScaffold PRIVATE FENRIR_DEMO_UI_SCRIPTING=1)
+    endif()
 
     set(FENRIR_DEMO_CONTRACT_DIR "${CMAKE_BINARY_DIR}/fenrir-demo/contract" CACHE INTERNAL "Where the Fenrir.Demo assembly is built")
     set(fenrir_demo_managed_dir "${CMAKE_CURRENT_SOURCE_DIR}/Managed/Fenrir.Demo")
@@ -49,7 +61,8 @@ endif()
 
 include(cmake/FenrirDemoApp.cmake)
 
-# The scaffold's own tests, on the null backend: the scene list, the free-fly camera and the smoke runs.
+# The scaffold's own tests, on the null backend: the scene list, the free-fly camera, the demo UI kit and the smoke
+# runs.
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)
 endif()

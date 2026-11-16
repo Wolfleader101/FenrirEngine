@@ -35,16 +35,25 @@ ADR-0071 and ADR-0072 also apply.
 
 **Touches:** `examples/DemoScaffold/`, `examples/UIDemo/src/DemoConfig.cpp`, `examples/UIDemo/src/main.cpp`, `packages/FenrirUI/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Every demo app runs with the kit's help at the bottom left in FenrirUI, and the panel on the right. F1 hides and shows them. ImGui's windows, where an app has them, still draw over the kit and take input first.
-- [ ] Scaffold tests on the null backend:
+- [x] Scaffold tests on the null backend:
   - the help lists the scaffold's, the app's and the scene's key rows in order, and a scene with only `keyHelp` shows it as one row
   - F1 hides the kit and its panels then take no press
   - a press on the panel sends no `DemoSceneClickEvent`, and one beside it does
   - a right-drag beside the panel still turns the free-fly camera
   - a scene section is gone after PageDown
-- [ ] FenrirUI test: a root with `gamepadNavigation` off, focused, passes the gamepad's directions and A to the game and publishes no gamepad claim.
-- [ ] `SceneList.cpp`'s help test and every existing scaffold, UIDemo and FenrirUI test pass. Every demo's `Smoke-null` passes with scripting off and on.
+- [x] FenrirUI test: a root with `gamepadNavigation` off, focused, passes the gamepad's directions and A to the game and publishes no gamepad claim.
+- [x] `SceneList.cpp`'s help test and every existing scaffold, UIDemo and FenrirUI test pass. Every demo's `Smoke-null` passes with scripting off and on.
 - [ ] Editing `examples/DemoScaffold/assets/ui/demo.css` while a demo runs restyles the kit (hand check).
 - [ ] Clang and MSVC x64 debug build without new warnings.
+
+## Comments
+
+Built on `demo/01-tracer` (PR into `demo-ui`). Left unticked, for the user:
+
+- The first box and the `demo.css` edit are hand checks on Windows (OpenGL): the kit's help and panel on screen, F1, ImGui's windows over the kit in LightingDemo, RendererDemo's Overlay scene and UIDemo, and an edit to `examples/DemoScaffold/assets/ui/demo.css` restyling the kit. The OpenGL smoke runs of UIDemo, RendererDemo and LightingDemo pass, but nobody looked at them.
+- Clang: only `msvc-x64-debug` was built locally (scripting on and off), with no new warnings; `clang-x64-debug` was not built.
+
+`SceneList.cpp`'s help test now taps F1 twice, since the kit starts shown: F1 hides it, and F1 again shows it and logs the help.

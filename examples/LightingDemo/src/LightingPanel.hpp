@@ -66,7 +66,7 @@ namespace LightingDemo
     void AddLensDirt(Fenrir::App& app);
 
     /**
-     * @brief The keys the panel answers, one line for a scene's help panel: T, E, B, O, G, H and, with more than one
+     * @brief The keys the panel answers, one line for a scene's help: T, E, B, O, G, H and, with more than one
      * panorama, S.
      */
     [[nodiscard]] std::string LightingKeyHelp(bool panoramaSwitch);

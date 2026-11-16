@@ -221,7 +221,7 @@ Small 02's branches sample their textures at the wrong scale.
 
 | Key | What it does |
 | --- | --- |
-| F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
+| F1, F3, PageDown, PageUp | The scaffold's: the demo UI kit, the free-fly camera, the next and previous scene. |
 
 ### Neon city
 
@@ -327,7 +327,7 @@ generated sky. Everything else is generated, and the scene says so on screen.
 
 | Key | What it does |
 | --- | --- |
-| F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
+| F1, F3, PageDown, PageUp | The scaffold's: the demo UI kit, the free-fly camera, the next and previous scene. |
 
 ### Sponza
 
@@ -388,7 +388,7 @@ renderer's, so other scenes keep them as V left them, as Many lights' sliders le
 
 | Key | What it does |
 | --- | --- |
-| F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
+| F1, F3, PageDown, PageUp | The scaffold's: the demo UI kit, the free-fly camera, the next and previous scene. |
 
 ## Hand checks
 

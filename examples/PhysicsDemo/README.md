@@ -40,7 +40,7 @@ The port is faithful: each scene has the legacy scene's bodies, keys, autopilot 
 | Key | What it does |
 | --- | --- |
 | F2 | Cycles the physics debug lines: off, colliders, contacts, velocities, bounds, joints, characters, vehicles, all. The choice is the app's: a scene entered later gets it once its physics world exists. |
-| F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
+| F1, F3, PageDown, PageUp | The scaffold's: the demo UI kit, the free-fly camera, the next and previous scene. |
 
 ## Smoke runs and tests
 
@@ -61,7 +61,7 @@ have scenes of their own, so there is no Tab, and the driver gets in only the ca
   bar and on its taskbar button, not the system's default.
 - **Switching and smoke runs:**
   - PageDown steps Playground (C++) → Playground (C#) → Joints (C++) → Joints (C#) → Character (C++) → Character (C#) →
-    Vehicles (C++) → Motorcycle (C++) → Tank (C++) → Vehicles (C#), and F1 shows each scene's keys.
+    Vehicles (C++) → Motorcycle (C++) → Tank (C++) → Vehicles (C#), and the help at the bottom left lists each scene's keys.
   - The F2 mode carries across a switch: the lines drawn match the logged mode. "characters" draws the character's
     shape, its ground normal and its `movedVelocity`. "vehicles" draws the suspension, the wheel circles and the contacts
     coloured by slip.

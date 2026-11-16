@@ -394,8 +394,8 @@ namespace UIDemo
     [[nodiscard]] FenrirDemo::DemoScene Room();
 
     /**
-     * @brief The app as main runs it: its scenes, the ImGui overlay for its switches, and FenrirUI, the Hud and the
-     * Menu installed after the renderer. The HUD draws where `hud` says, and the menu where `menu` says.
+     * @brief The app as main runs it: its scenes, the ImGui overlay for its switches, and the Hud, the Menu and the
+     * WorldUI installed over the scaffold's FenrirUI. The HUD draws where `hud` says, and the menu where `menu` says.
      */
     [[nodiscard]] FenrirDemo::DemoConfig MakeDemoConfig(HudConfig hud = {}, MenuConfig menu = {});
 } // namespace UIDemo
