@@ -1,0 +1,80 @@
+/*
+ * The Razor settings page's sheet (Settings.razor), scoped to it: each rule matches only elements Settings.razor
+ * placed, its ChildContent among them, unless it reaches further with ::deep. The page also takes menu.css's unscoped
+ * rules (.card, .row, .name, .title, and the controls under #menu), so this sheet only lays it out; a rule that
+ * outweighs one of menu.css's starts with #menu, as menu.css's do.
+ *
+ * It hot-reloads: the menu's root has hot reload on, and this file is read from the source tree, so saving it while the
+ * menu is open restyles the page.
+ */
+
+.page {
+    width: 400px;
+    row-gap: 12px;
+}
+
+.name {
+    width: 140px;
+}
+
+#menu .page slider,
+#menu .page textentry {
+    width: 200px;
+}
+
+/* The bindings list: rows come in from the left and leave to the right, through :intro and :outro. */
+.bindings {
+    height: 132px;
+    padding: 6px;
+    row-gap: 2px;
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+.binding {
+    align-items: center;
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+}
+
+.binding:intro {
+    opacity: 0;
+    transform: translate(-24px, 0);
+}
+
+.binding:outro {
+    opacity: 0;
+    transform: translate(24px, 0);
+}
+
+.key {
+    width: 80px;
+}
+
+.action {
+    flex-grow: 1;
+}
+
+#menu .remove {
+    padding: 4px 10px;
+    font-size: 16px;
+}
+
+/* ::deep: Section's heading is Section's element, with Section's scope, which a plain .heading here would not match. */
+.page ::deep .heading {
+    margin-top: 6px;
+    margin-bottom: 4px;
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--accent);
+}
+
+.page ::deep .section {
+    row-gap: 8px;
+}
+
+/* ::deep into the credits document, whose elements LoadDocument made, with no scope at all. */
+.page ::deep .document label {
+    font-size: 16px;
+    color: var(--ink-dim);
+}

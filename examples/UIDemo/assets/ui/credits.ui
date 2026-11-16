@@ -1,0 +1,10 @@
+<!--
+  UIDemo's credits (examples/UIDemo/README.md, "The C# variant"): a small markup document the Razor settings page,
+  scripts/Settings.razor, places with <Document Src="ui/credits.ui" />. Its elements are the document's, not the
+  page's: Settings.razor.css styles them only through ::deep.
+-->
+<panel id="credits">
+    <label>FenrirUI: elements, sheets and documents in C++</label>
+    <label>Razor components over it, from C#</label>
+    <label>The room: the shared demo assets</label>
+</panel>
