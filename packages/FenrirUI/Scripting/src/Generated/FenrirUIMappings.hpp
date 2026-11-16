@@ -13,12 +13,12 @@
 #include "FenrirUI/UIRoot.hpp"
 #include "FenrirAssetsScripting/AssetMappings.hpp"
 #include "FenrirScripting/BoundMappings.hpp"
-#include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirScriptingMappings.hpp"
-#include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
-#include "../../../../FenrirInput/Scripting/include/FenrirInputScripting/Generated/FenrirInputMappings.hpp"
-#include "../../../../FenrirAssets/Scripting/include/FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
-#include "../../../../FenrirText/Scripting/include/FenrirTextScripting/Generated/FenrirTextMappings.hpp"
-#include "../../../../FenrirPainter/Scripting/include/FenrirPainterScripting/Generated/FenrirPainterMappings.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
+#include "FenrirScripting/Generated/FenrirMathMappings.hpp"
+#include "FenrirInputScripting/Generated/FenrirInputMappings.hpp"
+#include "FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
+#include "FenrirTextScripting/Generated/FenrirTextMappings.hpp"
+#include "FenrirPainterScripting/Generated/FenrirPainterMappings.hpp"
 
 #include <cstdint>
 #include <string_view>

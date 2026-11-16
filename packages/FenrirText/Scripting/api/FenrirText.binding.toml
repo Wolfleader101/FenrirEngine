@@ -21,6 +21,7 @@ readonly-structs = ["Fenrir::LineMetrics"]
 
 [cpp]
 mappings = "../include/FenrirTextScripting/Generated/FenrirTextMappings.hpp"
+include = "FenrirTextScripting/Generated/FenrirTextMappings.hpp"
 # The structs as C# passes them.
 includes = ["FenrirTextScripting/ScriptText.hpp"]
 
