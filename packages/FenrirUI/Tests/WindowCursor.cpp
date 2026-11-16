@@ -92,6 +92,20 @@ namespace
         {
             return Window::GetCursorShape(app, Window::MainWindow());
         }
+
+        // The game sets the window's shape itself, as it does with no UI under the pointer.
+        void GameSets(CursorShape shape)
+        {
+            INFO("the window did not take the game's cursor shape " << static_cast<int>(shape));
+            REQUIRE(Window::SetCursorShape(app, Window::MainWindow(), shape));
+        }
+
+        // The game sets the window's cursor mode, as for mouse look.
+        void GameSets(CursorMode mode)
+        {
+            INFO("the window did not take the game's cursor mode " << static_cast<int>(mode));
+            REQUIRE(Window::SetCursorMode(app, Window::MainWindow(), mode));
+        }
     };
 
     // An element of `tag` under the root element, placed absolutely at `x`, `y` and sized `width` by `height`, with
@@ -189,7 +203,7 @@ TEST_CASE("A shape is set only when it differs from the last FenrirUI set", "[ui
     REQUIRE(test.Shape() == CursorShape::Hand);
 
     // The game sets a shape of its own: FenrirUI sets the hand again only if it set something else since.
-    REQUIRE(Window::SetCursorShape(test.app, Window::MainWindow(), CursorShape::NotAllowed));
+    test.GameSets(CursorShape::NotAllowed);
     test.MoveTo({130.0f, 25.0f});
     INFO("moving to the second button wants the hand again, which FenrirUI last set, so nothing is set");
     REQUIRE(test.Shape() == CursorShape::NotAllowed);
@@ -209,7 +223,7 @@ TEST_CASE("Leaving every root gives the window the arrow once, then leaves it to
     test.MoveTo({200.0f, 200.0f});
     INFO("off it, over nothing that takes pointer input, the arrow comes back");
     REQUIRE(test.Shape() == CursorShape::Arrow);
-    REQUIRE(Window::SetCursorShape(test.app, Window::MainWindow(), CursorShape::Text));
+    test.GameSets(CursorShape::Text);
     test.MoveTo({210.0f, 200.0f});
     test.Frame();
     INFO("after that the game's shape is left alone");
@@ -223,7 +237,7 @@ TEST_CASE("An element with pointer-events none under the pointer sets no cursor"
     UIRoot& root = test.MakeRoot();
     (void)Place(root, "panel", 10.0f, 10.0f, 100.0f, 100.0f, {{"cursor", "pointer"}});
     test.Frame();
-    REQUIRE(Window::SetCursorShape(test.app, Window::MainWindow(), CursorShape::Text));
+    test.GameSets(CursorShape::Text);
 
     test.MoveTo({50.0f, 50.0f});
     test.Frame();
@@ -238,13 +252,13 @@ TEST_CASE("Nothing is set while the window's cursor mode is not Normal", "[ui][c
     UIRoot& root = test.MakeRoot();
     (void)Place(root, "button", 10.0f, 10.0f, 60.0f, 30.0f);
     test.Frame();
-    REQUIRE(Window::SetCursorMode(test.app, Window::MainWindow(), CursorMode::Captured));
+    test.GameSets(CursorMode::Captured);
 
     test.MoveTo({40.0f, 25.0f});
     INFO("the cursor is captured for mouse look, so the button's hand is not set");
     REQUIRE(test.Shape() == CursorShape::Arrow);
 
-    REQUIRE(Window::SetCursorMode(test.app, Window::MainWindow(), CursorMode::Normal));
+    test.GameSets(CursorMode::Normal);
     test.Frame();
     INFO("with the cursor free again, the hovered button's hand is set");
     REQUIRE(test.Shape() == CursorShape::Hand);
@@ -294,7 +308,7 @@ TEST_CASE("An image root never sets the window's cursor", "[ui][cursor][display]
     UIRoot& root = test.Roots().CreateRoot(config);
     (void)Place(root, "button", 0.0f, 0.0f, 320.0f, 240.0f);
     test.Frame();
-    REQUIRE(Window::SetCursorShape(test.app, Window::MainWindow(), CursorShape::Text));
+    test.GameSets(CursorShape::Text);
 
     test.MoveTo({40.0f, 25.0f});
     test.Frame();
@@ -313,7 +327,7 @@ TEST_CASE("A world root reads its hovered button's cursor and never sets the win
     UIRoot& root = test.Roots().CreateRoot(config);
     (void)Place(root, "button", 0.0f, 0.0f, 200.0f, 100.0f);
     test.Frame();
-    REQUIRE(Window::SetCursorShape(test.app, Window::MainWindow(), CursorShape::Text));
+    test.GameSets(CursorShape::Text);
 
     Fenrir::Math::Ray ray;
     ray.origin = Fenrir::Math::Vec3(0.0f, 0.0f, 5.0f);

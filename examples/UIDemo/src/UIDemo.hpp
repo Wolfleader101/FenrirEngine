@@ -393,7 +393,7 @@ namespace UIDemo
         /** @brief The slider's hue, in degrees. */
         float m_hue = 30.0f;
         /** @brief Whether the last Update gave the terminal a ray, so the window's cursor is the terminal's. */
-        bool m_aimed = false;
+        bool m_rayGiven = false;
     };
 
     /** @brief The room: a lit room with the player, a top-down camera for the minimap and the HUD's system. */

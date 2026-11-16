@@ -133,8 +133,8 @@ TEST_CASE("A window's cursor shape reads back as it was last set", "[window][ser
 
     for (const CursorShape shape : {CursorShape::Move, CursorShape::Hand, CursorShape::Hidden, CursorShape::Arrow})
     {
+        INFO("cursor shape " << static_cast<int>(shape) << " is accepted and reads back as set");
         REQUIRE(Window::SetCursorShape(test.app, main, shape));
-        INFO("cursor shape " << static_cast<int>(shape) << " reads back as set");
         REQUIRE(Window::GetCursorShape(test.app, main) == shape);
     }
     INFO("a window that does not exist reads as the arrow");

@@ -10,6 +10,7 @@
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirText/FontLibrary.hpp"
 #include "FenrirUI/Controls.hpp"
+#include "FenrirUI/WindowCursor.hpp"
 #include "FenrirWindow/Window.hpp"
 
 namespace Fenrir
@@ -196,38 +197,34 @@ namespace Fenrir
         return RemoveStageWork(m_paintStage, handle.id);
     }
 
-    namespace
+    CursorShape WindowCursorShape(Cursor cursor) noexcept
     {
-        /** @brief The window's shape for a resolved cursor (UIRoot::GetHoveredCursor): `auto` is the arrow. */
-        CursorShape ShapeOf(Cursor cursor)
+        switch (cursor)
         {
-            switch (cursor)
-            {
-            case Cursor::Pointer:
-                return CursorShape::Hand;
-            case Cursor::Text:
-                return CursorShape::Text;
-            case Cursor::Move:
-                return CursorShape::Move;
-            case Cursor::NotAllowed:
-                return CursorShape::NotAllowed;
-            case Cursor::EwResize:
-                return CursorShape::ResizeEastWest;
-            case Cursor::NsResize:
-                return CursorShape::ResizeNorthSouth;
-            case Cursor::NwseResize:
-                return CursorShape::ResizeNorthWestSouthEast;
-            case Cursor::NeswResize:
-                return CursorShape::ResizeNorthEastSouthWest;
-            case Cursor::None:
-                return CursorShape::Hidden;
-            case Cursor::Auto:
-            case Cursor::Default:
-                break;
-            }
-            return CursorShape::Arrow;
+        case Cursor::Pointer:
+            return CursorShape::Hand;
+        case Cursor::Text:
+            return CursorShape::Text;
+        case Cursor::Move:
+            return CursorShape::Move;
+        case Cursor::NotAllowed:
+            return CursorShape::NotAllowed;
+        case Cursor::EwResize:
+            return CursorShape::ResizeEastWest;
+        case Cursor::NsResize:
+            return CursorShape::ResizeNorthSouth;
+        case Cursor::NwseResize:
+            return CursorShape::ResizeNorthWestSouthEast;
+        case Cursor::NeswResize:
+            return CursorShape::ResizeNorthEastSouthWest;
+        case Cursor::None:
+            return CursorShape::Hidden;
+        case Cursor::Auto:
+        case Cursor::Default:
+            break;
         }
-    } // namespace
+        return CursorShape::Arrow;
+    }
 
     void UIRoots::ApplyCursors()
     {
@@ -237,7 +234,9 @@ namespace Fenrir
         {
             WindowId window;
             Cursor cursor = Cursor::Default;
-            const UIRoot* root = nullptr;
+            /** @brief The deciding root's input priority and making order, once a root over an element is found. */
+            bool found = false;
+            int priority = 0;
             std::uint64_t order = 0;
         };
         std::vector<Wanted> wanted;
@@ -253,26 +252,34 @@ namespace Fenrir
                 continue;
             }
             const WindowId window = root.GetConfig().window;
+            const int priority = root.GetConfig().inputPriority;
             auto it = std::find_if(wanted.begin(), wanted.end(), [&](const Wanted& w) { return w.window == window; });
             if (it == wanted.end())
             {
                 wanted.push_back({window});
                 it = std::prev(wanted.end());
             }
-            const bool above =
-                it->root == nullptr || root.GetConfig().inputPriority > it->root->GetConfig().inputPriority ||
-                (root.GetConfig().inputPriority == it->root->GetConfig().inputPriority && entry.order < it->order);
-            if (above)
+            if (!it->found || priority > it->priority || (priority == it->priority && entry.order < it->order))
             {
-                *it = {window, root.GetHoveredCursor(), &root, entry.order};
+                *it = {window, root.GetHoveredCursor(), true, priority, entry.order};
             }
         }
         for (const Wanted& want : wanted)
         {
-            const CursorShape shape = ShapeOf(want.cursor);
             auto last = std::find_if(m_windowCursors.begin(), m_windowCursors.end(),
                                      [&](const auto& set) { return set.first == want.window; });
-            const CursorShape lastShape = last == m_windowCursors.end() ? CursorShape::Arrow : ShapeOf(last->second);
+            if (!Window::Exists(m_app, want.window))
+            {
+                // A window that went has no cursor to give back.
+                if (last != m_windowCursors.end())
+                {
+                    m_windowCursors.erase(last);
+                }
+                continue;
+            }
+            const CursorShape shape = WindowCursorShape(want.cursor);
+            const CursorShape lastShape =
+                last == m_windowCursors.end() ? CursorShape::Arrow : WindowCursorShape(last->second);
             // The window is the game's while it captures or hides the cursor, as for mouse look.
             if (shape == lastShape || Window::GetCursorMode(m_app, want.window) != CursorMode::Normal ||
                 !Window::SetCursorShape(m_app, want.window, shape))

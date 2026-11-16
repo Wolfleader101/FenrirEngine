@@ -16,6 +16,7 @@
 #include "FenrirUI/UI.hpp"
 #include "FenrirUI/UIRoot.hpp"
 #include "FenrirUI/UIWorldTarget.hpp"
+#include "FenrirUI/WindowCursor.hpp"
 #include "FenrirWindow/Window.hpp"
 #include "UIDemo.hpp"
 
@@ -59,36 +60,6 @@ namespace UIDemo
                 break;
             }
             return {rgb[0] + low, rgb[1] + low, rgb[2] + low};
-        }
-
-        /** @brief The window's shape for a cursor UIRoot::GetHoveredCursor gives, as a window root sets it. */
-        Fenrir::CursorShape ShapeOf(Fenrir::Cursor cursor)
-        {
-            switch (cursor)
-            {
-            case Fenrir::Cursor::Pointer:
-                return Fenrir::CursorShape::Hand;
-            case Fenrir::Cursor::Text:
-                return Fenrir::CursorShape::Text;
-            case Fenrir::Cursor::Move:
-                return Fenrir::CursorShape::Move;
-            case Fenrir::Cursor::NotAllowed:
-                return Fenrir::CursorShape::NotAllowed;
-            case Fenrir::Cursor::EwResize:
-                return Fenrir::CursorShape::ResizeEastWest;
-            case Fenrir::Cursor::NsResize:
-                return Fenrir::CursorShape::ResizeNorthSouth;
-            case Fenrir::Cursor::NwseResize:
-                return Fenrir::CursorShape::ResizeNorthWestSouthEast;
-            case Fenrir::Cursor::NeswResize:
-                return Fenrir::CursorShape::ResizeNorthEastSouthWest;
-            case Fenrir::Cursor::None:
-                return Fenrir::CursorShape::Hidden;
-            case Fenrir::Cursor::Auto:
-            case Fenrir::Cursor::Default:
-                break;
-            }
-            return Fenrir::CursorShape::Arrow;
         }
 
         /** @brief `rgb`'s sRGB channels packed as Colour::FromSrgb takes them, opaque. */
@@ -184,16 +155,17 @@ namespace UIDemo
         // window's shape, not the last one set here, since a window root gives the arrow back when the pointer leaves
         // it for the room.
         const Fenrir::WindowId window = Fenrir::Window::MainWindow();
-        if (ray || m_aimed)
+        // As a window root, it leaves the cursor alone while it is captured or hidden.
+        if ((ray || m_rayGiven) && Fenrir::Window::GetCursorMode(m_app, window) == Fenrir::CursorMode::Normal)
         {
             const Fenrir::CursorShape shape =
-                ray ? ShapeOf(m_terminal->GetHoveredCursor()) : Fenrir::CursorShape::Arrow;
+                ray ? Fenrir::WindowCursorShape(m_terminal->GetHoveredCursor()) : Fenrir::CursorShape::Arrow;
             if (shape != Fenrir::Window::GetCursorShape(m_app, window))
             {
                 (void)Fenrir::Window::SetCursorShape(m_app, window, shape);
             }
         }
-        m_aimed = ray.has_value();
+        m_rayGiven = ray.has_value();
         const Fenrir::UIRootId terminal = m_terminal->GetId();
         for (const Fenrir::UIEvent& event : m_events.Read(m_app))
         {
