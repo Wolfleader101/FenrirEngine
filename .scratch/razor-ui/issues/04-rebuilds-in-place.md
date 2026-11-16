@@ -18,9 +18,9 @@
 
 Stacked on 03.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The fake-seam tests pin these native-call counts:
+- [x] The fake-seam tests pin these native-call counts:
   - a no-change rebuild: zero;
   - a text change: one `SetText`;
   - a class token added and removed;
@@ -29,11 +29,11 @@ Stacked on 03.
   - an `@if` element appearing and disappearing;
   - a folded block built once and moved;
   - loose text in a panel giving a generated label.
-- [ ] Indices stay correct while a removed element is outgoing.
-- [ ] Scripting tests:
+- [x] Indices stay correct while a removed element is outgoing.
+- [x] Scripting tests:
   - `StateHasChanged` from an `Update` system shows the same frame;
   - a `BuildHash` that changes rebuilds and an unchanged one does not, seen through a build counter;
   - `Unmount` removes with the outro;
   - a throwing build disables only its component, and a reload brings it back.
-- [ ] A missing-`@using` fixture logs the unrecognised-directive warning once.
-- [ ] Everything passes under the msvc-x64-debug preset. `check_tickets.py` and clang-format pass.
+- [x] A missing-`@using` fixture logs the unrecognised-directive warning once.
+- [x] Everything passes under the msvc-x64-debug preset. `check_tickets.py` and clang-format pass.

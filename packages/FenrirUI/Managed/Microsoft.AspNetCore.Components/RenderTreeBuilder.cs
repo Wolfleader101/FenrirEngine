@@ -36,4 +36,9 @@ public abstract class RenderTreeBuilder
 
     /// <summary>An attribute from an expression of any other type.</summary>
     public abstract void AddAttribute(int sequence, string name, object? value);
+
+    /// <summary>
+    /// The open element's <c>@key</c>, written after its attributes: it keeps the element when siblings come, go or move.
+    /// </summary>
+    public abstract void SetKey(object? value);
 }
