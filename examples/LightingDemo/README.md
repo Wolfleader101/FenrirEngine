@@ -3,7 +3,7 @@
 The lighting spec's demo app (`GLOSSARY.md`: demo app): physically based lighting, image-based lighting from HDR
 panoramas, tonemapping and bloom on the demo scaffold (`examples/DemoScaffold/README.md`), one scene per showcase, flown
 through on the scaffold's free-fly camera. Built with the examples when the renderer is on. Each of its eight scenes
-(`.scratch/fenrir-renderer-lighting/spec.md`, "LightingDemo"), and with scripting (`FENRIR_ENABLE_SCRIPTING`) a ninth,
+(ADR-0047 to ADR-0052), and with scripting (`FENRIR_ENABLE_SCRIPTING`) a ninth,
 Many lights (C#), made and run from C# (`scripts/`), has a section below saying what it shows and its keys; every
 scene's hand checks are collected in one place after them, under Hand checks.
 
