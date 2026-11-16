@@ -142,6 +142,8 @@ The demo scaffold (ticket 23) has an optional `ImGuiOverlay`. It is the first co
 
 ImGui is a submodule linked only by that piece, built only with the examples. It is never part of a package and never the basis of Fenrir's own UI.
 
+*Amended 2026-11-16 (ADR-0071):* ImGui leaves the demos and the repository. Every demo moves onto the demo UI kit over FenrirUI (`.scratch/demo-ui/`), and the spec's last ticket deletes the `ImGuiOverlay`, `DemoConfig::imguiOverlay` and the submodule, then rewrites this section to say so. `builtin:2d` and its vertex layout stay.
+
 ## Testing
 
 - **On the null backend, through `RendererProbe`:**

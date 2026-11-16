@@ -1079,3 +1079,31 @@ One executable under `examples/` per feature area (RendererDemo, ScriptingDemo, 
 **Demo scaffold**
 What every demo app is built on: the `FenrirDemoScaffold` library (`examples/DemoScaffold/`), its `fenrir_add_demo_app` CMake function and its `Fenrir.Demo` C# assembly. It installs the engine packages, and holds the free-fly camera, the scene list, the scene-click event, the help panel, the smoke-run switches and the optional ImGui overlay.
 *Avoid:* demo framework, demo base, harness.
+
+**Demo UI kit**
+The demo scaffold's UI over FenrirUI that every demo app shares (ADR-0071): the demo panel, the help, the demo tutorial and the hint line, in one theme. Demo code, not an engine package.
+*Avoid:* debug UI, dev UI, demo HUD, overlay (alone: the renderer's).
+
+**Demo panel**
+The demo UI kit's side panel: the scene switcher, the readouts, the switches and any demo slots of the active scene and the app.
+*Avoid:* ImGui window, tweak panel, inspector.
+
+**Readout**
+A row of the demo panel showing a name and a live value the scene or app pushes.
+*Avoid:* stat, debug text (the renderer's screen text).
+
+**Switch row**
+A row of the demo panel bound to a value it changes: a toggle, range, choice, colour, button or text entry.
+*Avoid:* widget (ImGui's), tweakable.
+
+**Key row**
+One line of the help: the keys and what they do, for the scaffold, the app or a scene. Separate from the keys a smoke run presses.
+*Avoid:* key help (the single line it replaces), binding (a game's remappable input).
+
+**Demo tutorial**
+A scene's ordered steps, shown in a card the first time the scene is entered in a run, never in a smoke run.
+*Avoid:* onboarding, walkthrough.
+
+**Demo slot**
+An element of the demo panel with a known id, given to a scene that asks for it, where C# mounts a Razor component (ADR-0072).
+*Avoid:* mount point (alone), placeholder.
