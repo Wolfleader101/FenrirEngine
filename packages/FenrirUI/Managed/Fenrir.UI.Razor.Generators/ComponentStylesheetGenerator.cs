@@ -109,7 +109,7 @@ public sealed class ComponentStylesheetGenerator : IIncrementalGenerator
         }
     }
 
-    /// <summary>The namespace Razor gives the component, from its markup with comments stripped; null for the global one.</summary>
+    /// <summary>The namespace Razor gives the Razor component, from its markup with comments stripped; null for the global one.</summary>
     private static string? NamespaceOf(string relativePath, string markup, Dictionary<string, SourceFile> imports,
                                        string rootNamespace)
     {

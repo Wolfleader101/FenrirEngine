@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: built (2026-11-16: tickets 01 to 09 in PRs #364 and #366 to #372, ticket 02's #365 landed through #371, the `IsMounted` follow-up #373, and the close-out review, all into `razor-ui`; this folder goes once the trunk PR into `fenrir-ui` lands)
 
 # Razor UI: `.razor` components over FenrirUI, compiled by the stock SDK and built in place, with UIDemo
 
@@ -11,7 +11,7 @@ Origin: the user wants s&box's feel for game UI in C#, where `.razor` panels are
 | 0069 | Razor handlers and two-way binding ride the UI event queue |
 | 0070 | Razor component stylesheets are scoped by a scope class the native stylesheet loader applies |
 
-They build on ADR-0007 (ECS-first, behaviours as a later layer), ADR-0004 and ADR-0009 (shared contracts, extensions, reload of script assemblies), ADR-0039 (extension stages), ADR-0042 (generated bindings) and the FenrirUI ADRs 0061 to 0066. They amend ADR-0007, 0061, 0064 and 0065.
+They build on ADR-0007 (ECS-first, behaviours as a later layer), ADR-0004 and ADR-0009 (shared contracts, extensions, reload of script assemblies), ADR-0039 (extension stages), ADR-0042 (generated bindings) and the FenrirUI ADRs 0061 to 0066. They amend ADR-0007, 0039, 0061, 0064 and 0065.
 
 ## Problem Statement
 
@@ -112,13 +112,15 @@ UIDemo shows two things. Its speedometer becomes one `.razor` file. A Razor sett
 
 ### The stand-in contract: `Microsoft.AspNetCore.Components` (ADR-0067)
 
-- A managed project at `packages/FenrirUI/Managed/Microsoft.AspNetCore.Components/`, with no engine dependency, built as a contract and shared by the UI extension. It holds exactly what the research note's "Builder members the generated code needs" and its stand-in listing name:
+- A managed project at `packages/FenrirUI/Managed/Microsoft.AspNetCore.Components/`, depending only on the `Fenrir.UI` contract and those it builds on (ticket 06, below), built as a contract and shared by the UI extension. It holds exactly what the research note's "Builder members the generated code needs" and its stand-in listing name:
   - `IComponent` and `ComponentBase` with a protected virtual `BuildRenderTree(RenderTreeBuilder)`;
   - an abstract `Rendering.RenderTreeBuilder` with every member the generated code calls (`OpenElement`, `CloseElement`, `OpenComponent<T>`, `CloseComponent`, `AddMarkupContent`, the `AddContent` and `AddAttribute` overloads, `AddComponentParameter`, `AddMultipleAttributes`, `SetKey`, `SetUpdatesAttributeName`, the reference captures, the stop-propagation and prevent-default attributes);
   - `RenderFragment` and `RenderFragment<T>`;
   - `EventCallback`, `EventCallback<T>` and `EventCallbackFactory`, with the binder extensions;
   - `ElementReference`, `BindConverter` and `ParameterAttribute`;
   - `CompilerServices.RuntimeHelpers`.
+
+  As built (ticket 06), it also holds `IHandleEvent` (which `UIComponent` implements, so a child's `ValueChanged.InvokeAsync` marks its parent for rebuild), `EventCallbackWorkItem` and `ChangeEventArgs`, which the generated code and the binder name. It leaves out `AddMultipleAttributes` (`@attributes` splatting) and the stop-propagation and prevent-default attributes, so those do not compile; the README's "Not in this version" says so.
 
   It also holds two discovery classes:
   - **`EventHandlers`**, with an `[EventHandler]` per ADR-0069 name, each naming the handler's argument type. That is `Fenrir.UI`'s `UIEvent` when the generator accepts a struct there; the stand-in may reference the `Fenrir.UI` contract for it. Otherwise it is a small `UIEventArgs` class wrapping one, and `Action<UIEvent>` handlers are adapted through `EventCallback.Factory`'s overloads. Ticket 06 records which: the generator accepts the `UIEvent` struct (it emits `EventCallback.Factory.Create<global::Fenrir.UI.UIEvent>`), so there is no `UIEventArgs`, and the stand-in references the `Fenrir.UI` contract.
@@ -131,7 +133,7 @@ UIDemo shows two things. Its speedometer becomes one `.razor` file. A Razor sett
   - adds the running SDK's Razor source generator as an `Analyzer`, found from the SDK's own `Microsoft.NET.Sdk.Razor` folder: `$(NETCoreSdkVersion)` and `$(MSBuildExtensionsPath)`, never a hard-coded version;
   - adds `.razor` files as `AdditionalFiles`, and `RazorLangVersion` and `RootNamespace` as `CompilerVisibleProperty`;
   - references the stand-in and `Fenrir.UI.Razor`, compile-time only;
-  - adds a default `_Imports.razor` content: `@using Fenrir.UI`, `@using Fenrir.UI.Razor`, `@using Microsoft.AspNetCore.Components.Web` (where `EventHandlers` lives) and `@inherits UIComponent`;
+  - adds a default `_Imports.razor` content: `@using Fenrir.UI`, `@using Fenrir.UI.Razor`, `@using Microsoft.AspNetCore.Components.Web` (where `EventHandlers` lives) and `@inherits UIComponent`, unless the project has its own root `_Imports.razor`, which then replaces it (ticket 03);
   - adds the shipped `RazorDispatcher.cs` to `Compile`;
   - adds FenrirUI's Razor generator (`Fenrir.UI.Razor.Generators`) as an `Analyzer`, and `.razor.css` files as `AdditionalFiles`.
 
@@ -141,7 +143,7 @@ UIDemo shows two things. Its speedometer becomes one `.razor` file. A Razor sett
 
 ### The builder (ADR-0067)
 
-- `Fenrir.UI.Razor`'s `ElementBuilder : RenderTreeBuilder` works through an internal **element seam**, a small interface over the `UIRoot` natives it uses: create, remove, reorder, children, classes, style, id, text, attribute, value, entry text, load document, add class. The production implementation is `UIRoot`. Tests use a recording fake.
+- `Fenrir.UI.Razor`'s `ElementBuilder : RenderTreeBuilder` works through an internal **element seam**, a small interface over the `UIRoot` natives it uses: create, remove, reorder, children, classes, style, id, text, attribute, value, entry text, load document, add class. The production implementation is `RootSeam`, an internal wrapper over one `UIRoot` shared by its mounts. Tests use a recording fake.
 - **Retained state**:
   - per mounted component, a tree of regions;
   - per region, its entries keyed by `(sequence, occurrence)` or `(sequence, key)`;
@@ -150,7 +152,7 @@ UIDemo shows two things. Its speedometer becomes one `.razor` file. A Razor sett
   A child component's entry holds the child object and its region.
 - **Resolution.** `OpenElement` buffers the tag and attributes. The element is resolved, found by key or created at the end of its parent, at the first non-attribute call: `SetKey`, content, a child, or `CloseElement`. A tag change at the same key removes the old element and makes a new one.
 - **Applying values:**
-  - **Attributes.** `class` splits into tokens and diffs them (`AddClass`/`RemoveClass`). `style` splits into declarations and diffs them (`SetStyle`; a dropped declaration is reset by `SetStyle(name, "")`, which ticket 02 confirms or adds as a reset). `id` uses `SetIdString`. `value` uses `SetValue`, or `SetEntryText` for a `textentry`, chosen by tag. Any other attribute uses `SetAttribute`. Each native is called only when the value changed.
+  - **Attributes.** `class` splits into tokens and diffs them (`AddClass`/`RemoveClass`). `style` splits into declarations and diffs them (`SetStyle`; a dropped declaration is reset by `SetStyle(name, "")`, which ticket 02 confirms or adds as a reset). `id` uses `SetIdString`. `value` uses `SetValue`, or `SetEntryText` for a `textentry`, chosen by tag. Any other attribute uses `SetAttribute`. Each native is called only when the value changed. As built (ticket 04), an attribute dropped from the markup is undone: a dropped `class` removes its tokens, a dropped `style` resets its declarations, a dropped `id` is set to `""`, a dropped `value` is left as the control has it, and any other attribute is set to `"false"` when its last value was `"true"` (FenrirUI reads an empty value as true), else to `""`.
   - **Text.** Content runs within one element are concatenated and pushed with one `SetText` when the result changed. That applies in a `label` or `button`. In any other element, a run between child elements becomes a generated `label` child, keyed by the run's first sequence number.
   - **Folded markup.** `AddMarkupContent` strings are parsed by `MarkupFragment`, a C# parser for the well-formed HTML subset Razor's encoder emits: elements, attributes, text, the entities Razor emits, void elements and `<style>`. Each string is parsed once and cached per string instance. Its elements become entries keyed `(sequence, occurrence, child path)`, through the same apply rules. Whitespace-only runs are ignored.
   - **`<style>`.** A `<style>` element, folded or not, adds its text as a scoped sheet once per root and component type (ticket 07). It makes no element.
@@ -167,31 +169,31 @@ UIDemo shows two things. Its speedometer becomes one `.razor` file. A Razor sett
   - `StateHasChanged()` and the overridable `BuildHash()`;
   - the hooks `OnMount`, `OnParametersSet`, `OnBuilt(bool first)` and `OnUnmount`;
   - `OnPaint(PainterId, ElementBoxes)`.
-- **Mounting.** `root.Mount<T>(parent, index = -1, Action<T>? init = null)` is an extension on `UIRoot` in `Fenrir.UI.Razor`. It creates a host `panel` under `parent` carrying the component's readable class and scope class, constructs `T`, runs `init` (the place to set parameters), and queues the first build in the next build stage. It returns `ComponentRef<T>` (`Instance`, `Host`, `IsMounted`, `Unmount(RemoveMode)`). Mounting from outside a stage is allowed: the component is queued.
-- **The registry.** `RazorRuntime` is static in `Fenrir.UI.Razor` and keeps the mounted components per root. It drops a root's components when the root is destroyed.
+- **Mounting.** `root.Mount<T>(parent, index = -1, Action<T>? init = null)` is an extension on `UIRoot` in `Fenrir.UI.Razor`. It creates a host `panel` under `parent` carrying the component's readable class and scope class, constructs `T`, runs `init` (the place to set parameters), and queues the first build in the next build stage. It returns `ComponentRef<T>` (`Instance`, `Host`, `IsMounted`, `Unmount(RemoveMode)`). `IsMounted` asks the host (the follow-up PR #373): it is false at once when something else removed the host or its root was destroyed, and asking it then forgets the component (its `OnUnmount` runs). Mounting from outside a stage is allowed: the component is queued.
+- **The mounted list.** `RazorRuntime` is static in `Fenrir.UI.Razor` and keeps the mounted components per root. It drops a root's components when the root is destroyed.
 - **`RazorDispatcher.cs`** is shipped source, compiled into the script. It is one `[StageSystem(UIStages.Build)]` and one `[StageSystem(UIStages.Paint)]` system, each a single call into `RazorRuntime` with its `SystemContext`. In the build stage:
   1. read `EventReader<UIEvent>` and dispatch (ADR-0069);
   2. collect the components to rebuild: queued mounts, `StateHasChanged`, handler-touched, and a changed `BuildHash` (checked for every mounted component);
   3. build them parents first, each once per frame, with children rebuilt by parameter change inside their parent's build.
 
   In the paint stage, it calls `OnPaint` for each mounted component whose type overrides it (found once per type), with `PaintInto(Element)`. A child component, whose `Element` is the element it was placed in, paints into the first element its own markup places (ticket 08), so two children side by side each get their own boxes.
-- **Reload.** The dispatcher's `OnDestroy` calls `RazorRuntime.Release()`. That removes every mounted host with `RemoveMode.Immediate`, clears the registry, the per-type setter, override and stylesheet caches, and the parsed-markup cache, and leaves no static reference to a generation type. A test checks that the released generation is collected.
+- **Reload.** The dispatcher's `OnDestroy` calls `RazorRuntime.Release()`. That removes every mounted host with `RemoveMode.Immediate`, clears the mounted list, the per-type setter, override and stylesheet caches, and the parsed-markup cache, and leaves no static reference to a generation type. A test checks that the released generation is collected.
 - **Exceptions.** A component's build or handler that throws is logged with the component's type, and that component is disabled (not built again) until the next reload, as a throwing stage system is. Its elements stay as they were.
 
 ### Handlers and binding (ADR-0069)
 
-- Each handler attribute (`EventCallback` or `EventCallback<UIEvent>`) is recorded on its entry by kind. Dispatch walks `GetParent` from `UIEvent.Target` to the nearest entry, of any component on that root, with a handler of the event's kind, invokes it with the event, and marks its component for rebuild.
-- **The debug warning.** For a pointer-kind handler, in debug builds, the builder checks after the first layout whether the element's resolved `pointer-events` takes the pointer. This needs one native read, `GetPointerEvents` or a resolved-style query, which ticket 06 adds through the generated binding. If it doesn't, the builder warns once.
+- Each handler attribute (`EventCallback` or `EventCallback<UIEvent>`) is recorded on its entry by kind. Dispatch walks `GetParent` from `UIEvent.Target` to the nearest entry, of any component on that root, with a handler of the event's kind, invokes it with the event, and marks its component for rebuild. A handler returning a `Task` (such as `e => ValueChanged.InvokeAsync(e.Value)`) must have finished when it returns: one still running, an async handler, fails as a throwing handler does (close-out review).
+- **The debug warning.** For a pointer-kind handler, in debug builds, the builder checks after the first layout whether the element's resolved `pointer-events` takes the pointer. This needs one native read, `GetPointerEvents` or a resolved-style query, which ticket 06 adds through the generated binding. If it doesn't, the builder warns once. As built, the native does both: `UIRoot.WarnIfTakesNoPointer(element, message)` reads the resolved style and warns once per message in a debug build, and checks nothing in a release one, since the Razor contracts are built Release and only the engine knows which it is. The builder queues one check per element at its first pointer handler, run at the start of the next frame.
 - **`@bind`** compiles, through `BindAttributes` and `BindConverter`, to a value attribute plus an `onchange` callback.
   - The builder pushes the value when it changed.
-  - On a `Change` event, the dispatcher reads the control's value (`GetValue` or `GetEntryText`) and calls the generated setter. Then it runs `@bind:after`, then rebuilds.
+  - On a `Change` event, the dispatcher reads the control's value (`GetValue` or `GetEntryText`) and calls the generated setter. Then it runs `@bind:after`, then rebuilds. A `Change` whose reading equals the value the builder last pushed or read (a slider drag's closing `Change` repeats its value) does none of the three (ticket 06; ADR-0069's "each side moves only when it changed").
   - For a checkbox, the value is `GetValue != 0`.
 - `@bind-X` on a component is Razor's own lowering to `X` and `XChanged`, needing nothing more.
 
 ### Scoped component stylesheets (ADR-0070)
 
 - **Scope class.** `s-` followed by eight hex digits of FNV-1a over the component type's full name. It is computed in C#, and a test pins the value for a known name.
-- **Classes.** The builder adds the scope class to every element it creates, generated labels and folded-markup elements included, but not a placed document's elements. The host element gets the readable class: kebab case of the type name, without generic arity. It gets the scope class too, so the component's own sheet can style it (ticket 07).
+- **Classes.** The builder adds the scope class to every element it creates, generated labels and folded-markup elements included, but not a placed document's elements (its `document` panel is the `Document` Razor component's own, so it carries `Document`'s scope, and a parent reaches it with `::deep .document`). The host element gets the readable class: kebab case of the type name, without generic arity. It gets the scope class too, so the component's own sheet can style it (ticket 07).
 - **Loading.** On the first mount of a type into a root, the runtime loads the type's `[ComponentStylesheet]` with its scope: by path when the file exists, through `LoadStylesheet(path, scope)`, so hot reload applies; otherwise through `AddStylesheet(text, name, scope)`. `<style>` blocks load once per root and type, named by type and sequence.
 
 ### UIDemo
@@ -247,7 +249,7 @@ One session, branch and PR per ticket, into `razor-ui` or the previous ticket's 
 Stacks, from the Touches lines:
 - 01 → 02, on FenrirUI's native files.
 - 03 is cut from `razor-ui` once 01 has merged, and runs beside 02.
-- 03 → 04 → 05 → 06 → 07 → 08 stack on `Fenrir.UI.Razor`, with 07 cut once 02 has merged.
+- 03 → 04 → 05 → 06 → 07 → 08 stack on `Fenrir.UI.Razor`, with 07 cut once 02 has merged. As built, 08 went before 07, which waited for #365: 06 → 08 → 07, with 02 merged in under 07 (#365 landed through #371).
 - 09 comes last.
 
 | # | Ticket | Blocked by | Branch | PR |

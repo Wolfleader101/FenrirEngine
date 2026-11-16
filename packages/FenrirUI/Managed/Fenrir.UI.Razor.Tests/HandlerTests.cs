@@ -124,6 +124,44 @@ public sealed class HandlerTests : IDisposable
     }
 
     [Fact]
+    public void AHandlerReturningAFinishedTaskRunsAsAnyOther()
+    {
+        Awaiting awaiting = Mount<Awaiting>();
+        Frame();
+
+        List<string> calls = Frame(Event(UIEventKind.Click, Element("done")));
+
+        Assert.Equal(1, awaiting.Count);
+        Assert.Contains($"SetText({Name(Element("done"))}, Done 1)", calls);
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void AHandlerReturningAFaultedTaskTurnsItsRazorComponentOff()
+    {
+        Mount<Awaiting>();
+        Frame();
+
+        Frame(Event(UIEventKind.Click, Element("fault")));
+
+        Assert.Contains("the task faulted", Assert.Single(errors));
+    }
+
+    [Fact]
+    public void AnAsyncHandlerStillRunningTurnsItsRazorComponentOff()
+    {
+        Awaiting awaiting = Mount<Awaiting>();
+        Frame();
+
+        Frame(Event(UIEventKind.Click, Element("late")));
+        Assert.Contains("async handlers are not supported", Assert.Single(errors));
+
+        awaiting.StateHasChanged();
+        Assert.Empty(Frame(Event(UIEventKind.Click, Element("done"))));
+        Assert.Equal(0, awaiting.Count);
+    }
+
+    [Fact]
     public void ARemovedElementsHandlerIsForgotten()
     {
         Clicker clicker = Mount<Clicker>(c => c.Bad = true);

@@ -1,0 +1,6 @@
+@* A child Razor component whose OnUnmount throws, so forgetting it fails its parent's build (ChildComponentTests). *@
+<panel class="unmounting" />
+
+@code {
+    protected override void OnUnmount() => throw new InvalidOperationException("OnUnmount threw");
+}

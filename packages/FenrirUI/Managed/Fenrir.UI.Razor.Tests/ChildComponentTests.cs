@@ -1,4 +1,5 @@
 using Fenrir.Scripting;
+using System.Runtime.CompilerServices;
 using Xunit;
 
 namespace Fenrir.UI.Razor.Tests;
@@ -196,6 +197,35 @@ public sealed class ChildComponentTests : IDisposable
         errors.Clear();
         Assert.Equal("unmount", @fixed.Hooks[^1]);
         Assert.Null(pair.Fixed);
+    }
+
+    [Fact]
+    public void AKeyLeftByABuildThatFailedWhileForgettingIsNotHeldAfterRelease()
+    {
+        WeakReference key = FailABuildWhileForgettingAKey();
+
+        RazorRuntime.Release();
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        // A @key can be an object of a script generation's type, which would keep the generation from being collected.
+        Assert.False(key.IsAlive);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private WeakReference FailABuildWhileForgettingAKey()
+    {
+        object key = new();
+        ObjectKeyed keyed = Mount<ObjectKeyed>(k => k.Keys.Add(key));
+        RunFrame();
+
+        keyed.Keys.Clear();
+        keyed.StateHasChanged();
+        RazorRuntime.Build(default(SystemContext));
+        Assert.Single(errors);
+        errors.Clear();
+        return new WeakReference(key);
     }
 
     [Fact]

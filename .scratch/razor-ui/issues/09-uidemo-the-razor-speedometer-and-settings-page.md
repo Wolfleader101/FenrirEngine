@@ -31,3 +31,5 @@
 - [ ] Editing `Settings.razor.css` while the demo runs restyles the page, and rebuilding the scripts brings the page back after the reload.
 - [x] UIDemo still builds and runs with scripting off, unchanged.
 - [x] Everything passes under the msvc-x64-debug preset. `check_tickets.py` and clang-format pass.
+
+The three unticked boxes are hand checks in a running UIDemo on OpenGL (UIDemo's README, "Hand checks"). No headless test covers them: the OpenGL smoke run logs both mounts with no warnings, and the user checks the rest by hand before the trunk PR merges.

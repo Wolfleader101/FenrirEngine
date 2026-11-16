@@ -44,6 +44,12 @@ internal static class HandlerKinds
         ["oncancel"] = UIEventKind.Cancel,
     };
 
+    /// <summary>The same names in any case, which a directive misspelt as an attribute is recognised by.</summary>
+    private static readonly HashSet<string> anyCase = new(byName.Keys, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Whether <paramref name="name"/> is a handler directive's name in any case, as <c>onClick</c>.</summary>
+    public static bool IsNameInAnyCase(string name) => anyCase.Contains(name);
+
     /// <summary>The kind the attribute <paramref name="name"/> handles; false for a name that is no handler directive.</summary>
     public static bool TryKind(string name, out int kind)
     {
@@ -107,7 +113,7 @@ internal sealed class HandlerTable
     /// <summary>
     /// Runs the handler of the event's kind nearest its target, walking up through the parents; returns whether one was
     /// found. Only that one is offered the event: when its mount is off, nothing runs. Its Razor component then
-    /// rebuilds; a throw turns the component's mount off, as a throwing build does.
+    /// rebuilds; a throw turns its mount off, as a throwing build does.
     /// </summary>
     public bool Dispatch(in UIEvent e, IElementSeam seam, in SystemContext context)
     {

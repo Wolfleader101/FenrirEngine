@@ -1,0 +1,19 @@
+@* Handlers that return a Task (HandlerTests): one already finished, one faulted, and an async one still waiting. *@
+<panel>
+    <button id="done" @onclick="Done">Done @Count</button>
+    <button id="fault" @onclick="Fault">Fault</button>
+    <button id="late" @onclick="async () => { await Pending.Task; ++Count; }">Late</button>
+</panel>
+
+@code {
+    public int Count;
+    public TaskCompletionSource Pending = new();
+
+    private Task Done()
+    {
+        ++Count;
+        return Task.CompletedTask;
+    }
+
+    private Task Fault() => Task.FromException(new InvalidOperationException("the task faulted"));
+}

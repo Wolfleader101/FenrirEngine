@@ -136,6 +136,34 @@ public sealed class EventCallbackFactory
         new(callback.Receiver, callback.Delegate);
 
     public EventCallback<TValue> Create<TValue>(object receiver, EventCallback<TValue> callback) => callback;
+
+    // A handler returning a Task, such as e => ValueChanged.InvokeAsync(e.Value), must have finished when it returns
+    // (ADR-0069: a stage has no synchronisation context). Without these overloads an async lambda would bind to Action
+    // as an async void, whose throw after its first await no dispatcher could catch.
+    public EventCallback Create(object receiver, Func<Task> callback) =>
+        new(receiver as IHandleEvent, (Action)(() => Finished(callback())));
+
+    public EventCallback Create(object receiver, Func<object, Task> callback) =>
+        new(receiver as IHandleEvent, (Action<object>)(argument => Finished(callback(argument))));
+
+    public EventCallback<TValue> Create<TValue>(object receiver, Func<Task> callback) =>
+        new(receiver as IHandleEvent, (Action)(() => Finished(callback())));
+
+    public EventCallback<TValue> Create<TValue>(object receiver, Func<TValue, Task> callback) =>
+        new(receiver as IHandleEvent, (Action<TValue>)(argument => Finished(callback(argument))));
+
+    /// <summary>
+    /// Rethrows a faulted handler's exception, and throws for one still running: an async handler, which the dispatcher
+    /// reports as any handler that throws.
+    /// </summary>
+    private static void Finished(Task task)
+    {
+        if (!task.IsCompleted)
+            throw new InvalidOperationException(
+                "A Razor handler returned before it finished: async handlers are not supported, as a handler runs to " +
+                "its end in the UI's build stage (ADR-0069).");
+        task.GetAwaiter().GetResult();
+    }
 }
 
 /// <summary>What <c>@bind</c>'s change callback is handed: the control's new value, read by the dispatcher.</summary>

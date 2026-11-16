@@ -9,7 +9,7 @@
     <RootNamespace>Fenrir.UI.Razor</RootNamespace>
     <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
   </PropertyGroup>
-  <!-- The Razor components' runtime contract (ADR-0067, ADR-0068): UIComponent, mounting (UIRoot.Mount), the registry
+  <!-- The Razor components' runtime contract (ADR-0067, ADR-0068): UIComponent, mounting (UIRoot.Mount), the list
        of mounted Razor components the Razor dispatcher drives, and the builder that makes FenrirUI elements in place
        through the element seam. Written by hand over the generated Fenrir.UI contract, and built against the scripting
        SDK, the stand-in (Microsoft.AspNetCore.Components) and the Fenrir.UI contract with the contracts it builds on;
