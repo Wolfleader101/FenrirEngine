@@ -1,0 +1,27 @@
+@* Records its hooks and builds; BuildHash and a throw come from fields (RebuildTests). *@
+@{
+    if (Throw)
+        throw new InvalidOperationException("The build threw");
+}
+<label>@Value</label>
+
+@code {
+    public int Value;
+    public int Hash;
+    public bool Throw;
+    public bool AskAgain;
+    public List<string> Hooks = [];
+
+    protected override int BuildHash() => Hash;
+
+    protected override void OnMount() => Hooks.Add("mount");
+
+    protected override void OnBuilt(bool first)
+    {
+        Hooks.Add(first ? "built first" : "built");
+        if (AskAgain)
+            StateHasChanged();
+    }
+
+    protected override void OnUnmount() => Hooks.Add("unmount");
+}

@@ -1,0 +1,9 @@
+@* A child component given a fragment this file writes (ScopeTests): the child's elements carry the child's scope,
+   the fragment's the writer's. *@
+<panel class="list">
+    <Wrapper><label class="mine">@Text</label></Wrapper>
+</panel>
+
+@code {
+    public string Text = "from holder";
+}

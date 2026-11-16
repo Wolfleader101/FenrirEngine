@@ -1,0 +1,50 @@
+@* The speedometer (examples/UIDemo/README.md, "The C# variant"): a Razor component on the HUD root, which
+   SpeedometerSetup mounts and feeds the window camera's smoothed speed. Its host panel is the gauge: styled by
+   Speedometer.razor.css through its readable class, speedometer, and painted by OnPaint in Fenrir.UI.Paint after its
+   own box and before the readout label, which draws over it. It rebuilds only when the readout's text would change. *@
+@using Fenrir.Math
+@using Fenrir.Painter
+@using Fenrir.Text
+<label class="readout">@Readout m/s</label>
+
+@code {
+    // The speed the gauge reads full at, in metres a second.
+    public const float FullScale = 20.0f;
+
+    private const float Start = MathF.PI * 0.75f;
+    private const float Sweep = MathF.PI * 1.5f;
+
+    // The window camera's speed, smoothed, as SpeedometerSetup last read it. The gauge paints it every frame.
+    public float Speed;
+
+    // The readout's precision: one decimal.
+    private float Shown => MathF.Round(Speed, 1);
+
+    private string Readout => Shown.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+
+    protected override int BuildHash() => Shown.GetHashCode();
+
+    // A dark disc, a track of three quarters of a turn, the speed's share of it in the accent colour, and a needle.
+    protected override void OnPaint(PainterId painter, ElementBoxes boxes)
+    {
+        Rect2D box = boxes.Border;
+        var centre = new Vector2(box.X + box.Width * 0.5f, box.Y + box.Height * 0.5f);
+        float radius = MathF.Min(box.Width, box.Height) * 0.5f - 8;
+        float share = Math.Clamp(Speed / FullScale, 0, 1);
+
+        Painter.DrawCircle(painter, centre, radius + 6, new Paint { Colour = new Colour(0.03f, 0.05f, 0.08f, 0.65f) });
+        Painter.DrawArc(painter, centre, radius - 6, Start, Sweep, 8, new Paint { Colour = new Colour(1, 1, 1, 0.18f) });
+        if (share > 0)
+        {
+            Painter.DrawArc(painter, centre, radius - 6, Start, Sweep * share, 8,
+                            new Paint { Colour = new Colour(0.36f, 0.78f, 1.0f, 1.0f) });
+        }
+
+        float angle = Start + Sweep * share;
+        var tip = centre + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * (radius - 18);
+        ReadOnlySpan<Vector2> needle = [centre, tip];
+        Painter.StrokePath(painter, needle, false, new StrokeStyle { Width = 3, Cap = LineCap.Round },
+                           new Paint { Colour = new Colour(1.0f, 0.55f, 0.2f, 1.0f) });
+        Painter.DrawCircle(painter, centre, 6, new Paint { Colour = new Colour(1.0f, 0.55f, 0.2f, 1.0f) });
+    }
+}

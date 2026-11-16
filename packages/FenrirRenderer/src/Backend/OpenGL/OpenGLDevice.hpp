@@ -278,6 +278,7 @@ namespace Fenrir::Graphics
         /** @brief The live buffer a declared use names, else null (for a texture's use too). */
         [[nodiscard]] GlBuffer* BufferOf(const PassResourceUse& use);
         void Execute(const CmdCopyBuffer& command);
+        void Execute(const CmdCopyTexture& command);
 
         /**
          * @brief Sets the levels shaders sample of `texture`: only `level`, as its base and maximum, or every level

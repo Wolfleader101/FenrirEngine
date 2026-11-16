@@ -180,6 +180,16 @@ namespace FenrirDemo
         Fenrir::Math::Vec2 position{0.0f, 0.0f};
     };
 
+    /**
+     * @brief How the free-fly camera looks, an app resource DemoScaffold::Install adds: a game's settings change it
+     * while the app runs.
+     */
+    struct FreeFlyLook
+    {
+        /** @brief Moving the mouse up turns the camera down. */
+        bool invertPitch = false;
+    };
+
     /** @brief The exit code of a smoke run that could not start its backend, which CTest reports as skipped. */
     inline constexpr int SkippedExitCode = 4;
 

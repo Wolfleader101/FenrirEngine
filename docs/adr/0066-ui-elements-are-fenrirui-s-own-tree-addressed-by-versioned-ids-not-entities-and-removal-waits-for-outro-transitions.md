@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # UI elements are FenrirUI's own tree addressed by versioned ids, not entities, and removal waits for outro transitions
@@ -8,7 +8,7 @@ The engine is ECS-first (ADR-0007), and Bevy shows a UI can be made of entities 
 
 ## Elements are not entities
 
-An entity belongs to a scene; a UI root belongs to a window, an image or a world quad, and outlives scene changes (a pause menu over any scene). A UI tree is thousands of nodes with ordered children, a style cascade that walks ancestors and a layout that walks everything, which is the access pattern an ECS serves worst, and C# reaches elements through handles anyway (ADR-0061). So **FenrirUI keeps elements in a dense tree of its own** and hands out an **`ElementId`**: an index and a version, like `Entity`'s shape but not one, so a removed and reused slot is detected as stale. Elements are found by id string, by class query and by walking children. A game that wants an element tied to an entity (a name plate over a character) keeps the pair in a component of its own. **The one entity in the design is the world-space quad**: an entity with a component naming the root it shows, its size in world units and its UI units per world unit (ADR-0060's world-space target), and the game gives that root a pointer ray each frame; the engine never decides which camera a world UI is seen from (ADR-0057's line).
+An entity belongs to a scene; a UI root belongs to a window, an image or a world quad, and outlives scene changes (a pause menu over any scene). A UI tree is thousands of nodes with ordered children, a style cascade that walks ancestors and a layout that walks everything, which is the access pattern an ECS serves worst, and C# reaches elements through handles anyway (ADR-0061). So **FenrirUI keeps elements in a dense tree of its own** and hands out an **`ElementId`**: an index and a version, like `Entity`'s shape but not one, so a removed and reused slot is detected as stale. Elements are found by id string, by class query and by walking children. A game that wants an element tied to an entity (a name plate over a character) keeps the pair in a component of its own. **The one entity in the design is the world-space quad**: an entity with a component naming the root it shows, its size in world units and its UI units per world unit (ADR-0060's world-space target), and the game gives that root a pointer ray each frame; the engine never decides which camera a world UI is seen from (ADR-0057's line). *Amended 2026-11-14 (FenrirUI ticket 23):* the renderer sits below the UI (ADR-0027), so its component cannot name a UI root: the component is the renderer's `WorldQuad2D`, holding the size and units, and the root names the entity instead, through its target (`UIWorldTarget`). The pointer ray is `UIRoot::SetPointerRay`, with the button's state; the root's router takes the window's keys, text and gamepads but never its mouse.
 
 ## Removal is deferred through `:outro`
 

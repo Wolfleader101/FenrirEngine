@@ -1,0 +1,66 @@
+@* The Razor settings page (examples/UIDemo/README.md, "The C# variant"), which SettingsSetup mounts into the pause
+   menu's razor-settings slot. It edits a DemoSettings through @bind, logging each change; lists the key bindings by
+   @key, with buttons to add and remove them; and places the credits document in a Section, a child Razor component
+   given its content as ChildContent. menu.css styles its controls as the menu's own (its rules are unscoped, and the
+   page is under #menu); Settings.razor.css, scoped to this file, lays it out and reaches into Section and the document
+   with ::deep. *@
+<panel class="page card">
+    <label class="title">Razor</label>
+    <label class="subtitle">A settings page written in Settings.razor.</label>
+
+    <panel class="row">
+        <label class="name">Volume @VolumeText</label>
+        <slider min="0" max="100" step="1" @bind="State.Volume" @bind:after="LogVolume" />
+    </panel>
+    <panel class="row">
+        <label class="name">Subtitles</label>
+        <checkbox @bind="State.Subtitles" @bind:after="LogSubtitles" />
+    </panel>
+    <panel class="row">
+        <label class="name">Player name</label>
+        <textentry placeholder="Your name" maxlength="16" @bind="State.PlayerName" @bind:after="LogName" />
+    </panel>
+
+    <Section Title="Key bindings">
+        <scroll class="bindings">
+            @foreach (KeyBinding binding in State.Bindings)
+            {
+                <panel @key="binding.Id" class="entry binding">
+                    <label class="key">@binding.Key</label>
+                    <label class="action">@binding.Action</label>
+                    <button class="remove" @onclick="() => Remove(binding)">Remove</button>
+                </panel>
+            }
+        </scroll>
+        <button class="add" @onclick="Add">Add a binding</button>
+    </Section>
+
+    <Section Title="Credits">
+        <Document Src="ui/credits.ui" />
+    </Section>
+</panel>
+
+@code {
+    // What the page edits, given at mount; kept by SettingsSetup.
+    public DemoSettings State = null!;
+
+    private string VolumeText => ((int)MathF.Round(State.Volume)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private void LogVolume() => Context.Log.Info($"UIDemo (Razor): the volume is {VolumeText}");
+
+    private void LogSubtitles() => Context.Log.Info($"UIDemo (Razor): subtitles are {(State.Subtitles ? "on" : "off")}");
+
+    private void LogName() => Context.Log.Info($"UIDemo (Razor): the player's name is \"{State.PlayerName}\"");
+
+    private void Add()
+    {
+        KeyBinding binding = State.Add();
+        Context.Log.Info($"UIDemo (Razor): added the binding {binding.Key}, {binding.Action}");
+    }
+
+    private void Remove(KeyBinding binding)
+    {
+        State.Remove(binding);
+        Context.Log.Info($"UIDemo (Razor): removed the binding {binding.Key}, {binding.Action}");
+    }
+}

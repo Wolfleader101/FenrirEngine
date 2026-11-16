@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- A script assembly that builds and paints UI from C#. The build passes -p:FenrirScriptingSdk=<the SDK folder>/
+       and, for the UI, Painter, Text, Assets and Input contracts, -p:Fenrir<Package>ContractDir=<the folder holding its dll>/. The contracts are
+       compile-time only: the host shares its own copies. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <!-- Its Razor components compile as any script project's do; the build passes -p:FenrirUIRazorContractDir=<the Razor
+       folder>/ (and the stand-in's folder, unused here). -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../Managed/Fenrir.UI.Razor.InRepo.props" />
+  <!-- Hot.razor's sheet (RazorSheets.cs): a file under the build's intermediate folder, which RazorSheets.cpp writes and
+       rewrites there (the test target is told the same path), so its path is a constant here. -->
+  <PropertyGroup>
+    <FenrirHotSheetPath>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'hot', 'Hot.razor.css'))</FenrirHotSheetPath>
+  </PropertyGroup>
+  <Target Name="_FenrirHotSheetPath" BeforeTargets="BeforeBuild">
+    <WriteLinesToFile File="$(IntermediateOutputPath)HotSheet.g.cs" Overwrite="true" WriteOnlyWhenDifferent="true"
+                      Lines="namespace UIScriptFixture%3B internal static class HotSheet { public const string Path = @&quot;$(FenrirHotSheetPath)&quot;%3B }" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)HotSheet.g.cs" />
+    </ItemGroup>
+  </Target>
+  <!-- The generated defaults test's C# half (../Generated, from Scripting/api/FenrirUI.binding.toml). -->
+  <ItemGroup>
+    <Compile Include="../Generated/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Fenrir.Input">
+      <HintPath>$(FenrirInputContractDir)Fenrir.Input.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Assets">
+      <HintPath>$(FenrirAssetsContractDir)Fenrir.Assets.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Text">
+      <HintPath>$(FenrirTextContractDir)Fenrir.Text.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Painter">
+      <HintPath>$(FenrirPainterContractDir)Fenrir.Painter.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.UI">
+      <HintPath>$(FenrirUIContractDir)Fenrir.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

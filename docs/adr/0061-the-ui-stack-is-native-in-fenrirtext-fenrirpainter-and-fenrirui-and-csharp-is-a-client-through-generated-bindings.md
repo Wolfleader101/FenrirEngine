@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # The UI stack is native in FenrirText, FenrirPainter and FenrirUI, and C# is a client through generated bindings
@@ -18,7 +18,11 @@ Dependencies point down only, and none of the three knows the renderer or the sc
 
 Each package gets its C# contract the way every engine extension does (ADR-0042): a generated binding from its TOML description, with the painter as a **facade** (a static class with one native per draw call, the shape of SkiaSharp's `SKCanvas`, since a painter's answers depend on calls), elements as **wrapper handles** with natives for their properties, classes, children and events, and stylesheets and markup loaded by path. Native code never calls into a C# object per element, since scripting hosts C# only in stages (ADR-0039): custom drawing from C# is a C# system in a hosted `Paint` stage of FenrirUI, painting through the facade into the element it owns. UI events reach C# as engine events (ADR-0012), one queue read by both languages.
 
-**A Razor-style syntax is a separate, later effort**: a C# source generator over the same element API, as s&box's Razor is a convenience over its Panel API. Nothing in this stack assumes it.
+*Amended 2026-11-12 (FenrirUI ticket 19):* outside FenrirUI, a C# system gets its painter from the overlay, by window and layer, for the frame (`Painter.Overlay`): the painter's scripting extension owns the draw list it records into and submits it to the `Overlay` resource when the calling system returns, so C# holds no draw list and calls no submit, and the extension links FenrirRenderer for the header-only `Overlay` while FenrirPainter stays renderer-free. Every C# surface of FenrirText and FenrirPainter is generated; the painter's extension draws the text extension's paragraphs by sharing its state.
+
+*Amended 2026-11-14 (FenrirUI ticket 20, recorded at the close-out):* elements are not wrapper handles. C# names a root by its `UIRoot` mirror and an element by an `ElementId` mirror, plain data as in C++ (ADR-0066), and every element call (children, classes, style, text, attributes and values, focus, boxes) is a native on the `UIRoot` mirror; UI events reach C# as the `UIEvent` engine event, not through natives.
+
+**A Razor-style syntax is a separate, later effort**: a C# source generator over the same element API, as s&box's Razor is a convenience over its Panel API. Nothing in this stack assumes it. *Amended 2026-11-15:* that effort is ADR-0067 to ADR-0070: the stock SDK's Razor generator against an engine stand-in of `Microsoft.AspNetCore.Components`, a builder that makes and updates elements in place through the same natives, components as managed objects run by one dispatcher in a second hosted stage, `Fenrir.UI.Build`, and stylesheets scoped natively.
 
 ## Considered
 

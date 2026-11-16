@@ -8,10 +8,11 @@ fenrir_add_demo_app(RendererDemo
         src/Sky.cpp
         src/DebugDrawScene.cpp
         src/OverlayScene.cpp
+        src/PainterScene.cpp
     SCRIPTS scripts
 )
-# "Debug draw" draws into its scene's DebugDraw.
-target_link_libraries(RendererDemo PRIVATE FenrirDebugDraw)
+# "Debug draw" draws into its scene's DebugDraw; "Painter" paints with FenrirPainter.
+target_link_libraries(RendererDemo PRIVATE FenrirDebugDraw FenrirPainter)
 # The monitor screen's shader in "Cameras and render targets", a user shader embedded in the app.
 fenrir_add_shaders(RendererDemo PROGRAM RendererDemoMonitor VERTEX shaders/monitor.vert FRAGMENT shaders/monitor.frag
                    EMBED)

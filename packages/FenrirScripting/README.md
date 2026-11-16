@@ -70,6 +70,10 @@ A script project needs only the scripting SDK: one folder holding `Fenrir.Script
 The props file references the two contracts for compilation only (the host shares its own copies at run time), turns on
 runs the generator (the field accessors are C# 14 extension properties, the default for net10.0). A script's output must not carry its own copy of `Fenrir.Scripting.dll` or `Fenrir.Math.dll`.
 
+UI written as `.razor` components imports one more props file, `Fenrir.UI.Razor.props`, after this one: see
+[FenrirUI's "Razor components"](../FenrirUI/README.md#razor-components) for writing, mounting, the rebuild rules and
+reload.
+
 ### Components and `Ref<T>`
 
 A component is an `unmanaged` struct implementing `IComponent`. `Ref<T>` is a `ref struct` over a pointer into the

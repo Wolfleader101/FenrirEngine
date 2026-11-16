@@ -214,6 +214,12 @@ internal static class CppWriter
             List(text, "resources", binding.Listed.Where(Binding.IsResource), type => binding.ResourceFactory(registration, type)!,
                  binding.RegisteredName);
         }
+        if (binding.Config.Stages is { } stages)
+        {
+            // The stages the C# constants name: the extension declares them, so a script's [StageSystem] finds them.
+            text.Line($"extension.stages = {{{string.Join(", ", stages.Stages.Select(stage => $"\"{stage.Name}\""))}}};");
+        }
+
         if (natives != null)
         {
             var config = binding.Config.Natives!;
@@ -274,7 +280,9 @@ internal static class CppWriter
             text.Line($"{registration.Extension} extension;");
             text.Line($"extension.name = \"{binding.Config.Name}\";");
             text.Line("extension.SetState(std::move(state));");
-            text.Line($"extension.sharedAssemblies = {{\"{binding.Config.Namespace}.dll\"}};");
+            var assemblies = string.Join(", ", new[] { $"{binding.Config.Namespace}.dll" }.Concat(registration.Shares)
+                                                   .Select(assembly => $"\"{assembly}\""));
+            text.Line($"extension.sharedAssemblies = {{{assemblies}}};");
             text.Line($"{registration.Function}(extension);");
             text.Line("return extension;");
             text.Outdent();

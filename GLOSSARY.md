@@ -196,7 +196,7 @@ A plain-data C++ resource, scene or app, that C# sees as a blittable struct mark
 *Avoid:* singleton, global, resource mirror (informal).
 
 **Facade**
-A static C# class over a package's generated native functions, its generated part the pass-throughs each native's `@facade` names and its hand-written part what a description cannot say: overloads that are not renames, generic methods, properties over outputs, constants, defaults and conversions. It stands for a C++ resource with behaviour (`Keyboard`, `Mouse`, `Gamepads`, `Window`, `Assets`, `Materials`, `Renderer`, `DebugDraw`, physics's `PhysicsWorld`): its answers come from C++, so C# never re-implements the rules (ADR-0029, ADR-0043). A generated facade method takes by value what its declaration takes `in`, and when its mark names one output (`returns`) gives that output as its value, the C++ default when the call did nothing.
+A static C# class over a package's generated native functions, its generated part the pass-throughs each native's `@facade` names and its hand-written part what a description cannot say: overloads that are not renames, generic methods, properties over outputs, constants, defaults and conversions. It stands for a C++ resource with behaviour (`Keyboard`, `Mouse`, `Gamepads`, `Window`, `Assets`, `Materials`, `Renderer`, `DebugDraw`, physics's `PhysicsWorld`, text's `Fonts`, the painter's `Painter`): its answers come from C++, so C# never re-implements the rules (ADR-0029, ADR-0043). A generated facade method takes by value what its declaration takes `in`, and when its mark names one output (`returns`) gives that output as its value, the C++ default when the call did nothing.
 *Avoid:* wrapper (that is a one-field struct), API class, service.
 
 **Wrapper**
@@ -513,7 +513,7 @@ The rectangle of its render target a view draws into, given as fractions of the 
 *Avoid:* view (the drawing itself), screen rect, scissor.
 
 **Render target**
-Where a view's output goes: a window, or an image asset made with a size but no pixels, which materials and the overlay sample like any image (ADR-0026).
+Where a view's output goes: a window, or an image asset made with a size but no pixels, which materials and the overlay sample like any image (ADR-0026). An image 2D target draws into the same images, which may also be linear there (ADR-0060).
 *Avoid:* render texture (no separate type), framebuffer, scene targets (a view's own intermediate colour and depth).
 
 **Exposure**
@@ -669,11 +669,11 @@ Debug text stacked in a corner of the window, newest first, which a later messag
 ## FenrirEngine 2D drawing
 
 **FenrirDraw2D**
-The engine's package of 2D draw data: plain data with no GPU code, knowing no renderer or UI. UI libraries and a future painter produce it; FenrirRenderer draws it (ADR-0027).
-*Avoid:* UI renderer, canvas (a future painter's surface), ImGui backend.
+The engine's package of 2D draw data: plain data with no GPU code, knowing no renderer or UI. UI libraries and FenrirPainter's painter produce it; FenrirRenderer draws it (ADR-0027).
+*Avoid:* UI renderer, canvas (other engines' painter surface), ImGui backend.
 
 **2D draw list**
-`DrawList2D`: one batch of 2D drawing as plain data: vertex and index bytes, 2D pipeline descriptions, and commands with textures, a scissor and an index range, in local logical coordinates. The same list can be shown on screen, in a texture or in the world; the target decides where.
+`DrawList2D`: one batch of 2D drawing as plain data: vertex and index bytes, 2D pipeline descriptions, and commands (draws with textures, a scissor and an index range, and the begins and ends of offscreen groups), in local logical coordinates. The same list can be shown on screen, in a texture or in the world; the target decides where.
 *Avoid:* draw list (alone: the frame's 3D one), draw data (ImGui's), display list.
 
 **2D pipeline description**
@@ -681,8 +681,12 @@ A plain value saying how a 2D draw list's triangles are drawn: shader, vertex la
 *Avoid:* material (a 3D asset), pipeline handle (the device's).
 
 **2D target**
-Where FenrirRenderer's 2D render feature draws a 2D draw list, supplying the transform from local to clip space, depth and how a scissor is realised. The window overlay is the only one built; an image target and a world-space target are planned.
+Where FenrirRenderer's 2D render feature draws a 2D draw list, supplying the transform from local to clip space, depth and how a scissor is realised. The window overlay, the image 2D target (a list drawn into an image asset, ADR-0060) and the world-space 2D target are built.
 *Avoid:* render target (a camera's image), canvas, layer.
+
+**World-space 2D target**
+A quad in the scene a 2D draw list is drawn on: an entity with `WorldQuad2D` (its size in world units and logical units per world unit), drawn among each view's transparent items with no hardware scissor, its clips the painter's per-pixel ones (ADR-0060). A UI root on one is a world root.
+*Avoid:* world canvas, billboard (it turns only if the game turns it), screen (the image root's quad in UIDemo).
 
 **Overlay layer**
 The integer a 2D draw list is submitted to a window's overlay with: layers draw lowest first, and debug screen text draws above them all.
@@ -730,12 +734,60 @@ A file of CSS rules, custom properties, keyframes and font faces that FenrirUI m
 How a UI root maps its UI units to its target's logical units: by default so that 1080 UI units span the target's pixel height, or one to one with the target's logical units.
 *Avoid:* DPI scale (the window's content scale, one of its inputs), zoom, reference resolution.
 
+**UI event**
+`UIEvent`: the engine event a UI root sends once, at its target element, for each click, press, release, hover, scroll, key, text, focus, blur, change, submit or cancel (ADR-0065). Systems read it through an event reader.
+*Avoid:* UI message, signal, DOM event.
+
+**UI listener**
+C++ attached to one element for one kind of UI event, called when the event happens to the element or bubbles up to it from an element under it, until one stops its propagation. Unlike an event reader, it is called at the time; C# reads the UI event instead.
+*Avoid:* handler, callback, delegate.
+
+**Paint stage**
+The work `UIRoots` runs each frame after every UI root has laid out and before any paints (`UIRoots::AddPaintStage`), lowest order first: it paints into elements through `UIRoot::PaintInto`, whose painter draws under the element's transform and clips into a list of the element's own, which the root's paint appends after the element's boxes and before its children. C# systems join it as the extension stage `Fenrir.UI.Paint` (`UIStages.Paint`) and paint through the Painter facade (ADR-0039, ADR-0061).
+*Avoid:* render stage (the renderer's), paint pass (the root's painting of its tree), draw callback.
+
+**Focusable**
+Of an element: a click on it or under it, Tab and Shift+Tab, a gamepad direction and code can give it the focus, which sends it keys and text. Elements are not focusable until made so; the controls make themselves focusable.
+*Avoid:* tab stop, selectable (Unity's).
+
+**Gamepad navigation**
+Moving a UI root's focus with the D-pad or the left stick to the focusable element nearest in that direction, with A activating and B cancelling, while the root has the focus (ADR-0065).
+*Avoid:* spatial navigation (the web's name), selection (Unity's).
+
+**Pointer ray**
+The ray, in world space, a game gives a world root each frame with its button's state (`UIRoot::SetPointerRay`): the root meets it with its quad and hit-tests there. Which camera and cursor, or controller, it comes from is the game's choice (ADR-0057's line).
+*Avoid:* raycast (physics's), pick ray (the renderer's picking), cursor (the window's mouse, or the virtual cursor).
+
+**Virtual cursor**
+A per-root switch that turns the left stick into pointer motion and A into a left click, drawn as the root's `virtual-cursor` element.
+*Avoid:* gamepad mouse, fake pointer.
+
+**Razor component**
+A C# class compiled from a `.razor` file, whose markup and `@code` describe the elements it keeps in a UI root. One managed object per mounted instance, holding UI-local state only (ADR-0067, ADR-0068). Always say *Razor component*: a bare *component* is the ECS's.
+*Avoid:* panel (s&box's), view, widget, component (alone).
+
+**Mount**
+To place a Razor component into an element of a UI root, which builds it there and keeps it until it is unmounted, its host or root goes, or its script generation is released. (An asset root is never "mounted".)
+*Avoid:* attach, spawn, instantiate.
+
+**Razor dispatcher**
+The shipped C# stage systems that run every mounted Razor component, one in `Fenrir.UI.Build` and one in `Fenrir.UI.Paint`: they run the Razor components' handlers for the frame's UI events, rebuild the ones that need it, and call their paint overrides (ADR-0068).
+*Avoid:* renderer (Blazor's word, and the engine's renderer), UI manager.
+
+**Build stage**
+FenrirUI's hosted work at the start of each frame's styling, before transitions and the cascade, in which elements are made and changed for that frame's layout. C# systems join it as the extension stage `Fenrir.UI.Build`, and the Razor dispatcher runs there.
+*Avoid:* update stage, render tree pass.
+
+**Scope class**
+The class every element a Razor component builds carries, its mounted host included, and which its scoped stylesheets require on every rule's last selector, so that a Razor component's styles reach only its own elements unless `::deep` says otherwise (ADR-0070).
+*Avoid:* scope attribute (Blazor's), CSS module.
+
 **FenrirAssets**
 The engine's asset package: loads files into plain CPU-side data and owns it behind asset handles. It has no GPU code; FenrirRenderer and animation each turn its data into their own form (ADR-0021).
 *Avoid:* resource manager, asset server, asset database (cooking and an editor database are out of scope).
 
 **Asset**
-One piece of plain data FenrirAssets holds: a mesh, image, material, skeleton, clip, shader container or model, loaded from a file or added from code.
+One piece of plain data FenrirAssets holds: a mesh, image, material, skeleton, clip, font, shader container or model, loaded from a file or added from code.
 *Avoid:* resource (Iris and physics use it otherwise), file.
 
 **Asset handle**
@@ -1021,7 +1073,7 @@ Whoever took a key's, button's or pointer's press: the router that consumed it, 
 ## FenrirEngine demo apps
 
 **Demo app**
-One executable under `examples/` per feature area (RendererDemo, ScriptingDemo, PhysicsDemo, AnimationDemo, LightingDemo), built on the demo scaffold, with an ordered list of scenes; a C++ scene and its C# twin are separate entries. An app may be split further when it outgrows one list. Not a reference for engine code beyond what it shows.
+One executable under `examples/` per feature area (RendererDemo, ScriptingDemo, PhysicsDemo, AnimationDemo, LightingDemo, UIDemo), built on the demo scaffold, with an ordered list of scenes; a C++ scene and its C# twin are separate entries. An app may be split further when it outgrows one list. Not a reference for engine code beyond what it shows.
 *Avoid:* DemoApp (the legacy single app, which the demo apps replaced), sample, example (alone).
 
 **Demo scaffold**

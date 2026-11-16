@@ -50,6 +50,21 @@ internal static class Generator
             }
         }
 
+        if (config.Stages is { } stages)
+        {
+            // The class shares the generated directory with the mirrors and facade parts: its name must be its own.
+            if (binding.Mirrored.Any(type => binding.CSharpName(type) == stages.Class) ||
+                stages.Class == config.Natives?.Class ||
+                files.ContainsKey(Path.Combine(config.CSharp.Generated, stages.Class + ".cs")))
+            {
+                throw new BindingException(
+                    $"{config.Path}: [stages] class {stages.Class} is also the name of a mirror, a facade class or the [natives] class");
+            }
+
+            var (name, text) = CSharpWriter.Stages(binding, stages);
+            files.Add(Path.Combine(config.CSharp.Generated, name), text);
+        }
+
         files.Add(config.Cpp.Mappings, CppWriter.Mappings(binding));
         if (config.Registration is { } registration)
         {

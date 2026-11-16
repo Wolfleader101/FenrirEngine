@@ -14,8 +14,10 @@
 #include "Core/SceneRenderer.hpp"
 #include "Device/GraphicsSurface.hpp"
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirRenderer/ImageTargets2D.hpp"
 #include "FenrirRenderer/Overlay.hpp"
 #include "FenrirRenderer/Renderer.hpp"
+#include "FenrirRenderer/WorldTargets2D.hpp"
 
 namespace Fenrir
 {
@@ -124,6 +126,10 @@ namespace Fenrir::Detail
         StaleHandleLog skyImages;
         /** @brief Windows the renderer does not draw that overlay submissions named, by id. */
         std::set<std::uint32_t> loggedOverlayWindows;
+        /** @brief Images that image 2D target submissions named but cannot be drawn into, by index and generation. */
+        std::set<std::pair<std::uint32_t, std::uint32_t>> loggedImageTargets;
+        /** @brief The entities a dropped WorldTargets2D submission was logged for. */
+        std::set<std::uint32_t> loggedWorldTargets;
         /** @brief Whether a skinned draw found no skinning source registered. */
         bool loggedNoSkinningSource = false;
         /** @brief Mesh entities whose skinning was skipped or ignored, by entity id and why (SkinProblem). */
@@ -183,6 +189,48 @@ namespace Fenrir::Detail
             for (Overlay::Submission& submission : submissions)
             {
                 taken.push_back({submission.window, {submission.layer, std::move(submission.list)}});
+            }
+            return taken;
+        }
+    };
+
+    /** @brief How the renderer takes the ImageTargets2D submissions each Render. */
+    struct ImageTargetSubmissions
+    {
+        /** @brief Every submission made since the last call, in submission order, leaving none. */
+        static std::vector<std::pair<AssetHandle<Image>, DrawList2D>> Take(ImageTargets2D& targets)
+        {
+            std::vector<ImageTargets2D::Submission> submissions;
+            {
+                const std::lock_guard<std::mutex> lock(targets.m_mutex);
+                submissions.swap(targets.m_submissions);
+            }
+            std::vector<std::pair<AssetHandle<Image>, DrawList2D>> taken;
+            taken.reserve(submissions.size());
+            for (ImageTargets2D::Submission& submission : submissions)
+            {
+                taken.emplace_back(submission.image, std::move(submission.list));
+            }
+            return taken;
+        }
+    };
+
+    /** @brief How the renderer takes the WorldTargets2D submissions each Render. */
+    struct WorldTargetSubmissions
+    {
+        /** @brief Every submission made since the last call, in submission order, leaving none. */
+        static std::vector<std::pair<Entity, DrawList2D>> Take(WorldTargets2D& targets)
+        {
+            std::vector<WorldTargets2D::Submission> submissions;
+            {
+                const std::lock_guard<std::mutex> lock(targets.m_mutex);
+                submissions.swap(targets.m_submissions);
+            }
+            std::vector<std::pair<Entity, DrawList2D>> taken;
+            taken.reserve(submissions.size());
+            for (WorldTargets2D::Submission& submission : submissions)
+            {
+                taken.emplace_back(submission.entity, std::move(submission.list));
             }
             return taken;
         }

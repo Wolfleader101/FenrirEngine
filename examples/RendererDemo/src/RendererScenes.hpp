@@ -42,6 +42,13 @@ namespace RendererDemo
      */
     [[nodiscard]] FenrirDemo::DemoScene OverlayScene();
 
+    /**
+     * @brief Painter: FenrirPainter's analytic shapes, paints and clips painted into a list on the window overlay:
+     * rectangles, rounded rectangles, a border, shadows, a circle, an arc, a ring, gradients, images and a rotating
+     * rounded clip; keys switch the blend space and pause the animation.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene PainterScene();
+
     /** @brief Meshes and materials (C#)'s number, which its C# systems know it by (scripts/MeshesAndMaterials.cs). */
     inline constexpr std::uint32_t MeshesAndMaterialsCSharpScene = 1;
 

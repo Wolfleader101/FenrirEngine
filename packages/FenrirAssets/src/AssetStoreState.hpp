@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -33,6 +34,9 @@ namespace Fenrir::Detail
         std::string key;
         // The problems already logged for this asset (a material's unknown parameter names), so each is logged once.
         std::unordered_set<std::string> logged;
+        // An image's last region updates (AssetStore::UpdateImage), each with the revision it made, oldest first.
+        // Cleared whenever the whole image changes, so a revision before the first is one a copy cannot catch up from.
+        std::deque<std::pair<std::uint32_t, ImageRegion>> imageUpdates;
     };
 
     /** @brief Every asset of one kind, and the loaded ones by path. */

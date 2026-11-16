@@ -15,6 +15,8 @@
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirAssets/BoneMaskData.hpp"
 #include "FenrirAssets/ClipData.hpp"
+#include "FenrirAssets/FontData.hpp"
+#include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
@@ -68,9 +70,22 @@ namespace Fenrir
         [[nodiscard]] std::string PrepareAsset(ClipData& clip, AssetWarnings& warnings);
         [[nodiscard]] std::string PrepareAsset(BoneMaskData& mask, AssetWarnings& warnings);
         [[nodiscard]] std::string PrepareAsset(InstanceListData& list, AssetWarnings& warnings);
+        [[nodiscard]] std::string PrepareAsset(FontData& font, AssetWarnings& warnings);
         [[nodiscard]] std::string PrepareAsset(Model& model, AssetWarnings& warnings);
         /** @} */
     } // namespace Detail
+
+    /** @brief A rectangle of an image's pixels: its top-left pixel and its size, in pixels, rows counted from the top.
+     */
+    struct ImageRegion
+    {
+        std::uint32_t x = 0;
+        std::uint32_t y = 0;
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+
+        friend constexpr bool operator==(const ImageRegion&, const ImageRegion&) = default;
+    };
 
     /** @brief How Assets::Install sets the asset store up. */
     struct AssetsConfig
@@ -225,6 +240,9 @@ namespace Fenrir
          * the load is `LoadStatus::Partial`, naming each in `LoadResult::failedUnits`. FBX and OBJ skinned meshes are
          * still left out with a warning.
          *
+         * A font loads from a TrueType or OpenType file (`.ttf`, `.otf` or `.ttc`) as its bytes (FontData), which
+         * must start as a font file does.
+         *
          * A `builtin:` name loads what AssetStore::AddBuiltin registered under it, and fails until something has.
          */
         template <typename T>
@@ -304,6 +322,26 @@ namespace Fenrir
             Detail::AssetBox box(new Data(std::move(data)), &Detail::DestroyAssetData<Data>);
             return ReplaceSlot(Detail::AssetTraits<T>::kind, {handle.index, handle.generation}, std::move(box));
         }
+
+        /**
+         * @brief Writes `pixels` into `region` of the image `image` names and bumps its revision, recording the region
+         * so that a user holding a copy of the image (the renderer's texture) can update just it (ImageUpdatesSince):
+         * how FenrirText's glyph atlases upload (ADR-0062). `pixels` holds `region.width * region.height` pixels of the
+         * image's format, rows top to bottom. False, with a logged error and the image unchanged, if the handle does
+         * not resolve, the image is a cubemap or a render target, the region is empty or not inside the image, or the
+         * pixel count is wrong.
+         */
+        bool UpdateImage(AssetHandle<Image> image, ImageRegion region, std::span<const std::byte> pixels);
+
+        /**
+         * @brief The regions UpdateImage wrote into `image` after its revision `revision`, oldest first: all that a
+         * copy made at that revision must take again. Empty when the image is still at `revision`. None when the copy
+         * must take the whole image again: the image was replaced since, `revision` is newer than the image's, or the
+         * store no longer remembers that far back (it keeps the regions of the last 256 updates), and when the handle
+         * does not resolve.
+         */
+        [[nodiscard]] std::optional<std::vector<ImageRegion>> ImageUpdatesSince(AssetHandle<Image> image,
+                                                                                std::uint32_t revision) const;
 
         /**
          * @brief Frees the asset `handle` names now, whoever owns it. Every handle to it becomes stale, and loading

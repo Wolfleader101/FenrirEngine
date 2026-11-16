@@ -50,7 +50,8 @@ internal sealed record CppConfig(string Mappings, IReadOnlyList<string> Includes
 /// The registration lists: the source, its function, the extension's type, the maker (<c>maker</c>, optional: the
 /// function that makes the extension from its state, which takes the register function's place in the natives header
 /// and makes the register function file-local), and the factory each kind of registration is made by (each only when the
-/// generated lists hold a type of that kind), the types registered read-only, and those the extension registers by hand.
+/// generated lists hold a type of that kind), the types registered read-only, those the extension registers by hand, and
+/// the assemblies the made extension shares after its contract (<c>shares</c>, with a maker only).
 /// What the source includes comes through the natives header (<c>[natives] includes</c>).
 /// </summary>
 internal sealed record RegistrationConfig(
@@ -67,7 +68,8 @@ internal sealed record RegistrationConfig(
     string? MakeAppResource,
     string? MakeReadOnlyAppResource,
     IReadOnlySet<string> ReadOnly,
-    IReadOnlySet<string> ByHand);
+    IReadOnlySet<string> ByHand,
+    IReadOnlyList<string> Shares);
 
 /// <summary>The defaults test: its two sources, the C# class, and how a test case reaches the loaded C# assembly.</summary>
 internal sealed record TestsConfig(
@@ -97,6 +99,16 @@ internal sealed record NativesConfig(
     string ZeroOutputs,
     IReadOnlyDictionary<string, string> Types);
 
+/// <summary>One stage the extension hosts: the C# constant naming it, its full name, and the constant's summary.</summary>
+internal sealed record Stage(string Constant, string Name, string Summary);
+
+/// <summary>
+/// The stages the extension hosts (<c>[stages]</c>, ADR-0039): the static class of constants naming them for
+/// <c>[StageSystem]</c>, its summary, and the stages in the order the configuration lists them, which the
+/// registration sets as the extension's <c>stages</c>.
+/// </summary>
+internal sealed record StagesConfig(string Class, string Summary, IReadOnlyList<Stage> Stages);
+
 /// <summary>
 /// A binding's configuration (<c>&lt;Name&gt;.binding.toml</c>, the tool's README): everything about the C# side and
 /// the extension that the language-neutral description leaves out. Paths are relative to the file and made absolute
@@ -120,6 +132,7 @@ internal sealed record BindingConfig(
     RegistrationConfig? Registration,
     TestsConfig? Tests,
     NativesConfig? Natives,
+    StagesConfig? Stages,
     IReadOnlyDictionary<string, BoundType> BoundTypes,
     IReadOnlyDictionary<string, string> Names,
     IReadOnlyDictionary<string, string> Nouns,
@@ -152,7 +165,7 @@ internal sealed record BindingConfig(
 
         var reader = new Reader(path);
         reader.Keys(table, "", "namespace", "registered-namespace", "descriptions", "uses", "defaults", "exclude", "csharp",
-                    "cpp", "registration", "tests", "natives", "bound-types", "names", "nouns");
+                    "cpp", "registration", "tests", "natives", "stages", "bound-types", "names", "nouns");
         // The SDK's names come in first, so every section below is read as if the binding had spelled them.
         var defaults = table.ContainsKey("defaults") ? reader.PathOf(table, "defaults") : null;
         var defaultBoundTypes = new Dictionary<string, BoundType>(StringComparer.Ordinal);
@@ -186,7 +199,7 @@ internal sealed record BindingConfig(
             reader.Keys(section, "registration", "source", "function", "extension", "maker", "make-component",
                         "make-read-only-component", "make-event", "make-shared-struct", "make-scene-resource",
                         "make-read-only-scene-resource", "make-app-resource", "make-read-only-app-resource", "read-only",
-                        "by-hand");
+                        "by-hand", "shares");
             registration = new RegistrationConfig(
                 reader.PathOf(section, "source"), reader.String(section, "function"),
                 reader.String(section, "extension"), reader.OptionalString(section, "maker"),
@@ -197,7 +210,12 @@ internal sealed record BindingConfig(
                 reader.OptionalString(section, "make-app-resource"),
                 reader.OptionalString(section, "make-read-only-app-resource"),
                 reader.Strings(section, "read-only").ToHashSet(StringComparer.Ordinal),
-                reader.Strings(section, "by-hand").ToHashSet(StringComparer.Ordinal));
+                reader.Strings(section, "by-hand").ToHashSet(StringComparer.Ordinal), reader.Strings(section, "shares"));
+            if (registration.Shares.Count != 0 && registration.Maker == null)
+            {
+                throw new BindingException(
+                    $"{path}: [registration] shares needs maker: the maker sets the assemblies the extension shares");
+            }
         }
 
         TestsConfig? tests = null;
@@ -244,6 +262,16 @@ internal sealed record BindingConfig(
                 $"{path}: [registration] maker needs [natives]: the maker takes the natives' extension state, which their description records");
         }
 
+        StagesConfig? stages = null;
+        if (table.ContainsKey("stages"))
+        {
+            stages = ReadStages(reader, reader.Table(table, "stages"), path);
+            if (registration is null)
+            {
+                throw new BindingException($"{path}: [stages] needs [registration], whose source sets the extension's stages");
+            }
+        }
+
         var boundTypes = table.ContainsKey("bound-types")
                              ? ReadBoundTypes(reader, reader.Table(table, "bound-types"), path)
                              : new Dictionary<string, BoundType>(StringComparer.Ordinal);
@@ -274,8 +302,41 @@ internal sealed record BindingConfig(
                              reader.Strings(csharp, "fixed-buffers").ToHashSet(StringComparer.Ordinal),
                              reader.Strings(csharp, "internal-structs").ToHashSet(StringComparer.Ordinal)),
             new CppConfig(reader.PathOf(cpp, "mappings"), reader.Strings(cpp, "includes")), registration, tests,
-            nativesConfig, boundTypes, reader.StringTable(table, "names"), reader.StringTable(table, "nouns"),
+            nativesConfig, stages, boundTypes, reader.StringTable(table, "names"), reader.StringTable(table, "nouns"),
             reader.Strings(table, "exclude").ToHashSet(StringComparer.Ordinal));
+    }
+
+    // The [stages] table: its class and summary, and each stage as `Constant = { name = "...", summary = "..." }`, in
+    // the order written.
+    private static StagesConfig ReadStages(Reader reader, TomlTable section, string path)
+    {
+        reader.Keys(section, "stages", "class", "summary", "names");
+        var list = new List<Stage>();
+        foreach (var (constant, value) in reader.Table(section, "names"))
+        {
+            if (value is not TomlTable stage)
+            {
+                throw new BindingException(
+                    $"{path}: stage '{constant}' is a table: {{ name = \"<Namespace>.<Stage>\", summary = \"...\" }}");
+            }
+
+            reader.Keys(stage, $"stages.names.{constant}", "name", "summary");
+            list.Add(new Stage(constant, reader.String(stage, "name"), reader.String(stage, "summary")));
+        }
+
+        if (list.Count == 0)
+        {
+            throw new BindingException($"{path}: [stages.names] names no stage");
+        }
+
+        var doubled = list.GroupBy(stage => stage.Name, StringComparer.Ordinal).FirstOrDefault(group => group.Count() > 1);
+        if (doubled != null)
+        {
+            throw new BindingException(
+                $"{path}: [stages.names] {string.Join(" and ", doubled.Select(stage => stage.Constant))} both name {doubled.Key}");
+        }
+
+        return new StagesConfig(reader.String(section, "class"), reader.String(section, "summary"), list);
     }
 
     // A [bound-types] table, the binding's own or its defaults file's.

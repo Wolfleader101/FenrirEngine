@@ -33,23 +33,24 @@ function(fenrir_deploy_scripting target)
     endforeach()
 endfunction()
 
-# One extension's contract beside <target>, then the contracts it builds against. Fails when no extension <pkg> is in the
-# build.
+# One extension's contract beside <target>, then the contracts it builds against and those it shares after its own
+# (fenrir_scripting_contract's SHARED_BY). Fails when no extension <pkg> is in the build.
 function(_fenrir_deploy_extension_contract target pkg)
     if(TARGET ${target}Deploy${pkg}Contract)
         return()
     endif()
-    fenrir_scripting_contract_dir(${pkg} contract_dir)
+    fenrir_scripting_contract_dll(${pkg} dll)
     add_custom_target(${target}Deploy${pkg}Contract
         COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:${target}>"
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${contract_dir}/Fenrir.${pkg}.dll" "$<TARGET_FILE_DIR:${target}>"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${dll}" "$<TARGET_FILE_DIR:${target}>"
         VERBATIM
     )
     add_dependencies(${target}Deploy${pkg}Contract Fenrir${pkg}Contract)
     add_dependencies(${target} ${target}Deploy${pkg}Contract)
 
     get_property(uses GLOBAL PROPERTY FENRIR_SCRIPTING_CONTRACT_USES_${pkg})
-    foreach(used IN LISTS uses)
-        _fenrir_deploy_extension_contract(${target} ${used})
+    get_property(shared GLOBAL PROPERTY FENRIR_SCRIPTING_CONTRACT_SHARED_WITH_${pkg})
+    foreach(other IN LISTS uses shared)
+        _fenrir_deploy_extension_contract(${target} ${other})
     endforeach()
 endfunction()

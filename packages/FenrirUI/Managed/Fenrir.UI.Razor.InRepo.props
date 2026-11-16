@@ -1,0 +1,15 @@
+<Project>
+  <!--
+    For script projects in this repository (the UI scripting fixture, Fenrir.UI.Razor.Tests, the demos): imports
+    Fenrir.UI.Razor.props, as Fenrir.Scripting.InRepo.props imports the scripting SDK's.
+
+      * CMake builds pass -p:FenrirUIRazorContractDir=<the built folder>/, which holds the installed props beside both
+        contracts, and this file imports that props, exactly what a project outside the repo does.
+      * An editor passes nothing; then this file imports the source tree's props, which takes the contracts from their
+        source projects.
+
+    Import it after Fenrir.Scripting.InRepo.props.
+  -->
+  <Import Project="$(FenrirUIRazorContractDir)Fenrir.UI.Razor.props" Condition="'$(FenrirUIRazorContractDir)' != ''" />
+  <Import Project="$(MSBuildThisFileDirectory)Fenrir.UI.Razor.props" Condition="'$(FenrirUIRazorContractDir)' == ''" />
+</Project>

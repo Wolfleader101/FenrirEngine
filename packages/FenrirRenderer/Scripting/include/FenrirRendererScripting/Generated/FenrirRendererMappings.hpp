@@ -511,9 +511,13 @@ struct Iris::StructMapping<Fenrir::RendererStats>
         Iris::Field<std::uint32_t>("PaletteBytesUploaded", 60),
         Iris::Field<std::uint32_t>("DistinctPalettesWritten", 64),
         Iris::Field<std::uint32_t>("SkinnedDraws", 68),
-        Iris::Field<std::uint32_t>("ShadowDraws", 72));
+        Iris::Field<std::uint32_t>("ShadowDraws", 72),
+        Iris::Field<std::uint32_t>("Lists2D", 76),
+        Iris::Field<std::uint32_t>("Commands2D", 80),
+        Iris::Field<std::uint32_t>("Groups2D", 84),
+        Iris::Field<std::uint32_t>("TransientImageBytes2D", 88));
 };
-static_assert(sizeof(Fenrir::RendererStats) == 76 && alignof(Fenrir::RendererStats) == 4,
+static_assert(sizeof(Fenrir::RendererStats) == 92 && alignof(Fenrir::RendererStats) == 4,
               "Fenrir::RendererStats is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 

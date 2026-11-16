@@ -1,0 +1,12 @@
+@* A titled section of the Razor settings page (Settings.razor): its heading, then whatever the parent writes inside
+   its tag, given as ChildContent. The heading is Section's own element, with Section's scope; the content keeps the
+   scope of the file that wrote it. *@
+<panel class="section">
+    <label class="heading">@Title</label>
+    @ChildContent
+</panel>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

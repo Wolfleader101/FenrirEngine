@@ -37,3 +37,18 @@
 [submodule "packages/FenrirAssets/libs/meshoptimizer"]
 	path = packages/FenrirAssets/libs/meshoptimizer
 	url = https://github.com/zeux/meshoptimizer
+[submodule "packages/FenrirText/libs/freetype"]
+	path = packages/FenrirText/libs/freetype
+	url = https://github.com/freetype/freetype
+[submodule "packages/FenrirText/libs/SheenBidi"]
+	path = packages/FenrirText/libs/SheenBidi
+	url = https://github.com/Tehreer/SheenBidi
+[submodule "packages/FenrirText/libs/libunibreak"]
+	path = packages/FenrirText/libs/libunibreak
+	url = https://github.com/adah1972/libunibreak
+[submodule "packages/FenrirText/libs/harfbuzz"]
+	path = packages/FenrirText/libs/harfbuzz
+	url = https://github.com/harfbuzz/harfbuzz
+[submodule "packages/FenrirUI/libs/yoga"]
+	path = packages/FenrirUI/libs/yoga
+	url = https://github.com/facebook/yoga

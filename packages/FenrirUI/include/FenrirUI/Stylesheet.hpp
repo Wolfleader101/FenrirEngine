@@ -1,0 +1,189 @@
+#pragma once
+
+#include <cstdint>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace Fenrir
+{
+    /** @brief Something a stylesheet's parser refused or did not know, and the line it was on (from 1). */
+    struct StyleDiagnostic
+    {
+        std::uint32_t line = 0;
+        std::string message;
+    };
+
+    /**
+     * @brief One declaration of a rule, keyframe or font face: a property's name (lower case; a custom property's
+     * `--name` as written) and its value as written, trimmed. Shorthands are expanded into their longhands when the
+     * sheet is parsed, unless the value holds a `var()`, which waits for the cascade.
+     */
+    struct StyleDeclaration
+    {
+        std::string name;
+        std::string value;
+        std::uint32_t line = 0;
+
+        friend bool operator==(const StyleDeclaration&, const StyleDeclaration&) = default;
+    };
+
+    /** @brief How a compound selector is joined to the one before it. */
+    enum class SelectorCombinator : std::uint8_t
+    {
+        /** @brief Whitespace: any ancestor. */
+        Descendant,
+        /** @brief `>`: the parent. */
+        Child,
+    };
+
+    /** @brief A structural pseudo-class: one an element has by where it is, not a flag code sets. */
+    enum class StructuralPseudoClass : std::uint8_t
+    {
+        FirstChild = 1u << 0u,
+        LastChild = 1u << 1u,
+        Root = 1u << 2u,
+    };
+
+    /** @brief A compound selector: a tag (empty for any), an id, classes and pseudo-classes, all of which must hold. */
+    struct CompoundSelector
+    {
+        std::string tag;
+        std::string id;
+        std::vector<std::string> classes;
+        /** @brief PseudoClass bits, all of which the element must carry. */
+        std::uint16_t pseudoClasses = 0;
+        /** @brief StructuralPseudoClass bits. */
+        std::uint8_t structural = 0;
+    };
+
+    /**
+     * @brief A pseudo-element a selector may end with: a part of its subject drawn by FenrirUI rather than an element
+     * of the tree. A scroll view's scrollbars are two: `::scrollbar`, a bar's track (its `width` is the bar's thickness
+     * and its padding the thumb's inset), and `::scrollbar-thumb`. A text entry's are the other two: `::selection`, its
+     * selected text (`background-color` behind it, `color` for it), and `::placeholder`, the placeholder it shows while
+     * empty (its text properties).
+     */
+    enum class PseudoElement : std::uint8_t
+    {
+        None,
+        Scrollbar,
+        ScrollbarThumb,
+        Selection,
+        Placeholder,
+    };
+
+    /**
+     * @brief A complex selector: compound selectors from the leftmost to the subject, the rightmost, each after the
+     * first joined to the one before it by `combinators[i - 1]`, and the pseudo-element of the subject it styles, if
+     * any. A compound before a pseudo-element may be empty (`::scrollbar` is any element's).
+     */
+    struct Selector
+    {
+        std::vector<CompoundSelector> compounds;
+        std::vector<SelectorCombinator> combinators;
+        PseudoElement pseudoElement = PseudoElement::None;
+        /**
+         * @brief CSS's specificity: ids, then classes and pseudo-classes, then tags and pseudo-elements, each in 10
+         * bits.
+         */
+        std::uint32_t specificity = 0;
+
+        /** @brief As CSS writes it, in one canonical form (`panel.a:hover > #b`). */
+        [[nodiscard]] std::string ToString() const;
+    };
+
+    /** @brief A style rule, nesting flattened: its selector list and its declarations, in the order written. */
+    struct StyleRule
+    {
+        std::vector<Selector> selectors;
+        std::vector<StyleDeclaration> declarations;
+        std::uint32_t line = 0;
+    };
+
+    /** @brief One block of a `@keyframes` rule: where it sits (0 to 1, one per selector) and what it declares. */
+    struct StyleKeyframe
+    {
+        std::vector<float> offsets;
+        std::vector<StyleDeclaration> declarations;
+    };
+
+    /** @brief A `@keyframes` rule, kept for animations. */
+    struct StyleKeyframes
+    {
+        std::string name;
+        std::vector<StyleKeyframe> keyframes;
+        std::uint32_t line = 0;
+    };
+
+    /** @brief A `@font-face` rule's descriptors as written (`font-family`, `src`, ...), kept for fonts. */
+    struct StyleFontFace
+    {
+        std::vector<StyleDeclaration> descriptors;
+        std::uint32_t line = 0;
+    };
+
+    /** @brief An `@import` of another sheet, recorded where it was written. */
+    struct StyleImport
+    {
+        std::string url;
+        std::uint32_t line = 0;
+    };
+
+    /** @brief Names one stylesheet a UI root holds; zero names none. */
+    struct StylesheetId
+    {
+        std::uint32_t value = 0;
+
+        /** @brief Whether it names a sheet; one a root holds may still have been removed. */
+        [[nodiscard]] constexpr bool IsValid() const noexcept
+        {
+            return value != 0;
+        }
+
+        friend constexpr bool operator==(StylesheetId, StylesheetId) noexcept = default;
+    };
+
+    /**
+     * @brief A parsed stylesheet (ADR-0064): CSS rules with nesting flattened, `@keyframes`, `@font-face` and
+     * `@import`, and what the parser refused. Parse never fails as a whole: a malformed declaration, an unknown
+     * property or a declaration whose value cannot be read is skipped; a malformed rule or one with an unknown
+     * pseudo-class is skipped whole; each is a diagnostic with its line, and the rest of the sheet stands.
+     *
+     * A sheet parsed with a scope (ADR-0070) styles only elements carrying the scope class: once nesting is resolved,
+     * the class is added to the rightmost compound selector of every rule (`.a .b` is `.a .b.s-x`, `.a > label` is
+     * `.a > label.s-x`), adding a class's weight to its specificity. `::deep` is a marker between two compounds that
+     * puts the scope on the compound before it instead, leaving a descendant combinator (`.list ::deep label` is
+     * `.list.s-x label`; a leading `::deep .b` is `.s-x .b`). It is legal once in a selector, with a compound after
+     * it, and only in a scoped sheet: elsewhere its rule is skipped with a diagnostic. `@keyframes` names and
+     * `@font-face`s are not scoped.
+     */
+    class Stylesheet
+    {
+      public:
+        /**
+         * @brief Parses `text`; `name` names it in what the root logs. A non-empty `scope` is the class name its
+         * rules are scoped to; empty, the sheet is unscoped.
+         */
+        [[nodiscard]] static Stylesheet Parse(std::string_view text, std::string_view name,
+                                              std::string_view scope = {});
+
+        /** @brief What it is called in what the root logs. */
+        std::string name;
+        /** @brief The class its rules are scoped to; empty for an unscoped sheet. */
+        std::string scope;
+        /**
+         * @brief Its style rules in the order written: a nested rule after the rule it is in, and the declarations
+         * written after a nested rule as a rule of their own after it, with the outer rule's selectors (CSS nesting).
+         */
+        std::vector<StyleRule> rules;
+        /** @brief Its `@keyframes` rules, in the order written. */
+        std::vector<StyleKeyframes> keyframes;
+        /** @brief Its `@font-face` rules, in the order written. */
+        std::vector<StyleFontFace> fontFaces;
+        /** @brief Its `@import`s, in the order written. */
+        std::vector<StyleImport> imports;
+        /** @brief What the parser refused or did not know, by line. */
+        std::vector<StyleDiagnostic> diagnostics;
+    };
+} // namespace Fenrir

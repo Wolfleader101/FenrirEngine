@@ -10,7 +10,7 @@ The renderer builds no UI in. ImGui serves the demos for now, and the engine wil
 
 1. **FenrirDraw2D: 2D draw data.** A new package of plain data with no GPU code. It depends only on FenrirAssets (for asset handles) and FenrirMath, and it knows no renderer, UI or language.
 2. **FenrirRenderer: draws 2D draw data into a target.** Its renderer core has one **2D render feature**. The screen overlay is the first target to use it.
-3. **A future FenrirPainter / FenrirUI: produces 2D draw data.** It provides shapes, paths, text, images, borders and clipping, and above that elements, layout, styling, focus and state, all with no knowledge of the graphics backend.
+3. **A future FenrirPainter / FenrirUI: produces 2D draw data.** *(FenrirPainter and FenrirUI are built: see the amendments under "Not built, and kept possible".)* It provides shapes, paths, text, images, borders and clipping, and above that elements, layout, styling, focus and state, all with no knowledge of the graphics backend.
 
 The dependencies point one way: UI and painter → FenrirDraw2D ← FenrirRenderer. The renderer never learns whether a draw list came from C++, C#, ImGui or another library.
 
@@ -77,7 +77,7 @@ The dependencies point one way: UI and painter → FenrirDraw2D ← FenrirRender
   | `Opaque` | no blending; the shader's alpha is written | no blending |
 
   A premultiplied shader multiplies RGB by alpha in linear space, after any sRGB decode.
-- **Premultiplied alpha is preferred** for offscreen UI targets, both stored and composited, and the future `Painter` emits it.
+- **Premultiplied alpha is preferred** for offscreen UI targets, both stored and composited, and the `Painter` emits it (FenrirPainter, ADR-0060).
 - **The gamma compatibility path is opt-in.** A pipeline can set `blendSpace: Gamma`. Encoding is then off and its values pass through and blend in sRGB, as stock ImGui and RmlUi assume. It is allowed only on an 8-bit sRGB target; anywhere else it is a logged error and the pipeline draws with `Linear`. Gamma blending is never implicit.
 
 ## Input routing
@@ -165,10 +165,10 @@ ImGui is a submodule linked only by that piece, built only with the examples. It
 
 ## Not built, and kept possible
 
-- **The `Painter` and the retained UI framework:** new packages over FenrirDraw2D.
-- **An image target:** a draw list painted into an `AssetHandle<Image>` render target, which an ordinary 3D material then samples. This is the first world-space UI. It needs rules for creation, resizing, clearing, and ordering in the graph before the views that sample it. Premultiplied storage is preferred.
-- **A world-space target:** a world matrix and the camera's view-projection, depth-tested in a view's `Transparent` stage. The target sets depth and transforms; the draw list doesn't change. Lighting or normal-based effects may need more than `localToClip` in set 0. That is an extension of the set, not of the draw list.
-- **Dynamic images:** image assets updated by sub-rectangle (font atlases, runtime UI textures) rather than whole re-upload. The resource API should not assume images are immutable or always uploaded whole.
+- **The `Painter` and the retained UI framework:** new packages over FenrirDraw2D. *Amended 2026-11-11 (FenrirUI ticket 03):* the painter is built, as FenrirPainter (ADR-0060): analytic shapes, paints and clips through its own shader, `builtin:painter`, which it registers with the asset store, and premultiplied alpha as this ADR prefers. *Amended 2026-11-14 (FenrirUI close-out):* the retained UI framework is built too, as FenrirUI (ADR-0063 to ADR-0066).
+- **An image target:** a draw list painted into an `AssetHandle<Image>` render target, which an ordinary 3D material then samples. This is the first world-space UI. It needs rules for creation, resizing, clearing, and ordering in the graph before the views that sample it. Premultiplied storage is preferred. *Amended 2026-11-11 (FenrirUI ticket 01):* built as the image 2D target of ADR-0060, through the `ImageTargets2D` app resource: the image is a render target image, sRGB or linear, made with its asset and remade when it is replaced, cleared to transparent each frame it is drawn, and ordered by the graph before what samples it.
+- **A world-space target:** a world matrix and the camera's view-projection, depth-tested in a view's `Transparent` stage. The target sets depth and transforms; the draw list doesn't change. Lighting or normal-based effects may need more than `localToClip` in set 0. That is an extension of the set, not of the draw list. *Amended 2026-11-14 (FenrirUI ticket 23):* built as ADR-0060's world-space 2D target (`WorldQuad2D` and `WorldTargets2D`). It realises a scissor by ignoring it: there is no hardware scissor, and the painter's per-pixel clip from each vertex is the clip, so a list from a producer with no per-pixel clip of its own (ImGui's) draws unclipped there. Stencil was not taken (ADR-0060's gap 2).
+- **Dynamic images:** image assets updated by sub-rectangle (font atlases, runtime UI textures) rather than whole re-upload. The resource API should not assume images are immutable or always uploaded whole. *Amended 2026-11-11 (FenrirUI ticket 02):* built: `AssetStore::UpdateImage` writes a rectangle of an image in place and `ImageUpdatesSince` names the rectangles written since a revision, which the renderer uploads alone (FenrirText's glyph atlases).
 - **IME composition**, and C# authoring of draw lists through the managed host.
 
 ## Considered options

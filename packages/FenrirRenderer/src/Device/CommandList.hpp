@@ -263,12 +263,25 @@ namespace Fenrir::Graphics
         std::size_t size = 0;
         friend bool operator==(const CmdCopyBuffer&, const CmdCopyBuffer&) = default;
     };
+    /**
+     * @brief Copies a rectangle of one colour texture's top mip level (the backbuffer among them) into another's, at
+     * (`x`, `y`), in a `Copy` pass. Both rectangles are in pixels from the top-left; the formats match.
+     */
+    struct CmdCopyTexture
+    {
+        TextureHandle source;
+        PixelRect region;
+        TextureHandle destination;
+        std::int32_t x = 0;
+        std::int32_t y = 0;
+        friend bool operator==(const CmdCopyTexture&, const CmdCopyTexture&) = default;
+    };
     /** @} */
 
     /** @brief Any one command. */
     using Command = std::variant<CmdBeginPass, CmdEndPass, CmdSetPipeline, CmdSetBindingGroup, CmdSetVertexBuffer,
                                  CmdSetIndexBuffer, CmdSetViewport, CmdSetScissor, CmdDraw, CmdDrawIndexed,
-                                 CmdDrawIndexedIndirect, CmdDispatch, CmdCopyBuffer>;
+                                 CmdDrawIndexedIndirect, CmdDispatch, CmdCopyBuffer, CmdCopyTexture>;
 
     /**
      * @brief The commands of one or more passes as plain structs, owned by the renderer, recorded through a
@@ -375,6 +388,12 @@ namespace Fenrir::Graphics
 
         /** @brief Records a copy between buffers. */
         void CopyBuffer(const CmdCopyBuffer& copy)
+        {
+            Record(copy);
+        }
+
+        /** @brief Records a copy between textures. */
+        void CopyTexture(const CmdCopyTexture& copy)
         {
             Record(copy);
         }

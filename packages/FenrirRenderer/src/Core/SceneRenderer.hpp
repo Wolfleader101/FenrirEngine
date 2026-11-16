@@ -130,6 +130,50 @@ namespace Fenrir::Render
     };
 
     /**
+     * @brief What each view's Transparent pass draws among its transparent items besides them: the world-space 2D
+     * target's quads (ADR-0060), which the 2D render feature resolves and records, given to the scene renderer through
+     * SceneRenderer::SetWorldQuads.
+     */
+    class WorldQuads
+    {
+      public:
+        /** @brief One quad, in world space: the point it sorts by and the corners it is culled by. */
+        struct Quad
+        {
+            Math::Vec3 origin{0.0f};
+            std::array<Math::Vec3, 4> corners{};
+        };
+
+        WorldQuads() = default;
+        WorldQuads(const WorldQuads&) = delete;
+        WorldQuads& operator=(const WorldQuads&) = delete;
+        WorldQuads(WorldQuads&&) = delete;
+        WorldQuads& operator=(WorldQuads&&) = delete;
+
+        /**
+         * @brief The frame's quads, by index, resolved to draw into a view's `colour` scene colour at `samples` and its
+         * Depth32Float depth, the passes their groups draw in added; called once a frame by a scene renderer drawing
+         * `views` views, before it adds their passes.
+         */
+        virtual std::vector<Quad> ResolveWorldQuads(RenderGraph& graph, const FrameContext& frame,
+                                                    Graphics::TextureFormat colour, std::uint32_t samples,
+                                                    std::size_t views) = 0;
+        /** @brief The images `quad`'s draws sample, which a pass drawing it declares. */
+        [[nodiscard]] virtual std::vector<GraphResource> WorldQuadSamples(std::size_t quad) const = 0;
+        /** @brief The set 0 group `quad` draws with in the frame's view `view`, seen through `viewProjection`. */
+        [[nodiscard]] virtual Graphics::BindingGroupHandle WorldQuadTarget(std::uint64_t frameIndex, std::size_t quad,
+                                                                           std::size_t view,
+                                                                           const Math::Mat4& viewProjection) = 0;
+        /** @brief Records `quad`'s draws in the pass being recorded, with `target` at set 0, scissored to `viewport`.
+         */
+        virtual void RecordWorldQuad(PassContext& context, std::size_t quad, Graphics::BindingGroupHandle target,
+                                     Graphics::PixelRect viewport) = 0;
+
+      protected:
+        ~WorldQuads() = default;
+    };
+
+    /**
      * @brief What a view's cull pass tests its candidates against (ADR-0057): its planes (a camera's five, a cascade's
      * five with the near one left open, a spot light's five, or none) and a sphere (a point light's range, radius 0
      * for none). A candidate must pass both.
@@ -351,7 +395,8 @@ namespace Fenrir::Render
      * linear as the image is, RGBA16F or RGBA32F) with every mip level made at upload, and bound with their texture
      * parameter's sampler, one sampler per distinct description.
      *
-     * **Render target images** (ADR-0026) are prepared like assets, as RGBA8 sRGB textures of their image's size. A
+     * **Render target images** (ADR-0026) are prepared like assets, as RGBA8 textures of their image's size, sRGB, or
+     * linear for an image 2D target's linear image (ADR-0060). A
      * material texture parameter naming one binds it, and a view whose draws sample an image another view draws is
      * ordered after it by the graph. A view whose draws sample its own target, or an image whose views would have to
      * wait on it (a cycle, broken in the views' order), gets the parameter's default texture there, logged once.
@@ -431,8 +476,12 @@ namespace Fenrir::Render
         void ReleasePanorama(AssetKey key);
 
         [[nodiscard]] bool IsTargetCurrent(AssetKey key, std::uint32_t revision) const;
-        /** @brief A render target image: an RGBA8 sRGB texture of `size` that views draw into and materials sample. */
-        void PrepareTarget(AssetKey key, std::uint32_t revision, Graphics::PixelSize size);
+        /**
+         * @brief A render target image: an RGBA8 texture of `size`, sRGB unless `format` says linear (Rgba8Unorm), that
+         * views and image 2D targets draw into and materials sample.
+         */
+        void PrepareTarget(AssetKey key, std::uint32_t revision, Graphics::PixelSize size,
+                           Graphics::TextureFormat format = Graphics::TextureFormat::Rgba8Srgb);
         void ReleaseTarget(AssetKey key);
 
         [[nodiscard]] bool IsInstanceListCurrent(AssetKey key, std::uint32_t revision) const;
@@ -480,6 +529,17 @@ namespace Fenrir::Render
         void SetClusteredLights(bool on) noexcept
         {
             m_clusteredLights = on;
+        }
+
+        /**
+         * @brief The world-space 2D target's quads each view's Transparent pass draws (ADR-0060), sorted with its
+         * transparent items by the view depth of each quad's origin and culled with them (ADR-0057): the box round a
+         * quad's corners against the view's frustum, the frozen one while culling is frozen; null for none. Kept, not
+         * owned: it outlives the frame.
+         */
+        void SetWorldQuads(WorldQuads* quads) noexcept
+        {
+            m_worldQuads = quads;
         }
 
         /**
@@ -694,12 +754,13 @@ namespace Fenrir::Render
             Math::AABB bounds{Math::Vec3(0.0f), Math::Vec3(0.0f)};
         };
 
-        /** @brief A prepared render target image: its texture and size. */
+        /** @brief A prepared render target image: its texture, size and format. */
         struct TargetEntry
         {
             std::uint32_t revision = 0;
             Graphics::TextureHandle texture;
             Graphics::PixelSize size;
+            Graphics::TextureFormat format = Graphics::TextureFormat::Rgba8Srgb;
         };
 
         /** @brief A material texture parameter naming an image, and what was bound for it. */
@@ -1344,6 +1405,8 @@ namespace Fenrir::Render
         bool m_computeSkinning;
         /** @brief RendererConfig::clusteredLights: whether views with lights get a LightClusters pass. */
         bool m_clusteredLights = true;
+        /** @brief SetWorldQuads: the world-space 2D target's quads, or null for none. */
+        WorldQuads* m_worldQuads = nullptr;
         /** @brief RendererConfig::gpuCulling: whether each view's cull pass gets the view's planes. */
         bool m_gpuCulling = true;
         /** @brief RendererConfig::occlusionCulling: whether each view's cull pass runs its second phase. */

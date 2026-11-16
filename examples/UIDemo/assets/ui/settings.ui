@@ -1,0 +1,53 @@
+<!--
+  UIDemo's settings panel (examples/UIDemo/README.md), loaded beside the pause panel by its Settings button and styled
+  by menu.css. The menu keeps what its controls set, and writes it back into them each time the panel loads.
+-->
+<panel id="settings-panel" class="card">
+    <label class="title">Settings</label>
+
+    <panel class="row">
+        <label class="name">Volume</label>
+        <slider id="volume" min="0" max="100" step="1"/>
+    </panel>
+    <panel class="row">
+        <label class="name">Field of view</label>
+        <slider id="field-of-view" min="40" max="100" step="1"/>
+    </panel>
+    <panel class="row">
+        <label class="name">Invert look</label>
+        <checkbox id="invert-look"/>
+    </panel>
+    <panel class="row">
+        <label class="name">Show HUD</label>
+        <checkbox id="show-hud"/>
+    </panel>
+    <panel class="row">
+        <label class="name">Virtual cursor</label>
+        <checkbox id="virtual-cursor"/>
+    </panel>
+    <panel class="row">
+        <label class="name">Player name</label>
+        <textentry id="player-name" placeholder="Your name" maxlength="16"/>
+    </panel>
+
+    <label class="subtitle">Controls</label>
+    <scroll id="controls">
+        <panel class="entry"><label class="key">F</label><label>Fire</label></panel>
+        <panel class="entry"><label class="key">Left click</label><label>Fire</label></panel>
+        <panel class="entry"><label class="key">R</label><label>Reload</label></panel>
+        <panel class="entry"><label class="key">H</label><label>Take a hit</label></panel>
+        <panel class="entry"><label class="key">Right mouse</label><label>Look</label></panel>
+        <panel class="entry"><label class="key">W A S D</label><label>Move</label></panel>
+        <panel class="entry"><label class="key">Shift</label><label>Move faster</label></panel>
+        <panel class="entry"><label class="key">Wheel</label><label>Change speed</label></panel>
+        <panel class="entry"><label class="key">Escape</label><label>Pause menu</label></panel>
+        <panel class="entry"><label class="key">Tab</label><label>Next control</label></panel>
+        <panel class="entry"><label class="key">D-pad</label><label>Move the focus</label></panel>
+        <panel class="entry"><label class="key">A</label><label>Press</label></panel>
+        <panel class="entry"><label class="key">B</label><label>Back</label></panel>
+        <panel class="entry"><label class="key">F1</label><label>Help</label></panel>
+        <panel class="entry"><label class="key">F3</label><label>Free-fly camera</label></panel>
+    </scroll>
+
+    <button id="back">Back</button>
+</panel>

@@ -1,0 +1,196 @@
+#pragma once
+
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string_view>
+
+#include "FenrirDraw2D/DrawList2D.hpp"
+#include "FenrirInput/InputRouter.hpp"
+#include "FenrirMath/Math.hpp"
+#include "FenrirUI/ElementId.hpp"
+#include "FenrirUI/Style.hpp"
+
+namespace Fenrir
+{
+    class App;
+    class Painter;
+    class UIRoot;
+
+    /** @brief How a measure constraint bounds a size: not at all, to exactly it, or to at most it. */
+    enum class MeasureMode : std::uint8_t
+    {
+        Undefined,
+        Exactly,
+        AtMost,
+    };
+
+    /** @brief What Element::SetAttribute did with an attribute. */
+    enum class AttributeResult : std::uint8_t
+    {
+        /** @brief It took the value. */
+        Set,
+        /** @brief It has no attribute of that name. */
+        Unknown,
+        /** @brief It has the attribute, and could not read the value. */
+        Invalid,
+    };
+
+    /** @brief The space layout offers a measured element's content box, in UI units. */
+    struct MeasureConstraints
+    {
+        float width = 0.0f;
+        MeasureMode widthMode = MeasureMode::Undefined;
+        float height = 0.0f;
+        MeasureMode heightMode = MeasureMode::Undefined;
+    };
+
+    /**
+     * @brief An element's laid-out rectangles, in UI units from its root's top-left, before any transform: its border
+     * box, padding box (inside the border) and content box (inside the padding), and the clip its ancestors' `overflow:
+     * hidden` sets on it (their padding boxes intersected; the root's whole box when none clips).
+     */
+    struct ElementBoxes
+    {
+        Rect2D border;
+        Rect2D padding;
+        Rect2D content;
+        Rect2D clip;
+    };
+
+    /** @brief What an element paints its content with: its rectangles and resolved style. */
+    struct ElementPaint
+    {
+        const ElementBoxes& boxes;
+        const ResolvedStyle& style;
+        /**
+         * @brief What to multiply the content's alpha by: the element's opacity when it has no offscreen group of its
+         * own (a leaf, or groups switched off), 1 otherwise.
+         */
+        float opacity = 1.0f;
+    };
+
+    /**
+     * @brief One element of a UI root's tree (ADR-0066). The root keeps the tree: the tag name, id string, classes,
+     * pseudo-classes, styles, children and rectangles, all reached through UIRoot by the element's id. This object is
+     * the element's behaviour, which a custom element (and each control) overrides: how its content measures, what it
+     * paints over its box, and its input. A plain Element measures as an empty box and paints only its box.
+     *
+     * Register a subclass under a tag name with UIRoots::RegisterElement; creating that tag makes one through its
+     * factory.
+     */
+    class Element
+    {
+      public:
+        Element() = default;
+        Element(const Element&) = delete;
+        Element& operator=(const Element&) = delete;
+        Element(Element&&) = delete;
+        Element& operator=(Element&&) = delete;
+        virtual ~Element() = default;
+
+        /** @brief The element's id in its root. */
+        [[nodiscard]] ElementId GetId() const noexcept
+        {
+            return m_id;
+        }
+
+        /** @brief The root it belongs to. */
+        [[nodiscard]] UIRoot& GetRoot() const noexcept
+        {
+            return *m_root;
+        }
+
+        /**
+         * @brief Whether layout measures the content through Measure. Only an element with no children is measured: one
+         * with children is sized by them. Read when the element is made.
+         */
+        [[nodiscard]] virtual bool HasMeasure() const
+        {
+            return false;
+        }
+
+        /**
+         * @brief The content box's size in UI units for `constraints`, when HasMeasure is true. Layout caches the
+         * result; UIRoot::InvalidateMeasure asks for it again.
+         */
+        [[nodiscard]] virtual Math::Vec2 Measure(const MeasureConstraints& constraints)
+        {
+            (void)constraints;
+            return Math::Vec2(0.0f);
+        }
+
+        /**
+         * @brief Paints the content, after the element's shadows, background, border and text (UIRoot::SetText) and
+         * before its children, under its transform, its own overflow clip and its ancestors' clips. Coordinates are UI
+         * units from the root's top-left. It must not create, remove or move elements: `paint` refers into the root's
+         * tree.
+         */
+        virtual void Paint(Painter& painter, const ElementPaint& paint)
+        {
+            (void)painter;
+            (void)paint;
+        }
+
+        /**
+         * @brief Sees an input the root's input router routes to the element or to an element under it, before the
+         * UIEvent it makes is sent: a button press or scroll over it (it is the topmost element under the pointer
+         * taking pointer input), the release of a button pressed on it, pointer motion while a button pressed on it is
+         * held or else while it is under the pointer, and keys and text while it has the focus. The input is offered
+         * to that element first, then to each ancestor in turn until one returns Consumed, so a scroll view sees the
+         * wheel over its rows. Returning Consumed says it took the input itself, which stops it there and skips the
+         * root's default action: a press then leaves the focus where it was, and Tab does not move it. The input is
+         * consumed either way, as the router's rules say (ADR-0065), except motion, which always reaches the game.
+         */
+        virtual RouteResult OnInput(App& app, const RoutedInput& input)
+        {
+            (void)app;
+            (void)input;
+            return RouteResult::Passed;
+        }
+
+        /**
+         * @brief Where text typed into it goes while it has the focus, for the operating system's input method: its
+         * caret, in UI units from the root's top-left. With one, the root's input router claims text input in its
+         * window with that rectangle (scaled to the window's logical units) while the element has the focus, so the
+         * window takes text and places any candidate window there (ADR-0027). None, the default, for an element that
+         * takes no text.
+         */
+        [[nodiscard]] virtual std::optional<Rect2D> GetTextCaret() const
+        {
+            return std::nullopt;
+        }
+
+        /**
+         * @brief Gives it the attribute `name` with `value` as written in a markup document (ADR-0064), which it parses
+         * itself: a control's own attributes, and a custom element's. The document's text content between the tags
+         * comes as `text`. `id`, `class`, `style` and `focusable` are every element's and never reach it. A plain
+         * Element has no attributes: Unknown.
+         */
+        virtual AttributeResult SetAttribute(std::string_view name, std::string_view value)
+        {
+            (void)name;
+            (void)value;
+            return AttributeResult::Unknown;
+        }
+
+      protected:
+        /**
+         * @brief Called once the element is in its root, at the end of UIRoot::Create: a control makes its own
+         * children here and makes itself focusable.
+         */
+        virtual void OnCreate()
+        {
+        }
+
+      private:
+        friend class UIRoot;
+
+        ElementId m_id;
+        UIRoot* m_root = nullptr;
+    };
+
+    /** @brief Makes the element a registered tag names. */
+    using ElementFactory = std::function<std::unique_ptr<Element>()>;
+} // namespace Fenrir

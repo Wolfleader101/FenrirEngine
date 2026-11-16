@@ -1,0 +1,414 @@
+{
+  "binding": "FenrirText",
+  "context": "Fenrir::CallContext",
+  "functions": [
+    {
+      "name": "AddFace",
+      "namespace": "Fenrir::TextNatives",
+      "source": "../src/TextScripting.cpp",
+      "state": "Fenrir::TextScripting",
+      "doc": "Registers the font file at `path` (TrueType or OpenType, loaded once as a Font asset the app owns) as the face of `family` at `weight` and `style` in the app's FontLibrary, replacing any face registered there (FontLibrary::AddFace). Paragraphs laid out in the library lay out again on their next Layout.",
+      "facade": "Fonts.AddFace",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the face was registered: false when the file does not load, or the app has no FontLibrary or AssetStore."
+      },
+      "parameters": [
+        {
+          "name": "family",
+          "type": "std::string_view",
+          "kind": "string",
+          "doc": "The family's name, as text styles name it."
+        },
+        {
+          "name": "path",
+          "type": "std::string_view",
+          "kind": "string",
+          "doc": "The font file: relative to the asset root, or absolute."
+        },
+        {
+          "name": "weight",
+          "type": "std::uint16_t",
+          "kind": "u16",
+          "doc": "The CSS weight, 100 to 900; 400 is normal and 700 bold."
+        },
+        {
+          "name": "style",
+          "type": "Fenrir::FontStyle",
+          "kind": "enum",
+          "doc": "Upright or italic."
+        }
+      ]
+    },
+    {
+      "name": "CreateParagraph",
+      "namespace": "Fenrir::TextNatives",
+      "source": "../src/TextScripting.cpp",
+      "state": "Fenrir::TextScripting",
+      "doc": "A new paragraph with no text, in the default paragraph style, kept until it is destroyed.",
+      "facade": "Paragraph.Create",
+      "facadeReturns": "paragraph",
+      "returns": {
+        "type": "void",
+        "kind": "void",
+        "doc": "The paragraph made."
+      },
+      "parameters": [
+        {
+          "name": "paragraph",
+          "type": "Fenrir::ScriptText::Paragraph*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptText::Paragraph",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The paragraph made."
+        }
+      ]
+    },
+    {
+      "name": "DestroyParagraph",
+      "namespace": "Fenrir::TextNatives",
+      "source": "../src/TextScripting.cpp",
+      "state": "Fenrir::TextScripting",
+      "doc": "Destroys the paragraph: its calls do nothing from now on, and its id is never handed out again.",
+      "facade": "Paragraph.Destroy",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was a paragraph to destroy."
+      },
+      "parameters": [
+        {
+          "name": "paragraph",
+          "type": "const Fenrir::ScriptText::Paragraph*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptText::Paragraph",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "SetText",
+      "namespace": "Fenrir::TextNatives",
+      "source": "../src/TextScripting.cpp",
+      "state": "Fenrir::TextScripting",
+      "doc": "Makes `utf8` in `style`, in the family `family`, the paragraph's whole text (Paragraph::SetText).",
+      "facade": "Paragraph.SetText",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the paragraph exists."
+      },
+      "parameters": [
+        {
+          "name": "paragraph",
+          "type": "const Fenrir::ScriptText::Paragraph*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptText::Paragraph",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "utf8",
+          "type": "std::string_view",
+          "kind": "string",
+          "doc": "The text."
+        },
+        {
+          "name": "family",
+          "type": "std::string_view",
+          "kind": "string",
+          "doc": "The font family's name, as registered with Fonts.AddFace; one with no faces is the default face."
+        },
+        {
+          "name": "style",
+          "type": "const Fenrir::ScriptText::TextStyle*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptText::TextStyle",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "How the text looks."
+        }
+      ]
+    },
+    {
+      "name": "AddRun",
+      "namespace": "Fenrir::TextNatives",
+      "source": "../src/TextScripting.cpp",
+      "state": "Fenrir::TextScripting",
+      "doc": "Appends `utf8` in `style`, in the family `family`, to the paragraph's text (Paragraph::AddRun).",
+      "facade": "Paragraph.AddRun",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the paragraph exists."
+      },
+      "parameters": [
+        {
+          "name": "paragraph",
+          "type": "const Fenrir::ScriptText::Paragraph*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptText::Paragraph",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "utf8",
+          "type": "std::string_view",
+          "kind": "string",
+          "doc": "The text."
+        },
+        {
+          "name": "family",
+          "type": "std::string_view",
+          "kind": "string",
+          "doc": "The font family's name, as registered with Fonts.AddFace."
+        },
+        {
+          "name": "style",
+          "type": "const Fenrir::ScriptText::TextStyle*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptText::TextStyle",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "How the text looks."
+        }
+      ]
+    },
+    {
+      "name": "ClearParagraph",
+      "namespace": "Fenrir::TextNatives",
+      "source": "../src/TextScripting.cpp",
+      "state": "Fenrir::TextScripting",
+      "doc": "Removes all the paragraph's text (Paragraph::Clear).",
+      "facade": "Paragraph.Clear",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the paragraph exists."
+      },
+      "parameters": [
+        {
+          "name": "paragraph",
+          "type": "const Fenrir::ScriptText::Paragraph*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptText::Paragraph",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "SetStyle",
+      "namespace": "Fenrir::TextNatives",
+      "source": "../src/TextScripting.cpp",
+      "state": "Fenrir::TextScripting",
+      "doc": "Sets how the paragraph's lines are laid out (Paragraph::SetStyle); the next Layout lays out again if it differs.",
+      "facade": "Paragraph.SetStyle",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the paragraph exists."
+      },
+      "parameters": [
+        {
+          "name": "paragraph",
+          "type": "const Fenrir::ScriptText::Paragraph*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptText::Paragraph",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "style",
+          "type": "const Fenrir::ParagraphStyle*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ParagraphStyle",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "The alignment, line height, line limit, ellipsis, white space and direction."
+        }
+      ]
+    },
+    {
+      "name": "Layout",
+      "namespace": "Fenrir::TextNatives",
+      "source": "../src/TextScripting.cpp",
+      "state": "Fenrir::TextScripting",
+      "doc": "Lays the paragraph out to `width` pixels (infinity for no limit) with the app's FontLibrary, unless nothing changed since it last did (Paragraph::Layout).",
+      "facade": "Paragraph.Layout",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it laid out: false when nothing changed, or the paragraph or the FontLibrary is missing."
+      },
+      "parameters": [
+        {
+          "name": "paragraph",
+          "type": "const Fenrir::ScriptText::Paragraph*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptText::Paragraph",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "width",
+          "type": "float",
+          "kind": "f32",
+          "doc": "The width its lines wrap at, in pixels."
+        }
+      ]
+    },
+    {
+      "name": "Size",
+      "namespace": "Fenrir::TextNatives",
+      "source": "../src/TextScripting.cpp",
+      "state": "Fenrir::TextScripting",
+      "doc": "The laid-out text's extent: its widest line's width and its lines' height, in pixels (Paragraph::Size).",
+      "facade": "Paragraph.Size",
+      "facadeReturns": "size",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "The extent, zero for a paragraph that does not exist."
+      },
+      "parameters": [
+        {
+          "name": "paragraph",
+          "type": "const Fenrir::ScriptText::Paragraph*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptText::Paragraph",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "size",
+          "type": "Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The extent; zero before Layout."
+        }
+      ]
+    },
+    {
+      "name": "Lines",
+      "namespace": "Fenrir::TextNatives",
+      "source": "../src/TextScripting.cpp",
+      "state": "Fenrir::TextScripting",
+      "doc": "Writes the paragraph's laid-out lines, top to bottom, into `lines`, as many as fit (Paragraph::Lines).",
+      "facade": "Paragraph.Lines",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many lines the paragraph has: zero before Layout, for no text, or for a paragraph that does not exist."
+      },
+      "parameters": [
+        {
+          "name": "paragraph",
+          "type": "const Fenrir::ScriptText::Paragraph*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptText::Paragraph",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "lines",
+          "type": "Fenrir::LineMetrics*",
+          "kind": "pointer",
+          "pointee": "Fenrir::LineMetrics",
+          "pointeeKind": "struct",
+          "doc": "Where the lines are written."
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "CharacterAt",
+      "namespace": "Fenrir::TextNatives",
+      "source": "../src/TextScripting.cpp",
+      "state": "Fenrir::TextScripting",
+      "doc": "The caret position nearest `point`, a byte offset into the paragraph's UTF-8 text (Paragraph::CharacterAt): the grapheme boundary at the leading edge of the character under the point, or at its trailing edge past its middle.",
+      "facade": "Paragraph.CharacterAt",
+      "returns": {
+        "type": "std::uint32_t",
+        "kind": "u32",
+        "doc": "The byte offset; zero for a paragraph that does not exist."
+      },
+      "parameters": [
+        {
+          "name": "paragraph",
+          "type": "const Fenrir::ScriptText::Paragraph*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptText::Paragraph",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "point",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "Pixels from the paragraph's top-left."
+        }
+      ]
+    },
+    {
+      "name": "RangeRects",
+      "namespace": "Fenrir::TextNatives",
+      "source": "../src/TextScripting.cpp",
+      "state": "Fenrir::TextScripting",
+      "doc": "Writes the rectangles covering the characters in the byte range [`begin`, `end`) into `rects`, as many as fit (Paragraph::RangeRects): one per line and run of the range that is contiguous on screen, each a line box tall, in pixels from the paragraph's top-left.",
+      "facade": "Paragraph.RangeRects",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many rectangles cover the range: zero for an empty range, before Layout, or for a paragraph that does not exist."
+      },
+      "parameters": [
+        {
+          "name": "paragraph",
+          "type": "const Fenrir::ScriptText::Paragraph*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptText::Paragraph",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "begin",
+          "type": "std::uint32_t",
+          "kind": "u32",
+          "doc": "The range's first byte offset."
+        },
+        {
+          "name": "end",
+          "type": "std::uint32_t",
+          "kind": "u32",
+          "doc": "The byte offset past its last."
+        },
+        {
+          "name": "rects",
+          "type": "Fenrir::Rect2D*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Rect2D",
+          "pointeeKind": "struct",
+          "doc": "Where the rectangles are written."
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    }
+  ]
+}
