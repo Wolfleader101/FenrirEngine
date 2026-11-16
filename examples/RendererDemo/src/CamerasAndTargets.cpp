@@ -17,6 +17,8 @@ namespace RendererDemo
     namespace
     {
         using Fenrir::Math::Vec3;
+        using FenrirDemo::ScreenQuad;
+        using FenrirDemo::YawPitch;
 
         constexpr float Pi = 3.14159265f;
         // The monitor camera's image: 16:9, drawn by the third camera and shown on the monitor's screen.
@@ -50,25 +52,6 @@ namespace RendererDemo
             bool orthographic = false;
             float seconds = 0.0f;
         };
-
-        Fenrir::Math::Quat YawPitch(float yaw, float pitch)
-        {
-            return Fenrir::Math::AngleAxis(yaw, Vec3(0.0f, 1.0f, 0.0f)) *
-                   Fenrir::Math::AngleAxis(pitch, Vec3(1.0f, 0.0f, 0.0f));
-        }
-
-        /** @brief A quad of `width` x `height` in the XY plane facing +Z, with UV (0, 0) at its top-left corner. */
-        Fenrir::MeshData Screen(float width, float height)
-        {
-            Fenrir::MeshData mesh;
-            const float w = width * 0.5f;
-            const float h = height * 0.5f;
-            mesh.positions = {Vec3(-w, -h, 0.0f), Vec3(w, -h, 0.0f), Vec3(w, h, 0.0f), Vec3(-w, h, 0.0f)};
-            mesh.normals = {Vec3(0, 0, 1), Vec3(0, 0, 1), Vec3(0, 0, 1), Vec3(0, 0, 1)};
-            mesh.uv0 = {{0.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 0.0f}, {0.0f, 0.0f}};
-            mesh.indices = {0, 1, 2, 0, 2, 3};
-            return mesh;
-        }
 
         /** @brief Applies the layout to the two main views. */
         void ApplyLayout(CamerasState& state)
@@ -177,7 +160,7 @@ namespace RendererDemo
             Fenrir::Entity screen = entities.CreateEntity();
             screen.AddComponent<Fenrir::Transform>().pos = {0.0f, 2.6f, -6.0f};
             screen.AddComponent<Fenrir::MeshRenderer>(
-                Fenrir::MeshRenderer{store.Add<Fenrir::Mesh>(Screen(4.0f, 2.25f), scene), screenMaterial});
+                Fenrir::MeshRenderer{store.Add<Fenrir::Mesh>(ScreenQuad(4.0f, 2.25f), scene), screenMaterial});
 
             Fenrir::Entity light = entities.CreateEntity();
             light.AddComponent<Fenrir::Transform>().rot = YawPitch(0.5f, -0.9f);

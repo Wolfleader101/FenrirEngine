@@ -28,6 +28,8 @@ namespace UIDemo
     namespace
     {
         using Fenrir::Math::Vec3;
+        using FenrirDemo::ScreenQuad;
+        using FenrirDemo::YawPitch;
 
         constexpr float Pi = std::numbers::pi_v<float>;
         // The minimap's render target, square, and how many metres of the room its height spans.
@@ -64,25 +66,6 @@ namespace UIDemo
             /** @brief The name plate's quad, turned to the camera each frame. */
             Fenrir::Entity plate;
         };
-
-        Fenrir::Math::Quat YawPitch(float yaw, float pitch)
-        {
-            return Fenrir::Math::AngleAxis(yaw, Vec3(0.0f, 1.0f, 0.0f)) *
-                   Fenrir::Math::AngleAxis(pitch, Vec3(1.0f, 0.0f, 0.0f));
-        }
-
-        /** @brief A quad of `width` by `height` in the XY plane facing +Z, with UV (0, 0) at its top-left corner. */
-        Fenrir::MeshData ScreenQuad(float width, float height)
-        {
-            Fenrir::MeshData mesh;
-            const float w = width * 0.5f;
-            const float h = height * 0.5f;
-            mesh.positions = {Vec3(-w, -h, 0.0f), Vec3(w, -h, 0.0f), Vec3(w, h, 0.0f), Vec3(-w, h, 0.0f)};
-            mesh.normals = {Vec3(0, 0, 1), Vec3(0, 0, 1), Vec3(0, 0, 1), Vec3(0, 0, 1)};
-            mesh.uv0 = {{0.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 0.0f}, {0.0f, 0.0f}};
-            mesh.indices = {0, 1, 2, 0, 2, 3};
-            return mesh;
-        }
 
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
         {
