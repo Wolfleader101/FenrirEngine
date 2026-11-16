@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: built (tickets 01 to 22 through the trunk #288, from #259 to #284 and #287; screen-space reflections, tickets 29 to 31, #299 to #301; camera post effects, tickets 25 to 28, #310; tickets 23 and 24 never triaged and carried to the renderer map's "Not yet specified")
 
 # FenrirRenderer lighting: physically based shading with image-based lighting, many lights, shadows, ambient occlusion, bloom, tonemapping and instancing, with LightingDemo
 
