@@ -1,0 +1,9 @@
+@* A handler whose delegate is there only while Armed (HandlerTests): with none, the button handles nothing. *@
+<button id="toggled" @onclick="Armed ? Click : null">Go</button>
+
+@code {
+    public bool Armed = true;
+    public int Clicks;
+
+    private Action Click => () => ++Clicks;
+}

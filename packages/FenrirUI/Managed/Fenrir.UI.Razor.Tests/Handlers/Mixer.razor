@@ -1,0 +1,7 @@
+@* A parent binding a child's parameter with @bind-Value (HandlerTests). *@
+<label id="level">Level @Level</label>
+<Knob @bind-Value="Level" />
+
+@code {
+    public float Level = 0.2f;
+}

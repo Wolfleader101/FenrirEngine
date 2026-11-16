@@ -6,8 +6,8 @@
       * the running .NET SDK's own Razor source generator, from its Microsoft.NET.Sdk.Razor folder (never a pinned
         version), which compiles each .razor file into a class over the engine's stand-in, Microsoft.AspNetCore.Components;
       * the stand-in and Fenrir.UI.Razor, compile-time only (the host shares its own copies, as for every contract);
-      * default imports: Fenrir.UI, Fenrir.UI.Razor, and @inherits UIComponent. A project's own _Imports.razor at its
-        root replaces them and must say the same;
+      * default imports: Fenrir.UI, Fenrir.UI.Razor, Microsoft.AspNetCore.Components.Web (the handler directives), and
+        @inherits UIComponent. A project's own _Imports.razor at its root replaces them and must say the same;
       * the Razor dispatcher, RazorDispatcher.cs, compiled into the script so its stage system is scheduled.
 
     The project also needs the Fenrir.UI contract, as any script that uses the UI does. Installed, this file sits in a

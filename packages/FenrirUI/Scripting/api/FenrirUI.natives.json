@@ -1079,6 +1079,42 @@
       ]
     },
     {
+      "name": "WarnIfTakesNoPointer",
+      "namespace": "Fenrir::UINatives",
+      "source": "../src/UIScripting.cpp",
+      "state": "Fenrir::UIScripting",
+      "doc": "The check behind a Razor pointer handler (ADR-0069): in a debug build, warns once with `message` when the element's resolved style, as of the last frame, takes no pointer events (`pointer-events` is not `all`). A release build logs nothing.",
+      "facade": "UIRoot.WarnIfTakesNoPointer",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the element is alive."
+      },
+      "parameters": [
+        {
+          "name": "root",
+          "type": "const Fenrir::UIRootId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::UIRootId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "element",
+          "type": "const Fenrir::ElementId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ElementId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "message",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
       "name": "GetBoxes",
       "namespace": "Fenrir::UINatives",
       "source": "../src/UIScripting.cpp",

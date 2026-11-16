@@ -141,6 +141,15 @@ internal sealed class Entry(ElementId id, string tag)
 
     /// <summary>Its <c>@ref</c>, handed the element when made and none when the element is forgotten.</summary>
     public Action<Microsoft.AspNetCore.Components.ElementReference>? Reference;
+
+    /// <summary>Its handlers by <see cref="UIEventKind"/>; null when it has none.</summary>
+    public Handler?[]? Handlers;
+
+    /// <summary>Whether its root's <see cref="HandlerTable"/> holds it, so events reach its handlers.</summary>
+    public bool InHandlerTable;
+
+    /// <summary>Whether its pointer check is queued or done: each element is checked once.</summary>
+    public bool PointerChecked;
 }
 
 /// <summary>
@@ -198,4 +207,7 @@ internal sealed class RetainedTree(ElementId host)
 
     /// <summary>Every child Razor component in the tree, at any depth, for the frame's <c>BuildHash</c> checks.</summary>
     public List<ChildComponent> Children { get; } = [];
+
+    /// <summary>Its root's handler table, which its entries with handlers are in; null until mounted.</summary>
+    public HandlerTable? Handlers { get; set; }
 }

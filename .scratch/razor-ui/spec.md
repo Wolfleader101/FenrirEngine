@@ -121,7 +121,7 @@ UIDemo shows two things. Its speedometer becomes one `.razor` file. A Razor sett
   - `CompilerServices.RuntimeHelpers`.
 
   It also holds two discovery classes:
-  - **`EventHandlers`**, with an `[EventHandler]` per ADR-0069 name, each naming the handler's argument type. That is `Fenrir.UI`'s `UIEvent` when the generator accepts a struct there; the stand-in may reference the `Fenrir.UI` contract for it. Otherwise it is a small `UIEventArgs` class wrapping one, and `Action<UIEvent>` handlers are adapted through `EventCallback.Factory`'s overloads. Ticket 06 records which.
+  - **`EventHandlers`**, with an `[EventHandler]` per ADR-0069 name, each naming the handler's argument type. That is `Fenrir.UI`'s `UIEvent` when the generator accepts a struct there; the stand-in may reference the `Fenrir.UI` contract for it. Otherwise it is a small `UIEventArgs` class wrapping one, and `Action<UIEvent>` handlers are adapted through `EventCallback.Factory`'s overloads. Ticket 06 records which: the generator accepts the `UIEvent` struct (it emits `EventCallback.Factory.Create<global::Fenrir.UI.UIEvent>`), so there is no `UIEventArgs`, and the stand-in references the `Fenrir.UI` contract.
   - **`BindAttributes`**, with `[BindElement]` for `slider`, `progress`, `checkbox` and `textentry`, binding the value attribute and the `onchange` event.
 - Its version is part of the contract, as for every contract. Its namespace layout follows Blazor's, so generated code resolves unchanged.
 
@@ -180,7 +180,7 @@ UIDemo shows two things. Its speedometer becomes one `.razor` file. A Razor sett
 
 ### Handlers and binding (ADR-0069)
 
-- Each handler attribute (`EventCallback` or `EventCallback<UIEventArgs>`) is recorded on its entry by kind. Dispatch walks `GetParent` from `UIEvent.Target` to the nearest entry, of any component on that root, with a handler of the event's kind, invokes it with the event, and marks its component for rebuild.
+- Each handler attribute (`EventCallback` or `EventCallback<UIEvent>`) is recorded on its entry by kind. Dispatch walks `GetParent` from `UIEvent.Target` to the nearest entry, of any component on that root, with a handler of the event's kind, invokes it with the event, and marks its component for rebuild.
 - **The debug warning.** For a pointer-kind handler, in debug builds, the builder checks after the first layout whether the element's resolved `pointer-events` takes the pointer. This needs one native read, `GetPointerEvents` or a resolved-style query, which ticket 06 adds through the generated binding. If it doesn't, the builder warns once.
 - **`@bind`** compiles, through `BindAttributes` and `BindConverter`, to a value attribute plus an `onchange` callback.
   - The builder pushes the value when it changed.

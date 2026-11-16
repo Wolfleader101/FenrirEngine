@@ -193,6 +193,15 @@ public partial struct UIRoot
     public bool SetEntryText(ElementId element, ReadOnlySpan<char> text) =>
         UINative.SetEntryText(in this, in element, text);
 
+    /// <summary>
+    /// The check behind a Razor pointer handler (ADR-0069): in a debug build, warns once with `message` when the
+    /// element's resolved style, as of the last frame, takes no pointer events (`pointer-events` is not `all`). A
+    /// release build logs nothing.
+    /// </summary>
+    /// <returns>Whether the element is alive.</returns>
+    public bool WarnIfTakesNoPointer(ElementId element, ReadOnlySpan<char> message) =>
+        UINative.WarnIfTakesNoPointer(in this, in element, message);
+
     /// <summary>The element's rectangles as of the last frame's layout, in UI units from the root's top-left.</summary>
     /// <returns>Its border, padding, content and clip boxes; the C++ default when the call did nothing.</returns>
     public ElementBoxes GetBoxes(ElementId element)

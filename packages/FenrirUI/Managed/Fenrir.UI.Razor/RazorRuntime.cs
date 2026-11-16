@@ -47,6 +47,9 @@ public static class RazorRuntime
         public IElementSeam Seam { get; } = seam;
 
         public List<MountedRazorComponent> Mounted { get; } = [];
+
+        /// <summary>The root's elements with handlers, of all its Razor components.</summary>
+        public HandlerTable Handlers { get; } = new();
     }
 
     private static readonly List<RootGroup> groups = [];
@@ -54,15 +57,61 @@ public static class RazorRuntime
     private static readonly ElementBuilder builder = new();
 
     /// <summary>
-    /// Runs one frame of the Razor components (ADR-0068), from <c>Fenrir.UI.Build</c>: the Razor dispatcher calls it with
-    /// its context. First the Razor components of a destroyed root are dropped (one liveness check per root a frame),
-    /// and one whose host someone else removed is dropped when it would next build. Then each Razor component builds, in mount order, when it was just mounted, when
-    /// <c>StateHasChanged</c> asked, or when its <c>BuildHash</c> changed; at most once. One mounted while this runs
-    /// builds next frame. One whose build or hook throws is logged with its type and turned off until the next reload.
+    /// Runs one frame of the Razor components (ADR-0068, ADR-0069), from <c>Fenrir.UI.Build</c>: the Razor dispatcher
+    /// calls it with its context and the UI events it read this frame. First the Razor components of a destroyed root
+    /// are dropped (one liveness check per root a frame), and one whose host someone else removed is dropped when it
+    /// would next build. Then each event runs the handler of its kind nearest its target, walking up through the
+    /// parents, and that handler's Razor component is marked to build (a <c>Change</c> on a bound control first writes
+    /// the control's value into the bound field). Then each Razor component builds, in mount order, when it was just
+    /// mounted, when <c>StateHasChanged</c> or a handler asked, or when its <c>BuildHash</c> changed; at most once. One
+    /// mounted while this runs builds next frame. One whose build, hook or handler throws is logged with its type and
+    /// turned off until the next reload.
     /// </summary>
-    public static void Build(in SystemContext context)
+    public static void Build(in SystemContext context, EventRange<UIEvent> events)
+    {
+        BeginFrame();
+        for (int i = 0; i < events.Count; ++i)
+            Dispatch(events[i], context);
+        BuildAll(context);
+    }
+
+    /// <summary>
+    /// Runs one frame with no UI events, as <see cref="Build(in SystemContext, EventRange{UIEvent})"/> does with some.
+    /// </summary>
+    public static void Build(in SystemContext context) => Build(context, ReadOnlySpan<UIEvent>.Empty);
+
+    /// <summary>
+    /// Runs one frame with these UI events, as the tests give them: the public overload's steps over a span, since an
+    /// <c>EventRange</c> is the engine's queue and a test has none.
+    /// </summary>
+    internal static void Build(in SystemContext context, ReadOnlySpan<UIEvent> events)
+    {
+        BeginFrame();
+        foreach (ref readonly UIEvent e in events)
+            Dispatch(e, context);
+        BuildAll(context);
+    }
+
+    /// <summary>Drops dead roots, then runs the pointer checks earlier frames queued, now their elements are laid out.</summary>
+    private static void BeginFrame()
     {
         DropDeadRoots();
+        foreach (RootGroup group in groups)
+            group.Handlers.RunPointerChecks(group.Seam);
+    }
+
+    /// <summary>Runs the event's nearest handler, on its root's Razor components.</summary>
+    private static void Dispatch(in UIEvent e, in SystemContext context)
+    {
+        foreach (RootGroup group in groups)
+        {
+            if (group.Root.Value == e.Root.Value && group.Handlers.Dispatch(e, group.Seam, context))
+                return;
+        }
+    }
+
+    private static void BuildAll(in SystemContext context)
+    {
         foreach (RootGroup group in groups)
             building.AddRange(group.Mounted);
         try
@@ -82,7 +131,8 @@ public static class RazorRuntime
     /// <summary>
     /// Lets go of the script generation (ADR-0068): runs each Razor component's <c>OnUnmount</c>, removes every mounted
     /// host still alive at once, with no outro, and forgets every Razor component and every cache naming the
-    /// generation's types, so nothing here refers to its objects. The Razor dispatcher calls it from its
+    /// generation's types, so nothing here refers to its objects: the handler tables go with their roots'
+    /// groups. The Razor dispatcher calls it from its
     /// <c>OnDestroy</c>, before the generation is released.
     /// </summary>
     public static void Release()
@@ -135,7 +185,9 @@ public static class RazorRuntime
         }
         var entry = new MountedRazorComponent(component, seam, host);
         component.Mounted = entry;
-        GroupOf(root, seam).Mounted.Add(entry);
+        RootGroup group = GroupOf(root, seam);
+        entry.Tree.Handlers = group.Handlers;
+        group.Mounted.Add(entry);
         return entry;
     }
 

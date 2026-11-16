@@ -17,7 +17,7 @@ namespace Fenrir.UI.Razor;
 /// again until the next script reload; its elements stay as they were.
 /// </para>
 /// </summary>
-public abstract class UIComponent : ComponentBase
+public abstract class UIComponent : ComponentBase, IHandleEvent
 {
     /// <summary>The UI root it is mounted on.</summary>
     public UIRoot Root { get; internal set; }
@@ -97,6 +97,17 @@ public abstract class UIComponent : ComponentBase
     /// </summary>
     protected virtual void OnUnmount()
     {
+    }
+
+    /// <summary>
+    /// An <c>EventCallback</c> it wrote, run by whoever raises it (a child's <c>ValueChanged</c> for
+    /// <c>@bind-Value</c>): the delegate runs, then it asks for a rebuild, as after one of its handlers.
+    /// </summary>
+    Task IHandleEvent.HandleEventAsync(EventCallbackWorkItem item, object? arg)
+    {
+        Task task = item.InvokeAsync(arg);
+        StateHasChanged();
+        return task;
     }
 
     // The runtime's ways into the protected members, which the builder and RazorRuntime call.

@@ -45,6 +45,7 @@ namespace Fenrir::UINatives
     bool SetValue(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element, float value);
     std::int32_t GetEntryText(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element, char16_t* text, std::int32_t capacity);
     bool SetEntryText(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element, std::string_view text);
+    bool WarnIfTakesNoPointer(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element, std::string_view message);
     void GetBoxes(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element, Fenrir::ElementBoxes* boxes);
     bool SetFocusable(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element, bool focusable);
     bool Focus(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element);

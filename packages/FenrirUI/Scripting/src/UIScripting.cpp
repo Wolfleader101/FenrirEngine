@@ -511,6 +511,30 @@ namespace Fenrir
         }
 
         /**
+         * @brief The check behind a Razor pointer handler (ADR-0069): in a debug build, warns once with `message` when
+         * the element's resolved style, as of the last frame, takes no pointer events (`pointer-events` is not `all`).
+         * A release build logs nothing.
+         * @return Whether the element is alive.
+         * @facade UIRoot.WarnIfTakesNoPointer
+         */
+        bool WarnIfTakesNoPointer(const CallContext& context, UIScripting& ui, const UIRootId* root,
+                                  const ElementId* element, std::string_view message)
+        {
+            const UIRoot* found = ui.RootWith(context, *root, *element);
+            if (found == nullptr)
+            {
+                return false;
+            }
+            const ResolvedStyle* style = found->GetResolvedStyle(*element);
+            if (style != nullptr && style->pointerEvents != PointerEvents::All)
+            {
+                const NativeGuard guard(context, ui.warnings);
+                guard.Warn(std::string(message));
+            }
+            return true;
+        }
+
+        /**
          * @brief The element's rectangles as of the last frame's layout, in UI units from the root's top-left.
          * @param[out] boxes Its border, padding, content and clip boxes.
          * @return Its rectangles; empty ones for a stale id.
