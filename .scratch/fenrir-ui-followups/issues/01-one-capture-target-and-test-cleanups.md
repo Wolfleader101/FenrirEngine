@@ -10,10 +10,10 @@
 
 **Touches:** `packages/FenrirUI/Tests/`, `packages/FenrirUI/Scripting/Tests/`, `packages/FenrirUI/CMakeLists.txt`, `examples/UIDemo/Tests/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `CaptureTarget` is defined once; `grep -rn "class CaptureTarget"` finds one definition.
-- [ ] FenrirUI's tests, the UI scripting tests and UIDemo's tests pass, the same cases as before.
-- [ ] No test case in the two FenrirUI test folders has a REQUIRE before its first INFO.
-- [ ] `Text.cpp`'s label-size checks fail when the label's content box is made a pixel wider (checked by hand once, reverted).
-- [ ] Clang and MSVC x64 debug build without new warnings.
+- [x] `CaptureTarget` is defined once; `grep -rn "class CaptureTarget"` finds one definition.
+- [x] FenrirUI's tests, the UI scripting tests and UIDemo's tests pass, the same cases as before.
+- [x] No test case in the two FenrirUI test folders has a REQUIRE before its first INFO.
+- [x] `Text.cpp`'s label-size checks fail when the label's content box is made a pixel wider (checked by hand once, reverted).
+- [ ] Clang and MSVC x64 debug build without new warnings. (MSVC x64 debug: none. Clang: not built; no local clang build was run and CI's Linux job is off.)
