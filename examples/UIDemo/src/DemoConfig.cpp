@@ -66,8 +66,6 @@ namespace UIDemo
         config.appName = "UIDemo";
         config.scenes = {Room()};
         config.msaa = 4;
-        // The room lists its switches in an ImGui window, as LightingDemo does.
-        config.imguiOverlay = true;
         // FenrirUI is the scaffold's, installed before the app's packages.
         config.installPackages = [hud = std::move(hud),
                                   menu = std::move(menu)](Fenrir::App& app) -> std::shared_ptr<void> {
@@ -78,6 +76,7 @@ namespace UIDemo
                 app.AddResource<Hud>(app, hud);
                 app.AddResource<Menu>(app, menu);
                 app.AddResource<WorldUI>(app);
+                AddPanelSection(app);
             }
             return packages;
         };

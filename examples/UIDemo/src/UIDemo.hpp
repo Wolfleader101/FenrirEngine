@@ -60,7 +60,7 @@ namespace UIDemo
         std::shared_ptr<Fenrir::UITarget> target;
     };
 
-    /** @brief The overlay layer the HUD draws on, under the ImGui overlay's. */
+    /** @brief The overlay layer the HUD draws on, under the demo UI kit's (DemoUILayer). */
     inline constexpr std::int32_t HudLayer = 0;
 
     /** @brief What the HUD shows in a frame, pushed by the room's HUD system. */
@@ -152,10 +152,13 @@ namespace UIDemo
         std::shared_ptr<Fenrir::UITarget> target;
     };
 
-    /** @brief The overlay layer the menu draws on: over the HUD's, under the ImGui overlay's. */
+    /** @brief The overlay layer the menu draws on: over the HUD's, under the demo UI kit's (DemoUILayer). */
     inline constexpr std::int32_t MenuLayer = 10;
 
-    /** @brief The menu root's input priority: over the HUD's, so its elements see input first, under ImGui's. */
+    /**
+     * @brief The menu root's input priority: over the HUD's, so its elements see input first, under the demo UI kit's
+     * (DemoUIRouterPriority).
+     */
     inline constexpr int MenuInputPriority = 10;
 
     /** @brief The room's screen image, in pixels: 16 by 9, so the menu's 1080 UI units span its 720 pixels. */
@@ -394,7 +397,13 @@ namespace UIDemo
     [[nodiscard]] FenrirDemo::DemoScene Room();
 
     /**
-     * @brief The app as main runs it: its scenes, the ImGui overlay for its switches, and the Hud, the Menu and the
+     * @brief Adds the app's section, "UIDemo", to the demo panel: the HUD's and the menu's hot reload toggles with
+     * their stylesheets' paths, and the settings' volume and field of view. Does nothing without the demo UI kit.
+     */
+    void AddPanelSection(Fenrir::App& app);
+
+    /**
+     * @brief The app as main runs it: its scenes, its section of the demo panel, and the Hud, the Menu and the
      * WorldUI installed over the scaffold's FenrirUI. The HUD draws where `hud` says, and the menu where `menu` says.
      */
     [[nodiscard]] FenrirDemo::DemoConfig MakeDemoConfig(HudConfig hud = {}, MenuConfig menu = {});

@@ -24,10 +24,10 @@
 
 **Touches:** `examples/UIDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] No ImGui call or include remains in `examples/UIDemo/`, and `DemoConfig.cpp` sets no `imguiOverlay`.
-- [ ] `UIDemo` tests and `UIDemo-Smoke-null` pass with scripting off and on.
+- [x] No ImGui call or include remains in `examples/UIDemo/`, and `DemoConfig.cpp` sets no `imguiOverlay`.
+- [x] `UIDemo` tests and `UIDemo-Smoke-null` pass with scripting off and on.
 - [ ] Hand checks, on OpenGL:
   - the panel's hot reload toggles turn reloading off and on
   - the paths show
