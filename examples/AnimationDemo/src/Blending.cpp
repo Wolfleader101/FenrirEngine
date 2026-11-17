@@ -4,9 +4,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <initializer_list>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "AnimationScenes.hpp"
 #include "FenrirAnimation/Animation.hpp"
@@ -114,6 +116,40 @@ namespace AnimationDemo
             return entity;
         }
 
+        /** @brief Each human's blend, in sections of the demo panel, pulled each frame while the scene is there. */
+        void AddReadouts(Fenrir::App& app, Fenrir::Scene& scene, const BlendingState& state)
+        {
+            const FenrirDemo::DemoSection fades = SceneSection(app, "Crossfades");
+            fades.Readout("Clip", [&state] { return std::string(CycleNames.at(state.clip)); });
+            fades.Readout("Curve", [&state] {
+                return std::string(state.curve == Fenrir::FadeCurve::Smooth ? "smooth" : "linear");
+            });
+            fades.Readout("Fade", [&scene, &state] {
+                const Fenrir::PlaybackInfo fade = Fenrir::Animation::Playback(scene, state.fader.skeleton);
+                return fade.fading ? std::format("fading {:.0f}%", fade.fadeProgress * 100.0f) : std::string("settled");
+            });
+
+            const FenrirDemo::DemoSection upper = SceneSection(app, "Upper body");
+            upper.Readout("Call weight", [&state] {
+                return std::format("{:.0f}", state.upperBody.GetComponent<Fenrir::AnimationLayer>().weight);
+            });
+            upper.Readout("Mask").Set(std::format("{} subtree", UpperBody));
+
+            const FenrirDemo::DemoSection leaning = SceneSection(app, "Lean");
+            const auto layer = [&state]() -> const Fenrir::AnimationLayer& {
+                return state.lean.GetComponent<Fenrir::AnimationLayer>();
+            };
+            leaning.Readout("Additive from", [layer] {
+                return std::string(layer().reference == Fenrir::AdditiveReference::ClipStart ? "its start" : "rest");
+            });
+            leaning.Readout("Weight", [layer] { return std::format("{:.2f}", layer().weight); });
+            leaning.Readout("Clock", [&scene, &state] {
+                const Fenrir::PlaybackInfo clock = Fenrir::Animation::Playback(scene, state.lean);
+                return std::format("{:.2f} s (lap {})", clock.time, clock.completedLoops);
+            });
+            leaning.Readout("Sway events", [&state] { return std::to_string(state.leanEvents); });
+        }
+
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
         {
             AddStage(app, scene);
@@ -151,6 +187,7 @@ namespace AnimationDemo
             lean.clip = MakeLean(app, scene, state.leaner);
             state.lean = AddLayer(scene, state.leaner, lean);
             (void)state.events.Read(app);
+            AddReadouts(app, scene, state);
         }
 
         void CrossfadeToNext(Fenrir::App& app, BlendingState& state)
@@ -256,25 +293,6 @@ namespace AnimationDemo
             labelAt(state->fader, "Crossfades");
             labelAt(state->walker, "Walk + upper-body call");
             labelAt(state->leaner, "Idle + additive lean");
-
-            const Fenrir::PlaybackInfo fade = Fenrir::Animation::Playback(scene, state->fader.skeleton);
-            draw->ScreenText({16.0f, 120.0f},
-                             std::format("Crossfades: {}, {} curve, {}", CycleNames.at(state->clip),
-                                         state->curve == Fenrir::FadeCurve::Smooth ? "smooth" : "linear",
-                                         fade.fading ? std::format("fading {:.0f}%", fade.fadeProgress * 100.0f)
-                                                     : std::string("settled")),
-                             Colour::White);
-            const auto& call = state->upperBody.GetComponent<Fenrir::AnimationLayer>();
-            draw->ScreenText({16.0f, 144.0f},
-                             std::format("Upper body: call at weight {:.0f}, mask {} subtree", call.weight, UpperBody),
-                             Colour::White);
-            const Fenrir::PlaybackInfo leaning = Fenrir::Animation::Playback(scene, state->lean);
-            draw->ScreenText({16.0f, 168.0f},
-                             std::format("Lean: additive from {}, weight {:.2f}, clock {:.2f} s (lap {}), {} Sway "
-                                         "events",
-                                         lean.reference == Fenrir::AdditiveReference::ClipStart ? "its start" : "rest",
-                                         lean.weight, leaning.time, leaning.completedLoops, state->leanEvents),
-                             Colour::FromSrgb(0x80FF80FF));
         }
     } // namespace
 
@@ -282,9 +300,39 @@ namespace AnimationDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Blending";
-        scene.keyHelp = "C: crossfade to the next clip. V: smooth or linear. I: crossfade, then interrupt it mid-fade. "
-                        "U: upper-body call on or off. A: lean from its start or from rest. W: ramp the lean's weight "
-                        "to 0 and back.";
+        scene.keyRows = {{"C", "crossfade to the next clip"},
+                         {"V", "smooth or linear fades"},
+                         {"I", "crossfade, then interrupt it mid-fade"},
+                         {"U", "the upper-body call on or off"},
+                         {"A", "the lean measured from its start or from rest"},
+                         {"W", "ramp the lean's weight to 0 and back"}};
+        // Each step ends when one of its keys is pressed.
+        const auto pressed = [](std::initializer_list<Fenrir::Key> keys) {
+            return [keys = std::vector<Fenrir::Key>(keys)](Fenrir::App& app) {
+                const auto& keyboard = app.GetResource<Fenrir::Keyboard>();
+                return std::ranges::any_of(keys, [&](Fenrir::Key key) { return keyboard.JustPressed(key); });
+            };
+        };
+        scene.tutorial = FenrirDemo::DemoTutorial{
+            .title = "Blending",
+            .steps = {{.title = "The crossfade",
+                       .text = "The human on the left crossfades through idle, walk, run and sprint. Press C to fade "
+                               "to the next clip, and watch the Crossfades section's Fade. V picks the fade's curve; I "
+                               "fades and then fades again mid-way, from a snapshot of the blend so far.",
+                       .keys = {{"C", "crossfade to the next clip"}, {"V", "smooth or linear"}, {"I", "interrupt"}},
+                       .done = pressed({Fenrir::Key::C, Fenrir::Key::I})},
+                      {.title = "The upper-body layer",
+                       .text = "The middle human walks, with the call played over its upper body by an override layer "
+                               "whose bone mask is spine_01's subtree: its legs keep walking. Press U to turn the call "
+                               "off or on.",
+                       .keys = {{"U", "the upper-body call on or off"}},
+                       .done = pressed({Fenrir::Key::U})},
+                      {.title = "The lean",
+                       .text = "The human on the right idles with an additive lean on top. Press A to measure the lean "
+                               "from its first frame or from the rest pose, and W to ramp its weight to 0 and back; at "
+                               "0 its clock runs on but its Sway events are silent.",
+                       .keys = {{"A", "from its start or from rest"}, {"W", "ramp the weight to 0 and back"}},
+                       .done = pressed({Fenrir::Key::A, Fenrir::Key::W})}}};
         scene.keys = {Fenrir::Key::C, Fenrir::Key::V, Fenrir::Key::C, Fenrir::Key::I, Fenrir::Key::U,
                       Fenrir::Key::A, Fenrir::Key::W, Fenrir::Key::U, Fenrir::Key::A};
         scene.camera = {{0.0f, 1.4f, 6.0f}, 0.0f, -0.1f};

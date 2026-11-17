@@ -1,0 +1,53 @@
+@* Bone attachments (C#)'s readouts (examples/AnimationDemo/README.md, "The demo panel"), which AttachmentsPanelSetup
+   mounts into the scene's demo slot: the demo UI kit's shared Razor components (Fenrir.Demo.Razor), styled like the C++
+   rows. It reads the scene's AttachmentsScene and its bones through Context and Skeletons, so it shows what the keys
+   (BoneAttachments.cs) set. It has no switches: the keys are the scene's. *@
+@using System.Globalization
+@using Fenrir.Demo.Razor
+@using Fenrir.Math
+@using Fenrir.Scripting
+@using Fenrir.Skeleton
+@{ Values shown = Shown; }
+<DemoSection Title="Bone reads (Razor)">
+    <Readout Label="Bones" Value="@shown.Bones" />
+    <Readout Label="Pose" Value="@shown.Pose" />
+    <Readout Label="Generation" Value="@shown.Generation" />
+    <Readout Label="Head at" Value="@shown.Head" />
+    <Readout Label="Nod" Value="@shown.Nod" />
+    <Readout Label="Blade" Value="@shown.Blade" />
+    <Readout Label="Hat" Value="@shown.Hat" />
+</DemoSection>
+
+@code {
+    // What the readouts show, as text, so the panel rebuilds only when a shown value changes.
+    private readonly record struct Values(string Bones, string Pose, string Generation, string Head, string Nod,
+                                          string Blade, string Hat);
+
+    private static readonly Values Unbuilt = new("-", "-", "-", "-", "-", "-", "-");
+
+    private Values Shown
+    {
+        get
+        {
+            if (!AttachmentsCSharp.TryGet(Context, out AttachmentsScene state))
+                return Unbuilt;
+            string head = Skeletons.GetBoneWorldMatrix(state.Skeleton, state.Head, out Matrix4x4 world)
+                              ? string.Create(CultureInfo.InvariantCulture,
+                                              $"({world.Column3.X:0.00}, {world.Column3.Y:0.00}, {world.Column3.Z:0.00})")
+                              : "unread";
+            return new Values(
+                SkeletonData.BoneCount(state.Skeleton.Get<SkeletonPose>().Value.Skeleton)
+                    .ToString(CultureInfo.InvariantCulture),
+                Skeletons.GetPoseState(state.Skeleton).ToString(),
+                Skeletons.GetPoseGeneration(state.Skeleton).ToString(CultureInfo.InvariantCulture),
+                head,
+                state.Nod ? "on (Fenrir.Skeleton.Modify)" : "off",
+                AttachmentsCSharp.StateName(Skeletons.GetAttachmentState(state.Blade)) +
+                    string.Create(CultureInfo.InvariantCulture, $", offset {state.BladeOffset:0.00}"),
+                AttachmentsCSharp.StateName(Skeletons.GetAttachmentState(state.Hat)));
+        }
+    }
+
+    // Rebuilt when a key, or the walk moving the head, changed what is shown.
+    protected override int BuildHash() => Shown.GetHashCode();
+}

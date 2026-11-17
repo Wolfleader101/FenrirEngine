@@ -227,6 +227,26 @@ namespace AnimationDemo
             return store.Add<Fenrir::Skeleton>(std::move(data), scene);
         }
 
+        /** @brief The human's clip, its props and the timing, in a section of the demo panel, pulled each frame. */
+        void AddReadouts(Fenrir::App& app, const AttachState& state)
+        {
+            const FenrirDemo::DemoSection attachments = SceneSection(app, "Attachments");
+            attachments.Readout("Clip", [&state] { return std::string(ClipNames.at(state.clip)); });
+            attachments.Readout("Rifle", [&state] {
+                return std::string(state.rifle.HasComponent<BoneAttachment>() ? "in the hand" : "dropped");
+            });
+            attachments.Readout("Hat", [&state] {
+                return std::string(state.hat.HasComponent<BoneAttachment>() ? "on the head" : "left behind");
+            });
+            attachments.Readout("Timing",
+                                [&state] { return std::string(state.timing == PoseTiming::Tick ? "Tick" : "Frame"); });
+#ifdef ANIMATION_DEMO_PHYSICS
+            attachments.Readout("Boxes").Set("the shield pushes them");
+#else
+            attachments.Readout("Boxes").Set("built without physics: they stand still");
+#endif
+        }
+
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
         {
             AddStage(app, scene);
@@ -290,6 +310,7 @@ namespace AnimationDemo
             state.hat.AddComponent<BoneAttachment>(state.hatAttachment);
             shape(state.hat, cube.handle, 0xC03030FF, {0.0f, 0.0f, 0.0f}, {0.24f, 0.08f, 0.24f});
             shape(state.hat, cube.handle, 0xC03030FF, {0.0f, -0.035f, 0.0f}, {0.36f, 0.01f, 0.36f});
+            AddReadouts(app, state);
 
             // The failure cases: each a ball at its slot, which it keeps since it is never placed (except where its
             // Transform is the failure), labelled with its state.
@@ -456,17 +477,6 @@ namespace AnimationDemo
                                        : "Frame-posed: the shield lags a frame",
                                 ticked ? green : amber, {.size = 13.0f});
             }
-#ifdef ANIMATION_DEMO_PHYSICS
-            constexpr std::string_view boxes = "the shield pushes the boxes";
-#else
-            constexpr std::string_view boxes = "built without physics, so the boxes stand still";
-#endif
-            draw->ScreenText({16.0f, 120.0f},
-                             std::format("Clip: {}. Rifle {}, hat {}. Timing: {}; {}.", ClipNames.at(state->clip),
-                                         state->rifle.HasComponent<BoneAttachment>() ? "in the hand" : "dropped",
-                                         state->hat.HasComponent<BoneAttachment>() ? "on the head" : "left behind",
-                                         ticked ? "Tick" : "Frame", boxes),
-                             Colour::White);
         }
     } // namespace
 
@@ -478,8 +488,9 @@ namespace AnimationDemo
 
         FenrirDemo::DemoScene scene;
         scene.name = "Bone attachments";
-        scene.keyHelp = "C: the next clip. W: drop the rifle (KeepWorld). K: leave the hat (KeepLocal). R: attach both "
-                        "again. T: switch both humans between tick and frame timing. B: set the boxes out again.";
+        scene.keyRows = {
+            {"C", "the next clip"},     {"W", "drop the rifle (KeepWorld)"},         {"K", "leave the hat (KeepLocal)"},
+            {"R", "attach both again"}, {"T", "both humans' timing: tick or frame"}, {"B", "set the boxes out again"}};
         scene.keys = {Fenrir::Key::C, Fenrir::Key::C, Fenrir::Key::W, Fenrir::Key::K, Fenrir::Key::C, Fenrir::Key::R,
                       Fenrir::Key::W, Fenrir::Key::T, Fenrir::Key::B, Fenrir::Key::R, Fenrir::Key::T};
         scene.camera = {{0.0f, 1.5f, 5.2f}, 0.0f, -0.12f};

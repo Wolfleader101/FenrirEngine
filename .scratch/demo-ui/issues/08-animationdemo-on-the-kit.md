@@ -21,10 +21,10 @@
 
 **Touches:** `examples/AnimationDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] No `ScreenText` remains in `examples/AnimationDemo/` (C++ or C#).
-- [ ] `AnimationDemo-Smoke-null` passes with scripting off and on. With scripting off, the C# twins are not listed, as today.
+- [x] No `ScreenText` remains in `examples/AnimationDemo/` (C++ or C#).
+- [x] `AnimationDemo-Smoke-null` passes with scripting off and on. With scripting off, the C# twins are not listed, as today.
 - [ ] Hand checks, on OpenGL:
   - every scene's readouts change as its keys are pressed
   - the C# twins' Razor readouts do the same

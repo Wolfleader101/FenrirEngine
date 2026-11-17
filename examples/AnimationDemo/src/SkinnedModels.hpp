@@ -2,11 +2,13 @@
 
 #include <array>
 #include <cstddef>
+#include <string>
 #include <string_view>
 #include <vector>
 
 #include "FenrirAnimation/Animator.hpp"
 #include "FenrirAssets/AssetHandle.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirMath/Math.hpp"
 
@@ -119,4 +121,16 @@ namespace AnimationDemo
 
     /** @brief A lit floor, a directional light and a ColourSky: the stage every scene stands on. */
     void AddStage(Fenrir::App& app, Fenrir::Scene& scene, float width = 16.0f, float depth = 10.0f);
+
+    /**
+     * @brief A scene section of the demo panel titled `title`, gone when the scene is left; a handle that does nothing
+     * when the demo UI kit is not there (FenrirUI did not install).
+     */
+    [[nodiscard]] FenrirDemo::DemoSection SceneSection(Fenrir::App& app, std::string title);
+
+    /** @brief "on" or "off". */
+    [[nodiscard]] constexpr std::string_view OnOff(bool on) noexcept
+    {
+        return on ? "on" : "off";
+    }
 } // namespace AnimationDemo
