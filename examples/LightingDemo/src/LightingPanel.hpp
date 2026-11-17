@@ -1,12 +1,15 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirRenderer/Components.hpp"
+#include "FenrirRenderer/Renderer.hpp"
 
 namespace Fenrir
 {
@@ -102,10 +105,17 @@ namespace LightingDemo
     [[nodiscard]] std::vector<FenrirDemo::DemoKeyRow> LightingKeyRows(bool panoramaSwitch);
 
     /**
-     * @brief The same keys as one line, for the scenes whose help is still one line (Sponza, Neon city, Asteroid ring
-     * and Forest clearing, until demo UI ticket 11 gives them key rows).
+     * @brief A readout's value for a frame time of `frameSeconds` (the large scenes' smoothed one): its milliseconds
+     * and frames per second, as "16.67 ms (60 fps)".
      */
-    [[nodiscard]] std::string LightingKeyHelp(bool panoramaSwitch);
+    [[nodiscard]] std::string FrameReadout(float frameSeconds);
+
+    /**
+     * @brief A pulled readout's value (DemoSection::Readout) for one count of the renderer's last frame, such as
+     * `&Fenrir::RendererStats::draws`.
+     */
+    [[nodiscard]] std::function<std::string()> RendererCount(Fenrir::App& app,
+                                                             std::uint32_t Fenrir::RendererStats::* count);
 
     /**
      * @brief Runs the panel for one frame, from a scene's `update`: applies its keys (T the next tonemapper, E the next

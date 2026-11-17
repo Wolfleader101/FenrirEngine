@@ -44,9 +44,9 @@ exposure (0, +1, +2, -1 EV), B bloom off or back on at its default, O ambient oc
 view, H the sun's shadows off or back on, S the next panorama where the scene has more than one. The hint line at the panel's
 foot says what the hovered row does, and names its key where it has one.
 
-Material grid, Showcase models, Many lights, Showroom and Many lights (C#) have their own sections on the kit too; Many
-lights (C#)'s is a Razor panel. Sponza, Neon city, Asteroid ring and Forest clearing still show theirs in an ImGui window
-at the top left (demo UI ticket 11 moves them), beside the shared sections.
+Every scene has its own sections on the kit too, before the shared ones; Many lights (C#)'s is a Razor panel. Sponza,
+Neon city, Asteroid ring and Forest clearing show their frame time, counts and the last frame's renderer stats there as
+readouts, pulled each frame.
 
 Material grid, the first scene, has a tutorial: the lighting panel, its keys, the scene list and F1. So has Many lights.
 Each shows on the scene's first entry in a run, and again from the Tutorial button in the scene's first section.
@@ -166,15 +166,17 @@ start; the ring's rocks take shadows and cast none, which would cost four times 
 rocks and the planet's texture are fetched; without them the ring is spheres and cubes and the planet plain, and the
 scene says so on screen.
 
-Its ImGui window (until demo UI ticket 11 moves it onto the kit) has the ring's count (cutting each list to its share, which bumps its revision and uploads it
-again), the merging switch (Renderer::SetAutomaticInstancing: the renderer's, so the other scenes keep it as it was left), the
-ring turning, and the last frame's draws, instances, what the GPU drew of them (`RendererStats::instancesDrawn`, two
-frames behind) and uploads. Its Culling part (ADR-0057) has the GPU test (`Renderer::SetGpuCulling`; off, every copy
+Its section, Ring, has the ring's count (1,000 to 100,000, cutting each list to its share, which bumps its revision and
+uploads it again), the merging switch (Renderer::SetAutomaticInstancing: the renderer's, so the other scenes keep it as it was left), the
+ring turning, the ring's rocks and lists and the field's entities, the last frame's draws, instances, what the GPU drew of
+them (`RendererStats::instancesDrawn`, two frames behind) and uploads, and the frame time. Under its Culling separator
+(ADR-0057) are the GPU test (`Renderer::SetGpuCulling`; off, every copy
 draws at level 0, for comparison), occlusion culling (`Renderer::SetOcclusionCulling`; off, every copy inside the
 frustum draws, those the planet or the station hide too), freezing culling (`Renderer::SetCullingFrozen`: flying out of
 the frozen volume shows only what it kept, inside the frozen frustum's amber edges), the level-of-detail error in pixels
-(`Renderer::SetLodSelection`), how many copies drew at each level (`RendererStats::drawnByLod`) and how many each
-occlusion phase drew (`RendererStats::drawnByPhase`: visible last frame, then shown by the Hi-Z pyramid). The four are
+(`Renderer::SetLodSelection`, a logarithmic range from 0.25 to 8), how many copies drew at each of the eight levels
+(`RendererStats::drawnByLod`) and how many each occlusion phase drew (`RendererStats::drawnByPhase`: visible last frame,
+then shown by the Hi-Z pyramid), and a line saying what Drawn counts. The four are
 the renderer's, like merging, and the scene sets them back to on, on, following and a pixel each time it spawns.
 
 | Keys | |
@@ -224,8 +226,8 @@ prepass and the shadow cascades too, so the blades' depth, shadows and pixels sw
 grounds the plants. The sky is Poly Haven's Qwantani Late Afternoon, whose sun the DirectionalLight comes from, or a sky
 the demo makes with its sun in the same place.
 
-Its ImGui window (until demo UI ticket 11 moves it onto the kit) has the forest's density (cutting each list to its share, which uploads it again), the grass
-shown or hidden, the counts, the last frame's draws, instances and shadow draws, and the frame time. In Release on an
+Its section, Forest, has the forest's density (5 to 100%, cutting each list to its share, which uploads it again), the
+grass shown or hidden, the copies, lists, trees, grass blades and chunks, the last frame's draws, instances and shadow draws, and the frame time. In Release on an
 RTX 5080 at 1280 by 720 with 4x MSAA the full scene takes about 30 ms a frame. Without the fetched assets the grass
 still grows over plain earth-coloured ground and path, among box trunks and sphere boulders (two instance lists) and
 stand-ins for the boulder and log, under the demo's sky, and the scene says so on screen.
@@ -325,9 +327,10 @@ radius 0.45), a little chromatic aberration (0.006), fine film grain (0.04) and 
 at -0.5 EV. PBR Neutral keeps the neon saturated, where AgX (T) turns it pastel and lifts the dim
 spill on the upper walls towards dusk.
 
-Its ImGui window (until demo UI ticket 11 moves it onto the kit) has:
+Its section, City, has:
 
-- the frame time, the light and copy counts, and the last frame's draws and instances;
+- the frame time, the light counts (all, then each kind), the buildings, neon panels and cars, and the last frame's
+  draws and instances;
 - clustering, vsync (the main window's swap interval), the traffic, the puddles and reflections;
 - each kind of light's intensity.
 
@@ -373,7 +376,7 @@ The sky still lights the galleries' shade: the renderer has no light probes, so 
 surface whatever stands between it and the sky, darkened only by GTAO and the material's own occlusion. The scene
 draws the sky at 0.35 so the shade stays darker than the sunlit floor and the torches carry the galleries.
 
-Its ImGui window (until demo UI ticket 11 moves it onto the kit) has the frame time, the last frame's draws, instances and shadow draws, vsync (on when the
+Its section, Sun and torches, has the frame time, the last frame's draws, instances and shadow draws, vsync (on when the
 scene is entered; off, the frame time is the frame's own), the sun's intensity, the torches lit, their shadows, their
 flicker, their intensity and their range. In Release on an RTX 5080 at 1280 by 720 with 4x MSAA and vsync off, a frame
 takes about 2.2 ms from the floor or a gallery; in Debug about 11 ms. Without the fetched assets, a stone
@@ -425,7 +428,7 @@ above say what each shows and its keys.
 
 Hand checks for the demo panel, on OpenGL (above, "The demo panel"):
 
-- Each shared row changes the image as its ImGui slider did, over the same range: the exposure, the tonemapper's four
+- Each shared row changes the image over its range: the exposure, the tonemapper's four
   buttons, bloom, the streaks, the flare and the dirt, the grade, the camera effects, ambient occlusion, reflections,
   the sun's shadows, the debug view's stepper and the sky's panorama, intensity and rotation (in degrees, 0 to 360).
 - The logarithmic rows (bloom, streak and flare intensity, temperature, contrast, AO radius, max distance, thickness,
@@ -532,7 +535,7 @@ Hand checks, on OpenGL:
   on the left where the floor is smooth and blurred towards the right where it is rough, gone past the roughness cutoff,
   where the lights' own glints carry on. They fade at the screen's edge rather than cutting off. Each slab is reflected
   once: no brighter double image where its light's glint and its reflection overlap. Turning reflections off in the
-  window brings back the glints alone; G to the reflections' view shows the mirrored slabs and helmets on black, and to
+  panel brings back the glints alone; G to the reflections' view shows the mirrored slabs and helmets on black, and to
   their confidence, the floor in grey, white where it is smooth and darkening towards the screen's edges.
 
 ### Asteroid ring
@@ -557,6 +560,14 @@ Hand checks, on OpenGL:
   ring's rocks visibly coarser and 0.5 finer, the counts shifting between the levels.
 - F, then flying out of the ring: only the copies the frozen view kept are drawn, inside the frozen frustum's amber
   edges; F again fills the view in.
+- The Ring section: the rocks slider (1,000 to 100,000) sets the count the Ring rocks readout shows, and N moves the
+  slider to 10k, 50k or 100k; the instancing and turning checkboxes do as I and R, and follow them. Its readouts match
+  the renderer's: Draws, Instances, Drawn and Uploads as above, the frame time in ms and fps.
+- Under Culling: C, V and F flip their checkboxes, and clicking a checkbox does as its key; L steps the logarithmic
+  error slider through 1, 2, 4 and 0.5. The eight Drawn at level readouts change with them: GPU culling off puts every
+  copy at level 0, a larger error moves copies to the higher levels, and occlusion off changes Visible last frame
+  and Shown by the Hi-Z.
+- The panel costs no visible frame time: the Frame readout is the same with the Ring section open and collapsed.
 
 ### Forest clearing
 
@@ -569,6 +580,9 @@ Hand checks, on OpenGL (Release for a usable frame rate):
 - G to the occlusion view shows the plants, boulder and log grounded by dark contact shading.
 - Without the fetched assets: grass, trunks and boulders, and an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, no
   error in the log.
+- The Forest section: the density slider (5 to 100%) thins the forest and lowers Instances, and N moves it to 25, 50
+  and 100; the Grass checkbox and M hide and show the grass, each following the other. Copies, Lists, Trees, Grass blades
+  and Grass chunks are the spawned counts and hold still.
 
 ### Neon city
 
@@ -602,6 +616,13 @@ Hand checks, on OpenGL:
   glints as they leave the screen. Driving cars leave no visible ghost at walking speed. R turns them off: the puddles
   then show only the signs', lamps' and headlights' glints and the sky. G to the reflections' view shows the mirrored
   city on black, to their confidence the puddles near white and the dry asphalt darker.
+- The City section's readouts: 1092 lights, of them 594 rect signs, 200 point lamps, 144 spot headlights and 154 spot
+  uplights, 72 cars, and the buildings and neon panels; Draws and Instances as the renderer counts them.
+- Its rows do as their keys, and follow them: Clustered and C (the frame time rises off), Traffic moving and N, Puddles
+  and M (M dries the streets, the slider to 0, and back to where it was), Reflections and R. Vsync off lets the frame
+  time fall below the display's; the four intensities brighten and dim their kind of light, the signs' boards with
+  them.
+- The panel costs no visible frame time: the Frame readout is the same with the City section open and collapsed.
 
 ### Sponza
 
@@ -623,6 +644,10 @@ Hand checks, on OpenGL with the assets fetched:
 - G to the occlusion view: the arcades' corners, the columns' feet and the plants' pots darkened, the open floor white.
 - Without the fetched assets: plain colonnades and walls with the four torches, under a blue sky, and an amber message
   naming `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
+- The Sun and torches section: its readouts match the renderer's draws, instances and shadow draws and the frame time;
+  K, J and N flip Torches lit, Torch shadows and Flicker, and clicking each does as its key. The sun's intensity, the
+  torches' intensity and their range change the light as they move, and Vsync off frees the frame time.
+
 ### Many lights (C#)
 
 Hand checks, on OpenGL, beside Many lights (PageUp and PageDown between them, or each through its keys):

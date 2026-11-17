@@ -3,14 +3,15 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <format>
+#include <iterator>
 #include <numbers>
 #include <optional>
 #include <random>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
-
-#include <imgui.h>
 
 #include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
@@ -18,6 +19,7 @@
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/MeshData.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirRenderer/Components.hpp"
@@ -122,6 +124,9 @@ namespace LightingDemo
             bool merging = true;
             bool spinning = true;
             CullingControls culling;
+            /** @brief What the renderer's culling was last set to, so a change from a key or the panel reaches it once.
+             */
+            CullingControls appliedCulling;
             float angle = 0.0f;
             /** @brief The frame time, smoothed over about a second, in seconds. */
             float frameTime = 0.0f;
@@ -328,6 +333,51 @@ namespace LightingDemo
             }
         }
 
+        /** @brief The scene's section, bound to its state in its scene resource. */
+        void AddSection(Fenrir::App& app, AsteroidRingState& state)
+        {
+            auto* kit = app.TryGetResource<FenrirDemo::DemoUI>();
+            if (kit == nullptr)
+            {
+                return;
+            }
+            const FenrirDemo::DemoSection ring = kit->SceneSection("Ring");
+            ring.Range("Ring rocks (N)", &state.count, 1000, MaxRingRocks,
+                       "How many rocks the ring draws; N steps 10k, 50k, 100k");
+            ring.Toggle("Automatic instancing (I)", &state.merging,
+                        "The field's rock entities merged into instanced draws, or drawn one by one");
+            ring.Toggle("Ring turning (R)", &state.spinning, "The ring turning about the planet, or still");
+            ring.Readout("Ring rocks", [&state] { return std::format("{}", state.listedCount); });
+            ring.Readout("Ring lists", [&state] { return std::format("{}", state.handles.size()); });
+            ring.Readout("Field rocks", [] { return std::format("{} entities", FieldRocks); });
+            ring.Readout("Draws", RendererCount(app, &Fenrir::RendererStats::draws));
+            ring.Readout("Instances", RendererCount(app, &Fenrir::RendererStats::instances));
+            ring.Readout("Drawn", RendererCount(app, &Fenrir::RendererStats::instancesDrawn));
+            ring.Readout("Uploads", RendererCount(app, &Fenrir::RendererStats::uploads));
+            ring.Readout("Frame", [&state] { return FrameReadout(state.frameTime); });
+
+            ring.Separator("Culling");
+            ring.Toggle("GPU culling (C)", &state.culling.gpuCulling,
+                        "The GPU tests each copy against the view; off, every copy draws at level 0");
+            ring.Toggle("Occlusion culling (V)", &state.culling.occlusion,
+                        "Copies hidden behind the planet and nearer rocks, by the Hi-Z pyramid, are not drawn");
+            ring.Toggle("Freeze culling (F)", &state.culling.frozen,
+                        "Culling kept where the camera was, to fly out and see what it kept");
+            ring.Range("Level-of-detail error, pixels (L)", &state.culling.lodErrorPixels, 0.25f, 8.0f,
+                       {.logarithmic = true}, "How far, in pixels, a coarser level may depart from the full detail");
+            for (std::size_t level = 0; level < std::size(Fenrir::RendererStats{}.drawnByLod); ++level)
+            {
+                ring.Readout(std::format("Drawn at level {}", level), [&app, level] {
+                    return std::format("{}", Fenrir::Renderer::Stats(app).drawnByLod[level]);
+                });
+            }
+            ring.Readout("Visible last frame",
+                         [&app] { return std::format("{}", Fenrir::Renderer::Stats(app).drawnByPhase[0]); });
+            ring.Readout("Shown by the Hi-Z",
+                         [&app] { return std::format("{}", Fenrir::Renderer::Stats(app).drawnByPhase[1]); });
+            ring.Text("Drawn is what the GPU kept, two frames behind; off, every copy draws level 0.");
+        }
+
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
         {
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
@@ -343,7 +393,7 @@ namespace LightingDemo
             if (!cube.Ok() || !sphere.Ok())
             {
                 app.Logger()->Error("{}: the cube or the sphere did not load from the asset root", SceneName);
-                scene.AddResource<AsteroidRingState>(std::move(state));
+                AddSection(app, scene.AddResource<AsteroidRingState>(std::move(state)));
                 return;
             }
 
@@ -440,7 +490,8 @@ namespace LightingDemo
             // Culling as the panel starts: on, not frozen and at the renderer's default error, whatever another visit
             // left them as.
             state.culling.Apply(app);
-            scene.AddResource<AsteroidRingState>(std::move(state));
+            state.appliedCulling = state.culling;
+            AddSection(app, scene.AddResource<AsteroidRingState>(std::move(state)));
         }
 
         void Update(Fenrir::App& app, Fenrir::Scene& scene)
@@ -471,7 +522,7 @@ namespace LightingDemo
             {
                 state->spinning = !state->spinning;
             }
-            CullingControls culling = state->culling;
+            CullingControls& culling = state->culling;
             if (keyboard.JustPressed(Fenrir::Key::C))
             {
                 culling.gpuCulling = !culling.gpuCulling;
@@ -497,44 +548,15 @@ namespace LightingDemo
                 app.Logger()->Info("L: a level of detail may depart by {} pixels", culling.lodErrorPixels);
             }
 
-            const Fenrir::RendererStats stats = Fenrir::Renderer::Stats(app);
             const auto delta = static_cast<float>(app.GetTime().deltaTime);
             state->frameTime = state->frameTime == 0.0f ? delta : glm::mix(state->frameTime, delta, 0.05f);
             RunLightingPanel(app, scene, state->lighting);
-            // Its own switches stay in an ImGui window until demo UI ticket 11 moves them onto the kit.
-            ImGui::SetNextWindowPos({16.0f, 16.0f}, ImGuiCond_FirstUseEver);
-            ImGui::SetNextWindowSize({340.0f, 0.0f}, ImGuiCond_FirstUseEver);
-            if (ImGui::Begin(SceneName))
-            {
-                ImGui::SliderInt("Ring rocks (N)", &state->count, 1000, MaxRingRocks);
-                ImGui::Checkbox("Automatic instancing (I)", &state->merging);
-                ImGui::Checkbox("Ring turning (R)", &state->spinning);
-                ImGui::Text("Ring rocks: %d in %d lists; field rocks: %d entities", state->listedCount,
-                            static_cast<int>(state->handles.size()), FieldRocks);
-                ImGui::Text("Draws: %u  Instances: %u  Drawn: %u  Uploads: %u", stats.draws, stats.instances,
-                            stats.instancesDrawn, stats.uploads);
-                ImGui::Text("Frame: %.2f ms (%.0f fps)", state->frameTime * 1000.0f,
-                            state->frameTime > 0.0f ? 1.0f / state->frameTime : 0.0f);
-                ImGui::SeparatorText("Culling");
-                ImGui::Checkbox("GPU culling (C)", &culling.gpuCulling);
-                ImGui::Checkbox("Occlusion culling (V)", &culling.occlusion);
-                ImGui::Checkbox("Freeze culling (F)", &culling.frozen);
-                ImGui::SliderFloat("Level-of-detail error, pixels (L)", &culling.lodErrorPixels, 0.25f, 8.0f, "%.2f",
-                                   ImGuiSliderFlags_Logarithmic);
-                ImGui::Text("Drawn by level: %u  %u  %u  %u  %u  %u  %u  %u", stats.drawnByLod[0], stats.drawnByLod[1],
-                            stats.drawnByLod[2], stats.drawnByLod[3], stats.drawnByLod[4], stats.drawnByLod[5],
-                            stats.drawnByLod[6], stats.drawnByLod[7]);
-                ImGui::Text("Drawn by phase: %u visible last frame, %u shown by the Hi-Z pyramid",
-                            stats.drawnByPhase[0], stats.drawnByPhase[1]);
-                ImGui::TextUnformatted("Drawn is what the GPU kept, two frames behind; off, every copy draws level 0.");
-            }
-            ImGui::End();
 
             Fenrir::Renderer::SetAutomaticInstancing(app, state->merging);
-            if (culling != state->culling)
+            if (culling != state->appliedCulling)
             {
-                state->culling = culling;
                 culling.Apply(app);
+                state->appliedCulling = culling;
             }
             // A new count cuts each list again: Replace bumps its revision, so the renderer uploads it once more.
             if (state->count != state->listedCount && !state->handles.empty())
@@ -562,11 +584,14 @@ namespace LightingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp =
-            LightingKeyHelp(false) +
-            " N: 10k, 50k or 100k ring rocks. I: automatic instancing on or off. R: the ring turning. C: GPU "
-            "culling off or on. V: occlusion culling off or on. F: culling frozen or following. L: the next "
-            "level-of-detail error (1, 2, 4, 0.5 pixels).";
+        scene.keyRows = LightingKeyRows(false);
+        scene.keyRows.push_back({"N", "10k, 50k or 100k ring rocks"});
+        scene.keyRows.push_back({"I", "automatic instancing on or off"});
+        scene.keyRows.push_back({"R", "the ring turning or still"});
+        scene.keyRows.push_back({"C", "GPU culling off or on"});
+        scene.keyRows.push_back({"V", "occlusion culling off or on"});
+        scene.keyRows.push_back({"F", "culling frozen or following the camera"});
+        scene.keyRows.push_back({"L", "the next level-of-detail error (1, 2, 4, 0.5 pixels)"});
         // G through every debug view (the occlusion, the cascades, the shadow atlas, back), with the sun's shadows off
         // and on again (H) between; then culling off and on, occlusion culling off and on, frozen and following, and L
         // round its four errors, each control left as it started for the scenes after.
