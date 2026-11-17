@@ -118,7 +118,7 @@ namespace Fenrir
         /**
          * @brief Let the gamepad drive the root: the D-pad and the left stick move the focus, A activates, B cancels,
          * and the virtual cursor follows the stick. Off, the root consumes no gamepad input and never publishes the
-         * gamepad claim, even while it has the focus, so a pad always drives the game (a dev panel over a scene).
+         * gamepad claim, even while it has the focus, so a pad always drives the game (a demo panel over a scene).
          */
         bool gamepadNavigation = true;
         /** @brief How fast the virtual cursor moves with the stick pushed all the way, in UI units a second. */
