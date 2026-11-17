@@ -73,7 +73,8 @@ the screen as well.
 Two more UI roots are on quads in the room (ADR-0060's world-space 2D target): each a `UIWorldTarget` over an entity the
 room places, with the renderer's `WorldQuad2D` giving its size in metres and 500 UI units a metre, drawn in the camera's
 `Transparent` pass among the transparent items, in the linear blend space, styled by `assets/ui/world.css` (hot reload
-on), their text in the `ui-sdf` family. `WorldUI` (`src/World.cpp`) makes them when the room is spawned.
+on), their text in the `ui-sdf` family. `WorldUI` (`src/World.cpp`) makes them when the room is spawned. In the C#
+variant a third, the C# sign, is made from C# beside the name plate ("The C# variant", below).
 
 - **The light terminal** (`assets/ui/terminal.ui`): a rounded glass panel of 1.6 by 1 metres on a post right of the
   camera's start, turned towards it and tilted back. Its buttons, Warm, Cool and Hue, set the colour of the room's three
@@ -127,6 +128,16 @@ imports `Fenrir.UI.Razor.InRepo.props`, so its `.razor` files are compiled by th
   - A scoped sheet: `Settings.razor.css` matches only the page's own elements, its `ChildContent` among them, and
     reaches Section's headings and the credits document's labels with `::deep`. The page's controls take `menu.css`'s
     unscoped rules too, so they look like the menu's own.
+- **The C# sign** (`scripts/SignSetup.cs`, `assets/ui/sign.ui`): a small sign of 0.6 by 0.3 metres beside the name
+  plate, facing the camera's start, made wholly from C#. The script makes its entity with a `Transform` and a
+  `WorldQuad2D` (500 UI units a metre, as the other world roots), then, once the quad is there, a world root on it
+  (`UIRoot.CreateWorldRoot`, hot reload on) holding its own markup document under `world.css`'s `#sign` rules: a title
+  and one button. Each frame it gives the root a ray from the window's camera through the cursor
+  (`Renderer.ScreenPointToRay`) with the left button's state (`UIRoot.SetPointerRay`), under the terminal's rules: no
+  ray (`ClearPointerRay`) while the menu is open, while a window root has the pointer, or while the right mouse button
+  turns the camera. A click on its button logs "UIDemo (C#): the C# sign was clicked". The root ends when the script
+  generation is released, and the system destroys the quad's entity as it goes, so a reload makes a new sign. Logged
+  once: "the C# sign is beside the name plate, a world root made from C#".
 - **The menu's clicks** (`scripts/MenuClicks.cs`): an Update system reads `UIEvent`s through `EventReader<UIEvent>`,
   the queue the C++ `Menu` reads too, and logs each click on the menu root by the id of the element clicked or its
   nearest ancestor with one: "the menu's resume was clicked", and settings, quit, back and the settings' controls. A
@@ -221,3 +232,6 @@ On OpenGL, in The HUD:
   binding slides a row in, Remove slides it out, and the credits show under their heading. Saving
   `Settings.razor.css` with the menu open restyles the page; rebuilding the scripts brings the page back after the
   reload. Built without scripting, the pause panel is centred alone, as before.
+- With scripting built, the C# sign stands beside the name plate: its button lights under the cursor, a click on it
+  logs "UIDemo (C#): the C# sign was clicked", and it takes no hover while the menu is open or the right mouse button
+  turns the camera.

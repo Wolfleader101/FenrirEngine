@@ -8,6 +8,7 @@
 #include "Iris/Iris.hpp"
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirRenderer/Renderer.hpp"
+#include "FenrirRenderer/WorldTargets2D.hpp"
 #include "FenrirAssetsScripting/AssetMappings.hpp"
 #include "FenrirScripting/BoundMappings.hpp"
 #include "../../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirScriptingMappings.hpp"
@@ -582,6 +583,18 @@ struct Iris::StructMapping<Fenrir::SpotLight>
 };
 static_assert(sizeof(Fenrir::SpotLight) == 44 && alignof(Fenrir::SpotLight) == 4,
               "Fenrir::SpotLight is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fenrir::WorldQuad2D>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.WorldQuad2D";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<Fenrir::Math::Vec2>("Size", 0),
+        Iris::Field<float>("UnitsPerWorldUnit", 8));
+};
+static_assert(sizeof(Fenrir::WorldQuad2D) == 12 && alignof(Fenrir::WorldQuad2D) == 4,
+              "Fenrir::WorldQuad2D is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
 // clang-format on

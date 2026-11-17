@@ -1,0 +1,9 @@
+<!--
+  UIDemo's C# sign (examples/UIDemo/README.md, "The C# variant"): loaded by scripts/SignSetup.cs into a world root the
+  script makes on a small quad beside the name plate, and styled by world.css. The script aims a ray at it from the
+  window's camera through the cursor each frame; its button's click is logged from C#.
+-->
+<panel id="sign">
+    <label class="sign-title">Made in C#</label>
+    <button id="sign-button">Press</button>
+</panel>

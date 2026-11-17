@@ -12,12 +12,19 @@
 #include "UIScriptingState.hpp"
 #include "FenrirUIScripting/ScriptUI.hpp"
 #include "FenrirPainterScripting/ScriptPainter.hpp"
+#include "FenrirAssets/AssetHandle.hpp"
+#include "FenrirMath/Math.hpp"
 
 #include <memory>
 
 namespace Fenrir::UINatives
 {
     void CreateRoot(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::ScriptUI::RootSettings* settings, Fenrir::UIRootId* root);
+    void CreateImageRoot(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::ScriptUI::ImageRootSettings* settings, Fenrir::UIRootId* root);
+    void CreateWorldRoot(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::ScriptUI::WorldRootSettings* settings, Fenrir::UIRootId* root);
+    void GetImage(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, Fenrir::AssetHandle<Fenrir::Image>* image);
+    bool SetPointerRay(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::Math::Ray* ray, bool pressed);
+    bool ClearPointerRay(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root);
     bool FindRoot(const Fenrir::CallContext&, Fenrir::UIScripting&, Fenrir::WindowId window, std::int32_t layer, Fenrir::UIRootId* root);
     bool DestroyRoot(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root);
     void GetRootElement(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, Fenrir::ElementId* element);

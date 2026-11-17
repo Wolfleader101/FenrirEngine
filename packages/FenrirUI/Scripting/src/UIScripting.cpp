@@ -4,20 +4,25 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "FenrirAssets/AssetStore.hpp"
 #include "FenrirPainterScripting/PainterScriptingState.hpp"
+#include "FenrirRenderer/WorldTargets2D.hpp"
 #include "FenrirScripting/NativeGuard.hpp"
 #include "FenrirScripting/NativeMarshalling.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirUI/Controls.hpp"
 #include "FenrirUI/Element.hpp"
 #include "FenrirUI/UI.hpp"
+#include "FenrirUI/UIImageTarget.hpp"
 #include "FenrirUI/UIRoot.hpp"
+#include "FenrirUI/UIWorldTarget.hpp"
 #include "FenrirUIScripting/ScriptUI.hpp"
 #include "Generated/FenrirUINatives.hpp"
 #include "UIScriptingState.hpp"
@@ -75,6 +80,120 @@ namespace Fenrir
             config.virtualCursor = settings->virtualCursor;
             config.hotReload = settings->hotReload;
             *root = roots->CreateRoot(std::move(config)).GetId();
+        }
+
+        /**
+         * @brief Makes a UI root drawing into an image of its own, which lives until it is destroyed, the script is
+         * released or the UI ends; the image is unloaded with it.
+         * @param[out] root The root made.
+         * @return The root; none without a UI installed or an asset store.
+         * @facade UIRoot.CreateImageRoot returns root
+         */
+        void CreateImageRoot(const CallContext& context, UIScripting& ui, const ScriptUI::ImageRootSettings* settings,
+                             UIRootId* root)
+        {
+            UIRoots* roots = ui.Roots(context);
+            if (roots == nullptr)
+            {
+                return;
+            }
+            App& app = context.GetApp();
+            const NativeGuard guard(context, ui.warnings);
+            if (guard.Require(app.TryGetResource<AssetStore>(), std::string(UIScripting::NoAssetStore)) == nullptr)
+            {
+                return;
+            }
+            UIRootConfig config;
+            config.target =
+                std::make_shared<UIImageTarget>(app, settings->width, settings->height, settings->colourSpace);
+            config.scaleRule = settings->scaleRule;
+            config.snapToPixels = settings->snapToPixels;
+            config.defaultStylesheet = settings->defaultStylesheet;
+            config.hotReload = settings->hotReload;
+            *root = roots->CreateRoot(std::move(config)).GetId();
+            ui.made.push_back(*root);
+        }
+
+        /**
+         * @brief Makes a UI root on the entity's WorldQuad2D, its pointer the ray the script gives it each frame
+         * (SetPointerRay). It lives until it is destroyed, the script is released or the UI ends; the game keeps the
+         * entity while it lives.
+         * @param[out] root The root made.
+         * @return The root; none without a UI installed, or for an entity that is not alive or has no WorldQuad2D.
+         * @facade UIRoot.CreateWorldRoot returns root
+         */
+        void CreateWorldRoot(const CallContext& context, UIScripting& ui, const ScriptUI::WorldRootSettings* settings,
+                             UIRootId* root)
+        {
+            UIRoots* roots = ui.Roots(context);
+            if (roots == nullptr)
+            {
+                return;
+            }
+            const NativeGuard guard(context, ui.warnings);
+            const std::optional<Entity> entity = guard.Alive(settings->entity);
+            if (!entity)
+            {
+                return;
+            }
+            if (!entity->HasComponent<WorldQuad2D>())
+            {
+                guard.Warn(std::string(UIScripting::NoWorldQuad));
+                return;
+            }
+            UIRootConfig config;
+            config.target = std::make_shared<UIWorldTarget>(context.GetApp(), *entity);
+            config.scaleRule = settings->scaleRule;
+            config.snapToPixels = settings->snapToPixels;
+            config.defaultStylesheet = settings->defaultStylesheet;
+            config.hotReload = settings->hotReload;
+            config.virtualCursor = settings->virtualCursor;
+            *root = roots->CreateRoot(std::move(config)).GetId();
+            ui.made.push_back(*root);
+        }
+
+        /**
+         * @brief The image an image root draws into, which any image asset can be, a material's texture say.
+         * @param[out] image The image.
+         * @return The image; empty for a root not drawing into an image, or a destroyed one.
+         * @facade UIRoot.GetImage returns image
+         */
+        void GetImage(const CallContext& context, UIScripting& ui, const UIRootId* root, AssetHandle<Image>* image)
+        {
+            if (const UIRoot* found = ui.RootOf(context, *root))
+            {
+                if (const auto* target = dynamic_cast<const UIImageTarget*>(found->GetConfig().target.get()))
+                {
+                    *image = target->GetImage();
+                }
+            }
+        }
+
+        /**
+         * @brief Gives a world root its pointer for this frame (UIRoot::SetPointerRay): `ray`, in world space, and
+         * whether its left button is `pressed`. The root hovers, presses and clicks where the ray meets its quad; a
+         * held press follows the ray past the quad's edges. Call it once a frame, from an Update system.
+         * @return Whether the pointer is over one of its elements that takes pointer input, or a press is held on one;
+         * false, doing nothing, on a root not on a world quad.
+         * @facade UIRoot.SetPointerRay
+         */
+        bool SetPointerRay(const CallContext& context, UIScripting& ui, const UIRootId* root, const Math::Ray* ray,
+                           bool pressed)
+        {
+            UIRoot* found = ui.RayRootOf(context, *root);
+            return found != nullptr && found->SetPointerRay(*ray, pressed);
+        }
+
+        /**
+         * @brief Takes a world root's pointer away for this frame: it hovers nothing, and a held press is released as
+         * cancelled, with no click. As SetPointerRay with no ray.
+         * @return False, as the root has no pointer; false too on a root not on a world quad, doing nothing.
+         * @facade UIRoot.ClearPointerRay
+         */
+        bool ClearPointerRay(const CallContext& context, UIScripting& ui, const UIRootId* root)
+        {
+            UIRoot* found = ui.RayRootOf(context, *root);
+            return found != nullptr && found->SetPointerRay(std::nullopt, false);
         }
 
         /**
@@ -787,6 +906,7 @@ namespace Fenrir
             state->placedBuild.clear();
             state->placedPaint.clear();
             state->EndStage();
+            state->EndMadeRoots(app);
             state->changes.reset();
         }
     } // namespace

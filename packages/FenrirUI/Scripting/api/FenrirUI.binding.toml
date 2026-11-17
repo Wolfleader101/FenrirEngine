@@ -6,8 +6,10 @@
 # below; they are committed.
 namespace = "Fenrir.UI"
 # The window id, key and mouse button are the input binding's, the rectangle the text binding's, the painter id the
-# painter binding's and the vector the math binding's: named as theirs, never mirrored here.
+# painter binding's, the vector and the ray the math binding's, the image handle the assets binding's and the entity the
+# built-in binding's: named as theirs, never mirrored here.
 uses = [
+    "../../../FenrirScripting/api/FenrirScripting.binding.toml",
     "../../../FenrirScripting/api/FenrirMath.binding.toml",
     "../../../FenrirInput/Scripting/api/FenrirInput.binding.toml",
     "../../../FenrirAssets/Scripting/api/FenrirAssets.binding.toml",
@@ -79,4 +81,6 @@ includes = [
     "UIScriptingState.hpp",
     "FenrirUIScripting/ScriptUI.hpp",
     "FenrirPainterScripting/ScriptPainter.hpp",
+    "FenrirAssets/AssetHandle.hpp",
+    "FenrirMath/Math.hpp",
 ]

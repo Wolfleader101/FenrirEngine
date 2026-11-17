@@ -2,7 +2,9 @@
 // tree a C++ test builds and reads the rectangles C++ reads; it loads a document by path and finds an element by id;
 // a click fed through FenrirInput's test feed reaches its EventReader<UIEvent> with the target; its Fenrir.UI.Paint
 // stage system paints into an element after the element's own box; and a stale id's natives do nothing and return
-// false.
+// false. C# makes image and world roots too (spec: "Image and world roots from C#"): an image root's image is there at
+// its size, draws, and is unloaded with the root; a world root on a quad entity hovers and clicks by the ray C# gives
+// it; the wrong kind of root and a missing quad warn once; and releasing the script generation ends what it made.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -14,7 +16,12 @@
 #include <string_view>
 #include <vector>
 
+#include "FenrirAssets/AssetStore.hpp"
+#include "FenrirECS/EntityList.hpp"
+#include "FenrirRenderer/WorldTargets2D.hpp"
+#include "FenrirUI/UIImageTarget.hpp"
 #include "FenrirUI/UIRoot.hpp"
+#include "FenrirUI/UIWorldTarget.hpp"
 #include "UIScriptingApp.hpp"
 
 using namespace Fenrir;
@@ -248,4 +255,230 @@ TEST_CASE("A destroyed root's natives do nothing and return false", "[ui][script
     }
     INFO("A create under the destroyed root made an element");
     REQUIRE(test.Call<std::uint64_t>(TreeCallsType, "CreateUnderRoot", id) == Packed(ElementId{}));
+}
+
+namespace
+{
+    // The fixture's types for image and world roots.
+    constexpr const char* RootCallsType = "UIScriptFixture.RootCalls";
+
+    /** @brief The root `id` names among the app's roots, or null. */
+    UIRoot* RootNamed(UIScriptingApp& test, std::uint32_t id)
+    {
+        for (UIRoot* root : test.Roots().GetRoots())
+        {
+            if (root->GetId().value == id)
+            {
+                return root;
+            }
+        }
+        return nullptr;
+    }
+
+    /** @brief An image handle as the fixture packs it: its index in the high half, its generation in the low. */
+    AssetHandle<Image> UnpackedImage(std::uint64_t packed)
+    {
+        AssetHandle<Image> image;
+        image.index = static_cast<std::uint32_t>(packed >> 32u);
+        image.generation = static_cast<std::uint32_t>(packed);
+        return image;
+    }
+
+    /**
+     * @brief An entity of the active scene with a 2 by 1 world unit quad at the origin, facing +Z, 100 UI units to a
+     * world unit: a world root on it is 200 by 100 UI units.
+     */
+    Entity QuadEntity(UIScriptingApp& test)
+    {
+        Entity quad = test.app.GetActiveScene().GetEntityList().CreateEntity();
+        quad.AddComponent<WorldQuad2D>(WorldQuad2D{{2.0f, 1.0f}, 100.0f});
+        return quad;
+    }
+
+    /** @brief How many warnings the app logged that contain `text`. */
+    std::size_t Warned(UIScriptingApp& test, const std::string& text)
+    {
+        return LoggedWith(test.headless, Testing::LogLevel::Warn, text);
+    }
+} // namespace
+
+TEST_CASE("A script's image root gives an image of its size that its label draws into, unloaded with the root",
+          "[ui][scripting][roots]")
+{
+    UIScriptingApp test;
+    const std::uint32_t id = test.Call<std::uint32_t>(RootCallsType, "MakeImageRoot", 256u, 128u);
+    UIRoot* root = RootNamed(test, id);
+    {
+        INFO("The script made no root");
+        REQUIRE(root != nullptr);
+    }
+    auto* target = dynamic_cast<UIImageTarget*>(root->GetConfig().target.get());
+    {
+        INFO("The root draws into an image target");
+        REQUIRE(target != nullptr);
+    }
+    const AssetHandle<Image> image = UnpackedImage(test.Call<std::uint64_t>(RootCallsType, "Image", id));
+    {
+        INFO("C#'s GetImage is the target's image, and it is not empty");
+        REQUIRE_FALSE(image.IsEmpty());
+        REQUIRE(image == target->GetImage());
+    }
+    const AssetStore& store = test.app.GetResource<AssetStore>();
+    const AssetData<Image>* data = store.TryGet(image);
+    {
+        INFO("The image is in the store at 256 by 128 pixels");
+        REQUIRE(data != nullptr);
+        REQUIRE(data->width == 256u);
+        REQUIRE(data->height == 128u);
+    }
+    {
+        INFO("The image root blends linear and lays out by Height1080, as a C++ image root does");
+        REQUIRE(root->GetConfig().blendSpace == BlendSpace2D::Linear);
+        REQUIRE(root->GetConfig().scaleRule == ScaleRule::Height1080);
+    }
+
+    {
+        INFO("The script could not make a label in the root");
+        REQUIRE(test.Call<std::uint64_t>(RootCallsType, "AddLabel", id, std::string_view("Score")) !=
+                Packed(ElementId{}));
+    }
+    test.Frame();
+    {
+        INFO("The frame painted the root element and the label");
+        REQUIRE(root->GetStats().elementsPainted == 2u);
+    }
+
+    {
+        INFO("The script could not destroy its image root");
+        REQUIRE(test.Call<bool>(TreeCallsType, "DestroyRoot", id));
+    }
+    test.Frame();
+    INFO("The image went with the root");
+    REQUIRE_FALSE(store.IsValid(image));
+}
+
+TEST_CASE("A script's world root on a quad entity hovers and clicks a button by the ray it gives",
+          "[ui][scripting][roots]")
+{
+    UIScriptingApp test;
+    const Entity quad = QuadEntity(test);
+    const std::uint32_t id = test.Call<std::uint32_t>(RootCallsType, "MakeWorldRoot", quad.GetId());
+    UIRoot* root = RootNamed(test, id);
+    {
+        INFO("The script made no root, or not on the quad");
+        REQUIRE(root != nullptr);
+        auto* target = dynamic_cast<UIWorldTarget*>(root->GetConfig().target.get());
+        REQUIRE(target != nullptr);
+        REQUIRE(target->GetEntity() == quad);
+    }
+    // A button over the quad's centre, (100, 50) in UI units: 50 by 50 from (75, 25). The root has no default
+    // stylesheet, so the button is told to take pointer input.
+    const ElementId button = root->Create(root->GetRootElement(), "button");
+    {
+        INFO("the button takes its place, size and pointer input");
+        for (const auto& [name, value] : {std::pair{"position", "absolute"},
+                                          {"left", "75px"},
+                                          {"top", "25px"},
+                                          {"width", "50px"},
+                                          {"height", "50px"},
+                                          {"pointer-events", "all"}})
+        {
+            REQUIRE(root->SetStyleProperty(button, name, value));
+        }
+    }
+    test.Frame();
+    test.Call<void>(ClicksType, "Clear");
+
+    {
+        INFO("A ray from 5 in front of the quad's centre, straight at it, is over the button");
+        REQUIRE(test.Call<bool>(RootCallsType, "AimAtCentre", id, false));
+        REQUIRE(root->GetHovered() == button);
+    }
+    {
+        INFO("Pressed and then released along the same ray, still over the button");
+        REQUIRE(test.Call<bool>(RootCallsType, "AimAtCentre", id, true));
+        REQUIRE(test.Call<bool>(RootCallsType, "AimAtCentre", id, false));
+    }
+    test.Frame();
+    {
+        INFO("C# read one click, at the button, of the world root");
+        REQUIRE(test.Call<int>(ClicksType, "Count") == 1);
+        REQUIRE(test.Call<std::uint64_t>(ClicksType, "LastTarget") == Packed(button));
+        REQUIRE(test.Call<std::uint32_t>(ClicksType, "LastRoot") == id);
+    }
+
+    INFO("With the ray taken away, nothing is hovered");
+    REQUIRE_FALSE(test.Call<bool>(RootCallsType, "ClearRay", id));
+    REQUIRE_FALSE(root->GetHovered().IsValid());
+}
+
+TEST_CASE("The wrong kind of root and a quad-less entity do nothing from C#, each warned once in a debug build",
+          "[ui][scripting][roots]")
+{
+    UIScriptingApp test;
+    const std::uint32_t window = test.Call<std::uint32_t>(RootCallsType, "MakeWindowRoot");
+    {
+        INFO("The script made no window root");
+        REQUIRE(RootNamed(test, window) != nullptr);
+    }
+    {
+        INFO("A window root has no image");
+        REQUIRE(UnpackedImage(test.Call<std::uint64_t>(RootCallsType, "Image", window)).IsEmpty());
+    }
+    {
+        INFO("A window root takes no ray, twice, and keeps no pointer");
+        REQUIRE_FALSE(test.Call<bool>(RootCallsType, "AimAtCentre", window, false));
+        REQUIRE_FALSE(test.Call<bool>(RootCallsType, "AimAtCentre", window, false));
+    }
+
+    const std::size_t rootsBefore = test.Roots().GetRoots().size();
+    const Entity bare = test.app.GetActiveScene().GetEntityList().CreateEntity();
+    {
+        INFO("A world root on an entity without a WorldQuad2D, asked for twice, names no root");
+        REQUIRE(test.Call<std::uint32_t>(RootCallsType, "MakeWorldRoot", bare.GetId()) == 0u);
+        REQUIRE(test.Call<std::uint32_t>(RootCallsType, "MakeWorldRoot", bare.GetId()) == 0u);
+        REQUIRE(test.Roots().GetRoots().size() == rootsBefore);
+    }
+
+#ifdef NDEBUG
+    INFO("A release build warns of nothing");
+    REQUIRE(Warned(test, "UINative.") == 0);
+#else
+    INFO("Each cause warned once, under its native's name");
+    REQUIRE(Warned(test, "UINative.SetPointerRay: the root takes no pointer ray") == 1);
+    REQUIRE(Warned(test, "UINative.CreateWorldRoot: the entity has no WorldQuad2D") == 1);
+#endif
+}
+
+TEST_CASE("Releasing the script generation ends the image and world roots it made, and their targets",
+          "[ui][scripting][roots]")
+{
+    UIScriptingApp test;
+    const Entity quad = QuadEntity(test);
+    const std::size_t rootsBefore = test.Roots().GetRoots().size();
+    const std::uint32_t image = test.Call<std::uint32_t>(RootCallsType, "MakeImageRoot", 64u, 32u);
+    const std::uint32_t world = test.Call<std::uint32_t>(RootCallsType, "MakeWorldRoot", quad.GetId());
+    {
+        INFO("The script made its two roots");
+        REQUIRE(RootNamed(test, image) != nullptr);
+        REQUIRE(RootNamed(test, world) != nullptr);
+    }
+    const AssetHandle<Image> handle = UnpackedImage(test.Call<std::uint64_t>(RootCallsType, "Image", image));
+    std::weak_ptr<UITarget> worldTarget = RootNamed(test, world)->GetConfig().target;
+    test.Frame();
+
+    {
+        INFO("The script did not reload");
+        REQUIRE(test.scripting.Reload().Succeeded());
+    }
+    test.Frame();
+    {
+        INFO("Both roots are gone");
+        REQUIRE(RootNamed(test, image) == nullptr);
+        REQUIRE(RootNamed(test, world) == nullptr);
+        REQUIRE(test.Roots().GetRoots().size() == rootsBefore);
+    }
+    INFO("The image was unloaded and the world target ended");
+    REQUIRE_FALSE(test.app.GetResource<AssetStore>().IsValid(handle));
+    REQUIRE(worldTarget.expired());
 }
