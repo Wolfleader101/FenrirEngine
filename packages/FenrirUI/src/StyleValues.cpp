@@ -11,6 +11,7 @@
 #include <span>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace Fenrir::Detail
@@ -523,6 +524,10 @@ namespace Fenrir::Detail
             if (EqualsIgnoringCase(text, "transparent"))
             {
                 return Colour{0.0f, 0.0f, 0.0f, 0.0f};
+            }
+            if (EqualsIgnoringCase(text, "currentcolor"))
+            {
+                return CurrentColour;
             }
             for (const NamedColour& named : NamedColours)
             {
@@ -1129,7 +1134,9 @@ namespace Fenrir::Detail
             std::vector<Shadow> shadows;
             for (const std::string_view layer : Split(value, ','))
             {
+                // A colour left out is CSS's currentcolor.
                 Shadow shadow;
+                shadow.colour = CurrentColour;
                 std::vector<float> lengths;
                 bool coloured = false;
                 for (const std::string_view word : Split(layer, ' '))
@@ -1206,9 +1213,9 @@ namespace Fenrir::Detail
                     continue;
                 }
                 const std::optional<std::string_view> shadow = CallOf(function, "drop-shadow");
-                // A drop shadow is one text shadow: an offset, a blur and a colour, with no spread. Its colour left out
-                // is CSS's currentcolor, which the style cannot hold yet, so black, as a shadow's is. A second shadow
-                // after a comma reads as a second layer; a colour function's commas stay inside its parentheses.
+                // A drop shadow is one text shadow: an offset, a blur and a colour, with no spread; its colour left out
+                // is currentcolor, as a shadow's is. A second shadow after a comma reads as a second layer; a colour
+                // function's commas stay inside its parentheses.
                 std::vector<Shadow> shadows;
                 if (!shadow || !ParseTextShadow(*shadow, shadows, context) || shadows.size() != 1)
                 {
@@ -1859,9 +1866,116 @@ namespace Fenrir::Detail
 
     namespace
     {
-        constexpr std::array<std::string_view, 11> Shorthands{
-            "margin",     "padding", "border", "border-width", "border-color", "border-radius",
-            "background", "flex",    "gap",    "transition",   "animation",
+        void Resolve(Colour& colour, const Colour& current)
+        {
+            if (IsCurrentColour(colour))
+            {
+                colour = current;
+            }
+        }
+
+        void Resolve(std::vector<Shadow>& shadows, const Colour& current)
+        {
+            for (Shadow& shadow : shadows)
+            {
+                Resolve(shadow.colour, current);
+            }
+        }
+
+        void Resolve(std::vector<GradientStop>& stops, const Colour& current)
+        {
+            for (GradientStop& stop : stops)
+            {
+                Resolve(stop.colour, current);
+            }
+        }
+    } // namespace
+
+    namespace
+    {
+        /** @brief The properties that take a colour; ResolveCurrentColour has a case for each. */
+        constexpr std::array<StyleProperty, 11> ColourProperties{
+            StyleProperty::BackgroundColor,   StyleProperty::BackgroundImage,
+            StyleProperty::BorderTopColor,    StyleProperty::BorderRightColor,
+            StyleProperty::BorderBottomColor, StyleProperty::BorderLeftColor,
+            StyleProperty::BoxShadow,         StyleProperty::Filter,
+            StyleProperty::ScrollbarColor,    StyleProperty::Color,
+            StyleProperty::TextShadow,
+        };
+    } // namespace
+
+    bool TakesColour(StyleProperty property) noexcept
+    {
+        return std::find(ColourProperties.begin(), ColourProperties.end(), property) != ColourProperties.end();
+    }
+
+    void ResolveCurrentColour(StyleProperty property, ResolvedStyle& style, const Colour& colour)
+    {
+        switch (property)
+        {
+        case StyleProperty::BackgroundColor:
+            Resolve(style.backgroundColor, colour);
+            break;
+        case StyleProperty::BackgroundImage:
+            if (auto* linear = std::get_if<StyleLinearGradient>(&style.backgroundImage))
+            {
+                Resolve(linear->stops, colour);
+            }
+            else if (auto* radial = std::get_if<StyleRadialGradient>(&style.backgroundImage))
+            {
+                Resolve(radial->stops, colour);
+            }
+            break;
+        case StyleProperty::BorderTopColor:
+            Resolve(style.borderTopColor, colour);
+            break;
+        case StyleProperty::BorderRightColor:
+            Resolve(style.borderRightColor, colour);
+            break;
+        case StyleProperty::BorderBottomColor:
+            Resolve(style.borderBottomColor, colour);
+            break;
+        case StyleProperty::BorderLeftColor:
+            Resolve(style.borderLeftColor, colour);
+            break;
+        case StyleProperty::BoxShadow:
+            Resolve(style.boxShadow, colour);
+            break;
+        case StyleProperty::Filter:
+            for (FilterStep& step : style.filter)
+            {
+                Resolve(step.colour, colour);
+            }
+            break;
+        case StyleProperty::ScrollbarColor:
+            Resolve(style.scrollbarColor.thumb, colour);
+            Resolve(style.scrollbarColor.track, colour);
+            break;
+        case StyleProperty::Color:
+            Resolve(style.color, colour);
+            break;
+        case StyleProperty::TextShadow:
+            Resolve(style.textShadow, colour);
+            break;
+        default:
+            break;
+        }
+    }
+
+    void ResolveCurrentColour(ResolvedStyle& style)
+    {
+        const Colour colour = style.color;
+        for (const StyleProperty property : ColourProperties)
+        {
+            ResolveCurrentColour(property, style, colour);
+        }
+    }
+
+    namespace
+    {
+        constexpr std::array<std::string_view, 13> Shorthands{
+            "margin",       "padding",    "inset", "border", "border-width", "border-color", "border-radius",
+            "border-image", "background", "flex",  "gap",    "transition",   "animation",
         };
 
         bool IsTimingFunction(std::string_view text)
@@ -1946,11 +2060,11 @@ namespace Fenrir::Detail
             {
                 out.emplace_back("border-" + std::string(side) + "-width", widthText);
             }
-            // CSS's initial border colour is currentcolor, which FenrirUI's values do not have: a border colour left
-            // out is black, as the style's border colours start.
+            // A colour left out is CSS's initial border colour, currentcolor.
             for (const std::string_view side : {"top", "right", "bottom", "left"})
             {
-                out.emplace_back("border-" + std::string(side) + "-color", std::string(colour.value_or("black")));
+                out.emplace_back("border-" + std::string(side) + "-color",
+                                 std::string(colour.value_or("currentcolor")));
             }
             return true;
         }
@@ -2073,6 +2187,54 @@ namespace Fenrir::Detail
             // CSS: a grow given alone makes the basis 0%; a shrink left out is 1.
             return emit(numbers.empty() ? "1" : numbers[0], numbers.size() > 1 ? numbers[1] : "1",
                         basis.value_or("0%"));
+        }
+
+        /**
+         * @brief `border-image`: a source and up to four slices, in either order, into the two longhands FenrirUI has;
+         * the one left out is its initial value. CSS's width, outset and repeat have no longhand here, so are refused.
+         */
+        bool ExpandBorderImage(std::string_view value, std::vector<Longhand>& out, StyleParseContext& context)
+        {
+            constexpr std::string_view onlyTwo = "FenrirUI has only border-image-source and border-image-slice";
+            const auto notSourceAndSlices = [&] {
+                return Fail(context, "it is not a source (url() or none) and one to four slices");
+            };
+            std::optional<std::string_view> source;
+            std::vector<std::string_view> slices;
+            bool sourceFirst = false;
+            for (const std::string_view part : Split(value, ' '))
+            {
+                // A slash inside a url() is the path's.
+                if (part.find('/') != std::string_view::npos && !UrlPath(part))
+                {
+                    return Fail(context, "a width or outset (after a slash) is not supported: " + std::string(onlyTwo));
+                }
+                if (IsOneOf(part, std::array<std::string_view, 4>{"stretch", "repeat", "round", "space"}))
+                {
+                    return Fail(context, "a repeat keyword is not supported: " + std::string(onlyTwo));
+                }
+                // The slices are one run of numbers, before or after the source.
+                if (PlainNumber(part) && (slices.empty() || !source || sourceFirst))
+                {
+                    slices.push_back(part);
+                }
+                else if (!source && (EqualsIgnoringCase(part, "none") || UrlPath(part)))
+                {
+                    source = part;
+                    sourceFirst = slices.empty();
+                }
+                else
+                {
+                    return notSourceAndSlices();
+                }
+            }
+            if (slices.size() > 4)
+            {
+                return notSourceAndSlices();
+            }
+            out.emplace_back("border-image-source", std::string(source.value_or("none")));
+            out.emplace_back("border-image-slice", slices.empty() ? std::string("0") : Join(slices));
+            return true;
         }
 
         bool ExpandGap(std::string_view value, std::vector<Longhand>& out, StyleParseContext& context)
@@ -2343,6 +2505,14 @@ namespace Fenrir::Detail
         {
             read = ExpandSides(value, {"padding-top", "padding-right", "padding-bottom", "padding-left"}, expanded,
                                context);
+        }
+        else if (name == "inset")
+        {
+            read = ExpandSides(value, {"top", "right", "bottom", "left"}, expanded, context);
+        }
+        else if (name == "border-image")
+        {
+            read = ExpandBorderImage(value, expanded, context);
         }
         else if (name == "border-width")
         {

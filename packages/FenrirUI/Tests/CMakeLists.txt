@@ -5,7 +5,7 @@
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
-add_executable(FenrirUITests PublicHeaders.cpp Layout.cpp Tree.cpp Painting.cpp Filters.cpp BackgroundPosition.cpp PaintStage.cpp BuildStage.cpp StylesheetParser.cpp Cascade.cpp
+add_executable(FenrirUITests PublicHeaders.cpp Layout.cpp Tree.cpp Painting.cpp Filters.cpp BackgroundPosition.cpp CurrentColour.cpp PaintStage.cpp BuildStage.cpp StylesheetParser.cpp Cascade.cpp
                              Input.cpp Focus.cpp Listeners.cpp Motion.cpp Text.cpp Controls.cpp DefaultStylesheet.cpp
                              TextEntry.cpp Gamepad.cpp Markup.cpp StyleFiles.cpp ScopedStylesheets.cpp WorldRoots.cpp
                              WindowCursor.cpp

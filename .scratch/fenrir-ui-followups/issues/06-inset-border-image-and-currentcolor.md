@@ -14,12 +14,13 @@
 
 **Touches:** `packages/FenrirUI/src/` (`StyleValues.cpp`, `Cascade.cpp`, `Style.cpp`, `StyleAnimation.cpp`), `packages/FenrirUI/include/FenrirUI/Style.hpp`, `packages/FenrirUI/Resources/default.css`, `packages/FenrirUI/Tests/`, `packages/FenrirUI/README.md`, `examples/UIDemo/assets/ui/`, `examples/UIDemo/README.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `inset: 1px 2px` resolves top and bottom to 1, left and right to 2; `inset: 1px 2px 3px 4px 5px` is a logged error.
-- [ ] `border-image: url(frame.png) 12` resolves as the two longhands do; `border-image: url(frame.png) 12 / 4px` is a logged error naming them.
-- [ ] `color: red; border: 2px solid` gives red borders; `border-color: currentcolor` on a child with `color: blue` is blue; a `box-shadow` with no colour is the text colour.
-- [ ] While `color` transitions from red to blue, a `currentcolor` border is the same colour as the text each frame.
-- [ ] `CURRENTCOLOR` parses; `color: currentcolor` takes the parent's colour.
-- [ ] The default stylesheet's controls and UIDemo's roots draw as before (the existing painting and UIDemo tests pass).
-- [ ] Hand check: in UIDemo the terminal's swatch border follows the reading's colour.
+- [x] `inset: 1px 2px` resolves top and bottom to 1, left and right to 2; `inset: 1px 2px 3px 4px 5px` is a logged error.
+- [x] `border-image: url(frame.png) 12` resolves as the two longhands do; `border-image: url(frame.png) 12 / 4px` is a logged error naming them.
+- [x] `color: red; border: 2px solid` gives red borders; `border-color: currentcolor` on a child with `color: blue` is blue; a `box-shadow` with no colour is the text colour.
+- [x] While `color` transitions from red to blue, a `currentcolor` border is the same colour as the text each frame.
+- [x] `CURRENTCOLOR` parses; `color: currentcolor` takes the parent's colour.
+- [x] The default stylesheet's controls and UIDemo's roots draw as before (the existing painting and UIDemo tests pass).
+
+Hand check: in UIDemo the terminal's swatch border follows the reading's colour (the reading now takes the lamps' colour too, so the two change together; the swatch's fill is that colour half seen, so its border shows), and the name plate has its glowing frame.

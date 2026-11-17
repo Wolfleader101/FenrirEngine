@@ -327,6 +327,15 @@ namespace Fenrir::Detail
             return list.empty() ? initial : list[index % list.size()];
         }
 
+        /** @brief `property`'s field of `from`, alone, with its CurrentColour replaced by `colour`. */
+        ResolvedStyle ResolvedCopy(StyleProperty property, const ResolvedStyle& from, const Colour& colour)
+        {
+            ResolvedStyle copy;
+            CopyProperty(property, from, copy);
+            ResolveCurrentColour(property, copy, colour);
+            return copy;
+        }
+
         /** @brief The value `transition` shows now, written over `out`. */
         void ApplyTransition(const RunningTransition& transition, ResolvedStyle& out)
         {
@@ -462,7 +471,14 @@ namespace Fenrir::Detail
             const float span = to.offset - from.offset;
             const float local = span > 0.0f ? std::clamp((progress - from.offset) / span, 0.0f, 1.0f) : 1.0f;
             const TimingFunction& ease = from.timing != nullptr ? *from.timing : timing;
-            MixField(property, *from.values, *to.values, ease.Apply(local), out);
+            if (!TakesColour(property))
+            {
+                MixField(property, *from.values, *to.values, ease.Apply(local), out);
+                return;
+            }
+            // Colours mix as what currentcolor resolves to: the cascaded color.
+            MixField(property, ResolvedCopy(property, *from.values, underlying.color),
+                     ResolvedCopy(property, *to.values, underlying.color), ease.Apply(local), out);
         }
     } // namespace
 
@@ -531,7 +547,8 @@ namespace Fenrir::Detail
         return compiled;
     }
 
-    void StartTransitions(ElementMotion& motion, const ResolvedStyle& before, const ResolvedStyle& after)
+    void StartTransitions(ElementMotion& motion, const ResolvedStyle& before, const ResolvedStyle& after,
+                          const Colour& shownColour)
     {
         // Which entry of the transition lists each property takes: the last that names it, as CSS.
         constexpr std::size_t none = static_cast<std::size_t>(-1);
@@ -574,9 +591,9 @@ namespace Fenrir::Detail
             }
             const auto existing = std::find_if(running.begin(), running.end(),
                                                [&](const RunningTransition& t) { return t.property == property; });
-            // The value it shows now: part way through a running transition, or its old cascaded value.
-            ResolvedStyle current;
-            CopyProperty(property, before, current);
+            // The value it shows now: part way through a running transition, or its old cascaded value, its
+            // currentcolor the colour shown.
+            ResolvedStyle current = ResolvedCopy(property, before, shownColour);
             if (existing != running.end())
             {
                 ApplyTransition(*existing, current);
@@ -592,12 +609,13 @@ namespace Fenrir::Detail
             transition.delay = At(after.transitionDelay, entry[p], 0.0f);
             transition.timing = At(after.transitionTimingFunction, entry[p], TimingFunction::Ease());
             // As CSS: a transition that would end before it starts does not run, nor one to the value it shows.
-            if (transition.duration + transition.delay <= 0.0f || SameField(property, current, after))
+            const ResolvedStyle target = ResolvedCopy(property, after, after.color);
+            if (transition.duration + transition.delay <= 0.0f || SameField(property, current, target))
             {
                 continue;
             }
             CopyProperty(property, current, transition.from);
-            CopyProperty(property, after, transition.to);
+            CopyProperty(property, target, transition.to);
             running.push_back(std::move(transition));
         }
     }
@@ -648,6 +666,11 @@ namespace Fenrir::Detail
             }
         }
         return changed;
+    }
+
+    bool SameShadows(const std::vector<Shadow>& a, const std::vector<Shadow>& b)
+    {
+        return Same(a, b);
     }
 
     bool SameProperty(StyleProperty property, const ResolvedStyle& a, const ResolvedStyle& b)

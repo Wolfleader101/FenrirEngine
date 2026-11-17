@@ -233,6 +233,7 @@ namespace Fenrir::Detail
         ElementSlot& slot = state.slots[index];
         const ElementId id{index, slot.version};
         const StyleIndex& styles = state.index;
+        const Colour inherited = style.color;
         if (!styles.selectors.empty())
         {
             std::vector<std::uint32_t>& candidates = state.candidates;
@@ -365,6 +366,11 @@ namespace Fenrir::Detail
         if (pseudoElement == PseudoElement::None)
         {
             state.slots[index].inlineStyle.ApplyTo(style);
+        }
+        // As CSS, `color: currentcolor` is `color: inherit`.
+        if (IsCurrentColour(style.color))
+        {
+            style.color = inherited;
         }
     }
 } // namespace Fenrir::Detail

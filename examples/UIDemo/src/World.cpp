@@ -138,9 +138,15 @@ namespace UIDemo
         {
             return;
         }
-        (void)m_terminal->SetStyleProperty(m_terminal->FindById("swatch"), "background-color",
-                                           std::format("#{:06x}", srgb >> 8u));
-        m_terminal->SetText(m_terminal->FindById("reading"), reading);
+        // The reading and the swatch take the lamps' colour; the swatch's currentcolor border follows it, and its fill
+        // is it half seen.
+        const std::string colour = std::format("#{:06x}", srgb >> 8u);
+        const Fenrir::ElementId swatch = m_terminal->FindById("swatch");
+        const Fenrir::ElementId readingLabel = m_terminal->FindById("reading");
+        (void)m_terminal->SetStyleProperty(swatch, "color", colour);
+        (void)m_terminal->SetStyleProperty(swatch, "background-color", colour + "80");
+        (void)m_terminal->SetStyleProperty(readingLabel, "color", colour);
+        m_terminal->SetText(readingLabel, reading);
     }
 
     bool WorldUI::Update(const std::optional<Fenrir::Math::Ray>& ray, bool pressed)

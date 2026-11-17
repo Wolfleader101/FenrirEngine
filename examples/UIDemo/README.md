@@ -77,7 +77,9 @@ on), their text in the `ui-sdf` family. `WorldUI` (`src/World.cpp`) makes them w
 
 - **The light terminal** (`assets/ui/terminal.ui`): a rounded glass panel of 1.6 by 1 metres on a post right of the
   camera's start, turned towards it and tilted back. Its buttons, Warm, Cool and Hue, set the colour of the room's three
-  lamps, and its slider turns the hue Hue sets; a swatch and a reading show the colour. It is hit by a ray: each frame
+  lamps, and its slider turns the hue Hue sets; a swatch and a reading show the colour. Its glass is laid out over its
+  whole root by `inset: 0`; the reading's text and the swatch take the lamps' colour as their `color`, with a short
+  transition, and the swatch's border, given no colour, is `currentcolor`, so it follows the reading. It is hit by a ray: each frame
   the room's system casts one from the window's camera through the cursor (`Renderer::ScreenPointToRay`) and gives it
   to the root with the left button's state (`UIRoot::SetPointerRay`), and the root hovers, presses, clicks and drags
   where the ray meets its quad. The window's mouse is never its own: it gets no ray while the menu is open, while the
@@ -88,6 +90,8 @@ on), their text in the `ui-sdf` family. `WorldUI` (`src/World.cpp`) makes them w
   their window root. Its corners and its content are cut by the painter's per-pixel clip, so they stay exact as the quad turns.
 - **The name plate** (`assets/ui/plate.ui`): over a capsule left of the camera's start, a plate of 1 by 0.32 metres
   reading "Wanderer", which the room turns about its vertical axis to face the camera each frame. It takes no input.
+  Its frame is `assets/ui/plate-frame.png`, a 96-pixel rim and glow nine-sliced over it by the `border-image` shorthand,
+  its 40-pixel corners matching the plate's radius.
 
 ## The C# variant
 
@@ -169,7 +173,9 @@ which closes it, and once its outro ends the game has the mouse again; and a nam
 shows on the HUD. The screen's root is checked through the same app: it holds the pause panel from the start, in an image
 of 1280 by 720 at a scale of 720 / 1080, blending linear, and its settings panel, its name entry and its focus follow the
 live menu's. The world roots are checked there too: the terminal and the name plate are 800 by 500 and 500 by 160 UI
-units at a scale of 1, blending linear, with `ui-sdf` registered in SDF mode; a ray at Cool and then Warm turns every
+units at a scale of 1, blending linear, with `ui-sdf` registered in SDF mode; the terminal's glass covers its root by
+`inset: 0`, once Cool's transition ends its swatch's border is the reading's colour, and the plate's frame loads by the
+`border-image` shorthand; a ray at Cool and then Warm turns every
 lamp that colour; and the hue slider, dragged by the ray, turns them to its hue.
 
 ## Hand checks
@@ -205,6 +211,8 @@ On OpenGL, in The HUD:
   comes back over the room.
 - In the pause menu the panel's title has Fenrir's icon at its right end, and in Settings the controls list scrolls by
   a thin blue bar.
+- The terminal's swatch border and its reading change colour together when Warm, Cool or the hue slider changes the
+  lamps, and the name plate has a glowing blue frame round its rounded corners.
 - With scripting built, the speedometer sits bottom right over the ammo counter: its needle and the blue share of its
   track rise as the camera flies (WASD, Shift for faster) and fall back when it stops, under a readout of the speed;
   clicking Resume, Settings or Back in the menu logs "the menu's ... was clicked" from C#.
