@@ -500,7 +500,12 @@ namespace LightingDemo
             const Fenrir::RendererStats stats = Fenrir::Renderer::Stats(app);
             const auto delta = static_cast<float>(app.GetTime().deltaTime);
             state->frameTime = state->frameTime == 0.0f ? delta : glm::mix(state->frameTime, delta, 0.05f);
-            RunLightingPanel(app, scene, state->lighting, [&] {
+            RunLightingPanel(app, scene, state->lighting);
+            // Its own switches stay in an ImGui window until demo UI ticket 11 moves them onto the kit.
+            ImGui::SetNextWindowPos({16.0f, 16.0f}, ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize({340.0f, 0.0f}, ImGuiCond_FirstUseEver);
+            if (ImGui::Begin(SceneName))
+            {
                 ImGui::SliderInt("Ring rocks (N)", &state->count, 1000, MaxRingRocks);
                 ImGui::Checkbox("Automatic instancing (I)", &state->merging);
                 ImGui::Checkbox("Ring turning (R)", &state->spinning);
@@ -522,7 +527,8 @@ namespace LightingDemo
                 ImGui::Text("Drawn by phase: %u visible last frame, %u shown by the Hi-Z pyramid",
                             stats.drawnByPhase[0], stats.drawnByPhase[1]);
                 ImGui::TextUnformatted("Drawn is what the GPU kept, two frames behind; off, every copy draws level 0.");
-            });
+            }
+            ImGui::End();
 
             Fenrir::Renderer::SetAutomaticInstancing(app, state->merging);
             if (culling != state->culling)

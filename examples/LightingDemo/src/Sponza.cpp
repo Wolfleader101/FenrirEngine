@@ -272,7 +272,12 @@ namespace LightingDemo
             const auto delta = static_cast<float>(app.GetTime().deltaTime);
             state->frameTime = state->frameTime == 0.0f ? delta : glm::mix(state->frameTime, delta, 0.05f);
             const Fenrir::RendererStats stats = Fenrir::Renderer::Stats(app);
-            RunLightingPanel(app, scene, state->lighting, [&] {
+            RunLightingPanel(app, scene, state->lighting);
+            // Its own switches stay in an ImGui window until demo UI ticket 11 moves them onto the kit.
+            ImGui::SetNextWindowPos({16.0f, 16.0f}, ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize({340.0f, 0.0f}, ImGuiCond_FirstUseEver);
+            if (ImGui::Begin(SceneName))
+            {
                 ImGui::Text("Frame: %.2f ms (%.0f fps)", state->frameTime * 1000.0f,
                             state->frameTime > 0.0f ? 1.0f / state->frameTime : 0.0f);
                 ImGui::Text("Draws: %u  Instances: %u  Shadow draws: %u", stats.draws, stats.instances,
@@ -284,7 +289,8 @@ namespace LightingDemo
                 ImGui::Checkbox("Flicker (N)", &state->flicker);
                 ImGui::SliderFloat("Torch intensity", &state->torchIntensity, 0.0f, 30.0f);
                 ImGui::SliderFloat("Torch range", &state->torchRange, 1.0f, 20.0f);
-            });
+            }
+            ImGui::End();
 
             if (state->vsync != state->appliedVsync)
             {

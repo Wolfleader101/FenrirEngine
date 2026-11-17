@@ -960,7 +960,12 @@ namespace LightingDemo
             const Fenrir::RendererStats stats = Fenrir::Renderer::Stats(app);
             const auto delta = static_cast<float>(app.GetTime().deltaTime);
             state->frameTime = state->frameTime == 0.0f ? delta : glm::mix(state->frameTime, delta, 0.05f);
-            RunLightingPanel(app, scene, state->lighting, [&] {
+            RunLightingPanel(app, scene, state->lighting);
+            // Its own switches stay in an ImGui window until demo UI ticket 11 moves them onto the kit.
+            ImGui::SetNextWindowPos({16.0f, 16.0f}, ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize({340.0f, 0.0f}, ImGuiCond_FirstUseEver);
+            if (ImGui::Begin(SceneName))
+            {
                 ImGui::SliderInt("Forest density % (N)", &state->density, 5, 100);
                 ImGui::Checkbox("Grass (M)", &state->grassVisible);
                 ImGui::Text("Forest: %zu copies in %zu lists, %zu of them trees", state->copies, state->lists.size(),
@@ -970,7 +975,8 @@ namespace LightingDemo
                             stats.shadowDraws);
                 ImGui::Text("Frame: %.2f ms (%.0f fps)", state->frameTime * 1000.0f,
                             state->frameTime > 0.0f ? 1.0f / state->frameTime : 0.0f);
-            });
+            }
+            ImGui::End();
 
             // A new density cuts each list again: Replace bumps its revision, so the renderer uploads it once more.
             if (state->density != state->listedDensity)
