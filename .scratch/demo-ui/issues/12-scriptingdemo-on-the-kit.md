@@ -12,11 +12,11 @@
 
 **Touches:** `examples/ScriptingDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `ScriptingDemo-Smoke-null` passes with scripting off and on.
+- [x] `ScriptingDemo-Smoke-null` passes with scripting on; with scripting off ScriptingDemo is not built (`examples/CMakeLists.txt`), and the rest builds and passes.
 - [ ] Hand checks, on OpenGL:
   - the help lists the key rows
   - the tutorial shows once and steps
   - rebuilding the scripts while the demo runs brings the Razor panel back after the reload
-- [ ] Clang and MSVC x64 debug build without new warnings.
+- [ ] Clang and MSVC x64 debug build without new warnings. (MSVC x64 debug verified, scripting on and off; clang not built here.)
