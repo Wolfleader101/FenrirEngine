@@ -123,46 +123,6 @@ namespace
         }
     };
 
-    // A UITestApp with a hidden window before the rest, for FenrirWindow's clipboard.
-    struct WindowUITestApp
-    {
-        Fenrir::App app{std::make_unique<SilentLogger>(), 1};
-        Fenrir::Window window = Fenrir::Window::Install(app, HiddenWindow());
-        Fenrir::Assets assets = Fenrir::Assets::Install(app);
-        Fenrir::Input input = Fenrir::Input::Install(app);
-        Fenrir::UI ui = Fenrir::UI::Install(app);
-
-        static Fenrir::WindowConfig HiddenWindow()
-        {
-            Fenrir::WindowConfig config;
-            config.title = "FenrirUITests";
-            config.logicalSize = {320, 240};
-            config.visible = false;
-            return config;
-        }
-
-        Fenrir::InputFeed& Feed()
-        {
-            return app.GetResource<Fenrir::InputFeed>();
-        }
-
-        void Type(Key key, Scancode scancode, KeyModifiers modifiers = KeyModifiers::None)
-        {
-            Feed().KeyDown(testWindow, key, scancode, modifiers);
-            Feed().KeyUp(testWindow, key, scancode, modifiers);
-        }
-
-        Fenrir::UIRoots& Roots()
-        {
-            return app.GetResource<Fenrir::UIRoots>();
-        }
-
-        void Frame()
-        {
-            app.RunFrame(1.0 / 60.0);
-        }
-    };
-
     using Scene = EntryScene<UITestApp>;
 
     std::vector<UIEvent> Of(Fenrir::EventReader<UIEvent>& reader, Fenrir::App& app, UIEventKind kind, ElementId target)
@@ -346,10 +306,7 @@ TEST_CASE("Shift+End selects to the end, and typing replaces the selection", "[u
 TEST_CASE("Ctrl+C then Ctrl+V duplicates through the clipboard", "[ui][textentry][display]")
 {
     EntryScene<WindowUITestApp> scene;
-    if (!scene.test.window.IsValid())
-    {
-        SKIP("SDL's video could not start (no display), so there is no clipboard");
-    }
+    scene.test.RequireDisplay("clipboard");
     scene.Focus();
     scene.Entry().SetValue("abc");
 
@@ -367,10 +324,7 @@ TEST_CASE("Ctrl+C then Ctrl+V duplicates through the clipboard", "[ui][textentry
 TEST_CASE("Ctrl+X puts the selection on the clipboard and takes it out", "[ui][textentry][display]")
 {
     EntryScene<WindowUITestApp> scene;
-    if (!scene.test.window.IsValid())
-    {
-        SKIP("SDL's video could not start (no display), so there is no clipboard");
-    }
+    scene.test.RequireDisplay("clipboard");
     scene.Focus();
     scene.Entry().SetValue("abc");
 

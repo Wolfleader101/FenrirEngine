@@ -268,13 +268,16 @@ namespace Fenrir
         {
             auto last = std::find_if(m_windowCursors.begin(), m_windowCursors.end(),
                                      [&](const auto& set) { return set.first == want.window; });
-            if (!Window::Exists(m_app, want.window))
-            {
-                // A window that went has no cursor to give back.
+            const auto forget = [&] {
                 if (last != m_windowCursors.end())
                 {
                     m_windowCursors.erase(last);
                 }
+            };
+            if (!Window::Exists(m_app, want.window))
+            {
+                // A window that went has no cursor to give back.
+                forget();
                 continue;
             }
             const CursorShape shape = WindowCursorShape(want.cursor);
@@ -289,10 +292,7 @@ namespace Fenrir
             if (shape == CursorShape::Arrow)
             {
                 // Given back: the window is left to the game until a root wants another shape.
-                if (last != m_windowCursors.end())
-                {
-                    m_windowCursors.erase(last);
-                }
+                forget();
             }
             else if (last != m_windowCursors.end())
             {

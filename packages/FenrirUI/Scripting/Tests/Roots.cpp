@@ -380,59 +380,88 @@ TEST_CASE("Destroying a script's image root unloads its image", "[ui][scripting]
     REQUIRE_FALSE(test.app.GetResource<AssetStore>().IsValid(made.image));
 }
 
-TEST_CASE("A script's world root on a quad entity hovers and clicks a button by the ray it gives",
-          "[ui][scripting][roots]")
+namespace
 {
-    UIScriptingApp test;
-    const Entity quad = QuadEntity(test);
-    const std::uint32_t id = test.Call<std::uint32_t>(RootCallsType, "MakeWorldRoot", quad.GetId());
-    UIRoot* root = RootNamed(test, id);
+    /** @brief The world root C# made on a quad entity, its id and the button over the quad's centre. */
+    struct ScriptWorldRoot
     {
-        INFO("The script made no root, or not on the quad");
-        REQUIRE(root != nullptr);
-        auto* target = dynamic_cast<UIWorldTarget*>(root->GetConfig().target.get());
-        REQUIRE(target != nullptr);
-        REQUIRE(target->GetEntity() == quad);
-    }
-    // A button over the quad's centre, (100, 50) in UI units: 50 by 50 from (75, 25). The root has no default
-    // stylesheet, so the button is told to take pointer input.
-    const ElementId button = root->Create(root->GetRootElement(), "button");
-    {
-        INFO("the button did not take its place, size and pointer input");
-        for (const auto& [name, value] : {std::pair{"position", "absolute"},
-                                          {"left", "75px"},
-                                          {"top", "25px"},
-                                          {"width", "50px"},
-                                          {"height", "50px"},
-                                          {"pointer-events", "all"}})
-        {
-            REQUIRE(root->SetStyleProperty(button, name, value));
-        }
-    }
-    test.Frame();
-    test.Call<void>(ClicksType, "Clear");
+        UIRoot* root = nullptr;
+        std::uint32_t id = 0;
+        ElementId button;
+    };
 
+    /**
+     * @brief A world root C# makes on a quad entity, holding a button over the quad's centre, laid out by a frame,
+     * with the clicks C# has read cleared.
+     */
+    ScriptWorldRoot MakeScriptWorldRootWithButton(UIScriptingApp& test)
+    {
+        const Entity quad = QuadEntity(test);
+        ScriptWorldRoot made;
+        made.id = test.Call<std::uint32_t>(RootCallsType, "MakeWorldRoot", quad.GetId());
+        made.root = RootNamed(test, made.id);
+        {
+            INFO("The script made no root, or not on the quad");
+            REQUIRE(made.root != nullptr);
+            auto* target = dynamic_cast<UIWorldTarget*>(made.root->GetConfig().target.get());
+            REQUIRE(target != nullptr);
+            REQUIRE(target->GetEntity() == quad);
+        }
+        // A button over the quad's centre, (100, 50) in UI units: 50 by 50 from (75, 25). The root has no default
+        // stylesheet, so the button is told to take pointer input.
+        made.button = made.root->Create(made.root->GetRootElement(), "button");
+        {
+            INFO("the button did not take its place, size and pointer input");
+            for (const auto& [name, value] : {std::pair{"position", "absolute"},
+                                              {"left", "75px"},
+                                              {"top", "25px"},
+                                              {"width", "50px"},
+                                              {"height", "50px"},
+                                              {"pointer-events", "all"}})
+            {
+                REQUIRE(made.root->SetStyleProperty(made.button, name, value));
+            }
+        }
+        test.Frame();
+        test.Call<void>(ClicksType, "Clear");
+        return made;
+    }
+
+    /** @brief C# aims the world root's ray at the quad's centre, not pressed; the button is then hovered. */
+    void AimAtButton(UIScriptingApp& test, const ScriptWorldRoot& made)
     {
         INFO("A ray from 5 in front of the quad's centre, straight at it, is not over the button");
-        REQUIRE(test.Call<bool>(RootCallsType, "AimAtCentre", id, false));
-        REQUIRE(root->GetHovered() == button);
+        REQUIRE(test.Call<bool>(RootCallsType, "AimAtCentre", made.id, false));
+        REQUIRE(made.root->GetHovered() == made.button);
     }
-    {
-        INFO("Pressed and then released along the same ray, the pointer left the button");
-        REQUIRE(test.Call<bool>(RootCallsType, "AimAtCentre", id, true));
-        REQUIRE(test.Call<bool>(RootCallsType, "AimAtCentre", id, false));
-    }
-    test.Frame();
-    {
-        INFO("C# did not read one click, at the button, of the world root");
-        REQUIRE(test.Call<int>(ClicksType, "Count") == 1);
-        REQUIRE(test.Call<std::uint64_t>(ClicksType, "LastTarget") == Packed(button));
-        REQUIRE(test.Call<std::uint32_t>(ClicksType, "LastRoot") == id);
-    }
+} // namespace
+
+TEST_CASE("A script's world root on a quad entity hovers a button by the ray it gives", "[ui][scripting][roots]")
+{
+    UIScriptingApp test;
+    const ScriptWorldRoot made = MakeScriptWorldRootWithButton(test);
+    AimAtButton(test, made);
 
     INFO("With the ray taken away, the button is still hovered");
-    REQUIRE_FALSE(test.Call<bool>(RootCallsType, "ClearRay", id));
-    REQUIRE_FALSE(root->GetHovered().IsValid());
+    REQUIRE_FALSE(test.Call<bool>(RootCallsType, "ClearRay", made.id));
+    REQUIRE_FALSE(made.root->GetHovered().IsValid());
+}
+
+TEST_CASE("A script's world root on a quad entity clicks a button by the ray it gives", "[ui][scripting][roots]")
+{
+    UIScriptingApp test;
+    const ScriptWorldRoot made = MakeScriptWorldRootWithButton(test);
+    AimAtButton(test, made);
+    {
+        INFO("Pressed and then released along the same ray, the pointer left the button");
+        REQUIRE(test.Call<bool>(RootCallsType, "AimAtCentre", made.id, true));
+        REQUIRE(test.Call<bool>(RootCallsType, "AimAtCentre", made.id, false));
+    }
+    test.Frame();
+    INFO("C# did not read one click, at the button, of the world root");
+    REQUIRE(test.Call<int>(ClicksType, "Count") == 1);
+    REQUIRE(test.Call<std::uint64_t>(ClicksType, "LastTarget") == Packed(made.button));
+    REQUIRE(test.Call<std::uint32_t>(ClicksType, "LastRoot") == made.id);
 }
 
 TEST_CASE("A script's window root has no image", "[ui][scripting][roots]")
@@ -486,36 +515,59 @@ TEST_CASE("A world root asked for on an entity without a WorldQuad2D names no ro
 #endif
 }
 
-TEST_CASE("Releasing the script generation ends the image and world roots it made, and their targets",
+namespace
+{
+    /** @brief An image and a world root C# made, the roots there were before, and the world root's target. */
+    struct GenerationRoots
+    {
+        std::size_t rootsBefore = 0;
+        ScriptImageRoot image;
+        std::uint32_t world = 0;
+        std::weak_ptr<UITarget> worldTarget;
+    };
+
+    /** @brief C# makes an image root and a world root, then the script generation that made them is released. */
+    GenerationRoots MakeRootsThenReload(UIScriptingApp& test)
+    {
+        GenerationRoots made;
+        const Entity quad = QuadEntity(test);
+        made.rootsBefore = test.Roots().GetRoots().size();
+        made.image = MakeScriptImageRoot(test, 64, 32);
+        made.world = test.Call<std::uint32_t>(RootCallsType, "MakeWorldRoot", quad.GetId());
+        {
+            INFO("The script made no world root");
+            REQUIRE(RootNamed(test, made.world) != nullptr);
+            made.worldTarget = RootNamed(test, made.world)->GetConfig().target;
+        }
+        test.Frame();
+
+        {
+            INFO("The script did not reload");
+            REQUIRE(test.scripting.Reload().Succeeded());
+        }
+        test.Frame();
+        return made;
+    }
+} // namespace
+
+TEST_CASE("Releasing the script generation ends the image and world roots it made", "[ui][scripting][roots]")
+{
+    UIScriptingApp test;
+    const GenerationRoots made = MakeRootsThenReload(test);
+    INFO("A root the released generation made is still there");
+    REQUIRE(RootNamed(test, made.image.id) == nullptr);
+    REQUIRE(RootNamed(test, made.world) == nullptr);
+    REQUIRE(test.Roots().GetRoots().size() == made.rootsBefore);
+}
+
+TEST_CASE("Releasing the script generation unloads its image roots' images and ends its world roots' targets",
           "[ui][scripting][roots]")
 {
     UIScriptingApp test;
-    const Entity quad = QuadEntity(test);
-    const std::size_t rootsBefore = test.Roots().GetRoots().size();
-    const ScriptImageRoot image = MakeScriptImageRoot(test, 64, 32);
-    const std::uint32_t world = test.Call<std::uint32_t>(RootCallsType, "MakeWorldRoot", quad.GetId());
-    std::weak_ptr<UITarget> worldTarget;
-    {
-        INFO("The script made no world root");
-        REQUIRE(RootNamed(test, world) != nullptr);
-        worldTarget = RootNamed(test, world)->GetConfig().target;
-    }
-    test.Frame();
-
-    {
-        INFO("The script did not reload");
-        REQUIRE(test.scripting.Reload().Succeeded());
-    }
-    test.Frame();
-    {
-        INFO("A root the released generation made is still there");
-        REQUIRE(RootNamed(test, image.id) == nullptr);
-        REQUIRE(RootNamed(test, world) == nullptr);
-        REQUIRE(test.Roots().GetRoots().size() == rootsBefore);
-    }
+    const GenerationRoots made = MakeRootsThenReload(test);
     INFO("The image is still in the store, or the world target is still alive");
-    REQUIRE_FALSE(test.app.GetResource<AssetStore>().IsValid(image.image));
-    REQUIRE(worldTarget.expired());
+    REQUIRE_FALSE(test.app.GetResource<AssetStore>().IsValid(made.image.image));
+    REQUIRE(made.worldTarget.expired());
 }
 
 TEST_CASE("A world root asked for on an entity that is not alive names no root, warned once in a debug build",

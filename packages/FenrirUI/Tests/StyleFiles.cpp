@@ -24,6 +24,7 @@ namespace
 {
     using Fenrir::ElementId;
     using Fenrir::MarkupLoad;
+    using UITest::Same;
 
     // A logger that keeps the warnings it is given, for the tests that a failed reload logs.
     class WarningLog : public Fenrir::ILogger
@@ -137,11 +138,6 @@ namespace
             text += error.file + ":" + std::to_string(error.line) + ": " + error.message + "\n";
         }
         return text;
-    }
-
-    bool Same(const Fenrir::Colour& a, const Fenrir::Colour& b)
-    {
-        return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
     }
 
     const Fenrir::Colour red = Fenrir::Colour::Red;
