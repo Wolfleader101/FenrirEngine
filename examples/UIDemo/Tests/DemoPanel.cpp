@@ -131,15 +131,16 @@ TEST_CASE("The demo panel's UIDemo section shows the HUD's and the menu's styles
     const Fenrir::UIRoot& kit = demo.Kit().Root();
     const Fenrir::Rect2D panel = kit.GetBoxes(kit.FindById("demo-panel")).content;
     const std::vector<Fenrir::ElementId> labels = kit.FindByClass("demo-readout-label");
+    INFO("the panel has no readout, so no readout line to measure a wrapped path against");
     REQUIRE_FALSE(labels.empty());
     const float lineHeight = kit.GetBoxes(labels.front()).border.height;
     for (const Fenrir::ElementId line : kit.FindByClass("demo-text"))
     {
         const Fenrir::Rect2D box = kit.GetBoxes(line).border;
         INFO("the line " << kit.GetText(line) << " runs past the panel's right edge");
-        CHECK(box.x + box.width <= panel.x + panel.width + 0.5f);
+        REQUIRE(box.x + box.width <= panel.x + panel.width + 0.5f);
         INFO("the line " << kit.GetText(line) << " is not wrapped: it is " << box.height << " high");
-        CHECK(box.height > lineHeight * 1.5f);
+        REQUIRE(box.height > lineHeight * 1.5f);
     }
     // The settings' defaults: a volume of 80 and a field of view of 60 degrees.
     INFO("the volume reads " << Readout(demo, "Volume"));
@@ -190,9 +191,11 @@ TEST_CASE("The demo panel's volume and field of view follow the menu's settings"
 
     const float volume = demo.Menu().GetSettings().volume;
     const float fieldOfView = demo.Menu().GetSettings().fieldOfView;
+    INFO("the volume slider does not take the focus");
     REQUIRE(root.Focus(root.FindById("volume")));
     demo.Tap(Fenrir::Key::Left, Fenrir::Scancode::Left);
     demo.Frames(2);
+    INFO("the field of view slider does not take the focus");
     REQUIRE(root.Focus(root.FindById("field-of-view")));
     demo.Tap(Fenrir::Key::Right, Fenrir::Scancode::Right);
     demo.Frames(2);
@@ -222,7 +225,7 @@ TEST_CASE("The kit's panel and help cover none of the HUD's parts in a 1920 by 1
         {
             const Fenrir::Rect2D hudBox = hud.GetBoxes(hud.FindById(part)).border;
             INFO("the kit's #" << box << " covers the HUD's #" << part);
-            CHECK_FALSE(overlap(kitBox, hudBox));
+            REQUIRE_FALSE(overlap(kitBox, hudBox));
         }
     }
 }
@@ -235,7 +238,7 @@ TEST_CASE("The help lists the room's keys")
     for (const std::string_view key : {"F / left click", "R", "H", "Escape"})
     {
         INFO("the help has no row for " << key);
-        CHECK(Contains(keys, key));
+        REQUIRE(Contains(keys, key));
     }
 }
 
@@ -268,6 +271,7 @@ TEST_CASE("The Escape that closes the room's tutorial does not open the pause me
 {
     DemoApp demo(RoomTutorial::On);
     demo.Frames(2);
+    INFO("the room's tutorial does not show on its first entry");
     REQUIRE(demo.Kit().IsTutorialShown());
     demo.Tap(Fenrir::Key::Escape, Fenrir::Scancode::Escape);
     demo.Frames(2);

@@ -183,9 +183,10 @@ TEST_CASE("A section's heading collapses and opens it", "[demo][kit][sections]")
     const float heading = root.GetBoxes(title).border.height;
 
     test.Click(test.Centre(title));
-    INFO("a click on the heading collapses the section to little more than its heading");
     const float collapsed = root.GetBoxes(section).border.height;
+    INFO("a click on the heading does not collapse the section: " << collapsed << " high, open " << open);
     REQUIRE(collapsed < open);
+    INFO("the collapsed section is shorter than its own heading: " << collapsed << " against " << heading);
     REQUIRE(collapsed >= heading);
 
     test.Click(test.Centre(title));
