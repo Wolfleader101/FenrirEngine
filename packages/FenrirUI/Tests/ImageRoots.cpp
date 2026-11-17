@@ -26,6 +26,7 @@ namespace
         Fenrir::UIRoot& root = test.app.GetResource<Fenrir::UIRoots>().CreateRoot(config);
         const Fenrir::ElementId panel = root.Create(root.GetRootElement(), "panel");
         Fenrir::StyleDeclarations* style = root.EditInlineStyle(panel);
+        INFO("the panel has an inline style to edit");
         REQUIRE(style != nullptr);
         style->SetWidth(Fenrir::Length::Percent(100.0f))
             .SetHeight(Fenrir::Length::Percent(100.0f))
@@ -97,6 +98,7 @@ TEST_CASE("An image root submits a list to an image 2D target of its size each f
     RendererTestApp test;
     const Fenrir::Input input = Fenrir::Input::Install(test.app);
     const Fenrir::UI ui = Fenrir::UI::Install(test.app);
+    INFO("the UI installs on the renderer test app");
     REQUIRE(ui.IsValid());
     auto target = std::make_shared<Fenrir::UIImageTarget>(test.app, 640, 360);
     Fenrir::UIRoot& root = PanelRoot(test, target);

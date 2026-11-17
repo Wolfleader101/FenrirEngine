@@ -69,7 +69,9 @@ target_include_directories(FenrirUI PUBLIC include PRIVATE src)
 target_link_libraries(FenrirUI PUBLIC FenrirPainter FenrirInput FenrirApp FenrirAssets
                                PRIVATE FenrirYoga FenrirWindow FenrirRenderer)
 
-# Tests that use Catch2: only with -DFENRIR_BUILD_TESTS=ON (see the root CMakeLists.txt).
+# Tests that use Catch2: only with -DFENRIR_BUILD_TESTS=ON (see the root CMakeLists.txt). The test support library,
+# FenrirUITestSupport, is built with them, for the UI scripting tests and UIDemo's tests too.
 if(FENRIR_BUILD_TESTS)
+    add_subdirectory(Tests/Support)
     add_subdirectory(Tests)
 endif()

@@ -27,6 +27,7 @@ namespace
     std::vector<ElementId> CppThreePanels(UIRoot& root)
     {
         const ElementId row = root.Create(root.GetRootElement(), "panel");
+        INFO("the three-panel tree takes its style");
         for (const auto& [name, value] :
              {std::pair{"flex-direction", "row"}, {"width", "600px"}, {"height", "200px"}, {"padding", "10px"}})
         {
@@ -106,6 +107,7 @@ TEST_CASE("A click fed through the test feed reaches the script's EventReader<UI
     std::shared_ptr<CaptureTarget> target;
     UIRoot& root = test.MakeRoot(target);
     const ElementId button = root.Create(root.GetRootElement(), "button");
+    INFO("the button's size is taken");
     REQUIRE(root.SetStyleProperty(button, "width", "100px"));
     REQUIRE(root.SetStyleProperty(button, "height", "40px"));
     test.Frame();
@@ -132,6 +134,7 @@ namespace
         UIRoot& root = test.MakeRoot(target);
         const ElementId panel = root.Create(root.GetRootElement(), "panel");
         root.SetIdString(panel, "gauge");
+        INFO("the gauge takes its style and its child");
         REQUIRE(root.SetStyleProperty(panel, "width", "100px"));
         REQUIRE(root.SetStyleProperty(panel, "height", "100px"));
         REQUIRE(root.SetStyleProperty(panel, "background-color", "#f00"));

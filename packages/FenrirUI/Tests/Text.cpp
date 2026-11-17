@@ -76,8 +76,24 @@ namespace
         const Fenrir::Paragraph& ParagraphOf(Fenrir::ElementId element) const
         {
             const Fenrir::Paragraph* paragraph = root.GetParagraph(element);
+            INFO("the element has a paragraph");
             REQUIRE(paragraph != nullptr);
             return *paragraph;
+        }
+
+        // The pixel size of `text` laid out by the test itself through FenrirText, with the app's fonts, in the face a
+        // label gets from the default stylesheet's `sans-serif` (no such family is registered, so the embedded default
+        // face) at `pixelSize`, to `width` pixels: what a label's paragraph measures, worked out apart from FenrirUI.
+        Fenrir::Math::Vec2 OwnParagraphSize(const std::string& text, float pixelSize,
+                                            float width = Fenrir::UnlimitedWidth)
+        {
+            Fenrir::TextStyle style;
+            style.family = "sans-serif";
+            style.size = pixelSize;
+            Fenrir::Paragraph paragraph;
+            paragraph.SetText(text, style);
+            paragraph.Layout(test.app.GetResource<Fenrir::FontLibrary>(), width);
+            return paragraph.Size();
         }
     };
 
@@ -136,10 +152,12 @@ TEST_CASE("A label's laid-out size is its paragraph's, laid out in target pixels
     REQUIRE_FALSE(paragraph.Runs().empty());
     REQUIRE(UITest::Near(paragraph.Runs().front().size, 40.0f));
     const Fenrir::Rect2D content = scene.root.GetBoxes(label).content;
-    INFO("the content box is the paragraph's size divided back by 2");
-    REQUIRE(UITest::Near(content.width, paragraph.Size().x / 2.0f));
-    REQUIRE(UITest::Near(content.height, paragraph.Size().y / 2.0f));
-    REQUIRE(content.width > 0.0f);
+    const Fenrir::Math::Vec2 expected = scene.OwnParagraphSize("Hello, labels", 40.0f);
+    INFO("the test's own paragraph of the text has a width");
+    REQUIRE(expected.x > 0.0f);
+    INFO("the content box is the text's size at 40 pixels divided back by 2");
+    REQUIRE(UITest::Near(content.width, expected.x / 2.0f));
+    REQUIRE(UITest::Near(content.height, expected.y / 2.0f));
 }
 
 TEST_CASE("A label wraps at its parent's width", "[ui][text]")
@@ -155,8 +173,10 @@ TEST_CASE("A label wraps at its parent's width", "[ui][text]")
     REQUIRE(lines.Lines().size() > 1);
     REQUIRE(lines.Size().x <= 120.0f);
     REQUIRE(UITest::Near(scene.root.GetBoxes(wrapped).content.width, 120.0f));
-    // The root snaps the box to whole pixels; the paragraph's height is fractional.
-    REQUIRE(UITest::Near(scene.root.GetBoxes(wrapped).content.height, lines.Size().y, 1.0f));
+    // A label lays its paragraph out a 64th of a pixel wider than its box, so text that fitted the box still fits; the
+    // root snaps the box to whole pixels, and the text's height is fractional.
+    const float height = scene.OwnParagraphSize(LongText, 16.0f, 120.0f + 1.0f / 64.0f).y;
+    REQUIRE(UITest::Near(scene.root.GetBoxes(wrapped).content.height, height, 1.0f));
 }
 
 TEST_CASE("white-space: nowrap keeps a label on one line past its parent's width", "[ui][text]")
@@ -308,6 +328,7 @@ TEST_CASE("font-family resolves through the app's font library, with families re
 {
     TextScene scene;
     Fenrir::FontLibrary* fonts = scene.test.Roots().GetFonts();
+    INFO("the roots share the app's font library");
     REQUIRE(fonts != nullptr);
     REQUIRE(fonts == scene.test.app.TryGetResource<Fenrir::FontLibrary>());
     const std::filesystem::path file =
@@ -418,6 +439,7 @@ TEST_CASE("A label in an SDF family emits SDF glyph quads over the SDF atlas, be
         std::filesystem::path(FENRIR_TEXT_HARFBUZZ_TEST) / "subset" / "data" / "fonts" / "Roboto-Regular.ttf";
     const Fenrir::AssetHandle<Fenrir::Font> roboto =
         scene.test.assets.Store().Load<Fenrir::Font>(file.string(), Fenrir::AssetOwner::App()).handle;
+    INFO("Roboto loads from HarfBuzz's test fonts");
     REQUIRE_FALSE(roboto.IsEmpty());
     Fenrir::UIFontFace face;
     face.family = "Plate";

@@ -210,6 +210,7 @@ TEST_CASE("Unmounting the Razor component placing a document removes the documen
     const ElementId credit = test.Find("credit-first");
     const ElementId panel = test.root.GetParent(credit);
 
+    INFO("the script unmounts the component placing the document");
     REQUIRE(test.Call<bool>(CreditsProbeType, "Unmount"));
 
     INFO("The host, the Document's panel and the document's label are gone");

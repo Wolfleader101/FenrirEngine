@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "CaptureTarget.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 #include "FenrirECS/Entity.hpp"
@@ -60,20 +61,11 @@ namespace UIDemoTest
         std::shared_ptr<std::vector<std::string>> m_errors;
     };
 
-    /** @brief A 1920 by 1080 2D target at a content scale of one that keeps every list a root submits to it. */
-    class CaptureTarget : public Fenrir::UITarget
-    {
-      public:
-        Fenrir::UITargetSize GetSize(Fenrir::App&) override
-        {
-            return {{1920.0f, 1080.0f}, 1.0f};
-        }
-        void Submit(Fenrir::App&, Fenrir::DrawList2D list) override
-        {
-            lists.push_back(std::move(list));
-        }
-        std::vector<Fenrir::DrawList2D> lists;
-    };
+    /** @brief The capturing test target, from FenrirUI's test support. */
+    using Fenrir::Testing::CaptureTarget;
+
+    /** @brief The HUD's and the menu's target size: 1920 by 1080 at a content scale of one. */
+    inline const Fenrir::UITargetSize ScreenSize{{1920.0f, 1080.0f}, 1.0f};
 
     /** @brief The window FenrirInput's feed sends to: the roots on custom targets still route its input. */
     inline constexpr Fenrir::WindowId Window{1};
@@ -82,8 +74,8 @@ namespace UIDemoTest
     struct DemoApp
     {
         std::shared_ptr<std::vector<std::string>> errors = std::make_shared<std::vector<std::string>>();
-        std::shared_ptr<CaptureTarget> hudTarget = std::make_shared<CaptureTarget>();
-        std::shared_ptr<CaptureTarget> menuTarget = std::make_shared<CaptureTarget>();
+        std::shared_ptr<CaptureTarget> hudTarget = std::make_shared<CaptureTarget>(ScreenSize);
+        std::shared_ptr<CaptureTarget> menuTarget = std::make_shared<CaptureTarget>(ScreenSize);
         Fenrir::App app{std::make_unique<ErrorLogger>(errors), 2};
         FenrirDemo::DemoScaffold demo{Install(app, hudTarget, menuTarget)};
 
