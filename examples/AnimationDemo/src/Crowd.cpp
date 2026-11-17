@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <format>
+#include <string>
 #include <vector>
 
 #include "AnimationScenes.hpp"
@@ -11,7 +11,6 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirAssets/SkeletonData.hpp"
-#include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirInput/Input.hpp"
@@ -24,7 +23,6 @@ namespace AnimationDemo
 {
     namespace
     {
-        using Fenrir::Colour;
         using Fenrir::Math::Vec3;
 
         constexpr std::size_t StartCount = 64;
@@ -32,8 +30,6 @@ namespace AnimationDemo
         constexpr std::size_t MaxCount = 1024;
         /** @brief The distance between neighbours in the grid, in world units. */
         constexpr float Spacing = 1.0f;
-        /** @brief How much of each new frame time the shown average takes. */
-        constexpr double FrameTimeWeight = 0.1;
 
         /** @brief Scene 7's state, a resource of its FenrirScene. */
         struct CrowdState
@@ -47,7 +43,6 @@ namespace AnimationDemo
             /** @brief The renderer's compute skinning (ADR-0050), on by default: off, every draw skins in its vertex
              * stage. */
             bool computeSkinning = true;
-            double frameTime = 0.0;
         };
 
         /** @brief Every bit of `bits` at an even place, packed together: one coordinate of a Morton (Z-order) index. */
@@ -135,6 +130,27 @@ namespace AnimationDemo
             }
         }
 
+        /**
+         * @brief The crowd and the renderer's palette stats, in a section of the demo panel, pulled each frame; the
+         * frame time, draws and instances are in the kit's Frame section (DemoConfig::frameStats, main.cpp).
+         */
+        void AddReadouts(Fenrir::App& app, const CrowdState& state)
+        {
+            const FenrirDemo::DemoSection crowd = SceneSection(app, "Crowd");
+            crowd.Readout("Instances", [&state] { return std::to_string(state.members.size()); });
+            crowd.Readout("Bones", [&state] { return std::to_string(state.members.size() * state.bonesEach); });
+            crowd.Readout("Playing", [&state] { return std::string(state.playing ? "playing" : "paused"); });
+            crowd.Readout("Compute skinning", [&state] { return std::string(OnOff(state.computeSkinning)); });
+            // The renderer's counts are the last drawn frame's.
+            const FenrirDemo::DemoSection palettes = SceneSection(app, "Palettes");
+            palettes.Readout("Distinct written",
+                             [&app] { return std::to_string(Fenrir::Renderer::Stats(app).distinctPalettesWritten); });
+            palettes.Readout("Bytes uploaded",
+                             [&app] { return std::to_string(Fenrir::Renderer::Stats(app).paletteBytesUploaded); });
+            palettes.Readout("Skinned draws",
+                             [&app] { return std::to_string(Fenrir::Renderer::Stats(app).skinnedDraws); });
+        }
+
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
         {
             AddStage(app, scene, 40.0f, 40.0f);
@@ -144,6 +160,7 @@ namespace AnimationDemo
                 state.clips.at(i) = LoadClip(app, scene, KenneyClips.at(i), KenneyClip);
             }
             Resize(app, scene, state, StartCount);
+            AddReadouts(app, state);
         }
 
         void HandleKeys(Fenrir::App& app, Fenrir::Scene& scene, CrowdState& state)
@@ -187,36 +204,11 @@ namespace AnimationDemo
         void Update(Fenrir::App& app, Fenrir::Scene& scene)
         {
             CrowdState* state = scene.GetResource<CrowdState>();
-            Fenrir::DebugDraw* draw = scene.GetResource<Fenrir::DebugDraw>();
-            if (state == nullptr || draw == nullptr)
+            if (state == nullptr)
             {
                 return;
             }
             HandleKeys(app, scene, *state);
-
-            const double delta = app.GetTime().deltaTime;
-            state->frameTime =
-                state->frameTime == 0.0 ? delta : state->frameTime + (delta - state->frameTime) * FrameTimeWeight;
-            // The renderer's counts are the last drawn frame's.
-            const Fenrir::RendererStats stats = Fenrir::Renderer::Stats(app);
-            const std::size_t count = state->members.size();
-            draw->ScreenText({16.0f, 120.0f},
-                             std::format("Crowd: {} instances, {} bones, {}", count, count * state->bonesEach,
-                                         state->playing ? "playing" : "paused"),
-                             Colour::White);
-            draw->ScreenText({16.0f, 144.0f},
-                             std::format("Frame time {:.2f} ms ({:.0f} fps)", state->frameTime * 1000.0,
-                                         state->frameTime > 0.0 ? 1.0 / state->frameTime : 0.0),
-                             Colour::White);
-            draw->ScreenText({16.0f, 168.0f},
-                             std::format("Palettes: {} distinct written, {} bytes uploaded; {} draws of {} instances, "
-                                         "{} skinned",
-                                         stats.distinctPalettesWritten, stats.paletteBytesUploaded, stats.draws,
-                                         stats.instances, stats.skinnedDraws),
-                             Colour::FromSrgb(0x80FF80FF));
-            draw->ScreenText({16.0f, 192.0f},
-                             std::format("Compute skinning: {} (C)", state->computeSkinning ? "on" : "off"),
-                             Colour::FromSrgb(0x80FF80FF));
         }
     } // namespace
 
@@ -224,8 +216,10 @@ namespace AnimationDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Crowd";
-        scene.keyHelp = "Up/Down: double or halve the crowd (1 to 1024). Space: pause. C: compute skinning on or off. "
-                        "R: reset to 64.";
+        scene.keyRows = {{"Up/Down", "double / halve the crowd (1 to 1024)"},
+                         {"Space", "pause or play"},
+                         {"C", "compute skinning on or off"},
+                         {"R", "reset to 64"}};
         // Up to 1024, paused and played, compute skinning off and on, down to 1, then reset.
         scene.keys = {Fenrir::Key::Up,    Fenrir::Key::Up,   Fenrir::Key::Up,   Fenrir::Key::Up,   Fenrir::Key::Space,
                       Fenrir::Key::Space, Fenrir::Key::C,    Fenrir::Key::C,    Fenrir::Key::Down, Fenrir::Key::Down,

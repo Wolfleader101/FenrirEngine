@@ -16,8 +16,9 @@ namespace AnimationDemo.Scripts;
 //   a blade on hand_r, an offset C# edits with the arrow keys;
 //   a hat on Head;
 //   a tag naming "no_such_bone", which stays BoneNotFound.
-// Each is labelled with Skeletons.GetAttachmentState, and the screen text shows bone reads: the skeleton's bone count
-// (SkeletonData), Head's world position (GetBoneWorldMatrix) and the generation (GetPoseGeneration).
+// Each is labelled with Skeletons.GetAttachmentState, and the readouts in the scene's demo slot (AttachmentsPanel.razor)
+// show bone reads: the skeleton's bone count (SkeletonData), Head's world position (GetBoneWorldMatrix) and the
+// generation (GetPoseGeneration).
 //
 // Two stage systems show C# inside the pose pipeline: a Fenrir.Skeleton.Modify system after the pose override nods the
 // head through a PoseEdit, and a Fenrir.Skeleton.Late system marks hand_r where this frame's pose put it.
@@ -228,7 +229,7 @@ public sealed class AttachmentsKeys : ISystem
     }
 }
 
-// The labels and the bone reads, each frame.
+// The labels, each frame; the bone reads are AttachmentsPanel.razor's.
 [System(Phase.Update, Order = 300)]
 public sealed class AttachmentsShow : ISystem
 {
@@ -239,16 +240,6 @@ public sealed class AttachmentsShow : ISystem
         Label(state.Blade, "Blade on hand_r");
         Label(state.Hat, "Hat on Head");
         Label(state.Tag, "Tag on no_such_bone");
-
-        string head = Skeletons.GetBoneWorldMatrix(state.Skeleton, state.Head, out Matrix4x4 world)
-                          ? $"({world.Column3.X:0.00}, {world.Column3.Y:0.00}, {world.Column3.Z:0.00})"
-                          : "unread";
-        int bones = SkeletonData.BoneCount(state.Skeleton.Get<SkeletonPose>().Value.Skeleton);
-        DebugDraw.ScreenText(new Vector2(16, 120),
-                             $"C#: {bones} bones, {Skeletons.GetPoseState(state.Skeleton)}, generation " +
-                             $"{Skeletons.GetPoseGeneration(state.Skeleton)}; Head at {head}; nod " +
-                             $"{(state.Nod ? "on" : "off")} (Fenrir.Skeleton.Modify)",
-                             Colour.White);
     }
 
     private static void Label(Entity entity, string what)
