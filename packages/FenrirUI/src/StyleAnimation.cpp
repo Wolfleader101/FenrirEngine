@@ -37,6 +37,11 @@ namespace Fenrir::Detail
             return a.kind == b.kind && a.x == b.x && a.y == b.y && a.factors == b.factors && a.radians == b.radians;
         }
 
+        bool Same(const FilterStep& a, const FilterStep& b)
+        {
+            return a.kind == b.kind && a.radius == b.radius && a.offset == b.offset && Same(a.colour, b.colour);
+        }
+
         bool Same(const GradientStop& a, const GradientStop& b)
         {
             return a.offset == b.offset && Same(a.colour, b.colour);
@@ -228,6 +233,29 @@ namespace Fenrir::Detail
                 step.y = Mix(from.y, to.y, t);
                 step.factors = Mix(from.factors, to.factors, t);
                 step.radians = Mix(from.radians, to.radians, t);
+                out.push_back(step);
+            }
+            return out;
+        }
+
+        std::vector<FilterStep> Mix(const std::vector<FilterStep>& a, const std::vector<FilterStep>& b, float t)
+        {
+            // Function by function when both lists hold the same functions in the same order; otherwise CSS's
+            // discrete fallback, which switches half way.
+            const bool matched = a.size() == b.size() &&
+                                 std::equal(a.begin(), a.end(), b.begin(),
+                                            [](const FilterStep& x, const FilterStep& y) { return x.kind == y.kind; });
+            if (!matched)
+            {
+                return t >= 0.5f ? b : a;
+            }
+            std::vector<FilterStep> out;
+            for (std::size_t i = 0; i < a.size(); ++i)
+            {
+                FilterStep step = a[i];
+                step.radius = std::max(Mix(a[i].radius, b[i].radius, t), 0.0f);
+                step.offset = Mix(a[i].offset, b[i].offset, t);
+                step.colour = Mix(a[i].colour, b[i].colour, t);
                 out.push_back(step);
             }
             return out;

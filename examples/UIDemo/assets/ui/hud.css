@@ -20,6 +20,14 @@
     color: var(--ink);
     font-size: 22px;
     text-shadow: 0 2px rgba(0, 0, 0, 0.6);
+    /* Sharp through a blur of 0, so opening the pause menu mixes the radius in: a list of the same functions. */
+    filter: blur(0px);
+    transition: filter 0.3s ease-out;
+}
+
+/* While the pause menu is open (the room's HUD system sets the class), the HUD blurs behind it. */
+#hud.paused {
+    filter: blur(3px);
 }
 
 /* The compass: a strip at the top centre, painted by the compass element in its colour. */
@@ -32,6 +40,7 @@
     padding: 6px 16px;
     border-radius: 10px;
     background-color: var(--panel);
+    filter: drop-shadow(0 6px 10px black);
 }
 
 compass {
@@ -86,6 +95,20 @@ compass {
     border-radius: 2px;
     background-color: var(--hit);
     transform-origin: 50% 50%;
+}
+
+.hit-text {
+    position: absolute;
+    left: -8px;
+    top: 50px;
+    width: 60px;
+    font-size: 14px;
+    font-weight: bold;
+    letter-spacing: 3px;
+    text-align: center;
+    color: var(--hit);
+    /* A glow: the text's blurred shadow in the accent, under it. */
+    text-shadow: 0 0 4px var(--accent);
 }
 
 .hit-stroke.top-left {
@@ -206,6 +229,7 @@ progress.bar {
     align-items: flex-end;
     border-radius: 12px;
     background-color: var(--panel);
+    filter: drop-shadow(0 6px 10px black);
 }
 
 #ammo {

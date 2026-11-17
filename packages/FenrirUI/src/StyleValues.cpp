@@ -1153,6 +1153,45 @@ namespace Fenrir::Detail
             return true;
         }
 
+        bool ParseFilter(std::string_view value, std::vector<FilterStep>& out, StyleParseContext& context)
+        {
+            if (EqualsIgnoringCase(Trim(value), "none"))
+            {
+                out.clear();
+                return true;
+            }
+            const auto fail = [&] {
+                return Fail(context, "it is not a list of blur(<length>) and drop-shadow(<offset-x> <offset-y> "
+                                     "[<blur>] [<colour>]), lengths in px and blurs of zero or more, or none");
+            };
+            std::vector<FilterStep> steps;
+            for (const std::string_view function : Split(value, ' '))
+            {
+                if (const std::optional<std::string_view> blur = CallOf(function, "blur"))
+                {
+                    const std::optional<float> radius = Pixels(*blur);
+                    if (!radius || *radius < 0.0f)
+                    {
+                        return fail();
+                    }
+                    steps.push_back(FilterStep::Blur(*radius));
+                    continue;
+                }
+                const std::optional<std::string_view> shadow = CallOf(function, "drop-shadow");
+                // A drop shadow is one text shadow: an offset, a blur and a colour, with no spread. Its colour left out
+                // is CSS's currentcolor, which the style cannot hold yet, so black, as a shadow's is. A second shadow
+                // after a comma reads as a second layer; a colour function's commas stay inside its parentheses.
+                std::vector<Shadow> shadows;
+                if (!shadow || !ParseTextShadow(*shadow, shadows, context) || shadows.size() != 1)
+                {
+                    return fail();
+                }
+                steps.push_back(FilterStep::DropShadow(shadows[0].offset, shadows[0].blur, shadows[0].colour));
+            }
+            out = std::move(steps);
+            return true;
+        }
+
         bool ParseFontFamily(std::string_view value, std::string& out, StyleParseContext& context)
         {
             // CSS tries a list's families in turn; a FenrirText family has its own fallbacks, so the first is taken.
@@ -1720,10 +1759,8 @@ namespace Fenrir::Detail
             "background", "flex",    "gap",    "transition",   "animation",
         };
 
-        // The spec's property set that the style does not hold yet: the scrollbars, `filter` and
-        // background-position.
-        constexpr std::array<std::string_view, 4> LaterLonghands{
-            "filter",
+        // The spec's property set that the style does not hold yet: the scrollbars and background-position.
+        constexpr std::array<std::string_view, 3> LaterLonghands{
             "background-position",
             "scrollbar-color",
             "scrollbar-width",

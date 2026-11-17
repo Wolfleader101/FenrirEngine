@@ -48,7 +48,7 @@ namespace Fenrir::Detail
         /** @brief A shorthand, expanded by ExpandShorthand. */
         Shorthand,
         /**
-         * @brief A longhand of the spec's property set that the style does not hold (`filter`, `background-position`,
+         * @brief A longhand of the spec's property set that the style does not hold (`background-position`,
          * `scrollbar-color`, `scrollbar-width`): parsed and kept, and styling nothing.
          */
         NotYetStyled,
@@ -161,6 +161,7 @@ namespace Fenrir::Detail
     X(BorderBottomRightRadius, "border-bottom-right-radius", borderBottomRightRadius, ParsePixels)            \
     X(BorderBottomLeftRadius, "border-bottom-left-radius", borderBottomLeftRadius, ParsePixels)               \
     X(BoxShadow, "box-shadow", boxShadow, ParseBoxShadow)                                                     \
+    X(Filter, "filter", filter, ParseFilter)                                                                  \
     X(BackdropFilter, "backdrop-filter", backdropBlur, ParseBackdropFilter)                                   \
     X(Opacity, "opacity", opacity, ParseOpacity)                                                              \
     X(Transform, "transform", transform, ParseTransform)                                                      \

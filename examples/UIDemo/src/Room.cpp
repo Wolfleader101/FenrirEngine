@@ -414,6 +414,7 @@ namespace UIDemo
             frame.minimap = state->minimap;
             frame.playerName = settings.playerName;
             frame.shown = settings.showHud;
+            frame.paused = menu->IsOpen();
             hud->Show(frame);
             hud->Update(delta);
 

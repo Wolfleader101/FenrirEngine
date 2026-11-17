@@ -96,6 +96,38 @@ TEST_CASE("A gamepad direction and A click Resume, which closes the menu")
     REQUIRE_FALSE(demo.Menu().IsOpen());
 }
 
+TEST_CASE("The HUD blurs in while the pause menu is open and clears once it closes")
+{
+    DemoApp demo;
+    const auto hudBlur = [&] {
+        Fenrir::UIRoot& hud = demo.HudRoot();
+        const Fenrir::ResolvedStyle* style = hud.GetResolvedStyle(hud.FindById("hud"));
+        INFO("the HUD has its #hud element");
+        REQUIRE(style != nullptr);
+        float radius = 0.0f;
+        for (const Fenrir::FilterStep& step : style->filter)
+        {
+            radius += step.kind == Fenrir::FilterStep::Kind::Blur ? step.radius : 0.0f;
+        }
+        return radius;
+    };
+    demo.Frames(2);
+    INFO("the HUD is sharp while the menu is closed");
+    REQUIRE(hudBlur() == 0.0f);
+
+    OpenMenu(demo);
+    demo.Frames(IntroFrames);
+    INFO("the HUD is blurred by 3 once the menu has opened, not " << hudBlur());
+    REQUIRE(hudBlur() == 3.0f);
+
+    TapEscape(demo);
+    demo.Frames(OutroFrames);
+    INFO("Escape did not close the menu");
+    REQUIRE_FALSE(demo.Menu().IsOpen());
+    INFO("the HUD is sharp again once the menu has closed, not blurred by " << hudBlur());
+    REQUIRE(hudBlur() == 0.0f);
+}
+
 TEST_CASE("Once the closed menu's outro ends, the game has the pointer again")
 {
     DemoApp demo;
