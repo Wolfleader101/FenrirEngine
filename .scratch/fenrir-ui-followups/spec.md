@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: built (#382, #383, #385, #387, #389, #392, #393, #403)
 
 # FenrirUI follow-ups: element filters, blurred text shadows, the window cursor, the rest of the property set, `currentcolor`, image and world roots from C#, and test and demo cleanups
 
