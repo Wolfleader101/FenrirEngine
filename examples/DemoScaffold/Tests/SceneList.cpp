@@ -188,7 +188,7 @@ TEST_CASE("A scene with no camera of its own draws through the free-fly camera",
 TEST_CASE("F1 showing the demo UI kit logs the help: the app, the scene and the scene's keys", "[demo][help]")
 {
     FenrirDemo::DemoScene scene = EmptyScene("Lit cube");
-    scene.keyHelp = "L rotates the light";
+    scene.keyRows = {{"L", "rotate the light"}};
     DemoTestApp test({scene});
     test.Frames();
     // The kit starts shown: F1 hides it, and the help logged on entering the scene is forgotten.
@@ -200,7 +200,7 @@ TEST_CASE("F1 showing the demo UI kit logs the help: the app, the scene and the 
     INFO("the help names the app and the scene");
     REQUIRE(test.logged->InfoContains("TestDemo: Lit cube (1/1)"));
     INFO("the help lists the scene's keys");
-    REQUIRE(test.logged->InfoContains("L rotates the light"));
+    REQUIRE(test.logged->InfoContains("rotate the light"));
     INFO("the help lists the scaffold's keys");
     REQUIRE(test.logged->InfoContains("PageDown/PageUp"));
 }

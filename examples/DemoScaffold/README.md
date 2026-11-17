@@ -40,8 +40,7 @@ through FenrirAssets and gives to `Window::SetIcon`; it is the shared `icons/fen
 SDL's default icon. A smoke run's hidden window gets it too.
 `Run()` runs the app and returns the process's exit code. Destroy the `DemoScaffold` before the `App`.
 
-A `DemoScene` is one entry of the app's ordered scene list: a `name`, its `keyRows` for the help (or a one-line
-`keyHelp`, which the help shows as one row), an optional `tutorial` (a demo tutorial, below), the `keys` a smoke run presses, where the free-fly camera starts, a `spawn` function and an optional per-frame `update` (in `Update`, on the
+A `DemoScene` is one entry of the app's ordered scene list: a `name`, its `keyRows` for the help, an optional `tutorial` (a demo tutorial, below), the `keys` a smoke run presses, where the free-fly camera starts, a `spawn` function and an optional per-frame `update` (in `Update`, on the
 main thread). Each time a scene is entered it is spawned into a FenrirScene of its own, named after it; leaving it
 destroys that FenrirScene, and the assets the scene loaded for itself (owned by the scene) go with it.
 
@@ -111,8 +110,8 @@ The demo UI kit (`GLOSSARY.md`, ADR-0071) is the scaffold's UI over FenrirUI, in
 type: the scaffold feeds it. The scaffold adds it as the `DemoUI` app resource once FenrirUI is installed.
 
 - **The root:** one `UIRoot` on the main window's overlay, at layer `DemoUILayer` with input priority
-  `DemoUIRouterPriority` (both 900): over every demo app's own roots (UIDemo's HUD is at 0 and its menu at 10), under
-  the ImGui overlay's 1000 while that is there. Debug screen text and on-screen messages draw over it.
+  `DemoUIRouterPriority` (both 900): over every demo app's own roots (UIDemo's HUD is at 0 and its menu at 10). Debug
+  screen text and on-screen messages draw over it.
 - **The demo panel**, on the right, 360 UI units wide at the window's `Height1080` scale and scrolling when taller than
   the window, under the app's name (`SetTitle`): `AppSection(title)` adds a section of the app's, which stays, and
   `SceneSection(title)` one of the scene's, after the app's. `ClearScene()` removes the scene's sections; the scaffold
@@ -176,8 +175,8 @@ type: the scaffold feeds it. The scaffold adds it as the `DemoUI` app resource o
   frame (`Renderer::Stats`). Both are added before `installPackages`, so they come before the app's own sections.
 - **The help**, at the bottom left, clear of the on-screen messages that stack from the top left: a section that starts
   open, with the app and the scene (`<App>: <scene> (i/n)`), then key rows (`DemoKeyRow{keys, what}`): the scaffold's
-  (the keys below), then the app's (`DemoConfig::appKeyRows`, or `appKeyHelp` as one F2 row), then the scene's
-  (`DemoScene::keyRows`, or `keyHelp` as one row). The scaffold sets it each time a scene is entered (`SetHelp`). While
+  (the keys below), then the app's (`DemoConfig::appKeyRows`), then the scene's
+  (`DemoScene::keyRows`). The scaffold sets it each time a scene is entered (`SetHelp`). While
   the kit shows, the help is logged as `Help: ...` lines when it is set and when F1 shows it.
 - **Demo tutorials** (`GLOSSARY.md`): a `DemoTutorial{title, steps}` of `DemoTutorialStep{title, text, keys, done}`
   shows one step at a time in a card at the top centre (`ShowTutorial(tutorial)`, `CloseTutorial()`,
@@ -227,39 +226,13 @@ type: the scaffold feeds it. The scaffold adds it as the `DemoUI` app resource o
 
 `DemoConfig::demoUITarget` is the tests' seam: a 2D target the kit's root draws into instead of the window.
 
-## The ImGui overlay
-
-`DemoConfig::imguiOverlay = true` installs the scaffold's `ImGuiOverlay` (ADR-0027): Dear ImGui over the main window,
-for demo panels. Dear ImGui is the `libs/imgui` submodule (tag v1.92.9b), built here as the static `FenrirDemoImGui`
-with the spec's local overrides (`libs/CMakeLists.txt`), and linked only by the scaffold; it reaches a demo app through
-the scaffold, never through an engine package. A scene makes ImGui windows from its `update` with ImGui's own functions
-(`#include <imgui.h>`): the scaffold starts ImGui's frame in `BeforeTicks` and ends it in `PostUpdate`.
-
-- **Input:** an input router of priority `ImGuiOverlayRouterPriority`. ImGui gets keys, text, the mouse and the wheel,
-  and takes what it wants, judged by its previous frame: a click, a press or the wheel over an ImGui window, keys while
-  a widget is active (a text field, a slider being dragged), and text while a text field is. A drag that began on ImGui
-  is its alone, motion included. Every press ImGui does not take is the game's; ImGui sees it as a click away from its
-  windows, so clicking the scene takes the keyboard back from a text field. While the game holds a mouse button (the
-  free-fly camera's look) ImGui sees neither the pointer nor the wheel.
-- **Input claims,** published each frame: `pointer` (over an ImGui window), `pointerCapture` (an ImGui drag),
-  `keyboardFocus` (a widget is active, which cancels the scene's held keys) and `textInput` with the text field's caret,
-  where FenrirWindow puts the IME. With the overlay on, the window's text input is on only where ImGui claims it
-  (`WindowConfig::textInputByDefault` is false).
-- **Drawing:** ImGui's draw data becomes one `DrawList2D` a frame on `builtin:2d`: the ImGui vertex layout, sRGB vertex
-  colours, straight `AlphaBlend` and linear blending, with ImGui's clip rectangles as scissors, submitted to the main
-  window on overlay layer `ImGuiOverlayLayer` (1000), so a scene's own 2D lists on lower layers draw under it, and debug
-  text over it. ImGui's textures, its font atlas among them, are `ImageData` assets owned by the app, replaced whole when
-  ImGui changes them. ImGui lays out in logical units, and rasterises its fonts at the window's content scale.
-- **Platform:** the clipboard and the cursor shape through FenrirWindow (the cursor is left alone while it is captured).
-  Nothing is saved between runs (no `imgui.ini`).
-
 ## Keys
 
 | Key | What it does |
 | --- | --- |
 | PageDown / PageUp | The next / previous scene, wrapping at both ends; the demo panel's scene switcher enters any scene on a click. |
 | F1 | Hides or shows the demo UI kit: the demo panel and the help. Showing it also logs the help. |
-| F2 | The app's (its `DemoConfig::appKeyRows`, or `appKeyHelp`, say what it does). |
+| F2 | The app's (its `DemoConfig::appKeyRows` say what it does). |
 | F3 | Turns the free-fly camera on or off. A scene that spawns an enabled `Camera` of its own starts with the free-fly camera off; F3 then switches between the two. |
 | Right mouse button | Held, the mouse looks around (up and down the other way with the `FreeFlyLook` app resource's `invertPitch`), and WASD moves the free-fly camera (by key position), Shift makes it faster and the wheel changes its speed. Without it, WASD and the wheel are the scene's. |
 | Left click | Sends `DemoSceneClickEvent`, the ray (`Renderer::ScreenPointToRay`) from the camera drawn at the clicked point (`Renderer::CameraAt`) through it. A click where no camera draws sends nothing. |
@@ -314,10 +287,11 @@ The art-deco texture set comes with the scene that uses it.
 
 `FenrirDemoScaffoldTests` (CTest `FenrirDemoScaffold`) runs a demo app on the null backend with no window, its input
 fed through FenrirInput's feed and the App driven one frame at a time, or run as a smoke run: the scene list, the free-
-fly camera, the scene click, the help, the smoke runs and the ImGui overlay taking input from the scene; and the demo
-UI kit, its root drawing into a capturing target the size of the null backend's surface: the help's key rows in order
-and a scene's `keyHelp` as one row, F1 hiding the kit (its panel then taking no press) and hiding it from a focused
-button, a press on the panel sending no scene click and one beside it sending one, a right-drag beside it turning the
+fly camera, the scene click, the help, and the smoke runs; and the demo
+UI kit, its root drawing into a capturing target the size of the null backend's surface: the help's key rows in order,
+F1 hiding the kit (its panel then taking no press) and hiding it from a focused button, a press on the panel sending
+no scene click and one beside it sending one, the pointer over the panel claimed and the game seeing no button of a
+press on it, a right-drag beside it turning the
 free-fly camera, a scene's section gone after PageDown, a section's heading collapsing and opening it, and the gamepad
 reaching the scene while the kit has the focus; and the demo panel's rows (`Tests/DemoPanel.cpp`): a readout set by a
 scene's `update` shown that frame and a pulled one following its function, a scene's readouts gone after it is left
@@ -325,12 +299,12 @@ and fresh when it is entered again, a readout hidden and shown and one greyed ou
 scenes, marking the active one (after a click and after PageDown) and entering the third on a click, and the frame
 stats' frame time, fps and the renderer's draws on the null backend; and the switch rows and the hint line
 (`Tests/DemoSwitches.cpp`): a toggle's click setting its bool and code moving it the next frame, a click on a switch
-leaving the scene its keys, a range drag written before the scene's `update` without turning the free-fly camera and
+leaving the scene its keys, a range drag written before the scene's `update`, capturing the pointer, without turning the free-fly camera and
 a held range not moved by its value, a logarithmic range mapping 0, 0.5 and 1 to `min`, `sqrt(min*max)` and `max`
 and one with a non-positive `min` logged and linear, an integer range and an angle's degrees, a choice of three as
 buttons and one of five as a wrapping stepper, a colour row's sliders setting the colour with the swatch following, a
-button's function, a disabled row's control, a text entry typed in claiming the keyboard (a held W cancelled, F1 typed
-into it) with a click on the scene or Escape giving it back, the hint line following the hover and then the focus,
+button's function, a disabled row's control, a text entry typed in claiming the keyboard (a held W cancelled with one cancelled release, F1
+typed into it, no key or text reaching the scene, its caret on the entry) with a click on the scene or Escape giving it back, the hint line following the hover and then the focus,
 and the gamepad's directions reaching the game while a slider has the focus; and demo tutorials
 (`Tests/DemoTutorials.cpp`): a tutorial shown on its scene's first entry with its title and text and not on the second,
 never in a smoke run or with `FENRIR_DEMO_KEYS`, Next stepping on with Done on the last step closing it and its card

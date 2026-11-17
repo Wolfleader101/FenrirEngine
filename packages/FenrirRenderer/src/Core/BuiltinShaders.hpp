@@ -34,7 +34,8 @@ namespace Fenrir::Render
         DebugTriangles,
         /** @brief `builtin:debug-text`: debug text from the debug font's signed-distance-field atlas. */
         DebugText,
-        /** @brief `builtin:2d`: 2D draw lists on the ImGui vertex layout, textured and vertex-coloured (ADR-0027). */
+        /** @brief `builtin:2d`: 2D draw lists on the position, UV, RGBA8 vertex layout, textured and vertex-coloured
+         * (ADR-0027). */
         Draw2D,
         /** @brief `builtin:panorama`: a panorama sky's image drawn into one face and mip of its cube texture. */
         Panorama,

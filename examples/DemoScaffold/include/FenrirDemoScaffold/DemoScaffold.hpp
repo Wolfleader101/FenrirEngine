@@ -58,8 +58,6 @@ namespace FenrirDemo
         std::string name;
         /** @brief The scene's key rows, the help's last. */
         std::vector<DemoKeyRow> keyRows;
-        /** @brief The scene's keys as one line, which the help shows as one row when there are no `keyRows`. */
-        std::string keyHelp;
         /**
          * @brief The scene's demo tutorial: shown the first time the scene is entered in a run, but never in a smoke
          * run or with FENRIR_DEMO_KEYS, and again from the Tutorial button in the scene's section, titled after the
@@ -145,11 +143,6 @@ namespace FenrirDemo
         std::string iconPath = "icons/fenrir.png";
         /** @brief The app's key rows (F2 and anything app-wide), in the help after the scaffold's. */
         std::vector<DemoKeyRow> appKeyRows;
-        /**
-         * @brief What F2 does in this app, one line, which the help shows as an F2 row when there are no `appKeyRows`;
-         * empty when F2 does nothing.
-         */
-        std::string appKeyHelp;
         /** @brief The ordered scene list; PageDown and PageUp step through it, wrapping. */
         std::vector<DemoScene> scenes;
         /**
@@ -159,13 +152,6 @@ namespace FenrirDemo
         bool frameStats = false;
         /** @brief The renderer's MSAA samples per pixel (RendererConfig::msaa); 1 is off. */
         std::uint32_t msaa = 1;
-        /**
-         * @brief Installs the scaffold's ImGuiOverlay (examples/DemoScaffold/README.md): Dear ImGui over the main
-         * window, drawn on the overlay layer ImGuiOverlayLayer and seeing input before the game. A scene's `update`
-         * then makes ImGui windows with ImGui's own functions (`<imgui.h>`). The window's text input is then on only
-         * where ImGui or the demo UI kit asks for it (WindowConfig::textInputByDefault is false).
-         */
-        bool imguiOverlay = false;
         /**
          * @brief The demo UI kit's 2D target: the tests' seam, which captures it. Null, the app's, draws it on the main
          * window's overlay.
@@ -196,16 +182,6 @@ namespace FenrirDemo
         std::vector<Fenrir::ScriptingExtension> scriptingExtensions;
 #endif
     };
-
-    /**
-     * @brief The overlay layer the ImGuiOverlay draws on, over the demo UI kit's (DemoUILayer); a scene's own 2D draw
-     * lists on lower layers draw under it.
-     */
-    inline constexpr std::int32_t ImGuiOverlayLayer = 1000;
-
-    /** @brief The ImGuiOverlay's input router priority: it sees input before routers of lower priority, and the game.
-     */
-    inline constexpr int ImGuiOverlayRouterPriority = 1000;
 
     /**
      * @brief Sent when the scene is left-clicked (without the right mouse button held): the ray, from

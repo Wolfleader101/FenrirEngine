@@ -280,7 +280,7 @@ TEST_CASE("Frame stats show the frame time, fps and the renderer's draws", "[dem
             entity.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{mesh, material});
         }
     };
-    DemoTestApp test({scene}, NullRun(), false, {}, [](FenrirDemo::DemoConfig& config) { config.frameStats = true; });
+    DemoTestApp test({scene}, NullRun(), {}, [](FenrirDemo::DemoConfig& config) { config.frameStats = true; });
     // More than half a second of sixtieth-of-a-second frames, so the smoothed values are a whole window's.
     test.Frames(40);
 

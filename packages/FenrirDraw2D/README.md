@@ -20,7 +20,7 @@ Coordinates, vertices and scissors alike, are local and logical: units from the 
 
 **Limits** of this version, checked by the renderer, which skips a command over one and logs it once: `MaxTextureSlots2D` (4) and `MaxParameterBytes2D` (128), with 16- and 32-bit indices.
 
-`Vertex2D` is the ImGui vertex layout `builtin:2d` reads (position `vec2`, UV `vec2`, colour RGBA8 with red in the lowest byte), and `Vertex2DLayout()` describes it.
+`Vertex2D` is the vertex layout `builtin:2d` reads (position `vec2`, UV `vec2`, colour RGBA8 with red in the lowest byte), and `Vertex2DLayout()` describes it.
 
 ## Drawing it
 

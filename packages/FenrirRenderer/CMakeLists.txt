@@ -209,8 +209,8 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDebugTriangles VERTEX Shade
                    FRAGMENT Shaders/Builtin/debug.frag EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDebugText VERTEX Shaders/Builtin/debug_text.vert
                    FRAGMENT Shaders/Builtin/debug_text.frag EMBED)
-# builtin:2d (ADR-0027), the 2D render feature's own shader on the ImGui vertex layout. The renderer picks the keys from
-# the 2D pipeline description: INPUT_SRGB (sRGB vertex colours), PREMULTIPLY (PremultipliedAlpha), GAMMA (the gamma path).
+# builtin:2d (ADR-0027), the 2D render feature's own shader on the position, UV, RGBA8 vertex layout. The renderer
+# picks the keys from the 2D pipeline description: INPUT_SRGB (sRGB vertex colours), PREMULTIPLY (PremultipliedAlpha), GAMMA (the gamma path).
 # BLUR and SHADOW are the 2D feature's own, for offscreen groups' blur, drop shadow and backdrop blur (ADR-0060).
 fenrir_add_shaders(FenrirRendererCore PROGRAM Builtin2D VERTEX Shaders/Builtin/2d.vert FRAGMENT Shaders/Builtin/2d.frag
                    KEYS INPUT_SRGB PREMULTIPLY GAMMA BLUR SHADOW EMBED)

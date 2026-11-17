@@ -26,15 +26,15 @@
 
 **Touches:** `examples/DemoScaffold/`, `.gitmodules`, `packages/FenrirDraw2D/`, `packages/FenrirRenderer/`, `docs/adr/0027-ui-draws-through-fenrirdraw2d-and-takes-input-through-input-routers.md`, `GLOSSARY.md`, `README.md`, `examples/*/src/` (any `keyHelp` left)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A fresh clone with `git submodule update --init --recursive` fetches no ImGui. The build and every test pass, with examples on, scripting off and on.
-- [ ] The scaffold's tests cover:
+- [x] A fresh clone with `git submodule update --init --recursive` fetches no ImGui. The build and every test pass, with examples on, scripting off and on.
+- [x] The scaffold's tests cover:
   - a press on a panel sending no scene click
   - a range drag not turning the camera
   - text entry claiming and giving back the keyboard
   - F1 hiding the kit
   - the help's key rows
-- [ ] Every demo's `Smoke-null` passes.
+- [x] Every demo's `Smoke-null` passes.
 - [ ] Hand check, on OpenGL: each demo app opens, shows its panel and help, and F1 hides them.
 - [ ] Clang and MSVC x64 debug build without new warnings.

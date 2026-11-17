@@ -140,8 +140,8 @@ namespace LightingDemo
         }
 
         /**
-         * @brief A logarithmic range from 0 to `max`, as ImGui's logarithmic slider from 0 was: the kit's needs a
-         * positive minimum, so the slider starts at the smallest value `decimals` shows, and its left end writes 0.
+         * @brief A logarithmic range from 0 to `max`: the kit's logarithmic range needs a positive minimum, so the
+         * slider starts at the smallest value `decimals` shows, and its left end writes 0.
          */
         void LogRangeFromZero(const DemoSection& section, std::string label, float* value, float max, int decimals,
                               std::string hint)
