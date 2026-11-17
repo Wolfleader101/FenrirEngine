@@ -2,15 +2,16 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <format>
+#include <functional>
 #include <numbers>
 #include <optional>
 #include <utility>
 #include <vector>
 
-#include <imgui.h>
-
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirInput/Input.hpp"
@@ -51,6 +52,18 @@ namespace UIDemo
         constexpr float PlateWidth = 1.0f;
         constexpr float PlateDepth = 0.32f;
 
+        /**
+         * @brief What the player did this frame, which the room's tutorial steps end on: set by the room's Update and
+         * read by the steps' `done` later in the frame.
+         */
+        struct RoomEvents
+        {
+            bool fired = false;
+            bool reloaded = false;
+            bool hit = false;
+            bool terminalPressed = false;
+        };
+
         /** @brief The room's own state, a scene resource. */
         struct RoomState
         {
@@ -63,6 +76,7 @@ namespace UIDemo
             std::vector<Fenrir::Entity> lamps;
             /** @brief The name plate's quad, turned to the camera each frame. */
             Fenrir::Entity plate;
+            RoomEvents events;
         };
 
         Fenrir::Math::Quat YawPitch(float yaw, float pitch)
@@ -282,6 +296,7 @@ namespace UIDemo
             {
                 shots += aimed ? 0 : 1;
             }
+            state.events.fired = shots > 0;
             for (; shots > 0 && ammo.loaded > 0; --shots)
             {
                 --ammo.loaded;
@@ -289,6 +304,7 @@ namespace UIDemo
             }
             if (keyboard.JustPressed(Fenrir::Key::R))
             {
+                state.events.reloaded = true;
                 const std::int32_t taken = std::min(ammo.capacity - ammo.loaded, ammo.reserve);
                 ammo.loaded += taken;
                 ammo.reserve -= taken;
@@ -300,6 +316,7 @@ namespace UIDemo
             }
             if (keyboard.JustPressed(Fenrir::Key::H))
             {
+                state.events.hit = true;
                 health.current -= HitDamage;
                 if (health.current <= 0.0f)
                 {
@@ -308,42 +325,6 @@ namespace UIDemo
             }
             const float rate = cameraSpeed > MovingSpeed ? -StaminaDrain : StaminaRefill;
             stamina.current = std::clamp(stamina.current + rate * delta, 0.0f, stamina.max);
-        }
-
-        /** @brief The switches, listed on screen in an ImGui window as LightingDemo lists its own. */
-        void ShowSwitches(Hud& hud, const Menu& menu)
-        {
-            ImGui::SetNextWindowPos({12.0f, 12.0f}, ImGuiCond_FirstUseEver);
-            ImGui::SetNextWindowSize({380.0f, 0.0f}, ImGuiCond_FirstUseEver);
-            ImGui::Begin("UIDemo");
-            ImGui::SeparatorText("Keys");
-            ImGui::TextUnformatted("F or left click: fire (a hit marker, ammo down)");
-            ImGui::TextUnformatted("R: reload");
-            ImGui::TextUnformatted("H: take a hit (health down; refills at zero)");
-            ImGui::TextUnformatted("Right mouse + WASD: move (stamina drains)");
-            ImGui::TextUnformatted("Escape: the pause menu (B on a gamepad backs out)");
-            ImGui::TextUnformatted("Aim at the terminal and click: its buttons and slider set the lamps");
-            ImGui::SeparatorText("Hot reload");
-            bool hotReload = hud.Root().IsHotReloadOn();
-            if (ImGui::Checkbox("Reload the HUD's files when they change", &hotReload))
-            {
-                hud.Root().SetHotReload(hotReload);
-            }
-            ImGui::TextUnformatted("Edit this stylesheet while the demo runs:");
-            ImGui::TextWrapped("%s", hud.StylesheetPath().c_str());
-            bool menuReload = menu.Root().IsHotReloadOn();
-            if (ImGui::Checkbox("Reload the menu's files when they change", &menuReload))
-            {
-                menu.Root().SetHotReload(menuReload);
-            }
-            ImGui::TextUnformatted("The menu's stylesheet:");
-            ImGui::TextWrapped("%s", menu.StylesheetPath().c_str());
-            ImGui::SeparatorText("Settings");
-            const Settings& settings = menu.GetSettings();
-            // The engine has no audio yet: the volume is only kept and shown.
-            ImGui::Text("Volume: %.0f (no audio yet)", settings.volume);
-            ImGui::Text("Field of view: %.0f degrees", settings.fieldOfView);
-            ImGui::End();
         }
 
         void Update(Fenrir::App& app, Fenrir::Scene& scene)
@@ -356,6 +337,7 @@ namespace UIDemo
                 return;
             }
             const float delta = static_cast<float>(app.GetTime().deltaTime);
+            state->events = {};
 
             // The menu's system: Escape and the menu root's UI events.
             menu->Update();
@@ -387,7 +369,7 @@ namespace UIDemo
             }
 
             // The terminal's pointer: a ray from the window's camera through the cursor, while nothing on the window
-            // (the menu, the ImGui overlay) has the pointer and the camera is not being turned.
+            // (the menu, the demo UI kit's panels) has the pointer and the camera is not being turned.
             bool aimed = false;
             if (WorldUI* world = app.TryGetResource<WorldUI>(); world != nullptr)
             {
@@ -403,6 +385,7 @@ namespace UIDemo
                     pressed = mouse.IsDown(Fenrir::MouseButton::Left);
                 }
                 aimed = world->Update(ray, pressed);
+                state->events.terminalPressed = aimed && pressed;
                 for (const Fenrir::Entity& lamp : state->lamps)
                 {
                     lamp.GetComponent<Fenrir::PointLight>().colour = world->GetLightColour();
@@ -433,18 +416,106 @@ namespace UIDemo
             frame.shown = settings.showHud;
             hud->Show(frame);
             hud->Update(delta);
+        }
 
-            ShowSwitches(*hud, *menu);
+        /** @brief A tutorial step's `done`: true on the frame the room's player did `event`. */
+        std::function<bool(Fenrir::App&)> Happened(bool RoomEvents::* event)
+        {
+            return [event](Fenrir::App& app) {
+                const RoomState* state = app.GetActiveScene().GetResource<RoomState>();
+                return state != nullptr && state->events.*event;
+            };
+        }
+
+        /**
+         * @brief The room's demo tutorial: the HUD's keys, the terminal, and last the pause menu, as the Escape that
+         * opens it closes the card first.
+         */
+        FenrirDemo::DemoTutorial RoomTutorial()
+        {
+            return FenrirDemo::DemoTutorial{
+                .title = "The HUD",
+                .steps =
+                    {
+                        {.title = "Fire",
+                         .text =
+                             "Press F or click the room to fire. Each shot puts a hit marker at the centre and takes a "
+                             "round from the ammo counter, bottom right.",
+                         .keys = {{"F / left click", "fire"}},
+                         .done = Happened(&RoomEvents::fired)},
+                        {.title = "Reload",
+                         .text = "Press R to fill the magazine from the reserve. Once both are empty the reserve fills "
+                                 "again.",
+                         .keys = {{"R", "reload"}},
+                         .done = Happened(&RoomEvents::reloaded)},
+                        {.title = "Take a hit",
+                         .text =
+                             "Press H to take 15 damage: the health bar, bottom right, drops, and fills again at zero. "
+                             "Moving drains the stamina bar under it, which refills while you stand.",
+                         .keys = {{"H", "take a hit"}, {"Right mouse + WASD", "move, draining stamina"}},
+                         .done = Happened(&RoomEvents::hit)},
+                        {.title = "The light terminal",
+                         .text =
+                             "The screen on a stand to your right is a UI root in the room. Aim the cursor at it and "
+                             "click its buttons, or drag its slider, to colour the lamps.",
+                         .keys = {{"Aim + left click", "press the terminal's buttons"}},
+                         .done = Happened(&RoomEvents::terminalPressed)},
+                        {.title = "The pause menu",
+                         .text =
+                             "Close this card, then press Escape for the pause menu. Use it with the mouse, the keys "
+                             "or a gamepad. Its settings change the field of view and the HUD's name, and the demo "
+                             "panel shows the volume and field of view they set.",
+                         .keys = {{"Escape", "open the menu, or back out of it"},
+                                  {"Tab / Shift+Tab, Enter", "move the focus, press"},
+                                  {"D-pad, A / B", "move the focus, press / back out"}}},
+                    },
+            };
         }
     } // namespace
+
+    void AddPanelSection(Fenrir::App& app)
+    {
+        auto* kit = app.TryGetResource<FenrirDemo::DemoUI>();
+        Hud* hud = app.TryGetResource<Hud>();
+        Menu* menu = app.TryGetResource<Menu>();
+        if (kit == nullptr || hud == nullptr || menu == nullptr)
+        {
+            return;
+        }
+        // An app section outlives the room. It reads the Hud and the Menu, app resources the scaffold ends after the
+        // kit's last frame.
+        const FenrirDemo::DemoSection section = kit->AppSection("UIDemo");
+        section.Separator("Hot reload");
+        // A root's hot reload toggle, over the path of the stylesheet it reloads.
+        const auto hotReload = [&section](const std::string& whose, Fenrir::UIRoot& root, const std::string& path) {
+            section.Toggle(whose + " hot reload",
+                           FenrirDemo::DemoValue<bool>([&root] { return root.IsHotReloadOn(); },
+                                                       [&root](const bool& on) { root.SetHotReload(on); }),
+                           "Reloads the " + whose +
+                               "'s files when they change: edit the stylesheet below while the "
+                               "demo runs");
+            section.Text(path);
+        };
+        hotReload("HUD", hud->Root(), hud->StylesheetPath());
+        hotReload("Menu", menu->Root(), menu->StylesheetPath());
+        section.Separator("Settings");
+        // The engine has no audio yet: the volume is only kept and shown.
+        section.Readout("Volume", [menu] { return std::format("{:.0f} (no audio yet)", menu->GetSettings().volume); });
+        section.Readout("Field of view",
+                        [menu] { return std::format("{:.0f} degrees", menu->GetSettings().fieldOfView); });
+    }
 
     FenrirDemo::DemoScene Room()
     {
         FenrirDemo::DemoScene scene;
         scene.name = "The HUD";
-        scene.keyHelp =
-            "F or left click: fire. R: reload. H: take a hit. Right mouse and WASD: move, draining stamina. Escape: "
-            "the pause menu.";
+        scene.keyRows = {{"F / left click", "fire: a hit marker, one round down"},
+                         {"R", "reload from the reserve"},
+                         {"H", "take a hit: health down, refilled at zero"},
+                         {"Right mouse + WASD", "move, draining stamina"},
+                         {"Escape", "the pause menu; B on a gamepad backs out"},
+                         {"Aim + left click", "the light terminal's buttons and slider set the lamps"}};
+        scene.tutorial = RoomTutorial();
         // The smoke keys end by opening the menu and closing it again.
         scene.keys = {Fenrir::Key::F, Fenrir::Key::F, Fenrir::Key::H,      Fenrir::Key::F,
                       Fenrir::Key::R, Fenrir::Key::H, Fenrir::Key::Escape, Fenrir::Key::Escape};

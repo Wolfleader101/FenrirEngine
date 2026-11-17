@@ -10,17 +10,19 @@
 
 #include "FenrirApp/App.hpp"
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirUI/UI.hpp"
+#include "FenrirUI/UIRoot.hpp"
 #include "FenrirUI/UITarget.hpp"
 #include "UIDemo.hpp"
 
 // UIDemo set up as the app sets it up, on the null backend with no window, the App driven a frame at a time. The HUD's
-// and the menu's roots draw into capturing targets of 1920 by 1080, so 1080 UI units span their height at a scale of
-// one, and UI units are the window's logical units.
+// and the menu's roots, and the demo UI kit's, draw into capturing targets of 1920 by 1080, so 1080 UI units span their
+// height at a scale of one, and UI units are the window's logical units.
 namespace UIDemoTest
 {
     /** @brief A logger that keeps its error lines: a second ConsoleLogger in one process throws. */
@@ -78,17 +80,35 @@ namespace UIDemoTest
     /** @brief The window FenrirInput's feed sends to: the roots on custom targets still route its input. */
     inline constexpr Fenrir::WindowId Window{1};
 
-    /** @brief UIDemo installed as main installs it, its HUD and menu roots drawing into capture targets. */
+    /**
+     * @brief Whether the room keeps its demo tutorial: off for the tests of the HUD, the menu and the world roots, as
+     * the card it shows on the room's first entry would take their first Escape.
+     */
+    enum class RoomTutorial : std::uint8_t
+    {
+        Off,
+        On,
+    };
+
+    /** @brief UIDemo installed as main installs it, its HUD, menu and demo UI kit roots drawing into capture targets.
+     */
     struct DemoApp
     {
         std::shared_ptr<std::vector<std::string>> errors = std::make_shared<std::vector<std::string>>();
         std::shared_ptr<CaptureTarget> hudTarget = std::make_shared<CaptureTarget>();
         std::shared_ptr<CaptureTarget> menuTarget = std::make_shared<CaptureTarget>();
+        std::shared_ptr<CaptureTarget> kitTarget = std::make_shared<CaptureTarget>();
         Fenrir::App app{std::make_unique<ErrorLogger>(errors), 2};
-        FenrirDemo::DemoScaffold demo{Install(app, hudTarget, menuTarget)};
+        FenrirDemo::DemoScaffold demo;
+
+        explicit DemoApp(RoomTutorial tutorial = RoomTutorial::Off)
+            : demo(Install(app, hudTarget, menuTarget, kitTarget, tutorial))
+        {
+        }
 
         static FenrirDemo::DemoScaffold Install(Fenrir::App& app, std::shared_ptr<CaptureTarget> hudTarget,
-                                                std::shared_ptr<CaptureTarget> menuTarget)
+                                                std::shared_ptr<CaptureTarget> menuTarget,
+                                                std::shared_ptr<CaptureTarget> kitTarget, RoomTutorial tutorial)
         {
             UIDemo::HudConfig hud;
             hud.target = std::move(hudTarget);
@@ -98,6 +118,14 @@ namespace UIDemoTest
             FenrirDemo::DemoRunOptions run;
             run.backend = Fenrir::GraphicsBackend::Null;
             config.run = run;
+            config.demoUITarget = std::move(kitTarget);
+            if (tutorial == RoomTutorial::Off)
+            {
+                for (FenrirDemo::DemoScene& scene : config.scenes)
+                {
+                    scene.tutorial.reset();
+                }
+            }
             return FenrirDemo::DemoScaffold::Install(app, std::move(config));
         }
 
@@ -133,6 +161,35 @@ namespace UIDemoTest
         Fenrir::UIRoot& HudRoot()
         {
             return app.GetResource<UIDemo::Hud>().Root();
+        }
+
+        /** @brief The demo UI kit. */
+        FenrirDemo::DemoUI& Kit()
+        {
+            return app.GetResource<FenrirDemo::DemoUI>();
+        }
+
+        /** @brief The texts of the kit's elements of class `name`, in tree order. */
+        std::vector<std::string> KitTexts(std::string_view name)
+        {
+            std::vector<std::string> texts;
+            const Fenrir::UIRoot& root = Kit().Root();
+            for (const Fenrir::ElementId element : root.FindByClass(name))
+            {
+                texts.emplace_back(root.GetText(element));
+            }
+            return texts;
+        }
+
+        /** @brief Moves the pointer to `position` and presses and releases the left button there, across frames. */
+        void Click(Fenrir::Math::Vec2 position)
+        {
+            Feed().MouseMove(Window, position, {0.0f, 0.0f});
+            Frame();
+            Feed().MouseButtonDown(Window, Fenrir::MouseButton::Left);
+            Frame();
+            Feed().MouseButtonUp(Window, Fenrir::MouseButton::Left);
+            Frame();
         }
 
         /** @brief The pause menu. */
