@@ -7,9 +7,11 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "FenrirInput/InputTypes.hpp"
+#include "FenrirMath/Math.hpp"
 #include "FenrirUI/ElementId.hpp"
 #include "FenrirUI/Stylesheet.hpp"
 #include "FenrirUI/UI.hpp"
@@ -63,6 +65,71 @@ namespace FenrirDemo
 
     class DemoUI;
 
+    namespace Detail
+    {
+        class DemoSwitch;
+    } // namespace Detail
+
+    /**
+     * @brief What a switch row (GLOSSARY.md) reads and writes: a `T` of the scene's or the app's, by a pointer to it or
+     * by a get and set pair. Each frame, in the kit's build stage work, the kit reads it and shows it in the row's
+     * control, unless the user is dragging or editing that control; a change from the control is written through it
+     * the frame it arrives, before the scenes' Update. So a key that changes the value moves the control the next
+     * frame, and the control changes what the keys see.
+     *
+     * A pointer must outlive the row: a scene section's rows go when the scene is left (DemoUI::ClearScene), before
+     * its state does, so a pointer into the scene's state is safe there.
+     */
+    template <typename T>
+    class DemoValue
+    {
+      public:
+        /** @brief Reads and writes `*value`. */
+        DemoValue(T* value) // NOLINT(google-explicit-constructor): `&flag` is the common binding.
+            : m_get([value] { return *value; }), m_set([value](const T& next) { *value = next; })
+        {
+        }
+        /** @brief Reads through `get` and writes through `set`. */
+        DemoValue(std::function<T()> get, std::function<void(const T&)> set)
+            : m_get(std::move(get)), m_set(std::move(set))
+        {
+        }
+
+        /** @brief The value now; a default `T` when there is no getter. */
+        [[nodiscard]] T Get() const
+        {
+            return m_get ? m_get() : T{};
+        }
+        /** @brief Writes `value`; nothing when there is no setter. */
+        void Set(const T& value) const
+        {
+            if (m_set)
+            {
+                m_set(value);
+            }
+        }
+
+      private:
+        std::function<T()> m_get;
+        std::function<void(const T&)> m_set;
+    };
+
+    /** @brief How a range row's slider maps to its value, and how the value is shown. */
+    struct DemoRangeOptions
+    {
+        /**
+         * @brief The slider's 0..1 maps to `min * (max / min)^t`, for values that span orders of magnitude. `min` and
+         * `max` must be positive; otherwise the kit logs an error and the range is linear.
+         */
+        bool logarithmic = false;
+        /** @brief The step a linear range's value snaps to from `min`; 0 for none. A logarithmic range has none. */
+        float step = 0.0f;
+        /** @brief Decimal places the value is shown with, beside the slider. */
+        int decimals = 2;
+        /** @brief The value is an angle in radians (as are `min` and `max`), shown in degrees. */
+        bool angle = false;
+    };
+
     /**
      * @brief A row of a demo section, as a handle. It names nothing once its section is gone (a scene section after
      * DemoUI::ClearScene), and then does nothing. Valid only while the DemoUI that made it is.
@@ -88,6 +155,7 @@ namespace FenrirDemo
         std::uint32_t m_id = 0;
 
         friend class DemoSection;
+        friend class DemoUI;
     };
 
     /** @brief A read-only line of a demo section (DemoSection::Text), which can be changed. */
@@ -149,6 +217,40 @@ namespace FenrirDemo
         /** @brief Adds a rule across the section, under `title` when one is given, to group the rows after it. */
         DemoRow Separator(std::string title = {}) const;
 
+        /**
+         * @name Switch rows
+         * A switch row (GLOSSARY.md) shows a label and a control bound to `value` (DemoValue). Each takes a `hint`,
+         * shown in the hint line at the panel's foot while the row is hovered or has the focus.
+         * @{
+         */
+        /** @brief A checkbox over a `bool`. */
+        DemoRow Toggle(std::string label, DemoValue<bool> value, std::string hint = {}) const;
+        /** @brief A slider over a `float` from `min` to `max`, its value shown beside it. */
+        DemoRow Range(std::string label, DemoValue<float> value, float min, float max, DemoRangeOptions options = {},
+                      std::string hint = {}) const;
+        /** @brief A slider over an `int` from `min` to `max` in steps of one, its value shown beside it. */
+        DemoRow Range(std::string label, DemoValue<int> value, int min, int max, std::string hint = {}) const;
+        /**
+         * @brief One of `options`, by index: a button for each of up to four, the chosen one with the class `active`;
+         * beyond four, a previous and next stepper (wrapping) round the chosen option's name.
+         */
+        DemoRow Choice(std::string label, DemoValue<int> value, std::vector<std::string> options,
+                       std::string hint = {}) const;
+        /**
+         * @brief A linear colour, each component 0 to 1: a swatch of it, encoded for display, over hue, saturation
+         * and value sliders.
+         */
+        DemoRow Colour(std::string label, DemoValue<Fenrir::Math::Vec3> linear, std::string hint = {}) const;
+        /** @brief A button captioned `label` that calls `pressed` when clicked. */
+        DemoRow Button(std::string label, std::function<void()> pressed, std::string hint = {}) const;
+        /**
+         * @brief A text entry over a `std::string`, written at each edit. While it has the focus it has the keyboard
+         * and text input: the scene's held keys are cancelled, F1 types into it, Escape or a click on the scene gives
+         * the keyboard back.
+         */
+        DemoRow TextEntry(std::string label, DemoValue<std::string> value, std::string hint = {}) const;
+        /** @} */
+
         /** @brief Opens or collapses the section; it starts open. */
         void SetOpen(bool open) const;
         /** @brief Whether the section is open; false once it is gone. */
@@ -165,6 +267,9 @@ namespace FenrirDemo
         DemoSection(DemoUI* ui, std::uint32_t id) : m_ui(ui), m_id(id)
         {
         }
+
+        /** @brief Adds a switch row; an empty handle once the section, or the kit, is gone. */
+        DemoRow AddSwitch(std::string label, std::shared_ptr<Detail::DemoSwitch> control, std::string hint) const;
 
         DemoUI* m_ui = nullptr;
         std::uint32_t m_id = 0;
@@ -263,6 +368,8 @@ namespace FenrirDemo
             Text,
             Readout,
             Separator,
+            /** @brief A switch row: its DemoSwitch makes its elements and keeps its control and its value in step. */
+            Switch,
         };
 
         /** @brief A row as the kit keeps it, so it can be made again in a reloaded document. */
@@ -276,6 +383,10 @@ namespace FenrirDemo
             std::string label;
             /** @brief A pulled readout's value, called once a frame. */
             std::function<std::string()> pull;
+            /** @brief A switch row's control; shared, so the listeners and the frame's sync outlive a moved row. */
+            std::shared_ptr<Detail::DemoSwitch> control;
+            /** @brief What the hint line shows while the row is hovered or has the focus. */
+            std::string hint;
             bool shown = true;
             bool disabled = false;
             /** @brief The row's element: what SetShown and SetDisabled change. */
@@ -313,6 +424,15 @@ namespace FenrirDemo
         void ApplyActiveScene() const;
         /** @brief The build stage work: the pulled readouts' values. */
         void PullReadouts();
+        /** @brief Adds a switch row to the section `section` names; an empty handle when that is gone. */
+        DemoRow AddSwitch(std::uint32_t section, std::string label, std::shared_ptr<Detail::DemoSwitch> control,
+                          std::string hint);
+        /** @brief The build stage work: each switch row's control shows its bound value. */
+        void SyncSwitches();
+        /** @brief The build stage work: the hint line shows the hovered row's hint, or the focused row's. */
+        void UpdateHint();
+        /** @brief The hint of the row `element` is in, or empty. */
+        [[nodiscard]] std::string_view HintOf(Fenrir::ElementId element) const;
         void BuildHelp();
         void ApplyOpen(const Section& section) const;
         void ApplyRow(const Row& row) const;
@@ -352,5 +472,8 @@ namespace FenrirDemo
         Fenrir::ElementId m_sceneSections;
         Fenrir::ElementId m_help;
         Fenrir::ElementId m_helpBody;
+        Fenrir::ElementId m_hint;
+        /** @brief A hover or focus change since the hint line was last set. */
+        bool m_hintDirty = true;
     };
 } // namespace FenrirDemo

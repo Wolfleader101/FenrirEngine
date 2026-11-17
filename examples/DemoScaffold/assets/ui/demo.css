@@ -38,12 +38,27 @@
     pointer-events: all;
 }
 
-/* The demo panel, on the right, scrolling when taller than the window. */
+/* The demo panel, on the right: its sections scroll when taller than the window, over the hint line at its foot. */
 #demo-panel {
     right: 16px;
     top: 16px;
     width: 360px;
     max-height: 94%;
+}
+
+#demo-panel-scroll {
+    flex-shrink: 1;
+    min-height: 0;
+    row-gap: 10px;
+}
+
+/* The hint line: the hovered or focused row's hint, under a rule; the kit takes it out of the layout while empty. */
+#demo-hint {
+    padding-top: 6px;
+    border-top-width: 1px;
+    border-top-color: var(--demo-edge);
+    color: var(--demo-ink-dim);
+    font-size: 15px;
 }
 
 #demo-panel-title {
@@ -162,6 +177,123 @@
 .demo-scene-button.active {
     border-color: var(--demo-accent);
     color: var(--demo-accent);
+}
+
+/*
+ * A switch row: its label in the readouts' column, then its control. The controls keep FenrirUI's default look, in
+ * the kit's colours.
+ */
+.demo-row {
+    flex-direction: row;
+    align-items: center;
+    column-gap: 12px;
+}
+
+.demo-row-label {
+    width: 140px;
+    flex-shrink: 0;
+    color: var(--demo-ink-dim);
+}
+
+.demo-disabled > .demo-row-label {
+    opacity: 0.6;
+}
+
+.demo-slider {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.demo-slider > slider-fill {
+    background-color: var(--demo-accent);
+}
+
+/* A range's value, beside its slider. */
+.demo-range-value {
+    width: 64px;
+    flex-shrink: 0;
+    text-align: right;
+}
+
+/* A choice's buttons, and a long choice's stepper round its option's name. */
+.demo-choice-buttons,
+.demo-stepper {
+    flex-direction: row;
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 4px;
+    row-gap: 4px;
+}
+
+.demo-choice-button,
+.demo-step-previous,
+.demo-step-next,
+.demo-button {
+    padding: 3px 8px;
+    border: 1px solid var(--demo-edge);
+    border-radius: 4px;
+    background-color: var(--demo-control);
+    color: var(--demo-ink);
+}
+
+.demo-choice-button:hover,
+.demo-step-previous:hover,
+.demo-step-next:hover,
+.demo-button:hover {
+    background-color: var(--demo-control-hover);
+}
+
+.demo-choice-button.active {
+    border-color: var(--demo-accent);
+    color: var(--demo-accent);
+}
+
+.demo-choice-name {
+    flex-grow: 1;
+    flex-shrink: 1;
+    text-align: center;
+}
+
+/* A colour: its swatch beside the label, and its hue, saturation and value sliders on the lines under them. */
+.demo-colour {
+    flex-wrap: wrap;
+    row-gap: 4px;
+}
+
+.demo-swatch {
+    flex-grow: 1;
+    height: 18px;
+    border: 1px solid var(--demo-edge);
+    border-radius: 3px;
+}
+
+.demo-colour-sliders {
+    width: 100%;
+    row-gap: 4px;
+}
+
+.demo-colour-channel {
+    flex-direction: row;
+    align-items: center;
+    column-gap: 8px;
+    padding-left: 152px;
+}
+
+.demo-colour-channel-label {
+    width: 14px;
+    color: var(--demo-ink-dim);
+}
+
+/* A button row's button, across the row. */
+.demo-button {
+    flex-grow: 1;
+}
+
+.demo-entry {
+    flex-grow: 1;
+    flex-shrink: 1;
 }
 
 /* The help: the app and the scene, then a table of key rows, the keys in a column of their own. */
