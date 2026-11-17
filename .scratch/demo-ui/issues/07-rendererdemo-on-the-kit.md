@@ -22,10 +22,10 @@
 
 **Touches:** `examples/RendererDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] No ImGui call or include remains in `examples/RendererDemo/`. No `ScreenText` remains outside the Debug draw scenes.
-- [ ] `RendererDemo-Smoke-null` passes with scripting off and on.
+- [x] No ImGui call or include remains in `examples/RendererDemo/`. No `ScreenText` remains outside the Debug draw scenes.
+- [x] `RendererDemo-Smoke-null` passes with scripting off and on.
 - [ ] Hand checks, on OpenGL:
   - the Overlay scene's label entry changes the cube's label
   - Space and C stop while the entry has the keyboard
