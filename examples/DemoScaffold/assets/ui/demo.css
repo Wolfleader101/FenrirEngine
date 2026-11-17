@@ -318,3 +318,114 @@
     flex-grow: 1;
     color: var(--demo-ink);
 }
+
+/*
+ * The demo tutorial: a card at the top centre, in a row across the window that takes no pointer input, so a press
+ * beside the card is the scene's. Debug screen text and on-screen messages draw over it. It comes in and goes out
+ * through :intro and :outro, faded and slid, and takes no press while it goes.
+ */
+#demo-tutorial-area {
+    position: absolute;
+    left: 0;
+    top: 16px;
+    width: 100%;
+    align-items: center;
+}
+
+.demo-tutorial {
+    position: relative;
+    width: 560px;
+    row-gap: 8px;
+    opacity: 1;
+    transform: translateY(0px);
+    transition-property: opacity, transform;
+    transition-duration: 0.2s;
+    transition-timing-function: ease-out;
+}
+
+.demo-tutorial:intro,
+.demo-tutorial:outro {
+    opacity: 0;
+    transform: translateY(-16px);
+}
+
+.demo-tutorial:outro {
+    pointer-events: none;
+}
+
+.demo-tutorial-header {
+    flex-direction: row;
+    column-gap: 12px;
+}
+
+.demo-tutorial-title {
+    flex-grow: 1;
+    flex-shrink: 1;
+    color: var(--demo-ink-dim);
+    font-size: 15px;
+}
+
+.demo-tutorial-progress {
+    color: var(--demo-ink-dim);
+    font-size: 15px;
+}
+
+.demo-tutorial-step-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--demo-accent);
+}
+
+.demo-tutorial-text {
+    color: var(--demo-ink);
+}
+
+/* A step's key rows, as the help's. */
+.demo-tutorial-key-row {
+    flex-direction: row;
+    column-gap: 12px;
+}
+
+.demo-tutorial-key {
+    width: 200px;
+    flex-shrink: 0;
+    color: var(--demo-accent);
+}
+
+.demo-tutorial-what {
+    flex-shrink: 1;
+    flex-grow: 1;
+    color: var(--demo-ink);
+}
+
+/* Back and Next (Done on the last step) on the left, Close on the right. */
+.demo-tutorial-buttons {
+    flex-direction: row;
+    column-gap: 6px;
+    padding-top: 4px;
+}
+
+.demo-tutorial-button {
+    padding: 3px 12px;
+    border: 1px solid var(--demo-edge);
+    border-radius: 4px;
+    background-color: var(--demo-control);
+    color: var(--demo-ink);
+}
+
+.demo-tutorial-button:hover {
+    background-color: var(--demo-control-hover);
+}
+
+.demo-tutorial-button:disabled {
+    color: var(--demo-ink-dim);
+}
+
+.demo-tutorial-next {
+    border-color: var(--demo-accent);
+    color: var(--demo-accent);
+}
+
+.demo-tutorial-close {
+    margin-left: auto;
+}

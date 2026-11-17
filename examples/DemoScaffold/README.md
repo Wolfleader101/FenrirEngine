@@ -41,7 +41,7 @@ SDL's default icon. A smoke run's hidden window gets it too.
 `Run()` runs the app and returns the process's exit code. Destroy the `DemoScaffold` before the `App`.
 
 A `DemoScene` is one entry of the app's ordered scene list: a `name`, its `keyRows` for the help (or a one-line
-`keyHelp`, which the help shows as one row), the `keys` a smoke run presses, where the free-fly camera starts, a `spawn` function and an optional per-frame `update` (in `Update`, on the
+`keyHelp`, which the help shows as one row), an optional `tutorial` (a demo tutorial, below), the `keys` a smoke run presses, where the free-fly camera starts, a `spawn` function and an optional per-frame `update` (in `Update`, on the
 main thread). Each time a scene is entered it is spawned into a FenrirScene of its own, named after it; leaving it
 destroys that FenrirScene, and the assets the scene loaded for itself (owned by the scene) go with it.
 
@@ -131,6 +131,34 @@ type: the scaffold feeds it. The scaffold adds it as the `DemoUI` app resource o
   (the keys below), then the app's (`DemoConfig::appKeyRows`, or `appKeyHelp` as one F2 row), then the scene's
   (`DemoScene::keyRows`, or `keyHelp` as one row). The scaffold sets it each time a scene is entered (`SetHelp`). While
   the kit shows, the help is logged as `Help: ...` lines when it is set and when F1 shows it.
+- **Demo tutorials** (`GLOSSARY.md`): a `DemoTutorial{title, steps}` of `DemoTutorialStep{title, text, keys, done}`
+  shows one step at a time in a card at the top centre (`ShowTutorial(tutorial)`, `CloseTutorial()`,
+  `IsTutorialShown()`): the tutorial's title and the step's number, the step's title, its text and its key rows
+  (`DemoKeyRow`s, as the help's), and Back (disabled on the first step), Next (Done on the last, which closes it) and
+  Close. Escape closes it too, unless a text entry of the kit has the focus; the scene sees that Escape as well
+  (unless a control of the kit has the focus), so a scene that acts on Escape itself checks `IsTutorialShown()`. A step's `done`, when given, is asked once a
+  frame while the step shows, in the kit's build stage work after the scenes' `Update`: true moves to the next step,
+  or closes the tutorial after the last, so a step can end itself on what it teaches. A click on the card gives the
+  keyboard back to the scene, so a step's keys work at once. Only the card's box takes the pointer: a press on it sends
+  no `DemoSceneClickEvent`, and one beside it does. Debug screen text and the on-screen messages draw over it. It comes
+  in and goes out through `:intro` and `:outro` (`.demo-tutorial` in `demo.css`, faded and slid; it takes no press
+  while it goes). F1 hides it with the rest of the kit, and it goes on there: its steps' `done` are still asked. The
+  tutorial is the scene's: `ClearScene` closes it, its card going at once rather than through its outro, and a closed
+  tutorial's `done` is not asked again, so a step may hold pointers into the scene's state.
+
+  The scaffold feeds it from `DemoScene::tutorial`: it shows the first time the scene is entered in a run, and not on
+  later entries, and never in a smoke run or with `FENRIR_DEMO_KEYS`, which no one watches. A scene with a tutorial
+  gets a section titled after it, before the sections its `spawn` adds, holding a Tutorial button that shows it again
+  from its first step. A C# scene's tutorial is on its C++ `DemoScene` entry.
+
+  ```cpp
+  scene.tutorial = FenrirDemo::DemoTutorial{
+      .title = "Lit cube",
+      .steps = {{.title = "The scenes", .text = "PageDown and PageUp step through them.",
+                 .keys = {{"PageDown/PageUp", "the next or previous scene"}}},
+                {.title = "The light", .text = "Press L to rotate the light.", .keys = {{"L", "rotate the light"}},
+                 .done = [](Fenrir::App& app) { return app.GetResource<Fenrir::Keyboard>().JustPressed(Fenrir::Key::L); }}}};
+  ```
 - **F1** hides or shows all of the kit (`SetVisible`, `IsVisible`), even while one of its controls has the focus,
   unless that is a text entry; a held F1 toggles once. While another root has the focus (UIDemo's open menu), that root
   has the keyboard and F1 with it. Hidden, the kit takes no input and gives up the focus.
@@ -140,7 +168,8 @@ type: the scaffold feeds it. The scaffold adds it as the `DemoUI` app resource o
   a click on the scene. A focused text entry also has text input and takes F1 as its own; Escape blurs it, as does a
   click on the scene. The root takes no gamepad input (`UIRootConfig::gamepadNavigation` off), so a pad always drives
   the scene. The window's text input follows the kit's `textInput` claim (`WindowConfig::textInputByDefault` is false).
-- **Files and hot reload:** `assets/ui/demo.ui` (the containers, by id) and `assets/ui/demo.css` (the one theme: its
+- **Files and hot reload:** `assets/ui/demo.ui` (the containers, by id, the tutorial card's `#demo-tutorial-area` among
+  them) and `assets/ui/demo.css` (the one theme: its
   custom properties, `--demo-ink`, `--demo-panel`, `--demo-accent` and the rest, are on `#demo-kit`; text is FenrirText's
   embedded default face). `fenrir_add_demo_app` copies them into every app's asset root, but while the source tree is
   there the kit reads them from it (the scaffold's `FENRIR_DEMO_SOURCE_ASSETS`), with hot reload on except in a smoke
@@ -254,4 +283,11 @@ and one with a non-positive `min` logged and linear, an integer range and an ang
 buttons and one of five as a wrapping stepper, a colour row's sliders setting the colour with the swatch following, a
 button's function, a disabled row's control, a text entry typed in claiming the keyboard (a held W cancelled, F1 typed
 into it) with a click on the scene or Escape giving it back, the hint line following the hover and then the focus,
-and the gamepad's directions reaching the game while a slider has the focus.
+and the gamepad's directions reaching the game while a slider has the focus; and demo tutorials
+(`Tests/DemoTutorials.cpp`): a tutorial shown on its scene's first entry with its title and text and not on the second,
+never in a smoke run or with `FENRIR_DEMO_KEYS`, Next stepping on with Done on the last step closing it and its card
+going after its outro, Back stepping back and disabled on the first step, Close and Escape closing it (Escape after a
+click on the card too), the scene's keys reaching the game right after Close, a step's `done` asked each frame and
+moving it on and closing it after the last, a closed tutorial's `done` no longer asked, the scene's Tutorial button
+showing it again from step one (and restarting one that shows, in the same card), no button for a scene with no
+tutorial, and the card at the top centre, taking a press while one beside it reaches the scene.

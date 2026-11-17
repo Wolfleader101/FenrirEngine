@@ -17,4 +17,8 @@
 
     <!-- The help, at the bottom left: its title collapses it; under it the app and scene, then the key rows. -->
     <panel id="demo-help" class="demo-box"/>
+
+    <!-- The demo tutorial's card, at the top centre while a tutorial shows: the kit makes it in this row across the
+         window, which takes no pointer input itself. -->
+    <panel id="demo-tutorial-area"/>
 </panel>

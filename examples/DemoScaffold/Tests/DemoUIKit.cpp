@@ -23,28 +23,6 @@ namespace
     // Left of the window's centre, clear of the panel on the right and the help at the bottom left.
     const Fenrir::Math::Vec2 besidePanels{500.0f, 200.0f};
 
-    // How many scene clicks a left click at `position` sends: read the frame of the press, as an event lasts only so
-    // long.
-    std::size_t SceneClicksAt(DemoTestApp& test, Fenrir::Math::Vec2 position)
-    {
-        Fenrir::EventReader<FenrirDemo::DemoSceneClickEvent> clicks;
-        (void)clicks.Read(test.app);
-        Fenrir::InputFeed& feed = test.app.GetResource<Fenrir::InputFeed>();
-        feed.MouseMove(mainWindow, position, {0.0f, 0.0f});
-        test.Frames();
-        feed.MouseButtonDown(mainWindow, Fenrir::MouseButton::Left);
-        test.Frames();
-        std::size_t count = 0;
-        for (const FenrirDemo::DemoSceneClickEvent& event : clicks.Read(test.app))
-        {
-            (void)event;
-            ++count;
-        }
-        feed.MouseButtonUp(mainWindow, Fenrir::MouseButton::Left);
-        test.Frames();
-        return count;
-    }
-
     // A scene whose spawn adds a scene section titled `section` holding one line.
     FenrirDemo::DemoScene SceneWithSection(std::string name, std::string section)
     {
@@ -105,13 +83,13 @@ TEST_CASE("F1 hides the kit, whose panels then take no press, and shows it again
     INFO("F1 hides the kit");
     REQUIRE_FALSE(test.Kit().IsVisible());
     INFO("where the panel was, the press is the scene's");
-    REQUIRE(SceneClicksAt(test, panel) == 1);
+    REQUIRE(test.SceneClicksAt(panel) == 1);
 
     test.Tap(Fenrir::Key::F1);
     INFO("F1 again shows it");
     REQUIRE(test.Kit().IsVisible());
     INFO("and the panel takes the press again");
-    REQUIRE(SceneClicksAt(test, panel) == 0);
+    REQUIRE(test.SceneClicksAt(panel) == 0);
 }
 
 TEST_CASE("F1 hides the kit while one of its buttons has the focus", "[demo][kit][f1]")
@@ -139,9 +117,9 @@ TEST_CASE("A press on the demo panel sends no scene click, and one beside it doe
     test.Frames(2);
 
     INFO("the panel takes the press");
-    REQUIRE(SceneClicksAt(test, test.Centre(test.Kit().Root().FindById("demo-panel"))) == 0);
+    REQUIRE(test.SceneClicksAt(test.Centre(test.Kit().Root().FindById("demo-panel"))) == 0);
     INFO("beside the panels the press is the scene's");
-    REQUIRE(SceneClicksAt(test, besidePanels) == 1);
+    REQUIRE(test.SceneClicksAt(besidePanels) == 1);
 }
 
 TEST_CASE("A right-drag beside the demo panel still turns the free-fly camera", "[demo][kit][camera]")

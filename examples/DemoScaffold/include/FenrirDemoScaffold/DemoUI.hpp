@@ -5,6 +5,7 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -47,6 +48,35 @@ namespace FenrirDemo
         std::string what;
 
         friend bool operator==(const DemoKeyRow&, const DemoKeyRow&) = default;
+    };
+
+    /** @brief One step of a demo tutorial (GLOSSARY.md): a title, a few lines of text and the keys it teaches. */
+    struct DemoTutorialStep
+    {
+        /** @brief The step's title, over its text. */
+        std::string title;
+        /** @brief What the step says. */
+        std::string text;
+        /** @brief The keys the step teaches, as the help shows key rows; may be empty. */
+        std::vector<DemoKeyRow> keys;
+        /**
+         * @brief Whether the step is done, asked once a frame while the step shows, in the kit's build stage work
+         * (after the scenes' Update). True moves the tutorial to its next step, or closes it after its last. Empty,
+         * the step moves on by hand only (Next).
+         */
+        std::function<bool(Fenrir::App&)> done;
+    };
+
+    /**
+     * @brief A demo tutorial (GLOSSARY.md): a scene's ordered steps, shown one at a time in a card at the top centre
+     * (DemoUI::ShowTutorial).
+     */
+    struct DemoTutorial
+    {
+        /** @brief The tutorial's title, at the card's top over every step. */
+        std::string title;
+        /** @brief The steps, in order; a tutorial with none never shows. */
+        std::vector<DemoTutorialStep> steps;
     };
 
     /** @brief How the kit is made. */
@@ -356,6 +386,24 @@ namespace FenrirDemo
          */
         void SetHelp(std::string heading, std::vector<DemoKeyRow> rows);
 
+        /**
+         * @brief Shows `tutorial` from its first step in the tutorial card, at the top centre: the tutorial's title,
+         * the step's title, text and key rows, and Back, Next (Done on the last step) and Close. A tutorial that shows
+         * already is replaced. Escape closes it too, unless a text entry of the kit has the focus; the scene sees that
+         * Escape as well, unless a control of the kit has the focus. A click on the card
+         * gives the keyboard back to the scene, so a step's keys work at once. The card comes in through `:intro` and
+         * goes out through `:outro` (demo.css). The tutorial is the scene's: ClearScene closes it, and its steps'
+         * `done` are not asked once it is closed, so they may hold pointers into the scene's state.
+         */
+        void ShowTutorial(DemoTutorial tutorial);
+        /** @brief Closes the tutorial that shows, if one does; its card goes out through its outro. */
+        void CloseTutorial();
+        /** @brief Whether a tutorial shows (while the kit is hidden too). */
+        [[nodiscard]] bool IsTutorialShown() const noexcept
+        {
+            return m_tutorial.has_value();
+        }
+
       private:
         friend class DemoRow;
         friend class DemoTextRow;
@@ -445,6 +493,26 @@ namespace FenrirDemo
         /** @brief A key the kit's focused element saw: F1 toggles the kit, unless that element is a text entry. */
         void OnKey(Fenrir::Key key);
 
+        /** @brief What a click on the tutorial card's buttons does, applied in the build stage work. */
+        enum class TutorialAction : std::uint8_t
+        {
+            Back,
+            Next,
+            Close,
+        };
+        /** @brief Makes the tutorial card's elements for the step that shows, or removes the card when none does. */
+        void BuildTutorial();
+        /** @brief Shows step `step` of the tutorial, or closes it past the last. */
+        void ShowTutorialStep(std::size_t step);
+        /** @brief Takes the tutorial card away: at once when `immediate`, else through its outro. */
+        void RemoveTutorialCard(bool immediate);
+        /** @brief Ends the tutorial that shows, if any, and takes its card away (RemoveTutorialCard). */
+        void EndTutorial(bool immediate);
+        /** @brief The build stage work: Escape from the game's keyboard and a click on the card's buttons. */
+        void ApplyTutorialInput();
+        /** @brief The build stage work: the step that shows is asked whether it is done. */
+        void AskTutorialDone();
+
         [[nodiscard]] Section* FindSection(std::uint32_t id);
         [[nodiscard]] Row* FindRow(std::uint32_t id);
 
@@ -475,5 +543,17 @@ namespace FenrirDemo
         Fenrir::ElementId m_hint;
         /** @brief A hover or focus change since the hint line was last set. */
         bool m_hintDirty = true;
+        /** @brief The tutorial that shows, if one does. */
+        std::optional<DemoTutorial> m_tutorial;
+        /** @brief The index of the step that shows. */
+        std::size_t m_tutorialStep = 0;
+        /** @brief A click on the card's buttons not yet applied. */
+        std::optional<TutorialAction> m_tutorialAction;
+        /** @brief Counts the tutorial's changes, so a `done` that changed it is not taken as its step's answer. */
+        std::uint32_t m_tutorialChanges = 0;
+        /** @brief The card's container, the document's `#demo-tutorial-area`. */
+        Fenrir::ElementId m_tutorialArea;
+        /** @brief The card, made while a tutorial shows. */
+        Fenrir::ElementId m_tutorialCard;
     };
 } // namespace FenrirDemo

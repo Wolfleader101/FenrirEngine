@@ -196,6 +196,30 @@ namespace DemoScaffoldTests
             Frames();
         }
 
+        /**
+         * @brief How many scene clicks a left click at `position` sends: read the frame of the press, as an event lasts
+         * only so long.
+         */
+        std::size_t SceneClicksAt(Fenrir::Math::Vec2 position)
+        {
+            Fenrir::EventReader<FenrirDemo::DemoSceneClickEvent> clicks;
+            (void)clicks.Read(app);
+            Fenrir::InputFeed& feed = app.GetResource<Fenrir::InputFeed>();
+            feed.MouseMove(Fenrir::WindowId{1}, position, {0.0f, 0.0f});
+            Frames();
+            feed.MouseButtonDown(Fenrir::WindowId{1}, Fenrir::MouseButton::Left);
+            Frames();
+            std::size_t count = 0;
+            for (const FenrirDemo::DemoSceneClickEvent& event : clicks.Read(app))
+            {
+                (void)event;
+                ++count;
+            }
+            feed.MouseButtonUp(Fenrir::WindowId{1}, Fenrir::MouseButton::Left);
+            Frames();
+            return count;
+        }
+
         /** @brief Runs `count` frames of one tick each. */
         void Frames(int count = 1)
         {

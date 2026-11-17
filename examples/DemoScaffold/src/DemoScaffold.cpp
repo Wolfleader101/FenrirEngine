@@ -310,6 +310,8 @@ namespace FenrirDemo
             std::optional<std::size_t> current;
             // Scene entries so far, which a C# scene's CSharpScene marker carries.
             std::uint32_t entries = 0;
+            // The scenes entered so far in the run, by index: a scene's tutorial shows on its first entry only.
+            std::vector<bool> entered;
             // The scene a click on the scene switcher picked, entered at the next BeforeTicks.
             std::optional<std::size_t> picked;
 
@@ -456,6 +458,15 @@ namespace FenrirDemo
                     scene.AddResource<CSharpScene>(CSharpScene{demoScene.csharpScene, entries});
                 }
 
+                // The scene's Tutorial button first, so its section comes before the scene's own.
+                if (DemoUI* demoUI = Kit(); demoUI != nullptr && demoScene.tutorial)
+                {
+                    demoUI->SceneSection(demoScene.name)
+                        .Button(
+                            "Tutorial", [demoUI, &demoScene] { demoUI->ShowTutorial(*demoScene.tutorial); },
+                            "Shows the scene's tutorial again from its first step");
+                }
+
                 // The free-fly camera first, so the scene can find it.
                 Fenrir::EntityList& entities = scene.GetEntityList();
                 freeFly = entities.CreateEntity();
@@ -483,6 +494,15 @@ namespace FenrirDemo
                     demoUI->SetHelp(config.appName + ": " + demoScene.name + " (" + std::to_string(index + 1) + "/" +
                                         std::to_string(config.scenes.size()) + ")",
                                     HelpRows(demoScene));
+                }
+                // A run that presses keys by itself is watched by no one, so it shows no tutorial.
+                entered.resize(config.scenes.size());
+                const bool first = !entered[index];
+                entered[index] = true;
+                if (DemoUI* demoUI = Kit();
+                    demoUI != nullptr && demoScene.tutorial && first && !Smoke() && !run.pressKeys)
+                {
+                    demoUI->ShowTutorial(*demoScene.tutorial);
                 }
             }
 
