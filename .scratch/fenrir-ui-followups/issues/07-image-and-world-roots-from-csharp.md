@@ -12,11 +12,12 @@
 
 **Touches:** `packages/FenrirUI/Scripting/`, `packages/FenrirUI/Managed/Fenrir.UI/`, `packages/FenrirUI/README.md`, `docs/adr/0061-the-ui-stack-is-native-in-fenrirtext-fenrirpainter-and-fenrirui-and-csharp-is-a-client-through-generated-bindings.md`, `GLOSSARY.md`, `examples/UIDemo/scripts/`, `examples/UIDemo/assets/ui/`, `examples/UIDemo/README.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] From C#, an image root of 256 by 128 gives a non-empty image of that size, a label in it records draws, and `Destroy` unloads the image.
-- [ ] From C#, a world root on a quad entity hovers and clicks a button by ray, and the click reaches C# as a `UIEvent`.
-- [ ] `GetImage` on a window root is empty; `SetPointerRay` on a window root is a no-op warned once; `CreateWorldRoot` on an entity without `WorldQuad2D` gives an invalid root warned once.
-- [ ] Releasing the script generation ends the roots and targets it made.
-- [ ] The binding's generated files are up to date (the generator's check passes).
-- [ ] Hand check: in UIDemo with scripting on, the sign's button lights on hover and logs on click.
+- [x] From C#, an image root of 256 by 128 gives a non-empty image of that size, a label in it records draws, and `Destroy` unloads the image.
+- [x] From C#, a world root on a quad entity hovers and clicks a button by ray, and the click reaches C# as a `UIEvent`.
+- [x] `GetImage` on a window root is empty; `SetPointerRay` on a window root is a no-op warned once; `CreateWorldRoot` on an entity without `WorldQuad2D` gives an invalid root warned once.
+- [x] Releasing the script generation ends the roots and targets it made.
+- [x] The binding's generated files are up to date (the generator's check passes).
+
+Hand check: in UIDemo with scripting on, the C# sign beside the name plate lights its button under the cursor and logs "UIDemo (C#): the C# sign was clicked" on a click, and takes no hover while the menu is open or the right mouse button turns the camera.

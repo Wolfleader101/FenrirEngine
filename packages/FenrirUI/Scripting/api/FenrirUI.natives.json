@@ -36,6 +36,164 @@
       ]
     },
     {
+      "name": "CreateImageRoot",
+      "namespace": "Fenrir::UINatives",
+      "source": "../src/UIScripting.cpp",
+      "state": "Fenrir::UIScripting",
+      "doc": "Makes a UI root drawing into an image of its own, which lives until it is destroyed, the script is released or the UI ends; the image is unloaded with it.",
+      "facade": "UIRoot.CreateImageRoot",
+      "facadeReturns": "root",
+      "returns": {
+        "type": "void",
+        "kind": "void",
+        "doc": "The root; none without a UI installed or an asset store."
+      },
+      "parameters": [
+        {
+          "name": "settings",
+          "type": "const Fenrir::ScriptUI::ImageRootSettings*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptUI::ImageRootSettings",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "root",
+          "type": "Fenrir::UIRootId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::UIRootId",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The root made."
+        }
+      ]
+    },
+    {
+      "name": "CreateWorldRoot",
+      "namespace": "Fenrir::UINatives",
+      "source": "../src/UIScripting.cpp",
+      "state": "Fenrir::UIScripting",
+      "doc": "Makes a UI root on the entity's WorldQuad2D, its pointer the ray the script gives it each frame (SetPointerRay). It lives until it is destroyed, the script is released or the UI ends; the game keeps the entity while it lives.",
+      "facade": "UIRoot.CreateWorldRoot",
+      "facadeReturns": "root",
+      "returns": {
+        "type": "void",
+        "kind": "void",
+        "doc": "The root; none without a UI installed, or for an entity that is not alive or has no WorldQuad2D."
+      },
+      "parameters": [
+        {
+          "name": "settings",
+          "type": "const Fenrir::ScriptUI::WorldRootSettings*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptUI::WorldRootSettings",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "root",
+          "type": "Fenrir::UIRootId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::UIRootId",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The root made."
+        }
+      ]
+    },
+    {
+      "name": "GetImage",
+      "namespace": "Fenrir::UINatives",
+      "source": "../src/UIScripting.cpp",
+      "state": "Fenrir::UIScripting",
+      "doc": "The image an image root draws into, which any image asset can be, a material's texture say.",
+      "facade": "UIRoot.GetImage",
+      "facadeReturns": "image",
+      "returns": {
+        "type": "void",
+        "kind": "void",
+        "doc": "The image; empty for a root not drawing into an image, or a destroyed one."
+      },
+      "parameters": [
+        {
+          "name": "root",
+          "type": "const Fenrir::UIRootId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::UIRootId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "image",
+          "type": "Fenrir::AssetHandle<Fenrir::Image>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Image>",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The image."
+        }
+      ]
+    },
+    {
+      "name": "SetPointerRay",
+      "namespace": "Fenrir::UINatives",
+      "source": "../src/UIScripting.cpp",
+      "state": "Fenrir::UIScripting",
+      "doc": "Gives a world root its pointer for this frame (UIRoot::SetPointerRay): `ray`, in world space, and whether its left button is `pressed`. The root hovers, presses and clicks where the ray meets its quad; a held press follows the ray past the quad's edges. Call it once a frame, from an Update system.",
+      "facade": "UIRoot.SetPointerRay",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the pointer is over one of its elements that takes pointer input, or a press is held on one; false, doing nothing, on a root not on a world quad."
+      },
+      "parameters": [
+        {
+          "name": "root",
+          "type": "const Fenrir::UIRootId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::UIRootId",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "ray",
+          "type": "const Fenrir::Math::Ray*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Ray",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "pressed",
+          "type": "bool",
+          "kind": "bool"
+        }
+      ]
+    },
+    {
+      "name": "ClearPointerRay",
+      "namespace": "Fenrir::UINatives",
+      "source": "../src/UIScripting.cpp",
+      "state": "Fenrir::UIScripting",
+      "doc": "Takes a world root's pointer away for this frame: it hovers nothing, and a held press is released as cancelled, with no click. As SetPointerRay with no ray.",
+      "facade": "UIRoot.ClearPointerRay",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "False, as the root has no pointer; false too on a root not on a world quad, doing nothing."
+      },
+      "parameters": [
+        {
+          "name": "root",
+          "type": "const Fenrir::UIRootId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::UIRootId",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
       "name": "FindRoot",
       "namespace": "Fenrir::UINatives",
       "source": "../src/UIScripting.cpp",

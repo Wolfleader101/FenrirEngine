@@ -11,7 +11,9 @@
 #include "FenrirUI/ElementId.hpp"
 #include "FenrirUI/UIEvent.hpp"
 #include "FenrirUI/UIRoot.hpp"
+#include "FenrirAssetsScripting/AssetMappings.hpp"
 #include "FenrirScripting/BoundMappings.hpp"
+#include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 #include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
 #include "../../../../FenrirInput/Scripting/include/FenrirInputScripting/Generated/FenrirInputMappings.hpp"
 #include "../../../../FenrirAssets/Scripting/include/FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
@@ -20,6 +22,19 @@
 
 #include <cstdint>
 #include <string_view>
+
+static_assert(sizeof(Fenrir::AssetHandle<Fenrir::Image>) == 8 && alignof(Fenrir::AssetHandle<Fenrir::Image>) == 4,
+              "Fenrir::AssetHandle<Fenrir::Image> is not the layout FenrirUIScripting.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::EnumMapping<Fenrir::ColourSpace>
+{
+    static constexpr std::string_view typeName = "Fenrir.UI.ColourSpace";
+};
+static_assert(sizeof(Fenrir::ColourSpace) == 1 && alignof(Fenrir::ColourSpace) == 1,
+              "Fenrir::ColourSpace is not the layout FenrirUIScripting.api.json describes: "
+              "regenerate the description, then this binding");
 
 template <>
 struct Iris::EnumMapping<Fenrir::Cursor>
@@ -56,6 +71,10 @@ static_assert(sizeof(Fenrir::ElementId) == 8 && alignof(Fenrir::ElementId) == 4,
               "Fenrir::ElementId is not the layout FenrirUIScripting.api.json describes: "
               "regenerate the description, then this binding");
 
+static_assert(sizeof(Fenrir::Math::Vec3) == 12 && alignof(Fenrir::Math::Vec3) == 4,
+              "Fenrir::Math::Vec3 is not the layout FenrirUIScripting.api.json describes: "
+              "regenerate the description, then this binding");
+
 static_assert(sizeof(Fenrir::Math::Vec2) == 8 && alignof(Fenrir::Math::Vec2) == 4,
               "Fenrir::Math::Vec2 is not the layout FenrirUIScripting.api.json describes: "
               "regenerate the description, then this binding");
@@ -79,6 +98,23 @@ static_assert(sizeof(Fenrir::ScaleRule) == 1 && alignof(Fenrir::ScaleRule) == 1,
               "regenerate the description, then this binding");
 
 template <>
+struct Iris::StructMapping<Fenrir::ScriptUI::ImageRootSettings>
+{
+    static constexpr std::string_view typeName = "Fenrir.UI.ImageRootSettings";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<std::uint32_t>("Width", 0),
+        Iris::Field<std::uint32_t>("Height", 4),
+        Iris::Field<Fenrir::ColourSpace>("ColourSpace", 8),
+        Iris::Field<Fenrir::ScaleRule>("ScaleRule", 9),
+        Iris::Field<bool>("SnapToPixels", 10),
+        Iris::Field<bool>("DefaultStylesheet", 11),
+        Iris::Field<bool>("HotReload", 12));
+};
+static_assert(sizeof(Fenrir::ScriptUI::ImageRootSettings) == 16 && alignof(Fenrir::ScriptUI::ImageRootSettings) == 4,
+              "Fenrir::ScriptUI::ImageRootSettings is not the layout FenrirUIScripting.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
 struct Iris::StructMapping<Fenrir::ScriptUI::RootSettings>
 {
     static constexpr std::string_view typeName = "Fenrir.UI.RootSettings";
@@ -94,6 +130,22 @@ struct Iris::StructMapping<Fenrir::ScriptUI::RootSettings>
 };
 static_assert(sizeof(Fenrir::ScriptUI::RootSettings) == 20 && alignof(Fenrir::ScriptUI::RootSettings) == 4,
               "Fenrir::ScriptUI::RootSettings is not the layout FenrirUIScripting.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fenrir::ScriptUI::WorldRootSettings>
+{
+    static constexpr std::string_view typeName = "Fenrir.UI.WorldRootSettings";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<Fenrir::Entity>("Entity", 0),
+        Iris::Field<Fenrir::ScaleRule>("ScaleRule", 16),
+        Iris::Field<bool>("SnapToPixels", 17),
+        Iris::Field<bool>("DefaultStylesheet", 18),
+        Iris::Field<bool>("HotReload", 19),
+        Iris::Field<bool>("VirtualCursor", 20));
+};
+static_assert(sizeof(Fenrir::ScriptUI::WorldRootSettings) == 24 && alignof(Fenrir::ScriptUI::WorldRootSettings) == 8,
+              "Fenrir::ScriptUI::WorldRootSettings is not the layout FenrirUIScripting.api.json describes: "
               "regenerate the description, then this binding");
 
 template <>

@@ -15,8 +15,10 @@
 // The extension shares the Fenrir.UI contract assembly, which fenrir_deploy_scripting(<target> EXTENSIONS UI) copies
 // next to an executable with the contracts it builds on. C# names UI roots by UIRoot (the mirror of UIRootId,
 // the root's id) and their elements by ElementId, through natives on UIRoot for every UIRoot call a script needs:
-// making, removing and moving elements, names, classes, inline style, text, control values, rectangles, queries,
-// focus, and loading documents and stylesheets by path. UIEvent is an engine event, read through EventReader<UIEvent>.
+// making roots on a window, in an image or on a world quad (the extension makes the target, the root holds it, and the
+// script generation's release destroys the image and world roots it made), a world root's pointer ray, making,
+// removing and moving elements, names, classes, inline style, text, control values, rectangles, queries, focus, and
+// loading documents and stylesheets by path. UIEvent is an engine event, read through EventReader<UIEvent>.
 // The extension hosts two stages: Fenrir.UI.Build, UIRoots' build stage, where a C# system makes and changes elements
 // for the frame's layout; and Fenrir.UI.Paint, UIRoots' paint stage, where a C# system gets a painter for an element
 // (UIRoot.PaintInto), lent through the painter extension and taken back as the stage ends, and paints into the element

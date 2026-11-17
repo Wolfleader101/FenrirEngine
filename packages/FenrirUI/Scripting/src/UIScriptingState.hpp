@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -41,6 +42,14 @@ namespace Fenrir
         /** @brief Warned when the extension was made without the painter extension's state: it gives no painter. */
         static constexpr std::string_view NoPainterExtension =
             "the UI extension was made without the painter extension, so it gives no painter";
+        /** @brief Warned when an image root is asked for in an app with no asset store: it makes no root. */
+        static constexpr std::string_view NoAssetStore =
+            "the app has no asset store (Assets::Install was not called), so it makes no image root";
+        /** @brief Warned when a world root is asked for on an entity without a WorldQuad2D: it makes no root. */
+        static constexpr std::string_view NoWorldQuad = "the entity has no WorldQuad2D, so it makes no world root";
+        /** @brief Warned for a pointer ray given to a root not on a world quad: the native does nothing. */
+        static constexpr std::string_view TakesNoRay =
+            "the root takes no pointer ray (it is not on a world quad), so it does nothing";
 
         /** @brief A painter lent for one element in the running paint stage. */
         struct Lent
@@ -78,6 +87,23 @@ namespace Fenrir
         }
 
         /**
+         * @brief The root `root` names when it takes a pointer ray (it is on a world quad), or null, warning once
+         * under the calling native's name when there is no root or it takes no ray.
+         */
+        UIRoot* RayRootOf(const CallContext& context, const UIRootId& root)
+        {
+            UIRoot* found = RootOf(context, root);
+            if (found == nullptr)
+            {
+                return nullptr;
+            }
+            const UITarget* target = found->GetConfig().target.get();
+            const NativeGuard guard(context, warnings);
+            return guard.Require(target != nullptr && target->TakesPointerRay() ? found : nullptr,
+                                 std::string(TakesNoRay));
+        }
+
+        /**
          * @brief The root `root` names when `element` is alive in it, or null, warning once under the calling native's
          * name when the root or the element is not there.
          */
@@ -90,6 +116,26 @@ namespace Fenrir
             }
             const NativeGuard guard(context, warnings);
             return guard.Require(found->IsAlive(element) ? found : nullptr, std::string(NoElement));
+        }
+
+        /**
+         * @brief Destroys every image and world root the released script generation made that is still there: each
+         * root holds its target, so the image is unloaded and the world target ends with it.
+         */
+        void EndMadeRoots(App& app)
+        {
+            if (UIRoots* roots = app.TryGetResource<UIRoots>())
+            {
+                for (UIRoot* root : roots->GetRoots())
+                {
+                    if (std::find(generationRoots.begin(), generationRoots.end(), root->GetId()) !=
+                        generationRoots.end())
+                    {
+                        (void)roots->DestroyRoot(*root);
+                    }
+                }
+            }
+            generationRoots.clear();
         }
 
         /** @brief Takes back every painter lent in the stage that is ending: their ids paint nothing from now on. */
@@ -113,6 +159,11 @@ namespace Fenrir
         std::vector<BuildStageHandle> placedBuild;
         /** @brief What placeStages put in the paint stage for the loaded script: its groups and the stage's end. */
         std::vector<PaintStageHandle> placedPaint;
+        /**
+         * @brief The image and world roots the loaded script generation made (CreateImageRoot, CreateWorldRoot), which
+         * its release destroys, less those Destroy ended. Its window roots are the game's to keep, as before.
+         */
+        std::vector<UIRootId> generationRoots;
         /** @brief The loaded script's stage changes, played back as each stage ends. */
         std::optional<StageChanges> changes;
         /** @brief What the natives have warned about, so that each place warns once. */

@@ -21,7 +21,7 @@ generated = "../../Managed/Fenrir.Renderer/Generated"
 
 [cpp]
 mappings = "../include/FenrirRendererScripting/Generated/FenrirRendererMappings.hpp"
-includes = ["FenrirRenderer/Components.hpp", "FenrirRenderer/Renderer.hpp"]
+includes = ["FenrirRenderer/Components.hpp", "FenrirRenderer/Renderer.hpp", "FenrirRenderer/WorldTargets2D.hpp"]
 
 [registration]
 source = "../src/Generated/FenrirRendererRegistration.cpp"
