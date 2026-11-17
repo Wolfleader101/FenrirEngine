@@ -259,8 +259,9 @@ namespace RendererDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Cameras and render targets";
-        scene.keyHelp = "L: layout (one view, side by side, one over the other). O: the minimap's order, over or under "
-                        "the main views. P: the main views' projection, perspective or orthographic.";
+        scene.keyRows = {{"L", "layout (one view, side by side, one over the other)"},
+                         {"O", "the minimap's order, over or under the main views"},
+                         {"P", "the main views' projection, perspective or orthographic"}};
         scene.keys = {Fenrir::Key::L, Fenrir::Key::P, Fenrir::Key::O, Fenrir::Key::L,
                       Fenrir::Key::O, Fenrir::Key::P, Fenrir::Key::L};
         scene.spawn = Spawn;

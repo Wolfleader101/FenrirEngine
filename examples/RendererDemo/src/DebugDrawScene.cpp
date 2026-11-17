@@ -299,8 +299,10 @@ namespace RendererDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Debug draw";
-        scene.keyHelp = "1, 2, 3: show or hide the Wire, Solid and Labels groups. T: a sphere for three seconds. F: an "
-                        "arrow kept forever. X: clear the forever arrows.";
+        scene.keyRows = {{"1, 2, 3", "show or hide the Wire, Solid and Labels groups"},
+                         {"T", "a sphere for three seconds"},
+                         {"F", "an arrow kept forever"},
+                         {"X", "clear the forever arrows"}};
         scene.keys = {Fenrir::Key::Num1, Fenrir::Key::Num2, Fenrir::Key::Num3, Fenrir::Key::T,    Fenrir::Key::F,
                       Fenrir::Key::F,    Fenrir::Key::X,    Fenrir::Key::Num1, Fenrir::Key::Num2, Fenrir::Key::Num3};
         scene.camera.position = {0.0f, 6.0f, 27.0f};
@@ -315,6 +317,8 @@ namespace RendererDemo
         // The C++ scene's name, keys and camera; C# spawns, draws and runs everything else.
         FenrirDemo::DemoScene scene = DebugDrawing();
         scene.name = "Debug draw (C#)";
+        // scripts/DebugDrawPanel.razor's slot: its group switches, which 1, 2 and 3 work too.
+        scene.razorPanel = "debug-draw-razor";
         scene.spawn = nullptr;
         scene.update = nullptr;
         scene.csharpScene = DebugDrawingCSharpScene;
