@@ -20,7 +20,9 @@
 #include "FenrirRenderer/SpawnModel.hpp"
 #include "FenrirRenderer/WorldTargets2D.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "FenrirUI/UI.hpp"
 #include "FenrirUI/UIRoot.hpp"
+#include "FenrirUI/UITarget.hpp"
 #include "UIDemo.hpp"
 
 namespace UIDemo
@@ -219,6 +221,23 @@ namespace UIDemo
             scene.AddResource<RoomState>(std::move(state));
         }
 
+        /**
+         * @brief Whether the pointer ray of any world root is over one of its elements: the terminal's, or one a script
+         * made and aims (the C# variant's sign), whose clicks are not shots either.
+         */
+        bool AnyWorldRootAimed(Fenrir::App& app)
+        {
+            const auto* roots = app.TryGetResource<Fenrir::UIRoots>();
+            if (roots == nullptr)
+            {
+                return false;
+            }
+            return std::ranges::any_of(roots->GetRoots(), [](const Fenrir::UIRoot* root) {
+                const Fenrir::UITarget* target = root->GetConfig().target.get();
+                return target != nullptr && target->TakesPointerRay() && root->GetHovered().IsValid();
+            });
+        }
+
         /** @brief The camera drawing into the main window: the enabled one of highest order. Null when none is. */
         Fenrir::Entity WindowCamera(Fenrir::Scene& scene)
         {
@@ -249,8 +268,8 @@ namespace UIDemo
         }
 
         /**
-         * @brief The game's side of the player: firing, reloading, taking hits and stamina. A click on the terminal
-         * (`aimed` at it) is the terminal's, not a shot.
+         * @brief The game's side of the player: firing, reloading, taking hits and stamina. A click on the terminal,
+         * or on another world root's element (`aimed` at it), is that root's, not a shot.
          */
         void RunPlayer(Fenrir::App& app, RoomState& state, Hud& hud, float delta, float cameraSpeed, bool aimed)
         {
@@ -385,7 +404,8 @@ namespace UIDemo
                     ray = Fenrir::Renderer::ScreenPointToRay(app, camera, mouse.Position());
                     pressed = mouse.IsDown(Fenrir::MouseButton::Left);
                 }
-                aimed = world->Update(ray, pressed);
+                // A script's world root takes its ray in its own system, so its hover may be the last frame's.
+                aimed = world->Update(ray, pressed) || AnyWorldRootAimed(app);
                 for (const Fenrir::Entity& lamp : state->lamps)
                 {
                     lamp.GetComponent<Fenrir::PointLight>().colour = world->GetLightColour();

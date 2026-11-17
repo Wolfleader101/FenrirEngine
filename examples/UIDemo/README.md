@@ -135,7 +135,8 @@ imports `Fenrir.UI.Razor.InRepo.props`, so its `.razor` files are compiled by th
   and one button. Each frame it gives the root a ray from the window's camera through the cursor
   (`Renderer.ScreenPointToRay`) with the left button's state (`UIRoot.SetPointerRay`), under the terminal's rules: no
   ray (`ClearPointerRay`) while the menu is open, while a window root has the pointer, or while the right mouse button
-  turns the camera. A click on its button logs "UIDemo (C#): the C# sign was clicked". The root ends when the script
+  turns the camera. A click on its button logs "UIDemo (C#): the C# sign was clicked", and is not a shot: the room
+  counts a click over any world root's element as that root's. The root ends when the script
   generation is released, and the system destroys the quad's entity as it goes, so a reload makes a new sign. Logged
   once: "the C# sign is beside the name plate, a world root made from C#".
 - **The menu's clicks** (`scripts/MenuClicks.cs`): an Update system reads `UIEvent`s through `EventReader<UIEvent>`,
@@ -233,5 +234,5 @@ On OpenGL, in The HUD:
   `Settings.razor.css` with the menu open restyles the page; rebuilding the scripts brings the page back after the
   reload. Built without scripting, the pause panel is centred alone, as before.
 - With scripting built, the C# sign stands beside the name plate: its button lights under the cursor, a click on it
-  logs "UIDemo (C#): the C# sign was clicked", and it takes no hover while the menu is open or the right mouse button
-  turns the camera.
+  logs "UIDemo (C#): the C# sign was clicked" without firing (no hit marker, the ammo unchanged), and it takes no hover
+  while the menu is open or the right mouse button turns the camera.
