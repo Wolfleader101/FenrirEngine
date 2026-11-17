@@ -462,7 +462,19 @@ namespace Fenrir::Detail
             const float span = to.offset - from.offset;
             const float local = span > 0.0f ? std::clamp((progress - from.offset) / span, 0.0f, 1.0f) : 1.0f;
             const TimingFunction& ease = from.timing != nullptr ? *from.timing : timing;
-            MixField(property, *from.values, *to.values, ease.Apply(local), out);
+            if (!TakesColour(property))
+            {
+                MixField(property, *from.values, *to.values, ease.Apply(local), out);
+                return;
+            }
+            // Colours mix as what currentcolor resolves to: the cascaded color.
+            ResolvedStyle a;
+            ResolvedStyle b;
+            CopyProperty(property, *from.values, a);
+            CopyProperty(property, *to.values, b);
+            ResolveCurrentColour(property, a, underlying.color);
+            ResolveCurrentColour(property, b, underlying.color);
+            MixField(property, a, b, ease.Apply(local), out);
         }
     } // namespace
 
@@ -574,9 +586,11 @@ namespace Fenrir::Detail
             }
             const auto existing = std::find_if(running.begin(), running.end(),
                                                [&](const RunningTransition& t) { return t.property == property; });
-            // The value it shows now: part way through a running transition, or its old cascaded value.
+            // The value it shows now: part way through a running transition, or its old cascaded value. A colour runs
+            // between what currentcolor resolved to on each side: the old and the new cascaded color.
             ResolvedStyle current;
             CopyProperty(property, before, current);
+            ResolveCurrentColour(property, current, before.color);
             if (existing != running.end())
             {
                 ApplyTransition(*existing, current);
@@ -592,12 +606,15 @@ namespace Fenrir::Detail
             transition.delay = At(after.transitionDelay, entry[p], 0.0f);
             transition.timing = At(after.transitionTimingFunction, entry[p], TimingFunction::Ease());
             // As CSS: a transition that would end before it starts does not run, nor one to the value it shows.
-            if (transition.duration + transition.delay <= 0.0f || SameField(property, current, after))
+            ResolvedStyle target;
+            CopyProperty(property, after, target);
+            ResolveCurrentColour(property, target, after.color);
+            if (transition.duration + transition.delay <= 0.0f || SameField(property, current, target))
             {
                 continue;
             }
             CopyProperty(property, current, transition.from);
-            CopyProperty(property, after, transition.to);
+            CopyProperty(property, target, transition.to);
             running.push_back(std::move(transition));
         }
     }

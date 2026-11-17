@@ -186,6 +186,46 @@ TEST_CASE("Margin, padding, gap and the border lists expand from one to four val
     REQUIRE(Expand("gap: 5px 10%;") == Declarations{{"row-gap", "5px"}, {"column-gap", "10%"}});
 }
 
+TEST_CASE("Inset expands from one to four values into top, right, bottom and left", "[ui][stylesheet]")
+{
+    INFO("two values are top and bottom, then right and left");
+    REQUIRE(Expand("inset: 1px 2px;") ==
+            Declarations{{"top", "1px"}, {"right", "2px"}, {"bottom", "1px"}, {"left", "2px"}});
+    INFO("one is every side");
+    REQUIRE(Expand("inset: 0;") == Declarations{{"top", "0"}, {"right", "0"}, {"bottom", "0"}, {"left", "0"}});
+    const Fenrir::Stylesheet five = Fenrir::Stylesheet::Parse("panel {\n  inset: 1px 2px 3px 4px 5px;\n}\n", "five");
+    INFO("five values are refused on their line, setting no side");
+    REQUIRE(HasDiagnosticOnLine(five, 2, "inset"));
+    REQUIRE(five.rules.at(0).declarations.empty());
+}
+
+TEST_CASE("Border-image expands into its source and slice, and refuses what FenrirUI has no longhand for",
+          "[ui][stylesheet]")
+{
+    INFO("a source and a slice are the two longhands");
+    REQUIRE(Expand("border-image: url(frame.png) 12;") ==
+            Declarations{{"border-image-source", "url(frame.png)"}, {"border-image-slice", "12"}});
+    INFO("up to four slices go to the slice, and a slice left out is its initial 0");
+    REQUIRE(Expand("border-image: url(frame.png) 1 2 3 4;")[1] ==
+            std::pair<std::string, std::string>{"border-image-slice", "1 2 3 4"});
+    REQUIRE(Expand("border-image: url(frame.png);")[1] ==
+            std::pair<std::string, std::string>{"border-image-slice", "0"});
+    const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse("panel {\n"
+                                                               "  border-image: url(frame.png) 12 / 4px;\n"
+                                                               "  border-image: url(frame.png) 12 round;\n"
+                                                               "  border-image: url(frame.png) 1 2 3 4 5;\n"
+                                                               "}\n",
+                                                               "refused");
+    INFO("a width or outset after a slash is refused, naming the two longhands FenrirUI has");
+    REQUIRE(HasDiagnosticOnLine(sheet, 2, "border-image-source"));
+    REQUIRE(HasDiagnosticOnLine(sheet, 2, "border-image-slice"));
+    INFO("so is a repeat keyword");
+    REQUIRE(HasDiagnosticOnLine(sheet, 3, "border-image-slice"));
+    INFO("and five slices");
+    REQUIRE(HasDiagnosticOnLine(sheet, 4, "border-image"));
+    REQUIRE(sheet.rules.at(0).declarations.empty());
+}
+
 TEST_CASE("Border-radius expands from the top-left corner round", "[ui][stylesheet]")
 {
     INFO("two values are the top-left and bottom-right, then the other two");
@@ -211,10 +251,10 @@ TEST_CASE("Border sets every side's width and colour, and no style is no border"
                                                                  {"border-right-color", "#ff0000"},
                                                                  {"border-bottom-color", "#ff0000"},
                                                                  {"border-left-color", "#ff0000"}});
-    INFO("a style with no width is CSS's medium, 3px, and no colour is the initial one");
+    INFO("a style with no width is CSS's medium, 3px, and no colour is the initial one, currentcolor");
     const Declarations styleOnly = Expand("border: dashed;");
     REQUIRE(styleOnly[0] == std::pair<std::string, std::string>{"border-top-width", "3px"});
-    REQUIRE(styleOnly[4] == std::pair<std::string, std::string>{"border-top-color", "black"});
+    REQUIRE(styleOnly[4] == std::pair<std::string, std::string>{"border-top-color", "currentcolor"});
     INFO("with the style none, or none given, the widths are zero, as CSS computes them");
     REQUIRE(Expand("border: none;")[0] == std::pair<std::string, std::string>{"border-top-width", "0"});
     REQUIRE(Expand("border: 4px red;")[0] == std::pair<std::string, std::string>{"border-top-width", "0"});

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "BoxPainting.hpp"
 #include "Cascade.hpp"
@@ -77,6 +78,16 @@ namespace Fenrir
             return {x0, y0, x1 - x0, y1 - y0};
         }
 
+        bool SameShadows(const std::vector<Shadow>& a, const std::vector<Shadow>& b)
+        {
+            const auto same = [](const Shadow& x, const Shadow& y) {
+                return x.offset == y.offset && x.blur == y.blur && x.spread == y.spread && x.inset == y.inset &&
+                       x.colour.r == y.colour.r && x.colour.g == y.colour.g && x.colour.b == y.colour.b &&
+                       x.colour.a == y.colour.a;
+            };
+            return std::equal(a.begin(), a.end(), b.begin(), b.end(), same);
+        }
+
         /** @brief Whether `a` and `b` differ in a property children inherit. */
         bool InheritedDiffer(const ResolvedStyle& a, const ResolvedStyle& b)
         {
@@ -118,6 +129,7 @@ namespace Fenrir
                 if (parent != nullptr)
                 {
                     Detail::Inherit(parent->resolved, style);
+                    style.textShadow = parent->inheritedTextShadow;
                     custom = parent->customProperties;
                 }
                 Detail::Cascade(state, index, style, custom);
@@ -139,6 +151,7 @@ namespace Fenrir
                     Detail::Inherit(style, part);
                     std::shared_ptr<const Detail::CustomProperties> partCustom = slot.customProperties;
                     Detail::Cascade(state, index, part, partCustom, pseudoElement);
+                    Detail::ResolveCurrentColour(part);
                 };
                 if (dynamic_cast<const TextEntry*>(slot.element.get()) != nullptr)
                 {
@@ -170,7 +183,12 @@ namespace Fenrir
             {
                 ResolvedStyle shown = slot.cascaded;
                 Detail::ApplyMotion(slot.motion, shown);
-                inheritedChanged = InheritedDiffer(shown, slot.resolved) || customChanged;
+                // A text shadow's currentcolor resolves to each element's own colour, so children inherit it
+                // unresolved.
+                const bool textShadowChanged = !SameShadows(shown.textShadow, slot.inheritedTextShadow);
+                slot.inheritedTextShadow = shown.textShadow;
+                Detail::ResolveCurrentColour(shown);
+                inheritedChanged = InheritedDiffer(shown, slot.resolved) || textShadowChanged || customChanged;
                 slot.resolved = std::move(shown);
                 state.layout.ApplyStyle(slot.node, slot.resolved);
                 UpdateTextStyle(state, slot);

@@ -17,6 +17,23 @@
 
 namespace Fenrir
 {
+    /**
+     * @brief CSS's `currentcolor` as a colour of the style: the element's own `color`. It is kept through the cascade
+     * and replaced by the `color` the element shows after its transitions and animations, every frame, so it follows
+     * a `color` transition; a transition from or to it mixes the colours it resolved to. `color: currentcolor` is
+     * `color: inherit`. The initial border colours and a shadow's, a text shadow's and a drop shadow's colour left out
+     * are it. A resolved style (UIRoot::GetResolvedStyle) never holds it; a StyleDeclarations may. Not a real colour:
+     * every channel is -1.
+     */
+    inline constexpr Colour CurrentColour{-1.0f, -1.0f, -1.0f, -1.0f};
+
+    /** @brief Whether `colour` is CurrentColour. */
+    [[nodiscard]] constexpr bool IsCurrentColour(const Colour& colour) noexcept
+    {
+        return colour.r == CurrentColour.r && colour.g == CurrentColour.g && colour.b == CurrentColour.b &&
+               colour.a == CurrentColour.a;
+    }
+
     /** @brief What a Length's value counts: nothing (`auto`, or `none` for a maximum), UI units (`px`), or percent. */
     enum class LengthUnit : std::uint8_t
     {
@@ -183,7 +200,7 @@ namespace Fenrir
     /**
      * @brief `scrollbar-color` on a scroll view: `auto`, which leaves the bars' colours to their `::scrollbar-thumb`
      * and `::scrollbar` styles, or a thumb colour then a track colour (straight alpha), which win over those styles'
-     * background colours. Not inherited.
+     * background colours; either may be CurrentColour, the scroll view's own `color`. Not inherited.
      */
     struct ScrollbarColor
     {
@@ -293,8 +310,8 @@ namespace Fenrir
         float radius = 0.0f;
         /** @brief Where a drop shadow is drawn from the element. */
         Math::Vec2 offset{0.0f};
-        /** @brief A drop shadow's colour, straight alpha; black when left out. */
-        Colour colour = Colour::Black;
+        /** @brief A drop shadow's colour, straight alpha; CurrentColour when left out. */
+        Colour colour = CurrentColour;
 
         /** @brief `blur(radius)`. */
         [[nodiscard]] static FilterStep Blur(float radius)
@@ -499,15 +516,16 @@ namespace Fenrir
         AssetHandle<Image> borderImageSource;
         /** @brief `border-image-slice`: the nine-slice insets, in the image's pixels. */
         Sides borderImageSlice;
-        Colour borderTopColor = Colour::Black;
-        Colour borderRightColor = Colour::Black;
-        Colour borderBottomColor = Colour::Black;
-        Colour borderLeftColor = Colour::Black;
+        /** @brief The border colours, straight alpha; initially CurrentColour, the text's colour, as CSS. */
+        Colour borderTopColor = CurrentColour;
+        Colour borderRightColor = CurrentColour;
+        Colour borderBottomColor = CurrentColour;
+        Colour borderLeftColor = CurrentColour;
         float borderTopLeftRadius = 0.0f;
         float borderTopRightRadius = 0.0f;
         float borderBottomRightRadius = 0.0f;
         float borderBottomLeftRadius = 0.0f;
-        /** @brief `box-shadow`: outset shadows, the first drawn on top, as CSS. */
+        /** @brief `box-shadow`: outset shadows, the first drawn on top, as CSS; a colour left out is CurrentColour. */
         std::vector<Shadow> boxShadow;
         /**
          * @brief `backdrop-filter: blur(r)`: what is already drawn under the border box blurred by `r` UI units (a
@@ -569,7 +587,8 @@ namespace Fenrir
         /**
          * @brief `text-shadow`: the text drawn again under itself, offset and tinted, the first on top, as CSS. A
          * shadow with a blur draws its runs inside an offscreen group blurred by it, bounded by the paragraph's box at
-         * the shadow's offset grown by the blur; with UISettings::offscreenGroups off every shadow draws sharp.
+         * the shadow's offset grown by the blur; with UISettings::offscreenGroups off every shadow draws sharp. A
+         * colour left out is CurrentColour, which an inheriting element resolves to its own colour.
          */
         std::vector<Shadow> textShadow;
         /** @brief `white-space`: Normal wraps at the width, NoWrap keeps one line; both collapse spaces. */

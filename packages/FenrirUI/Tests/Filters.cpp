@@ -151,14 +151,15 @@ TEST_CASE("filter reads its functions in the order written, or none, into the re
 
     INFO("drop-shadow() with only its offset is taken");
     REQUIRE(root.SetStyleProperty(panel, "filter", "drop-shadow(-1px 2px)"));
+    REQUIRE(root.SetStyleProperty(panel, "color", "blue"));
     test.Frame();
     {
         const std::vector<FilterStep>& filter = FilterOf(root, panel);
-        INFO("a drop shadow with no blur or colour is sharp and black");
+        INFO("a drop shadow with no blur or colour is sharp and in the text colour, currentcolor");
         REQUIRE(filter.size() == 1);
         REQUIRE(filter[0].offset == Fenrir::Math::Vec2(-1.0f, 2.0f));
         REQUIRE(filter[0].radius == 0.0f);
-        REQUIRE(Same(filter[0].colour, Fenrir::Colour::Black));
+        REQUIRE(Same(filter[0].colour, Fenrir::Colour::Blue));
     }
 
     INFO("a list of both is taken");

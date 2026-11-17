@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -151,6 +152,37 @@ TEST_CASE("The terminal's hue slider, dragged by the ray, turns the lamps' hue")
     REQUIRE(Same(LampColour(demo), world.GetLightColour()));
     REQUIRE(root.GetText(root.FindById("reading")).starts_with("Hue "));
     INFO("nothing logged an error");
+    INFO("the demo logged no error");
+    REQUIRE(demo.errors->empty());
+}
+
+TEST_CASE(
+    "The terminal fills its root by inset, its swatch's border follows the reading's colour, and the plate is framed")
+{
+    DemoApp demo;
+    demo.Frames(3);
+    UIDemo::WorldUI& world = demo.app.GetResource<UIDemo::WorldUI>();
+    const Fenrir::UIRoot& terminal = *world.TerminalRoot();
+    INFO("inset: 0 lays the terminal's glass over its whole 800 by 500 root");
+    const Fenrir::Rect2D glass = terminal.GetBoxes(terminal.FindById("terminal")).border;
+    REQUIRE(glass == Fenrir::Rect2D{0.0f, 0.0f, 800.0f, 500.0f});
+
+    Click(world, "cool");
+    demo.Frames(60);
+    const Fenrir::Colour cool = Fenrir::Colour::FromSrgb(UIDemo::WorldUI::CoolLight);
+    const auto near = [](const Fenrir::Colour& a, const Fenrir::Colour& b) {
+        return std::abs(a.r - b.r) < 1e-3f && std::abs(a.g - b.g) < 1e-3f && std::abs(a.b - b.b) < 1e-3f &&
+               std::abs(a.a - b.a) < 1e-3f;
+    };
+    INFO("once its transition ends the reading is the cool light's colour, and so is the swatch's currentcolor border");
+    REQUIRE(near(terminal.GetResolvedStyle(terminal.FindById("reading"))->color, cool));
+    REQUIRE(near(terminal.GetResolvedStyle(terminal.FindById("swatch"))->borderTopColor, cool));
+
+    INFO("the plate's border-image shorthand loads its frame, 40 pixels a corner");
+    const Fenrir::UIRoot& plate = *world.PlateRoot();
+    const Fenrir::ResolvedStyle* plateStyle = plate.GetResolvedStyle(plate.FindById("plate"));
+    REQUIRE_FALSE(plateStyle->borderImageSource.IsEmpty());
+    REQUIRE(plateStyle->borderImageSlice.top == 40.0f);
     INFO("the demo logged no error");
     REQUIRE(demo.errors->empty());
 }

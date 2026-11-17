@@ -19,10 +19,13 @@
     color: var(--ink);
 }
 
-/* The terminal: a rounded glass panel, its corners and its content cut by the shader's clip at any angle. */
+/*
+ * The terminal: a rounded glass panel, its corners and its content cut by the shader's clip at any angle. It is laid
+ * out over its whole root by inset: 0.
+ */
 #terminal {
-    width: 100%;
-    height: 100%;
+    position: absolute;
+    inset: 0;
     padding: 36px 44px;
     row-gap: 28px;
     border: 3px solid var(--edge);
@@ -43,12 +46,19 @@
     font-weight: bold;
 }
 
+/*
+ * The swatch and the reading are in the lamps' colour, which the demo sets as their color. The swatch's border, given
+ * no colour, is currentcolor, so it follows the reading's colour through its transition; its fill is the same colour,
+ * half seen.
+ */
 #swatch {
     width: 120px;
     height: 56px;
-    border: 3px solid var(--edge);
+    border: 3px solid;
     border-radius: 28px;
-    background-color: #ffd8a8;
+    color: #ffd8a8;
+    background-color: rgba(255, 216, 168, 0.5);
+    transition: color 0.3s ease-out, background-color 0.3s ease-out;
 }
 
 .presets {
@@ -114,10 +124,14 @@
 
 .reading {
     font-size: 34px;
-    color: var(--ink-dim);
+    color: #ffd8a8;
+    transition: color 0.3s ease-out;
 }
 
-/* The name plate: over the capsule, taking no pointer input. */
+/*
+ * The name plate: over the capsule, taking no pointer input. Its frame is a nine-sliced image, a rim and a glow whose
+ * 40-pixel corners match its radius, given by the border-image shorthand.
+ */
 #plate {
     width: 100%;
     height: 100%;
@@ -126,6 +140,7 @@
     row-gap: 6px;
     border-radius: 40px;
     background-color: rgba(8, 14, 22, 0.7);
+    border-image: url(ui/plate-frame.png) 40;
     pointer-events: none;
 }
 

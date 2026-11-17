@@ -105,6 +105,15 @@ namespace Fenrir::Detail
 
     /** @brief Copies every inherited property of `parent` to `style`. */
     void Inherit(const ResolvedStyle& parent, ResolvedStyle& style);
+
+    /** @brief Whether `property` takes a colour, and so may hold CurrentColour. */
+    [[nodiscard]] bool TakesColour(StyleProperty property) noexcept;
+
+    /** @brief Replaces each CurrentColour in `property`'s field of `style` by `colour`; other properties are left. */
+    void ResolveCurrentColour(StyleProperty property, ResolvedStyle& style, const Colour& colour);
+
+    /** @brief Replaces every CurrentColour in `style` by its own `color`, as it is shown. */
+    void ResolveCurrentColour(ResolvedStyle& style);
 } // namespace Fenrir::Detail
 
 // Every property: its enumerator, its CSS name, its ResolvedStyle field and the parser that reads it. The table drives
