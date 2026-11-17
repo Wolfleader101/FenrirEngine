@@ -91,6 +91,11 @@ namespace FenrirDemo
         bool hotReload = true;
         /** @brief The root's 2D target: the tests' seam, which captures it. Null draws on the main window's overlay. */
         std::shared_ptr<Fenrir::UITarget> target;
+        /**
+         * @brief Scripts run, which can mount a Razor panel into a scene slot (SceneSlot). False, each slot shows a
+         * note that its panel needs scripting.
+         */
+        bool scripting = false;
     };
 
     class DemoUI;
@@ -366,8 +371,17 @@ namespace FenrirDemo
         /** @brief Adds a section of the active scene's to the demo panel, after the app's sections and the scene's. */
         DemoSection SceneSection(std::string title);
         /**
-         * @brief Removes every scene section: the scaffold calls it when a scene is left, before its FenrirScene goes,
-         * so a row bound to the scene's state never outlives it.
+         * @brief Adds a demo slot (GLOSSARY.md) of the active scene's to the demo panel, after the app's sections and
+         * the scene's: an empty element of class `demo-slot` with the id `id`, which a script finds by that id and
+         * mounts a Razor panel into (ADR-0072). ClearScene removes it, with what was mounted in it. With no script to
+         * mount into it (DemoUIConfig::scripting false), it shows a muted note that the panel needs scripting. A
+         * reloaded `demo.ui` makes it again under the same id, empty. Logs an error, and adds nothing, for an empty id
+         * or one a slot has already.
+         */
+        void SceneSlot(std::string id);
+        /**
+         * @brief Removes every scene section and slot: the scaffold calls it when a scene is left, before its
+         * FenrirScene goes, so a row bound to the scene's state never outlives it.
          */
         void ClearScene();
 
@@ -451,6 +465,8 @@ namespace FenrirDemo
             bool scene = false;
             /** @brief The scene switcher, whose body holds the scene buttons rather than rows. */
             bool switcher = false;
+            /** @brief A demo slot's id: the slot is an element of this id, with no heading and no rows. */
+            std::string slot;
             bool open = true;
             std::vector<Row> rows;
             Fenrir::ElementId element;
@@ -479,7 +495,10 @@ namespace FenrirDemo
         void SyncSwitches();
         /** @brief The build stage work: the hint line shows the hovered row's hint, or the focused row's. */
         void UpdateHint();
-        /** @brief The hint of the row `element` is in, or empty. */
+        /**
+         * @brief The hint of the row `element` is in, or empty: a kit row's, or the text of the `.demo-row-hint` child
+         * of a `.demo-row` a script made in a scene slot.
+         */
         [[nodiscard]] std::string_view HintOf(Fenrir::ElementId element) const;
         void BuildHelp();
         void ApplyOpen(const Section& section) const;

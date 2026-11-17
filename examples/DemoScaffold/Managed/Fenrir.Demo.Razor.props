@@ -1,0 +1,34 @@
+<Project>
+  <!--
+    The demo UI kit's shared Razor components (examples/DemoScaffold/README.md, "C# scenes"; ADR-0072), for every demo
+    app's scripts project. fenrir_add_demo_app adds this file to each one it builds (-p:CustomAfterMicrosoftCommonTargets),
+    and a project may import it itself too, for an editor, which passes nothing.
+
+      * It imports Fenrir.UI.Razor.InRepo.props (FenrirUI's README, "Razor components"), unless the project has already.
+      * A project with .razor files of its own also gets the components in Fenrir.Demo.Razor/ (DemoSection, Readout,
+        Toggle, Range, Choice and ColourRow, in the namespace Fenrir.Demo.Razor), compiled into it as its own are: a
+        Razor component must be compiled into the script that mounts it (ADR-0068).
+      * A project with no .razor of its own builds exactly as before.
+  -->
+  <PropertyGroup>
+    <FenrirDemoRazorDir>$(MSBuildThisFileDirectory)Fenrir.Demo.Razor\</FenrirDemoRazorDir>
+  </PropertyGroup>
+  <!-- FenrirRazorDir is Fenrir.UI.Razor.props's own, set when the project imported it. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../packages/FenrirUI/Managed/Fenrir.UI.Razor.InRepo.props"
+          Condition="'$(FenrirRazorDir)' == ''" />
+
+  <!-- _FenrirRazorComponent is the project's own .razor files (Fenrir.UI.Razor.props), which these never join. -->
+  <ItemGroup Condition="'@(_FenrirRazorComponent)' != ''">
+    <_FenrirDemoRazorComponent Include="$(FenrirDemoRazorDir)*.razor" />
+  </ItemGroup>
+
+  <!-- Razor's generator places a file by its TargetPath, base-64 encoded as the Razor SDK writes it: these go under
+       Fenrir.Demo.Razor/ at the project's root, under the project's imports, and each names its own namespace. -->
+  <Target Name="_FenrirDemoRazorComponents" BeforeTargets="GenerateMSBuildEditorConfigFileShouldRun;GenerateMSBuildEditorConfigFile"
+          Condition="'@(_FenrirDemoRazorComponent)' != ''">
+    <ItemGroup>
+      <AdditionalFiles Include="@(_FenrirDemoRazorComponent)"
+                       TargetPath="$([MSBuild]::ConvertToBase64('Fenrir.Demo.Razor/%(_FenrirDemoRazorComponent.Filename)%(_FenrirDemoRazorComponent.Extension)'))" />
+    </ItemGroup>
+  </Target>
+</Project>

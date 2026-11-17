@@ -18,10 +18,14 @@ public struct Burst : IEvent
     public int Count;
 }
 
-// R reverses every spin. Space starts a burst of sparks.
+// R reverses every spin, and [ and ] slow it and speed it up, through the SpinDial (Spin.cs) the Razor panel shows.
+// Space starts a burst of sparks.
 [System(Phase.Update, Order = 5)]
 public sealed class Controls : ISystem
 {
+    // What [ and ] divide and multiply the spin's speed by.
+    private const float SpeedStep = 1.5f;
+
     // Remembers which key events this system has already handled, so each is handled once.
     private readonly EventReader<KeyEvent> keys = new();
 
@@ -35,9 +39,18 @@ public sealed class Controls : ISystem
 
             if (key.Key == Key.R)
             {
-                foreach (var (entity, spin) in context.Query<Spin>())
-                    spin.RadiansPerSecond = -spin.RadiansPerSecond;
+                foreach (var (_, dial) in context.Query<SpinDial>())
+                    dial.Reversed = dial.Reversed != 0 ? 0 : 1;
                 context.Log.Info("R: reversed the spin.");
+            }
+            else if (key.Key is Key.LeftBracket or Key.RightBracket)
+            {
+                float by = key.Key == Key.RightBracket ? SpeedStep : 1.0f / SpeedStep;
+                foreach (var (_, dial) in context.Query<SpinDial>())
+                {
+                    dial.Speed = Math.Clamp(dial.Speed * by, SpinDial.MinSpeed, SpinDial.MaxSpeed);
+                    context.Log.Info($"{(by > 1 ? "]" : "[")}: the spin's speed is x{dial.Speed:0.00}.");
+                }
             }
             else if (key.Key == Key.Space)
             {

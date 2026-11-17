@@ -23,6 +23,10 @@ set(expected
     "C\\+\\+ saw a burst of 5 sparks sent from C#\\."
     # Sparks.cs: Expired, the event only C# defines.
     "Spark [0-9]+ burnt out\\."
+    # ShowcasePanelSetup.cs: the Razor panel, mounted into Showcase's demo slot.
+    "ScriptingDemo: the Razor panel is in Showcase's demo slot"
+    # Controls.cs: ] speeds the spin up through the dial the panel shows (the line starts with "]:", left out here).
+    "the spin's speed is x1\\.50\\."
     # Culling.cs: the renderer's GPU culling switched off from C#, and what the cull passes drew read from C#.
     "G: GPU culling off; [0-9]+ of [0-9]+ instances drawn\\."
 )

@@ -122,6 +122,23 @@
     color: var(--demo-ink-dim);
 }
 
+/* A demo slot, where a script mounts a Razor panel: laid out as the sections are. Without scripting it holds the note
+   that its panel needs it, a muted line. */
+.demo-slot {
+    row-gap: 10px;
+}
+
+/* A row a shared Razor component makes keeps its hint in a label of its own, which the kit reads for the hint line. */
+.demo-row-hint {
+    display: none;
+}
+
+.demo-slot-note {
+    padding: 0 8px;
+    color: var(--demo-ink-dim);
+    font-size: 15px;
+}
+
 /* A readout: its label in a column of its own, then its live value. */
 .demo-readout {
     flex-direction: row;

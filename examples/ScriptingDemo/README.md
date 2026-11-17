@@ -23,7 +23,8 @@ above it, and each spark's where it is.
 
 | You see | What it shows | Where |
 |---|---|---|
-| Both boxes turn about the Y axis. `R` reverses them. | A **component defined in C#** (`Spin`, nothing registered anywhere); a C# **system** that **queries** an engine component (`Transform`) together with it and writes the engine's memory directly. | `Spin.cs` |
+| Both boxes turn about the Y axis. `R` reverses them, and `[` and `]` slow them down and speed them up. | A **component defined in C#** (`Spin`, nothing registered anywhere); a C# **system** that **queries** an engine component (`Transform`) together with it and writes the engine's memory directly. How they turn is one `SpinDial`, another C# component. | `Spin.cs`, `Controls.cs` |
+| The demo panel's "Spin (Razor)" section: a Reversed toggle, a logarithmic Speed range and a readout of the sparks alive, styled like the C++ rows. | **A Razor panel in a demo slot**: `ShowcasePanel.razor`, built from the demo UI kit's shared Razor components (`examples/DemoScaffold/README.md`, "C# scenes"), mounted into the slot Showcase asks for (`razorPanel`) by a C# system, from `OnCreate` and again on each entry. It reads and writes the `SpinDial` through `Context`, so the panel and the keys agree. | `ShowcasePanel.razor`, `ShowcasePanelSetup.cs` |
 | Box 2 bobs up and down, and its name above it keeps changing (`Box 2 (bob phase 3.75)`). | **A component shared between C++ and C#**: `Bob` is declared in C++, mirrored in C# with `[NativeComponent]`, and checked field by field at load. C++ sets how it looks, C# animates it and writes `Phase`, and a C++ system reads `Phase` back into the entity's `Name`. One copy of the data, nothing converted. | `Bobbing.cs`, `Showcase.cpp` |
 | `R: reversed the spin.` in the log when you press R. | **An event from C++ to C#**: FenrirInput's C++ `KeyEvent`, read from C# unchanged (`Fenrir.Input.KeyEvent`). | `Controls.cs` |
 | Press `Space`: five `Spark N` names appear in a row above the boxes and vanish a couple of seconds later. | **Creating and destroying entities from C#**, giving them components and names, and **changes landing between systems** (the `Dresser` sees the sparks the `Spawner` made a moment before, the `Reaper`'s destroys never disturb its own loop). | `Sparks.cs` |
@@ -39,7 +40,8 @@ handles each event once, whichever language sent it. `Bob` and `Burst` are the a
 
 | Key | Does |
 |---|---|
-| `R` | Reverses the boxes' spin. |
+| `R` | Reverses the boxes' spin (the panel's Reversed toggle). |
+| `[` / `]` | Slows the spin down or speeds it up, by half again each press, from x0.10 to x10 (the panel's Speed range). |
 | `Space` | A burst of five sparks. |
 | `G` | Turns the renderer's GPU culling off, or back on, and logs what the cull passes drew. |
 
@@ -58,9 +60,10 @@ See "Hot reload" in `packages/FenrirScripting/README.md`. Smoke runs turn hot re
 ## Smoke runs
 
 CTest runs `ScriptingDemo-Smoke-null` and `ScriptingDemo-Smoke-opengl`, as for every demo app, and
-`ScriptingDemo-Showcase-null` and `ScriptingDemo-Showcase-opengl`: 900 frames of Showcase with R, Space and G pressed,
-which pass only if the log has the lines above (the spin, `Bob.Phase` read by C++, the key event, the burst, a burnt-out
-spark and the culling switch with its count; `cmake/CheckShowcaseLog.cmake`).
+`ScriptingDemo-Showcase-null` and `ScriptingDemo-Showcase-opengl`: 900 frames of Showcase with R, Space, G and ]
+pressed, which pass only if the log has the lines above (the spin, `Bob.Phase` read by C++, the key event, the burst, a
+burnt-out spark, the Razor panel mounted in its slot, `]: the spin's speed is x1.50.` and the culling switch with its
+count; `cmake/CheckShowcaseLog.cmake`).
 
 ## Hand checks
 
@@ -71,6 +74,13 @@ spark and the culling switch with its count; `cmake/CheckShowcaseLog.cmake`).
 - The upper box bobs up and down, and the name above it, `Box 2 (bob phase …)`, counts up as it does; the log
   says `C++ read Bob.Phase = …, which C# wrote into the same component.` once.
 - R reverses both spins, and the log says `R: reversed the spin.`; R again turns them back.
+- The demo panel shows a "Spin (Razor)" section after the app's sections, laid out and styled like the C++ sections: a
+  Reversed checkbox, a Speed slider with `1.00` beside it, and Sparks alive `0`; the log says `ScriptingDemo: the Razor
+  panel is in Showcase's demo slot`. Its heading collapses and opens it.
+- Clicking Reversed reverses the boxes, and R ticks and unticks it. Dragging Speed changes how fast they turn (the
+  slider is logarithmic: its middle is x1), and `[` and `]` move the slider and its value. Hovering a row shows its hint
+  at the panel's foot.
+- Space makes Sparks alive count up to 5 and back down to 0 as they burn out.
 - Space puts five `Spark N` names in a row above the boxes, logs `C++ saw a burst of 5 sparks sent from C#.`, and
   over the next two to four seconds each name vanishes as `Spark N burnt out.` is logged. Several presses number the
   sparks on (`Spark 6`, `Spark 7`…).

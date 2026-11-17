@@ -12,13 +12,18 @@
 # Fenrir.Assets, Fenrir.Renderer, Fenrir.DebugDraw and the scaffold's Fenrir.Demo, whose folders it gets as -p:Fenrir<Name>ContractDir=,
 # and Fenrir.Physics's, Fenrir.Skeleton's, Fenrir.Animation's, Fenrir.Text's, Fenrir.Painter's and Fenrir.UI's too when
 # their scripting extensions are built (the scaffold installs the last three for every app), with the Razor components' folder,
-# -p:FenrirUIRazorContractDir=, for a project that imports Fenrir.UI.Razor.InRepo.props),
+# -p:FenrirUIRazorContractDir=), with Fenrir.Demo.Razor.props added (-p:CustomAfterMicrosoftCommonTargets=), which
+# imports Fenrir.UI.Razor.InRepo.props and gives a project with .razor files of its own the scaffold's shared Razor
+# components (examples/DemoScaffold/Managed/Fenrir.Demo.Razor),
 # and copied to `scripts/` beside the executable, with the contracts and what scripting needs at run time; the app's
 # sources get FENRIR_DEMO_SCRIPT_ASSEMBLY, its path relative to the executable's directory, for
 # DemoConfig::scriptAssembly. Without scripting, SCRIPTS is ignored.
 include_guard(GLOBAL)
 
 set(FENRIR_DEMO_SHARED_ASSETS "${CMAKE_CURRENT_LIST_DIR}/../../assets" CACHE INTERNAL "")
+# The shared Razor components and the props that adds them to every demo app's scripts project.
+set(FENRIR_DEMO_RAZOR_PROPS "${CMAKE_CURRENT_LIST_DIR}/../Managed/Fenrir.Demo.Razor.props" CACHE INTERNAL "")
+set(FENRIR_DEMO_RAZOR_DIR "${CMAKE_CURRENT_LIST_DIR}/../Managed/Fenrir.Demo.Razor" CACHE INTERNAL "")
 
 # The scripting extensions the scaffold installs for every app, whose contracts go beside each executable: the
 # packages' it installs, with FenrirUI's and the text and painter ones under it where they are built.
@@ -97,6 +102,7 @@ function(fenrir_add_demo_scripts name scripts_dir)
     endif()
     file(GLOB_RECURSE sources CONFIGURE_DEPENDS "${scripts_dir}/*.cs" "${scripts_dir}/*.razor" "${scripts_dir}/*.razor.css")
     list(FILTER sources EXCLUDE REGEX "/(obj|bin)/")
+    file(GLOB shared_razor CONFIGURE_DEPENDS "${FENRIR_DEMO_RAZOR_DIR}/*.razor")
 
     # Built into a folder of its own, then copied beside the executable: the contracts are compile-time only (the host
     # shares its own copies), so the folder holds the scripts alone.
@@ -124,8 +130,9 @@ function(fenrir_add_demo_scripts name scripts_dir)
             "-p:FenrirDebugDrawContractDir=${FENRIR_DEBUGDRAW_CONTRACT_DIR}/"
             "-p:FenrirDemoContractDir=${FENRIR_DEMO_CONTRACT_DIR}/"
             ${optional_args}
+            "-p:CustomAfterMicrosoftCommonTargets=${FENRIR_DEMO_RAZOR_PROPS}"
             "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/${name}-scripts-obj/"
-        DEPENDS ${sources} "${project}"
+        DEPENDS ${sources} "${project}" "${FENRIR_DEMO_RAZOR_PROPS}" ${shared_razor}
             FenrirScriptingContract "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.dll"
             "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Math.dll"
             FenrirInputContract "${FENRIR_INPUT_CONTRACT_DIR}/Fenrir.Input.dll"
