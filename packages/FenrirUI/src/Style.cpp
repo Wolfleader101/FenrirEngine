@@ -229,6 +229,12 @@ namespace Fenrir
         return Set(StyleProperty::BackgroundSize, &ResolvedStyle::backgroundSize, value);
     }
 
+    StyleDeclarations& StyleDeclarations::SetBackgroundPosition(Length x, Length y)
+    {
+        Set(StyleProperty::BackgroundPositionX, &ResolvedStyle::backgroundPositionX, x);
+        return Set(StyleProperty::BackgroundPositionY, &ResolvedStyle::backgroundPositionY, y);
+    }
+
     StyleDeclarations& StyleDeclarations::SetBorderImage(AssetHandle<Image> image, const Sides& slice)
     {
         Set(StyleProperty::BorderImageSource, &ResolvedStyle::borderImageSource, image);
@@ -285,6 +291,16 @@ namespace Fenrir
     StyleDeclarations& StyleDeclarations::SetOverflow(Fenrir::Overflow value)
     {
         return Set(StyleProperty::Overflow, &ResolvedStyle::overflow, value);
+    }
+
+    StyleDeclarations& StyleDeclarations::SetScrollbarWidth(Fenrir::ScrollbarWidth value)
+    {
+        return Set(StyleProperty::ScrollbarWidth, &ResolvedStyle::scrollbarWidth, value);
+    }
+
+    StyleDeclarations& StyleDeclarations::SetScrollbarColor(const Fenrir::ScrollbarColor& value)
+    {
+        return Set(StyleProperty::ScrollbarColor, &ResolvedStyle::scrollbarColor, value);
     }
 
     StyleDeclarations& StyleDeclarations::SetZIndex(std::int32_t value)

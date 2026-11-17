@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -12,6 +13,7 @@
 
 #include "CaptureTarget.hpp"
 #include "FenrirApp/App.hpp"
+#include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirDraw2D/DrawList2D.hpp"
 #include "FenrirInput/Input.hpp"
@@ -136,11 +138,48 @@ namespace UITest
         return events;
     }
 
-    // Each quad's first vertex, in the order drawn: every painter box is one quad of four.
-    inline std::vector<Fenrir::PainterVertex> Quads(const Fenrir::DrawList2D& list)
+    // A colour packed as the painter's vertices hold it: red in the low byte.
+    constexpr std::uint32_t Rgba8(std::uint32_t r, std::uint32_t g, std::uint32_t b, std::uint32_t a)
+    {
+        return r | (g << 8u) | (b << 16u) | (a << 24u);
+    }
+
+    // Every vertex of `list`, in the order drawn.
+    inline std::vector<Fenrir::PainterVertex> Vertices(const Fenrir::DrawList2D& list)
     {
         std::vector<Fenrir::PainterVertex> vertices(list.vertices.size() / sizeof(Fenrir::PainterVertex));
         std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(Fenrir::PainterVertex));
+        return vertices;
+    }
+
+    // The box the `quad`-th quad of `vertices` draws: its shape's centre and half size, without the quad's margin.
+    inline Fenrir::Rect2D QuadBox(const std::vector<Fenrir::PainterVertex>& vertices, std::size_t quad)
+    {
+        Fenrir::Math::Vec2 centre(0.0f);
+        for (std::size_t i = 0; i < 4; ++i)
+        {
+            centre += vertices[quad * 4 + i].position;
+        }
+        centre /= 4.0f;
+        const Fenrir::Math::Vec2 half = vertices[quad * 4].halfSize;
+        return {centre.x - half.x, centre.y - half.y, half.x * 2.0f, half.y * 2.0f};
+    }
+
+    // A white image `width` by `height` in the app's asset store, under `name` for a stylesheet's url().
+    inline Fenrir::AssetHandle<Fenrir::Image> AddWhiteImage(Fenrir::App& app, std::string_view name,
+                                                            std::uint32_t width, std::uint32_t height)
+    {
+        Fenrir::ImageData pixels;
+        pixels.width = width;
+        pixels.height = height;
+        pixels.pixels.assign(static_cast<std::size_t>(width) * height * 4, std::byte{0xFF});
+        return app.GetResource<Fenrir::AssetStore>().AddBuiltin<Fenrir::Image>(name, std::move(pixels));
+    }
+
+    // Each quad's first vertex, in the order drawn: every painter box is one quad of four.
+    inline std::vector<Fenrir::PainterVertex> Quads(const Fenrir::DrawList2D& list)
+    {
+        const std::vector<Fenrir::PainterVertex> vertices = Vertices(list);
         std::vector<Fenrir::PainterVertex> quads;
         for (std::size_t i = 0; i < vertices.size(); i += 4)
         {

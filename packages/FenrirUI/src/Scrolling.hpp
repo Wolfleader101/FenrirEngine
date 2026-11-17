@@ -9,8 +9,9 @@ namespace Fenrir::Detail
     struct ElementSlot;
 
     /**
-     * @brief The element's scrollbars from its padding box, scroll offset and range and its `::scrollbar` styles: none
-     * while it does not scroll or its bar has no width.
+     * @brief The element's scrollbars from its padding box, scroll offset and range, its `scrollbar-width` and its
+     * `::scrollbar` styles (whose width `scrollbar-width` overrides unless it is auto): none while it does not scroll,
+     * its bar has no width or its `scrollbar-width` is none.
      */
     [[nodiscard]] ScrollbarBoxes ScrollbarsOf(const ElementSlot& slot);
 } // namespace Fenrir::Detail

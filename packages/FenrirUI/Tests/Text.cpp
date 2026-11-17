@@ -21,6 +21,9 @@
 
 namespace
 {
+    using UITest::Rgba8;
+    using UITest::Vertices;
+
     constexpr const char* LongText = "the quick brown fox jumps over the lazy dog and runs far away";
 
     // A root at `contentScale` over a capture target of 800 by 600 logical units, without pixel snapping when `snap` is
@@ -97,13 +100,6 @@ namespace
         }
     };
 
-    std::vector<Fenrir::PainterVertex> Vertices(const Fenrir::DrawList2D& list)
-    {
-        std::vector<Fenrir::PainterVertex> vertices(list.vertices.size() / sizeof(Fenrir::PainterVertex));
-        std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(Fenrir::PainterVertex));
-        return vertices;
-    }
-
     // The first vertex of each glyph quad, in the order drawn.
     std::vector<std::vector<Fenrir::PainterVertex>> GlyphQuads(const Fenrir::DrawList2D& list)
     {
@@ -130,10 +126,6 @@ namespace
         return count;
     }
 
-    constexpr std::uint32_t Rgba8(std::uint32_t r, std::uint32_t g, std::uint32_t b, std::uint32_t a)
-    {
-        return r | (g << 8u) | (b << 16u) | (a << 24u);
-    }
 } // namespace
 
 TEST_CASE("A label's laid-out size is its paragraph's, laid out in target pixels and measured back in UI units",

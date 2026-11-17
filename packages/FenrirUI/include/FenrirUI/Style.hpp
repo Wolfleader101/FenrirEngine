@@ -152,12 +152,59 @@ namespace Fenrir
     /** @brief `background-size`: how a background image fits its element's border box. */
     enum class BackgroundSize : std::uint8_t
     {
-        /** @brief Stretched over the box. */
+        /** @brief Stretched over the box; `background-position` is ignored. */
         Stretch,
-        /** @brief Scaled evenly to cover the box, centred, the overhang cut off. */
+        /** @brief Scaled evenly to cover the box, placed by `background-position`, the overhang cut off. */
         Cover,
-        /** @brief Scaled evenly to fit inside the box, centred. */
+        /** @brief Scaled evenly to fit inside the box, placed by `background-position`. */
         Contain,
+    };
+
+    /**
+     * @brief `scrollbar-width` on a scroll view, which wins over its `::scrollbar` style's `width` unless it is
+     * `Auto`. Not inherited.
+     */
+    enum class ScrollbarWidth : std::uint8_t
+    {
+        /** @brief The bar is its `::scrollbar` style's `width` thick. */
+        Auto,
+        /**
+         * @brief The bar is ThinScrollbarWidth thick, half the default stylesheet's, and its thumb is inset half the
+         * `::scrollbar` padding.
+         */
+        Thin,
+        /** @brief No bar is drawn or hit; the view still scrolls by the wheel, the keys and its content. */
+        None,
+    };
+
+    /** @brief A `scrollbar-width: thin` bar's thickness, in UI units: half the default stylesheet's 10. */
+    inline constexpr float ThinScrollbarWidth = 5.0f;
+
+    /**
+     * @brief `scrollbar-color` on a scroll view: `auto`, which leaves the bars' colours to their `::scrollbar-thumb`
+     * and `::scrollbar` styles, or a thumb colour then a track colour (straight alpha), which win over those styles'
+     * background colours. Not inherited.
+     */
+    struct ScrollbarColor
+    {
+        /** @brief `auto`: the pseudo-elements' colours show, and thumb and track are not read. */
+        bool isAuto = true;
+        /** @brief The thumb's background colour. */
+        Colour thumb = Colour::Black;
+        /** @brief The track's background colour. */
+        Colour track = Colour::Black;
+
+        /** @brief `auto`. */
+        [[nodiscard]] static constexpr ScrollbarColor Auto() noexcept
+        {
+            return {};
+        }
+
+        /** @brief `scrollbar-color: thumb track`. */
+        [[nodiscard]] static constexpr ScrollbarColor Of(const Colour& thumb, const Colour& track) noexcept
+        {
+            return {false, thumb, track};
+        }
     };
 
     /**
@@ -441,6 +488,13 @@ namespace Fenrir
         Colour backgroundColor{0.0f, 0.0f, 0.0f, 0.0f};
         BackgroundImage backgroundImage;
         BackgroundSize backgroundSize = BackgroundSize::Stretch;
+        /**
+         * @brief `background-position`: where a `cover` or `contain` background image sits in the border box, from its
+         * top-left. A length moves the image's top-left by it; a percentage aligns that point of the image with that
+         * point of the box, as CSS: 0% 0% (the initial value) is the top-left, 100% 100% the bottom-right.
+         */
+        Length backgroundPositionX = Length::Percent(0.0f);
+        Length backgroundPositionY = Length::Percent(0.0f);
         /** @brief `border-image-source`: an image nine-sliced over the border box. */
         AssetHandle<Image> borderImageSource;
         /** @brief `border-image-slice`: the nine-slice insets, in the image's pixels. */
@@ -476,6 +530,10 @@ namespace Fenrir
         Length transformOriginX = Length::Percent(50.0f);
         Length transformOriginY = Length::Percent(50.0f);
         Overflow overflow = Overflow::Visible;
+        /** @brief `scrollbar-width`: a scroll view's bars' thickness, or none. */
+        ScrollbarWidth scrollbarWidth = ScrollbarWidth::Auto;
+        /** @brief `scrollbar-color`: a scroll view's thumb and track colours, or `auto`. */
+        ScrollbarColor scrollbarColor;
         /** @brief Siblings paint in increasing `z-index`, equal ones in tree order. */
         std::int32_t zIndex = 0;
         PointerEvents pointerEvents = PointerEvents::None;
@@ -589,6 +647,8 @@ namespace Fenrir
         BackgroundColor,
         BackgroundImage,
         BackgroundSize,
+        BackgroundPositionX,
+        BackgroundPositionY,
         BorderImageSource,
         BorderImageSlice,
         BorderTopColor,
@@ -607,6 +667,8 @@ namespace Fenrir
         TransformOriginX,
         TransformOriginY,
         Overflow,
+        ScrollbarWidth,
+        ScrollbarColor,
         ZIndex,
         PointerEvents,
         Cursor,
@@ -730,6 +792,8 @@ namespace Fenrir
         StyleDeclarations& SetBackgroundImage(const Fenrir::BackgroundImage& value);
         /** @brief `background-size`. */
         StyleDeclarations& SetBackgroundSize(Fenrir::BackgroundSize value);
+        /** @brief `background-position`: the image's place across, then down. */
+        StyleDeclarations& SetBackgroundPosition(Length x, Length y);
         /** @brief `border-image-source` and `border-image-slice`: `image` nine-sliced at `slice`. */
         StyleDeclarations& SetBorderImage(AssetHandle<Image> image, const Sides& slice);
         /** @brief The four `border-*-color`s, one colour. */
@@ -750,6 +814,10 @@ namespace Fenrir
         StyleDeclarations& SetTransformOrigin(Length x, Length y);
         /** @brief `overflow`. */
         StyleDeclarations& SetOverflow(Fenrir::Overflow value);
+        /** @brief `scrollbar-width`. */
+        StyleDeclarations& SetScrollbarWidth(Fenrir::ScrollbarWidth value);
+        /** @brief `scrollbar-color`. */
+        StyleDeclarations& SetScrollbarColor(const Fenrir::ScrollbarColor& value);
         /** @brief `z-index`. */
         StyleDeclarations& SetZIndex(std::int32_t value);
         /** @brief `pointer-events`. */

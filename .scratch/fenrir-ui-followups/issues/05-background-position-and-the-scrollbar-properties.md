@@ -12,11 +12,12 @@
 
 **Touches:** `packages/FenrirUI/src/` (`StyleValues.cpp`, `Style.cpp`, `StyleAnimation.cpp`, `BoxPainting.cpp`, `Scrolling.cpp`), `packages/FenrirUI/include/FenrirUI/Style.hpp`, `packages/FenrirUI/Tests/`, `packages/FenrirUI/README.md`, `examples/UIDemo/assets/ui/menu.css`, `examples/UIDemo/README.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A 100 by 50 image at `contain` in a 200 by 200 box draws at y 75 with `center`, 0 with `top` and 150 with `bottom` (worked from CSS); at `cover`, `right` crops its left.
-- [ ] `background: url(x.png) right / contain` and the longhand draw the same.
-- [ ] `scrollbar-width: thin` gives a track half the default width; `none` gives no bars in `GetScrollbars` and no bar draws, and the wheel still scrolls.
-- [ ] `scrollbar-color: red blue` draws a red thumb and a blue track over a `::scrollbar-thumb` rule's green; `auto` leaves the rule's green.
-- [ ] A stylesheet using none of the three draws exactly as before.
-- [ ] Hand check: in UIDemo the controls list has a thin coloured bar and the pause panel its corner image.
+- [x] A 100 by 50 image at `contain` in a 200 by 200 box, scaled to 200 by 100, draws at y 50 with `center`, 0 with `top` and 100 with `bottom` (worked from CSS; the 75 and 150 first written here were the unscaled image's); at `cover`, `right` crops its left.
+- [x] `background: url(x.png) right / contain` and the longhand draw the same.
+- [x] `scrollbar-width: thin` gives a track half the default width; `none` gives no bars in `GetScrollbars` and no bar draws, and the wheel still scrolls.
+- [x] `scrollbar-color: red blue` draws a red thumb and a blue track over a `::scrollbar-thumb` rule's green; `auto` leaves the rule's green.
+- [x] A stylesheet using none of the three draws exactly as before, but for a `cover` or `contain` background image, which was centred and now sits at CSS's initial `0% 0%`, the top-left.
+
+Hand check: in UIDemo the controls list has a thin coloured bar and the pause panel its corner image (on the panel's title, at its right end: a `contain` image over the whole card would fill its height).

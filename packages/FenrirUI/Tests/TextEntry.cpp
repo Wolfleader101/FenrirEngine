@@ -178,11 +178,6 @@ namespace
         return found;
     }
 
-    constexpr std::uint32_t Rgba8(std::uint32_t r, std::uint32_t g, std::uint32_t b, std::uint32_t a)
-    {
-        return r | (g << 8u) | (b << 16u) | (a << 24u);
-    }
-
     // A painted rectangle: its shape's box, from its quad's centre and half size.
     struct PaintedRect
     {
