@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <limits>
 #include <numbers>
 #include <optional>
@@ -12,8 +13,6 @@
 #include <utility>
 #include <vector>
 
-#include <imgui.h>
-
 #include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
@@ -22,6 +21,7 @@
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/Model.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirRenderer/Components.hpp"
@@ -865,6 +865,30 @@ namespace LightingDemo
             return clear;
         }
 
+        /** @brief The scene's section, bound to its state in its scene resource. */
+        void AddSection(Fenrir::App& app, ForestState& state)
+        {
+            auto* kit = app.TryGetResource<FenrirDemo::DemoUI>();
+            if (kit == nullptr)
+            {
+                return;
+            }
+            const auto count = [](std::size_t value) { return std::format("{}", value); };
+            const FenrirDemo::DemoSection forest = kit->SceneSection("Forest");
+            forest.Range("Forest density % (N)", &state.density, 5, 100,
+                         "The share of every list's copies drawn; N steps 25%, 50% and all");
+            forest.Toggle("Grass (M)", &state.grassVisible, "The grass's chunks shown or hidden");
+            forest.Readout("Copies", [&state, count] { return count(state.copies); });
+            forest.Readout("Lists", [&state, count] { return count(state.lists.size()); });
+            forest.Readout("Trees", [&state, count] { return count(state.trees); });
+            forest.Readout("Grass blades", [&state, count] { return count(state.blades); });
+            forest.Readout("Grass chunks", [&state, count] { return count(state.grass.size()); });
+            forest.Readout("Draws", RendererCount(app, &Fenrir::RendererStats::draws));
+            forest.Readout("Instances", RendererCount(app, &Fenrir::RendererStats::instances));
+            forest.Readout("Shadow draws", RendererCount(app, &Fenrir::RendererStats::shadowDraws));
+            forest.Readout("Frame", [&state] { return FrameReadout(state.frameTime); });
+        }
+
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
         {
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
@@ -931,7 +955,7 @@ namespace LightingDemo
                                    SceneName);
             }
             state.fetched = fetched;
-            scene.AddResource<ForestState>(std::move(state));
+            AddSection(app, scene.AddResource<ForestState>(std::move(state)));
         }
 
         void Update(Fenrir::App& app, Fenrir::Scene& scene)
@@ -957,26 +981,9 @@ namespace LightingDemo
                 state->grassVisible = !state->grassVisible;
             }
 
-            const Fenrir::RendererStats stats = Fenrir::Renderer::Stats(app);
             const auto delta = static_cast<float>(app.GetTime().deltaTime);
             state->frameTime = state->frameTime == 0.0f ? delta : glm::mix(state->frameTime, delta, 0.05f);
             RunLightingPanel(app, scene, state->lighting);
-            // Its own switches stay in an ImGui window until demo UI ticket 11 moves them onto the kit.
-            ImGui::SetNextWindowPos({16.0f, 16.0f}, ImGuiCond_FirstUseEver);
-            ImGui::SetNextWindowSize({340.0f, 0.0f}, ImGuiCond_FirstUseEver);
-            if (ImGui::Begin(SceneName))
-            {
-                ImGui::SliderInt("Forest density % (N)", &state->density, 5, 100);
-                ImGui::Checkbox("Grass (M)", &state->grassVisible);
-                ImGui::Text("Forest: %zu copies in %zu lists, %zu of them trees", state->copies, state->lists.size(),
-                            state->trees);
-                ImGui::Text("Grass: %zu blades in %zu chunks", state->blades, state->grass.size());
-                ImGui::Text("Draws: %u  Instances: %u  Shadow draws: %u", stats.draws, stats.instances,
-                            stats.shadowDraws);
-                ImGui::Text("Frame: %.2f ms (%.0f fps)", state->frameTime * 1000.0f,
-                            state->frameTime > 0.0f ? 1.0f / state->frameTime : 0.0f);
-            }
-            ImGui::End();
 
             // A new density cuts each list again: Replace bumps its revision, so the renderer uploads it once more.
             if (state->density != state->listedDensity)
@@ -1001,7 +1008,9 @@ namespace LightingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp = LightingKeyHelp(true) + " N: 25%, 50% or all of the forest. M: the grass hidden or shown.";
+        scene.keyRows = LightingKeyRows(true);
+        scene.keyRows.push_back({"N", "25%, 50% or all of the forest"});
+        scene.keyRows.push_back({"M", "the grass hidden or shown"});
         // Thin the forest and back, the grass off and on, through the debug views with the shadows off and on, and the
         // other sky.
         scene.keys = {Fenrir::Key::N, Fenrir::Key::M, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::M, Fenrir::Key::G,

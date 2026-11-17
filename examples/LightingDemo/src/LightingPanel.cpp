@@ -3,6 +3,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <format>
 #include <numbers>
 #include <utility>
 
@@ -398,14 +399,15 @@ namespace LightingDemo
         return rows;
     }
 
-    std::string LightingKeyHelp(bool panoramaSwitch)
+    std::string FrameReadout(float frameSeconds)
     {
-        std::string help;
-        for (const FenrirDemo::DemoKeyRow& row : LightingKeyRows(panoramaSwitch))
-        {
-            help += row.keys + ": " + row.what + ". ";
-        }
-        return help + "The demo panel's lighting sections set each of them, and the sky's intensity and rotation.";
+        return std::format("{:.2f} ms ({:.0f} fps)", frameSeconds * 1000.0f,
+                           frameSeconds > 0.0f ? 1.0f / frameSeconds : 0.0f);
+    }
+
+    std::function<std::string()> RendererCount(Fenrir::App& app, std::uint32_t Fenrir::RendererStats::* count)
+    {
+        return [&app, count] { return std::format("{}", Fenrir::Renderer::Stats(app).*count); };
     }
 
     void RunLightingPanel(Fenrir::App& app, Fenrir::Scene& scene, LightingSettings& settings)

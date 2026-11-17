@@ -22,9 +22,6 @@ int main()
     config.scriptAssembly = FENRIR_DEMO_SCRIPT_ASSEMBLY;
 #endif
     config.msaa = 4;
-    // Sponza's, Neon city's, Asteroid ring's and Forest clearing's own switches, until demo UI ticket 11 moves them
-    // onto the kit.
-    config.imguiOverlay = true;
 
     FenrirDemo::DemoScaffold demo = FenrirDemo::DemoScaffold::Install(app, std::move(config));
     LightingDemo::AddLensDirt(app);

@@ -1,16 +1,16 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <format>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include <imgui.h>
-
 #include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirRenderer/Components.hpp"
@@ -167,6 +167,31 @@ namespace LightingDemo
             }
         }
 
+        /** @brief The scene's section, bound to its state in its scene resource. */
+        void AddSection(Fenrir::App& app, SponzaState& state)
+        {
+            auto* kit = app.TryGetResource<FenrirDemo::DemoUI>();
+            if (kit == nullptr)
+            {
+                return;
+            }
+            const FenrirDemo::DemoSection torches = kit->SceneSection("Sun and torches");
+            torches.Readout("Frame", [&state] { return FrameReadout(state.frameTime); });
+            torches.Readout("Draws", RendererCount(app, &Fenrir::RendererStats::draws));
+            torches.Readout("Instances", RendererCount(app, &Fenrir::RendererStats::instances));
+            torches.Readout("Shadow draws", RendererCount(app, &Fenrir::RendererStats::shadowDraws));
+            torches.Toggle("Vsync", &state.vsync,
+                           "Off, presents don't wait for the display: the frame time is its own");
+            torches.Range("Sun intensity", &state.sunIntensity, 0.0f, 20.0f, {.decimals = 3}, "The sun's intensity");
+            torches.Toggle("Torches lit (K)", &state.torchesLit, "The four torches out or lit");
+            torches.Toggle("Torch shadows (J)", &state.torchShadows, "Whether the torches cast shadows");
+            torches.Toggle("Flicker (N)", &state.flicker, "The torches flickering or burning steadily");
+            torches.Range("Torch intensity", &state.torchIntensity, 0.0f, 30.0f, {.decimals = 3},
+                          "Every torch's intensity, before its flicker");
+            torches.Range("Torch range", &state.torchRange, 1.0f, 20.0f, {.decimals = 3},
+                          "How far, in metres, each torch reaches");
+        }
+
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
         {
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
@@ -206,7 +231,7 @@ namespace LightingDemo
             if (!cube.Ok() || !sphere.Ok())
             {
                 app.Logger()->Error("{}: the cube or the sphere did not load from the asset root", SceneName);
-                scene.AddResource<SponzaState>(std::move(state));
+                AddSection(app, scene.AddResource<SponzaState>(std::move(state)));
                 return;
             }
             bool spawned = false;
@@ -238,7 +263,7 @@ namespace LightingDemo
             state.sun = scene.GetEntityList().CreateEntity();
             state.sun.AddComponent<Fenrir::Transform>();
             state.sun.AddComponent<Fenrir::DirectionalLight>(Fenrir::DirectionalLight{SunColour, state.sunIntensity});
-            scene.AddResource<SponzaState>(std::move(state));
+            AddSection(app, scene.AddResource<SponzaState>(std::move(state)));
         }
 
         void Update(Fenrir::App& app, Fenrir::Scene& scene)
@@ -271,26 +296,7 @@ namespace LightingDemo
 
             const auto delta = static_cast<float>(app.GetTime().deltaTime);
             state->frameTime = state->frameTime == 0.0f ? delta : glm::mix(state->frameTime, delta, 0.05f);
-            const Fenrir::RendererStats stats = Fenrir::Renderer::Stats(app);
             RunLightingPanel(app, scene, state->lighting);
-            // Its own switches stay in an ImGui window until demo UI ticket 11 moves them onto the kit.
-            ImGui::SetNextWindowPos({16.0f, 16.0f}, ImGuiCond_FirstUseEver);
-            ImGui::SetNextWindowSize({340.0f, 0.0f}, ImGuiCond_FirstUseEver);
-            if (ImGui::Begin(SceneName))
-            {
-                ImGui::Text("Frame: %.2f ms (%.0f fps)", state->frameTime * 1000.0f,
-                            state->frameTime > 0.0f ? 1.0f / state->frameTime : 0.0f);
-                ImGui::Text("Draws: %u  Instances: %u  Shadow draws: %u", stats.draws, stats.instances,
-                            stats.shadowDraws);
-                ImGui::Checkbox("Vsync", &state->vsync);
-                ImGui::SliderFloat("Sun intensity", &state->sunIntensity, 0.0f, 20.0f);
-                ImGui::Checkbox("Torches lit (K)", &state->torchesLit);
-                ImGui::Checkbox("Torch shadows (J)", &state->torchShadows);
-                ImGui::Checkbox("Flicker (N)", &state->flicker);
-                ImGui::SliderFloat("Torch intensity", &state->torchIntensity, 0.0f, 30.0f);
-                ImGui::SliderFloat("Torch range", &state->torchRange, 1.0f, 20.0f);
-            }
-            ImGui::End();
 
             if (state->vsync != state->appliedVsync)
             {
@@ -328,8 +334,10 @@ namespace LightingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp = LightingKeyHelp(false) +
-                        " J: the torches' shadows off or on. K: the torches out or lit. N: the flicker off or on.";
+        scene.keyRows = LightingKeyRows(false);
+        scene.keyRows.push_back({"J", "the torches' shadows off or on"});
+        scene.keyRows.push_back({"K", "the torches out or lit"});
+        scene.keyRows.push_back({"N", "the flicker off or on"});
         // Through the debug views and back, the sun's and the torches' shadows off and on, the torches out and lit,
         // the flicker off and on, then the tonemapper, exposure, bloom and occlusion.
         scene.keys = {Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G,
