@@ -10,7 +10,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "FenrirAssets/AssetStore.hpp"
 #include "FenrirPainter/Painter.hpp"
 #include "FenrirPainter/PainterVertex.hpp"
 #include "UITestApp.hpp"
@@ -252,17 +251,6 @@ namespace
         REQUIRE(root.SetStyleProperty(element, "background-color", colour));
         return element;
     }
-
-    // A 2 x 2 white image in the app's asset store.
-    Fenrir::AssetHandle<Fenrir::Image> WhiteImage(UITest::UITestApp& test)
-    {
-        Fenrir::ImageData pixels;
-        pixels.width = 2;
-        pixels.height = 2;
-        pixels.pixels.assign(16, std::byte{0xFF});
-        return test.app.GetResource<Fenrir::AssetStore>().Add<Fenrir::Image>(std::move(pixels),
-                                                                             Fenrir::AssetOwner::App());
-    }
 } // namespace
 
 TEST_CASE("Siblings paint by z-index, equal ones in tree order", "[ui][paint]")
@@ -350,7 +338,7 @@ TEST_CASE("A background image paints as a gradient or as the image, which its co
     INFO("the gradient panel's style is taken");
     REQUIRE(root.SetStyleProperty(gradient, "height", "100px"));
     REQUIRE(root.SetStyleProperty(gradient, "background-image", "linear-gradient(90deg, #000000, #ffffff)"));
-    const Fenrir::AssetHandle<Fenrir::Image> image = WhiteImage(test);
+    const Fenrir::AssetHandle<Fenrir::Image> image = UITest::AddWhiteImage(test.app, "builtin:white", 2, 2);
     const Fenrir::ElementId picture = root.Create(root.GetRootElement(), "panel");
     root.EditInlineStyle(picture)
         ->SetHeight(Fenrir::Length::Px(100.0f))
@@ -587,7 +575,8 @@ TEST_CASE("A tree that sets none of background-position and the scrollbar proper
         REQUIRE(root.SetStyleProperty(gradient, "background-image", "linear-gradient(90deg, #000000, #ffffff)"));
         const Fenrir::ElementId picture = root.Create(root.GetRootElement(), "panel");
         REQUIRE(root.SetStyleProperty(picture, "height", "40px"));
-        root.EditInlineStyle(picture)->SetBackgroundImage(Fenrir::BackgroundImage{WhiteImage(test)});
+        root.EditInlineStyle(picture)->SetBackgroundImage(
+            Fenrir::BackgroundImage{UITest::AddWhiteImage(test.app, "builtin:white", 2, 2)});
         const Fenrir::ElementId view = root.Create(root.GetRootElement(), "scroll");
         REQUIRE(root.SetStyleProperty(view, "height", "60px"));
         for (int i = 0; i < 3; ++i)

@@ -18,6 +18,7 @@ namespace
 {
     using Fenrir::ElementId;
     using Fenrir::FilterStep;
+    using UITest::Same;
 
     constexpr double eighth = 0.125;
 
@@ -53,11 +54,6 @@ namespace
         INFO("the element is alive");
         REQUIRE(style != nullptr);
         return style->filter;
-    }
-
-    bool Same(const Fenrir::Colour& a, const Fenrir::Colour& b)
-    {
-        return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
     }
 
     bool IsBegin(const Fenrir::Command2D& command)

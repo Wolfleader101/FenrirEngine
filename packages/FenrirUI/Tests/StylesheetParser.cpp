@@ -1,4 +1,6 @@
 // The stylesheet parser (ADR-0064): selectors, shorthands, nesting, at-rules and what it refuses, each with its line.
+// The `[shorthand]` tests read a shorthand set inline or from a sheet back from an element's resolved style, through a
+// headless App (the spec's seam 1).
 #include <algorithm>
 #include <string>
 #include <string_view>
@@ -9,9 +11,13 @@
 
 #include "FenrirUI/Stylesheet.hpp"
 #include "FenrirUI/UIRoot.hpp"
+#include "UITestApp.hpp"
 
 namespace
 {
+    using Fenrir::ElementId;
+    using UITest::StyleTest;
+
     using Declarations = std::vector<std::pair<std::string, std::string>>;
 
     Declarations NamesAndValues(const Fenrir::StyleRule& rule)
@@ -199,8 +205,7 @@ TEST_CASE("Inset expands from one to four values into top, right, bottom and lef
     REQUIRE(five.rules.at(0).declarations.empty());
 }
 
-TEST_CASE("Border-image expands into its source and slice, and refuses what FenrirUI has no longhand for",
-          "[ui][stylesheet]")
+TEST_CASE("Border-image expands into its source and slice", "[ui][stylesheet]")
 {
     INFO("a source and a slice are the two longhands");
     REQUIRE(Expand("border-image: url(frame.png) 12;") ==
@@ -210,6 +215,10 @@ TEST_CASE("Border-image expands into its source and slice, and refuses what Fenr
             std::pair<std::string, std::string>{"border-image-slice", "1 2 3 4"});
     REQUIRE(Expand("border-image: url(frame.png);")[1] ==
             std::pair<std::string, std::string>{"border-image-slice", "0"});
+}
+
+TEST_CASE("Border-image refuses what FenrirUI has no longhand for", "[ui][stylesheet]")
+{
     const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse("panel {\n"
                                                                "  border-image: url(frame.png) 12 / 4px;\n"
                                                                "  border-image: url(frame.png) 12 round;\n"
@@ -224,6 +233,76 @@ TEST_CASE("Border-image expands into its source and slice, and refuses what Fenr
     INFO("and five slices");
     REQUIRE(HasDiagnosticOnLine(sheet, 4, "border-image"));
     REQUIRE(sheet.rules.at(0).declarations.empty());
+}
+
+TEST_CASE("inset: 1px 2px sets top and bottom to 1, right and left to 2", "[ui][shorthand]")
+{
+    StyleTest t;
+    const ElementId box = t.Make("box");
+    t.Set(box, "inset", "1px 2px");
+    t.test.Frame();
+    const Fenrir::ResolvedStyle& style = t.Style(box);
+    INFO("the first value is top and bottom, the second right and left");
+    REQUIRE(style.top == Fenrir::Length::Px(1.0f));
+    REQUIRE(style.bottom == Fenrir::Length::Px(1.0f));
+    REQUIRE(style.right == Fenrir::Length::Px(2.0f));
+    REQUIRE(style.left == Fenrir::Length::Px(2.0f));
+}
+
+TEST_CASE("inset with five values is refused and sets no side", "[ui][shorthand]")
+{
+    StyleTest t;
+    const ElementId box = t.Make("box");
+    INFO("five values are refused");
+    REQUIRE_FALSE(t.root.SetStyleProperty(box, "inset", "1px 2px 3px 4px 5px"));
+    t.test.Frame();
+    INFO("every side keeps its initial auto");
+    REQUIRE(t.Style(box).top == Fenrir::Length::Auto());
+    REQUIRE(t.Style(box).left == Fenrir::Length::Auto());
+}
+
+TEST_CASE("border-image resolves as its two longhands do, inline or from a sheet", "[ui][shorthand]")
+{
+    StyleTest t;
+    const Fenrir::AssetHandle<Fenrir::Image> frame = UITest::AddWhiteImage(t.test.app, "builtin:frame", 48, 48);
+    t.root.AddStylesheet(".sheet { border-image: url(builtin:frame) 12; }", "sheet");
+    const ElementId shorthand = t.Make("a");
+    const ElementId longhands = t.Make("b");
+    const ElementId sheet = t.Make("sheet");
+    t.Set(shorthand, "border-image", "url(builtin:frame) 12");
+    t.Set(longhands, "border-image-source", "url(builtin:frame)");
+    t.Set(longhands, "border-image-slice", "12");
+    t.test.Frame();
+    for (const ElementId element : {shorthand, longhands, sheet})
+    {
+        const Fenrir::ResolvedStyle& style = t.Style(element);
+        INFO("the source is the frame and every slice 12");
+        REQUIRE(style.borderImageSource == frame);
+        REQUIRE(style.borderImageSlice.top == 12.0f);
+        REQUIRE(style.borderImageSlice.right == 12.0f);
+        REQUIRE(style.borderImageSlice.bottom == 12.0f);
+        REQUIRE(style.borderImageSlice.left == 12.0f);
+    }
+}
+
+TEST_CASE("border-image refuses a width after a slash", "[ui][shorthand]")
+{
+    StyleTest t;
+    (void)UITest::AddWhiteImage(t.test.app, "builtin:frame", 48, 48);
+    const ElementId box = t.Make("box");
+    INFO("url(builtin:frame) 12 / 4px is refused");
+    REQUIRE_FALSE(t.root.SetStyleProperty(box, "border-image", "url(builtin:frame) 12 / 4px"));
+}
+
+TEST_CASE("border-image takes a slash inside its url() as part of the path", "[ui][shorthand]")
+{
+    StyleTest t;
+    const Fenrir::AssetHandle<Fenrir::Image> frame = UITest::AddWhiteImage(t.test.app, "builtin:ui/frame", 48, 48);
+    const ElementId box = t.Make("box");
+    t.Set(box, "border-image", "url(builtin:ui/frame) 12");
+    t.test.Frame();
+    INFO("the path's slash is not a width's");
+    REQUIRE(t.Style(box).borderImageSource == frame);
 }
 
 TEST_CASE("Border-radius expands from the top-left corner round", "[ui][stylesheet]")

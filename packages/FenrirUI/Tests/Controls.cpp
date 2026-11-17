@@ -859,26 +859,49 @@ TEST_CASE("scrollbar-width thin wins over a ::scrollbar rule's width", "[ui][con
     REQUIRE(Near(width, 5.0f));
 }
 
-TEST_CASE("scrollbar-width none draws and hits no bar, and the wheel still scrolls the view", "[ui][controls][scroll]")
+namespace
+{
+    // Gives the fixture's scroll view `scrollbar-width: none` and lays it out; returns the bars it showed before.
+    Fenrir::ScrollbarBoxes HideBars(ScrollFixture& fixture)
+    {
+        const Fenrir::ScrollbarBoxes shown = fixture.root.GetScrollbars(fixture.view);
+        {
+            INFO("the scroll view takes scrollbar-width");
+            REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-width", "none"));
+        }
+        fixture.test.Frame();
+        return shown;
+    }
+} // namespace
+
+TEST_CASE("scrollbar-width none draws no bar", "[ui][controls][scroll]")
 {
     ScrollFixture fixture;
-    UITestApp& test = fixture.test;
-    const Fenrir::ScrollbarBoxes shown = fixture.root.GetScrollbars(fixture.view);
-    {
-        INFO("the scroll view takes scrollbar-width");
-        REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-width", "none"));
-    }
-    test.Frame();
+    const Fenrir::ScrollbarBoxes shown = HideBars(fixture);
     const Fenrir::ScrollbarBoxes bars = fixture.root.GetScrollbars(fixture.view);
-    INFO("GetScrollbars reports no bar");
-    REQUIRE_FALSE(bars.vertical);
-    REQUIRE_FALSE(bars.horizontal);
+    {
+        INFO("GetScrollbars reports no bar");
+        REQUIRE_FALSE(bars.vertical);
+        REQUIRE_FALSE(bars.horizontal);
+    }
     INFO("no track or thumb draws where the bar was");
     REQUIRE(ColourOver(*fixture.target, shown.verticalTrack) == 0u);
     REQUIRE(ColourOver(*fixture.target, shown.verticalThumb) == 0u);
+}
+
+TEST_CASE("scrollbar-width none hits no bar: a point where it was hits the row under it", "[ui][controls][scroll]")
+{
+    ScrollFixture fixture;
+    const Fenrir::ScrollbarBoxes shown = HideBars(fixture);
     INFO("a point where the bar was hits the row under it");
     REQUIRE(fixture.root.HitTest(Centre(shown.verticalThumb)) == fixture.rows[0]);
+}
 
+TEST_CASE("scrollbar-width none still lets the wheel scroll the view", "[ui][controls][scroll]")
+{
+    ScrollFixture fixture;
+    UITestApp& test = fixture.test;
+    (void)HideBars(fixture);
     Move(test, {50.0f, 50.0f});
     test.Feed().Scroll(testWindow, {0.0f, -1.0f});
     test.Frame();
@@ -923,30 +946,47 @@ TEST_CASE("scrollbar-color auto leaves the pseudo-elements' colours", "[ui][cont
     REQUIRE(ColourOver(*fixture.target, bars.verticalThumb) == Rgba8(0, 255, 0, 255));
 }
 
-TEST_CASE("scrollbar-width and scrollbar-color read their keywords and colours and refuse the rest",
-          "[ui][controls][scroll]")
+TEST_CASE("scrollbar-width refuses a length and an unknown keyword", "[ui][controls][scroll]")
 {
     ScrollFixture fixture;
-    UIRoot& root = fixture.root;
     for (const char* refused : {"6px", "thick"})
     {
         INFO("scrollbar-width '" << refused << "' is refused");
-        REQUIRE_FALSE(root.SetStyleProperty(fixture.view, "scrollbar-width", refused));
+        REQUIRE_FALSE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-width", refused));
     }
+}
+
+TEST_CASE("scrollbar-color refuses anything but auto or two colours", "[ui][controls][scroll]")
+{
+    ScrollFixture fixture;
     for (const char* refused : {"red", "red blue green", "thin"})
     {
         INFO("scrollbar-color '" << refused << "' is refused");
-        REQUIRE_FALSE(root.SetStyleProperty(fixture.view, "scrollbar-color", refused));
+        REQUIRE_FALSE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-color", refused));
     }
+}
+
+TEST_CASE("scrollbar-width thin resolves as Thin", "[ui][controls][scroll]")
+{
+    ScrollFixture fixture;
     {
-        INFO("the scroll view takes both");
-        REQUIRE(root.SetStyleProperty(fixture.view, "scrollbar-width", "thin"));
-        REQUIRE(root.SetStyleProperty(fixture.view, "scrollbar-color", "rgba(255, 0, 0, 0.5) #0000ff"));
+        INFO("the scroll view takes scrollbar-width");
+        REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-width", "thin"));
     }
     fixture.test.Frame();
-    const Fenrir::ResolvedStyle* view = root.GetResolvedStyle(fixture.view);
     INFO("thin resolves as Thin");
-    REQUIRE(view->scrollbarWidth == Fenrir::ScrollbarWidth::Thin);
+    REQUIRE(fixture.root.GetResolvedStyle(fixture.view)->scrollbarWidth == Fenrir::ScrollbarWidth::Thin);
+}
+
+TEST_CASE("scrollbar-color's two colours resolve as the thumb's and the track's", "[ui][controls][scroll]")
+{
+    ScrollFixture fixture;
+    {
+        INFO("the scroll view takes scrollbar-color");
+        REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-color", "rgba(255, 0, 0, 0.5) #0000ff"));
+    }
+    fixture.test.Frame();
+    const Fenrir::ResolvedStyle* view = fixture.root.GetResolvedStyle(fixture.view);
     INFO("the colours resolve as a half-transparent red thumb and a blue track");
     REQUIRE_FALSE(view->scrollbarColor.isAuto);
     REQUIRE(view->scrollbarColor.thumb.a == 0.5f);

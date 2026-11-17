@@ -32,36 +32,13 @@ namespace
 {
     using Declarations = std::vector<std::pair<std::string, std::string>>;
 
-    // A UITestApp with a hidden 320 by 240 window installed first, whose cursor shape the roots set.
-    struct WindowCursorApp
+    // The shared hidden-window app, with what the cursor tests do on its window.
+    struct WindowCursorApp : WindowUITestApp
     {
-        Fenrir::App app{std::make_unique<SilentLogger>(), 1};
-        Fenrir::Window window = Fenrir::Window::Install(app, HiddenWindow());
-        Fenrir::Assets assets = Fenrir::Assets::Install(app);
-        Fenrir::Input input = Fenrir::Input::Install(app);
-        Fenrir::UI ui = Fenrir::UI::Install(app);
-
-        static Fenrir::WindowConfig HiddenWindow()
-        {
-            Fenrir::WindowConfig config;
-            config.title = "FenrirUITests";
-            config.logicalSize = {320, 240};
-            config.visible = false;
-            return config;
-        }
-
         // Skips the calling test when SDL's video could not start: no display to make a window on.
         void RequireDisplay() const
         {
-            if (!window.IsValid())
-            {
-                SKIP("SDL's video could not start (no display), so there is no window cursor");
-            }
-        }
-
-        Fenrir::UIRoots& Roots()
-        {
-            return app.GetResource<Fenrir::UIRoots>();
+            WindowUITestApp::RequireDisplay("window cursor");
         }
 
         // A root on the window, over a capture target of the window's size at a scale of 1, so UI units are the
@@ -79,13 +56,8 @@ namespace
         // Moves the pointer to `position` in the window and runs the frame that routes it.
         void MoveTo(Vec2 position)
         {
-            app.GetResource<Fenrir::InputFeed>().MouseMove(testWindow, position, {0.0f, 0.0f});
+            Feed().MouseMove(testWindow, position, {0.0f, 0.0f});
             Frame();
-        }
-
-        void Frame()
-        {
-            app.RunFrame(1.0 / 60.0);
         }
 
         [[nodiscard]] CursorShape Shape()
@@ -135,22 +107,37 @@ namespace
     }
 } // namespace
 
-TEST_CASE("Over a button the window's cursor is the hand, and over a text entry the I-beam", "[ui][cursor][display]")
+TEST_CASE("Over a button the window's cursor is the hand", "[ui][cursor][display]")
 {
     WindowCursorApp test;
     test.RequireDisplay();
     UIRoot& root = test.MakeRoot();
     (void)Place(root, "button", 10.0f, 10.0f, 80.0f, 30.0f);
-    (void)Place(root, "textentry", 10.0f, 100.0f, 120.0f, 30.0f);
     test.Frame();
-    INFO("the window starts with the arrow");
-    REQUIRE(test.Shape() == CursorShape::Arrow);
+    {
+        INFO("the window starts with the arrow");
+        REQUIRE(test.Shape() == CursorShape::Arrow);
+    }
 
     test.MoveTo({50.0f, 25.0f});
     INFO("the default stylesheet gives a button `cursor: pointer`, the hand");
     REQUIRE(test.Shape() == CursorShape::Hand);
+}
+
+TEST_CASE("Over a text entry the window's cursor is the I-beam", "[ui][cursor][display]")
+{
+    WindowCursorApp test;
+    test.RequireDisplay();
+    UIRoot& root = test.MakeRoot();
+    (void)Place(root, "textentry", 10.0f, 100.0f, 120.0f, 30.0f);
+    test.Frame();
+    {
+        INFO("the window starts with the arrow");
+        REQUIRE(test.Shape() == CursorShape::Arrow);
+    }
+
     test.MoveTo({50.0f, 115.0f});
-    INFO("and a text entry `cursor: text`, the I-beam");
+    INFO("the default stylesheet gives a text entry `cursor: text`, the I-beam");
     REQUIRE(test.Shape() == CursorShape::Text);
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -17,8 +18,10 @@
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirDraw2D/DrawList2D.hpp"
 #include "FenrirInput/Input.hpp"
+#include "FenrirMath/Colour.hpp"
 #include "FenrirPainter/PainterVertex.hpp"
 #include "FenrirUI/UI.hpp"
+#include "FenrirWindow/Window.hpp"
 
 namespace UITest
 {
@@ -126,6 +129,100 @@ namespace UITest
         }
     };
 
+    // A UITestApp with a hidden 320 by 240 window installed before the rest, for what needs FenrirWindow: its
+    // clipboard, or the cursor shape the roots set on it.
+    struct WindowUITestApp
+    {
+        Fenrir::App app{std::make_unique<SilentLogger>(), 1};
+        Fenrir::Window window = Fenrir::Window::Install(app, HiddenWindow());
+        Fenrir::Assets assets = Fenrir::Assets::Install(app);
+        Fenrir::Input input = Fenrir::Input::Install(app);
+        Fenrir::UI ui = Fenrir::UI::Install(app);
+
+        static Fenrir::WindowConfig HiddenWindow()
+        {
+            Fenrir::WindowConfig config;
+            config.title = "FenrirUITests";
+            config.logicalSize = {320, 240};
+            config.visible = false;
+            return config;
+        }
+
+        // Skips the calling test when SDL's video could not start: with no display there is no window, so no
+        // `missing` (what the test needs from it).
+        void RequireDisplay(std::string_view missing) const
+        {
+            if (!window.IsValid())
+            {
+                SKIP("SDL's video could not start (no display), so there is no " << missing);
+            }
+        }
+
+        Fenrir::InputFeed& Feed()
+        {
+            return app.GetResource<Fenrir::InputFeed>();
+        }
+
+        // Presses and releases `key`, fed for the next frame.
+        void Type(Fenrir::Key key, Fenrir::Scancode scancode,
+                  Fenrir::KeyModifiers modifiers = Fenrir::KeyModifiers::None)
+        {
+            Feed().KeyDown(testWindow, key, scancode, modifiers);
+            Feed().KeyUp(testWindow, key, scancode, modifiers);
+        }
+
+        Fenrir::UIRoots& Roots()
+        {
+            return app.GetResource<Fenrir::UIRoots>();
+        }
+
+        void Frame()
+        {
+            app.RunFrame(1.0 / 60.0);
+        }
+    };
+
+    // A UITestApp with one root over an 800 by 600 capture target, for tests that read elements' resolved style.
+    struct StyleTest
+    {
+        UITestApp test;
+        std::shared_ptr<CaptureTarget> target;
+        Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
+
+        // A panel under `parent` with the classes `classes`, space-separated.
+        Fenrir::ElementId Make(Fenrir::ElementId parent, std::string_view classes)
+        {
+            const Fenrir::ElementId element = root.Create(parent, "panel");
+            for (std::size_t start = 0; start < classes.size();)
+            {
+                const std::size_t end = std::min(classes.find(' ', start), classes.size());
+                root.AddClass(element, classes.substr(start, end - start));
+                start = end + 1;
+            }
+            return element;
+        }
+
+        Fenrir::ElementId Make(std::string_view classes)
+        {
+            return Make(root.GetRootElement(), classes);
+        }
+
+        const Fenrir::ResolvedStyle& Style(Fenrir::ElementId element) const
+        {
+            const Fenrir::ResolvedStyle* style = root.GetResolvedStyle(element);
+            INFO("the element is alive and styled");
+            REQUIRE(style != nullptr);
+            return *style;
+        }
+
+        // Sets `name: value` inline on `element`, which must read.
+        void Set(Fenrir::ElementId element, std::string_view name, std::string_view value)
+        {
+            INFO("the inline declaration " << name << ": " << value << " reads");
+            REQUIRE(root.SetStyleProperty(element, name, value));
+        }
+    };
+
     // The events `reader` has not read yet, copied out.
     template <typename TEvent>
     std::vector<TEvent> ReadAll(Fenrir::EventReader<TEvent>& reader, const Fenrir::App& app)
@@ -208,6 +305,19 @@ namespace UITest
     {
         return Near(a.x, b.x, tolerance) && Near(a.y, b.y, tolerance) && Near(a.width, b.width, tolerance) &&
                Near(a.height, b.height, tolerance);
+    }
+
+    // Each channel within `tolerance`: for a colour mixed or converted on the way, as a transition's is.
+    inline bool Near(const Fenrir::Colour& a, const Fenrir::Colour& b, float tolerance = 1e-3f)
+    {
+        return Near(a.r, b.r, tolerance) && Near(a.g, b.g, tolerance) && Near(a.b, b.b, tolerance) &&
+               Near(a.a, b.a, tolerance);
+    }
+
+    // Every channel equal: for a colour that reaches the style unmixed, as a named colour does.
+    inline bool Same(const Fenrir::Colour& a, const Fenrir::Colour& b)
+    {
+        return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
     }
 } // namespace UITest
 
