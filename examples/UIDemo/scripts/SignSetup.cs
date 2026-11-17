@@ -50,7 +50,7 @@ public sealed class SignSetup : ISystem
         if (root.Value == 0)
             return;
 
-        if (RayThroughCursor() is { } ray)
+        if (RayThroughCursor(context) is { } ray)
             root.SetPointerRay(ray, Mouse.IsDown(MouseButton.Left));
         else
             root.ClearPointerRay();
@@ -82,16 +82,33 @@ public sealed class SignSetup : ISystem
     }
 
     // The ray from the window's camera through the cursor, or none under the terminal's rules.
-    private static Ray? RayThroughCursor()
+    private static Ray? RayThroughCursor(in SystemContext context)
     {
         UIRoot menu = UIRoot.Find(Window, MenuLayer);
+        // The menu's document is under its root while it is open (and while it leaves through its outro).
         bool menuOpen = menu.Value != 0 && menu.GetChildren(menu.GetRootElement(), Span<ElementId>.Empty) > 0;
         bool pointerTaken = Resources.TryGetReadOnly<InputClaims>(out var claims) && claims.Value.For(Window).Pointer;
         if (menuOpen || pointerTaken || Mouse.IsDown(MouseButton.Right))
             return null;
-        Entity camera = Renderer.CameraAt(Window, Mouse.Position);
+        Entity camera = WindowCamera(context);
         if (!camera.IsValid || !Renderer.ScreenPointToRay(camera, Mouse.Position, out Ray ray))
             return null;
         return ray;
+    }
+
+    // The highest-order enabled camera drawing to a window, as the room's terminal takes its ray from.
+    private static Entity WindowCamera(in SystemContext context)
+    {
+        Entity found = Entity.None;
+        int order = 0;
+        foreach (var (entity, _, camera) in context.Query<Transform, Camera>())
+        {
+            if (camera.Enabled && camera.Target.Type == RenderTargetType.Window && (!found.IsValid || camera.Order > order))
+            {
+                found = entity;
+                order = camera.Order;
+            }
+        }
+        return found;
     }
 }

@@ -44,6 +44,21 @@ namespace Fenrir
             return index < 0 ? UIRoot::End : static_cast<std::size_t>(index);
         }
 
+        /**
+         * @brief A root config with what every kind of script-made root's settings share: the scale rule, pixel
+         * snapping, the default stylesheet and hot reload.
+         */
+        template <class Settings>
+        UIRootConfig SharedConfig(const Settings& settings)
+        {
+            UIRootConfig config;
+            config.scaleRule = settings.scaleRule;
+            config.snapToPixels = settings.snapToPixels;
+            config.defaultStylesheet = settings.defaultStylesheet;
+            config.hotReload = settings.hotReload;
+            return config;
+        }
+
         /** @brief Writes `ids` into C#'s span, as much as fits, and returns how many there are. */
         std::int32_t WriteIds(std::span<const ElementId> ids, ElementId* out, std::int32_t count)
         {
@@ -70,15 +85,11 @@ namespace Fenrir
             {
                 return;
             }
-            UIRootConfig config;
+            UIRootConfig config = SharedConfig(*settings);
             config.window = settings->window;
             config.layer = settings->layer;
-            config.scaleRule = settings->scaleRule;
-            config.snapToPixels = settings->snapToPixels;
             config.inputPriority = settings->inputPriority;
-            config.defaultStylesheet = settings->defaultStylesheet;
             config.virtualCursor = settings->virtualCursor;
-            config.hotReload = settings->hotReload;
             *root = roots->CreateRoot(std::move(config)).GetId();
         }
 
@@ -103,15 +114,11 @@ namespace Fenrir
             {
                 return;
             }
-            UIRootConfig config;
+            UIRootConfig config = SharedConfig(*settings);
             config.target =
                 std::make_shared<UIImageTarget>(app, settings->width, settings->height, settings->colourSpace);
-            config.scaleRule = settings->scaleRule;
-            config.snapToPixels = settings->snapToPixels;
-            config.defaultStylesheet = settings->defaultStylesheet;
-            config.hotReload = settings->hotReload;
             *root = roots->CreateRoot(std::move(config)).GetId();
-            ui.made.push_back(*root);
+            ui.generationRoots.push_back(*root);
         }
 
         /**
@@ -141,15 +148,11 @@ namespace Fenrir
                 guard.Warn(std::string(UIScripting::NoWorldQuad));
                 return;
             }
-            UIRootConfig config;
+            UIRootConfig config = SharedConfig(*settings);
             config.target = std::make_shared<UIWorldTarget>(context.GetApp(), *entity);
-            config.scaleRule = settings->scaleRule;
-            config.snapToPixels = settings->snapToPixels;
-            config.defaultStylesheet = settings->defaultStylesheet;
-            config.hotReload = settings->hotReload;
             config.virtualCursor = settings->virtualCursor;
             *root = roots->CreateRoot(std::move(config)).GetId();
-            ui.made.push_back(*root);
+            ui.generationRoots.push_back(*root);
         }
 
         /**
@@ -232,6 +235,7 @@ namespace Fenrir
         bool DestroyRoot(const CallContext& context, UIScripting& ui, const UIRootId* root)
         {
             UIRoot* found = ui.RootOf(context, *root);
+            std::erase(ui.generationRoots, *root);
             return found != nullptr && context.GetApp().GetResource<UIRoots>().DestroyRoot(*found);
         }
 

@@ -128,13 +128,14 @@ namespace Fenrir
             {
                 for (UIRoot* root : roots->GetRoots())
                 {
-                    if (std::find(made.begin(), made.end(), root->GetId()) != made.end())
+                    if (std::find(generationRoots.begin(), generationRoots.end(), root->GetId()) !=
+                        generationRoots.end())
                     {
                         (void)roots->DestroyRoot(*root);
                     }
                 }
             }
-            made.clear();
+            generationRoots.clear();
         }
 
         /** @brief Takes back every painter lent in the stage that is ending: their ids paint nothing from now on. */
@@ -160,9 +161,9 @@ namespace Fenrir
         std::vector<PaintStageHandle> placedPaint;
         /**
          * @brief The image and world roots the loaded script generation made (CreateImageRoot, CreateWorldRoot), which
-         * its release destroys. Its window roots are the game's to keep, as before.
+         * its release destroys, less those Destroy ended. Its window roots are the game's to keep, as before.
          */
-        std::vector<UIRootId> made;
+        std::vector<UIRootId> generationRoots;
         /** @brief The loaded script's stage changes, played back as each stage ends. */
         std::optional<StageChanges> changes;
         /** @brief What the natives have warned about, so that each place warns once. */
