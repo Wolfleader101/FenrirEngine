@@ -1,0 +1,25 @@
+@* The C# scenes' readings panel (examples/PhysicsDemo/README.md), which ReadingsPanelSetup mounts into the active C#
+   scene's demo slot: a readout per entity its readings system named, from Looks.Readings, in the demo UI kit's shared
+   Razor components (Fenrir.Demo.Razor), styled like the C++ scenes' Readings section. It has no switches, so the scene
+   needs no keys for it. *@
+@using Fenrir.Demo.Razor
+<DemoSection Title="Readings">
+    @foreach (var (label, value) in Looks.Readings)
+    {
+        <Readout Label="@label" Value="@value" />
+    }
+</DemoSection>
+
+@code {
+    // Rebuilt when a reading changes, which most do each frame.
+    protected override int BuildHash()
+    {
+        var hash = new HashCode();
+        foreach (var (label, value) in Looks.Readings)
+        {
+            hash.Add(label);
+            hash.Add(value);
+        }
+        return hash.ToHashCode();
+    }
+}

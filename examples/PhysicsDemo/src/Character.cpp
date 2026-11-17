@@ -26,10 +26,10 @@
 // Camera entity. C frees the camera (it stays where it is, and the arrows still walk; F3 is the free-fly camera) and
 // snaps it back.
 //
-// The character's name shows its readings every frame, shown as screen text: ground state and what it stands on,
-// velocity, moved velocity, carried velocity while it has some, onWall, onCeiling and shapeBlocked while set, how many
-// times it has landed, and how often its ground state changed in the last second. Each ground change is logged with its
-// tick; L logs the whole state.
+// The character's name shows its readings every frame, shown as readouts in the demo panel: ground state and what it
+// stands on, velocity, moved velocity, carried velocity while it has some, onWall, onCeiling and shapeBlocked while
+// set, how many times it has landed, and how often its ground state changed in the last second. Each ground change is
+// logged with its tick; L logs the whole state.
 //
 // T teleports the character to just above the start by writing its Transform's position, and the autopilot does so at
 // the end of each route. 2 toggles its interpolation, which a 60 Hz display with vsync barely shows.
@@ -67,6 +67,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <format>
 #include <memory>
 #include <numbers>
 #include <optional>
@@ -215,7 +216,7 @@ namespace PhysicsDemo
                                       keyboard.IsDown(Fenrir::Key::Q), keyboard.IsDown(Fenrir::Key::E),
                                       static_cast<float>(app.GetTime().deltaTime));
                 ShowLook();
-                ShowReadings(app.GetActiveScene());
+                ShowReadings(app);
             }
 
             // Tick, while the scene is active: game code reads the last move's state and drives the character.
@@ -1022,8 +1023,8 @@ namespace PhysicsDemo
                 m_lastGround = ground;
             }
 
-            // The readings in the names, shown as screen text.
-            void ShowReadings(Fenrir::Scene& scene) const
+            // The readings in the names, shown as readouts in the demo panel.
+            void ShowReadings(Fenrir::App& app) const
             {
                 const Fenrir::CharacterBody& body = m_character.GetComponent<Fenrir::CharacterBody>();
                 const Fenrir::CharacterState& state = body.state;
@@ -1071,9 +1072,18 @@ namespace PhysicsDemo
                 secondReading += m_secondWalking ? ")" : ", stopped)";
                 m_second.GetComponent<Fenrir::Name>().Set(secondReading.c_str());
 
-                const std::array<Fenrir::Entity, 6> shown = {m_character,       m_pushBoxes.at(0), m_pushBoxes.at(1),
-                                                             m_pushBoxes.at(2), m_seesaw,          m_second};
-                ShowReadouts(scene, shown);
+                std::array<std::string, 3> pushLabels;
+                for (std::size_t i = 0; i < pushLabels.size(); ++i)
+                {
+                    pushLabels.at(i) = std::format("Push box {:.0f} kg", static_cast<double>(m_pushMasses.at(i)));
+                }
+                const std::array<Reading, 6> shown = {Reading{"Character", m_character},
+                                                      Reading{pushLabels.at(0), m_pushBoxes.at(0)},
+                                                      Reading{pushLabels.at(1), m_pushBoxes.at(1)},
+                                                      Reading{pushLabels.at(2), m_pushBoxes.at(2)},
+                                                      Reading{"Seesaw", m_seesaw},
+                                                      Reading{"Character 2", m_second}};
+                ShowReadouts(app, shown);
             }
 
             void LogState(Fenrir::App& app) const
@@ -1204,18 +1214,58 @@ namespace PhysicsDemo
 
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp =
-            "WASD or the arrows walk (relative to the camera), Shift runs, Space jumps, Q and E turn the camera, C "
-            "frees "
-            "the camera and snaps it back, X toggles crouch, G scales the character by 1.5 and back. A wall to the "
-            "south-east, a low ceiling to the south-west, a crouch tunnel to the north, a ledge only a crouch-jump "
-            "clears to the north-west, a lift and a shuttle to the north-east. Boxes of 1, 20 and 100 kg east of the "
-            "wall, a seesaw to the west, a paddle's lane to the south, and past it a second character walking a loop, "
-            "which 6 stops and starts. B throws a ball at the character, logging its contacts, H drops a box on its "
-            "head. Far west, a ledge 3 m up with a 30° ramp and ten 0.3 m stairs to it, and a 55° slope that cannot be "
-            "walked up. T teleports to the start, 1 toggles stopOnSlope, 2 toggles interpolation, 3 pauses the "
-            "platforms and the paddle, 4 toggles the character on and off, 5 toggles stairs and ground snapping, M "
-            "swaps its collider to a mesh (inactive) and back. L logs the state, P walks the route by itself.";
+        // A wall to the south-east, a low ceiling to the south-west, a crouch tunnel to the north, a ledge only a
+        // crouch-jump clears to the north-west, a lift and a shuttle to the north-east; boxes of 1, 20 and 100 kg east
+        // of the wall, a seesaw to the west, a paddle's lane to the south and past it a second character walking a
+        // loop. Far west, a ledge 3 m up with a 30 degree ramp and ten 0.3 m stairs to it, and a 55 degree slope that
+        // cannot be walked up.
+        scene.keyRows = {{"WASD/arrows", "walk, relative to the camera"},
+                         {"Shift", "run"},
+                         {"Space", "jump"},
+                         {"Q/E", "turn the camera"},
+                         {"C", "free the camera, and snap it back"},
+                         {"X", "crouch on/off"},
+                         {"G", "scale the character by 1.5, and back"},
+                         {"B", "throw a ball at the character (its contacts logged)"},
+                         {"H", "drop a box on its head"},
+                         {"T", "teleport to the start"},
+                         {"1", "stopOnSlope on/off"},
+                         {"2", "interpolation on/off"},
+                         {"3", "pause the platforms and the paddle"},
+                         {"4", "the character on/off"},
+                         {"5", "stairs and ground snapping on/off"},
+                         {"6", "stop or start the second character"},
+                         {"M", "swap to a mesh collider (inactive), and back"},
+                         {"L", "log the state"},
+                         {"P", "walk the route by itself"}};
+        scene.tutorial = FenrirDemo::DemoTutorial{
+            .title = "Character",
+            .steps = {
+                {.title = "Walking",
+                 .text = "WASD or the arrows walk the character, relative to the camera, and Shift runs. Q and E "
+                         "turn the camera round it. Walk a step.",
+                 .keys = {{"WASD/arrows", "walk"}, {"Shift", "run"}, {"Q/E", "turn the camera"}},
+                 .done =
+                     [](Fenrir::App& app) {
+                         return AnyJustPressed(app, {Fenrir::Key::W, Fenrir::Key::A, Fenrir::Key::S, Fenrir::Key::D,
+                                                     Fenrir::Key::Up, Fenrir::Key::Down, Fenrir::Key::Left,
+                                                     Fenrir::Key::Right});
+                     }},
+                {.title = "Jumping",
+                 .text = "Space jumps. The lift and the shuttle to the north-east carry the character, and a jump "
+                         "off one keeps their speed. Jump.",
+                 .keys = {{"Space", "jump"}},
+                 .done = [](Fenrir::App& app) { return AnyJustPressed(app, {Fenrir::Key::Space}); }},
+                {.title = "Crouching",
+                 .text = "X crouches, and again stands up where there is room. The tunnel to the north needs a "
+                         "crouch, and the ledge to the north-west a crouch in mid-jump. Crouch.",
+                 .keys = {{"X", "crouch on/off"}},
+                 .done = [](Fenrir::App& app) { return AnyJustPressed(app, {Fenrir::Key::X}); }},
+                {.title = "Pushing",
+                 .text = "East of the wall are boxes of 1, 20 and 100 kg: walk into them. The light two move, the "
+                         "heavy one doesn't, and their speeds are in the Readings section. The seesaw to the west "
+                         "tips under the character.",
+                 .keys = {{"WASD/arrows", "walk into a box"}}}}};
         using Fenrir::Key;
         // The autopilot walks every piece while L logs the state, then stops, each key is tapped twice, and T ends it.
         scene.keys = {Key::P};
@@ -1236,16 +1286,22 @@ namespace PhysicsDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Character (C#)";
-        scene.keyHelp =
-            "A character body built and driven by C#. WASD or the arrows walk (relative to the camera), Shift runs, "
-            "Space jumps, Q and E turn the camera, C frees the camera and snaps it back, X toggles crouch. A slide "
-            "ramp "
-            "to the west, ice to the east, a crouch tunnel to the south, a trigger pad to the south-west, a lift to "
-            "the "
-            "north-east, and to the north a ghost pane the character passes through and a test wall. F dashes 8 m "
-            "ahead (MoveCast), K puts the character half into the test wall and pushes it out (Penetrations, "
-            "Depenetrate). T teleports to the start, 1 toggles StopOnSlope (off at the start), L logs the state, P "
-            "walks the route by itself.";
+        // A character body built and driven by C#: a slide ramp to the west, ice to the east, a crouch tunnel to the
+        // south, a trigger pad to the south-west, a lift to the north-east, and to the north a ghost pane the character
+        // passes through and a test wall. Its readings are a Razor panel (scripts/ReadingsPanel.razor).
+        scene.keyRows = {{"WASD/arrows", "walk, relative to the camera"},
+                         {"Shift", "run"},
+                         {"Space", "jump"},
+                         {"Q/E", "turn the camera"},
+                         {"C", "free the camera, and snap it back"},
+                         {"X", "crouch on/off"},
+                         {"F", "dash 8 m ahead (MoveCast)"},
+                         {"K", "put the character half into the test wall and push it out"},
+                         {"T", "teleport to the start"},
+                         {"1", "StopOnSlope on/off (off at the start)"},
+                         {"L", "log the state"},
+                         {"P", "walk the route by itself"}};
+        scene.razorPanel = "character-csharp-readings";
         using Fenrir::Key;
         // The autopilot walks the whole route while L logs the state, then stops, each key is tapped twice (T last, so
         // F dashes from the start, through the ghost pane to the test wall), F and K once, and T ends it.
