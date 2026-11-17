@@ -89,9 +89,36 @@ type: the scaffold feeds it. The scaffold adds it as the `DemoUI` app resource o
     the scenes' `Update`. A scene section's function is no longer called once the scene is left, so it may hold
     pointers into the scene's state.
   - `Separator(title)`: a rule, under a title when one is given, grouping the rows after it.
+  - **Switch rows** (`GLOSSARY.md`), a label and a control bound to a value, each with an optional last argument, its
+    hint:
+    - `Toggle(label, DemoValue<bool>)`: a checkbox.
+    - `Range(label, DemoValue<float>, min, max, DemoRangeOptions)`: a slider, its value shown beside it with
+      `decimals` places. `logarithmic` maps the slider's 0..1 to `min * (max / min)^t`, for values across orders of
+      magnitude; it needs a positive `min` and `max`, and otherwise the kit logs an error and draws the range linear.
+      `step` snaps a linear range's value from `min`. `angle` shows a value in radians (and `min` and `max` in
+      radians) as degrees.
+    - `Range(label, DemoValue<int>, min, max)`: a slider in steps of one, its value beside it.
+    - `Choice(label, DemoValue<int>, options)`: the index of one of `options`. Up to four are buttons
+      (`.demo-choice-button`, the chosen one `.active`); beyond four, a previous and next stepper (wrapping) round the
+      chosen option's name, as FenrirUI has no dropdown.
+    - `Colour(label, DemoValue<Vec3>)`: a linear colour, components 0 to 1: a swatch, the colour encoded for display,
+      over hue, saturation and value sliders (FenrirUI has no colour picker).
+    - `Button(label, std::function<void()>)`: a button captioned `label`.
+    - `TextEntry(label, DemoValue<std::string>)`: a text entry, written at each edit.
 
-  Every row handle can hide its row (`SetShown`, taking no room) and grey it out (`SetDisabled`). A handle to a section
-  or row that is gone does nothing.
+    **Bindings:** a `DemoValue<T>` is a `T*` (`&settings.exposure`) or a get and set pair. Each frame, in the kit's build
+    stage work, the kit reads every switch row's value and shows it in the control, unless the control is being dragged
+    (a held slider) or edited (a focused text entry), and only when it differs from what the control last showed. A
+    change from a control is written through the binding the frame it arrives, during the input dispatch and so before
+    the scenes' `Update`. So a key that changes a value moves its control the next frame, and a control that changes
+    it changes what the keys see. A scene section's rows go when the scene is left, before its state, so a pointer into
+    the scene's state is safe there; an app section's binding must outlive the kit.
+
+  Every row handle can hide its row (`SetShown`, taking no room) and grey it out (`SetDisabled`, which also disables a
+  switch row's controls). A handle to a section or row that is gone does nothing.
+- **The hint line,** at the demo panel's foot under its scrolling sections (`#demo-hint`): the hint of the row under the
+  pointer, or else of the row with the focus, and empty, taking no room, when neither has one. The kit tracks it from UI
+  events (the pointer entering and leaving, focus and blur) and sets it in its build stage work.
 - **The scene switcher** is the panel's first app section, "Scenes": a button per scene of the app, in order, the
   active one with the class `active`. A click enters that scene the next frame, as PageDown does, with the same
   `Scene i/n` log line and help, and in a smoke run too; a click on the active one does nothing. The scaffold feeds
@@ -110,7 +137,8 @@ type: the scaffold feeds it. The scaffold adds it as the `DemoUI` app resource o
 - **Input:** only the panels' boxes take the pointer (`pointer-events: all` on `.demo-box`), so a press on a panel is
   consumed and sends no `DemoSceneClickEvent`, while the free-fly camera's right-drag and the scene click work everywhere
   else (ADR-0065). Tab and a click focus the kit's controls as FenrirUI does, and a focused one has the keyboard until
-  a click on the scene. The root takes no gamepad input (`UIRootConfig::gamepadNavigation` off), so a pad always drives
+  a click on the scene. A focused text entry also has text input and takes F1 as its own; Escape blurs it, as does a
+  click on the scene. The root takes no gamepad input (`UIRootConfig::gamepadNavigation` off), so a pad always drives
   the scene. The window's text input follows the kit's `textInput` claim (`WindowConfig::textInputByDefault` is false).
 - **Files and hot reload:** `assets/ui/demo.ui` (the containers, by id) and `assets/ui/demo.css` (the one theme: its
   custom properties, `--demo-ink`, `--demo-panel`, `--demo-accent` and the rest, are on `#demo-kit`; text is FenrirText's
@@ -218,4 +246,12 @@ reaching the scene while the kit has the focus; and the demo panel's rows (`Test
 scene's `update` shown that frame and a pulled one following its function, a scene's readouts gone after it is left
 and fresh when it is entered again, a readout hidden and shown and one greyed out, a separator's title, the scene switcher listing the
 scenes, marking the active one (after a click and after PageDown) and entering the third on a click, and the frame
-stats' frame time, fps and the renderer's draws on the null backend.
+stats' frame time, fps and the renderer's draws on the null backend; and the switch rows and the hint line
+(`Tests/DemoSwitches.cpp`): a toggle's click setting its bool and code moving it the next frame, a click on a switch
+leaving the scene its keys, a range drag written before the scene's `update` without turning the free-fly camera and
+a held range not moved by its value, a logarithmic range mapping 0, 0.5 and 1 to `min`, `sqrt(min*max)` and `max`
+and one with a non-positive `min` logged and linear, an integer range and an angle's degrees, a choice of three as
+buttons and one of five as a wrapping stepper, a colour row's sliders setting the colour with the swatch following, a
+button's function, a disabled row's control, a text entry typed in claiming the keyboard (a held W cancelled, F1 typed
+into it) with a click on the scene or Escape giving it back, the hint line following the hover and then the focus,
+and the gamepad's directions reaching the game while a slider has the focus.

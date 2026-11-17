@@ -1,6 +1,11 @@
 #include "FenrirDemoScaffold/DemoUI.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <format>
+#include <numbers>
+#include <optional>
 #include <utility>
 
 #include "FenrirApp/App.hpp"
@@ -37,6 +42,553 @@ namespace FenrirDemo
                                     loaded->diagnostics.size());
             }
         }
+
+        /** @brief `element` of `root` as a `Control`, or null when it is gone or is another kind. */
+        template <typename Control>
+        Control* As(const Fenrir::UIRoot& root, Fenrir::ElementId element)
+        {
+            return dynamic_cast<Control*>(root.GetElement(element));
+        }
+
+        /** @brief Makes a `tag` under `parent` with the class `name`. */
+        Fenrir::ElementId Make(Fenrir::UIRoot& root, Fenrir::ElementId parent, std::string_view tag,
+                               std::string_view name)
+        {
+            const Fenrir::ElementId element = root.Create(parent, tag);
+            root.AddClass(element, name);
+            return element;
+        }
+
+        /** @brief A label of class `name` under `parent`, showing `text`. */
+        Fenrir::ElementId MakeLabel(Fenrir::UIRoot& root, Fenrir::ElementId parent, std::string_view name,
+                                    std::string_view text)
+        {
+            const Fenrir::ElementId label = Make(root, parent, "label", name);
+            root.SetText(label, text);
+            return label;
+        }
+
+        /** @brief A slider of the class `demo-slider`, and `name` when given, from `min` to `max` in `step`s. */
+        Fenrir::ElementId MakeSlider(Fenrir::UIRoot& root, Fenrir::ElementId parent, float min, float max, float step,
+                                     std::string_view name = {})
+        {
+            const Fenrir::ElementId element = Make(root, parent, "slider", "demo-slider");
+            if (!name.empty())
+            {
+                root.AddClass(element, name);
+            }
+            if (auto* slider = As<Fenrir::Slider>(root, element); slider != nullptr)
+            {
+                slider->SetRange(min, max);
+                slider->SetStep(step);
+            }
+            return element;
+        }
+
+        /** @brief Whether a press holds `element` (a slider being dragged). */
+        bool Held(const Fenrir::UIRoot& root, Fenrir::ElementId element)
+        {
+            return root.HasPseudoClass(element, Fenrir::PseudoClass::Active);
+        }
+
+        /** @brief A linear colour component encoded for display (sRGB's transfer function), 0 to 255. */
+        int EncodeSrgb(float linear)
+        {
+            const float clamped = std::clamp(linear, 0.0f, 1.0f);
+            const float encoded =
+                clamped <= 0.0031308f ? clamped * 12.92f : 1.055f * std::pow(clamped, 1.0f / 2.4f) - 0.055f;
+            return static_cast<int>(std::lround(encoded * 255.0f));
+        }
+
+        /** @brief Hue, saturation and value, each 0 to 1, of `rgb`. A grey keeps hue 0. */
+        Fenrir::Math::Vec3 RgbToHsv(Fenrir::Math::Vec3 rgb)
+        {
+            const float high = std::max({rgb.r, rgb.g, rgb.b});
+            const float low = std::min({rgb.r, rgb.g, rgb.b});
+            const float range = high - low;
+            float hue = 0.0f;
+            if (range > 0.0f)
+            {
+                if (high == rgb.r)
+                {
+                    hue = std::fmod((rgb.g - rgb.b) / range, 6.0f);
+                }
+                else if (high == rgb.g)
+                {
+                    hue = (rgb.b - rgb.r) / range + 2.0f;
+                }
+                else
+                {
+                    hue = (rgb.r - rgb.g) / range + 4.0f;
+                }
+                hue /= 6.0f;
+                if (hue < 0.0f)
+                {
+                    hue += 1.0f;
+                }
+            }
+            return {hue, high > 0.0f ? range / high : 0.0f, high};
+        }
+
+        /** @brief The colour of hue, saturation and value `hsv`, each 0 to 1. */
+        Fenrir::Math::Vec3 HsvToRgb(Fenrir::Math::Vec3 hsv)
+        {
+            const float sector = std::fmod(hsv.x, 1.0f) * 6.0f;
+            const float chroma = hsv.z * hsv.y;
+            const float second = chroma * (1.0f - std::abs(std::fmod(sector, 2.0f) - 1.0f));
+            Fenrir::Math::Vec3 rgb(0.0f);
+            switch (static_cast<int>(sector))
+            {
+            case 0:
+                rgb = {chroma, second, 0.0f};
+                break;
+            case 1:
+                rgb = {second, chroma, 0.0f};
+                break;
+            case 2:
+                rgb = {0.0f, chroma, second};
+                break;
+            case 3:
+                rgb = {0.0f, second, chroma};
+                break;
+            case 4:
+                rgb = {second, 0.0f, chroma};
+                break;
+            default:
+                rgb = {chroma, 0.0f, second};
+                break;
+            }
+            return rgb + Fenrir::Math::Vec3(hsv.z - chroma);
+        }
+    } // namespace
+
+    namespace Detail
+    {
+        /**
+         * @brief A switch row's control and its binding. Build makes the row's elements under its row element and
+         * attaches the listeners that write a change back the frame it arrives; Sync, in the build stage, shows the
+         * bound value in the control unless it is held or edited, and only when it differs from what was last shown,
+         * so a hue survives a grey and a drag is never fought.
+         *
+         * The listeners hold `this`: a switch is shared by its row and outlives the row's elements, which go with
+         * their listeners when the row's section does or the document loads again.
+         */
+        class DemoSwitch
+        {
+          public:
+            DemoSwitch() = default;
+            DemoSwitch(const DemoSwitch&) = delete;
+            DemoSwitch& operator=(const DemoSwitch&) = delete;
+            DemoSwitch(DemoSwitch&&) = delete;
+            DemoSwitch& operator=(DemoSwitch&&) = delete;
+            virtual ~DemoSwitch() = default;
+
+            /** @brief Makes the row's label and controls under `row`, its element, of a row labelled `label`. */
+            virtual void Build(Fenrir::UIRoot& root, Fenrir::ElementId row, const std::string& label) = 0;
+            /** @brief Shows the bound value in the controls, unless one is held or edited or it is already shown. */
+            virtual void Sync(Fenrir::UIRoot& root) = 0;
+
+            /** @brief Disables or enables every control of the row. */
+            void SetDisabled(const Fenrir::UIRoot& root, bool disabled) const
+            {
+                for (const Fenrir::ElementId element : m_controls)
+                {
+                    if (auto* control = As<Fenrir::Control>(root, element); control != nullptr)
+                    {
+                        control->SetDisabled(disabled);
+                    }
+                }
+            }
+
+          protected:
+            /** @brief The row's controls, for SetDisabled; Build fills it. */
+            std::vector<Fenrir::ElementId> m_controls;
+        };
+    } // namespace Detail
+
+    namespace
+    {
+        /** @brief Gives a switch row's element `row` its kind's class and makes its label. */
+        void StartSwitchRow(Fenrir::UIRoot& root, Fenrir::ElementId row, std::string_view kind,
+                            const std::string& label)
+        {
+            root.AddClass(row, kind);
+            MakeLabel(root, row, "demo-row-label", label);
+        }
+
+        /** @brief A checkbox over a bool. */
+        class ToggleSwitch final : public Detail::DemoSwitch
+        {
+          public:
+            explicit ToggleSwitch(DemoValue<bool> value) : m_value(std::move(value))
+            {
+            }
+
+            void Build(Fenrir::UIRoot& root, Fenrir::ElementId row, const std::string& label) override
+            {
+                StartSwitchRow(root, row, "demo-toggle", label);
+                m_box = Make(root, row, "checkbox", "demo-checkbox");
+                m_controls = {m_box};
+                m_shown.reset();
+                root.AddListener(m_box, Fenrir::UIEventKind::Change, [this](Fenrir::UIListenerContext& context) {
+                    const bool checked = context.GetEvent().value != 0.0f;
+                    m_shown = checked;
+                    m_value.Set(checked);
+                });
+            }
+
+            void Sync(Fenrir::UIRoot& root) override
+            {
+                const bool value = m_value.Get();
+                if (m_shown == value)
+                {
+                    return;
+                }
+                m_shown = value;
+                if (auto* box = As<Fenrir::Checkbox>(root, m_box); box != nullptr)
+                {
+                    box->SetChecked(value);
+                }
+            }
+
+          private:
+            DemoValue<bool> m_value;
+            Fenrir::ElementId m_box;
+            std::optional<bool> m_shown;
+        };
+
+        /** @brief A slider over a float, linear or logarithmic, its value shown beside it. */
+        class RangeSwitch final : public Detail::DemoSwitch
+        {
+          public:
+            RangeSwitch(DemoValue<float> value, float min, float max, DemoRangeOptions options)
+                : m_value(std::move(value)), m_min(min), m_max(max), m_options(options)
+            {
+            }
+
+            void Build(Fenrir::UIRoot& root, Fenrir::ElementId row, const std::string& label) override
+            {
+                StartSwitchRow(root, row, "demo-range", label);
+                // A logarithmic slider runs over t, 0 to 1; a linear one over the value itself.
+                m_slider = m_options.logarithmic ? MakeSlider(root, row, 0.0f, 1.0f, 0.0f)
+                                                 : MakeSlider(root, row, m_min, m_max, m_options.step);
+                m_text = MakeLabel(root, row, "demo-range-value", "");
+                m_controls = {m_slider};
+                m_shown.reset();
+                root.AddListener(m_slider, Fenrir::UIEventKind::Change,
+                                 [this, &root](Fenrir::UIListenerContext& context) {
+                                     const float value = FromSlider(context.GetEvent().value);
+                                     m_shown = value;
+                                     m_value.Set(value);
+                                     root.SetText(m_text, Format(value));
+                                 });
+            }
+
+            void Sync(Fenrir::UIRoot& root) override
+            {
+                if (Held(root, m_slider))
+                {
+                    return;
+                }
+                const float value = m_value.Get();
+                if (m_shown == value)
+                {
+                    return;
+                }
+                m_shown = value;
+                if (auto* slider = As<Fenrir::Slider>(root, m_slider); slider != nullptr)
+                {
+                    slider->SetValue(ToSlider(value));
+                }
+                root.SetText(m_text, Format(value));
+            }
+
+          private:
+            [[nodiscard]] float FromSlider(float position) const
+            {
+                return m_options.logarithmic ? m_min * std::pow(m_max / m_min, position) : position;
+            }
+
+            [[nodiscard]] float ToSlider(float value) const
+            {
+                if (!m_options.logarithmic)
+                {
+                    return value;
+                }
+                return value > 0.0f ? std::log(value / m_min) / std::log(m_max / m_min) : 0.0f;
+            }
+
+            [[nodiscard]] std::string Format(float value) const
+            {
+                const int decimals = std::max(m_options.decimals, 0);
+                if (m_options.angle)
+                {
+                    // U+00B0, the degree sign, in UTF-8.
+                    return std::format("{:.{}f}\xC2\xB0", value * 180.0f / std::numbers::pi_v<float>, decimals);
+                }
+                return std::format("{:.{}f}", value, decimals);
+            }
+
+            DemoValue<float> m_value;
+            float m_min;
+            float m_max;
+            DemoRangeOptions m_options;
+            Fenrir::ElementId m_slider;
+            Fenrir::ElementId m_text;
+            std::optional<float> m_shown;
+        };
+
+        /** @brief One of a list of options: buttons for up to four, a stepper round the chosen one's name beyond. */
+        class ChoiceSwitch final : public Detail::DemoSwitch
+        {
+          public:
+            /** @brief The most options shown as buttons. */
+            static constexpr std::size_t MaxButtons = 4;
+
+            ChoiceSwitch(DemoValue<int> value, std::vector<std::string> options)
+                : m_value(std::move(value)), m_options(std::move(options))
+            {
+            }
+
+            void Build(Fenrir::UIRoot& root, Fenrir::ElementId row, const std::string& label) override
+            {
+                StartSwitchRow(root, row, "demo-choice", label);
+                m_buttons.clear();
+                m_shown.reset();
+                if (m_options.size() <= MaxButtons)
+                {
+                    const Fenrir::ElementId buttons = Make(root, row, "panel", "demo-choice-buttons");
+                    for (std::size_t i = 0; i < m_options.size(); ++i)
+                    {
+                        const Fenrir::ElementId button = Make(root, buttons, "button", "demo-choice-button");
+                        root.SetText(button, m_options[i]);
+                        root.AddListener(button, Fenrir::UIEventKind::Click,
+                                         [this, i](Fenrir::UIListenerContext&) { Choose(static_cast<int>(i)); });
+                        m_buttons.push_back(button);
+                    }
+                    m_controls = m_buttons;
+                    return;
+                }
+                const Fenrir::ElementId stepper = Make(root, row, "panel", "demo-stepper");
+                const Fenrir::ElementId previous = Make(root, stepper, "button", "demo-step-previous");
+                root.SetText(previous, "<");
+                m_name = MakeLabel(root, stepper, "demo-choice-name", "");
+                const Fenrir::ElementId next = Make(root, stepper, "button", "demo-step-next");
+                root.SetText(next, ">");
+                root.AddListener(previous, Fenrir::UIEventKind::Click,
+                                 [this](Fenrir::UIListenerContext&) { Step(-1); });
+                root.AddListener(next, Fenrir::UIEventKind::Click, [this](Fenrir::UIListenerContext&) { Step(1); });
+                m_controls = {previous, next};
+            }
+
+            void Sync(Fenrir::UIRoot& root) override
+            {
+                const int value = m_value.Get();
+                if (m_shown == value)
+                {
+                    return;
+                }
+                m_shown = value;
+                for (std::size_t i = 0; i < m_buttons.size(); ++i)
+                {
+                    if (std::cmp_equal(i, value))
+                    {
+                        root.AddClass(m_buttons[i], "active");
+                    }
+                    else
+                    {
+                        root.RemoveClass(m_buttons[i], "active");
+                    }
+                }
+                if (m_buttons.empty())
+                {
+                    root.SetText(m_name, value >= 0 && std::cmp_less(value, m_options.size()) ? m_options[value] : "");
+                }
+            }
+
+          private:
+            /** @brief Writes `index`; the next Sync marks it. */
+            void Choose(int index) const
+            {
+                m_value.Set(index);
+            }
+
+            /** @brief Moves `by` options from the chosen one, wrapping round the ends. */
+            void Step(int by) const
+            {
+                const int count = static_cast<int>(m_options.size());
+                const int chosen = std::clamp(m_value.Get(), 0, count - 1);
+                Choose(((chosen + by) % count + count) % count);
+            }
+
+            DemoValue<int> m_value;
+            std::vector<std::string> m_options;
+            std::vector<Fenrir::ElementId> m_buttons;
+            Fenrir::ElementId m_name;
+            std::optional<int> m_shown;
+        };
+
+        /** @brief A linear colour: a swatch of it, encoded for display, over hue, saturation and value sliders. */
+        class ColourSwitch final : public Detail::DemoSwitch
+        {
+          public:
+            explicit ColourSwitch(DemoValue<Fenrir::Math::Vec3> value) : m_value(std::move(value))
+            {
+            }
+
+            void Build(Fenrir::UIRoot& root, Fenrir::ElementId row, const std::string& label) override
+            {
+                StartSwitchRow(root, row, "demo-colour", label);
+                m_swatch = Make(root, row, "panel", "demo-swatch");
+                const Fenrir::ElementId sliders = Make(root, row, "panel", "demo-colour-sliders");
+                constexpr std::array<std::pair<const char*, const char*>, 3> channels{
+                    {{"H", "demo-hue"}, {"S", "demo-saturation"}, {"V", "demo-value"}}};
+                for (std::size_t i = 0; i < channels.size(); ++i)
+                {
+                    const Fenrir::ElementId line = Make(root, sliders, "panel", "demo-colour-channel");
+                    MakeLabel(root, line, "demo-colour-channel-label", channels[i].first);
+                    m_sliders[i] = MakeSlider(root, line, 0.0f, 1.0f, 0.0f, channels[i].second);
+                    root.AddListener(m_sliders[i], Fenrir::UIEventKind::Change,
+                                     [this, &root](Fenrir::UIListenerContext&) { FromSliders(root); });
+                }
+                m_controls.assign(m_sliders.begin(), m_sliders.end());
+                m_shown.reset();
+            }
+
+            void Sync(Fenrir::UIRoot& root) override
+            {
+                if (std::any_of(m_sliders.begin(), m_sliders.end(),
+                                [&root](Fenrir::ElementId slider) { return Held(root, slider); }))
+                {
+                    return;
+                }
+                const Fenrir::Math::Vec3 colour = m_value.Get();
+                if (m_shown == colour)
+                {
+                    return;
+                }
+                m_shown = colour;
+                const Fenrir::Math::Vec3 hsv = RgbToHsv(colour);
+                for (std::size_t i = 0; i < m_sliders.size(); ++i)
+                {
+                    if (auto* slider = As<Fenrir::Slider>(root, m_sliders[i]); slider != nullptr)
+                    {
+                        slider->SetValue(hsv[static_cast<int>(i)]);
+                    }
+                }
+                ShowSwatch(root, colour);
+            }
+
+          private:
+            /** @brief The sliders changed: the colour they make is written and shown. */
+            void FromSliders(Fenrir::UIRoot& root)
+            {
+                Fenrir::Math::Vec3 hsv(0.0f);
+                for (std::size_t i = 0; i < m_sliders.size(); ++i)
+                {
+                    if (const auto* slider = As<Fenrir::Slider>(root, m_sliders[i]); slider != nullptr)
+                    {
+                        hsv[static_cast<int>(i)] = slider->GetValue();
+                    }
+                }
+                const Fenrir::Math::Vec3 colour = HsvToRgb(hsv);
+                m_shown = colour;
+                m_value.Set(colour);
+                ShowSwatch(root, colour);
+            }
+
+            void ShowSwatch(Fenrir::UIRoot& root, Fenrir::Math::Vec3 colour) const
+            {
+                // CSS colours are sRGB-encoded (ADR-0065): the linear colour is encoded for the swatch.
+                (void)root.SetStyleProperty(m_swatch, "background-color",
+                                            std::format("#{:02x}{:02x}{:02x}", EncodeSrgb(colour.r),
+                                                        EncodeSrgb(colour.g), EncodeSrgb(colour.b)));
+            }
+
+            DemoValue<Fenrir::Math::Vec3> m_value;
+            Fenrir::ElementId m_swatch;
+            std::array<Fenrir::ElementId, 3> m_sliders{};
+            std::optional<Fenrir::Math::Vec3> m_shown;
+        };
+
+        /** @brief A button that calls a function. */
+        class ButtonSwitch final : public Detail::DemoSwitch
+        {
+          public:
+            explicit ButtonSwitch(std::function<void()> pressed) : m_pressed(std::move(pressed))
+            {
+            }
+
+            void Build(Fenrir::UIRoot& root, Fenrir::ElementId row, const std::string& label) override
+            {
+                root.AddClass(row, "demo-button-row");
+                const Fenrir::ElementId button = Make(root, row, "button", "demo-button");
+                root.SetText(button, label);
+                m_controls = {button};
+                root.AddListener(button, Fenrir::UIEventKind::Click, [this](Fenrir::UIListenerContext&) {
+                    // Copied: the function may leave the scene, which removes this row and this switch with it.
+                    const std::function<void()> pressed = m_pressed;
+                    if (pressed)
+                    {
+                        pressed();
+                    }
+                });
+            }
+
+            void Sync(Fenrir::UIRoot&) override
+            {
+            }
+
+          private:
+            std::function<void()> m_pressed;
+        };
+
+        /** @brief A text entry over a string, written at each edit and not changed by code while it is edited. */
+        class TextEntrySwitch final : public Detail::DemoSwitch
+        {
+          public:
+            explicit TextEntrySwitch(DemoValue<std::string> value) : m_value(std::move(value))
+            {
+            }
+
+            void Build(Fenrir::UIRoot& root, Fenrir::ElementId row, const std::string& label) override
+            {
+                StartSwitchRow(root, row, "demo-text-entry", label);
+                m_entry = Make(root, row, "textentry", "demo-entry");
+                m_controls = {m_entry};
+                m_shown.reset();
+                root.AddListener(m_entry, Fenrir::UIEventKind::Change, [this, &root](Fenrir::UIListenerContext&) {
+                    if (const auto* entry = As<Fenrir::TextEntry>(root, m_entry); entry != nullptr)
+                    {
+                        m_shown = std::string(entry->GetValue());
+                        m_value.Set(*m_shown);
+                    }
+                });
+            }
+
+            void Sync(Fenrir::UIRoot& root) override
+            {
+                if (root.GetFocused() == m_entry)
+                {
+                    return;
+                }
+                std::string value = m_value.Get();
+                if (m_shown == value)
+                {
+                    return;
+                }
+                if (auto* entry = As<Fenrir::TextEntry>(root, m_entry); entry != nullptr)
+                {
+                    entry->SetValue(value);
+                }
+                m_shown = std::move(value);
+            }
+
+          private:
+            DemoValue<std::string> m_value;
+            Fenrir::ElementId m_entry;
+            std::optional<std::string> m_shown;
+        };
     } // namespace
 
     // Rows and sections.
@@ -111,6 +663,68 @@ namespace FenrirDemo
         return row != nullptr ? DemoRow(m_ui, row->id) : DemoRow();
     }
 
+    DemoRow DemoSection::AddSwitch(std::string label, std::shared_ptr<Detail::DemoSwitch> control,
+                                   std::string hint) const
+    {
+        return m_ui != nullptr ? m_ui->AddSwitch(m_id, std::move(label), std::move(control), std::move(hint))
+                               : DemoRow();
+    }
+
+    DemoRow DemoSection::Toggle(std::string label, DemoValue<bool> value, std::string hint) const
+    {
+        return AddSwitch(std::move(label), std::make_shared<ToggleSwitch>(std::move(value)), std::move(hint));
+    }
+
+    DemoRow DemoSection::Range(std::string label, DemoValue<float> value, float min, float max,
+                               DemoRangeOptions options, std::string hint) const
+    {
+        if (m_ui == nullptr)
+        {
+            return {};
+        }
+        if (options.logarithmic && (min <= 0.0f || max <= 0.0f))
+        {
+            m_ui->m_app.Logger()->Error("The demo range \"{}\" is logarithmic over {} to {}, which needs a positive "
+                                        "min and max: it is drawn linear",
+                                        label, min, max);
+            options.logarithmic = false;
+        }
+        return AddSwitch(std::move(label), std::make_shared<RangeSwitch>(std::move(value), min, max, options),
+                         std::move(hint));
+    }
+
+    DemoRow DemoSection::Range(std::string label, DemoValue<int> value, int min, int max, std::string hint) const
+    {
+        // A float range in steps of one, over the int.
+        auto shared = std::make_shared<DemoValue<int>>(std::move(value));
+        DemoValue<float> asFloat([shared] { return static_cast<float>(shared->Get()); },
+                                 [shared](const float& next) { shared->Set(static_cast<int>(std::lround(next))); });
+        return Range(std::move(label), std::move(asFloat), static_cast<float>(min), static_cast<float>(max),
+                     {.step = 1.0f, .decimals = 0}, std::move(hint));
+    }
+
+    DemoRow DemoSection::Choice(std::string label, DemoValue<int> value, std::vector<std::string> options,
+                                std::string hint) const
+    {
+        return AddSwitch(std::move(label), std::make_shared<ChoiceSwitch>(std::move(value), std::move(options)),
+                         std::move(hint));
+    }
+
+    DemoRow DemoSection::Colour(std::string label, DemoValue<Fenrir::Math::Vec3> linear, std::string hint) const
+    {
+        return AddSwitch(std::move(label), std::make_shared<ColourSwitch>(std::move(linear)), std::move(hint));
+    }
+
+    DemoRow DemoSection::Button(std::string label, std::function<void()> pressed, std::string hint) const
+    {
+        return AddSwitch(std::move(label), std::make_shared<ButtonSwitch>(std::move(pressed)), std::move(hint));
+    }
+
+    DemoRow DemoSection::TextEntry(std::string label, DemoValue<std::string> value, std::string hint) const
+    {
+        return AddSwitch(std::move(label), std::make_shared<TextEntrySwitch>(std::move(value)), std::move(hint));
+    }
+
     void DemoSection::SetOpen(bool open) const
     {
         if (DemoUI::Section* section = m_ui != nullptr ? m_ui->FindSection(m_id) : nullptr;
@@ -169,9 +783,18 @@ namespace FenrirDemo
         // A reloaded demo.ui makes the kit's elements again under new ids.
         m_root->AddListener(m_root->GetRootElement(), Fenrir::UIEventKind::DocumentReloaded,
                             [this](Fenrir::UIListenerContext&) { Build(); });
+        // The hint line follows the hover and the focus: any change of either marks it, and the build stage sets it.
+        for (const Fenrir::UIEventKind kind : {Fenrir::UIEventKind::PointerEnter, Fenrir::UIEventKind::PointerLeave,
+                                               Fenrir::UIEventKind::Focus, Fenrir::UIEventKind::Blur})
+        {
+            m_root->AddListener(m_root->GetRootElement(), kind,
+                                [this](Fenrir::UIListenerContext&) { m_hintDirty = true; });
+        }
         m_buildStage = roots.AddBuildStage(BuildStageOrder, [this] {
             PollToggleKey();
             PullReadouts();
+            SyncSwitches();
+            UpdateHint();
         });
 
         const std::string document = (files / DocumentFile).generic_string();
@@ -303,10 +926,17 @@ namespace FenrirDemo
         m_appSections = m_root->FindById("demo-app-sections");
         m_sceneSections = m_root->FindById("demo-scene-sections");
         m_help = m_root->FindById("demo-help");
-        if (!m_kit.IsValid() || !m_appSections.IsValid() || !m_sceneSections.IsValid() || !m_help.IsValid())
+        m_hint = m_root->FindById("demo-hint");
+        m_hintDirty = true;
+        if (!m_kit.IsValid() || !m_appSections.IsValid() || !m_sceneSections.IsValid() || !m_help.IsValid() ||
+            !m_hint.IsValid())
         {
             m_app.Logger()->Error("The demo UI kit's document lacks #demo-kit, #demo-app-sections, "
-                                  "#demo-scene-sections or #demo-help");
+                                  "#demo-scene-sections, #demo-help or #demo-hint");
+        }
+        if (m_hint.IsValid())
+        {
+            Display(m_hint, false);
         }
         m_root->SetText(m_panelTitle, m_title);
         for (Section& section : m_sections)
@@ -390,9 +1020,25 @@ namespace FenrirDemo
             root.AddClass(row.element, "demo-separator");
             row.textElement = row.element;
             break;
+        case RowKind::Switch:
+            // The switch makes its label and controls; the row shows no text of its own.
+            row.element = Make(root, body, "panel", "demo-row");
+            row.control->Build(root, row.element, row.label);
+            ApplyRow(row);
+            return;
         }
         root.SetText(row.textElement, row.text);
         ApplyRow(row);
+    }
+
+    DemoRow DemoUI::AddSwitch(std::uint32_t section, std::string label, std::shared_ptr<Detail::DemoSwitch> control,
+                              std::string hint)
+    {
+        const Row* row = AddRow(section, {.kind = RowKind::Switch,
+                                          .label = std::move(label),
+                                          .control = std::move(control),
+                                          .hint = std::move(hint)});
+        return row != nullptr ? DemoRow(this, row->id) : DemoRow();
     }
 
     void DemoUI::SetRowText(Row& row, std::string_view text) const
@@ -474,6 +1120,70 @@ namespace FenrirDemo
         }
     }
 
+    void DemoUI::SyncSwitches()
+    {
+        // By id, each switch held, since a getter may add or remove rows.
+        std::vector<std::pair<std::uint32_t, std::shared_ptr<Detail::DemoSwitch>>> switches;
+        for (const Section& section : m_sections)
+        {
+            for (const Row& row : section.rows)
+            {
+                if (row.control)
+                {
+                    switches.emplace_back(row.id, row.control);
+                }
+            }
+        }
+        for (const auto& [id, control] : switches)
+        {
+            if (FindRow(id) != nullptr)
+            {
+                control->Sync(*m_root);
+            }
+        }
+    }
+
+    void DemoUI::UpdateHint()
+    {
+        if (!m_hintDirty || !m_hint.IsValid())
+        {
+            return;
+        }
+        m_hintDirty = false;
+        std::string_view hint = HintOf(m_root->GetHovered());
+        if (hint.empty())
+        {
+            hint = HintOf(m_root->GetFocused());
+        }
+        if (m_root->GetText(m_hint) != hint)
+        {
+            // Copied: SetText may not be given a view of the text it replaces.
+            const std::string line(hint);
+            m_root->SetText(m_hint, line);
+            // An empty line takes no room at the panel's foot.
+            Display(m_hint, !line.empty());
+        }
+    }
+
+    std::string_view DemoUI::HintOf(Fenrir::ElementId element) const
+    {
+        // The row the element is in: its nearest ancestor that is a row's element.
+        for (Fenrir::ElementId at = element; at.IsValid(); at = m_root->GetParent(at))
+        {
+            for (const Section& section : m_sections)
+            {
+                for (const Row& row : section.rows)
+                {
+                    if (row.element == at)
+                    {
+                        return row.hint;
+                    }
+                }
+            }
+        }
+        return {};
+    }
+
     void DemoUI::BuildHelp()
     {
         Fenrir::UIRoot& root = *m_root;
@@ -529,6 +1239,10 @@ namespace FenrirDemo
     void DemoUI::ApplyRow(const Row& row) const
     {
         Display(row.element, row.shown);
+        if (row.control)
+        {
+            row.control->SetDisabled(*m_root, row.disabled);
+        }
         if (row.disabled)
         {
             m_root->AddClass(row.element, "demo-disabled");

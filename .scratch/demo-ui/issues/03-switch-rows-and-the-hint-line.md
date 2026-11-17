@@ -26,9 +26,9 @@
 
 **Touches:** `examples/DemoScaffold/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Scaffold tests on the null backend:
+- [x] Scaffold tests on the null backend:
   - a toggle's click flips its bound `bool`, and code flipping it moves the control the next frame
   - a range drag changes its value and doesn't turn the free-fly camera; a logarithmic range maps 0, 0.5 and 1 to `min`, `sqrt(min*max)` and `max`
   - a choice of three is three buttons, one of five is a stepper, and both set their index
@@ -36,5 +36,5 @@
   - typing into a text entry sets its string and claims the keyboard (a held W is cancelled); a click on the scene gives the keyboard back
   - the hint line shows a hovered row's hint and clears when the pointer leaves
   - the gamepad's directions with a kit row focused reach the game
-- [ ] Every demo's `Smoke-null` passes with scripting off and on.
+- [x] Every demo's `Smoke-null` passes with scripting off and on.
 - [ ] Clang and MSVC x64 debug build without new warnings.

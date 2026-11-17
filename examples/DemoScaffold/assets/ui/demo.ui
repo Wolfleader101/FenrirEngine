@@ -4,13 +4,16 @@
   sections, their rows and the help in them, again whenever this file is loaded again.
 -->
 <panel id="demo-kit">
-    <!-- The demo panel, on the right: the app's sections (the scene switcher first), then the scene's. It scrolls
-         when taller than the window. -->
-    <scroll id="demo-panel" class="demo-box">
-        <label id="demo-panel-title"/>
-        <panel id="demo-app-sections" class="demo-sections"/>
-        <panel id="demo-scene-sections" class="demo-sections"/>
-    </scroll>
+    <!-- The demo panel, on the right: the app's sections (the scene switcher first), then the scene's, scrolling when
+         taller than the window, and under them the hint line, the hovered or focused row's hint. -->
+    <panel id="demo-panel" class="demo-box">
+        <scroll id="demo-panel-scroll">
+            <label id="demo-panel-title"/>
+            <panel id="demo-app-sections" class="demo-sections"/>
+            <panel id="demo-scene-sections" class="demo-sections"/>
+        </scroll>
+        <label id="demo-hint"/>
+    </panel>
 
     <!-- The help, at the bottom left: its title collapses it; under it the app and scene, then the key rows. -->
     <panel id="demo-help" class="demo-box"/>
