@@ -1,0 +1,25 @@
+@* A section of the demo panel (examples/DemoScaffold/README.md, "C# scenes"), as the kit's C++ DemoSection makes one:
+   a heading button that collapses and opens it, over whatever the parent writes between its tags, given as
+   ChildContent. Fenrir.Demo.Razor.props compiles it into the scripts project that uses it; demo.css styles it. *@
+@namespace Fenrir.Demo.Razor
+@using Fenrir.UI
+@using Fenrir.UI.Razor
+@using Microsoft.AspNetCore.Components.Web
+@inherits UIComponent
+<panel class="demo-section @(open ? "" : "demo-closed")">
+    <button class="demo-section-title" @onclick="() => open = !open">@Title</button>
+    @* Hidden by display rather than left out, so the rows keep their state while it is closed, as the kit's do. *@
+    <panel class="demo-section-body" style="@(open ? "" : "display: none")">
+        @ChildContent
+    </panel>
+</panel>
+
+@code {
+    /// <summary>The heading.</summary>
+    [Parameter] public string Title { get; set; } = "";
+    /// <summary>The section's rows.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    // Open until its heading is clicked.
+    private bool open = true;
+}

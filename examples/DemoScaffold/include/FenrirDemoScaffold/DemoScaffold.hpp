@@ -66,6 +66,15 @@ namespace FenrirDemo
          * scene, which the scaffold adds before `spawn` adds the scene's own.
          */
         std::optional<DemoTutorial> tutorial;
+        /**
+         * @brief The id of the scene's demo slot (GLOSSARY.md), for a scene with a Razor panel: an element of this id
+         * in the demo panel (DemoUI::SceneSlot), made when the scene is entered, after its Tutorial section and before
+         * `spawn` adds its own sections, and gone when it is left. The app's C# finds it by this id
+         * (`DemoUI.TryGetSceneSlot` in the Fenrir.Demo assembly) and mounts its Razor panel into it. Without scripting
+         * the slot shows a note that the panel needs it, so every switch on the panel needs a key in `keyRows`
+         * (ADR-0072). Unique in the app; empty for none.
+         */
+        std::string razorPanel;
         /** @brief The keys a smoke run or FENRIR_DEMO_KEYS presses in this scene, in order. */
         std::vector<Fenrir::Key> keys;
         /** @brief Where the free-fly camera starts. */

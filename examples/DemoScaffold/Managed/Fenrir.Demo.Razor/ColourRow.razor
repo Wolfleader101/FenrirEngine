@@ -1,0 +1,117 @@
+@* A colour row of the demo panel, as the kit's C++ DemoSection::Colour makes one: a linear colour, each component 0 to
+   1, bound from the parent with @bind-Value, shown as a swatch encoded for display over hue, saturation and value
+   sliders. A value the parent changes moves the sliders; one the sliders made does not, so a hue survives a grey. Its
+   hint shows in the kit's hint line while it is hovered or focused. *@
+@namespace Fenrir.Demo.Razor
+@using Fenrir.Math
+@using Fenrir.UI
+@using Fenrir.UI.Razor
+@using Microsoft.AspNetCore.Components.Web
+@inherits UIComponent
+<panel class="demo-row demo-colour">
+    <label class="demo-row-label">@Label</label>
+    <panel class="demo-swatch" style="background-color: @Swatch" />
+    <panel class="demo-colour-sliders">
+        <panel class="demo-colour-channel">
+            <label class="demo-colour-channel-label">H</label>
+            <slider class="demo-slider demo-hue" min="0" max="1" @bind="hue" @bind:after="FromSliders" />
+        </panel>
+        <panel class="demo-colour-channel">
+            <label class="demo-colour-channel-label">S</label>
+            <slider class="demo-slider demo-saturation" min="0" max="1" @bind="saturation" @bind:after="FromSliders" />
+        </panel>
+        <panel class="demo-colour-channel">
+            <label class="demo-colour-channel-label">V</label>
+            <slider class="demo-slider demo-value" min="0" max="1" @bind="brightness" @bind:after="FromSliders" />
+        </panel>
+    </panel>
+    @if (Hint.Length > 0)
+    {
+        <label class="demo-row-hint">@Hint</label>
+    }
+</panel>
+
+@code {
+    /// <summary>The row's label.</summary>
+    [Parameter] public string Label { get; set; } = "";
+    /// <summary>The linear colour, each component 0 to 1.</summary>
+    [Parameter] public Vector3 Value { get; set; }
+    /// <summary>Raised with the new colour while a slider is dragged.</summary>
+    [Parameter] public EventCallback<Vector3> ValueChanged { get; set; }
+    /// <summary>What the kit's hint line shows while the row is hovered or focused; empty for none.</summary>
+    [Parameter] public string Hint { get; set; } = "";
+
+    private float hue;
+    private float saturation;
+    private float brightness;
+    // The colour the sliders show, so a value they made is not read back into them.
+    private Vector3? shown;
+
+    // CSS colours are sRGB-encoded (ADR-0065): the linear colour is encoded for the swatch.
+    private string Swatch => $"#{Encode(Value.X):x2}{Encode(Value.Y):x2}{Encode(Value.Z):x2}";
+
+    protected override void OnParametersSet()
+    {
+        if (shown == Value)
+            return;
+        shown = Value;
+        (hue, saturation, brightness) = ToHsv(Value);
+    }
+
+    private void FromSliders()
+    {
+        Vector3 colour = FromHsv(hue, saturation, brightness);
+        shown = colour;
+        Value = colour;
+        _ = ValueChanged.InvokeAsync(colour);
+    }
+
+    // A linear component encoded for display (sRGB's transfer function), 0 to 255.
+    private static int Encode(float linear)
+    {
+        float clamped = Math.Clamp(linear, 0, 1);
+        float encoded = clamped <= 0.0031308f ? clamped * 12.92f : 1.055f * MathF.Pow(clamped, 1 / 2.4f) - 0.055f;
+        return (int)MathF.Round(encoded * 255);
+    }
+
+    // Hue, saturation and value, each 0 to 1, of `rgb`. A grey keeps hue 0.
+    private static (float Hue, float Saturation, float Value) ToHsv(Vector3 rgb)
+    {
+        float high = MathF.Max(rgb.X, MathF.Max(rgb.Y, rgb.Z));
+        float low = MathF.Min(rgb.X, MathF.Min(rgb.Y, rgb.Z));
+        float range = high - low;
+        float hue = 0;
+        if (range > 0)
+        {
+            if (high == rgb.X)
+                hue = ((rgb.Y - rgb.Z) / range) % 6;
+            else if (high == rgb.Y)
+                hue = (rgb.Z - rgb.X) / range + 2;
+            else
+                hue = (rgb.X - rgb.Y) / range + 4;
+            hue /= 6;
+            if (hue < 0)
+                hue += 1;
+        }
+        return (hue, high > 0 ? range / high : 0, high);
+    }
+
+    // The colour of hue, saturation and value, each 0 to 1.
+    private static Vector3 FromHsv(float hue, float saturation, float value)
+    {
+        float sector = (hue % 1) * 6;
+        float chroma = value * saturation;
+        float second = chroma * (1 - MathF.Abs(sector % 2 - 1));
+        Vector3 rgb = (int)sector switch
+        {
+            0 => new Vector3(chroma, second, 0),
+            1 => new Vector3(second, chroma, 0),
+            2 => new Vector3(0, chroma, second),
+            3 => new Vector3(0, second, chroma),
+            4 => new Vector3(second, 0, chroma),
+            _ => new Vector3(chroma, 0, second),
+        };
+        float lift = value - chroma;
+        return rgb + new Vector3(lift, lift, lift);
+    }
+}

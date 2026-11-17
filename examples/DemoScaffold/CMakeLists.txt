@@ -43,20 +43,38 @@ if(FENRIR_ENABLE_SCRIPTING)
     set(FENRIR_DEMO_CONTRACT_DIR "${CMAKE_BINARY_DIR}/fenrir-demo/contract" CACHE INTERNAL "Where the Fenrir.Demo assembly is built")
     set(fenrir_demo_managed_dir "${CMAKE_CURRENT_SOURCE_DIR}/Managed/Fenrir.Demo")
     file(GLOB fenrir_demo_contract_sources CONFIGURE_DEPENDS "${fenrir_demo_managed_dir}/*.cs")
+    # Its DemoUI finds the kit's root through FenrirUI's contract, which it is built against with the ones that
+    # contract builds on, wherever FenrirUI's scripting is built; elsewhere it is left out (-p:FenrirDemoUI=false).
+    set(fenrir_demo_ui_args "-p:FenrirDemoUI=false")
+    set(fenrir_demo_ui_depends "")
+    if(TARGET FenrirUIContract)
+        set(fenrir_demo_ui_args "")
+        foreach(contract IN ITEMS Input Assets Text Painter UI)
+            string(TOUPPER "${contract}" CONTRACT_UPPER)
+            fenrir_scripting_contract_dll(${contract} contract_dll)
+            list(APPEND fenrir_demo_ui_args "-p:Fenrir${contract}ContractDir=${FENRIR_${CONTRACT_UPPER}_CONTRACT_DIR}/")
+            list(APPEND fenrir_demo_ui_depends Fenrir${contract}Contract "${contract_dll}")
+        endforeach()
+    endif()
     add_custom_command(
         OUTPUT "${FENRIR_DEMO_CONTRACT_DIR}/Fenrir.Demo.dll"
         COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${fenrir_demo_managed_dir}/Fenrir.Demo.csproj"
             --configuration Release --output "${FENRIR_DEMO_CONTRACT_DIR}" -nologo -v:q
             "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/"
+            ${fenrir_demo_ui_args}
             "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/contract-obj/"
         DEPENDS ${fenrir_demo_contract_sources} "${fenrir_demo_managed_dir}/Fenrir.Demo.csproj"
             FenrirScriptingContract "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.dll"
             "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Math.dll"
+            ${fenrir_demo_ui_depends}
         COMMENT "Building the Fenrir.Demo assembly"
         VERBATIM
     )
     add_custom_target(FenrirDemoContract ALL DEPENDS "${FENRIR_DEMO_CONTRACT_DIR}/Fenrir.Demo.dll")
     add_dependencies(FenrirDemoContract FenrirScriptingContract)
+    if(TARGET FenrirUIContract)
+        add_dependencies(FenrirDemoContract FenrirUIContract)
+    endif()
 endif()
 
 include(cmake/FenrirDemoApp.cmake)

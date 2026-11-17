@@ -23,6 +23,10 @@ namespace FenrirDemo
     {
         constexpr const char* DocumentFile = "ui/demo.ui";
         constexpr const char* StylesheetFile = "ui/demo.css";
+        // What a scene slot shows with no script to mount a Razor panel into it (ADR-0072).
+        constexpr const char* SlotNote =
+            "This panel is a Razor component and needs scripting (FENRIR_ENABLE_SCRIPTING); "
+            "its keys are in the help.";
 
         // The build stage order of the kit's work: early, so a scene's rows pushed later in the stage win.
         constexpr std::int32_t BuildStageOrder = -100;
@@ -888,6 +892,21 @@ namespace FenrirDemo
         return AddSection(std::move(title), true);
     }
 
+    void DemoUI::SceneSlot(std::string id)
+    {
+        if (id.empty() || std::any_of(m_sections.begin(), m_sections.end(),
+                                      [&id](const Section& section) { return section.slot == id; }))
+        {
+            m_app.Logger()->Error("The demo UI kit's scene slot \"{}\" is empty or there already", id);
+            return;
+        }
+        Section& section = m_sections.emplace_back();
+        section.id = m_nextId++;
+        section.scene = true;
+        section.slot = std::move(id);
+        BuildSection(section);
+    }
+
     void DemoUI::ClearScene()
     {
         // The tutorial is the scene's: its steps' `done` may read the scene's state, which goes next. Its card goes at
@@ -990,6 +1009,16 @@ namespace FenrirDemo
     {
         Fenrir::UIRoot& root = *m_root;
         section.element = root.Create(section.scene ? m_sceneSections : m_appSections, "panel", index);
+        if (!section.slot.empty())
+        {
+            root.AddClass(section.element, "demo-slot");
+            root.SetIdString(section.element, section.slot);
+            if (!m_config.scripting)
+            {
+                MakeLabel(root, section.element, "demo-slot-note", SlotNote);
+            }
+            return;
+        }
         root.AddClass(section.element, "demo-section");
         const Fenrir::ElementId title = root.Create(section.element, "button");
         root.AddClass(title, "demo-section-title");
@@ -1196,7 +1225,8 @@ namespace FenrirDemo
 
     std::string_view DemoUI::HintOf(Fenrir::ElementId element) const
     {
-        // The row the element is in: its nearest ancestor that is a row's element.
+        // The row the element is in: its nearest ancestor that is a row's element, or a row a script made in a scene
+        // slot (a shared Razor component's), whose hint is the text of its child of class demo-row-hint.
         for (Fenrir::ElementId at = element; at.IsValid(); at = m_root->GetParent(at))
         {
             for (const Section& section : m_sections)
@@ -1208,6 +1238,17 @@ namespace FenrirDemo
                         return row.hint;
                     }
                 }
+            }
+            if (m_root->HasClass(at, "demo-row"))
+            {
+                for (const Fenrir::ElementId child : m_root->GetChildren(at))
+                {
+                    if (m_root->HasClass(child, "demo-row-hint"))
+                    {
+                        return m_root->GetText(child);
+                    }
+                }
+                return {};
             }
         }
         return {};

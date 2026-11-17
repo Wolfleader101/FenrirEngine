@@ -1,0 +1,72 @@
+@* A range row of the demo panel, as the kit's C++ DemoSection::Range makes one: a label, a slider over a float from
+   Min to Max, and the value beside it with Decimals places, bound from the parent with @bind-Value. Logarithmic maps the
+   slider's 0..1 to Min * (Max / Min)^t, as the kit does; Min and Max must then be positive, or it logs an error and is
+   linear. Step snaps a linear range's value from Min; a logarithmic one has none. Its hint shows in the kit's hint line
+   while it is hovered or focused. *@
+@namespace Fenrir.Demo.Razor
+@using System.Globalization
+@using Fenrir.UI
+@using Fenrir.UI.Razor
+@using Microsoft.AspNetCore.Components.Web
+@inherits UIComponent
+<panel class="demo-row demo-range">
+    <label class="demo-row-label">@Label</label>
+    @* The range before the value, so the slider never clamps the value to its default range. *@
+    <slider class="demo-slider" min="@SliderMin" max="@SliderMax" step="@SliderStep" @bind="Position"
+            @bind:after="Raise" />
+    <label class="demo-range-value">@Value.ToString("F" + Math.Max(Decimals, 0), CultureInfo.InvariantCulture)</label>
+    @if (Hint.Length > 0)
+    {
+        <label class="demo-row-hint">@Hint</label>
+    }
+</panel>
+
+@code {
+    /// <summary>The row's label.</summary>
+    [Parameter] public string Label { get; set; } = "";
+    /// <summary>The value, from Min to Max.</summary>
+    [Parameter] public float Value { get; set; }
+    /// <summary>Raised with the new value while the slider is dragged or stepped.</summary>
+    [Parameter] public EventCallback<float> ValueChanged { get; set; }
+    /// <summary>The value at the slider's left end.</summary>
+    [Parameter] public float Min { get; set; }
+    /// <summary>The value at the slider's right end.</summary>
+    [Parameter] public float Max { get; set; } = 1;
+    /// <summary>The slider's 0..1 maps to Min * (Max / Min)^t, for values that span orders of magnitude.</summary>
+    [Parameter] public bool Logarithmic { get; set; }
+    /// <summary>The step a linear range's value snaps to from Min; 0 for none.</summary>
+    [Parameter] public float Step { get; set; }
+    /// <summary>Decimal places the value is shown with.</summary>
+    [Parameter] public int Decimals { get; set; } = 2;
+    /// <summary>What the kit's hint line shows while the row is hovered or focused; empty for none.</summary>
+    [Parameter] public string Hint { get; set; } = "";
+
+    private bool warned;
+
+    // A logarithmic range needs both ends positive; otherwise it is drawn linear, as the kit's is.
+    private bool IsLogarithmic => Logarithmic && Min > 0 && Max > 0;
+
+    // A logarithmic slider runs over t, 0 to 1; a linear one over the value itself.
+    private float SliderMin => IsLogarithmic ? 0 : Min;
+    private float SliderMax => IsLogarithmic ? 1 : Max;
+    private float SliderStep => IsLogarithmic ? 0 : Step;
+
+    // Where the slider is for the value, and the value for where it is.
+    private float Position
+    {
+        get => !IsLogarithmic ? Value : Value > 0 ? MathF.Log(Value / Min) / MathF.Log(Max / Min) : 0;
+        set => Value = IsLogarithmic ? Min * MathF.Pow(Max / Min, value) : value;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (Logarithmic && !IsLogarithmic && !warned)
+        {
+            warned = true;
+            Context.Log.Error($"The Razor range \"{Label}\" is logarithmic from {Min} to {Max}, which must both be " +
+                              "positive; it is linear");
+        }
+    }
+
+    private void Raise() => _ = ValueChanged.InvokeAsync(Value);
+}

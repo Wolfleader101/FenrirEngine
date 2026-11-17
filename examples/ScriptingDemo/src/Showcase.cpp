@@ -157,8 +157,14 @@ namespace ScriptingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Showcase";
-        scene.keyHelp = "R: reverse the boxes' spin. Space: a burst of sparks. G: GPU culling off or on.";
-        scene.keys = {Fenrir::Key::R, Fenrir::Key::Space, Fenrir::Key::G};
+        // Every switch of the Razor panel has its key here, for a build without scripting (ADR-0072).
+        scene.keyRows = {{"R", "reverse the boxes' spin"},
+                         {"[ / ]", "slow the spin down / speed it up"},
+                         {"Space", "a burst of sparks"},
+                         {"G", "GPU culling off or on"}};
+        scene.keys = {Fenrir::Key::R, Fenrir::Key::Space, Fenrir::Key::G, Fenrir::Key::RightBracket};
+        // The spin's switches, in Razor (scripts/ShowcasePanel.razor), mounted by scripts/ShowcasePanelSetup.cs.
+        scene.razorPanel = "showcase-razor";
         scene.camera.position = {0.0f, 4.0f, 16.0f};
         scene.spawn = Spawn;
         return scene;

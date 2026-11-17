@@ -24,10 +24,10 @@
 
 **Touches:** `examples/DemoScaffold/`, `examples/ScriptingDemo/scripts/`, `examples/ScriptingDemo/src/Showcase.cpp`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] With scripting built, ScriptingDemo's Showcase shows its Razor panel in the demo panel, styled like the C++ rows; the toggle reverses the spin and the range changes its speed (hand check). `ScriptingDemo-Smoke-null` passes with no error.
-- [ ] Built without scripting, Showcase's slot shows the note and the scene works by its keys. `Smoke-null` passes.
-- [ ] Every other demo's scripts project builds unchanged with the props added, and every `Smoke-null` passes with scripting off and on.
-- [ ] A scaffold test: a scene with `razorPanel` has its slot's element by id while active, and not after it is left.
-- [ ] Clang and MSVC x64 debug build without new warnings; the C# builds with no new warnings.
+- [x] With scripting built, ScriptingDemo's Showcase shows its Razor panel in the demo panel, styled like the C++ rows; the toggle reverses the spin and the range changes its speed (hand check). `ScriptingDemo-Smoke-null` passes with no error.
+- [x] Built without scripting, Showcase's slot shows the note and the scene works by its keys. `Smoke-null` passes.
+- [x] Every other demo's scripts project builds unchanged with the props added, and every `Smoke-null` passes with scripting off and on.
+- [x] A scaffold test: a scene with `razorPanel` has its slot's element by id while active, and not after it is left.
+- [x] Clang and MSVC x64 debug build without new warnings; the C# builds with no new warnings.

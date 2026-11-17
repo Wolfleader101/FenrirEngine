@@ -1,0 +1,61 @@
+@* A choice row of the demo panel, as the kit's C++ DemoSection::Choice makes one: one of Options by index, bound from
+   the parent with @bind-Value. Up to four options are a button each, the chosen one with the class active; beyond four,
+   a previous and next stepper, wrapping round the ends, round the chosen option's name. Its hint shows in the kit's
+   hint line while it is hovered or focused. *@
+@namespace Fenrir.Demo.Razor
+@using Fenrir.UI
+@using Fenrir.UI.Razor
+@using Microsoft.AspNetCore.Components.Web
+@inherits UIComponent
+<panel class="demo-row demo-choice">
+    <label class="demo-row-label">@Label</label>
+    @if (Options.Count <= MaxButtons)
+    {
+        <panel class="demo-choice-buttons">
+            @for (int i = 0; i < Options.Count; i++)
+            {
+                int index = i;
+                <button @key="index" class="demo-choice-button @(index == Value ? "active" : "")"
+                        @onclick="() => Choose(index)">@Options[index]</button>
+            }
+        </panel>
+    }
+    else
+    {
+        <panel class="demo-stepper">
+            <button class="demo-step-previous" @onclick="() => StepBy(-1)">@("<")</button>
+            <label class="demo-choice-name">@(Value >= 0 && Value < Options.Count ? Options[Value] : "")</label>
+            <button class="demo-step-next" @onclick="() => StepBy(1)">@(">")</button>
+        </panel>
+    }
+    @if (Hint.Length > 0)
+    {
+        <label class="demo-row-hint">@Hint</label>
+    }
+</panel>
+
+@code {
+    // The most options shown as buttons, as the kit's.
+    private const int MaxButtons = 4;
+
+    /// <summary>The row's label.</summary>
+    [Parameter] public string Label { get; set; } = "";
+    /// <summary>The chosen option's index.</summary>
+    [Parameter] public int Value { get; set; }
+    /// <summary>Raised with the chosen index when an option is clicked or stepped to.</summary>
+    [Parameter] public EventCallback<int> ValueChanged { get; set; }
+    /// <summary>The options' names, in order.</summary>
+    [Parameter] public IReadOnlyList<string> Options { get; set; } = [];
+    /// <summary>What the kit's hint line shows while the row is hovered or focused; empty for none.</summary>
+    [Parameter] public string Hint { get; set; } = "";
+
+    private void Choose(int index) => _ = ValueChanged.InvokeAsync(index);
+
+    // Moves `by` options from the chosen one, wrapping round the ends.
+    private void StepBy(int by)
+    {
+        int count = Options.Count;
+        int chosen = Math.Clamp(Value, 0, count - 1);
+        Choose(((chosen + by) % count + count) % count);
+    }
+}

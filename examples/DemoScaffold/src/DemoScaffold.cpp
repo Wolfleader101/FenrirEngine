@@ -466,6 +466,11 @@ namespace FenrirDemo
                             "Tutorial", [demoUI, &demoScene] { demoUI->ShowTutorial(*demoScene.tutorial); },
                             "Shows the scene's tutorial again from its first step");
                 }
+                // Its demo slot next, before the scene's own sections.
+                if (DemoUI* demoUI = Kit(); demoUI != nullptr && !demoScene.razorPanel.empty())
+                {
+                    demoUI->SceneSlot(demoScene.razorPanel);
+                }
 
                 // The free-fly camera first, so the scene can find it.
                 Fenrir::EntityList& entities = scene.GetEntityList();
@@ -937,6 +942,11 @@ namespace FenrirDemo
             // A smoke run is a check of the files as built, not an editing session.
             kit.hotReload = !smoke;
             kit.target = state->config.demoUITarget;
+#if defined(FENRIR_DEMO_SCRIPTING) && defined(FENRIR_DEMO_UI_SCRIPTING)
+            // Scripting is installed below for an app with a script assembly, and with FenrirUI's scripting extension
+            // a script can mount into a scene slot.
+            kit.scripting = !state->config.scriptAssembly.empty();
+#endif
             state->kit.emplace(app, std::move(kit));
             app.GetResource<DemoUI>().SetTitle(state->config.appName);
         }

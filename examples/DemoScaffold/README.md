@@ -65,6 +65,44 @@ With `FENRIR_ENABLE_SCRIPTING` on, an app can run C# scenes:
   FenrirScene gets a `CSharpScene { Scene, Entry }`, `Entry` new for each entry. Its C# systems do nothing unless
   `CSharpScene.IsActive(number, out entry)`, and spawn the scene when `entry` is one they have not seen; the scene's
   assets and entities go with its FenrirScene, as a C++ scene's do.
+- **The kit from C#:** `Fenrir.Demo`'s `DemoUI`, plain C# over FenrirUI's contract with no natives (ADR-0072), so
+  `Fenrir.Demo.csproj` is built against `Fenrir.UI` and the contracts under it. `DemoUI.Layer` is the kit's layer,
+  `DemoUI.TryGetRoot(out UIRoot root)` finds its root on the main window (`UIRoot.Find`), and
+  `DemoUI.TryGetSceneSlot(string id, out UIRoot root, out ElementId slot)` the active scene's demo slot of that id
+  (false before the scene is entered and after it is left).
+- **Razor panels:** a C# scene, or a C++ scene with a Razor panel, sets `DemoScene::razorPanel` to its slot's id, and a
+  C# system mounts its Razor component there from `OnCreate` and again whenever the slot is there without it, which is
+  each entry of the scene, since leaving it removes the slot and the panel with it (ScriptingDemo's
+  `ShowcasePanelSetup.cs`):
+
+  ```cs
+  if (panel.IsMounted || !DemoUI.TryGetSceneSlot("showcase-razor", out UIRoot root, out ElementId slot))
+      return;
+  panel = root.Mount<ShowcasePanel>(slot);
+  ```
+- **The shared Razor components**, in `Managed/Fenrir.Demo.Razor/`, namespace `Fenrir.Demo.Razor`, build the C++
+  rows' elements with `demo.css`'s classes, so the two look alike, and bind with `@bind-Value` (ADR-0069):
+  - `DemoSection Title`: a section, its heading collapsing and opening its `ChildContent`.
+  - `Readout Label Value`: a readout; `Value` is the text shown, and the parent rebuilds when it changes (its
+    `BuildHash`).
+  - `Toggle Label @bind-Value Hint`: a checkbox over a `bool`.
+  - `Range Label @bind-Value Min Max Logarithmic Step Decimals Hint`: a slider over a `float`, its value beside it with
+    `Decimals` places (2). `Logarithmic` maps the slider's 0..1 to `Min * (Max / Min)^t`, as the kit does, and logs an
+    error and is linear unless `Min` and `Max` are positive; `Step` snaps a linear one from `Min`.
+  - `Choice Label @bind-Value Options Hint`: an index into `Options`, buttons for up to four and a wrapping stepper
+    beyond, as the kit's.
+  - `ColourRow Label @bind-Value Hint`: a linear `Vector3`, a swatch over hue, saturation and value sliders.
+
+  Each switch's `Hint` shows in the kit's hint line while it is hovered or focused, through a hidden
+  `label.demo-row-hint`.
+- **The props file,** `Managed/Fenrir.Demo.Razor.props`, which `fenrir_add_demo_app` adds to every scripts project it
+  builds (`-p:CustomAfterMicrosoftCommonTargets=`): it imports `Fenrir.UI.Razor.InRepo.props`, unless the project did
+  itself, and gives a project with `.razor` files of its own the shared components too, compiled into it with the Razor
+  dispatcher (a Razor component must be compiled into the script that mounts it, ADR-0068). A project with no `.razor`
+  of its own builds as before. Its builds depend on the shared `.razor` files. In an editor, which passes nothing, a
+  project imports the props itself (`Condition="'$(FenrirDemoContractDir)' == ''"`, as ScriptingDemo's does), and
+  references `Fenrir.UI`, as any script that uses the UI does.
+- **Without scripting** the scene's slot shows the note (below, "The demo UI kit", "Demo slots") and the scene works by its keys.
 
 ## The demo UI kit
 
@@ -119,6 +157,16 @@ type: the scaffold feeds it. The scaffold adds it as the `DemoUI` app resource o
 - **The hint line,** at the demo panel's foot under its scrolling sections (`#demo-hint`): the hint of the row under the
   pointer, or else of the row with the focus, and empty, taking no room, when neither has one. The kit tracks it from UI
   events (the pointer entering and leaving, focus and blur) and sets it in its build stage work.
+- **Demo slots** (`GLOSSARY.md`, ADR-0072): `SceneSlot(id)` adds an empty `panel.demo-slot` of id `id` to the demo panel,
+  after the scene's sections so far, for a script to mount a Razor panel into (above, "C# scenes"). It is the scene's:
+  `ClearScene` removes it, with what was mounted in it. A reloaded `demo.ui` makes it again, empty, under the same id.
+  With no script to mount into it (`DemoUIConfig::scripting` false: scripting or FenrirUI's scripting not built, or no script assembly), it
+  holds one muted line, `.demo-slot-note`: "This panel is a Razor component and needs scripting
+  (FENRIR_ENABLE_SCRIPTING); its keys are in the help." The scaffold feeds it from `DemoScene::razorPanel`, the slot's
+  id: the slot is made each time the scene is entered, after its Tutorial section and before `spawn` adds its own.
+  Every switch on a Razor panel must also be on a key in the scene's `keyRows`, so the scene works without scripting.
+  A `.demo-row` made in a slot gives its hint to the hint line through a child `label.demo-row-hint`, which `demo.css`
+  hides, as the shared Razor components do.
 - **The scene switcher** is the panel's first app section, "Scenes": a button per scene of the app, in order, the
   active one with the class `active`. A click enters that scene the next frame, as PageDown does, with the same
   `Scene i/n` log line and help, and in a smoke run too; a click on the active one does nothing. The scaffold feeds
