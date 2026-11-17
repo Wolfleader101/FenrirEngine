@@ -7,8 +7,9 @@
 // VehicleDifferential on an entity of its own drives the rear wheels through an automatic gearbox, and two
 // VehicleAntiRollBars, front and rear, keep it level in corners. Game code in Tick turns the keys into driver input;
 // physics writes the car's state and each wheel's back after every step, and their names show it every frame, shown as
-// screen text. Settings are live edits: 1 softens the springs and 2 fits bigger wheels (their looks rescaled), each
-// changing the ride height as the car drives, and 7 limits the chassis's tilt to 60 degrees; each key again undoes it.
+// readouts in the demo panel. Settings are live edits: 1 softens the springs and 2 fits bigger wheels (their looks
+// rescaled), each changing the ride height as the car drives, and 7 limits the chassis's tilt to 60 degrees; each key
+// again undoes it.
 //
 // The car tows a 300 kg trailer: a TrailerVehicle, with no engine, on one axle, joined to the car's tow hitch by an
 // ordinary ball Joint on an entity of its own. Nothing links their brakes: game code copies the car's `brake` and
@@ -71,6 +72,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <format>
 #include <iterator>
 #include <memory>
 #include <numbers>
@@ -176,7 +178,7 @@ namespace PhysicsDemo
                 }
                 m_followCamera.Update(m_camera.GetComponent<Fenrir::Transform>(), target,
                                       Beyond(ReadPad(app).rightStick), dt);
-                ShowReadings(app.GetActiveScene());
+                ShowReadings(app);
             }
 
             // Tick, while the scene is active: game code reads the car's state and writes its driver input.
@@ -1361,8 +1363,8 @@ namespace PhysicsDemo
                 return entity.IsValid() ? std::string(entity.GetComponent<Fenrir::Name>().Get()) : "?";
             }
 
-            // The car's and each wheel's state in their names, every frame, shown as screen text.
-            void ShowReadings(Fenrir::Scene& scene)
+            // The car's and each wheel's state in their names, every frame, shown as readouts in the demo panel.
+            void ShowReadings(Fenrir::App& app)
             {
                 const Fenrir::VehicleState& state = m_car.chassis.GetComponent<Fenrir::Vehicle>().state;
                 std::array<char, 256> text{};
@@ -1404,9 +1406,17 @@ namespace PhysicsDemo
                     m_car.wheels.at(i).GetComponent<Fenrir::Name>().Set(text.data());
                 }
 
-                std::vector<Fenrir::Entity> shown = {m_car.chassis, m_trailer.chassis};
-                shown.insert(shown.end(), m_car.wheels.begin(), m_car.wheels.end());
-                ShowReadouts(scene, shown);
+                std::vector<std::string> wheelLabels;
+                for (std::size_t i = 0; i < m_car.wheels.size(); ++i)
+                {
+                    wheelLabels.push_back(std::format("Wheel {}", i));
+                }
+                std::vector<Reading> shown = {{"Car", m_car.chassis}, {"Trailer", m_trailer.chassis}};
+                for (std::size_t i = 0; i < m_car.wheels.size(); ++i)
+                {
+                    shown.push_back({wheelLabels.at(i), m_car.wheels.at(i)});
+                }
+                ShowReadouts(app, shown);
             }
 
             // L: the car's whole state and each wheel's.
@@ -1528,23 +1538,80 @@ namespace PhysicsDemo
 
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp =
-            "W or Up drives, S or Down brakes and then reverses once stopped, A/D or Left/Right steer, Space pulls the "
-            "handbrake, C frees the camera (it stays where it is, the arrows still drive) and snaps it back. The car "
-            "tows a trailer, which brakes with it. North of the start: a pedestrian, ten bumps, then a ramp. East: an "
-            "ice lane, a grass lane, a wall of crates and a ferry across a gap to a far bank, and west a 15 degree "
-            "parking slope. L logs the car's state, P drives the track by itself. M switches the gearbox between "
-            "Automatic and Manual; in Manual E/Q shift up and down (down past neutral is reverse), W drives in that "
-            "gear, S brakes, and Shift holds the clutch. 1 softens the springs, 2 fits big wheels, 7 limits the tilt "
-            "to 60 degrees (each again to undo). 4 switches the car off (a plain box) and on; 5 switches its "
-            "interpolation off and on; 9 makes its chassis kinematic (the car inactive, with a warning) and back. T "
-            "respawns the car at the start; 8 destroys its rear-left wheel (a warning) and remakes it. A gamepad "
-            "drives too: the right trigger drives, the left trigger brakes and then reverses, the left stick steers, "
-            "A pulls the handbrake, the right stick looks round the car; X is M, the bumpers Q/E, B the clutch, the "
-            "D-pad 1 (up), 2 (right), 7 (down) and 4 (left), and Start 9. F gets out of the car and, within 3 m of "
-            "it, back in; on foot WASD walks (relative to the camera), Shift runs, Space jumps, Q/E turn the camera, "
-            "T teleports the driver beside the start and P gets back in to drive the track. K kicks the car over "
-            "(\"flipped\" after 2 s upside down), R rights it. Y is F and Back R.";
+        // The car tows a trailer, which brakes with it. North of the start: a pedestrian, ten bumps, then a ramp. East:
+        // an ice lane, a grass lane, a wall of crates and a ferry across a gap to a far bank, and west a 15 degree
+        // parking slope.
+        scene.keyRows = {
+            {"W/Up", "drive"},
+            {"S/Down", "brake, then reverse once stopped"},
+            {"A/D, Left/Right", "steer"},
+            {"Space", "handbrake"},
+            {"C", "free the camera (the arrows still drive), and snap it back"},
+            {"M", "gearbox: Automatic or Manual"},
+            {"E/Q", "in Manual, shift up/down (down past neutral is reverse); W drives in that gear, S brakes"},
+            {"Shift", "hold the clutch"},
+            {"1", "soften the springs, and back"},
+            {"2", "big wheels, and back"},
+            {"7", "limit the tilt to 60 degrees, and back"},
+            {"4", "the car off (a plain box) and on"},
+            {"5", "interpolation off/on"},
+            {"9", "a kinematic chassis (the car inactive, a warning), and back"},
+            {"8", "destroy the rear-left wheel (a warning), and remake it"},
+            {"T", "respawn the car at the start"},
+            {"F", "get out; within 3 m of the car, back in"},
+            {"On foot: WASD", "walk, relative to the camera"},
+            {"On foot: Shift/Space", "run/jump"},
+            {"On foot: Q/E", "turn the camera"},
+            {"On foot: T", "teleport beside the start"},
+            {"P", "drive the track by itself; on foot, get back in and drive it"},
+            {"K", "kick the car over (\"flipped\" after 2 s upside down)"},
+            {"R", "right the car"},
+            {"L", "log the car's state"},
+            {"Pad right trigger", "drive"},
+            {"Pad left trigger", "brake, then reverse"},
+            {"Pad left stick", "steer; on foot, walk"},
+            {"Pad right stick", "look round the car"},
+            {"Pad A", "handbrake (Space)"},
+            {"Pad B", "clutch (Shift)"},
+            {"Pad X", "gearbox (M)"},
+            {"Pad Y", "get out or in (F)"},
+            {"Pad bumpers", "shift down/up (Q/E)"},
+            {"Pad D-pad", "up 1, right 2, down 7, left 4"},
+            {"Pad Start", "kinematic chassis (9)"},
+            {"Pad Back", "right the car (R)"}};
+        scene.tutorial = FenrirDemo::DemoTutorial{
+            .title = "Vehicles",
+            .steps = {
+                {.title = "Driving",
+                 .text = "W or Up drives, and A/D or Left/Right steer. The car's speed, RPM and gear, and each "
+                         "wheel's ground and slip, are in the Readings section. Drive off.",
+                 .keys = {{"W/Up", "drive"}, {"A/D, Left/Right", "steer"}},
+                 .done = [](Fenrir::App& app) { return AnyJustPressed(app, {Fenrir::Key::W, Fenrir::Key::Up}); }},
+                {.title = "Braking",
+                 .text = "S or Down brakes, and once stopped reverses. Space pulls the handbrake, which holds the "
+                         "car on the parking slope to the west. Brake.",
+                 .keys = {{"S/Down", "brake, then reverse"}, {"Space", "handbrake"}},
+                 .done =
+                     [](Fenrir::App& app) {
+                         return AnyJustPressed(app, {Fenrir::Key::S, Fenrir::Key::Down, Fenrir::Key::Space});
+                     }},
+                {.title = "The camera",
+                 .text = "The camera chases the car. C frees it where it is, the arrows still driving, and C again "
+                         "snaps it back; F3 switches to the free-fly camera. Free the camera.",
+                 .keys = {{"C", "free the camera, and snap it back"}, {"F3", "free-fly camera on/off"}},
+                 .done = [](Fenrir::App& app) { return AnyJustPressed(app, {Fenrir::Key::C}); }},
+                {.title = "The trailer",
+                 .text = "The car tows a trailer on a hitch, which brakes with it; take it over the ramp to the "
+                         "north. Its speed is in the Readings section. F gets the driver out to walk, and back in "
+                         "within 3 m.",
+                 .keys = {{"F", "get out, or back in"}}},
+                {.title = "A gamepad",
+                 .text = "A connected pad drives too, whatever the demo panel has focused: the right trigger "
+                         "drives, the left brakes, the left stick steers and the right one looks round the car.",
+                 .keys = {{"Pad triggers", "drive/brake"},
+                          {"Pad left stick", "steer"},
+                          {"Pad right stick", "look round the car"},
+                          {"Pad A", "handbrake"}}}}};
         // F2 steps the app's debug lines from off to "vehicles" first, so the run draws every wheel throughout.
         scene.keys.insert(scene.keys.end(), 7, Key::F2);
         // The autopilot drives a whole lap, every piece and the ferry both ways, while L logs the state, then stops,
@@ -1570,15 +1637,32 @@ namespace PhysicsDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Vehicles (C#)";
-        scene.keyHelp =
-            "A car towing a trailer, both built and driven by C#, on a track of its own: five bumps and a ramp to the "
-            "north, a grass patch on the way back south. W or Up drives, S or Down brakes and then reverses once "
-            "stopped, A/D or Left/Right steer, Space pulls the handbrake, Shift holds the clutch, C frees the camera "
-            "(it stays where it is, the arrows still drive) and snaps it back. M switches the gearbox between "
-            "Automatic and Manual through the kind's view; in Manual E/Q shift up and down. V turns the vehicles' "
-            "debug lines on and off, U turns the trailer into a wheeled car that pushes and back. K kicks the car "
-            "over, R rights it, T puts it back at the start. L logs the car's state, P drives the track by itself. A "
-            "gamepad drives too, as in Vehicles (C++).";
+        // A car towing a trailer, both built and driven by C#, on a track of its own: five bumps and a ramp to the
+        // north, a grass patch on the way back south. Its readings are a Razor panel (scripts/ReadingsPanel.razor).
+        scene.keyRows = {{"W/Up", "drive"},
+                         {"S/Down", "brake, then reverse once stopped"},
+                         {"A/D, Left/Right", "steer"},
+                         {"Space", "handbrake"},
+                         {"C", "free the camera (the arrows still drive), and snap it back"},
+                         {"Shift", "hold the clutch"},
+                         {"M", "gearbox: Automatic or Manual, through the kind's view"},
+                         {"E/Q", "in Manual, shift up/down"},
+                         {"V", "the vehicles' debug lines on/off"},
+                         {"U", "the trailer into a wheeled car that pushes, and back"},
+                         {"K", "kick the car over"},
+                         {"R", "right the car"},
+                         {"T", "put the car back at the start"},
+                         {"L", "log the car's state"},
+                         {"P", "drive the track by itself"},
+                         {"Pad triggers", "drive/brake, then reverse"},
+                         {"Pad left stick", "steer"},
+                         {"Pad right stick", "look round the car"},
+                         {"Pad A", "handbrake (Space)"},
+                         {"Pad B", "clutch (Shift)"},
+                         {"Pad X", "gearbox (M)"},
+                         {"Pad bumpers", "shift down/up (Q/E)"},
+                         {"Pad Back", "right the car (R)"}};
+        scene.razorPanel = "vehicles-csharp-readings";
         // The autopilot drives a lap while L logs the state, then stops; each key is tapped twice (E and Q in
         // Manual), and K, R and T end it.
         scene.keys = {Key::P};

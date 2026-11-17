@@ -26,10 +26,10 @@
 
 **Touches:** `examples/PhysicsDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] No `ScreenText` remains in `examples/PhysicsDemo/` (C++ or C#).
-- [ ] `PhysicsDemo-Smoke-null` passes with scripting off and on, the F2 presses included.
+- [x] No `ScreenText` remains in `examples/PhysicsDemo/` (C++ or C#).
+- [x] `PhysicsDemo-Smoke-null` passes with scripting off and on, the F2 presses included.
 - [ ] Hand checks, on OpenGL:
   - each scene's readouts follow the bodies
   - the debug-line choice and F2 agree

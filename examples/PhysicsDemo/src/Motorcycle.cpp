@@ -12,7 +12,7 @@
 // gear and wheel spin. 6 switches the lean controller off, and the bike falls over, and on again; a fallen bike stays
 // down, and T stands it back up at the start, a Transform write that keeps its engine and wheels turning. 5 switches
 // the chassis's interpolation off and on: the lean is the chassis's pose, so it blends with it, and the wheels follow.
-// Its readout, in its name and shown as screen text, adds its lean to the speed, RPM and gear.
+// Its readout, in its name and shown as readouts in the demo panel, adds its lean to the speed, RPM and gear.
 //
 // W or Up drives, S or Down brakes and then reverses once stopped, A/D or Left/Right steer, and Space pulls the
 // handbrake. P rides a loop by itself, two long straights and a hairpin at each end, leaning into each. C frees the
@@ -88,7 +88,7 @@ namespace PhysicsDemo
                 }
                 m_followCamera.Update(m_camera.GetComponent<Fenrir::Transform>(), Fenrir::GetWorldTransform(m_bike),
                                       Vec2(0.0f), static_cast<float>(app.GetTime().deltaTime));
-                ShowReadings(app.GetActiveScene());
+                ShowReadings(app);
             }
 
             // Tick, while the scene is active: game code reads the bike's state and writes its driver input.
@@ -319,8 +319,8 @@ namespace PhysicsDemo
                 return box;
             }
 
-            // The bike's state in its name, every frame, with its lean, shown as screen text.
-            void ShowReadings(Fenrir::Scene& scene)
+            // The bike's state in its name, every frame, with its lean, shown as readouts in the demo panel.
+            void ShowReadings(Fenrir::App& app)
             {
                 const Fenrir::VehicleState& state = m_bike.GetComponent<Fenrir::Vehicle>().state;
                 std::array<char, 160> text{};
@@ -330,8 +330,8 @@ namespace PhysicsDemo
                               state.gear, state.shifting ? ", shifting" : "",
                               static_cast<double>(state.leanAngle / degrees), state.wheelsOnGround);
                 m_bike.GetComponent<Fenrir::Name>().Set(text.data());
-                const std::array<Fenrir::Entity, 1> shown = {m_bike};
-                ShowReadouts(scene, shown);
+                const std::array<Reading, 1> shown = {Reading{"Motorcycle", m_bike}};
+                ShowReadouts(app, shown);
             }
 
             // L: the bike's state and each wheel's.
@@ -382,12 +382,17 @@ namespace PhysicsDemo
 
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp = "W or Up drives, S or Down brakes and then reverses once stopped, A/D or Left/Right steer, "
-                        "Space pulls the handbrake, C frees the camera (it stays where it is, the arrows still drive) "
-                        "and snaps it back. P rides a loop by itself, L logs the bike's state. 3 changes the max lean "
-                        "between 45 and 20 degrees (a rebuild keeping RPM and gear), 6 switches the lean controller "
-                        "off (it falls over) and on, 5 switches its interpolation off and on, T stands it up at the "
-                        "start.";
+        scene.keyRows = {{"W/Up", "drive"},
+                         {"S/Down", "brake, then reverse once stopped"},
+                         {"A/D, Left/Right", "steer"},
+                         {"Space", "handbrake"},
+                         {"C", "free the camera (the arrows still drive), and snap it back"},
+                         {"3", "max lean 45 or 20 degrees (a rebuild keeping RPM and gear)"},
+                         {"6", "the lean controller off (it falls over) and on"},
+                         {"5", "interpolation off/on"},
+                         {"T", "stand it up at the start"},
+                         {"L", "log the bike's state"},
+                         {"P", "ride a loop by itself"}};
         // F2 steps the app's debug lines from off to "vehicles" first, so the run draws both wheels throughout.
         scene.keys.insert(scene.keys.end(), 7, Key::F2);
         // The autopilot rides the loop while L logs the bike, its max lean changed twice on the way, then stops.

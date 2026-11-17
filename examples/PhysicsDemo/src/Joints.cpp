@@ -11,8 +11,8 @@
 // The door's hinge has hard limits (shut to a little past a right angle open), friction, and a motor that starts off.
 // 1 pushes the door, 2 cycles its motor (off, opening, closing, to shut), logging whether the door was asleep, and L
 // turns its limits off and on. With limits on, the opening motor holds the door at its limit, however strong.
-// Each joint entity's name shows its joint state every frame, shown as screen text: the door's angle and load, each
-// chain joint's load. 0 logs every joint's full state.
+// Each joint entity's name shows its joint state every frame, shown as readouts in the demo panel: the door's angle and
+// load, each chain joint's load. 0 logs every joint's full state.
 //
 // B gives chain joint 1 a 15 N break force, and takes it away again. It holds the seven links below it, about 69 N, so
 // it breaks on the next step: physics disables it and sends a JointBroken, which is logged, and its axes draw dimmed in
@@ -313,7 +313,7 @@ namespace PhysicsDemo
             }
 
             // The joints' readings in their names: the door's angle, and how hard each joint pulls; "off" once
-            // disabled. Shown as screen text, where the legacy editor's hierarchy showed them.
+            // disabled. Shown as readouts in the demo panel, as the legacy editor's hierarchy showed them.
             void ShowReadings(Fenrir::App& app) const
             {
                 Fenrir::Scene& scene = app.GetActiveScene();
@@ -322,7 +322,7 @@ namespace PhysicsDemo
                 {
                     return;
                 }
-                std::vector<Fenrir::Entity> shown;
+                std::vector<Reading> shown;
                 for (const Labelled& labelled : m_joints)
                 {
                     const Fenrir::JointState state = world->GetJointState(labelled.joint);
@@ -334,9 +334,9 @@ namespace PhysicsDemo
                                                                   static_cast<double>(state.position), force)
                                                     : std::format("{}: {:.1f} N", labelled.label, force);
                     labelled.joint.GetComponent<Fenrir::Name>().Set(reading.c_str());
-                    shown.push_back(labelled.joint);
+                    shown.push_back({labelled.label, labelled.joint});
                 }
-                ShowReadouts(scene, shown);
+                ShowReadouts(app, shown);
             }
 
             void LogJointStates(Fenrir::App& app) const
@@ -566,13 +566,20 @@ namespace PhysicsDemo
 
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp =
-            "The door swings on its hinge, the chain hangs from its hook. 1 pushes the door, 2 cycles its "
-            "motor (off, opening, closing, to shut), L turns its limits off and on. 9 lets the links "
-            "collide with their neighbours, and back. 0 logs every joint's state. B gives chain joint 1 a "
-            "15 N break force, and back; R repairs broken joints. 4 teleports the door alone, 5 the door and "
-            "its frame. 6 scales link 5, 7 adds or removes a lump on link 6, 8 moves it. 3 destroys chain "
-            "link 3.";
+        // The door swings on its hinge, the chain hangs from its hook.
+        scene.keyRows = {{"1", "push the door"},
+                         {"2", "cycle the door's motor: off, opening, closing, to shut"},
+                         {"L", "the door's limits off/on"},
+                         {"9", "the links collide with their neighbours, and back"},
+                         {"0", "log every joint's state"},
+                         {"B", "a 15 N break force on chain joint 1, and back"},
+                         {"R", "repair broken joints"},
+                         {"4", "teleport the door alone"},
+                         {"5", "teleport the door and its frame"},
+                         {"6", "scale link 5"},
+                         {"7", "add or remove a lump on link 6"},
+                         {"8", "move link 6's lump"},
+                         {"3", "destroy chain link 3"}};
         using Fenrir::Key;
         scene.keys = {Key::Num9, Key::Num1, Key::Num2, Key::Num2, Key::L,    Key::Num2, Key::Num2, Key::L,    Key::Num0,
                       Key::B,    Key::R,    Key::B,    Key::R,    Key::Num4, Key::Num4, Key::Num5, Key::Num5, Key::Num6,
@@ -587,10 +594,15 @@ namespace PhysicsDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Joints (C#)";
-        scene.keyHelp = "A bridge, a lift, a spring rope and a limb, all built by C#. B drops a weight on the bridge, "
-                        "whose middle hinge breaks over 250 N; R repairs broken joints. K swaps the middle joint "
-                        "between hinge and fixed. 1 cycles the lift's motor (off, up, down, half way), 2 raises the "
-                        "limb and lowers it. 0 logs every joint's state.";
+        // A bridge, a lift, a spring rope and a limb, all built by C#; its readings are a Razor panel
+        // (scripts/ReadingsPanel.razor).
+        scene.keyRows = {{"B", "drop a weight on the bridge (its middle hinge breaks over 250 N)"},
+                         {"R", "repair broken joints"},
+                         {"K", "swap the middle joint between hinge and fixed"},
+                         {"1", "cycle the lift's motor: off, up, down, half way"},
+                         {"2", "raise the limb, then lower it"},
+                         {"0", "log every joint's state"}};
+        scene.razorPanel = "joints-csharp-readings";
         using Fenrir::Key;
         scene.keys = {Key::Num0, Key::K,    Key::K,    Key::B,    Key::Num0, Key::R,   Key::Num1,
                       Key::Num1, Key::Num1, Key::Num1, Key::Num2, Key::Num2, Key::Num0};
