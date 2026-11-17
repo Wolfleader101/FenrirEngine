@@ -137,6 +137,18 @@ TEST_CASE("filter reads its functions in the order written, or none, into the re
         REQUIRE(Same(filter[0].colour, Fenrir::Colour::Red));
     }
 
+    INFO("drop-shadow() with a colour function, commas inside it, is taken");
+    REQUIRE(root.SetStyleProperty(panel, "filter", "drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5))"));
+    test.Frame();
+    {
+        const std::vector<FilterStep>& filter = FilterOf(root, panel);
+        INFO("drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5)) is one half-transparent black shadow 4 down, blurred by 6");
+        REQUIRE(filter.size() == 1);
+        REQUIRE(filter[0].offset == Fenrir::Math::Vec2(0.0f, 4.0f));
+        REQUIRE(filter[0].radius == 6.0f);
+        REQUIRE(filter[0].colour.a == 0.5f);
+    }
+
     INFO("drop-shadow() with only its offset is taken");
     REQUIRE(root.SetStyleProperty(panel, "filter", "drop-shadow(-1px 2px)"));
     test.Frame();
@@ -173,6 +185,7 @@ TEST_CASE("A filter a stylesheet cannot read is logged with its line and skipped
                                                                "  filter: blur(-1px);\n"
                                                                "  filter: sepia(1);\n"
                                                                "  filter: drop-shadow(red);\n"
+                                                               "  filter: drop-shadow(1px 1px, 2px 2px);\n"
                                                                "  width: 1px;\n"
                                                                "}\n",
                                                                "filters");
@@ -182,9 +195,11 @@ TEST_CASE("A filter a stylesheet cannot read is logged with its line and skipped
     REQUIRE(HasDiagnosticOnLine(sheet, 3, "filter"));
     INFO("a drop shadow without its offset is refused, on line 4");
     REQUIRE(HasDiagnosticOnLine(sheet, 4, "filter"));
-    INFO("those three are the sheet's only diagnostics");
-    REQUIRE(sheet.diagnostics.size() == 3);
-    INFO("the three declarations are skipped and the rest of the rule stands");
+    INFO("two shadows in one drop shadow are refused, on line 5");
+    REQUIRE(HasDiagnosticOnLine(sheet, 5, "filter"));
+    INFO("those four are the sheet's only diagnostics");
+    REQUIRE(sheet.diagnostics.size() == 4);
+    INFO("the four declarations are skipped and the rest of the rule stands");
     REQUIRE(sheet.rules.at(0).declarations.size() == 1);
     REQUIRE(sheet.rules.at(0).declarations[0].name == "width");
 }

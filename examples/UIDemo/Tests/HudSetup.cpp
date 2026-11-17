@@ -36,6 +36,24 @@ TEST_CASE("The HUD's health bar follows the player's health")
     }
 }
 
+TEST_CASE("The HUD's compass strip and ammo box cast drop shadows")
+{
+    HudApp hud;
+    hud.Frame();
+    Fenrir::UIRoot& root = hud.HudRoot();
+    for (const char* id : {"compass-strip", "ammo-box"})
+    {
+        const Fenrir::ResolvedStyle* style = root.GetResolvedStyle(root.FindById(id));
+        INFO("the HUD has #" << id);
+        REQUIRE(style != nullptr);
+        INFO("hud.css gives #" << id << " one drop shadow, 6 down and blurred by 10");
+        REQUIRE(style->filter.size() == 1);
+        REQUIRE(style->filter[0].kind == Fenrir::FilterStep::Kind::DropShadow);
+        REQUIRE(style->filter[0].offset == Fenrir::Math::Vec2(0.0f, 6.0f));
+        REQUIRE(style->filter[0].radius == 10.0f);
+    }
+}
+
 TEST_CASE("The HUD's stamina bar follows the player's stamina")
 {
     HudApp hud;

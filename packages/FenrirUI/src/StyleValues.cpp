@@ -1179,10 +1179,10 @@ namespace Fenrir::Detail
                 }
                 const std::optional<std::string_view> shadow = CallOf(function, "drop-shadow");
                 // A drop shadow is one text shadow: an offset, a blur and a colour, with no spread. Its colour left out
-                // is CSS's currentcolor, which the style cannot hold yet, so black, as a shadow's is.
+                // is CSS's currentcolor, which the style cannot hold yet, so black, as a shadow's is. A second shadow
+                // after a comma reads as a second layer; a colour function's commas stay inside its parentheses.
                 std::vector<Shadow> shadows;
-                if (!shadow || shadow->find(',') != std::string_view::npos ||
-                    !ParseTextShadow(*shadow, shadows, context) || shadows.size() != 1)
+                if (!shadow || !ParseTextShadow(*shadow, shadows, context) || shadows.size() != 1)
                 {
                     return fail();
                 }

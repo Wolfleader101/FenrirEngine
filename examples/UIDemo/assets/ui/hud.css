@@ -40,7 +40,7 @@
     padding: 6px 16px;
     border-radius: 10px;
     background-color: var(--panel);
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.7));
+    filter: drop-shadow(0 6px 10px black);
 }
 
 compass {
@@ -229,7 +229,7 @@ progress.bar {
     align-items: flex-end;
     border-radius: 12px;
     background-color: var(--panel);
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.7));
+    filter: drop-shadow(0 6px 10px black);
 }
 
 #ammo {
