@@ -19,12 +19,6 @@ target_compile_definitions(UIDemoCore PRIVATE UIDEMO_SOURCE_ASSETS="${CMAKE_CURR
 
 fenrir_add_demo_app(UIDemo SOURCES src/main.cpp ASSETS assets SCRIPTS scripts)
 target_link_libraries(UIDemo PRIVATE UIDemoCore FenrirLogger)
-# The C# variant (README, "The C# variant"): the text, painter and UI scripting extensions, and their contracts beside
-# the executable.
-if(FENRIR_ENABLE_SCRIPTING AND TARGET FenrirUIScripting)
-    target_link_libraries(UIDemo PRIVATE FenrirUIScripting FenrirPainterScripting FenrirTextScripting)
-    fenrir_deploy_scripting(UIDemo EXTENSIONS Text Painter UI)
-endif()
 
 # UIDemo's tests: the app's own setup of the HUD, the menu, the screen and the world roots, on the null backend.
 if(FENRIR_BUILD_TESTS)

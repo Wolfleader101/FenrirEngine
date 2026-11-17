@@ -2,7 +2,7 @@
 
 What every demo app is built on (`GLOSSARY.md`: demo app, demo scaffold): the `FenrirDemoScaffold` static library and
 the `fenrir_add_demo_app` CMake function. Demo code, not engine code. Built with `FENRIR_BUILD_EXAMPLES` (on by
-default) when `FENRIR_ENABLE_RENDERER` is on.
+default) when `FENRIR_ENABLE_RENDERER` and `FENRIR_ENABLE_UI` are on.
 
 ## A demo app
 
@@ -11,8 +11,8 @@ fenrir_add_demo_app(RendererDemo SOURCES src/main.cpp src/MeshesAndMaterials.cpp
 ```
 
 `fenrir_add_demo_app(<name> SOURCES … SCRIPTS … ASSETS …)` makes the executable and links the scaffold. Its asset
-root, the `assets` folder beside the executable (FenrirAssets' default root), gets the shared `examples/assets/` and
-then each `ASSETS` directory copied in after every build, so an app's file replaces a shared one of the same name. With
+root, the `assets` folder beside the executable (FenrirAssets' default root), gets the shared `examples/assets/`, the
+demo UI kit's files (`examples/DemoScaffold/assets/`) and then each `ASSETS` directory copied in after every build, so an app's file replaces a shared one of the same name. With
 `FENRIR_BUILD_TESTS` on, it registers the app's smoke runs in CTest (below). `SCRIPTS <dir>` names the app's C# scripts
 project, `<dir>/<App>.Scripts.csproj` (see "C# scenes").
 
@@ -26,19 +26,22 @@ return demo.Run();
 ```
 
 `DemoScaffold::Install(App&, DemoConfig)` installs FenrirWindow (for the OpenGL backend), FenrirInput, FenrirAssets,
-FenrirDebugDraw and FenrirRenderer, and adds the scaffold's systems. With scripting built and
-`DemoConfig::scriptAssembly` set, it installs Scripting last (see "C# scenes").
-`DemoConfig::installPackages`, when set, runs after FenrirRenderer and before Scripting, for an app's own packages that
-need the scaffold's and must precede Scripting (AnimationDemo's FenrirSkeleton, whose pose stages a script's systems
-join as it loads); the scaffold keeps what it returns and destroys it after Scripting ends and before its own packages.
+FenrirDebugDraw, FenrirRenderer and FenrirUI, adds the demo UI kit (below), and adds the scaffold's systems. With
+scripting built and `DemoConfig::scriptAssembly` set, it installs Scripting last (see "C# scenes"), with the text,
+painter and UI scripting extensions among the packages' where they are built. An app installs no FenrirUI of its own
+(a second `UI::Install` is refused): its roots go in the scaffold's.
+`DemoConfig::installPackages`, when set, runs after FenrirUI and the kit and before Scripting, for an app's own packages
+that need the scaffold's and must precede Scripting (AnimationDemo's FenrirSkeleton, whose pose stages a script's
+systems join as it loads, and UIDemo's roots); the scaffold keeps what it returns and destroys it after Scripting ends
+and before the kit and its own packages.
 `DemoConfig::msaa` sets the renderer's MSAA samples (`RendererConfig::msaa`; 1, off, by default).
 `DemoConfig::iconPath` names the window's icon, an RGBA8 PNG or JPEG under the asset root, which the scaffold loads
 through FenrirAssets and gives to `Window::SetIcon`; it is the shared `icons/fenrir.png` by default, and empty keeps
 SDL's default icon. A smoke run's hidden window gets it too.
 `Run()` runs the app and returns the process's exit code. Destroy the `DemoScaffold` before the `App`.
 
-A `DemoScene` is one entry of the app's ordered scene list: a `name`, a one-line `keyHelp`, the `keys` a smoke run
-presses, where the free-fly camera starts, a `spawn` function and an optional per-frame `update` (in `Update`, on the
+A `DemoScene` is one entry of the app's ordered scene list: a `name`, its `keyRows` for the help (or a one-line
+`keyHelp`, which the help shows as one row), the `keys` a smoke run presses, where the free-fly camera starts, a `spawn` function and an optional per-frame `update` (in `Update`, on the
 main thread). Each time a scene is entered it is spawned into a FenrirScene of its own, named after it; leaving it
 destroys that FenrirScene, and the assets the scene loaded for itself (owned by the scene) go with it.
 
@@ -62,6 +65,45 @@ With `FENRIR_ENABLE_SCRIPTING` on, an app can run C# scenes:
   FenrirScene gets a `CSharpScene { Scene, Entry }`, `Entry` new for each entry. Its C# systems do nothing unless
   `CSharpScene.IsActive(number, out entry)`, and spawn the scene when `entry` is one they have not seen; the scene's
   assets and entities go with its FenrirScene, as a C++ scene's do.
+
+## The demo UI kit
+
+The demo UI kit (`GLOSSARY.md`, ADR-0071) is the scaffold's UI over FenrirUI, in every demo app:
+`include/FenrirDemoScaffold/DemoUI.hpp` and `src/DemoUI.cpp`, in namespace `FenrirDemo`. Its API names no scaffold
+type: the scaffold feeds it. The scaffold adds it as the `DemoUI` app resource once FenrirUI is installed.
+
+- **The root:** one `UIRoot` on the main window's overlay, at layer `DemoUILayer` with input priority
+  `DemoUIRouterPriority` (both 900): over every demo app's own roots (UIDemo's HUD is at 0 and its menu at 10), under
+  the ImGui overlay's 1000 while that is there. Debug screen text and on-screen messages draw over it.
+- **The demo panel**, on the right, 360 UI units wide at the window's `Height1080` scale and scrolling when taller than
+  the window, under the app's name (`SetTitle`): `AppSection(title)` adds a section of the app's, which stays, and
+  `SceneSection(title)` one of the scene's, after the app's. `ClearScene()` removes the scene's sections; the scaffold
+  calls it when a scene is left, before its FenrirScene goes, so a row bound to the scene's state never outlives it.
+  A section (`DemoSection`, a handle) has a heading that collapses and opens it, and rows in the order they were
+  added: `Text(line)` for now, a read-only line that `DemoTextRow::Set` changes. A row can be hidden (`SetShown`) and
+  greyed out (`SetDisabled`). A handle to a section or row that is gone does nothing.
+- **The help**, at the bottom left, clear of the on-screen messages that stack from the top left: a section that starts
+  open, with the app and the scene (`<App>: <scene> (i/n)`), then key rows (`DemoKeyRow{keys, what}`): the scaffold's
+  (the keys below), then the app's (`DemoConfig::appKeyRows`, or `appKeyHelp` as one F2 row), then the scene's
+  (`DemoScene::keyRows`, or `keyHelp` as one row). The scaffold sets it each time a scene is entered (`SetHelp`). While
+  the kit shows, the help is logged as `Help: ...` lines when it is set and when F1 shows it.
+- **F1** hides or shows all of the kit (`SetVisible`, `IsVisible`), even while one of its controls has the focus,
+  unless that is a text entry; a held F1 toggles once. While another root has the focus (UIDemo's open menu), that root
+  has the keyboard and F1 with it. Hidden, the kit takes no input and gives up the focus.
+- **Input:** only the panels' boxes take the pointer (`pointer-events: all` on `.demo-box`), so a press on a panel is
+  consumed and sends no `DemoSceneClickEvent`, while the free-fly camera's right-drag and the scene click work everywhere
+  else (ADR-0065). Tab and a click focus the kit's controls as FenrirUI does, and a focused one has the keyboard until
+  a click on the scene. The root takes no gamepad input (`UIRootConfig::gamepadNavigation` off), so a pad always drives
+  the scene. The window's text input follows the kit's `textInput` claim (`WindowConfig::textInputByDefault` is false).
+- **Files and hot reload:** `assets/ui/demo.ui` (the containers, by id) and `assets/ui/demo.css` (the one theme: its
+  custom properties, `--demo-ink`, `--demo-panel`, `--demo-accent` and the rest, are on `#demo-kit`; text is FenrirText's
+  embedded default face). `fenrir_add_demo_app` copies them into every app's asset root, but while the source tree is
+  there the kit reads them from it (the scaffold's `FENRIR_DEMO_SOURCE_ASSETS`), with hot reload on except in a smoke
+  run: edit `demo.css` while a demo runs and the kit restyles; edit `demo.ui` and the kit makes its sections and the
+  help again in it. `AddStylesheet(path)` loads a demo's own sheet over `demo.css`. A sheet or document that loads with
+  problems is logged as an error, so a smoke run fails on it.
+
+`DemoConfig::demoUITarget` is the tests' seam: a 2D target the kit's root draws into instead of the window.
 
 ## The ImGui overlay
 
@@ -94,8 +136,8 @@ the scaffold, never through an engine package. A scene makes ImGui windows from 
 | Key | What it does |
 | --- | --- |
 | PageDown / PageUp | The next / previous scene, wrapping at both ends. |
-| F1 | Shows or hides the help panel: the app, the scene and the scene's keys. Showing it also logs it. The panel is debug screen text in the window's bottom-left corner, clear of the on-screen messages, which stack from its top-left. |
-| F2 | The app's (`DemoConfig::appKeyHelp` says what it does). |
+| F1 | Hides or shows the demo UI kit: the demo panel and the help. Showing it also logs the help. |
+| F2 | The app's (its `DemoConfig::appKeyRows`, or `appKeyHelp`, say what it does). |
 | F3 | Turns the free-fly camera on or off. A scene that spawns an enabled `Camera` of its own starts with the free-fly camera off; F3 then switches between the two. |
 | Right mouse button | Held, the mouse looks around (up and down the other way with the `FreeFlyLook` app resource's `invertPitch`), and WASD moves the free-fly camera (by key position), Shift makes it faster and the wheel changes its speed. Without it, WASD and the wheel are the scene's. |
 | Left click | Sends `DemoSceneClickEvent`, the ray (`Renderer::ScreenPointToRay`) from the camera drawn at the clicked point (`Renderer::CameraAt`) through it. A click where no camera draws sends nothing. |
@@ -150,4 +192,9 @@ The art-deco texture set comes with the scene that uses it.
 
 `FenrirDemoScaffoldTests` (CTest `FenrirDemoScaffold`) runs a demo app on the null backend with no window, its input
 fed through FenrirInput's feed and the App driven one frame at a time, or run as a smoke run: the scene list, the free-
-fly camera, the scene click, the help, the smoke runs and the ImGui overlay taking input from the scene.
+fly camera, the scene click, the help, the smoke runs and the ImGui overlay taking input from the scene; and the demo
+UI kit, its root drawing into a capturing target the size of the null backend's surface: the help's key rows in order
+and a scene's `keyHelp` as one row, F1 hiding the kit (its panel then taking no press) and hiding it from a focused
+button, a press on the panel sending no scene click and one beside it sending one, a right-drag beside it turning the
+free-fly camera, a scene's section gone after PageDown, a section's heading collapsing and opening it, and the gamepad
+reaching the scene while the kit has the focus.

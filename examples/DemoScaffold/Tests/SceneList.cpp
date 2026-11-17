@@ -185,12 +185,15 @@ TEST_CASE("A scene with no camera of its own draws through the free-fly camera",
     REQUIRE(test.demo.FreeFlyCamera().GetComponent<Fenrir::Camera>().enabled);
 }
 
-TEST_CASE("F1 logs the help: the app, the scene and the scene's keys", "[demo][help]")
+TEST_CASE("F1 showing the demo UI kit logs the help: the app, the scene and the scene's keys", "[demo][help]")
 {
     FenrirDemo::DemoScene scene = EmptyScene("Lit cube");
     scene.keyHelp = "L rotates the light";
     DemoTestApp test({scene});
     test.Frames();
+    // The kit starts shown: F1 hides it, and the help logged on entering the scene is forgotten.
+    test.Tap(Fenrir::Key::F1);
+    test.logged->infos.clear();
 
     test.Tap(Fenrir::Key::F1);
 

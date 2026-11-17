@@ -8,6 +8,7 @@ add_executable(UIDemoTests DemoApp.hpp HudSetup.cpp MenuSetup.cpp ScreenSetup.cp
 target_link_libraries(UIDemoTests PRIVATE UIDemoCore FenrirLogger Catch2::Catch2WithMain)
 add_custom_command(TARGET UIDemoTests POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_directory "${FENRIR_DEMO_SHARED_ASSETS}" "$<TARGET_FILE_DIR:UIDemoTests>/assets"
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory "${FENRIR_DEMO_SCAFFOLD_ASSETS}" "$<TARGET_FILE_DIR:UIDemoTests>/assets"
     COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/../assets"
             "$<TARGET_FILE_DIR:UIDemoTests>/assets"
     COMMENT "Copying the demo assets into UIDemoTests' asset root"
@@ -16,5 +17,5 @@ add_custom_command(TARGET UIDemoTests POST_BUILD
 add_test(NAME UIDemo COMMAND UIDemoTests)
 # With scripting built the scaffold links it, so the tests need what it loads at run time beside them.
 if(FENRIR_ENABLE_SCRIPTING)
-    fenrir_deploy_scripting(UIDemoTests EXTENSIONS Input Window Assets Renderer DebugDraw)
+    fenrir_deploy_scripting(UIDemoTests EXTENSIONS ${FENRIR_DEMO_SCRIPTING_EXTENSIONS})
 endif()

@@ -54,8 +54,9 @@ scene; only Overlay makes an ImGui window.
 - PageDown and PageUp step through the six scenes, wrapping at both ends (`Scene 2/6: Cameras and render targets`,
   `Scene 3/6: Sky`, `Scene 4/6: Debug draw`, `Scene 5/6: Overlay`, `Scene 6/6: Painter` and
   `Scene 1/6: Meshes and materials` are logged).
-- F1 shows the help panel (app, scene, keys) in white text in the window's bottom-left corner, long lines wrapped, and
-  logs it; F1 again hides it. It shows in every scene, over the scene and clear of the on-screen messages.
+- The demo UI kit shows in every scene, over the scene and clear of the on-screen messages: the help (app, scene and a
+  table of keys) at the bottom left, and the demo panel, under the app's name, on the right. F1 hides both, and F1
+  again shows them and logs the help.
 - F3 turns the free-fly camera off (the window is cleared to black, as with no camera) and on again.
 - Cameras and render targets (PageDown from the first scene, or `FENRIR_DEMO_SCENE="Cameras and render targets"`):
   - The main view fills the window, with the minimap, an orthographic top-down view of the whole ring with no
@@ -106,7 +107,7 @@ scene; only Overlay makes an ImGui window.
     which are on. T draws a pink sphere and "3 seconds" at the orbiter, and a pink message, all gone three seconds
     later. Each F adds a green arrow and "forever #n" label that stay; X removes them all.
   - Text stays crisp, not blurred or blocky, at sizes from the small labels to the titles, and with Windows' display
-    scale set to 150% (the screen text, messages and help panel grow with it).
+    scale set to 150% (the screen text and messages grow with it, and the demo UI kit's text stays as sharp).
 - Meshes and materials (C#), with scripting built (PageUp twice from the first scene, or
   `FENRIR_DEMO_SCENE="Meshes and materials (C#)"`):
   - It looks the same as Meshes and materials, object for object (step between the two with PageDown and PageUp, or
@@ -131,7 +132,7 @@ scene; only Overlay makes an ImGui window.
     is solid orange, its alpha ignored.
   - The "Overlay" ImGui window draws over the scene, in ImGui's colours (dark grey-blue window, blue title bar and
     fields) with crisp text, also with Windows' display scale at 150% (the window and its text grow, and stay sharp);
-    the help panel (F1) and debug text draw over it.
+    the demo UI kit's panels draw under it, and debug text over it.
   - Clicking in the ImGui window never counts a scene click; clicking the scene does (`Overlay: scene click n` is
     logged, and the window's count goes up). Dragging in the ImGui window (the slider, or with the right button held
     anywhere in it) never turns or flies the free-fly camera.

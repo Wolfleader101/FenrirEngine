@@ -32,7 +32,7 @@ for the event budget and scene 3) and `critter.gltf` (a four-legged skinned mode
 
 | Key | What it does |
 | --- | --- |
-| F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
+| F1, F3, PageDown, PageUp | The scaffold's: the demo UI kit, the free-fly camera, the next and previous scene. |
 
 ## Smoke runs
 
