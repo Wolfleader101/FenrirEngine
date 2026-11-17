@@ -78,14 +78,40 @@ namespace Fenrir
             return {x0, y0, x1 - x0, y1 - y0};
         }
 
-        bool SameShadows(const std::vector<Shadow>& a, const std::vector<Shadow>& b)
+        /**
+         * @brief Resolves the pseudo-elements of slot `index`, whose shown style before CurrentColour is replaced is
+         * `shown`: they are parts of it, inheriting what it shows and matching its pseudo-classes, so each frame its
+         * `color` moves, their currentcolor follows.
+         */
+        void ResolveParts(Detail::UIRootState& state, std::uint32_t index, const ResolvedStyle& shown)
         {
-            const auto same = [](const Shadow& x, const Shadow& y) {
-                return x.offset == y.offset && x.blur == y.blur && x.spread == y.spread && x.inset == y.inset &&
-                       x.colour.r == y.colour.r && x.colour.g == y.colour.g && x.colour.b == y.colour.b &&
-                       x.colour.a == y.colour.a;
+            Detail::ElementSlot& slot = state.slots[index];
+            const auto resolvePart = [&](ResolvedStyle& part, PseudoElement pseudoElement) {
+                Detail::Inherit(shown, part);
+                std::shared_ptr<const Detail::CustomProperties> partCustom = slot.customProperties;
+                Detail::Cascade(state, index, part, partCustom, pseudoElement);
+                Detail::ResolveCurrentColour(part);
             };
-            return std::equal(a.begin(), a.end(), b.begin(), b.end(), same);
+            if (dynamic_cast<const TextEntry*>(slot.element.get()) != nullptr)
+            {
+                auto parts = std::make_unique<Detail::TextEntryStyles>();
+                resolvePart(parts->selection, PseudoElement::Selection);
+                resolvePart(parts->placeholder, PseudoElement::Placeholder);
+                slot.textEntryStyles = std::move(parts);
+            }
+            if (shown.overflow == Overflow::Scroll)
+            {
+                auto parts = std::make_unique<Detail::ScrollbarStyles>();
+                resolvePart(parts->track, PseudoElement::Scrollbar);
+                resolvePart(parts->thumb, PseudoElement::ScrollbarThumb);
+                slot.scrollbarStyles = std::move(parts);
+            }
+            else
+            {
+                slot.scrollbarStyles.reset();
+                slot.scrollOffset = Math::Vec2(0.0f);
+                slot.scrollRange = Math::Vec2(0.0f);
+            }
         }
 
         /** @brief Whether `a` and `b` differ in a property children inherit. */
@@ -143,36 +169,9 @@ namespace Fenrir
                 }
                 if (slot.hasCascaded)
                 {
-                    Detail::StartTransitions(slot.motion, slot.cascaded, style);
+                    Detail::StartTransitions(slot.motion, slot.cascaded, style, slot.resolved.color);
                 }
                 Detail::ReconcileAnimations(slot.motion, style, state.index.keyframes);
-                // Its pseudo-elements are parts of it: they inherit from it and match its pseudo-classes.
-                const auto resolvePart = [&](ResolvedStyle& part, PseudoElement pseudoElement) {
-                    Detail::Inherit(style, part);
-                    std::shared_ptr<const Detail::CustomProperties> partCustom = slot.customProperties;
-                    Detail::Cascade(state, index, part, partCustom, pseudoElement);
-                    Detail::ResolveCurrentColour(part);
-                };
-                if (dynamic_cast<const TextEntry*>(slot.element.get()) != nullptr)
-                {
-                    auto parts = std::make_unique<Detail::TextEntryStyles>();
-                    resolvePart(parts->selection, PseudoElement::Selection);
-                    resolvePart(parts->placeholder, PseudoElement::Placeholder);
-                    slot.textEntryStyles = std::move(parts);
-                }
-                if (style.overflow == Overflow::Scroll)
-                {
-                    auto parts = std::make_unique<Detail::ScrollbarStyles>();
-                    resolvePart(parts->track, PseudoElement::Scrollbar);
-                    resolvePart(parts->thumb, PseudoElement::ScrollbarThumb);
-                    slot.scrollbarStyles = std::move(parts);
-                }
-                else
-                {
-                    slot.scrollbarStyles.reset();
-                    slot.scrollOffset = Math::Vec2(0.0f);
-                    slot.scrollRange = Math::Vec2(0.0f);
-                }
                 slot.cascaded = std::move(style);
                 slot.hasCascaded = true;
                 slot.styleDirty = false;
@@ -185,8 +184,9 @@ namespace Fenrir
                 Detail::ApplyMotion(slot.motion, shown);
                 // A text shadow's currentcolor resolves to each element's own colour, so children inherit it
                 // unresolved.
-                const bool textShadowChanged = !SameShadows(shown.textShadow, slot.inheritedTextShadow);
+                const bool textShadowChanged = !Detail::SameShadows(shown.textShadow, slot.inheritedTextShadow);
                 slot.inheritedTextShadow = shown.textShadow;
+                ResolveParts(state, index, shown);
                 Detail::ResolveCurrentColour(shown);
                 inheritedChanged = InheritedDiffer(shown, slot.resolved) || textShadowChanged || customChanged;
                 slot.resolved = std::move(shown);

@@ -1891,25 +1891,22 @@ namespace Fenrir::Detail
         }
     } // namespace
 
+    namespace
+    {
+        /** @brief The properties that take a colour; ResolveCurrentColour has a case for each. */
+        constexpr std::array<StyleProperty, 11> ColourProperties{
+            StyleProperty::BackgroundColor,   StyleProperty::BackgroundImage,
+            StyleProperty::BorderTopColor,    StyleProperty::BorderRightColor,
+            StyleProperty::BorderBottomColor, StyleProperty::BorderLeftColor,
+            StyleProperty::BoxShadow,         StyleProperty::Filter,
+            StyleProperty::ScrollbarColor,    StyleProperty::Color,
+            StyleProperty::TextShadow,
+        };
+    } // namespace
+
     bool TakesColour(StyleProperty property) noexcept
     {
-        switch (property)
-        {
-        case StyleProperty::BackgroundColor:
-        case StyleProperty::BackgroundImage:
-        case StyleProperty::BorderTopColor:
-        case StyleProperty::BorderRightColor:
-        case StyleProperty::BorderBottomColor:
-        case StyleProperty::BorderLeftColor:
-        case StyleProperty::BoxShadow:
-        case StyleProperty::Filter:
-        case StyleProperty::ScrollbarColor:
-        case StyleProperty::Color:
-        case StyleProperty::TextShadow:
-            return true;
-        default:
-            return false;
-        }
+        return std::find(ColourProperties.begin(), ColourProperties.end(), property) != ColourProperties.end();
     }
 
     void ResolveCurrentColour(StyleProperty property, ResolvedStyle& style, const Colour& colour)
@@ -1968,9 +1965,9 @@ namespace Fenrir::Detail
     void ResolveCurrentColour(ResolvedStyle& style)
     {
         const Colour colour = style.color;
-        for (std::size_t i = 0; i < StylePropertyCount; ++i)
+        for (const StyleProperty property : ColourProperties)
         {
-            ResolveCurrentColour(static_cast<StyleProperty>(i), style, colour);
+            ResolveCurrentColour(property, style, colour);
         }
     }
 
@@ -2199,6 +2196,9 @@ namespace Fenrir::Detail
         bool ExpandBorderImage(std::string_view value, std::vector<Longhand>& out, StyleParseContext& context)
         {
             constexpr std::string_view onlyTwo = "FenrirUI has only border-image-source and border-image-slice";
+            const auto notSourceAndSlices = [&] {
+                return Fail(context, "it is not a source (url() or none) and one to four slices");
+            };
             std::optional<std::string_view> source;
             std::vector<std::string_view> slices;
             bool sourceFirst = false;
@@ -2225,12 +2225,12 @@ namespace Fenrir::Detail
                 }
                 else
                 {
-                    return Fail(context, "it is not a source (url() or none) and one to four slices");
+                    return notSourceAndSlices();
                 }
             }
             if (slices.size() > 4)
             {
-                return Fail(context, "it is not a source (url() or none) and one to four slices");
+                return notSourceAndSlices();
             }
             out.emplace_back("border-image-source", std::string(source.value_or("none")));
             out.emplace_back("border-image-slice", slices.empty() ? std::string("0") : Join(slices));

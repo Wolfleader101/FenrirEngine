@@ -516,11 +516,19 @@ namespace Fenrir
         AssetHandle<Image> borderImageSource;
         /** @brief `border-image-slice`: the nine-slice insets, in the image's pixels. */
         Sides borderImageSlice;
-        /** @brief The border colours, straight alpha; initially CurrentColour, the text's colour, as CSS. */
+        /** @name Border colours
+         * Straight alpha; initially CurrentColour, the text's colour, as CSS.
+         * @{
+         */
+        /** @brief `border-top-color`. */
         Colour borderTopColor = CurrentColour;
+        /** @brief `border-right-color`. */
         Colour borderRightColor = CurrentColour;
+        /** @brief `border-bottom-color`. */
         Colour borderBottomColor = CurrentColour;
+        /** @brief `border-left-color`. */
         Colour borderLeftColor = CurrentColour;
+        /** @} */
         float borderTopLeftRadius = 0.0f;
         float borderTopRightRadius = 0.0f;
         float borderBottomRightRadius = 0.0f;

@@ -21,6 +21,8 @@ namespace
     // Red and blue as the style holds them: linear, opaque.
     constexpr Colour red{1.0f, 0.0f, 0.0f, 1.0f};
     constexpr Colour blue{0.0f, 0.0f, 1.0f, 1.0f};
+    // Half way from red to blue: sRGB (0.5, 0, 0.5), linear 0.21404, as CSS mixes in sRGB.
+    constexpr Colour halfway{0.21404f, 0.0f, 0.21404f, 1.0f};
 
     bool Same(const Colour& a, const Colour& b)
     {
@@ -58,10 +60,27 @@ namespace
             REQUIRE(style != nullptr);
             return *style;
         }
+
+        // Sets `name: value` inline on `element`, which must read.
+        void Set(ElementId element, std::string_view name, std::string_view value)
+        {
+            INFO("the inline declaration " << name << ": " << value << " reads");
+            REQUIRE(root.SetStyleProperty(element, name, value));
+        }
     };
 } // namespace
 
-TEST_CASE("currentcolor parses in any case, and color: currentcolor takes the parent's colour", "[ui][currentcolor]")
+TEST_CASE("currentcolor is a colour in any case", "[ui][currentcolor]")
+{
+    ColourTest t;
+    t.root.AddStylesheet(".box { color: red; background-color: CurrentColor; }", "sheet");
+    const ElementId box = t.Make("box");
+    t.test.Frame();
+    INFO("background-color: CurrentColor reads, as the element's red");
+    REQUIRE(Same(t.Style(box).backgroundColor, red));
+}
+
+TEST_CASE("color: currentcolor takes the parent's colour, as inherit does", "[ui][currentcolor]")
 {
     ColourTest t;
     t.root.AddStylesheet(".parent { color: blue; } .child { color: red; } .child.own { color: CURRENTCOLOR; }",
@@ -69,30 +88,45 @@ TEST_CASE("currentcolor parses in any case, and color: currentcolor takes the pa
     const ElementId parent = t.Make("parent");
     const ElementId child = t.Make(parent, "child own");
     t.test.Frame();
-    INFO("CURRENTCOLOR is a colour, and as color's value it is inherit: the parent's blue over the earlier red");
+    INFO("the later color: currentcolor is the parent's blue, not the earlier red");
     REQUIRE(Same(t.Style(child).color, blue));
 }
 
-TEST_CASE("A border's and a box shadow's colour left out is the text colour", "[ui][currentcolor]")
+TEST_CASE("A border shorthand with no colour gives every side the text colour", "[ui][currentcolor]")
 {
     ColourTest t;
-    t.root.AddStylesheet(".box { width: 40px; height: 20px; color: red; border: 2px solid; box-shadow: 0 2px 4px; }",
-                         "sheet");
+    t.root.AddStylesheet(".box { color: red; border: 2px solid; }", "sheet");
     const ElementId box = t.Make("box");
     t.test.Frame();
-    INFO("the border shorthand with no colour gives every side the text colour, red");
     const Fenrir::ResolvedStyle& style = t.Style(box);
+    INFO("every side is the text colour, red");
     REQUIRE(Same(style.borderTopColor, red));
     REQUIRE(Same(style.borderRightColor, red));
     REQUIRE(Same(style.borderBottomColor, red));
     REQUIRE(Same(style.borderLeftColor, red));
-    INFO("a box shadow with no colour is red too");
-    REQUIRE(style.boxShadow.size() == 1);
-    REQUIRE(Same(style.boxShadow[0].colour, red));
-    INFO("the border draws in red: the shadow, then the border's box (the transparent background draws nothing)");
+}
+
+TEST_CASE("A border with no colour draws in the text colour", "[ui][currentcolor]")
+{
+    ColourTest t;
+    t.root.AddStylesheet(".box { width: 40px; height: 20px; color: red; border: 2px solid; }", "sheet");
+    t.Make("box");
+    t.test.Frame();
     const std::vector<Fenrir::PainterVertex> quads = UITest::Quads(t.target->lists.back());
-    REQUIRE(quads.size() == 2);
-    REQUIRE(quads[1].borderColours[0] == UITest::Rgba8(255, 0, 0, 255));
+    INFO("one quad, the border's box (the transparent background draws nothing), its border red");
+    REQUIRE(quads.size() == 1);
+    REQUIRE(quads[0].borderColours[0] == UITest::Rgba8(255, 0, 0, 255));
+}
+
+TEST_CASE("A box shadow with no colour is the text colour", "[ui][currentcolor]")
+{
+    ColourTest t;
+    t.root.AddStylesheet(".box { color: red; box-shadow: 0 2px 4px; }", "sheet");
+    const ElementId box = t.Make("box");
+    t.test.Frame();
+    INFO("one shadow, red");
+    REQUIRE(t.Style(box).boxShadow.size() == 1);
+    REQUIRE(Same(t.Style(box).boxShadow[0].colour, red));
 }
 
 TEST_CASE("A border colour no rule gives is the element's own text colour", "[ui][currentcolor]")
@@ -113,7 +147,7 @@ TEST_CASE("border-color: currentcolor on a child is the child's colour, not its 
     t.root.AddStylesheet(".parent { color: red; border-color: currentcolor; } .child { color: blue; }", "sheet");
     const ElementId parent = t.Make("parent");
     const ElementId child = t.Make(parent, "child");
-    REQUIRE(t.root.SetStyleProperty(child, "border-color", "currentcolor"));
+    t.Set(child, "border-color", "currentcolor");
     t.test.Frame();
     INFO("each resolves currentcolor to its own color");
     REQUIRE(Same(t.Style(parent).borderLeftColor, red));
@@ -133,8 +167,8 @@ TEST_CASE("currentcolor is a colour in every colour-taking property", "[ui][curr
     const Fenrir::ResolvedStyle& style = t.Style(box);
     INFO("background-color: currentcolor is red");
     REQUIRE(Same(style.backgroundColor, red));
-    INFO("a gradient stop of currentcolor is red");
     const auto* gradient = std::get_if<Fenrir::StyleLinearGradient>(&style.backgroundImage);
+    INFO("a gradient stop of currentcolor is red");
     REQUIRE(gradient != nullptr);
     REQUIRE(gradient->stops.size() == 2);
     REQUIRE(Same(gradient->stops[0].colour, red));
@@ -162,6 +196,23 @@ TEST_CASE("A pseudo-element's currentcolor is its own colour", "[ui][currentcolo
     REQUIRE(Same(thumb->backgroundColor, blue));
 }
 
+TEST_CASE("A pseudo-element's currentcolor follows its element's color transition", "[ui][currentcolor]")
+{
+    ColourTest t;
+    t.root.AddStylesheet(".box { color: red; overflow: scroll; transition: color 1s linear; }"
+                         " .box.cool { color: blue; }"
+                         " .box::scrollbar-thumb { background-color: currentcolor; }",
+                         "sheet");
+    const ElementId box = t.Make("box");
+    t.test.Frames(1, eighth);
+    t.root.AddClass(box, "cool");
+    t.test.Frames(5, eighth);
+    const Fenrir::ResolvedStyle* thumb = t.root.GetPseudoElementStyle(box, Fenrir::PseudoElement::ScrollbarThumb);
+    INFO("half way through the element's color transition, the thumb it colours is half way too");
+    REQUIRE(thumb != nullptr);
+    REQUIRE(Same(thumb->backgroundColor, halfway));
+}
+
 TEST_CASE("An inherited text shadow's currentcolor is the inheriting element's own colour", "[ui][currentcolor]")
 {
     ColourTest t;
@@ -181,17 +232,20 @@ TEST_CASE("While color transitions, a currentcolor border is the text's colour e
                          " .box.cool { color: blue; }",
                          "sheet");
     const ElementId box = t.Make("box");
-    t.test.Frame();
+    t.test.Frames(1, eighth);
     t.root.AddClass(box, "cool");
-    for (int frame = 0; frame < 9; ++frame)
+    for (int frame = 1; frame <= 8; ++frame)
     {
         t.test.Frames(1, eighth);
         const Fenrir::ResolvedStyle& style = t.Style(box);
         INFO("frame " << frame << ": the border is the colour the text shows");
         REQUIRE(Same(style.borderTopColor, style.color));
+        if (frame == 5)
+        {
+            INFO("half way, both are half way from red to blue");
+            REQUIRE(Same(style.borderTopColor, halfway));
+        }
     }
-    INFO("past its second the text, and so the border, is blue");
-    REQUIRE(Same(t.Style(box).color, blue));
 }
 
 TEST_CASE("A transition from currentcolor to a colour mixes the resolved colours", "[ui][currentcolor]")
@@ -201,12 +255,32 @@ TEST_CASE("A transition from currentcolor to a colour mixes the resolved colours
                          " .box.blue { border-top-color: blue; }",
                          "sheet");
     const ElementId box = t.Make("box");
-    t.test.Frame();
+    t.test.Frames(1, eighth);
     t.root.AddClass(box, "blue");
     t.test.Frames(5, eighth);
-    // Half way between sRGB (1, 0, 0) and (0, 0, 1) is sRGB (0.5, 0, 0.5), linear 0.21404.
     INFO("half way from currentcolor, red, to blue");
-    REQUIRE(Same(t.Style(box).borderTopColor, Colour{0.21404f, 0.0f, 0.21404f, 1.0f}));
+    REQUIRE(Same(t.Style(box).borderTopColor, halfway));
+}
+
+TEST_CASE("A transition from currentcolor while color moves starts from the colour shown", "[ui][currentcolor]")
+{
+    ColourTest t;
+    // The border's transition waits a second, showing where it starts from all that time.
+    t.root.AddStylesheet(".box { color: red; border-top-width: 1px;"
+                         " transition: color 1s linear, border-top-color 1s linear 1s; }"
+                         " .box.cool { color: blue; } .box.cool.edge { border-top-color: lime; }",
+                         "sheet");
+    const ElementId box = t.Make("box");
+    t.test.Frames(1, eighth);
+    t.root.AddClass(box, "cool");
+    t.test.Frames(5, eighth);
+    t.root.AddClass(box, "edge");
+    t.test.Frames(1, eighth);
+    const Colour from = t.Style(box).borderTopColor;
+    INFO("the border starts from the text's colour part way to blue, not from the old red");
+    REQUIRE(from.r > 0.05f);
+    REQUIRE(from.r < 0.5f);
+    REQUIRE(from.b > 0.05f);
 }
 
 TEST_CASE("A keyframe animation from currentcolor mixes the colour it resolves to", "[ui][currentcolor]")
@@ -217,27 +291,37 @@ TEST_CASE("A keyframe animation from currentcolor mixes the colour it resolves t
                          "sheet");
     const ElementId box = t.Make("box");
     t.test.Frames(5, eighth);
-    INFO("half way from currentcolor, red, to blue: sRGB (0.5, 0, 0.5), linear 0.21404");
-    REQUIRE(Same(t.Style(box).borderTopColor, Colour{0.21404f, 0.0f, 0.21404f, 1.0f}));
+    INFO("half way from currentcolor, red, to blue");
+    REQUIRE(Same(t.Style(box).borderTopColor, halfway));
 }
 
-TEST_CASE("inset sets top, right, bottom and left, and five values set none", "[ui][currentcolor]")
+TEST_CASE("inset: 1px 2px sets top and bottom to 1, right and left to 2", "[ui][shorthand]")
 {
     ColourTest t;
     const ElementId box = t.Make("box");
-    REQUIRE(t.root.SetStyleProperty(box, "inset", "1px 2px"));
-    INFO("five values are refused");
-    REQUIRE_FALSE(t.root.SetStyleProperty(box, "inset", "1px 2px 3px 4px 5px"));
+    t.Set(box, "inset", "1px 2px");
     t.test.Frame();
     const Fenrir::ResolvedStyle& style = t.Style(box);
-    INFO("top and bottom are 1, right and left 2, as the two values gave them");
+    INFO("the first value is top and bottom, the second right and left");
     REQUIRE(style.top == Fenrir::Length::Px(1.0f));
     REQUIRE(style.bottom == Fenrir::Length::Px(1.0f));
     REQUIRE(style.right == Fenrir::Length::Px(2.0f));
     REQUIRE(style.left == Fenrir::Length::Px(2.0f));
 }
 
-TEST_CASE("border-image resolves as its two longhands do, and refuses a width", "[ui][currentcolor]")
+TEST_CASE("inset with five values is refused and sets no side", "[ui][shorthand]")
+{
+    ColourTest t;
+    const ElementId box = t.Make("box");
+    INFO("five values are refused");
+    REQUIRE_FALSE(t.root.SetStyleProperty(box, "inset", "1px 2px 3px 4px 5px"));
+    t.test.Frame();
+    INFO("every side keeps its initial auto");
+    REQUIRE(t.Style(box).top == Fenrir::Length::Auto());
+    REQUIRE(t.Style(box).left == Fenrir::Length::Auto());
+}
+
+TEST_CASE("border-image resolves as its two longhands do, inline or from a sheet", "[ui][shorthand]")
 {
     ColourTest t;
     const Fenrir::AssetHandle<Fenrir::Image> frame = UITest::AddWhiteImage(t.test.app, "builtin:frame", 48, 48);
@@ -245,23 +329,38 @@ TEST_CASE("border-image resolves as its two longhands do, and refuses a width", 
     const ElementId shorthand = t.Make("a");
     const ElementId longhands = t.Make("b");
     const ElementId sheet = t.Make("sheet");
-    REQUIRE(t.root.SetStyleProperty(shorthand, "border-image", "url(builtin:frame) 12"));
-    INFO("a slash inside the url() is part of its path");
-    (void)UITest::AddWhiteImage(t.test.app, "builtin:ui/frame", 48, 48);
-    REQUIRE(t.root.SetStyleProperty(t.Make("c"), "border-image", "url(builtin:ui/frame) 12"));
-    REQUIRE(t.root.SetStyleProperty(longhands, "border-image-source", "url(builtin:frame)"));
-    REQUIRE(t.root.SetStyleProperty(longhands, "border-image-slice", "12"));
-    INFO("a width after a slash is refused");
-    REQUIRE_FALSE(t.root.SetStyleProperty(shorthand, "border-image", "url(builtin:frame) 12 / 4px"));
+    t.Set(shorthand, "border-image", "url(builtin:frame) 12");
+    t.Set(longhands, "border-image-source", "url(builtin:frame)");
+    t.Set(longhands, "border-image-slice", "12");
     t.test.Frame();
-    INFO("the shorthand's source and slices, inline or from a sheet, are the longhands'");
     for (const ElementId element : {shorthand, longhands, sheet})
     {
-        REQUIRE(t.Style(element).borderImageSource == frame);
-        const Fenrir::Sides& slice = t.Style(element).borderImageSlice;
-        REQUIRE(slice.top == 12.0f);
-        REQUIRE(slice.right == 12.0f);
-        REQUIRE(slice.bottom == 12.0f);
-        REQUIRE(slice.left == 12.0f);
+        const Fenrir::ResolvedStyle& style = t.Style(element);
+        INFO("the source is the frame and every slice 12");
+        REQUIRE(style.borderImageSource == frame);
+        REQUIRE(style.borderImageSlice.top == 12.0f);
+        REQUIRE(style.borderImageSlice.right == 12.0f);
+        REQUIRE(style.borderImageSlice.bottom == 12.0f);
+        REQUIRE(style.borderImageSlice.left == 12.0f);
     }
+}
+
+TEST_CASE("border-image refuses a width after a slash", "[ui][shorthand]")
+{
+    ColourTest t;
+    (void)UITest::AddWhiteImage(t.test.app, "builtin:frame", 48, 48);
+    const ElementId box = t.Make("box");
+    INFO("url(builtin:frame) 12 / 4px is refused");
+    REQUIRE_FALSE(t.root.SetStyleProperty(box, "border-image", "url(builtin:frame) 12 / 4px"));
+}
+
+TEST_CASE("border-image takes a slash inside its url() as part of the path", "[ui][shorthand]")
+{
+    ColourTest t;
+    const Fenrir::AssetHandle<Fenrir::Image> frame = UITest::AddWhiteImage(t.test.app, "builtin:ui/frame", 48, 48);
+    const ElementId box = t.Make("box");
+    t.Set(box, "border-image", "url(builtin:ui/frame) 12");
+    t.test.Frame();
+    INFO("the path's slash is not a width's");
+    REQUIRE(t.Style(box).borderImageSource == frame);
 }

@@ -327,6 +327,15 @@ namespace Fenrir::Detail
             return list.empty() ? initial : list[index % list.size()];
         }
 
+        /** @brief `property`'s field of `from`, alone, with its CurrentColour replaced by `colour`. */
+        ResolvedStyle ResolvedCopy(StyleProperty property, const ResolvedStyle& from, const Colour& colour)
+        {
+            ResolvedStyle copy;
+            CopyProperty(property, from, copy);
+            ResolveCurrentColour(property, copy, colour);
+            return copy;
+        }
+
         /** @brief The value `transition` shows now, written over `out`. */
         void ApplyTransition(const RunningTransition& transition, ResolvedStyle& out)
         {
@@ -468,13 +477,8 @@ namespace Fenrir::Detail
                 return;
             }
             // Colours mix as what currentcolor resolves to: the cascaded color.
-            ResolvedStyle a;
-            ResolvedStyle b;
-            CopyProperty(property, *from.values, a);
-            CopyProperty(property, *to.values, b);
-            ResolveCurrentColour(property, a, underlying.color);
-            ResolveCurrentColour(property, b, underlying.color);
-            MixField(property, a, b, ease.Apply(local), out);
+            MixField(property, ResolvedCopy(property, *from.values, underlying.color),
+                     ResolvedCopy(property, *to.values, underlying.color), ease.Apply(local), out);
         }
     } // namespace
 
@@ -543,7 +547,8 @@ namespace Fenrir::Detail
         return compiled;
     }
 
-    void StartTransitions(ElementMotion& motion, const ResolvedStyle& before, const ResolvedStyle& after)
+    void StartTransitions(ElementMotion& motion, const ResolvedStyle& before, const ResolvedStyle& after,
+                          const Colour& shownColour)
     {
         // Which entry of the transition lists each property takes: the last that names it, as CSS.
         constexpr std::size_t none = static_cast<std::size_t>(-1);
@@ -586,11 +591,9 @@ namespace Fenrir::Detail
             }
             const auto existing = std::find_if(running.begin(), running.end(),
                                                [&](const RunningTransition& t) { return t.property == property; });
-            // The value it shows now: part way through a running transition, or its old cascaded value. A colour runs
-            // between what currentcolor resolved to on each side: the old and the new cascaded color.
-            ResolvedStyle current;
-            CopyProperty(property, before, current);
-            ResolveCurrentColour(property, current, before.color);
+            // The value it shows now: part way through a running transition, or its old cascaded value, its
+            // currentcolor the colour shown.
+            ResolvedStyle current = ResolvedCopy(property, before, shownColour);
             if (existing != running.end())
             {
                 ApplyTransition(*existing, current);
@@ -606,9 +609,7 @@ namespace Fenrir::Detail
             transition.delay = At(after.transitionDelay, entry[p], 0.0f);
             transition.timing = At(after.transitionTimingFunction, entry[p], TimingFunction::Ease());
             // As CSS: a transition that would end before it starts does not run, nor one to the value it shows.
-            ResolvedStyle target;
-            CopyProperty(property, after, target);
-            ResolveCurrentColour(property, target, after.color);
+            const ResolvedStyle target = ResolvedCopy(property, after, after.color);
             if (transition.duration + transition.delay <= 0.0f || SameField(property, current, target))
             {
                 continue;
@@ -665,6 +666,11 @@ namespace Fenrir::Detail
             }
         }
         return changed;
+    }
+
+    bool SameShadows(const std::vector<Shadow>& a, const std::vector<Shadow>& b)
+    {
+        return Same(a, b);
     }
 
     bool SameProperty(StyleProperty property, const ResolvedStyle& a, const ResolvedStyle& b)
