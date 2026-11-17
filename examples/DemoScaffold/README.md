@@ -42,6 +42,17 @@ presses, where the free-fly camera starts, a `spawn` function and an optional pe
 main thread). Each time a scene is entered it is spawned into a FenrirScene of its own, named after it; leaving it
 destroys that FenrirScene, and the assets the scene loaded for itself (owned by the scene) go with it.
 
+## Helpers
+
+What more than one demo needs to build a scene, in `FenrirDemoScaffold/DemoScaffold.hpp`, so a fix to one reaches
+every demo:
+
+- `YawPitch(yaw, pitch)`: the rotation of a yaw about +Y, then a pitch about the turned +X, in radians, as the free-fly
+  camera turns. 0 and 0 looks along -Z; positive yaw turns to the left (-Z towards -X), positive pitch turns up.
+- `ScreenQuad(width, height, repeat = 1)`: the `MeshData` of a quad of that size, centred in the XY plane and facing
+  +Z, with normals, tangents and UV0 from (0, 0) at the top-left corner to (`repeat`, `repeat`) at the bottom-right,
+  for screens, boards and other flat panels.
+
 ## C# scenes
 
 With `FENRIR_ENABLE_SCRIPTING` on, an app can run C# scenes:
@@ -150,4 +161,5 @@ The art-deco texture set comes with the scene that uses it.
 
 `FenrirDemoScaffoldTests` (CTest `FenrirDemoScaffold`) runs a demo app on the null backend with no window, its input
 fed through FenrirInput's feed and the App driven one frame at a time, or run as a smoke run: the scene list, the free-
-fly camera, the scene click, the help, the smoke runs and the ImGui overlay taking input from the scene.
+fly camera, the scene click, the help, the smoke runs and the ImGui overlay taking input from the scene; and the
+helpers, `YawPitch` and `ScreenQuad`, on their own.

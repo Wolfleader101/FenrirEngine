@@ -68,10 +68,22 @@ TEST_CASE("C#'s new ElementId() has C++'s Fenrir::ElementId{} defaults, field by
     CheckDefaults<Fenrir::ElementId>(Fenrir::ScriptingProbe::Component(app.scripting), "ElementId");
 }
 
+TEST_CASE("C#'s new ImageRootSettings() has C++'s Fenrir::ScriptUI::ImageRootSettings{} defaults, field by field", "[ui][scripting][bindings]")
+{
+    Fenrir::Testing::UIScriptingApp app;
+    CheckDefaults<Fenrir::ScriptUI::ImageRootSettings>(Fenrir::ScriptingProbe::Component(app.scripting), "ImageRootSettings");
+}
+
 TEST_CASE("C#'s new RootSettings() has C++'s Fenrir::ScriptUI::RootSettings{} defaults, field by field", "[ui][scripting][bindings]")
 {
     Fenrir::Testing::UIScriptingApp app;
     CheckDefaults<Fenrir::ScriptUI::RootSettings>(Fenrir::ScriptingProbe::Component(app.scripting), "RootSettings");
+}
+
+TEST_CASE("C#'s new WorldRootSettings() has C++'s Fenrir::ScriptUI::WorldRootSettings{} defaults, field by field", "[ui][scripting][bindings]")
+{
+    Fenrir::Testing::UIScriptingApp app;
+    CheckDefaults<Fenrir::ScriptUI::WorldRootSettings>(Fenrir::ScriptingProbe::Component(app.scripting), "WorldRootSettings");
 }
 
 TEST_CASE("C#'s new UIRoot() has C++'s Fenrir::UIRootId{} defaults, field by field", "[ui][scripting][bindings]")

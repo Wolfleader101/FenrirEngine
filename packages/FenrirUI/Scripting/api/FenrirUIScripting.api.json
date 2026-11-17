@@ -4,6 +4,88 @@
   "alignment": "natural",
   "types": [
     {
+      "name": "Fenrir::AssetHandle<Fenrir::Image>",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4,
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+    },
+    {
+      "name": "Fenrir::ColourSpace",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How an image's red, green and blue values are encoded; alpha is always linear.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Srgb",
+          "value": 0,
+          "doc": "Encoded through the sRGB curve, as colour textures and pictures usually are."
+        },
+        {
+          "name": "Linear",
+          "value": 1,
+          "doc": "Stored as they are: data such as normals and roughness, and HDR images."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Cursor",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "`cursor`: the shape the pointer should take over the element. Inherited. A root on the window sets the window's cursor shape from its hovered element's (UIRootConfig::applyCursor); any root gives it through UIRoot::GetHoveredCursor.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Auto",
+          "value": 0
+        },
+        {
+          "name": "Default",
+          "value": 1
+        },
+        {
+          "name": "Pointer",
+          "value": 2
+        },
+        {
+          "name": "Text",
+          "value": 3
+        },
+        {
+          "name": "Move",
+          "value": 4
+        },
+        {
+          "name": "NotAllowed",
+          "value": 5
+        },
+        {
+          "name": "EwResize",
+          "value": 6
+        },
+        {
+          "name": "NsResize",
+          "value": 7
+        },
+        {
+          "name": "NwseResize",
+          "value": 8
+        },
+        {
+          "name": "NeswResize",
+          "value": 9
+        },
+        {
+          "name": "None",
+          "value": 10
+        }
+      ]
+    },
+    {
       "name": "Fenrir::Rect2D",
       "category": "struct",
       "role": "shared-struct",
@@ -96,6 +178,28 @@
           "kind": "u32",
           "default": 0,
           "doc": "The slot's version when the element was made."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Entity",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 8,
+      "doc": "Entity class that is used to interact with the entity list. This forms the basis of the ECS",
+      "fields": [
+        {
+          "name": "m_entityId",
+          "offset": 0,
+          "kind": "u32",
+          "default": 4294967295
+        },
+        {
+          "name": "m_entityList",
+          "offset": 8,
+          "kind": "pointer",
+          "default": null
         }
       ]
     },
@@ -583,6 +687,43 @@
       ]
     },
     {
+      "name": "Fenrir::Math::Vec3",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 12,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::Math::Ray",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 24,
+      "alignment": 4,
+      "doc": "Represents a ray in 3D space defined by an origin point and a direction vector.",
+      "fields": [
+        {
+          "name": "origin",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {},
+          "doc": "The origin point of the ray."
+        },
+        {
+          "name": "dir",
+          "offset": 12,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          "doc": "The direction vector of the ray, should be normalized to represent a direction."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::Math::Vec2",
       "category": "bound-type",
       "role": "bound-type",
@@ -682,6 +823,67 @@
       ]
     },
     {
+      "name": "Fenrir::ScriptUI::ImageRootSettings",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 4,
+      "doc": "What a script makes a UI root in an image with (UIRoot.CreateImageRoot): an image asset the root owns, of the size given, that it draws into each frame, blending linear, at a content scale of 1, so a root on the `Height1080` scale rule spans 1080 UI units of the image's height. Its input comes from code: it takes no window input. The image (UIRoot.GetImage) is unloaded when the root ends.",
+      "fields": [
+        {
+          "name": "width",
+          "offset": 0,
+          "kind": "u32",
+          "default": 0,
+          "doc": "The image's width in pixels; with a zero width or height the root draws nothing."
+        },
+        {
+          "name": "height",
+          "offset": 4,
+          "kind": "u32",
+          "default": 0,
+          "doc": "The image's height in pixels."
+        },
+        {
+          "name": "colourSpace",
+          "offset": 8,
+          "kind": "enum",
+          "type": "Fenrir::ColourSpace",
+          "default": "Srgb",
+          "doc": "How the image's colours are encoded: sRGB for a colour texture."
+        },
+        {
+          "name": "scaleRule",
+          "offset": 9,
+          "kind": "enum",
+          "type": "Fenrir::ScaleRule",
+          "default": "Height1080",
+          "doc": "How its UI units map to the image's pixels."
+        },
+        {
+          "name": "snapToPixels",
+          "offset": 10,
+          "kind": "bool",
+          "default": true,
+          "doc": "Snap laid-out rectangles to whole pixels."
+        },
+        {
+          "name": "defaultStylesheet",
+          "offset": 11,
+          "kind": "bool",
+          "default": true,
+          "doc": "Give it FenrirUI's default stylesheet before its own sheets."
+        },
+        {
+          "name": "hotReload",
+          "offset": 12,
+          "kind": "bool",
+          "default": false,
+          "doc": "Start with hot reload on: the files it loads are polled for changes."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::WindowId",
       "category": "struct",
       "role": "nested",
@@ -703,7 +905,7 @@
       "role": "shared-struct",
       "size": 20,
       "alignment": 4,
-      "doc": "What a script makes a UI root with (UIRoot.Create): a root on a window's overlay at a layer, blending in the overlay's gamma space. A root drawn into an image or the world is made in C++.",
+      "doc": "What a script makes a UI root with (UIRoot.Create): a root on a window's overlay at a layer, blending in the overlay's gamma space. A root drawn into an image is made with ImageRootSettings, and one on a quad in the world with WorldRootSettings.",
       "fields": [
         {
           "name": "window",
@@ -764,6 +966,60 @@
           "kind": "bool",
           "default": false,
           "doc": "Start with hot reload on: the files it loads are polled for changes."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptUI::WorldRootSettings",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 24,
+      "alignment": 8,
+      "doc": "What a script makes a UI root on a quad in the world with (UIRoot.CreateWorldRoot): the entity's WorldQuad2D, whose size in world units and UI units per world unit it reads each frame, drawn among the scene's transparent items, blending linear. The game keeps the entity while the root lives. Its pointer is the ray the script gives it each frame (UIRoot.SetPointerRay); it takes the window's keys, text and gamepads.",
+      "fields": [
+        {
+          "name": "entity",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Entity",
+          "default": {},
+          "doc": "The entity of the active scene whose WorldQuad2D it draws on."
+        },
+        {
+          "name": "scaleRule",
+          "offset": 16,
+          "kind": "enum",
+          "type": "Fenrir::ScaleRule",
+          "default": "ContentScale",
+          "doc": "How its UI units map to the quad's: one to one by default, the quad's own units."
+        },
+        {
+          "name": "snapToPixels",
+          "offset": 17,
+          "kind": "bool",
+          "default": true,
+          "doc": "Snap laid-out rectangles to whole pixels."
+        },
+        {
+          "name": "defaultStylesheet",
+          "offset": 18,
+          "kind": "bool",
+          "default": true,
+          "doc": "Give it FenrirUI's default stylesheet before its own sheets."
+        },
+        {
+          "name": "hotReload",
+          "offset": 19,
+          "kind": "bool",
+          "default": false,
+          "doc": "Start with hot reload on: the files it loads are polled for changes."
+        },
+        {
+          "name": "virtualCursor",
+          "offset": 20,
+          "kind": "bool",
+          "default": false,
+          "doc": "Start with the virtual cursor on: the left stick moves the pointer and A clicks under it."
         }
       ]
     },

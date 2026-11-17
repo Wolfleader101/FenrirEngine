@@ -1813,6 +1813,34 @@
           "doc": "How far it moves towards the light, in texels per unit of slope (the tangent of the angle between its normal and the light, held between 0.1 and 8): 2 by default."
         }
       ]
+    },
+    {
+      "name": "Fenrir::WorldQuad2D",
+      "category": "struct",
+      "role": "component",
+      "size": 12,
+      "alignment": 4,
+      "doc": "A quad in the world that 2D draw lists are drawn on (ADR-0060's world-space 2D target): a component on an entity of the active scene, whose world transform places it. The game owns that transform like any other.\n\nThe quad lies in the entity's XY plane, centred on its origin, `size` world units across (X) and up (Y), and faces +Z; it is drawn from both sides. A list's local coordinates are logical units from the quad's top-left corner, X right and Y down, `unitsPerWorldUnit` of them to a world unit, so a list `size * unitsPerWorldUnit` units across covers it. Nothing outside the quad is cut away: a list that draws past its edge draws past it.",
+      "fields": [
+        {
+          "name": "size",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 1,
+            "y": 1
+          },
+          "doc": "The quad's width and height in world units."
+        },
+        {
+          "name": "unitsPerWorldUnit",
+          "offset": 8,
+          "kind": "f32",
+          "default": 100,
+          "doc": "The list's logical units to one world unit, above zero: 100 makes a unit a centimetre."
+        }
+      ]
     }
   ]
 }

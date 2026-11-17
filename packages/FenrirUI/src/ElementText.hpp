@@ -67,6 +67,12 @@ namespace Fenrir::Detail
          */
         bool LayOutForDrawing(FontLibrary& fonts);
 
+        /** @brief Target pixels per UI unit, as the last SetStyle gave: what the paragraph's sizes are divided by. */
+        [[nodiscard]] float PixelsPerUnit() const noexcept
+        {
+            return m_pixelsPerUnit;
+        }
+
         /** @brief The paragraph, laid out in target pixels. */
         [[nodiscard]] Paragraph& GetParagraph() noexcept
         {

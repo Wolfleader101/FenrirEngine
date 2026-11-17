@@ -131,6 +131,7 @@ TEST_CASE("Tab and Shift+Tab walk the focusable elements in tree order and wrap"
     UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
     const Menu menu = MakeMenu(root, 3);
     test.Frame();
+    INFO("the first button takes the focus");
     REQUIRE(root.Focus(menu.buttons[0]));
 
     std::vector<ElementId> walked;
@@ -163,6 +164,7 @@ TEST_CASE("Tab skips elements that are not focusable or not displayed", "[ui][fo
     root.SetFocusable(menu.buttons[1], false);
     root.SetStyleProperty(menu.buttons[2], "display", "none");
     test.Frame();
+    INFO("the first button takes the focus");
     REQUIRE(root.Focus(menu.buttons[0]));
 
     test.Type(Key::Tab, Scancode::Tab);
@@ -180,6 +182,7 @@ TEST_CASE("The focused element's ancestors carry :focus-within until it blurs", 
     root.AddStylesheet("div:focus-within { opacity: 0.25; }", "within.css");
     test.Frame();
 
+    INFO("the second button takes the focus");
     REQUIRE(root.Focus(menu.buttons[1]));
     test.Frame();
     INFO("the panel and the root element hold :focus-within; the button holds :focus, not :focus-within");
@@ -204,6 +207,7 @@ TEST_CASE("Removing the focused element takes the focus and :focus-within away",
     UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
     const Menu menu = MakeMenu(root, 2);
     test.Frame();
+    INFO("the first button takes the focus");
     REQUIRE(root.Focus(menu.buttons[0]));
 
     root.Remove(menu.buttons[0], Fenrir::RemoveMode::Immediate);
@@ -231,6 +235,7 @@ TEST_CASE("Keys and text go to the focused element and are consumed", "[ui][focu
     UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
     const Menu menu = MakeMenu(root, 1);
     test.Frame();
+    INFO("the button takes the focus");
     REQUIRE(root.Focus(menu.buttons[0]));
     Fenrir::EventReader<UIEvent> events;
     Fenrir::EventReader<Fenrir::KeyEvent> keys;
@@ -303,6 +308,7 @@ TEST_CASE("Tab's release goes to the element that had its press, not the one it 
     UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
     const Menu menu = MakeMenu(root, 2);
     test.Frame();
+    INFO("the first button takes the focus");
     REQUIRE(root.Focus(menu.buttons[0]));
     Fenrir::EventReader<UIEvent> events;
     (void)ReadAll(events, test.app);
@@ -343,6 +349,7 @@ TEST_CASE("A click on another root on the window blurs this one", "[ui][focus]")
     popup.SetStyleProperty(panel, "height", "50px");
     popup.SetStyleProperty(panel, "pointer-events", "all");
     test.Frame();
+    INFO("the HUD's button takes the focus");
     REQUIRE(hud.Focus(menu.buttons[0]));
 
     test.Click({50.0f, 220.0f});

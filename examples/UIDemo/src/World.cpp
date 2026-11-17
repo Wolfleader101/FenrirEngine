@@ -16,6 +16,8 @@
 #include "FenrirUI/UI.hpp"
 #include "FenrirUI/UIRoot.hpp"
 #include "FenrirUI/UIWorldTarget.hpp"
+#include "FenrirUI/WindowCursor.hpp"
+#include "FenrirWindow/Window.hpp"
 #include "UIDemo.hpp"
 
 namespace UIDemo
@@ -136,9 +138,15 @@ namespace UIDemo
         {
             return;
         }
-        (void)m_terminal->SetStyleProperty(m_terminal->FindById("swatch"), "background-color",
-                                           std::format("#{:06x}", srgb >> 8u));
-        m_terminal->SetText(m_terminal->FindById("reading"), reading);
+        // The reading and the swatch take the lamps' colour; the swatch's currentcolor border follows it, and its fill
+        // is it half seen.
+        const std::string colour = std::format("#{:06x}", srgb >> 8u);
+        const Fenrir::ElementId swatch = m_terminal->FindById("swatch");
+        const Fenrir::ElementId readingLabel = m_terminal->FindById("reading");
+        (void)m_terminal->SetStyleProperty(swatch, "color", colour);
+        (void)m_terminal->SetStyleProperty(swatch, "background-color", colour + "80");
+        (void)m_terminal->SetStyleProperty(readingLabel, "color", colour);
+        m_terminal->SetText(readingLabel, reading);
     }
 
     bool WorldUI::Update(const std::optional<Fenrir::Math::Ray>& ray, bool pressed)
@@ -149,6 +157,21 @@ namespace UIDemo
             return false;
         }
         const bool over = m_terminal->SetPointerRay(ray, pressed);
+        // A world root never sets the window's cursor: the game does, from the root it aims at. Compared with the
+        // window's shape, not the last one set here, since a window root gives the arrow back when the pointer leaves
+        // it for the room.
+        const Fenrir::WindowId window = Fenrir::Window::MainWindow();
+        // As a window root, it leaves the cursor alone while it is captured or hidden.
+        if ((ray || m_rayGiven) && Fenrir::Window::GetCursorMode(m_app, window) == Fenrir::CursorMode::Normal)
+        {
+            const Fenrir::CursorShape shape =
+                ray ? Fenrir::WindowCursorShape(m_terminal->GetHoveredCursor()) : Fenrir::CursorShape::Arrow;
+            if (shape != Fenrir::Window::GetCursorShape(m_app, window))
+            {
+                (void)Fenrir::Window::SetCursorShape(m_app, window, shape);
+            }
+        }
+        m_rayGiven = ray.has_value();
         const Fenrir::UIRootId terminal = m_terminal->GetId();
         for (const Fenrir::UIEvent& event : m_events.Read(m_app))
         {

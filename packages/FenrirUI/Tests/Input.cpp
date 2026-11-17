@@ -113,6 +113,7 @@ TEST_CASE("A UI event carries its root, the pointer in UI units and the button",
     test.Frame();
 
     const std::vector<UIEvent> read = ReadAll(events, test.app);
+    INFO("the move and the press each send one event");
     REQUIRE(read.size() == 2);
     const UIEvent& press = read[1];
     INFO("the press names the root, the panel, the right button and the pointer at twice the logical position");

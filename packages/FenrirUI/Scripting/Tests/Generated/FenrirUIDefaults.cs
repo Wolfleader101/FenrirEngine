@@ -10,7 +10,9 @@ public static class Defaults
 {
     public static global::Fenrir.UI.ElementBoxes ElementBoxes() => new();
     public static global::Fenrir.UI.ElementId ElementId() => new();
+    public static global::Fenrir.UI.ImageRootSettings ImageRootSettings() => new();
     public static global::Fenrir.UI.RootSettings RootSettings() => new();
+    public static global::Fenrir.UI.WorldRootSettings WorldRootSettings() => new();
     public static global::Fenrir.UI.UIRoot UIRoot() => new();
     public static global::Fenrir.UI.UIEvent UIEvent() => new();
 }

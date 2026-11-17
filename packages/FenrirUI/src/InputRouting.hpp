@@ -10,6 +10,7 @@
 #include "FenrirInput/InputRouter.hpp"
 #include "FenrirMath/Math.hpp"
 #include "FenrirUI/ElementId.hpp"
+#include "FenrirUI/Style.hpp"
 #include "FenrirUI/UIEvent.hpp"
 
 namespace Fenrir
@@ -121,6 +122,8 @@ namespace Fenrir::Detail
 
     /** @copydoc Fenrir::UIRoot::HitTest */
     [[nodiscard]] ElementId HitTest(const UIRootState& state, Math::Vec2 position);
+    /** @copydoc Fenrir::UIRoot::GetHoveredCursor */
+    [[nodiscard]] Cursor HoveredCursor(const UIRootState& state);
     /** @copydoc Fenrir::UIRoot::Focus */
     bool Focus(UIRoot& root, UIRootState& state, ElementId element);
     /** @copydoc Fenrir::UIRoot::Blur */

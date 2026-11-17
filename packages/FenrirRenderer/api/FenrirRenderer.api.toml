@@ -1,7 +1,11 @@
 # FenrirRenderer's selection (ADR-0042, tools/describe-api/README.md): the headers to read, relative to this file, and
 # each type the package shares with bindings, with its role. Projection, RenderTarget, CameraBackground and Sky are tagged
 # unions; their kinds, the Viewport and the tag enums are described through what holds them.
-headers = ["../include/FenrirRenderer/Components.hpp", "../include/FenrirRenderer/Renderer.hpp"]
+headers = [
+    "../include/FenrirRenderer/Components.hpp",
+    "../include/FenrirRenderer/Renderer.hpp",
+    "../include/FenrirRenderer/WorldTargets2D.hpp",
+]
 
 # SkinnedMesh holds the engine's Entity, which keeps its value and entity list private: described here as nested with the
 # layout FenrirECS shares, and mirrored by the built-in binding.
@@ -16,6 +20,8 @@ private-members = ["Fenrir::Entity", "Fenrir::Math::Frustum"]
 "Fenrir::SpotLight" = "component"
 "Fenrir::RectLight" = "component"
 "Fenrir::SkinnedMesh" = "component"
+# A quad in the world that 2D lists draw on: a script places one for a UI world root (UIRoot.CreateWorldRoot).
+"Fenrir::WorldQuad2D" = "component"
 "Fenrir::Sky" = "scene-resource"
 "Fenrir::SkyLight" = "scene-resource"
 "Fenrir::RendererStats" = "shared-struct"

@@ -130,6 +130,7 @@ TEST_CASE("A change mid-transition continues from the value shown", "[ui][motion
     t.test.Frames(1, eighth);
     t.root.AddClass(box, "wide");
     t.test.Frames(5, eighth);
+    INFO("half a second into the first transition, from 0 to 100, it shows 50");
     REQUIRE(UITest::Near(t.Width(box), 50.0f));
 
     t.root.RemoveClass(box, "wide");
@@ -152,6 +153,7 @@ TEST_CASE("A transition stops when the transition lists stop naming its property
     t.test.Frames(1, eighth);
     t.root.AddClass(box, "wide");
     t.test.Frames(5, eighth);
+    INFO("half a second into the transition, from 0 to 100, it shows 50");
     REQUIRE(UITest::Near(t.Width(box), 50.0f));
     t.root.AddClass(box, "still");
     t.test.Frames(1, eighth);
@@ -280,6 +282,7 @@ TEST_CASE("Remove() keeps an element with an outro transition alive and animatin
     const ElementId toast = t.Make("toast");
     t.test.Frames(2, eighth);
 
+    INFO("Remove() takes an element that is alive");
     REQUIRE(t.root.Remove(toast));
     INFO("it carries :outro and is alive until its outro ends");
     REQUIRE(t.root.HasPseudoClass(toast, PseudoClass::Outro));
@@ -305,6 +308,7 @@ TEST_CASE("Remove() with no outro transition removes the element after the next 
     MotionTest t;
     const ElementId plain = t.Make("plain");
     t.test.Frames(1, eighth);
+    INFO("Remove() takes an element that is alive");
     REQUIRE(t.root.Remove(plain));
     INFO("it is alive until the root's next frame");
     REQUIRE(t.root.IsAlive(plain));
@@ -321,6 +325,7 @@ TEST_CASE("Remove(immediate) removes an element at once, outro transition or not
     const ElementId leaving = t.Make("toast");
     t.test.Frames(1, eighth);
 
+    INFO("Remove(immediate) takes an element that is alive");
     REQUIRE(t.root.Remove(toast, RemoveMode::Immediate));
     INFO("its id is stale with no frame run");
     REQUIRE_FALSE(t.root.IsAlive(toast));
@@ -343,6 +348,7 @@ TEST_CASE("A parent's outro keeps its children alive while their transitions run
     t.root.AddClass(child, "child");
     t.test.Frames(2, eighth);
 
+    INFO("Remove() takes a parent that is alive");
     REQUIRE(t.root.Remove(parent));
     t.test.Frames(4, eighth);
     INFO("the parent has no transition of its own, but its child's keeps both alive");

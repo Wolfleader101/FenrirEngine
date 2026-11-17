@@ -372,6 +372,7 @@ TEST_CASE("Inline style takes shorthands by name, as a sheet does", "[ui][cascad
     SheetTest t;
     Fenrir::UIRoot& root = t.root;
     const Fenrir::ElementId element = root.Create(root.GetRootElement(), "panel");
+    INFO("the inline shorthands are taken");
     REQUIRE(root.SetStyleProperty(element, "margin", "1px 2px"));
     REQUIRE(root.SetStyleProperty(element, "border", "2px solid red"));
     INFO("a shorthand with a value it cannot read sets none of its longhands");

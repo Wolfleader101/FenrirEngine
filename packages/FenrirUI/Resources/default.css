@@ -200,6 +200,7 @@ scroll:disabled {
 ::scrollbar-thumb {
     border-radius: 3px;
     background-color: #b4b4b4;
+    cursor: pointer;
 }
 
 :hover::scrollbar-thumb {
@@ -212,6 +213,7 @@ scroll:disabled {
 
 :disabled::scrollbar-thumb {
     background-color: #d6d6d6;
+    cursor: default;
 }
 
 /* A text entry paints its own text, caret and selection on one line through its content box; the caret is in its

@@ -165,6 +165,7 @@ TEST_CASE("Gaps, percentages, minimums and maximums lay out rows as flexbox does
     std::shared_ptr<UITest::CaptureTarget> target;
     Fenrir::UIRoot& root = test.MakeRoot(target, {1000.0f, 500.0f});
     const Fenrir::ElementId row = root.Create(root.GetRootElement(), "panel");
+    INFO("the row's style is taken");
     REQUIRE(root.SetStyleProperty(row, "flex-direction", "row"));
     REQUIRE(root.SetStyleProperty(row, "width", "400px"));
     REQUIRE(root.SetStyleProperty(row, "height", "50%"));
@@ -236,6 +237,7 @@ TEST_CASE("Pixel snapping rounds each edge to the target's nearest pixel, halves
     // Two pixels per UI unit, so whole pixels are half UI units.
     Fenrir::UIRoot& root = test.MakeRoot(target, {500.0f, 500.0f}, 2.0f);
     const Fenrir::ElementId row = root.Create(root.GetRootElement(), "panel");
+    INFO("the row's style is taken");
     REQUIRE(root.SetStyleProperty(row, "flex-direction", "row"));
     REQUIRE(root.SetStyleProperty(row, "width", "100px"));
     REQUIRE(root.SetStyleProperty(row, "height", "10px"));
@@ -281,6 +283,7 @@ TEST_CASE("Padding and border boxes nest inside the border box", "[ui][layout]")
     std::shared_ptr<UITest::CaptureTarget> target;
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
     const Fenrir::ElementId panel = root.Create(root.GetRootElement(), "panel");
+    INFO("the panel's style is taken");
     REQUIRE(root.SetStyleProperty(panel, "width", "100px"));
     REQUIRE(root.SetStyleProperty(panel, "height", "80px"));
     REQUIRE(root.SetStyleProperty(panel, "margin-left", "10px"));

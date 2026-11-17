@@ -11,6 +11,7 @@
 #include <span>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace Fenrir::Detail
@@ -524,6 +525,10 @@ namespace Fenrir::Detail
             {
                 return Colour{0.0f, 0.0f, 0.0f, 0.0f};
             }
+            if (EqualsIgnoringCase(text, "currentcolor"))
+            {
+                return CurrentColour;
+            }
             for (const NamedColour& named : NamedColours)
             {
                 if (EqualsIgnoringCase(text, named.name))
@@ -824,6 +829,14 @@ namespace Fenrir::Detail
                                            std::pair{std::string_view("scroll"), Overflow::Scroll}});
         }
 
+        bool ParseScrollbarWidth(std::string_view value, ScrollbarWidth& out, StyleParseContext& context)
+        {
+            return ParseKeyword(value, out, context,
+                                std::array{std::pair{std::string_view("auto"), ScrollbarWidth::Auto},
+                                           std::pair{std::string_view("thin"), ScrollbarWidth::Thin},
+                                           std::pair{std::string_view("none"), ScrollbarWidth::None}});
+        }
+
         bool ParsePointerEvents(std::string_view value, PointerEvents& out, StyleParseContext& context)
         {
             return ParseKeyword(value, out, context,
@@ -978,6 +991,26 @@ namespace Fenrir::Detail
             return true;
         }
 
+        /** @brief `scrollbar-color`: `auto`, or a thumb colour then a track colour. */
+        bool ParseScrollbarColor(std::string_view value, ScrollbarColor& out, StyleParseContext& context)
+        {
+            value = Trim(value);
+            if (EqualsIgnoringCase(value, "auto"))
+            {
+                out = ScrollbarColor::Auto();
+                return true;
+            }
+            const std::vector<std::string_view> parts = Split(value, ' ');
+            const std::optional<Colour> thumb = parts.size() == 2 ? ReadColour(parts[0]) : std::nullopt;
+            const std::optional<Colour> track = parts.size() == 2 ? ReadColour(parts[1]) : std::nullopt;
+            if (!thumb || !track)
+            {
+                return Fail(context, "it is not auto, or a thumb colour then a track colour");
+            }
+            out = ScrollbarColor::Of(*thumb, *track);
+            return true;
+        }
+
         bool ParseImageUrl(std::string_view value, AssetHandle<Image>& out, StyleParseContext& context)
         {
             if (EqualsIgnoringCase(Trim(value), "none"))
@@ -1101,7 +1134,9 @@ namespace Fenrir::Detail
             std::vector<Shadow> shadows;
             for (const std::string_view layer : Split(value, ','))
             {
+                // A colour left out is CSS's currentcolor.
                 Shadow shadow;
+                shadow.colour = CurrentColour;
                 std::vector<float> lengths;
                 bool coloured = false;
                 for (const std::string_view word : Split(layer, ' '))
@@ -1150,6 +1185,45 @@ namespace Fenrir::Detail
                 return Fail(context, "a text shadow takes no spread: it is offset-x offset-y [blur] [colour]");
             }
             out = std::move(shadows);
+            return true;
+        }
+
+        bool ParseFilter(std::string_view value, std::vector<FilterStep>& out, StyleParseContext& context)
+        {
+            if (EqualsIgnoringCase(Trim(value), "none"))
+            {
+                out.clear();
+                return true;
+            }
+            const auto fail = [&] {
+                return Fail(context, "it is not a list of blur(<length>) and drop-shadow(<offset-x> <offset-y> "
+                                     "[<blur>] [<colour>]), lengths in px and blurs of zero or more, or none");
+            };
+            std::vector<FilterStep> steps;
+            for (const std::string_view function : Split(value, ' '))
+            {
+                if (const std::optional<std::string_view> blur = CallOf(function, "blur"))
+                {
+                    const std::optional<float> radius = Pixels(*blur);
+                    if (!radius || *radius < 0.0f)
+                    {
+                        return fail();
+                    }
+                    steps.push_back(FilterStep::Blur(*radius));
+                    continue;
+                }
+                const std::optional<std::string_view> shadow = CallOf(function, "drop-shadow");
+                // A drop shadow is one text shadow: an offset, a blur and a colour, with no spread; its colour left out
+                // is currentcolor, as a shadow's is. A second shadow after a comma reads as a second layer; a colour
+                // function's commas stay inside its parentheses.
+                std::vector<Shadow> shadows;
+                if (!shadow || !ParseTextShadow(*shadow, shadows, context) || shadows.size() != 1)
+                {
+                    return fail();
+                }
+                steps.push_back(FilterStep::DropShadow(shadows[0].offset, shadows[0].blur, shadows[0].colour));
+            }
+            out = std::move(steps);
             return true;
         }
 
@@ -1361,54 +1435,98 @@ namespace Fenrir::Detail
             return true;
         }
 
-        /** @brief `transform-origin`: one or two lengths or keywords, x first (CSS also takes y first for keywords). */
-        bool ParseTransformOrigin(std::string_view value, StyleDeclarations& into, StyleParseContext& context)
+        /**
+         * @brief A position as `transform-origin` and `background-position` write it, CSS's two-value syntax: one or
+         * two of `left`, `center`, `right`, `top`, `bottom`, lengths and percentages, across then down, though two
+         * keywords may come down first (`top left`); one value leaves the other axis centred. The keywords are
+         * percentages: left and top 0%, center 50%, right and bottom 100%. Nothing for anything else.
+         */
+        std::optional<std::pair<Length, Length>> ReadPosition(std::string_view value)
         {
+            // What a part may be: a keyword across, a keyword down, center, or a length.
+            enum class Part : std::uint8_t
+            {
+                Across,
+                Down,
+                Centre,
+                Offset,
+            };
+            struct Read
+            {
+                Part part;
+                Length length;
+            };
+            const auto read = [](std::string_view text) -> std::optional<Read> {
+                if (EqualsIgnoringCase(text, "left") || EqualsIgnoringCase(text, "right"))
+                {
+                    return Read{Part::Across, Length::Percent(EqualsIgnoringCase(text, "left") ? 0.0f : 100.0f)};
+                }
+                if (EqualsIgnoringCase(text, "top") || EqualsIgnoringCase(text, "bottom"))
+                {
+                    return Read{Part::Down, Length::Percent(EqualsIgnoringCase(text, "top") ? 0.0f : 100.0f)};
+                }
+                if (EqualsIgnoringCase(text, "center"))
+                {
+                    return Read{Part::Centre, Length::Percent(50.0f)};
+                }
+                const std::optional<Length> length = ReadLength(text);
+                if (!length || length->unit == LengthUnit::Auto)
+                {
+                    return std::nullopt;
+                }
+                return Read{Part::Offset, *length};
+            };
             const std::vector<std::string_view> parts = Split(value, ' ');
             if (parts.empty() || parts.size() > 2)
             {
-                return Fail(context, "it is not one or two lengths or keywords");
+                return std::nullopt;
             }
-            const auto read = [](std::string_view part, bool& vertical) -> std::optional<Length> {
-                vertical = false;
-                if (EqualsIgnoringCase(part, "left"))
-                {
-                    return Length::Percent(0.0f);
-                }
-                if (EqualsIgnoringCase(part, "right"))
-                {
-                    return Length::Percent(100.0f);
-                }
-                if (EqualsIgnoringCase(part, "center"))
-                {
-                    return Length::Percent(50.0f);
-                }
-                if (EqualsIgnoringCase(part, "top") || EqualsIgnoringCase(part, "bottom"))
-                {
-                    vertical = true;
-                    return Length::Percent(EqualsIgnoringCase(part, "top") ? 0.0f : 100.0f);
-                }
-                const std::optional<Length> length = ReadLength(part);
-                return length && length->unit != LengthUnit::Auto ? length : std::nullopt;
-            };
-            bool firstVertical = false;
-            bool secondVertical = false;
-            std::optional<Length> x = read(parts[0], firstVertical);
-            std::optional<Length> y =
-                parts.size() == 2 ? read(parts[1], secondVertical) : std::optional<Length>(Length::Percent(50.0f));
-            if (!x || !y)
+            const std::optional<Read> first = read(parts[0]);
+            if (!first)
+            {
+                return std::nullopt;
+            }
+            if (parts.size() == 1)
+            {
+                return first->part == Part::Down ? std::pair{Length::Percent(50.0f), first->length}
+                                                 : std::pair{first->length, Length::Percent(50.0f)};
+            }
+            const std::optional<Read> second = read(parts[1]);
+            if (!second)
+            {
+                return std::nullopt;
+            }
+            if (first->part == Part::Down || second->part == Part::Across)
+            {
+                // Down first: only keywords may swap, as CSS (`top 10px` is not a position).
+                const bool keywords = (first->part == Part::Down || first->part == Part::Centre) &&
+                                      (second->part == Part::Across || second->part == Part::Centre);
+                return keywords ? std::optional(std::pair{second->length, first->length}) : std::nullopt;
+            }
+            return std::pair{first->length, second->length};
+        }
+
+        /** @brief `transform-origin`: a position (ReadPosition) from the border box's top-left. */
+        bool ParseTransformOrigin(std::string_view value, StyleDeclarations& into, StyleParseContext& context)
+        {
+            const std::optional<std::pair<Length, Length>> position = ReadPosition(value);
+            if (!position)
             {
                 return Fail(context, "it is not one or two lengths or keywords");
             }
-            if (firstVertical)
+            into.SetTransformOrigin(position->first, position->second);
+            return true;
+        }
+
+        /** @brief `background-position`: a position (ReadPosition) for a background image in the border box. */
+        bool ParseBackgroundPosition(std::string_view value, StyleDeclarations& into, StyleParseContext& context)
+        {
+            const std::optional<std::pair<Length, Length>> position = ReadPosition(value);
+            if (!position)
             {
-                std::swap(x, y);
-                if (parts.size() == 1)
-                {
-                    x = Length::Percent(50.0f);
-                }
+                return Fail(context, "it is not one or two lengths, percentages or keywords");
             }
-            into.SetTransformOrigin(*x, *y);
+            into.SetBackgroundPosition(position->first, position->second);
             return true;
         }
 
@@ -1670,27 +1788,60 @@ namespace Fenrir::Detail
             {FENRIR_UI_STYLE_PROPERTIES(FENRIR_UI_PROPERTY_ENTRY)}};
 
 #undef FENRIR_UI_PROPERTY_ENTRY
+
+        /** @brief A name that gives two properties of the style at once, across then down. */
+        struct PairEntry
+        {
+            std::string_view name;
+            StyleProperty x;
+            StyleProperty y;
+            Parser parse;
+        };
+
+        // Each pair's two parts are named only by the pair: FenrirUI does not take `background-position-x` and the
+        // like (the table's names for them are its own).
+        const std::array<PairEntry, 2> Pairs{{
+            {"transform-origin", StyleProperty::TransformOriginX, StyleProperty::TransformOriginY,
+             ParseTransformOrigin},
+            {"background-position", StyleProperty::BackgroundPositionX, StyleProperty::BackgroundPositionY,
+             ParseBackgroundPosition},
+        }};
+
+        const PairEntry* PairNamed(std::string_view name) noexcept
+        {
+            const auto found = std::find_if(Pairs.begin(), Pairs.end(),
+                                            [&](const PairEntry& pair) { return EqualsIgnoringCase(name, pair.name); });
+            return found != Pairs.end() ? &*found : nullptr;
+        }
+
+        /** @brief The property `name` names on its own: none for a pair's part. */
+        const PropertyEntry* EntryNamed(std::string_view name) noexcept
+        {
+            for (const PropertyEntry& entry : Properties)
+            {
+                const bool part = std::any_of(Pairs.begin(), Pairs.end(), [&](const PairEntry& pair) {
+                    return entry.property == pair.x || entry.property == pair.y;
+                });
+                if (!part && EqualsIgnoringCase(name, entry.name))
+                {
+                    return &entry;
+                }
+            }
+            return nullptr;
+        }
     } // namespace
 
     bool ParseStyleProperty(std::string_view name, std::string_view value, StyleDeclarations& into,
                             StyleParseContext& context)
     {
         name = Trim(name);
-        if (EqualsIgnoringCase(name, "transform-origin"))
+        if (const PairEntry* pair = PairNamed(name))
         {
-            return ParseTransformOrigin(value, into, context);
+            return pair->parse(value, into, context);
         }
-        for (const PropertyEntry& entry : Properties)
+        if (const PropertyEntry* entry = EntryNamed(name))
         {
-            // transform-origin's two parts are named only by transform-origin, as in CSS.
-            if (entry.property == StyleProperty::TransformOriginX || entry.property == StyleProperty::TransformOriginY)
-            {
-                continue;
-            }
-            if (EqualsIgnoringCase(name, entry.name))
-            {
-                return entry.parse(value, into, context);
-            }
+            return entry->parse(value, into, context);
         }
         return Fail(context, "it is not a property FenrirUI knows");
     }
@@ -1715,18 +1866,116 @@ namespace Fenrir::Detail
 
     namespace
     {
-        constexpr std::array<std::string_view, 11> Shorthands{
-            "margin",     "padding", "border", "border-width", "border-color", "border-radius",
-            "background", "flex",    "gap",    "transition",   "animation",
-        };
+        void Resolve(Colour& colour, const Colour& current)
+        {
+            if (IsCurrentColour(colour))
+            {
+                colour = current;
+            }
+        }
 
-        // The spec's property set that the style does not hold yet: the scrollbars, `filter` and
-        // background-position.
-        constexpr std::array<std::string_view, 4> LaterLonghands{
-            "filter",
-            "background-position",
-            "scrollbar-color",
-            "scrollbar-width",
+        void Resolve(std::vector<Shadow>& shadows, const Colour& current)
+        {
+            for (Shadow& shadow : shadows)
+            {
+                Resolve(shadow.colour, current);
+            }
+        }
+
+        void Resolve(std::vector<GradientStop>& stops, const Colour& current)
+        {
+            for (GradientStop& stop : stops)
+            {
+                Resolve(stop.colour, current);
+            }
+        }
+    } // namespace
+
+    namespace
+    {
+        /** @brief The properties that take a colour; ResolveCurrentColour has a case for each. */
+        constexpr std::array<StyleProperty, 11> ColourProperties{
+            StyleProperty::BackgroundColor,   StyleProperty::BackgroundImage,
+            StyleProperty::BorderTopColor,    StyleProperty::BorderRightColor,
+            StyleProperty::BorderBottomColor, StyleProperty::BorderLeftColor,
+            StyleProperty::BoxShadow,         StyleProperty::Filter,
+            StyleProperty::ScrollbarColor,    StyleProperty::Color,
+            StyleProperty::TextShadow,
+        };
+    } // namespace
+
+    bool TakesColour(StyleProperty property) noexcept
+    {
+        return std::find(ColourProperties.begin(), ColourProperties.end(), property) != ColourProperties.end();
+    }
+
+    void ResolveCurrentColour(StyleProperty property, ResolvedStyle& style, const Colour& colour)
+    {
+        switch (property)
+        {
+        case StyleProperty::BackgroundColor:
+            Resolve(style.backgroundColor, colour);
+            break;
+        case StyleProperty::BackgroundImage:
+            if (auto* linear = std::get_if<StyleLinearGradient>(&style.backgroundImage))
+            {
+                Resolve(linear->stops, colour);
+            }
+            else if (auto* radial = std::get_if<StyleRadialGradient>(&style.backgroundImage))
+            {
+                Resolve(radial->stops, colour);
+            }
+            break;
+        case StyleProperty::BorderTopColor:
+            Resolve(style.borderTopColor, colour);
+            break;
+        case StyleProperty::BorderRightColor:
+            Resolve(style.borderRightColor, colour);
+            break;
+        case StyleProperty::BorderBottomColor:
+            Resolve(style.borderBottomColor, colour);
+            break;
+        case StyleProperty::BorderLeftColor:
+            Resolve(style.borderLeftColor, colour);
+            break;
+        case StyleProperty::BoxShadow:
+            Resolve(style.boxShadow, colour);
+            break;
+        case StyleProperty::Filter:
+            for (FilterStep& step : style.filter)
+            {
+                Resolve(step.colour, colour);
+            }
+            break;
+        case StyleProperty::ScrollbarColor:
+            Resolve(style.scrollbarColor.thumb, colour);
+            Resolve(style.scrollbarColor.track, colour);
+            break;
+        case StyleProperty::Color:
+            Resolve(style.color, colour);
+            break;
+        case StyleProperty::TextShadow:
+            Resolve(style.textShadow, colour);
+            break;
+        default:
+            break;
+        }
+    }
+
+    void ResolveCurrentColour(ResolvedStyle& style)
+    {
+        const Colour colour = style.color;
+        for (const StyleProperty property : ColourProperties)
+        {
+            ResolveCurrentColour(property, style, colour);
+        }
+    }
+
+    namespace
+    {
+        constexpr std::array<std::string_view, 13> Shorthands{
+            "margin",       "padding",    "inset", "border", "border-width", "border-color", "border-radius",
+            "border-image", "background", "flex",  "gap",    "transition",   "animation",
         };
 
         bool IsTimingFunction(std::string_view text)
@@ -1811,11 +2060,11 @@ namespace Fenrir::Detail
             {
                 out.emplace_back("border-" + std::string(side) + "-width", widthText);
             }
-            // CSS's initial border colour is currentcolor, which FenrirUI's values do not have: a border colour left
-            // out is black, as the style's border colours start.
+            // A colour left out is CSS's initial border colour, currentcolor.
             for (const std::string_view side : {"top", "right", "bottom", "left"})
             {
-                out.emplace_back("border-" + std::string(side) + "-color", std::string(colour.value_or("black")));
+                out.emplace_back("border-" + std::string(side) + "-color",
+                                 std::string(colour.value_or("currentcolor")));
             }
             return true;
         }
@@ -1938,6 +2187,54 @@ namespace Fenrir::Detail
             // CSS: a grow given alone makes the basis 0%; a shrink left out is 1.
             return emit(numbers.empty() ? "1" : numbers[0], numbers.size() > 1 ? numbers[1] : "1",
                         basis.value_or("0%"));
+        }
+
+        /**
+         * @brief `border-image`: a source and up to four slices, in either order, into the two longhands FenrirUI has;
+         * the one left out is its initial value. CSS's width, outset and repeat have no longhand here, so are refused.
+         */
+        bool ExpandBorderImage(std::string_view value, std::vector<Longhand>& out, StyleParseContext& context)
+        {
+            constexpr std::string_view onlyTwo = "FenrirUI has only border-image-source and border-image-slice";
+            const auto notSourceAndSlices = [&] {
+                return Fail(context, "it is not a source (url() or none) and one to four slices");
+            };
+            std::optional<std::string_view> source;
+            std::vector<std::string_view> slices;
+            bool sourceFirst = false;
+            for (const std::string_view part : Split(value, ' '))
+            {
+                // A slash inside a url() is the path's.
+                if (part.find('/') != std::string_view::npos && !UrlPath(part))
+                {
+                    return Fail(context, "a width or outset (after a slash) is not supported: " + std::string(onlyTwo));
+                }
+                if (IsOneOf(part, std::array<std::string_view, 4>{"stretch", "repeat", "round", "space"}))
+                {
+                    return Fail(context, "a repeat keyword is not supported: " + std::string(onlyTwo));
+                }
+                // The slices are one run of numbers, before or after the source.
+                if (PlainNumber(part) && (slices.empty() || !source || sourceFirst))
+                {
+                    slices.push_back(part);
+                }
+                else if (!source && (EqualsIgnoringCase(part, "none") || UrlPath(part)))
+                {
+                    source = part;
+                    sourceFirst = slices.empty();
+                }
+                else
+                {
+                    return notSourceAndSlices();
+                }
+            }
+            if (slices.size() > 4)
+            {
+                return notSourceAndSlices();
+            }
+            out.emplace_back("border-image-source", std::string(source.value_or("none")));
+            out.emplace_back("border-image-slice", slices.empty() ? std::string("0") : Join(slices));
+            return true;
         }
 
         bool ExpandGap(std::string_view value, std::vector<Longhand>& out, StyleParseContext& context)
@@ -2186,23 +2483,7 @@ namespace Fenrir::Detail
         {
             return PropertyKind::Shorthand;
         }
-        if (std::find(LaterLonghands.begin(), LaterLonghands.end(), name) != LaterLonghands.end())
-        {
-            return PropertyKind::NotYetStyled;
-        }
-        if (name == "transform-origin")
-        {
-            return PropertyKind::Styled;
-        }
-        for (const PropertyEntry& entry : Properties)
-        {
-            if (entry.property != StyleProperty::TransformOriginX &&
-                entry.property != StyleProperty::TransformOriginY && entry.name == name)
-            {
-                return PropertyKind::Styled;
-            }
-        }
-        return PropertyKind::Unknown;
+        return PairNamed(name) != nullptr || EntryNamed(name) != nullptr ? PropertyKind::Styled : PropertyKind::Unknown;
     }
 
     bool ExpandShorthand(std::string_view name, std::string_view value, std::vector<Longhand>& out,
@@ -2224,6 +2505,14 @@ namespace Fenrir::Detail
         {
             read = ExpandSides(value, {"padding-top", "padding-right", "padding-bottom", "padding-left"}, expanded,
                                context);
+        }
+        else if (name == "inset")
+        {
+            read = ExpandSides(value, {"top", "right", "bottom", "left"}, expanded, context);
+        }
+        else if (name == "border-image")
+        {
+            read = ExpandBorderImage(value, expanded, context);
         }
         else if (name == "border-width")
         {
@@ -2294,8 +2583,6 @@ namespace Fenrir::Detail
         {
         case PropertyKind::Styled:
             return ParseStyleProperty(name, value, into, context);
-        case PropertyKind::NotYetStyled:
-            return true;
         case PropertyKind::Shorthand: {
             std::vector<Longhand> longhands;
             if (!ExpandShorthand(name, value, longhands, context))
@@ -2323,10 +2610,6 @@ namespace Fenrir::Detail
 
     std::vector<StyleProperty> PropertiesOf(std::string_view name)
     {
-        if (name == "transform-origin")
-        {
-            return {StyleProperty::TransformOriginX, StyleProperty::TransformOriginY};
-        }
         std::vector<std::string> longhands{std::string(name)};
         if (ClassifyProperty(name) == PropertyKind::Shorthand)
         {
@@ -2356,13 +2639,14 @@ namespace Fenrir::Detail
         std::vector<StyleProperty> properties;
         for (const std::string& longhand : longhands)
         {
-            for (const PropertyEntry& entry : Properties)
+            if (const PairEntry* pair = PairNamed(longhand))
             {
-                if (entry.name == longhand && entry.property != StyleProperty::TransformOriginX &&
-                    entry.property != StyleProperty::TransformOriginY)
-                {
-                    properties.push_back(entry.property);
-                }
+                properties.push_back(pair->x);
+                properties.push_back(pair->y);
+            }
+            else if (const PropertyEntry* entry = EntryNamed(longhand))
+            {
+                properties.push_back(entry->property);
             }
         }
         return properties;

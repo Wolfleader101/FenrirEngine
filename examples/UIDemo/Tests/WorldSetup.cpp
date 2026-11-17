@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -153,4 +154,44 @@ TEST_CASE("The terminal's hue slider, dragged by the ray, turns the lamps' hue")
     INFO("nothing logged an error");
     INFO("the demo logged no error");
     REQUIRE(demo.errors->empty());
+}
+
+TEST_CASE("The terminal's glass covers its whole root by inset: 0")
+{
+    DemoApp demo;
+    demo.Frames(3);
+    const Fenrir::UIRoot& terminal = *demo.app.GetResource<UIDemo::WorldUI>().TerminalRoot();
+    INFO("the glass's border box is the root's 800 by 500");
+    REQUIRE(terminal.GetBoxes(terminal.FindById("terminal")).border == Fenrir::Rect2D{0.0f, 0.0f, 800.0f, 500.0f});
+}
+
+TEST_CASE("The terminal's swatch border is the reading's colour once Cool's transition ends")
+{
+    DemoApp demo;
+    demo.Frames(3);
+    UIDemo::WorldUI& world = demo.app.GetResource<UIDemo::WorldUI>();
+    const Fenrir::UIRoot& terminal = *world.TerminalRoot();
+    Click(world, "cool");
+    demo.Frames(60);
+    const Fenrir::Colour cool = Fenrir::Colour::FromSrgb(UIDemo::WorldUI::CoolLight);
+    const auto near = [](const Fenrir::Colour& a, const Fenrir::Colour& b) {
+        return std::abs(a.r - b.r) < 1e-3f && std::abs(a.g - b.g) < 1e-3f && std::abs(a.b - b.b) < 1e-3f &&
+               std::abs(a.a - b.a) < 1e-3f;
+    };
+    INFO("the reading is the cool light's colour, and so is the swatch's currentcolor border");
+    REQUIRE(near(terminal.GetResolvedStyle(terminal.FindById("reading"))->color, cool));
+    REQUIRE(near(terminal.GetResolvedStyle(terminal.FindById("swatch"))->borderTopColor, cool));
+}
+
+TEST_CASE("The name plate's frame loads by the border-image shorthand, 40 pixels a corner")
+{
+    DemoApp demo;
+    demo.Frames(3);
+    const Fenrir::UIRoot& plate = *demo.app.GetResource<UIDemo::WorldUI>().PlateRoot();
+    const Fenrir::ResolvedStyle* style = plate.GetResolvedStyle(plate.FindById("plate"));
+    INFO("the plate has a frame image, sliced 40 from each edge");
+    REQUIRE(style != nullptr);
+    REQUIRE_FALSE(style->borderImageSource.IsEmpty());
+    REQUIRE(style->borderImageSlice.top == 40.0f);
+    REQUIRE(style->borderImageSlice.left == 40.0f);
 }

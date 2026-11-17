@@ -22,12 +22,19 @@ namespace Fenrir::Generated
             extension.sharedStructs = {
                 Fenrir::MakeSharedStruct<Fenrir::ElementBoxes>("Fenrir.UI.ElementBoxes"),
                 Fenrir::MakeSharedStruct<Fenrir::ElementId>("Fenrir.UI.ElementId"),
+                Fenrir::MakeSharedStruct<Fenrir::ScriptUI::ImageRootSettings>("Fenrir.UI.ImageRootSettings"),
                 Fenrir::MakeSharedStruct<Fenrir::ScriptUI::RootSettings>("Fenrir.UI.RootSettings"),
+                Fenrir::MakeSharedStruct<Fenrir::ScriptUI::WorldRootSettings>("Fenrir.UI.WorldRootSettings"),
                 Fenrir::MakeSharedStruct<Fenrir::UIRootId>("Fenrir.UI.UIRoot"),
             };
             extension.stages = {"Fenrir.UI.Build", "Fenrir.UI.Paint"};
             extension.functions = {
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::CreateRoot, 3>::Call>("Fenrir.UI.UINative.CreateRoot"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::CreateImageRoot, 3>::Call>("Fenrir.UI.UINative.CreateImageRoot"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::CreateWorldRoot, 3>::Call>("Fenrir.UI.UINative.CreateWorldRoot"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::GetImage, 3>::Call>("Fenrir.UI.UINative.GetImage"),
+                Fenrir::NativeFunction::Make<&Fenrir::UINatives::SetPointerRay>("Fenrir.UI.UINative.SetPointerRay"),
+                Fenrir::NativeFunction::Make<&Fenrir::UINatives::ClearPointerRay>("Fenrir.UI.UINative.ClearPointerRay"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::FindRoot, 4>::Call>("Fenrir.UI.UINative.FindRoot"),
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::DestroyRoot>("Fenrir.UI.UINative.DestroyRoot"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::GetRootElement, 3>::Call>("Fenrir.UI.UINative.GetRootElement"),
@@ -61,6 +68,7 @@ namespace Fenrir::Generated
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::Focus>("Fenrir.UI.UINative.Focus"),
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::Blur>("Fenrir.UI.UINative.Blur"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::GetFocused, 3>::Call>("Fenrir.UI.UINative.GetFocused"),
+                Fenrir::NativeFunction::Make<&Fenrir::UINatives::GetHoveredCursor>("Fenrir.UI.UINative.GetHoveredCursor"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::UINatives::LoadDocument, 5>::Call>("Fenrir.UI.UINative.LoadDocument"),
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::LoadStylesheet>("Fenrir.UI.UINative.LoadStylesheet"),
                 Fenrir::NativeFunction::Make<&Fenrir::UINatives::AddStylesheet>("Fenrir.UI.UINative.AddStylesheet"),

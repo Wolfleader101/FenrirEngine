@@ -27,7 +27,7 @@ field of view as last set.
 
 | Scene | Shows | Keys |
 | --- | --- | --- |
-| The HUD | A UI root on the main window's overlay, under the ImGui window, loaded from the markup document `assets/ui/hud.ui` and styled by `assets/ui/hud.css`, over a room of 14 by 14 metres with pillars, crates and three spheres, lit by a dim sun through its open top and three warm lamps. Top centre, the **compass**: a custom element (`src/Compass.cpp`, registered as `compass`) painting with the painter 120 degrees of heading round the camera's, ticks every 15 degrees, taller at north, east, south and west, each of those four with its letter over its tick, and a needle at the centre, in the element's `color`. The letters are paragraphs the element lays out and paints itself, in `ui-sdf`, the engine's embedded face registered in SDF mode (ADR-0062), so they stay smooth at any size. Top right, the **minimap**: an `image` element showing what an orthographic camera looking straight down draws into a render target image, following the camera across the room, north up, in a round frame clipped by `overflow: hidden`, with the player's arrow at its centre turning with the heading. Bottom left, the **health** and **stamina bars**: `progress` elements set from the components; stamina drains while the camera moves and refills while it stands. Bottom right, the **ammo counter**: a `label` reading the rounds in the magazine over the reserve. At the centre, a dot, and a **hit marker** for each shot, made by the game, scaling in through `:intro` and fading out through `:outro` a quarter of a second later. Nothing in the HUD takes pointer input (`pointer-events: none`), so the right mouse button still turns the camera over it and a left click still reaches the room. | F or left click: fire (a hit marker, one round down; nothing with the magazine empty). R: reload from the reserve (it refills once both are empty). H: take a hit (15 health; at zero it refills). Right mouse button and WASD: move, draining stamina. Escape: the pause menu. |
+| The HUD | A UI root on the main window's overlay, under the ImGui window, loaded from the markup document `assets/ui/hud.ui` and styled by `assets/ui/hud.css`, over a room of 14 by 14 metres with pillars, crates and three spheres, lit by a dim sun through its open top and three warm lamps. The compass's strip and the ammo counter's box cast soft shadows under them (`filter: drop-shadow()`, drawing each with its subtree through an offscreen group). Top centre, the **compass**: a custom element (`src/Compass.cpp`, registered as `compass`) painting with the painter 120 degrees of heading round the camera's, ticks every 15 degrees, taller at north, east, south and west, each of those four with its letter over its tick, and a needle at the centre, in the element's `color`. The letters are paragraphs the element lays out and paints itself, in `ui-sdf`, the engine's embedded face registered in SDF mode (ADR-0062), so they stay smooth at any size. Top right, the **minimap**: an `image` element showing what an orthographic camera looking straight down draws into a render target image, following the camera across the room, north up, in a round frame clipped by `overflow: hidden`, with the player's arrow at its centre turning with the heading. Bottom left, the **health** and **stamina bars**: `progress` elements set from the components; stamina drains while the camera moves and refills while it stands. Bottom right, the **ammo counter**: a `label` reading the rounds in the magazine over the reserve. At the centre, a dot, and a **hit marker** for each shot, made by the game, scaling in through `:intro` and fading out through `:outro` a quarter of a second later, its word HIT glowing through a blurred `text-shadow`. While the pause menu is open the room's HUD system gives the HUD's top element the class `paused`, and `filter: blur(3px)`, transitioned from `blur(0px)` over 0.3 seconds, blurs the whole HUD in behind the menu and out again as it closes. Nothing in the HUD takes pointer input (`pointer-events: none`), so the right mouse button still turns the camera over it and a left click still reaches the room. | F or left click: fire (a hit marker, one round down; nothing with the magazine empty). R: reload from the reserve (it refills once both are empty). H: take a hit (15 health; at zero it refills). Right mouse button and WASD: move, draining stamina. Escape: the pause menu. |
 
 ## The pause menu
 
@@ -46,7 +46,10 @@ through `:outro`, its elements removed once the outro ends; the backing that dim
 - The **settings**: sliders for the volume (kept and shown in the UIDemo window: the engine has no audio yet) and the
   window camera's field of view; checkboxes for invert look (the scaffold's `FreeFlyLook`), show HUD and the virtual
   cursor (the left stick moves a pointer over the menu and A clicks under it); a text entry for the player's name, which
-  the HUD shows over the vitals; and a scrolling list of the controls.
+  the HUD shows over the vitals; and a scrolling list of the controls, whose bar is thin (`scrollbar-width: thin`) and
+  in the accent colour over a faint track (`scrollbar-color`).
+- The pause panel's title carries Fenrir's icon from the shared demo assets at its right end, in the panel's top-right
+  corner: `background-size: contain` with `background-position: right center`.
 - While it is open its backing covers the window and takes pointer input, so the right mouse button and clicks do not
   reach the room, and the room's keys do nothing: the camera stops turning and the game waits.
 - The menu's system reads the root's UI events through `EventReader<UIEvent>` (ADR-0065): clicks by the buttons' ids,
@@ -70,18 +73,26 @@ the screen as well.
 Two more UI roots are on quads in the room (ADR-0060's world-space 2D target): each a `UIWorldTarget` over an entity the
 room places, with the renderer's `WorldQuad2D` giving its size in metres and 500 UI units a metre, drawn in the camera's
 `Transparent` pass among the transparent items, in the linear blend space, styled by `assets/ui/world.css` (hot reload
-on), their text in the `ui-sdf` family. `WorldUI` (`src/World.cpp`) makes them when the room is spawned.
+on), their text in the `ui-sdf` family. `WorldUI` (`src/World.cpp`) makes them when the room is spawned. In the C#
+variant a third, the C# sign, is made from C# beside the name plate ("The C# variant", below).
 
 - **The light terminal** (`assets/ui/terminal.ui`): a rounded glass panel of 1.6 by 1 metres on a post right of the
   camera's start, turned towards it and tilted back. Its buttons, Warm, Cool and Hue, set the colour of the room's three
-  lamps, and its slider turns the hue Hue sets; a swatch and a reading show the colour. It is hit by a ray: each frame
+  lamps, and its slider turns the hue Hue sets; a swatch and a reading show the colour. Its glass is laid out over its
+  whole root by `inset: 0`; the reading's text and the swatch take the lamps' colour as their `color`, with a short
+  transition, and the swatch's border, given no colour, is `currentcolor`, so it follows the reading. It is hit by a ray: each frame
   the room's system casts one from the window's camera through the cursor (`Renderer::ScreenPointToRay`) and gives it
   to the root with the left button's state (`UIRoot::SetPointerRay`), and the root hovers, presses, clicks and drags
   where the ray meets its quad. The window's mouse is never its own: it gets no ray while the menu is open, while the
   ImGui window or a window root has the pointer, or while the right mouse button turns the camera. A click on it is not
-  a shot. Its corners and its content are cut by the painter's per-pixel clip, so they stay exact as the quad turns.
+  a shot. A world root never sets the window's cursor, so while the room's system gives it a ray it applies the
+  terminal's `GetHoveredCursor()` to the window itself (the hand over its buttons and slider), and the arrow the frame
+  the ray stops; the menu's buttons show the hand and its name entry the I-beam from the default stylesheet, set by
+  their window root. Its corners and its content are cut by the painter's per-pixel clip, so they stay exact as the quad turns.
 - **The name plate** (`assets/ui/plate.ui`): over a capsule left of the camera's start, a plate of 1 by 0.32 metres
   reading "Wanderer", which the room turns about its vertical axis to face the camera each frame. It takes no input.
+  Its frame is `assets/ui/plate-frame.png`, a 96-pixel rim and glow nine-sliced over it by the `border-image` shorthand,
+  its 40-pixel corners matching the plate's radius.
 
 ## The C# variant
 
@@ -117,6 +128,17 @@ imports `Fenrir.UI.Razor.InRepo.props`, so its `.razor` files are compiled by th
   - A scoped sheet: `Settings.razor.css` matches only the page's own elements, its `ChildContent` among them, and
     reaches Section's headings and the credits document's labels with `::deep`. The page's controls take `menu.css`'s
     unscoped rules too, so they look like the menu's own.
+- **The C# sign** (`scripts/SignSetup.cs`, `assets/ui/sign.ui`): a small sign of 0.6 by 0.3 metres beside the name
+  plate, facing the camera's start, made wholly from C#. The script makes its entity with a `Transform` and a
+  `WorldQuad2D` (500 UI units a metre, as the other world roots), then, once the quad is there, a world root on it
+  (`UIRoot.CreateWorldRoot`, hot reload on) holding its own markup document under `world.css`'s `#sign` rules: a title
+  and one button. Each frame it gives the root a ray from the window's camera through the cursor
+  (`Renderer.ScreenPointToRay`) with the left button's state (`UIRoot.SetPointerRay`), under the terminal's rules: no
+  ray (`ClearPointerRay`) while the menu is open, while a window root has the pointer, or while the right mouse button
+  turns the camera. A click on its button logs "UIDemo (C#): the C# sign was clicked", and is not a shot: the room
+  counts a click over any world root's element as that root's. The root ends when the script
+  generation is released, and the system destroys the quad's entity as it goes, so a reload makes a new sign. Logged
+  once: "the C# sign is beside the name plate, a world root made from C#".
 - **The menu's clicks** (`scripts/MenuClicks.cs`): an Update system reads `UIEvent`s through `EventReader<UIEvent>`,
   the queue the C++ `Menu` reads too, and logs each click on the menu root by the id of the element clicked or its
   nearest ancestor with one: "the menu's resume was clicked", and settings, quit, back and the settings' controls. A
@@ -158,12 +180,14 @@ are logged.
 into a capturing target of 1920 by 1080, and drives it a frame at a time: the health and stamina bars' fills cover the
 share of their bars the player's health and stamina hold, the ammo counter reads the player's ammo, and a right press over
 the HUD's elements hits none of them and reaches the game's `Mouse`. The menu root draws into a second capturing target:
-Escape opens the menu, whose root then takes a right press away from the game; a gamepad direction and A click Resume,
+Escape opens the menu, whose root then takes a right press away from the game, and the HUD is blurred by 3 while it is open and sharp again once it closes; a gamepad direction and A click Resume,
 which closes it, and once its outro ends the game has the mouse again; and a name typed into the settings panel's entry
 shows on the HUD. The screen's root is checked through the same app: it holds the pause panel from the start, in an image
 of 1280 by 720 at a scale of 720 / 1080, blending linear, and its settings panel, its name entry and its focus follow the
 live menu's. The world roots are checked there too: the terminal and the name plate are 800 by 500 and 500 by 160 UI
-units at a scale of 1, blending linear, with `ui-sdf` registered in SDF mode; a ray at Cool and then Warm turns every
+units at a scale of 1, blending linear, with `ui-sdf` registered in SDF mode; the terminal's glass covers its root by
+`inset: 0`, once Cool's transition ends its swatch's border is the reading's colour, and the plate's frame loads by the
+`border-image` shorthand; a ray at Cool and then Warm turns every
 lamp that colour; and the hue slider, dragged by the ray, turns them to its hue.
 
 ## Hand checks
@@ -175,11 +199,14 @@ On OpenGL, in The HUD:
 - Turning the camera (right mouse button held) turns the compass's ticks the other way, its N passing the needle when
   the camera faces -Z, and turns the minimap's arrow. The compass's letters are smooth-edged.
 - The minimap shows the room from above, and moves with the camera as it flies (WASD).
-- F and left clicks show hit markers that scale in and fade out; the ammo counter counts down, and R reloads it.
+- The compass's strip and the ammo counter's box cast soft shadows down onto the room.
+- F and left clicks show hit markers that scale in and fade out, their HIT glowing blue; the ammo counter counts down,
+  and R reloads it.
 - H shortens the health bar; flying drains the stamina bar, which refills once the camera stops.
 - Changing `--health` in `hud.css` while the demo runs recolours the health bar within a moment, without a restart.
 - Clicks and the right mouse button over the HUD's elements still reach the room and the camera.
-- Escape opens the pause menu over a dimmed room, blurred behind its panel; it moves in, and out again on Resume.
+- Escape opens the pause menu over a dimmed room, blurred behind its panel; it moves in, and out again on Resume. The
+  HUD blurs in as the menu opens and clears as it closes.
 - Every control works with the mouse, with Tab and Enter, and with a controller (D-pad and A, B to back out), the focus
   ring showing where the focus is; with the virtual cursor on, the left stick moves a pointer and A clicks.
 - The name typed in Settings shows on the HUD; the field of view slider widens and narrows the view; show HUD hides it;
@@ -192,6 +219,12 @@ On OpenGL, in The HUD:
   under the cursor from several camera angles, its fill following the thumb; its rounded corners stay clean as the
   camera moves round it.
 - The name plate faces the camera as it moves, and its text stays crisp as the camera comes close.
+- The hand shows over the menu's buttons and the terminal's, the I-beam over the name entry in Settings, and the arrow
+  comes back over the room.
+- In the pause menu the panel's title has Fenrir's icon at its right end, and in Settings the controls list scrolls by
+  a thin blue bar.
+- The terminal's swatch border and its reading change colour together when Warm, Cool or the hue slider changes the
+  lamps, and the name plate has a glowing blue frame round its rounded corners.
 - With scripting built, the speedometer sits bottom right over the ammo counter: its needle and the blue share of its
   track rise as the camera flies (WASD, Shift for faster) and fall back when it stops, under a readout of the speed;
   clicking Resume, Settings or Back in the menu logs "the menu's ... was clicked" from C#.
@@ -200,3 +233,6 @@ On OpenGL, in The HUD:
   binding slides a row in, Remove slides it out, and the credits show under their heading. Saving
   `Settings.razor.css` with the menu open restyles the page; rebuilding the scripts brings the page back after the
   reload. Built without scripting, the pause panel is centred alone, as before.
+- With scripting built, the C# sign stands beside the name plate: its button lights under the cursor, a click on it
+  logs "UIDemo (C#): the C# sign was clicked" without firing (no hit marker, the ammo unchanged), and it takes no hover
+  while the menu is open or the right mouse button turns the camera.
