@@ -4,12 +4,14 @@ add_library(FenrirDemoScaffold STATIC
     include/FenrirDemoScaffold/DemoScaffold.hpp
     include/FenrirDemoScaffold/DemoUI.hpp
     src/DemoScaffold.cpp
+    src/DemoHelpers.cpp
     src/DemoUI.cpp
 )
 target_include_directories(FenrirDemoScaffold PUBLIC include)
 target_link_libraries(FenrirDemoScaffold
-    PUBLIC FenrirApp FenrirRenderer FenrirInput FenrirMath FenrirECS FenrirUI
-    PRIVATE FenrirWindow FenrirAssets FenrirDebugDraw FenrirLogger
+    # PUBLIC FenrirAssets: ScreenQuad returns MeshData.
+    PUBLIC FenrirApp FenrirRenderer FenrirInput FenrirMath FenrirECS FenrirUI FenrirAssets
+    PRIVATE FenrirWindow FenrirDebugDraw FenrirLogger
 )
 # The demo UI kit's files (assets/ui, copied into every demo app's asset root by fenrir_add_demo_app) are read from this
 # source tree while it is there, so an edit to them hot-reloads and a rebuild keeps it.

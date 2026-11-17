@@ -190,8 +190,10 @@ TEST_CASE("A listener may destroy the root that is calling it", "[ui][listeners]
     std::shared_ptr<CaptureTarget> target;
     UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
     const Nested nested = MakeNested(root);
-    root.AddListener(nested.button, UIEventKind::PointerPress,
-                     [&](UIListenerContext&) { REQUIRE(test.Roots().DestroyRoot(root)); });
+    root.AddListener(nested.button, UIEventKind::PointerPress, [&](UIListenerContext&) {
+        INFO("the listener destroys the root calling it");
+        REQUIRE(test.Roots().DestroyRoot(root));
+    });
     test.Frame();
     Fenrir::EventReader<Fenrir::MouseButtonEvent> buttons;
 

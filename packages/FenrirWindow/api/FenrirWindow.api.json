@@ -71,8 +71,13 @@
           "value": 7
         },
         {
+          "name": "Move",
+          "value": 8,
+          "doc": "The four-way arrows, over something that can be dragged about."
+        },
+        {
           "name": "Hidden",
-          "value": 8
+          "value": 9
         }
       ]
     },

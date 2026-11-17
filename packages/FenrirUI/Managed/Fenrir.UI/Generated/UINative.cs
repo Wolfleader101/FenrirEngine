@@ -2,7 +2,9 @@
 // Change the native functions' C++ definitions, then regenerate their description and this binding.
 
 using System;
+using Fenrir.Assets;
 using Fenrir.Input;
+using Fenrir.Math;
 using Fenrir.Painter;
 using Fenrir.Scripting;
 
@@ -19,6 +21,52 @@ internal static unsafe partial class UINative
     /// <returns>The root; none without a UI installed.</returns>
     [NativeFunction]
     public static partial void CreateRoot(in RootSettings settings, out UIRoot root);
+
+    /// <summary>
+    /// Makes a UI root drawing into an image of its own, which lives until it is destroyed, the script is released or
+    /// the UI ends; the image is unloaded with it.
+    /// </summary>
+    /// <param name="root">The root made.</param>
+    /// <returns>The root; none without a UI installed or an asset store.</returns>
+    [NativeFunction]
+    public static partial void CreateImageRoot(in ImageRootSettings settings, out UIRoot root);
+
+    /// <summary>
+    /// Makes a UI root on the entity's WorldQuad2D, its pointer the ray the script gives it each frame (SetPointerRay).
+    /// It lives until it is destroyed, the script is released or the UI ends; the game keeps the entity while it lives.
+    /// </summary>
+    /// <param name="root">The root made.</param>
+    /// <returns>
+    /// The root; none without a UI installed, or for an entity that is not alive or has no WorldQuad2D.
+    /// </returns>
+    [NativeFunction]
+    public static partial void CreateWorldRoot(in WorldRootSettings settings, out UIRoot root);
+
+    /// <summary>The image an image root draws into, which any image asset can be, a material's texture say.</summary>
+    /// <param name="image">The image.</param>
+    /// <returns>The image; empty for a root not drawing into an image, or a destroyed one.</returns>
+    [NativeFunction]
+    public static partial void GetImage(in UIRoot root, out AssetHandle<Image> image);
+
+    /// <summary>
+    /// Gives a world root its pointer for this frame (UIRoot::SetPointerRay): `ray`, in world space, and whether its
+    /// left button is `pressed`. The root hovers, presses and clicks where the ray meets its quad; a held press follows
+    /// the ray past the quad's edges. Call it once a frame, from an Update system.
+    /// </summary>
+    /// <returns>
+    /// Whether the pointer is over one of its elements that takes pointer input, or a press is held on one; false,
+    /// doing nothing, on a root not on a world quad.
+    /// </returns>
+    [NativeFunction]
+    public static partial bool SetPointerRay(in UIRoot root, in Ray ray, bool pressed);
+
+    /// <summary>
+    /// Takes a world root's pointer away for this frame: it hovers nothing, and a held press is released as cancelled,
+    /// with no click. As SetPointerRay with no ray.
+    /// </summary>
+    /// <returns>False, as the root has no pointer; false too on a root not on a world quad, doing nothing.</returns>
+    [NativeFunction]
+    public static partial bool ClearPointerRay(in UIRoot root);
 
     /// <summary>
     /// The first root made, in C++ or C#, on the window's overlay at the layer: how a script finds a root the game
@@ -233,6 +281,17 @@ internal static unsafe partial class UINative
     /// <returns>The focused element; none when no element of the root has it.</returns>
     [NativeFunction]
     public static partial void GetFocused(in UIRoot root, out ElementId element);
+
+    /// <summary>
+    /// The cursor the root's hovered element wants (UIRoot::GetHoveredCursor): over a scroll view's bar its part's,
+    /// `auto` resolved to `Text` over a text entry and `Default` elsewhere.
+    /// </summary>
+    /// <returns>
+    /// The cursor; `Auto` with nothing hovered or no such root. A root on the window sets the window's cursor from it
+    /// itself; a script applies a world root's.
+    /// </returns>
+    [NativeFunction]
+    public static partial Cursor GetHoveredCursor(in UIRoot root);
 
     /// <summary>
     /// Loads the markup document at `path` (relative to the asset root, or absolute) under `parent`, after its children

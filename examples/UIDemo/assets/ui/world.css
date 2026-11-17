@@ -1,12 +1,14 @@
 /*
  * UIDemo's world roots' stylesheet (examples/UIDemo/README.md): the light terminal and the name plate, each a root on a
- * quad in the room. Their UI units are the quads' own, 500 to a metre, and they blend linear, as the lit room does.
- * Their text is in `ui-sdf`, the embedded face registered in SDF mode, so it stays crisp at any distance and angle.
- * The demo loads it with hot reload on: edit it while the demo runs and both roots restyle.
+ * quad in the room, and in the C# variant the sign its script makes. Their UI units are the quads' own, 500 to a metre,
+ * and they blend linear, as the lit room does. Their text is in `ui-sdf`, the embedded face registered in SDF mode, so
+ * it stays crisp at any distance and angle. The demo loads it with hot reload on: edit it while the demo runs and the
+ * roots restyle.
  */
 
 #terminal,
-#plate {
+#plate,
+#sign {
     --ink: #e8f2ff;
     --ink-dim: rgba(232, 242, 255, 0.55);
     --glass: rgba(8, 14, 22, 0.86);
@@ -19,10 +21,13 @@
     color: var(--ink);
 }
 
-/* The terminal: a rounded glass panel, its corners and its content cut by the shader's clip at any angle. */
+/*
+ * The terminal: a rounded glass panel, its corners and its content cut by the shader's clip at any angle. It is laid
+ * out over its whole root by inset: 0.
+ */
 #terminal {
-    width: 100%;
-    height: 100%;
+    position: absolute;
+    inset: 0;
     padding: 36px 44px;
     row-gap: 28px;
     border: 3px solid var(--edge);
@@ -43,12 +48,19 @@
     font-weight: bold;
 }
 
+/*
+ * The swatch and the reading are in the lamps' colour, which the demo sets as their color. The swatch's border, given
+ * no colour, is currentcolor, so it follows the reading's colour through its transition; its fill is the same colour,
+ * half seen.
+ */
 #swatch {
     width: 120px;
     height: 56px;
-    border: 3px solid var(--edge);
+    border: 3px solid;
     border-radius: 28px;
-    background-color: #ffd8a8;
+    color: #ffd8a8;
+    background-color: rgba(255, 216, 168, 0.5);
+    transition: color 0.3s ease-out, background-color 0.3s ease-out;
 }
 
 .presets {
@@ -114,10 +126,14 @@
 
 .reading {
     font-size: 34px;
-    color: var(--ink-dim);
+    color: #ffd8a8;
+    transition: color 0.3s ease-out;
 }
 
-/* The name plate: over the capsule, taking no pointer input. */
+/*
+ * The name plate: over the capsule, taking no pointer input. Its frame is a nine-sliced image, a rim and a glow whose
+ * 40-pixel corners match its radius, given by the border-image shorthand.
+ */
 #plate {
     width: 100%;
     height: 100%;
@@ -126,6 +142,7 @@
     row-gap: 6px;
     border-radius: 40px;
     background-color: rgba(8, 14, 22, 0.7);
+    border-image: url(ui/plate-frame.png) 40;
     pointer-events: none;
 }
 
@@ -137,4 +154,43 @@
 .plate-role {
     font-size: 36px;
     color: var(--ink-dim);
+}
+
+/*
+ * The C# variant's sign (scripts/SignSetup.cs): beside the name plate, a root the script makes on its own quad, with one
+ * button it aims at by ray.
+ */
+#sign {
+    position: absolute;
+    inset: 0;
+    padding: 20px 28px;
+    row-gap: 14px;
+    align-items: center;
+    justify-content: center;
+    border: 3px solid var(--edge);
+    border-radius: 32px;
+    background-color: var(--glass);
+    font-size: 30px;
+}
+
+.sign-title {
+    color: var(--ink-dim);
+}
+
+#sign-button {
+    padding: 14px 44px;
+    border: 2px solid rgba(0, 0, 0, 0);
+    border-radius: 20px;
+    background-color: var(--control);
+    color: var(--ink);
+    transition: background-color 0.15s ease-out, border-color 0.15s ease-out;
+}
+
+#sign-button:hover {
+    border-color: var(--edge);
+    background-color: var(--control-hover);
+}
+
+#sign-button:active {
+    background-color: var(--accent);
 }

@@ -118,7 +118,7 @@ namespace Fenrir
         constexpr std::array<SDL_SystemCursor, static_cast<std::size_t>(CursorShape::Hidden)> systemCursors{
             SDL_SYSTEM_CURSOR_DEFAULT,   SDL_SYSTEM_CURSOR_TEXT,        SDL_SYSTEM_CURSOR_EW_RESIZE,
             SDL_SYSTEM_CURSOR_NS_RESIZE, SDL_SYSTEM_CURSOR_NWSE_RESIZE, SDL_SYSTEM_CURSOR_NESW_RESIZE,
-            SDL_SYSTEM_CURSOR_POINTER,   SDL_SYSTEM_CURSOR_NOT_ALLOWED,
+            SDL_SYSTEM_CURSOR_POINTER,   SDL_SYSTEM_CURSOR_NOT_ALLOWED, SDL_SYSTEM_CURSOR_MOVE,
         };
 
         // Puts a made window's cursor mode and shape into effect. One window is made, so SDL's app-wide cursor
@@ -506,6 +506,12 @@ namespace Fenrir
         }
         record->cursorShape = shape;
         return record->sdl == nullptr || ApplyCursor(*Detail::FindWindowState(app), *record);
+    }
+
+    CursorShape Window::GetCursorShape(App& app, WindowId window)
+    {
+        const WindowRecord* record = FindWindow(app, window);
+        return record == nullptr ? CursorShape::Arrow : record->cursorShape;
     }
 
     std::string Window::ClipboardText(App& app)

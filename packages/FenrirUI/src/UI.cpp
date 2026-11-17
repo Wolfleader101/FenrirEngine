@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <iterator>
 #include <utility>
 #include <vector>
 
@@ -9,6 +10,8 @@
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirText/FontLibrary.hpp"
 #include "FenrirUI/Controls.hpp"
+#include "FenrirUI/WindowCursor.hpp"
+#include "FenrirWindow/Window.hpp"
 
 namespace Fenrir
 {
@@ -194,9 +197,118 @@ namespace Fenrir
         return RemoveStageWork(m_paintStage, handle.id);
     }
 
+    CursorShape WindowCursorShape(Cursor cursor) noexcept
+    {
+        switch (cursor)
+        {
+        case Cursor::Pointer:
+            return CursorShape::Hand;
+        case Cursor::Text:
+            return CursorShape::Text;
+        case Cursor::Move:
+            return CursorShape::Move;
+        case Cursor::NotAllowed:
+            return CursorShape::NotAllowed;
+        case Cursor::EwResize:
+            return CursorShape::ResizeEastWest;
+        case Cursor::NsResize:
+            return CursorShape::ResizeNorthSouth;
+        case Cursor::NwseResize:
+            return CursorShape::ResizeNorthWestSouthEast;
+        case Cursor::NeswResize:
+            return CursorShape::ResizeNorthEastSouthWest;
+        case Cursor::None:
+            return CursorShape::Hidden;
+        case Cursor::Auto:
+        case Cursor::Default:
+            break;
+        }
+        return CursorShape::Arrow;
+    }
+
+    void UIRoots::ApplyCursors()
+    {
+        // What each window wants: the hovered cursor of its highest-priority root over an element, the earliest made
+        // of equal priorities, as their routers run; the arrow for a window FenrirUI set a shape on before.
+        struct Wanted
+        {
+            WindowId window;
+            Cursor cursor = Cursor::Default;
+            /** @brief The deciding root's input priority and making order, once a root over an element is found. */
+            bool found = false;
+            int priority = 0;
+            std::uint64_t order = 0;
+        };
+        std::vector<Wanted> wanted;
+        for (const auto& set : m_windowCursors)
+        {
+            wanted.push_back({set.first});
+        }
+        for (const RootEntry& entry : m_roots)
+        {
+            const UIRoot& root = *entry.root;
+            if (!root.AppliesCursor() || !root.GetHovered().IsValid())
+            {
+                continue;
+            }
+            const WindowId window = root.GetConfig().window;
+            const int priority = root.GetConfig().inputPriority;
+            auto it = std::find_if(wanted.begin(), wanted.end(), [&](const Wanted& w) { return w.window == window; });
+            if (it == wanted.end())
+            {
+                wanted.push_back({window});
+                it = std::prev(wanted.end());
+            }
+            if (!it->found || priority > it->priority || (priority == it->priority && entry.order < it->order))
+            {
+                *it = {window, root.GetHoveredCursor(), true, priority, entry.order};
+            }
+        }
+        for (const Wanted& want : wanted)
+        {
+            auto last = std::find_if(m_windowCursors.begin(), m_windowCursors.end(),
+                                     [&](const auto& set) { return set.first == want.window; });
+            const auto forget = [&] {
+                if (last != m_windowCursors.end())
+                {
+                    m_windowCursors.erase(last);
+                }
+            };
+            if (!Window::Exists(m_app, want.window))
+            {
+                // A window that went has no cursor to give back.
+                forget();
+                continue;
+            }
+            const CursorShape shape = WindowCursorShape(want.cursor);
+            const CursorShape lastShape =
+                last == m_windowCursors.end() ? CursorShape::Arrow : WindowCursorShape(last->second);
+            // The window is the game's while it captures or hides the cursor, as for mouse look.
+            if (shape == lastShape || Window::GetCursorMode(m_app, want.window) != CursorMode::Normal ||
+                !Window::SetCursorShape(m_app, want.window, shape))
+            {
+                continue;
+            }
+            if (shape == CursorShape::Arrow)
+            {
+                // Given back: the window is left to the game until a root wants another shape.
+                forget();
+            }
+            else if (last != m_windowCursors.end())
+            {
+                last->second = want.cursor;
+            }
+            else
+            {
+                m_windowCursors.emplace_back(want.window, want.cursor);
+            }
+        }
+    }
+
     void UIRoots::Frame()
     {
         m_retired.clear();
+        ApplyCursors();
         // First, before any root advances its transitions or resolves its styles: what the build stage makes and
         // changes is laid out and painted this frame.
         RunStage(m_buildStage);

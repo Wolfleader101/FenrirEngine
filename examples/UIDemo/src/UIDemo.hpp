@@ -77,6 +77,8 @@ namespace UIDemo
         std::string playerName;
         /** @brief Whether the HUD shows at all. */
         bool shown = true;
+        /** @brief Whether the pause menu is open: the HUD's top element has the class `paused`, which blurs it. */
+        bool paused = false;
     };
 
     /**
@@ -350,8 +352,10 @@ namespace UIDemo
 
         /**
          * @brief The terminal's system, run once a frame: gives its root `ray` and whether the left button is
-         * `pressed` (UIRoot::SetPointerRay), then reads its UI events. Whether the ray is over the terminal or a press
-         * is held on it, so the room's clicks are not shots.
+         * `pressed` (UIRoot::SetPointerRay), then reads its UI events. While it gives a ray, the window's cursor is the
+         * shape the terminal's hovered element wants (UIRoot::GetHoveredCursor), as a window root's would be; the
+         * frame it stops, the arrow. Whether the ray is over the terminal or a press is held on it, so the room's
+         * clicks are not shots.
          */
         bool Update(const std::optional<Fenrir::Math::Ray>& ray, bool pressed);
 
@@ -391,6 +395,8 @@ namespace UIDemo
         std::string m_reading = "Warm white";
         /** @brief The slider's hue, in degrees. */
         float m_hue = 30.0f;
+        /** @brief Whether the last Update gave the terminal a ray, so the window's cursor is the terminal's. */
+        bool m_rayGiven = false;
     };
 
     /** @brief The room: a lit room with the player, a top-down camera for the minimap and the HUD's system. */

@@ -56,8 +56,16 @@ namespace Fenrir::Detail
         ResolvedStyle cascaded;
         /** @brief Whether it has been cascaded: a first style starts no transitions, having nothing to change from. */
         bool hasCascaded = false;
-        /** @brief Its shown style: the cascaded one with its animations and transitions over it. */
+        /**
+         * @brief Its shown style: the cascaded one with its animations and transitions over it, and each CurrentColour
+         * replaced by its shown `color`.
+         */
         ResolvedStyle resolved;
+        /**
+         * @brief Its shown `text-shadow` before CurrentColour is replaced, which its children inherit: as CSS, an
+         * inherited currentcolor is the inheriting element's own colour.
+         */
+        std::vector<Shadow> inheritedTextShadow;
         /** @brief Its transitions and animations. */
         ElementMotion motion;
         /** @brief Its motion moved this frame, so its shown style needs writing again. */

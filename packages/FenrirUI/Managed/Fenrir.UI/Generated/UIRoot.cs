@@ -3,7 +3,9 @@
 // Its methods are the natives of UINative marked @facade UIRoot.<Method> (FenrirUI.natives.json): change their C++ definitions.
 
 using System;
+using Fenrir.Assets;
 using Fenrir.Input;
+using Fenrir.Math;
 using Fenrir.Painter;
 using Fenrir.Scripting;
 
@@ -21,6 +23,54 @@ public partial struct UIRoot
         UINative.CreateRoot(in settings, out UIRoot root);
         return root;
     }
+
+    /// <summary>
+    /// Makes a UI root drawing into an image of its own, which lives until it is destroyed, the script is released or
+    /// the UI ends; the image is unloaded with it.
+    /// </summary>
+    /// <returns>The root made; the C++ default when the call did nothing.</returns>
+    public static UIRoot CreateImageRoot(ImageRootSettings settings)
+    {
+        UINative.CreateImageRoot(in settings, out UIRoot root);
+        return root;
+    }
+
+    /// <summary>
+    /// Makes a UI root on the entity's WorldQuad2D, its pointer the ray the script gives it each frame (SetPointerRay).
+    /// It lives until it is destroyed, the script is released or the UI ends; the game keeps the entity while it lives.
+    /// </summary>
+    /// <returns>The root made; the C++ default when the call did nothing.</returns>
+    public static UIRoot CreateWorldRoot(WorldRootSettings settings)
+    {
+        UINative.CreateWorldRoot(in settings, out UIRoot root);
+        return root;
+    }
+
+    /// <summary>The image an image root draws into, which any image asset can be, a material's texture say.</summary>
+    /// <returns>The image; the C++ default when the call did nothing.</returns>
+    public AssetHandle<Image> GetImage()
+    {
+        UINative.GetImage(in this, out AssetHandle<Image> image);
+        return image;
+    }
+
+    /// <summary>
+    /// Gives a world root its pointer for this frame (UIRoot::SetPointerRay): `ray`, in world space, and whether its
+    /// left button is `pressed`. The root hovers, presses and clicks where the ray meets its quad; a held press follows
+    /// the ray past the quad's edges. Call it once a frame, from an Update system.
+    /// </summary>
+    /// <returns>
+    /// Whether the pointer is over one of its elements that takes pointer input, or a press is held on one; false,
+    /// doing nothing, on a root not on a world quad.
+    /// </returns>
+    public bool SetPointerRay(Ray ray, bool pressed) => UINative.SetPointerRay(in this, in ray, pressed);
+
+    /// <summary>
+    /// Takes a world root's pointer away for this frame: it hovers nothing, and a held press is released as cancelled,
+    /// with no click. As SetPointerRay with no ray.
+    /// </summary>
+    /// <returns>False, as the root has no pointer; false too on a root not on a world quad, doing nothing.</returns>
+    public bool ClearPointerRay() => UINative.ClearPointerRay(in this);
 
     /// <summary>
     /// The first root made, in C++ or C#, on the window's overlay at the layer: how a script finds a root the game
@@ -230,6 +280,16 @@ public partial struct UIRoot
         UINative.GetFocused(in this, out ElementId element);
         return element;
     }
+
+    /// <summary>
+    /// The cursor the root's hovered element wants (UIRoot::GetHoveredCursor): over a scroll view's bar its part's,
+    /// `auto` resolved to `Text` over a text entry and `Default` elsewhere.
+    /// </summary>
+    /// <returns>
+    /// The cursor; `Auto` with nothing hovered or no such root. A root on the window sets the window's cursor from it
+    /// itself; a script applies a world root's.
+    /// </returns>
+    public Cursor GetHoveredCursor() => UINative.GetHoveredCursor(in this);
 
     /// <summary>
     /// Loads the markup document at `path` (relative to the asset root, or absolute) under `parent`, after its children

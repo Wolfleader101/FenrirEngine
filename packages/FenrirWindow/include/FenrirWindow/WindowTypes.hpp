@@ -69,6 +69,8 @@ namespace Fenrir
         /** @brief The pointing hand, over a link or button. */
         Hand,
         NotAllowed,
+        /** @brief The four-way arrows, over something that can be dragged about. */
+        Move,
         Hidden,
     };
 

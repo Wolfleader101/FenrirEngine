@@ -20,11 +20,6 @@ namespace
     constexpr std::string_view backgrounded[] = {"button", "checkbox", "slider", "progress", "scroll"};
     constexpr std::string_view focusable[] = {"button", "checkbox", "slider", "scroll"};
 
-    bool Same(const Fenrir::Colour& a, const Fenrir::Colour& b)
-    {
-        return Near(a.r, b.r) && Near(a.g, b.g) && Near(a.b, b.b) && Near(a.a, b.a);
-    }
-
     bool IsBlackText(const Fenrir::Colour& colour)
     {
         return colour.r == 0.0f && colour.g == 0.0f && colour.b == 0.0f && colour.a == 1.0f;
@@ -34,6 +29,7 @@ namespace
 TEST_CASE("The default stylesheet is embedded and every declaration in it is one FenrirUI reads", "[ui][default]")
 {
     const std::string_view text = Fenrir::DefaultStylesheet();
+    INFO("the default stylesheet is embedded");
     REQUIRE_FALSE(text.empty());
     const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse(text, "default.css");
     INFO("the parser refused nothing");
@@ -102,12 +98,12 @@ TEST_CASE("The default stylesheet's states change a control's look", "[ui][defau
         root.SetPseudoClass(button, state, true);
         test.Frame();
         INFO(static_cast<int>(state));
-        REQUIRE_FALSE(Same(root.GetResolvedStyle(button)->backgroundColor, plain));
+        REQUIRE_FALSE(Near(root.GetResolvedStyle(button)->backgroundColor, plain));
         root.SetPseudoClass(button, state, false);
     }
     root.SetPseudoClass(checkbox, Fenrir::PseudoClass::Checked, true);
     test.Frame();
-    REQUIRE_FALSE(Same(root.GetResolvedStyle(checkbox)->backgroundColor, unchecked));
+    REQUIRE_FALSE(Near(root.GetResolvedStyle(checkbox)->backgroundColor, unchecked));
 }
 
 TEST_CASE("A game's sheet overrides the default stylesheet by specificity, and by order at equal specificity",
@@ -121,21 +117,21 @@ TEST_CASE("A game's sheet overrides the default stylesheet by specificity, and b
     root.AddStylesheet("button { background-color: #00ff00; } .danger { color: #ff0000; }", "game.css");
     test.Frame();
     INFO("the game's button rule comes after the default's of equal specificity");
-    REQUIRE(Same(root.GetResolvedStyle(button)->backgroundColor, Fenrir::Colour::Green));
+    REQUIRE(Near(root.GetResolvedStyle(button)->backgroundColor, Fenrir::Colour::Green));
     INFO("the game's class rule is more specific than the default's inherited colour");
-    REQUIRE(Same(root.GetResolvedStyle(button)->color, Fenrir::Colour::Red));
+    REQUIRE(Near(root.GetResolvedStyle(button)->color, Fenrir::Colour::Red));
     INFO("what the game's sheet leaves alone stays the default's");
     REQUIRE_FALSE(root.GetResolvedStyle(button)->borderTopWidth == 0.0f);
 
     root.SetPseudoClass(button, Fenrir::PseudoClass::Hover, true);
     test.Frame();
     INFO("hovered, the default's more specific button:hover beats the game's plain rule");
-    REQUIRE_FALSE(Same(root.GetResolvedStyle(button)->backgroundColor, Fenrir::Colour::Green));
+    REQUIRE_FALSE(Near(root.GetResolvedStyle(button)->backgroundColor, Fenrir::Colour::Green));
 
     root.AddStylesheet("button:hover { background-color: #0000ff; }", "hover.css");
     test.Frame();
     INFO("and the game's own button:hover beats the default's by coming later");
-    REQUIRE(Same(root.GetResolvedStyle(button)->backgroundColor, Fenrir::Colour::Blue));
+    REQUIRE(Near(root.GetResolvedStyle(button)->backgroundColor, Fenrir::Colour::Blue));
 }
 
 TEST_CASE("A root made without the default stylesheet gives its controls no look", "[ui][default]")
@@ -149,6 +145,7 @@ TEST_CASE("A root made without the default stylesheet gives its controls no look
     UIRoot& root = test.Roots().CreateRoot(config);
     const ElementId button = root.Create(root.GetRootElement(), "button");
     test.Frame();
+    INFO("a button on a root without the default stylesheet has no background");
     REQUIRE(root.GetResolvedStyle(button)->backgroundColor.a == 0.0f);
     INFO("it still behaves as a button");
     REQUIRE(root.IsFocusable(button));

@@ -79,9 +79,11 @@ namespace Fenrir::Detail
      * @brief After an element's cascaded style changed from `before` to `after`, starts a transition for each property
      * that changed and that `after`'s transition lists name with a duration and delay that run, from the value it shows
      * now (a running transition's current value, so a change mid-transition continues from there), and drops those a
-     * change has made moot.
+     * change has made moot. A colour runs between what CurrentColour resolves to: `shownColour`, the `color` the
+     * element shows now, before, and `after`'s own `color` after.
      */
-    void StartTransitions(ElementMotion& motion, const ResolvedStyle& before, const ResolvedStyle& after);
+    void StartTransitions(ElementMotion& motion, const ResolvedStyle& before, const ResolvedStyle& after,
+                          const Colour& shownColour);
 
     /**
      * @brief Brings an element's animations in line with `style`'s `animation-name` list: a name it already plays
@@ -100,6 +102,9 @@ namespace Fenrir::Detail
      * values on the way in.
      */
     void ApplyMotion(const ElementMotion& motion, ResolvedStyle& style);
+
+    /** @brief Whether two shadow lists are the same, shadow by shadow. */
+    [[nodiscard]] bool SameShadows(const std::vector<Shadow>& a, const std::vector<Shadow>& b);
 
     /** @brief Whether `a` and `b` hold the same value for `property`. */
     [[nodiscard]] bool SameProperty(StyleProperty property, const ResolvedStyle& a, const ResolvedStyle& b);

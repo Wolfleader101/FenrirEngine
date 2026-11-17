@@ -125,6 +125,14 @@ namespace Fenrir
         float virtualCursorSpeed = 900.0f;
         /** @brief Start with hot reload on (UIRoot::SetHotReload): the files the root loaded are polled for changes. */
         bool hotReload = false;
+        /**
+         * @brief Set its window's cursor shape from its hovered element's `cursor` (UIRoot::GetHoveredCursor), each
+         * frame after input routing, while it is the highest-priority root with this on whose pointer is over an
+         * element that takes pointer input; when no such root's is, the arrow is given back once. Nothing is set while
+         * the window's cursor mode is not Normal. Meaningful for a root on its window's input only: a root in an image
+         * or on a world quad never sets the window's cursor. Off for a game that draws its own cursor.
+         */
+        bool applyCursor = true;
     };
 
     /**
@@ -302,11 +310,11 @@ namespace Fenrir
          * `#rrggbbaa`, `rgb()`, `rgba()`, `hsl()`, `hsla()` or a CSS colour name, `url(path)` for an image asset loaded
          * from the asset store, `linear-gradient()` and `radial-gradient()`, `box-shadow` lists, and `transform`
          * lists of `translate()`, `translateX()`, `translateY()`, `scale()`, `scaleX()`, `scaleY()`, `rotate()` (deg,
-         * rad, grad or turn), times in `s` or `ms` and timing functions (the CSS named set, `cubic-bezier()`,
-         * `steps()`) in the transition and animation lists. An unknown property, one the style does not hold yet (the
-         * filter and scrollbar properties, which a stylesheet parses and keeps), or a value it cannot read is
-         * logged, with both named, and changes nothing: false. An empty (or all-whitespace) value resets the
-         * property, or each longhand of a shorthand, to not set, so the cascade's value shows through: true.
+         * rad, grad or turn), `filter` lists of `blur()` and `drop-shadow()`, times in `s` or `ms` and timing
+         * functions (the CSS named set, `cubic-bezier()`, `steps()`) in the transition and animation lists. An unknown
+         * property or a value it cannot read is logged, with both named, and changes nothing: false. An empty (or
+         * all-whitespace) value resets the property, or each longhand of a shorthand, to not set, so the cascade's
+         * value shows through: true.
          */
         bool SetStyleProperty(ElementId element, std::string_view name, std::string_view value);
         /**
@@ -494,6 +502,12 @@ namespace Fenrir
         /** @brief The topmost element under the pointer that takes pointer input; nothing when none is. */
         [[nodiscard]] ElementId GetHovered() const noexcept;
         /**
+         * @brief The cursor the hovered element wants, as resolved: over a scroll view's bar, its `::scrollbar-thumb`'s
+         * or `::scrollbar`'s; `auto` resolved to `Text` over a text entry and `Default` elsewhere. `Auto` with nothing
+         * hovered. A root on the window applies it itself (UIRootConfig::applyCursor); a game applies a world root's.
+         */
+        [[nodiscard]] Cursor GetHoveredCursor() const noexcept;
+        /**
          * @brief Where the pointer last was in the root's window, in UI units; none before it moved there. On a world
          * root, where the pointer ray last met the quad; none while it misses.
          */
@@ -594,6 +608,11 @@ namespace Fenrir
         void PaintAndSubmit();
         /** @brief Leaves FenrirInput before the root is freed, which UIRoots puts off to its next frame. */
         void Retire();
+        /**
+         * @brief Whether it sets its window's cursor: UIRootConfig::applyCursor is on and its target takes the window's
+         * pointer (not an image's or a world quad's), with its router in FenrirInput.
+         */
+        [[nodiscard]] bool AppliesCursor() const noexcept;
         /** @brief SetStyleProperty without the log: false with why in `error`. */
         bool ApplyStyleProperty(ElementId element, std::string_view name, std::string_view value, std::string& error);
         /**

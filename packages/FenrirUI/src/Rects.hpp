@@ -26,6 +26,12 @@ namespace Fenrir::Detail
         return {x0, y0, x1 - x0, y1 - y0};
     }
 
+    /** @brief `rect` moved by `offset` and grown by `by` on every side. */
+    [[nodiscard]] inline Rect2D Grown(const Rect2D& rect, float by, Math::Vec2 offset = Math::Vec2(0.0f))
+    {
+        return {rect.x + offset.x - by, rect.y + offset.y - by, rect.width + 2.0f * by, rect.height + 2.0f * by};
+    }
+
     /** @brief Whether `point` is inside `rect`: its left and top edges included, its right and bottom edges not. */
     [[nodiscard]] inline bool Contains(const Rect2D& rect, Math::Vec2 point)
     {

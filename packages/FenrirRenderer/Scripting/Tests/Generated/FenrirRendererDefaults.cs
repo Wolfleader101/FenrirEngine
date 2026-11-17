@@ -19,4 +19,5 @@ public static class Defaults
     public static global::Fenrir.Renderer.Sky Sky() => new();
     public static global::Fenrir.Renderer.SkyLight SkyLight() => new();
     public static global::Fenrir.Renderer.SpotLight SpotLight() => new();
+    public static global::Fenrir.Renderer.WorldQuad2D WorldQuad2D() => new();
 }

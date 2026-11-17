@@ -54,6 +54,7 @@ namespace
                 root.AddStylesheet(sheet, "test.css");
             }
             entry = root.Create(root.GetRootElement(), "textentry");
+            INFO("the text entry takes its position and size");
             REQUIRE(root.SetStyleProperty(entry, "position", "absolute"));
             REQUIRE(root.SetStyleProperty(entry, "left", "20px"));
             REQUIRE(root.SetStyleProperty(entry, "top", "20px"));
@@ -75,12 +76,14 @@ namespace
         TextEntry& Entry()
         {
             auto* control = dynamic_cast<TextEntry*>(root.GetElement(entry));
+            INFO("the element is a text entry");
             REQUIRE(control != nullptr);
             return *control;
         }
 
         void Focus()
         {
+            INFO("the text entry takes the focus");
             REQUIRE(root.Focus(entry));
         }
 
@@ -107,6 +110,7 @@ namespace
         float Advance()
         {
             const Fenrir::Paragraph& paragraph = Entry().GetParagraph();
+            INFO("the entry has text to measure");
             REQUIRE_FALSE(paragraph.Text().empty());
             return paragraph.Size().x / static_cast<float>(Entry().GetValue().size());
         }
@@ -116,46 +120,6 @@ namespace
         {
             const Fenrir::Rect2D content = Content();
             return {content.x + Advance() * static_cast<float>(index), content.y + content.height / 2.0f};
-        }
-    };
-
-    // A UITestApp with a hidden window before the rest, for FenrirWindow's clipboard.
-    struct WindowUITestApp
-    {
-        Fenrir::App app{std::make_unique<SilentLogger>(), 1};
-        Fenrir::Window window = Fenrir::Window::Install(app, HiddenWindow());
-        Fenrir::Assets assets = Fenrir::Assets::Install(app);
-        Fenrir::Input input = Fenrir::Input::Install(app);
-        Fenrir::UI ui = Fenrir::UI::Install(app);
-
-        static Fenrir::WindowConfig HiddenWindow()
-        {
-            Fenrir::WindowConfig config;
-            config.title = "FenrirUITests";
-            config.logicalSize = {320, 240};
-            config.visible = false;
-            return config;
-        }
-
-        Fenrir::InputFeed& Feed()
-        {
-            return app.GetResource<Fenrir::InputFeed>();
-        }
-
-        void Type(Key key, Scancode scancode, KeyModifiers modifiers = KeyModifiers::None)
-        {
-            Feed().KeyDown(testWindow, key, scancode, modifiers);
-            Feed().KeyUp(testWindow, key, scancode, modifiers);
-        }
-
-        Fenrir::UIRoots& Roots()
-        {
-            return app.GetResource<Fenrir::UIRoots>();
-        }
-
-        void Frame()
-        {
-            app.RunFrame(1.0 / 60.0);
         }
     };
 
@@ -172,11 +136,6 @@ namespace
             }
         }
         return found;
-    }
-
-    constexpr std::uint32_t Rgba8(std::uint32_t r, std::uint32_t g, std::uint32_t b, std::uint32_t a)
-    {
-        return r | (g << 8u) | (b << 16u) | (a << 24u);
     }
 
     // A painted rectangle: its shape's box, from its quad's centre and half size.
@@ -258,6 +217,7 @@ TEST_CASE("A combining sequence moves and deletes as one grapheme", "[ui][texten
     scene.Focus();
     // e, a combining acute accent (U+0301, two bytes) and x: two graphemes in four bytes.
     scene.TypeText(U"éx");
+    INFO("the typed text is e, a combining acute accent and x");
     REQUIRE(scene.Entry().GetValue() == "e\xCC\x81x");
 
     scene.Press(Key::Left, Scancode::Left);
@@ -346,10 +306,7 @@ TEST_CASE("Shift+End selects to the end, and typing replaces the selection", "[u
 TEST_CASE("Ctrl+C then Ctrl+V duplicates through the clipboard", "[ui][textentry][display]")
 {
     EntryScene<WindowUITestApp> scene;
-    if (!scene.test.window.IsValid())
-    {
-        SKIP("SDL's video could not start (no display), so there is no clipboard");
-    }
+    scene.test.RequireDisplay("clipboard");
     scene.Focus();
     scene.Entry().SetValue("abc");
 
@@ -367,10 +324,7 @@ TEST_CASE("Ctrl+C then Ctrl+V duplicates through the clipboard", "[ui][textentry
 TEST_CASE("Ctrl+X puts the selection on the clipboard and takes it out", "[ui][textentry][display]")
 {
     EntryScene<WindowUITestApp> scene;
-    if (!scene.test.window.IsValid())
-    {
-        SKIP("SDL's video could not start (no display), so there is no clipboard");
-    }
+    scene.test.RequireDisplay("clipboard");
     scene.Focus();
     scene.Entry().SetValue("abc");
 
@@ -555,6 +509,7 @@ TEST_CASE("The selection and caret draw where the paragraph puts them, in the sh
     const float advance = scene.Advance();
     const Fenrir::Rect2D content = scene.Content();
     const Fenrir::Paragraph& paragraph = scene.Entry().GetParagraph();
+    INFO("the entry's text lays out on one line");
     REQUIRE(paragraph.Lines().size() == 1);
     const float lineHeight = paragraph.Lines().front().height;
     const float lineTop = content.y + (content.height - lineHeight) / 2.0f;

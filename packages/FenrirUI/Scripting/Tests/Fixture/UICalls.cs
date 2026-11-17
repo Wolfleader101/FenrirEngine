@@ -140,6 +140,12 @@ public static class TreeCalls
     }
 }
 
+// What C# reads of a root's hovered cursor (UIRoot.GetHoveredCursor), as its enumerator's value.
+public static class CursorCalls
+{
+    public static int HoveredCursor(uint value) => (int)Ids.Root(value).GetHoveredCursor();
+}
+
 // What C# reads of the UI's clicks, in an Update system, for the tests to compare with C++.
 [System(Phase.Update)]
 public sealed class ClickRecorder : ISystem

@@ -119,7 +119,7 @@ FenrirInput (ADR-0017) gains **input routers** between the input feed and the ga
 
 FenrirWindow gains, keyed by `WindowId`:
 
-- `SetCursorShape` (arrow, text, the four resize shapes, hand, not-allowed, hidden), beside its cursor modes
+- `SetCursorShape` (arrow, text, the four resize shapes, hand, not-allowed, hidden), beside its cursor modes. *Amended 2026-11-16 (FenrirUI follow-ups ticket 04):* and move, with `GetCursorShape` to read it back; a FenrirUI root on the window sets it from its hovered element's `cursor` (ADR-0065)
 - clipboard text get and set
 - focus gained and lost, fed to FenrirInput for cancellation
 

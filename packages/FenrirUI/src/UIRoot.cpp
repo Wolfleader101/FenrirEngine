@@ -4,6 +4,7 @@
 #include <cmath>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "BoxPainting.hpp"
 #include "Cascade.hpp"
@@ -77,6 +78,42 @@ namespace Fenrir
             return {x0, y0, x1 - x0, y1 - y0};
         }
 
+        /**
+         * @brief Resolves the pseudo-elements of slot `index`, whose shown style before CurrentColour is replaced is
+         * `shown`: they are parts of it, inheriting what it shows and matching its pseudo-classes, so each frame its
+         * `color` moves, their currentcolor follows.
+         */
+        void ResolveParts(Detail::UIRootState& state, std::uint32_t index, const ResolvedStyle& shown)
+        {
+            Detail::ElementSlot& slot = state.slots[index];
+            const auto resolvePart = [&](ResolvedStyle& part, PseudoElement pseudoElement) {
+                Detail::Inherit(shown, part);
+                std::shared_ptr<const Detail::CustomProperties> partCustom = slot.customProperties;
+                Detail::Cascade(state, index, part, partCustom, pseudoElement);
+                Detail::ResolveCurrentColour(part);
+            };
+            if (dynamic_cast<const TextEntry*>(slot.element.get()) != nullptr)
+            {
+                auto parts = std::make_unique<Detail::TextEntryStyles>();
+                resolvePart(parts->selection, PseudoElement::Selection);
+                resolvePart(parts->placeholder, PseudoElement::Placeholder);
+                slot.textEntryStyles = std::move(parts);
+            }
+            if (shown.overflow == Overflow::Scroll)
+            {
+                auto parts = std::make_unique<Detail::ScrollbarStyles>();
+                resolvePart(parts->track, PseudoElement::Scrollbar);
+                resolvePart(parts->thumb, PseudoElement::ScrollbarThumb);
+                slot.scrollbarStyles = std::move(parts);
+            }
+            else
+            {
+                slot.scrollbarStyles.reset();
+                slot.scrollOffset = Math::Vec2(0.0f);
+                slot.scrollRange = Math::Vec2(0.0f);
+            }
+        }
+
         /** @brief Whether `a` and `b` differ in a property children inherit. */
         bool InheritedDiffer(const ResolvedStyle& a, const ResolvedStyle& b)
         {
@@ -118,6 +155,7 @@ namespace Fenrir
                 if (parent != nullptr)
                 {
                     Detail::Inherit(parent->resolved, style);
+                    style.textShadow = parent->inheritedTextShadow;
                     custom = parent->customProperties;
                 }
                 Detail::Cascade(state, index, style, custom);
@@ -131,35 +169,9 @@ namespace Fenrir
                 }
                 if (slot.hasCascaded)
                 {
-                    Detail::StartTransitions(slot.motion, slot.cascaded, style);
+                    Detail::StartTransitions(slot.motion, slot.cascaded, style, slot.resolved.color);
                 }
                 Detail::ReconcileAnimations(slot.motion, style, state.index.keyframes);
-                // Its pseudo-elements are parts of it: they inherit from it and match its pseudo-classes.
-                const auto resolvePart = [&](ResolvedStyle& part, PseudoElement pseudoElement) {
-                    Detail::Inherit(style, part);
-                    std::shared_ptr<const Detail::CustomProperties> partCustom = slot.customProperties;
-                    Detail::Cascade(state, index, part, partCustom, pseudoElement);
-                };
-                if (dynamic_cast<const TextEntry*>(slot.element.get()) != nullptr)
-                {
-                    auto parts = std::make_unique<Detail::TextEntryStyles>();
-                    resolvePart(parts->selection, PseudoElement::Selection);
-                    resolvePart(parts->placeholder, PseudoElement::Placeholder);
-                    slot.textEntryStyles = std::move(parts);
-                }
-                if (style.overflow == Overflow::Scroll)
-                {
-                    auto parts = std::make_unique<Detail::ScrollbarStyles>();
-                    resolvePart(parts->track, PseudoElement::Scrollbar);
-                    resolvePart(parts->thumb, PseudoElement::ScrollbarThumb);
-                    slot.scrollbarStyles = std::move(parts);
-                }
-                else
-                {
-                    slot.scrollbarStyles.reset();
-                    slot.scrollOffset = Math::Vec2(0.0f);
-                    slot.scrollRange = Math::Vec2(0.0f);
-                }
                 slot.cascaded = std::move(style);
                 slot.hasCascaded = true;
                 slot.styleDirty = false;
@@ -170,7 +182,13 @@ namespace Fenrir
             {
                 ResolvedStyle shown = slot.cascaded;
                 Detail::ApplyMotion(slot.motion, shown);
-                inheritedChanged = InheritedDiffer(shown, slot.resolved) || customChanged;
+                // A text shadow's currentcolor resolves to each element's own colour, so children inherit it
+                // unresolved.
+                const bool textShadowChanged = !Detail::SameShadows(shown.textShadow, slot.inheritedTextShadow);
+                slot.inheritedTextShadow = shown.textShadow;
+                ResolveParts(state, index, shown);
+                Detail::ResolveCurrentColour(shown);
+                inheritedChanged = InheritedDiffer(shown, slot.resolved) || textShadowChanged || customChanged;
                 slot.resolved = std::move(shown);
                 state.layout.ApplyStyle(slot.node, slot.resolved);
                 UpdateTextStyle(state, slot);
@@ -443,6 +461,13 @@ namespace Fenrir
     void UIRoot::Retire()
     {
         Detail::StopInput(*m_state, false);
+    }
+
+    bool UIRoot::AppliesCursor() const noexcept
+    {
+        const UITarget& target = *m_state->target;
+        return m_state->config.applyCursor && target.TakesWindowInput() && !target.TakesPointerRay() &&
+               m_state->input.routerId.value != 0;
     }
 
     UIRootId UIRoot::GetId() const noexcept
@@ -776,16 +801,7 @@ namespace Fenrir
             MarkStyleDirty(*m_state, element);
             return true;
         }
-        bool set = false;
-        if (kind == Detail::PropertyKind::NotYetStyled)
-        {
-            context.error = "FenrirUI does not style it yet";
-        }
-        else
-        {
-            set = Detail::ParseStyleDeclaration(lower, value, slot->inlineStyle, context);
-        }
-        if (!set)
+        if (!Detail::ParseStyleDeclaration(lower, value, slot->inlineStyle, context))
         {
             error = std::move(context.error);
             return false;
@@ -1053,6 +1069,11 @@ namespace Fenrir
     ElementId UIRoot::GetHovered() const noexcept
     {
         return m_state->Find(m_state->input.hovered) != nullptr ? m_state->input.hovered : ElementId{};
+    }
+
+    Cursor UIRoot::GetHoveredCursor() const noexcept
+    {
+        return Detail::HoveredCursor(*m_state);
     }
 
     std::optional<Math::Vec2> UIRoot::GetPointer() const noexcept

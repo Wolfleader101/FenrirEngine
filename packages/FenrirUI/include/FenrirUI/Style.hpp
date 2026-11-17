@@ -17,6 +17,23 @@
 
 namespace Fenrir
 {
+    /**
+     * @brief CSS's `currentcolor` as a colour of the style: the element's own `color`. It is kept through the cascade
+     * and replaced by the `color` the element shows after its transitions and animations, every frame, so it follows
+     * a `color` transition; a transition from or to it mixes the colours it resolved to. `color: currentcolor` is
+     * `color: inherit`. The initial border colours and a shadow's, a text shadow's and a drop shadow's colour left out
+     * are it. A resolved style (UIRoot::GetResolvedStyle) never holds it; a StyleDeclarations may. Not a real colour:
+     * every channel is -1.
+     */
+    inline constexpr Colour CurrentColour{-1.0f, -1.0f, -1.0f, -1.0f};
+
+    /** @brief Whether `colour` is CurrentColour. */
+    [[nodiscard]] constexpr bool IsCurrentColour(const Colour& colour) noexcept
+    {
+        return colour.r == CurrentColour.r && colour.g == CurrentColour.g && colour.b == CurrentColour.b &&
+               colour.a == CurrentColour.a;
+    }
+
     /** @brief What a Length's value counts: nothing (`auto`, or `none` for a maximum), UI units (`px`), or percent. */
     enum class LengthUnit : std::uint8_t
     {
@@ -130,8 +147,9 @@ namespace Fenrir
     };
 
     /**
-     * @brief `cursor`: the shape the pointer should take over the element. Inherited. Resolved and kept for the game to
-     * read; FenrirUI does not set the window's cursor from it.
+     * @brief `cursor`: the shape the pointer should take over the element. Inherited. A root on the window sets the
+     * window's cursor shape from its hovered element's (UIRootConfig::applyCursor); any root gives it through
+     * UIRoot::GetHoveredCursor.
      */
     enum class Cursor : std::uint8_t
     {
@@ -151,12 +169,59 @@ namespace Fenrir
     /** @brief `background-size`: how a background image fits its element's border box. */
     enum class BackgroundSize : std::uint8_t
     {
-        /** @brief Stretched over the box. */
+        /** @brief Stretched over the box; `background-position` is ignored. */
         Stretch,
-        /** @brief Scaled evenly to cover the box, centred, the overhang cut off. */
+        /** @brief Scaled evenly to cover the box, placed by `background-position`, the overhang cut off. */
         Cover,
-        /** @brief Scaled evenly to fit inside the box, centred. */
+        /** @brief Scaled evenly to fit inside the box, placed by `background-position`. */
         Contain,
+    };
+
+    /**
+     * @brief `scrollbar-width` on a scroll view, which wins over its `::scrollbar` style's `width` unless it is
+     * `Auto`. Not inherited.
+     */
+    enum class ScrollbarWidth : std::uint8_t
+    {
+        /** @brief The bar is its `::scrollbar` style's `width` thick. */
+        Auto,
+        /**
+         * @brief The bar is ThinScrollbarWidth thick, half the default stylesheet's, and its thumb is inset half the
+         * `::scrollbar` padding.
+         */
+        Thin,
+        /** @brief No bar is drawn or hit; the view still scrolls by the wheel, the keys and its content. */
+        None,
+    };
+
+    /** @brief A `scrollbar-width: thin` bar's thickness, in UI units: half the default stylesheet's 10. */
+    inline constexpr float ThinScrollbarWidth = 5.0f;
+
+    /**
+     * @brief `scrollbar-color` on a scroll view: `auto`, which leaves the bars' colours to their `::scrollbar-thumb`
+     * and `::scrollbar` styles, or a thumb colour then a track colour (straight alpha), which win over those styles'
+     * background colours; either may be CurrentColour, the scroll view's own `color`. Not inherited.
+     */
+    struct ScrollbarColor
+    {
+        /** @brief `auto`: the pseudo-elements' colours show, and thumb and track are not read. */
+        bool isAuto = true;
+        /** @brief The thumb's background colour. */
+        Colour thumb = Colour::Black;
+        /** @brief The track's background colour. */
+        Colour track = Colour::Black;
+
+        /** @brief `auto`. */
+        [[nodiscard]] static constexpr ScrollbarColor Auto() noexcept
+        {
+            return {};
+        }
+
+        /** @brief `scrollbar-color: thumb track`. */
+        [[nodiscard]] static constexpr ScrollbarColor Of(const Colour& thumb, const Colour& track) noexcept
+        {
+            return {false, thumb, track};
+        }
     };
 
     /**
@@ -223,6 +288,48 @@ namespace Fenrir
             TransformStep step;
             step.kind = Kind::Rotate;
             step.radians = radians;
+            return step;
+        }
+    };
+
+    /**
+     * @brief One function of a `filter` list: what an element and its subtree are drawn through, in an offscreen group
+     * of their own (ADR-0060). Lengths are UI units.
+     */
+    struct FilterStep
+    {
+        /** @brief Which function. */
+        enum class Kind : std::uint8_t
+        {
+            Blur,
+            DropShadow,
+        };
+
+        Kind kind = Kind::Blur;
+        /** @brief The blur's, or the drop shadow's blur, radius: a Gaussian's standard deviation, 0 or more. */
+        float radius = 0.0f;
+        /** @brief Where a drop shadow is drawn from the element. */
+        Math::Vec2 offset{0.0f};
+        /** @brief A drop shadow's colour, straight alpha; CurrentColour when left out. */
+        Colour colour = CurrentColour;
+
+        /** @brief `blur(radius)`. */
+        [[nodiscard]] static FilterStep Blur(float radius)
+        {
+            FilterStep step;
+            step.kind = Kind::Blur;
+            step.radius = radius;
+            return step;
+        }
+
+        /** @brief `drop-shadow(offset-x offset-y radius colour)`. */
+        [[nodiscard]] static FilterStep DropShadow(Math::Vec2 offset, float radius, const Colour& colour)
+        {
+            FilterStep step;
+            step.kind = Kind::DropShadow;
+            step.radius = radius;
+            step.offset = offset;
+            step.colour = colour;
             return step;
         }
     };
@@ -398,19 +505,35 @@ namespace Fenrir
         Colour backgroundColor{0.0f, 0.0f, 0.0f, 0.0f};
         BackgroundImage backgroundImage;
         BackgroundSize backgroundSize = BackgroundSize::Stretch;
+        /**
+         * @brief `background-position`: where a `cover` or `contain` background image sits in the border box, from its
+         * top-left. A length moves the image's top-left by it; a percentage aligns that point of the image with that
+         * point of the box, as CSS: 0% 0% (the initial value) is the top-left, 100% 100% the bottom-right.
+         */
+        Length backgroundPositionX = Length::Percent(0.0f);
+        Length backgroundPositionY = Length::Percent(0.0f);
         /** @brief `border-image-source`: an image nine-sliced over the border box. */
         AssetHandle<Image> borderImageSource;
         /** @brief `border-image-slice`: the nine-slice insets, in the image's pixels. */
         Sides borderImageSlice;
-        Colour borderTopColor = Colour::Black;
-        Colour borderRightColor = Colour::Black;
-        Colour borderBottomColor = Colour::Black;
-        Colour borderLeftColor = Colour::Black;
+        /** @name Border colours
+         * Straight alpha; initially CurrentColour, the text's colour, as CSS.
+         * @{
+         */
+        /** @brief `border-top-color`. */
+        Colour borderTopColor = CurrentColour;
+        /** @brief `border-right-color`. */
+        Colour borderRightColor = CurrentColour;
+        /** @brief `border-bottom-color`. */
+        Colour borderBottomColor = CurrentColour;
+        /** @brief `border-left-color`. */
+        Colour borderLeftColor = CurrentColour;
+        /** @} */
         float borderTopLeftRadius = 0.0f;
         float borderTopRightRadius = 0.0f;
         float borderBottomRightRadius = 0.0f;
         float borderBottomLeftRadius = 0.0f;
-        /** @brief `box-shadow`: outset shadows, the first drawn on top, as CSS. */
+        /** @brief `box-shadow`: outset shadows, the first drawn on top, as CSS; a colour left out is CurrentColour. */
         std::vector<Shadow> boxShadow;
         /**
          * @brief `backdrop-filter: blur(r)`: what is already drawn under the border box blurred by `r` UI units (a
@@ -420,12 +543,23 @@ namespace Fenrir
          * that group's image, not what is under the group.
          */
         float backdropBlur = 0.0f;
+        /**
+         * @brief `filter`: the element and its subtree drawn through one offscreen group per function, the first
+         * innermost as CSS applies them in order; empty for `none`. Each group covers what they cover grown by its
+         * function's reach (a blur's radius; a drop shadow's offset and blur), and an opacity group is outside them
+         * all. A blur of 0 draws no group. Ignored with UISettings::offscreenGroups off.
+         */
+        std::vector<FilterStep> filter;
         float opacity = 1.0f;
         std::vector<TransformStep> transform;
         /** @brief `transform-origin`, from the border box's top-left; a percentage is of its size. */
         Length transformOriginX = Length::Percent(50.0f);
         Length transformOriginY = Length::Percent(50.0f);
         Overflow overflow = Overflow::Visible;
+        /** @brief `scrollbar-width`: a scroll view's bars' thickness, or none. */
+        ScrollbarWidth scrollbarWidth = ScrollbarWidth::Auto;
+        /** @brief `scrollbar-color`: a scroll view's thumb and track colours, or `auto`. */
+        ScrollbarColor scrollbarColor;
         /** @brief Siblings paint in increasing `z-index`, equal ones in tree order. */
         std::int32_t zIndex = 0;
         PointerEvents pointerEvents = PointerEvents::None;
@@ -459,8 +593,10 @@ namespace Fenrir
         /** @brief `letter-spacing`: added after each glyph, and may be negative. */
         float letterSpacing = 0.0f;
         /**
-         * @brief `text-shadow`: the text drawn again under itself, the first on top, as CSS. A shadow's blur is kept
-         * and not drawn yet: shadows are sharp, offset and tinted.
+         * @brief `text-shadow`: the text drawn again under itself, offset and tinted, the first on top, as CSS. A
+         * shadow with a blur draws its runs inside an offscreen group blurred by it, bounded by the paragraph's box at
+         * the shadow's offset grown by the blur; with UISettings::offscreenGroups off every shadow draws sharp. A
+         * colour left out is CurrentColour, which an inheriting element resolves to its own colour.
          */
         std::vector<Shadow> textShadow;
         /** @brief `white-space`: Normal wraps at the width, NoWrap keeps one line; both collapse spaces. */
@@ -538,6 +674,8 @@ namespace Fenrir
         BackgroundColor,
         BackgroundImage,
         BackgroundSize,
+        BackgroundPositionX,
+        BackgroundPositionY,
         BorderImageSource,
         BorderImageSlice,
         BorderTopColor,
@@ -549,12 +687,15 @@ namespace Fenrir
         BorderBottomRightRadius,
         BorderBottomLeftRadius,
         BoxShadow,
+        Filter,
         BackdropFilter,
         Opacity,
         Transform,
         TransformOriginX,
         TransformOriginY,
         Overflow,
+        ScrollbarWidth,
+        ScrollbarColor,
         ZIndex,
         PointerEvents,
         Cursor,
@@ -678,6 +819,8 @@ namespace Fenrir
         StyleDeclarations& SetBackgroundImage(const Fenrir::BackgroundImage& value);
         /** @brief `background-size`. */
         StyleDeclarations& SetBackgroundSize(Fenrir::BackgroundSize value);
+        /** @brief `background-position`: the image's place across, then down. */
+        StyleDeclarations& SetBackgroundPosition(Length x, Length y);
         /** @brief `border-image-source` and `border-image-slice`: `image` nine-sliced at `slice`. */
         StyleDeclarations& SetBorderImage(AssetHandle<Image> image, const Sides& slice);
         /** @brief The four `border-*-color`s, one colour. */
@@ -686,6 +829,8 @@ namespace Fenrir
         StyleDeclarations& SetBorderRadius(const CornerRadii& radii);
         /** @brief `box-shadow`. */
         StyleDeclarations& SetBoxShadow(std::vector<Shadow> shadows);
+        /** @brief `filter`: its functions in order; empty for `none`. */
+        StyleDeclarations& SetFilter(std::vector<FilterStep> steps);
         /** @brief `backdrop-filter: blur(radius)`, in UI units; 0 for `none`. */
         StyleDeclarations& SetBackdropBlur(float radius);
         /** @brief `opacity`, 0 to 1. */
@@ -696,6 +841,10 @@ namespace Fenrir
         StyleDeclarations& SetTransformOrigin(Length x, Length y);
         /** @brief `overflow`. */
         StyleDeclarations& SetOverflow(Fenrir::Overflow value);
+        /** @brief `scrollbar-width`. */
+        StyleDeclarations& SetScrollbarWidth(Fenrir::ScrollbarWidth value);
+        /** @brief `scrollbar-color`. */
+        StyleDeclarations& SetScrollbarColor(const Fenrir::ScrollbarColor& value);
         /** @brief `z-index`. */
         StyleDeclarations& SetZIndex(std::int32_t value);
         /** @brief `pointer-events`. */
