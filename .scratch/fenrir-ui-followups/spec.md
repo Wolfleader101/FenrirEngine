@@ -127,4 +127,4 @@ Built on the integration branch `ui-followups`, one session, branch (`uif/NN-<sl
 | 04 The window cursor from `cursor` | `uif/04-cursor` | 03 | #387 |
 | 05 `background-position` and the scrollbar properties | `uif/05-longhands` | 04 | #389 |
 | 06 `inset`, `border-image` and `currentcolor` | `uif/06-currentcolor` | 05 | #392 |
-| 07 Image and world roots from C# | `uif/07-csharp-roots` | 06 | |
+| 07 Image and world roots from C# | `uif/07-csharp-roots` | 06 | #393 |
