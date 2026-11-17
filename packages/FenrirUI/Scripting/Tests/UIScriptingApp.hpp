@@ -34,6 +34,7 @@ namespace Fenrir::Testing
 {
     // The fixture's types the tests call.
     inline constexpr const char* TreeCallsType = "UIScriptFixture.TreeCalls";
+    inline constexpr const char* CursorCallsType = "UIScriptFixture.CursorCalls";
     inline constexpr const char* ClicksType = "UIScriptFixture.Clicks";
     inline constexpr const char* PaintProbeType = "UIScriptFixture.PaintProbe";
     inline constexpr const char* BuildProbeType = "UIScriptFixture.BuildProbe";

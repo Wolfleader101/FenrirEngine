@@ -14,12 +14,13 @@
 
 **Touches:** `packages/FenrirWindow/` (`WindowTypes.hpp`, the SDL cursor mapping, its binding), `packages/FenrirUI/src/` (`InputRouting.cpp`, `UIRoot.cpp`, `UI.cpp`), `packages/FenrirUI/include/FenrirUI/` (`UIRoot.hpp`, `Style.hpp`), `packages/FenrirUI/Resources/default.css`, `packages/FenrirUI/Scripting/`, `packages/FenrirUI/Tests/`, `packages/FenrirUI/README.md`, `examples/UIDemo/src/World.cpp`, `examples/UIDemo/README.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Over a button the window's shape is the hand, over a text entry the I-beam, over a `cursor: ew-resize` panel the east-west resize, over `cursor: none` hidden.
-- [ ] Moving between two buttons sets the shape once; leaving every root sets the arrow once; a `pointer-events: none` element under the pointer sets nothing.
-- [ ] With the cursor mode `Captured`, nothing is set; with `applyCursor` off, nothing is set.
-- [ ] Two window roots: the one with the higher input priority under the pointer decides.
-- [ ] An image root and a world root never set the window's shape; a world root's `GetHoveredCursor()` gives its hovered button's `Pointer` once its ray is on it.
-- [ ] The UI scripting tests read `GetHoveredCursor` from C#; FenrirWindow's tests set `Move`.
-- [ ] Hand check: in UIDemo the hand shows over the menu's buttons and the terminal's, the I-beam over the name entry, and the arrow comes back over the room.
+- [x] Over a button the window's shape is the hand, over a text entry the I-beam, over a `cursor: ew-resize` panel the east-west resize, over `cursor: none` hidden.
+- [x] Moving between two buttons sets the shape once; leaving every root sets the arrow once; a `pointer-events: none` element under the pointer sets nothing.
+- [x] With the cursor mode `Captured`, nothing is set; with `applyCursor` off, nothing is set.
+- [x] Two window roots: the one with the higher input priority under the pointer decides.
+- [x] An image root and a world root never set the window's shape; a world root's `GetHoveredCursor()` gives its hovered button's `Pointer` once its ray is on it.
+- [x] The UI scripting tests read `GetHoveredCursor` from C#; FenrirWindow's tests set `Move`.
+
+Hand check: in UIDemo the hand shows over the menu's buttons and the terminal's, the I-beam over the name entry, and the arrow comes back over the room.

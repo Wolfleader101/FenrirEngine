@@ -12,6 +12,7 @@
 #include "FenrirUI/UIImageTarget.hpp"
 #include "FenrirUI/UIRoot.hpp"
 #include "FenrirUI/UITarget.hpp"
+#include "FenrirUI/WindowCursor.hpp"
 
 #if defined(YG_EXPORT) || defined(YOGA_YGMACROS_H)
 #error "A FenrirUI header includes Yoga."

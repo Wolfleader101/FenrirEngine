@@ -12,6 +12,7 @@
 #include "ElementGeometry.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirInput/Input.hpp"
+#include "FenrirUI/Controls.hpp"
 #include "FenrirUI/UI.hpp"
 #include "FenrirUI/UIRoot.hpp"
 #include "Rects.hpp"
@@ -27,7 +28,13 @@ namespace Fenrir::Detail
         /** @brief How far, in UI units, the pointer may move between the two clicks of a double click. */
         constexpr float doubleClickDistance = 4.0f;
 
-        ElementId HitElement(const UIRootState& state, ElementId id, Math::Vec2 point)
+        /**
+         * @brief The topmost element under `point` in `id`'s subtree that takes pointer input; nothing when none is.
+         * With `part`, it is set to the scroll view's `::scrollbar-thumb` or `::scrollbar` style when the hit is on
+         * one of its bars, and left alone otherwise.
+         */
+        ElementId HitElement(const UIRootState& state, ElementId id, Math::Vec2 point,
+                             const ResolvedStyle** part = nullptr)
         {
             const ElementSlot& slot = state.slots[id.index];
             const ResolvedStyle& style = slot.resolved;
@@ -47,6 +54,12 @@ namespace Fenrir::Detail
                 if ((bars.vertical && Detail::Contains(bars.verticalTrack, point)) ||
                     (bars.horizontal && Detail::Contains(bars.horizontalTrack, point)))
                 {
+                    if (part != nullptr && slot.scrollbarStyles != nullptr)
+                    {
+                        const bool onThumb = (bars.vertical && Detail::Contains(bars.verticalThumb, point)) ||
+                                             (bars.horizontal && Detail::Contains(bars.horizontalThumb, point));
+                        *part = onThumb ? &slot.scrollbarStyles->thumb : &slot.scrollbarStyles->track;
+                    }
                     return id;
                 }
             }
@@ -61,7 +74,7 @@ namespace Fenrir::Detail
                 });
                 for (auto child = children.rbegin(); child != children.rend(); ++child)
                 {
-                    const ElementId hit = HitElement(state, *child, point);
+                    const ElementId hit = HitElement(state, *child, point, part);
                     if (hit.IsValid())
                     {
                         return hit;
@@ -1174,6 +1187,29 @@ namespace Fenrir::Detail
     ElementId HitTest(const UIRootState& state, Math::Vec2 position)
     {
         return HitElement(state, state.rootElement, position);
+    }
+
+    Cursor HoveredCursor(const UIRootState& state)
+    {
+        const UIRootInput& input = state.input;
+        const ElementSlot* slot = state.Find(input.hovered);
+        if (slot == nullptr)
+        {
+            return Cursor::Auto;
+        }
+        const ResolvedStyle* style = &slot->resolved;
+        // Hit testing again finds whether the pointer is on a scroll view's bar, whose parts have cursors of their own.
+        if (const ResolvedStyle* part = nullptr;
+            input.pointer && HitElement(state, state.rootElement, *input.pointer, &part) == input.hovered &&
+            part != nullptr)
+        {
+            style = part;
+        }
+        if (style->cursor != Cursor::Auto)
+        {
+            return style->cursor;
+        }
+        return dynamic_cast<const TextEntry*>(slot->element.get()) != nullptr ? Cursor::Text : Cursor::Default;
     }
 
     bool Focus(UIRoot& root, UIRootState& state, ElementId element)

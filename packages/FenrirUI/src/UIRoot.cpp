@@ -445,6 +445,13 @@ namespace Fenrir
         Detail::StopInput(*m_state, false);
     }
 
+    bool UIRoot::AppliesCursor() const noexcept
+    {
+        const UITarget& target = *m_state->target;
+        return m_state->config.applyCursor && target.TakesWindowInput() && !target.TakesPointerRay() &&
+               m_state->input.routerId.value != 0;
+    }
+
     UIRootId UIRoot::GetId() const noexcept
     {
         return m_state->input.id;
@@ -1053,6 +1060,11 @@ namespace Fenrir
     ElementId UIRoot::GetHovered() const noexcept
     {
         return m_state->Find(m_state->input.hovered) != nullptr ? m_state->input.hovered : ElementId{};
+    }
+
+    Cursor UIRoot::GetHoveredCursor() const noexcept
+    {
+        return Detail::HoveredCursor(*m_state);
     }
 
     std::optional<Math::Vec2> UIRoot::GetPointer() const noexcept

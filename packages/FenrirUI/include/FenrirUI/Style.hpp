@@ -130,8 +130,9 @@ namespace Fenrir
     };
 
     /**
-     * @brief `cursor`: the shape the pointer should take over the element. Inherited. Resolved and kept for the game to
-     * read; FenrirUI does not set the window's cursor from it.
+     * @brief `cursor`: the shape the pointer should take over the element. Inherited. A root on the window sets the
+     * window's cursor shape from its hovered element's (UIRootConfig::applyCursor); any root gives it through
+     * UIRoot::GetHoveredCursor.
      */
     enum class Cursor : std::uint8_t
     {

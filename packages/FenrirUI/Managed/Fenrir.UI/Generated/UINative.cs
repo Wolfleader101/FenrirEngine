@@ -235,6 +235,17 @@ internal static unsafe partial class UINative
     public static partial void GetFocused(in UIRoot root, out ElementId element);
 
     /// <summary>
+    /// The cursor the root's hovered element wants (UIRoot::GetHoveredCursor): over a scroll view's bar its part's,
+    /// `auto` resolved to `Text` over a text entry and `Default` elsewhere.
+    /// </summary>
+    /// <returns>
+    /// The cursor; `Auto` with nothing hovered or no such root. A root on the window sets the window's cursor from it
+    /// itself; a script applies a world root's.
+    /// </returns>
+    [NativeFunction]
+    public static partial Cursor GetHoveredCursor(in UIRoot root);
+
+    /// <summary>
     /// Loads the markup document at `path` (relative to the asset root, or absolute) under `parent`, after its children
     /// (UIRoot::LoadDocument). Its errors are logged with their files and lines; a document with errors loads what it
     /// could.

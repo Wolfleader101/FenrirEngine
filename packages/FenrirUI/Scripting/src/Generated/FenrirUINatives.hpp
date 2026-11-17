@@ -51,6 +51,7 @@ namespace Fenrir::UINatives
     bool Focus(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* element);
     bool Blur(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root);
     void GetFocused(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, Fenrir::ElementId* element);
+    Fenrir::Cursor GetHoveredCursor(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root);
     bool LoadDocument(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, const Fenrir::ElementId* parent, std::string_view path, Fenrir::ElementId* first);
     bool LoadStylesheet(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, std::string_view path, std::string_view scope);
     bool AddStylesheet(const Fenrir::CallContext&, Fenrir::UIScripting&, const Fenrir::UIRootId* root, std::string_view text, std::string_view name, std::string_view scope);

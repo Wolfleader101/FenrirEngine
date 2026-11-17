@@ -125,6 +125,26 @@ TEST_CASE("A click fed through the test feed reaches the script's EventReader<UI
     REQUIRE(test.Call<std::uint32_t>(ClicksType, "LastRoot") == root.GetId().value);
 }
 
+TEST_CASE("A script reads the cursor its root's hovered element wants", "[ui][scripting]")
+{
+    UIScriptingApp test;
+    std::shared_ptr<CaptureTarget> target;
+    UIRoot& root = test.MakeRoot(target);
+    const ElementId button = root.Create(root.GetRootElement(), "button");
+    INFO("the button's size is taken");
+    REQUIRE(root.SetStyleProperty(button, "width", "100px"));
+    REQUIRE(root.SetStyleProperty(button, "height", "40px"));
+    test.Frame();
+    const std::uint32_t id = root.GetId().value;
+    INFO("with nothing hovered, C# reads auto");
+    REQUIRE(test.Call<int>(CursorCallsType, "HoveredCursor", id) == static_cast<int>(Cursor::Auto));
+
+    test.Feed().MouseMove(WindowId{1}, {50.0f, 20.0f}, {0.0f, 0.0f});
+    test.Frame();
+    INFO("over the button, C# reads the default stylesheet's pointer");
+    REQUIRE(test.Call<int>(CursorCallsType, "HoveredCursor", id) == static_cast<int>(Cursor::Pointer));
+}
+
 namespace
 {
     // The fixture's gauge (PaintProbe's element): a red panel of 100 by 100 at the root's top-left, with an empty

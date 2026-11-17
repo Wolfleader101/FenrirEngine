@@ -79,7 +79,10 @@ on), their text in the `ui-sdf` family. `WorldUI` (`src/World.cpp`) makes them w
   to the root with the left button's state (`UIRoot::SetPointerRay`), and the root hovers, presses, clicks and drags
   where the ray meets its quad. The window's mouse is never its own: it gets no ray while the menu is open, while the
   ImGui window or a window root has the pointer, or while the right mouse button turns the camera. A click on it is not
-  a shot. Its corners and its content are cut by the painter's per-pixel clip, so they stay exact as the quad turns.
+  a shot. A world root never sets the window's cursor, so while the room's system gives it a ray it applies the
+  terminal's `GetHoveredCursor()` to the window itself (the hand over its buttons and slider), and the arrow the frame
+  the ray stops; the menu's buttons show the hand and its name entry the I-beam from the default stylesheet, set by
+  their window root. Its corners and its content are cut by the painter's per-pixel clip, so they stay exact as the quad turns.
 - **The name plate** (`assets/ui/plate.ui`): over a capsule left of the camera's start, a plate of 1 by 0.32 metres
   reading "Wanderer", which the room turns about its vertical axis to face the camera each frame. It takes no input.
 
@@ -195,6 +198,8 @@ On OpenGL, in The HUD:
   under the cursor from several camera angles, its fill following the thumb; its rounded corners stay clean as the
   camera moves round it.
 - The name plate faces the camera as it moves, and its text stays crisp as the camera comes close.
+- The hand shows over the menu's buttons and the terminal's, the I-beam over the name entry in Settings, and the arrow
+  comes back over the room.
 - With scripting built, the speedometer sits bottom right over the ammo counter: its needle and the blue share of its
   track rise as the camera flies (WASD, Shift for faster) and fall back when it stops, under a readout of the speed;
   clicking Resume, Settings or Back in the menu logs "the menu's ... was clicked" from C#.

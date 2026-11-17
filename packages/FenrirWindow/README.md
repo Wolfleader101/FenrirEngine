@@ -52,7 +52,7 @@ Events, read through `EventReader<T>` (ADR-0012), each name their window:
 ## Services
 
 - `SetCursorMode(app, window, mode)`: `Normal`, `Hidden`, or `Captured` (hidden, held in the window, with raw relative motion for mouse look). `GetCursorMode` reads it back.
-- `SetCursorShape(app, window, shape)`: `Arrow`, `Text`, the four resize shapes, `Hand`, `NotAllowed`, or `Hidden`.
+- `SetCursorShape(app, window, shape)`: `Arrow`, `Text`, the four resize shapes, `Hand`, `NotAllowed`, `Move`, or `Hidden`. `GetCursorShape` reads it back (C++ only). A FenrirUI root on the window sets it from its hovered element's `cursor` (`packages/FenrirUI/README.md`).
 - `ClipboardText(app)` and `SetClipboardText(app, text)`: the system clipboard, as UTF-8.
 - `SetTitle(app, window, title)`.
 - `SetIcon(app, window, width, height, rgba8)`: the icon in the window's title bar and the taskbar, from `width *

@@ -27,6 +27,7 @@ add_library(FenrirUI STATIC
     include/FenrirUI/UIRoot.hpp
     include/FenrirUI/UITarget.hpp
     include/FenrirUI/UIWorldTarget.hpp
+    include/FenrirUI/WindowCursor.hpp
 
     src/AttributeValues.hpp
     src/BoxPainting.cpp
