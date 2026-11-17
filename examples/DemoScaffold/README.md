@@ -80,8 +80,25 @@ type: the scaffold feeds it. The scaffold adds it as the `DemoUI` app resource o
   `SceneSection(title)` one of the scene's, after the app's. `ClearScene()` removes the scene's sections; the scaffold
   calls it when a scene is left, before its FenrirScene goes, so a row bound to the scene's state never outlives it.
   A section (`DemoSection`, a handle) has a heading that collapses and opens it, and rows in the order they were
-  added: `Text(line)` for now, a read-only line that `DemoTextRow::Set` changes. A row can be hidden (`SetShown`) and
-  greyed out (`SetDisabled`). A handle to a section or row that is gone does nothing.
+  added:
+  - `Text(line)`: a read-only line that `DemoTextRow::Set` changes.
+  - `Readout(label)`: a readout (`GLOSSARY.md`), its label and its value in two columns (`.demo-readout-label` and
+    `.demo-readout-value` in `demo.css`). `DemoReadout::Set(value)` shows a value, changing the element only when it
+    differs, so a scene's `update` may set it every frame; it shows that frame.
+  - `Readout(label, std::function<std::string()>)`: a readout pulled once a frame in the kit's build stage work, after
+    the scenes' `Update`. A scene section's function is no longer called once the scene is left, so it may hold
+    pointers into the scene's state.
+  - `Separator(title)`: a rule, under a title when one is given, grouping the rows after it.
+
+  Every row handle can hide its row (`SetShown`, taking no room) and grey it out (`SetDisabled`). A handle to a section
+  or row that is gone does nothing.
+- **The scene switcher** is the panel's first app section, "Scenes": a button per scene of the app, in order, the
+  active one with the class `active`. A click enters that scene the next frame, as PageDown does, with the same
+  `Scene i/n` log line and help, and in a smoke run too; a click on the active one does nothing. The scaffold feeds
+  it (`DemoUI::SetScenes` and `SetActiveScene`, which name no scaffold type).
+- **Frame stats:** `DemoConfig::frameStats = true` adds the app section "Frame" after the switcher: the frame time and
+  fps, each the average of a half-second window, and the draws, instances and shadow draws of the renderer's last
+  frame (`Renderer::Stats`). Both are added before `installPackages`, so they come before the app's own sections.
 - **The help**, at the bottom left, clear of the on-screen messages that stack from the top left: a section that starts
   open, with the app and the scene (`<App>: <scene> (i/n)`), then key rows (`DemoKeyRow{keys, what}`): the scaffold's
   (the keys below), then the app's (`DemoConfig::appKeyRows`, or `appKeyHelp` as one F2 row), then the scene's
@@ -135,7 +152,7 @@ the scaffold, never through an engine package. A scene makes ImGui windows from 
 
 | Key | What it does |
 | --- | --- |
-| PageDown / PageUp | The next / previous scene, wrapping at both ends. |
+| PageDown / PageUp | The next / previous scene, wrapping at both ends; the demo panel's scene switcher enters any scene on a click. |
 | F1 | Hides or shows the demo UI kit: the demo panel and the help. Showing it also logs the help. |
 | F2 | The app's (its `DemoConfig::appKeyRows`, or `appKeyHelp`, say what it does). |
 | F3 | Turns the free-fly camera on or off. A scene that spawns an enabled `Camera` of its own starts with the free-fly camera off; F3 then switches between the two. |
@@ -197,4 +214,8 @@ UI kit, its root drawing into a capturing target the size of the null backend's 
 and a scene's `keyHelp` as one row, F1 hiding the kit (its panel then taking no press) and hiding it from a focused
 button, a press on the panel sending no scene click and one beside it sending one, a right-drag beside it turning the
 free-fly camera, a scene's section gone after PageDown, a section's heading collapsing and opening it, and the gamepad
-reaching the scene while the kit has the focus.
+reaching the scene while the kit has the focus; and the demo panel's rows (`Tests/DemoPanel.cpp`): a readout set by a
+scene's `update` shown that frame and a pulled one following its function, a scene's readouts gone after it is left
+and fresh when it is entered again, a readout hidden and shown and one greyed out, a separator's title, the scene switcher listing the
+scenes, marking the active one (after a click and after PageDown) and entering the third on a click, and the frame
+stats' frame time, fps and the renderer's draws on the null backend.

@@ -12,7 +12,7 @@ The **demo UI kit** lives in `examples/DemoScaffold/` and is installed by the sc
 
 ## What it offers
 
-- **The demo panel:** one collapsible side panel on the right of the main window, holding the scene switcher, the readouts and the switches, and scrolling when tall. Readouts are name and value rows pushed each frame, with an optional frame-time and draw-count row. Switches are rows bound to values: toggle, range (linear or logarithmic), choice, colour, button, text entry and read-only text.
+- **The demo panel:** one collapsible side panel on the right of the main window, holding the scene switcher, the readouts and the switches, and scrolling when tall. Readouts are name and value rows, pushed by the scene or pulled from a function once a frame, with an optional frame-stats section (frame time, fps and the renderer's draw counts). Switches are rows bound to values: toggle, range (linear or logarithmic), choice, colour, button, text entry and read-only text.
 - **The help:** the scaffold's keys, then the app's, then the scene's, at the bottom left. They are given as structured key rows (`{keys, what}`) instead of one line of text. They stay separate from the keys a smoke run presses.
 - **The demo tutorial:** a scene's ordered steps, shown in a card at the top centre the first time the scene is entered in a run, never in a smoke run, and reopened from the panel. A step can end itself on a condition the scene reports.
 - **Hints, not tooltips:** a row's one-line description shows in a fixed hint line at the foot of the panel while the row is hovered or focused.

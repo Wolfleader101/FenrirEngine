@@ -2,6 +2,8 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <limits>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -70,7 +72,7 @@ namespace FenrirDemo
       public:
         DemoRow() = default;
 
-        /** @brief Shows or hides the row; a hidden row takes no room. */
+        /** @brief Shows or hides the row; a hidden row takes no room. Rows start shown. */
         void SetShown(bool shown) const;
         /** @brief Greys the row out and keeps its controls from taking input. */
         void SetDisabled(bool disabled) const;
@@ -104,6 +106,27 @@ namespace FenrirDemo
     };
 
     /**
+     * @brief A readout (GLOSSARY.md) of a demo section (DemoSection::Readout): a label and a live value, in two
+     * columns.
+     */
+    class DemoReadout : public DemoRow
+    {
+      public:
+        DemoReadout() = default;
+
+        /**
+         * @brief Shows `value`: it changes the value's element only when it differs, so a scene may set it every
+         * frame. A pulled readout's function sets it again the next frame.
+         */
+        void Set(std::string_view value) const;
+
+      private:
+        using DemoRow::DemoRow;
+
+        friend class DemoSection;
+    };
+
+    /**
      * @brief A section of the demo panel, as a handle: a heading that collapses and opens it, and its rows in the order
      * they were added. It names nothing once it is gone (a scene section after DemoUI::ClearScene), and then does
      * nothing. Valid only while the DemoUI that made it is.
@@ -115,6 +138,16 @@ namespace FenrirDemo
 
         /** @brief Adds a read-only line. */
         DemoTextRow Text(std::string line) const;
+        /** @brief Adds a readout labelled `label`, empty until DemoReadout::Set gives it a value. */
+        DemoReadout Readout(std::string label) const;
+        /**
+         * @brief Adds a readout labelled `label` whose value is pulled from `value` once a frame, in the kit's build
+         * stage work (after the scenes' Update). `value` is called while the row is there: a scene section's no
+         * longer once the scene is left, so it may hold pointers into the scene's state.
+         */
+        DemoReadout Readout(std::string label, std::function<std::string()> value) const;
+        /** @brief Adds a rule across the section, under `title` when one is given, to group the rows after it. */
+        DemoRow Separator(std::string title = {}) const;
 
         /** @brief Opens or collapses the section; it starts open. */
         void SetOpen(bool open) const;
@@ -143,8 +176,8 @@ namespace FenrirDemo
      * @brief The demo UI kit, an app resource the demo scaffold adds once FenrirUI is installed: one UIRoot on the main
      * window's overlay at DemoUILayer and DemoUIRouterPriority holding `ui/demo.ui`, styled by `ui/demo.css`.
      *
-     * - **The demo panel**, on the right, under a title: the app's sections, which stay, then the scene's, which
-     *   ClearScene removes. It scrolls when it is taller than the window.
+     * - **The demo panel**, on the right, under a title: the scene switcher (SetScenes), then the app's sections,
+     *   which stay, then the scene's, which ClearScene removes. It scrolls when it is taller than the window.
      * - **The help**, at the bottom left: a section that starts open, with a heading line and key rows (SetHelp).
      * - **Input:** only the panels' boxes take the pointer, so a right-drag or a click beside them reaches the scene.
      *   The root takes no gamepad input (UIRootConfig::gamepadNavigation off), so a pad always drives the scene.
@@ -204,6 +237,15 @@ namespace FenrirDemo
         void ClearScene();
 
         /**
+         * @brief Sets the scene switcher, the panel's first app section, "Scenes": one button per name, in order. A
+         * click on one calls `enter` with its index, the active one's too; the caller enters the scene and marks it
+         * with SetActiveScene. Empty names remove the switcher.
+         */
+        void SetScenes(std::vector<std::string> names, std::function<void(std::size_t)> enter);
+        /** @brief Marks the scene switcher's button `index` with the class `active`, and no other. */
+        void SetActiveScene(std::size_t index);
+
+        /**
          * @brief Sets the help: `heading` (the app and the scene), then `rows` in order. Logged as `Help: ...` lines
          * while the kit shows.
          */
@@ -212,16 +254,34 @@ namespace FenrirDemo
       private:
         friend class DemoRow;
         friend class DemoTextRow;
+        friend class DemoReadout;
         friend class DemoSection;
+
+        /** @brief What a row is. */
+        enum class RowKind : std::uint8_t
+        {
+            Text,
+            Readout,
+            Separator,
+        };
 
         /** @brief A row as the kit keeps it, so it can be made again in a reloaded document. */
         struct Row
         {
             std::uint32_t id = 0;
+            RowKind kind = RowKind::Text;
+            /** @brief A text row's line, a readout's value or a separator's title. */
             std::string text;
+            /** @brief A readout's label. */
+            std::string label;
+            /** @brief A pulled readout's value, called once a frame. */
+            std::function<std::string()> pull;
             bool shown = true;
             bool disabled = false;
+            /** @brief The row's element: what SetShown and SetDisabled change. */
             Fenrir::ElementId element;
+            /** @brief The element whose text is `text`: the row's own, or a readout's value. */
+            Fenrir::ElementId textElement;
         };
 
         /** @brief A section as the kit keeps it. */
@@ -230,6 +290,8 @@ namespace FenrirDemo
             std::uint32_t id = 0;
             std::string title;
             bool scene = false;
+            /** @brief The scene switcher, whose body holds the scene buttons rather than rows. */
+            bool switcher = false;
             bool open = true;
             std::vector<Row> rows;
             Fenrir::ElementId element;
@@ -239,8 +301,18 @@ namespace FenrirDemo
         /** @brief Finds the document's containers again and makes every section, the title and the help in them. */
         void Build();
         DemoSection AddSection(std::string title, bool scene);
-        void BuildSection(Section& section);
+        /** @brief Makes `section`'s elements, at `index` among its container's children (UIRoot::End, the last). */
+        void BuildSection(Section& section, std::size_t index = std::numeric_limits<std::size_t>::max());
+        /** @brief Adds `row` under a new id to the section `section` names and makes it, or nothing when that is gone.
+         */
+        Row* AddRow(std::uint32_t section, Row row);
         void BuildRow(Row& row, Fenrir::ElementId body);
+        /** @brief Changes `row`'s text, and its element's, only when it differs. */
+        void SetRowText(Row& row, std::string_view text) const;
+        void BuildSceneButtons(const Section& section);
+        void ApplyActiveScene() const;
+        /** @brief The build stage work: the pulled readouts' values. */
+        void PullReadouts();
         void BuildHelp();
         void ApplyOpen(const Section& section) const;
         void ApplyRow(const Row& row) const;
@@ -248,7 +320,7 @@ namespace FenrirDemo
         /** @brief Shows `element` or takes it out of the layout. */
         void Display(Fenrir::ElementId element, bool shown) const;
         void LogHelp() const;
-        /** @brief The build stage work: F1 from the game's keyboard, which sees it while the kit has no focus. */
+        /** @brief The build stage work, too: F1 from the game's keyboard, which sees it while the kit has no focus. */
         void PollToggleKey();
         /** @brief A key the kit's focused element saw: F1 toggles the kit, unless that element is a text entry. */
         void OnKey(Fenrir::Key key);
@@ -267,6 +339,11 @@ namespace FenrirDemo
         std::vector<DemoKeyRow> m_helpRows;
         bool m_helpOpen = true;
         std::vector<Section> m_sections;
+        /** @brief The scene switcher's names, what a click on one calls, its buttons and the marked one. */
+        std::vector<std::string> m_sceneNames;
+        std::function<void(std::size_t)> m_enterScene;
+        std::vector<Fenrir::ElementId> m_sceneButtons;
+        std::size_t m_activeScene = 0;
         std::uint32_t m_nextId = 1;
         /** @brief The document's containers, found again after a reload. */
         Fenrir::ElementId m_kit;

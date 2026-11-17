@@ -4,7 +4,8 @@
   sections, their rows and the help in them, again whenever this file is loaded again.
 -->
 <panel id="demo-kit">
-    <!-- The demo panel, on the right: the app's sections, then the scene's. It scrolls when taller than the window. -->
+    <!-- The demo panel, on the right: the app's sections (the scene switcher first), then the scene's. It scrolls
+         when taller than the window. -->
     <scroll id="demo-panel" class="demo-box">
         <label id="demo-panel-title"/>
         <panel id="demo-app-sections" class="demo-sections"/>

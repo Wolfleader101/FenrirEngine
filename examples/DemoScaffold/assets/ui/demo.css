@@ -107,6 +107,63 @@
     color: var(--demo-ink-dim);
 }
 
+/* A readout: its label in a column of its own, then its live value. */
+.demo-readout {
+    flex-direction: row;
+    column-gap: 12px;
+}
+
+.demo-readout-label {
+    width: 140px;
+    flex-shrink: 0;
+    color: var(--demo-ink-dim);
+}
+
+.demo-readout-value {
+    flex-grow: 1;
+    flex-shrink: 1;
+    color: var(--demo-ink);
+}
+
+.demo-disabled > .demo-readout-value {
+    color: var(--demo-ink-dim);
+}
+
+/* A separator: a rule over its title, grouping the rows after it. */
+.demo-separator {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top-width: 1px;
+    border-top-color: var(--demo-edge);
+    color: var(--demo-accent);
+    font-size: 15px;
+}
+
+/* The scene switcher: a button per scene, wrapping, the active one in the accent. */
+.demo-scenes {
+    flex-direction: row;
+    flex-wrap: wrap;
+    column-gap: 6px;
+    row-gap: 6px;
+}
+
+.demo-scene-button {
+    padding: 3px 8px;
+    border: 1px solid var(--demo-edge);
+    border-radius: 4px;
+    background-color: var(--demo-control);
+    color: var(--demo-ink);
+}
+
+.demo-scene-button:hover {
+    background-color: var(--demo-control-hover);
+}
+
+.demo-scene-button.active {
+    border-color: var(--demo-accent);
+    color: var(--demo-accent);
+}
+
 /* The help: the app and the scene, then a table of key rows, the keys in a column of their own. */
 .demo-help-heading {
     color: var(--demo-accent);
