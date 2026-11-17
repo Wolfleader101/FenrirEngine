@@ -24,7 +24,6 @@
 #include "FenrirScene/Scene.hpp"
 #include "FenrirUI/UI.hpp"
 #include "FenrirWindow/Window.hpp"
-#include "ImGuiOverlay.hpp"
 
 #ifdef FENRIR_DEMO_SCRIPTING
 #include "DemoScripting.hpp"
@@ -301,8 +300,6 @@ namespace FenrirDemo
             // Last, so it ends first, while the packages its extensions reach are there.
             std::optional<Fenrir::Scripting> scripting;
 #endif
-            // DemoConfig::imguiOverlay: ended first, while the input and the asset store it uses are there.
-            std::optional<ImGuiOverlay> imgui;
 
             // The App's own first scene, kept empty and active between leaving one demo scene and entering the next.
             std::string holderScene;
@@ -595,8 +592,7 @@ namespace FenrirDemo
                 Log().Info("F3: the free-fly camera is {}", freeFlyOn ? "on" : "off");
             }
 
-            // The help's key rows: the scaffold's, the app's, then the scene's. An app or a scene with only its one
-            // line of key help shows it as one row.
+            // The help's key rows: the scaffold's, the app's, then the scene's.
             [[nodiscard]] std::vector<DemoKeyRow> HelpRows(const DemoScene& scene) const
             {
                 std::vector<DemoKeyRow> rows{
@@ -607,22 +603,8 @@ namespace FenrirDemo
                     {"Right mouse + WASD", "fly; Shift goes faster, the wheel changes the speed"},
                     {"Left click", "scene click"},
                 };
-                if (!config.appKeyRows.empty())
-                {
-                    rows.insert(rows.end(), config.appKeyRows.begin(), config.appKeyRows.end());
-                }
-                else if (!config.appKeyHelp.empty())
-                {
-                    rows.push_back({"F2", config.appKeyHelp});
-                }
-                if (!scene.keyRows.empty())
-                {
-                    rows.insert(rows.end(), scene.keyRows.begin(), scene.keyRows.end());
-                }
-                else if (!scene.keyHelp.empty())
-                {
-                    rows.push_back({"", scene.keyHelp});
-                }
+                rows.insert(rows.end(), config.appKeyRows.begin(), config.appKeyRows.end());
+                rows.insert(rows.end(), scene.keyRows.begin(), scene.keyRows.end());
                 return rows;
             }
 
@@ -751,11 +733,6 @@ namespace FenrirDemo
             // BeforeTicks: the scene list, the free-fly camera and the scene click. F1 is the demo UI kit's own.
             void BeforeTicks()
             {
-                // Before anything makes an ImGui window this frame.
-                if (imgui)
-                {
-                    imgui->BeginFrame();
-                }
                 if (!started)
                 {
                     Start();
@@ -910,8 +887,7 @@ namespace FenrirDemo
             window.title = state->config.appName;
             // A smoke run is a check, not a show: its window is never shown.
             window.visible = !smoke;
-            // The demo UI kit, and ImGui while it is there, turn text input on where they want text, with their caret
-            // for the IME.
+            // The demo UI kit turns text input on where it wants text, with its caret for the IME.
             window.textInputByDefault = false;
             state->window = Fenrir::Window::Install(app, window);
         }
@@ -975,11 +951,6 @@ namespace FenrirDemo
         }
 #endif
 
-        if (state->config.imguiOverlay)
-        {
-            state->imgui.emplace(app, state->assets->Store());
-        }
-
         std::weak_ptr<Detail::DemoState> weak = state;
         app.AddSequentialSystem(Fenrir::SchedulePriority::BeforeTicks, [weak](Fenrir::App&) {
             if (const auto locked = weak.lock())
@@ -993,16 +964,6 @@ namespace FenrirDemo
                 locked->Update();
             }
         });
-        if (state->imgui)
-        {
-            // After every scene's Update: what ImGui drew this frame goes to the overlay before Render.
-            app.AddSequentialSystem(Fenrir::SchedulePriority::PostUpdate, [weak](Fenrir::App&) {
-                if (const auto locked = weak.lock(); locked && locked->imgui)
-                {
-                    locked->imgui->EndFrame();
-                }
-            });
-        }
         return DemoScaffold(std::move(state));
     }
 

@@ -31,12 +31,12 @@ namespace Fenrir
 namespace FenrirDemo
 {
     /**
-     * @brief The overlay layer the kit's root draws on: over every demo app's own roots, under the ImGui overlay's
-     * (ImGuiOverlayLayer) while that is there. Debug screen text and on-screen messages draw over it.
+     * @brief The overlay layer the kit's root draws on: over every demo app's own roots. Debug screen text and
+     * on-screen messages draw over it.
      */
     inline constexpr std::int32_t DemoUILayer = 900;
 
-    /** @brief The kit's root's input priority: it sees input before every demo app's own roots, after ImGui's. */
+    /** @brief The kit's root's input priority: it sees input before every demo app's own roots. */
     inline constexpr int DemoUIRouterPriority = 900;
 
     /** @brief A key row (GLOSSARY.md): one line of the help, the keys and what they do. */

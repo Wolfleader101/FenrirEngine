@@ -1,8 +1,8 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 // builtin:debug-text, the vertex stage (ADR-0025): debug text's glyph quads, laid out by the renderer in the target's
-// local coordinates (top-left origin, Y down), with the ImGui vertex layout: position, atlas UV and an sRGB-encoded
-// RGBA8 colour. Set 0 is the target (`Fenrir/2D.glsl`): a view's viewport for world text, the window for screen text.
+// local coordinates (top-left origin, Y down), as position, atlas UV and an sRGB-encoded RGBA8
+// colour. Set 0 is the target (`Fenrir/2D.glsl`): a view's viewport for world text, the window for screen text.
 #include "Fenrir/2D.glsl"
 
 layout(location = 0) in vec2 inPosition;

@@ -11,6 +11,7 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 #include "FenrirDemoScaffold/DemoUI.hpp"
+#include "FenrirInput/Devices.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirUI/UIRoot.hpp"
@@ -155,10 +156,9 @@ namespace DemoScaffoldTests
         FenrirDemo::DemoScaffold demo;
 
         explicit DemoTestApp(std::vector<FenrirDemo::DemoScene> scenes, FenrirDemo::DemoRunOptions run = NullRun(),
-                             bool imguiOverlay = false, std::vector<FenrirDemo::DemoKeyRow> appKeyRows = {},
+                             std::vector<FenrirDemo::DemoKeyRow> appKeyRows = {},
                              const std::function<void(FenrirDemo::DemoConfig&)>& configure = {})
-            : demo(Install(app, std::move(scenes), std::move(run), imguiOverlay, uiTarget, std::move(appKeyRows),
-                           configure))
+            : demo(Install(app, std::move(scenes), std::move(run), uiTarget, std::move(appKeyRows), configure))
         {
         }
 
@@ -220,13 +220,38 @@ namespace DemoScaffoldTests
             return count;
         }
 
-        /** @brief Runs `count` frames of one tick each. */
+        /** @brief Runs `count` frames of one tick each, each followed by `afterFrame`. */
         void Frames(int count = 1)
         {
             for (int i = 0; i < count; ++i)
             {
                 app.RunFrame(oneFrame);
+                for (const std::function<void()>& after : afterFrame)
+                {
+                    after();
+                }
             }
+        }
+
+        /** @brief Run after each frame `Frames` runs: SentEvents reads the game's events there. */
+        std::vector<std::function<void()>> afterFrame;
+
+        /** @brief The input feed the test's input goes through. */
+        Fenrir::InputFeed& Feed()
+        {
+            return app.GetResource<Fenrir::InputFeed>();
+        }
+
+        /** @brief The input claims published for the main window. */
+        Fenrir::WindowInputClaims Claims()
+        {
+            return app.GetResource<Fenrir::InputClaims>().For(Fenrir::WindowId{1});
+        }
+
+        /** @brief Whether the game's keyboard has `key` held. */
+        bool SceneHolds(Fenrir::Key key)
+        {
+            return app.GetResource<Fenrir::Keyboard>().IsDown(key);
         }
 
         /** @brief Presses and releases `key` across two frames, as a person tapping it would. */
@@ -253,8 +278,7 @@ namespace DemoScaffoldTests
 
       private:
         static FenrirDemo::DemoScaffold Install(Fenrir::App& app, std::vector<FenrirDemo::DemoScene> scenes,
-                                                FenrirDemo::DemoRunOptions run, bool imguiOverlay,
-                                                std::shared_ptr<CaptureTarget> uiTarget,
+                                                FenrirDemo::DemoRunOptions run, std::shared_ptr<CaptureTarget> uiTarget,
                                                 std::vector<FenrirDemo::DemoKeyRow> appKeyRows,
                                                 const std::function<void(FenrirDemo::DemoConfig&)>& configure)
         {
@@ -264,7 +288,6 @@ namespace DemoScaffoldTests
             config.appName = "TestDemo";
             config.scenes = std::move(scenes);
             config.run = std::move(run);
-            config.imguiOverlay = imguiOverlay;
             // The rest of the config, for a test that needs a switch the arguments above do not name.
             if (configure)
             {
@@ -272,5 +295,47 @@ namespace DemoScaffoldTests
             }
             return FenrirDemo::DemoScaffold::Install(app, std::move(config));
         }
+    };
+
+    /**
+     * @brief Every `Event` the game is sent while this lives, read after each frame the test app runs: an event lasts
+     * a frame, so a test that runs several, as DemoTestApp::Click does, would otherwise miss the early ones. Made and
+     * destroyed in reverse order, as locals are.
+     */
+    template <typename Event>
+    class SentEvents
+    {
+      public:
+        explicit SentEvents(DemoTestApp& test) : m_test(test)
+        {
+            (void)m_reader.Read(test.app);
+            test.afterFrame.emplace_back([this] {
+                for (const Event& event : m_reader.Read(m_test.app))
+                {
+                    m_events.push_back(event);
+                }
+            });
+        }
+
+        ~SentEvents()
+        {
+            m_test.afterFrame.pop_back();
+        }
+
+        SentEvents(const SentEvents&) = delete;
+        SentEvents& operator=(const SentEvents&) = delete;
+        SentEvents(SentEvents&&) = delete;
+        SentEvents& operator=(SentEvents&&) = delete;
+
+        /** @brief What the game was sent since this was made. */
+        [[nodiscard]] const std::vector<Event>& Events() const
+        {
+            return m_events;
+        }
+
+      private:
+        DemoTestApp& m_test;
+        Fenrir::EventReader<Event> m_reader;
+        std::vector<Event> m_events;
     };
 } // namespace DemoScaffoldTests

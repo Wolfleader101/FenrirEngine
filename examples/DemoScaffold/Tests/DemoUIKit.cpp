@@ -11,6 +11,7 @@
 #include "DemoTestApp.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirInput/Devices.hpp"
+#include "FenrirInput/Input.hpp"
 #include "FenrirUI/UIRoot.hpp"
 
 using namespace DemoScaffoldTests;
@@ -39,7 +40,7 @@ TEST_CASE("The help lists the app and the scene, then the scaffold's, the app's 
 {
     FenrirDemo::DemoScene scene = EmptyScene("Lit cube");
     scene.keyRows = {{"L", "rotate the light"}, {"K", "change its colour"}};
-    DemoTestApp test({scene, EmptyScene("Other")}, NullRun(), false, {{"F2", "cycle the debug lines"}});
+    DemoTestApp test({scene, EmptyScene("Other")}, NullRun(), {{"F2", "cycle the debug lines"}});
     test.Frames(2);
 
     INFO("the help's heading names the app and the scene, i of n");
@@ -56,21 +57,6 @@ TEST_CASE("The help lists the app and the scene, then the scaffold's, the app's 
     REQUIRE(what[6] == "cycle the debug lines");
     INFO("the scene's first row says what L does");
     REQUIRE(what[7] == "rotate the light");
-}
-
-TEST_CASE("A scene with no key rows shows its keyHelp line as the help's last row", "[demo][kit][help]")
-{
-    FenrirDemo::DemoScene scene = EmptyScene("Old style");
-    scene.keyHelp = "L rotates the light, K changes its colour";
-    DemoTestApp test({scene});
-    test.Frames(2);
-
-    const std::vector<std::string> what = test.Texts("demo-what");
-    INFO("the scene's key help is one row, after the scaffold's");
-    REQUIRE(what.size() == 7);
-    REQUIRE(what.back() == "L rotates the light, K changes its colour");
-    INFO("with no keys of its own");
-    REQUIRE(test.Texts("demo-keys").back().empty());
 }
 
 TEST_CASE("F1 hides the kit, whose panels then take no press, and shows it again", "[demo][kit][f1]")
@@ -120,6 +106,37 @@ TEST_CASE("A press on the demo panel sends no scene click, and one beside it doe
     REQUIRE(test.SceneClicksAt(test.Centre(test.Kit().Root().FindById("demo-panel"))) == 0);
     INFO("beside the panels the press is the scene's");
     REQUIRE(test.SceneClicksAt(besidePanels) == 1);
+}
+
+TEST_CASE("The pointer over the demo panel is claimed, and beside it is not", "[demo][kit][click]")
+{
+    DemoTestApp test({SceneWithSection("Lit cube", "Lights")});
+    test.Frames(2);
+
+    test.Feed().MouseMove(mainWindow, test.Centre(test.Kit().Root().FindById("demo-panel")), {0.0f, 0.0f});
+    test.Frames();
+    INFO("over the panel the kit claims the pointer");
+    REQUIRE(test.Claims().pointer);
+
+    test.Feed().MouseMove(mainWindow, besidePanels, {0.0f, 0.0f});
+    test.Frames();
+    INFO("beside the panels the pointer claim is down");
+    REQUIRE_FALSE(test.Claims().pointer);
+}
+
+TEST_CASE("A press on the demo panel sends the game no mouse button, and one beside it does", "[demo][kit][click]")
+{
+    DemoTestApp test({SceneWithSection("Lit cube", "Lights")});
+    test.Frames(2);
+    SentEvents<Fenrir::MouseButtonEvent> buttons(test);
+
+    test.Click(test.Centre(test.Kit().Root().FindById("demo-panel")));
+    INFO("the game saw the button go neither down nor up on the panel");
+    REQUIRE(buttons.Events().empty());
+
+    test.Click(besidePanels);
+    INFO("beside the panels it saw both");
+    REQUIRE(buttons.Events().size() == 2);
 }
 
 TEST_CASE("A right-drag beside the demo panel still turns the free-fly camera", "[demo][kit][camera]")

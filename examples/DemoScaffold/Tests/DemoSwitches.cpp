@@ -18,6 +18,7 @@
 #include "DemoTestApp.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirInput/Devices.hpp"
+#include "FenrirInput/Input.hpp"
 #include "FenrirUI/Controls.hpp"
 #include "FenrirUI/Style.hpp"
 #include "FenrirUI/UIRoot.hpp"
@@ -76,33 +77,18 @@ namespace
         return Fenrir::Math::Vec2(box.x + box.width * fraction, box.y + box.height * 0.5f) * root.GetScale();
     }
 
-    Fenrir::InputFeed& Feed(DemoTestApp& test)
-    {
-        return test.app.GetResource<Fenrir::InputFeed>();
-    }
-
-    Fenrir::WindowInputClaims Claims(DemoTestApp& test)
-    {
-        return test.app.GetResource<Fenrir::InputClaims>().For(mainWindow);
-    }
-
-    bool SceneHolds(DemoTestApp& test, Fenrir::Key key)
-    {
-        return test.app.GetResource<Fenrir::Keyboard>().IsDown(key);
-    }
-
     // Presses the left button at `position` and holds it.
     void PressAt(DemoTestApp& test, Fenrir::Math::Vec2 position)
     {
-        Feed(test).MouseMove(mainWindow, position, {0.0f, 0.0f});
+        test.Feed().MouseMove(mainWindow, position, {0.0f, 0.0f});
         test.Frames();
-        Feed(test).MouseButtonDown(mainWindow, Fenrir::MouseButton::Left);
+        test.Feed().MouseButtonDown(mainWindow, Fenrir::MouseButton::Left);
         test.Frames();
     }
 
     void Release(DemoTestApp& test)
     {
-        Feed(test).MouseButtonUp(mainWindow, Fenrir::MouseButton::Left);
+        test.Feed().MouseButtonUp(mainWindow, Fenrir::MouseButton::Left);
         test.Frames();
     }
 
@@ -197,7 +183,7 @@ namespace
             test.Click(test.Centre(Entry()));
             test.Frames();
             INFO("the clicked entry has the keyboard");
-            REQUIRE(Claims(test).keyboardFocus);
+            REQUIRE(test.Claims().keyboardFocus);
         }
     };
 
@@ -273,7 +259,7 @@ TEST_CASE("A range drag changes its value, shown beside it, and doesn't turn the
     RangeScene scene;
     const Fenrir::Math::Quat before = scene.test.demo.FreeFlyCamera().GetComponent<Fenrir::Transform>().rot;
     PressAt(scene.test, Along(scene.test, scene.Slider(), 0.25f));
-    Feed(scene.test).MouseMove(mainWindow, Along(scene.test, scene.Slider(), 0.75f), {100.0f, 0.0f});
+    scene.test.Feed().MouseMove(mainWindow, Along(scene.test, scene.Slider(), 0.75f), {100.0f, 0.0f});
     scene.test.Frames();
     Release(scene.test);
 
@@ -284,6 +270,19 @@ TEST_CASE("A range drag changes its value, shown beside it, and doesn't turn the
     const Fenrir::Math::Quat after = scene.test.demo.FreeFlyCamera().GetComponent<Fenrir::Transform>().rot;
     INFO("the camera looks where it did");
     REQUIRE(after == before);
+}
+
+TEST_CASE("A range drag holds the pointer capture until its release", "[demo][kit][switches][range]")
+{
+    RangeScene scene;
+    PressAt(scene.test, Along(scene.test, scene.Slider(), 0.25f));
+    scene.test.Feed().MouseMove(mainWindow, Along(scene.test, scene.Slider(), 0.75f), {100.0f, 0.0f});
+    scene.test.Frames();
+    INFO("mid-drag, the kit has the pointer captured");
+    REQUIRE(scene.test.Claims().pointerCapture);
+    Release(scene.test);
+    INFO("released, the capture is gone");
+    REQUIRE_FALSE(scene.test.Claims().pointerCapture);
 }
 
 TEST_CASE("Code setting a range's value moves its slider the next frame", "[demo][kit][switches][range]")
@@ -324,7 +323,7 @@ TEST_CASE("A logarithmic range maps its ends and middle to min, sqrt(min*max) an
     {
         // The right edge is outside the slider: the end is reached by a drag past it, which clamps.
         PressAt(test, Along(test, slider, std::min(fraction, 0.9f)));
-        Feed(test).MouseMove(mainWindow, Along(test, slider, fraction == 1.0f ? 1.2f : fraction), {0.0f, 0.0f});
+        test.Feed().MouseMove(mainWindow, Along(test, slider, fraction == 1.0f ? 1.2f : fraction), {0.0f, 0.0f});
         test.Frames();
         Release(test);
         INFO("a press at " << fraction << " of the way gives min * (max / min)^t");
@@ -495,7 +494,7 @@ TEST_CASE("Typing into a text entry sets its string", "[demo][kit][switches][tex
 {
     TextEntryScene scene;
     scene.Edit();
-    Feed(scene.test).Text(mainWindow, U"!");
+    scene.test.Feed().Text(mainWindow, U"!");
     scene.test.Frames();
     INFO("the typed text is written to the string");
     REQUIRE(*scene.label == "Hi!");
@@ -505,16 +504,73 @@ TEST_CASE("A focused text entry claims the keyboard and text input, cancelling a
           "[demo][kit][switches][keyboard]")
 {
     TextEntryScene scene;
-    Feed(scene.test).KeyDown(mainWindow, Fenrir::Key::W, Fenrir::Scancode::W);
+    scene.test.Feed().KeyDown(mainWindow, Fenrir::Key::W, Fenrir::Scancode::W);
     scene.test.Frames();
     INFO("the scene has W held");
-    REQUIRE(SceneHolds(scene.test, Fenrir::Key::W));
+    REQUIRE(scene.test.SceneHolds(Fenrir::Key::W));
 
     scene.Edit();
     INFO("the entry claims text input too");
-    REQUIRE(Claims(scene.test).textInput);
+    REQUIRE(scene.test.Claims().textInput);
     INFO("which lets go of the scene's W");
-    REQUIRE_FALSE(SceneHolds(scene.test, Fenrir::Key::W));
+    REQUIRE_FALSE(scene.test.SceneHolds(Fenrir::Key::W));
+}
+
+TEST_CASE("A focused text entry's cancelling of a held scene key is one release, marked cancelled",
+          "[demo][kit][switches][keyboard]")
+{
+    TextEntryScene scene;
+    scene.test.Feed().KeyDown(mainWindow, Fenrir::Key::W, Fenrir::Scancode::W);
+    scene.test.Frames();
+    SentEvents<Fenrir::KeyEvent> keys(scene.test);
+
+    scene.Edit();
+    const std::vector<Fenrir::KeyEvent>& sent = keys.Events();
+    INFO("the scene was sent one key event");
+    REQUIRE(sent.size() == 1);
+    INFO("W's release, marked cancelled");
+    REQUIRE(sent[0].key == Fenrir::Key::W);
+    REQUIRE_FALSE(sent[0].pressed);
+    REQUIRE(sent[0].cancelled);
+}
+
+TEST_CASE("A focused text entry claims a caret a line tall, on the entry", "[demo][kit][switches][keyboard]")
+{
+    TextEntryScene scene;
+    scene.Edit();
+    const Fenrir::CaretRect caret = scene.test.Claims().caret;
+    const Fenrir::UIRoot& root = scene.test.Kit().Root();
+    // The caret is in the window's logical units, the entry's box in the root's UI units.
+    const Fenrir::Rect2D box = root.GetBoxes(scene.Entry()).border;
+    const Fenrir::Math::Vec2 entryMin = Fenrir::Math::Vec2(box.x, box.y) * root.GetScale();
+    const Fenrir::Math::Vec2 entryMax = Fenrir::Math::Vec2(box.x + box.width, box.y + box.height) * root.GetScale();
+    INFO("the caret is a line tall");
+    REQUIRE(caret.size.y > 0.0f);
+    INFO("and on the entry");
+    REQUIRE(caret.position.x >= entryMin.x);
+    REQUIRE(caret.position.x <= entryMax.x);
+    REQUIRE(caret.position.y >= entryMin.y);
+    REQUIRE(caret.position.y <= entryMax.y);
+}
+
+TEST_CASE("Typing into a focused text entry sends the scene no key or text", "[demo][kit][switches][keyboard]")
+{
+    TextEntryScene scene;
+    scene.Edit();
+    SentEvents<Fenrir::KeyEvent> keys(scene.test);
+    SentEvents<Fenrir::TextEvent> texts(scene.test);
+
+    scene.test.Feed().KeyDown(mainWindow, Fenrir::Key::H, Fenrir::Scancode::H);
+    scene.test.Feed().Text(mainWindow, U"h");
+    scene.test.Frames();
+    INFO("the scene does not see the key held");
+    REQUIRE_FALSE(scene.test.SceneHolds(Fenrir::Key::H));
+    scene.test.Feed().KeyUp(mainWindow, Fenrir::Key::H, Fenrir::Scancode::H);
+    scene.test.Frames();
+    INFO("nor any key event");
+    REQUIRE(keys.Events().empty());
+    INFO("nor any text event");
+    REQUIRE(texts.Events().empty());
 }
 
 TEST_CASE("F1 types into a focused text entry rather than hiding the kit", "[demo][kit][switches][keyboard]")
@@ -542,13 +598,13 @@ TEST_CASE("A click on the scene gives a text entry's keyboard back", "[demo][kit
     scene.Edit();
     scene.test.Click(besidePanels);
     INFO("the kit's keyboard and text claims are dropped");
-    REQUIRE_FALSE(Claims(scene.test).keyboardFocus);
-    REQUIRE_FALSE(Claims(scene.test).textInput);
+    REQUIRE_FALSE(scene.test.Claims().keyboardFocus);
+    REQUIRE_FALSE(scene.test.Claims().textInput);
 
-    Feed(scene.test).KeyDown(mainWindow, Fenrir::Key::W, Fenrir::Scancode::W);
+    scene.test.Feed().KeyDown(mainWindow, Fenrir::Key::W, Fenrir::Scancode::W);
     scene.test.Frames();
     INFO("W is the scene's again");
-    REQUIRE(SceneHolds(scene.test, Fenrir::Key::W));
+    REQUIRE(scene.test.SceneHolds(Fenrir::Key::W));
 }
 
 TEST_CASE("A text entry no longer edited shows its string as code set it", "[demo][kit][switches][text]")
@@ -567,7 +623,7 @@ TEST_CASE("Escape in a text entry gives the keyboard back", "[demo][kit][switche
     scene.Edit();
     scene.test.Tap(Fenrir::Key::Escape);
     INFO("Escape blurs the entry, which drops the keyboard claim");
-    REQUIRE_FALSE(Claims(scene.test).keyboardFocus);
+    REQUIRE_FALSE(scene.test.Claims().keyboardFocus);
 }
 
 TEST_CASE("The hint line is empty with no row hovered or focused", "[demo][kit][hint]")
@@ -580,12 +636,12 @@ TEST_CASE("The hint line is empty with no row hovered or focused", "[demo][kit][
 TEST_CASE("The hint line shows a hovered row's hint and clears when the pointer leaves", "[demo][kit][hint]")
 {
     ToggleScene scene;
-    Feed(scene.test).MouseMove(mainWindow, scene.test.Centre(scene.Box()), {0.0f, 0.0f});
+    scene.test.Feed().MouseMove(mainWindow, scene.test.Centre(scene.Box()), {0.0f, 0.0f});
     scene.test.Frames();
     INFO("hovering the toggle shows its hint");
     REQUIRE(Hint(scene.test) == "Casts the sun's shadows");
 
-    Feed(scene.test).MouseMove(mainWindow, besidePanels, {0.0f, 0.0f});
+    scene.test.Feed().MouseMove(mainWindow, besidePanels, {0.0f, 0.0f});
     scene.test.Frames();
     INFO("the pointer leaving clears it");
     REQUIRE(Hint(scene.test).empty());
@@ -603,11 +659,11 @@ TEST_CASE("The gamepad's directions reach the game while a kit row has the focus
 {
     RangeScene scene;
     *scene.exposure = 1.0f;
-    Feed(scene.test).GamepadConnected(testPad);
+    scene.test.Feed().GamepadConnected(testPad);
     FocusOn(scene.test, scene.Slider());
 
-    Feed(scene.test).GamepadButtonDown(testPad, Fenrir::GamepadButton::DPadRight);
-    Feed(scene.test).GamepadButtonDown(testPad, Fenrir::GamepadButton::DPadUp);
+    scene.test.Feed().GamepadButtonDown(testPad, Fenrir::GamepadButton::DPadRight);
+    scene.test.Feed().GamepadButtonDown(testPad, Fenrir::GamepadButton::DPadUp);
     scene.test.Frames();
     const Fenrir::Gamepads& pads = scene.test.app.GetResource<Fenrir::Gamepads>();
     INFO("the D-pad is the game's");
