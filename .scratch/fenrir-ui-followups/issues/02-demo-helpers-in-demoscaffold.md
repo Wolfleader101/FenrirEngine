@@ -11,8 +11,9 @@
 
 **Touches:** `examples/DemoScaffold/`, `examples/UIDemo/src/Room.cpp`, `examples/RendererDemo/src/CamerasAndTargets.cpp`, `examples/RendererDemo/src/MeshesAndMaterials.cpp`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] No demo defines `YawPitch` or its own quad builder.
-- [ ] DemoScaffold's new tests pass; UIDemo's and RendererDemo's tests and smoke runs pass.
-- [ ] Hand check: UIDemo's room and screen and RendererDemo's cameras and meshes scenes look as before.
+- [x] No demo defines `YawPitch` or its own quad builder.
+- [x] DemoScaffold's new tests pass; UIDemo's and RendererDemo's tests and smoke runs pass.
+
+Hand check: UIDemo's room and screen and RendererDemo's cameras and meshes scenes look as before.

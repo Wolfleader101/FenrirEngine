@@ -3,13 +3,15 @@
 add_library(FenrirDemoScaffold STATIC
     include/FenrirDemoScaffold/DemoScaffold.hpp
     src/DemoScaffold.cpp
+    src/DemoHelpers.cpp
     src/ImGuiOverlay.hpp
     src/ImGuiOverlay.cpp
 )
 target_include_directories(FenrirDemoScaffold PUBLIC include)
 target_link_libraries(FenrirDemoScaffold
-    PUBLIC FenrirApp FenrirRenderer FenrirInput FenrirMath FenrirECS
-    PRIVATE FenrirWindow FenrirAssets FenrirDebugDraw FenrirLogger
+    # PUBLIC FenrirAssets: ScreenQuad returns MeshData.
+    PUBLIC FenrirApp FenrirRenderer FenrirInput FenrirMath FenrirECS FenrirAssets
+    PRIVATE FenrirWindow FenrirDebugDraw FenrirLogger
 )
 
 # Dear ImGui (libs/imgui), for the ImGuiOverlay. PUBLIC, so a demo app's scenes make their ImGui windows with ImGui's

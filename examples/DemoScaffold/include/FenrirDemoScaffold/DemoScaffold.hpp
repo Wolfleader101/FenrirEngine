@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "FenrirAssets/MeshData.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirInput/InputTypes.hpp"
 #include "FenrirMath/Math.hpp"
@@ -192,6 +193,21 @@ namespace FenrirDemo
 
     /** @brief The exit code of a smoke run that could not start its backend, which CTest reports as skipped. */
     inline constexpr int SkippedExitCode = 4;
+
+    /**
+     * @brief The rotation of a yaw about +Y, then a pitch about the turned +X, in radians: the way DemoCameraStart's
+     * yaw and pitch turn a camera. Positive yaw turns -Z towards -X (to the left, seen from above), and positive pitch
+     * turns it towards +Y (up), so a camera with this rotation looks along -Z turned left by `yaw` and up by `pitch`.
+     */
+    [[nodiscard]] Fenrir::Math::Quat YawPitch(float yaw, float pitch);
+
+    /**
+     * @brief A quad of `width` by `height`, centred on the origin in the XY plane and facing +Z, for screens, boards
+     * and other flat panels: four vertices with normal +Z, tangent +X (bitangent sign +1) and UV0 (0, 0) at the
+     * top-left corner and (`repeat`, `repeat`) at the bottom-right, v growing down, so an image is drawn the right
+     * way up and tiled `repeat` times across each side.
+     */
+    [[nodiscard]] Fenrir::MeshData ScreenQuad(float width, float height, float repeat = 1.0f);
 
     /**
      * @brief The owner of a demo app's engine packages and scaffold (GLOSSARY.md: demo scaffold). Move-only; destroy it
