@@ -68,6 +68,26 @@ namespace FenrirDemo
             return label;
         }
 
+        /** @brief A key row under `parent`: a panel of class `row` holding `keys` and `what` labels of their classes.
+         */
+        void MakeKeyRow(Fenrir::UIRoot& root, Fenrir::ElementId parent, const DemoKeyRow& keyRow, std::string_view row,
+                        std::string_view keys, std::string_view what)
+        {
+            const Fenrir::ElementId line = Make(root, parent, "panel", row);
+            MakeLabel(root, line, keys, keyRow.keys);
+            MakeLabel(root, line, what, keyRow.what);
+        }
+
+        /** @brief Removes every child of `parent` at once, for a part of the kit made whole again. */
+        void RemoveChildren(Fenrir::UIRoot& root, Fenrir::ElementId parent)
+        {
+            for (const Fenrir::ElementId child :
+                 std::vector<Fenrir::ElementId>(root.GetChildren(parent).begin(), root.GetChildren(parent).end()))
+            {
+                (void)root.Remove(child, Fenrir::RemoveMode::Immediate);
+            }
+        }
+
         /** @brief A slider of the class `demo-slider`, and `name` when given, from `min` to `max` in `step`s. */
         Fenrir::ElementId MakeSlider(Fenrir::UIRoot& root, Fenrir::ElementId parent, float min, float max, float step,
                                      std::string_view name = {})
@@ -792,6 +812,8 @@ namespace FenrirDemo
         }
         m_buildStage = roots.AddBuildStage(BuildStageOrder, [this] {
             PollToggleKey();
+            ApplyTutorialInput();
+            AskTutorialDone();
             PullReadouts();
             SyncSwitches();
             UpdateHint();
@@ -868,6 +890,9 @@ namespace FenrirDemo
 
     void DemoUI::ClearScene()
     {
+        // The tutorial is the scene's: its steps' `done` may read the scene's state, which goes next. Its card goes at
+        // once, so it never fades out beside the next scene's.
+        EndTutorial(true);
         for (const Section& section : m_sections)
         {
             if (section.scene)
@@ -927,12 +952,15 @@ namespace FenrirDemo
         m_sceneSections = m_root->FindById("demo-scene-sections");
         m_help = m_root->FindById("demo-help");
         m_hint = m_root->FindById("demo-hint");
+        m_tutorialArea = m_root->FindById("demo-tutorial-area");
+        // The card went with the document it was in.
+        m_tutorialCard = {};
         m_hintDirty = true;
         if (!m_kit.IsValid() || !m_appSections.IsValid() || !m_sceneSections.IsValid() || !m_help.IsValid() ||
-            !m_hint.IsValid())
+            !m_hint.IsValid() || !m_tutorialArea.IsValid())
         {
             m_app.Logger()->Error("The demo UI kit's document lacks #demo-kit, #demo-app-sections, "
-                                  "#demo-scene-sections, #demo-help or #demo-hint");
+                                  "#demo-scene-sections, #demo-help, #demo-hint or #demo-tutorial-area");
         }
         if (m_hint.IsValid())
         {
@@ -944,6 +972,7 @@ namespace FenrirDemo
             BuildSection(section);
         }
         BuildHelp();
+        BuildTutorial();
         ApplyVisible();
     }
 
@@ -1192,11 +1221,7 @@ namespace FenrirDemo
             return;
         }
         // The help is made whole each time it changes: a scene's entry, or a reloaded document.
-        for (const Fenrir::ElementId child :
-             std::vector<Fenrir::ElementId>(root.GetChildren(m_help).begin(), root.GetChildren(m_help).end()))
-        {
-            (void)root.Remove(child, Fenrir::RemoveMode::Immediate);
-        }
+        RemoveChildren(root, m_help);
         const Fenrir::ElementId title = root.Create(m_help, "button");
         root.AddClass(title, "demo-help-title");
         root.SetText(title, "Help");
@@ -1211,14 +1236,7 @@ namespace FenrirDemo
         root.SetText(heading, m_helpHeading);
         for (const DemoKeyRow& keyRow : m_helpRows)
         {
-            const Fenrir::ElementId row = root.Create(m_helpBody, "panel");
-            root.AddClass(row, "demo-key-row");
-            const Fenrir::ElementId keys = root.Create(row, "label");
-            root.AddClass(keys, "demo-keys");
-            root.SetText(keys, keyRow.keys);
-            const Fenrir::ElementId what = root.Create(row, "label");
-            root.AddClass(what, "demo-what");
-            root.SetText(what, keyRow.what);
+            MakeKeyRow(root, m_helpBody, keyRow, "demo-key-row", "demo-keys", "demo-what");
         }
         Display(m_helpBody, m_helpOpen);
     }
@@ -1298,16 +1316,189 @@ namespace FenrirDemo
 
     void DemoUI::OnKey(Fenrir::Key key)
     {
-        if (key != Fenrir::Key::F1)
+        if (key != Fenrir::Key::F1 && key != Fenrir::Key::Escape)
         {
             return;
         }
-        // F1 is a character of no text, but a text entry's keys are all its own.
+        // F1 is a character of no text, but a text entry's keys are all its own, and its Escape gives up its focus.
         if (dynamic_cast<const Fenrir::TextEntry*>(m_root->GetElement(m_root->GetFocused())) != nullptr)
         {
             return;
         }
-        SetVisible(!m_visible);
+        if (key == Fenrir::Key::F1)
+        {
+            SetVisible(!m_visible);
+        }
+        else if (m_tutorial)
+        {
+            m_tutorialAction = TutorialAction::Close;
+        }
+    }
+
+    // The tutorial card.
+
+    void DemoUI::ShowTutorial(DemoTutorial tutorial)
+    {
+        if (tutorial.steps.empty())
+        {
+            return;
+        }
+        m_tutorial = std::move(tutorial);
+        m_tutorialAction.reset();
+        ShowTutorialStep(0);
+    }
+
+    void DemoUI::CloseTutorial()
+    {
+        if (m_tutorial)
+        {
+            EndTutorial(false);
+        }
+    }
+
+    void DemoUI::EndTutorial(bool immediate)
+    {
+        m_tutorial.reset();
+        m_tutorialAction.reset();
+        ++m_tutorialChanges;
+        RemoveTutorialCard(immediate);
+    }
+
+    void DemoUI::ShowTutorialStep(std::size_t step)
+    {
+        if (!m_tutorial || step >= m_tutorial->steps.size())
+        {
+            CloseTutorial();
+            return;
+        }
+        m_tutorialStep = step;
+        ++m_tutorialChanges;
+        BuildTutorial();
+    }
+
+    void DemoUI::RemoveTutorialCard(bool immediate)
+    {
+        if (m_tutorialCard.IsValid())
+        {
+            (void)m_root->Remove(m_tutorialCard, immediate ? Fenrir::RemoveMode::Immediate : Fenrir::RemoveMode::Outro);
+        }
+        m_tutorialCard = {};
+    }
+
+    void DemoUI::BuildTutorial()
+    {
+        Fenrir::UIRoot& root = *m_root;
+        if (!m_tutorial)
+        {
+            RemoveTutorialCard(false);
+            return;
+        }
+        if (!m_tutorialArea.IsValid())
+        {
+            return;
+        }
+        if (root.GetElement(m_tutorialCard) == nullptr)
+        {
+            // A new card comes in through its intro; a step changed in a card that shows keeps the card.
+            m_tutorialCard = Make(root, m_tutorialArea, "panel", "demo-box");
+            root.AddClass(m_tutorialCard, "demo-tutorial");
+        }
+        else
+        {
+            RemoveChildren(root, m_tutorialCard);
+        }
+        const DemoTutorial& tutorial = *m_tutorial;
+        const DemoTutorialStep& step = tutorial.steps[m_tutorialStep];
+        const bool last = m_tutorialStep + 1 == tutorial.steps.size();
+
+        const Fenrir::ElementId header = Make(root, m_tutorialCard, "panel", "demo-tutorial-header");
+        MakeLabel(root, header, "demo-tutorial-title", tutorial.title);
+        MakeLabel(root, header, "demo-tutorial-progress",
+                  std::format("{}/{}", m_tutorialStep + 1, tutorial.steps.size()));
+        MakeLabel(root, m_tutorialCard, "demo-tutorial-step-title", step.title);
+        MakeLabel(root, m_tutorialCard, "demo-tutorial-text", step.text);
+        for (const DemoKeyRow& keyRow : step.keys)
+        {
+            MakeKeyRow(root, m_tutorialCard, keyRow, "demo-tutorial-key-row", "demo-tutorial-key",
+                       "demo-tutorial-what");
+        }
+
+        // The buttons' clicks are applied in the build stage work, which makes the card's elements again.
+        const Fenrir::ElementId buttons = Make(root, m_tutorialCard, "panel", "demo-tutorial-buttons");
+        const auto button = [&](std::string_view name, std::string_view caption, TutorialAction action) {
+            const Fenrir::ElementId made = Make(root, buttons, "button", name);
+            root.AddClass(made, "demo-tutorial-button");
+            root.SetText(made, caption);
+            root.AddListener(made, Fenrir::UIEventKind::Click,
+                             [this, action](Fenrir::UIListenerContext&) { m_tutorialAction = action; });
+            return made;
+        };
+        const Fenrir::ElementId back = button("demo-tutorial-back", "Back", TutorialAction::Back);
+        if (auto* control = As<Fenrir::Control>(root, back); control != nullptr)
+        {
+            control->SetDisabled(m_tutorialStep == 0);
+        }
+        button("demo-tutorial-next", last ? "Done" : "Next", TutorialAction::Next);
+        button("demo-tutorial-close", "Close", TutorialAction::Close);
+    }
+
+    void DemoUI::ApplyTutorialInput()
+    {
+        if (!m_tutorial)
+        {
+            return;
+        }
+        // While the kit has no focus the game's keyboard sees Escape; while it has, OnKey does.
+        if (const auto* keyboard = m_app.TryGetResource<Fenrir::Keyboard>();
+            keyboard != nullptr && keyboard->JustPressed(Fenrir::Key::Escape))
+        {
+            m_tutorialAction = TutorialAction::Close;
+        }
+        if (!m_tutorialAction)
+        {
+            return;
+        }
+        const TutorialAction action = *m_tutorialAction;
+        m_tutorialAction.reset();
+        // A click on the card's button took the focus, and the keyboard with it: a step's keys are the scene's.
+        for (Fenrir::ElementId at = m_root->GetFocused(); at.IsValid(); at = m_root->GetParent(at))
+        {
+            if (at == m_tutorialCard)
+            {
+                m_root->Blur();
+                break;
+            }
+        }
+        switch (action)
+        {
+        case TutorialAction::Back:
+            if (m_tutorialStep > 0)
+            {
+                ShowTutorialStep(m_tutorialStep - 1);
+            }
+            break;
+        case TutorialAction::Next:
+            ShowTutorialStep(m_tutorialStep + 1);
+            break;
+        case TutorialAction::Close:
+            CloseTutorial();
+            break;
+        }
+    }
+
+    void DemoUI::AskTutorialDone()
+    {
+        if (!m_tutorial || !m_tutorial->steps[m_tutorialStep].done)
+        {
+            return;
+        }
+        // Copied, and the changes counted: `done` may close the tutorial, show another or leave the scene.
+        const std::function<bool(Fenrir::App&)> done = m_tutorial->steps[m_tutorialStep].done;
+        const std::uint32_t changes = m_tutorialChanges;
+        if (done(m_app) && changes == m_tutorialChanges)
+        {
+            ShowTutorialStep(m_tutorialStep + 1);
+        }
     }
 
     DemoUI::Section* DemoUI::FindSection(std::uint32_t id)

@@ -24,14 +24,14 @@
 
 **Touches:** `examples/DemoScaffold/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Scaffold tests on the null backend:
+- [x] Scaffold tests on the null backend:
   - a tutorial shows on the scene's first entry and not on its second
   - it never shows in a smoke run
   - Next, Back and Close step and close it
   - a step whose `done` turns true moves on
   - the Tutorial button shows it again from step one
   - a press on the card sends no scene click, and one beside it does
-- [ ] Every demo's `Smoke-null` passes with scripting off and on.
-- [ ] Clang and MSVC x64 debug build without new warnings.
+- [x] Every demo's `Smoke-null` passes with scripting off and on.
+- [x] Clang and MSVC x64 debug build without new warnings. (MSVC x64 debug built locally, scripting on and off; Clang was not built here.)

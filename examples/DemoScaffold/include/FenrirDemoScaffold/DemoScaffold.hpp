@@ -60,6 +60,12 @@ namespace FenrirDemo
         std::vector<DemoKeyRow> keyRows;
         /** @brief The scene's keys as one line, which the help shows as one row when there are no `keyRows`. */
         std::string keyHelp;
+        /**
+         * @brief The scene's demo tutorial: shown the first time the scene is entered in a run, but never in a smoke
+         * run or with FENRIR_DEMO_KEYS, and again from the Tutorial button in the scene's section, titled after the
+         * scene, which the scaffold adds before `spawn` adds the scene's own.
+         */
+        std::optional<DemoTutorial> tutorial;
         /** @brief The keys a smoke run or FENRIR_DEMO_KEYS presses in this scene, in order. */
         std::vector<Fenrir::Key> keys;
         /** @brief Where the free-fly camera starts. */
