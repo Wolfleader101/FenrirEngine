@@ -17,29 +17,9 @@
 
 namespace
 {
-    constexpr std::uint32_t Rgba8(std::uint32_t r, std::uint32_t g, std::uint32_t b, std::uint32_t a)
-    {
-        return r | (g << 8u) | (b << 16u) | (a << 24u);
-    }
-
-    std::vector<Fenrir::PainterVertex> Vertices(const Fenrir::DrawList2D& list)
-    {
-        std::vector<Fenrir::PainterVertex> vertices(list.vertices.size() / sizeof(Fenrir::PainterVertex));
-        std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(Fenrir::PainterVertex));
-        return vertices;
-    }
-
-    // Each quad's first vertex, in the order drawn: every painter box is one quad of four.
-    std::vector<Fenrir::PainterVertex> Quads(const Fenrir::DrawList2D& list)
-    {
-        const std::vector<Fenrir::PainterVertex> vertices = Vertices(list);
-        std::vector<Fenrir::PainterVertex> quads;
-        for (std::size_t i = 0; i < vertices.size(); i += 4)
-        {
-            quads.push_back(vertices[i]);
-        }
-        return quads;
-    }
+    using UITest::Quads;
+    using UITest::Rgba8;
+    using UITest::Vertices;
 
     Fenrir::ShapeKind ShapeOf(const Fenrir::PainterVertex& vertex)
     {
@@ -621,8 +601,11 @@ TEST_CASE("A tree that sets none of background-position and the scrollbar proper
     };
     const std::vector<std::byte> unset = draw(false);
     const std::vector<std::byte> written = draw(true);
+    {
+        INFO("the tree draws something");
+        REQUIRE(!unset.empty());
+    }
     INFO("the tree draws " << unset.size() << " vertex bytes unset and " << written.size() << " with the initials "
                            << "written, and they differ");
-    REQUIRE(!unset.empty());
     REQUIRE(unset == written);
 }

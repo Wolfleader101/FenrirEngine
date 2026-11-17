@@ -348,16 +348,18 @@ namespace Fenrir::Detail
                     return;
                 }
                 const ScrollbarColor& colours = slot.resolved.scrollbarColor;
-                std::optional<ResolvedStyle> coloured[2];
+                // Copies of the parts' styles in the scroll view's colours, only when it gives them.
+                std::optional<ResolvedStyle> colouredTrack;
+                std::optional<ResolvedStyle> colouredThumb;
                 if (!colours.isAuto)
                 {
-                    coloured[0] = slot.scrollbarStyles->track;
-                    coloured[0]->backgroundColor = colours.track;
-                    coloured[1] = slot.scrollbarStyles->thumb;
-                    coloured[1]->backgroundColor = colours.thumb;
+                    colouredTrack = slot.scrollbarStyles->track;
+                    colouredTrack->backgroundColor = colours.track;
+                    colouredThumb = slot.scrollbarStyles->thumb;
+                    colouredThumb->backgroundColor = colours.thumb;
                 }
-                const ResolvedStyle& track = coloured[0] ? *coloured[0] : slot.scrollbarStyles->track;
-                const ResolvedStyle& thumb = coloured[1] ? *coloured[1] : slot.scrollbarStyles->thumb;
+                const ResolvedStyle& track = colouredTrack ? *colouredTrack : slot.scrollbarStyles->track;
+                const ResolvedStyle& thumb = colouredThumb ? *colouredThumb : slot.scrollbarStyles->thumb;
                 if (bars.vertical)
                 {
                     PaintBox(track, bars.verticalTrack, alpha);

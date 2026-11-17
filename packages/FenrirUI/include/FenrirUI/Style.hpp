@@ -161,14 +161,19 @@ namespace Fenrir
     };
 
     /**
-     * @brief `scrollbar-width` on a scroll view: `Auto` leaves the bar's thickness to its `::scrollbar` style's
-     * `width`; `Thin` is half the default stylesheet's bar width (ThinScrollbarWidth); `None` draws and hits no bar,
-     * while the view still scrolls by the wheel, the keys and its content. Not inherited.
+     * @brief `scrollbar-width` on a scroll view, which wins over its `::scrollbar` style's `width` unless it is
+     * `Auto`. Not inherited.
      */
     enum class ScrollbarWidth : std::uint8_t
     {
+        /** @brief The bar is its `::scrollbar` style's `width` thick. */
         Auto,
+        /**
+         * @brief The bar is ThinScrollbarWidth thick, half the default stylesheet's, and its thumb is inset half the
+         * `::scrollbar` padding.
+         */
         Thin,
+        /** @brief No bar is drawn or hit; the view still scrolls by the wheel, the keys and its content. */
         None,
     };
 
@@ -184,7 +189,9 @@ namespace Fenrir
     {
         /** @brief `auto`: the pseudo-elements' colours show, and thumb and track are not read. */
         bool isAuto = true;
+        /** @brief The thumb's background colour. */
         Colour thumb = Colour::Black;
+        /** @brief The track's background colour. */
         Colour track = Colour::Black;
 
         /** @brief `auto`. */

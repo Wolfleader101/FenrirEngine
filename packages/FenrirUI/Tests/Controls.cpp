@@ -804,57 +804,59 @@ TEST_CASE("A scroll view's bars take their look from its pseudo-elements", "[ui]
 
 namespace
 {
-    constexpr std::uint32_t Rgba8(std::uint32_t r, std::uint32_t g, std::uint32_t b, std::uint32_t a)
-    {
-        return r | (g << 8u) | (b << 16u) | (a << 24u);
-    }
-
-    // The colour of the latest frame's quad drawn over `box`, or 0 when none is.
+    // The colour of the latest frame's last quad drawn over `box`, or 0 when none is.
     std::uint32_t ColourOver(const CaptureTarget& target, const Fenrir::Rect2D& box)
     {
-        const Fenrir::DrawList2D& list = target.lists.back();
-        std::vector<Fenrir::PainterVertex> vertices(list.vertices.size() / sizeof(Fenrir::PainterVertex));
-        std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(Fenrir::PainterVertex));
+        const std::vector<Fenrir::PainterVertex> vertices = Vertices(target.lists.back());
         std::uint32_t colour = 0;
-        for (std::size_t i = 0; i + 4 <= vertices.size(); i += 4)
+        for (std::size_t quad = 0; quad < vertices.size() / 4; ++quad)
         {
-            Vec2 centre(0.0f);
-            for (std::size_t j = 0; j < 4; ++j)
+            if (Near(QuadBox(vertices, quad), box, 0.01f))
             {
-                centre += vertices[i + j].position;
-            }
-            centre /= 4.0f;
-            const Vec2 half = vertices[i].halfSize;
-            if (Near({centre.x - half.x, centre.y - half.y, half.x * 2.0f, half.y * 2.0f}, box, 0.01f))
-            {
-                colour = vertices[i].colour;
+                colour = vertices[quad * 4].colour;
             }
         }
         return colour;
     }
 } // namespace
 
-TEST_CASE("scrollbar-width thin draws the bar at half the default stylesheet's width", "[ui][controls][scroll]")
+TEST_CASE("scrollbar-width thin draws the bar at half the default stylesheet's width, its inset halved too",
+          "[ui][controls][scroll]")
 {
     ScrollFixture fixture;
-    INFO("the default stylesheet's ::scrollbar is 10 wide down the view's right edge");
-    REQUIRE(Near(fixture.root.GetScrollbars(fixture.view).verticalTrack, {90.0f, 0.0f, 10.0f, 100.0f}));
+    const Fenrir::ScrollbarBoxes before = fixture.root.GetScrollbars(fixture.view);
+    INFO("the default stylesheet's ::scrollbar is 10 wide down the view's right edge, its thumb inset 2");
+    REQUIRE(Near(before.verticalTrack, {90.0f, 0.0f, 10.0f, 100.0f}));
+    REQUIRE(Near(before.verticalThumb.width, 6.0f));
 
-    INFO("the scroll view takes scrollbar-width");
-    REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-width", "thin"));
+    {
+        INFO("the scroll view takes scrollbar-width");
+        REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-width", "thin"));
+    }
     fixture.test.Frame();
     const Fenrir::ScrollbarBoxes bars = fixture.root.GetScrollbars(fixture.view);
     INFO("thin is half of it, 5 wide: the track is " << bars.verticalTrack.width << " wide at x "
                                                      << bars.verticalTrack.x);
     REQUIRE(Near(bars.verticalTrack, {95.0f, 0.0f, 5.0f, 100.0f}));
+    INFO("its thumb is inset half the 2, so 3 wide, not " << bars.verticalThumb.width);
+    REQUIRE(Near(bars.verticalThumb.width, 3.0f));
     INFO("the track draws at that width");
     REQUIRE(ColourOver(*fixture.target, bars.verticalTrack) != 0u);
+}
 
+TEST_CASE("scrollbar-width thin wins over a ::scrollbar rule's width", "[ui][controls][scroll]")
+{
+    ScrollFixture fixture;
     fixture.root.SetIdString(fixture.view, "list");
     fixture.root.AddStylesheet("#list::scrollbar { width: 14px; }", "game.css");
+    {
+        INFO("the scroll view takes scrollbar-width");
+        REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-width", "thin"));
+    }
     fixture.test.Frame();
-    INFO("thin wins over a ::scrollbar rule's width");
-    REQUIRE(Near(fixture.root.GetScrollbars(fixture.view).verticalTrack.width, 5.0f));
+    const float width = fixture.root.GetScrollbars(fixture.view).verticalTrack.width;
+    INFO("the bar is thin's 5 wide, not the rule's 14: " << width);
+    REQUIRE(Near(width, 5.0f));
 }
 
 TEST_CASE("scrollbar-width none draws and hits no bar, and the wheel still scrolls the view", "[ui][controls][scroll]")
@@ -862,8 +864,10 @@ TEST_CASE("scrollbar-width none draws and hits no bar, and the wheel still scrol
     ScrollFixture fixture;
     UITestApp& test = fixture.test;
     const Fenrir::ScrollbarBoxes shown = fixture.root.GetScrollbars(fixture.view);
-    INFO("the scroll view takes scrollbar-width");
-    REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-width", "none"));
+    {
+        INFO("the scroll view takes scrollbar-width");
+        REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-width", "none"));
+    }
     test.Frame();
     const Fenrir::ScrollbarBoxes bars = fixture.root.GetScrollbars(fixture.view);
     INFO("GetScrollbars reports no bar");
@@ -882,35 +886,44 @@ TEST_CASE("scrollbar-width none draws and hits no bar, and the wheel still scrol
     REQUIRE(fixture.Scroll().GetOffset() == Vec2(0.0f, Fenrir::ScrollView::ScrollStep));
 }
 
-TEST_CASE("scrollbar-color colours the thumb and track over the pseudo-elements' rules, and auto leaves them",
-          "[ui][controls][scroll]")
+TEST_CASE("scrollbar-color colours the thumb and the track over the pseudo-elements' rules", "[ui][controls][scroll]")
 {
     ScrollFixture fixture;
     fixture.root.SetIdString(fixture.view, "list");
     fixture.root.AddStylesheet("#list::scrollbar-thumb { background-color: #00ff00; }", "game.css");
+    {
+        INFO("the scroll view takes scrollbar-color");
+        REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-color", "red blue"));
+    }
     fixture.test.Frame();
     const Fenrir::ScrollbarBoxes bars = fixture.root.GetScrollbars(fixture.view);
-    INFO("with no scrollbar-color the thumb is the rule's green");
-    REQUIRE(ColourOver(*fixture.target, bars.verticalThumb) == Rgba8(0, 255, 0, 255));
-
-    INFO("the scroll view takes scrollbar-color");
-    REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-color", "red blue"));
-    fixture.test.Frame();
-    INFO("the thumb is red, its first colour, and the track blue, its second");
+    INFO("the thumb is red, its first colour, over the rule's green");
     REQUIRE(ColourOver(*fixture.target, bars.verticalThumb) == Rgba8(255, 0, 0, 255));
+    INFO("the track is blue, its second colour");
     REQUIRE(ColourOver(*fixture.target, bars.verticalTrack) == Rgba8(0, 0, 255, 255));
-    INFO("the pseudo-element keeps its own style");
+    INFO("GetPseudoElementStyle still reads the thumb's own style, the rule's green");
     REQUIRE(
         fixture.root.GetPseudoElementStyle(fixture.view, Fenrir::PseudoElement::ScrollbarThumb)->backgroundColor.g ==
         1.0f);
+}
 
-    REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-color", "auto"));
+TEST_CASE("scrollbar-color auto leaves the pseudo-elements' colours", "[ui][controls][scroll]")
+{
+    ScrollFixture fixture;
+    fixture.root.SetIdString(fixture.view, "list");
+    fixture.root.AddStylesheet("#list::scrollbar-thumb { background-color: #00ff00; }", "game.css");
+    {
+        INFO("the scroll view takes scrollbar-color");
+        REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-color", "red blue"));
+        REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-color", "auto"));
+    }
     fixture.test.Frame();
-    INFO("auto gives the thumb back to the rule's green");
+    const Fenrir::ScrollbarBoxes bars = fixture.root.GetScrollbars(fixture.view);
+    INFO("auto gives the thumb the rule's green");
     REQUIRE(ColourOver(*fixture.target, bars.verticalThumb) == Rgba8(0, 255, 0, 255));
 }
 
-TEST_CASE("The scrollbar properties read their keywords and colours, are not inherited, and have setters",
+TEST_CASE("scrollbar-width and scrollbar-color read their keywords and colours and refuse the rest",
           "[ui][controls][scroll]")
 {
     ScrollFixture fixture;
@@ -925,25 +938,47 @@ TEST_CASE("The scrollbar properties read their keywords and colours, are not inh
         INFO("scrollbar-color '" << refused << "' is refused");
         REQUIRE_FALSE(root.SetStyleProperty(fixture.view, "scrollbar-color", refused));
     }
-    INFO("the scroll view takes both");
-    REQUIRE(root.SetStyleProperty(fixture.view, "scrollbar-width", "thin"));
-    REQUIRE(root.SetStyleProperty(fixture.view, "scrollbar-color", "rgba(255, 0, 0, 0.5) #0000ff"));
+    {
+        INFO("the scroll view takes both");
+        REQUIRE(root.SetStyleProperty(fixture.view, "scrollbar-width", "thin"));
+        REQUIRE(root.SetStyleProperty(fixture.view, "scrollbar-color", "rgba(255, 0, 0, 0.5) #0000ff"));
+    }
     fixture.test.Frame();
     const Fenrir::ResolvedStyle* view = root.GetResolvedStyle(fixture.view);
+    INFO("thin resolves as Thin");
     REQUIRE(view->scrollbarWidth == Fenrir::ScrollbarWidth::Thin);
+    INFO("the colours resolve as a half-transparent red thumb and a blue track");
     REQUIRE_FALSE(view->scrollbarColor.isAuto);
     REQUIRE(view->scrollbarColor.thumb.a == 0.5f);
     REQUIRE(view->scrollbarColor.track.b == 1.0f);
-    const Fenrir::ResolvedStyle* row = root.GetResolvedStyle(fixture.rows[0]);
-    INFO("a child of the view does not inherit them");
+}
+
+TEST_CASE("The scrollbar properties are not inherited", "[ui][controls][scroll]")
+{
+    ScrollFixture fixture;
+    {
+        INFO("the scroll view takes both");
+        REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-width", "none"));
+        REQUIRE(fixture.root.SetStyleProperty(fixture.view, "scrollbar-color", "red blue"));
+    }
+    fixture.test.Frame();
+    const Fenrir::ResolvedStyle* row = fixture.root.GetResolvedStyle(fixture.rows[0]);
+    INFO("a row of the view keeps auto for both");
     REQUIRE(row->scrollbarWidth == Fenrir::ScrollbarWidth::Auto);
     REQUIRE(row->scrollbarColor.isAuto);
+}
 
-    root.EditInlineStyle(fixture.view)
+TEST_CASE("The scrollbar properties' typed setters give them", "[ui][controls][scroll]")
+{
+    ScrollFixture fixture;
+    fixture.root.EditInlineStyle(fixture.view)
         ->SetScrollbarWidth(Fenrir::ScrollbarWidth::None)
         .SetScrollbarColor(Fenrir::ScrollbarColor::Of(Fenrir::Colour::White, Fenrir::Colour::Black));
     fixture.test.Frame();
-    INFO("the typed setters give them");
-    REQUIRE(root.GetResolvedStyle(fixture.view)->scrollbarWidth == Fenrir::ScrollbarWidth::None);
-    REQUIRE(root.GetResolvedStyle(fixture.view)->scrollbarColor.thumb.g == 1.0f);
+    const Fenrir::ResolvedStyle* view = fixture.root.GetResolvedStyle(fixture.view);
+    INFO("SetScrollbarWidth gives none");
+    REQUIRE(view->scrollbarWidth == Fenrir::ScrollbarWidth::None);
+    INFO("SetScrollbarColor gives a white thumb and a black track");
+    REQUIRE(view->scrollbarColor.thumb.g == 1.0f);
+    REQUIRE(view->scrollbarColor.track.g == 0.0f);
 }

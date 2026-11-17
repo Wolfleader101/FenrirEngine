@@ -204,8 +204,8 @@
 }
 
 /* The controls list: more entries than it is tall, so it scrolls, with a thin bar in the accent over a faint track.
-   scrollbar-width and scrollbar-color win over the ::scrollbar rules' width and colours; the track's padding is still
-   the thumb's inset. */
+   scrollbar-width and scrollbar-color win over the ::scrollbar rules' width and colours; thin halves the track's
+   padding, the thumb's inset. */
 #controls {
     height: 180px;
     padding: 6px;
@@ -215,10 +215,6 @@
     background-color: rgba(0, 0, 0, 0.2);
     scrollbar-width: thin;
     scrollbar-color: var(--accent) rgba(255, 255, 255, 0.06);
-}
-
-#controls::scrollbar {
-    padding: 1px;
 }
 
 #controls::scrollbar-thumb {

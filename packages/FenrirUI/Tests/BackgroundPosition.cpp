@@ -3,8 +3,6 @@
 // The expected places are worked from CSS: a percentage aligns that point of the image with that point of the box, so
 // an image's offset is (box - image) times it; a length offsets the image's top-left from the box's.
 #include <algorithm>
-#include <cstddef>
-#include <cstring>
 #include <memory>
 #include <string_view>
 #include <utility>
@@ -12,7 +10,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "FenrirAssets/AssetStore.hpp"
 #include "FenrirPainter/PainterVertex.hpp"
 #include "UITestApp.hpp"
 
@@ -22,18 +19,8 @@ namespace
     using Fenrir::Length;
     using UITest::Near;
 
-    // A white image `width` by `height` in the app's asset store, under `name` for a stylesheet's url().
-    Fenrir::AssetHandle<Fenrir::Image> AddImage(UITest::UITestApp& test, std::string_view name, std::uint32_t width,
-                                                std::uint32_t height)
-    {
-        Fenrir::ImageData pixels;
-        pixels.width = width;
-        pixels.height = height;
-        pixels.pixels.assign(static_cast<std::size_t>(width) * height * 4, std::byte{0xFF});
-        return test.app.GetResource<Fenrir::AssetStore>().AddBuiltin<Fenrir::Image>(name, std::move(pixels));
-    }
-
-    // A root 400 by 400 with no default stylesheet, holding one 200 by 200 panel at its top-left.
+    // A root 400 by 400 holding one 200 by 200 panel at its top-left, which the default stylesheet leaves unpainted,
+    // and two white images for its url()s: builtin:wide, 100 by 50, and builtin:tall, 50 by 100.
     struct PositionTest
     {
         UITest::UITestApp test;
@@ -43,8 +30,8 @@ namespace
 
         PositionTest()
         {
-            AddImage(test, "builtin:wide", 100, 50);
-            AddImage(test, "builtin:tall", 50, 100);
+            UITest::AddWhiteImage(test.app, "builtin:wide", 100, 50);
+            UITest::AddWhiteImage(test.app, "builtin:tall", 50, 100);
             INFO("the panel takes its size");
             REQUIRE(root.SetStyleProperty(panel, "width", "200px"));
             REQUIRE(root.SetStyleProperty(panel, "height", "200px"));
@@ -64,9 +51,7 @@ namespace
         // The latest frame's one drawn quad, all four of its vertices.
         std::vector<Fenrir::PainterVertex> Quad() const
         {
-            const Fenrir::DrawList2D& list = target->lists.back();
-            std::vector<Fenrir::PainterVertex> vertices(list.vertices.size() / sizeof(Fenrir::PainterVertex));
-            std::memcpy(vertices.data(), list.vertices.data(), vertices.size() * sizeof(Fenrir::PainterVertex));
+            const std::vector<Fenrir::PainterVertex> vertices = UITest::Vertices(target->lists.back());
             INFO("the panel draws its image as one quad and nothing else: " << vertices.size() << " vertices");
             REQUIRE(vertices.size() == 4);
             return vertices;
@@ -75,15 +60,7 @@ namespace
         // The box the latest frame's one quad draws: its shape's centre and half size, without the quad's margin.
         Fenrir::Rect2D Drawn() const
         {
-            const std::vector<Fenrir::PainterVertex> vertices = Quad();
-            Fenrir::Math::Vec2 centre(0.0f);
-            for (const Fenrir::PainterVertex& vertex : vertices)
-            {
-                centre += vertex.position;
-            }
-            centre /= 4.0f;
-            const Fenrir::Math::Vec2 half = vertices[0].halfSize;
-            return {centre.x - half.x, centre.y - half.y, half.x * 2.0f, half.y * 2.0f};
+            return UITest::QuadBox(Quad(), 0);
         }
 
         const Fenrir::ResolvedStyle& Resolved() const
@@ -124,22 +101,35 @@ TEST_CASE("background-position reads one or two keywords, lengths or percentages
         REQUIRE(t.Resolved().backgroundPositionX == c.x);
         REQUIRE(t.Resolved().backgroundPositionY == c.y);
     }
+}
 
+TEST_CASE("background-position is 0% 0% when nothing gives it, as CSS's initial value", "[ui][style]")
+{
     PositionTest t;
-    INFO("with nothing given it is CSS's initial 0% 0%");
     t.test.Frame();
+    INFO("an unset position is " << t.Resolved().backgroundPositionX.value << " "
+                                 << t.Resolved().backgroundPositionY.value << ", not 0% 0%");
     REQUIRE(t.Resolved().backgroundPositionX == Length::Percent(0.0f));
     REQUIRE(t.Resolved().backgroundPositionY == Length::Percent(0.0f));
+}
+
+TEST_CASE("background-position refuses what CSS does not read as a position", "[ui][style]")
+{
+    PositionTest t;
     for (const std::string_view refused :
          {"left right", "top bottom", "top 10px", "10px left", "1px 2px 3px", "auto", "middle"})
     {
         INFO("'" << refused << "' is not a position and is refused");
         REQUIRE_FALSE(t.root.SetStyleProperty(t.panel, "background-position", refused));
     }
+}
 
+TEST_CASE("SetBackgroundPosition gives both lengths", "[ui][style]")
+{
+    PositionTest t;
     t.root.EditInlineStyle(t.panel)->SetBackgroundPosition(Length::Px(5.0f), Length::Percent(75.0f));
     t.test.Frame();
-    INFO("the typed setter gives both lengths");
+    INFO("the typed setter gives 5px across and 75% down");
     REQUIRE(t.Resolved().backgroundPositionX == Length::Px(5.0f));
     REQUIRE(t.Resolved().backgroundPositionY == Length::Percent(75.0f));
 }
@@ -185,7 +175,7 @@ TEST_CASE("A covering background image placed right crops its left", "[ui][paint
     REQUIRE(Near(most, 1.0f, 0.01f));
 }
 
-TEST_CASE("A stretched image and a gradient ignore background-position", "[ui][paint]")
+TEST_CASE("A stretched background image ignores background-position", "[ui][paint]")
 {
     PositionTest stretched;
     stretched.Style({{"background-image", "url(builtin:wide)"}, {"background-position", "right bottom"}});
@@ -196,7 +186,10 @@ TEST_CASE("A stretched image and a gradient ignore background-position", "[ui][p
     }
     INFO("a stretched image fills the box from u 0 (less the margin), not " << least);
     REQUIRE(Near(least, 0.0f, 0.01f));
+}
 
+TEST_CASE("A gradient ignores background-position", "[ui][paint]")
+{
     PositionTest plain;
     plain.Style({{"background-image", "linear-gradient(90deg, #000000, #ffffff)"}});
     PositionTest placed;
