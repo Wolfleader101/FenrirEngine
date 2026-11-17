@@ -22,8 +22,6 @@ int main()
     config.scriptAssembly = FENRIR_DEMO_SCRIPT_ASSEMBLY;
 #endif
     config.msaa = 4;
-    // The Lighting window, in every scene.
-    config.imguiOverlay = true;
 
     FenrirDemo::DemoScaffold demo = FenrirDemo::DemoScaffold::Install(app, std::move(config));
     LightingDemo::AddLensDirt(app);

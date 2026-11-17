@@ -1,0 +1,42 @@
+@* Many lights (C#)'s own switches (examples/LightingDemo/README.md), which ManyLightsPanelSetup mounts into the scene's
+   demo slot: the demo UI kit's shared Razor components (Fenrir.Demo.Razor), styled like the C++ rows. Every switch reads
+   and writes ManyLights' state, so M, P, K, J and V (ManyLightsUpdater) and the panel agree; each is on its key too, so
+   the scene works without scripting's panel. *@
+@using System.Globalization
+@using Fenrir.Demo.Razor
+<DemoSection Title="Lights (Razor)">
+    <Range Label="Lights" @bind-Value="Count" Min="0f" Max="ManyLights.MaxLights" Step="1f" Decimals="0"
+           Hint="How many lights are on; M steps 16, 64, 100, 256, 1024" />
+    <Readout Label="Point lights on" Value="@((ManyLights.Count - SpotsOn).ToString(CultureInfo.InvariantCulture))" />
+    <Readout Label="Spot lights on" Value="@SpotsOn.ToString(CultureInfo.InvariantCulture)" />
+    <Toggle Label="Moving (P)" @bind-Value="ManyLights.Moving" Hint="The lights circling the room, or still" />
+    <Toggle Label="Spot shadows (K)" @bind-Value="ManyLights.SpotShadows" Hint="Whether the spot lights cast shadows" />
+    <Toggle Label="Point shadows (J)" @bind-Value="ManyLights.PointShadows" Hint="Whether the point lights cast shadows" />
+    <Choice Label="Budgets (V)" @bind-Value="Budget" Options="BudgetNames"
+            Hint="How many of the nearest spot and point lights cast; the rest light unshadowed" />
+</DemoSection>
+
+@code {
+    // ManyLights.Budgets, as the choice names them.
+    private static readonly string[] BudgetNames = ["8 and 4", "16 and 8", "None"];
+
+    private float Count
+    {
+        get => ManyLights.Count;
+        set => ManyLights.Count = Math.Clamp((int)MathF.Round(value), 0, ManyLights.MaxLights);
+    }
+
+    // Every fourth light is a spot, so of the first Count this many are.
+    private static int SpotsOn => ManyLights.Count / ManyLights.SpotEvery;
+
+    private int Budget
+    {
+        get => ManyLights.Budget;
+        set => ManyLights.SetBudget(Math.Clamp(value, 0, ManyLights.Budgets.Length - 1));
+    }
+
+    // Rebuilt when a key changed what the panel shows.
+    protected override int BuildHash() =>
+        HashCode.Combine(ManyLights.Count, ManyLights.Moving, ManyLights.SpotShadows, ManyLights.PointShadows,
+            ManyLights.Budget);
+}

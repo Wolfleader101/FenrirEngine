@@ -27,10 +27,10 @@
 
 **Touches:** `examples/LightingDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] No ImGui call or include remains in `examples/LightingDemo/`, and `main.cpp` sets no `imguiOverlay`.
-- [ ] `LightingDemo-Smoke-null` passes with scripting off and on.
+- [x] No ImGui call or include remains in `examples/LightingDemo/`, and `main.cpp` sets no `imguiOverlay`.
+- [x] `LightingDemo-Smoke-null` passes with scripting off and on.
 - [ ] Hand checks, on OpenGL, with the fetched assets:
   - each scene's rows work as their ImGui ones did
   - its readouts match what the ImGui text showed

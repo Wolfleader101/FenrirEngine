@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <numbers>
 #include <optional>
 #include <random>
@@ -11,13 +12,12 @@
 #include <utility>
 #include <vector>
 
-#include <imgui.h>
-
 #include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/InstanceListData.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirRenderer/Components.hpp"
@@ -873,6 +873,64 @@ namespace LightingDemo
             PlaceCars(store, state);
         }
 
+        /** @brief Turns the light clusters on or off, from C or the panel. */
+        void SetClustered(Fenrir::App& app, CityState& state, bool clustered)
+        {
+            state.clustered = clustered;
+            Fenrir::Renderer::SetClusteredLights(app, clustered);
+        }
+
+        /** @brief The headlights: two to a car. */
+        std::size_t Headlights(const CityState& state)
+        {
+            return state.cars.size() * 2;
+        }
+
+        /** @brief The scene's section, bound to its state in its scene resource: the counts first, as a hand check
+         * reads them, then the switches. */
+        void AddSection(Fenrir::App& app, CityState& state)
+        {
+            auto* kit = app.TryGetResource<FenrirDemo::DemoUI>();
+            if (kit == nullptr)
+            {
+                return;
+            }
+            using FenrirDemo::DemoValue;
+            const auto count = [](std::size_t value) { return std::format("{}", value); };
+            const FenrirDemo::DemoSection city = kit->SceneSection("City");
+            city.Readout("Frame", [&state] { return FrameReadout(state.frameTime); });
+            city.Readout("Lights", [&state, count] {
+                return count(state.lamps.size() + state.signs.size() + Headlights(state) + state.uplights.size());
+            });
+            city.Readout("Rect signs", [&state, count] { return count(state.signs.size()); });
+            city.Readout("Point lamps", [&state, count] { return count(state.lamps.size()); });
+            city.Readout("Spot headlights", [&state, count] { return count(Headlights(state)); });
+            city.Readout("Spot uplights", [&state, count] { return count(state.uplights.size()); });
+            city.Readout("Buildings", [&state, count] { return count(state.buildings); });
+            city.Readout("Neon panels", [&state, count] { return count(state.panels); });
+            city.Readout("Cars", [&state, count] { return count(state.cars.size()); });
+            city.Readout("Draws", RendererCount(app, &Fenrir::RendererStats::draws));
+            city.Readout("Instances", RendererCount(app, &Fenrir::RendererStats::instances));
+            city.Toggle("Clustered (C)",
+                        DemoValue<bool>([&state] { return state.clustered; },
+                                        [&app, &state](const bool& on) { SetClustered(app, state, on); }),
+                        "Off, every pixel loops over every light");
+            city.Toggle("Vsync", &state.vsync, "Off, presents don't wait for the display: the frame time is its own");
+            city.Toggle("Traffic moving (N)", &state.moving, "The cars driving or stopped");
+            city.Range("Puddles (M)", &state.puddles, 0.0f, 1.0f, {.decimals = 3},
+                       "The share of the streets under water");
+            city.Toggle("Reflections (R)", &state.lighting.reflections.enabled,
+                        "Screen-space reflections, in the puddles and the wet streets");
+            city.Range("Lamp intensity", &state.lampIntensity, 0.0f, 150.0f, {.decimals = 3},
+                       "Every street lamp's intensity");
+            city.Range("Sign intensity", &state.signIntensity, 0.0f, 30.0f, {.decimals = 3},
+                       "The neon signs' rect lights and their boards' glow");
+            city.Range("Headlight intensity", &state.headlightIntensity, 0.0f, 200.0f, {.decimals = 3},
+                       "Every car's headlights");
+            city.Range("Uplight intensity", &state.uplightIntensity, 0.0f, 5000.0f, {.decimals = 3},
+                       "A 40-metre uplight's; longer ones are brighter by the square of their reach");
+        }
+
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
         {
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
@@ -936,7 +994,7 @@ namespace LightingDemo
             if (!cube.Ok())
             {
                 app.Logger()->Error("{}: the cube did not load from the asset root", SceneName);
-                scene.AddResource<CityState>(std::move(state));
+                AddSection(app, scene.AddResource<CityState>(std::move(state)));
                 return;
             }
             // Only the masts' beacons are round: without the sphere they are left out.
@@ -954,7 +1012,7 @@ namespace LightingDemo
                                    "stand in",
                                    SceneName);
             }
-            scene.AddResource<CityState>(std::move(state));
+            AddSection(app, scene.AddResource<CityState>(std::move(state)));
         }
 
         /** @brief Gives the lights, the sign boards and the street what the panel last set, where it changed. */
@@ -1042,49 +1100,20 @@ namespace LightingDemo
                 reflections.enabled = !reflections.enabled;
                 app.Logger()->Info("R: reflections are {}", reflections.enabled ? "on" : "off");
             }
-            bool clustered = state->clustered;
             if (keyboard.JustPressed(Fenrir::Key::C))
             {
-                clustered = !clustered;
-                app.Logger()->Info("C: the lights are {}", clustered ? "clustered" : "not clustered");
+                SetClustered(app, *state, !state->clustered);
+                app.Logger()->Info("C: the lights are {}", state->clustered ? "clustered" : "not clustered");
             }
 
-            const Fenrir::RendererStats stats = Fenrir::Renderer::Stats(app);
             const auto delta = static_cast<float>(app.GetTime().deltaTime);
             state->frameTime = state->frameTime == 0.0f ? delta : glm::mix(state->frameTime, delta, 0.05f);
-            const std::size_t headlights = state->cars.size() * 2;
-            const std::size_t lights = state->lamps.size() + state->signs.size() + headlights + state->uplights.size();
-            RunLightingPanel(app, scene, state->lighting, [&] {
-                // The counts first: the window is long, and they are what a hand check reads.
-                ImGui::Text("Frame: %.2f ms (%.0f fps)", state->frameTime * 1000.0f,
-                            state->frameTime > 0.0f ? 1.0f / state->frameTime : 0.0f);
-                ImGui::Text("Lights: %zu: %zu rect signs, %zu point lamps,", lights, state->signs.size(),
-                            state->lamps.size());
-                ImGui::Text("  %zu spot headlights, %zu spot uplights", headlights, state->uplights.size());
-                ImGui::Text("Buildings: %zu  Neon panels: %zu  Cars: %zu", state->buildings, state->panels,
-                            state->cars.size());
-                ImGui::Text("Draws: %u  Instances: %u", stats.draws, stats.instances);
-                ImGui::Checkbox("Clustered (C)", &clustered);
-                ImGui::SameLine();
-                ImGui::Checkbox("Vsync", &state->vsync);
-                ImGui::Checkbox("Traffic moving (N)", &state->moving);
-                ImGui::SliderFloat("Puddles (M)", &state->puddles, 0.0f, 1.0f);
-                ImGui::Checkbox("Reflections (R)", &state->lighting.reflections.enabled);
-                ImGui::SliderFloat("Lamp intensity", &state->lampIntensity, 0.0f, 150.0f);
-                ImGui::SliderFloat("Sign intensity", &state->signIntensity, 0.0f, 30.0f);
-                ImGui::SliderFloat("Headlight intensity", &state->headlightIntensity, 0.0f, 200.0f);
-                ImGui::SliderFloat("Uplight intensity", &state->uplightIntensity, 0.0f, 5000.0f);
-            });
+            RunLightingPanel(app, scene, state->lighting);
             if (state->vsync != state->appliedVsync)
             {
                 // The main window's swap interval: the renderer presents to it. False on the null backend's no window.
                 Fenrir::Window::SetSwapInterval(app, Fenrir::Window::MainWindow(), state->vsync ? 1 : 0);
                 state->appliedVsync = state->vsync;
-            }
-            if (clustered != state->clustered)
-            {
-                state->clustered = clustered;
-                Fenrir::Renderer::SetClusteredLights(app, clustered);
             }
 
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
@@ -1112,10 +1141,11 @@ namespace LightingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp =
-            LightingKeyHelp(true) +
-            " N: the traffic stopped or moving. M: the streets dry or wet. R: reflections off or on. C: the "
-            "lights clustered or not.";
+        scene.keyRows = LightingKeyRows(true);
+        scene.keyRows.push_back({"N", "the traffic stopped or moving"});
+        scene.keyRows.push_back({"M", "the streets dry or wet"});
+        scene.keyRows.push_back({"R", "reflections off or on"});
+        scene.keyRows.push_back({"C", "the lights clustered or not"});
         // The traffic stopped and the streets dried, then through the debug views to the reflections' and back,
         // unclustered and clustered again, wet again, reflections off and on again, moving again, and the other sky
         // where there is one.
