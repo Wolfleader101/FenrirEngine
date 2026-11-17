@@ -23,18 +23,6 @@ namespace
     // Left of the window's centre, clear of the panel on the right and the help at the bottom left.
     const Fenrir::Math::Vec2 besidePanels{500.0f, 200.0f};
 
-    // The texts of the kit's elements of class `name`, in tree order.
-    std::vector<std::string> Texts(DemoTestApp& test, std::string_view name)
-    {
-        const Fenrir::UIRoot& root = test.Kit().Root();
-        std::vector<std::string> texts;
-        for (const Fenrir::ElementId element : root.FindByClass(name))
-        {
-            texts.emplace_back(root.GetText(element));
-        }
-        return texts;
-    }
-
     // How many scene clicks a left click at `position` sends: read the frame of the press, as an event lasts only so
     // long.
     std::size_t SceneClicksAt(DemoTestApp& test, Fenrir::Math::Vec2 position)
@@ -77,13 +65,13 @@ TEST_CASE("The help lists the app and the scene, then the scaffold's, the app's 
     test.Frames(2);
 
     INFO("the help's heading names the app and the scene, i of n");
-    REQUIRE(Texts(test, "demo-help-heading") == std::vector<std::string>{"TestDemo: Lit cube (1/2)"});
-    const std::vector<std::string> keys = Texts(test, "demo-keys");
+    REQUIRE(test.Texts("demo-help-heading") == std::vector<std::string>{"TestDemo: Lit cube (1/2)"});
+    const std::vector<std::string> keys = test.Texts("demo-keys");
     const std::vector<std::string> expected{
         "PageDown/PageUp", "F1", "F3", "Right mouse", "Right mouse + WASD", "Left click", "F2", "L", "K"};
     INFO("the scaffold's rows, then the app's, then the scene's, in order");
     REQUIRE(keys == expected);
-    const std::vector<std::string> what = Texts(test, "demo-what");
+    const std::vector<std::string> what = test.Texts("demo-what");
     INFO("each row says what its keys do");
     REQUIRE(what.size() == expected.size());
     INFO("the app's row says what F2 does");
@@ -99,12 +87,12 @@ TEST_CASE("A scene with no key rows shows its keyHelp line as the help's last ro
     DemoTestApp test({scene});
     test.Frames(2);
 
-    const std::vector<std::string> what = Texts(test, "demo-what");
+    const std::vector<std::string> what = test.Texts("demo-what");
     INFO("the scene's key help is one row, after the scaffold's");
     REQUIRE(what.size() == 7);
     REQUIRE(what.back() == "L rotates the light, K changes its colour");
     INFO("with no keys of its own");
-    REQUIRE(Texts(test, "demo-keys").back().empty());
+    REQUIRE(test.Texts("demo-keys").back().empty());
 }
 
 TEST_CASE("F1 hides the kit, whose panels then take no press, and shows it again", "[demo][kit][f1]")
@@ -181,12 +169,12 @@ TEST_CASE("A scene's section is gone once the scene is left", "[demo][kit][scene
 {
     DemoTestApp test({SceneWithSection("Lit cube", "Lights"), EmptyScene("Empty")});
     test.Frames(2);
-    INFO("the scene's section is in the panel, after none of the app's");
-    REQUIRE(Texts(test, "demo-section-title") == std::vector<std::string>{"Lights"});
+    INFO("the scene's section is in the panel, after the app's scene switcher");
+    REQUIRE(test.Texts("demo-section-title") == std::vector<std::string>{"Scenes", "Lights"});
 
     test.Tap(Fenrir::Key::PageDown);
     INFO("after PageDown the next scene has no section, and the last one's is gone");
-    REQUIRE(Texts(test, "demo-section-title").empty());
+    REQUIRE(test.Texts("demo-section-title") == std::vector<std::string>{"Scenes"});
 }
 
 TEST_CASE("A section's heading collapses and opens it", "[demo][kit][sections]")

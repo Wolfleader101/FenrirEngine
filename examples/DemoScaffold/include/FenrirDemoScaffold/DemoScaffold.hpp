@@ -137,6 +137,11 @@ namespace FenrirDemo
         std::string appKeyHelp;
         /** @brief The ordered scene list; PageDown and PageUp step through it, wrapping. */
         std::vector<DemoScene> scenes;
+        /**
+         * @brief Adds the demo panel's "Frame" section, after the scene switcher: the frame time and fps, averaged
+         * over half a second, and the draws, instances and shadow draws of the renderer's last frame (Renderer::Stats).
+         */
+        bool frameStats = false;
         /** @brief The renderer's MSAA samples per pixel (RendererConfig::msaa); 1 is off. */
         std::uint32_t msaa = 1;
         /**

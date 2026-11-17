@@ -67,27 +67,48 @@ namespace FenrirDemo
 
     void DemoTextRow::Set(std::string_view line) const
     {
-        DemoUI::Row* row = m_ui != nullptr ? m_ui->FindRow(m_id) : nullptr;
-        if (row == nullptr || row->text == line)
+        if (DemoUI::Row* row = m_ui != nullptr ? m_ui->FindRow(m_id) : nullptr; row != nullptr)
         {
-            return;
+            m_ui->SetRowText(*row, line);
         }
-        row->text = line;
-        m_ui->Root().SetText(row->element, row->text);
+    }
+
+    void DemoReadout::Set(std::string_view value) const
+    {
+        if (DemoUI::Row* row = m_ui != nullptr ? m_ui->FindRow(m_id) : nullptr; row != nullptr)
+        {
+            m_ui->SetRowText(*row, value);
+        }
     }
 
     DemoTextRow DemoSection::Text(std::string line) const
     {
-        DemoUI::Section* section = m_ui != nullptr ? m_ui->FindSection(m_id) : nullptr;
-        if (section == nullptr)
-        {
-            return {};
-        }
-        DemoUI::Row& row = section->rows.emplace_back();
-        row.id = m_ui->m_nextId++;
-        row.text = std::move(line);
-        m_ui->BuildRow(row, section->body);
-        return DemoTextRow(m_ui, row.id);
+        const DemoUI::Row* row =
+            m_ui != nullptr ? m_ui->AddRow(m_id, {.kind = DemoUI::RowKind::Text, .text = std::move(line)}) : nullptr;
+        return row != nullptr ? DemoTextRow(m_ui, row->id) : DemoTextRow();
+    }
+
+    DemoReadout DemoSection::Readout(std::string label) const
+    {
+        return Readout(std::move(label), {});
+    }
+
+    DemoReadout DemoSection::Readout(std::string label, std::function<std::string()> value) const
+    {
+        const DemoUI::Row* row =
+            m_ui != nullptr
+                ? m_ui->AddRow(m_id,
+                               {.kind = DemoUI::RowKind::Readout, .label = std::move(label), .pull = std::move(value)})
+                : nullptr;
+        return row != nullptr ? DemoReadout(m_ui, row->id) : DemoReadout();
+    }
+
+    DemoRow DemoSection::Separator(std::string title) const
+    {
+        const DemoUI::Row* row =
+            m_ui != nullptr ? m_ui->AddRow(m_id, {.kind = DemoUI::RowKind::Separator, .text = std::move(title)})
+                            : nullptr;
+        return row != nullptr ? DemoRow(m_ui, row->id) : DemoRow();
     }
 
     void DemoSection::SetOpen(bool open) const
@@ -148,7 +169,10 @@ namespace FenrirDemo
         // A reloaded demo.ui makes the kit's elements again under new ids.
         m_root->AddListener(m_root->GetRootElement(), Fenrir::UIEventKind::DocumentReloaded,
                             [this](Fenrir::UIListenerContext&) { Build(); });
-        m_buildStage = roots.AddBuildStage(BuildStageOrder, [this] { PollToggleKey(); });
+        m_buildStage = roots.AddBuildStage(BuildStageOrder, [this] {
+            PollToggleKey();
+            PullReadouts();
+        });
 
         const std::string document = (files / DocumentFile).generic_string();
         const Fenrir::MarkupLoad load = m_root->LoadDocument(m_root->GetRootElement(), document);
@@ -231,6 +255,36 @@ namespace FenrirDemo
         std::erase_if(m_sections, [](const Section& section) { return section.scene; });
     }
 
+    void DemoUI::SetScenes(std::vector<std::string> names, std::function<void(std::size_t)> enter)
+    {
+        m_sceneNames = std::move(names);
+        m_enterScene = std::move(enter);
+        const auto found =
+            std::find_if(m_sections.begin(), m_sections.end(), [](const Section& section) { return section.switcher; });
+        if (found != m_sections.end())
+        {
+            (void)m_root->Remove(found->element, Fenrir::RemoveMode::Immediate);
+            m_sections.erase(found);
+            m_sceneButtons.clear();
+        }
+        if (m_sceneNames.empty())
+        {
+            return;
+        }
+        // The panel's first app section, whenever it is set.
+        Section& section = *m_sections.insert(m_sections.begin(), Section{});
+        section.id = m_nextId++;
+        section.title = "Scenes";
+        section.switcher = true;
+        BuildSection(section, 0);
+    }
+
+    void DemoUI::SetActiveScene(std::size_t index)
+    {
+        m_activeScene = index;
+        ApplyActiveScene();
+    }
+
     void DemoUI::SetHelp(std::string heading, std::vector<DemoKeyRow> rows)
     {
         m_helpHeading = std::move(heading);
@@ -273,10 +327,10 @@ namespace FenrirDemo
         return DemoSection(this, section.id);
     }
 
-    void DemoUI::BuildSection(Section& section)
+    void DemoUI::BuildSection(Section& section, std::size_t index)
     {
         Fenrir::UIRoot& root = *m_root;
-        section.element = root.Create(section.scene ? m_sceneSections : m_appSections, "panel");
+        section.element = root.Create(section.scene ? m_sceneSections : m_appSections, "panel", index);
         root.AddClass(section.element, "demo-section");
         const Fenrir::ElementId title = root.Create(section.element, "button");
         root.AddClass(title, "demo-section-title");
@@ -286,6 +340,10 @@ namespace FenrirDemo
                          [handle](Fenrir::UIListenerContext&) { handle.SetOpen(!handle.IsOpen()); });
         section.body = root.Create(section.element, "panel");
         root.AddClass(section.body, "demo-section-body");
+        if (section.switcher)
+        {
+            BuildSceneButtons(section);
+        }
         for (Row& row : section.rows)
         {
             BuildRow(row, section.body);
@@ -293,13 +351,127 @@ namespace FenrirDemo
         ApplyOpen(section);
     }
 
+    DemoUI::Row* DemoUI::AddRow(std::uint32_t section, Row row)
+    {
+        Section* found = FindSection(section);
+        if (found == nullptr)
+        {
+            return nullptr;
+        }
+        Row& added = found->rows.emplace_back(std::move(row));
+        added.id = m_nextId++;
+        BuildRow(added, found->body);
+        return &added;
+    }
+
     void DemoUI::BuildRow(Row& row, Fenrir::ElementId body)
     {
         Fenrir::UIRoot& root = *m_root;
-        row.element = root.Create(body, "label");
-        root.AddClass(row.element, "demo-text");
-        root.SetText(row.element, row.text);
+        switch (row.kind)
+        {
+        case RowKind::Text:
+            row.element = root.Create(body, "label");
+            root.AddClass(row.element, "demo-text");
+            row.textElement = row.element;
+            break;
+        case RowKind::Readout: {
+            // Two columns, the label's and the value's, which demo.css sizes.
+            row.element = root.Create(body, "panel");
+            root.AddClass(row.element, "demo-readout");
+            const Fenrir::ElementId label = root.Create(row.element, "label");
+            root.AddClass(label, "demo-readout-label");
+            root.SetText(label, row.label);
+            row.textElement = root.Create(row.element, "label");
+            root.AddClass(row.textElement, "demo-readout-value");
+            break;
+        }
+        case RowKind::Separator:
+            row.element = root.Create(body, "label");
+            root.AddClass(row.element, "demo-separator");
+            row.textElement = row.element;
+            break;
+        }
+        root.SetText(row.textElement, row.text);
         ApplyRow(row);
+    }
+
+    void DemoUI::SetRowText(Row& row, std::string_view text) const
+    {
+        // A scene may set a readout every frame: an unchanged value leaves the element, and the layout, alone.
+        if (row.text == text)
+        {
+            return;
+        }
+        row.text = text;
+        m_root->SetText(row.textElement, row.text);
+    }
+
+    void DemoUI::BuildSceneButtons(const Section& section)
+    {
+        Fenrir::UIRoot& root = *m_root;
+        const Fenrir::ElementId scenes = root.Create(section.body, "panel");
+        root.AddClass(scenes, "demo-scenes");
+        m_sceneButtons.clear();
+        for (std::size_t i = 0; i < m_sceneNames.size(); ++i)
+        {
+            const Fenrir::ElementId button = root.Create(scenes, "button");
+            root.AddClass(button, "demo-scene-button");
+            root.SetText(button, m_sceneNames[i]);
+            root.AddListener(button, Fenrir::UIEventKind::Click, [this, i](Fenrir::UIListenerContext&) {
+                if (m_enterScene)
+                {
+                    m_enterScene(i);
+                }
+            });
+            m_sceneButtons.push_back(button);
+        }
+        ApplyActiveScene();
+    }
+
+    void DemoUI::ApplyActiveScene() const
+    {
+        for (std::size_t i = 0; i < m_sceneButtons.size(); ++i)
+        {
+            if (i == m_activeScene)
+            {
+                m_root->AddClass(m_sceneButtons[i], "active");
+            }
+            else
+            {
+                m_root->RemoveClass(m_sceneButtons[i], "active");
+            }
+        }
+    }
+
+    void DemoUI::PullReadouts()
+    {
+        // By id, since a pull may add or remove rows.
+        std::vector<std::uint32_t> pulled;
+        for (const Section& section : m_sections)
+        {
+            for (const Row& row : section.rows)
+            {
+                if (row.pull)
+                {
+                    pulled.push_back(row.id);
+                }
+            }
+        }
+        for (const std::uint32_t id : pulled)
+        {
+            const Row* row = FindRow(id);
+            if (row == nullptr)
+            {
+                continue;
+            }
+            // Copied, so the call outlives a row it removes.
+            const std::function<std::string()> pull = row->pull;
+            const std::string value = pull();
+            if (Row* still = FindRow(id); still != nullptr)
+            {
+                SetRowText(*still, value);
+            }
+        }
     }
 
     void DemoUI::BuildHelp()

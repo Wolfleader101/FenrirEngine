@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -114,6 +115,17 @@ namespace DemoScaffoldTests
         std::vector<Fenrir::DrawList2D> lists;
     };
 
+    /** @brief The texts of `root`'s elements of class `name`, in tree order. */
+    inline std::vector<std::string> TextsOfClass(const Fenrir::UIRoot& root, std::string_view name)
+    {
+        std::vector<std::string> texts;
+        for (const Fenrir::ElementId element : root.FindByClass(name))
+        {
+            texts.emplace_back(root.GetText(element));
+        }
+        return texts;
+    }
+
     // The App's default fixed step: a frame of `oneFrame` seconds runs exactly one tick.
     inline constexpr double oneFrame = 1.0 / 60.0;
 
@@ -143,8 +155,10 @@ namespace DemoScaffoldTests
         FenrirDemo::DemoScaffold demo;
 
         explicit DemoTestApp(std::vector<FenrirDemo::DemoScene> scenes, FenrirDemo::DemoRunOptions run = NullRun(),
-                             bool imguiOverlay = false, std::vector<FenrirDemo::DemoKeyRow> appKeyRows = {})
-            : demo(Install(app, std::move(scenes), std::move(run), imguiOverlay, uiTarget, std::move(appKeyRows)))
+                             bool imguiOverlay = false, std::vector<FenrirDemo::DemoKeyRow> appKeyRows = {},
+                             const std::function<void(FenrirDemo::DemoConfig&)>& configure = {})
+            : demo(Install(app, std::move(scenes), std::move(run), imguiOverlay, uiTarget, std::move(appKeyRows),
+                           configure))
         {
         }
 
@@ -152,6 +166,12 @@ namespace DemoScaffoldTests
         FenrirDemo::DemoUI& Kit()
         {
             return app.GetResource<FenrirDemo::DemoUI>();
+        }
+
+        /** @brief The texts of the kit's elements of class `name`, in tree order. */
+        std::vector<std::string> Texts(std::string_view name)
+        {
+            return TextsOfClass(Kit().Root(), name);
         }
 
         /** @brief The centre of `element`'s border box in the window's logical units, where a press on it goes. */
@@ -211,7 +231,8 @@ namespace DemoScaffoldTests
         static FenrirDemo::DemoScaffold Install(Fenrir::App& app, std::vector<FenrirDemo::DemoScene> scenes,
                                                 FenrirDemo::DemoRunOptions run, bool imguiOverlay,
                                                 std::shared_ptr<CaptureTarget> uiTarget,
-                                                std::vector<FenrirDemo::DemoKeyRow> appKeyRows)
+                                                std::vector<FenrirDemo::DemoKeyRow> appKeyRows,
+                                                const std::function<void(FenrirDemo::DemoConfig&)>& configure)
         {
             FenrirDemo::DemoConfig config;
             config.demoUITarget = std::move(uiTarget);
@@ -220,6 +241,11 @@ namespace DemoScaffoldTests
             config.scenes = std::move(scenes);
             config.run = std::move(run);
             config.imguiOverlay = imguiOverlay;
+            // The rest of the config, for a test that needs a switch the arguments above do not name.
+            if (configure)
+            {
+                configure(config);
+            }
             return FenrirDemo::DemoScaffold::Install(app, std::move(config));
         }
     };

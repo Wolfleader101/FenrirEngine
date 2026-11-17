@@ -21,12 +21,21 @@
 
 **Touches:** `examples/DemoScaffold/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Scaffold tests on the null backend:
+- [x] Scaffold tests on the null backend:
   - a readout set by a scene's `update` shows its value that frame, and a pulled readout shows its function's value
   - the scene switcher lists every scene, marks the active one, and a click on the third enters it
   - a scene's readouts are gone after it is left and fresh when it is entered again
   - `frameStats` rows show the renderer's draws on the null backend
-- [ ] Every demo's `Smoke-null` passes with scripting off and on.
+- [x] Every demo's `Smoke-null` passes with scripting off and on.
 - [ ] Clang and MSVC x64 debug build without new warnings.
+
+## Comments
+
+Built on `demo/02-readouts`, stacked on `demo/01-tracer` (PR into it). Left unticked, for the user:
+
+- Clang: only `msvc-x64-debug` was built locally, scripting on and off, with no new warnings in the scaffold's sources. `clang-x64-debug` was not built.
+- Hand check on Windows (OpenGL), not automated: the scene switcher's buttons wrap in the panel and the active one shows in the accent, a click on one changes scene, and the readouts' two columns line up.
+
+The kit's API for the switcher is `DemoUI::SetScenes(names, enter)` and `SetActiveScene(index)`, which name no scaffold type; the scaffold feeds them. A click on the active scene's button does nothing (PageDown would leave the scene too). Readouts carry a `label`, as the spec's `Readout(label)` does. ADR-0071's and the glossary's "pushed" now say pushed or pulled.

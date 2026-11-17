@@ -1089,7 +1089,7 @@ The demo UI kit's side panel: the scene switcher, the readouts, the switches and
 *Avoid:* ImGui window, tweak panel, inspector.
 
 **Readout**
-A row of the demo panel showing a name and a live value the scene or app pushes.
+A row of the demo panel showing a name and a live value, which the scene or app pushes or the kit pulls once a frame.
 *Avoid:* stat, debug text (the renderer's screen text).
 
 **Switch row**

@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <format>
 #include <iterator>
 #include <string>
 #include <string_view>
@@ -47,6 +48,9 @@ namespace FenrirDemo
 
         // A smoke run's frames are this long, so it runs the same however fast the machine is.
         constexpr double SmokeFrameSeconds = 1.0 / 60.0;
+
+        // The frame stats' frame time and fps are averaged over windows this long, so they can be read.
+        constexpr double FrameStatsWindow = 0.5;
 
         /** @brief Counts the errors (and fatal messages) the app's logger is given, GL debug errors included. */
         class ErrorCounter : public Fenrir::ILogger
@@ -130,6 +134,53 @@ namespace FenrirDemo
 #endif
             return store.Root();
         }
+
+        /**
+         * @brief DemoConfig::frameStats's frame time and fps: averaged over windows of FrameStatsWindow seconds, and
+         * over the frames so far until the first window is whole.
+         */
+        class FrameStats
+        {
+          public:
+            /** @brief Adds a frame of `deltaTime` seconds. */
+            void Count(double deltaTime)
+            {
+                if (deltaTime <= 0.0)
+                {
+                    return;
+                }
+                m_seconds += deltaTime;
+                ++m_frames;
+                const bool windowWhole = m_seconds >= FrameStatsWindow;
+                if (windowWhole || !m_shownWhole)
+                {
+                    m_frameSeconds = m_seconds / m_frames;
+                    m_framesPerSecond = m_frames / m_seconds;
+                }
+                if (windowWhole)
+                {
+                    m_shownWhole = true;
+                    m_seconds = 0.0;
+                    m_frames = 0;
+                }
+            }
+
+            [[nodiscard]] double FrameSeconds() const noexcept
+            {
+                return m_frameSeconds;
+            }
+            [[nodiscard]] double FramesPerSecond() const noexcept
+            {
+                return m_framesPerSecond;
+            }
+
+          private:
+            double m_seconds = 0.0;
+            std::uint32_t m_frames = 0;
+            bool m_shownWhole = false;
+            double m_frameSeconds = 0.0;
+            double m_framesPerSecond = 0.0;
+        };
 
         /** @brief The demo UI kit as an app resource, removed when this owner ends: after the app's packages. */
         class DemoUIResource
@@ -259,6 +310,11 @@ namespace FenrirDemo
             std::optional<std::size_t> current;
             // Scene entries so far, which a C# scene's CSharpScene marker carries.
             std::uint32_t entries = 0;
+            // The scene a click on the scene switcher picked, entered at the next BeforeTicks.
+            std::optional<std::size_t> picked;
+
+            // DemoConfig::frameStats's frame time and fps.
+            FrameStats frameStats;
 
             Fenrir::Entity freeFly;
             bool freeFlyOn = true;
@@ -423,6 +479,7 @@ namespace FenrirDemo
                            demoScene.name);
                 if (DemoUI* demoUI = Kit())
                 {
+                    demoUI->SetActiveScene(index);
                     demoUI->SetHelp(config.appName + ": " + demoScene.name + " (" + std::to_string(index + 1) + "/" +
                                         std::to_string(config.scenes.size()) + ")",
                                     HelpRows(demoScene));
@@ -685,7 +742,18 @@ namespace FenrirDemo
                 const auto& keyboard = app->GetResource<Fenrir::Keyboard>();
                 const auto& mouse = app->GetResource<Fenrir::Mouse>();
 
-                if (keyboard.JustPressed(Fenrir::Key::PageDown))
+                if (config.frameStats)
+                {
+                    frameStats.Count(app->GetTime().deltaTime);
+                }
+                if (picked)
+                {
+                    // Entered as PageDown enters a scene, and in a smoke run as well.
+                    const std::size_t index = *picked;
+                    picked.reset();
+                    EnterScene(index);
+                }
+                else if (keyboard.JustPressed(Fenrir::Key::PageDown))
                 {
                     Step(1);
                 }
@@ -703,6 +771,53 @@ namespace FenrirDemo
                 {
                     FeedSmokeKeys();
                 }
+            }
+
+            // The kit's app sections the scaffold feeds: the scene switcher first, then the frame stats.
+            void AddAppSections(DemoUI& demoUI, const std::weak_ptr<DemoState>& weak)
+            {
+                std::vector<std::string> names;
+                names.reserve(config.scenes.size());
+                for (const DemoScene& scene : config.scenes)
+                {
+                    names.push_back(scene.name);
+                }
+                demoUI.SetScenes(std::move(names), [weak](std::size_t index) {
+                    // The active scene's button leaves it be: PageDown would leave it.
+                    if (const auto locked = weak.lock(); locked && locked->current != index)
+                    {
+                        locked->picked = index;
+                    }
+                });
+                if (!config.frameStats)
+                {
+                    return;
+                }
+                // Pulled in the kit's build stage work, after the scenes' Update: the renderer's stats are the last
+                // frame's, which is the one the window shows.
+                const DemoSection frame = demoUI.AppSection("Frame");
+                const auto pulled = [weak](auto read) {
+                    return [weak, read] {
+                        const auto locked = weak.lock();
+                        return locked ? read(*locked) : std::string();
+                    };
+                };
+                frame.Readout("Frame time", pulled([](const DemoState& state) {
+                                  return std::format("{:.1f} ms", state.frameStats.FrameSeconds() * 1000.0);
+                              }));
+                frame.Readout("FPS", pulled([](const DemoState& state) {
+                                  return std::format("{:.0f}", state.frameStats.FramesPerSecond());
+                              }));
+                const auto stat = [&](std::string label, std::uint32_t Fenrir::RendererStats::* field) {
+                    frame.Readout(std::move(label), pulled([field](const DemoState& state) {
+                                      return state.renderer && state.renderer->IsValid()
+                                                 ? std::to_string(state.renderer->Stats().*field)
+                                                 : std::string("-");
+                                  }));
+                };
+                stat("Draws", &Fenrir::RendererStats::draws);
+                stat("Instances", &Fenrir::RendererStats::instances);
+                stat("Shadow draws", &Fenrir::RendererStats::shadowDraws);
             }
 
             // Update: the scene's own update, then a smoke run's or FENRIR_DEMO_KEYS's bookkeeping.
@@ -804,6 +919,11 @@ namespace FenrirDemo
             kit.target = state->config.demoUITarget;
             state->kit.emplace(app, std::move(kit));
             app.GetResource<DemoUI>().SetTitle(state->config.appName);
+        }
+        // Before the app's packages, so the switcher and the frame stats are the panel's first app sections.
+        if (DemoUI* demoUI = state->Kit())
+        {
+            state->AddAppSections(*demoUI, state);
         }
         if (state->config.installPackages)
         {
