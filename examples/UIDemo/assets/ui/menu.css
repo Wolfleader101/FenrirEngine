@@ -90,6 +90,14 @@
     font-weight: bold;
 }
 
+/* The pause card's title carries Fenrir's icon (the shared demo assets) in the card's top-right corner: contained in
+   the title's box, so as tall as the line, and placed at its right end. */
+#pause .title {
+    background-image: url(icons/fenrir.png);
+    background-size: contain;
+    background-position: right center;
+}
+
 .subtitle {
     margin-bottom: 6px;
     font-size: 18px;
@@ -195,7 +203,9 @@
     color: var(--ink-dim);
 }
 
-/* The controls list: more entries than it is tall, so it scrolls. */
+/* The controls list: more entries than it is tall, so it scrolls, with a thin bar in the accent over a faint track.
+   scrollbar-width and scrollbar-color win over the ::scrollbar rules' width and colours; the track's padding is still
+   the thumb's inset. */
 #controls {
     height: 180px;
     padding: 6px;
@@ -203,14 +213,16 @@
     border: 1px solid var(--edge);
     border-radius: 10px;
     background-color: rgba(0, 0, 0, 0.2);
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent) rgba(255, 255, 255, 0.06);
 }
 
 #controls::scrollbar {
-    background-color: rgba(0, 0, 0, 0);
+    padding: 1px;
 }
 
 #controls::scrollbar-thumb {
-    background-color: var(--control-hover);
+    border-radius: 2px;
 }
 
 .entry {

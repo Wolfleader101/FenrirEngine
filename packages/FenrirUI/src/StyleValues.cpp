@@ -824,6 +824,14 @@ namespace Fenrir::Detail
                                            std::pair{std::string_view("scroll"), Overflow::Scroll}});
         }
 
+        bool ParseScrollbarWidth(std::string_view value, ScrollbarWidth& out, StyleParseContext& context)
+        {
+            return ParseKeyword(value, out, context,
+                                std::array{std::pair{std::string_view("auto"), ScrollbarWidth::Auto},
+                                           std::pair{std::string_view("thin"), ScrollbarWidth::Thin},
+                                           std::pair{std::string_view("none"), ScrollbarWidth::None}});
+        }
+
         bool ParsePointerEvents(std::string_view value, PointerEvents& out, StyleParseContext& context)
         {
             return ParseKeyword(value, out, context,
@@ -975,6 +983,26 @@ namespace Fenrir::Detail
                 return Fail(context, "it is not a colour (#hex, rgb(), rgba(), hsl(), hsla() or a colour name)");
             }
             out = *colour;
+            return true;
+        }
+
+        /** @brief `scrollbar-color`: `auto`, or a thumb colour then a track colour. */
+        bool ParseScrollbarColor(std::string_view value, ScrollbarColor& out, StyleParseContext& context)
+        {
+            value = Trim(value);
+            if (EqualsIgnoringCase(value, "auto"))
+            {
+                out = ScrollbarColor::Auto();
+                return true;
+            }
+            const std::vector<std::string_view> parts = Split(value, ' ');
+            const std::optional<Colour> thumb = parts.size() == 2 ? ReadColour(parts[0]) : std::nullopt;
+            const std::optional<Colour> track = parts.size() == 2 ? ReadColour(parts[1]) : std::nullopt;
+            if (!thumb || !track)
+            {
+                return Fail(context, "it is not auto, or a thumb colour then a track colour");
+            }
+            out = ScrollbarColor::Of(*thumb, *track);
             return true;
         }
 
@@ -1400,54 +1428,98 @@ namespace Fenrir::Detail
             return true;
         }
 
-        /** @brief `transform-origin`: one or two lengths or keywords, x first (CSS also takes y first for keywords). */
-        bool ParseTransformOrigin(std::string_view value, StyleDeclarations& into, StyleParseContext& context)
+        /**
+         * @brief A position as `transform-origin` and `background-position` write it, CSS's two-value syntax: one or
+         * two of `left`, `center`, `right`, `top`, `bottom`, lengths and percentages, across then down, though two
+         * keywords may come down first (`top left`); one value leaves the other axis centred. The keywords are
+         * percentages: left and top 0%, center 50%, right and bottom 100%. Nothing for anything else.
+         */
+        std::optional<std::pair<Length, Length>> ReadPosition(std::string_view value)
         {
+            // What a part may be: a keyword across, a keyword down, center, or a length.
+            enum class Part : std::uint8_t
+            {
+                Across,
+                Down,
+                Centre,
+                Offset,
+            };
+            struct Read
+            {
+                Part part;
+                Length length;
+            };
+            const auto read = [](std::string_view text) -> std::optional<Read> {
+                if (EqualsIgnoringCase(text, "left") || EqualsIgnoringCase(text, "right"))
+                {
+                    return Read{Part::Across, Length::Percent(EqualsIgnoringCase(text, "left") ? 0.0f : 100.0f)};
+                }
+                if (EqualsIgnoringCase(text, "top") || EqualsIgnoringCase(text, "bottom"))
+                {
+                    return Read{Part::Down, Length::Percent(EqualsIgnoringCase(text, "top") ? 0.0f : 100.0f)};
+                }
+                if (EqualsIgnoringCase(text, "center"))
+                {
+                    return Read{Part::Centre, Length::Percent(50.0f)};
+                }
+                const std::optional<Length> length = ReadLength(text);
+                if (!length || length->unit == LengthUnit::Auto)
+                {
+                    return std::nullopt;
+                }
+                return Read{Part::Offset, *length};
+            };
             const std::vector<std::string_view> parts = Split(value, ' ');
             if (parts.empty() || parts.size() > 2)
             {
-                return Fail(context, "it is not one or two lengths or keywords");
+                return std::nullopt;
             }
-            const auto read = [](std::string_view part, bool& vertical) -> std::optional<Length> {
-                vertical = false;
-                if (EqualsIgnoringCase(part, "left"))
-                {
-                    return Length::Percent(0.0f);
-                }
-                if (EqualsIgnoringCase(part, "right"))
-                {
-                    return Length::Percent(100.0f);
-                }
-                if (EqualsIgnoringCase(part, "center"))
-                {
-                    return Length::Percent(50.0f);
-                }
-                if (EqualsIgnoringCase(part, "top") || EqualsIgnoringCase(part, "bottom"))
-                {
-                    vertical = true;
-                    return Length::Percent(EqualsIgnoringCase(part, "top") ? 0.0f : 100.0f);
-                }
-                const std::optional<Length> length = ReadLength(part);
-                return length && length->unit != LengthUnit::Auto ? length : std::nullopt;
-            };
-            bool firstVertical = false;
-            bool secondVertical = false;
-            std::optional<Length> x = read(parts[0], firstVertical);
-            std::optional<Length> y =
-                parts.size() == 2 ? read(parts[1], secondVertical) : std::optional<Length>(Length::Percent(50.0f));
-            if (!x || !y)
+            const std::optional<Read> first = read(parts[0]);
+            if (!first)
+            {
+                return std::nullopt;
+            }
+            if (parts.size() == 1)
+            {
+                return first->part == Part::Down ? std::pair{Length::Percent(50.0f), first->length}
+                                                 : std::pair{first->length, Length::Percent(50.0f)};
+            }
+            const std::optional<Read> second = read(parts[1]);
+            if (!second)
+            {
+                return std::nullopt;
+            }
+            if (first->part == Part::Down || second->part == Part::Across)
+            {
+                // Down first: only keywords may swap, as CSS (`top 10px` is not a position).
+                const bool keywords = (first->part == Part::Down || first->part == Part::Centre) &&
+                                      (second->part == Part::Across || second->part == Part::Centre);
+                return keywords ? std::optional(std::pair{second->length, first->length}) : std::nullopt;
+            }
+            return std::pair{first->length, second->length};
+        }
+
+        /** @brief `transform-origin`: a position (ReadPosition) from the border box's top-left. */
+        bool ParseTransformOrigin(std::string_view value, StyleDeclarations& into, StyleParseContext& context)
+        {
+            const std::optional<std::pair<Length, Length>> position = ReadPosition(value);
+            if (!position)
             {
                 return Fail(context, "it is not one or two lengths or keywords");
             }
-            if (firstVertical)
+            into.SetTransformOrigin(position->first, position->second);
+            return true;
+        }
+
+        /** @brief `background-position`: a position (ReadPosition) for a background image in the border box. */
+        bool ParseBackgroundPosition(std::string_view value, StyleDeclarations& into, StyleParseContext& context)
+        {
+            const std::optional<std::pair<Length, Length>> position = ReadPosition(value);
+            if (!position)
             {
-                std::swap(x, y);
-                if (parts.size() == 1)
-                {
-                    x = Length::Percent(50.0f);
-                }
+                return Fail(context, "it is not one or two lengths, percentages or keywords");
             }
-            into.SetTransformOrigin(*x, *y);
+            into.SetBackgroundPosition(position->first, position->second);
             return true;
         }
 
@@ -1709,27 +1781,60 @@ namespace Fenrir::Detail
             {FENRIR_UI_STYLE_PROPERTIES(FENRIR_UI_PROPERTY_ENTRY)}};
 
 #undef FENRIR_UI_PROPERTY_ENTRY
+
+        /** @brief A name that gives two properties of the style at once, across then down. */
+        struct PairEntry
+        {
+            std::string_view name;
+            StyleProperty x;
+            StyleProperty y;
+            Parser parse;
+        };
+
+        // Each pair's two parts are named only by the pair: FenrirUI does not take `background-position-x` and the
+        // like (the table's names for them are its own).
+        const std::array<PairEntry, 2> Pairs{{
+            {"transform-origin", StyleProperty::TransformOriginX, StyleProperty::TransformOriginY,
+             ParseTransformOrigin},
+            {"background-position", StyleProperty::BackgroundPositionX, StyleProperty::BackgroundPositionY,
+             ParseBackgroundPosition},
+        }};
+
+        const PairEntry* PairNamed(std::string_view name) noexcept
+        {
+            const auto found = std::find_if(Pairs.begin(), Pairs.end(),
+                                            [&](const PairEntry& pair) { return EqualsIgnoringCase(name, pair.name); });
+            return found != Pairs.end() ? &*found : nullptr;
+        }
+
+        /** @brief The property `name` names on its own: none for a pair's part. */
+        const PropertyEntry* EntryNamed(std::string_view name) noexcept
+        {
+            for (const PropertyEntry& entry : Properties)
+            {
+                const bool part = std::any_of(Pairs.begin(), Pairs.end(), [&](const PairEntry& pair) {
+                    return entry.property == pair.x || entry.property == pair.y;
+                });
+                if (!part && EqualsIgnoringCase(name, entry.name))
+                {
+                    return &entry;
+                }
+            }
+            return nullptr;
+        }
     } // namespace
 
     bool ParseStyleProperty(std::string_view name, std::string_view value, StyleDeclarations& into,
                             StyleParseContext& context)
     {
         name = Trim(name);
-        if (EqualsIgnoringCase(name, "transform-origin"))
+        if (const PairEntry* pair = PairNamed(name))
         {
-            return ParseTransformOrigin(value, into, context);
+            return pair->parse(value, into, context);
         }
-        for (const PropertyEntry& entry : Properties)
+        if (const PropertyEntry* entry = EntryNamed(name))
         {
-            // transform-origin's two parts are named only by transform-origin, as in CSS.
-            if (entry.property == StyleProperty::TransformOriginX || entry.property == StyleProperty::TransformOriginY)
-            {
-                continue;
-            }
-            if (EqualsIgnoringCase(name, entry.name))
-            {
-                return entry.parse(value, into, context);
-            }
+            return entry->parse(value, into, context);
         }
         return Fail(context, "it is not a property FenrirUI knows");
     }
@@ -1757,13 +1862,6 @@ namespace Fenrir::Detail
         constexpr std::array<std::string_view, 11> Shorthands{
             "margin",     "padding", "border", "border-width", "border-color", "border-radius",
             "background", "flex",    "gap",    "transition",   "animation",
-        };
-
-        // The spec's property set that the style does not hold yet: the scrollbars and background-position.
-        constexpr std::array<std::string_view, 3> LaterLonghands{
-            "background-position",
-            "scrollbar-color",
-            "scrollbar-width",
         };
 
         bool IsTimingFunction(std::string_view text)
@@ -2223,23 +2321,7 @@ namespace Fenrir::Detail
         {
             return PropertyKind::Shorthand;
         }
-        if (std::find(LaterLonghands.begin(), LaterLonghands.end(), name) != LaterLonghands.end())
-        {
-            return PropertyKind::NotYetStyled;
-        }
-        if (name == "transform-origin")
-        {
-            return PropertyKind::Styled;
-        }
-        for (const PropertyEntry& entry : Properties)
-        {
-            if (entry.property != StyleProperty::TransformOriginX &&
-                entry.property != StyleProperty::TransformOriginY && entry.name == name)
-            {
-                return PropertyKind::Styled;
-            }
-        }
-        return PropertyKind::Unknown;
+        return PairNamed(name) != nullptr || EntryNamed(name) != nullptr ? PropertyKind::Styled : PropertyKind::Unknown;
     }
 
     bool ExpandShorthand(std::string_view name, std::string_view value, std::vector<Longhand>& out,
@@ -2331,8 +2413,6 @@ namespace Fenrir::Detail
         {
         case PropertyKind::Styled:
             return ParseStyleProperty(name, value, into, context);
-        case PropertyKind::NotYetStyled:
-            return true;
         case PropertyKind::Shorthand: {
             std::vector<Longhand> longhands;
             if (!ExpandShorthand(name, value, longhands, context))
@@ -2360,10 +2440,6 @@ namespace Fenrir::Detail
 
     std::vector<StyleProperty> PropertiesOf(std::string_view name)
     {
-        if (name == "transform-origin")
-        {
-            return {StyleProperty::TransformOriginX, StyleProperty::TransformOriginY};
-        }
         std::vector<std::string> longhands{std::string(name)};
         if (ClassifyProperty(name) == PropertyKind::Shorthand)
         {
@@ -2393,13 +2469,14 @@ namespace Fenrir::Detail
         std::vector<StyleProperty> properties;
         for (const std::string& longhand : longhands)
         {
-            for (const PropertyEntry& entry : Properties)
+            if (const PairEntry* pair = PairNamed(longhand))
             {
-                if (entry.name == longhand && entry.property != StyleProperty::TransformOriginX &&
-                    entry.property != StyleProperty::TransformOriginY)
-                {
-                    properties.push_back(entry.property);
-                }
+                properties.push_back(pair->x);
+                properties.push_back(pair->y);
+            }
+            else if (const PropertyEntry* entry = EntryNamed(longhand))
+            {
+                properties.push_back(entry->property);
             }
         }
         return properties;

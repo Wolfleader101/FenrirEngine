@@ -29,7 +29,17 @@ namespace Fenrir::Detail
             return bars;
         }
         const ResolvedStyle& track = slot.scrollbarStyles->track;
-        const float thickness = ResolveLength(track.width, 0.0f);
+        float thickness = ResolveLength(track.width, 0.0f);
+        switch (slot.resolved.scrollbarWidth)
+        {
+        case ScrollbarWidth::Auto:
+            break;
+        case ScrollbarWidth::Thin:
+            thickness = ThinScrollbarWidth;
+            break;
+        case ScrollbarWidth::None:
+            return bars;
+        }
         if (thickness <= 0.0f)
         {
             return bars;

@@ -43,15 +43,13 @@ namespace Fenrir::Detail
     {
         /** @brief Not in the spec's property set. */
         Unknown,
-        /** @brief A longhand the style holds (or `transform-origin`), read by ParseStyleProperty. */
+        /**
+         * @brief A longhand the style holds, or `transform-origin` or `background-position` (each two of its
+         * properties), read by ParseStyleProperty.
+         */
         Styled,
         /** @brief A shorthand, expanded by ExpandShorthand. */
         Shorthand,
-        /**
-         * @brief A longhand of the spec's property set that the style does not hold (`background-position`,
-         * `scrollbar-color`, `scrollbar-width`): parsed and kept, and styling nothing.
-         */
-        NotYetStyled,
     };
 
     /** @brief One longhand and its value, as a shorthand expands to them. */
@@ -69,7 +67,7 @@ namespace Fenrir::Detail
 
     /**
      * @brief Reads a declaration, longhand or shorthand, into `into`: all of a shorthand's longhands or none of them.
-     * A NotYetStyled longhand reads as nothing held. False, leaving `into` as it was, as ParseStyleProperty is.
+     * False, leaving `into` as it was, as ParseStyleProperty is.
      */
     bool ParseStyleDeclaration(std::string_view name, std::string_view value, StyleDeclarations& into,
                                StyleParseContext& context);
@@ -91,9 +89,10 @@ namespace Fenrir::Detail
         std::string_view value, const std::function<const std::string*(std::string_view)>& lookup);
 
     /**
-     * @brief Reads `value` as the inline style property `name` (a CSS longhand, or `transform-origin`, which gives both
-     * of its parts) into `into`. False, leaving `into` as it was and `context.error` saying why, for an unknown name or
-     * a value it cannot read. The stylesheet's declarations read through the same parsers.
+     * @brief Reads `value` as the inline style property `name` (a CSS longhand, or `transform-origin` or
+     * `background-position`, which give both of their parts) into `into`. False, leaving `into` as it was and
+     * `context.error` saying why, for an unknown name or a value it cannot read. The stylesheet's declarations read
+     * through the same parsers.
      */
     bool ParseStyleProperty(std::string_view name, std::string_view value, StyleDeclarations& into,
                             StyleParseContext& context);
@@ -150,6 +149,8 @@ namespace Fenrir::Detail
     X(BackgroundColor, "background-color", backgroundColor, ParseColour)                                      \
     X(BackgroundImage, "background-image", backgroundImage, ParseBackgroundImage)                             \
     X(BackgroundSize, "background-size", backgroundSize, ParseBackgroundSize)                                 \
+    X(BackgroundPositionX, "background-position-x", backgroundPositionX, ParseLength)                         \
+    X(BackgroundPositionY, "background-position-y", backgroundPositionY, ParseLength)                         \
     X(BorderImageSource, "border-image-source", borderImageSource, ParseImageUrl)                             \
     X(BorderImageSlice, "border-image-slice", borderImageSlice, ParseSlice)                                   \
     X(BorderTopColor, "border-top-color", borderTopColor, ParseColour)                                        \
@@ -168,6 +169,8 @@ namespace Fenrir::Detail
     X(TransformOriginX, "transform-origin-x", transformOriginX, ParseLength)                                  \
     X(TransformOriginY, "transform-origin-y", transformOriginY, ParseLength)                                  \
     X(Overflow, "overflow", overflow, ParseOverflow)                                                          \
+    X(ScrollbarWidth, "scrollbar-width", scrollbarWidth, ParseScrollbarWidth)                                 \
+    X(ScrollbarColor, "scrollbar-color", scrollbarColor, ParseScrollbarColor)                                 \
     X(ZIndex, "z-index", zIndex, ParseInteger)                                                                \
     X(PointerEvents, "pointer-events", pointerEvents, ParsePointerEvents)                                     \
     X(Cursor, "cursor", cursor, ParseCursor)                                                                  \

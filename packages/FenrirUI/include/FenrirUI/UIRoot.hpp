@@ -306,10 +306,9 @@ namespace Fenrir
          * lists of `translate()`, `translateX()`, `translateY()`, `scale()`, `scaleX()`, `scaleY()`, `rotate()` (deg,
          * rad, grad or turn), `filter` lists of `blur()` and `drop-shadow()`, times in `s` or `ms` and timing
          * functions (the CSS named set, `cubic-bezier()`, `steps()`) in the transition and animation lists. An unknown
-         * property, one the style does not hold yet (`background-position` and the scrollbar properties, which a
-         * stylesheet parses and keeps), or a value it cannot read is
-         * logged, with both named, and changes nothing: false. An empty (or all-whitespace) value resets the
-         * property, or each longhand of a shorthand, to not set, so the cascade's value shows through: true.
+         * property or a value it cannot read is logged, with both named, and changes nothing: false. An empty (or
+         * all-whitespace) value resets the property, or each longhand of a shorthand, to not set, so the cascade's
+         * value shows through: true.
          */
         bool SetStyleProperty(ElementId element, std::string_view name, std::string_view value);
         /**

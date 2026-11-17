@@ -586,3 +586,43 @@ TEST_CASE("Backdrop filter reads blur() or none, and refuses the rest", "[ui][st
     INFO("none clears it");
     REQUIRE(root.GetResolvedStyle(panel)->backdropBlur == 0.0f);
 }
+
+TEST_CASE("A tree that sets none of background-position and the scrollbar properties draws as their initial values do",
+          "[ui][paint]")
+{
+    // Their initial values (0% 0%, auto, auto) leave every box, image and bar where the rest of the style puts it.
+    const auto draw = [](bool initialsWritten) {
+        UITest::UITestApp test;
+        std::shared_ptr<UITest::CaptureTarget> target;
+        Fenrir::UIRoot& root = test.MakeRoot(target, {400.0f, 300.0f});
+        if (initialsWritten)
+        {
+            root.AddStylesheet("panel, scroll { background-position: 0% 0%; scrollbar-width: auto; "
+                               "scrollbar-color: auto; }",
+                               "initials.css");
+        }
+        const Fenrir::ElementId gradient = root.Create(root.GetRootElement(), "panel");
+        INFO("the panels and the scroll view take their style");
+        REQUIRE(root.SetStyleProperty(gradient, "height", "40px"));
+        REQUIRE(root.SetStyleProperty(gradient, "background-image", "linear-gradient(90deg, #000000, #ffffff)"));
+        const Fenrir::ElementId picture = root.Create(root.GetRootElement(), "panel");
+        REQUIRE(root.SetStyleProperty(picture, "height", "40px"));
+        root.EditInlineStyle(picture)->SetBackgroundImage(Fenrir::BackgroundImage{WhiteImage(test)});
+        const Fenrir::ElementId view = root.Create(root.GetRootElement(), "scroll");
+        REQUIRE(root.SetStyleProperty(view, "height", "60px"));
+        for (int i = 0; i < 3; ++i)
+        {
+            const Fenrir::ElementId row = root.Create(view, "panel");
+            REQUIRE(root.SetStyleProperty(row, "height", "40px"));
+            REQUIRE(root.SetStyleProperty(row, "background-color", "#ff0000"));
+        }
+        test.Frame();
+        return target->lists.back().vertices;
+    };
+    const std::vector<std::byte> unset = draw(false);
+    const std::vector<std::byte> written = draw(true);
+    INFO("the tree draws " << unset.size() << " vertex bytes unset and " << written.size() << " with the initials "
+                           << "written, and they differ");
+    REQUIRE(!unset.empty());
+    REQUIRE(unset == written);
+}

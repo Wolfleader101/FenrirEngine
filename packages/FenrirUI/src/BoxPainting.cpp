@@ -336,19 +336,37 @@ namespace Fenrir::Detail
                 return bounds;
             }
 
-            /** @brief A scroll view's bars over its children: each track's box, then its thumb's. */
+            /**
+             * @brief A scroll view's bars over its children: each track's box, then its thumb's, in its
+             * `scrollbar-color` where that is not auto.
+             */
             void PaintScrollbars(const ElementSlot& slot, float alpha)
             {
                 const ScrollbarBoxes bars = ScrollbarsOf(slot);
+                if (!bars.vertical && !bars.horizontal)
+                {
+                    return;
+                }
+                const ScrollbarColor& colours = slot.resolved.scrollbarColor;
+                std::optional<ResolvedStyle> coloured[2];
+                if (!colours.isAuto)
+                {
+                    coloured[0] = slot.scrollbarStyles->track;
+                    coloured[0]->backgroundColor = colours.track;
+                    coloured[1] = slot.scrollbarStyles->thumb;
+                    coloured[1]->backgroundColor = colours.thumb;
+                }
+                const ResolvedStyle& track = coloured[0] ? *coloured[0] : slot.scrollbarStyles->track;
+                const ResolvedStyle& thumb = coloured[1] ? *coloured[1] : slot.scrollbarStyles->thumb;
                 if (bars.vertical)
                 {
-                    PaintBox(slot.scrollbarStyles->track, bars.verticalTrack, alpha);
-                    PaintBox(slot.scrollbarStyles->thumb, bars.verticalThumb, alpha);
+                    PaintBox(track, bars.verticalTrack, alpha);
+                    PaintBox(thumb, bars.verticalThumb, alpha);
                 }
                 if (bars.horizontal)
                 {
-                    PaintBox(slot.scrollbarStyles->track, bars.horizontalTrack, alpha);
-                    PaintBox(slot.scrollbarStyles->thumb, bars.horizontalThumb, alpha);
+                    PaintBox(track, bars.horizontalTrack, alpha);
+                    PaintBox(thumb, bars.horizontalThumb, alpha);
                 }
             }
 
@@ -453,7 +471,10 @@ namespace Fenrir::Detail
                                               ? std::max(border.width / size->x, border.height / size->y)
                                               : std::min(border.width / size->x, border.height / size->y);
                         const Math::Vec2 fitted = *size * fit;
-                        pattern.rect = {centre.x - fitted.x / 2.0f, centre.y - fitted.y / 2.0f, fitted.x, fitted.y};
+                        // A percentage of what the box has to spare aligns that point of the image with the box's.
+                        pattern.rect = {border.x + ResolveLength(style.backgroundPositionX, border.width - fitted.x),
+                                        border.y + ResolveLength(style.backgroundPositionY, border.height - fitted.y),
+                                        fitted.x, fitted.y};
                     }
                     if (style.backgroundSize == BackgroundSize::Contain)
                     {

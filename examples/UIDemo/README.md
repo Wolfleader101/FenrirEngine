@@ -46,7 +46,10 @@ through `:outro`, its elements removed once the outro ends; the backing that dim
 - The **settings**: sliders for the volume (kept and shown in the UIDemo window: the engine has no audio yet) and the
   window camera's field of view; checkboxes for invert look (the scaffold's `FreeFlyLook`), show HUD and the virtual
   cursor (the left stick moves a pointer over the menu and A clicks under it); a text entry for the player's name, which
-  the HUD shows over the vitals; and a scrolling list of the controls.
+  the HUD shows over the vitals; and a scrolling list of the controls, whose bar is thin (`scrollbar-width: thin`) and
+  in the accent colour over a faint track (`scrollbar-color`).
+- The pause panel's title carries Fenrir's icon from the shared demo assets at its right end, in the panel's top-right
+  corner: `background-size: contain` with `background-position: right center`.
 - While it is open its backing covers the window and takes pointer input, so the right mouse button and clicks do not
   reach the room, and the room's keys do nothing: the camera stops turning and the game waits.
 - The menu's system reads the root's UI events through `EventReader<UIEvent>` (ADR-0065): clicks by the buttons' ids,
@@ -200,6 +203,8 @@ On OpenGL, in The HUD:
 - The name plate faces the camera as it moves, and its text stays crisp as the camera comes close.
 - The hand shows over the menu's buttons and the terminal's, the I-beam over the name entry in Settings, and the arrow
   comes back over the room.
+- In the pause menu the panel's title has Fenrir's icon at its right end, and in Settings the controls list scrolls by
+  a thin blue bar.
 - With scripting built, the speedometer sits bottom right over the ammo counter: its needle and the blue share of its
   track rise as the camera flies (WASD, Shift for faster) and fall back when it stops, under a readout of the speed;
   clicking Resume, Settings or Back in the menu logs "the menu's ... was clicked" from C#.

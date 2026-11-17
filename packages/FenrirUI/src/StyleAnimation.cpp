@@ -26,6 +26,11 @@ namespace Fenrir::Detail
             return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
         }
 
+        bool Same(const ScrollbarColor& a, const ScrollbarColor& b)
+        {
+            return a.isAuto == b.isAuto && (a.isAuto || (Same(a.thumb, b.thumb) && Same(a.track, b.track)));
+        }
+
         bool Same(const Shadow& a, const Shadow& b)
         {
             return a.offset == b.offset && a.blur == b.blur && a.spread == b.spread && Same(a.colour, b.colour) &&
@@ -158,6 +163,16 @@ namespace Fenrir::Detail
                 return Decode(Mix(Encode(x) * a.a, Encode(y) * b.a, t) / alpha);
             };
             return {channel(a.r, b.r), channel(a.g, b.g), channel(a.b, b.b), alpha};
+        }
+
+        ScrollbarColor Mix(const ScrollbarColor& a, const ScrollbarColor& b, float t)
+        {
+            // Two pairs of colours mix colour by colour; auto against colours is discrete.
+            if (a.isAuto || b.isAuto)
+            {
+                return t >= 1.0f ? b : a;
+            }
+            return ScrollbarColor::Of(Mix(a.thumb, b.thumb, t), Mix(a.track, b.track, t));
         }
 
         Shadow Mix(const Shadow& a, const Shadow& b, float t)

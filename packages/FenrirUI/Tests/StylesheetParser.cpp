@@ -311,7 +311,7 @@ TEST_CASE("Every kind of value the property set takes parses with no diagnostic"
             transform-origin: left top;
             color: cornflowerblue; font-size: 18px; text-shadow: 1px 1px 2px black;
             filter: blur(4px); backdrop-filter: blur(8px); background-position: center;
-            scrollbar-color: red blue; scrollbar-width: 6px;
+            scrollbar-color: red blue; scrollbar-width: thin;
             transition-duration: 1s; animation-name: spin;
         }
         .a { background-image: radial-gradient(red, blue); }
@@ -322,8 +322,8 @@ TEST_CASE("Every kind of value the property set takes parses with no diagnostic"
     {
         UNSCOPED_INFO("line " << diagnostic.line << ": " << diagnostic.message);
     }
-    INFO("lengths, colours, url(), gradients, shadows, transforms, filters, transition and animation lists and the "
-         "properties FenrirUI does not style all parse");
+    INFO("lengths, colours, url(), gradients, shadows, transforms, filters, transition and animation lists, "
+         "background-position and the scrollbar properties all parse");
     REQUIRE(sheet.diagnostics.empty());
     REQUIRE(sheet.rules.size() == 3);
     REQUIRE(sheet.rules[0].declarations.size() == 24);

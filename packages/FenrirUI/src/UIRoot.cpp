@@ -783,16 +783,7 @@ namespace Fenrir
             MarkStyleDirty(*m_state, element);
             return true;
         }
-        bool set = false;
-        if (kind == Detail::PropertyKind::NotYetStyled)
-        {
-            context.error = "FenrirUI does not style it yet";
-        }
-        else
-        {
-            set = Detail::ParseStyleDeclaration(lower, value, slot->inlineStyle, context);
-        }
-        if (!set)
+        if (!Detail::ParseStyleDeclaration(lower, value, slot->inlineStyle, context))
         {
             error = std::move(context.error);
             return false;
