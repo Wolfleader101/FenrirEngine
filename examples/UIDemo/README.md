@@ -204,6 +204,9 @@ On OpenGL, in The HUD:
 
 - The HUD draws over the room: the compass at the top, the round minimap at the top left, and the bars and the ammo
   counter at the bottom right. The demo panel on the right and the help at the bottom left cover none of them.
+- The help lists the scaffold's keys, then the room's: F or left click, R, H, the right mouse button and WASD, Escape,
+  and aiming at the terminal. F1 hides the panel, the help and the tutorial card, leaving the HUD, and F1 again shows
+  them and logs the help.
 - The tutorial card shows at the top centre on the first entry only: a shot ends Fire, R ends Reload, H ends Take a
   hit, a click on the terminal ends The light terminal, and Done on The pause menu closes it. Escape closes it without
   opening the menu, and the panel's Tutorial button shows it again from the start.
