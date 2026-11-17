@@ -161,7 +161,9 @@ namespace Fenrir
         std::vector<PaintStageHandle> placedPaint;
         /**
          * @brief The image and world roots the loaded script generation made (CreateImageRoot, CreateWorldRoot), which
-         * its release destroys, less those Destroy ended. Its window roots are the game's to keep, as before.
+         * its release destroys, less those Destroy ended. Its window roots are the game's to keep: the next generation
+         * finds them again with UIRoot.Find, which finds no image or world root, so only those would be left with no
+         * one to end them.
          */
         std::vector<UIRootId> generationRoots;
         /** @brief The loaded script's stage changes, played back as each stage ends. */
