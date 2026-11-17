@@ -33,10 +33,10 @@
 
 **Touches:** `examples/LightingDemo/src/LightingPanel.hpp`, `examples/LightingDemo/src/LightingPanel.cpp`, `examples/LightingDemo/src/MaterialGrid.cpp`, `examples/LightingDemo/src/ShowcaseModels.cpp`, `examples/LightingDemo/src/Showroom.cpp`, `examples/LightingDemo/src/ManyLights.cpp`, `examples/LightingDemo/scripts/`, `examples/LightingDemo/README.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] No ImGui call remains in `LightingPanel.cpp`, `MaterialGrid.cpp`, `ShowcaseModels.cpp`, `Showroom.cpp` or `ManyLights.cpp`.
-- [ ] `LightingDemo-Smoke-null` passes with scripting off and on.
+- [x] No ImGui call remains in `LightingPanel.cpp`, `MaterialGrid.cpp`, `ShowcaseModels.cpp`, `Showroom.cpp` or `ManyLights.cpp`.
+- [x] `LightingDemo-Smoke-null` passes with scripting off and on.
 - [ ] Hand checks, on OpenGL:
   - every shared row changes the image as its ImGui slider did, at the same ranges
   - the logarithmic rows move logarithmically

@@ -7,27 +7,49 @@ through on the scaffold's free-fly camera. Built with the examples when the rend
 Many lights (C#), made and run from C# (`scripts/`), has a section below saying what it shows and its keys; every
 scene's hand checks are collected in one place after them, under Hand checks.
 
-## The Lighting window
+## The demo panel
 
-Every scene shows the same ImGui window, Lighting (`src/LightingPanel.cpp`): the cameras' exposure (EV stops),
-tonemapper (AgX, PBR Neutral, ACES, None), bloom (intensity and radius), anamorphic streaks (ADR-0059: intensity
-and length; the tint is the scene's), the lens flare's intensity and the lens dirt's (ADR-0059; the ghosts and halo
-are the scene's, and a scene that sets no dirt image reads the one the demo generates at startup with
-`Fenrir::GenerateLensDirt`), colour grade (ADR-0059: white balance as a
-temperature and tint, contrast, the shadow and highlight tints and their balance, saturation, and a button for no
-grade), camera effects (ADR-0059: chromatic aberration, the vignette's intensity and radius, and film grain's
-intensity; the vignette's shape and the grain's response and size are the scene's), ambient occlusion (GTAO: on, which it is
-by default here, its radius and strength) and screen-space reflections (ADR-0056: on, off unless the scene turns them
-on, their intensity, max distance, thickness and roughness cutoff, and buttons for their two debug views), the sun's
-shadows (on, their distance and their normal and slope biases,
-given to every DirectionalLight in the scene), a debug view (the lit scene, the raw occlusion as grey, the shadow
-cascades tinted red, green, blue and yellow from the nearest, the shadow atlas, the spot shadow atlas, the light
-clusters' heat: how many lights each pixel loops over, black none, 1 blue, 4 cyan, 16 green, 64 yellow and 256 red, the
-reflections: what each pixel's mirror ray hit times how sure it is, or that confidence as grey),
-and the sky: which panorama, its intensity and its rotation. It writes them to every camera in the scene each frame, the free-fly camera among them.
-Keys do the same, for the smoke runs and by hand: T the next tonemapper, E the next exposure (0, +1, +2, -1 EV), B bloom
-off or back on at its default, O ambient occlusion off or back on, G the next debug view, H the sun's shadows off or
-back on, S the next panorama where the scene has more than one.
+Every scene shows its switches in the demo panel on the right (the demo UI kit, `examples/DemoScaffold/README.md`,
+ADR-0071): first the scene's own sections, then the lighting panel's, which every scene shares (`src/LightingPanel.cpp`,
+`LightingPanel`). `RunLightingPanel` adds the shared sections on the scene's first frame, bound to the scene's
+`LightingSettings`, and writes them each frame to every camera in the scene, the free-fly camera among them, to every
+DirectionalLight and to the scene's sky. Its keys move the same values, so a key moves its row the next frame. F1 hides
+the panel and the help.
+
+- **Camera:** the exposure (EV stops, -6 to +6); the tonemapper (AgX, PBR Neutral, ACES, None), a choice; bloom's
+  intensity (logarithmic, 0 to 1) and radius; the anamorphic streaks' intensity (logarithmic) and length (ADR-0059; the
+  tint is the scene's); the lens flare's intensity (logarithmic, 0 to 0.2) and the lens dirt's (0 to 10; ADR-0059: the
+  ghosts and halo are the scene's, and a scene that sets no dirt image reads the one the demo generates at startup with
+  `Fenrir::GenerateLensDirt`). A logarithmic row from 0 starts its slider at 0.001, and its left end sets 0.
+- **Colour grade** (ADR-0059): white balance as a temperature (2500 to 25000 K, logarithmic) and tint, contrast
+  (logarithmic), the shadow and highlight tints as colour rows (a swatch over hue, saturation and value; only their hue
+  and saturation count), their balance, saturation, and a No grade button.
+- **Camera effects** (ADR-0059): chromatic aberration, the vignette's intensity and radius, and film grain's intensity;
+  the vignette's shape and the grain's response and size are the scene's.
+- **Ambient occlusion (GTAO):** on, which it is by default here, its radius (logarithmic) and strength.
+- **Reflections (SSR)** (ADR-0056): on, off unless the scene turns them on, their intensity, max distance and thickness
+  (both logarithmic) and roughness cutoff, and a choice of their two debug views, Show reflections or Show confidence;
+  the chosen one again goes back to the lit scene.
+- **Sun shadows:** on, their distance (logarithmic) and their normal and slope biases, given to every DirectionalLight
+  in the scene.
+- **Debug view:** a stepper through the lit scene, the raw occlusion as grey, the shadow cascades tinted red, green,
+  blue and yellow from the nearest, the shadow atlas, the spot shadow atlas, the light clusters' heat (how many lights
+  each pixel loops over; while it shows, a line under it gives the colours: black none, 1 blue, 4 cyan, 16 green, 64
+  yellow and 256 red), the reflections (what each pixel's mirror ray hit times how sure it is) or that confidence as
+  grey.
+- **Sky:** the panorama, a choice, or the line "No panorama loaded"; its intensity, and its rotation in degrees.
+
+Keys do the same, for the smoke runs and by hand, and the help lists them as key rows: T the next tonemapper, E the next
+exposure (0, +1, +2, -1 EV), B bloom off or back on at its default, O ambient occlusion off or back on, G the next debug
+view, H the sun's shadows off or back on, S the next panorama where the scene has more than one. The hint line at the panel's
+foot says what the hovered row does, and names its key where it has one.
+
+Every scene has its own sections on the kit too, before the shared ones; Many lights (C#)'s is a Razor panel. Sponza,
+Neon city, Asteroid ring and Forest clearing show their frame time, counts and the last frame's renderer stats there as
+readouts, pulled each frame.
+
+Material grid, the first scene, has a tutorial: the lighting panel, its keys, the scene list and F1. So has Many lights.
+Each shows on the scene's first entry in a run, and again from the Tutorial button in the scene's first section.
 
 ## Assets
 
@@ -54,25 +76,25 @@ only.
 
 Seven by seven spheres in `builtin:lit`, roughness 0 to 1 from left to right and metallic 0 to 1 from bottom to top,
 labelled in world text (metallic on the right), all of LearnOpenGL's IBL red (linear 0.5, 0, 0), lit by Poly Haven's Brown Photostudio 02 (the
-committed 1k panorama) alone; a sun can be added. The window's Scene part has the sun and the spheres' base colour.
+committed 1k panorama) alone; a sun can be added. Its section, Spheres, has the sun and the spheres' base colour, a colour row.
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
+| T, E, B, O, G, H | The lighting panel's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | L | The sun (a DirectionalLight of intensity 3) on or off. |
 
 ### Showcase models
 
 Khronos's DamagedHelmet, FlightHelmet and SciFiHelmet in a row, each about two metres high, on a grey floor under one
 of three Poly Haven panoramas, Venice Sunset, Studio Small 09 and Symmetrical Garden 02, all fetched, with a low warm sun
-behind them on the left casting their shadows towards the camera. The window's Scene part has a
+behind them on the left casting their shadows towards the camera. Its section, Models, has a
 turntable that turns the helmets slowly. Without the fetched assets (or in a smoke run) the scene is empty, and says on
 screen to configure with `-DFENRIR_FETCH_DEMO_ASSETS=ON`. Entering it loads all three 2k panoramas and the helmets'
 large textures at once: about 15 seconds in a Debug build on an RTX 5080 machine, the window not responding meanwhile.
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
+| T, E, B, O, G, H | The lighting panel's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | S | The next panorama. |
 | R | The turntable on or off. |
 
@@ -84,15 +106,16 @@ plastic) and spheres of gold and white plastic between them. Up to 1024 coloured
 marked by a small glowing sphere of its colour (each hue's markers one instanced draw): point lights bobbing at waist height, and every fourth a spot light up high, pointing
 down and leaning out as it goes, its cone lighting a moving pool. A hundred are on at first, and the spot lights cast
 shadows: the eight nearest the camera each frame, RendererConfig's default spot shadow budget. So do the point lights,
-the four nearest (the default point shadow budget), each into a cube round it. The window's Scene part has the count (0
-to 1024), whether they move, the point and spot intensities, the range, whether the spot lights cast, and their budget
-(0 to 16, Renderer::SetSpotShadowBudget), and whether the point lights cast, and their budget (0 to 8,
-Renderer::SetPointShadowBudget), and whether the lights are clustered (Renderer::SetClusteredLights). The budgets and
+the four nearest (the default point shadow budget), each into a cube round it. Its section, Lights, has the count (0
+to 1024), how many point and spot lights are on, whether they move, the point and spot intensities, the range, whether
+the spot lights cast, and their budget (0 to 16, Renderer::SetSpotShadowBudget), and whether the point lights cast, and
+their budget (0 to 8, Renderer::SetPointShadowBudget), and whether the lights are clustered
+(Renderer::SetClusteredLights). The budgets and
 the clustering are the renderer's, so other scenes keep them as they were left.
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
+| T, E, B, O, G, H | The lighting panel's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | M | 16, 64, 100, 256 or 1024 lights. |
 | P | The lights moving or still. |
 | K | Spot shadows off or on. |
@@ -109,11 +132,11 @@ right, slowly at first: 0.05 a quarter of the way across, 0.14 in the middle.
 Khronos's DamagedHelmet, FlightHelmet and SciFiHelmet stand on white plinths across the middle, fetched (ADR-0052);
 without them the plinths are bare and the scene says so on screen. Screen-space reflections are on, so the polished
 floor mirrors the slabs, the plinths and the helmets as well as the lights' own glints, which give way to the slabs'
-reflections where they are on screen. The window's Scene part has each light's width, height, intensity and sidedness.
+reflections where they are on screen. Its section, Rect lights, has each light's width, height, intensity and sidedness, under a separator with its name.
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
+| T, E, B, O, G, H | The lighting panel's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | Z | Every light at half, as set, or twice its size. |
 | V | Every light's sidedness flipped. |
 
@@ -143,20 +166,22 @@ start; the ring's rocks take shadows and cast none, which would cost four times 
 rocks and the planet's texture are fetched; without them the ring is spheres and cubes and the planet plain, and the
 scene says so on screen.
 
-The window's Scene part has the ring's count (cutting each list to its share, which bumps its revision and uploads it
-again), the merging switch (Renderer::SetAutomaticInstancing: the renderer's, so the other scenes keep it as it was left), the
-ring turning, and the last frame's draws, instances, what the GPU drew of them (`RendererStats::instancesDrawn`, two
-frames behind) and uploads. Its Culling part (ADR-0057) has the GPU test (`Renderer::SetGpuCulling`; off, every copy
+Its section, Ring, has the ring's count (1,000 to 100,000, cutting each list to its share, which bumps its revision and
+uploads it again), the merging switch (Renderer::SetAutomaticInstancing: the renderer's, so the other scenes keep it as it was left), the
+ring turning, the ring's rocks and lists and the field's entities, the last frame's draws, instances, what the GPU drew of
+them (`RendererStats::instancesDrawn`, two frames behind) and uploads, and the frame time. Under its Culling separator
+(ADR-0057) are the GPU test (`Renderer::SetGpuCulling`; off, every copy
 draws at level 0, for comparison), occlusion culling (`Renderer::SetOcclusionCulling`; off, every copy inside the
 frustum draws, those the planet or the station hide too), freezing culling (`Renderer::SetCullingFrozen`: flying out of
 the frozen volume shows only what it kept, inside the frozen frustum's amber edges), the level-of-detail error in pixels
-(`Renderer::SetLodSelection`), how many copies drew at each level (`RendererStats::drawnByLod`) and how many each
-occlusion phase drew (`RendererStats::drawnByPhase`: visible last frame, then shown by the Hi-Z pyramid). The four are
+(`Renderer::SetLodSelection`, a logarithmic range from 0.25 to 8), how many copies drew at each of the eight levels
+(`RendererStats::drawnByLod`) and how many each occlusion phase drew (`RendererStats::drawnByPhase`: visible last frame,
+then shown by the Hi-Z pyramid), and a line saying what Drawn counts. The four are
 the renderer's, like merging, and the scene sets them back to on, on, following and a pixel each time it spawns.
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
+| T, E, B, O, G, H | The lighting panel's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | N | 10k, 50k or 100k ring rocks. |
 | I | Automatic instancing off or back on: the field's 5,000 rocks become 5,000 draws, and back to a handful. |
 | R | The ring turning or still. |
@@ -201,15 +226,15 @@ prepass and the shadow cascades too, so the blades' depth, shadows and pixels sw
 grounds the plants. The sky is Poly Haven's Qwantani Late Afternoon, whose sun the DirectionalLight comes from, or a sky
 the demo makes with its sun in the same place.
 
-The window's Scene part has the forest's density (cutting each list to its share, which uploads it again), the grass
-shown or hidden, the counts, the last frame's draws, instances and shadow draws, and the frame time. In Release on an
+Its section, Forest, has the forest's density (5 to 100%, cutting each list to its share, which uploads it again), the
+grass shown or hidden, the copies, lists, trees, grass blades and chunks, the last frame's draws, instances and shadow draws, and the frame time. In Release on an
 RTX 5080 at 1280 by 720 with 4x MSAA the full scene takes about 30 ms a frame. Without the fetched assets the grass
 still grows over plain earth-coloured ground and path, among box trunks and sphere boulders (two instance lists) and
 stand-ins for the boulder and log, under the demo's sky, and the scene says so on screen.
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G, H, S | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows, the next panorama. |
+| T, E, B, O, G, H, S | The lighting panel's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows, the next panorama. |
 | N | 25%, 50% or all of the forest. |
 | M | The grass hidden or shown. |
 
@@ -302,9 +327,10 @@ radius 0.45), a little chromatic aberration (0.006), fine film grain (0.04) and 
 at -0.5 EV. PBR Neutral keeps the neon saturated, where AgX (T) turns it pastel and lifts the dim
 spill on the upper walls towards dusk.
 
-The window's Scene part has:
+Its section, City, has:
 
-- the frame time, the light and copy counts, and the last frame's draws and instances;
+- the frame time, the light counts (all, then each kind), the buildings, neon panels and cars, and the last frame's
+  draws and instances;
 - clustering, vsync (the main window's swap interval), the traffic, the puddles and reflections;
 - each kind of light's intensity.
 
@@ -319,7 +345,7 @@ generated sky. Everything else is generated, and the scene says so on screen.
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G, S | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the next sky. |
+| T, E, B, O, G, S | The lighting panel's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the next sky. |
 | N | The traffic stopped or moving. |
 | M | The streets dry or wet again. |
 | R | Reflections off or on. |
@@ -334,7 +360,7 @@ generated sky. Everything else is generated, and the scene says so on screen.
 Everything at once in a real building: Khronos's Sponza, Crytek's atrium of two storeys of arcades round an open
 courtyard, about 30 metres long, 18 wide and 11 high, with its masked plants, chains and curtains, fetched (ADR-0052).
 The sky is Poly Haven's Kloofendal 48d Partly Cloudy (Pure Sky), fetched, and the sun is that sky's: the
-DirectionalLight comes from its brightest texels, 48 degrees up, and turns with it when the window's sky rotation does.
+DirectionalLight comes from its brightest texels, 48 degrees up, and turns with it when the panel's sky rotation does.
 The sky starts turned so the sun stands high over the courtyard's east end and a little to the south, shining down its
 length through the open roof onto the west end's walls and floor and the north arcade's faces, its shadows in four
 cascades over 40 metres. The camera starts on the courtyard floor at the east end, looking west with the sun behind.
@@ -350,7 +376,7 @@ The sky still lights the galleries' shade: the renderer has no light probes, so 
 surface whatever stands between it and the sky, darkened only by GTAO and the material's own occlusion. The scene
 draws the sky at 0.35 so the shade stays darker than the sunlit floor and the torches carry the galleries.
 
-The window's Scene part has the frame time, the last frame's draws, instances and shadow draws, vsync (on when the
+Its section, Sun and torches, has the frame time, the last frame's draws, instances and shadow draws, vsync (on when the
 scene is entered; off, the frame time is the frame's own), the sun's intensity, the torches lit, their shadows, their
 flicker, their intensity and their range. In Release on an RTX 5080 at 1280 by 720 with 4x MSAA and vsync off, a frame
 takes about 2.2 ms from the floor or a gallery; in Debug about 11 ms. Without the fetched assets, a stone
@@ -359,7 +385,7 @@ sun and the four torches, and the scene says so on screen.
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
+| T, E, B, O, G, H | The lighting panel's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | J | The torches' shadows off or on. |
 | K | The torches out or lit. |
 | N | The torches' flicker off or on. |
@@ -372,14 +398,16 @@ only: the same room, materials, lights, paths, intensities, range and camera, bu
 a sphere entity, C# draws every lit light's marker as one copy of an instance list it makes with
 `Assets.AddInstanceList` and rewrites each frame with `ReplaceInstanceList`, through one `InstancedMeshRenderer` whose
 unlit material each copy's colour tints: one draw for every marker. V steps the shadow budgets through C#'s
-`Renderer.SetSpotShadowBudget` and `SetPointShadowBudget`. The Lighting window is C++'s, as in every scene; its Scene
-part only says what C# does: C# has no ImGui, so the twin has none of Many lights' sliders, and its count is set by M
-and its intensities and range are Many lights' starting ones. C# sets the budgets to 8 and 4 on entering; they are the
-renderer's, so other scenes keep them as V left them, as Many lights' sliders leave them.
+`Renderer.SetSpotShadowBudget` and `SetPointShadowBudget`. The lighting panel is C++'s, as in every scene. The scene's own
+section is a Razor panel, Lights (Razor) (`scripts/ManyLightsPanel.razor`), which `scripts/ManyLightsPanelSetup.cs`
+mounts into the scene's demo slot (ADR-0072) on each entry: the count, whether the lights move, the spot and point
+shadows and the budgets, each on its key too, so the scene works by its keys alone; without the Razor panel the slot
+says it needs scripting. The twin's intensities and range are Many lights' starting ones. C# sets the budgets to 8 and 4 on entering; they are the
+renderer's, so other scenes keep them as V or the panel left them, as Many lights' sliders leave them.
 
 | Keys | |
 | --- | --- |
-| T, E, B, O, G, H | The Lighting window's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
+| T, E, B, O, G, H | The lighting panel's: tonemapper, exposure, bloom, ambient occlusion, the next debug view, the sun's shadows. |
 | M | 16, 64, 100, 256 or 1024 lights. |
 | P | The lights moving or still. |
 | K | Spot shadows off or on. |
@@ -398,13 +426,34 @@ above say what each shows and its keys.
 
 ### Every scene
 
+Hand checks for the demo panel, on OpenGL (above, "The demo panel"):
+
+- Each shared row changes the image over its range: the exposure, the tonemapper's four
+  buttons, bloom, the streaks, the flare and the dirt, the grade, the camera effects, ambient occlusion, reflections,
+  the sun's shadows, the debug view's stepper and the sky's panorama, intensity and rotation (in degrees, 0 to 360).
+- The logarithmic rows (bloom, streak and flare intensity, temperature, contrast, AO radius, max distance, thickness,
+  shadow distance) move slowly at their low end and fast at their high end; dragging bloom intensity to the far left
+  shows 0.000 and takes the bloom away.
+- T, E, B, O, G, H and, in Showcase models, S move their rows the next frame: the tonemapper's button, the exposure's
+  slider, bloom's intensity to 0 and back, the AO and shadow checkboxes, the debug view's name and the panorama's
+  button.
+- The shadow and highlight tints' swatches show their colours, white at first; dragging the hue and saturation tints
+  the shadows or highlights, and No grade puts both back to white with the rest of the grade.
+- Show reflections and Show confidence each switch the view, the chosen one marked; clicking it again goes back to the
+  lit scene, and the Debug view's stepper follows. The light clusters' legend shows only under that view.
+- A scene with no panorama (Many lights, Showroom) says "No panorama loaded" in its Sky section.
+- The scene's own sections come first, then the shared ones; the hint line at the panel's foot names the key of each row that has one.
+- Material grid's tutorial shows on its first entry, at the top centre, steps with Next and Back through the panel, its
+  keys and the scene list, and does not show on a second entry; the Tutorial button shows it again. Many lights' moves
+  on by itself when M, then K, then C are pressed.
+
 Hand check for ambient occlusion: in Showcase models, contact shadows under the helmets where they meet the ground, and
 with G, dark creases and corners on white, no dark halo round a model's silhouette against what is far behind it.
 
 Hand check for the sun's shadows (ADR-0050): flying round Showcase models with the free-fly camera, the helmets'
 shadows on the floor hold still, neither shimmering as the camera turns nor swimming as it moves; G to the cascade
 colours shows four bands on the floor, their boundaries following the camera, and no seam in a shadow that crosses one.
-The lit floor shows no speckled acne at any sun angle the sky's rotation leaves it; raising the biases in the window
+The lit floor shows no speckled acne at any sun angle the sky's rotation leaves it; raising the biases in the panel
 detaches the shadows from the helmets' bases, lowering them to 0 brings acne back.
 
 ### Material grid
@@ -417,10 +466,12 @@ Hand checks, on OpenGL:
   diffuse light. No row or column is much brighter or darker overall than its neighbours: a rough metal
   keeps its energy (ADR-0048's multi-scatter compensation), and no sphere glows at its rim.
 - Turning the sky (Rotation) turns the reflections with it, without a hitch; Intensity scales the whole grid's light.
+- The Spheres section's base colour recolours every sphere as it is dragged, its swatch showing the colour; its Sun
+  checkbox and L agree.
 - L adds a sun from above and to the right, behind the camera: a highlight on each sphere, small and sharp at the left, broad at the right.
 - T steps the tonemapper: AgX (the default) softens the brightest highlights towards white, PBR Neutral keeps the red
   truer, ACES is more contrasty, None clips the softbox reflections flat. E brightens a stop at a time.
-- Bloom (B, and the window's sliders): the softbox reflections in the glossy spheres glow softly into their
+- Bloom (B, and the Camera section's rows): the softbox reflections in the glossy spheres glow softly into their
   surroundings, with no hard threshold edge; intensity 0 removes it, and radius widens or narrows the glow.
 
 ### Showcase models
@@ -431,8 +482,10 @@ Hand checks, on OpenGL with the assets fetched:
   emissive panels (which bloom softly), its scratches in the normal map; FlightHelmet's leather, brass, glass lenses and
   wooden stand reading as their own materials; SciFiHelmet's painted and bare metal panels. Each is lit by the sky
   around it: warm and directional at the Venice sunset, soft and neutral in the studio, cool and even in the garden.
-- S changes the sky and the helmets' light and reflections with it in the same frame, with no flash.
-- Rotation turns the light round the helmets; the turntable (R) shows reflections sliding over the curved surfaces
+- S, or a panorama's button in the Sky section, changes the sky and the helmets' light and reflections with it in the
+  same frame, with no flash; S marks the new panorama's button.
+- Rotation turns the light round the helmets; the turntable (R, or the Models section's checkbox, which R ticks) shows
+  reflections sliding over the curved surfaces
   without swimming or sparkling.
 - Without the fetched assets: an empty scene with an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, and no error in
   the log.
@@ -455,7 +508,10 @@ Hand checks, on OpenGL:
   to their casters, with no acne on the lit floor or walls. As the lights circle, lights move in and out of the budget
   without popping badly: a light leaving it is far from the camera, its pool small on screen. K turns them off and on.
 - G to the spot shadow atlas shows a three by three grid of grey tiles, eight of them each one spot light's view down
-  onto the floor and the columns; the budget slider makes it a grid of the new size.
+  onto the floor and the columns; the Budget row makes it a grid of the new size.
+- The Lights section: the Lights row sets any count from 0 to 1024 and M moves it, with the point and spot lights on
+  following; Moving, Cast (K), Cast (J) and Clustered (C) agree with their keys; the Budget and Point budget rows
+  change how many lights cast, and their hints say the nearest cast.
 - The point lights nearest the camera, low among the columns and spheres, throw their shadows out across the floor and
   up the walls on every side of them, soft-edged and attached. No seam shows where a shadow crosses from one face of a
   light's cube to the next (look along the floor's diagonals from a light, where the faces meet). J turns them off and
@@ -467,9 +523,10 @@ Hand checks, on OpenGL:
 
 - The polished floor reflects each light as its own shape: the neon strip as a thin line and the panel as a rectangle,
   sharp-edged on the left of the floor and blurring, stretching towards the camera and dimming across it to the right.
-- Widening, heightening or dimming a light in the window changes its slab, its reflection and the light it casts in the
+- Widening, heightening or dimming a light in the Rect lights section (under its name's separator) changes its slab, its reflection and the light it casts in the
   same frame; Z does it to all three at once.
-- The sign lights the floor and walls on both sides of it; turned one-sided (its checkbox, or V), only the side its front
+- The sign lights the floor and walls on both sides of it; turned one-sided (its Two-sided checkbox, or V, which
+  ticks every light's), only the side its front
   faces, towards -X, the room's left half, is lit. V also makes the neon and the panel two-sided: each then lights the
   strip of back wall just behind it too.
 - The helmets' metal shows the lights' shapes in its highlights; the room stays dark beyond the lights' ranges.
@@ -478,7 +535,7 @@ Hand checks, on OpenGL:
   on the left where the floor is smooth and blurred towards the right where it is rough, gone past the roughness cutoff,
   where the lights' own glints carry on. They fade at the screen's edge rather than cutting off. Each slab is reflected
   once: no brighter double image where its light's glint and its reflection overlap. Turning reflections off in the
-  window brings back the glints alone; G to the reflections' view shows the mirrored slabs and helmets on black, and to
+  panel brings back the glints alone; G to the reflections' view shows the mirrored slabs and helmets on black, and to
   their confidence, the floor in grey, white where it is smooth and darkening towards the screen's edges.
 
 ### Asteroid ring
@@ -503,6 +560,14 @@ Hand checks, on OpenGL:
   ring's rocks visibly coarser and 0.5 finer, the counts shifting between the levels.
 - F, then flying out of the ring: only the copies the frozen view kept are drawn, inside the frozen frustum's amber
   edges; F again fills the view in.
+- The Ring section: the rocks slider (1,000 to 100,000) sets the count the Ring rocks readout shows, and N moves the
+  slider to 10k, 50k or 100k; the instancing and turning checkboxes do as I and R, and follow them. Its readouts match
+  the renderer's: Draws, Instances, Drawn and Uploads as above, the frame time in ms and fps.
+- Under Culling: C, V and F flip their checkboxes, and clicking a checkbox does as its key; L steps the logarithmic
+  error slider through 1, 2, 4 and 0.5. The eight Drawn at level readouts change with them: GPU culling off puts every
+  copy at level 0, a larger error moves copies to the higher levels, and occlusion off changes Visible last frame
+  and Shown by the Hi-Z.
+- The panel costs no visible frame time: the Frame readout is the same with the Ring section open and collapsed.
 
 ### Forest clearing
 
@@ -515,6 +580,9 @@ Hand checks, on OpenGL (Release for a usable frame rate):
 - G to the occlusion view shows the plants, boulder and log grounded by dark contact shading.
 - Without the fetched assets: grass, trunks and boulders, and an amber message naming `FENRIR_FETCH_DEMO_ASSETS`, no
   error in the log.
+- The Forest section: the density slider (5 to 100%) thins the forest and lowers Instances, and N moves it to 25, 50
+  and 100; the Grass checkbox and M hide and show the grass, each following the other. Copies, Lists, Trees, Grass blades
+  and Grass chunks are the spawned counts and hold still.
 
 ### Neon city
 
@@ -524,7 +592,7 @@ Hand checks, on OpenGL:
   between them. M dries the streets, and the streaks go.
 - The signs glow, with bloom round them; their light falls on the walls and sidewalks below them in their colour.
 - Anamorphic streaks: the signs and headlights throw long, thin horizontal lines, blue, and dim surfaces show
-  none. The Lighting window's streak intensity at 0 takes them away.
+  none. The Camera section's streak intensity at 0 takes them away.
 - Lens flare: turning towards a bright sign throws faint coloured ghosts across the view, on the far side of its
   centre, and lights up the dirt on the lens round the sign. The flare intensity at 0 takes the ghosts away, and the
   lens dirt at 0 the smudges.
@@ -535,12 +603,12 @@ Hand checks, on OpenGL:
 - Flying past a lit window, the room behind it shifts with parallax: its back wall, side walls, floor and ceiling
   light.
 - G to the light clusters' heat: no red (256 lights) anywhere along the streets.
-- The colour grade (ADR-0059): teal in the shadowed streets and magenta on the lit walls; No grade in the Lighting
-  window takes them away. Warming and cooling the white balance, raising the contrast and moving the balance change
+- The colour grade (ADR-0059): teal in the shadowed streets and magenta on the lit walls; No grade in the Colour
+  grade section takes them away. Warming and cooling the white balance, raising the contrast and moving the balance change
   the mood without clipping the signs or crushing the streets.
 - Camera effects (ADR-0059): the corners fall off gently, signs near the screen's edges fringe red outside and blue
   inside, and fine grain shimmers over the dark streets without showing in the bright signs. Each at 0 in the
-  Lighting window takes it away.
+  Camera effects section takes it away.
 - Without the fetched assets: dark wet streets, the city and its lights, and an amber message naming
   `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
 - Reflections (ADR-0056), at night: the wet streets mirror the edge strips, sign boards and lit windows, streaked by
@@ -548,6 +616,13 @@ Hand checks, on OpenGL:
   glints as they leave the screen. Driving cars leave no visible ghost at walking speed. R turns them off: the puddles
   then show only the signs', lamps' and headlights' glints and the sky. G to the reflections' view shows the mirrored
   city on black, to their confidence the puddles near white and the dry asphalt darker.
+- The City section's readouts: 1092 lights, of them 594 rect signs, 200 point lamps, 144 spot headlights and 154 spot
+  uplights, 72 cars, and the buildings and neon panels; Draws and Instances as the renderer counts them.
+- Its rows do as their keys, and follow them: Clustered and C (the frame time rises off), Traffic moving and N, Puddles
+  and M (M dries the streets, the slider to 0, and back to where it was), Reflections and R. Vsync off lets the frame
+  time fall below the display's; the four intensities brighten and dim their kind of light, the signs' boards with
+  them.
+- The panel costs no visible frame time: the Frame readout is the same with the City section open and collapsed.
 
 ### Sponza
 
@@ -569,6 +644,10 @@ Hand checks, on OpenGL with the assets fetched:
 - G to the occlusion view: the arcades' corners, the columns' feet and the plants' pots darkened, the open floor white.
 - Without the fetched assets: plain colonnades and walls with the four torches, under a blue sky, and an amber message
   naming `FENRIR_FETCH_DEMO_ASSETS`, no error in the log.
+- The Sun and torches section: its readouts match the renderer's draws, instances and shadow draws and the frame time;
+  K, J and N flip Torches lit, Torch shadows and Flicker, and clicking each does as its key. The sun's intensity, the
+  torches' intensity and their range change the light as they move, and Vsync off frees the frame time.
+
 ### Many lights (C#)
 
 Hand checks, on OpenGL, beside Many lights (PageUp and PageDown between them, or each through its keys):
@@ -579,6 +658,10 @@ Hand checks, on OpenGL, beside Many lights (PageUp and PageDown between them, or
 - Only lit lights have markers: stepping M from 1024 to 16 leaves sixteen markers, each on its light.
 - K and J turn the spot and point shadows off and on, as in Many lights. V to 16 and 8 shadows more lights, the spot
   atlas (G) a four by four grid; V to none leaves every light unshadowed; V again returns to 8 and 4.
+- The Razor panel, Lights (Razor), shows first among the scene's sections, before the shared ones, styled as the C++
+  rows: its Lights row sets any count (the markers follow), its checkboxes and the Budgets choice change the room as
+  P, K, J and V do, and those keys move its rows. Leaving the scene and coming back mounts it again, once. Built
+  without scripting, the scene is not in the list.
 
 ## Smoke runs
 
@@ -586,5 +669,5 @@ The scaffold's `LightingDemo-Smoke-null` (everywhere) and `LightingDemo-Smoke-op
 60 frames with its keys pressed, and fail on any error. Neither uses the fetched assets, so Showcase models runs empty,
 Showroom's plinths bare, the asteroid ring of spheres and cubes, the forest clearing of grass, boulders and trunks, the
 neon city's streets plain under its generated sky and Sponza's colonnades plain columns, each with its message shown.
-With scripting, they run Many lights (C#) too, its scripts loaded.
+With scripting, they run Many lights (C#) too, its scripts loaded and its Razor panel mounted.
 `FENRIR_DEMO_SCENE="Material grid" FENRIR_DEMO_KEYS=1` runs one scene through its keys.

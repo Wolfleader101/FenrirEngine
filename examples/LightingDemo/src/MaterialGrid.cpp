@@ -1,13 +1,13 @@
 #include <cstddef>
 #include <format>
+#include <utility>
 #include <vector>
-
-#include <imgui.h>
 
 #include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirDebugDraw/DebugDraw.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirRenderer/Components.hpp"
@@ -37,6 +37,8 @@ namespace LightingDemo
             Fenrir::Entity sun;
             bool sunOn = false;
             Fenrir::Colour baseColour = DefaultBaseColour;
+            /** @brief The base colour the materials were last given, so a change from the panel recolours them. */
+            Fenrir::Colour appliedColour = DefaultBaseColour;
         };
 
         float Fraction(std::size_t index, std::size_t count)
@@ -70,7 +72,7 @@ namespace LightingDemo
             if (!sphere.Ok())
             {
                 app.Logger()->Error("Material grid: the sphere did not load from the asset root");
-                scene.AddResource<GridState>(state);
+                scene.AddResource<GridState>(std::move(state));
                 return;
             }
             Fenrir::EntityList& entities = scene.GetEntityList();
@@ -93,7 +95,15 @@ namespace LightingDemo
             state.sun.AddComponent<Fenrir::Transform>().rot =
                 glm::quatLookAt(glm::normalize(Vec3(-0.4f, -0.5f, -1.0f)), Vec3(0.0f, 1.0f, 0.0f));
             state.sun.AddComponent<Fenrir::DirectionalLight>().intensity = 0.0f;
-            scene.AddResource<GridState>(state);
+            GridState& added = scene.AddResource<GridState>(std::move(state));
+
+            // The grid's own section, before the lighting panel's (RunLightingPanel adds those on the first frame).
+            if (auto* kit = app.TryGetResource<FenrirDemo::DemoUI>())
+            {
+                const FenrirDemo::DemoSection grid = kit->SceneSection("Spheres");
+                grid.Toggle("Sun (L)", &added.sunOn, "A sun from above and to the right, behind the camera");
+                grid.Colour("Base colour (linear)", LinearColour(&added.baseColour), "Every sphere's base colour");
+            }
         }
 
         void DrawLabels(Fenrir::Scene& scene)
@@ -110,7 +120,7 @@ namespace LightingDemo
                                 std::format("{:.2f}", Fraction(column, Columns)), Fenrir::Colour::White);
             }
             draw->WorldText({0.0f, below - 0.5f, 0.0f}, "roughness", Fenrir::Colour::White);
-            // On the right, clear of the Lighting window.
+            // On the right of the grid.
             const float right = SpherePosition(Columns - 1, 0).x + 0.9f;
             for (std::size_t row = 0; row < Rows; ++row)
             {
@@ -134,13 +144,12 @@ namespace LightingDemo
                 app.Logger()->Info("L: the sun is {}", state->sunOn ? "on" : "off");
             }
 
-            bool recolour = false;
-            RunLightingPanel(app, scene, state->lighting, [&] {
-                ImGui::Checkbox("Sun (L)", &state->sunOn);
-                recolour = ImGui::ColorEdit3("Base colour (linear)", &state->baseColour.r, ImGuiColorEditFlags_Float);
-            });
-            if (recolour)
+            RunLightingPanel(app, scene, state->lighting);
+            const Fenrir::Colour& colour = state->baseColour;
+            const Fenrir::Colour& applied = state->appliedColour;
+            if (colour.r != applied.r || colour.g != applied.g || colour.b != applied.b)
             {
+                state->appliedColour = state->baseColour;
                 for (const auto& material : state->materials)
                 {
                     store.SetColour(material, "baseColour", state->baseColour);
@@ -158,7 +167,25 @@ namespace LightingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Material grid";
-        scene.keyHelp = LightingKeyHelp(false) + " L: the sun on or off.";
+        scene.keyRows = LightingKeyRows(false);
+        scene.keyRows.push_back({"L", "the sun on or off"});
+        // The first scene: its tutorial shows the panel every LightingDemo scene shares.
+        std::vector<FenrirDemo::DemoKeyRow> panelKeys = LightingKeyRows(true);
+        panelKeys.back().what += ", in a scene with more than one";
+        scene.tutorial = FenrirDemo::DemoTutorial{
+            .title = "LightingDemo",
+            .steps = {{.title = "The lighting panel",
+                       .text = "The demo panel on the right sets every camera's look: exposure, tonemapper, bloom, "
+                               "the colour grade, ambient occlusion, reflections, the sun's shadows, the debug view "
+                               "and the sky. Every LightingDemo scene shares its sections, after the scene's own."},
+                      {.title = "Its keys",
+                       .text = "These keys move the panel's rows too. Try G: it steps the debug view.",
+                       .keys = std::move(panelKeys)},
+                      {.title = "The scenes",
+                       .text = "The Scenes section at the panel's top enters any scene; PageDown and PageUp step "
+                               "through them. F1 hides or shows the panel and the help.",
+                       .keys = {{"PageDown/PageUp", "the next or previous scene"},
+                                {"F1", "the demo panel and the help hidden or shown"}}}}};
         scene.keys = {Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::B, Fenrir::Key::L, Fenrir::Key::T, Fenrir::Key::E,
                       Fenrir::Key::B, Fenrir::Key::L, Fenrir::Key::G, Fenrir::Key::O, Fenrir::Key::G, Fenrir::Key::O};
         scene.camera.position = {0.0f, 0.0f, 10.0f};

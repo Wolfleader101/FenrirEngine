@@ -2,13 +2,13 @@
 #include <cmath>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
-
-#include <imgui.h>
 
 #include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirRenderer/Components.hpp"
@@ -139,7 +139,11 @@ namespace LightingDemo
                     state.models.push_back(root);
                 }
             }
-            scene.AddResource<ShowcaseState>(state);
+            ShowcaseState& added = scene.AddResource<ShowcaseState>(std::move(state));
+            if (auto* kit = app.TryGetResource<FenrirDemo::DemoUI>())
+            {
+                kit->SceneSection("Models").Toggle("Turntable (R)", &added.turntable, "Turns the helmets slowly");
+            }
         }
 
         void Update(Fenrir::App& app, Fenrir::Scene& scene)
@@ -158,7 +162,7 @@ namespace LightingDemo
                 state->turntable = !state->turntable;
                 app.Logger()->Info("R: the turntable is {}", state->turntable ? "on" : "off");
             }
-            RunLightingPanel(app, scene, state->lighting, [&] { ImGui::Checkbox("Turntable (R)", &state->turntable); });
+            RunLightingPanel(app, scene, state->lighting);
 
             if (state->turntable)
             {
@@ -179,7 +183,8 @@ namespace LightingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp = LightingKeyHelp(true) + " R: the turntable on or off.";
+        scene.keyRows = LightingKeyRows(true);
+        scene.keyRows.push_back({"R", "the turntable on or off"});
         scene.keys = {Fenrir::Key::S, Fenrir::Key::T, Fenrir::Key::B, Fenrir::Key::R, Fenrir::Key::S, Fenrir::Key::E,
                       Fenrir::Key::B, Fenrir::Key::R, Fenrir::Key::G, Fenrir::Key::O, Fenrir::Key::G, Fenrir::Key::O};
         scene.camera.position = {0.0f, 1.5f, 7.0f};
