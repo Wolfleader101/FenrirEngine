@@ -117,36 +117,61 @@ TEST_CASE("The demo panel's UIDemo section shows the HUD's and the menu's styles
 {
     DemoApp demo;
     demo.Frames(2);
-    INFO("the demo logged errors: " << (demo.errors->empty() ? "" : demo.errors->front()));
-    REQUIRE(demo.errors->empty());
-    INFO("the panel has no UIDemo section");
-    REQUIRE(Contains(demo.KitTexts("demo-section-title"), "UIDemo"));
+    {
+        INFO("the demo logged errors: " << (demo.errors->empty() ? "" : demo.errors->front()));
+        REQUIRE(demo.errors->empty());
+    }
+    {
+        INFO("the panel has no UIDemo section");
+        REQUIRE(Contains(demo.KitTexts("demo-section-title"), "UIDemo"));
+    }
     const std::vector<std::string> lines = demo.KitTexts("demo-text");
-    INFO("the panel does not show the HUD's stylesheet " << demo.app.GetResource<UIDemo::Hud>().StylesheetPath());
-    REQUIRE(Contains(lines, demo.app.GetResource<UIDemo::Hud>().StylesheetPath()));
-    INFO("the panel does not show the menu's stylesheet " << demo.Menu().StylesheetPath());
-    REQUIRE(Contains(lines, demo.Menu().StylesheetPath()));
-    // The paths are longer than the panel is wide, so they wrap inside it: each is within the panel and taller than
-    // the one line of a readout's label.
+    {
+        INFO("the panel does not show the HUD's stylesheet " << demo.app.GetResource<UIDemo::Hud>().StylesheetPath());
+        REQUIRE(Contains(lines, demo.app.GetResource<UIDemo::Hud>().StylesheetPath()));
+    }
+    {
+        INFO("the panel does not show the menu's stylesheet " << demo.Menu().StylesheetPath());
+        REQUIRE(Contains(lines, demo.Menu().StylesheetPath()));
+    }
+    // The paths are longer than the panel is wide, so they wrap inside it: each is within the panel and at least two
+    // lines high. Content boxes, so a row's padding is not counted as a line; the paths' length is the checkout's, so
+    // only "wrapped at least once" holds everywhere.
     const Fenrir::UIRoot& kit = demo.Kit().Root();
     const Fenrir::Rect2D panel = kit.GetBoxes(kit.FindById("demo-panel")).content;
     const std::vector<Fenrir::ElementId> labels = kit.FindByClass("demo-readout-label");
-    INFO("the panel has no readout, so no readout line to measure a wrapped path against");
-    REQUIRE_FALSE(labels.empty());
-    const float lineHeight = kit.GetBoxes(labels.front()).border.height;
+    {
+        INFO("the panel has no readout, so no label line to measure a wrapped path against");
+        REQUIRE_FALSE(labels.empty());
+    }
+    // The shortest label is one line: a long one wraps in its 140-unit column.
+    float lineHeight = kit.GetBoxes(labels.front()).content.height;
+    for (const Fenrir::ElementId label : labels)
+    {
+        lineHeight = std::min(lineHeight, kit.GetBoxes(label).content.height);
+    }
     for (const Fenrir::ElementId line : kit.FindByClass("demo-text"))
     {
-        const Fenrir::Rect2D box = kit.GetBoxes(line).border;
-        INFO("the line " << kit.GetText(line) << " runs past the panel's right edge");
-        REQUIRE(box.x + box.width <= panel.x + panel.width + 0.5f);
-        INFO("the line " << kit.GetText(line) << " is not wrapped: it is " << box.height << " high");
-        REQUIRE(box.height > lineHeight * 1.5f);
+        const Fenrir::ElementBoxes boxes = kit.GetBoxes(line);
+        {
+            INFO("the line " << kit.GetText(line) << " runs past the panel's right edge");
+            REQUIRE(boxes.border.x + boxes.border.width <= panel.x + panel.width + 0.5f);
+        }
+        {
+            INFO("the line " << kit.GetText(line) << " is not wrapped: its text is " << boxes.content.height
+                             << " high, one line " << lineHeight);
+            REQUIRE(boxes.content.height >= lineHeight * 1.9f);
+        }
     }
     // The settings' defaults: a volume of 80 and a field of view of 60 degrees.
-    INFO("the volume reads " << Readout(demo, "Volume"));
-    REQUIRE(Readout(demo, "Volume") == "80 (no audio yet)");
-    INFO("the field of view reads " << Readout(demo, "Field of view"));
-    REQUIRE(Readout(demo, "Field of view") == "60 degrees");
+    {
+        INFO("the volume reads " << Readout(demo, "Volume"));
+        REQUIRE(Readout(demo, "Volume") == "80 (no audio yet)");
+    }
+    {
+        INFO("the field of view reads " << Readout(demo, "Field of view"));
+        REQUIRE(Readout(demo, "Field of view") == "60 degrees");
+    }
 }
 
 TEST_CASE("The demo panel's hot reload toggles turn the HUD's and the menu's reloading off and on")
