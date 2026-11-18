@@ -16,5 +16,7 @@ public enum CursorShape : byte
     /// <summary>The pointing hand, over a link or button.</summary>
     Hand = 6,
     NotAllowed = 7,
-    Hidden = 8,
+    /// <summary>The four-way arrows, over something that can be dragged about.</summary>
+    Move = 8,
+    Hidden = 9,
 }

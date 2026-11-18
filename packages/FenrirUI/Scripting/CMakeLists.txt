@@ -13,6 +13,6 @@ fenrir_scripting_extension(UI
         include/FenrirUIScripting/UIScripting.hpp
         src/UIScripting.cpp
         src/UIScriptingState.hpp
-    LINK FenrirUI FenrirPainterScripting FenrirTextScripting FenrirAssetsScripting FenrirInputScripting
+    LINK FenrirUI FenrirRenderer FenrirPainterScripting FenrirTextScripting FenrirAssetsScripting FenrirInputScripting
     DESCRIPTIONS api/FenrirUIScripting.api.json
 )

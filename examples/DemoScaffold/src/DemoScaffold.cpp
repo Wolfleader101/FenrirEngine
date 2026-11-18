@@ -540,8 +540,7 @@ namespace FenrirDemo
 
             [[nodiscard]] Fenrir::Math::Quat FreeFlyRotation() const
             {
-                return Fenrir::Math::AngleAxis(yaw, Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f)) *
-                       Fenrir::Math::AngleAxis(pitch, Fenrir::Math::Vec3(1.0f, 0.0f, 0.0f));
+                return YawPitch(yaw, pitch);
             }
 
             void PlaceFreeFly(const Fenrir::Math::Vec3& position)

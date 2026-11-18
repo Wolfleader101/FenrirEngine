@@ -24,6 +24,7 @@ namespace Fenrir::Generated
                 Fenrir::MakeComponent<Fenrir::RectLight>("Fenrir.Renderer.RectLight"),
                 Fenrir::MakeComponent<Fenrir::SkinnedMesh>("Fenrir.Renderer.SkinnedMesh"),
                 Fenrir::MakeComponent<Fenrir::SpotLight>("Fenrir.Renderer.SpotLight"),
+                Fenrir::MakeComponent<Fenrir::WorldQuad2D>("Fenrir.Renderer.WorldQuad2D"),
             };
             extension.events = {};
             extension.sharedStructs = {

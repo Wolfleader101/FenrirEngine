@@ -1,4 +1,6 @@
 // The stylesheet parser (ADR-0064): selectors, shorthands, nesting, at-rules and what it refuses, each with its line.
+// The `[shorthand]` tests read a shorthand set inline or from a sheet back from an element's resolved style, through a
+// headless App (the spec's seam 1).
 #include <algorithm>
 #include <string>
 #include <string_view>
@@ -9,9 +11,13 @@
 
 #include "FenrirUI/Stylesheet.hpp"
 #include "FenrirUI/UIRoot.hpp"
+#include "UITestApp.hpp"
 
 namespace
 {
+    using Fenrir::ElementId;
+    using UITest::StyleTest;
+
     using Declarations = std::vector<std::pair<std::string, std::string>>;
 
     Declarations NamesAndValues(const Fenrir::StyleRule& rule)
@@ -64,6 +70,7 @@ namespace
 TEST_CASE("Type, class, id and compound selectors parse with CSS's specificity", "[ui][stylesheet]")
 {
     const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse("panel {} .card {} #title {} button.primary#ok {}", "t");
+    INFO("the stylesheet parses with no errors into its four rules");
     REQUIRE(sheet.diagnostics.empty());
     REQUIRE(sheet.rules.size() == 4);
 
@@ -91,6 +98,7 @@ TEST_CASE("Type, class, id and compound selectors parse with CSS's specificity",
 TEST_CASE("Descendant and child combinators and selector lists parse", "[ui][stylesheet]")
 {
     const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse(".menu   .item>label, #hud > .bar {}", "t");
+    INFO("the stylesheet parses with no errors into one rule");
     REQUIRE(sheet.diagnostics.empty());
     REQUIRE(sheet.rules.size() == 1);
     REQUIRE(sheet.rules[0].selectors.size() == 2);
@@ -184,6 +192,119 @@ TEST_CASE("Margin, padding, gap and the border lists expand from one to four val
     REQUIRE(Expand("gap: 5px 10%;") == Declarations{{"row-gap", "5px"}, {"column-gap", "10%"}});
 }
 
+TEST_CASE("Inset expands from one to four values into top, right, bottom and left", "[ui][stylesheet]")
+{
+    INFO("two values are top and bottom, then right and left");
+    REQUIRE(Expand("inset: 1px 2px;") ==
+            Declarations{{"top", "1px"}, {"right", "2px"}, {"bottom", "1px"}, {"left", "2px"}});
+    INFO("one is every side");
+    REQUIRE(Expand("inset: 0;") == Declarations{{"top", "0"}, {"right", "0"}, {"bottom", "0"}, {"left", "0"}});
+    const Fenrir::Stylesheet five = Fenrir::Stylesheet::Parse("panel {\n  inset: 1px 2px 3px 4px 5px;\n}\n", "five");
+    INFO("five values are refused on their line, setting no side");
+    REQUIRE(HasDiagnosticOnLine(five, 2, "inset"));
+    REQUIRE(five.rules.at(0).declarations.empty());
+}
+
+TEST_CASE("Border-image expands into its source and slice", "[ui][stylesheet]")
+{
+    INFO("a source and a slice are the two longhands");
+    REQUIRE(Expand("border-image: url(frame.png) 12;") ==
+            Declarations{{"border-image-source", "url(frame.png)"}, {"border-image-slice", "12"}});
+    INFO("up to four slices go to the slice, and a slice left out is its initial 0");
+    REQUIRE(Expand("border-image: url(frame.png) 1 2 3 4;")[1] ==
+            std::pair<std::string, std::string>{"border-image-slice", "1 2 3 4"});
+    REQUIRE(Expand("border-image: url(frame.png);")[1] ==
+            std::pair<std::string, std::string>{"border-image-slice", "0"});
+}
+
+TEST_CASE("Border-image refuses what FenrirUI has no longhand for", "[ui][stylesheet]")
+{
+    const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse("panel {\n"
+                                                               "  border-image: url(frame.png) 12 / 4px;\n"
+                                                               "  border-image: url(frame.png) 12 round;\n"
+                                                               "  border-image: url(frame.png) 1 2 3 4 5;\n"
+                                                               "}\n",
+                                                               "refused");
+    INFO("a width or outset after a slash is refused, naming the two longhands FenrirUI has");
+    REQUIRE(HasDiagnosticOnLine(sheet, 2, "border-image-source"));
+    REQUIRE(HasDiagnosticOnLine(sheet, 2, "border-image-slice"));
+    INFO("so is a repeat keyword");
+    REQUIRE(HasDiagnosticOnLine(sheet, 3, "border-image-slice"));
+    INFO("and five slices");
+    REQUIRE(HasDiagnosticOnLine(sheet, 4, "border-image"));
+    REQUIRE(sheet.rules.at(0).declarations.empty());
+}
+
+TEST_CASE("inset: 1px 2px sets top and bottom to 1, right and left to 2", "[ui][shorthand]")
+{
+    StyleTest t;
+    const ElementId box = t.Make("box");
+    t.Set(box, "inset", "1px 2px");
+    t.test.Frame();
+    const Fenrir::ResolvedStyle& style = t.Style(box);
+    INFO("the first value is top and bottom, the second right and left");
+    REQUIRE(style.top == Fenrir::Length::Px(1.0f));
+    REQUIRE(style.bottom == Fenrir::Length::Px(1.0f));
+    REQUIRE(style.right == Fenrir::Length::Px(2.0f));
+    REQUIRE(style.left == Fenrir::Length::Px(2.0f));
+}
+
+TEST_CASE("inset with five values is refused and sets no side", "[ui][shorthand]")
+{
+    StyleTest t;
+    const ElementId box = t.Make("box");
+    INFO("five values are refused");
+    REQUIRE_FALSE(t.root.SetStyleProperty(box, "inset", "1px 2px 3px 4px 5px"));
+    t.test.Frame();
+    INFO("every side keeps its initial auto");
+    REQUIRE(t.Style(box).top == Fenrir::Length::Auto());
+    REQUIRE(t.Style(box).left == Fenrir::Length::Auto());
+}
+
+TEST_CASE("border-image resolves as its two longhands do, inline or from a sheet", "[ui][shorthand]")
+{
+    StyleTest t;
+    const Fenrir::AssetHandle<Fenrir::Image> frame = UITest::AddWhiteImage(t.test.app, "builtin:frame", 48, 48);
+    t.root.AddStylesheet(".sheet { border-image: url(builtin:frame) 12; }", "sheet");
+    const ElementId shorthand = t.Make("a");
+    const ElementId longhands = t.Make("b");
+    const ElementId sheet = t.Make("sheet");
+    t.Set(shorthand, "border-image", "url(builtin:frame) 12");
+    t.Set(longhands, "border-image-source", "url(builtin:frame)");
+    t.Set(longhands, "border-image-slice", "12");
+    t.test.Frame();
+    for (const ElementId element : {shorthand, longhands, sheet})
+    {
+        const Fenrir::ResolvedStyle& style = t.Style(element);
+        INFO("the source is the frame and every slice 12");
+        REQUIRE(style.borderImageSource == frame);
+        REQUIRE(style.borderImageSlice.top == 12.0f);
+        REQUIRE(style.borderImageSlice.right == 12.0f);
+        REQUIRE(style.borderImageSlice.bottom == 12.0f);
+        REQUIRE(style.borderImageSlice.left == 12.0f);
+    }
+}
+
+TEST_CASE("border-image refuses a width after a slash", "[ui][shorthand]")
+{
+    StyleTest t;
+    (void)UITest::AddWhiteImage(t.test.app, "builtin:frame", 48, 48);
+    const ElementId box = t.Make("box");
+    INFO("url(builtin:frame) 12 / 4px is refused");
+    REQUIRE_FALSE(t.root.SetStyleProperty(box, "border-image", "url(builtin:frame) 12 / 4px"));
+}
+
+TEST_CASE("border-image takes a slash inside its url() as part of the path", "[ui][shorthand]")
+{
+    StyleTest t;
+    const Fenrir::AssetHandle<Fenrir::Image> frame = UITest::AddWhiteImage(t.test.app, "builtin:ui/frame", 48, 48);
+    const ElementId box = t.Make("box");
+    t.Set(box, "border-image", "url(builtin:ui/frame) 12");
+    t.test.Frame();
+    INFO("the path's slash is not a width's");
+    REQUIRE(t.Style(box).borderImageSource == frame);
+}
+
 TEST_CASE("Border-radius expands from the top-left corner round", "[ui][stylesheet]")
 {
     INFO("two values are the top-left and bottom-right, then the other two");
@@ -209,10 +330,10 @@ TEST_CASE("Border sets every side's width and colour, and no style is no border"
                                                                  {"border-right-color", "#ff0000"},
                                                                  {"border-bottom-color", "#ff0000"},
                                                                  {"border-left-color", "#ff0000"}});
-    INFO("a style with no width is CSS's medium, 3px, and no colour is the initial one");
+    INFO("a style with no width is CSS's medium, 3px, and no colour is the initial one, currentcolor");
     const Declarations styleOnly = Expand("border: dashed;");
     REQUIRE(styleOnly[0] == std::pair<std::string, std::string>{"border-top-width", "3px"});
-    REQUIRE(styleOnly[4] == std::pair<std::string, std::string>{"border-top-color", "black"});
+    REQUIRE(styleOnly[4] == std::pair<std::string, std::string>{"border-top-color", "currentcolor"});
     INFO("with the style none, or none given, the widths are zero, as CSS computes them");
     REQUIRE(Expand("border: none;")[0] == std::pair<std::string, std::string>{"border-top-width", "0"});
     REQUIRE(Expand("border: 4px red;")[0] == std::pair<std::string, std::string>{"border-top-width", "0"});
@@ -309,7 +430,7 @@ TEST_CASE("Every kind of value the property set takes parses with no diagnostic"
             transform-origin: left top;
             color: cornflowerblue; font-size: 18px; text-shadow: 1px 1px 2px black;
             filter: blur(4px); backdrop-filter: blur(8px); background-position: center;
-            scrollbar-color: red blue; scrollbar-width: 6px;
+            scrollbar-color: red blue; scrollbar-width: thin;
             transition-duration: 1s; animation-name: spin;
         }
         .a { background-image: radial-gradient(red, blue); }
@@ -320,8 +441,8 @@ TEST_CASE("Every kind of value the property set takes parses with no diagnostic"
     {
         UNSCOPED_INFO("line " << diagnostic.line << ": " << diagnostic.message);
     }
-    INFO("lengths, colours, url(), gradients, shadows, transforms, transition and animation lists and the properties "
-         "FenrirUI does not style all parse");
+    INFO("lengths, colours, url(), gradients, shadows, transforms, filters, transition and animation lists, "
+         "background-position and the scrollbar properties all parse");
     REQUIRE(sheet.diagnostics.empty());
     REQUIRE(sheet.rules.size() == 3);
     REQUIRE(sheet.rules[0].declarations.size() == 24);
@@ -465,6 +586,7 @@ TEST_CASE("Nesting flattens to the selectors CSS nesting means", "[ui][styleshee
         }
     )",
                                                                "nesting");
+    INFO("the stylesheet parses with no errors");
     REQUIRE(sheet.diagnostics.empty());
     INFO("the outer rule comes first, then each nested rule in order, each selector of the outer list in turn");
     REQUIRE(SelectorTexts(sheet) == std::vector<std::string>{
@@ -485,6 +607,7 @@ TEST_CASE("A nested selector's & weighs as the outer list's highest specificity,
 {
     const Fenrir::Stylesheet sheet =
         Fenrir::Stylesheet::Parse(".card, #hero { &:hover {} > label {} .x { & .y {} } }", "is");
+    INFO("the stylesheet parses with no errors into the outer rule and its four nested ones");
     REQUIRE(sheet.diagnostics.empty());
     REQUIRE(sheet.rules.size() == 5);
     INFO("&:hover under .card, #hero is :is(.card, #hero):hover, an id and a class for both selectors");
@@ -502,6 +625,7 @@ TEST_CASE("Declarations after a nested rule apply after it, as a rule of the out
 {
     const Fenrir::Stylesheet sheet =
         Fenrir::Stylesheet::Parse(".a {\n  width: 1px;\n  &.b { width: 2px; }\n  width: 3px;\n}\n", "after");
+    INFO("the stylesheet parses with no errors");
     REQUIRE(sheet.diagnostics.empty());
     INFO("the outer rule, the nested rule, then a rule of .a holding what came after the nested one");
     REQUIRE(SelectorTexts(sheet) == std::vector<std::string>{".a", ".a.b", ".a"});
@@ -540,6 +664,7 @@ TEST_CASE("Imports are recorded with their url and line", "[ui][stylesheet]")
 {
     const Fenrir::Stylesheet sheet = Fenrir::Stylesheet::Parse(
         "@import url(\"base.css\");\n@import 'theme.css';\npanel { width: 1px; }\n", "imports");
+    INFO("the stylesheet parses with no errors");
     REQUIRE(sheet.diagnostics.empty());
     INFO("url() and a bare string both name the sheet, without their quotes");
     REQUIRE(sheet.imports.size() == 2);
@@ -559,6 +684,7 @@ TEST_CASE("A keyframes rule keeps its name, and each block's offsets and declara
                                                                "  to { opacity: 1; }\n"
                                                                "}\n",
                                                                "keyframes");
+    INFO("the stylesheet parses with no errors into one keyframes rule");
     REQUIRE(sheet.diagnostics.empty());
     REQUIRE(sheet.keyframes.size() == 1);
     const Fenrir::StyleKeyframes& pulse = sheet.keyframes[0];
@@ -581,6 +707,7 @@ TEST_CASE("A font face keeps its descriptors as written", "[ui][stylesheet]")
                                                                "  font-weight: 700;\n"
                                                                "}\n",
                                                                "fonts");
+    INFO("the stylesheet parses with no errors into one font face");
     REQUIRE(sheet.diagnostics.empty());
     REQUIRE(sheet.fontFaces.size() == 1);
     INFO("each descriptor keeps its name and its value, quotes and url() included");

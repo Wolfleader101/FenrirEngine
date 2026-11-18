@@ -24,6 +24,8 @@ namespace RendererDemo
     {
         using Fenrir::Math::Vec3;
         using Material = Fenrir::AssetHandle<Fenrir::Material>;
+        using FenrirDemo::ScreenQuad;
+        using FenrirDemo::YawPitch;
 
         constexpr float Pi = 3.14159265f;
         // The greys of the scene's ColourSky, which lights it from every side, that M cycles through: dim, bright and
@@ -47,28 +49,6 @@ namespace RendererDemo
             bool boxVisible = true;
             float seconds = 0.0f;
         };
-
-        Fenrir::Math::Quat YawPitch(float yaw, float pitch)
-        {
-            return Fenrir::Math::AngleAxis(yaw, Vec3(0.0f, 1.0f, 0.0f)) *
-                   Fenrir::Math::AngleAxis(pitch, Vec3(1.0f, 0.0f, 0.0f));
-        }
-
-        /**
-         * @brief A quad of `width` x `height` in the XY plane facing +Z, with UV (0, 0) at its top-left corner and
-         * `repeat` at its bottom-right.
-         */
-        Fenrir::MeshData Quad(float width, float height, float repeat = 1.0f)
-        {
-            Fenrir::MeshData mesh;
-            const float w = width * 0.5f;
-            const float h = height * 0.5f;
-            mesh.positions = {Vec3(-w, -h, 0.0f), Vec3(w, -h, 0.0f), Vec3(w, h, 0.0f), Vec3(-w, h, 0.0f)};
-            mesh.normals = {Vec3(0, 0, 1), Vec3(0, 0, 1), Vec3(0, 0, 1), Vec3(0, 0, 1)};
-            mesh.uv0 = {{0.0f, repeat}, {repeat, repeat}, {repeat, 0.0f}, {0.0f, 0.0f}};
-            mesh.indices = {0, 1, 2, 0, 2, 3};
-            return mesh;
-        }
 
         /** @brief Appends one RGBA8 pixel to `image`. */
         void Push(Fenrir::ImageData& image, std::uint8_t red, std::uint8_t green, std::uint8_t blue, std::uint8_t alpha)
@@ -197,7 +177,7 @@ namespace RendererDemo
             place(cube.handle, Material{}, {2.4f, 0.5f, 0.0f});
             // An empty mesh and a stale one beside it draw nothing; the stale one is logged once.
             place(Fenrir::AssetHandle<Fenrir::Mesh>{}, make(lit, 0xFFFFFFFF), {3.6f, 0.5f, 0.0f});
-            const auto stale = store.Add<Fenrir::Mesh>(Quad(1.0f, 1.0f), scene);
+            const auto stale = store.Add<Fenrir::Mesh>(ScreenQuad(1.0f, 1.0f), scene);
             store.Unload(stale);
             place(stale, make(lit, 0xFFFFFFFF), {3.6f, 0.5f, 0.0f});
 
@@ -230,10 +210,10 @@ namespace RendererDemo
             nearest.filter = Fenrir::SamplerFilter::Nearest;
             const Material board = make(lit, 0xFFFFFFFF);
             store.SetTexture(board, "baseColourTexture", store.Add<Fenrir::Image>(Checker(), scene), nearest);
-            place(store.Add<Fenrir::Mesh>(Quad(7.0f, 2.0f, 4.0f), scene), board, {-2.5f, 2.2f, -2.4f});
+            place(store.Add<Fenrir::Mesh>(ScreenQuad(7.0f, 2.0f, 4.0f), scene), board, {-2.5f, 2.2f, -2.4f});
             const auto alphaDisc = store.Add<Fenrir::Image>(Disc(64, true), scene);
             const auto glowDisc = store.Add<Fenrir::Image>(Disc(64, false), scene);
-            const auto discQuad = store.Add<Fenrir::Mesh>(Quad(1.4f, 1.4f), scene);
+            const auto discQuad = store.Add<Fenrir::Mesh>(ScreenQuad(1.4f, 1.4f), scene);
             const std::array<std::pair<Fenrir::BlendMode, std::uint32_t>, 4> modes{{
                 {Fenrir::BlendMode::Opaque, 0xE04040FF},
                 {Fenrir::BlendMode::Masked, 0x40C040FF},
@@ -251,7 +231,7 @@ namespace RendererDemo
 
             // A double-sided quad turning about +Y, and a single-sided one beside it, which vanishes while it faces
             // away.
-            const auto turningQuad = store.Add<Fenrir::Mesh>(Quad(1.2f, 1.2f), scene);
+            const auto turningQuad = store.Add<Fenrir::Mesh>(ScreenQuad(1.2f, 1.2f), scene);
             const Material twoSided = make(lit, 0x8040C0FF);
             store.SetDoubleSided(twoSided, true);
             state.turning.at(0) = place(turningQuad, twoSided, {8.6f, 0.8f, 0.0f});

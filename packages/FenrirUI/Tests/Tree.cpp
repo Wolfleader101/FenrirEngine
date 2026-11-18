@@ -44,6 +44,7 @@ TEST_CASE("An element removed at once has a stale id, and a reused slot does not
     const Fenrir::ElementId child = root.Create(panel, "panel");
     root.SetIdString(child, "child");
 
+    INFO("Remove(immediate) takes a panel that is alive");
     REQUIRE(root.Remove(panel, Fenrir::RemoveMode::Immediate));
     INFO("the element and everything under it are gone");
     REQUIRE_FALSE(root.IsAlive(panel));
@@ -139,6 +140,7 @@ TEST_CASE("A registered tag makes its custom element, whose measure sizes the le
     std::shared_ptr<UITest::CaptureTarget> target;
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
     const Fenrir::ElementId row = root.Create(root.GetRootElement(), "panel");
+    INFO("the row's style is taken");
     REQUIRE(root.SetStyleProperty(row, "flex-direction", "row"));
     REQUIRE(root.SetStyleProperty(row, "align-items", "flex-start"));
     const Fenrir::ElementId leaf = root.Create(row, "fixed");
@@ -218,6 +220,7 @@ TEST_CASE("A dirty subtree resolves and lays out again, and a clean subtree is n
     TwoSubtrees tree(test);
     auto* rightElement = dynamic_cast<FixedSizeElement*>(tree.root->GetElement(tree.rightLeaf));
     const int rightMeasures = rightElement->measures;
+    INFO("the left leaf takes its margin");
     REQUIRE(tree.root->SetStyleProperty(tree.leftLeaf, "margin-top", "7px"));
     test.Frame();
 
@@ -233,6 +236,7 @@ TEST_CASE("A change that does not lay out resolves the style without a layout", 
 {
     UITest::UITestApp test;
     TwoSubtrees tree(test);
+    INFO("the right subtree takes its background");
     REQUIRE(tree.root->SetStyleProperty(tree.right, "background-color", "#ff0000"));
     test.Frame();
     INFO("the panel's style is resolved, and Yoga's style is unchanged, so no layout runs");
@@ -259,6 +263,7 @@ TEST_CASE("Inherited properties come from the parent, others from the defaults",
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
     const Fenrir::ElementId menu = root.Create(root.GetRootElement(), "panel");
     const Fenrir::ElementId item = root.Create(menu, "panel");
+    INFO("the menu's inherited and uninherited properties are taken");
     REQUIRE(root.SetStyleProperty(menu, "pointer-events", "all"));
     REQUIRE(root.SetStyleProperty(menu, "cursor", "pointer"));
     REQUIRE(root.SetStyleProperty(menu, "opacity", "0.5"));

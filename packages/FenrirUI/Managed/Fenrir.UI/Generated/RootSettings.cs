@@ -8,7 +8,8 @@ namespace Fenrir.UI;
 
 /// <summary>
 /// What a script makes a UI root with (UIRoot.Create): a root on a window's overlay at a layer, blending in the
-/// overlay's gamma space. A root drawn into an image or the world is made in C++.
+/// overlay's gamma space. A root drawn into an image is made with ImageRootSettings, and one on a quad in the world
+/// with WorldRootSettings.
 /// </summary>
 public partial struct RootSettings
 {

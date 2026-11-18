@@ -7,6 +7,7 @@
 // draw into capturing targets of a fixed size, so they lay out with no window; a script reaches one by its id, and what
 // it painted is read from the captured list.
 
+#include "CaptureTarget.hpp"
 #include "ExtensionTestApp.hpp"
 
 #include <cmath>
@@ -33,6 +34,7 @@ namespace Fenrir::Testing
 {
     // The fixture's types the tests call.
     inline constexpr const char* TreeCallsType = "UIScriptFixture.TreeCalls";
+    inline constexpr const char* CursorCallsType = "UIScriptFixture.CursorCalls";
     inline constexpr const char* ClicksType = "UIScriptFixture.Clicks";
     inline constexpr const char* PaintProbeType = "UIScriptFixture.PaintProbe";
     inline constexpr const char* BuildProbeType = "UIScriptFixture.BuildProbe";
@@ -94,28 +96,6 @@ namespace Fenrir::Testing
         }
         return sum / 4.0f;
     }
-
-    /** @brief A 2D target of a fixed size that keeps every list a root submits to it. */
-    class CaptureTarget : public UITarget
-    {
-      public:
-        explicit CaptureTarget(UITargetSize size) : size(size)
-        {
-        }
-
-        UITargetSize GetSize(App&) override
-        {
-            return size;
-        }
-
-        void Submit(App&, DrawList2D list) override
-        {
-            lists.push_back(std::move(list));
-        }
-
-        UITargetSize size;
-        std::vector<DrawList2D> lists;
-    };
 
     /** @brief Assets, input and the UI. Input comes before the UI, so the roots leave its routers before it ends. */
     struct UIPackages

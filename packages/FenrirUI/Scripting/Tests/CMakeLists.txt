@@ -7,6 +7,8 @@
 # overrides, placed documents and scoped component stylesheets among them.
 fenrir_scripting_tests(UI SOURCES UIScriptingApp.hpp Roots.cpp BuildStage.cpp Razor.cpp RazorHandlers.cpp
     RazorPaint.cpp RazorSheets.cpp)
+# Roots draw into the shared capturing test target, FenrirUI's test support.
+target_link_libraries(FenrirUIScriptingTests PRIVATE FenrirUITestSupport)
 fenrir_script_fixture(UI USES Input Assets Text Painter UIRazor RazorComponents)
 # Hot.razor's sheet, which the fixture records (its project file) and RazorSheets.cpp writes and rewrites: under the
 # fixture's intermediate folder, which fenrir_script_fixture passes it.

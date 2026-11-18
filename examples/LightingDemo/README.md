@@ -446,6 +446,9 @@ Hand checks for the demo panel, on OpenGL (above, "The demo panel"):
 - Material grid's tutorial shows on its first entry, at the top centre, steps with Next and Back through the panel, its
   keys and the scene list, and does not show on a second entry; the Tutorial button shows it again. Many lights' moves
   on by itself when M, then K, then C are pressed.
+- The help at the bottom left shows the app, the scene (i of n) and a table of keys: the scaffold's, then the lighting
+  panel's T, E, B, O, G and H (and S in Showcase models), then the scene's own. F1 hides the panel, the help and a
+  tutorial, and F1 again shows them and logs the help.
 
 Hand check for ambient occlusion: in Showcase models, contact shadows under the helmets where they meet the ground, and
 with G, dark creases and corners on white, no dark halo round a model's silhouette against what is far behind it.

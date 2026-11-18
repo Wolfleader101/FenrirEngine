@@ -35,6 +35,7 @@ namespace
                             const char* height)
     {
         const Fenrir::ElementId panel = root.Create(parent, "panel");
+        INFO("the panel takes its colour and size");
         REQUIRE(root.SetStyleProperty(panel, "background-color", colour));
         REQUIRE(root.SetStyleProperty(panel, "width", width));
         REQUIRE(root.SetStyleProperty(panel, "height", height));
@@ -48,6 +49,7 @@ TEST_CASE("Paint stage work paints into an element after its own box and before 
     std::shared_ptr<UITest::CaptureTarget> target;
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
     const Fenrir::ElementId parent = Panel(root, root.GetRootElement(), "#f00", "200px", "100px");
+    INFO("the parent takes its padding");
     REQUIRE(root.SetStyleProperty(parent, "padding", "10px"));
     Panel(root, parent, "#00f", "50px", "50px");
 
@@ -81,6 +83,7 @@ TEST_CASE("A paint stage painter draws under the element's transform and inside 
     std::shared_ptr<UITest::CaptureTarget> target;
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
     const Fenrir::ElementId clipper = Panel(root, root.GetRootElement(), "#f00", "100px", "100px");
+    INFO("the clipping panel takes overflow hidden");
     REQUIRE(root.SetStyleProperty(clipper, "overflow", "hidden"));
     const Fenrir::ElementId moved = Panel(root, clipper, "#00f", "40px", "40px");
     REQUIRE(root.SetStyleProperty(moved, "transform", "translate(30px, 0px)"));
@@ -120,6 +123,7 @@ TEST_CASE("In the paint stage a stale element gets no painter", "[ui][paint][sta
     std::shared_ptr<UITest::CaptureTarget> target;
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
     const Fenrir::ElementId removed = Panel(root, root.GetRootElement(), "#f00", "10px", "10px");
+    INFO("the panel is removed at once, leaving a stale id");
     REQUIRE(root.Remove(removed, Fenrir::RemoveMode::Immediate));
     bool stale = false;
     test.Roots().AddPaintStage(0, [&] { stale = root.PaintInto(removed) == nullptr; });
@@ -179,6 +183,7 @@ TEST_CASE("What the paint stage paints fades with an element whose opacity fades
     Fenrir::UIRoot& root = test.MakeRoot(target, {800.0f, 600.0f});
     // A leaf: with no children its opacity fades its boxes rather than going through an offscreen group.
     const Fenrir::ElementId faded = Panel(root, root.GetRootElement(), "#f00", "100px", "100px");
+    INFO("the leaf takes its opacity");
     REQUIRE(root.SetStyleProperty(faded, "opacity", "0.5"));
     test.Roots().AddPaintStage(0, [&] {
         if (Fenrir::Painter* painter = root.PaintInto(faded))

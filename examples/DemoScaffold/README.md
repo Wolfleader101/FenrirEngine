@@ -44,6 +44,17 @@ A `DemoScene` is one entry of the app's ordered scene list: a `name`, its `keyRo
 main thread). Each time a scene is entered it is spawned into a FenrirScene of its own, named after it; leaving it
 destroys that FenrirScene, and the assets the scene loaded for itself (owned by the scene) go with it.
 
+## Helpers
+
+What more than one demo needs to build a scene, in `FenrirDemoScaffold/DemoScaffold.hpp`, so a fix to one reaches
+every demo:
+
+- `YawPitch(yaw, pitch)`: the rotation of a yaw about +Y, then a pitch about the turned +X, in radians, as the free-fly
+  camera turns. 0 and 0 looks along -Z; positive yaw turns to the left (-Z towards -X), positive pitch turns up.
+- `ScreenQuad(width, height, repeat = 1)`: the `MeshData` of a quad of that size, centred in the XY plane and facing
+  +Z, with normals, tangents and UV0 from (0, 0) at the top-left corner to (`repeat`, `repeat`) at the bottom-right,
+  for screens, boards and other flat panels.
+
 ## C# scenes
 
 With `FENRIR_ENABLE_SCRIPTING` on, an app can run C# scenes:
@@ -312,4 +323,5 @@ going after its outro, Back stepping back and disabled on the first step, Close 
 click on the card too), the scene's keys reaching the game right after Close, a step's `done` asked each frame and
 moving it on and closing it after the last, a closed tutorial's `done` no longer asked, the scene's Tutorial button
 showing it again from step one (and restarting one that shows, in the same card), no button for a scene with no
-tutorial, and the card at the top centre, taking a press while one beside it reaches the scene.
+tutorial, and the card at the top centre, taking a press while one beside it reaches the scene; and the helpers,
+`YawPitch` and `ScreenQuad`, on their own.

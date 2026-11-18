@@ -26,6 +26,11 @@ namespace Fenrir::Detail
             return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
         }
 
+        bool Same(const ScrollbarColor& a, const ScrollbarColor& b)
+        {
+            return a.isAuto == b.isAuto && (a.isAuto || (Same(a.thumb, b.thumb) && Same(a.track, b.track)));
+        }
+
         bool Same(const Shadow& a, const Shadow& b)
         {
             return a.offset == b.offset && a.blur == b.blur && a.spread == b.spread && Same(a.colour, b.colour) &&
@@ -35,6 +40,11 @@ namespace Fenrir::Detail
         bool Same(const TransformStep& a, const TransformStep& b)
         {
             return a.kind == b.kind && a.x == b.x && a.y == b.y && a.factors == b.factors && a.radians == b.radians;
+        }
+
+        bool Same(const FilterStep& a, const FilterStep& b)
+        {
+            return a.kind == b.kind && a.radius == b.radius && a.offset == b.offset && Same(a.colour, b.colour);
         }
 
         bool Same(const GradientStop& a, const GradientStop& b)
@@ -155,6 +165,16 @@ namespace Fenrir::Detail
             return {channel(a.r, b.r), channel(a.g, b.g), channel(a.b, b.b), alpha};
         }
 
+        ScrollbarColor Mix(const ScrollbarColor& a, const ScrollbarColor& b, float t)
+        {
+            // Two pairs of colours mix colour by colour; auto against colours is discrete.
+            if (a.isAuto || b.isAuto)
+            {
+                return t >= 1.0f ? b : a;
+            }
+            return ScrollbarColor::Of(Mix(a.thumb, b.thumb, t), Mix(a.track, b.track, t));
+        }
+
         Shadow Mix(const Shadow& a, const Shadow& b, float t)
         {
             Shadow out;
@@ -232,6 +252,29 @@ namespace Fenrir::Detail
             }
             return out;
         }
+
+        std::vector<FilterStep> Mix(const std::vector<FilterStep>& a, const std::vector<FilterStep>& b, float t)
+        {
+            // Function by function when both lists hold the same functions in the same order; otherwise CSS's
+            // discrete fallback, which switches half way.
+            const bool matched = a.size() == b.size() &&
+                                 std::equal(a.begin(), a.end(), b.begin(),
+                                            [](const FilterStep& x, const FilterStep& y) { return x.kind == y.kind; });
+            if (!matched)
+            {
+                return t >= 0.5f ? b : a;
+            }
+            std::vector<FilterStep> out;
+            for (std::size_t i = 0; i < a.size(); ++i)
+            {
+                FilterStep step = a[i];
+                step.radius = std::max(Mix(a[i].radius, b[i].radius, t), 0.0f);
+                step.offset = Mix(a[i].offset, b[i].offset, t);
+                step.colour = Mix(a[i].colour, b[i].colour, t);
+                out.push_back(step);
+            }
+            return out;
+        }
         /** @} */
 
         bool SameField(StyleProperty property, const ResolvedStyle& a, const ResolvedStyle& b)
@@ -282,6 +325,15 @@ namespace Fenrir::Detail
         T At(const std::vector<T>& list, std::size_t index, T initial)
         {
             return list.empty() ? initial : list[index % list.size()];
+        }
+
+        /** @brief `property`'s field of `from`, alone, with its CurrentColour replaced by `colour`. */
+        ResolvedStyle ResolvedCopy(StyleProperty property, const ResolvedStyle& from, const Colour& colour)
+        {
+            ResolvedStyle copy;
+            CopyProperty(property, from, copy);
+            ResolveCurrentColour(property, copy, colour);
+            return copy;
         }
 
         /** @brief The value `transition` shows now, written over `out`. */
@@ -419,7 +471,14 @@ namespace Fenrir::Detail
             const float span = to.offset - from.offset;
             const float local = span > 0.0f ? std::clamp((progress - from.offset) / span, 0.0f, 1.0f) : 1.0f;
             const TimingFunction& ease = from.timing != nullptr ? *from.timing : timing;
-            MixField(property, *from.values, *to.values, ease.Apply(local), out);
+            if (!TakesColour(property))
+            {
+                MixField(property, *from.values, *to.values, ease.Apply(local), out);
+                return;
+            }
+            // Colours mix as what currentcolor resolves to: the cascaded color.
+            MixField(property, ResolvedCopy(property, *from.values, underlying.color),
+                     ResolvedCopy(property, *to.values, underlying.color), ease.Apply(local), out);
         }
     } // namespace
 
@@ -488,7 +547,8 @@ namespace Fenrir::Detail
         return compiled;
     }
 
-    void StartTransitions(ElementMotion& motion, const ResolvedStyle& before, const ResolvedStyle& after)
+    void StartTransitions(ElementMotion& motion, const ResolvedStyle& before, const ResolvedStyle& after,
+                          const Colour& shownColour)
     {
         // Which entry of the transition lists each property takes: the last that names it, as CSS.
         constexpr std::size_t none = static_cast<std::size_t>(-1);
@@ -531,9 +591,9 @@ namespace Fenrir::Detail
             }
             const auto existing = std::find_if(running.begin(), running.end(),
                                                [&](const RunningTransition& t) { return t.property == property; });
-            // The value it shows now: part way through a running transition, or its old cascaded value.
-            ResolvedStyle current;
-            CopyProperty(property, before, current);
+            // The value it shows now: part way through a running transition, or its old cascaded value, its
+            // currentcolor the colour shown.
+            ResolvedStyle current = ResolvedCopy(property, before, shownColour);
             if (existing != running.end())
             {
                 ApplyTransition(*existing, current);
@@ -549,12 +609,13 @@ namespace Fenrir::Detail
             transition.delay = At(after.transitionDelay, entry[p], 0.0f);
             transition.timing = At(after.transitionTimingFunction, entry[p], TimingFunction::Ease());
             // As CSS: a transition that would end before it starts does not run, nor one to the value it shows.
-            if (transition.duration + transition.delay <= 0.0f || SameField(property, current, after))
+            const ResolvedStyle target = ResolvedCopy(property, after, after.color);
+            if (transition.duration + transition.delay <= 0.0f || SameField(property, current, target))
             {
                 continue;
             }
             CopyProperty(property, current, transition.from);
-            CopyProperty(property, after, transition.to);
+            CopyProperty(property, target, transition.to);
             running.push_back(std::move(transition));
         }
     }
@@ -605,6 +666,11 @@ namespace Fenrir::Detail
             }
         }
         return changed;
+    }
+
+    bool SameShadows(const std::vector<Shadow>& a, const std::vector<Shadow>& b)
+    {
+        return Same(a, b);
     }
 
     bool SameProperty(StyleProperty property, const ResolvedStyle& a, const ResolvedStyle& b)

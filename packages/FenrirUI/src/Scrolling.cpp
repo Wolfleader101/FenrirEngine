@@ -9,13 +9,13 @@ namespace Fenrir::Detail
 {
     namespace
     {
-        /** @brief `track` less its style's padding: where the thumb runs. */
-        Rect2D Inner(const Rect2D& track, const ResolvedStyle& style)
+        /** @brief `track` less its style's padding times `inset`: where the thumb runs. */
+        Rect2D Inner(const Rect2D& track, const ResolvedStyle& style, float inset)
         {
-            const float left = ResolveLength(style.paddingLeft, track.width);
-            const float right = ResolveLength(style.paddingRight, track.width);
-            const float top = ResolveLength(style.paddingTop, track.width);
-            const float bottom = ResolveLength(style.paddingBottom, track.width);
+            const float left = ResolveLength(style.paddingLeft, track.width) * inset;
+            const float right = ResolveLength(style.paddingRight, track.width) * inset;
+            const float top = ResolveLength(style.paddingTop, track.width) * inset;
+            const float bottom = ResolveLength(style.paddingBottom, track.width) * inset;
             return {track.x + left, track.y + top, std::max(0.0f, track.width - left - right),
                     std::max(0.0f, track.height - top - bottom)};
         }
@@ -29,7 +29,21 @@ namespace Fenrir::Detail
             return bars;
         }
         const ResolvedStyle& track = slot.scrollbarStyles->track;
-        const float thickness = ResolveLength(track.width, 0.0f);
+        float thickness = ResolveLength(track.width, 0.0f);
+        // A thin bar is the default one at half its width, its thumb's inset halved with it, so the default
+        // stylesheet's 2-unit padding does not leave a thumb 1 unit wide.
+        float inset = 1.0f;
+        switch (slot.resolved.scrollbarWidth)
+        {
+        case ScrollbarWidth::Auto:
+            break;
+        case ScrollbarWidth::Thin:
+            thickness = ThinScrollbarWidth;
+            inset = 0.5f;
+            break;
+        case ScrollbarWidth::None:
+            return bars;
+        }
         if (thickness <= 0.0f)
         {
             return bars;
@@ -42,7 +56,7 @@ namespace Fenrir::Detail
         {
             bars.verticalTrack = {box.x + box.width - thickness, box.y, thickness,
                                   std::max(0.0f, box.height - (bars.horizontal ? thickness : 0.0f))};
-            const Rect2D inner = Inner(bars.verticalTrack, track);
+            const Rect2D inner = Inner(bars.verticalTrack, track, inset);
             // The thumb is the track's share the view shows of its content, kept no shorter than it is wide.
             const float shown = box.height / (box.height + slot.scrollRange.y);
             const float length = std::min(inner.height, std::max(inner.height * shown, inner.width));
@@ -54,7 +68,7 @@ namespace Fenrir::Detail
         {
             bars.horizontalTrack = {box.x, box.y + box.height - thickness,
                                     std::max(0.0f, box.width - (bars.vertical ? thickness : 0.0f)), thickness};
-            const Rect2D inner = Inner(bars.horizontalTrack, track);
+            const Rect2D inner = Inner(bars.horizontalTrack, track, inset);
             const float shown = box.width / (box.width + slot.scrollRange.x);
             const float length = std::min(inner.width, std::max(inner.width * shown, inner.height));
             bars.travel.x = inner.width - length;
