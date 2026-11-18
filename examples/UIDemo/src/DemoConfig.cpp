@@ -11,15 +11,14 @@ namespace UIDemo
     namespace
     {
         /**
-         * @brief What installPackages hands the scaffold to keep: FenrirUI, and the WorldUI, Menu and Hud resources
-         * over it, which go first, so their roots are destroyed while the UI is still there.
+         * @brief What installPackages hands the scaffold to keep: the WorldUI, Menu and Hud resources over the
+         * scaffold's FenrirUI, which the scaffold ends after them, so their roots are destroyed while the UI is there.
          */
         struct UIPackages
         {
             Fenrir::App* app = nullptr;
-            Fenrir::UI ui;
 
-            UIPackages(Fenrir::App& owner, Fenrir::UI installed) : app(&owner), ui(std::move(installed))
+            explicit UIPackages(Fenrir::App& owner) : app(&owner)
             {
             }
             UIPackages(const UIPackages&) = delete;
@@ -67,17 +66,17 @@ namespace UIDemo
         config.appName = "UIDemo";
         config.scenes = {Room()};
         config.msaa = 4;
-        // The room lists its switches in an ImGui window, as LightingDemo does.
-        config.imguiOverlay = true;
+        // FenrirUI is the scaffold's, installed before the app's packages.
         config.installPackages = [hud = std::move(hud),
                                   menu = std::move(menu)](Fenrir::App& app) -> std::shared_ptr<void> {
-            auto packages = std::make_shared<UIPackages>(app, Fenrir::UI::Install(app));
-            if (packages->ui.IsValid())
+            auto packages = std::make_shared<UIPackages>(app);
+            if (app.TryGetResource<Fenrir::UIRoots>() != nullptr)
             {
                 RegisterSdfFamily(app);
                 app.AddResource<Hud>(app, hud);
                 app.AddResource<Menu>(app, menu);
                 app.AddResource<WorldUI>(app);
+                AddPanelSection(app);
             }
             return packages;
         };

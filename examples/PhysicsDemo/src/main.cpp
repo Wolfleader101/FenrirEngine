@@ -22,8 +22,8 @@ int main()
 
     FenrirDemo::DemoConfig config;
     config.appName = "PhysicsDemo";
-    config.appKeyHelp = "cycle the physics debug lines: off, colliders, contacts, velocities, bounds, joints, "
-                        "characters, vehicles, all.";
+    config.appKeyRows = {{"F2", "step the physics debug lines: off, colliders, contacts, velocities, bounds, joints, "
+                                "characters, vehicles, all"}};
     config.scenes.push_back(PhysicsDemo::Playground(app, physics));
 #ifdef FENRIR_DEMO_SCRIPT_ASSEMBLY
     config.scenes.push_back(PhysicsDemo::PlaygroundCSharp());
@@ -45,8 +45,8 @@ int main()
     // Physics from C#: the physics components, PhysicsWorld's functions and the Fenrir.Physics contract.
     config.scriptingExtensions = {Fenrir::Physics::ScriptingExtension()};
 #endif
-    PhysicsDemo::AddDebugCategoryCycling(app);
-
     FenrirDemo::DemoScaffold demo = FenrirDemo::DemoScaffold::Install(app, std::move(config));
+    // After the scaffold, which adds the demo UI kit that holds F2's Debug lines choice.
+    PhysicsDemo::AddDebugCategoryCycling(app);
     return demo.Run();
 }

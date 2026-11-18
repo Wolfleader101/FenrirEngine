@@ -10,8 +10,9 @@
 namespace FenrirDemo::Detail
 {
     /**
-     * @brief Every scripting extension of the packages the scaffold installs (Input, Window, Assets, Renderer), in the
-     * order their contracts build on each other, then the scaffold's own: the Fenrir.Demo assembly, with the
+     * @brief Every scripting extension of the packages the scaffold installs (Input, Window, Assets, Renderer,
+     * DebugDrawing, and Text, Painting and UI where FenrirUI's is built), in the order their contracts build on each
+     * other, then the scaffold's own: the Fenrir.Demo assembly, with the
      * CSharpScene marker as a read-only scene resource and DemoSceneClickEvent as a native event.
      */
     [[nodiscard]] std::vector<Fenrir::ScriptingExtension> DemoScriptingExtensions();

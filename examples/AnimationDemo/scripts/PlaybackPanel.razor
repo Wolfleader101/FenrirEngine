@@ -1,0 +1,51 @@
+@* Playback (C#)'s readouts (examples/AnimationDemo/README.md, "The demo panel"), which PlaybackPanelSetup mounts into
+   the scene's demo slot: the demo UI kit's shared Razor components (Fenrir.Demo.Razor), styled like the C++ rows. It
+   reads the scene's PlaybackScene and Animation.Playback through Context, so it shows what the keys (Playback.cs) set.
+   It has no switches: the keys are the scene's. *@
+@using System.Globalization
+@using Fenrir.Animation
+@using Fenrir.Assets
+@using Fenrir.Demo.Razor
+@using Fenrir.Scripting
+@{ Values shown = Shown; }
+<DemoSection Title="Walker (Razor)">
+    <Readout Label="Clip" Value="@shown.Clip" />
+    <Readout Label="Time" Value="@shown.Time" />
+    <Readout Label="Speed" Value="@shown.Speed" />
+    <Readout Label="Loop" Value="@shown.Loop" />
+    <Readout Label="Playing" Value="@shown.Playing" />
+    <Readout Label="Laps" Value="@shown.Laps" />
+    <Readout Label="Crossfade" Value="@shown.Crossfade" />
+    <Readout Label="Upper-body layer" Value="@shown.Layer" />
+</DemoSection>
+
+@code {
+    // What the readouts show, as text, so the panel rebuilds only when a shown value changes.
+    private readonly record struct Values(string Clip, string Time, string Speed, string Loop, string Playing,
+                                          string Laps, string Crossfade, string Layer);
+
+    private static readonly Values Unbuilt = new("-", "-", "-", "-", "-", "-", "-", "-");
+
+    private Values Shown
+    {
+        get
+        {
+            if (!PlaybackCSharp.TryGet(Context, out PlaybackScene state))
+                return Unbuilt;
+            PlaybackInfo info = Fenrir.Animation.Animation.Playback(state.Skeleton);
+            AssetHandle<Clip> clip = PlaybackCSharp.ClipOf(state, state.Clip);
+            return new Values(
+                PlaybackCSharp.ClipNames[state.Clip],
+                string.Create(CultureInfo.InvariantCulture, $"{info.Time:0.00} / {Clips.Duration(clip):0.00} s"),
+                state.Speed.ToString("0.00", CultureInfo.InvariantCulture),
+                state.Loop.ToString(),
+                (state.Playing ? "playing" : "paused") + (info.Finished ? ", finished" : ""),
+                info.CompletedLoops.ToString(CultureInfo.InvariantCulture),
+                info.Fading ? info.FadeProgress.ToString("0.00", CultureInfo.InvariantCulture) : "settled",
+                state.LayerWeight.ToString("0.00", CultureInfo.InvariantCulture) + ", spine_01's subtree");
+        }
+    }
+
+    // Rebuilt when a key, or the clip playing on, changed what is shown.
+    protected override int BuildHash() => Shown.GetHashCode();
+}

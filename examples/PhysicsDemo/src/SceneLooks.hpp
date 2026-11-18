@@ -1,11 +1,14 @@
 #pragma once
 
+#include <initializer_list>
 #include <span>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirECS/Entity.hpp"
+#include "FenrirInput/InputTypes.hpp"
 #include "FenrirMath/Math.hpp"
 
 namespace Fenrir
@@ -16,7 +19,7 @@ namespace Fenrir
 } // namespace Fenrir
 
 // What PhysicsDemo's C++ scenes share: how their bodies look, the readouts the legacy editor's hierarchy showed, and
-// F2.
+// F2 with its Debug lines choice.
 namespace PhysicsDemo
 {
     /**
@@ -61,18 +64,37 @@ namespace PhysicsDemo
      */
     [[nodiscard]] Fenrir::Math::Quat LookRotation(float yawDegrees, float pitchDegrees);
 
-    /**
-     * @brief Shows each entity's Name as debug screen text, one line each from the window's top-left: the legacy
-     * scenes write their live readings into names, which the legacy editor's hierarchy showed. A destroyed entity is
-     * skipped.
-     */
-    void ShowReadouts(Fenrir::Scene& scene, std::span<const Fenrir::Entity> entities);
+    /** @brief One readout of ShowReadouts: the row's label, and the entity whose Name holds the reading. */
+    struct Reading
+    {
+        std::string_view label;
+        Fenrir::Entity entity;
+    };
 
     /**
-     * @brief Adds PhysicsDemo's F2: each press steps the physics debug categories (off, colliders, contacts,
-     * velocities, bounds, joints, characters, vehicles, all, and round again), logged, and applies them to the active
-     * scene's physics world. The categories are the app's, so a scene entered later gets them once its world exists;
-     * what a scene's own code sets lasts until the next F2 or scene.
+     * @brief The value a readout labelled `label` shows for an entity named `name`: the name without a leading
+     * "<label>: " or "<label> ", which the legacy scenes' names start with, or else the whole name.
+     */
+    [[nodiscard]] std::string_view ReadingValue(std::string_view name, std::string_view label);
+
+    /**
+     * @brief Shows each entity's Name as a readout in the active scene's "Readings" section of the demo panel: the
+     * legacy scenes write their live readings into names, which the legacy editor's hierarchy showed. Called each frame
+     * from the scene's `Update`; the section and a readout per label are made the first time they are asked for, and go
+     * with the scene. A destroyed entity's readout is hidden.
+     */
+    void ShowReadouts(Fenrir::App& app, std::span<const Reading> readings);
+
+    /**
+     * @brief Adds PhysicsDemo's F2 and, with the demo UI kit, its "Debug lines" choice (a switch row) in the demo
+     * panel's app section "Physics": each press steps the physics debug categories (off, colliders, contacts,
+     * velocities, bounds, joints, characters, vehicles, all, and round again), the choice picks one, and either is
+     * logged and applied to the active scene's physics world. The categories are the app's, so a scene entered later
+     * gets them once its world exists; what a scene's own code sets lasts until the next F2, choice or scene. Run after
+     * DemoScaffold::Install, which adds the kit.
      */
     void AddDebugCategoryCycling(Fenrir::App& app);
+
+    /** @brief Whether any of `keys` was pressed this frame: a demo tutorial step's `done` for the keys it teaches. */
+    [[nodiscard]] bool AnyJustPressed(Fenrir::App& app, std::initializer_list<Fenrir::Key> keys);
 } // namespace PhysicsDemo

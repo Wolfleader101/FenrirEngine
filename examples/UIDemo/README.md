@@ -17,21 +17,24 @@ components, and its HUD system pushes what they hold into the HUD's elements eve
 `src/` (`UIDemoCore`, which the app and its test link), the room's assets come from the shared demo assets
 (`examples/assets`: the cube, the sphere and Khronos's BoxTextured), and nothing is downloaded (ADR-0052).
 
-## The UIDemo window
+## The demo panel
 
-An ImGui window, as LightingDemo lists its switches: the room's keys (and how to use the light terminal), the HUD's and
-the menu's hot reload switches and the full paths of their stylesheets (also logged at start), and the menu's volume and
-field of view as last set.
+The demo UI kit's panel, on the right (`examples/DemoScaffold/README.md`, "The demo UI kit"), has the app's section
+"UIDemo": toggles for the HUD's and the menu's hot reload, each over the full path of its stylesheet (also logged at
+start), and readouts of the menu's volume ("no audio yet") and field of view as last set. The room's keys are its key
+rows in the help, at the bottom left, and the room has a demo tutorial, shown the first time it is entered: fire,
+reload, take a hit, the light terminal, and last the pause menu, as the Escape that would open the menu closes the card
+first. The first four steps end on what they teach. While the tutorial shows, Escape is the card's, not the menu's.
 
 ## Scenes
 
 | Scene | Shows | Keys |
 | --- | --- | --- |
-| The HUD | A UI root on the main window's overlay, under the ImGui window, loaded from the markup document `assets/ui/hud.ui` and styled by `assets/ui/hud.css`, over a room of 14 by 14 metres with pillars, crates and three spheres, lit by a dim sun through its open top and three warm lamps. The compass's strip and the ammo counter's box cast soft shadows under them (`filter: drop-shadow()`, drawing each with its subtree through an offscreen group). Top centre, the **compass**: a custom element (`src/Compass.cpp`, registered as `compass`) painting with the painter 120 degrees of heading round the camera's, ticks every 15 degrees, taller at north, east, south and west, each of those four with its letter over its tick, and a needle at the centre, in the element's `color`. The letters are paragraphs the element lays out and paints itself, in `ui-sdf`, the engine's embedded face registered in SDF mode (ADR-0062), so they stay smooth at any size. Top right, the **minimap**: an `image` element showing what an orthographic camera looking straight down draws into a render target image, following the camera across the room, north up, in a round frame clipped by `overflow: hidden`, with the player's arrow at its centre turning with the heading. Bottom left, the **health** and **stamina bars**: `progress` elements set from the components; stamina drains while the camera moves and refills while it stands. Bottom right, the **ammo counter**: a `label` reading the rounds in the magazine over the reserve. At the centre, a dot, and a **hit marker** for each shot, made by the game, scaling in through `:intro` and fading out through `:outro` a quarter of a second later, its word HIT glowing through a blurred `text-shadow`. While the pause menu is open the room's HUD system gives the HUD's top element the class `paused`, and `filter: blur(3px)`, transitioned from `blur(0px)` over 0.3 seconds, blurs the whole HUD in behind the menu and out again as it closes. Nothing in the HUD takes pointer input (`pointer-events: none`), so the right mouse button still turns the camera over it and a left click still reaches the room. | F or left click: fire (a hit marker, one round down; nothing with the magazine empty). R: reload from the reserve (it refills once both are empty). H: take a hit (15 health; at zero it refills). Right mouse button and WASD: move, draining stamina. Escape: the pause menu. |
+| The HUD | A UI root on the main window's overlay, under the demo UI kit's panels, loaded from the markup document `assets/ui/hud.ui` and styled by `assets/ui/hud.css`, over a room of 14 by 14 metres with pillars, crates and three spheres, lit by a dim sun through its open top and three warm lamps. The compass's strip and the ammo counter's box cast soft shadows under them (`filter: drop-shadow()`, drawing each with its subtree through an offscreen group). Top centre, the **compass**: a custom element (`src/Compass.cpp`, registered as `compass`) painting with the painter 120 degrees of heading round the camera's, ticks every 15 degrees, taller at north, east, south and west, each of those four with its letter over its tick, and a needle at the centre, in the element's `color`. The letters are paragraphs the element lays out and paints itself, in `ui-sdf`, the engine's embedded face registered in SDF mode (ADR-0062), so they stay smooth at any size. Top left, clear of the demo panel, the **minimap**: an `image` element showing what an orthographic camera looking straight down draws into a render target image, following the camera across the room, north up, in a round frame clipped by `overflow: hidden`, with the player's arrow at its centre turning with the heading. Bottom right, beside the ammo counter and clear of the help, the **health** and **stamina bars**: `progress` elements set from the components; stamina drains while the camera moves and refills while it stands. Bottom right, the **ammo counter**: a `label` reading the rounds in the magazine over the reserve. At the centre, a dot, and a **hit marker** for each shot, made by the game, scaling in through `:intro` and fading out through `:outro` a quarter of a second later, its word HIT glowing through a blurred `text-shadow`. While the pause menu is open the room's HUD system gives the HUD's top element the class `paused`, and `filter: blur(3px)`, transitioned from `blur(0px)` over 0.3 seconds, blurs the whole HUD in behind the menu and out again as it closes. Nothing in the HUD takes pointer input (`pointer-events: none`), so the right mouse button still turns the camera over it and a left click still reaches the room. | F or left click: fire (a hit marker, one round down; nothing with the magazine empty). R: reload from the reserve (it refills once both are empty). H: take a hit (15 health; at zero it refills). Right mouse button and WASD: move, draining stamina. Escape: the pause menu (B on a gamepad backs out). Aim and left click: the light terminal's buttons and slider set the lamps. |
 
 ## The pause menu
 
-Escape opens it: a second UI root on the window overlay (`MenuLayer`, over the HUD and under the ImGui window, with a
+Escape opens it: a second UI root on the window overlay (`MenuLayer`, over the HUD and under the demo UI kit, with a
 higher input priority than the HUD's), styled by `assets/ui/menu.css`. It is game code (ADR-0063): the engine keeps no
 menu stack, and the `Menu` resource (`src/Menu.cpp`) decides what is there. Opening loads `assets/ui/menu.ui` into the
 root; Settings loads `assets/ui/settings.ui` beside it; Back, B on a gamepad, or Escape steps out of the settings and
@@ -43,7 +46,7 @@ through `:outro`, its elements removed once the outro ends; the backing that dim
   inside one would blur the group's image instead of the room.
 - The **buttons** lighten and slide on hover, shrink while pressed, and show the focus ring (`:focus`), which Tab,
   Shift+Tab and the gamepad's D-pad and left stick move; A presses the focused control.
-- The **settings**: sliders for the volume (kept and shown in the UIDemo window: the engine has no audio yet) and the
+- The **settings**: sliders for the volume (kept and shown in the demo panel: the engine has no audio yet) and the
   window camera's field of view; checkboxes for invert look (the scaffold's `FreeFlyLook`), show HUD and the virtual
   cursor (the left stick moves a pointer over the menu and A clicks under it); a text entry for the player's name, which
   the HUD shows over the vitals; and a scrolling list of the controls, whose bar is thin (`scrollbar-width: thin`) and
@@ -84,7 +87,7 @@ variant a third, the C# sign, is made from C# beside the name plate ("The C# var
   the room's system casts one from the window's camera through the cursor (`Renderer::ScreenPointToRay`) and gives it
   to the root with the left button's state (`UIRoot::SetPointerRay`), and the root hovers, presses, clicks and drags
   where the ray meets its quad. The window's mouse is never its own: it gets no ray while the menu is open, while the
-  ImGui window or a window root has the pointer, or while the right mouse button turns the camera. A click on it is not
+  demo UI kit's panels or a window root have the pointer (the window's `pointer` claim), or while the right mouse button turns the camera. A click on it is not
   a shot. A world root never sets the window's cursor, so while the room's system gives it a ray it applies the
   terminal's `GetHoveredCursor()` to the window itself (the hand over its buttons and slider), and the arrow the frame
   the ray stops; the menu's buttons show the hand and its name entry the I-beam from the default stylesheet, set by
@@ -171,7 +174,7 @@ second; save `hud.ui` and it loads the document again. The menu's root does the 
 and `settings.ui` while they are open. Its colours are the custom properties at the top of the sheet
 (`--health`, `--stamina`, `--accent`, `--ink` and the rest). The files are read from the source tree while it is there
 (`UIDEMO_SOURCE_ASSETS`), so an edit survives a rebuild; without it they are read from the asset root beside the
-executable. The UIDemo window shows which. A version with an error is not taken: the one before stays, and the errors
+executable. The demo panel shows which. A version with an error is not taken: the one before stays, and the errors
 are logged.
 
 ## Tests
@@ -188,14 +191,28 @@ live menu's. The world roots are checked there too: the terminal and the name pl
 units at a scale of 1, blending linear, with `ui-sdf` registered in SDF mode; the terminal's glass covers its root by
 `inset: 0`, once Cool's transition ends its swatch's border is the reading's colour, and the plate's frame loads by the
 `border-image` shorthand; a ray at Cool and then Warm turns every
-lamp that colour; and the hue slider, dragged by the ray, turns them to its hue.
+lamp that colour; and the hue slider, dragged by the ray, turns them to its hue. The demo UI kit's root draws into a
+third capturing target of 1920 by 1080: the panel's UIDemo section shows both stylesheets' paths and the settings'
+volume and field of view, which follow the settings panel's sliders; its toggles turn the HUD's and the menu's hot
+reload off and on; the help lists the room's keys; the kit's panel and help cover none of the HUD's parts; the room's
+tutorial shows on its first entry and steps on a shot, a reload and a hit; and the Escape that closes it does not open
+the menu.
 
 ## Hand checks
 
 On OpenGL, in The HUD:
 
-- The HUD draws over the room: the compass at the top, the round minimap at the top right, the bars at the bottom left
-  and the ammo counter at the bottom right.
+- The HUD draws over the room: the compass at the top, the round minimap at the top left, and the bars and the ammo
+  counter at the bottom right. The demo panel on the right and the help at the bottom left cover none of them.
+- The help lists the scaffold's keys, then the room's: F or left click, R, H, the right mouse button and WASD, Escape,
+  and aiming at the terminal. F1 hides the panel, the help and the tutorial card, leaving the HUD, and F1 again shows
+  them and logs the help.
+- The tutorial card shows at the top centre on the first entry only: a shot ends Fire, R ends Reload, H ends Take a
+  hit, a click on the terminal ends The light terminal, and Done on The pause menu closes it. Escape closes it without
+  opening the menu, and the panel's Tutorial button shows it again from the start.
+- The demo panel's HUD hot reload and Menu hot reload toggles turn reloading off (an edit to `hud.css` or `menu.css`
+  then shows nothing) and on again (it shows). The paths under them are the stylesheets', wrapped in the panel.
+- The panel's Volume and Field of view follow the settings panel's sliders as they move.
 - Turning the camera (right mouse button held) turns the compass's ticks the other way, its N passing the needle when
   the camera faces -Z, and turns the minimap's arrow. The compass's letters are smooth-edged.
 - The minimap shows the room from above, and moves with the camera as it flies (WASD).
@@ -215,6 +232,9 @@ On OpenGL, in The HUD:
 - Changing a colour in `menu.css` while the menu is open restyles it within a moment.
 - The screen on the north wall shows the menu, crisp at its native size: the pause panel with the menu closed, and,
   with it open, the settings panel, the settings and the focus ring as the live menu has them.
+- The light terminal takes no ray while the pointer is over the demo panel: hovering its buttons through the panel
+  lights nothing, and a click on the panel is no shot.
+- The menu opens over the HUD, and the demo panel and help stay over both.
 - The light terminal's buttons light the room warm, cool or in the slider's hue under the cursor; the slider drags
   under the cursor from several camera angles, its fill following the thumb; its rounded corners stay clean as the
   camera moves round it.

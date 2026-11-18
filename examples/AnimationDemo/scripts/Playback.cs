@@ -24,8 +24,9 @@ namespace AnimationDemo.Scripts;
 //              covers spine_01's subtree, made with BoneMasks.
 //
 // Its clip events (authored here with Clips.AddEvent) are read through EventReader<AnimationEvent> and shown above the
-// human's head; ClipFinished shows as a message. The screen text is Animation.Playback's: the clip, its time, the speed,
-// the loop mode, laps, and the fade's progress. Every system acts only while the scene is active.
+// human's head; ClipFinished shows as a message. The readouts, in the scene's demo slot (PlaybackPanel.razor), are
+// Animation.Playback's: the clip, its time, the speed, the loop mode, laps, the fade's progress and the layer's weight.
+// Every system acts only while the scene is active.
 
 // The scene's state, on one entity: what is made, what plays and what the keys set.
 public struct PlaybackScene : IComponent
@@ -55,6 +56,20 @@ public static class PlaybackCSharp
 
     public static readonly string[] ClipNames = ["Idle", "Walk", "Run", "Sprint", "Call"];
     public static readonly Key[] ClipKeys = [Key.Num1, Key.Num2, Key.Num3, Key.Num4, Key.Num5];
+
+    // The scene's state, when it is active and built.
+    public static bool TryGet(in SystemContext context, out PlaybackScene state)
+    {
+        state = default;
+        if (!CSharpScene.IsActive(SceneId, out _))
+            return false;
+        foreach (var (_, found) in context.Query<PlaybackScene>())
+        {
+            state = found.Value;
+            return state.Built == 2;
+        }
+        return false;
+    }
 
     public static AssetHandle<Clip> ClipOf(in PlaybackScene state, int clip) => clip switch
     {
@@ -268,18 +283,5 @@ public sealed class PlaybackShow : ISystem
                               Colour.FromSrgb(0xFFC060FF), new TextOptions { Duration = 2 });
             context.Log.Info("Playback (C#): ClipFinished");
         }
-
-        PlaybackInfo info = Fenrir.Animation.Animation.Playback(state.Skeleton);
-        AssetHandle<Clip> clip = PlaybackCSharp.ClipOf(state, state.Clip);
-        string fade = info.Fading ? $", crossfading {info.FadeProgress:0.00}" : "";
-        DebugDraw.ScreenText(new Vector2(16, 120),
-                             $"C# walker: {PlaybackCSharp.ClipNames[state.Clip]} {info.Time:0.00} / " +
-                             $"{Clips.Duration(clip):0.00} s, speed {state.Speed:0.00}, {state.Loop}, " +
-                             $"{(state.Playing ? "playing" : "paused")}{(info.Finished ? ", finished" : "")}, laps " +
-                             $"{info.CompletedLoops}{fade}",
-                             Colour.White);
-        DebugDraw.ScreenText(new Vector2(16, 140),
-                             $"Upper-body call layer (spine_01's subtree): weight {state.LayerWeight:0.00}",
-                             Colour.White);
     }
 }

@@ -1,6 +1,6 @@
 #include <array>
 #include <cstddef>
-#include <format>
+#include <string>
 #include <string_view>
 
 #include "AnimationScenes.hpp"
@@ -97,6 +97,10 @@ namespace AnimationDemo
                     }
                 }
             }
+            const FenrirDemo::DemoSection shown = SceneSection(app, "Shown");
+            shown.Readout("Meshes", [&state] { return std::string(OnOff(state.meshes)); });
+            shown.Readout("Bones", [&state] { return std::string(OnOff(state.bones)); });
+            shown.Readout("Names", [&state] { return std::string(OnOff(state.names)); });
         }
 
         void Update(Fenrir::App& app, Fenrir::Scene& scene)
@@ -142,10 +146,6 @@ namespace AnimationDemo
                 const Vec3 at = spawned.root.GetComponent<Fenrir::Transform>().pos;
                 draw->WorldText(at + Vec3(-0.4f, Models.at(i).labelHeight, 0.0f), Models.at(i).label, Colour::White);
             }
-            draw->ScreenText({16.0f, 120.0f},
-                             std::format("Meshes {}, bones {}, names {}", state->meshes ? "on" : "off",
-                                         state->bones ? "on" : "off", state->names ? "on" : "off"),
-                             Colour::White);
         }
     } // namespace
 
@@ -153,7 +153,9 @@ namespace AnimationDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Skeleton";
-        scene.keyHelp = "M: show or hide the meshes. B: the bones and their axes. N: the bones' names.";
+        scene.keyRows = {{"M", "show or hide the meshes"},
+                         {"B", "show or hide the bones and their axes"},
+                         {"N", "show or hide the bones' names"}};
         scene.keys = {Fenrir::Key::N, Fenrir::Key::M, Fenrir::Key::B, Fenrir::Key::M, Fenrir::Key::B, Fenrir::Key::N};
         scene.camera = {{0.0f, 1.4f, 6.8f}, 0.0f, -0.12f};
         scene.spawn = Spawn;

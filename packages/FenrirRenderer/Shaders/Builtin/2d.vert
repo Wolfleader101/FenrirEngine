@@ -1,6 +1,6 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
-// builtin:2d, the vertex stage (ADR-0027): a 2D draw list's vertices in the ImGui layout (position, UV, an RGBA8
+// builtin:2d, the vertex stage (ADR-0027): a 2D draw list's vertices (position, UV, an RGBA8
 // colour), in the target's local coordinates (top-left origin, Y down). Set 0 is the 2D target (`Fenrir/2D.glsl`).
 //
 // The renderer picks the variant from the 2D pipeline description: INPUT_SRGB for sRGB-encoded vertex colours, and

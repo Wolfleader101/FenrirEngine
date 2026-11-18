@@ -7,6 +7,7 @@
 #include "DemoUI.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirUI/Controls.hpp"
 #include "FenrirUI/Markup.hpp"
@@ -366,9 +367,12 @@ namespace UIDemo
     void Menu::Update()
     {
         // Escape reaches the game while none of the menu's elements has the focus, and so does Tab: it then gives
-        // Resume the focus, as a gamepad's first direction does.
+        // Resume the focus, as a gamepad's first direction does. While the demo UI kit's tutorial shows, Escape closes
+        // it and is not the menu's.
         const auto& keyboard = m_app.GetResource<Fenrir::Keyboard>();
-        if (keyboard.JustPressed(Fenrir::Key::Escape))
+        const auto* kit = m_app.TryGetResource<FenrirDemo::DemoUI>();
+        const bool tutorialShown = kit != nullptr && kit->IsTutorialShown();
+        if (keyboard.JustPressed(Fenrir::Key::Escape) && !tutorialShown)
         {
             m_open ? Back() : Open();
         }

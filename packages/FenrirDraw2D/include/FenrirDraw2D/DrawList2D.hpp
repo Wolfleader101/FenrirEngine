@@ -41,7 +41,7 @@ namespace Fenrir
 
     /**
      * @brief The space a 2D pipeline blends in. `Linear` blends linear values and the target encodes on write; `Gamma`
-     * (opt-in, for UIs that assume it, as stock ImGui does) turns encoding off so values pass through and blend in
+     * (opt-in, for UIs that assume sRGB blending) turns encoding off so values pass through and blend in
      * sRGB. `Gamma` is allowed only on an 8-bit sRGB target; anywhere else it is a logged error and draws as `Linear`.
      */
     enum class BlendSpace2D : std::uint8_t
@@ -318,8 +318,8 @@ namespace Fenrir
     };
 
     /**
-     * @brief One vertex of the ImGui vertex layout, which `builtin:2d` reads: position, UV and an RGBA8 colour, red in
-     * the lowest byte.
+     * @brief One vertex of the layout `builtin:2d` reads: position, UV, RGBA8 (the colour's red in the lowest
+     * byte).
      */
     struct Vertex2D
     {

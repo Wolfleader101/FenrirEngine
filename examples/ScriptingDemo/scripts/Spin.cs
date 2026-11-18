@@ -15,6 +15,19 @@ public struct Spin : IComponent
     public float Angle;
 }
 
+// How every Spin turns, on one entity of the scene's: reversed or not, and how fast. R reverses it and [ and ] step its
+// speed (Controls.cs), and the Razor panel in Showcase's demo slot shows and changes both (ShowcasePanel.razor).
+public struct SpinDial : IComponent
+{
+    public const float MinSpeed = 0.1f;
+    public const float MaxSpeed = 10.0f;
+
+    /// <summary>Nonzero turns every Spin the other way (an int: a component's fields are blittable, and bool is not).</summary>
+    public int Reversed;
+    /// <summary>What every Spin's rate is multiplied by, from MinSpeed to MaxSpeed.</summary>
+    public float Speed;
+}
+
 // Gives the demo's boxes a Spin. The entities are made when the scene is entered, after scripts load, so this looks for
 // them every frame instead of in OnCreate, and spins them each time the scene is entered again (PageDown) and spawns new ones.
 [System(Phase.Update, Order = 0)]
@@ -40,20 +53,31 @@ public sealed class SpinSetup : ISystem
         }
 
         if (added > 0)
+        {
+            // The dial, with the boxes: the scene's entities go when it is left, so each entry makes its own.
+            bool dialled = false;
+            foreach (var _ in context.Query<SpinDial>())
+                dialled = true;
+            if (!dialled)
+                context.CreateEntity().Add(new SpinDial { Speed = 1.0f });
             context.Log.Info($"Spinning {found} entities from C#. Press R to reverse them, Space for sparks.");
+        }
     }
 }
 
-// Turns every entity that has a Transform (an engine component) and a Spin (this assembly's own).
+// Turns every entity that has a Transform (an engine component) and a Spin (this assembly's own), as the SpinDial says.
 [System(Phase.Update, Order = 10)]
 public sealed class Spinner : ISystem
 {
     public void OnUpdate(in SystemContext context)
     {
         float deltaTime = context.Time.DeltaTime;
+        float rate = 1.0f;
+        foreach (var (_, dial) in context.Query<SpinDial>())
+            rate = dial.Reversed != 0 ? -dial.Speed : dial.Speed;
         foreach (var (entity, transform, spin) in context.Query<Transform, Spin>())
         {
-            spin.Angle += spin.RadiansPerSecond * deltaTime;
+            spin.Angle += spin.RadiansPerSecond * rate * deltaTime;
             float half = spin.Angle * 0.5f;
             // Writes straight into the engine's Transform, which the renderer reads this frame.
             transform.Rotation = new Quaternion(0, MathF.Sin(half), 0, MathF.Cos(half));

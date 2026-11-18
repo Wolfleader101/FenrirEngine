@@ -473,6 +473,43 @@ TEST_CASE("Gamepad input the UI acts on is kept from the game while it has the f
     REQUIRE(pad.Pads().Axis(testPad, GamepadAxis::LeftX) == 0.0f);
 }
 
+TEST_CASE("A root with gamepad navigation off, focused, leaves the gamepad to the game and claims none",
+          "[ui][gamepad]")
+{
+    GamepadTest pad;
+    pad.target = std::make_shared<CaptureTarget>(Fenrir::UITargetSize{{400.0f, 300.0f}, 1.0f});
+    Fenrir::UIRootConfig config;
+    config.scaleRule = Fenrir::ScaleRule::ContentScale;
+    config.target = pad.target;
+    config.defaultStylesheet = false;
+    config.gamepadNavigation = false;
+    UIRoot& root = pad.test.Roots().CreateRoot(config);
+    const ElementId first = Place(root, root.GetRootElement(), "button", 0.0f, 0.0f, 50.0f, 30.0f);
+    (void)Place(root, root.GetRootElement(), "button", 0.0f, 50.0f, 50.0f, 30.0f);
+    pad.test.Frame();
+    INFO("the first button takes the focus");
+    REQUIRE(root.Focus(first));
+    Fenrir::EventReader<UIEvent> events;
+
+    pad.test.Feed().GamepadButtonDown(testPad, GamepadButton::DPadDown);
+    pad.test.Feed().GamepadButtonDown(testPad, GamepadButton::South);
+    pad.Stick(GamepadAxis::LeftX, 1.0f);
+    pad.test.Frame();
+    INFO("the D-pad reaches the game");
+    REQUIRE(pad.Pads().IsDown(testPad, GamepadButton::DPadDown));
+    INFO("so does A");
+    REQUIRE(pad.Pads().IsDown(testPad, GamepadButton::South));
+    INFO("and the stick");
+    REQUIRE(pad.Pads().Axis(testPad, GamepadAxis::LeftX) == 1.0f);
+    INFO("the focus stays where it was");
+    REQUIRE(root.GetFocused() == first);
+    INFO("A clicked nothing");
+    REQUIRE(std::ranges::none_of(ReadAll(events, pad.test.app),
+                                 [](const UIEvent& event) { return event.kind == UIEventKind::Click; }));
+    INFO("and the root never claims the gamepad");
+    REQUIRE_FALSE(pad.Claimed());
+}
+
 TEST_CASE("The virtual cursor starts at the root's centre, drawn by its element there", "[ui][gamepad][cursor]")
 {
     GamepadTest pad;

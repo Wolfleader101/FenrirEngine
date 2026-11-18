@@ -1,13 +1,18 @@
 #include "SceneLooks.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <iterator>
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
-#include "FenrirDebugDraw/DebugDraw.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirInput/Input.hpp"
@@ -27,6 +32,13 @@ namespace PhysicsDemo
         {
             return encoded <= 0.04045f ? encoded / 12.92f : std::pow((encoded + 0.055f) / 1.055f, 2.4f);
         }
+
+        /** @brief A scene's "Readings" section and its readouts by label, made by ShowReadouts. */
+        struct SceneReadouts
+        {
+            FenrirDemo::DemoSection section;
+            std::vector<std::pair<std::string, FenrirDemo::DemoReadout>> rows;
+        };
 
         /** @brief Marks a scene whose physics world has been given the app's debug categories. */
         struct DebugCategoriesApplied
@@ -115,54 +127,123 @@ namespace PhysicsDemo
                Fenrir::Math::AngleAxis(pitchDegrees * radians, Vec3(1.0f, 0.0f, 0.0f));
     }
 
-    void ShowReadouts(Fenrir::Scene& scene, std::span<const Fenrir::Entity> entities)
+    bool AnyJustPressed(Fenrir::App& app, std::initializer_list<Fenrir::Key> keys)
     {
-        Fenrir::DebugDraw* draw = scene.GetResource<Fenrir::DebugDraw>();
-        if (draw == nullptr)
+        const auto& keyboard = app.GetResource<Fenrir::Keyboard>();
+        return std::ranges::any_of(keys, [&keyboard](Fenrir::Key key) { return keyboard.JustPressed(key); });
+    }
+
+    std::string_view ReadingValue(std::string_view name, std::string_view label)
+    {
+        if (label.empty() || !name.starts_with(label))
+        {
+            return name;
+        }
+        const std::string_view rest = name.substr(label.size());
+        if (rest.starts_with(": "))
+        {
+            return rest.substr(2);
+        }
+        if (rest.starts_with(' '))
+        {
+            return rest.substr(1);
+        }
+        return name;
+    }
+
+    void ShowReadouts(Fenrir::App& app, std::span<const Reading> readings)
+    {
+        auto* kit = app.TryGetResource<FenrirDemo::DemoUI>();
+        if (kit == nullptr)
         {
             return;
         }
-        constexpr float margin = 16.0f;
-        constexpr float lineHeight = 20.0f;
-        float y = margin;
-        for (const Fenrir::Entity& entity : entities)
+        Fenrir::Scene& scene = app.GetActiveScene();
+        auto* shown = scene.GetResource<SceneReadouts>();
+        if (shown == nullptr)
         {
-            if (!entity.IsValid())
+            shown = &scene.AddResource<SceneReadouts>(SceneReadouts{.section = kit->SceneSection("Readings")});
+        }
+        for (const Reading& reading : readings)
+        {
+            auto row = std::ranges::find(shown->rows, reading.label,
+                                         [](const auto& made) -> const std::string& { return made.first; });
+            if (row == shown->rows.end())
             {
-                continue;
+                shown->rows.emplace_back(std::string(reading.label),
+                                         shown->section.Readout(std::string(reading.label)));
+                row = std::prev(shown->rows.end());
             }
-            draw->ScreenText({margin, y}, entity.GetComponent<Fenrir::Name>().Get(), Fenrir::Colour::White);
-            y += lineHeight;
+            const bool valid = reading.entity.IsValid();
+            row->second.SetShown(valid);
+            if (valid)
+            {
+                row->second.Set(ReadingValue(reading.entity.GetComponent<Fenrir::Name>().Get(), reading.label));
+            }
         }
     }
 
     void AddDebugCategoryCycling(Fenrir::App& app)
     {
-        app.AddSequentialSystem(
-            Fenrir::SchedulePriority::Update, [mode = std::size_t{0}](Fenrir::App& running) mutable {
-                const auto& keyboard = running.GetResource<Fenrir::Keyboard>();
-                const bool stepped = keyboard.JustPressed(Fenrir::Key::F2);
-                if (stepped)
-                {
-                    mode = (mode + 1) % DebugModes.size();
-                    running.Logger()->Info(std::string("Physics debug lines: ") + DebugModes.at(mode).name);
-                }
+        // The app's mode, which F2 and the Debug lines choice share, and whether either changed it since the system
+        // last ran.
+        struct DebugLines
+        {
+            int mode = 0;
+            bool changed = false;
+        };
+        auto lines = std::make_shared<DebugLines>();
 
-                Fenrir::Scene& scene = running.GetActiveScene();
-                Fenrir::PhysicsWorld* world = Fenrir::PhysicsWorld::Of(scene);
-                if (world == nullptr)
+        std::vector<std::string> names;
+        for (const DebugMode& mode : DebugModes)
+        {
+            names.emplace_back(mode.name);
+        }
+        // Without the kit (FenrirUI did not start), F2 alone steps them.
+        if (auto* kit = app.TryGetResource<FenrirDemo::DemoUI>())
+        {
+            kit->AppSection("Physics").Choice("Debug lines",
+                                              FenrirDemo::DemoValue<int>([lines] { return lines->mode; },
+                                                                         [lines](const int& mode) {
+                                                                             if (mode != lines->mode)
+                                                                             {
+                                                                                 lines->mode = mode;
+                                                                                 lines->changed = true;
+                                                                             }
+                                                                         }),
+                                              std::move(names), "Which physics debug lines are drawn; F2 steps them");
+        }
+
+        app.AddSequentialSystem(Fenrir::SchedulePriority::Update, [lines](Fenrir::App& running) {
+            const auto& keyboard = running.GetResource<Fenrir::Keyboard>();
+            if (keyboard.JustPressed(Fenrir::Key::F2))
+            {
+                lines->mode = (lines->mode + 1) % static_cast<int>(DebugModes.size());
+                lines->changed = true;
+            }
+            const bool stepped = lines->changed;
+            const DebugMode& mode = DebugModes.at(static_cast<std::size_t>(lines->mode));
+            if (stepped)
+            {
+                lines->changed = false;
+                running.Logger()->Info(std::string("Physics debug lines: ") + mode.name);
+            }
+
+            Fenrir::Scene& scene = running.GetActiveScene();
+            Fenrir::PhysicsWorld* world = Fenrir::PhysicsWorld::Of(scene);
+            if (world == nullptr)
+            {
+                return;
+            }
+            // Each scene's world keeps its own categories; one entered since the last change gets the app's once.
+            if (stepped || scene.GetResource<DebugCategoriesApplied>() == nullptr)
+            {
+                world->SetDebugDraw(mode.categories);
+                if (scene.GetResource<DebugCategoriesApplied>() == nullptr)
                 {
-                    return;
+                    scene.AddResource<DebugCategoriesApplied>();
                 }
-                // Each scene's world keeps its own categories; one entered since the last F2 gets the app's once.
-                if (stepped || scene.GetResource<DebugCategoriesApplied>() == nullptr)
-                {
-                    world->SetDebugDraw(DebugModes.at(mode).categories);
-                    if (scene.GetResource<DebugCategoriesApplied>() == nullptr)
-                    {
-                        scene.AddResource<DebugCategoriesApplied>();
-                    }
-                }
-            });
+            }
+        });
     }
 } // namespace PhysicsDemo

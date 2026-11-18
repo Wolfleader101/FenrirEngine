@@ -20,7 +20,31 @@ The port is faithful: each scene has the legacy scene's bodies, keys, autopilot 
   connection), not the legacy `DemoGamepad`. Its buttons are named by the standard layout: A is South, B East, X West
   and Y North.
 - **Readouts:** the legacy scenes write live readings into entity names, which the legacy editor's hierarchy showed. Each
-  scene shows those names as debug screen text from the window's top-left.
+  scene shows those names as readouts in the demo panel (below), not as debug screen text, so the on-screen messages'
+  corner is clear.
+- **Help:** the keys are key rows in the demo UI kit's help, gamepad bindings as rows of their own, not one long line.
+
+## The demo panel
+
+The demo UI kit (`examples/DemoScaffold/README.md`, "The demo UI kit") on the right, under the scene switcher:
+
+- **Physics** (the app's section): **Debug lines**, a choice of the physics debug categories (off, colliders, contacts,
+  velocities, bounds, joints, characters, vehicles, all; a stepper, as there are more than four). It and F2 are one
+  setting: F2 steps the choice, and a pick on it sets the categories as F2 would, logged as `Physics debug lines: ...`
+  either way (`AddDebugCategoryCycling`, `src/SceneLooks.cpp`).
+- **Readings** (a scene's section, in Joints (C++), Character (C++), Vehicles (C++), Motorcycle (C++) and Tank (C++)): a
+  readout per named body, labelled with what it is (`Car`, `Wheel 2`, `Door hinge`) and showing the rest of its name,
+  updated each frame (`ShowReadouts`, `src/SceneLooks.cpp`). A destroyed body's readout is hidden.
+- **The C# twins' readings** (Joints (C#), Character (C#) and Vehicles (C#)): the same readouts as a Razor panel,
+  `scripts/ReadingsPanel.razor` over the kit's shared Razor components, which `scripts/ReadingsPanelSetup.cs` mounts in
+  the scene's demo slot (`razorPanel`). Its rows come from `Looks.ShowReadouts` (`scripts/Looks.cs`). It has no switches,
+  so the scenes need no keys for it; without scripting the twins are not in the app.
+- **Tutorials** (demo tutorials, shown on a scene's first entry in a run, and again from its section's Tutorial button):
+  Playground (C++), the first scene, on the scene list, F1, F2 and the free-fly camera; Character (C++) on walking,
+  jumping, crouching and pushing; Vehicles (C++) on driving, braking, the camera, the trailer and a gamepad. A step that
+  teaches a key ends when it is pressed.
+
+The kit never takes the gamepad, so a pad drives the vehicles whatever the panel has focused.
 
 ## Scenes
 
@@ -39,8 +63,8 @@ The port is faithful: each scene has the legacy scene's bodies, keys, autopilot 
 
 | Key | What it does |
 | --- | --- |
-| F2 | Cycles the physics debug lines: off, colliders, contacts, velocities, bounds, joints, characters, vehicles, all. The choice is the app's: a scene entered later gets it once its physics world exists. |
-| F1, F3, PageDown, PageUp | The scaffold's: help, the free-fly camera, the next and previous scene. |
+| F2 | Cycles the physics debug lines: off, colliders, contacts, velocities, bounds, joints, characters, vehicles, all, as the Physics section's Debug lines choice does. The choice is the app's: a scene entered later gets it once its physics world exists. |
+| F1, F3, PageDown, PageUp | The scaffold's: the demo UI kit, the free-fly camera, the next and previous scene. |
 
 ## Smoke runs and tests
 
@@ -49,7 +73,8 @@ through its keys (the Character scenes' keys start and stop the autopilot), and 
 
 Besides the scaffold's `PhysicsDemo-Smoke-<backend>`, CTest runs each scene alone as `PhysicsDemo-<Scene>-<backend>`
 (`PhysicsDemo-JointsCSharp-null`, say; `PhysicsDemo-VehiclesCpp-<backend>` is the slowest, a lap of its track), for a second per key, and fails unless it logs no error and logs the legacy
-scene's lines for its keys and autopilot (`cmake/CheckSceneLog.cmake`).
+scene's lines for its keys and autopilot (`cmake/CheckSceneLog.cmake`). The C# twins with readings must also log that
+their readings panel is in their demo slot.
 
 ## Hand checks
 
@@ -61,10 +86,24 @@ have scenes of their own, so there is no Tab, and the driver gets in only the ca
   bar and on its taskbar button, not the system's default.
 - **Switching and smoke runs:**
   - PageDown steps Playground (C++) → Playground (C#) → Joints (C++) → Joints (C#) → Character (C++) → Character (C#) →
-    Vehicles (C++) → Motorcycle (C++) → Tank (C++) → Vehicles (C#), and F1 shows each scene's keys.
+    Vehicles (C++) → Motorcycle (C++) → Tank (C++) → Vehicles (C#), as do the Scenes section's buttons. The help at the
+    bottom left lists each scene's keys as rows, and Vehicles' gamepad bindings as rows of their own.
   - The F2 mode carries across a switch: the lines drawn match the logged mode. "characters" draws the character's
     shape, its ground normal and its `movedVelocity`. "vehicles" draws the suspension, the wheel circles and the contacts
     coloured by slip.
+- **The demo panel:**
+  - **Debug lines and F2 agree:** F2 steps the Physics section's Debug lines choice, and a pick on its stepper draws
+    those lines and logs `Physics debug lines: ...`, the next F2 stepping on from the pick.
+  - **Readouts follow the bodies:** in each scene with a Readings section, the readouts change live as the bodies move,
+    and nothing is drawn as text at the window's top left, where the messages stack.
+  - **Tutorials:** Playground (C++)'s, Character (C++)'s and Vehicles (C++)'s show on the first entry in a run only, step
+    with Next and Back, and step on by themselves when their key is pressed (F2; a walk key, Space, X; W or Up, S, Down
+    or Space, C). Each comes back from the Tutorial button in its scene's section. None shows in a smoke run.
+  - **The C# twins' Razor readouts:** Joints (C#), Character (C#) and Vehicles (C#) show a "Readings" Razor section in
+    their slot, live, with the same labels as their C++ scenes; leaving and coming back mounts it again.
+  - **Gamepad with the panel focused:** click a row of the panel (the Debug lines stepper), then drive Vehicles (C++)
+    with a pad: the pad drives the car.
+  - **F1** hides the panel, the help and a tutorial, and shows them again.
   - A key pressed in one scene does nothing in another.
   - `FENRIR_DEMO_SCENE` with `FENRIR_DEMO_KEYS=1` runs each scene through its keys (and the Character and vehicle scenes
     through their autopilots) with no errors, in Debug and Release. In Vehicles (C++) the only warnings are physics's
@@ -94,7 +133,7 @@ have scenes of their own, so there is no Tab, and the driver gets in only the ca
   - **Lift:** 1 drives it between its limits and to a position.
   - **Rope:** it bobs from its world point.
   - **Limb:** it stays inside its cone, and 2 raises and lowers it.
-  - **Readouts:** each joint's reading shows live.
+  - **Readouts:** each joint's reading shows live, in the Razor panel.
 - **With the `Joints` lines on:** every joint's frames coincide at rest.
 - **Camera (both Character scenes):** it follows, and Q/E orbit it. C frees it (it stays where it is, and the arrows
   still walk), and C again snaps it back. F3 switches to the free-fly camera and back.

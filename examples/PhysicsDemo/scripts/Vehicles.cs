@@ -42,8 +42,8 @@ namespace PhysicsDemo.Scripts;
 //   T              teleport the car and its trailer to the start
 //   R / K          right the car (a Transform write, upright and lifted 1 m, its velocities zeroed) / kick it over
 //   M, E / Q       Manual gearbox through Kind.Wheeled, shift up / down
-//   V              the vehicles' debug lines on and off, through PhysicsWorld.SetDebugDraw (F2 or a scene switch takes
-//                  the lines back to the app's mode)
+//   V              the vehicles' debug lines on and off, through PhysicsWorld.SetDebugDraw (F2, the Debug lines choice or
+//                  a scene switch takes the lines back to the app's mode)
 //   U              the trailer turned into a wheeled car by assigning a new VehicleKind (it then pushes, given the car's
 //                  Forward), and back into a trailer
 //   L              log the car's whole state and each wheel's
@@ -51,7 +51,7 @@ namespace PhysicsDemo.Scripts;
 //                  driver drives
 //
 // The car's, the trailer's and each wheel's names show their readings every frame, in the C++ scenes' format, shown as
-// screen text. As in the other C# scenes, the scene's state lives in components, so it survives a hot reload.
+// readouts in the scene's demo slot (ReadingsPanel.razor). As in the other C# scenes, the scene's state lives in components, so it survives a hot reload.
 
 // The scene's own marker, on one entity: Built once the builder has made it.
 public struct VehiclesSceneMarker : IComponent
@@ -842,7 +842,7 @@ public sealed class VehiclesCamera : ISystem
 }
 
 // The looks moved onto what they show, and the readings in the car's, the trailer's and each wheel's names, every
-// frame, in the C++ scenes' format, shown as screen text.
+// frame, in the C++ scenes' format, shown as readouts in the demo slot.
 [System(Phase.Update, Order = 440)]
 public sealed class VehiclesReadings : ISystem
 {
@@ -857,7 +857,7 @@ public sealed class VehiclesReadings : ISystem
             transform.Rotation = target.Rotation;
         }
 
-        var shown = new List<Entity>();
+        var shown = new List<(string, Entity)>();
         foreach (var (car, driver, vehicle) in context.Query<VehicleDriver, Vehicle>())
         {
             ref readonly VehicleState state = ref vehicle.State;
@@ -872,9 +872,10 @@ public sealed class VehiclesReadings : ISystem
             Entity[] wheels = [driver.Wheel0, driver.Wheel1, driver.Wheel2, driver.Wheel3];
             for (int i = 0; i < wheels.Length; ++i)
                 wheels[i].Get<Name>().Value.SetText(Reading(i, in wheels[i].Get<VehicleWheel>().Value));
-            shown.Add(car);
-            shown.Add(driver.Trailer);
-            shown.AddRange(wheels);
+            shown.Add(("Car", car));
+            shown.Add(("Trailer", driver.Trailer));
+            for (int i = 0; i < wheels.Length; ++i)
+                shown.Add(($"Wheel {i}", wheels[i]));
         }
         Looks.ShowReadouts(shown);
     }

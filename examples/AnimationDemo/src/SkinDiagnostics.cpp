@@ -53,6 +53,9 @@ namespace AnimationDemo
         {
             AddStage(app, scene, 18.0f, 6.0f);
             scene.AddResource<DiagnosticsState>();
+            // The scene has no keys.
+            const FenrirDemo::DemoSection cases = SceneSection(app, "Skip cases");
+            cases.Text("Each skip case logs one warning: see the log.");
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
             Fenrir::EntityList& entities = scene.GetEntityList();
 
@@ -124,7 +127,6 @@ namespace AnimationDemo
                 draw->Circle(At(slot) + Vec3(0.0f, 0.01f, 0.0f), Vec3(0.0f, 1.0f, 0.0f), 0.6f,
                              Colour::FromSrgb(0xFFD040FF));
             }
-            draw->ScreenText({16.0f, 120.0f}, "Each skip case logs one warning: see the log.", Colour::White);
         }
     } // namespace
 
@@ -132,7 +134,7 @@ namespace AnimationDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Skin diagnostics";
-        scene.keyHelp = "No keys: one labelled entity per skinning skip case, and a working one first.";
+        scene.keyRows = {{"None", "one labelled entity per skinning skip case, and a working one first"}};
         scene.camera = {{0.0f, 1.8f, 9.5f}, 0.0f, -0.1f};
         scene.spawn = Spawn;
         scene.update = Update;

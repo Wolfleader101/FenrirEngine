@@ -1,8 +1,9 @@
 # fenrir_add_demo_app(<name> SOURCES <files>... [SCRIPTS <dir>] [ASSETS <dirs>...])
 #
 # Makes the demo app <name> (GLOSSARY.md: demo app): an executable from SOURCES linking FenrirDemoScaffold, with its
-# asset root, the folder `assets` beside the executable, holding the shared examples/assets and then each ASSETS
-# directory (relative to the calling CMakeLists.txt), copied over it after every build. With the tests on, it registers
+# asset root, the folder `assets` beside the executable, holding the shared examples/assets, the demo UI kit's files
+# (examples/DemoScaffold/assets) and then each ASSETS directory (relative to the calling CMakeLists.txt), copied over it
+# after every build. With the tests on, it registers
 # the app's smoke runs in CTest, one per backend: <name>-Smoke-null everywhere, and <name>-Smoke-opengl labelled gl,
 # reported skipped without an OpenGL 4.6 context.
 #
@@ -10,14 +11,27 @@
 # (FENRIR_ENABLE_SCRIPTING) it is built against the scripting SDK and the contracts (Fenrir.Input, Fenrir.Window,
 # Fenrir.Assets, Fenrir.Renderer, Fenrir.DebugDraw and the scaffold's Fenrir.Demo, whose folders it gets as -p:Fenrir<Name>ContractDir=,
 # and Fenrir.Physics's, Fenrir.Skeleton's, Fenrir.Animation's, Fenrir.Text's, Fenrir.Painter's and Fenrir.UI's too when
-# their scripting extensions are built, for an app that installs those packages, with the Razor components' folder,
-# -p:FenrirUIRazorContractDir=, for a project that imports Fenrir.UI.Razor.InRepo.props),
+# their scripting extensions are built (the scaffold installs the last three for every app), with the Razor components' folder,
+# -p:FenrirUIRazorContractDir=), with Fenrir.Demo.Razor.props added (-p:CustomAfterMicrosoftCommonTargets=), which
+# imports Fenrir.UI.Razor.InRepo.props and gives a project with .razor files of its own the scaffold's shared Razor
+# components (examples/DemoScaffold/Managed/Fenrir.Demo.Razor),
 # and copied to `scripts/` beside the executable, with the contracts and what scripting needs at run time; the app's
 # sources get FENRIR_DEMO_SCRIPT_ASSEMBLY, its path relative to the executable's directory, for
 # DemoConfig::scriptAssembly. Without scripting, SCRIPTS is ignored.
 include_guard(GLOBAL)
 
 set(FENRIR_DEMO_SHARED_ASSETS "${CMAKE_CURRENT_LIST_DIR}/../../assets" CACHE INTERNAL "")
+# The shared Razor components and the props that adds them to every demo app's scripts project.
+set(FENRIR_DEMO_RAZOR_PROPS "${CMAKE_CURRENT_LIST_DIR}/../Managed/Fenrir.Demo.Razor.props" CACHE INTERNAL "")
+set(FENRIR_DEMO_RAZOR_DIR "${CMAKE_CURRENT_LIST_DIR}/../Managed/Fenrir.Demo.Razor" CACHE INTERNAL "")
+
+# The scripting extensions the scaffold installs for every app, whose contracts go beside each executable: the
+# packages' it installs, with FenrirUI's and the text and painter ones under it where they are built.
+set(fenrir_demo_extensions Input Window Assets Renderer DebugDraw)
+if(TARGET FenrirUIScripting)
+    list(APPEND fenrir_demo_extensions Text Painter UI)
+endif()
+set(FENRIR_DEMO_SCRIPTING_EXTENSIONS "${fenrir_demo_extensions}" CACHE INTERNAL "The scripting extensions the scaffold installs")
 
 # How many frames each scene runs in a demo app's CTest smoke runs.
 set(FENRIR_DEMO_SMOKE_FRAMES 60 CACHE STRING "Frames per scene in the demo apps' CTest smoke runs (FENRIR_DEMO_SMOKE)")
@@ -38,7 +52,8 @@ function(fenrir_add_demo_app name)
     set(asset_root "$<TARGET_FILE_DIR:${name}>/assets")
     add_custom_command(TARGET ${name} POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E copy_directory "${FENRIR_DEMO_SHARED_ASSETS}" "${asset_root}"
-        COMMENT "Copying the shared demo assets into ${name}'s asset root"
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory "${FENRIR_DEMO_SCAFFOLD_ASSETS}" "${asset_root}"
+        COMMENT "Copying the shared demo assets and the demo UI kit's files into ${name}'s asset root"
         VERBATIM
     )
     foreach(assets_dir IN LISTS demo_ASSETS)
@@ -55,7 +70,7 @@ function(fenrir_add_demo_app name)
     elseif(FENRIR_ENABLE_SCRIPTING)
         # The scaffold links the scripting host whenever scripting is built, so an app with no scripts of its own still
         # needs its run-time files and the contracts of the extensions the scaffold installs beside the executable.
-        fenrir_deploy_scripting(${name} EXTENSIONS Input Window Assets Renderer DebugDraw)
+        fenrir_deploy_scripting(${name} EXTENSIONS ${FENRIR_DEMO_SCRIPTING_EXTENSIONS})
     endif()
 
     # Every scene, whatever FENRIR_DEMO_SCENE and FENRIR_DEMO_KEYS the shell has: empty is unset.
@@ -87,6 +102,7 @@ function(fenrir_add_demo_scripts name scripts_dir)
     endif()
     file(GLOB_RECURSE sources CONFIGURE_DEPENDS "${scripts_dir}/*.cs" "${scripts_dir}/*.razor" "${scripts_dir}/*.razor.css")
     list(FILTER sources EXCLUDE REGEX "/(obj|bin)/")
+    file(GLOB shared_razor CONFIGURE_DEPENDS "${FENRIR_DEMO_RAZOR_DIR}/*.razor")
 
     # Built into a folder of its own, then copied beside the executable: the contracts are compile-time only (the host
     # shares its own copies), so the folder holds the scripts alone.
@@ -114,8 +130,9 @@ function(fenrir_add_demo_scripts name scripts_dir)
             "-p:FenrirDebugDrawContractDir=${FENRIR_DEBUGDRAW_CONTRACT_DIR}/"
             "-p:FenrirDemoContractDir=${FENRIR_DEMO_CONTRACT_DIR}/"
             ${optional_args}
+            "-p:CustomAfterMicrosoftCommonTargets=${FENRIR_DEMO_RAZOR_PROPS}"
             "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/${name}-scripts-obj/"
-        DEPENDS ${sources} "${project}"
+        DEPENDS ${sources} "${project}" "${FENRIR_DEMO_RAZOR_PROPS}" ${shared_razor}
             FenrirScriptingContract "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.dll"
             "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Math.dll"
             FenrirInputContract "${FENRIR_INPUT_CONTRACT_DIR}/Fenrir.Input.dll"
@@ -142,5 +159,5 @@ function(fenrir_add_demo_scripts name scripts_dir)
     target_compile_definitions(${name} PRIVATE FENRIR_DEMO_SCRIPT_ASSEMBLY="scripts/${name}.Scripts.dll")
 
     # The scaffold installs every package's extension (DemoScripting.cpp), so their contracts go beside the executable.
-    fenrir_deploy_scripting(${name} EXTENSIONS Input Window Assets Renderer DebugDraw)
+    fenrir_deploy_scripting(${name} EXTENSIONS ${FENRIR_DEMO_SCRIPTING_EXTENSIONS})
 endfunction()

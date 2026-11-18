@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <format>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -127,6 +128,30 @@ namespace AnimationDemo
             }
         }
 
+        /** @brief The left arm's override, in a section of the demo panel, pulled each frame while the scene is there.
+         */
+        void AddReadouts(Fenrir::App& app, Fenrir::Scene& scene, const LimpState& state)
+        {
+            const FenrirDemo::DemoSection arm = SceneSection(app, "Left arm");
+            arm.Readout("Subtree").Set(ArmBones.front());
+            arm.Readout("Override weight", [&state] { return std::format("{:.2f}", state.weight); });
+            arm.Readout("Targets", [&scene, &state] {
+                const bool written =
+                    Skeletons::GetOverride(scene, state.walker.skeleton, state.bones.front()).has_value();
+                return std::string(written ? "written" : "none");
+            });
+            arm.Readout("Arm", [&state] {
+                return std::string(state.blendBack >= 0.0 ? "blending back"
+                                   : state.weight > 0.0f  ? "limp"
+                                                          : "animated");
+            });
+            arm.Readout("Sway", [&state] { return std::string(OnOff(state.sway)); });
+            arm.Readout("Timing", [&state] {
+                const Fenrir::PoseTiming timing = state.walker.skeleton.GetComponent<Fenrir::SkeletonPose>().timing;
+                return std::string(timing == Fenrir::PoseTiming::Tick ? "Tick" : "Frame");
+            });
+        }
+
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
         {
             AddStage(app, scene);
@@ -151,6 +176,7 @@ namespace AnimationDemo
                     return;
                 }
             }
+            AddReadouts(app, scene, state);
         }
 
         void Update(Fenrir::App& app, Fenrir::Scene& scene)
@@ -213,18 +239,8 @@ namespace AnimationDemo
                 ClearSag(scene, *state);
             }
 
-            const bool entries = Skeletons::GetOverride(scene, state->walker.skeleton, shoulder).has_value();
             draw->WorldText(state->walker.root.GetComponent<Fenrir::Transform>().pos + Vec3(-0.4f, 2.3f, 0.0f),
                             "Walking, left arm overridden", Colour::White, {.size = 16.0f});
-            draw->ScreenText({16.0f, 120.0f},
-                             std::format("Left arm ({} subtree): override weight {:.2f}, {}, {}, sway {}. {}-posed.",
-                                         ArmBones.front(), state->weight, entries ? "targets written" : "no targets",
-                                         state->blendBack >= 0.0 ? "blending back"
-                                         : state->weight > 0.0f  ? "limp"
-                                                                 : "animated",
-                                         state->sway ? "on" : "off",
-                                         timing == Fenrir::PoseTiming::Tick ? "Tick" : "Frame"),
-                             Colour::White);
         }
     } // namespace
 
@@ -232,8 +248,10 @@ namespace AnimationDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Going limp";
-        scene.keyHelp = "L: the left arm goes limp. B: blend it back into the walk. S: its sway on or off. T: switch "
-                        "the human between frame and tick timing.";
+        scene.keyRows = {{"L", "the left arm goes limp"},
+                         {"B", "blend it back into the walk"},
+                         {"S", "its sway on or off"},
+                         {"T", "the human's timing: frame or tick"}};
         scene.keys = {Fenrir::Key::L, Fenrir::Key::S, Fenrir::Key::S, Fenrir::Key::B,
                       Fenrir::Key::T, Fenrir::Key::L, Fenrir::Key::B, Fenrir::Key::T};
         scene.camera = {{0.0f, 1.4f, 3.4f}, 0.0f, -0.12f};

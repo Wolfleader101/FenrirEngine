@@ -293,9 +293,31 @@ namespace RendererDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Meshes and materials";
-        scene.keyHelp =
-            "L: turn the light. M: the sky (dim, bright, black). V: show or hide the textured box. C: "
-            "the colour of the three cubes' shared material.";
+        scene.keyRows = {{"L", "turn the light"},
+                         {"M", "the sky (dim, bright, black)"},
+                         {"V", "show or hide the textured box"},
+                         {"C", "the colour of the three cubes' shared material"}};
+        // The app's first scene: what the demo panel, the help and the free-fly camera are, then the scene's keys.
+        scene.tutorial = FenrirDemo::DemoTutorial{
+            .title = "RendererDemo",
+            .steps = {{.title = "The scenes",
+                       .text = "Each scene shows one renderer feature. The demo panel on the right lists them: click "
+                               "one, or step through them with PageDown and PageUp.",
+                       .keys = {{"PageDown/PageUp", "the next or previous scene"}}},
+                      {.title = "The demo UI",
+                       .text = "The help at the bottom left lists every key. F1 hides or shows the panel, the help "
+                               "and this card.",
+                       .keys = {{"F1", "hide or show the demo UI"}}},
+                      {.title = "The camera",
+                       .text = "The free-fly camera: hold the right mouse button and move the mouse to look, and "
+                               "with it held WASD flies. F3 swaps a scene's own camera for it.",
+                       .keys = {{"Right mouse", "hold to look"},
+                                {"Right mouse + WASD", "fly; Shift goes faster, the wheel changes the speed"},
+                                {"F3", "free-fly camera on/off"}}},
+                      {.title = "This scene",
+                       .text = "Meshes and materials: the imported box, primitives, a metallic and roughness grid, "
+                               "the blend modes and a user shader. Try its keys.",
+                       .keys = scene.keyRows}}};
         scene.keys = {Fenrir::Key::L, Fenrir::Key::M, Fenrir::Key::V, Fenrir::Key::C,
                       Fenrir::Key::L, Fenrir::Key::M, Fenrir::Key::V, Fenrir::Key::C};
         scene.camera.position = {0.0f, 3.0f, 11.0f};
@@ -310,6 +332,8 @@ namespace RendererDemo
         // The C++ scene's name, keys and camera; C# spawns and runs everything else.
         FenrirDemo::DemoScene scene = MeshesAndMaterials();
         scene.name = "Meshes and materials (C#)";
+        // The tutorial is the first scene's alone.
+        scene.tutorial.reset();
         scene.spawn = nullptr;
         scene.update = nullptr;
         scene.csharpScene = MeshesAndMaterialsCSharpScene;

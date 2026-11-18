@@ -37,7 +37,7 @@ namespace Fenrir::Render
         };
         static_assert(sizeof(TriangleVertex) == 16);
 
-        /** @brief One vertex of `builtin:debug-text`, the ImGui layout: position, UV, sRGB-encoded RGBA8 colour. */
+        /** @brief One vertex of `builtin:debug-text`, position, UV, sRGB-encoded RGBA8 colour. */
         struct TextVertex
         {
             float x = 0.0f;

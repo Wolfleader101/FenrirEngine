@@ -7,11 +7,10 @@
 #include <utility>
 #include <vector>
 
-#include <imgui.h>
-
 #include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirRenderer/Components.hpp"
@@ -160,6 +159,47 @@ namespace LightingDemo
             return out;
         }
 
+        /**
+         * @brief A row's binding over member `member` of `light`'s RectLight, through the entity: a component's address
+         * can move as other entities' are added.
+         */
+        template <typename T>
+        FenrirDemo::DemoValue<T> RectMember(Fenrir::Entity light, T Fenrir::RectLight::* member)
+        {
+            return {[light, member]() mutable {
+                        return light.IsValid() ? light.GetComponent<Fenrir::RectLight>().*member : T{};
+                    },
+                    [light, member](const T& value) mutable {
+                        if (light.IsValid())
+                        {
+                            light.GetComponent<Fenrir::RectLight>().*member = value;
+                        }
+                    }};
+        }
+
+        /** @brief The scene's section: per light, a separator with its name, then its size, intensity and sidedness. */
+        void AddLightRows(Fenrir::App& app, const std::vector<ShowroomLight>& lights)
+        {
+            auto* kit = app.TryGetResource<FenrirDemo::DemoUI>();
+            if (kit == nullptr)
+            {
+                return;
+            }
+            const FenrirDemo::DemoSection section = kit->SceneSection("Rect lights");
+            for (const ShowroomLight& light : lights)
+            {
+                section.Separator(light.name);
+                section.Range("Width", RectMember(light.light, &Fenrir::RectLight::width), 0.02f, 8.0f, {.decimals = 3},
+                              "The light's width in metres; Z scales every light");
+                section.Range("Height", RectMember(light.light, &Fenrir::RectLight::height), 0.02f, 4.0f,
+                              {.decimals = 3}, "The light's height in metres; Z scales every light");
+                section.Range("Intensity", RectMember(light.light, &Fenrir::RectLight::intensity), 0.0f, 30.0f,
+                              {.decimals = 3}, "How bright the light and its slab are");
+                section.Toggle("Two-sided (V)", RectMember(light.light, &Fenrir::RectLight::twoSided),
+                               "Lights from both faces; V flips every light");
+            }
+        }
+
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
         {
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
@@ -206,6 +246,7 @@ namespace LightingDemo
                 app.Logger()->Info("{}: the fetched demo assets are missing, so the plinths are bare "
                                    "(FENRIR_FETCH_DEMO_ASSETS, ADR-0052)",
                                    SceneName);
+                AddLightRows(app, state.lights);
                 scene.AddResource<ShowroomState>(state);
                 return;
             }
@@ -225,6 +266,7 @@ namespace LightingDemo
                     transform.scale = Vec3(Exhibits.at(i).scale);
                 }
             }
+            AddLightRows(app, state.lights);
             scene.AddResource<ShowroomState>(state);
         }
 
@@ -274,23 +316,7 @@ namespace LightingDemo
             // Z resizes every light by the step's ratio, so sizes set in the panel keep their proportions.
             const float ratio = SizeSteps.at(static_cast<std::size_t>(state->sizeStep)) / before;
 
-            RunLightingPanel(app, scene, state->lighting, [&] {
-                for (ShowroomLight& light : state->lights)
-                {
-                    if (!light.light.IsValid())
-                    {
-                        continue;
-                    }
-                    Fenrir::RectLight& rect = light.light.GetComponent<Fenrir::RectLight>();
-                    ImGui::PushID(light.name);
-                    ImGui::SeparatorText(light.name);
-                    ImGui::SliderFloat("Width", &rect.width, 0.02f, 8.0f);
-                    ImGui::SliderFloat("Height", &rect.height, 0.02f, 4.0f);
-                    ImGui::SliderFloat("Intensity", &rect.intensity, 0.0f, 30.0f);
-                    ImGui::Checkbox("Two-sided (V)", &rect.twoSided);
-                    ImGui::PopID();
-                }
-            });
+            RunLightingPanel(app, scene, state->lighting);
 
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
             for (ShowroomLight& light : state->lights)
@@ -310,8 +336,9 @@ namespace LightingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp = LightingKeyHelp(false) + " Z: every light half, as set, or twice its size. V: flip every "
-                                                 "light's sidedness.";
+        scene.keyRows = LightingKeyRows(false);
+        scene.keyRows.push_back({"Z", "every light half, as set, or twice its size"});
+        scene.keyRows.push_back({"V", "every light's sidedness flipped"});
         scene.keys = {Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::B, Fenrir::Key::Z,
                       Fenrir::Key::V, Fenrir::Key::Z, Fenrir::Key::V, Fenrir::Key::Z};
         // At the front of the room, a little above head height, looking down across the floor to the back wall.

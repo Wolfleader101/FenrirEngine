@@ -1,0 +1,42 @@
+@* Debug draw (C#)'s Razor panel (examples/RendererDemo/README.md), which DebugDrawPanelSetup mounts into the scene's
+   demo slot: the demo UI kit's shared Razor components (Fenrir.Demo.Razor), styled like the C++ rows. Each toggle shows
+   or hides one of the scene's debug draw groups through the Fenrir.DebugDraw facade, so 1, 2 and 3 (DebugDrawScene.cs)
+   and the panel agree. *@
+@using Fenrir.DebugDraw
+@using Fenrir.Demo.Razor
+<DemoSection Title="Groups (Razor)">
+    <Toggle Label="Wire" @bind-Value="Wire" Hint="The wire shapes in both blocks; 1 does it too" />
+    <Toggle Label="Solid" @bind-Value="Solid" Hint="The alpha-blended solids in both blocks; 2 does it too" />
+    <Toggle Label="Labels" @bind-Value="Labels" Hint="The shapes' world-text names; 3 does it too" />
+</DemoSection>
+
+@code {
+    private bool Wire
+    {
+        get => DebugDraw.IsGroupShown("Wire");
+        set => Show("Wire", value);
+    }
+
+    private bool Solid
+    {
+        get => DebugDraw.IsGroupShown("Solid");
+        set => Show("Solid", value);
+    }
+
+    private bool Labels
+    {
+        get => DebugDraw.IsGroupShown("Labels");
+        set => Show("Labels", value);
+    }
+
+    private static void Show(string group, bool shown)
+    {
+        if (shown)
+            DebugDraw.ShowGroup(group);
+        else
+            DebugDraw.HideGroup(group);
+    }
+
+    // Rebuilt when a number key showed or hid a group.
+    protected override int BuildHash() => HashCode.Combine(Wire, Solid, Labels);
+}

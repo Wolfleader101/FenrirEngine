@@ -17,7 +17,7 @@ namespace RendererTest
         return std::uint32_t{r} | (std::uint32_t{g} << 8u) | (std::uint32_t{b} << 16u) | (std::uint32_t{a} << 24u);
     }
 
-    /** @brief A 2D pipeline description for builtin:2d (or `shader`) on the ImGui vertex layout. */
+    /** @brief A 2D pipeline description for builtin:2d (or `shader`) on the position, UV, RGBA8 vertex layout. */
     inline Fenrir::PipelineDescription2D Pipeline2D(Fenrir::AssetHandle<Fenrir::Shader> shader,
                                                     Fenrir::BlendMode2D blend = Fenrir::BlendMode2D::AlphaBlend,
                                                     Fenrir::ColourSpace input = Fenrir::ColourSpace::Srgb)

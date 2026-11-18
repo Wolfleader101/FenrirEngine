@@ -10,6 +10,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
+#include "FenrirInput/Devices.hpp"
 #include "FenrirInput/InputTypes.hpp"
 #include "FenrirMath/Colour.hpp"
 #include "FenrirRenderer/Components.hpp"
@@ -157,8 +158,36 @@ namespace ScriptingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Showcase";
-        scene.keyHelp = "R: reverse the boxes' spin. Space: a burst of sparks. G: GPU culling off or on.";
-        scene.keys = {Fenrir::Key::R, Fenrir::Key::Space, Fenrir::Key::G};
+        // Every switch of the Razor panel has its key here, for a build without scripting (ADR-0072).
+        scene.keyRows = {{"R", "reverse the boxes' spin"},
+                         {"[ / ]", "slow the spin down / speed it up"},
+                         {"Space", "a burst of sparks"},
+                         {"G", "GPU culling off or on"}};
+        scene.keys = {Fenrir::Key::R, Fenrir::Key::Space, Fenrir::Key::G, Fenrir::Key::RightBracket};
+        scene.tutorial = FenrirDemo::DemoTutorial{
+            .title = "Showcase",
+            .steps = {
+                {.title = "The scenes",
+                 .text = "The demo panel's Scenes section lists ScriptingDemo's one scene, Showcase. PageDown or "
+                         "PageUp enters it again, which spawns the boxes afresh.",
+                 .keys = {{"PageDown/PageUp", "enter the scene again"}}},
+                {.title = "The demo UI",
+                 .text = "F1 hides the demo panel, the help and this card, and shows them again.",
+                 .keys = {{"F1", "hide or show the demo UI kit"}}},
+                {.title = "The C# systems",
+                 .text = "Every key here is read by a C# system, from FenrirInput's C++ key events. Press R to "
+                         "reverse the boxes.",
+                 // The help's rows, the keys of the Razor panel's switches.
+                 .keys = scene.keyRows,
+                 .done = [](Fenrir::App& app) {
+                     return app.GetResource<Fenrir::Keyboard>().JustPressed(Fenrir::Key::R);
+                 }},
+                {.title = "A Razor panel",
+                 .text = "The Spin (Razor) section is a Razor component in C#, mounted into the scene's demo slot. "
+                         "Rebuild ScriptingDemoDeployScripts while the demo runs: the scripts reload, the panel "
+                         "comes back and the boxes turn on from where they were."}}};
+        // The spin's switches, in Razor (scripts/ShowcasePanel.razor), mounted by scripts/ShowcasePanelSetup.cs.
+        scene.razorPanel = "showcase-razor";
         scene.camera.position = {0.0f, 4.0f, 16.0f};
         scene.spawn = Spawn;
         return scene;

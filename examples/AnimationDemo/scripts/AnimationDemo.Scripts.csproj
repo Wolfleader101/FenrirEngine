@@ -12,8 +12,13 @@
        passing -p:FenrirScriptingSdk=<the SDK folder>/ and the folder of each contract (-p:Fenrir<Name>ContractDir=). The
        contracts are compile-time only: the host shares its own copies. Fenrir.Skeleton's and Fenrir.Animation's folders
        come as -p:FenrirSkeletonContractDir= and -p:FenrirAnimationContractDir= too, the scaffold passing them whenever
-       their scripting extensions are built. -->
+       their scripting extensions are built. Fenrir.UI's (and Fenrir.Text's and Fenrir.Painter's, which it builds on) are
+       for the C# twins' Razor readouts in their demo slots; fenrir_add_demo_app adds Fenrir.Demo.Razor.props, which
+       compiles them with the demo UI kit's shared Razor components. -->
   <Import Project="$(MSBuildThisFileDirectory)../../../packages/FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <!-- In an editor, which passes no folders, the props come from here. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../DemoScaffold/Managed/Fenrir.Demo.Razor.props"
+          Condition="'$(FenrirDemoContractDir)' == ''" />
   <ItemGroup Condition="'$(FenrirDemoContractDir)' != ''">
     <Reference Include="Fenrir.Input">
       <HintPath>$(FenrirInputContractDir)Fenrir.Input.dll</HintPath>
@@ -43,6 +48,18 @@
       <HintPath>$(FenrirAnimationContractDir)Fenrir.Animation.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Fenrir.Text">
+      <HintPath>$(FenrirTextContractDir)Fenrir.Text.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Painter">
+      <HintPath>$(FenrirPainterContractDir)Fenrir.Painter.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.UI">
+      <HintPath>$(FenrirUIContractDir)Fenrir.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
   <!-- In an editor, which passes no folders, the contracts come from their source projects. -->
   <ItemGroup Condition="'$(FenrirDemoContractDir)' == ''">
@@ -65,6 +82,9 @@
       <Private>false</Private>
     </ProjectReference>
     <ProjectReference Include="$(MSBuildThisFileDirectory)../../../packages/FenrirAnimation/Managed/Fenrir.Animation/Fenrir.Animation.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../packages/FenrirUI/Managed/Fenrir.UI/Fenrir.UI.csproj">
       <Private>false</Private>
     </ProjectReference>
   </ItemGroup>

@@ -1,10 +1,9 @@
 using Fenrir.Assets;
-using Fenrir.DebugDraw;
 using Fenrir.Math;
 using Fenrir.Renderer;
 using Fenrir.Scripting;
 
-// Outside any Fenrir.* namespace, as a game's scripts are, so `Assets` and `DebugDraw` name the classes.
+// Outside any Fenrir.* namespace, as a game's scripts are, so `Assets` names the class.
 namespace PhysicsDemo.Scripts;
 
 /// <summary>Which of the shared meshes an entity is drawn with, as the legacy DemoMesh's Kind named them.</summary>
@@ -81,19 +80,43 @@ public static class Looks
     }
 
     /// <summary>
-    /// Shows each entity's Name as debug screen text, one line each from the window's top-left: the legacy scenes write their
-    /// live readings into names, which the legacy editor's hierarchy showed.
+    /// The readouts ReadingsPanel.razor shows, a label and a value each, as the last ShowReadouts call left them.
     /// </summary>
-    public static void ShowReadouts(IEnumerable<Entity> entities)
+    public static IReadOnlyList<(string Label, string Value)> Readings => Shown;
+
+    private static readonly List<(string Label, string Value)> Shown = [];
+
+    /// <summary>Empties Readings, so a panel mounted for a scene shows nothing of the last scene's until its own readings come.</summary>
+    public static void ClearReadouts() => Shown.Clear();
+
+    /// <summary>
+    /// Shows each entity's Name as a readout of ReadingsPanel.razor, in the C# scene's demo slot: the legacy scenes write
+    /// their live readings into names, which the legacy editor's hierarchy showed. Called each frame by the scene's
+    /// readings system, as the C++ scenes' ShowReadouts (examples/PhysicsDemo/src/SceneLooks.hpp) is. A destroyed entity
+    /// is skipped.
+    /// </summary>
+    public static void ShowReadouts(IEnumerable<(string Label, Entity Entity)> readings)
     {
-        float y = 16;
-        foreach (Entity entity in entities)
+        Shown.Clear();
+        foreach (var (label, entity) in readings)
         {
-            if (!entity.IsValid)
-                continue;
-            DebugDraw.ScreenText(new Vector2(16, y), entity.Get<Name>().Value.GetText(), Colour.White);
-            y += 20;
+            if (entity.IsValid)
+                Shown.Add((label, ReadingValue(entity.Get<Name>().Value.GetText(), label)));
         }
+    }
+
+    /// <summary>
+    /// The value a readout labelled <paramref name="label"/> shows for an entity named <paramref name="name"/>: the name
+    /// without a leading "label: " or "label ", which the legacy scenes' names start with, or else the whole name.
+    /// </summary>
+    public static string ReadingValue(string name, string label)
+    {
+        if (label.Length == 0 || !name.StartsWith(label, StringComparison.Ordinal))
+            return name;
+        string rest = name[label.Length..];
+        if (rest.StartsWith(": ", StringComparison.Ordinal))
+            return rest[2..];
+        return rest.StartsWith(' ') ? rest[1..] : name;
     }
 
     /// <summary>A Camera entity's rotation looking along the legacy DemoCamera's yaw and pitch: degrees about world +Y where -90 looks along -Z, and degrees above the horizon.</summary>

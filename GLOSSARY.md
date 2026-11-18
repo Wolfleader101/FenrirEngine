@@ -670,11 +670,11 @@ Debug text stacked in a corner of the window, newest first, which a later messag
 
 **FenrirDraw2D**
 The engine's package of 2D draw data: plain data with no GPU code, knowing no renderer or UI. UI libraries and FenrirPainter's painter produce it; FenrirRenderer draws it (ADR-0027).
-*Avoid:* UI renderer, canvas (other engines' painter surface), ImGui backend.
+*Avoid:* UI renderer, canvas (other engines' painter surface), UI backend.
 
 **2D draw list**
 `DrawList2D`: one batch of 2D drawing as plain data: vertex and index bytes, 2D pipeline descriptions, and commands (draws with textures, a scissor and an index range, and the begins and ends of offscreen groups), in local logical coordinates. The same list can be shown on screen, in a texture or in the world; the target decides where.
-*Avoid:* draw list (alone: the frame's 3D one), draw data (ImGui's), display list.
+*Avoid:* draw list (alone: the frame's 3D one), draw data (other UI libraries'), display list.
 
 **2D pipeline description**
 A plain value saying how a 2D draw list's triangles are drawn: shader, vertex layout, index type, blend mode, input colour space and blend space. The renderer makes and caches a device pipeline from it.
@@ -1064,7 +1064,7 @@ A callback registered on FenrirInput with a priority, such as a UI, that sees ea
 
 **Input claim**
 What a router says it is doing with input in a window: the pointer is over it, it has captured the pointer, it has keyboard focus, or it wants text; plus an app-wide gamepad claim. Claims describe the interaction and drive text input; routers decide what is consumed.
-*Avoid:* capture flag, want-capture (ImGui's), focus (alone).
+*Avoid:* capture flag, want-capture, focus (alone).
 
 **Control owner**
 Whoever took a key's, button's or pointer's press: the router that consumed it, or the game. Its repeats and its release go to the same owner, and a cancelled control's release goes to no one.
@@ -1077,5 +1077,33 @@ One executable under `examples/` per feature area (RendererDemo, ScriptingDemo, 
 *Avoid:* DemoApp (the legacy single app, which the demo apps replaced), sample, example (alone).
 
 **Demo scaffold**
-What every demo app is built on: the `FenrirDemoScaffold` library (`examples/DemoScaffold/`), its `fenrir_add_demo_app` CMake function and its `Fenrir.Demo` C# assembly. It installs the engine packages, and holds the free-fly camera, the scene list, the scene-click event, the help panel, the smoke-run switches and the optional ImGui overlay.
+What every demo app is built on: the `FenrirDemoScaffold` library (`examples/DemoScaffold/`), its `fenrir_add_demo_app` CMake function and its `Fenrir.Demo` C# assembly. It installs the engine packages, FenrirUI among them, and holds the demo UI kit, the free-fly camera, the scene list, the scene-click event, the help and the smoke-run switches.
 *Avoid:* demo framework, demo base, harness.
+
+**Demo UI kit**
+The demo scaffold's UI over FenrirUI that every demo app shares (ADR-0071): the demo panel, the help, the demo tutorial and the hint line, in one theme. Demo code, not an engine package.
+*Avoid:* debug UI, dev UI, demo HUD, overlay (alone: the renderer's).
+
+**Demo panel**
+The demo UI kit's side panel: the scene switcher, the readouts, the switches and any demo slots of the active scene and the app.
+*Avoid:* debug window, tweak panel, inspector.
+
+**Readout**
+A row of the demo panel showing a name and a live value, which the scene or app pushes or the kit pulls once a frame.
+*Avoid:* stat, debug text (the renderer's screen text).
+
+**Switch row**
+A row of the demo panel bound to a value it changes: a toggle, range, choice, colour, button or text entry.
+*Avoid:* widget, tweakable.
+
+**Key row**
+One line of the help: the keys and what they do, for the scaffold, the app or a scene. Separate from the keys a smoke run presses.
+*Avoid:* key help (the single line it replaces), binding (a game's remappable input).
+
+**Demo tutorial**
+A scene's ordered steps, shown in a card the first time the scene is entered in a run, never in a smoke run.
+*Avoid:* onboarding, walkthrough.
+
+**Demo slot**
+An element of the demo panel with a known id, given to a scene that asks for it, where C# mounts a Razor component (ADR-0072).
+*Avoid:* mount point (alone), placeholder.

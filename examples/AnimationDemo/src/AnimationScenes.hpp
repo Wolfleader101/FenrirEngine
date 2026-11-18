@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 
@@ -64,13 +65,16 @@ namespace AnimationDemo
 
     /**
      * @brief Crowd: a grid of Kenney's character, 64 at first, doubled and halved between 1 and 1024 by the keys, the
-     * members taking the idle and run in turn from staggered starts (Seek), with pause and reset. The screen text
-     * shows the instances, their bones, the frame time and the renderer's palette stats.
+     * members taking the idle and run in turn from staggered starts (Seek), with pause and reset. Its demo panel
+     * sections show the instances, their bones and the renderer's palette stats, the kit's Frame section the frame
+     * time.
      */
     [[nodiscard]] FenrirDemo::DemoScene Crowd();
 
     /** @brief Playback (C#)'s number, which its C# systems know it by (scripts/Playback.cs). */
     inline constexpr std::uint32_t PlaybackCSharpScene = 1;
+    /** @brief Playback (C#)'s demo slot, which scripts/PanelSetup.cs mounts its Razor readouts into. */
+    inline constexpr std::string_view PlaybackCSharpSlot = "playback-csharp-razor";
 
     /**
      * @brief Playback (C#), scene 1's twin, made and run by C# (scripts/Playback.cs): the Quaternius human's Animator
@@ -82,6 +86,9 @@ namespace AnimationDemo
 
     /** @brief Bone attachments (C#)'s number, which its C# systems know it by (scripts/BoneAttachments.cs). */
     inline constexpr std::uint32_t BoneAttachmentsCSharpScene = 2;
+    /** @brief Bone attachments (C#)'s demo slot, which scripts/PanelSetup.cs mounts its Razor readouts into.
+     */
+    inline constexpr std::string_view BoneAttachmentsCSharpSlot = "attachments-csharp-razor";
 
     /**
      * @brief Bone attachments (C#), scene 5's twin, made and run by C# (scripts/BoneAttachments.cs): a blade, a hat and

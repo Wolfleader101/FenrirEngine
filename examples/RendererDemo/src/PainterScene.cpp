@@ -5,7 +5,6 @@
 
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
-#include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirDraw2D/DrawList2D.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirPainter/Painter.hpp"
@@ -14,6 +13,7 @@
 #include "FenrirRenderer/Overlay.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "RendererScenes.hpp"
+#include "SceneLabels.hpp"
 
 namespace RendererDemo
 {
@@ -34,6 +34,7 @@ namespace RendererDemo
             Fenrir::BlendSpace2D blendSpace = Fenrir::BlendSpace2D::Gamma;
             float time = 0.0f;
             bool paused = false;
+            SceneLabels labels;
         };
 
         Colour Srgb(std::uint32_t rgba)
@@ -43,7 +44,7 @@ namespace RendererDemo
 
         // Row 1: a rectangle, a rounded rectangle with four radii, a border with four colours, and an outset and an
         // inset shadow, each on a light card so the shadows read.
-        void PaintBoxes(Fenrir::Painter& painter, Fenrir::DebugDraw& draw)
+        void PaintBoxes(Fenrir::Painter& painter, SceneLabels& labels)
         {
             constexpr float top = 80.0f;
             painter.DrawRect({40, top, 120, 80}, Srgb(0xE04848FF));
@@ -68,12 +69,12 @@ namespace RendererDemo
             Fenrir::Shadow inset = outset;
             inset.inset = true;
             painter.DrawShadow({640, top, 120, 80}, Fenrir::CornerRadii::All(12), inset);
-            draw.ScreenText({40, top - 24}, "Rectangle, rounded, border, outset and inset shadow", Colour::White);
+            labels.Draw("Rectangle, rounded, border, outset and inset shadow", {40, top - 24});
         }
 
         // Row 2: a circle, an arc whose sweep breathes, a ring, and three gradients: two stops, five stops through the
         // stop texture, and a radial gradient with its focal point off centre.
-        void PaintRound(Fenrir::Painter& painter, Fenrir::DebugDraw& draw, float time)
+        void PaintRound(Fenrir::Painter& painter, SceneLabels& labels, float time)
         {
             constexpr float top = 240.0f;
             painter.DrawCircle({100, top + 50}, 45, Srgb(0x06D6A0FF));
@@ -103,13 +104,12 @@ namespace RendererDemo
             radial.focal = {850 + 25.0f * std::cos(time), top + 50 - 25.0f * std::sin(time)};
             radial.stops = {{0.0f, Colour::White}, {1.0f, Srgb(0x3A0CA3FF)}};
             painter.DrawCircle({850, top + 50}, 50, radial);
-            draw.ScreenText({40, top - 24}, "Circle, arc, ring; two-stop, five-stop and focal radial gradients",
-                            Colour::White);
+            labels.Draw("Circle, arc, ring; two-stop, five-stop and focal radial gradients", {40, top - 24});
         }
 
         // Row 3: the icon stretched, nine-sliced into a wide panel, and as a repeating pattern in a circle; then a
         // rotating rounded clip over a gradient.
-        void PaintImagesAndClips(Fenrir::Painter& painter, Fenrir::DebugDraw& draw, const PainterState& state)
+        void PaintImagesAndClips(Fenrir::Painter& painter, SceneLabels& labels, const PainterState& state)
         {
             constexpr float top = 420.0f;
             Fenrir::ImageDraw icon;
@@ -136,7 +136,7 @@ namespace RendererDemo
             behind.stops = {{0.0f, Srgb(0xFF9F1CFF)}, {1.0f, Srgb(0x2EC4B6FF)}};
             painter.DrawRect({-80, -80, 160, 160}, behind);
             painter.Restore();
-            draw.ScreenText({40, top - 24}, "Image, nine-slice, image pattern; a rotating rounded clip", Colour::White);
+            labels.Draw("Image, nine-slice, image pattern; a rotating rounded clip", {40, top - 24});
         }
 
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
@@ -161,8 +161,7 @@ namespace RendererDemo
         {
             PainterState* state = scene.GetResource<PainterState>();
             auto* overlay = app.TryGetResource<Fenrir::Overlay>();
-            auto* draw = scene.GetResource<Fenrir::DebugDraw>();
-            if (state == nullptr || overlay == nullptr || draw == nullptr)
+            if (state == nullptr || overlay == nullptr)
             {
                 return;
             }
@@ -189,17 +188,20 @@ namespace RendererDemo
             config.blendSpace = state->blendSpace;
             config.stops = &*state->stops;
             Fenrir::Painter painter(list, config);
-            PaintBoxes(painter, *draw);
-            PaintRound(painter, *draw, state->time);
-            PaintImagesAndClips(painter, *draw, *state);
+            // The captions and the status line, in FenrirText, in a list of their own blended in gamma space as the
+            // window's UI is, so G changes the shapes and not the text.
+            state->labels.Begin(app, MainWindow, state->shader);
+            PaintBoxes(painter, state->labels);
+            PaintRound(painter, state->labels, state->time);
+            PaintImagesAndClips(painter, state->labels, *state);
+            state->labels.Draw(state->blendSpace == Fenrir::BlendSpace2D::Gamma
+                                   ? "Blending in gamma space (G for linear)"
+                                   : "Blending in linear space (G for gamma)",
+                               {40, 580});
             // The gradients' rows, written before the list is drawn; the stop texture starts the next frame empty.
             app.GetResource<Fenrir::AssetStore>().Replace(state->stops->GetImage(), state->stops->TakeImageData());
             overlay->Submit(MainWindow, 0, std::move(list));
-            draw->ScreenText({40, 580},
-                             state->blendSpace == Fenrir::BlendSpace2D::Gamma
-                                 ? "Blending in gamma space (G for linear)"
-                                 : "Blending in linear space (G for gamma)",
-                             Colour::White);
+            state->labels.Submit(*overlay, 0);
         }
     } // namespace
 
@@ -207,8 +209,8 @@ namespace RendererDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Painter";
-        scene.keyHelp =
-            "G: blend in gamma or linear space. Space: pause or resume the arc, the focal point and the clip.";
+        scene.keyRows = {{"G", "blend in gamma or linear space"},
+                         {"Space", "pause or resume the arc, the focal point and the clip"}};
         scene.keys = {Fenrir::Key::G, Fenrir::Key::Space, Fenrir::Key::G, Fenrir::Key::Space};
         scene.spawn = Spawn;
         scene.update = Update;

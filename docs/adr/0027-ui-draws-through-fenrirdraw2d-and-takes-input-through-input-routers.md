@@ -61,7 +61,7 @@ The dependencies point one way: UI and painter → FenrirDraw2D ← FenrirRender
 - **Bad windows:** a submission to a window the renderer does not draw (ADR-0022: the main window only, for now) is dropped and logged once.
 - **Stage and transform:** the overlay draws in each window's `Overlay` stage, after every view's `Output`. It is orthographic, with `localToClip` mapping the window's logical size to clip space. There is no depth and no culling; those are restrictions of this target, not of FenrirDraw2D.
 - **Debug text on top:** debug screen text and on-screen messages (ADR-0025, ADR-0026) are drawn by the same 2D render feature as a fixed layer above every submitted layer, so a UI never hides engine diagnostics. *Amended 2026-10-23 (renderer ticket 19):* they are drawn by the debug render feature, in its own `Overlay` pass after the 2D render feature's, which keeps them the fixed top layer; it was the 2D render feature itself.
-- **`builtin:2d`:** a textured, vertex-coloured shader with the ImGui vertex layout (position `vec2`, UV `vec2`, colour RGBA8). Simple UIs need no shader of their own.
+- **`builtin:2d`:** a textured, vertex-coloured shader with a position, UV, RGBA8 vertex layout (position `vec2`, UV `vec2`, colour RGBA8; ImGui's layout, when this was decided). Simple UIs need no shader of their own.
 
 ## Colour and alpha
 
@@ -134,13 +134,19 @@ Text input follows the `textInput` claim. After routing, FenrirWindow keeps SDL 
 
 ## ImGui in the demos
 
-The demo scaffold (ticket 23) has an optional `ImGuiOverlay`. It is the first consumer of `DrawList2D` and the overlay, and it gives demo apps tweak panels; the ImGui editor prototype reuses it.
+Dear ImGui served the demos until the demo UI kit (ADR-0071), and has been removed.
 
-- It is an input router.
-- It builds a `DrawList2D` with `builtin:2d`: input colour space `sRGB`, straight `AlphaBlend`, linear blending, so it tests the default path.
-- Its font atlas is an `ImageData` asset, re-uploaded whole when it changes.
+The demo scaffold (ticket 23) had an optional `ImGuiOverlay`. It was the first consumer of `DrawList2D` and the overlay, and it gave the demo apps their tweak panels until the demo UI kit replaced them.
 
-ImGui is a submodule linked only by that piece, built only with the examples. It is never part of a package and never the basis of Fenrir's own UI.
+- It was an input router.
+- It built a `DrawList2D` with `builtin:2d`: input colour space `sRGB`, straight `AlphaBlend`, linear blending, so it tested the default path.
+- Its font atlas was an `ImageData` asset, re-uploaded whole when it changed.
+
+ImGui was a submodule linked only by that piece, built only with the examples. It was never part of a package and never the basis of Fenrir's own UI.
+
+*Amended 2026-11-16 (ADR-0071):* ImGui leaves the demos and the repository. Every demo moves onto the demo UI kit over FenrirUI (`.scratch/demo-ui/`), and the spec's last ticket deletes the `ImGuiOverlay`, `DemoConfig::imguiOverlay` and the submodule, then rewrites this section to say so. `builtin:2d` and its vertex layout (position, UV, RGBA8) stay.
+
+*Done 2026-11-17 (demo UI ticket 13):* the `ImGuiOverlay`, `ImGuiOverlayLayer`, `ImGuiOverlayRouterPriority`, `DemoConfig::imguiOverlay`, the scaffold's ImGui tests and the `examples/DemoScaffold/libs/imgui` submodule are deleted. The demo UI kit's tests cover what the overlay's did: a press on a panel reaching neither the scene click nor the game, a drag not turning the camera, and text entry claiming and giving back the keyboard.
 
 ## Testing
 

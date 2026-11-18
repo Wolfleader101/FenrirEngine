@@ -157,8 +157,8 @@ namespace Fenrir::Detail
             UIRootInput& input = state.input;
             const ElementSlot* focused = state.Find(input.focused);
             // Only while it navigates the focus or drives the cursor does the UI want the pad: a HUD root never claims
-            // it.
-            if (const bool gamepad = focused != nullptr || input.cursor.on;
+            // it, nor does a root with gamepad navigation off.
+            if (const bool gamepad = state.config.gamepadNavigation && (focused != nullptr || input.cursor.on);
                 input.routerId.value != 0 && gamepad != input.gamepadPublished)
             {
                 input.gamepadPublished = gamepad;
@@ -508,11 +508,12 @@ namespace Fenrir::Detail
                     }
                     else if constexpr (std::is_same_v<Event, GamepadButtonEvent>)
                     {
-                        return GamepadButtonInput(event);
+                        // With gamepad navigation off the pad is always the game's.
+                        return m_state->config.gamepadNavigation ? GamepadButtonInput(event) : RouteResult::Passed;
                     }
                     else if constexpr (std::is_same_v<Event, GamepadAxisEvent>)
                     {
-                        return GamepadAxisInput(event);
+                        return m_state->config.gamepadNavigation ? GamepadAxisInput(event) : RouteResult::Passed;
                     }
                     else
                     {

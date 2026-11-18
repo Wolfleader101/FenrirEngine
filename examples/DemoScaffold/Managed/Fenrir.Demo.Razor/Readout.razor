@@ -1,0 +1,17 @@
+@* A readout of the demo panel, as the kit's C++ DemoSection::Readout makes one: a label and a live value, in two
+   columns. The parent passes the value as text, and rebuilds when it changes (its BuildHash). *@
+@namespace Fenrir.Demo.Razor
+@using Fenrir.UI
+@using Fenrir.UI.Razor
+@inherits UIComponent
+<panel class="demo-readout">
+    <label class="demo-readout-label">@Label</label>
+    <label class="demo-readout-value">@Value</label>
+</panel>
+
+@code {
+    /// <summary>What the value is, in the left column.</summary>
+    [Parameter] public string Label { get; set; } = "";
+    /// <summary>The value, as shown.</summary>
+    [Parameter] public string Value { get; set; } = "";
+}
