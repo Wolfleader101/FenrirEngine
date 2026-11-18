@@ -46,10 +46,14 @@
     max-height: 94%;
 }
 
+/* A scroll view inside the panel's box: none of the default stylesheet's light background, border or padding. */
 #demo-panel-scroll {
     flex-shrink: 1;
     min-height: 0;
     row-gap: 10px;
+    padding: 0;
+    border-width: 0;
+    background-color: transparent;
 }
 
 /* The hint line: the hovered or focused row's hint, under a rule; the kit takes it out of the layout while empty. */
@@ -434,8 +438,19 @@
     background-color: var(--demo-control-hover);
 }
 
-.demo-tutorial-button:disabled {
+/* Disabled controls anywhere in the kit (the tutorial's Back on its first step, a row a scene disables): dimmed on the
+   dark panels, never the default stylesheet's light greys. */
+#demo-kit button:disabled,
+#demo-kit checkbox:disabled,
+#demo-kit textentry:disabled,
+#demo-kit slider:disabled > slider-thumb {
+    border-color: var(--demo-edge);
+    background-color: var(--demo-control);
     color: var(--demo-ink-dim);
+}
+
+#demo-kit slider:disabled {
+    background-color: var(--demo-control);
 }
 
 .demo-tutorial-next {
