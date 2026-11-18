@@ -1,5 +1,5 @@
-// The demo panel's rows and the app sections the scaffold gives it (spec: .scratch/demo-ui/spec.md, "The C++ API" and
-// "What the scaffold feeds the kit"): readouts pushed and pulled, the scene switcher and the frame stats, on the null
+// The demo panel's rows and the app sections the scaffold gives it (examples/DemoScaffold/README.md, "The demo UI kit";
+// ADR-0071): readouts pushed and pulled, the scene switcher and the frame stats, on the null
 // backend with the kit's root drawing into a capturing target.
 
 #include <memory>

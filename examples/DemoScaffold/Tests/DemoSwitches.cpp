@@ -1,4 +1,4 @@
-// The demo panel's switch rows and its hint line (spec: .scratch/demo-ui/spec.md, "The C++ API"): toggles, ranges,
+// The demo panel's switch rows and its hint line (examples/DemoScaffold/README.md): toggles, ranges,
 // choices, colours, buttons and text entries bound to a scene's state through DemoValue, and the keyboard and gamepad
 // around them, on the null backend with the kit's root drawing into a capturing target.
 

@@ -1,4 +1,4 @@
-// Demo slots (spec: .scratch/demo-ui/spec.md, "C# and Razor"; ADR-0072): a scene with a Razor panel gets an element of
+// Demo slots (ADR-0072; examples/DemoScaffold/README.md): a scene with a Razor panel gets an element of
 // a known id in the demo panel, which C# finds by that id and mounts its Razor component into. It goes when the scene
 // is left, and with no script to mount into it, it shows a note that the panel needs scripting.
 

@@ -1,4 +1,4 @@
-// The demo UI kit (ADR-0071; spec: .scratch/demo-ui/spec.md): its root over the scene, the demo panel's sections, the
+// The demo UI kit (ADR-0071; examples/DemoScaffold/README.md): its root over the scene, the demo panel's sections, the
 // help's key rows, F1, and which input reaches the scene, on the null backend with the kit's root drawing into a
 // capturing target the size of the null backend's surface.
 

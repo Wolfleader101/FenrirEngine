@@ -1,4 +1,4 @@
-// Demo tutorials (spec: .scratch/demo-ui/spec.md, "Demo tutorials"): a scene's steps in a card at the top centre, shown
+// Demo tutorials (examples/DemoScaffold/README.md): a scene's steps in a card at the top centre, shown
 // on the scene's first entry in a run and never in a smoke run or with FENRIR_DEMO_KEYS, stepped by hand or by a step's
 // `done`, closed by Close or Escape and shown again by the scene's Tutorial button, on the null backend with the kit's
 // root drawing into a capturing target.
