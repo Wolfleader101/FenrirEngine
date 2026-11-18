@@ -1,5 +1,7 @@
 # Demo UI: every demo on FenrirUI through one demo UI kit in the scaffold, with Razor where it helps, and Dear ImGui removed
 
+Status: built (#384, #388, #390, #391, #395, #396, #397, #398, #399, #400, #401, #402, #406, close-out #407)
+
 ## Problem Statement
 
 FenrirEngine has its own UI stack (FenrirText, FenrirPainter, FenrirUI and Razor components, ADR-0060 to ADR-0070), but its demos don't use it:
