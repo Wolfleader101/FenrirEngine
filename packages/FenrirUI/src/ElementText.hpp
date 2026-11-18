@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <string>
 #include <string_view>
 
@@ -55,6 +56,19 @@ namespace Fenrir::Detail
          */
         [[nodiscard]] Math::Vec2 Measure(FontLibrary* fonts, const MeasureConstraints& constraints);
 
+        /**
+         * @brief Takes the content width, in UI units, the last layout gave the element. True when it differs from
+         * the one taken before, so a measure that used the old one may be wrong and layout must run again. A measure
+         * not exact in width answers with the height at this width when it is narrower than the measure's, as a flex
+         * item's height is the height at its flexed width (the layout bridge, "Wrapped text in a shrunk flex item").
+         */
+        bool SetLaidOutWidth(float width) noexcept
+        {
+            const bool changed = std::abs(width - m_laidOutWidth) > 0.01f;
+            m_laidOutWidth = width;
+            return changed;
+        }
+
         /** @brief Sets the width, in UI units, the paragraph is drawn at: its content box's, as laid out. */
         void SetContentWidth(float width) noexcept
         {
@@ -94,6 +108,8 @@ namespace Fenrir::Detail
         float m_pixelsPerUnit = 1.0f;
         /** @brief The content box's unsnapped width in UI units; infinite before the first layout. */
         float m_contentWidth = UnlimitedWidth;
+        /** @brief The content width, in UI units, the last layout gave it; infinite before the first. */
+        float m_laidOutWidth = UnlimitedWidth;
         /** @brief The width, in target pixels, it was last drawn at, and its size there; negative after a measure. */
         float m_drawnWidth = -1.0f;
         Math::Vec2 m_drawnSize{0.0f};

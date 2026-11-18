@@ -121,7 +121,17 @@ namespace Fenrir::Detail
         m_paragraph.Layout(*fonts, width);
         // Layout has seen the paragraph's size: drawing it at another width next is no news.
         m_drawnWidth = -1.0f;
-        const Math::Vec2 size = m_paragraph.Size() / m_pixelsPerUnit;
+        Math::Vec2 size = m_paragraph.Size() / m_pixelsPerUnit;
+        // Not exact in width, Yoga is asking for a flex basis or a container's content size, and may keep the height
+        // it gets for a row's cross size even after shrinking the element narrower (the layout bridge, "Wrapped text
+        // in a shrunk flex item"). Narrower than this measure's width, the width the last layout gave it is where its
+        // height belongs, as a flex item's height is its height at its flexed width.
+        if (constraints.widthMode != MeasureMode::Exactly && std::isfinite(m_laidOutWidth) &&
+            (constraints.widthMode == MeasureMode::Undefined || m_laidOutWidth < constraints.width))
+        {
+            m_paragraph.Layout(*fonts, LayoutWidth(m_laidOutWidth, m_pixelsPerUnit));
+            size.y = std::max(size.y, m_paragraph.Size().y / m_pixelsPerUnit);
+        }
         return {Constrained(size.x, constraints.width, constraints.widthMode),
                 Constrained(size.y, constraints.height, constraints.heightMode)};
     }

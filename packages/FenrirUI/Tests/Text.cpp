@@ -275,6 +275,48 @@ TEST_CASE("Labels in a flex row with flex-grow wrap at their share of it", "[ui]
     REQUIRE(UITest::Near(scene.root.GetBoxes(row).border.height, scene.root.GetBoxes(first).border.height));
 }
 
+TEST_CASE("An absolute box with only a max-width is as tall as its wrapped text", "[ui][text]")
+{
+    TextScene scene;
+    const Fenrir::ElementId box = scene.root.Create(scene.root.GetRootElement(), "panel");
+    scene.SetStyle(box, "position: absolute; left: 10px; bottom: 10px; max-width: 200px");
+    const Fenrir::ElementId label = scene.Label(box, LongText);
+    scene.test.Frame();
+
+    const Fenrir::Rect2D outer = scene.root.GetBoxes(box).border;
+    const Fenrir::Rect2D text = scene.root.GetBoxes(label).border;
+    INFO("the box stops at its max-width and the label wraps inside it");
+    REQUIRE(outer.width <= 200.0f);
+    REQUIRE(scene.ParagraphOf(label).Lines().size() > 1);
+    INFO("the label ends at " << text.y + text.height << ", the box at " << outer.y + outer.height);
+    REQUIRE(text.y + text.height <= outer.y + outer.height + 0.5f);
+    INFO("the box's bottom edge is 10 units above the target's");
+    REQUIRE(UITest::Near(outer.y + outer.height, 590.0f));
+}
+
+TEST_CASE("An absolute box with only a max-width is as tall as its rows of wrapped text", "[ui][text]")
+{
+    TextScene scene;
+    const Fenrir::ElementId box = scene.root.Create(scene.root.GetRootElement(), "panel");
+    scene.SetStyle(box, "position: absolute; left: 10px; bottom: 10px; max-width: 300px");
+    Fenrir::ElementId last;
+    for (int i = 0; i < 3; ++i)
+    {
+        const Fenrir::ElementId row = scene.root.Create(box, "panel");
+        scene.SetStyle(row, "flex-direction: row");
+        scene.Label(row, "Key", "width: 60px; flex-shrink: 0");
+        last = scene.Label(row, LongText, "flex-grow: 1; flex-shrink: 1");
+    }
+    scene.test.Frame();
+
+    const Fenrir::Rect2D outer = scene.root.GetBoxes(box).border;
+    const Fenrir::Rect2D text = scene.root.GetBoxes(last).border;
+    REQUIRE(outer.width <= 300.0f);
+    REQUIRE(scene.ParagraphOf(last).Lines().size() > 1);
+    INFO("the last row's text ends at " << text.y + text.height << ", the box at " << outer.y + outer.height);
+    REQUIRE(text.y + text.height <= outer.y + outer.height + 0.5f);
+}
+
 TEST_CASE("Text properties read from inline style and every one inherits", "[ui][text]")
 {
     TextScene scene;

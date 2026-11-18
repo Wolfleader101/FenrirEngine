@@ -344,13 +344,57 @@ namespace Fenrir::Detail
         m_config->fonts = fonts;
     }
 
+    namespace
+    {
+        /**
+         * @brief Gives each text leaf under `node` the content width it was laid out at, marking dirty those whose
+         * width changed; true when any did.
+         */
+        bool TakeLaidOutWidths(YGNodeRef node)
+        {
+            bool changed = false;
+            const auto* context = static_cast<const NodeContext*>(YGNodeGetContext(node));
+            if (context != nullptr && context->text != nullptr && YGNodeHasMeasureFunc(node))
+            {
+                const float width = YGNodeLayoutGetWidth(node) - YGNodeLayoutGetBorder(node, YGEdgeLeft) -
+                                    YGNodeLayoutGetBorder(node, YGEdgeRight) -
+                                    YGNodeLayoutGetPadding(node, YGEdgeLeft) -
+                                    YGNodeLayoutGetPadding(node, YGEdgeRight);
+                if (context->text->SetLaidOutWidth(width))
+                {
+                    YGNodeMarkDirty(node);
+                    changed = true;
+                }
+            }
+            const std::size_t count = YGNodeGetChildCount(node);
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                changed = TakeLaidOutWidths(YGNodeGetChild(node, i)) || changed;
+            }
+            return changed;
+        }
+    } // namespace
+
     bool LayoutTree::Layout(LayoutNode* root)
     {
         if (!YGNodeIsDirty(Node(root)))
         {
             return false;
         }
-        YGNodeCalculateLayout(Node(root), YGUndefined, YGUndefined, YGDirectionLTR);
+        // Wrapped text in a shrunk flex item: Yoga sizes a row whose width is not definite (in a box with only a
+        // max-width, say) from its items' heights at their flex bases, measured before it shrinks them, and keeps that
+        // height once it has shrunk a wrapping label narrower, so the label's later lines run out of the row. Each
+        // text leaf takes the width it was laid out at and answers later measures with its height there
+        // (ElementText::Measure); when any width changed, layout runs again, until the widths settle.
+        constexpr int MaxPasses = 3;
+        for (int pass = 0; pass < MaxPasses; ++pass)
+        {
+            YGNodeCalculateLayout(Node(root), YGUndefined, YGUndefined, YGDirectionLTR);
+            if (!TakeLaidOutWidths(Node(root)))
+            {
+                break;
+            }
+        }
         return true;
     }
 
