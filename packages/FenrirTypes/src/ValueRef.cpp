@@ -12,8 +12,7 @@ namespace Fenrir
 {
     namespace
     {
-        // Where an Entity's two fields sit: its 32-bit id first, then the entity list pointer, 8-byte aligned.
-        constexpr std::size_t EntityListOffset = 8;
+        static_assert(sizeof(EntityValue) == 16, "an entity is 16 bytes: its id, then its entity list pointer");
 
         std::size_t ScalarSize(Kind kind) noexcept
         {
@@ -87,7 +86,7 @@ namespace Fenrir
         case Kind::Reference:
             return sizeof(ReferenceValue);
         case Kind::Entity:
-            return EntityListOffset + sizeof(void*);
+            return sizeof(EntityValue);
         case Kind::FixedString:
             return type.count;
         case Kind::Path:
@@ -267,19 +266,13 @@ namespace Fenrir
 
     EntityValue ValueRef::Entity() const noexcept
     {
-        if (m_type->kind != Kind::Entity)
-            return {};
-        const auto* bytes = static_cast<const std::byte*>(m_value);
-        return {Load<std::uint32_t>(bytes), Load<void*>(bytes + EntityListOffset)};
+        return m_type->kind == Kind::Entity ? Load<EntityValue>(m_value) : EntityValue{};
     }
 
     void ValueRef::SetEntity(EntityValue entity) const noexcept
     {
-        if (m_type->kind != Kind::Entity)
-            return;
-        auto* bytes = static_cast<std::byte*>(m_value);
-        Store(bytes, entity.id);
-        Store(bytes + EntityListOffset, entity.list);
+        if (m_type->kind == Kind::Entity)
+            Store(m_value, entity);
     }
 
     const TypeDescription* ValueRef::Description() const noexcept

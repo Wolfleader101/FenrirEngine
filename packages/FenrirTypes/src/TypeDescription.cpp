@@ -3,11 +3,31 @@
 #include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/ValueRef.hpp"
 
-#include <cassert>
 #include <cstddef>
 
 namespace Fenrir
 {
+    namespace
+    {
+        // Hands a read-only visitor what a type's visit function pushes, read-only, so one generated function serves
+        // both forms of Visit.
+        class ReadOnly final : public FieldVisitor
+        {
+          public:
+            explicit ReadOnly(ConstFieldVisitor& visitor) noexcept : m_visitor(visitor)
+            {
+            }
+
+            void Field(const FieldInfo& field, ValueRef value) override
+            {
+                m_visitor.Field(field, value);
+            }
+
+          private:
+            ConstFieldVisitor& m_visitor;
+        };
+    } // namespace
+
     void TypeDescription::Construct(void* instance) const
     {
         if (construct != nullptr)
@@ -22,9 +42,11 @@ namespace Fenrir
 
     void TypeDescription::Visit(void* instance, FieldVisitor& visitor) const
     {
-        // The table-driven form: each field at its offset. An owning type's fields have no offsets, so it is walked
-        // by a generated function instead, never through here.
-        assert(!AdmitsOwningKinds(role) && "an owning type is not visited through offsets");
+        if (visit != nullptr)
+        {
+            visit(instance, visitor);
+            return;
+        }
         auto* bytes = static_cast<std::byte*>(instance);
         for (const FieldInfo& field : fields)
             visitor.Field(field, ValueRef(bytes + field.offset, field.type));
@@ -32,9 +54,8 @@ namespace Fenrir
 
     void TypeDescription::Visit(const void* instance, ConstFieldVisitor& visitor) const
     {
-        assert(!AdmitsOwningKinds(role) && "an owning type is not visited through offsets");
-        const auto* bytes = static_cast<const std::byte*>(instance);
-        for (const FieldInfo& field : fields)
-            visitor.Field(field, ConstValueRef(bytes + field.offset, field.type));
+        // The visit function takes a mutable instance, but every value reaches the visitor read-only.
+        ReadOnly readOnly(visitor);
+        Visit(const_cast<void*>(instance), readOnly);
     }
 } // namespace Fenrir

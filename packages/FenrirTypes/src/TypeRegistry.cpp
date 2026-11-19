@@ -18,15 +18,33 @@ namespace Fenrir
             return Quoted(description.name) + " (" + std::string(description.package) + ")";
         }
 
-        // The first owning kind in `type` or its elements, the field's own kind first; null when there is none.
-        const ValueType* FirstOwning(const ValueType& type) noexcept
+        // The first owning kind in `type` or along its elements, the field's own kind first; null when there is none.
+        // A value of a nested struct is its own description's business, so this stops at one.
+        const ValueType* OwnOwning(const ValueType& type) noexcept
         {
             if (IsOwning(type.kind))
                 return &type;
             if (type.element != nullptr)
-                return FirstOwning(*type.element);
+                return OwnOwning(*type.element);
             return nullptr;
         }
+
+        // The first owning kind `type` holds, through its elements and nested structs' fields; null when none.
+        // Structs held by value nest finitely, so the walk ends.
+        const ValueType* HeldOwning(const ValueType& type) noexcept
+        {
+            if (const ValueType* owning = OwnOwning(type))
+                return owning;
+            const ValueType* leaf = &type;
+            while (leaf->element != nullptr)
+                leaf = leaf->element;
+            if (leaf->kind == Kind::Struct && leaf->type != nullptr)
+                for (const FieldInfo& field : leaf->type->fields)
+                    if (const ValueType* owning = HeldOwning(field.type))
+                        return owning;
+            return nullptr;
+        }
+
     } // namespace
 
     TypeRegistry::TypeRegistry(Diagnostics diagnostics) : m_diagnostics(std::move(diagnostics))
@@ -47,15 +65,23 @@ namespace Fenrir
             return false;
         }
 
-        // Every name it would take, canonical first, each checked against every registered type's names.
+        // Every name it would take, canonical first, each checked against every registered type's names and its own.
         std::vector<std::string_view> names{description.name};
         names.insert(names.end(), description.formerly.begin(), description.formerly.end());
-        for (std::string_view name : names)
+        for (std::size_t i = 0; i < names.size(); ++i)
         {
-            if (const Entry* holder = FindEntry(name))
+            if (const Entry* holder = FindEntry(names[i]))
             {
-                Report(prefix + "the name " + Quoted(name) + " is already " + Named(*holder->description) + "'s");
+                Report(prefix + "the name " + Quoted(names[i]) + " is already " + Named(*holder->description) + "'s");
                 return false;
+            }
+            for (std::size_t j = 0; j < i; ++j)
+            {
+                if (names[j] == names[i])
+                {
+                    Report(prefix + "it names " + Quoted(names[i]) + " twice among its canonical and former names");
+                    return false;
+                }
             }
         }
 
@@ -82,18 +108,24 @@ namespace Fenrir
             }
         }
 
-        if (!AdmitsOwningKinds(description.role))
+        for (const FieldInfo& field : description.fields)
         {
-            for (const FieldInfo& field : description.fields)
+            // A nested struct's owning kinds are allowed or refused in the role of the type that holds it.
+            const ValueType* held = HeldOwning(field.type);
+            if (held != nullptr && description.role != Role::Nested && !AdmitsOwningKinds(description.role))
             {
-                if (const ValueType* owning = FirstOwning(field.type))
-                {
-                    Report(prefix + "its field " + Quoted(field.name) + " holds a " +
-                           std::string(KindName(owning->kind)) + ", which a " +
-                           std::string(RoleName(description.role)) +
-                           " may not; only data asset and settings types hold owning kinds");
-                    return false;
-                }
+                Report(prefix + "its field " + Quoted(field.name) + " holds a " + std::string(KindName(held->kind)) +
+                       ", which a " + std::string(RoleName(description.role)) +
+                       " may not; only data asset and settings types hold owning kinds");
+                return false;
+            }
+            // An owning field has no offset to visit it by, so the type must bring its own visit function.
+            if (OwnOwning(field.type) != nullptr && description.visit == nullptr)
+            {
+                Report(prefix + "its field " + Quoted(field.name) + " holds a " +
+                       std::string(KindName(OwnOwning(field.type)->kind)) +
+                       ", which has no offset to visit it by, and the type has no visit function");
+                return false;
             }
         }
 

@@ -14,12 +14,12 @@
 
 **Touches:** `packages/FenrirTypes/` (new: `CMakeLists.txt`, `include/FenrirTypes/`, `src/`, `Tests/`), the root `CMakeLists.txt` (adding the package), `README.md` (the package list)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirTypes` builds on msvc-x64-debug and links into a Catch2 test executable through `fenrir_add_catch2()` with no other engine package.
-- [ ] A hand-written description of a fixed-layout struct (a `Transform`-shaped test type) registers, is found by canonical and by a former name with the current name reported, and a recording `FieldVisitor` sees every field once with the kind, offset and value the struct holds; a mutable visit writes a field back.
-- [ ] A two-step base chain (`Sword` extends `WeaponData` extends nothing) answers `IsA` both ways correctly; an unregistered base is a registration diagnostic.
-- [ ] Registering two types under one canonical name fails with a diagnostic naming both, and the first stays.
-- [ ] An attachment keyed by a test tag type is hung on a type and read back; a missing attachment reads as absent, not as an error.
-- [ ] `Describe<T>` for a test type returns the description the test registered, by identity.
-- [ ] `PublicHeaders` passes: every header under `packages/FenrirTypes/include` compiles alone.
+- [x] `FenrirTypes` builds on msvc-x64-debug and links into a Catch2 test executable through `fenrir_add_catch2()` with no other engine package.
+- [x] A hand-written description of a fixed-layout struct (a `Transform`-shaped test type) registers, is found by canonical and by a former name with the current name reported, and a recording `FieldVisitor` sees every field once with the kind, offset and value the struct holds; a mutable visit writes a field back.
+- [x] A two-step base chain (`Sword` extends `WeaponData` extends nothing) answers `IsA` both ways correctly; an unregistered base is a registration diagnostic.
+- [x] Registering two types under one canonical name fails with a diagnostic naming both, and the first stays.
+- [x] An attachment keyed by a test tag type is hung on a type and read back; a missing attachment reads as absent, not as an error.
+- [x] `Describe<T>` for a test type returns the description the test registered, by identity.
+- [x] `PublicHeaders` passes: every header under `packages/FenrirTypes/include` compiles alone.

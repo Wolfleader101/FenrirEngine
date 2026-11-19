@@ -21,6 +21,9 @@ TEST_CASE("Describe<T> yields the description the registration added, by identit
 
 TEST_CASE("Only a type something describes is Described", "[types][describe]")
 {
+    INFO("Transform has a Describe specialisation, so is Described");
     STATIC_REQUIRE(Fenrir::Described<TypesTest::Transform>);
+
+    INFO("Gem has none, so is not");
     STATIC_REQUIRE_FALSE(Fenrir::Described<TypesTest::Gem>);
 }

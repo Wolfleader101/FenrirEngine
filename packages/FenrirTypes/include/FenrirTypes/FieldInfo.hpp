@@ -3,6 +3,7 @@
 #include "FenrirTypes/Kind.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <string_view>

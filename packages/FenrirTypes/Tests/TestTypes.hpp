@@ -5,13 +5,17 @@
 
 #include "FenrirTypes/Describe.hpp"
 #include "FenrirTypes/FieldInfo.hpp"
+#include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/Kind.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
+#include "FenrirTypes/ValueRef.hpp"
 
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -99,6 +103,15 @@ namespace TypesTest
         std::optional<float> edge;
         std::filesystem::path icon;
     };
+
+    // The field of `fields` named `name`, which must be there.
+    inline const FieldInfo& FieldNamed(std::span<const FieldInfo> fields, std::string_view name)
+    {
+        for (const FieldInfo& field : fields)
+            if (field.name == name)
+                return field;
+        throw std::logic_error("no such field");
+    }
 
     inline constexpr ValueType F32{.kind = Kind::F32};
     inline constexpr ValueType U32{.kind = Kind::U32};
@@ -221,8 +234,8 @@ namespace TypesTest
         .fields = ProbeFields,
     };
 
-    // The data assets' fields have no offsets: an owning type is walked by a generated function, not a table, so the
-    // tests here reach their values through value references made from the fields' types.
+    // The data assets' fields have no offsets: an owning type is walked by its visit function, written here by hand as
+    // the generator will write it.
     inline constexpr ValueType StringType{.kind = Kind::String};
 
     inline const FieldInfo GemFields[] = {
@@ -246,6 +259,14 @@ namespace TypesTest
         {.name = "damage", .type = F32},
     };
 
+    // What the generator writes for an owning type: a function pushing each field once, by member, not by offset.
+    inline void VisitWeaponData(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& weapon = *static_cast<WeaponData*>(instance);
+        visitor.Field(WeaponDataFields[0], Fenrir::ValueRef(&weapon.name, WeaponDataFields[0].type));
+        visitor.Field(WeaponDataFields[1], Fenrir::ValueRef(&weapon.damage, WeaponDataFields[1].type));
+    }
+
     inline const TypeDescription WeaponDataDescription{
         .name = "TypesTest::WeaponData",
         .package = "FenrirTypesTests",
@@ -255,6 +276,7 @@ namespace TypesTest
         .construct = Fenrir::ConstructValue<WeaponData>,
         .destroy = Fenrir::DestroyValue<WeaponData>,
         .fields = WeaponDataFields,
+        .visit = VisitWeaponData,
     };
 
     inline constexpr ValueType GemType{.kind = Kind::Struct, .type = &GemDescription};
@@ -266,6 +288,16 @@ namespace TypesTest
         {.name = "icon", .type = {.kind = Kind::Path}},
     };
 
+    // A derived owning type's visit walks its base's fields first (ADR-0075).
+    inline void VisitSword(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& sword = *static_cast<Sword*>(instance);
+        VisitWeaponData(static_cast<WeaponData*>(&sword), visitor);
+        visitor.Field(SwordFields[0], Fenrir::ValueRef(&sword.gems, SwordFields[0].type));
+        visitor.Field(SwordFields[1], Fenrir::ValueRef(&sword.edge, SwordFields[1].type));
+        visitor.Field(SwordFields[2], Fenrir::ValueRef(&sword.icon, SwordFields[2].type));
+    }
+
     inline const TypeDescription SwordDescription{
         .name = "TypesTest::Sword",
         .package = "FenrirTypesTests",
@@ -276,6 +308,7 @@ namespace TypesTest
         .destroy = Fenrir::DestroyValue<Sword>,
         .base = "TypesTest::WeaponData",
         .fields = SwordFields,
+        .visit = VisitSword,
     };
 } // namespace TypesTest
 

@@ -1,6 +1,8 @@
 #include "TestTypes.hpp"
 
+#include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
+#include "FenrirTypes/ValueRef.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -174,10 +176,9 @@ TEST_CASE("A type whose base is not registered is refused with a diagnostic", "[
     REQUIRE(recording.registry.Find("TypesTest::Sword") == nullptr);
 }
 
-TEST_CASE("Only a data asset may have a base, and only a data asset may be one", "[types][registry]")
+TEST_CASE("A type that is not a data asset may not have a base", "[types][registry]")
 {
     RecordingRegistry recording;
-    REQUIRE(recording.registry.Register(TypesTest::TransformDescription));
     REQUIRE(recording.registry.Register(TypesTest::WeaponDataDescription));
 
     const TypeDescription componentWithBase{
@@ -186,8 +187,15 @@ TEST_CASE("Only a data asset may have a base, and only a data asset may be one",
         .role = Role::Component,
         .base = "TypesTest::WeaponData",
     };
-    INFO("a component with a base is refused");
+    INFO("a component with a base is refused, with one diagnostic");
     REQUIRE_FALSE(recording.registry.Register(componentWithBase));
+    REQUIRE(recording.diagnostics.size() == 1);
+}
+
+TEST_CASE("A data asset may extend only another data asset", "[types][registry]")
+{
+    RecordingRegistry recording;
+    REQUIRE(recording.registry.Register(TypesTest::TransformDescription));
 
     const TypeDescription dataAssetOnComponent{
         .name = "TypesTest::Odd",
@@ -195,18 +203,16 @@ TEST_CASE("Only a data asset may have a base, and only a data asset may be one",
         .role = Role::DataAsset,
         .base = "TypesTest::Transform",
     };
-    INFO("a data asset extending a component is refused");
+    INFO("a data asset extending a component is refused, with one diagnostic");
     REQUIRE_FALSE(recording.registry.Register(dataAssetOnComponent));
-
-    INFO("each refusal was reported");
-    REQUIRE(recording.diagnostics.size() == 2);
+    REQUIRE(recording.diagnostics.size() == 1);
 }
 
 TEST_CASE("An owning kind in a role that does not admit one is refused", "[types][registry]")
 {
     RecordingRegistry recording;
 
-    static const Fenrir::FieldInfo fields[] = {{.name = "name", .type = {.kind = Fenrir::Kind::String}}};
+    static const Fenrir::FieldInfo fields[] = {{.name = "title", .type = {.kind = Fenrir::Kind::String}}};
     const TypeDescription component{
         .name = "TypesTest::Named",
         .package = "FenrirTypesTests",
@@ -220,12 +226,103 @@ TEST_CASE("An owning kind in a role that does not admit one is refused", "[types
 
     INFO("the diagnostic names the type, the field, the kind and the role: " << recording.diagnostics.front());
     REQUIRE(Contains(recording.diagnostics.front(), "TypesTest::Named"));
-    REQUIRE(Contains(recording.diagnostics.front(), "name"));
+    REQUIRE(Contains(recording.diagnostics.front(), "title"));
     REQUIRE(Contains(recording.diagnostics.front(), "string"));
     REQUIRE(Contains(recording.diagnostics.front(), "component"));
+}
 
-    INFO("settings and data assets hold owning kinds");
-    REQUIRE(recording.registry.Register(TypesTest::WeaponDataDescription));
+namespace
+{
+    // A nested struct holding a string, walked by its own visit function, as a data asset's nested structs may be.
+    struct Caption
+    {
+        std::string text;
+    };
+
+    const Fenrir::FieldInfo CaptionFields[] = {{.name = "text", .type = {.kind = Fenrir::Kind::String}}};
+
+    void VisitCaption(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        visitor.Field(CaptionFields[0],
+                      Fenrir::ValueRef(&static_cast<Caption*>(instance)->text, CaptionFields[0].type));
+    }
+
+    const TypeDescription CaptionDescription{
+        .name = "TypesTest::Caption",
+        .package = "FenrirTypesTests",
+        .role = Role::Nested,
+        .size = sizeof(Caption),
+        .alignment = alignof(Caption),
+        .fields = CaptionFields,
+        .visit = VisitCaption,
+    };
+
+    const Fenrir::FieldInfo CaptionedFields[] = {
+        {.name = "caption", .type = {.kind = Fenrir::Kind::Struct, .type = &CaptionDescription}}};
+} // namespace
+
+TEST_CASE("A nested struct holding an owning kind is judged in the role of the type holding it", "[types][registry]")
+{
+    RecordingRegistry recording;
+
+    INFO("the nested struct itself registers");
+    REQUIRE(recording.registry.Register(CaptionDescription));
+
+    const TypeDescription component{
+        .name = "TypesTest::CaptionedComponent",
+        .package = "FenrirTypesTests",
+        .role = Role::Component,
+        .fields = CaptionedFields,
+    };
+    INFO("a component holding it by value is refused, naming the string it reaches");
+    REQUIRE_FALSE(recording.registry.Register(component));
+    REQUIRE(recording.diagnostics.size() == 1);
+    REQUIRE(Contains(recording.diagnostics.front(), "string"));
+
+    const TypeDescription dataAsset{
+        .name = "TypesTest::CaptionedAsset",
+        .package = "FenrirTypesTests",
+        .role = Role::DataAsset,
+        .fields = CaptionedFields,
+    };
+    INFO("a data asset holding it by value registers, its own field a struct it visits by offset");
+    REQUIRE(recording.registry.Register(dataAsset));
+}
+
+TEST_CASE("A type with an owning field and no visit function is refused", "[types][registry]")
+{
+    RecordingRegistry recording;
+
+    static const Fenrir::FieldInfo fields[] = {{.name = "title", .type = {.kind = Fenrir::Kind::String}}};
+    const TypeDescription unvisitable{
+        .name = "TypesTest::Unvisitable",
+        .package = "FenrirTypesTests",
+        .role = Role::DataAsset,
+        .fields = fields,
+    };
+
+    INFO("an owning field has no offset to visit by, so the type must bring a visit function");
+    REQUIRE_FALSE(recording.registry.Register(unvisitable));
+    REQUIRE(recording.diagnostics.size() == 1);
+    REQUIRE(Contains(recording.diagnostics.front(), "visit function"));
+}
+
+TEST_CASE("A type naming one name twice among its own names is refused", "[types][registry]")
+{
+    RecordingRegistry recording;
+
+    static constexpr std::string_view formerly[] = {"TypesTest::Old", "TypesTest::Old"};
+    const TypeDescription repeated{
+        .name = "TypesTest::Repeated",
+        .package = "FenrirTypesTests",
+        .role = Role::SharedStruct,
+        .formerly = formerly,
+    };
+
+    INFO("a former name given twice is refused, naming it");
+    REQUIRE_FALSE(recording.registry.Register(repeated));
+    REQUIRE(recording.diagnostics.size() == 1);
+    REQUIRE(Contains(recording.diagnostics.front(), "TypesTest::Old"));
 }
 
 TEST_CASE("A version below 1 is refused", "[types][registry]")

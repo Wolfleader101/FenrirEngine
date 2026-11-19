@@ -11,15 +11,15 @@
 #include "FenrirTypes/ValueRef.hpp"
 
 #if __has_include("FenrirMath/Math.hpp") || __has_include("FenrirECS/Entity.hpp")
-#error "Another engine package reaches a user of FenrirTypes: it may depend on the standard library only."
+#error "FenrirMath or FenrirECS reaches a user of FenrirTypes, which sits below them."
 #endif
 
 #if __has_include("FenrirCore/FenrirCore.hpp") || __has_include("FenrirLogger/ILogger.hpp")
-#error "Another engine package reaches a user of FenrirTypes: it may depend on the standard library only."
+#error "FenrirCore or FenrirLogger reaches a user of FenrirTypes: its diagnostics go to a function the caller gives."
 #endif
 
 #if __has_include("FenrirAssets/AssetHandle.hpp")
-#error "Another engine package reaches a user of FenrirTypes: it may depend on the standard library only."
+#error "FenrirAssets reaches a user of FenrirTypes: it knows a reference's layout without naming the asset store."
 #endif
 
 #include <catch2/catch_test_macros.hpp>

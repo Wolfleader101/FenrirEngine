@@ -53,9 +53,11 @@ namespace Fenrir
          * @brief Adds `description` under its canonical name and its former names.
          *
          * Refused with a diagnostic, leaving the registry as it was, when one of those names is already a registered
-         * type's (the diagnostic names both types and their packages), when its version is below 1, when it has a
-         * base and is not a data asset, when its base is not a registered data asset type, or when a field holds an
-         * owning kind in a role that does not admit one.
+         * type's (the diagnostic names both types and their packages) or appears twice among them, when its version is
+         * below 1, when it has a base and is not a data asset, when its base is not a registered data asset type, when
+         * a field holds an owning kind (itself, or through its elements or nested structs) in a role that does not
+         * admit one, or when a field is of an owning kind and the type has no visit function. A `Nested` type's owning
+         * kinds are judged in the role of the type that holds it.
          *
          * @return Whether it was added.
          */

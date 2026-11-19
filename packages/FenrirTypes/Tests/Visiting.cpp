@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <map>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -173,17 +174,100 @@ TEST_CASE("A struct holding every other fixed-layout kind visits each at its off
     REQUIRE(visitor.seen == expected);
 }
 
-TEST_CASE("A description constructs and destroys an instance in place", "[types][visiting]")
+TEST_CASE("A description constructs an instance in place with the type's defaults", "[types][describe]")
 {
     alignas(TypesTest::Sword) std::byte storage[sizeof(TypesTest::Sword)];
     TypesTest::SwordDescription.Construct(storage);
-    auto* sword = reinterpret_cast<TypesTest::Sword*>(storage);
+    auto* sword = std::launder(reinterpret_cast<TypesTest::Sword*>(storage));
 
     INFO("construction gives the type's defaults, its base's included");
     REQUIRE(sword->damage == 10.0f);
     REQUIRE(sword->gems.empty());
     REQUIRE_FALSE(sword->edge.has_value());
 
-    sword->gems.resize(4);
     TypesTest::SwordDescription.Destroy(storage);
+}
+
+namespace
+{
+    // Counts its destructions, so a test can see Destroy run the destructor.
+    struct Counted
+    {
+        static inline int destroyed = 0;
+        ~Counted()
+        {
+            ++destroyed;
+        }
+    };
+
+    const Fenrir::TypeDescription CountedDescription{
+        .name = "TypesTest::Counted",
+        .package = "FenrirTypesTests",
+        .size = sizeof(Counted),
+        .alignment = alignof(Counted),
+        .construct = Fenrir::ConstructValue<Counted>,
+        .destroy = Fenrir::DestroyValue<Counted>,
+    };
+} // namespace
+
+TEST_CASE("A description destroys an instance it constructed", "[types][describe]")
+{
+    alignas(Counted) std::byte storage[sizeof(Counted)];
+    CountedDescription.Construct(storage);
+    const int before = Counted::destroyed;
+
+    CountedDescription.Destroy(storage);
+
+    INFO("destroying ran the type's destructor once");
+    REQUIRE(Counted::destroyed == before + 1);
+}
+
+TEST_CASE("An owning type visits through its visit function, its base's fields first", "[types][visiting]")
+{
+    TypesTest::Sword sword;
+    sword.name = "Gram";
+
+    struct Names final : Fenrir::ConstFieldVisitor
+    {
+        std::vector<std::string> names;
+        std::string firstText;
+
+        void Field(const FieldInfo& field, ConstValueRef value) override
+        {
+            if (names.empty())
+                firstText = value.Text();
+            names.emplace_back(field.name);
+        }
+    } visitor;
+
+    const TypesTest::Sword& readOnly = sword;
+    TypesTest::SwordDescription.Visit(&readOnly, visitor);
+
+    INFO("every field is seen once, WeaponData's before Sword's own");
+    REQUIRE(visitor.names == std::vector<std::string>{"name", "damage", "gems", "edge", "icon"});
+
+    INFO("each value is the instance's");
+    REQUIRE(visitor.firstText == "Gram");
+}
+
+TEST_CASE("A mutable visit of an owning type writes its fields back", "[types][visiting]")
+{
+    TypesTest::Sword sword;
+
+    struct Writer final : Fenrir::FieldVisitor
+    {
+        void Field(const FieldInfo& field, ValueRef value) override
+        {
+            if (field.name == "name")
+                value.SetText("Gram");
+            else if (field.name == "gems")
+                value.Resize(2);
+        }
+    } writer;
+
+    TypesTest::SwordDescription.Visit(&sword, writer);
+
+    INFO("the base's string and the derived type's list took the written values");
+    REQUIRE(sword.name == "Gram");
+    REQUIRE(sword.gems.size() == 2);
 }

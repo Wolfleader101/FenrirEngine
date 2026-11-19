@@ -69,6 +69,12 @@ namespace Fenrir
         std::span<const Enumerator> enumerators;
         /** @brief For an `Enum`: its underlying integer kind. */
         Kind underlying = Kind::I32;
+        /**
+         * @brief For a type holding an owning kind: the generated function that pushes each field of the instance at
+         * `instance` to `visitor` once, its base's fields first (ADR-0075). Null for a fixed-layout type, which is
+         * visited through its fields' offsets.
+         */
+        void (*visit)(void* instance, FieldVisitor& visitor) = nullptr;
 
         /** @brief Value-initialises an instance at `instance`, which has `size` bytes aligned to `alignment`. */
         void Construct(void* instance) const;
@@ -79,8 +85,9 @@ namespace Fenrir
         /**
          * @brief Pushes each field of the instance at `instance` to `visitor` once, in storage order.
          *
-         * A field of a nested struct arrives as one `Struct` value, which the visitor walks through
-         * `ValueRef::Visit` if it wants its fields.
+         * Through `visit` when the type has one, else through each field's offset; a visitor cannot tell which. A
+         * field of a nested struct arrives as one `Struct` value, which the visitor walks through `ValueRef::Visit`
+         * if it wants its fields.
          */
         void Visit(void* instance, FieldVisitor& visitor) const;
 

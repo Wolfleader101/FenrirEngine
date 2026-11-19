@@ -26,12 +26,14 @@ namespace Fenrir
         friend constexpr bool operator==(const ReferenceValue&, const ReferenceValue&) = default;
     };
 
-    /** @brief The two fields of an `Entity` value: its id and the entity list it belongs to, which FenrirTypes never
-     * reads. */
+    /**
+     * @brief The two fields of an `Entity` value, laid out as `Fenrir::Entity` is: its id and the entity list it
+     * belongs to, which FenrirTypes never reads. The default is the null entity.
+     */
     struct EntityValue
     {
-        /** @brief The entity's id in its entity list. */
-        std::uint32_t id = 0;
+        /** @brief The entity's id in its entity list; all bits set for the null entity, as `Entity::Null` is. */
+        std::uint32_t id = 0xFFFFFFFFu;
         /** @brief The entity list it belongs to; null for the null entity. */
         void* list = nullptr;
 
