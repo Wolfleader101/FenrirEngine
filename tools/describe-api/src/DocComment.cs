@@ -31,8 +31,7 @@ internal static class DocComment
     /// A function's doc comment, split: <c>@param name</c>, <c>@param[in] name</c>, <c>@param[out] name</c> or
     /// <c>@param[in,out] name</c> and <c>@return</c> (or <c>@returns</c>) each take the text up to the next command or
     /// blank line, <c>@notrunning</c> the rest of its line, a C++ expression, and <c>@facade</c> the rest of its line,
-    /// the public <c>Class.Method</c> the native is named as; the rest is the function's text, as <see cref="Text" />
-    /// gives it.
+    /// the public <c>Class.Method</c> the native is named as; the rest is the function's text, as the class gives it.
     /// </summary>
     public static FunctionDoc Function(string? raw)
     {
@@ -121,7 +120,7 @@ internal static class DocComment
 
     /// <summary>
     /// A type's doc comment, split: <c>@version N</c>, <c>@formerly Old::Name</c> (repeatable), <c>@transient</c> and
-    /// <c>@editor-only</c>, each a line of its own; the rest is the type's text, as <see cref="Text" /> gives it. A
+    /// <c>@editor-only</c>, each a line of its own; the rest is the type's text, as the class gives it. A
     /// field's command, a malformed one or an unknown <c>@</c> word throws <see cref="DocCommandException" />.
     /// </summary>
     public static TypeDoc Type(string? raw)
@@ -236,8 +235,8 @@ internal static class DocComment
     }
 
     /// <summary>
-    /// The doc comment of something that takes no doc command (an enumerator, a tagged union's kind), as
-    /// <see cref="Text" /> gives it; a command throws <see cref="DocCommandException" /> naming <paramref name="what" />.
+    /// The doc comment of something that takes no doc command (an enumerator, a tagged union's kind), as the
+    /// class gives it; a command throws <see cref="DocCommandException" /> naming <paramref name="what" />.
     /// </summary>
     public static string? Plain(string? raw, string what)
     {

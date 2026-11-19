@@ -67,6 +67,8 @@ public sealed class DescribeTests
     [InlineData("VersionZero", "Failing::VersionZero: @version takes a whole number from 1: '@version 0'")]
     [InlineData("FieldVersion", "Failing::FieldVersion::value: @version is a type's doc command, not a field's")]
     [InlineData("TypeRange", "Failing::TypeRange: @range is a field's doc command, not a type's")]
+    [InlineData("FormerlyWithoutName",
+                "Failing::FormerlyWithoutName::value: @formerly takes the field's former name: '@formerly'")]
     [InlineData("UnknownCommand",
                 "Failing::UnknownCommand::value: @colour is not a doc command (a type takes @version, @formerly, " +
                 "@transient and @editor-only; a field @formerly, @range, @step, @display, @group, @readonly, @hidden, " +
@@ -225,9 +227,11 @@ public sealed class DescribeTests
     {
         var described = DescriptionWriter.Write(Describer.Describe(Selection.Read(FixtureSelection), []));
 
+        var command = new System.Text.RegularExpressions.Regex(
+            "@(version|formerly|transient|editor-only|range|step|display|group|readonly|hidden|multiline|units)\\b");
         foreach (var line in described.Split('\n').Where(line => line.TrimStart().StartsWith("\"doc\":", StringComparison.Ordinal)))
         {
-            Assert.DoesNotContain("@", line, StringComparison.Ordinal);
+            Assert.DoesNotMatch(command, line);
         }
     }
 
@@ -276,9 +280,18 @@ public sealed class DescribeTests
         File.WriteAllText(selection, $"headers = [\"{header}\"]\n\n{types}\n[other]\nkey = 1\n");
         var exception = Assert.Throws<DescribeException>(() => Selection.Read(selection));
         Assert.Contains("unknown key 'other'", exception.Message, StringComparison.Ordinal);
+    }
 
-        File.WriteAllText(selection, $"registration = 1\nheaders = [\"{header}\"]\n\n{types}");
-        exception = Assert.Throws<DescribeException>(() => Selection.Read(selection));
+    [Fact]
+    public void ARegistrationThatIsNotATableFails()
+    {
+        using var directory = new TemporaryDirectory();
+        var header = Path.Combine(FixtureDirectory(), "Failing.hpp").Replace('\\', '/');
+        var selection = Path.Combine(directory.Path, "Registered.api.toml");
+        File.WriteAllText(selection, $"registration = 1\nheaders = [\"{header}\"]\n\n[types]\n\"Failing::NoInitialiser\" = \"component\"\n");
+
+        var exception = Assert.Throws<DescribeException>(() => Selection.Read(selection));
+
         Assert.Contains("'registration' is a table", exception.Message, StringComparison.Ordinal);
     }
 

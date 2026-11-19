@@ -1337,6 +1337,39 @@ public sealed class BindingTests
                     $"Binding should fail with\n  {diagnostic}...{rest}\nbut failed with\n  {exception.Message}");
     }
 
+    [Fact]
+    public void TheDocCommandKeysAndBoundTypeComponentsLeaveTheBindingAsItWas()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var plain = Generator.Generate(config, [WriteDescription(directory, root =>
+        {
+            foreach (var type in root["types"]!.AsArray())
+            {
+                type!.AsObject().Remove("components");
+            }
+        })]);
+        // What describe-api's doc commands record (SCHEMA.md, "Type and field doc commands"): the binding reads none.
+        var commanded = Generator.Generate(config, [WriteDescription(directory, root =>
+        {
+            var body = Type(root, "Fixture::Body");
+            body["version"] = 3;
+            body["formerly"] = new JsonArray("Fixture::OldBody");
+            body["transient"] = true;
+            body["editorOnly"] = true;
+            var mass = Field(root, "Fixture::Body", "mass");
+            mass["formerly"] = new JsonArray("weight");
+            mass["metadata"] = new JsonObject
+            {
+                ["range"] = new JsonObject { ["min"] = 0, ["max"] = 10 }, ["step"] = 0.5, ["display"] = "Mass",
+                ["group"] = "Physics", ["readonly"] = true, ["hidden"] = true, ["multiline"] = true, ["units"] = "kg",
+            };
+        })]);
+
+        var changes = Changes(plain, commanded);
+        Assert.True(changes.Count == 0, "The doc command keys and components changed the binding:\n" + string.Join("\n", changes));
+    }
+
     [Theory]
     [InlineData("Alike", "")]
     [InlineData("Differently", "Fixture::Hit is also described by")]

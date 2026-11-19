@@ -172,7 +172,7 @@ The language-neutral record of the plain-data types a package shares with any bi
 *Avoid:* schema, IDL, manifest, interop definition.
 
 **Bound type**
-A type the API description records by layout only, because every binding already has its own (a vector, a quaternion, a transform). A binding's own configuration says which of its types stands for it.
+A type the API description records by its layout, and the scalars it holds when it is made of them (a vector's three floats), but never as fields, because every binding already has its own (a vector, a quaternion, a transform). A binding's own configuration says which of its types stands for it.
 *Avoid:* primitive, built-in type.
 
 **Binding**

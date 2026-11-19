@@ -115,6 +115,12 @@ namespace Failing
         float value = 0.0f;
     };
 
+    struct FormerlyWithoutName
+    {
+        /** @formerly */
+        float value = 0.0f;
+    };
+
     struct UnknownCommand
     {
         /** @colour red */

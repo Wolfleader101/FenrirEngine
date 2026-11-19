@@ -467,7 +467,7 @@ internal sealed class Describer
     /// <summary>A field's description, with what its doc commands give.</summary>
     private FieldDescription Field(FieldDecl field, string subject, FieldType type, DefaultValue value)
     {
-        var doc = Commands(field, subject, () => DocComment.Field(RawDoc(field)));
+        var doc = WithDocCommandDiagnostics(field, subject, () => DocComment.Field(RawDoc(field)));
         return new FieldDescription(field.Name, Offset(field), type, value, doc.Text)
         {
             Formerly = doc.Formerly,
@@ -1187,14 +1187,14 @@ internal sealed class Describer
 
     /// <summary>A type's doc comment, split into its text and what its doc commands give.</summary>
     private DocComment.TypeDoc TypeDoc(Decl decl, string subject) =>
-        Commands(decl, subject, () => DocComment.Type(RawDoc(decl)));
+        WithDocCommandDiagnostics(decl, subject, () => DocComment.Type(RawDoc(decl)));
 
     /// <summary>The doc comment of <paramref name="what"/>, which takes no doc command.</summary>
     private string? PlainDoc(Decl decl, string subject, string what, Decl? previous = null) =>
-        Commands(decl, subject, () => DocComment.Plain(RawDoc(decl, previous), what));
+        WithDocCommandDiagnostics(decl, subject, () => DocComment.Plain(RawDoc(decl, previous), what));
 
     // Splits a doc comment, turning a doc command's failure into a diagnostic naming the subject.
-    private T Commands<T>(Decl at, string subject, Func<T> split)
+    private T WithDocCommandDiagnostics<T>(Decl at, string subject, Func<T> split)
     {
         try
         {
