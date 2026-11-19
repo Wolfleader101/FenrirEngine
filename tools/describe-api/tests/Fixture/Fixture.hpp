@@ -357,4 +357,76 @@ namespace Fixture
         Handle first;
         Handle second;
     };
+
+    /** @brief A bound type holding an array of another, as a maths library's matrix holds its columns. */
+    class Columns
+    {
+      public:
+        Columns() = default;
+
+      private:
+        Vec3 m_value[2];
+    };
+
+    /** @brief A named constant a scalar default may name. */
+    inline constexpr std::int32_t DefaultTicks = 12;
+
+    /** @brief A named constant computed from another, as a build-dependent switch is. */
+    inline constexpr bool EnabledByDefault = DefaultTicks > 10;
+
+    /**
+     * @brief A component a file reads under its former names, at version 2.
+     *
+     * The doc commands below are recorded as keys, not as text.
+     *
+     * @version 2
+     * @formerly Fixture::Gauge
+     * @formerly Legacy::Meter
+     */
+    struct Dial
+    {
+        /**
+         * @brief Every metadata command on one field, and two former names.
+         * @formerly level
+         * @formerly amount
+         * @range 0 100
+         * @step 0.5
+         * @display Fill level
+         * @group Readout
+         * @readonly
+         * @hidden
+         * @multiline
+         * @units percent
+         */
+        float fill = 50.0f;
+        /**
+         * @brief A default named by a constant.
+         * @range -10 10.5
+         */
+        std::int32_t ticks = DefaultTicks;
+        /** @brief A default written as an arithmetic expression. */
+        std::int32_t span = 2 * 4;
+        /** @brief A default named by a constant computed from another. */
+        bool enabled = EnabledByDefault;
+        /** @brief A float default computed from a named constant. */
+        float scaled = DefaultTicks * 0.5f;
+    };
+
+    /**
+     * @brief Plain run-time data no file holds.
+     * @transient
+     */
+    struct Contacts
+    {
+        std::uint32_t count = 0;
+    };
+
+    /**
+     * @brief Editor data the cooker strips.
+     * @editor-only
+     */
+    struct Folder
+    {
+        bool open = false;
+    };
 } // namespace Fixture

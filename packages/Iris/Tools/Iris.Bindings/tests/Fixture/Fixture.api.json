@@ -234,7 +234,29 @@
       "role": "bound-type",
       "size": 16,
       "alignment": 4,
-      "doc": "A bound type whose constructor takes its components in another order than it stores them, under parameter names with a leading underscore, and stores them in an anonymous struct inside an anonymous union."
+      "doc": "A bound type whose constructor takes its components in another order than it stores them, under parameter names with a leading underscore, and stores them in an anonymous struct inside an anonymous union.",
+      "components": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32"
+        },
+        {
+          "name": "z",
+          "offset": 8,
+          "kind": "f32"
+        },
+        {
+          "name": "w",
+          "offset": 12,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fixture::Spring",
@@ -264,7 +286,24 @@
       "role": "bound-type",
       "size": 12,
       "alignment": 4,
-      "doc": "A bound type built like a maths library's vector: each component in an anonymous union of names."
+      "doc": "A bound type built like a maths library's vector: each component in an anonymous union of names.",
+      "components": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32"
+        },
+        {
+          "name": "z",
+          "offset": 8,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fixture::Body",
@@ -653,7 +692,19 @@
       "role": "bound-type",
       "size": 16,
       "alignment": 8,
-      "doc": "A pair of values, as a class template."
+      "doc": "A pair of values, as a class template.",
+      "components": [
+        {
+          "name": "first",
+          "offset": 0,
+          "kind": "f64"
+        },
+        {
+          "name": "second",
+          "offset": 8,
+          "kind": "f64"
+        }
+      ]
     },
     {
       "name": "Fixture::Size",
@@ -661,7 +712,19 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "A bound type that is a template's specialisation nothing here instantiates: the tool instantiates it."
+      "doc": "A bound type that is a template's specialisation nothing here instantiates: the tool instantiates it.",
+      "components": [
+        {
+          "name": "first",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "second",
+          "offset": 4,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fixture::Sky",
@@ -737,7 +800,14 @@
       "role": "bound-type",
       "size": 4,
       "alignment": 4,
-      "doc": "A bound type of one member, which a binding may pass to a native by value as that member."
+      "doc": "A bound type of one member, which a binding may pass to a native by value as that member.",
+      "components": [
+        {
+          "name": "m_number",
+          "offset": 0,
+          "kind": "u32"
+        }
+      ]
     },
     {
       "name": "Fixture::Touched",

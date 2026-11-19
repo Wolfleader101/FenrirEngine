@@ -40,11 +40,18 @@ internal sealed record Selection(string Path, string Package, IReadOnlyList<stri
 
         foreach (var key in table.Keys)
         {
-            if (key is not ("headers" or "types" or "private-members"))
+            if (key is not ("headers" or "types" or "private-members" or "registration"))
             {
                 throw new DescribeException(
-                    $"{path}: unknown key '{key}' (a selection has 'headers', 'types' and 'private-members')");
+                    $"{path}: unknown key '{key}' (a selection has 'headers', 'types', 'private-members' and 'registration')");
             }
+        }
+
+        // What tools/generate-type-registry writes for the package: that tool reads and checks it, so this one only
+        // accepts it.
+        if (table.TryGetValue("registration", out var registration) && registration is not TomlTable)
+        {
+            throw new DescribeException($"{path}: 'registration' is a table, which tools/generate-type-registry reads");
         }
 
         if (!table.TryGetValue("headers", out var headersValue) || headersValue is not TomlArray headerArray ||

@@ -13,11 +13,11 @@
 
 **Touches:** `tools/describe-api/src/` (`DocComment.cs`, `Describer.cs`, `Description.cs`, `DescriptionWriter.cs`, `Selection.cs`), `tools/describe-api/SCHEMA.md`, `tools/describe-api/README.md`, `tools/describe-api/tests/` (the fixture header, `Fixture.api.json`, `Failing.hpp`, `DescribeTests.cs`), every `packages/*/api/*.api.json`, `packages/Iris/Tools/Iris.Bindings/` (the schema copy and its fixture description)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The fixture header gains a type with `@version 2`, two `@formerly` names, `@transient` and `@editor-only` types, and a field carrying each metadata command; the committed `Fixture.api.json` is regenerated and compared byte for byte in the tests, and the `doc` strings carry no `@` commands.
-- [ ] `Failing.hpp` gains a malformed `@range`, a `@version 0`, a field-level `@version` and an unknown command, each failing with a diagnostic naming the type, member and command.
-- [ ] A bound type in the fixture records `components` with the offsets the tests assert.
-- [ ] A default written as a named `constexpr` and one written as `2 * 4` describe as their values.
-- [ ] `fenrir-describe-api` regenerates every package's description with no change but the new keys, and `fenrir-generate-bindings` leaves every binding byte-identical; both are committed.
-- [ ] `SCHEMA.md` documents every new key and command, and Iris.Bindings' copy matches it.
+- [x] The fixture header gains a type with `@version 2`, two `@formerly` names, `@transient` and `@editor-only` types, and a field carrying each metadata command; the committed `Fixture.api.json` is regenerated and compared byte for byte in the tests, and the `doc` strings carry no `@` commands.
+- [x] `Failing.hpp` gains a malformed `@range`, a `@version 0`, a field-level `@version` and an unknown command, each failing with a diagnostic naming the type, member and command.
+- [x] A bound type in the fixture records `components` with the offsets the tests assert.
+- [x] A default written as a named `constexpr` and one written as `2 * 4` describe as their values.
+- [x] `fenrir-describe-api` regenerates every package's description with no change but the new keys, and `fenrir-generate-bindings` leaves every binding byte-identical; both are committed.
+- [x] `SCHEMA.md` documents every new key and command, and Iris.Bindings' copy matches it.

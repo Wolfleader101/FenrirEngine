@@ -64,8 +64,22 @@ internal static class DescriptionWriter
         json.WriteNumber("size", type.Size);
         json.WriteNumber("alignment", type.Alignment);
         WriteDoc(json, type.Doc);
+        WriteTypeCommands(json, type.Commands);
         switch (type)
         {
+            case BoundTypeDescription { Components: { } components }:
+                json.WriteStartArray("components");
+                foreach (var component in components)
+                {
+                    json.WriteStartObject();
+                    json.WriteString("name", component.Name);
+                    json.WriteNumber("offset", component.Offset);
+                    json.WriteString("kind", component.Kind);
+                    json.WriteEndObject();
+                }
+
+                json.WriteEndArray();
+                break;
             case EnumDescription enumType:
                 json.WriteString("underlying", enumType.Underlying);
                 json.WriteStartArray("values");
@@ -122,7 +136,91 @@ internal static class DescriptionWriter
         json.WritePropertyName("default");
         WriteDefault(json, field.Default);
         WriteDoc(json, field.Doc);
+        WriteFormerly(json, field.Formerly);
+        WriteMetadata(json, field.Metadata);
         json.WriteEndObject();
+    }
+
+    // Each key only when its command is present, so a type with none reads as before (SCHEMA.md, "Type and field doc commands").
+    private static void WriteTypeCommands(Utf8JsonWriter json, TypeCommands commands)
+    {
+        if (commands.Version != TypeCommands.None.Version)
+        {
+            json.WriteNumber("version", commands.Version);
+        }
+
+        WriteFormerly(json, commands.Formerly);
+        if (commands.Transient)
+        {
+            json.WriteBoolean("transient", true);
+        }
+
+        if (commands.EditorOnly)
+        {
+            json.WriteBoolean("editorOnly", true);
+        }
+    }
+
+    private static void WriteFormerly(Utf8JsonWriter json, IReadOnlyList<string> formerly)
+    {
+        if (formerly.Count == 0)
+        {
+            return;
+        }
+
+        json.WriteStartArray("formerly");
+        foreach (var name in formerly)
+        {
+            json.WriteStringValue(name);
+        }
+
+        json.WriteEndArray();
+    }
+
+    private static void WriteMetadata(Utf8JsonWriter json, FieldMetadata metadata)
+    {
+        if (metadata == FieldMetadata.None)
+        {
+            return;
+        }
+
+        json.WriteStartObject("metadata");
+        if (metadata.Range is var (min, max))
+        {
+            json.WriteStartObject("range");
+            json.WriteNumber("min", min);
+            json.WriteNumber("max", max);
+            json.WriteEndObject();
+        }
+
+        if (metadata.Step is { } step)
+        {
+            json.WriteNumber("step", step);
+        }
+
+        WriteOptional("display", metadata.Display);
+        WriteOptional("group", metadata.Group);
+        WriteFlag("readonly", metadata.Readonly);
+        WriteFlag("hidden", metadata.Hidden);
+        WriteFlag("multiline", metadata.Multiline);
+        WriteOptional("units", metadata.Units);
+        json.WriteEndObject();
+
+        void WriteOptional(string key, string? value)
+        {
+            if (value is not null)
+            {
+                json.WriteString(key, value);
+            }
+        }
+
+        void WriteFlag(string key, bool value)
+        {
+            if (value)
+            {
+                json.WriteBoolean(key, true);
+            }
+        }
     }
 
     private static void WriteFieldType(Utf8JsonWriter json, FieldType type)
