@@ -1,7 +1,7 @@
 # What dev-time data does the engine hold, and in what files?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 07, 12
 
 ## Question
