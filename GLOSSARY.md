@@ -253,7 +253,15 @@ State a package keeps for the whole app rather than one scene, one value per typ
 
 **FenrirTypes**
 The package that holds the engine's type registry and the kinds a described type's fields may have. It knows no file format and no language (ADR-0060).
-*Avoid:* reflection package, FenrirReflection, FenrirSerialisation (file reading is another package's).
+*Avoid:* reflection package, FenrirReflection, FenrirSerialisation (the tree and format are that package's).
+
+**FenrirSerialisation**
+The package that turns a described value into a value tree and back through the type registry, reads and writes that tree as JSON5, applies upgraders and reports located diagnostics. It knows no files, assets or scenes; a game's save files compose it alone (ADR-0065).
+*Avoid:* FenrirJson, FenrirText, serialiser (informal), FenrirAssets (which owns the envelope and the doors).
+
+**Value tree**
+The in-memory form of a file's contents: objects, arrays, strings, numbers, booleans and nulls, with comments kept as trivia, between a described value and its JSON5 text (ADR-0065).
+*Avoid:* DOM, document, AST, JSON object.
 
 **Type registry**
 The run-time table of every described type the running engine knows, by canonical name: its role, fields, kinds, defaults, docs and metadata, filled from each package's generated type registration at `Install` and from C# at admission. A file reader, writer or inspector reaches a type's fields only through it (ADR-0060).
