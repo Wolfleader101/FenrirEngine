@@ -1,7 +1,7 @@
 # What does a scene file hold, and how are entities identified and referenced in it?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 02, 09, 11
 
 ## Question
