@@ -28,7 +28,7 @@ Each effort touches different packages, so the efforts are **independent and can
 | 1 | **Build helpers** | root `CMakeLists.txt`, `cmake/`, `examples/DemoScaffold/cmake/` | 02 | 16 → 17 | before its first ticket |
 | 2 | **C# reach** | FenrirScripting, FenrirScene, FenrirApp, FenrirAssets bindings | 11, 13, 04 (positions) | 18, 19, 20, 33 | parenting early; scenes for restart and title |
 | 3 | **Pause and time scale** | FenrirTime, FenrirApp, FenrirPhysics, FenrirAnimation | 05 | 21 | for the pause menu |
-| 4 | **Renderer features** | FenrirRenderer, FenrirAssets materials | 06, 07, 14, 15 | 22 → 23, 24 → 25, 26, 34 → 35, 27 | before the game is complete |
+| 4 | **Renderer features** | FenrirRenderer, FenrirAssets materials | 06, 07, 14, 15 | 22 → 23, 24 → 25, 36, 26, 34 → 35, 27 | before the game is complete |
 | 5 | **Wanted, not blocking** | FenrirInput, FenrirUI, FenrirWindow | 08, 09, 10, 12 | 29, 30, 31, 32 | never blocks |
 | – | **Waits on the levels design** | FenrirAssets, FenrirPhysics | 04 (the helper) | 28 | once levels are authored |
 | – | **Covered elsewhere or deferred** | | 01, 03 | none | see below |
@@ -53,6 +53,7 @@ Within the renderer features, the four tickets are independent of each other as 
 - [How does a game draw outlines and add its own render pass?](issues/23-how-a-game-draws-outlines-and-adds-a-pass.md): a game pass declared from C# at two points before the tonemap, reading scene colour, depth, normals and layer masks from a new `layers` bitmask; spec-ready with an ADR.
 - [What fog does the renderer offer?](issues/26-what-fog-the-renderer-offers.md): exponential distance and height fog in a `Fog` scene resource, coloured from the sky, a full-screen pass after opaque plus a `Lighting.glsl` helper for transparents, the sky unfogged; spec-ready; volumetric fog moved into this effort as its own tickets.
 - [How does one entity get its own material parameters?](issues/27-how-one-entity-gets-its-own-material-parameters.md): a `colour` tint and four `custom` vec4 values on `MeshRenderer`, in the per-copy draw data so batching holds; named overrides deferred; spec-ready.
+- [What is the engine's particle system?](issues/25-what-the-particle-system-is.md): everything, in FenrirRenderer, CPU or GPU per effect; a module stack defined in code; billboards, ribbons and meshes; depth and shape collision on the GPU, physics on the CPU; lit, light-emitting, sorted and soft; decals split off; spec-ready with an ADR, CPU bursts first.
 - [Does C# get a loaded mesh's positions?](issues/33-does-csharp-get-a-loaded-meshs-positions.md): yes, `Assets.GetMeshPositions` into a span, shaped like `GetMeshLodIndices`, in the C# reach effort; spec-ready.
 - [Does the engine offer input actions or dead zones?](issues/29-does-the-engine-offer-input-actions.md): radial per-stick dead zones in FenrirInput, settable, raw values still readable, spec-ready; the action layer deferred until a game wants rebinding.
 - [Do arrow keys move UI focus?](issues/30-do-arrow-keys-move-ui-focus.md): arrow keys always drive directional navigation after the focused element's refusal; W and S are the game's through a public call that sends a direction; spec-ready.

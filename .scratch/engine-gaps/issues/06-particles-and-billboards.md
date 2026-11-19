@@ -24,3 +24,4 @@ Yes: it must be resolved before the game is complete (the user, 2026-11-19). The
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [How do engines split particles between the engine and the game?](24-how-engines-split-particles.md), [What is the engine's particle system?](25-what-the-particle-system-is.md).
 
 - 2026-11-19, round 3 of [Engine gaps for Flightless Frenzy](../map.md): the user widened the first version to everything, on the GPU too; [What is the engine's particle system?](25-what-the-particle-system-is.md) stays open for round 4.
+- 2026-11-19, round 4 of [Engine gaps for Flightless Frenzy](../map.md): particles are spec-ready in [What is the engine's particle system?](25-what-the-particle-system-is.md); decals are their own block in [What is a decal?](36-what-is-a-decal.md). The status changes when that resolves.

@@ -488,6 +488,14 @@ A full-screen pass a game adds to the frame at one of the renderer's named point
 The entities on a render layer drawn by the renderer into a target of a game pass's own, for the pass to read: how a pass chooses which objects it affects.
 *Avoid:* stencil (there is none), selection mask, custom depth (Unreal's).
 
+**Particle effect**
+What a burst or an emitter plays: a stack of the engine's particle modules (spawn, motion, forces, collision, change over life, sub-emitters, render mode) and whether it simulates on the CPU or the GPU. The game defines it; the renderer runs it.
+*Avoid:* particle system (the whole feature), VFX, effect (alone, beside a game pass or a lens effect).
+
+**Particle emitter**
+The component that plays a particle effect from its entity, continuously or once, following the entity as it moves.
+*Avoid:* spawner, emitter (alone, beside a light).
+
 **Main window**
 The window FenrirWindow creates first and the foundation renderer draws to; closing it stops the app by default.
 *Avoid:* primary window, root window.
