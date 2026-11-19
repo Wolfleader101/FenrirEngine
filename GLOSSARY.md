@@ -259,6 +259,14 @@ A per-placement difference an instance keeps from its source: a field's value, a
 A scene file whose single root is an instance of another scene file, so it is that scene with overrides and additions: Fenrir's scene inheritance (ADR-0066).
 *Avoid:* inherited scene, derived scene, prefab variant, child blueprint.
 
+**Scene patch**
+What a changed scene file or instance source does to a running scene: entities matched by entity id have their written components, parent and order rewritten from the file, new ones are added, ones the file dropped are destroyed with their children, and run-time entities and unwritten components are left alone (ADR-0067).
+*Avoid:* scene reload (destroying and recreating, which is the caller's), live sync, diff apply.
+
+**Hot reload**
+A file the running app loaded changing on disk and the app taking the change between frames: a data asset or imported asset replaced under its handle with its revision bumped, a scene or instance patched, a script assembly's generation swapped. A development feature, off in a cooked build (ADR-0067).
+*Avoid:* live reload, watch mode, auto-refresh.
+
 **App resource**
 State a package keeps for the whole app rather than one scene, one value per type, ended with the App (the input devices and the asset store are ones).
 *Avoid:* singleton, global, app-wide state (informal).
