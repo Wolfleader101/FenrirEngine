@@ -36,11 +36,13 @@ One spec for Flightless Frenzy as a complete, small game built on FenrirEngine, 
 - [How does the game build against the engine?](issues/03-how-the-game-builds-against-the-engine.md): a CMake project of its own with its own presets, adding the engine by path as it would a submodule, examples off; only package targets and engine CMake functions; its own start-up and solution; unit tests but no smoke run, no CI for now; the script-build and asset-copy helpers move into the engine first.
 - [C++, C#, or a split?](issues/04-cpp-csharp-or-a-split.md): gameplay and UI in C# with Razor panels; a C++ host that only starts the app, installs packages and registers shaders; the engine binds parenting and scenes for C# before the game needs them; run state on one entity until C# can define resources; rules as plain C# types under `dotnet test`.
 - [What is the game loop?](issues/06-the-game-loop.md): title, playing, paused, won, lost; the timer starts on first input and running out is the only loss; enemy hits and falls cost seconds, nothing adds time; cages open on touch and are the checkpoints; the exit opens after the last friend; score from friends, coins, stomps and time left, no rank; best score and time kept in a file the game writes itself.
+- [What are the HUD and the menus?](issues/13-hud-and-menus.md): HUD of timer, friends, score and active power-up; a marker to the exit once it opens, none for cages; title, pause, won, lost and options screens as Razor panels; options are camera sensitivity and invert-Y; menus by mouse, Tab and gamepad, Escape to pause and go back; the level frozen and blurred behind a menu.
 
 ## Not yet specified
 
 - **The level itself:** its layout, landmarks, where the cages, coins, power-ups, enemies and exit sit, and its time limit. Waits on the movement numbers, the enemies, the power-ups and how levels are authored.
 - **What freed friends do:** run off, gather at the exit, follow Kiki;.
+- **A live title screen:** the level flown over behind the title menu, in place of a plain backdrop.
 - **How the story is told:** an opening, an ending, or nothing beyond the title screen.
 - **Weather, day and night, and particles** beyond what "What does the game look like?" decides.
 - **Difficulty:** one setting or several.
