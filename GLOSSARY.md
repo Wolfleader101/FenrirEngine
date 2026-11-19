@@ -774,6 +774,14 @@ The directory relative asset paths resolve against, set in `AssetsConfig`; by de
 `<source>.import.json5` beside a model or image: an importer's described options (scale, axes, sub-assets to keep, colour space, mipmaps), nothing required, defaults when missing, never an identity (ADR-0070).
 *Avoid:* .meta, .import (Godot's), import settings, asset metadata.
 
+**Asset source**
+The store's private seam that answers "the bytes at this asset path" and "does this path exist": a directory under the asset root in development, a pack beside or inside the executable when cooked. Everything above it loads by path and cannot tell which (ADR-0071).
+*Avoid:* mount, virtual file system, pak reader, asset provider.
+
+**Cooked form**
+A shipped game's data: the same value trees in the binary tree encoding, imported assets pre-baked, transient, editor-only and per-developer data stripped, read through the same doors from a pack. Designed for by the serialisation map, specified by a later effort (ADR-0071).
+*Avoid:* binary format (it is the tree encoding), export, build output, bundle.
+
 **Model**
 The asset a model file loads as: its whole node tree, bones included, pointing at its meshes, materials and skeletons, and its clips.
 *Avoid:* scene (FenrirScene's), prefab.
