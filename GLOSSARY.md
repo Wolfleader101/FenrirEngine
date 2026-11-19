@@ -508,6 +508,10 @@ The component that plays a particle effect from its entity, continuously or once
 A scene's distance and height haze toward the sky, from its `Fog` scene resource: applied to opaque surfaces after the background and to transparents in their own shading, never to the sky.
 *Avoid:* mist, haze (informal), atmosphere (the sky's scattering).
 
+**Froxel volume**
+A camera's 3D grid of cells along its view, finer near the camera, holding its fog's density and the light scattered in it, built each frame for volumetric fog and read with one lookup per pixel.
+*Avoid:* froxel grid (alone, beside the light clusters), fog texture, volume (alone).
+
 **Fog volume**
 An entity's box or sphere of extra fog density, with its own albedo and falloff, that volumetric fog adds to the scene's own fog.
 *Avoid:* density volume (HDRP's), local fog (alone).
