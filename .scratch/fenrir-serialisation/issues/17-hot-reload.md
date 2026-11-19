@@ -1,7 +1,7 @@
 # How do edited files reload in a running development build?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 15
 
 ## Question
