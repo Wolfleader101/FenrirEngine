@@ -27,6 +27,7 @@ immutable-structs = ["Fenrir::ScriptPainter::Path2D"]
 [cpp]
 # On the include path, for FenrirUI's binding, which builds on this one.
 mappings = "../include/FenrirPainterScripting/Generated/FenrirPainterMappings.hpp"
+include = "FenrirPainterScripting/Generated/FenrirPainterMappings.hpp"
 # The structs as C# passes them.
 includes = ["FenrirPainterScripting/ScriptPainter.hpp"]
 

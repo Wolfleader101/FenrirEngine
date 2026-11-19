@@ -30,7 +30,9 @@ internal static class CppWriter
 
         foreach (var used in binding.Uses)
         {
-            text.Line($"#include \"{Relative(binding.Config.Cpp.Mappings, used.Config.Cpp.Mappings)}\"");
+            // The used binding's own spelling when it gives one: a path relative to this header grows with every `..`
+            // and with each header that includes this one, and MSVC fails past 260 characters of it.
+            text.Line($"#include \"{used.Config.Cpp.Include ?? Relative(binding.Config.Cpp.Mappings, used.Config.Cpp.Mappings)}\"");
         }
 
         text.Line();
