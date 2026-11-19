@@ -763,8 +763,16 @@ An asset's one identity in files and in the store: its path relative to the asse
 *Avoid:* asset id, GUID, uid, resource path, key (the store's word for the same string).
 
 **Asset root**
-The directory relative asset paths resolve against, set in `AssetsConfig`; by default `assets/` beside the executable.
+The directory relative asset paths resolve against, set in `AssetsConfig`; by default `assets/` beside the executable, or where the project file says.
 *Avoid:* content directory, mount, virtual file system.
+
+**Project file**
+`<name>.project.json5` at the project root: each package's Install config by canonical type name, layered over code defaults by a platform file, a per-developer local file and the command line, read before any package is installed. Not an asset: no handle, no hot reload (ADR-0070).
+*Avoid:* .feproj, project settings asset, ini, config file (informal).
+
+**Import sidecar**
+`<source>.import.json5` beside a model or image: an importer's described options (scale, axes, sub-assets to keep, colour space, mipmaps), nothing required, defaults when missing, never an identity (ADR-0070).
+*Avoid:* .meta, .import (Godot's), import settings, asset metadata.
 
 **Model**
 The asset a model file loads as: its whole node tree, bones included, pointing at its meshes, materials and skeletons, and its clips.
