@@ -15,3 +15,8 @@ FenrirWindow has no fullscreen or borderless mode, no resolution change and no l
 - The C# surface.
 
 Outcome: a spec-ready design.
+
+## Facts (checked 2026-11-19)
+
+- FenrirWindow's API (`packages/FenrirWindow/include/FenrirWindow/Window.hpp:51-157`) has size, scale, title, icon, cursor, clipboard, `RequestClose`, surface and swap interval; no fullscreen. SDL3 backend; windows are created resizable and high-DPI (`packages/FenrirWindow/src/Window.cpp:222`); `SDL_SetWindowFullscreen` is never called.
+- MSAA is `RendererConfig::msaa` (1, 2, 4 or 8), fixed at install (`packages/FenrirRenderer/include/FenrirRenderer/Renderer.hpp:64`).

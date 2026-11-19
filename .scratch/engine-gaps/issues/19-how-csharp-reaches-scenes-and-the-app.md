@@ -16,3 +16,10 @@ Flightless Frenzy restarts a level by destroying and recreating its scene, so th
 - **Scene files:** loading a scene from a file is the `fenrir-serialisation` map's ("How does C# define data asset types and reach scene and asset data?", its ticket 16). This ticket covers code-built scenes only, and its API must leave room for a scene loaded from a file to arrive through the same create call.
 
 Outcome: a spec-ready design.
+
+## Facts (checked 2026-11-19)
+
+- C++ has scene create, switch and destroy (`packages/FenrirApp/include/FenrirApp/App.hpp:620-630`); C# has no binding for them and there is no Scene facade class.
+- No `App.Stop` binding; `Window.RequestClose` is bound (`packages/FenrirWindow/Managed/Fenrir.Window/Generated/Window.cs:74`).
+- C# `Time` is only `DeltaTime` and `TickRate` (`packages/FenrirScripting/Managed/Fenrir.Scripting/Time.cs`).
+- Every package touches only `app.GetActiveScene()` (`packages/FenrirPhysics/src/Physics.cpp:22,49,60`, `packages/FenrirSkeleton/src/Skeletons.cpp:139,181`, renderer README:52); `ForEachScene` (`App.hpp:635`) is not for per-frame work.

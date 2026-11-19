@@ -17,3 +17,10 @@ Flightless Frenzy's pause menu freezes the level behind a blurred panel while th
 - Whether this is an ADR (it touches every package that reads time).
 
 Outcome: a spec-ready design.
+
+## Facts (checked 2026-11-19)
+
+- `Time` (`packages/FenrirTime/include/FenrirTime/Time.hpp`): `deltaTime`, `tickRate` (1/60), `accumulator`, `maxTicksPerFrame` (5), `frameCount`, `tickCount`; no scale or pause.
+- `App::RunFrame` (`packages/FenrirApp/src/App.cpp:230-262`) advances time, then runs PreTick, Tick and PostTick while `accumulator >= tickRate`, dropping the remainder past the cap; `App::GetTime()` is read-only (`App.hpp:618`).
+- Physics steps by `tickRate` in PostTick and blends by `accumulator / tickRate` (`packages/FenrirPhysics/src/Physics.cpp:43,66`). Skeletons pose by `tickRate` on the tick and `deltaTime` per frame (`packages/FenrirSkeleton/src/Skeletons.cpp:161,204`). `Animator` has per-entity `speed` and `playing` (`packages/FenrirAnimation/include/FenrirAnimation/Animator.hpp:46,50`); its crossfade runs on unscaled frame time (:52).
+- An inactive scene is skipped because each package reads only the active scene; there is no per-scene flag. FenrirUI has its own CSS `animation-play-state` (`packages/FenrirUI/src/StyleValues.cpp:2313`).

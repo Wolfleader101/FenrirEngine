@@ -17,3 +17,8 @@ Each caged friend is the Kiki model in its own body colour, and an active power-
 - **Where it is planned:** this map, or the renderer map's "Richer materials" line.
 
 Outcome: a spec-ready design.
+
+## Facts (checked 2026-11-19)
+
+- `MeshRenderer` holds `mesh`, `material`, `visible`, `castShadows` (`packages/FenrirRenderer/include/FenrirRenderer/Components.hpp:24-36`).
+- An instance list carries per-copy `colours` (`packages/FenrirAssets/include/FenrirAssets/InstanceList*.hpp:23`); shaders read `CurrentDraw().colour` (`packages/FenrirRenderer/Shaders/include/Fenrir/Draw.glsl:134`), and `builtin:lit` and `builtin:unlit` multiply their base colour by it. A per-draw colour slot exists already.

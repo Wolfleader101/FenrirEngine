@@ -16,3 +16,7 @@ A scene resource or app resource is one-per-type package state (`GLOSSARY.md`). 
 - How it meets the `fenrir-serialisation` map: ADR-0064 writes described scene-resource types into scene files, and that map's ticket 16 decides how C# types are described. Say what this design leaves to it.
 
 Outcome: a spec-ready design, or a pointer to the `fenrir-serialisation` map's ticket 16 with this question added there.
+
+## Facts (checked 2026-11-19)
+
+- C# reaches resources through `Resources.Get/TryGet/GetReadOnly/Insert/Remove` (`packages/FenrirScripting/Managed/Fenrir.Scripting/Resources.cs`), for `MakeSceneResource` types a native extension registered (`packages/FenrirScripting/README.md:605,687-735,718`). C# can define components (README:238); nothing mentions C#-defined resources.

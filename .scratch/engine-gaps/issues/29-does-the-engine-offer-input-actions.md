@@ -13,3 +13,7 @@ FenrirInput reports devices and names an action layer, rebinding and dead zones 
 - Do stick dead zones (radial, per stick, configurable) belong in FenrirInput even if actions do not?
 
 Outcome: a spec-ready design, or `wontfix` with the reason, for each half.
+
+## Facts (checked 2026-11-19)
+
+- FenrirInput clamps axes to -1..1 and applies no dead zone (`packages/FenrirWindow/src/SdlInput.cpp:129-132`); `packages/FenrirInput/README.md:91` rules actions and bindings out. FenrirUI has its own navigation dead zone of 0.5 (`packages/FenrirUI/include/FenrirUI/UIRoot.hpp:195`).

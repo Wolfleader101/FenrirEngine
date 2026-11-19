@@ -17,3 +17,9 @@ Flightless Frenzy wants dark outlines on Kiki, friends, enemies and pickups and 
 - Whether this is an ADR (the frame's shape).
 
 Outcome: a spec-ready design.
+
+## Facts (checked 2026-11-19)
+
+- No stencil (the window has none, renderer README:33). Material shaders bind no scene depth or normals (`Shaders/include/Fenrir/View.glsl:46-69`, `Frame.glsl`).
+- `RenderStage` (`packages/FenrirRenderer/src/Core/RenderGraph.hpp:24-44`) calls `Cull` "open to a user compute pass", but the graph is internal; README:40 says there is no native escape hatch.
+- Frame order (README:54): post-processing after Debug in `PostProcess` (scene history, bloom, streaks, lens flare), then `Output` (exposure, vignette, grading, tonemap, grain, sRGB), then Overlay.
