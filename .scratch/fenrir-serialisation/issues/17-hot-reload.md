@@ -19,7 +19,7 @@ Zoom into [Who loads and saves files?](15-load-save-api-and-ownership.md) and th
 
 ## Answer
 
-ADR: `docs/adr/0067-the-asset-store-watches-every-loaded-file-replaces-data-assets-in-place-and-patches-running-scenes-and-instances-by-entity-id.md`. Glossary: Scene patch, Hot reload. One grilling round, every recommendation accepted.
+ADR: `docs/adr/0081-the-asset-store-watches-every-loaded-file-replaces-data-assets-in-place-and-patches-running-scenes-and-instances-by-entity-id.md`. Glossary: Scene patch, Hot reload. One grilling round, every recommendation accepted.
 
 - **Watching:** `ReloadWatcher` moves from `FenrirScripting`'s private sources to `FenrirCore`; `FenrirAssets` keeps one per loaded file of every kind (data assets, scene files it filled, instance sources, imported models, images and shader containers) and polls them between frames on the main thread, stamps spread across the interval; `AssetsConfig::hotReload`, true by default, off in a cooked build; a deleted file keeps its data with one warning and reloads if it reappears. OS notifications declined.
 - **Data assets:** parsed into a private instance and `Replace`d under the same handle with a revision bump, so every holder sees it; a failure keeps the old instance and logs the located diagnostics once per change; `Assets::Reloaded()` lists the handles replaced this frame. Imported assets reload through their importer the same way.

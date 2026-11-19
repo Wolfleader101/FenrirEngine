@@ -17,7 +17,7 @@ Zoom into [How do engines type, inherit and reference data assets?](01-how-engin
 
 ## Answer
 
-ADR: `docs/adr/0062-an-assets-identity-in-files-is-its-root-relative-path-and-a-tool-rewrites-references-when-a-file-moves.md`. Glossary: Asset path. One grilling round, every recommendation accepted; the hybrid (ids in Fenrir-authored files' headers, paths for imported files) was weighed and declined.
+ADR: `docs/adr/0076-an-assets-identity-in-files-is-its-root-relative-path-and-a-tool-rewrites-references-when-a-file-moves.md`. Glossary: Asset path. One grilling round, every recommendation accepted; the hybrid (ids in Fenrir-authored files' headers, paths for imported files) was weighed and declined.
 
 - **Identity:** the asset path, as the store already keys it: relative to the asset root, forward slashes, extension included, `#label` for a sub-asset, `builtin:` for embedded assets; `..` and absolute paths refused; case-sensitive comparison with a development warning on a case-insensitive match. No GUIDs, no sidecars, no id index.
 - **Reference kinds:** one spelling for all, the path string; the expected kind comes from the field's declared type, and a data asset target's type must be assignable to the field's base; a missing or wrong-typed target leaves the handle empty with one diagnostic naming file, field, path, expected and found. A prefab source is named by the same path.

@@ -32,4 +32,4 @@ We decided that **the API description stays the one description of a type, widen
 - What "assignable to a base" means for an open slot, how a reader treats an older version, and how a C# data asset's strings and lists cross are decided by the data asset, format and C# tickets of the serialisation map; this decision only guarantees the description and registry can carry them.
 - Doc text ships in the registration until the cooked-form work adds an option to strip it.
 - The generated registration is a second consumer of the description, so a change to `SCHEMA.md` changes two generators and Iris's copy of the schema.
-- *Narrowed by ADR-0061:* the open slot is built in its reference form only; a data asset type may extend one other, so the description records a base type for the `data-asset` role.
+- *Narrowed by ADR-0075:* the open slot is built in its reference form only; a data asset type may extend one other, so the description records a base type for the `data-asset` role.

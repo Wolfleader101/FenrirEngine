@@ -18,7 +18,7 @@ Zoom into [What is a data asset?](10-what-a-data-asset-is.md), [Who loads and sa
 
 ## Answer
 
-ADR: `docs/adr/0069-csharp-data-assets-are-classes-materialised-from-the-stores-value-tree-and-scenes-reach-csharp-through-the-assets-facade.md`. Glossary: Tree encoding, Codec (and Value tree widened). One grilling round, every recommendation accepted.
+ADR: `docs/adr/0083-csharp-data-assets-are-classes-materialised-from-the-stores-value-tree-and-scenes-reach-csharp-through-the-assets-facade.md`. Glossary: Tree encoding, Codec (and Value tree widened). One grilling round, every recommendation accepted.
 
 - **Defining types:** a `class` implementing `IDataAsset`, extending another C# data asset class or the generated C# class of a C++ data asset type; a new generator in `Fenrir.Scripting.Generators` emits its description entry (full C# name, `[Version]`, `[Formerly]`, editor metadata attributes, base, fields with kinds), its codecs and its `[Upgrader]` registration; the script report carries data asset types and admission checks them all or nothing.
 - **Richer fields in C#:** the store holds the value tree as the truth for a C#-typed asset; `TryGet<T>` pulls through a per-generation cache keyed by handle and revision, one native handing the tree in the compact binary tree encoding, the codec materialising the class; `Replace(handle, instance)` serialises back, swaps the tree and bumps the revision; no `Edit` from C#. C++ data asset types reach C# as generated classes over the same tree (`Iris.Bindings` emits class and codecs), so C# never reads native bytes.

@@ -236,39 +236,39 @@ State a package keeps in one scene, one value per type, ended with the scene (a 
 *Avoid:* singleton, global, scene component (a *component* belongs to an entity).
 
 **Scene file**
-The file a scene is created from: its described scene resources, and its entities with their entity ids, parents, order and described components. Authoring data, read when the scene is made and never written by the running game; what a level editor edits and what a game calls a map or level (ADR-0064).
+The file a scene is created from: its described scene resources, and its entities with their entity ids, parents, order and described components. Authoring data, read when the scene is made and never written by the running game; what a level editor edits and what a game calls a map or level (ADR-0078).
 *Avoid:* map file, level file (the game's words), save file (a game's own), world.
 
 **Entity id**
-The readable random string a scene file gives an entity, held in its `EntityId` component, minted once when the entity is first saved and kept for its life. It is how a file names an entity, for a parent or a component's entity field; it is not the run-time `Entity`, which is reassigned on every load (ADR-0064).
+The readable random string a scene file gives an entity, held in its `EntityId` component, minted once when the entity is first saved and kept for its life. It is how a file names an entity, for a parent or a component's entity field; it is not the run-time `Entity`, which is reassigned on every load (ADR-0078).
 *Avoid:* entity handle, fileID, GUID, name (the display string).
 
 **Transient**
-Not written to a scene file: a component whose description says so, or an entity tagged `Transient` with its children (a free-fly camera, a debug entity). Everything else described is written (ADR-0064).
+Not written to a scene file: a component whose description says so, or an entity tagged `Transient` with its children (a free-fly camera, a debug entity). Everything else described is written (ADR-0078).
 *Avoid:* runtime-only, editor-only (which is written but stripped when cooked), hidden, don't-save.
 
 **Editor-only**
-A described type an editor package defines for its own organisation (a layer, a group, a folded flag, a cordon): written to the scene file like any component or scene resource, ignored by run-time systems, kept opaque where the package is absent, and stripped by the cooker (ADR-0068).
+A described type an editor package defines for its own organisation (a layer, a group, a folded flag, a cordon): written to the scene file like any component or scene resource, ignored by run-time systems, kept opaque where the package is absent, and stripped by the cooker (ADR-0082).
 *Avoid:* editor data section, visgroup (Hammer's), metadata, transient (which is never written).
 
 **Scene instance**
-The entities made in a scene from another scene file or a model file, under one root that carries the `Instance` component naming the source. The host's file writes the instance as that reference plus its overrides, so a change to the source reaches every instance that did not override it. *Prefab* is the informal word for a scene file meant to be instanced; there is no prefab asset kind (ADR-0066).
+The entities made in a scene from another scene file or a model file, under one root that carries the `Instance` component naming the source. The host's file writes the instance as that reference plus its overrides, so a change to the source reaches every instance that did not override it. *Prefab* is the informal word for a scene file meant to be instanced; there is no prefab asset kind (ADR-0080).
 *Avoid:* prefab instance, nested scene, sub-scene, level instance, blueprint.
 
 **Override**
-A per-placement difference an instance keeps from its source: a field's value, a component or entity added, a component or entity removed. Written in the host's file against the source entity's id; never in the source (ADR-0066).
+A per-placement difference an instance keeps from its source: a field's value, a component or entity added, a component or entity removed. Written in the host's file against the source entity's id; never in the source (ADR-0080).
 *Avoid:* modification, delta, patch, property override (Unreal's).
 
 **Variant**
-A scene file whose single root is an instance of another scene file, so it is that scene with overrides and additions: Fenrir's scene inheritance (ADR-0066).
+A scene file whose single root is an instance of another scene file, so it is that scene with overrides and additions: Fenrir's scene inheritance (ADR-0080).
 *Avoid:* inherited scene, derived scene, prefab variant, child blueprint.
 
 **Scene patch**
-What a changed scene file or instance source does to a running scene: entities matched by entity id have their written components, parent and order rewritten from the file, new ones are added, ones the file dropped are destroyed with their children, and run-time entities and unwritten components are left alone (ADR-0067).
+What a changed scene file or instance source does to a running scene: entities matched by entity id have their written components, parent and order rewritten from the file, new ones are added, ones the file dropped are destroyed with their children, and run-time entities and unwritten components are left alone (ADR-0081).
 *Avoid:* scene reload (destroying and recreating, which is the caller's), live sync, diff apply.
 
 **Hot reload**
-A file the running app loaded changing on disk and the app taking the change between frames: a data asset or imported asset replaced under its handle with its revision bumped, a scene or instance patched, a script assembly's generation swapped. A development feature, off in a cooked build (ADR-0067).
+A file the running app loaded changing on disk and the app taking the change between frames: a data asset or imported asset replaced under its handle with its revision bumped, a scene or instance patched, a script assembly's generation swapped. A development feature, off in a cooked build (ADR-0081).
 *Avoid:* live reload, watch mode, auto-refresh.
 
 **App resource**
@@ -276,47 +276,47 @@ State a package keeps for the whole app rather than one scene, one value per typ
 *Avoid:* singleton, global, app-wide state (informal).
 
 **FenrirTypes**
-The package that holds the engine's type registry and the kinds a described type's fields may have. It knows no file format and no language (ADR-0060).
+The package that holds the engine's type registry and the kinds a described type's fields may have. It knows no file format and no language (ADR-0074).
 *Avoid:* reflection package, FenrirReflection, FenrirSerialisation (the tree and format are that package's).
 
 **FenrirSerialisation**
-The package that turns a described value into a value tree and back through the type registry, reads and writes that tree as JSON5, applies upgraders and reports located diagnostics. It knows no files, assets or scenes; a game's save files compose it alone (ADR-0065).
+The package that turns a described value into a value tree and back through the type registry, reads and writes that tree as JSON5, applies upgraders and reports located diagnostics. It knows no files, assets or scenes; a game's save files compose it alone (ADR-0079).
 *Avoid:* FenrirJson, FenrirText, serialiser (informal), FenrirAssets (which owns the envelope and the doors).
 
 **Value tree**
-The in-memory form of a file's contents: objects, arrays, strings, numbers, booleans and nulls, with comments kept as trivia, between a described value and its JSON5 text (ADR-0065). For a C#-typed data asset it is the store's truth, with the managed instance a view of it (ADR-0069).
+The in-memory form of a file's contents: objects, arrays, strings, numbers, booleans and nulls, with comments kept as trivia, between a described value and its JSON5 text (ADR-0079). For a C#-typed data asset it is the store's truth, with the managed instance a view of it (ADR-0083).
 *Avoid:* DOM, document, AST, JSON object.
 
 **Tree encoding**
-FenrirSerialisation's compact binary form of a value tree, used in memory to hand a data asset between C++ and C#; never written to a text file (ADR-0069).
+FenrirSerialisation's compact binary form of a value tree, used in memory to hand a data asset between C++ and C#; never written to a text file (ADR-0083).
 *Avoid:* wire format, binary JSON, BSON, MessagePack.
 
 **Codec**
-The generated pair that turns a data asset class into a value tree and back, emitted per C++ data asset type by the binding generator and per C# data asset type by the scripting source generator (ADR-0069).
+The generated pair that turns a data asset class into a value tree and back, emitted per C++ data asset type by the binding generator and per C# data asset type by the scripting source generator (ADR-0083).
 *Avoid:* serializer, converter, marshaller, mapper.
 
 **Type registry**
-The run-time table of every described type the running engine knows, by canonical name: its role, fields, kinds, defaults, docs and metadata, filled from each package's generated type registration at `Install` and from C# at admission. A file reader, writer or inspector reaches a type's fields only through it (ADR-0060).
+The run-time table of every described type the running engine knows, by canonical name: its role, fields, kinds, defaults, docs and metadata, filled from each package's generated type registration at `Install` and from C# at admission. A file reader, writer or inspector reaches a type's fields only through it (ADR-0074).
 *Avoid:* reflection, RTTI, ClassDB, type database.
 
 **Type registration**
-The generated C++ a package compiles in that registers its described types with the type registry, written from the package's API description by `tools/generate-type-registry` and committed beside it, as a binding's generated mirrors are (ADR-0060).
+The generated C++ a package compiles in that registers its described types with the type registry, written from the package's API description by `tools/generate-type-registry` and committed beside it, as a binding's generated mirrors are (ADR-0074).
 *Avoid:* reflection data, type table, registry entry.
 
 **Canonical type name**
-The one name a type has in files and in the type registry, in every language: the API description's spelling for a C++ type (`Fenrir::Transform`) and the full name for a C# one (`MyGame.WeaponData`). A renamed type keeps reading under its former names (ADR-0060).
+The one name a type has in files and in the type registry, in every language: the API description's spelling for a C++ type (`Fenrir::Transform`) and the full name for a C# one (`MyGame.WeaponData`). A renamed type keeps reading under its former names (ADR-0074).
 *Avoid:* type id, GUID, class name (a C# spelling of a C++ type).
 
 **Open slot**
-A described field whose value may be of any registered type assignable to a named base, chosen per file rather than fixed by the C++ (a tagged union's kinds are fixed). The file writes the value's canonical type name beside it (ADR-0060).
+A described field whose value may be of any registered type assignable to a named base, chosen per file rather than fixed by the C++ (a tagged union's kinds are fixed). The file writes the value's canonical type name beside it (ADR-0074).
 *Avoid:* polymorphic field, variant, any.
 
 **Type version**
-The number a described type carries, written beside its name in every file holding a value of it and raised when the type's fields change meaning. A file at an older version is upgraded on load (ADR-0063).
+The number a described type carries, written beside its name in every file holding a value of it and raised when the type's fields change meaning. A file at an older version is upgraded on load (ADR-0077).
 *Avoid:* schema version, format version (the envelope's), revision (the store's count of edits).
 
 **Upgrader**
-A function a type registers with the type registry that rewrites a value's tree from one type version to the next, before the tree is read into the struct. Upgraders run in order; there is no downgrade (ADR-0063).
+A function a type registers with the type registry that rewrites a value's tree from one type version to the next, before the tree is read into the struct. Upgraders run in order; there is no downgrade (ADR-0077).
 *Avoid:* migration, converter, version hook.
 
 ## FenrirEngine physics
@@ -747,7 +747,7 @@ One piece of plain data FenrirAssets holds: a mesh, image, material, skeleton, c
 *Avoid:* resource (Iris and physics use it otherwise), file.
 
 **Data asset**
-An asset of a type the game defines: a plain struct of described fields (numbers, text, lists, nested structs, handles to other assets) in a file of its own, shared by everything that names it by handle. A data asset type may extend one other, and a field typed by a base accepts a file of any type extending it (ADR-0061).
+An asset of a type the game defines: a plain struct of described fields (numbers, text, lists, nested structs, handles to other assets) in a file of its own, shared by everything that names it by handle. A data asset type may extend one other, and a field typed by a base accepts a file of any type extending it (ADR-0075).
 *Avoid:* resource, scriptable object, data table, blueprint, config, definition, archetype.
 
 **Asset handle**
@@ -759,7 +759,7 @@ The app or a scene, named when an asset is loaded or added. An asset is freed wh
 *Avoid:* reference count, scope.
 
 **Asset path**
-An asset's one identity in files and in the store: its path relative to the asset root, with `#label` for a sub-asset or `builtin:` for an embedded one. A reference in a scene file or data asset is an asset path; moving a file means rewriting the paths that name it (ADR-0062).
+An asset's one identity in files and in the store: its path relative to the asset root, with `#label` for a sub-asset or `builtin:` for an embedded one. A reference in a scene file or data asset is an asset path; moving a file means rewriting the paths that name it (ADR-0076).
 *Avoid:* asset id, GUID, uid, resource path, key (the store's word for the same string).
 
 **Asset root**
@@ -767,19 +767,19 @@ The directory relative asset paths resolve against, set in `AssetsConfig`; by de
 *Avoid:* content directory, mount, virtual file system.
 
 **Project file**
-`<name>.project.json5` at the project root: each package's Install config by canonical type name, layered over code defaults by a platform file, a per-developer local file and the command line, read before any package is installed. Not an asset: no handle, no hot reload (ADR-0070).
+`<name>.project.json5` at the project root: each package's Install config by canonical type name, layered over code defaults by a platform file, a per-developer local file and the command line, read before any package is installed. Not an asset: no handle, no hot reload (ADR-0084).
 *Avoid:* .feproj, project settings asset, ini, config file (informal).
 
 **Import sidecar**
-`<source>.import.json5` beside a model or image: an importer's described options (scale, axes, sub-assets to keep, colour space, mipmaps), nothing required, defaults when missing, never an identity (ADR-0070).
+`<source>.import.json5` beside a model or image: an importer's described options (scale, axes, sub-assets to keep, colour space, mipmaps), nothing required, defaults when missing, never an identity (ADR-0084).
 *Avoid:* .meta, .import (Godot's), import settings, asset metadata.
 
 **Asset source**
-The store's private seam that answers "the bytes at this asset path" and "does this path exist": a directory under the asset root in development, a pack beside or inside the executable when cooked. Everything above it loads by path and cannot tell which (ADR-0071).
+The store's private seam that answers "the bytes at this asset path" and "does this path exist": a directory under the asset root in development, a pack beside or inside the executable when cooked. Everything above it loads by path and cannot tell which (ADR-0085).
 *Avoid:* mount, virtual file system, pak reader, asset provider.
 
 **Cooked form**
-A shipped game's data: the same value trees in the binary tree encoding, imported assets pre-baked, transient, editor-only and per-developer data stripped, read through the same doors from a pack. Designed for by the serialisation map, specified by a later effort (ADR-0071).
+A shipped game's data: the same value trees in the binary tree encoding, imported assets pre-baked, transient, editor-only and per-developer data stripped, read through the same doors from a pack. Designed for by the serialisation map, specified by a later effort (ADR-0085).
 *Avoid:* binary format (it is the tree encoding), export, build output, bundle.
 
 **Model**
@@ -791,11 +791,11 @@ An asset inside another asset's file, loadable on its own by label: a model's `h
 *Avoid:* sub-resource, embedded asset.
 
 **Envelope**
-The one shape every text file the engine writes has: the file format's version, the value's canonical type name and type version, the value's fields, and its embedded sub-assets by name. A scene file and a settings file are envelopes like any data asset's (ADR-0063).
+The one shape every text file the engine writes has: the file format's version, the value's canonical type name and type version, the value's fields, and its embedded sub-assets by name. A scene file and a settings file are envelopes like any data asset's (ADR-0077).
 *Avoid:* header, wrapper, document.
 
 **Format version**
-The envelope's own version, raised only when the envelope's shape changes; a type's changes raise its type version instead (ADR-0063).
+The envelope's own version, raised only when the envelope's shape changes; a type's changes raise its type version instead (ADR-0077).
 *Avoid:* file version, schema version.
 
 ## FenrirEngine animation

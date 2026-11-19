@@ -18,7 +18,7 @@ Consult `codebase-design`. Zoom into [How do engines type, inherit and reference
 
 ## Answer
 
-ADR: `docs/adr/0061-a-data-asset-is-a-game-defined-plain-struct-in-the-asset-store-with-single-inheritance-and-polymorphism-through-references.md` (narrowing ADR-0060's open slot to its reference form). Glossary: Data asset; Asset and Sub-asset widened. One grilling round, every recommendation accepted.
+ADR: `docs/adr/0075-a-data-asset-is-a-game-defined-plain-struct-in-the-asset-store-with-single-inheritance-and-polymorphism-through-references.md` (narrowing ADR-0074's open slot to its reference form). Glossary: Data asset; Asset and Sub-asset widened. One grilling round, every recommendation accepted.
 
 - **Type model:** single inheritance, no virtual functions. A data asset type (plain C++ struct, C# class) may extend one other data asset type; the registry records the base chain and "assignable to a base" is is-a over it, so `AssetHandle<WeaponData>` accepts a `Sword` file. Polymorphism only through references: a mixed list is a list of handles to data assets, embedded or external; no by-value open slot, no `unique_ptr`, no virtual destructors. A C# type may extend a C++ data asset type (through its generated C# class) or another C# type; C++ never extends C#.
 - **Name:** *data asset*. Avoid resource, scriptable object, data table, blueprint, config, definition, archetype.

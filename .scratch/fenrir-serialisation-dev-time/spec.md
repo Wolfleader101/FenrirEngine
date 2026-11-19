@@ -6,12 +6,12 @@ Origin: the serialisation map (`.scratch/fenrir-serialisation/map.md`), gatherin
 
 | ADR | Decision |
 |---|---|
-| 0070 | A project file layers each package's config by type name, and import sidecars hold options only |
-| 0060 | Types read from and written to files are described by the API description and registered with FenrirTypes from generated code |
-| 0063 | Files are JSON5 in one envelope, read and written by an engine-owned parser, and migrated by per-type upgraders |
-| 0065 | FenrirSerialisation bridges described values and JSON5 trees, and FenrirAssets loads and saves scenes and data assets |
-| 0067 | The asset store watches every loaded file, replaces data assets in place, and patches running scenes and instances by entity id |
-| 0071 | The development formats promise a cooked form path identity, compiled-in descriptions, the tree encoding and one asset source seam |
+| 0084 | A project file layers each package's config by type name, and import sidecars hold options only |
+| 0074 | Types read from and written to files are described by the API description and registered with FenrirTypes from generated code |
+| 0077 | Files are JSON5 in one envelope, read and written by an engine-owned parser, and migrated by per-type upgraders |
+| 0079 | FenrirSerialisation bridges described values and JSON5 trees, and FenrirAssets loads and saves scenes and data assets |
+| 0081 | The asset store watches every loaded file, replaces data assets in place, and patches running scenes and instances by entity id |
+| 0085 | The development formats promise a cooked form path identity, compiled-in descriptions, the tree encoding and one asset source seam |
 
 ## Prerequisite
 
@@ -27,7 +27,7 @@ Imports run at load with no options. `ImportModel` (cgltf for glTF and GLB, ufbx
 
 ## Solution
 
-All in FenrirAssets, with the `settings` role applied in each package that owns a config, and the command line in the demo scaffold (ADR-0070).
+All in FenrirAssets, with the `settings` role applied in each package that owns a config, and the command line in the demo scaffold (ADR-0084).
 
 ### The config structs become settings types
 
@@ -38,18 +38,18 @@ All in FenrirAssets, with the `settings` role applied in each package that owns 
 
 ### The project file
 
-- **`<name>.project.json5` at the project root, beside the asset root** (ADR-0070): one envelope (`format`, `type: "Fenrir::Project"`, `version`, `data`, no `sub`), its `data` a map from canonical type name (`Fenrir::RendererConfig`) to that config's fields, the shape of a scene's `resources`. Every file in the stack is a partial envelope: a type or a field left out is left to the layer below.
+- **`<name>.project.json5` at the project root, beside the asset root** (ADR-0084): one envelope (`format`, `type: "Fenrir::Project"`, `version`, `data`, no `sub`), its `data` a map from canonical type name (`Fenrir::RendererConfig`) to that config's fields, the shape of a scene's `resources`. Every file in the stack is a partial envelope: a type or a field left out is left to the layer below.
 - **`Fenrir::ProjectConfig { name, firstScene }`** in FenrirAssets is the one settings type that is not a package's Install config: the project's name and its first scene as an asset path string the game hands to `LoadScene`. The engine reads neither.
-- **Project versus scene** (ADR-0070): the project holds window, backend and quality, physics limits and defaults, the asset root, the script assembly, the project name, the first scene, and references to data assets by asset path rather than inlined values; a scene's `resources` hold the per-scene environment (sky, sky light). Device choice is never in the project file.
+- **Project versus scene** (ADR-0084): the project holds window, backend and quality, physics limits and defaults, the asset root, the script assembly, the project name, the first scene, and references to data assets by asset path rather than inlined values; a scene's `resources` hold the per-scene environment (sky, sky light). Device choice is never in the project file.
 - **The asset root follows the project file**: with a project file, an empty `AssetsConfig::root` is `assets/` beside it; without one, `assets/` beside the executable as today.
 
 ### `Project::Load` and the five layers
 
-- **`Fenrir::Project::Load(path, overrides, logger) -> Project`** in FenrirAssets, before any `Install` and without an `App`: reads `<name>.project.json5`, then `<name>.project.<platform>.json5` (`windows`, `linux`, `macos`, the platform the build runs on), then `<name>.project.local.json5`, then the `overrides` (`--set Fenrir::RendererConfig.vsync=false`, each a dotted field path after the type name and a JSON5 value, a bare word read as a string), into one tree merged field by field: a nested struct merges by field, a list replaces the list below it. Code defaults are the fifth layer, below them all, and belong to the caller (next bullet). No environment variables (ADR-0070). A platform or local file that does not exist is simply absent; a named project file that is missing or unreadable is one error diagnostic and a `Project` holding nothing.
-- **`project.Get<T>(T defaults = T{}) -> T`** fills a config through `Describe<T>`'s visitor resolved at compile time, over the caller's code defaults, so Install signatures stay and the app's own defaults (`DemoConfig::msaa`) are the bottom layer. Every settings type is `@version 1` in this spec; a tree whose `version` is below the type's is read as it is with one warning, and when a settings type first moves its version the caller registers its upgraders on the `Project` before `Get<T>` (`project.RegisterUpgrader<T>(fromVersion, upgrader)`, the format spec's upgrader shape), since `Describe<T>` is tree-free and no registry exists yet. An unknown field warns and drops; a type the build does not know is kept opaque with no diagnostic, so one project file serves apps installing different packages (ADR-0063).
-- **Provenance per field**: `Project` records which layer set each field (`Project::Layer { Default, Project, Platform, Local, CommandLine }`, read by `project.Provenance(typeName, fieldPath)`), and `Load` logs the stack once at `Info` through its logger in a development build: each layer's file found or absent, then each field set above its default with its value and layer. A cooked build logs nothing; the switch is the cooking effort's (ADR-0071).
-- **Located diagnostics** (ADR-0063): a syntax or type error names file, line and column; a partly broken layer applies what reads; `Project::Diagnostics()` returns them and `Load` logs each once.
-- **The local file is the per-developer override** (ADR-0070): any config's fields, an asset root elsewhere, debug flags, the device index; above platform, below the command line; never committed and never written by the engine. `.gitignore` gains `*.project.local.json5`, and `README.md` gains a "Project file" subsection under "Building and testing", after the options table, naming the stack, the ignore line and `--set`.
+- **`Fenrir::Project::Load(path, overrides, logger) -> Project`** in FenrirAssets, before any `Install` and without an `App`: reads `<name>.project.json5`, then `<name>.project.<platform>.json5` (`windows`, `linux`, `macos`, the platform the build runs on), then `<name>.project.local.json5`, then the `overrides` (`--set Fenrir::RendererConfig.vsync=false`, each a dotted field path after the type name and a JSON5 value, a bare word read as a string), into one tree merged field by field: a nested struct merges by field, a list replaces the list below it. Code defaults are the fifth layer, below them all, and belong to the caller (next bullet). No environment variables (ADR-0084). A platform or local file that does not exist is simply absent; a named project file that is missing or unreadable is one error diagnostic and a `Project` holding nothing.
+- **`project.Get<T>(T defaults = T{}) -> T`** fills a config through `Describe<T>`'s visitor resolved at compile time, over the caller's code defaults, so Install signatures stay and the app's own defaults (`DemoConfig::msaa`) are the bottom layer. Every settings type is `@version 1` in this spec; a tree whose `version` is below the type's is read as it is with one warning, and when a settings type first moves its version the caller registers its upgraders on the `Project` before `Get<T>` (`project.RegisterUpgrader<T>(fromVersion, upgrader)`, the format spec's upgrader shape), since `Describe<T>` is tree-free and no registry exists yet. An unknown field warns and drops; a type the build does not know is kept opaque with no diagnostic, so one project file serves apps installing different packages (ADR-0077).
+- **Provenance per field**: `Project` records which layer set each field (`Project::Layer { Default, Project, Platform, Local, CommandLine }`, read by `project.Provenance(typeName, fieldPath)`), and `Load` logs the stack once at `Info` through its logger in a development build: each layer's file found or absent, then each field set above its default with its value and layer. A cooked build logs nothing; the switch is the cooking effort's (ADR-0085).
+- **Located diagnostics** (ADR-0077): a syntax or type error names file, line and column; a partly broken layer applies what reads; `Project::Diagnostics()` returns them and `Load` logs each once.
+- **The local file is the per-developer override** (ADR-0084): any config's fields, an asset root elsewhere, debug flags, the device index; above platform, below the command line; never committed and never written by the engine. `.gitignore` gains `*.project.local.json5`, and `README.md` gains a "Project file" subsection under "Building and testing", after the options table, naming the stack, the ignore line and `--set`.
 
 ### The demo scaffold
 
@@ -58,15 +58,15 @@ All in FenrirAssets, with the `settings` role applied in each package that owns 
 
 ### Import sidecars
 
-- **`<source>.import.json5` beside a model or image** (`hero.glb.import.json5`, `wall.png.import.json5`): the envelope of a described options type, options only, no identity (ADR-0062), nothing required, defaults when missing (ADR-0070). Read by the store at load through the `AssetSource` seam ("does this path exist", "the bytes at this path") before the importer runs; a sidecar that fails to read applies the fields that parsed, defaults the rest, and makes the asset's `LoadResult` `Partial` with the located diagnostics. An image embedded in a model has no sidecar and takes defaults.
+- **`<source>.import.json5` beside a model or image** (`hero.glb.import.json5`, `wall.png.import.json5`): the envelope of a described options type, options only, no identity (ADR-0076), nothing required, defaults when missing (ADR-0084). Read by the store at load through the `AssetSource` seam ("does this path exist", "the bytes at this path") before the importer runs; a sidecar that fails to read applies the fields that parsed, defaults the rest, and makes the asset's `LoadResult` `Partial` with the located diagnostics. An image embedded in a model has no sidecar and takes defaults.
 - **`Fenrir::ModelImportOptions`** (`settings` role, `@version 1`, FenrirAssets): `scale` (1.0, multiplied into the root nodes' transforms, where ufbx's unit conversion already sits), `axes` (`ImportAxes { FromFile, YUp, ZUp }`: the up axis the file's data is in when its header is absent or wrong, OBJ having none), `keep { meshes, materials, images, skins, clips }` (all true; a dropped kind leaves its labels unloaded, a mesh with no material or a material with no image taking the store's white defaults), `clips` (a list of clip names to keep, empty for all) and `skeletonRoot` (a node name overriding `skin.skeleton` and the nearest-non-bone rule). `ImportModel(file, options)` takes it.
 - **`Fenrir::ImageImportOptions`** (`settings` role, `@version 1`, FenrirAssets): `colourSpace` (`ImportColourSpace { FromUse, Srgb, Linear }`, `FromUse` being today's rule) and `mipmaps` (true). `ImportImage(bytes, options)` takes it; `ImageData` gains `mipmaps`, which the renderer's `ImageUpload` honours, uploading one level when false. Sampler defaults stay on the material.
-- **The sidecar is watched beside its source** (ADR-0067): the store keeps a `ReloadWatcher` on the sidecar path of every imported model and image whether or not the file exists, so creating, editing or deleting a sidecar reimports the asset through its importer and `Replace`, bumping the revision and listing it in `Reloaded()`.
+- **The sidecar is watched beside its source** (ADR-0081): the store keeps a `ReloadWatcher` on the sidecar path of every imported model and image whether or not the file exists, so creating, editing or deleting a sidecar reimports the asset through its importer and `Replace`, bumping the revision and listing it in `Reloaded()`.
 - **No import cache**: imports run at load; the cache stays in the map's fog with its graduation condition.
 
 ### Not assets
 
-Project and import files are described types in the one envelope with the format version, type versions and upgraders of ADR-0063, but they are not assets: no `AssetHandle`, no owner, no store slot, no hot reload. `Project` is a plain copyable value; a config change is a restart, and an import option change reaches the running app only through the asset it configures. Neither is written by the engine, so neither reaches the writer or the move tool. A cooked build has no sidecars (imports are baked, ADR-0071) and the local layer is never cooked; the project file's cooked twin is the cooking effort's.
+Project and import files are described types in the one envelope with the format version, type versions and upgraders of ADR-0077, but they are not assets: no `AssetHandle`, no owner, no store slot, no hot reload. `Project` is a plain copyable value; a config change is a restart, and an import option change reaches the running app only through the asset it configures. Neither is written by the engine, so neither reaches the writer or the move tool. A cooked build has no sidecars (imports are baked, ADR-0085) and the local layer is never cooked; the project file's cooked twin is the cooking effort's.
 
 ### Testing
 
@@ -99,8 +99,8 @@ Everything the other five specs own: the description, roles, kinds and `Describe
 - `Get<T>(T defaults = T{})` takes the caller's code defaults as the bottom layer, so an app's own defaults (`DemoConfig::msaa`) sit below the files without a second mechanism; `Provenance` reports them as `Default`.
 - A list in a higher layer replaces the whole list below it (`PhysicsConfig::collisionLayers`); only nested structs merge by field.
 - `ScriptingConfig`'s `std::chrono::milliseconds` fields are described as `i64` milliseconds rather than adding a `duration` kind.
-- `Fenrir::ProjectConfig { name, firstScene }` is where ADR-0070's project name and first scene live, since no package's config holds them; `firstScene` is a plain asset path string, not a `reference`, so loading it is the game's call.
-- With a project file present, an empty `AssetsConfig::root` means `assets/` beside the project file (ADR-0070 puts the file "beside the asset root"); a `--set` path resolves against the working directory, a layer file's path against that file's directory.
+- `Fenrir::ProjectConfig { name, firstScene }` is where ADR-0084's project name and first scene live, since no package's config holds them; `firstScene` is a plain asset path string, not a `reference`, so loading it is the game's call.
+- With a project file present, an empty `AssetsConfig::root` means `assets/` beside the project file (ADR-0084 puts the file "beside the asset root"); a `--set` path resolves against the working directory, a layer file's path against that file's directory.
 - Settings types start at `@version 1` with no upgraders; a lower-versioned tree reads with one warning, and upgraders, when a settings type first moves, are registered on the `Project` by the caller before `Get<T>`, since `Describe<T>` is tree-free and `Get<T>` runs before any registry exists.
 - A sidecar's watcher exists whether or not the sidecar does, so creating one reimports the asset; a broken sidecar makes the asset's load `Partial` rather than failing it; an embedded image has no sidecar.
 - `ImageImportOptions::mipmaps` needs `ImageData::mipmaps` for the renderer to read, the one change outside FenrirAssets and the demo scaffold; ticket 08's demo project file lives beside the executable, copied by `fenrir_add_demo_app`.

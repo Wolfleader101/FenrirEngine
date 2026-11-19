@@ -19,7 +19,7 @@ Consult `codebase-design` for where the registry sits. Zoom into [How do C++ eng
 
 ## Answer
 
-ADR: `docs/adr/0060-types-read-from-and-written-to-files-are-described-by-the-api-description-and-registered-with-fenrirtypes-from-generated-code.md`. Glossary: FenrirTypes, Type registry, Type registration, Canonical type name, Open slot. Two grilling rounds, every recommendation accepted.
+ADR: `docs/adr/0074-types-read-from-and-written-to-files-are-described-by-the-api-description-and-registered-with-fenrirtypes-from-generated-code.md`. Glossary: FenrirTypes, Type registry, Type registration, Canonical type name, Open slot. Two grilling rounds, every recommendation accepted.
 
 - **Source:** the API description (ADR-0042) stays the one description of a C++ type, widened; no macros, templates or hand-filled registry. A game runs `describe-api` on its own headers through the same CMake function, committing its own description and registration; the .NET SDK is a development-time need, as for C# scripting, with prebuilt tool binaries a later convenience.
 - **Run time:** a second generator, `tools/generate-type-registry`, reads the description and writes a committed C++ **type registration** per package, compiled in and registering each type with the **type registry** at `Install`; the engine parses no JSON and ships no description. It is configured by a `[registration]` table in the package's `.api.toml`, joins one `fenrir-generate-type-registry` target the ordinary build never runs, and CI's dirty-tree check gains it and runs with the renderer on.

@@ -6,7 +6,7 @@ status: accepted
 
 A `Scene` today is a name, an `EntityList` and a type-indexed map of resources that nothing writes to disk; demo scenes are C++ spawn functions. A scene file must give back the same scene: its entities, their components (native and C#), the hierarchy with sibling order, and the scene resources. The research found every authoring format gives entities a file-level id apart from the run-time handle and remaps on load (Godot's `unique_id`, Unity's `fileID`, Unreal's `ActorGuid`, Bevy's `#[entities]` fields), writes parents first with sibling order meaningful, keeps scene-level state as a type-keyed map applied after entities (Bevy, the closest to Fenrir's scene resources), and keeps unknown types as placeholders where it can (Godot). Nine component fields hold an `Entity`, all resolved tolerantly each frame; `Name` is `char[256]` described as 256 bytes; `Relationship` is four `Entity` links; `WorldTransform` is always computed. The user fixed the file's role: authoring data that a game loads once, as in Godot and Unity, with save games the game's own.
 
-We decided that **a scene file is a `Fenrir::Scene` data asset in the one envelope (ADR-0063), holding described components under entity ids and described scene resources, read when a scene is created from it and never written by the running game**:
+We decided that **a scene file is a `Fenrir::Scene` data asset in the one envelope (ADR-0077), holding described components under entity ids and described scene resources, read when a scene is created from it and never written by the running game**:
 
 1. **One scene per file, no name inside it.** The scene's run-time name comes from the caller, defaulting to the file's asset path. `data` holds `resources` then `entities`.
 2. **An entity's id is a component.** Every saved entity carries `Fenrir::EntityId`, a described component holding a readable random id (eight bytes, shown as a string), written first in its block, added at load, minted at save for any entity without one. `Name` is a display string, not an identity.
@@ -35,4 +35,4 @@ We decided that **a scene file is a `Fenrir::Scene` data asset in the one envelo
 - Nine `Entity` fields are written as ids; a component added later with an `Entity` field is covered by the kind, not by a list.
 - The load/save ticket of the serialisation map decides the API that reads a file into a scene (and additively into an existing one) and writes a scene out; the prefab ticket decides whether a model instance or a sub-scene is kept as one reference; the hot-reload ticket decides whether a changed file re-reads.
 - A game's save files are its own and fall outside this effort; the map's fog records the question of a convenience API.
-- Nothing in this ADR constrains what a cooked scene looks like beyond ADR-0063's tree.
+- Nothing in this ADR constrains what a cooked scene looks like beyond ADR-0077's tree.
