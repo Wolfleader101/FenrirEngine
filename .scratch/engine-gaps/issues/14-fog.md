@@ -26,3 +26,4 @@ Yes: it must be resolved before the game is complete (the user, 2026-11-19). The
 - 2026-11-19, round 3 of [Engine gaps for Flightless Frenzy](../map.md): plain distance and height fog are spec-ready in [What fog does the renderer offer?](26-what-fog-the-renderer-offers.md); volumetric fog, which the user wants explored, is [What volumetric fog does the renderer offer?](35-what-volumetric-fog-the-renderer-offers.md). The status changes when that resolves.
 - 2026-11-19, round 5 of [Engine gaps for Flightless Frenzy](../map.md): volumetric fog is spec-ready, with an ADR, in [What volumetric fog does the renderer offer?](35-what-volumetric-fog-the-renderer-offers.md); with the plain fog, the gap is settled.
 - 2026-11-19: the plain fog spec is written, [Plain fog](../../fenrir-renderer-fog/spec.md), `ready-for-agent` for `/to-tickets`.
+- 2026-11-19: plain fog tickets cut, `.scratch/fenrir-renderer-fog/issues/01` to `04` (stack 01, 02, 04; 03 beside from 01).
