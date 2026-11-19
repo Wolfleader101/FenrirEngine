@@ -504,6 +504,10 @@ What a burst or an emitter plays: a stack of the engine's particle modules (spaw
 The component that plays a particle effect from its entity, continuously or once, following the entity as it moves.
 *Avoid:* spawner, emitter (alone, beside a light).
 
+**Fog**
+A scene's distance and height haze toward the sky, from its `Fog` scene resource: applied to opaque surfaces after the background and to transparents in their own shading, never to the sky.
+*Avoid:* mist, haze (informal), atmosphere (the sky's scattering).
+
 **Fog volume**
 An entity's box or sphere of extra fog density, with its own albedo and falloff, that volumetric fog adds to the scene's own fog.
 *Avoid:* density volume (HDRP's), local fog (alone).
