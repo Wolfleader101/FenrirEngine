@@ -245,7 +245,11 @@ The readable random string a scene file gives an entity, held in its `EntityId` 
 
 **Transient**
 Not written to a scene file: a component whose description says so, or an entity tagged `Transient` with its children (a free-fly camera, a debug entity). Everything else described is written (ADR-0064).
-*Avoid:* runtime-only, editor-only, hidden, don't-save.
+*Avoid:* runtime-only, editor-only (which is written but stripped when cooked), hidden, don't-save.
+
+**Editor-only**
+A described type an editor package defines for its own organisation (a layer, a group, a folded flag, a cordon): written to the scene file like any component or scene resource, ignored by run-time systems, kept opaque where the package is absent, and stripped by the cooker (ADR-0068).
+*Avoid:* editor data section, visgroup (Hammer's), metadata, transient (which is never written).
 
 **Scene instance**
 The entities made in a scene from another scene file or a model file, under one root that carries the `Instance` component naming the source. The host's file writes the instance as that reference plus its overrides, so a change to the source reaches every instance that did not override it. *Prefab* is the informal word for a scene file meant to be instanced; there is no prefab asset kind (ADR-0066).
