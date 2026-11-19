@@ -12,7 +12,7 @@ One spec for Flightless Frenzy as a complete, small game built on FenrirEngine, 
 - **The core as described in 2022:** a timed 3D platformer. Free every caged friend by walking into the cage, collect coins for score, reach the exit before the timer runs out. Three power-ups: speed boost, slowed timer, double jump. The code delivered less than this, and in third person: see "What did the old game ship?".
 - **Engine gaps are raised, not worked around.** Anything the game needs that FenrirEngine lacks becomes its own issue under `.scratch/engine-gaps/issues/`, `Status: needs-triage`, linked from the map ticket that found it, saying whether it blocks the game or can be stubbed. It is not built inside the game.
 - **The engine/game line:** the engine provides building blocks; what the world is belongs to the game.
-- **Use what the engine offers:** renderer and lighting, physics and ragdolls, animation, FenrirUI and Razor panels, C# scripting. "What does FenrirEngine give a game today?" is the inventory decisions rest on.
+- **Use what the engine offers:** renderer and lighting, physics, animation, FenrirUI and Razor panels, C# scripting. Ragdolls are specified but not yet built. "What does FenrirEngine give a game today?" is the inventory decisions rest on.
 - **Settled while charting** (2026-11-19; the tickets below build on these and do not reopen them):
   - The reimagining starts from the design document's vision, trimmed, with the shipped loop as its spine: Kiki the Kiwi, a virtual New Zealand, friends caged by poachers.
   - **Camera:** third person, with Kiki on screen, as the working intent; "How does Kiki move?" compares it against first person before it is locked.
@@ -28,6 +28,7 @@ One spec for Flightless Frenzy as a complete, small game built on FenrirEngine, 
 
 <!-- one line per resolved ticket: [title](issues/NN-slug.md): gist -->
 
+- [What does FenrirEngine give a game today?](issues/01-what-fenrirengine-gives-a-game.md): the engine covers running, input, rendering with a game's own material shaders, physics with a character body, animation, UI and C# scripting; it lacks a way to build against it from outside, any level or save format, time scale and pause, particles, outlines, animation state machines, navigation, an input action layer, and scene switching and parenting from C#; ragdolls are specified but unbuilt.
 - [What did the old game ship?](issues/02-what-the-old-game-shipped.md): a third-person game of about 1,080 lines of C++ with one hand-placed level; cages freed by proximity, a frame-counting timer, three lives; no real jump, power-ups that only score, uncollectable coins, no enemies, menus or animation; a three-band toon shader; assets carry no licence or stated origin.
 
 ## Not yet specified
