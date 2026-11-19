@@ -1,0 +1,22 @@
+# One entity cannot have its own colour without its own material
+
+Status: needs-triage
+Blocked by: none
+
+## What is missing
+
+`MeshRenderer` has no tint and no per-entity material parameters. A per-copy colour exists only on an `InstanceList`. Today, giving one entity a different colour or parameter value means cloning its material.
+
+## Who needs it
+
+Flightless Frenzy ([map](../../flightless-frenzy/map.md)): each caged friend is the Kiki model in a different body colour ([Where do the assets come from?](../../flightless-frenzy/issues/11-where-assets-come-from.md)), and an active power-up changes how Kiki is lit ([What does the game look like?](../../flightless-frenzy/issues/12-the-look.md)).
+
+## Does anything plan it?
+
+Only as a line: per-entity material overrides are planned on the renderer map (`.scratch/fenrir-renderer/map.md:87`).
+
+## Does it block the game?
+
+Yes: it must be resolved before the game is complete (the user, 2026-11-19). It does not block the first playable slice; cloned materials work until then.
+
+## Comments

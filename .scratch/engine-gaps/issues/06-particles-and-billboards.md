@@ -17,6 +17,6 @@ Barely: particles are one line under "Not yet specified" on the renderer map (`.
 
 ## Does it block the game?
 
-No. The game can ship with small instanced meshes it moves itself, or with no effects, until this exists.
+Yes: it must be resolved before the game is complete (the user, 2026-11-19). The game's effects come from the engine, not from instanced meshes the game moves itself. It does not block the first playable slice, which can run with no effects.
 
 ## Comments
