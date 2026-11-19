@@ -14,6 +14,7 @@ One spec for Flightless Frenzy as a complete, small game built on FenrirEngine, 
 - **Engine gaps are raised, not worked around.** Anything the game needs that FenrirEngine lacks becomes its own issue under `.scratch/engine-gaps/issues/`, `Status: needs-triage`, linked from the map ticket that found it, saying whether it blocks the game or can be stubbed. It is not built inside the game.
 - **The engine/game line:** the engine provides building blocks; what the world is belongs to the game.
 - **Use what the engine offers:** renderer and lighting, physics, animation, FenrirUI and Razor panels, C# scripting. The game does not need ragdolls: the design document has none, and they are not yet built. "What does FenrirEngine give a game today?" is the inventory decisions rest on.
+- **"How are levels authored and loaded?" waits** (the user, 2026-11-19): the engine's levels and scenes are being designed in another session. Take that ticket only once that design is settled. "The first playable slice and build order" waits with it.
 - **Settled while charting** (2026-11-19; the tickets below build on these and do not reopen them):
   - The reimagining starts from the design document's vision, trimmed, with the shipped loop as its spine: Kiki the Kiwi, a virtual New Zealand, friends caged by poachers.
   - **Camera:** third person, with Kiki on screen, as the working intent; "How does Kiki move?" compares it against first person before it is locked.

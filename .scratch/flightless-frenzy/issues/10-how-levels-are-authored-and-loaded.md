@@ -14,3 +14,16 @@ The spec has one level, built so that a second is new data and not new code (set
 - How fast the loop from changing a level to playing it is.
 
 The engine/game line applies: a level format that describes *this game's* things is the game's; a general scene file or serialisation the engine lacks is an engine gap (the `fenrir-serialisation` planning, if the inventory finds it, says what is coming). A world editor is out of scope.
+
+## Waiting on the engine's design
+
+Parked 2026-11-19 (the user): the engine's levels and scenes are being designed in another session. Do not grill this ticket until that design is settled; then answer it against what the engine will offer, not against a stopgap.
+
+A first round was asked and not answered. It proposed one folder per level holding a Blender-exported `level.glb` and a `level.json`, things placed as named empty nodes in the model, every mesh solid unless under a `Decor` node, a fall height in the JSON, and a development key that reloads the model. Treat these as options to weigh against the engine's design, not as decisions.
+
+Facts found for that round (checked in the code, 2026-11-19):
+
+- `SpawnModel` makes one entity per glTF node with its name, transform, meshes, materials and lights; C# can call it and read each entity's `Name`.
+- The glTF importer does not read node `extras` (custom properties): nothing in `packages/FenrirAssets` mentions them. A marker can carry data only in its name and its place in the node tree.
+- C# can cook a collision mesh from vertices it is given (`PhysicsWorld.CreateCollisionMesh`) and can read a mesh's LOD indices (`GetMeshLodIndices`), but no binding returns a loaded mesh's positions. A C# game cannot make a loaded model solid today.
+- C# can unload and load an asset, so a level model can be re-read from disk without asset hot reload.
