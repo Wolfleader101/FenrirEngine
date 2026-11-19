@@ -23,3 +23,4 @@ No. The game keeps this state as components on one "run" entity until C# can def
 
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [How does C# define its own resources?](20-how-csharp-defines-resources.md).
 - 2026-11-19, round 2 of [Engine gaps for Flightless Frenzy](../map.md): spec-ready in [How does C# define its own resources?](20-how-csharp-defines-resources.md).
+- 2026-11-19: the spec is written, [C# reach: parenting, scenes, the app, C# resources and mesh positions](../../fenrir-scripting-reach/spec.md), `ready-for-agent` for `/to-tickets`.

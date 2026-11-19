@@ -23,3 +23,4 @@ Yes, if the level is an authored model, and the game is C#. Checked 2026-11-19: 
 
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [Does a loaded model give C# its collision?](28-does-a-loaded-model-give-csharp-its-collision.md).
 - 2026-11-19, round 1 of charting [Engine gaps for Flightless Frenzy](../map.md): the C# reach half is spec-ready in [Does C# get a loaded mesh's positions?](33-does-csharp-get-a-loaded-meshs-positions.md); the model-to-collider helper waits in [Does a loaded model give C# its collision?](28-does-a-loaded-model-give-csharp-its-collision.md).
+- 2026-11-19: the spec is written, [C# reach: parenting, scenes, the app, C# resources and mesh positions](../../fenrir-scripting-reach/spec.md) (the mesh positions half), `ready-for-agent` for `/to-tickets`.

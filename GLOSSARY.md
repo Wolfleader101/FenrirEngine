@@ -239,6 +239,10 @@ State a package or a script assembly keeps in one scene, one value per type, end
 State a package or a script assembly keeps for the whole app rather than one scene, one value per type, ended with the App (the input devices and the asset store are ones).
 *Avoid:* singleton, global, app-wide state (informal).
 
+**Scene request**
+A create, activate or destroy of a scene, by name, queued and applied at the end of the frame in the order made, so no system sees a scene change mid-frame; what C# uses to change scenes.
+*Avoid:* scene change (alone), level load (the game's words).
+
 **Time scale**
 How fast game time runs against real time, one value for the whole app: it scales the fixed tick's accumulation and the frame's delta time, while the fixed step itself stays the same.
 *Avoid:* game speed, slow motion (an effect a game makes with it), per-scene time scale.
