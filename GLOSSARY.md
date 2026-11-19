@@ -472,6 +472,10 @@ What a window offers a graphics backend to draw into and present: the OpenGL con
 The window FenrirWindow creates first and the foundation renderer draws to; closing it stops the app by default.
 *Avoid:* primary window, root window.
 
+**Borderless fullscreen**
+A window mode in which the window covers its whole display at the display's own desktop mode, with no border, as opposed to windowed; no display mode is changed.
+*Avoid:* fullscreen windowed, exclusive fullscreen (which changes the display's mode).
+
 **MeshRenderer**
 The component that makes an entity drawn: one mesh, one material and whether it is visible, one draw. A mesh with several materials is several entities (ADR-0023).
 *Avoid:* renderable, model (FenrirAssets' asset), mesh instance.
@@ -750,9 +754,9 @@ The work `UIRoots` runs each frame after every UI root has laid out and before a
 Of an element: a click on it or under it, Tab and Shift+Tab, a gamepad direction and code can give it the focus, which sends it keys and text. Elements are not focusable until made so; the controls make themselves focusable.
 *Avoid:* tab stop, selectable (Unity's).
 
-**Gamepad navigation**
-Moving a UI root's focus with the D-pad or the left stick to the focusable element nearest in that direction, with A activating and B cancelling, while the root has the focus (ADR-0065).
-*Avoid:* spatial navigation (the web's name), selection (Unity's).
+**Directional navigation**
+Moving a UI root's focus to the focusable element nearest in a direction, from the D-pad, the left stick, the arrow keys or a direction the game sends, after the focused element has declined it, with A or Enter activating and B or Escape cancelling, while the root has the focus (ADR-0065).
+*Avoid:* gamepad navigation (its old name, from before the arrow keys), spatial navigation (the web's name), selection (Unity's).
 
 **Pointer ray**
 The ray, in world space, a game gives a world root each frame with its button's state (`UIRoot::SetPointerRay`): the root meets it with its quad and hit-tests there. Which camera and cursor, or controller, it comes from is the game's choice (ADR-0057's line).
@@ -1065,6 +1069,10 @@ A callback registered on FenrirInput with a priority, such as a UI, that sees ea
 **Input claim**
 What a router says it is doing with input in a window: the pointer is over it, it has captured the pointer, it has keyboard focus, or it wants text; plus an app-wide gamepad claim. Claims describe the interaction and drive text input; routers decide what is consumed.
 *Avoid:* capture flag, want-capture, focus (alone).
+
+**Dead zone**
+The part of a stick's or trigger's travel, near rest, that FenrirInput reads as zero, rescaling the rest so the value still runs to full: radial for a stick, so the direction is kept. Raw values stay readable.
+*Avoid:* deadband, threshold (a navigation threshold is a direction cut-off, not a dead zone).
 
 **Control owner**
 Whoever took a key's, button's or pointer's press: the router that consumed it, or the game. Its repeats and its release go to the same owner, and a cancelled control's release goes to no one.

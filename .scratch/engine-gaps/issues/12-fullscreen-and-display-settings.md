@@ -1,6 +1,6 @@
 # No fullscreen or display settings
 
-Status: needs-triage
+Status: ready-for-agent
 Blocked by: none
 
 ## What is missing
@@ -22,3 +22,4 @@ No. The game runs in a window until this exists.
 ## Comments
 
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [What do fullscreen and display settings look like?](31-what-fullscreen-and-display-settings-are.md).
+- 2026-11-19, round 1 of charting [Engine gaps for Flightless Frenzy](../map.md): windowed and borderless fullscreen are spec-ready, exclusive modes deferred, in [What do fullscreen and display settings look like?](31-what-fullscreen-and-display-settings-are.md).

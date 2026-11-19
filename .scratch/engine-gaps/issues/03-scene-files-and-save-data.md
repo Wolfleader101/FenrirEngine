@@ -1,6 +1,6 @@
 # No scene or prefab files, and no way to save data
 
-Status: needs-triage
+Status: ready-for-agent
 Blocked by: none
 
 ## What is missing
@@ -22,3 +22,4 @@ No. A format that describes this game's own things is the game's to define, and 
 ## Comments
 
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): a pointer to the `fenrir-serialisation` map (`claude/wayfinder-serializable-resources-246b15`); no decision ticket here.
+- 2026-11-19, round 1 of charting [Engine gaps for Flightless Frenzy](../map.md): **a pointer** to the `fenrir-serialisation` map, with nothing added there. The one open fact, that the glTF importer drops node `extras`, went to the levels and scenes design through the sessions' shared notes.

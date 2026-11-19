@@ -1,6 +1,6 @@
 # No navigation or path-finding
 
-Status: needs-triage
+Status: needs-info
 Blocked by: none
 
 ## What is missing
@@ -22,3 +22,4 @@ No. Enemies can follow patrol points placed in the level and chase in a straight
 ## Comments
 
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [Does the engine offer navigation?](32-does-the-engine-offer-navigation.md).
+- 2026-11-19, round 1 of charting [Engine gaps for Flightless Frenzy](../map.md): **deferred** in [Does the engine offer navigation?](32-does-the-engine-offer-navigation.md): comes back when a game asks for path-finding.

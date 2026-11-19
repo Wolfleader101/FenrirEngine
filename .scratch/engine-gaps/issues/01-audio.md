@@ -1,6 +1,6 @@
 # The engine has no audio
 
-Status: needs-triage
+Status: needs-info
 Blocked by: none
 
 ## What is missing
@@ -18,3 +18,4 @@ No. Audio is out of scope for the game's first spec; the game is planned and bui
 ## Comments
 
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): deferred by the user; no decision ticket.
+- 2026-11-19, round 1 of charting [Engine gaps for Flightless Frenzy](../map.md): **deferred** by the user; comes back when the user takes audio up.

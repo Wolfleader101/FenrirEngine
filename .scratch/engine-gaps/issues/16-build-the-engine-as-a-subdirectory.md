@@ -1,7 +1,7 @@
 # What breaks when the engine is built as a subdirectory?
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: none
 Settles: [A game cannot build its scripts or copy its assets without demo code](02-building-a-game-against-the-engine.md)
 
