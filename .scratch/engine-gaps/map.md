@@ -44,6 +44,7 @@ Within the renderer features, the four tickets are independent of each other as 
 
 <!-- one line per resolved ticket: [title](issues/NN-slug.md): gist -->
 
+- [What breaks when the engine is built as a subdirectory?](issues/16-build-the-engine-as-a-subdirectory.md): two plain variables (`IRIS_BRIDGE_DIR`, `FENRIR_SHADER_INCLUDE_DIR`) never reach the game and stop scripts and shaders; the engine's C++20, warnings and compile commands stay in its own scope; a nested build tree passes MSVC's path limit; the deferred checks work; C# needs the built SDK's props and a contract path per contract.
 - [Does C# get a loaded mesh's positions?](issues/33-does-csharp-get-a-loaded-meshs-positions.md): yes, `Assets.GetMeshPositions` into a span, shaped like `GetMeshLodIndices`, in the C# reach effort; spec-ready.
 - [Does the engine offer input actions or dead zones?](issues/29-does-the-engine-offer-input-actions.md): radial per-stick dead zones in FenrirInput, settable, raw values still readable, spec-ready; the action layer deferred until a game wants rebinding.
 - [Do arrow keys move UI focus?](issues/30-do-arrow-keys-move-ui-focus.md): arrow keys always drive directional navigation after the focused element's refusal; W and S are the game's through a public call that sends a direction; spec-ready.
