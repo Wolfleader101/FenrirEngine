@@ -21,7 +21,7 @@ One spec for Flightless Frenzy as a complete, small game built on FenrirEngine, 
   - **Power-ups** are four timed pickups: speed, slowed timer, extra jump, glide.
   - **One finished level**, about five minutes, open and vertical, built so that a second level is new data and not new code.
   - **The look** is stylised and toon-shaded, as the design document wanted.
-  - **The game lives in `games/FlightlessFrenzy/`** in this repo, apart from `examples/`, built against the engine as an outside program would be.
+  - **The game lives in `games/FlightlessFrenzy/`** in this repo, apart from `examples/`, and is treated as its own repo: it leans on no demo code.
 - Skills: grilling tickets call `grilling` and `domain-modeling`; prototype tickets call `prototype` and are used where feel is the question (movement, the double jump, the camera). Research tickets call `research` and put their findings on a `research/<name>` branch.
 - Plan, don't do: tickets produce decisions, not the game.
 
@@ -32,6 +32,7 @@ One spec for Flightless Frenzy as a complete, small game built on FenrirEngine, 
 - [What does FenrirEngine give a game today?](issues/01-what-fenrirengine-gives-a-game.md): the engine covers running, input, rendering with a game's own material shaders, physics with a character body, animation, UI and C# scripting; it lacks a way to build against it from outside, any level or save format, time scale and pause, particles, outlines, animation state machines, navigation, an input action layer, and scene switching and parenting from C#; ragdolls are specified but unbuilt.
 - [What did the old game ship?](issues/02-what-the-old-game-shipped.md): a third-person game of about 1,080 lines of C++ with one hand-placed level; cages freed by proximity, a frame-counting timer, three lives; no real jump, power-ups that only score, uncollectable coins, no enemies, menus or animation; a three-band toon shader; assets carry no licence or stated origin.
 - [Raise the engine gaps the inventory found](issues/14-raise-the-engine-gaps-the-inventory-found.md): eleven issues in `.scratch/engine-gaps/issues/` beside audio; building against the engine from outside `examples/` and pause block part of the game, C# reach blocks part of a C# game, the rest can be stubbed; scene files are already being planned on the unmerged `fenrir-serialisation` map.
+- [How does the game build against the engine?](issues/03-how-the-game-builds-against-the-engine.md): a CMake project of its own with its own presets, adding the engine by path as it would a submodule, examples off; only package targets and engine CMake functions; its own start-up and solution; unit tests but no smoke run, no CI for now; the script-build and asset-copy helpers move into the engine first.
 
 ## Not yet specified
 
@@ -40,7 +41,8 @@ One spec for Flightless Frenzy as a complete, small game built on FenrirEngine, 
 - **How the story is told:** an opening, an ending, or nothing beyond the title screen.
 - **Weather, day and night, and particles** beyond what "What does the game look like?" decides.
 - **Difficulty:** one setting or several.
-- **How game code is tested**, once the language is chosen.
+- **How game code is unit-tested**, once the language is chosen (no smoke runs: settled).
+- **CI for the game:** none for now.
 - **The game's vocabulary:** whether its terms (friend, cage, coin, power-up, exit) go in `GLOSSARY.md` or a glossary of the game's own.
 - **How the game is packaged** to hand to someone else to play.
 

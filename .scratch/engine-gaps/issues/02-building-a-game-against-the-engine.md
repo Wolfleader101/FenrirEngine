@@ -1,27 +1,28 @@
-# A game outside `examples/` has no supported way to build against the engine
+# A game cannot build its scripts or copy its assets without demo code
 
 Status: needs-triage
 Blocked by: none
 
 ## What is missing
 
-Everything a program needs to stand on the engine without leaning on demo code:
+A game is a CMake project of its own that adds the engine with `add_subdirectory` (a submodule, or a path), with `FENRIR_BUILD_EXAMPLES` off. Install, export and packaging are **not** asked for: that route was chosen in [How does the game build against the engine?](../../flightless-frenzy/issues/03-how-the-game-builds-against-the-engine.md). Three things stand in its way:
 
-- **No install, export or package** for the engine's CMake targets; the only route is a build that contains the engine's source (root `CMakeLists.txt:89-171`). No README covers consuming the engine.
-- **`fenrir_add_shaders`** reads `FENRIR_SHADER_INCLUDE_DIR`, a non-cache variable set in the root `CMakeLists.txt`, so a caller outside that scope may not see it (`cmake/FenrirShaders.cmake:20,65`). Read from the source, not tried.
-- **No engine-level function builds a game's C# script project.** `fenrir_add_demo_scripts` is in the demo scaffold and always passes the `Fenrir.Demo` contract (`examples/DemoScaffold/cmake/FenrirDemoApp.cmake:97-159`). `FenrirScripting.sln` does not hold the Physics, Animation, UI or Razor projects.
-- **The start-up a game needs is demo code.** Installing the packages, installing scripting with every extension, copying asset folders beside the executable and registering smoke runs all live in `examples/DemoScaffold/`, built only with `FENRIR_BUILD_EXAMPLES`. ADR-0071 leaves lifting any of it into a package as "a later decision, taken only once a game asks for it".
+1. **No engine function builds a game's C# script project.** `fenrir_add_demo_scripts` (`examples/DemoScaffold/cmake/FenrirDemoApp.cmake:97-163`) builds `<dir>/<name>.Scripts.csproj`, passes each built contract's directory, and deploys the result with the contracts and scripting's run-time files beside the executable. It is demo code: it always passes the `Fenrir.Demo` contract and the demo Razor files, and it does not exist with examples off. The engine needs the same thing without the demo parts.
+2. **No engine function copies an asset folder beside the executable.** The post-build `copy_directory` into `<exe dir>/assets` is inside `fenrir_add_demo_app` (same file, lines 50-65), mixed with the shared demo assets.
+3. **The engine's CMake has not been run as a subdirectory of another project.** Known from reading, not tried: `fenrir_add_shaders` reads `FENRIR_SHADER_INCLUDE_DIR`, a plain variable set in the engine's own directory scope (`cmake/FenrirShaders.cmake:20`), which a parent project calling the function will not see. `packages/FenrirAnimation/CMakeLists.txt:40` and `packages/FenrirSkeleton/CMakeLists.txt:36` defer a check to `CMAKE_SOURCE_DIR`, which becomes the game's directory. There may be more; the test is a small outside project that adds the engine, compiles a shader, builds a script project and links.
+
+Also: no README says how a game consumes the engine.
 
 ## Who needs it
 
-Flightless Frenzy ([map](../../flightless-frenzy/map.md)), which lives in `games/FlightlessFrenzy/` and is meant to build as an outside program would. "How does the game build against the engine?" decides the game's side.
+Flightless Frenzy ([map](../../flightless-frenzy/map.md)), which is a project of its own under `games/FlightlessFrenzy/` and uses nothing from `examples/`.
 
 ## Does anything plan it?
 
-No map, spec or ticket. ADR-0071 names the trigger: a game asking.
+No. ADR-0071 leaves lifting scaffold pieces into the engine as "a later decision, taken only once a game asks for it"; this is the game asking, for the build helpers only. The game writes its own start-up code and wants none of the demo UI kit.
 
 ## Does it block the game?
 
-Partly. Inside this repo the game can be added to the root build and write its own start-up, so a first build is possible. It blocks the stated aim of using only public engine pieces, and it blocks moving the game to its own repo.
+Yes, its first ticket: the game cannot configure against the engine until item 3 holds, and cannot build scripts (if it has C#) or find its assets without items 1 and 2. It was agreed these are engine work done ahead of the game's first ticket, not copies written inside the game.
 
 ## Comments

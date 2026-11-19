@@ -16,7 +16,7 @@ Eleven issues raised under `.scratch/engine-gaps/issues/`, beside the audio one,
 
 **Blocks part of the game**
 
-- [A game outside `examples/` has no supported way to build against the engine](../../engine-gaps/issues/02-building-a-game-against-the-engine.md): the game can join the root build and write its own start-up, but cannot use only public engine pieces or move to its own repo.
+- [A game cannot build its scripts or copy its assets without demo code](../../engine-gaps/issues/02-building-a-game-against-the-engine.md): narrowed and renamed after "How does the game build against the engine?"; it blocks the game's first ticket.
 - [No pause and no time scale](../../engine-gaps/issues/05-pause-and-time-scale.md): blocks a pause menu that stops physics and animation.
 
 **Blocks only a C# game, in part**
