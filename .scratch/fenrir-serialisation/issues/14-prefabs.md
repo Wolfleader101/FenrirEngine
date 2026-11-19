@@ -1,7 +1,7 @@
 # How do prefabs work: instancing a scene file into another, overrides, nesting and inheritance?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 13
 
 ## Question
