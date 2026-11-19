@@ -21,6 +21,8 @@ Parked 2026-11-19 (the user): the engine's levels and scenes are being designed 
 
 A first round was asked and not answered. It proposed one folder per level holding a Blender-exported `level.glb` and a `level.json`, things placed as named empty nodes in the model, every mesh solid unless under a `Decor` node, a fall height in the JSON, and a development key that reloads the model. Treat these as options to weigh against the engine's design, not as decisions.
 
+Decided since, in "Where do the assets come from?": the level is the 2022 level's geometry (`levelGeo.obj`, `cliffTrees.obj`, `wallGrass.obj` and its textures), converted to GLB and possibly broken into pieces. This ticket decides how it is broken up. The old level was placed at scale 0.05 and spans about 660 x 680 units in plan.
+
 Facts found for that round (checked in the code, 2026-11-19):
 
 - `SpawnModel` makes one entity per glTF node with its name, transform, meshes, materials and lights; C# can call it and read each entity's `Name`.

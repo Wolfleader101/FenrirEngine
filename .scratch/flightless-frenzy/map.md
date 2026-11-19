@@ -9,6 +9,7 @@ One spec for Flightless Frenzy as a complete, small game built on FenrirEngine, 
 ## Notes
 
 - **The game design document is the source of truth for what the game is meant to be** (the user, 2026-11-19). The 2022 code was rushed and did not complete it: use "What did the old game ship?" for history and for mistakes to avoid, never as the reference for a rule or a number. Where the decisions settled while charting trim the design document, they stand.
+- **The old repo is the source of the art** (the user, 2026-11-19): every game asset in it was made by Darcy Wilson and comes across, credited, with the original Kiki model mandatory and the old level as the game's level. See "Where do the assets come from?".
 - **Sources:** the 2022 game design document, the user guide and the Project Vakol engine document (PDFs outside the repo), and the old code at <https://github.com/Wolfleader101/Project_Vakol>. "What did the old game ship?" holds what they say.
 - **The core as described in 2022:** a timed 3D platformer. Free every caged friend by walking into the cage, collect coins for score, reach the exit before the timer runs out. Three power-ups: speed boost, slowed timer, double jump. The code delivered less than this, and in third person: see "What did the old game ship?".
 - **Engine gaps are raised, not worked around.** Anything the game needs that FenrirEngine lacks becomes its own issue under `.scratch/engine-gaps/issues/`, `Status: needs-triage`, linked from the map ticket that found it, saying whether it blocks the game or can be stubbed. It is not built inside the game.
@@ -37,10 +38,11 @@ One spec for Flightless Frenzy as a complete, small game built on FenrirEngine, 
 - [C++, C#, or a split?](issues/04-cpp-csharp-or-a-split.md): gameplay and UI in C# with Razor panels; a C++ host that only starts the app, installs packages and registers shaders; the engine binds parenting and scenes for C# before the game needs them; run state on one entity until C# can define resources; rules as plain C# types under `dotnet test`.
 - [What is the game loop?](issues/06-the-game-loop.md): title, playing, paused, won, lost; the timer starts on first input and running out is the only loss; enemy hits and falls cost seconds, nothing adds time; cages open on touch and are the checkpoints; the exit opens after the last friend; score from friends, coins, stomps and time left, no rank; best score and time kept in a file the game writes itself.
 - [What are the HUD and the menus?](issues/13-hud-and-menus.md): HUD of timer, friends, score and active power-up; a marker to the exit once it opens, none for cages; title, pause, won, lost and options screens as Razor panels; options are camera sensitivity and invert-Y; menus by mouse, Tab and gamepad, Escape to pause and go back; the level frozen and blurred behind a menu.
+- [Where do the assets come from?](issues/11-where-assets-come-from.md): all of the 2022 art, made by Darcy Wilson, comes across under CC0 with credit, the old level included; the original Kiki is mandatory, rigid and moved in code at first, with a ticket to try rigging it; friends are Kiki recoloured; anything else is CC0, CC-BY or OFL; GLB only, converted once, no OBJ kept; plain files in the repo under a 50 MB budget.
 
 ## Not yet specified
 
-- **The level itself:** its layout, landmarks, where the cages, coins, power-ups, enemies and exit sit, and its time limit. Waits on the movement numbers, the enemies, the power-ups and how levels are authored.
+- **The level itself:** it starts from the 2022 level's geometry; still open are how that is broken up, its landmarks, where the cages, coins, power-ups, enemies and exit sit, and its time limit. Waits on the movement numbers, the enemies, the power-ups and how levels are authored.
 - **What freed friends do:** run off, gather at the exit, follow Kiki;.
 - **A live title screen:** the level flown over behind the title menu, in place of a plain backdrop.
 - **How the story is told:** an opening, an ending, or nothing beyond the title screen.
