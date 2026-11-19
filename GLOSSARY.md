@@ -488,6 +488,10 @@ What a window offers a graphics backend to draw into and present: the OpenGL con
 A full-screen pass a game adds to the frame at one of the renderer's named points before the tonemap, reading the frame's colour, depth, normals and layer masks it asks for; the renderer runs it, the game writes it.
 *Avoid:* render feature (Unity's, and the renderer's internal word), custom pass, post-process (the renderer's own effects after transparents).
 
+**Render layer**
+One bit of a renderer's `layers` bitmask: a number a game gives a meaning to (outlined, receives decals), so a game pass or a decal can choose the entities it affects. Layer 0 is every renderer's default.
+*Avoid:* layer (alone, beside a UI root's layering), tag, culling layer (a camera's, not yet built).
+
 **Layer mask**
 The entities on a render layer drawn by the renderer into a target of a game pass's own, for the pass to read: how a pass chooses which objects it affects.
 *Avoid:* stencil (there is none), selection mask, custom depth (Unreal's).
