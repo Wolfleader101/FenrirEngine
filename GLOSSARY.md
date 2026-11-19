@@ -698,6 +698,10 @@ An asset of a type the game defines: a plain struct of described fields (numbers
 The app or a scene, named when an asset is loaded or added. An asset is freed when its last owner ends, or when it is unloaded explicitly.
 *Avoid:* reference count, scope.
 
+**Asset path**
+An asset's one identity in files and in the store: its path relative to the asset root, with `#label` for a sub-asset or `builtin:` for an embedded one. A reference in a scene file or data asset is an asset path; moving a file means rewriting the paths that name it (ADR-0062).
+*Avoid:* asset id, GUID, uid, resource path, key (the store's word for the same string).
+
 **Asset root**
 The directory relative asset paths resolve against, set in `AssetsConfig`; by default `assets/` beside the executable.
 *Avoid:* content directory, mount, virtual file system.
