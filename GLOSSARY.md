@@ -496,6 +496,14 @@ What a burst or an emitter plays: a stack of the engine's particle modules (spaw
 The component that plays a particle effect from its entity, continuously or once, following the entity as it moves.
 *Avoid:* spawner, emitter (alone, beside a light).
 
+**Fog volume**
+An entity's box or sphere of extra fog density, with its own albedo and falloff, that volumetric fog adds to the scene's own fog.
+*Avoid:* density volume (HDRP's), local fog (alone).
+
+**Decal**
+A material projected into a box onto the surfaces inside it, on the render layers it names, during their shading.
+*Avoid:* projector (Unity's old word), sticker.
+
 **Main window**
 The window FenrirWindow creates first and the foundation renderer draws to; closing it stops the app by default.
 *Avoid:* primary window, root window.

@@ -1,6 +1,6 @@
 # No particles or billboards
 
-Status: needs-triage
+Status: ready-for-agent
 Blocked by: none
 
 ## What is missing
@@ -25,3 +25,4 @@ Yes: it must be resolved before the game is complete (the user, 2026-11-19). The
 
 - 2026-11-19, round 3 of [Engine gaps for Flightless Frenzy](../map.md): the user widened the first version to everything, on the GPU too; [What is the engine's particle system?](25-what-the-particle-system-is.md) stays open for round 4.
 - 2026-11-19, round 4 of [Engine gaps for Flightless Frenzy](../map.md): particles are spec-ready in [What is the engine's particle system?](25-what-the-particle-system-is.md); decals are their own block in [What is a decal?](36-what-is-a-decal.md). The status changes when that resolves.
+- 2026-11-19, round 5 of [Engine gaps for Flightless Frenzy](../map.md): decals are spec-ready in [What is a decal?](36-what-is-a-decal.md); with the particles, the gap is settled.

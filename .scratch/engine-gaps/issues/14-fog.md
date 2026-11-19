@@ -1,6 +1,6 @@
 # No fog
 
-Status: needs-triage
+Status: ready-for-agent
 Blocked by: none
 
 ## What is missing
@@ -24,3 +24,4 @@ Yes: it must be resolved before the game is complete (the user, 2026-11-19). The
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [What fog does the renderer offer?](26-what-fog-the-renderer-offers.md).
 
 - 2026-11-19, round 3 of [Engine gaps for Flightless Frenzy](../map.md): plain distance and height fog are spec-ready in [What fog does the renderer offer?](26-what-fog-the-renderer-offers.md); volumetric fog, which the user wants explored, is [What volumetric fog does the renderer offer?](35-what-volumetric-fog-the-renderer-offers.md). The status changes when that resolves.
+- 2026-11-19, round 5 of [Engine gaps for Flightless Frenzy](../map.md): volumetric fog is spec-ready, with an ADR, in [What volumetric fog does the renderer offer?](35-what-volumetric-fog-the-renderer-offers.md); with the plain fog, the gap is settled.

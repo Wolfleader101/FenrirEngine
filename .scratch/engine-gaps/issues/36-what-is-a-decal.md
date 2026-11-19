@@ -1,7 +1,7 @@
 # What is a decal?
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: none
 Settles: [No particles or billboards](06-particles-and-billboards.md) (decals)
 
@@ -17,3 +17,14 @@ Settles: [No particles or billboards](06-particles-and-billboards.md) (decals)
 - **Where its spec sits:** its own spec (`.scratch/fenrir-renderer-decals/`), as round 4 decided.
 
 Outcome: a spec-ready design.
+
+## Answer
+
+Grilled 2026-11-19 in round 5 of [Engine gaps for Flightless Frenzy](../map.md); every recommendation was accepted. **Spec-ready**; its own spec, `.scratch/fenrir-renderer-decals/`.
+
+- **What a decal is:** a `Decal` component projecting a decal material into its box, clustered like lights in the forward frame and read during shading through `Fenrir/Lighting.glsl`, so every material that shades through the engine's surface function gets decals; a game's own material shader (the toon shader) gets them if it goes through it.
+- **What it writes:** albedo, normal, roughness and metal, and emission, each optional.
+- **Its material:** a decal material type whose textures are packed in a decal atlas, so many decals shade in one pass; blended by alpha.
+- **Which surfaces take it:** a `layers` mask choosing which render layers receive it (footprints skip characters), plus angle fade and distance fade.
+- **Lifetime and count:** a cap on decals per view and an optional fade-out lifetime; a decal a particle spawns is an ordinary `Decal` entity under the same cap.
+- **The C# surface:** the component's fields.
