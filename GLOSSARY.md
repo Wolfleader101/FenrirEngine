@@ -259,6 +259,14 @@ The one name a type has in files and in the type registry, in every language: th
 A described field whose value may be of any registered type assignable to a named base, chosen per file rather than fixed by the C++ (a tagged union's kinds are fixed). The file writes the value's canonical type name beside it (ADR-0060).
 *Avoid:* polymorphic field, variant, any.
 
+**Type version**
+The number a described type carries, written beside its name in every file holding a value of it and raised when the type's fields change meaning. A file at an older version is upgraded on load (ADR-0063).
+*Avoid:* schema version, format version (the envelope's), revision (the store's count of edits).
+
+**Upgrader**
+A function a type registers with the type registry that rewrites a value's tree from one type version to the next, before the tree is read into the struct. Upgraders run in order; there is no downgrade (ADR-0063).
+*Avoid:* migration, converter, version hook.
+
 ## FenrirEngine physics
 
 **FenrirPhysics**
@@ -713,6 +721,14 @@ The asset a model file loads as: its whole node tree, bones included, pointing a
 **Sub-asset**
 An asset inside another asset's file, loadable on its own by label: a model's `hero.fbx#Run`, or a data asset embedded in a data asset file.
 *Avoid:* sub-resource, embedded asset.
+
+**Envelope**
+The one shape every text file the engine writes has: the file format's version, the value's canonical type name and type version, the value's fields, and its embedded sub-assets by name. A scene file and a settings file are envelopes like any data asset's (ADR-0063).
+*Avoid:* header, wrapper, document.
+
+**Format version**
+The envelope's own version, raised only when the envelope's shape changes; a type's changes raise its type version instead (ADR-0063).
+*Avoid:* file version, schema version.
 
 ## FenrirEngine animation
 
