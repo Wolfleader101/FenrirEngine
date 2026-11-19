@@ -247,6 +247,18 @@ The readable random string a scene file gives an entity, held in its `EntityId` 
 Not written to a scene file: a component whose description says so, or an entity tagged `Transient` with its children (a free-fly camera, a debug entity). Everything else described is written (ADR-0064).
 *Avoid:* runtime-only, editor-only, hidden, don't-save.
 
+**Scene instance**
+The entities made in a scene from another scene file or a model file, under one root that carries the `Instance` component naming the source. The host's file writes the instance as that reference plus its overrides, so a change to the source reaches every instance that did not override it. *Prefab* is the informal word for a scene file meant to be instanced; there is no prefab asset kind (ADR-0066).
+*Avoid:* prefab instance, nested scene, sub-scene, level instance, blueprint.
+
+**Override**
+A per-placement difference an instance keeps from its source: a field's value, a component or entity added, a component or entity removed. Written in the host's file against the source entity's id; never in the source (ADR-0066).
+*Avoid:* modification, delta, patch, property override (Unreal's).
+
+**Variant**
+A scene file whose single root is an instance of another scene file, so it is that scene with overrides and additions: Fenrir's scene inheritance (ADR-0066).
+*Avoid:* inherited scene, derived scene, prefab variant, child blueprint.
+
 **App resource**
 State a package keeps for the whole app rather than one scene, one value per type, ended with the App (the input devices and the asset store are ones).
 *Avoid:* singleton, global, app-wide state (informal).
