@@ -14,7 +14,7 @@
 
 **Status:** ready-for-agent
 
-- [ ] `material.slang` builds to a container whose `parameters` and `defaultBlock` equal `material.frag`'s byte for byte.
+- [ ] `material.frag.slang` builds to a container whose `parameters` and `defaultBlock` equal `material.frag`'s byte for byte.
 - [ ] Each attribute error fixture fails with the pragma fixture's message, at the attribute's line.
 - [ ] A default under `#ifdef ALPHA_MASK` is in the `ALPHA_MASK` variant's parameters and absent from the other.
 - [ ] `FenrirAssetsTests`' `ShaderParameters` cases pass on the Slang twin's container, and C# `Shaders.GetParameter` reads the same defaults (the scripting fixture, run on both containers).

@@ -125,7 +125,7 @@ Where these sources are pinned:
 
 ### What followed
 
-ADR-0073 (proposed 2026-11-19) supersedes ADR-0018 with the decisions §4 asked for, and `.scratch/fenrir-renderer-slang/` holds the spec and its twelve tickets.
+ADR-0073 (accepted 2026-11-19, after a grilling that settled its decisions and added one file per stage, `import` only, explicit bindings only, no GLSL grace period and no renames) supersedes ADR-0018 with the decisions §4 asked for, and `.scratch/fenrir-renderer-slang/` holds the spec and its twelve tickets.
 
 ### What the re-runs changed
 

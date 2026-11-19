@@ -8,7 +8,7 @@
 - **Where the modules live:** `packages/FenrirRenderer/Shaders/include/Fenrir/*.slang`, found through `FENRIR_SHADER_INCLUDE_DIR` as the search path, so `import Fenrir.View;` resolves for users as the include did. Each module's header comment names its `.glsl` twin and the ADRs it serves.
 - **Docs:** ADR-0051 and ADR-0057 get amendment lines naming `Fenrir.Draw` and `Fenrir.DrawRecord`; `GLOSSARY.md` gains *shader module* ("one `Fenrir.<Name>` file under the engine's shader include directory, imported by `import`; the Slang form of a shader include") and marks *shader include* as its GLSL predecessor.
 
-**Blocked by:** 03 (Reflection and the rules from Slang's program layout), 05 (The GL copy completed).
+**Blocked by:** 03 (Reflection and the rules from Slang's program layout).
 
 **Touches:** `packages/FenrirRenderer/Shaders/include/Fenrir/*.slang` (new), `packages/FenrirRenderer/Tools/ShaderCompiler/Tests/`, `packages/FenrirRenderer/Tests/`, `docs/adr/0051-*.md`, `docs/adr/0057-*.md`, `GLOSSARY.md`
 
