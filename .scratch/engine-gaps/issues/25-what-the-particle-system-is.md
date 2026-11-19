@@ -17,3 +17,7 @@ Flightless Frenzy wants bursts when a coin is collected, a cage opens, a power-u
 - **Where it is planned:** this map, or the renderer map's "Particles" line graduated into a spec there.
 
 Outcome: a spec-ready design.
+
+## Comments
+
+- 2026-11-19, round 3 of [Engine gaps for Flightless Frenzy](../map.md): accepted, an effect is a plain parameter struct defined from C++ or C# (burst count or rate, lifetime, speed and direction cone, gravity, size and colour over life, texture, blend mode), a data asset once `fenrir-serialisation` lands; played by a `ParticleEmitter` component (continuous or one-shot, following its entity) and `Particles.Burst(effect, position)`, from C++ and C#; the spec is `.scratch/fenrir-renderer-particles/`, decided here. **Changed by the user:** the first version has everything (trails, decals, mesh particles, collision, lit particles, soft particles) and can simulate on the GPU, not only the CPU. So where it simulates, which package owns it, and how each of those features is done reopen; they are round 4.

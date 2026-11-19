@@ -1,7 +1,7 @@
 # How does one entity get its own material parameters?
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: none
 Settles: [One entity cannot have its own colour without its own material](15-per-entity-material-colour.md)
 
@@ -22,3 +22,14 @@ Outcome: a spec-ready design.
 
 - `MeshRenderer` holds `mesh`, `material`, `visible`, `castShadows` (`packages/FenrirRenderer/include/FenrirRenderer/Components.hpp:24-36`).
 - An instance list carries per-copy `colours` (`packages/FenrirAssets/include/FenrirAssets/InstanceList*.hpp:23`); shaders read `CurrentDraw().colour` (`packages/FenrirRenderer/Shaders/include/Fenrir/Draw.glsl:134`), and `builtin:lit` and `builtin:unlit` multiply their base colour by it. A per-draw colour slot exists already.
+
+## Answer
+
+Grilled 2026-11-19 in round 3 of [Engine gaps for Flightless Frenzy](../map.md); every recommendation was accepted. **Spec-ready.**
+
+- **A tint:** `MeshRenderer` gains `colour`, multiplied into the per-draw colour shaders already read (`CurrentDraw().colour`, `packages/FenrirRenderer/Shaders/include/Fenrir/Draw.glsl:134`), as an instance list's per-copy colour is.
+- **Custom values:** `MeshRenderer` gains four `custom` vec4 values a material shader reads through `CurrentDraw()` the same way, for a game's own parameters (Kiki's power-up rim colour).
+- **Batching holds:** both ride in the per-copy data automatic instancing already writes, so entities with different values still instance and cull together.
+- **Per material slot for free:** a mesh with several materials is already several entities (ADR-0023), so a friend's body takes its colour and its eyes do not.
+- **The C# surface:** the fields on the `MeshRenderer` component.
+- **Deferred:** named overrides of any material parameter (Unity's property blocks, Godot's instance uniforms); they come back when a game needs more than four values or a texture per entity.

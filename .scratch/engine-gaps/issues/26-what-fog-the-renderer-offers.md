@@ -1,7 +1,7 @@
 # What fog does the renderer offer?
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: none
 Settles: [No fog](14-fog.md)
 
@@ -16,3 +16,14 @@ Flightless Frenzy's open level, about 660 units wide, needs its far edges to sof
 - **Where it is planned:** this map, or the renderer map's fog line graduated there.
 
 Outcome: a spec-ready design.
+
+## Answer
+
+Grilled 2026-11-19 in round 3 of [Engine gaps for Flightless Frenzy](../map.md). The plain fog was accepted as recommended. **Volumetric fog was not left for later** (the user: it is worth exploring and most engines have it), so it moved into this effort as [How do engines do volumetric fog?](34-how-engines-do-volumetric-fog.md) and [What volumetric fog does the renderer offer?](35-what-volumetric-fog-the-renderer-offers.md). **The plain fog is spec-ready.**
+
+- **What it is:** exponential distance fog plus exponential height fog, in a `Fog` scene resource beside `Sky` and `SkyLight`.
+- **Its colour** is taken from the sky, with a settable override.
+- **Opaque surfaces** are fogged by a full-screen pass after opaque that reads scene depth, so every material, the game's own toon shader included, is fogged with no work.
+- **Transparents** are fogged in their own shading through a helper in `Fenrir/Lighting.glsl`, which the built-in transparent materials call and a game's transparent shader may call.
+- **The sky** is not fogged.
+- **Volumetric fog** sits beside this as its own tickets; it decides how the two combine.

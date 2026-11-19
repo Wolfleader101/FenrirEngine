@@ -1,6 +1,6 @@
 # A game cannot draw outlines or add a render pass
 
-Status: needs-triage
+Status: ready-for-agent
 Blocked by: none
 
 ## What is missing
@@ -24,3 +24,5 @@ Checked 2026-11-19: an inverted-hull outline drawn as a second material is not p
 ## Comments
 
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [How do engines let a game add a render pass and draw outlines?](22-how-engines-add-render-passes-and-outlines.md), [How does a game draw outlines and add its own render pass?](23-how-a-game-draws-outlines-and-adds-a-pass.md).
+
+- 2026-11-19, round 3 of [Engine gaps for Flightless Frenzy](../map.md): spec-ready, with an ADR, in [How does a game draw outlines and add its own render pass?](23-how-a-game-draws-outlines-and-adds-a-pass.md).

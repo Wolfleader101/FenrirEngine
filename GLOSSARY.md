@@ -480,6 +480,14 @@ One camera's drawing of the scene in a frame: its chain of render passes, from i
 What a window offers a graphics backend to draw into and present: the OpenGL context today, later a Vulkan surface, an `HWND` or a Metal layer. FenrirWindow creates it on the renderer's request; the backend owns what is built on it, such as a swapchain (ADR-0022).
 *Avoid:* swapchain (the backend's, built on a surface), context (alone), canvas.
 
+**Game pass**
+A full-screen pass a game adds to the frame at one of the renderer's named points before the tonemap, reading the frame's colour, depth, normals and layer masks it asks for; the renderer runs it, the game writes it.
+*Avoid:* render feature (Unity's, and the renderer's internal word), custom pass, post-process (the renderer's own effects after transparents).
+
+**Layer mask**
+The entities on a render layer drawn by the renderer into a target of a game pass's own, for the pass to read: how a pass chooses which objects it affects.
+*Avoid:* stencil (there is none), selection mask, custom depth (Unreal's).
+
 **Main window**
 The window FenrirWindow creates first and the foundation renderer draws to; closing it stops the app by default.
 *Avoid:* primary window, root window.

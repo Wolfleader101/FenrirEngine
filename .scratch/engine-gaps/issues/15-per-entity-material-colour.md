@@ -1,6 +1,6 @@
 # One entity cannot have its own colour without its own material
 
-Status: needs-triage
+Status: ready-for-agent
 Blocked by: none
 
 ## What is missing
@@ -22,3 +22,5 @@ Yes: it must be resolved before the game is complete (the user, 2026-11-19). It 
 ## Comments
 
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [How does one entity get its own material parameters?](27-how-one-entity-gets-its-own-material-parameters.md).
+
+- 2026-11-19, round 3 of [Engine gaps for Flightless Frenzy](../map.md): spec-ready in [How does one entity get its own material parameters?](27-how-one-entity-gets-its-own-material-parameters.md).
