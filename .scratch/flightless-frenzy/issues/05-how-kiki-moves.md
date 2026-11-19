@@ -17,3 +17,7 @@ Settle by playing it:
 - **The numbers a level is built from:** the highest ledge and the longest gap Kiki clears with and without each power-up.
 
 The answer records the chosen camera and the numbers; the prototype stays on a `prototype/` branch as a pointer. Anything the character body cannot do becomes an engine gap.
+
+## Comments
+
+- **The prototype** is on branch [`prototype/flightless-frenzy-movement`](https://github.com/Wolfleader101/FenrirEngine/tree/prototype/flightless-frenzy-movement): one commit on main, the throwaway demo app `examples/KikiMovePrototype` on a `CharacterBody`. Its README has the build and run commands, the controls, the default numbers and the course's measured ledges (0.5 to 6.0 m), gaps (2 to 12 m), ramps, wall, ceilings and a 10.5 m tower. The numbers are starting points, not decisions: the answer comes from playing it. Building it found no gap in `CharacterBody`.
