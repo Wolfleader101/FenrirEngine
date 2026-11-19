@@ -1,7 +1,7 @@
 # What is a data asset: its type model, its name, and how C++ and C# define one?
 
 Type: grilling
-Status: claimed
+Status: resolved
 Blocked by: 01, 09
 
 ## Question
@@ -15,3 +15,17 @@ What is the game-defined typed data in a file, and what is it called? **ADR**, a
 - **Defaults and the type's own defaults.** A field left out of the file takes the type's default (as `T{}` does for components); whether a data asset can itself be a default for others (Unreal's archetype).
 
 Consult `codebase-design`. Zoom into [How do engines type, inherit and reference data assets?](01-how-engines-type-data-assets.md).
+
+## Answer
+
+ADR: `docs/adr/0061-a-data-asset-is-a-game-defined-plain-struct-in-the-asset-store-with-single-inheritance-and-polymorphism-through-references.md` (narrowing ADR-0060's open slot to its reference form). Glossary: Data asset; Asset and Sub-asset widened. One grilling round, every recommendation accepted.
+
+- **Type model:** single inheritance, no virtual functions. A data asset type (plain C++ struct, C# class) may extend one other data asset type; the registry records the base chain and "assignable to a base" is is-a over it, so `AssetHandle<WeaponData>` accepts a `Sword` file. Polymorphism only through references: a mixed list is a list of handles to data assets, embedded or external; no by-value open slot, no `unique_ptr`, no virtual destructors. A C# type may extend a C++ data asset type (through its generated C# class) or another C# type; C++ never extends C#.
+- **Name:** *data asset*. Avoid resource, scriptable object, data table, blueprint, config, definition, archetype.
+- **Store and handle:** one new `AssetKind::Data` in FenrirAssets' store, keyed by path, deduplicated, owned by app or scene, freed with the last owner (ADR-0021), type checked through the registry; game code and C# hold the existing `AssetHandle<T>` with `T` any data asset type. No separate store.
+- **Shape:** one top-level data asset per file, with named embedded sub-assets referenced as `file#name`; tables are list fields of nested structs; several unrelated top-level assets per file are not offered.
+- **Contents:** the described kinds, handles to assets of any kind, any described plain struct by value (a component type included); never an `Entity`.
+- **Ownership and sharing:** `Get` gives a const reference to the one shared instance; `Edit` and `Replace` bump the revision as material edits do, so hot reload, inspector edits and code edits share one path; `Add` from code; written to disk only when asked.
+- **Defaults:** a field left out takes the type's default, and the writer omits fields equal to it; a data asset as another file's default ("based on", Unreal's data-only Blueprint, Stride's archetype) is not offered and goes to the fog.
+- **No engine base, no behaviour:** the selection role (C++) or an attribute (C#) makes a type a data asset; the store holds path, revision and owner; C++ types are plain data, C# methods are not described, logic lives in systems.
+- **Left to other tickets:** how a reference is spelled and what a wrong-typed one reports (11), the file format and omitted-default rules (12), which package reads and writes (15), how C# strings and lists cross (16).

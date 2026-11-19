@@ -683,8 +683,12 @@ The engine's asset package: loads files into plain CPU-side data and owns it beh
 *Avoid:* resource manager, asset server, asset database (cooking and an editor database are out of scope).
 
 **Asset**
-One piece of plain data FenrirAssets holds: a mesh, image, material, skeleton, clip, shader container or model, loaded from a file or added from code.
+One piece of plain data FenrirAssets holds: a mesh, image, material, skeleton, clip, shader container, model or data asset, loaded from a file or added from code.
 *Avoid:* resource (Iris and physics use it otherwise), file.
+
+**Data asset**
+An asset of a type the game defines: a plain struct of described fields (numbers, text, lists, nested structs, handles to other assets) in a file of its own, shared by everything that names it by handle. A data asset type may extend one other, and a field typed by a base accepts a file of any type extending it (ADR-0061).
+*Avoid:* resource, scriptable object, data table, blueprint, config, definition, archetype.
 
 **Asset handle**
 `AssetHandle<T>`: a typed index plus generation naming an asset. Plain data that keeps nothing alive; once its asset is freed, the generation no longer matches and users skip it. Each binding has its own (C#'s `AssetHandle<T>` is laid out the same), so it is a *bound type*, and a native function takes or gives one by pointer like any struct of two fields (ADR-0044, as amended by the asset-handles spec); a native that serves every kind at once takes the kind and a kind-neutral handle instead.
@@ -703,7 +707,7 @@ The asset a model file loads as: its whole node tree, bones included, pointing a
 *Avoid:* scene (FenrirScene's), prefab.
 
 **Sub-asset**
-An asset inside a model file, loadable on its own by label: `hero.fbx#Run`.
+An asset inside another asset's file, loadable on its own by label: a model's `hero.fbx#Run`, or a data asset embedded in a data asset file.
 *Avoid:* sub-resource, embedded asset.
 
 ## FenrirEngine animation
