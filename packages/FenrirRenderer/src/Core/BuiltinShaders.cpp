@@ -11,6 +11,7 @@
 #include "FenrirShaders/BuiltinBloomDownsample.hpp"
 #include "FenrirShaders/BuiltinBloomUpsample.hpp"
 #include "FenrirShaders/BuiltinBrdfLut.hpp"
+#include "FenrirShaders/BuiltinCull.hpp"
 #include "FenrirShaders/BuiltinDebugLines.hpp"
 #include "FenrirShaders/BuiltinDebugText.hpp"
 #include "FenrirShaders/BuiltinDebugTriangles.hpp"
@@ -41,9 +42,9 @@ namespace Fenrir::Render
             return std::as_bytes(std::span<const std::uint8_t, N>(embedded));
         }
 
-        const std::array<BuiltinShader, 24>& Table()
+        const std::array<BuiltinShader, 25>& Table()
         {
-            static const std::array<BuiltinShader, 24> table{{
+            static const std::array<BuiltinShader, 25> table{{
                 {BuiltinProgram::Unlit, "builtin:unlit", BytesOf(Shaders::BuiltinUnlit)},
                 {BuiltinProgram::Lit, "builtin:lit", BytesOf(Shaders::BuiltinLit)},
                 {BuiltinProgram::Fallback, "builtin:fallback", BytesOf(Shaders::BuiltinFallback)},
@@ -65,6 +66,7 @@ namespace Fenrir::Render
                 {BuiltinProgram::Skinning, "builtin:skinning", BytesOf(Shaders::BuiltinSkinning)},
                 {BuiltinProgram::Shadow, "builtin:shadow", BytesOf(Shaders::BuiltinShadow)},
                 {BuiltinProgram::LightClusters, "builtin:light-clusters", BytesOf(Shaders::BuiltinLightClusters)},
+                {BuiltinProgram::Cull, "builtin:cull", BytesOf(Shaders::BuiltinCull)},
                 {BuiltinProgram::HiZ, "builtin:hi-z", BytesOf(Shaders::BuiltinHiZ)},
                 {BuiltinProgram::SceneHistory, "builtin:scene-history", BytesOf(Shaders::BuiltinSceneHistory)},
                 {BuiltinProgram::ReflectionTrace, "builtin:reflection-trace", BytesOf(Shaders::BuiltinReflectionTrace)},

@@ -75,7 +75,10 @@ namespace Fenrir::Render
     [[nodiscard]] ScreenRay ReflectedRay(const Math::Mat4& projection, Math::Vec3 position, Math::Vec3 normal,
                                          Graphics::PixelSize size, float maxDistance) noexcept;
 
-    /** @brief A Hi-Z pyramid on the CPU: each level's reversed-Z depths, top row first, level 0 the view's. */
+    /**
+     * @brief A Hi-Z pyramid on the CPU as the march reads it: each level's nearest reversed-Z depths, top row first,
+     * level 0 the view's.
+     */
     struct HiZPyramid
     {
         /** @brief Level 0's size, the view's. */

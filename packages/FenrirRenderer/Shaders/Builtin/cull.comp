@@ -1,0 +1,348 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+// builtin:cull (ADR-0057): one view's cull pass. Each run the view draws (a merged run of matching items, an instance
+// list, or a lone item as a run of one) has a command per level of detail in the view's command buffer, copied from
+// its templates before this runs with no instances, and a region of the view's indirection per command starting at the
+// command's base instance. Each
+// work group culls up to 64 candidates of one run, the group table saying which run and which candidates, so no group
+// straddles two runs and one dispatch culls the view. A candidate that is kept is counted into its command's instance
+// count with an atomic, and its entry, uvec2(record, copy), written at the slot the count gave it: the order within a
+// run varies frame to frame, which an opaque pass behind a depth prepass does not show, and tests compare sets.
+//
+// A candidate is kept when its box may be inside the view's planes, tested as FenrirMath's Math::Frustum tests it
+// (culling ticket 04): first the sphere around the box, dropped when it is wholly outside one plane, then the box's
+// eight corners, dropped only when every corner is outside one plane. A job with no planes keeps every candidate
+// (RendererConfig::gpuCulling off).
+//
+// A kept candidate is counted into one of its run's commands, one per level of detail of its mesh, contiguous from the
+// group's command (culling ticket 07): the coarsest level whose error, scaled by the candidate's largest axis scale and
+// projected at its distance from the camera (to the nearest point of its sphere), is under the job's error pixels, as
+// Core/LevelOfDetail.hpp's SelectLod chooses it on the CPU; a candidate whose radius projects under the job's least
+// pixels is dropped first. The job's error pixels are 0 with GPU culling off, so every candidate draws level 0.
+//
+// Occlusion culling (culling ticket 11) runs the pass twice a view, in two phases over the same groups, with a word of
+// visibility per candidate kept between frames. Phase one keeps only the candidates visible last frame (every one when
+// the job says the words are stale), counted into the first set of commands, which the depth prepass draws; the view's
+// Hi-Z pyramid is then built from that depth. Phase two tests every candidate inside the planes against the pyramid
+// (Core/Occlusion.hpp's ScreenRectOf, PyramidLevelOf and IsHidden on the CPU): its box's screen rectangle, at the level
+// whose texels cover it in at most 2 x 2, against the farthest depth there; a box straddling the near plane is kept.
+// It writes the result as the candidate's visibility for next frame, and counts the visible candidates phase one did
+// not draw into the second set of commands, the job's command offset on, which the prepass draws after phase one's and
+// Opaque with them. A job of phase 0 is the one phase of a view without occlusion culling.
+//
+// A shadow view (culling ticket 10) runs one phase against the light's volume: a cascade's box open towards the light,
+// a spot light's cone, or a point light's range sphere (the job's sphere, tested after the planes as
+// Core/ShadowViews.hpp's WithinRange tests it on the CPU: the candidate's sphere against it, then the world box about
+// its moved corners), choosing levels by the camera the shadows are for, never by the light. A point light's six faces
+// drawn as instances count six instances a kept candidate (the level table's instances), one entry for all six.
+#include "Fenrir/DrawRecord.glsl"
+
+layout(local_size_x = 64) in;
+
+// How much nearer than a candidate's nearest corner the pyramid's farthest depth must be to hide it, as a factor of
+// the depth (reversed-Z, so larger is nearer): Occlusion.hpp's HiddenMargin.
+const float HiddenMargin = 1.0 + 1.0 / 65536.0;
+
+// The view's job.
+layout(set = 0, binding = 0, std140) uniform CullJob
+{
+    // x: the view's first entry in the group table; y: how many groups it has; z: how many of the planes below are
+    // the view's, 0 to keep every candidate; w: the view's first command's entry in the level table.
+    uvec4 groups;
+    // The view's planes in world space, vec4(n, d) with n the unit normal pointing inward: a point p is inside when
+    // dot(n, p) + d >= 0. Five for a camera (no far plane), six for an orthographic view.
+    vec4 planes[6];
+    // xyz: the camera's position in world space (where it was when frozen, frozen); w: how many pixels one unit covers
+    // at distance 1.
+    vec4 camera;
+    // x: the pixels a level's projected error must be under to be drawn; y: the pixels a candidate's projected radius
+    // must reach to be drawn, 0 for any; z: the near plane's distance, the least a perspective view projects by;
+    // w: 1 for a perspective view, 0 for an orthographic one, which projects the same at any distance.
+    vec4 lod;
+    // x: the phase, 0 for the one phase of a view without occlusion culling, 1 for the first, 2 for the second;
+    // y: 1 when the visibility words are stale, so every candidate counts as visible last frame; z: how many
+    // commands after a run's first its second-phase command is; w: how many levels the pyramid has.
+    uvec4 occlusion;
+    // xy: the view's size in pixels, the pyramid's level 0.
+    vec4 screen;
+    // World to clip space, which the screen rectangle is taken in.
+    mat4 viewProjection;
+    // xyz: the centre of the sphere the view culls against as well, a point light's range; w: its radius, 0 for none.
+    vec4 sphere;
+} job;
+
+// The frame's draw records, Fenrir/Draw.glsl's draws.
+layout(set = 1, binding = 0, std430) readonly buffer Records
+{
+    DrawItem items[];
+} records;
+
+// The frame's group table: per work group, x its run's first command in the view's command buffer, y the run's first record
+// (an instance list's one record), z how many candidates the run has, w the first of them this group culls.
+layout(set = 1, binding = 1, std430) readonly buffer Groups
+{
+    uvec4 entries[];
+} groups;
+
+// The view's command buffer as words, five a command (Device/CommandList.hpp's DrawIndexedIndirectCommand): the
+// instance count the second, the base instance the fifth.
+layout(set = 1, binding = 2, std430) buffer Commands
+{
+    uint words[];
+} commands;
+
+// The view's indirection, Fenrir/Draw.glsl's fenrirVisible.
+layout(set = 1, binding = 3, std430) writeonly buffer Indirection
+{
+    uvec2 entries[];
+} indirection;
+
+// The instance lists' copies, Fenrir/Draw.glsl's binding 1 of set 3, which a list's candidate is one of.
+layout(set = 1, binding = 4, std430) readonly buffer Copies
+{
+    FenrirInstance copies[];
+} lists;
+
+// The frame's level table: per command template, in the templates' order, the level's error in its mesh's local units,
+// which level of its run's it is, how many levels the run has, the run's first candidate's index in the view, and how
+// many instances each kept candidate draws as (six for a point light's instanced faces, else one).
+struct CullLevel
+{
+    float error;
+    uint level;
+    uint levels;
+    uint firstCandidate;
+    uint instances;
+};
+layout(set = 1, binding = 5, std430) readonly buffer Levels
+{
+    CullLevel entries[];
+} levels;
+
+// The view's visibility, a word per candidate kept between frames: 1 when phase two last found it visible.
+layout(set = 1, binding = 6, std430) buffer Visibility
+{
+    uint entries[];
+} visibility;
+
+// The view's Hi-Z pyramid: red the nearest depth of each texel's footprint, green the farthest, reversed-Z.
+layout(set = 1, binding = 7) uniform sampler2D pyramid;
+
+// Whether the box boundsMin..boundsMax under transform may be inside the job's planes: Math::Frustum::Intersects(box,
+// transform) after Intersects(Math::Frustum::SphereOf(box, transform)), the same arithmetic in the same order; and,
+// with a sphere in the job, inside it too: ShadowViews.hpp's WithinRange.
+// The largest scale transform applies along any of its axes: what the mesh's lengths are scaled by.
+float LargestScale(mat4 transform)
+{
+    return max(max(length(transform[0].xyz), length(transform[1].xyz)), length(transform[2].xyz));
+}
+
+// The sphere around the box boundsMin..boundsMax under transform, Math::Frustum::SphereOf: its centre moved, its
+// half-diagonal scaled by the largest axis scale.
+vec4 SphereOf(vec3 boundsMin, vec3 boundsMax, mat4 transform)
+{
+    const vec3 centre = (boundsMin + boundsMax) * 0.5;
+    const float halfDiagonal = length(boundsMax - boundsMin) * 0.5;
+    return vec4((transform * vec4(centre, 1.0)).xyz, halfDiagonal * LargestScale(transform));
+}
+
+// How many pixels a length covers at a distance from the camera: LevelOfDetail.hpp's ProjectedPixels.
+float ProjectedPixels(float len, float distance)
+{
+    return len * job.camera.w / (job.lod.w != 0.0 ? max(distance, job.lod.z) : 1.0);
+}
+
+// Which of a run's levelCount levels, whose table entries start at first, a candidate of sphere (centre, radius) and
+// largest axis scale `scale` draws: LevelOfDetail.hpp's SelectLod. -1 when its radius projects too small to draw.
+int SelectLevel(uint first, uint levelCount, vec4 sphere, float scale)
+{
+    // The distance to the sphere's nearest point, 0 inside it.
+    const float distance = max(length(sphere.xyz - job.camera.xyz) - sphere.w, 0.0);
+    if (job.lod.y > 0.0 && ProjectedPixels(sphere.w, distance) < job.lod.y)
+    {
+        return -1;
+    }
+    for (uint level = levelCount - 1u; level > 0u; --level)
+    {
+        if (ProjectedPixels(levels.entries[first + level].error * scale, distance) < job.lod.x)
+        {
+            return int(level);
+        }
+    }
+    return 0;
+}
+
+// The corner c of the box boundsMin..boundsMax, in Math::Corners' order: bit 0 of the index picks max x, bit 1 max y,
+// bit 2 max z.
+vec3 CornerOf(vec3 boundsMin, vec3 boundsMax, uint c)
+{
+    return vec3((c & 1u) != 0u ? boundsMax.x : boundsMin.x, (c & 2u) != 0u ? boundsMax.y : boundsMin.y,
+                (c & 4u) != 0u ? boundsMax.z : boundsMin.z);
+}
+
+bool Visible(vec3 boundsMin, vec3 boundsMax, mat4 transform)
+{
+    const uint planeCount = min(job.groups.z, 6u);
+    const vec4 sphere = SphereOf(boundsMin, boundsMax, transform);
+    const vec3 sphereCentre = sphere.xyz;
+    const float radius = sphere.w;
+    for (uint p = 0u; p < planeCount; ++p)
+    {
+        const vec4 plane = job.planes[p];
+        if (dot(plane.xyz, sphereCentre) + plane.w < -radius)
+        {
+            return false;
+        }
+    }
+    vec4 corners[8];
+    for (uint c = 0u; c < 8u; ++c)
+    {
+        corners[c] = vec4((transform * vec4(CornerOf(boundsMin, boundsMax, c), 1.0)).xyz, 1.0);
+    }
+    for (uint p = 0u; p < planeCount; ++p)
+    {
+        const vec4 plane = job.planes[p];
+        bool allOutside = true;
+        for (uint c = 0u; c < 8u && allOutside; ++c)
+        {
+            allOutside = dot(plane, corners[c]) < 0.0;
+        }
+        if (allOutside)
+        {
+            return false;
+        }
+    }
+    if (job.sphere.w > 0.0)
+    {
+        // The candidate's sphere against the range, then the world box about its moved corners: the nearest point of
+        // that box to the range's centre must be within the radius.
+        const vec3 toCentre = sphereCentre - job.sphere.xyz;
+        const float reach = radius + job.sphere.w;
+        if (dot(toCentre, toCentre) > reach * reach)
+        {
+            return false;
+        }
+        vec3 lowest = corners[0].xyz;
+        vec3 highest = corners[0].xyz;
+        for (uint c = 1u; c < 8u; ++c)
+        {
+            lowest = min(lowest, corners[c].xyz);
+            highest = max(highest, corners[c].xyz);
+        }
+        const vec3 away = clamp(job.sphere.xyz, lowest, highest) - job.sphere.xyz;
+        if (dot(away, away) > job.sphere.w * job.sphere.w)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Whether the box boundsMin..boundsMax under transform is wholly behind what the pyramid holds: Occlusion.hpp's
+// ScreenRectOf, PyramidLevelOf, TexelsOf and IsHidden. Its corners' screen rectangle (texture coordinates, y down
+// from the top) and nearest depth; a corner at or in front of the near plane keeps it. The level is the one halving
+// the rectangle's longer side, in pixels, to at most a texel, so it touches at most 2 x 2 texels, whose smallest
+// farthest depth it must reach to show. A level's texel k covers the pixels from k times its side on (hi_z.frag
+// folds the remainder into the last texel), so the texels are found from pixels shifted by the level, as the
+// reflection trace's CellOf finds them, not from the level's texture size.
+bool Hidden(vec3 boundsMin, vec3 boundsMax, mat4 transform)
+{
+    const mat4 clipFrom = job.viewProjection * transform;
+    vec2 ndcMin = vec2(1e30);
+    vec2 ndcMax = vec2(-1e30);
+    float nearest = 0.0;
+    for (uint c = 0u; c < 8u; ++c)
+    {
+        const vec4 clip = clipFrom * vec4(CornerOf(boundsMin, boundsMax, c), 1.0);
+        if (clip.w <= 0.0 || clip.z > clip.w)
+        {
+            return false;
+        }
+        const vec3 ndc = clip.xyz / clip.w;
+        ndcMin = min(ndcMin, ndc.xy);
+        ndcMax = max(ndcMax, ndc.xy);
+        nearest = max(nearest, ndc.z);
+    }
+    const vec2 uvMin = clamp(vec2(ndcMin.x * 0.5 + 0.5, 0.5 - ndcMax.y * 0.5), 0.0, 1.0);
+    const vec2 uvMax = clamp(vec2(ndcMax.x * 0.5 + 0.5, 0.5 - ndcMin.y * 0.5), 0.0, 1.0);
+    const vec2 pixels = (uvMax - uvMin) * job.screen.xy;
+    const float longest = max(max(pixels.x, pixels.y), 1.0);
+    const int level = clamp(int(ceil(log2(longest))), 0, int(job.occlusion.w) - 1);
+    const float side = exp2(float(level));
+    const ivec2 last = textureSize(pyramid, level) - 1;
+    const ivec2 lo = min(ivec2(floor(uvMin * job.screen.xy / side)), last);
+    const ivec2 hi = min(max(ivec2(ceil(uvMax * job.screen.xy / side)) - 1, lo), last);
+    float farthest = 1.0;
+    for (int y = lo.y; y <= hi.y; ++y)
+    {
+        for (int x = lo.x; x <= hi.x; ++x)
+        {
+            farthest = min(farthest, texelFetch(pyramid, ivec2(x, y), level).g);
+        }
+    }
+    // Behind by more than rounding: a flat candidate facing the camera that phase one drew has its own depth in the
+    // pyramid, which the rasteriser and this projection may place an ulp apart.
+    return nearest * HiddenMargin < farthest;
+}
+
+void main()
+{
+    uvec4 group = groups.entries[job.groups.x + gl_WorkGroupID.x];
+    uint candidate = group.w + gl_LocalInvocationID.x;
+    if (candidate >= group.z)
+    {
+        return;
+    }
+    DrawItem first = records.items[group.y];
+    // A merged run's candidates are consecutive records; an instance list's are its copies, all of its one record.
+    bool list = first.instanceCount != 0u;
+    uint record = list ? group.y : group.y + candidate;
+    uint copy = list ? first.instanceFirst + candidate : FenrirNoCopy;
+
+    // An item's box already has its world matrix applied, so it is tested under the identity; a list's is the mesh's
+    // local box, moved by the entity's world matrix and the copy's transform.
+    DrawItem item = list ? first : records.items[record];
+    mat4 transform = list ? item.world * lists.copies[copy].transform : mat4(1.0);
+    const uint firstLevel = job.groups.w + group.x;
+    const CullLevel run = levels.entries[firstLevel];
+
+    // Which phase this is, and whether phase one drew (or draws) the candidate: visible last frame, or every
+    // candidate while the words are stale.
+    const uint phase = job.occlusion.x;
+    const uint slotIndex = run.firstCandidate + candidate;
+    const bool wasVisible = phase == 0u || job.occlusion.y != 0u || visibility.entries[slotIndex] != 0u;
+    if (phase == 1u && !wasVisible)
+    {
+        return;
+    }
+    const bool inView = Visible(item.boundsMin.xyz, item.boundsMax.xyz, transform);
+    if (phase == 2u)
+    {
+        // Every candidate's visibility is decided here, phase one's included, so one that something has since hidden
+        // leaves phase one next frame; only those phase one did not draw are drawn now.
+        const bool visible = inView && !Hidden(item.boundsMin.xyz, item.boundsMax.xyz, transform);
+        visibility.entries[slotIndex] = visible ? 1u : 0u;
+        if (!visible || wasVisible)
+        {
+            return;
+        }
+    }
+    else if (!inView)
+    {
+        return;
+    }
+    // Which of the run's commands it is counted into: its level of detail's, or none at all.
+    const int level = SelectLevel(firstLevel, run.levels,
+                                  SphereOf(item.boundsMin.xyz, item.boundsMax.xyz, transform), LargestScale(transform));
+    if (level < 0)
+    {
+        return;
+    }
+
+    // Counted as the run's instances per candidate (six for a point light's instanced faces, one entry for all six:
+    // Fenrir/Draw.glsl reads it at the instance index over six), at the slot the count gave it.
+    const uint instances = run.instances;
+    uint command = (group.x + uint(level) + (phase == 2u ? job.occlusion.z : 0u)) * 5u;
+    uint slot = atomicAdd(commands.words[command + 1u], instances) / instances;
+    indirection.entries[commands.words[command + 4u] + slot] = uvec2(record, copy);
+}

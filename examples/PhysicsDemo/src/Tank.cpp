@@ -9,8 +9,8 @@
 // back; moving, the inner track runs at 0.6 of the outer. 3 changes both tracks' grip (longitudinalFriction) between
 // 4 and 1, a live edit: on 1 the tracks slip and it crawls. A row of 20 kg crates north of the start is there to push
 // aside. T puts it back at the start, a Transform write that keeps its engine and tracks turning. 5 switches the
-// chassis's interpolation off and on, and the wheels follow it. Its readout, in its name and shown as screen text, adds
-// its two track speeds to the speed, RPM and gear.
+// chassis's interpolation off and on, and the wheels follow it. Its readout, in its name and shown as readouts in the
+// demo panel, adds its two track speeds to the speed, RPM and gear.
 //
 // W or Up drives, S or Down brakes and then reverses once stopped, A/D or Left/Right steer, and Space brakes. P drives
 // a loop by itself, two long straights with a pivot on the spot at each end. C frees the chase camera (it stays where
@@ -83,7 +83,7 @@ namespace PhysicsDemo
                 }
                 m_followCamera.Update(m_camera.GetComponent<Fenrir::Transform>(), Fenrir::GetWorldTransform(m_tank),
                                       Vec2(0.0f), static_cast<float>(app.GetTime().deltaTime));
-                ShowReadings(app.GetActiveScene());
+                ShowReadings(app);
             }
 
             // Tick, while the scene is active: game code reads the tank's state and writes its driver input.
@@ -330,8 +330,9 @@ namespace PhysicsDemo
                 return box;
             }
 
-            // The tank's state in its name, every frame, with its two track speeds, shown as screen text.
-            void ShowReadings(Fenrir::Scene& scene)
+            // The tank's state in its name, every frame, with its two track speeds, shown as readouts in the demo
+            // panel.
+            void ShowReadings(Fenrir::App& app)
             {
                 const Fenrir::VehicleState& state = m_tank.GetComponent<Fenrir::Vehicle>().state;
                 std::array<char, 160> text{};
@@ -341,8 +342,8 @@ namespace PhysicsDemo
                               state.gear, state.shifting ? ", shifting" : "", static_cast<double>(state.leftTrackSpeed),
                               static_cast<double>(state.rightTrackSpeed), state.wheelsOnGround);
                 m_tank.GetComponent<Fenrir::Name>().Set(text.data());
-                const std::array<Fenrir::Entity, 1> shown = {m_tank};
-                ShowReadouts(scene, shown);
+                const std::array<Reading, 1> shown = {Reading{"Tank", m_tank}};
+                ShowReadouts(app, shown);
             }
 
             // L: the tank's state, and its two driven wheels' (each track's rearmost).
@@ -395,11 +396,16 @@ namespace PhysicsDemo
 
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp = "W or Up drives, S or Down brakes and then reverses once stopped, A/D or Left/Right steer (it "
-                        "pivots on the spot when stopped), Space brakes, C frees the camera (it stays where it is, the "
-                        "arrows still drive) and snaps it back. P drives a loop by itself, pivoting at each end, L "
-                        "logs the tank's state. 3 changes the tracks' grip between 4 and 1, 5 switches its "
-                        "interpolation off and on, T puts it back at the start.";
+        scene.keyRows = {{"W/Up", "drive"},
+                         {"S/Down", "brake, then reverse once stopped"},
+                         {"A/D, Left/Right", "steer; stopped, pivot on the spot"},
+                         {"Space", "brake"},
+                         {"C", "free the camera (the arrows still drive), and snap it back"},
+                         {"3", "the tracks' grip 4 or 1"},
+                         {"5", "interpolation off/on"},
+                         {"T", "put it back at the start"},
+                         {"L", "log the tank's state"},
+                         {"P", "drive a loop by itself, pivoting at each end"}};
         // F2 steps the app's debug lines from off to "vehicles" first, so the run draws every wheel throughout.
         scene.keys.insert(scene.keys.end(), 7, Key::F2);
         // The autopilot drives the loop, pivoting at its ends, while L logs the tank, its grip changed twice on the

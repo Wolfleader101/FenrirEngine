@@ -3,14 +3,15 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <format>
+#include <iterator>
 #include <numbers>
 #include <optional>
 #include <random>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
-
-#include <imgui.h>
 
 #include "DemoMaterials.hpp"
 #include "FenrirApp/App.hpp"
@@ -18,6 +19,7 @@
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/MeshData.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirRenderer/Components.hpp"
@@ -62,22 +64,48 @@ namespace LightingDemo
         constexpr const char* PlanetTexture = "planets/2k_jupiter.jpg";
 
         /**
-         * @brief How many cells a side the ring's and the field's rock meshes are simplified on: the ring's rocks are
-         * a few pixels across, the field's close enough to show more.
+         * @brief How a rock's levels are made: halving to seven levels and 32 to 52 triangles, the coarsest the specks
+         * that are most of the ring, with its UV seams free to collapse, as `LodSettings` leaves them (a scanned
+         * rock's islands lock it at a few hundred triangles otherwise).
          */
-        constexpr int RingMeshCells = 5;
-        constexpr int FieldMeshCells = 16;
+        constexpr Fenrir::LodSettings RockLods{.ratio = 0.5f, .maxLevels = 7, .minTriangles = 32};
+        /** @brief The level-of-detail errors L steps through, in pixels; the renderer's default first. */
+        constexpr std::array<float, 4> LodErrorSteps{1.0f, 2.0f, 4.0f, 0.5f};
 
         /**
-         * @brief One kind of rock: the simplified copies of its mesh the field and the ring draw, its material, and the
-         * scale that makes its mesh a metre across.
+         * @brief One kind of rock: its mesh at full detail with its generated levels (ADR-0057), which the field and
+         * the ring both draw, its material, and the scale that makes its mesh a metre across.
          */
         struct RockKind
         {
             Fenrir::AssetHandle<Fenrir::Mesh> mesh;
-            Fenrir::AssetHandle<Fenrir::Mesh> ringMesh;
             Fenrir::AssetHandle<Fenrir::Material> material;
             float toMetre = 1.0f;
+        };
+
+        /**
+         * @brief The renderer's culling as the panel and keys set it (ADR-0057): the GPU test, occlusion culling, the
+         * freeze and the level-of-detail error. The renderer's, like merging, so a change is applied once, not every
+         * frame.
+         */
+        struct CullingControls
+        {
+            bool gpuCulling = true;
+            bool occlusion = true;
+            bool frozen = false;
+            float lodErrorPixels = LodErrorSteps.front();
+
+            friend bool operator==(const CullingControls&, const CullingControls&) = default;
+
+            /** @brief Sets all four on the renderer; setting one again as it is changes nothing. */
+            void Apply(Fenrir::App& app) const
+            {
+                Fenrir::Renderer::SetGpuCulling(app, gpuCulling);
+                Fenrir::Renderer::SetOcclusionCulling(app, occlusion);
+                Fenrir::Renderer::SetCullingFrozen(app, frozen);
+                // No least size: a rock that projects under a pixel still draws, at its coarsest level.
+                Fenrir::Renderer::SetLodSelection(app, lodErrorPixels, 0.0f);
+            }
         };
 
         /** @brief The ring's lists and what the panel and keys have set, kept as a scene resource. */
@@ -95,10 +123,27 @@ namespace LightingDemo
             bool fetched = false;
             bool merging = true;
             bool spinning = true;
+            CullingControls culling;
+            /** @brief What the renderer's culling was last set to, so a change from a key or the panel reaches it once.
+             */
+            CullingControls appliedCulling;
             float angle = 0.0f;
             /** @brief The frame time, smoothed over about a second, in seconds. */
             float frameTime = 0.0f;
         };
+
+        /**
+         * @brief Gives `mesh` its levels of detail once, in the store (ADR-0057): the ring's rocks are a few pixels
+         * across and draw the coarsest, the field's are close enough to draw full detail. The store refuses nothing
+         * GenerateLods makes, so the replacement is not checked.
+         */
+        void AddLevels(Fenrir::AssetStore& store, Fenrir::AssetHandle<Fenrir::Mesh> mesh)
+        {
+            if (const Fenrir::MeshData* data = store.TryGet(mesh))
+            {
+                store.Replace(mesh, Fenrir::GenerateLods(*data, RockLods));
+            }
+        }
 
         /** @brief The scale that fits `mesh` into a box a metre on its longest side. */
         float UnitScale(const Fenrir::AssetStore& store, Fenrir::AssetHandle<Fenrir::Mesh> mesh)
@@ -288,13 +333,58 @@ namespace LightingDemo
             }
         }
 
+        /** @brief The scene's section, bound to its state in its scene resource. */
+        void AddSection(Fenrir::App& app, AsteroidRingState& state)
+        {
+            auto* kit = app.TryGetResource<FenrirDemo::DemoUI>();
+            if (kit == nullptr)
+            {
+                return;
+            }
+            const FenrirDemo::DemoSection ring = kit->SceneSection("Ring");
+            ring.Range("Ring rocks (N)", &state.count, 1000, MaxRingRocks,
+                       "How many rocks the ring draws; N steps 10k, 50k, 100k");
+            ring.Toggle("Automatic instancing (I)", &state.merging,
+                        "The field's rock entities merged into instanced draws, or drawn one by one");
+            ring.Toggle("Ring turning (R)", &state.spinning, "The ring turning about the planet, or still");
+            ring.Readout("Ring rocks", [&state] { return std::format("{}", state.listedCount); });
+            ring.Readout("Ring lists", [&state] { return std::format("{}", state.handles.size()); });
+            ring.Readout("Field rocks", [] { return std::format("{} entities", FieldRocks); });
+            ring.Readout("Draws", RendererCount(app, &Fenrir::RendererStats::draws));
+            ring.Readout("Instances", RendererCount(app, &Fenrir::RendererStats::instances));
+            ring.Readout("Drawn", RendererCount(app, &Fenrir::RendererStats::instancesDrawn));
+            ring.Readout("Uploads", RendererCount(app, &Fenrir::RendererStats::uploads));
+            ring.Readout("Frame", [&state] { return FrameReadout(state.frameTime); });
+
+            ring.Separator("Culling");
+            ring.Toggle("GPU culling (C)", &state.culling.gpuCulling,
+                        "The GPU tests each copy against the view; off, every copy draws at level 0");
+            ring.Toggle("Occlusion culling (V)", &state.culling.occlusion,
+                        "Copies hidden behind the planet and nearer rocks, by the Hi-Z pyramid, are not drawn");
+            ring.Toggle("Freeze culling (F)", &state.culling.frozen,
+                        "Culling kept where the camera was, to fly out and see what it kept");
+            ring.Range("Level-of-detail error, pixels (L)", &state.culling.lodErrorPixels, 0.25f, 8.0f,
+                       {.logarithmic = true}, "How far, in pixels, a coarser level may depart from the full detail");
+            for (std::size_t level = 0; level < std::size(Fenrir::RendererStats{}.drawnByLod); ++level)
+            {
+                ring.Readout(std::format("Drawn at level {}", level), [&app, level] {
+                    return std::format("{}", Fenrir::Renderer::Stats(app).drawnByLod[level]);
+                });
+            }
+            ring.Readout("Visible last frame",
+                         [&app] { return std::format("{}", Fenrir::Renderer::Stats(app).drawnByPhase[0]); });
+            ring.Readout("Shown by the Hi-Z",
+                         [&app] { return std::format("{}", Fenrir::Renderer::Stats(app).drawnByPhase[1]); });
+            ring.Text("Drawn is what the GPU kept, two frames behind; off, every copy draws level 0.");
+        }
+
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
         {
             Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
             AsteroidRingState state;
             state.lighting.panoramas.push_back(
                 {"Procedural starfield", store.Add<Fenrir::Image>(Starfield(2048), scene)});
-            state.lighting.bloom.intensity = 0.06f;
+            state.lighting.look.bloom.intensity = 0.06f;
             // The whole ring, from where the camera starts, so the planet's shadow falls across it (ADR-0050).
             state.lighting.sunShadows.shadowDistance = 200.0f;
 
@@ -303,7 +393,7 @@ namespace LightingDemo
             if (!cube.Ok() || !sphere.Ok())
             {
                 app.Logger()->Error("{}: the cube or the sphere did not load from the asset root", SceneName);
-                scene.AddResource<AsteroidRingState>(std::move(state));
+                AddSection(app, scene.AddResource<AsteroidRingState>(std::move(state)));
                 return;
             }
 
@@ -320,10 +410,8 @@ namespace LightingDemo
                 const auto material = store.Load<Fenrir::Material>(*path + "#Material0", scene);
                 if (mesh.Ok() && material.Ok())
                 {
-                    const Fenrir::MeshData& full = *store.TryGet(mesh.handle);
-                    kinds.push_back({store.Add<Fenrir::Mesh>(Simplified(full, FieldMeshCells), scene),
-                                     store.Add<Fenrir::Mesh>(Simplified(full, RingMeshCells), scene), material.handle,
-                                     UnitScale(store, mesh.handle)});
+                    AddLevels(store, mesh.handle);
+                    kinds.push_back({mesh.handle, material.handle, UnitScale(store, mesh.handle)});
                 }
             }
             const std::optional<std::string> planetPath = FetchedAsset(PlanetTexture);
@@ -331,8 +419,12 @@ namespace LightingDemo
             if (!fetched)
             {
                 const auto rock = LitMaterial(store, scene, {0.45f, 0.42f, 0.4f, 1.0f}, 0.0f, 0.9f);
-                kinds = {{sphere.handle, sphere.handle, rock, UnitScale(store, sphere.handle)},
-                         {cube.handle, cube.handle, rock, UnitScale(store, cube.handle)}};
+                // The sphere gets levels (the planet, one copy of it, draws the finest up close); the cube's hard
+                // edges are seams, so it keeps its twelve triangles.
+                AddLevels(store, sphere.handle);
+                AddLevels(store, cube.handle);
+                kinds = {{sphere.handle, rock, UnitScale(store, sphere.handle)},
+                         {cube.handle, rock, UnitScale(store, cube.handle)}};
                 app.Logger()->Info(
                     "{}: the rocks and planet are fetched assets (FENRIR_FETCH_DEMO_ASSETS); spheres and "
                     "cubes stand in",
@@ -376,7 +468,7 @@ namespace LightingDemo
                 // The ring takes the planet's shadow but casts none: 100k rocks in four cascades would cost four
                 // times the ring again for specks of shadow on each other.
                 layer.AddComponent<Fenrir::InstancedMeshRenderer>(
-                    Fenrir::InstancedMeshRenderer{kinds[kind].ringMesh, kinds[kind].material, list, false});
+                    Fenrir::InstancedMeshRenderer{kinds[kind].mesh, kinds[kind].material, list, false});
                 state.ring.AddChild(layer);
             }
 
@@ -395,7 +487,11 @@ namespace LightingDemo
             }
             SpawnField(scene, kinds, tints);
             SpawnStation(store, scene, cube.handle);
-            scene.AddResource<AsteroidRingState>(std::move(state));
+            // Culling as the panel starts: on, not frozen and at the renderer's default error, whatever another visit
+            // left them as.
+            state.culling.Apply(app);
+            state.appliedCulling = state.culling;
+            AddSection(app, scene.AddResource<AsteroidRingState>(std::move(state)));
         }
 
         void Update(Fenrir::App& app, Fenrir::Scene& scene)
@@ -426,22 +522,42 @@ namespace LightingDemo
             {
                 state->spinning = !state->spinning;
             }
+            CullingControls& culling = state->culling;
+            if (keyboard.JustPressed(Fenrir::Key::C))
+            {
+                culling.gpuCulling = !culling.gpuCulling;
+                app.Logger()->Info("C: GPU culling {}", culling.gpuCulling ? "on" : "off");
+            }
+            if (keyboard.JustPressed(Fenrir::Key::V))
+            {
+                culling.occlusion = !culling.occlusion;
+                app.Logger()->Info("V: occlusion culling {}", culling.occlusion ? "on" : "off");
+            }
+            if (keyboard.JustPressed(Fenrir::Key::F))
+            {
+                culling.frozen = !culling.frozen;
+                app.Logger()->Info("F: culling {}", culling.frozen ? "frozen" : "following the camera");
+            }
+            if (keyboard.JustPressed(Fenrir::Key::L))
+            {
+                // From a slider value between the steps, the first step.
+                const auto step = std::find(LodErrorSteps.begin(), LodErrorSteps.end(), culling.lodErrorPixels);
+                const auto next =
+                    step == LodErrorSteps.end() || step + 1 == LodErrorSteps.end() ? LodErrorSteps.begin() : step + 1;
+                culling.lodErrorPixels = *next;
+                app.Logger()->Info("L: a level of detail may depart by {} pixels", culling.lodErrorPixels);
+            }
 
-            const Fenrir::RendererStats stats = Fenrir::Renderer::Stats(app);
             const auto delta = static_cast<float>(app.GetTime().deltaTime);
             state->frameTime = state->frameTime == 0.0f ? delta : glm::mix(state->frameTime, delta, 0.05f);
-            RunLightingPanel(app, scene, state->lighting, [&] {
-                ImGui::SliderInt("Ring rocks (N)", &state->count, 1000, MaxRingRocks);
-                ImGui::Checkbox("Automatic instancing (I)", &state->merging);
-                ImGui::Checkbox("Ring turning (R)", &state->spinning);
-                ImGui::Text("Ring rocks: %d in %d lists; field rocks: %d entities", state->listedCount,
-                            static_cast<int>(state->handles.size()), FieldRocks);
-                ImGui::Text("Draws: %u  Instances: %u  Uploads: %u", stats.draws, stats.instances, stats.uploads);
-                ImGui::Text("Frame: %.2f ms (%.0f fps)", state->frameTime * 1000.0f,
-                            state->frameTime > 0.0f ? 1.0f / state->frameTime : 0.0f);
-            });
+            RunLightingPanel(app, scene, state->lighting);
 
             Fenrir::Renderer::SetAutomaticInstancing(app, state->merging);
+            if (culling != state->appliedCulling)
+            {
+                culling.Apply(app);
+                state->appliedCulling = culling;
+            }
             // A new count cuts each list again: Replace bumps its revision, so the renderer uploads it once more.
             if (state->count != state->listedCount && !state->handles.empty())
             {
@@ -468,13 +584,21 @@ namespace LightingDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp = LightingKeyHelp(false) +
-                        " N: 10k, 50k or 100k ring rocks. I: automatic instancing on or off. R: the ring turning.";
+        scene.keyRows = LightingKeyRows(false);
+        scene.keyRows.push_back({"N", "10k, 50k or 100k ring rocks"});
+        scene.keyRows.push_back({"I", "automatic instancing on or off"});
+        scene.keyRows.push_back({"R", "the ring turning or still"});
+        scene.keyRows.push_back({"C", "GPU culling off or on"});
+        scene.keyRows.push_back({"V", "occlusion culling off or on"});
+        scene.keyRows.push_back({"F", "culling frozen or following the camera"});
+        scene.keyRows.push_back({"L", "the next level-of-detail error (1, 2, 4, 0.5 pixels)"});
         // G through every debug view (the occlusion, the cascades, the shadow atlas, back), with the sun's shadows off
-        // and on again (H) between.
-        scene.keys = {Fenrir::Key::T, Fenrir::Key::B, Fenrir::Key::I, Fenrir::Key::N, Fenrir::Key::I,
-                      Fenrir::Key::R, Fenrir::Key::N, Fenrir::Key::N, Fenrir::Key::G, Fenrir::Key::G,
-                      Fenrir::Key::G, Fenrir::Key::H, Fenrir::Key::G, Fenrir::Key::H};
+        // and on again (H) between; then culling off and on, occlusion culling off and on, frozen and following, and L
+        // round its four errors, each control left as it started for the scenes after.
+        scene.keys = {Fenrir::Key::T, Fenrir::Key::B, Fenrir::Key::I, Fenrir::Key::N, Fenrir::Key::I, Fenrir::Key::R,
+                      Fenrir::Key::N, Fenrir::Key::N, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::G, Fenrir::Key::H,
+                      Fenrir::Key::G, Fenrir::Key::H, Fenrir::Key::C, Fenrir::Key::C, Fenrir::Key::V, Fenrir::Key::V,
+                      Fenrir::Key::F, Fenrir::Key::F, Fenrir::Key::L, Fenrir::Key::L, Fenrir::Key::L, Fenrir::Key::L};
         // Beyond the station, looking past it and the field across the ring to the planet.
         scene.camera.position = {74.0f, 9.0f, 34.0f};
         scene.camera.yaw = 1.08f;

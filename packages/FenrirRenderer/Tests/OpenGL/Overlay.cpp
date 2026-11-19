@@ -1,6 +1,6 @@
 // The 2D render feature on OpenGL (ADR-0027, the spec's seam 2): 2D draw lists drawn into small offscreen targets by
-// the renderer core, as the window overlay draws them into the backbuffer, and read back. The expected colours are
-// ADR-0027's blend table worked by hand.
+// the renderer core, as the window overlay draws them into the backbuffer, and read back, with offscreen groups and an
+// image 2D target (ADR-0060). The expected colours are ADR-0027's blend table worked by hand.
 
 #include <cstdint>
 #include <memory>
@@ -91,7 +91,7 @@ namespace
         /** @brief Draws `submissions` (layer and list, in submission order) into the target and reads it back. */
         GlProbe::Image Draw(std::vector<Fenrir::Render::Submission2D> submissions, float contentScale = 1.0f)
         {
-            Fenrir::Render::OverlayFrame frame;
+            Fenrir::Render::Frame2D frame;
             frame.submissions = std::move(submissions);
             frame.contentScale = contentScale;
             frame.target = m_target;
@@ -101,6 +101,31 @@ namespace
             INFO("the frame was drawn");
             REQUIRE(report.drawn);
             return GlProbe::Read(core->Device(), m_target);
+        }
+
+        /**
+         * @brief Draws `lists`, in order, into a new Size-square image 2D target of `format` (RGBA8, sRGB or linear)
+         * and reads the image back.
+         */
+        GlProbe::Image DrawImage(std::vector<Fenrir::DrawList2D> lists, TextureFormat format)
+        {
+            using namespace Fenrir::Graphics;
+            Fenrir::Render::ImageSubmission2D image;
+            image.image = {7, 1};
+            image.desc.format = format;
+            image.desc.width = Size;
+            image.desc.height = Size;
+            image.desc.usage = TextureUsage::ColourAttachment | TextureUsage::Sampled;
+            image.texture = core->Device().CreateTexture(image.desc, "2D test image");
+            image.lists = std::move(lists);
+            const TextureHandle texture = image.texture;
+            Fenrir::Render::Frame2D frame;
+            frame.images.push_back(std::move(image));
+            draw2D->SetFrame(std::move(frame));
+            const Fenrir::Render::FrameReport report = core->RenderFrame();
+            INFO("the frame was drawn");
+            REQUIRE(report.drawn);
+            return GlProbe::Read(core->Device(), texture);
         }
 
         GlTest::GlTestApp gl;
@@ -282,4 +307,52 @@ TEST_CASE("A texture slot's sRGB image is sampled decoded, times the vertex colo
 
     INFO("the image's orange, 128 decoded to 0.216");
     REQUIRE(GlProbe::Near(pixel, {1.0f, HalfDecoded, 0.0f, 1.0f}));
+}
+
+TEST_CASE("An offscreen group at half opacity over a solid colour composites its quads as one",
+          "[renderer][gl][overlay][groups]")
+{
+    GlCore2D test;
+    test.MakeTarget(TextureFormat::Rgba16Float, OpaqueBlue);
+    // Opaque red over the whole group, opaque green over its bottom-right quarter, so a composite flipped either
+    // way would put the green elsewhere.
+    Fenrir::DrawList2D list = GlCore2D::List(Linear(Fenrir::BlendMode2D::PremultipliedAlpha));
+    list.BeginGroup({0.0f, 0.0f, static_cast<float>(Size), static_cast<float>(Size)});
+    AddQuad(list, 0, {0.0f, 0.0f}, {64.0f, 64.0f}, Rgba8(255, 0, 0, 255));
+    AddQuad(list, 0, {32.0f, 32.0f}, {64.0f, 64.0f}, Rgba8(0, 255, 0, 255));
+    Fenrir::EndGroup2D half;
+    half.opacity = 0.5f;
+    list.EndGroup(half);
+    std::vector<Fenrir::Render::Submission2D> submissions;
+    submissions.push_back({0, std::move(list)});
+
+    const GlProbe::Image image = test.Draw(std::move(submissions));
+
+    // The image composited premultiplied at 128/255: RGB src * o + dst * (1 - o), alpha o + 1 * (1 - o).
+    INFO("the left half and the top-right quarter: the group's red at half over blue");
+    REQUIRE(GlProbe::Near(image.At(16, 48), {Half, 0.0f, 1.0f - Half, 1.0f}));
+    REQUIRE(GlProbe::Near(image.At(48, 16), {Half, 0.0f, 1.0f - Half, 1.0f}));
+    INFO("the bottom-right quarter: only the green on top, at half, with no red under it showing through");
+    REQUIRE(GlProbe::Near(image.At(48, 48), {0.0f, Half, 1.0f - Half, 1.0f}));
+    REQUIRE(test.messages->errors.empty());
+}
+
+TEST_CASE("An image 2D target read back holds what was drawn into it, and transparency elsewhere",
+          "[renderer][gl][overlay][image2d]")
+{
+    GlCore2D test;
+    // Linear red at alpha 128/255, premultiplied by builtin:2d, over the image's top-left quarter.
+    Fenrir::DrawList2D list = GlCore2D::List(Linear(Fenrir::BlendMode2D::PremultipliedAlpha));
+    AddQuad(list, 0, {0.0f, 0.0f}, {32.0f, 32.0f}, HalfRed);
+    std::vector<Fenrir::DrawList2D> lists;
+    lists.push_back(std::move(list));
+
+    const GlProbe::Image image = test.DrawImage(std::move(lists), TextureFormat::Rgba8Unorm);
+
+    INFO("the quarter holds premultiplied red, half of it at alpha a half");
+    REQUIRE(GlProbe::Near(image.At(8, 8), {Half, 0.0f, 0.0f, Half}));
+    INFO("the rest was cleared to transparent black");
+    REQUIRE(GlProbe::Near(image.At(48, 48), {0.0f, 0.0f, 0.0f, 0.0f}));
+    REQUIRE(GlProbe::Near(image.At(40, 8), {0.0f, 0.0f, 0.0f, 0.0f}));
+    REQUIRE(test.messages->errors.empty());
 }

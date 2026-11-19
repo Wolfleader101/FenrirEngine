@@ -10,7 +10,7 @@ The renderer builds no UI in. ImGui serves the demos for now, and the engine wil
 
 1. **FenrirDraw2D: 2D draw data.** A new package of plain data with no GPU code. It depends only on FenrirAssets (for asset handles) and FenrirMath, and it knows no renderer, UI or language.
 2. **FenrirRenderer: draws 2D draw data into a target.** Its renderer core has one **2D render feature**. The screen overlay is the first target to use it.
-3. **A future FenrirPainter / FenrirUI: produces 2D draw data.** It provides shapes, paths, text, images, borders and clipping, and above that elements, layout, styling, focus and state, all with no knowledge of the graphics backend.
+3. **A future FenrirPainter / FenrirUI: produces 2D draw data.** *(FenrirPainter and FenrirUI are built: see the amendments under "Not built, and kept possible".)* It provides shapes, paths, text, images, borders and clipping, and above that elements, layout, styling, focus and state, all with no knowledge of the graphics backend.
 
 The dependencies point one way: UI and painter → FenrirDraw2D ← FenrirRenderer. The renderer never learns whether a draw list came from C++, C#, ImGui or another library.
 
@@ -61,7 +61,7 @@ The dependencies point one way: UI and painter → FenrirDraw2D ← FenrirRender
 - **Bad windows:** a submission to a window the renderer does not draw (ADR-0022: the main window only, for now) is dropped and logged once.
 - **Stage and transform:** the overlay draws in each window's `Overlay` stage, after every view's `Output`. It is orthographic, with `localToClip` mapping the window's logical size to clip space. There is no depth and no culling; those are restrictions of this target, not of FenrirDraw2D.
 - **Debug text on top:** debug screen text and on-screen messages (ADR-0025, ADR-0026) are drawn by the same 2D render feature as a fixed layer above every submitted layer, so a UI never hides engine diagnostics. *Amended 2026-10-23 (renderer ticket 19):* they are drawn by the debug render feature, in its own `Overlay` pass after the 2D render feature's, which keeps them the fixed top layer; it was the 2D render feature itself.
-- **`builtin:2d`:** a textured, vertex-coloured shader with the ImGui vertex layout (position `vec2`, UV `vec2`, colour RGBA8). Simple UIs need no shader of their own.
+- **`builtin:2d`:** a textured, vertex-coloured shader with a position, UV, RGBA8 vertex layout (position `vec2`, UV `vec2`, colour RGBA8; ImGui's layout, when this was decided). Simple UIs need no shader of their own.
 
 ## Colour and alpha
 
@@ -77,7 +77,7 @@ The dependencies point one way: UI and painter → FenrirDraw2D ← FenrirRender
   | `Opaque` | no blending; the shader's alpha is written | no blending |
 
   A premultiplied shader multiplies RGB by alpha in linear space, after any sRGB decode.
-- **Premultiplied alpha is preferred** for offscreen UI targets, both stored and composited, and the future `Painter` emits it.
+- **Premultiplied alpha is preferred** for offscreen UI targets, both stored and composited, and the `Painter` emits it (FenrirPainter, ADR-0060).
 - **The gamma compatibility path is opt-in.** A pipeline can set `blendSpace: Gamma`. Encoding is then off and its values pass through and blend in sRGB, as stock ImGui and RmlUi assume. It is allowed only on an 8-bit sRGB target; anywhere else it is a logged error and the pipeline draws with `Linear`. Gamma blending is never implicit.
 
 ## Input routing
@@ -119,7 +119,7 @@ FenrirInput (ADR-0017) gains **input routers** between the input feed and the ga
 
 FenrirWindow gains, keyed by `WindowId`:
 
-- `SetCursorShape` (arrow, text, the four resize shapes, hand, not-allowed, hidden), beside its cursor modes
+- `SetCursorShape` (arrow, text, the four resize shapes, hand, not-allowed, hidden), beside its cursor modes. *Amended 2026-11-16 (FenrirUI follow-ups ticket 04):* and move, with `GetCursorShape` to read it back; a FenrirUI root on the window sets it from its hovered element's `cursor` (ADR-0065)
 - clipboard text get and set
 - focus gained and lost, fed to FenrirInput for cancellation
 
@@ -134,13 +134,19 @@ Text input follows the `textInput` claim. After routing, FenrirWindow keeps SDL 
 
 ## ImGui in the demos
 
-The demo scaffold (ticket 23) has an optional `ImGuiOverlay`. It is the first consumer of `DrawList2D` and the overlay, and it gives demo apps tweak panels; the ImGui editor prototype reuses it.
+Dear ImGui served the demos until the demo UI kit (ADR-0071), and has been removed.
 
-- It is an input router.
-- It builds a `DrawList2D` with `builtin:2d`: input colour space `sRGB`, straight `AlphaBlend`, linear blending, so it tests the default path.
-- Its font atlas is an `ImageData` asset, re-uploaded whole when it changes.
+The demo scaffold (ticket 23) had an optional `ImGuiOverlay`. It was the first consumer of `DrawList2D` and the overlay, and it gave the demo apps their tweak panels until the demo UI kit replaced them.
 
-ImGui is a submodule linked only by that piece, built only with the examples. It is never part of a package and never the basis of Fenrir's own UI.
+- It was an input router.
+- It built a `DrawList2D` with `builtin:2d`: input colour space `sRGB`, straight `AlphaBlend`, linear blending, so it tested the default path.
+- Its font atlas was an `ImageData` asset, re-uploaded whole when it changed.
+
+ImGui was a submodule linked only by that piece, built only with the examples. It was never part of a package and never the basis of Fenrir's own UI.
+
+*Amended 2026-11-16 (ADR-0071):* ImGui leaves the demos and the repository. Every demo moves onto the demo UI kit over FenrirUI (`.scratch/demo-ui/`), and the spec's last ticket deletes the `ImGuiOverlay`, `DemoConfig::imguiOverlay` and the submodule, then rewrites this section to say so. `builtin:2d` and its vertex layout (position, UV, RGBA8) stay.
+
+*Done 2026-11-17 (demo UI ticket 13):* the `ImGuiOverlay`, `ImGuiOverlayLayer`, `ImGuiOverlayRouterPriority`, `DemoConfig::imguiOverlay`, the scaffold's ImGui tests and the `examples/DemoScaffold/libs/imgui` submodule are deleted. The demo UI kit's tests cover what the overlay's did: a press on a panel reaching neither the scene click nor the game, a drag not turning the camera, and text entry claiming and giving back the keyboard.
 
 ## Testing
 
@@ -165,10 +171,10 @@ ImGui is a submodule linked only by that piece, built only with the examples. It
 
 ## Not built, and kept possible
 
-- **The `Painter` and the retained UI framework:** new packages over FenrirDraw2D.
-- **An image target:** a draw list painted into an `AssetHandle<Image>` render target, which an ordinary 3D material then samples. This is the first world-space UI. It needs rules for creation, resizing, clearing, and ordering in the graph before the views that sample it. Premultiplied storage is preferred.
-- **A world-space target:** a world matrix and the camera's view-projection, depth-tested in a view's `Transparent` stage. The target sets depth and transforms; the draw list doesn't change. Lighting or normal-based effects may need more than `localToClip` in set 0. That is an extension of the set, not of the draw list.
-- **Dynamic images:** image assets updated by sub-rectangle (font atlases, runtime UI textures) rather than whole re-upload. The resource API should not assume images are immutable or always uploaded whole.
+- **The `Painter` and the retained UI framework:** new packages over FenrirDraw2D. *Amended 2026-11-11 (FenrirUI ticket 03):* the painter is built, as FenrirPainter (ADR-0060): analytic shapes, paints and clips through its own shader, `builtin:painter`, which it registers with the asset store, and premultiplied alpha as this ADR prefers. *Amended 2026-11-14 (FenrirUI close-out):* the retained UI framework is built too, as FenrirUI (ADR-0063 to ADR-0066).
+- **An image target:** a draw list painted into an `AssetHandle<Image>` render target, which an ordinary 3D material then samples. This is the first world-space UI. It needs rules for creation, resizing, clearing, and ordering in the graph before the views that sample it. Premultiplied storage is preferred. *Amended 2026-11-11 (FenrirUI ticket 01):* built as the image 2D target of ADR-0060, through the `ImageTargets2D` app resource: the image is a render target image, sRGB or linear, made with its asset and remade when it is replaced, cleared to transparent each frame it is drawn, and ordered by the graph before what samples it.
+- **A world-space target:** a world matrix and the camera's view-projection, depth-tested in a view's `Transparent` stage. The target sets depth and transforms; the draw list doesn't change. Lighting or normal-based effects may need more than `localToClip` in set 0. That is an extension of the set, not of the draw list. *Amended 2026-11-14 (FenrirUI ticket 23):* built as ADR-0060's world-space 2D target (`WorldQuad2D` and `WorldTargets2D`). It realises a scissor by ignoring it: there is no hardware scissor, and the painter's per-pixel clip from each vertex is the clip, so a list from a producer with no per-pixel clip of its own (ImGui's) draws unclipped there. Stencil was not taken (ADR-0060's gap 2).
+- **Dynamic images:** image assets updated by sub-rectangle (font atlases, runtime UI textures) rather than whole re-upload. The resource API should not assume images are immutable or always uploaded whole. *Amended 2026-11-11 (FenrirUI ticket 02):* built: `AssetStore::UpdateImage` writes a rectangle of an image in place and `ImageUpdatesSince` names the rectangles written since a revision, which the renderer uploads alone (FenrirText's glyph atlases).
 - **IME composition**, and C# authoring of draw lists through the managed host.
 
 ## Considered options

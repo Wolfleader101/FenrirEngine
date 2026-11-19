@@ -209,13 +209,14 @@ namespace RendererDemo
             if (keyboard.JustPressed(Fenrir::Key::T) && state->camera.IsValid())
             {
                 state->tonemapper = (state->tonemapper + 1) % Tonemappers.size();
-                state->camera.GetComponent<Fenrir::Camera>().tonemapper = Tonemappers.at(state->tonemapper).tonemapper;
+                state->camera.GetComponent<Fenrir::Camera>().look.tonemapper =
+                    Tonemappers.at(state->tonemapper).tonemapper;
                 app.Logger()->Info("T: the camera's tonemapper is {}", Tonemappers.at(state->tonemapper).name);
             }
             if (keyboard.JustPressed(Fenrir::Key::E) && state->camera.IsValid())
             {
                 state->exposure = (state->exposure + 1) % Exposures.size();
-                state->camera.GetComponent<Fenrir::Camera>().exposure = Exposures.at(state->exposure);
+                state->camera.GetComponent<Fenrir::Camera>().look.exposure = Exposures.at(state->exposure);
                 app.Logger()->Info("E: the camera's exposure is {:+.0f} EV", Exposures.at(state->exposure));
             }
         }
@@ -225,11 +226,11 @@ namespace RendererDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Sky";
-        scene.keyHelp =
-            "B: the scene's Sky, the skybox cubemap or a dusk colour. C: the skybox, generated or Darcy Wilson's (lit "
-            "by a neutral grey SkyLight). O: "
-            "the camera's own background, a teal colour overriding the Sky, on or off. T: the camera's tonemapper "
-            "(AgX, PBR Neutral, ACES, None). E: the camera's exposure (0, +1, +2, -1 EV).";
+        scene.keyRows = {{"B", "the scene's Sky, the skybox cubemap or a dusk colour"},
+                         {"C", "the skybox, generated or Darcy Wilson's (lit by a neutral grey SkyLight)"},
+                         {"O", "the camera's own background, a teal colour overriding the Sky, on or off"},
+                         {"T", "the camera's tonemapper (AgX, PBR Neutral, ACES, None)"},
+                         {"E", "the camera's exposure (0, +1, +2, -1 EV)"}};
         scene.keys = {Fenrir::Key::B, Fenrir::Key::O, Fenrir::Key::B, Fenrir::Key::O, Fenrir::Key::C,
                       Fenrir::Key::C, Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::T, Fenrir::Key::E,
                       Fenrir::Key::T, Fenrir::Key::E, Fenrir::Key::T, Fenrir::Key::E};

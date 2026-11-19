@@ -1,0 +1,9 @@
+@* A shell wrapping its ChildContent in a panel, counting its builds (ChildComponentTests). *@
+<panel class="shell">@ChildContent</panel>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    public int Builds;
+
+    protected override void OnBuilt(bool first) => ++Builds;
+}

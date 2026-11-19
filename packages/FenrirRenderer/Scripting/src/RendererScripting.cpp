@@ -16,6 +16,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
+#include "FenrirMath/Frustum.hpp"
 #include "FenrirRenderer/SpawnModel.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirScripting/NativeGuard.hpp"
@@ -35,6 +36,20 @@ namespace Fenrir
 {
     namespace
     {
+        // Calls the facade's `setter` on the app's renderer with `arguments` and says whether there was one to call:
+        // the one shape of every setter native, whose C# result is whether the app has a renderer.
+        template <typename... Args>
+        bool SetOnRenderer(const CallContext& context, RendererScripting& renderer, void (*setter)(App&, Args...),
+                           Args... arguments)
+        {
+            if (!renderer.HasRenderer(context))
+            {
+                return false;
+            }
+            setter(context.GetApp(), arguments...);
+            return true;
+        }
+
         // Writes `value` through `out` if there is one, and says whether there was.
         template <typename V>
         bool Write(const std::optional<V>& value, V* out)
@@ -225,12 +240,7 @@ namespace Fenrir
          */
         bool SetSpotShadowBudget(const CallContext& context, RendererScripting& renderer, std::uint32_t budget)
         {
-            if (!renderer.HasRenderer(context))
-            {
-                return false;
-            }
-            Renderer::SetSpotShadowBudget(context.GetApp(), budget);
-            return true;
+            return SetOnRenderer(context, renderer, &Renderer::SetSpotShadowBudget, budget);
         }
 
         /**
@@ -241,12 +251,78 @@ namespace Fenrir
          */
         bool SetPointShadowBudget(const CallContext& context, RendererScripting& renderer, std::uint32_t budget)
         {
-            if (!renderer.HasRenderer(context))
-            {
-                return false;
-            }
-            Renderer::SetPointShadowBudget(context.GetApp(), budget);
-            return true;
+            return SetOnRenderer(context, renderer, &Renderer::SetPointShadowBudget, budget);
+        }
+
+        /**
+         * @brief Turns the GPU frustum test (RendererConfig::gpuCulling, ADR-0057) on or off from the next frame, as
+         * Renderer::SetGpuCulling does: off, every cull pass keeps every candidate at level 0 and runs no occlusion
+         * phase, for comparison; the coarse cull of whole entities on the CPU stays on. Scripting never reaches
+         * RendererConfig, so this is C#'s way to the switch.
+         * @return Whether the app has a renderer.
+         * @facade Renderer.SetGpuCulling
+         */
+        bool SetGpuCulling(const CallContext& context, RendererScripting& renderer, bool on)
+        {
+            return SetOnRenderer(context, renderer, &Renderer::SetGpuCulling, on);
+        }
+
+        /**
+         * @brief Turns occlusion culling (RendererConfig::occlusionCulling, ADR-0057) on or off from the next frame,
+         * as Renderer::SetOcclusionCulling does: off, each camera's cull pass runs once and keeps every copy inside
+         * its frustum, for comparison. Shadow views never cull by occlusion.
+         * @return Whether the app has a renderer.
+         * @facade Renderer.SetOcclusionCulling
+         */
+        bool SetOcclusionCulling(const CallContext& context, RendererScripting& renderer, bool on)
+        {
+            return SetOnRenderer(context, renderer, &Renderer::SetOcclusionCulling, on);
+        }
+
+        /**
+         * @brief Freezes culling from the next frame, or thaws it, as Renderer::SetCullingFrozen does (ADR-0057):
+         * frozen, each camera keeps the frustum and position it has in that frame and culls against them however it
+         * moves after, and the Debug stage draws each frozen frustum's edges, so flying out of it shows what was kept.
+         * Freezing while frozen keeps the first frame's volumes.
+         * @return Whether the app has a renderer.
+         * @facade Renderer.SetCullingFrozen
+         */
+        bool SetCullingFrozen(const CallContext& context, RendererScripting& renderer, bool on)
+        {
+            return SetOnRenderer(context, renderer, &Renderer::SetCullingFrozen, on);
+        }
+
+        /**
+         * @brief Sets both level-of-detail thresholds from the next frame, as Renderer::SetLodSelection does
+         * (RendererConfig::lodErrorPixels and minProjectedPixels, ADR-0057): each copy of a mesh with levels draws at
+         * the coarsest level whose error, scaled by the copy's largest axis scale and projected at its distance from
+         * the camera, is under `lodErrorPixels` pixels, and a copy whose bounding sphere's radius projects under
+         * `minProjectedPixels` is dropped (0: never). Scripting never reaches RendererConfig, so this is C#'s way to
+         * both.
+         * @param lodErrorPixels The error, in pixels, a drawn level may show; 1 by default.
+         * @param minProjectedPixels The radius, in pixels, under which a copy is dropped; 0 by default.
+         * @return Whether the app has a renderer.
+         * @facade Renderer.SetLodSelection
+         */
+        bool SetLodSelection(const CallContext& context, RendererScripting& renderer, float lodErrorPixels,
+                             float minProjectedPixels)
+        {
+            return SetOnRenderer(context, renderer, &Renderer::SetLodSelection, lodErrorPixels, minProjectedPixels);
+        }
+
+        /**
+         * @brief The volume `camera` sees now (ADR-0057): the planes the renderer culls by, in world space from the
+         * camera's world matrix and its target's size, for a game that culls or streams its own entities. Five planes
+         * for a perspective camera, whose far plane is at infinity, six for an orthographic one.
+         * @param[out] frustum The frustum; one with no planes, which everything is inside, when there is none.
+         * @return Whether there is one: false with no renderer, no such camera, or a camera that draws nothing.
+         * @facade Renderer.GetFrustum
+         */
+        bool GetFrustum(const CallContext& context, RendererScripting& renderer, const Entity* camera,
+                        Math::Frustum* frustum)
+        {
+            const std::optional<Entity> entity = renderer.CameraFor(context, *camera);
+            return entity && Write(Renderer::GetFrustum(context.GetApp(), *entity), frustum);
         }
 
         /**

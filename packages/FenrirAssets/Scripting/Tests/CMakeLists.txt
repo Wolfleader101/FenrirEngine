@@ -13,6 +13,7 @@ fenrir_scripting_tests(Assets
         Shaders.cpp
         Shapes.cpp
         InstanceLists.cpp
+        MeshLods.cpp
 )
 fenrir_script_fixture(Assets)
 target_compile_definitions(FenrirAssetsScriptingTests PRIVATE

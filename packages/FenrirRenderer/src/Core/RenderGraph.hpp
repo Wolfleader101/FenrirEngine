@@ -23,6 +23,11 @@ namespace Fenrir::Render
      */
     enum class RenderStage : std::uint8_t
     {
+        /**
+         * @brief Each view's GPU cull of its opaque runs into indirect draws (ADR-0057), before the frame; open to a
+         * user compute pass that must run before it, such as a particle simulation.
+         */
+        Cull,
         /** @brief Work whose result is kept across frames, such as a panorama sky's cube texture, made when needed. */
         Prepare,
         /** @brief Each skinned mesh skinned once a frame in compute, for every later pass to draw (ADR-0050). */
@@ -99,6 +104,14 @@ namespace Fenrir::Render
         void SamplePrevious(GraphResource texture);
         /** @brief Reads `resource` as storage in a shader. */
         void StorageRead(GraphResource resource);
+        /**
+         * @brief Reads what the imported `buffer` held before this frame's passes wrote it, as storage in a shader,
+         * so this pass runs before every pass that writes it: SamplePrevious for a buffer (ADR-0057: the cull
+         * pass's first phase reads the visibility words its second phase writes). An error on a transient.
+         */
+        void StorageReadPrevious(GraphResource buffer);
+        /** @brief Reads `buffer` as the commands of its indirect draws (ADR-0057). */
+        void IndirectRead(GraphResource buffer);
         /** @brief Writes `resource` as storage in a shader. */
         void StorageWrite(GraphResource resource);
         /** @brief Reads `buffer` as vertex input in its draws. */
@@ -215,7 +228,11 @@ namespace Fenrir::Render
     class RenderGraph
     {
       public:
-        /** @brief Brings in a texture made outside the graph, such as the backbuffer or a camera's image target. */
+        /**
+         * @brief Brings in a texture made outside the graph, such as the backbuffer or a camera's image target. A
+         * texture already imported this frame gives back the resource it was imported as, so the passes of every
+         * feature that uses it are ordered by those uses.
+         */
         GraphResource ImportTexture(std::string name, Graphics::TextureHandle texture,
                                     const Graphics::TextureDesc& desc);
         /** @brief Brings in a buffer made outside the graph. */

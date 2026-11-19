@@ -1,10 +1,15 @@
+#include <algorithm>
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <format>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirAssets/FontData.hpp"
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
@@ -26,6 +31,25 @@ namespace Fenrir::Detail
             }
             return std::format("its {} stream has {} values for {} positions", name, stream.size(), vertices);
         }
+
+        // Empty when the list is whole triangles that all index below `vertices`, else what is wrong with it; `owner`
+        // names the list in the message ("its", "level of detail 2's").
+        std::string CheckTriangleList(std::string_view owner, const std::vector<std::uint32_t>& indices,
+                                      std::size_t vertices)
+        {
+            if (indices.size() % 3 != 0)
+            {
+                return std::format("{} {} indices are not whole triangles", owner, indices.size());
+            }
+            for (std::size_t i = 0; i < indices.size(); ++i)
+            {
+                if (indices[i] >= vertices)
+                {
+                    return std::format("{} index {} is {}, past its {} vertices", owner, i, indices[i], vertices);
+                }
+            }
+            return {};
+        }
     } // namespace
 
     std::string PrepareAsset(MeshData& mesh, AssetWarnings& warnings)
@@ -41,16 +65,9 @@ namespace Fenrir::Detail
                 return problem;
             }
         }
-        if (mesh.indices.size() % 3 != 0)
+        if (std::string problem = CheckTriangleList("its", mesh.indices, vertices); !problem.empty())
         {
-            return std::format("its {} indices are not whole triangles", mesh.indices.size());
-        }
-        for (std::size_t i = 0; i < mesh.indices.size(); ++i)
-        {
-            if (mesh.indices[i] >= vertices)
-            {
-                return std::format("index {} is {}, past its {} vertices", i, mesh.indices[i], vertices);
-            }
+            return problem;
         }
         for (std::size_t i = 0; i < mesh.submeshes.size(); ++i)
         {
@@ -60,6 +77,31 @@ namespace Fenrir::Detail
                 return std::format("submesh {} reaches index {}, past its {} indices", i,
                                    std::size_t{submesh.indexOffset} + submesh.indexCount, mesh.indices.size());
             }
+        }
+
+        if (!mesh.lods.empty() && mesh.submeshes.size() > 1)
+        {
+            return std::format("it has {} levels of detail and {} submeshes, and a level is one triangle list over a "
+                               "mesh with one submesh or none",
+                               mesh.lods.size(), mesh.submeshes.size());
+        }
+        float previousError = 0.0f;
+        for (std::size_t level = 0; level < mesh.lods.size(); ++level)
+        {
+            const MeshLod& lod = mesh.lods[level];
+            if (std::string problem =
+                    CheckTriangleList(std::format("level of detail {}'s", level + 1), lod.indices, vertices);
+                !problem.empty())
+            {
+                return problem;
+            }
+            // Written as a negation so a NaN error is refused too.
+            if (!(lod.error > previousError))
+            {
+                return std::format("level of detail {}'s error {} is not greater than level {}'s {}", level + 1,
+                                   lod.error, level, previousError);
+            }
+            previousError = lod.error;
         }
 
         mesh.bounds = {Math::Vec3(0.0f), Math::Vec3(0.0f)};
@@ -122,6 +164,26 @@ namespace Fenrir::Detail
         {
             return std::format("it has {} colours for {} transforms: give one colour per transform, or none",
                                list.colours.size(), list.transforms.size());
+        }
+        return {};
+    }
+
+    std::string PrepareAsset(FontData& font, AssetWarnings&)
+    {
+        // The sfnt version tags a TrueType or OpenType file, or a collection of them, starts with.
+        constexpr std::array<std::array<std::uint8_t, 4>, 4> tags = {{
+            {0x00, 0x01, 0x00, 0x00},
+            {'O', 'T', 'T', 'O'},
+            {'t', 'r', 'u', 'e'},
+            {'t', 't', 'c', 'f'},
+        }};
+        const bool tagged = font.bytes.size() >= 4 && std::ranges::any_of(tags, [&](const auto& tag) {
+                                return std::ranges::equal(std::span(font.bytes).first(4), tag, {},
+                                                          [](std::byte b) { return static_cast<std::uint8_t>(b); });
+                            });
+        if (!tagged)
+        {
+            return std::format("its {} bytes do not start as a TrueType or OpenType file does", font.bytes.size());
         }
         return {};
     }

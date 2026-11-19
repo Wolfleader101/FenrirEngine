@@ -1,0 +1,47 @@
+# The UI binding's own selection (ADR-0042, tools/describe-api/README.md): what its natives take and give by pointer,
+# and the event it shares. FenrirUI's root config holds its target as a shared pointer and its blend space as an
+# optional, so the settings C# makes a root with are this library's (ScriptUI.hpp); FenrirUI's own plain data (the
+# element and root ids, the UI event, an element's rectangles and the enums) is described as FenrirUI declares it, so
+# its mirrors are generated from FenrirUI's headers. The window id, key and mouse button are the input binding's, the
+# rectangle the text binding's, the painter id the painter binding's, the vector and the ray the math binding's, the
+# image handle the assets binding's and the entity the built-in binding's. An image root's colour space is FenrirAssets's
+# enum, which no other binding mirrors, so it is mirrored here through the settings that hold it.
+headers = [
+    "../include/FenrirUIScripting/ScriptUI.hpp",
+    "../../include/FenrirUI/ElementId.hpp",
+    "../../include/FenrirUI/UIEvent.hpp",
+    "../../include/FenrirUI/Element.hpp",
+    "../../include/FenrirUI/UIRoot.hpp",
+    "../../include/FenrirUI/Style.hpp",
+    "../../../FenrirAssets/include/FenrirAssets/ImageData.hpp",
+    "../../../FenrirPainter/Scripting/include/FenrirPainterScripting/ScriptPainter.hpp",
+]
+
+# The world root's settings hold the engine's Entity, which keeps its value and entity list private: described here as
+# nested with the layout FenrirECS shares, and mirrored by the built-in binding.
+private-members = ["Fenrir::Entity"]
+
+[types]
+"Fenrir::ScriptUI::RootSettings" = "shared-struct"
+"Fenrir::ScriptUI::ImageRootSettings" = "shared-struct"
+"Fenrir::ScriptUI::WorldRootSettings" = "shared-struct"
+"Fenrir::ElementId" = "shared-struct"
+"Fenrir::UIRootId" = "shared-struct"
+"Fenrir::ElementBoxes" = "shared-struct"
+# The UI's event, read from C# through EventReader<UIEvent>.
+"Fenrir::UIEvent" = "event"
+# The enums a native takes or gives by value, which no struct here holds.
+"Fenrir::RemoveMode" = "enum"
+"Fenrir::Cursor" = "enum"
+# The painter binding's (FenrirPainterScripting.api.toml gives it this role).
+"Fenrir::ScriptPainter::PainterId" = "shared-struct"
+# The text binding's.
+"Fenrir::Rect2D" = "shared-struct"
+# The built-in binding's.
+"Fenrir::Entity" = "shared-struct"
+# The math binding's.
+"Fenrir::Math::Ray" = "shared-struct"
+"Fenrir::Math::Vec2" = "bound-type"
+"Fenrir::Math::Vec3" = "bound-type"
+# The assets binding's.
+"Fenrir::AssetHandle<Fenrir::Image>" = "bound-type"

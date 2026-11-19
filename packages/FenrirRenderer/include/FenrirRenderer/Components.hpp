@@ -41,10 +41,12 @@ namespace Fenrir
      * the material's base colour in builtin:lit and builtin:unlit. The renderer uploads the list when it is new or its
      * revision has moved on, so a list that never changes uploads once, however far the entity moves.
      *
-     * One draw a pass, whatever the count: never merged with other items, and never culled, copy by copy or whole. A
-     * transparent material sorts the whole list by the entity's world position. An empty or stale mesh or list is
-     * skipped (a stale one logged once per handle), as is a mesh with skin data; an empty or stale material draws with
-     * the fallback material, as a MeshRenderer's does.
+     * One draw a pass, whatever the count: never merged with other items. Its world bounds are the box around every
+     * copy's mesh box (ADR-0057; Renderer::GetWorldBounds), by which a camera it is wholly outside of leaves the whole
+     * list out; an opaque or masked list's copies are then culled one by one in the camera's cull pass, and a
+     * transparent list is sorted whole by the entity's world position. An
+     * empty or stale mesh or list is skipped (a stale one logged once per handle), as is a mesh with skin data; an
+     * empty or stale material draws with the fallback material, as a MeshRenderer's does.
      */
     struct InstancedMeshRenderer
     {
@@ -664,6 +666,38 @@ namespace Fenrir
     };
 
     /**
+     * @brief How a view turns the scene's light into its picture (ADR-0059): its exposure, the lens's effects, its
+     * colour grade, its tonemapper and its film. Plain data, one value: copy it to give another camera the same look.
+     * Every effect is off by default, and off costs nothing; the defaults keep the exposure at 0 EV, AgX and a light
+     * bloom. In the frame they run in ADR-0059's order: bloom, streaks and the flare in `PostProcess`, then in Output
+     * chromatic aberration as the scene is read, the exposure, the vignette, the grade, the tonemapper and the grain.
+     */
+    struct CameraLook
+    {
+        /**
+         * @brief The view's exposure in EV stops: its Output pass multiplies the linear colour by 2^exposure before
+         * the tonemapper, so each +1 doubles it. 0 by default.
+         */
+        float exposure = 0.0f;
+        /** @brief How the view's Output pass maps its HDR colour into what its target stores (ADR-0049). */
+        Tonemapper tonemapper = Tonemapper::AgX;
+        /** @brief How the view's bright pixels bleed into their surroundings before the tonemap. */
+        Bloom bloom;
+        /** @brief How the view's bright pixels draw out into horizontal lines before the tonemap, after bloom. */
+        AnamorphicStreaks anamorphicStreaks;
+        /** @brief The view's ghosts, halo and lens dirt before the tonemap, after the streaks. */
+        LensFlare lensFlare;
+        /** @brief The view's white balance, contrast, tints and saturation, before the tonemap. */
+        ColourGrading colourGrading;
+        /** @brief How the view's colours fringe towards its corners, as it reads the scene. */
+        ChromaticAberration chromaticAberration;
+        /** @brief How the view darkens towards its corners, before the grade. */
+        Vignette vignette;
+        /** @brief The view's film grain, after its tonemap. */
+        FilmGrain filmGrain;
+    };
+
+    /**
      * @brief A view's ambient occlusion (ADR-0049): ground-truth ambient occlusion (GTAO, after Intel's XeGTAO) from
      * its depth prepass, darkening the sky's light where nearby geometry hides the sky from a surface, as in creases,
      * corners and under objects resting on the ground. It darkens the sky's diffuse light, and its specular light by a
@@ -787,27 +821,8 @@ namespace Fenrir
          * belong to the window, not the view, and draw either way.
          */
         bool drawDebug = true;
-        /**
-         * @brief The view's exposure in EV stops: its Output pass multiplies the linear colour by 2^exposure before
-         * the tonemapper, so each +1 doubles it. 0 by default.
-         */
-        float exposure = 0.0f;
-        /** @brief How the view's Output pass maps its HDR colour into what its target stores (ADR-0049). */
-        Tonemapper tonemapper = Tonemapper::AgX;
-        /** @brief How the view's bright pixels bleed into their surroundings before the tonemap. */
-        Bloom bloom;
-        /** @brief How the view's bright pixels draw out into horizontal lines before the tonemap, after bloom. */
-        AnamorphicStreaks anamorphicStreaks;
-        /** @brief The view's ghosts, halo and lens dirt before the tonemap, after the streaks. */
-        LensFlare lensFlare;
-        /** @brief The look of the view: its white balance, contrast, tints and saturation, before the tonemap. */
-        ColourGrading colourGrading;
-        /** @brief How the view's colours fringe towards its corners, as it reads the scene. */
-        ChromaticAberration chromaticAberration;
-        /** @brief How the view darkens towards its corners, before the grade. */
-        Vignette vignette;
-        /** @brief The view's film grain, after its tonemap. */
-        FilmGrain filmGrain;
+        /** @brief How the view turns the scene's light into its picture: exposure, lens, grade, tonemap and film. */
+        CameraLook look;
         /** @brief How nearby geometry darkens the sky's light in the view. */
         AmbientOcclusion ambientOcclusion;
         /** @brief How smooth surfaces in the view mirror what is on screen. */

@@ -10,5 +10,6 @@ public static class MathDefaults
 {
     public static global::Fenrir.Math.Colour Colour() => new();
     public static global::Fenrir.Math.Bounds Bounds() => new();
+    public static global::Fenrir.Math.Frustum Frustum() => new();
     public static global::Fenrir.Math.Ray Ray() => new();
 }

@@ -1,0 +1,463 @@
+/*
+ * The demo UI kit's stylesheet (examples/DemoScaffold/README.md, "The demo UI kit"), for demo.ui and the sections, rows
+ * and help the kit makes in it. Every demo app loads it with hot reload on (not in a smoke run): edit it while a demo
+ * runs, save, and the kit restyles. The theme is the custom properties on #demo-kit. Sizes are in UI units of a window
+ * 1080 units high. Text is FenrirText's embedded default face.
+ *
+ * Only the panels' boxes take the pointer, so the free-fly camera's right-drag and the scene click pass everywhere
+ * else.
+ */
+
+#demo-kit {
+    --demo-ink: #e8ecf2;
+    --demo-ink-dim: rgba(232, 236, 242, 0.62);
+    --demo-panel: rgba(14, 18, 26, 0.78);
+    --demo-edge: rgba(255, 255, 255, 0.12);
+    --demo-control: rgba(255, 255, 255, 0.06);
+    --demo-control-hover: rgba(255, 255, 255, 0.14);
+    --demo-accent: #6cc4ff;
+
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    color: var(--demo-ink);
+    font-family: default;
+    font-size: 17px;
+}
+
+/* A panel: dark, translucent, and the only part of the kit that takes the pointer (it inherits to what is inside). */
+.demo-box {
+    position: absolute;
+    padding: 12px;
+    row-gap: 10px;
+    border: 1px solid var(--demo-edge);
+    border-radius: 6px;
+    background-color: var(--demo-panel);
+    pointer-events: all;
+}
+
+/* The demo panel, on the right: its sections scroll when taller than the window, over the hint line at its foot. */
+#demo-panel {
+    right: 16px;
+    top: 16px;
+    width: 360px;
+    max-height: 94%;
+}
+
+/* A scroll view inside the panel's box: none of the default stylesheet's light background, border or padding. */
+#demo-panel-scroll {
+    flex-shrink: 1;
+    min-height: 0;
+    row-gap: 10px;
+    padding: 0;
+    border-width: 0;
+    background-color: transparent;
+}
+
+/* The hint line: the hovered or focused row's hint, under a rule; the kit takes it out of the layout while empty. */
+#demo-hint {
+    padding-top: 6px;
+    border-top-width: 1px;
+    border-top-color: var(--demo-edge);
+    color: var(--demo-ink-dim);
+    font-size: 15px;
+}
+
+#demo-panel-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--demo-accent);
+}
+
+.demo-sections {
+    row-gap: 10px;
+}
+
+/* The help, at the bottom left, clear of the on-screen messages stacked from the top left. */
+#demo-help {
+    left: 16px;
+    bottom: 16px;
+    max-width: 760px;
+}
+
+/* A section's heading, and the help's title: a flat button across the box that collapses what is under it. */
+.demo-section-title,
+.demo-help-title {
+    justify-content: flex-start;
+    padding: 4px 8px;
+    border: 0px solid transparent;
+    border-radius: 4px;
+    background-color: var(--demo-control);
+    color: var(--demo-ink);
+    font-weight: bold;
+}
+
+.demo-section-title:hover,
+.demo-help-title:hover {
+    background-color: var(--demo-control-hover);
+}
+
+.demo-section-title:active,
+.demo-help-title:active {
+    background-color: var(--demo-edge);
+}
+
+.demo-section {
+    row-gap: 6px;
+}
+
+.demo-section-body {
+    padding: 0 8px;
+    row-gap: 4px;
+}
+
+/* A collapsed section's heading is dimmed; the kit takes its body out of the layout. */
+.demo-closed > .demo-section-title {
+    color: var(--demo-ink-dim);
+}
+
+.demo-text {
+    color: var(--demo-ink);
+}
+
+.demo-disabled {
+    color: var(--demo-ink-dim);
+}
+
+/* A demo slot, where a script mounts a Razor panel: laid out as the sections are. Without scripting it holds the note
+   that its panel needs it, a muted line. */
+.demo-slot {
+    row-gap: 10px;
+}
+
+/* A row a shared Razor component makes keeps its hint in a label of its own, which the kit reads for the hint line. */
+.demo-row-hint {
+    display: none;
+}
+
+.demo-slot-note {
+    padding: 0 8px;
+    color: var(--demo-ink-dim);
+    font-size: 15px;
+}
+
+/* A readout: its label in a column of its own, then its live value. */
+.demo-readout {
+    flex-direction: row;
+    column-gap: 12px;
+}
+
+.demo-readout-label {
+    width: 140px;
+    flex-shrink: 0;
+    color: var(--demo-ink-dim);
+}
+
+.demo-readout-value {
+    flex-grow: 1;
+    flex-shrink: 1;
+    color: var(--demo-ink);
+}
+
+.demo-disabled > .demo-readout-value {
+    color: var(--demo-ink-dim);
+}
+
+/* A separator: a rule over its title, grouping the rows after it. */
+.demo-separator {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top-width: 1px;
+    border-top-color: var(--demo-edge);
+    color: var(--demo-accent);
+    font-size: 15px;
+}
+
+/* The scene switcher: a button per scene, wrapping, the active one in the accent. */
+.demo-scenes {
+    flex-direction: row;
+    flex-wrap: wrap;
+    column-gap: 6px;
+    row-gap: 6px;
+}
+
+.demo-scene-button {
+    padding: 3px 8px;
+    border: 1px solid var(--demo-edge);
+    border-radius: 4px;
+    background-color: var(--demo-control);
+    color: var(--demo-ink);
+}
+
+.demo-scene-button:hover {
+    background-color: var(--demo-control-hover);
+}
+
+.demo-scene-button.active {
+    border-color: var(--demo-accent);
+    color: var(--demo-accent);
+}
+
+/*
+ * A switch row: its label in the readouts' column, then its control. The controls keep FenrirUI's default look, in
+ * the kit's colours.
+ */
+.demo-row {
+    flex-direction: row;
+    align-items: center;
+    column-gap: 12px;
+}
+
+.demo-row-label {
+    width: 140px;
+    flex-shrink: 0;
+    color: var(--demo-ink-dim);
+}
+
+.demo-disabled > .demo-row-label {
+    opacity: 0.6;
+}
+
+.demo-slider {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.demo-slider > slider-fill {
+    background-color: var(--demo-accent);
+}
+
+/* A range's value, beside its slider. */
+.demo-range-value {
+    width: 64px;
+    flex-shrink: 0;
+    text-align: right;
+}
+
+/* A choice's buttons, and a long choice's stepper round its option's name. */
+.demo-choice-buttons,
+.demo-stepper {
+    flex-direction: row;
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 4px;
+    row-gap: 4px;
+}
+
+.demo-choice-button,
+.demo-step-previous,
+.demo-step-next,
+.demo-button {
+    padding: 3px 8px;
+    border: 1px solid var(--demo-edge);
+    border-radius: 4px;
+    background-color: var(--demo-control);
+    color: var(--demo-ink);
+}
+
+.demo-choice-button:hover,
+.demo-step-previous:hover,
+.demo-step-next:hover,
+.demo-button:hover {
+    background-color: var(--demo-control-hover);
+}
+
+.demo-choice-button.active {
+    border-color: var(--demo-accent);
+    color: var(--demo-accent);
+}
+
+.demo-choice-name {
+    flex-grow: 1;
+    flex-shrink: 1;
+    text-align: center;
+}
+
+/* A colour: its swatch beside the label, and its hue, saturation and value sliders on the lines under them. */
+.demo-colour {
+    flex-wrap: wrap;
+    row-gap: 4px;
+}
+
+.demo-swatch {
+    flex-grow: 1;
+    height: 18px;
+    border: 1px solid var(--demo-edge);
+    border-radius: 3px;
+}
+
+.demo-colour-sliders {
+    width: 100%;
+    row-gap: 4px;
+}
+
+.demo-colour-channel {
+    flex-direction: row;
+    align-items: center;
+    column-gap: 8px;
+    padding-left: 152px;
+}
+
+.demo-colour-channel-label {
+    width: 14px;
+    color: var(--demo-ink-dim);
+}
+
+/* A button row's button, across the row. */
+.demo-button {
+    flex-grow: 1;
+}
+
+.demo-entry {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+/* The help: the app and the scene, then a table of key rows, the keys in a column of their own. */
+.demo-help-heading {
+    color: var(--demo-accent);
+    padding-bottom: 4px;
+}
+
+.demo-key-row {
+    flex-direction: row;
+    column-gap: 12px;
+}
+
+.demo-keys {
+    width: 200px;
+    flex-shrink: 0;
+    color: var(--demo-accent);
+}
+
+.demo-what {
+    flex-shrink: 1;
+    flex-grow: 1;
+    color: var(--demo-ink);
+}
+
+/*
+ * The demo tutorial: a card at the top centre, in a row across the window that takes no pointer input, so a press
+ * beside the card is the scene's. Debug screen text and on-screen messages draw over it. It comes in and goes out
+ * through :intro and :outro, faded and slid, and takes no press while it goes.
+ */
+#demo-tutorial-area {
+    position: absolute;
+    left: 0;
+    top: 16px;
+    width: 100%;
+    align-items: center;
+}
+
+.demo-tutorial {
+    position: relative;
+    width: 560px;
+    row-gap: 8px;
+    opacity: 1;
+    transform: translateY(0px);
+    transition-property: opacity, transform;
+    transition-duration: 0.2s;
+    transition-timing-function: ease-out;
+}
+
+.demo-tutorial:intro,
+.demo-tutorial:outro {
+    opacity: 0;
+    transform: translateY(-16px);
+}
+
+.demo-tutorial:outro {
+    pointer-events: none;
+}
+
+.demo-tutorial-header {
+    flex-direction: row;
+    column-gap: 12px;
+}
+
+.demo-tutorial-title {
+    flex-grow: 1;
+    flex-shrink: 1;
+    color: var(--demo-ink-dim);
+    font-size: 15px;
+}
+
+.demo-tutorial-progress {
+    color: var(--demo-ink-dim);
+    font-size: 15px;
+}
+
+.demo-tutorial-step-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--demo-accent);
+}
+
+.demo-tutorial-text {
+    color: var(--demo-ink);
+}
+
+/* A step's key rows, as the help's. */
+.demo-tutorial-key-row {
+    flex-direction: row;
+    column-gap: 12px;
+}
+
+.demo-tutorial-key {
+    width: 200px;
+    flex-shrink: 0;
+    color: var(--demo-accent);
+}
+
+.demo-tutorial-what {
+    flex-shrink: 1;
+    flex-grow: 1;
+    color: var(--demo-ink);
+}
+
+/* Back and Next (Done on the last step) on the left, Close on the right. */
+.demo-tutorial-buttons {
+    flex-direction: row;
+    column-gap: 6px;
+    padding-top: 4px;
+}
+
+.demo-tutorial-button {
+    padding: 3px 12px;
+    border: 1px solid var(--demo-edge);
+    border-radius: 4px;
+    background-color: var(--demo-control);
+    color: var(--demo-ink);
+}
+
+.demo-tutorial-button:hover {
+    background-color: var(--demo-control-hover);
+}
+
+/* Disabled controls anywhere in the kit (the tutorial's Back on its first step, a row a scene disables): dimmed on the
+   dark panels, never the default stylesheet's light greys. */
+#demo-kit button:disabled,
+#demo-kit checkbox:disabled,
+#demo-kit textentry:disabled,
+#demo-kit slider:disabled > slider-thumb {
+    border-color: var(--demo-edge);
+    background-color: var(--demo-control);
+    color: var(--demo-ink-dim);
+}
+
+#demo-kit slider:disabled {
+    background-color: var(--demo-control);
+}
+
+.demo-tutorial-next {
+    border-color: var(--demo-accent);
+    color: var(--demo-accent);
+}
+
+.demo-tutorial-close {
+    margin-left: auto;
+}

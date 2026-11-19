@@ -1,0 +1,18 @@
+@* A Razor component that paints (PaintTests): it records each OnPaint's painter, boxes and context. *@
+@using Fenrir.Painter
+<label class="painted">@Text</label>
+
+@code {
+    [Parameter] public string Text { get; set; } = "";
+    public List<ulong> Painters = [];
+    public List<float> BorderX = [];
+    public bool Throw;
+
+    protected override void OnPaint(PainterId painter, ElementBoxes boxes)
+    {
+        if (Throw)
+            throw new InvalidOperationException("OnPaint threw");
+        Painters.Add(painter.Value);
+        BorderX.Add(boxes.Border.X);
+    }
+}

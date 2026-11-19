@@ -48,7 +48,8 @@ namespace PhysicsDemo.Scripts;
 //                  teleport it the safe distance
 //   K              push out: put the character half into the test wall, log Penetrations, and apply Depenetrate
 //
-// The character's name shows its readings every frame, shown as screen text: ground state and what it stands on, velocity, moved velocity,
+// The character's name shows its readings every frame, shown as a readout in the scene's demo slot
+// (ReadingsPanel.razor): ground state and what it stands on, velocity, moved velocity,
 // carried velocity while it has some, onWall, onCeiling and shapeBlocked while set, the ground's friction off the
 // default, how many times it has landed, and how often its ground state changed in the last second. Each ground change
 // is logged with its tick. As in the other C# scenes, the scene's state lives in components, so it survives a hot reload.
@@ -813,7 +814,7 @@ public sealed class CharacterCamera : ISystem
     }
 }
 
-// The character's look and its readings in its name, every frame, shown as screen text.
+// The character's look and its readings in its name, every frame, shown as a readout in the demo slot.
 [System(Phase.Update, Order = 340)]
 public sealed class CharacterReadings : ISystem
 {
@@ -828,11 +829,11 @@ public sealed class CharacterReadings : ISystem
             transform.Scale = new Vector3(0.6f, 2 * (shape.HalfHeight + shape.Radius), 0.6f);
         }
 
-        var shown = new List<Entity>();
+        var shown = new List<(string, Entity)>();
         foreach (var (entity, body, player) in context.Query<CharacterBody, CharacterPlayer>())
         {
             entity.Get<Name>().Value.SetText(Reading(in body.Value, in player.Value));
-            shown.Add(entity);
+            shown.Add(("Character", entity));
         }
         Looks.ShowReadouts(shown);
     }

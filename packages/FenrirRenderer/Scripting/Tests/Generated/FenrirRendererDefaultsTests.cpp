@@ -126,4 +126,10 @@ TEST_CASE("C#'s new SpotLight() has C++'s Fenrir::SpotLight{} defaults, field by
     CheckDefaults<Fenrir::SpotLight>(Fenrir::ScriptingProbe::Component(app.scripting), "SpotLight");
 }
 
+TEST_CASE("C#'s new WorldQuad2D() has C++'s Fenrir::WorldQuad2D{} defaults, field by field", "[renderer][scripting][bindings]")
+{
+    Fenrir::Testing::RendererScriptingApp app;
+    CheckDefaults<Fenrir::WorldQuad2D>(Fenrir::ScriptingProbe::Component(app.scripting), "WorldQuad2D");
+}
+
 // clang-format on

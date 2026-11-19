@@ -14,8 +14,9 @@ public static class Place
 }
 
 // What a game's system does to draw something, once armed: on its next update it loads a mesh by file#Label, makes a
-// builtin:unlit material and sets its colour, and spawns a MeshRenderer at (1, 2, 3) and a Camera at (0, 0, 5) looking
-// along -Z. The tests read back the entities it made.
+// builtin:unlit material and sets its colour, and spawns a MeshRenderer at (1, 2, 3) and a Camera at (1, 2, 5) looking
+// along -Z, straight at it (an entity outside the camera's view is not drawn, ADR-0057). The tests read back the
+// entities it made.
 [System(Phase.Update)]
 public sealed class SceneBuilder : ISystem
 {
@@ -45,7 +46,7 @@ public sealed class SceneBuilder : ISystem
         drawn = entity.Value;
 
         Entity eye = context.CreateEntity();
-        eye.Add(Place.At(new Vector3(0, 0, 5)));
+        eye.Add(Place.At(new Vector3(1, 2, 5)));
         eye.Add(new Camera());
         camera = eye.Value;
     }

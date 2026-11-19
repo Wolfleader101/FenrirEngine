@@ -5,6 +5,8 @@
 # stb (the libs/stb submodule, a pinned commit) is header-only: stb_image is compiled once, here, as FenrirStbImage.
 # It reads PNG, JPEG and HDR and nothing else, from memory (FenrirAssets reads the files). cgltf (libs/cgltf, tag v1.15)
 # reads glTF and GLB, and ufbx (libs/ufbx, tag v0.23.1) reads FBX and OBJ (ADR-0031); each is compiled once, here.
+# meshoptimizer (libs/meshoptimizer, tag v1.3, MIT) simplifies meshes into levels of detail (ADR-0057) through its own
+# CMake, as a static library; FenrirAssets uses it in src/MeshLods.cpp alone, so it is linked PRIVATE like the importers.
 # Debug and Release are supported; RelWithDebInfo and MinSizeRel build them too but are not mapped to anything of
 # theirs.
 
@@ -34,3 +36,11 @@ if(MSVC)
     # ufbx.c is one very large translation unit.
     target_compile_options(FenrirUfbx PRIVATE /bigobj)
 endif()
+
+# meshoptimizer builds through its own CMakeLists.txt: the library only, nothing installed.
+set(MESHOPT_BUILD_DEMO OFF CACHE BOOL "" FORCE)
+set(MESHOPT_BUILD_GLTFPACK OFF CACHE BOOL "" FORCE)
+set(MESHOPT_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(MESHOPT_INSTALL OFF CACHE BOOL "" FORCE)
+add_subdirectory(meshoptimizer EXCLUDE_FROM_ALL)
+set_target_properties(meshoptimizer PROPERTIES SYSTEM TRUE)

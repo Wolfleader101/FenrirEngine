@@ -76,32 +76,32 @@ namespace
         const auto image = test.assets.Store().Add<Fenrir::Image>(std::move(data), Fenrir::AssetOwner::App());
         camera.target = Fenrir::ImageTarget{image};
         camera.background = Fenrir::ColourBackground{colour};
-        camera.tonemapper = Fenrir::Tonemapper::None;
+        camera.look.tonemapper = Fenrir::Tonemapper::None;
         return image;
     }
 
     /** @brief Each effect at a strength that shows in the golden scene. */
     void Aberrated(Fenrir::Camera& camera)
     {
-        camera.chromaticAberration.intensity = 0.04f;
+        camera.look.chromaticAberration.intensity = 0.04f;
     }
 
     void Vignetted(Fenrir::Camera& camera)
     {
-        camera.vignette = {0.5f, 0.3f, 0.7f, 1.0f};
+        camera.look.vignette = {0.5f, 0.3f, 0.7f, 1.0f};
     }
 
     void Grained(Fenrir::Camera& camera)
     {
-        camera.filmGrain = {0.08f, 0.8f, 1.0f};
+        camera.look.filmGrain = {0.08f, 0.8f, 1.0f};
     }
 
     /** @brief Every effect on, strongly. */
     void EveryEffect(Fenrir::Camera& camera)
     {
-        camera.chromaticAberration.intensity = 0.1f;
-        camera.vignette = {1.0f, 0.1f, 0.5f, 0.5f};
-        camera.filmGrain = {0.3f, 0.2f, 2.0f};
+        camera.look.chromaticAberration.intensity = 0.1f;
+        camera.look.vignette = {1.0f, 0.1f, 0.5f, 0.5f};
+        camera.look.filmGrain = {0.3f, 0.2f, 2.0f};
     }
 
     void RequireGolden(std::string_view name, const RendererTest::Rgba8Image& frame)
@@ -135,7 +135,7 @@ namespace
         test.RequireOpenGL();
         Fenrir::Camera& camera = test.AddCamera();
         const auto image = FlatView(test, camera, 95, 63, Fenrir::Colour::Black);
-        camera.chromaticAberration.intensity = aberration;
+        camera.look.chromaticAberration.intensity = aberration;
         AddPatch(test, 2.0f, 0.3f, 3.0f, Fenrir::Colour::White);
         AddPatch(test, 0.0f, 1.2f, 1.2f, Fenrir::Colour{1.0f, 0.5f, 0.2f, 1.0f});
 
@@ -240,7 +240,7 @@ TEST_CASE("The vignette darkens a flat view by its CPU falloff", "[renderer][gl]
         test.RequireOpenGL();
         Fenrir::Camera& camera = test.AddCamera();
         const auto image = FlatView(test, camera, 96, 64, Fenrir::Colour{0.18f, 0.18f, 0.18f, 1.0f});
-        camera.vignette = {0.6f, 0.2f, 0.6f, roundness};
+        camera.look.vignette = {0.6f, 0.2f, 0.6f, roundness};
         test.RunFrame();
         const GlProbe::Image pixels =
             GlProbe::Read(RendererProbe::Device(test.renderer), RendererProbe::ImageTexture(test.renderer, image));
@@ -250,7 +250,7 @@ TEST_CASE("The vignette darkens a flat view by its CPU falloff", "[renderer][gl]
         {
             const Vec2 uv((static_cast<float>(x) + 0.5f) / 96.0f, (static_cast<float>(y) + 0.5f) / 64.0f);
             const float expected =
-                Encode(0.18f * Fenrir::Render::VignetteFalloff(ToCore(camera.vignette), uv, 96.0f / 64.0f));
+                Encode(0.18f * Fenrir::Render::VignetteFalloff(ToCore(camera.look.vignette), uv, 96.0f / 64.0f));
             const GlProbe::Pixel actual = pixels.At(x, y);
             INFO("roundness " << roundness << ", pixel (" << x << ", " << y << "): the GPU stored " << actual[0]
                               << ", the mirror encodes to " << expected);
@@ -270,7 +270,7 @@ TEST_CASE("Film grain matches its CPU mirror for the frame it is drawn in", "[re
         test.RequireOpenGL();
         Fenrir::Camera& camera = test.AddCamera();
         const auto image = FlatView(test, camera, 32, 16, Fenrir::Colour{0.18f, 0.18f, 0.18f, 1.0f});
-        camera.filmGrain = {0.1f, 0.8f, size};
+        camera.look.filmGrain = {0.1f, 0.8f, size};
         const auto frame = static_cast<std::uint32_t>(RendererProbe::Core(test.renderer).FrameIndex());
         test.RunFrame();
         const GlProbe::Image pixels =
@@ -282,7 +282,8 @@ TEST_CASE("Film grain matches its CPU mirror for the frame it is drawn in", "[re
         {
             for (std::uint32_t x = 0; x < 32; ++x)
             {
-                const Vec3 grained = Fenrir::Render::ApplyFilmGrain(ToCore(camera.filmGrain), Vec3(0.18f), x, y, frame);
+                const Vec3 grained =
+                    Fenrir::Render::ApplyFilmGrain(ToCore(camera.look.filmGrain), Vec3(0.18f), x, y, frame);
                 const float expected = Encode(grained.r);
                 const GlProbe::Pixel actual = pixels.At(x, y);
                 INFO("size " << size << ", frame " << frame << ", pixel (" << x << ", " << y << "): the GPU stored "
@@ -308,16 +309,16 @@ TEST_CASE("The vignette, grade, tonemapper and grain together match their mirror
     Fenrir::Camera& camera = test.AddCamera();
     const Vec3 colour(0.3f, 0.18f, 0.1f);
     const auto image = FlatView(test, camera, 48, 32, Fenrir::Colour{colour.r, colour.g, colour.b, 1.0f});
-    camera.tonemapper = Fenrir::Tonemapper::AgX;
-    camera.exposure = 0.5f;
-    camera.vignette = {0.6f, 0.2f, 0.6f, 1.0f};
-    camera.colourGrading.temperature = 7500.0f;
-    camera.colourGrading.contrast = 1.3f;
-    camera.colourGrading.shadowTint = Fenrir::Colour{0.1f, 0.6f, 0.7f, 1.0f};
-    camera.colourGrading.highlightTint = Fenrir::Colour{0.9f, 0.3f, 0.7f, 1.0f};
-    camera.colourGrading.saturation = 1.15f;
-    camera.colourGrading.slope = Vec3(1.05f, 1.0f, 0.95f);
-    camera.filmGrain = {0.1f, 0.8f, 1.0f};
+    camera.look.tonemapper = Fenrir::Tonemapper::AgX;
+    camera.look.exposure = 0.5f;
+    camera.look.vignette = {0.6f, 0.2f, 0.6f, 1.0f};
+    camera.look.colourGrading.temperature = 7500.0f;
+    camera.look.colourGrading.contrast = 1.3f;
+    camera.look.colourGrading.shadowTint = Fenrir::Colour{0.1f, 0.6f, 0.7f, 1.0f};
+    camera.look.colourGrading.highlightTint = Fenrir::Colour{0.9f, 0.3f, 0.7f, 1.0f};
+    camera.look.colourGrading.saturation = 1.15f;
+    camera.look.colourGrading.slope = Vec3(1.05f, 1.0f, 0.95f);
+    camera.look.filmGrain = {0.1f, 0.8f, 1.0f};
     const auto frame = static_cast<std::uint32_t>(RendererProbe::Core(test.renderer).FrameIndex());
     test.RunFrame();
     const GlProbe::Image pixels =
@@ -327,11 +328,12 @@ TEST_CASE("The vignette, grade, tonemapper and grain together match their mirror
                               std::pair{40u, 5u}, std::pair{24u, 0u}})
     {
         const Vec2 uv((static_cast<float>(x) + 0.5f) / 48.0f, (static_cast<float>(y) + 0.5f) / 32.0f);
-        const float falloff = Fenrir::Render::VignetteFalloff(ToCore(camera.vignette), uv, 48.0f / 32.0f);
+        const float falloff = Fenrir::Render::VignetteFalloff(ToCore(camera.look.vignette), uv, 48.0f / 32.0f);
         const Vec3 graded = Fenrir::Render::GradeColour(
-            ToCore(camera.colourGrading), colour * Fenrir::Render::ExposureScale(camera.exposure) * falloff);
+            ToCore(camera.look.colourGrading), colour * Fenrir::Render::ExposureScale(camera.look.exposure) * falloff);
         const Vec3 expected = Fenrir::Render::ApplyFilmGrain(
-            ToCore(camera.filmGrain), Fenrir::Render::Tonemap(Fenrir::Render::Tonemapper::AgX, graded), x, y, frame);
+            ToCore(camera.look.filmGrain), Fenrir::Render::Tonemap(Fenrir::Render::Tonemapper::AgX, graded), x, y,
+            frame);
         const GlProbe::Pixel actual = pixels.At(x, y);
         INFO("pixel (" << x << ", " << y << "): the GPU stored (" << actual[0] << ", " << actual[1] << ", " << actual[2]
                        << "), the mirrors chained encode to (" << Encode(expected.r) << ", " << Encode(expected.g)
@@ -346,19 +348,19 @@ TEST_CASE("With every effect at 0 the frame is the tonemap golden exactly", "[re
     // and the PostProcess streaks and lens flare, through each tonemapper and exposure the tonemap goldens cover, the
     // same bytes as the plain frame, and its golden.
     const auto off = [](Fenrir::Camera& camera) {
-        camera.chromaticAberration.intensity = 0.0f;
-        camera.vignette = {0.0f, 0.1f, 0.2f, 0.3f};
-        camera.filmGrain = {0.0f, 0.1f, 3.0f};
-        camera.anamorphicStreaks.intensity = 0.0f;
-        camera.anamorphicStreaks.length = 0.3f;
-        camera.anamorphicStreaks.tint = Fenrir::Colour{0.2f, 0.4f, 1.0f, 1.0f};
-        camera.lensFlare.intensity = 0.0f;
-        camera.lensFlare.ghostCount = 7;
-        camera.lensFlare.ghostSpacing = 0.2f;
-        camera.lensFlare.haloRadius = 0.3f;
-        camera.lensFlare.haloWidth = 0.3f;
-        camera.lensFlare.chromaticOffset = 0.05f;
-        camera.lensFlare.dirtIntensity = 3.0f;
+        camera.look.chromaticAberration.intensity = 0.0f;
+        camera.look.vignette = {0.0f, 0.1f, 0.2f, 0.3f};
+        camera.look.filmGrain = {0.0f, 0.1f, 3.0f};
+        camera.look.anamorphicStreaks.intensity = 0.0f;
+        camera.look.anamorphicStreaks.length = 0.3f;
+        camera.look.anamorphicStreaks.tint = Fenrir::Colour{0.2f, 0.4f, 1.0f, 1.0f};
+        camera.look.lensFlare.intensity = 0.0f;
+        camera.look.lensFlare.ghostCount = 7;
+        camera.look.lensFlare.ghostSpacing = 0.2f;
+        camera.look.lensFlare.haloRadius = 0.3f;
+        camera.look.lensFlare.haloWidth = 0.3f;
+        camera.look.lensFlare.chromaticOffset = 0.05f;
+        camera.look.lensFlare.dirtIntensity = 3.0f;
     };
     struct Golden
     {

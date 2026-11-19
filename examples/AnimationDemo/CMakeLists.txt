@@ -23,6 +23,23 @@ target_link_libraries(AnimationDemo PRIVATE FenrirSkeleton FenrirAnimation Fenri
 if(FENRIR_ENABLE_SCRIPTING)
     target_link_libraries(AnimationDemo PRIVATE FenrirSkeletonScripting FenrirAnimationScripting)
     fenrir_deploy_scripting(AnimationDemo EXTENSIONS Skeleton Animation)
+    # The C# twins' Razor panels, checked: a smoke run of each twin alone must log its panel mounted in its demo slot
+    # (scripts/PanelSetup.cs). The test names have no "(C#)": a CTest name with parentheses is awkward to -R.
+    if(FENRIR_BUILD_TESTS)
+        foreach(twin IN ITEMS "Playback" "Bone attachments")
+            string(REPLACE " " "" name "${twin}")
+            add_test(NAME AnimationDemo-${name}Razor-null
+                COMMAND "${CMAKE_COMMAND}" "-DDEMO=$<TARGET_FILE:AnimationDemo>"
+                    "-DEXPECTED=AnimationDemo: the Razor panel is in ${twin} .C#.'s demo slot"
+                    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckRazorPanelsLog.cmake")
+            set_tests_properties(AnimationDemo-${name}Razor-null PROPERTIES
+                ENVIRONMENT "FENRIR_DEMO_SMOKE=120;FENRIR_DEMO_BACKEND=null;FENRIR_DEMO_SCENE=${twin} (C#)"
+                SKIP_REGULAR_EXPRESSION "AnimationDemo skipped"
+                TIMEOUT 300
+                LABELS demo
+            )
+        endforeach()
+    endif()
 endif()
 # Scene 5's kinematic shield pushes dynamic boxes with physics; without it the shield still follows its bone.
 if(FENRIR_ENABLE_PHYSICS)

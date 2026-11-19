@@ -27,8 +27,8 @@ namespace PhysicsDemo.Scripts;
 //   2   moves the limb's motor target between its rest pose and a raised pose.
 //   0   logs every joint's state.
 //
-// Each joint entity's name shows its joint state every frame (PhysicsWorld.GetJointState), shown as screen text: the
-// bridge's angles and loads, the lift's offset, the rope's length, the limb's swing. As in Playground.cs, every system
+// Each joint entity's name shows its joint state every frame (PhysicsWorld.GetJointState), shown as readouts in the
+// scene's demo slot (ReadingsPanel.razor): the bridge's angles and loads, the lift's offset, the rope's length, the limb's swing. As in Playground.cs, every system
 // acts only while the scene is active and keeps the scene's state in components, so it survives a hot reload.
 
 // The scene's own marker, on one entity: how far the build has gone (JointsScene.BodiesMade, JointsScene.Built).
@@ -528,7 +528,8 @@ public sealed class JointsInput : ISystem
     }
 }
 
-// Each joint's readings in its name, every frame, shown as screen text: an angle or an offset, and how hard it pulls;
+// Each joint's readings in its name, every frame, shown as readouts in the demo slot (ReadingsPanel.razor): an angle
+// or an offset, and how hard it pulls;
 // "off" once disabled.
 [System(Phase.Update, Order = 230)]
 public sealed class JointsReadings : ISystem
@@ -537,14 +538,14 @@ public sealed class JointsReadings : ISystem
     {
         if (!JointsScene.IsActive(in context))
             return;
-        var shown = new List<Entity>();
+        var shown = new List<(string, Entity)>();
         foreach (var (entity, joint, role) in context.Query<Joint, JointRole>())
         {
             string label = JointsScene.LabelOf(role.Value);
             entity.Get<Name>().Value.SetText(joint.Value.Enabled
                 ? $"{label}: {Reading(in joint.Value, PhysicsWorld.GetJointState(entity))}"
                 : $"{label}: off");
-            shown.Add(entity);
+            shown.Add((label, entity));
         }
         Looks.ShowReadouts(shown);
     }

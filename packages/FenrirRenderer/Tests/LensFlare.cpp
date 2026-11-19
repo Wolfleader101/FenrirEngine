@@ -120,7 +120,7 @@ namespace
     Fenrir::Camera& AddFlaringCamera(RendererTestApp& test, float intensity)
     {
         Fenrir::Camera& camera = test.AddCamera().GetComponent<Fenrir::Camera>();
-        camera.lensFlare.intensity = intensity;
+        camera.look.lensFlare.intensity = intensity;
         test.AddMeshRenderer(test.Mesh(), test.Material());
         return camera;
     }
@@ -270,8 +270,8 @@ TEST_CASE("A camera's lens flare is off by default and adds no pass", "[renderer
     test.AddCamera();
     test.AddMeshRenderer(test.Mesh(), test.Material());
     INFO("a camera's flare intensity is 0 by default, and it has no dirt");
-    REQUIRE(Fenrir::Camera{}.lensFlare.intensity == 0.0f);
-    REQUIRE(Fenrir::Camera{}.lensFlare.dirt.IsEmpty());
+    REQUIRE(Fenrir::Camera{}.look.lensFlare.intensity == 0.0f);
+    REQUIRE(Fenrir::Camera{}.look.lensFlare.dirt.IsEmpty());
 
     test.Frame();
     const std::vector<std::string> labels = Labels(test.Passes());
@@ -288,16 +288,16 @@ TEST_CASE("A camera's flare runs in PostProcess after its streaks, from bloom's 
 {
     RendererTestApp test;
     Fenrir::Camera& camera = AddFlaringCamera(test, 0.05f);
-    camera.anamorphicStreaks.intensity = 0.1f;
-    camera.lensFlare.ghostCount = 5;
-    camera.lensFlare.ghostSpacing = 0.3f;
-    camera.lensFlare.haloRadius = 0.55f;
-    camera.lensFlare.haloWidth = 0.2f;
-    camera.lensFlare.chromaticOffset = 0.02f;
+    camera.look.anamorphicStreaks.intensity = 0.1f;
+    camera.look.lensFlare.ghostCount = 5;
+    camera.look.lensFlare.ghostSpacing = 0.3f;
+    camera.look.lensFlare.haloRadius = 0.55f;
+    camera.look.lensFlare.haloWidth = 0.2f;
+    camera.look.lensFlare.chromaticOffset = 0.02f;
 
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
-    std::vector<std::string> expected{"BrdfLut", "DepthPrepass", "Opaque", "Background"};
+    std::vector<std::string> expected{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background"};
     expected.insert(expected.end(), 6, "BloomDownsample");
     expected.insert(expected.end(), 8, "StreakDownsample");
     expected.insert(expected.end(), {"FlareGhosts", "FlareBlur"});
@@ -305,7 +305,8 @@ TEST_CASE("A camera's flare runs in PostProcess after its streaks, from bloom's 
     expected.emplace_back("BloomComposite");
     expected.insert(expected.end(), 7, "StreakUpsample");
     expected.emplace_back("StreakComposite");
-    expected.insert(expected.end(), {"FlareComposite", "Output"});
+    expected.insert(expected.end(), {"FlareComposite", "Output", "CullReadback"});
+    expected = RendererTest::WithOcclusion(expected);
     INFO("the ghosts and their blur read level 1 before bloom's upsamples blend over it, as the streaks' downsamples "
          "read level 0; the flare's composite follows the streaks'");
     REQUIRE(Labels(passes) == expected);
@@ -352,15 +353,15 @@ TEST_CASE("A camera with bloom off still flares, running bloom's first two downs
 {
     RendererTestApp test;
     Fenrir::Camera& camera = AddFlaringCamera(test, 3.0f);
-    camera.bloom.intensity = 0.0f;
-    camera.lensFlare.ghostCount = 50;
+    camera.look.bloom.intensity = 0.0f;
+    camera.look.lensFlare.ghostCount = 50;
 
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
     INFO("two downsamples of SceneColor down to level 1, then the flare's passes; no bloom upsample or composite");
-    REQUIRE(Labels(passes) == std::vector<std::string>{"BrdfLut", "DepthPrepass", "Opaque", "Background",
-                                                       "BloomDownsample", "BloomDownsample", "FlareGhosts", "FlareBlur",
-                                                       "FlareComposite", "Output"});
+    REQUIRE(Labels(passes) == RendererTest::WithOcclusion({"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background",
+                                                           "BloomDownsample", "BloomDownsample", "FlareGhosts",
+                                                           "FlareBlur", "FlareComposite", "Output", "CullReadback"}));
     REQUIRE(Samples(RendererTest::Labelled(passes, "FlareGhosts").at(0),
                     RendererTest::Labelled(passes, "BloomDownsample").at(1).pass.colour.at(0).texture));
     INFO("an intensity over 1 mixes in the flare alone, and the ghost count is held to MaxGhosts");
@@ -373,8 +374,8 @@ TEST_CASE("Lens dirt makes bloom's and the flare's composites read the dirt imag
 {
     RendererTestApp test;
     Fenrir::Camera& camera = AddFlaringCamera(test, 0.05f);
-    camera.lensFlare.dirt = AddDirt(test, 200);
-    camera.lensFlare.dirtIntensity = 2.5f;
+    camera.look.lensFlare.dirt = AddDirt(test, 200);
+    camera.look.lensFlare.dirtIntensity = 2.5f;
 
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
@@ -415,7 +416,7 @@ TEST_CASE("Lens dirt with the flare off scales bloom alone", "[renderer][flare]"
 {
     RendererTestApp test;
     Fenrir::Camera& camera = AddFlaringCamera(test, 0.0f);
-    camera.lensFlare.dirt = AddDirt(test, 255);
+    camera.look.lensFlare.dirt = AddDirt(test, 255);
 
     test.Frame();
     std::vector<std::string> labels = Labels(test.Passes());
@@ -432,8 +433,8 @@ TEST_CASE("Lens dirt at an intensity of 0 is none", "[renderer][flare]")
 {
     RendererTestApp test;
     Fenrir::Camera& camera = AddFlaringCamera(test, 0.0f);
-    camera.lensFlare.dirt = AddDirt(test, 255);
-    camera.lensFlare.dirtIntensity = 0.0f;
+    camera.look.lensFlare.dirt = AddDirt(test, 255);
+    camera.look.lensFlare.dirtIntensity = 0.0f;
 
     test.Frame();
     INFO("a dirt intensity of 0 is the plain composite");
@@ -446,7 +447,7 @@ TEST_CASE("Lens dirt that is not a flat image with pixels is none, logged once",
 {
     RendererTestApp test;
     Fenrir::Camera& camera = AddFlaringCamera(test, 0.05f);
-    camera.lensFlare.dirt = test.TargetImage(16, 16);
+    camera.look.lensFlare.dirt = test.TargetImage(16, 16);
 
     test.Frame();
     test.Frame();

@@ -1,0 +1,14 @@
+@* A static Razor component for the Razor tests (Razor.cpp): elements, classes, an inline style and an id each, and
+   text, the label's from the field the mount sets. *@
+@namespace UIScriptFixture
+<panel class="board @Theme" style="width: @(Width)px; height: 40px" id="board">
+    <label class="score" id="score">Score: @Score</label>
+    <button class="go" id="go">@Caption</button>
+</panel>
+
+@code {
+    public string Theme = "dark";
+    public int Width = 200;
+    public int Score;
+    public string Caption = "Go";
+}

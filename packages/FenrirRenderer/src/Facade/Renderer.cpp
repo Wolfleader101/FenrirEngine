@@ -1,4 +1,6 @@
 #include "FenrirRenderer/Renderer.hpp"
+#include "FenrirRenderer/ImageTargets2D.hpp"
+#include "FenrirRenderer/WorldTargets2D.hpp"
 
 #include <algorithm>
 #include <array>
@@ -11,6 +13,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 #include "Backend/OpenGL/OpenGLDevice.hpp"
@@ -131,6 +134,22 @@ namespace Fenrir
             return {grain.intensity, grain.response, grain.size};
         }
 
+        /** @brief The core's copy of a camera's look, without its lens dirt, whose key ReadViews sets once prepared. */
+        Render::LookSettings ToCore(const CameraLook& look)
+        {
+            Render::LookSettings settings;
+            settings.exposure = look.exposure;
+            settings.tonemapper = ToCore(look.tonemapper);
+            settings.colourGrading = ToCore(look.colourGrading);
+            settings.bloom = {look.bloom.intensity, look.bloom.radius};
+            settings.anamorphicStreaks = ToCore(look.anamorphicStreaks);
+            settings.lensFlare = ToCore(look.lensFlare);
+            settings.chromaticAberration = ToCore(look.chromaticAberration);
+            settings.vignette = ToCore(look.vignette);
+            settings.filmGrain = ToCore(look.filmGrain);
+            return settings;
+        }
+
         /** @brief The core's copy of a camera's debug view: the same values in the same order. */
         Render::ViewDebug ToCore(CameraDebugView debugView)
         {
@@ -176,12 +195,21 @@ namespace Fenrir
             return true;
         }
 
-        /** @brief Whether `image` is a render target: a flat RGBA8 sRGB image with a size and no pixels (ADR-0026). */
+        /**
+         * @brief Whether `image` is a render target: a flat RGBA8 image with a size and no pixels (ADR-0026), sRGB for
+         * a camera's, sRGB or linear for an image 2D target's (ADR-0060).
+         */
         bool IsRenderTarget(const ImageData& image)
         {
-            return image.pixels.empty() && image.format == ImageFormat::RGBA8 &&
-                   image.colourSpace == ColourSpace::Srgb && image.shape == ImageShape::Flat && image.width > 0 &&
-                   image.height > 0;
+            return image.pixels.empty() && image.format == ImageFormat::RGBA8 && image.shape == ImageShape::Flat &&
+                   image.width > 0 && image.height > 0;
+        }
+
+        /** @brief A render target image's texture format: RGBA8, sRGB-encoded or linear as its colour space says. */
+        Graphics::TextureFormat RenderTargetFormat(const ImageData& image)
+        {
+            return image.colourSpace == ColourSpace::Linear ? Graphics::TextureFormat::Rgba8Unorm
+                                                            : Graphics::TextureFormat::Rgba8Srgb;
         }
 
         /**
@@ -201,7 +229,7 @@ namespace Fenrir
             const std::uint32_t revision = store.Revision(handle);
             if (!scene.IsTargetCurrent(KeyOf(handle), revision))
             {
-                scene.PrepareTarget(KeyOf(handle), revision, {data->width, data->height});
+                scene.PrepareTarget(KeyOf(handle), revision, {data->width, data->height}, RenderTargetFormat(*data));
             }
             return true;
         }
@@ -659,7 +687,8 @@ namespace Fenrir
                     resolved.problem = resolved.image.IsEmpty() ? CameraProblem::NoImage : CameraProblem::StaleImage;
                     return resolved;
                 }
-                if (!IsRenderTarget(*data))
+                // The views' Output pass writes sRGB, so a camera draws into sRGB render targets only.
+                if (!IsRenderTarget(*data) || data->colourSpace != ColourSpace::Srgb)
                 {
                     resolved.problem = CameraProblem::NotRenderTarget;
                     return resolved;
@@ -807,19 +836,12 @@ namespace Fenrir
                 view.target = KeyOf(resolved.image);
                 view.viewport = resolved.pixels;
                 view.drawDebug = camera.drawDebug;
-                view.exposure = camera.exposure;
-                view.tonemapper = ToCore(camera.tonemapper);
-                view.colourGrading = ToCore(camera.colourGrading);
-                view.bloom = {camera.bloom.intensity, camera.bloom.radius};
-                view.anamorphicStreaks = ToCore(camera.anamorphicStreaks);
-                view.lensFlare = ToCore(camera.lensFlare);
-                if (!camera.lensFlare.dirt.IsEmpty() && PrepareLensDirt(state, store, camera.lensFlare.dirt))
+                view.look = ToCore(camera.look);
+                const AssetHandle<Image>& dirt = camera.look.lensFlare.dirt;
+                if (!dirt.IsEmpty() && PrepareLensDirt(state, store, dirt))
                 {
-                    view.lensFlare.dirt = KeyOf(camera.lensFlare.dirt);
+                    view.look.lensFlare.dirt = KeyOf(dirt);
                 }
-                view.chromaticAberration = ToCore(camera.chromaticAberration);
-                view.vignette = ToCore(camera.vignette);
-                view.filmGrain = ToCore(camera.filmGrain);
                 view.ambientOcclusion = {camera.ambientOcclusion.enabled, camera.ambientOcclusion.radius,
                                          camera.ambientOcclusion.intensity};
                 view.reflections = {camera.reflections.enabled, camera.reflections.intensity,
@@ -899,22 +921,6 @@ namespace Fenrir
             }
         }
 
-        /** @brief `box` moved by `matrix`: the box around its eight corners, moved. */
-        Math::AABB Moved(const Math::AABB& box, const Math::Mat4& matrix)
-        {
-            Math::AABB moved;
-            for (int corner = 0; corner < 8; ++corner)
-            {
-                const Math::Vec3 local((corner & 1) != 0 ? box.max.x : box.min.x,
-                                       (corner & 2) != 0 ? box.max.y : box.min.y,
-                                       (corner & 4) != 0 ? box.max.z : box.min.z);
-                const Math::Vec3 point(matrix * Math::Vec4(local, 1.0f));
-                moved.min = corner == 0 ? point : glm::min(moved.min, point);
-                moved.max = corner == 0 ? point : glm::max(moved.max, point);
-            }
-            return moved;
-        }
-
         /**
          * @brief A skinned mesh's world bounds (ADR-0035): each bone's box moved by its palette matrix, and the box of
          * unweighted vertices, all under the skeleton entity's `world`. Empty when the skin bounds nothing.
@@ -923,19 +929,17 @@ namespace Fenrir
                                                 const Math::Mat4& world)
         {
             std::optional<Math::AABB> bounds;
-            const auto add = [&](const Math::AABB& box) {
-                bounds = bounds ? Math::AABB{glm::min(bounds->min, box.min), glm::max(bounds->max, box.max)} : box;
-            };
+            const auto add = [&](const Math::AABB& box) { bounds = bounds ? Math::Union(*bounds, box) : box; };
             for (std::size_t bone = 0; bone < skin.boneBounds.size() && bone < palette.size(); ++bone)
             {
                 if (skin.boneBounds[bone].has_value())
                 {
-                    add(Moved(*skin.boneBounds[bone], world * palette[bone]));
+                    add(Math::Moved(*skin.boneBounds[bone], world * palette[bone]));
                 }
             }
             if (skin.unweightedBounds.has_value())
             {
-                add(Moved(*skin.unweightedBounds, world));
+                add(Math::Moved(*skin.unweightedBounds, world));
             }
             return bounds;
         }
@@ -1052,15 +1056,14 @@ namespace Fenrir
             draw.skinned = true;
             draw.paletteOffset = range->second;
             draw.world = GetWorldMatrix(skeleton);
+            // Its record carries its skinned bounds (ADR-0057), which a transparent one is also sorted and culled by.
+            draw.bounds = SkinnedBounds(skin, source->GetPalette(scene, skeleton), draw.world);
             const MaterialData* material =
                 store.TryGet(AssetHandle<Material>{draw.material.index, draw.material.generation});
-            if (material != nullptr &&
+            if (draw.bounds.has_value() && material != nullptr &&
                 (material->blendMode == BlendMode::AlphaBlend || material->blendMode == BlendMode::Additive))
             {
-                if (const auto bounds = SkinnedBounds(skin, source->GetPalette(scene, skeleton), draw.world))
-                {
-                    draw.sortPoint = (bounds->min + bounds->max) * 0.5f;
-                }
+                draw.sortPoint = (draw.bounds->min + draw.bounds->max) * 0.5f;
             }
             return true;
         }
@@ -1146,7 +1149,8 @@ namespace Fenrir
                 const std::uint32_t revision = store.Revision(renderer.instances);
                 if (!state.scene->IsInstanceListCurrent(KeyOf(renderer.instances), revision))
                 {
-                    state.scene->PrepareInstanceList(KeyOf(renderer.instances), revision, *list);
+                    state.scene->PrepareInstanceList(KeyOf(renderer.instances), revision, *list,
+                                                     store.TryGet(renderer.mesh)->bounds);
                 }
                 Render::DrawRequest draw;
                 draw.mesh = KeyOf(renderer.mesh);
@@ -1274,14 +1278,160 @@ namespace Fenrir
             return frame;
         }
 
+        /** @brief Prepares the 2D shaders and the images `list` names, as the 2D render feature draws them. */
+        void PrepareList(Detail::RendererState& state, const AssetStore& store, const DrawList2D& list)
+        {
+            for (const PipelineDescription2D& pipeline : list.pipelines)
+            {
+                const ShaderData* data = store.TryGet(pipeline.shader);
+                if (data == nullptr)
+                {
+                    continue;
+                }
+                const std::uint32_t revision = store.Revision(pipeline.shader);
+                if (!state.draw2D->IsShaderCurrent(KeyOf(pipeline.shader), revision))
+                {
+                    state.draw2D->PrepareShader(KeyOf(pipeline.shader), revision, *data);
+                }
+            }
+            for (const Command2D& command : list.commands)
+            {
+                const auto* draw = std::get_if<DrawCommand2D>(&command);
+                if (draw == nullptr)
+                {
+                    continue;
+                }
+                for (const TextureSlot2D& slot : draw->textures)
+                {
+                    if (!slot.image.IsEmpty())
+                    {
+                        PrepareSampledImage(state, store, slot.image, "a 2D draw list");
+                    }
+                }
+            }
+        }
+
+        /**
+         * @brief The ImageTargets2D submissions this frame (ADR-0060), taken so it starts the next frame empty, grouped
+         * by image in the order of each image's first submission, with each image's texture and what its lists name
+         * prepared. A submission to an empty or stale image, or one that is not a render target, is dropped, logged
+         * once per image. With `draw` false they are only taken.
+         */
+        std::vector<Render::ImageSubmission2D> ReadImageTargets(Detail::RendererState& state, const AssetStore* store,
+                                                                bool draw)
+        {
+            std::vector<Render::ImageSubmission2D> images;
+            ImageTargets2D* targets = state.app->TryGetResource<ImageTargets2D>();
+            if (targets == nullptr)
+            {
+                return images;
+            }
+            auto taken = Detail::ImageTargetSubmissions::Take(*targets);
+            if (!draw || store == nullptr)
+            {
+                return images;
+            }
+            for (auto& [image, list] : taken)
+            {
+                const ImageData* data = store->TryGet(image);
+                if (data == nullptr || !IsRenderTarget(*data))
+                {
+                    if (state.loggedImageTargets.insert({image.index, image.generation}).second)
+                    {
+                        state.app->Logger()->Warn(
+                            "FenrirRenderer: a 2D draw list was submitted to image {}, which is {}, so it is dropped",
+                            image.index,
+                            data == nullptr ? (image.IsEmpty() ? "no image" : "stale")
+                                            : "not a render target (a flat RGBA8 image with no pixels)");
+                    }
+                    continue;
+                }
+                PrepareTarget(*state.scene, *store, image);
+                PrepareList(state, *store, list);
+                const auto found = std::find_if(images.begin(), images.end(),
+                                                [&](const auto& submitted) { return submitted.image == KeyOf(image); });
+                if (found != images.end())
+                {
+                    found->lists.push_back(std::move(list));
+                    continue;
+                }
+                Render::ImageSubmission2D& submission = images.emplace_back();
+                submission.image = KeyOf(image);
+                submission.texture = state.scene->SampledTexture(KeyOf(image));
+                submission.desc.width = data->width;
+                submission.desc.height = data->height;
+                submission.desc.format = RenderTargetFormat(*data);
+                submission.desc.usage = Graphics::TextureUsage::ColourAttachment | Graphics::TextureUsage::Sampled;
+                submission.lists.push_back(std::move(list));
+            }
+            return images;
+        }
+
+        /**
+         * @brief The WorldTargets2D submissions this frame (ADR-0060), taken so it starts the next frame empty, grouped
+         * by entity in the order of each entity's first submission, with what their lists name prepared, each quad
+         * placed by its entity's world matrix as it is now. A submission to an entity not valid in `scene`, or with no
+         * WorldQuad2D, is dropped, logged once per entity. With `draw` false they are only taken.
+         */
+        std::vector<Render::WorldSubmission2D> ReadWorldTargets(Detail::RendererState& state, const AssetStore* store,
+                                                                Scene* scene, bool draw)
+        {
+            std::vector<Render::WorldSubmission2D> worlds;
+            WorldTargets2D* targets = state.app->TryGetResource<WorldTargets2D>();
+            if (targets == nullptr)
+            {
+                return worlds;
+            }
+            auto taken = Detail::WorldTargetSubmissions::Take(*targets);
+            if (!draw || store == nullptr || scene == nullptr)
+            {
+                return worlds;
+            }
+            std::vector<std::uint32_t> entities;
+            EntityList& list = scene->GetEntityList();
+            for (auto& [entity, drawList] : taken)
+            {
+                const bool inScene = entity.IsValid() && list.GetEntity(entity.GetId()) == entity;
+                if (!inScene || !entity.HasComponent<WorldQuad2D>() || !entity.GetComponent<WorldQuad2D>().IsDrawable())
+                {
+                    if (state.loggedWorldTargets.insert(entity.GetId()).second)
+                    {
+                        state.app->Logger()->Warn("FenrirRenderer: a 2D draw list was submitted to entity {}, which "
+                                                  "{}, so it is dropped",
+                                                  entity.GetId(),
+                                                  inScene ? "has no WorldQuad2D with a size and units above zero"
+                                                          : "is not an entity of the active scene");
+                    }
+                    continue;
+                }
+                PrepareList(state, *store, drawList);
+                const auto found = std::find(entities.begin(), entities.end(), entity.GetId());
+                if (found != entities.end())
+                {
+                    worlds[static_cast<std::size_t>(found - entities.begin())].lists.push_back(std::move(drawList));
+                    continue;
+                }
+                // The lists' units to the entity's XY plane, then to the world.
+                const WorldQuad2D& quad = entity.GetComponent<WorldQuad2D>();
+                const Math::Mat4 world = GetWorldMatrix(entity);
+                entities.push_back(entity.GetId());
+                Render::WorldSubmission2D& submission = worlds.emplace_back();
+                submission.localToWorld = world * quad.LocalToEntity();
+                submission.logicalSize = quad.LogicalSize();
+                submission.origin = Math::Vec3(world[3]);
+                submission.lists.push_back(std::move(drawList));
+            }
+            return worlds;
+        }
+
         /**
          * @brief The Overlay's submissions this frame (ADR-0027), taken so it starts the next frame empty, with the
          * shaders and images they name prepared. A submission to a window other than the main window is dropped, logged
          * once per window. With `draw` false (a minimised window, or no store) they are only taken.
          */
-        Render::OverlayFrame ReadOverlay(Detail::RendererState& state, const AssetStore* store, bool draw)
+        Render::Frame2D ReadOverlay(Detail::RendererState& state, const AssetStore* store, bool draw)
         {
-            Render::OverlayFrame frame;
+            Render::Frame2D frame;
             Overlay* overlay = state.app->TryGetResource<Overlay>();
             if (overlay == nullptr)
             {
@@ -1306,30 +1456,7 @@ namespace Fenrir
                     }
                     continue;
                 }
-                const DrawList2D& list = submission.submission.list;
-                for (const PipelineDescription2D& pipeline : list.pipelines)
-                {
-                    const ShaderData* data = store->TryGet(pipeline.shader);
-                    if (data == nullptr)
-                    {
-                        continue;
-                    }
-                    const std::uint32_t revision = store->Revision(pipeline.shader);
-                    if (!state.draw2D->IsShaderCurrent(KeyOf(pipeline.shader), revision))
-                    {
-                        state.draw2D->PrepareShader(KeyOf(pipeline.shader), revision, *data);
-                    }
-                }
-                for (const Command2D& command : list.commands)
-                {
-                    for (const TextureSlot2D& slot : command.textures)
-                    {
-                        if (!slot.image.IsEmpty())
-                        {
-                            PrepareSampledImage(state, *store, slot.image, "a 2D draw list");
-                        }
-                    }
-                }
+                PrepareList(state, *store, submission.submission.list);
                 frame.submissions.push_back(std::move(submission.submission));
             }
             frame.contentScale = Window::Exists(*state.app, Window::MainWindow())
@@ -1374,7 +1501,11 @@ namespace Fenrir
             }
             state.scene->SetFrame(std::move(frame));
             state.debug->SetFrame(std::move(debug));
-            state.draw2D->SetFrame(ReadOverlay(state, store, !size.IsEmpty()));
+            Render::Frame2D frame2D = ReadOverlay(state, store, !size.IsEmpty());
+            frame2D.images = ReadImageTargets(state, store, !size.IsEmpty());
+            frame2D.worlds =
+                ReadWorldTargets(state, store, store != nullptr ? &app.GetActiveScene() : nullptr, !size.IsEmpty());
+            state.draw2D->SetFrame(std::move(frame2D));
 
             const Render::FrameReport report = state.core->RenderFrame();
             for (const std::string& error : report.errors)
@@ -1386,12 +1517,26 @@ namespace Fenrir
                 const Render::SceneStats scene = state.scene->TakeStats();
                 state.stats.draws = scene.draws;
                 state.stats.instances = scene.instances;
+                state.stats.instancesDrawn = scene.instancesDrawn;
+                static_assert(std::extent_v<decltype(RendererStats::drawnByLod)> ==
+                                  std::tuple_size_v<decltype(scene.drawnByLod)>,
+                              "RendererStats::drawnByLod counts as many levels as SceneStats::drawnByLod");
+                static_assert(std::extent_v<decltype(RendererStats::drawnByPhase)> ==
+                                  std::tuple_size_v<decltype(scene.drawnByPhase)>,
+                              "RendererStats::drawnByPhase counts as many phases as SceneStats::drawnByPhase");
+                std::ranges::copy(scene.drawnByLod, std::begin(state.stats.drawnByLod));
+                std::ranges::copy(scene.drawnByPhase, std::begin(state.stats.drawnByPhase));
                 state.stats.passes = report.passesRun;
                 state.stats.uploads = scene.uploads;
                 state.stats.paletteBytesUploaded = scene.paletteBytes;
                 state.stats.distinctPalettesWritten = scene.palettes;
                 state.stats.skinnedDraws = scene.skinnedDraws;
                 state.stats.shadowDraws = scene.shadowDraws;
+                const Render::Stats2D twoD = state.draw2D->Stats();
+                state.stats.lists2D = twoD.lists;
+                state.stats.commands2D = twoD.commands;
+                state.stats.groups2D = twoD.groups;
+                state.stats.transientImageBytes2D = twoD.transientImageBytes;
             }
         }
 
@@ -1504,6 +1649,8 @@ namespace Fenrir
             {
                 app->RemoveResource<InstalledRenderer>();
                 app->RemoveResource<Overlay>();
+                app->RemoveResource<ImageTargets2D>();
+                app->RemoveResource<WorldTargets2D>();
             }
         }
     } // namespace Detail
@@ -1571,10 +1718,16 @@ namespace Fenrir
             state->core->Device(), *app.Logger(), SupportedMsaa(app, config), config.automaticInstancing,
             config.computeSkinning, cascades, spotShadows, pointShadows);
         scene->SetClusteredLights(config.clusteredLights);
+        scene->SetGpuCulling(config.gpuCulling);
+        scene->SetOcclusionCulling(config.occlusionCulling);
+        scene->SetLodSelection(config.lodErrorPixels, config.minProjectedPixels);
         state->scene = scene.get();
         // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
         // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).
         auto draw2D = std::make_unique<Render::Draw2DFeature>(state->core->Device(), *app.Logger(), *scene);
+        draw2D->SetOffscreenGroups(config.offscreenGroups2D);
+        // Every view's Transparent pass draws the world-space 2D target's quads among its transparent items.
+        scene->SetWorldQuads(draw2D.get());
         state->draw2D = draw2D.get();
         // Debug drawing goes into the views the scene renderer drew, so it is added after it.
         auto debug = std::make_unique<Render::DebugFeature>(state->core->Device(), *app.Logger(), *scene);
@@ -1596,6 +1749,8 @@ namespace Fenrir
                                 });
         app.AddResource<Detail::InstalledRenderer>(Detail::InstalledRenderer{state});
         app.AddResource<Overlay>();
+        app.AddResource<ImageTargets2D>();
+        app.AddResource<WorldTargets2D>();
         return Renderer(std::move(state));
     }
 
@@ -1640,6 +1795,38 @@ namespace Fenrir
         }
     }
 
+    void Renderer::SetGpuCulling(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetGpuCulling(on);
+        }
+    }
+
+    void Renderer::SetOcclusionCulling(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetOcclusionCulling(on);
+        }
+    }
+
+    void Renderer::SetCullingFrozen(bool on)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetCullingFrozen(on);
+        }
+    }
+
+    void Renderer::SetLodSelection(float lodErrorPixels, float minProjectedPixels)
+    {
+        if (m_state != nullptr)
+        {
+            m_state->scene->SetLodSelection(lodErrorPixels, minProjectedPixels);
+        }
+    }
+
     void Renderer::SetSpotShadowBudget(std::uint32_t budget)
     {
         if (m_state != nullptr)
@@ -1658,19 +1845,46 @@ namespace Fenrir
 
     std::optional<Math::AABB> Renderer::GetWorldBounds(const Entity& entity) const
     {
-        if (m_state == nullptr || !entity.IsValid() || !entity.HasComponent<MeshRenderer>())
+        if (m_state == nullptr || !entity.IsValid())
         {
             return std::nullopt;
         }
         const AssetStore* store = m_state->app->TryGetResource<AssetStore>();
-        const MeshData* mesh = store == nullptr ? nullptr : store->TryGet(entity.GetComponent<MeshRenderer>().mesh);
+        if (store == nullptr)
+        {
+            return std::nullopt;
+        }
+        if (entity.HasComponent<InstancedMeshRenderer>())
+        {
+            // The box around every copy (ADR-0057): the core's, computed when the list was uploaded, else from the
+            // list itself before its first frame.
+            const InstancedMeshRenderer& renderer = entity.GetComponent<InstancedMeshRenderer>();
+            const MeshData* mesh = store->TryGet(renderer.mesh);
+            const InstanceListData* list = store->TryGet(renderer.instances);
+            if (mesh == nullptr || list == nullptr || list->transforms.empty())
+            {
+                return std::nullopt;
+            }
+            std::optional<Math::AABB> local;
+            if (m_state->scene->IsInstanceListCurrent(KeyOf(renderer.instances), store->Revision(renderer.instances)))
+            {
+                local = m_state->scene->InstanceListBounds(KeyOf(renderer.instances), mesh->bounds);
+            }
+            return Math::Moved(local.value_or(Render::CopiesBounds(list->transforms, mesh->bounds)),
+                               GetWorldMatrix(entity));
+        }
+        if (!entity.HasComponent<MeshRenderer>())
+        {
+            return std::nullopt;
+        }
+        const MeshData* mesh = store->TryGet(entity.GetComponent<MeshRenderer>().mesh);
         if (mesh == nullptr)
         {
             return std::nullopt;
         }
         if (!mesh->skin.has_value())
         {
-            return Moved(mesh->bounds, GetWorldMatrix(entity));
+            return Math::Moved(mesh->bounds, GetWorldMatrix(entity));
         }
         // A skinned mesh (ADR-0035), from its skeleton's pose now; it is not drawn without a SkinnedMesh.
         SkinningSource* source = SkinningSourceOf(*m_state->app);
@@ -1749,6 +1963,20 @@ namespace Fenrir
         }
         const Math::Mat4& world = resolved->world;
         return Math::Ray(Math::Vec3(world * Math::Vec4(origin, 1.0f)), Math::Vec3(world * Math::Vec4(direction, 0.0f)));
+    }
+
+    std::optional<Math::Frustum> Renderer::GetFrustum(const Entity& camera) const
+    {
+        if (m_state == nullptr)
+        {
+            return std::nullopt;
+        }
+        const std::optional<ResolvedCamera> resolved = PickingCamera(*m_state, camera);
+        if (!resolved)
+        {
+            return std::nullopt;
+        }
+        return Math::Frustum::FromViewProjection(resolved->projection * glm::inverse(resolved->world));
     }
 
     std::optional<Math::Vec2> Renderer::WorldToScreenPoint(const Entity& camera, Math::Vec3 point) const
@@ -1847,6 +2075,26 @@ namespace Fenrir
         Renderer(InstalledState(app)).SetClusteredLights(on);
     }
 
+    void Renderer::SetGpuCulling(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetGpuCulling(on);
+    }
+
+    void Renderer::SetOcclusionCulling(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetOcclusionCulling(on);
+    }
+
+    void Renderer::SetCullingFrozen(App& app, bool on)
+    {
+        Renderer(InstalledState(app)).SetCullingFrozen(on);
+    }
+
+    void Renderer::SetLodSelection(App& app, float lodErrorPixels, float minProjectedPixels)
+    {
+        Renderer(InstalledState(app)).SetLodSelection(lodErrorPixels, minProjectedPixels);
+    }
+
     void Renderer::SetSpotShadowBudget(App& app, std::uint32_t budget)
     {
         Renderer(InstalledState(app)).SetSpotShadowBudget(budget);
@@ -1870,6 +2118,11 @@ namespace Fenrir
     std::optional<Math::Vec2> Renderer::WorldToScreenPoint(App& app, const Entity& camera, Math::Vec3 point)
     {
         return Renderer(InstalledState(app)).WorldToScreenPoint(camera, point);
+    }
+
+    std::optional<Math::Frustum> Renderer::GetFrustum(App& app, const Entity& camera)
+    {
+        return Renderer(InstalledState(app)).GetFrustum(camera);
     }
 
     Entity Renderer::CameraAt(App& app, WindowId window, Math::Vec2 point)

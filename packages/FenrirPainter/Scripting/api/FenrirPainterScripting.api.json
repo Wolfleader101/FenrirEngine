@@ -1,0 +1,979 @@
+{
+  "package": "FenrirPainterScripting",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fenrir::AssetHandle<Fenrir::Image>",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4,
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+    },
+    {
+      "name": "Fenrir::Colour",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A colour as linear red, green, blue and alpha, each a float, usually in [0, 1] (ADR-0025). Debug draw, materials and lights take it, and the renderer packs it for vertices. Colours written as sRGB hex values, as colour pickers and art tools give them, are converted when made (FromSrgb). Default constructed, it is opaque white.",
+      "fields": [
+        {
+          "name": "r",
+          "offset": 0,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "g",
+          "offset": 4,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "b",
+          "offset": 8,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "a",
+          "offset": 12,
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Sides",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 4,
+      "doc": "One value for each side of a rectangle: border widths, nine-slice insets.",
+      "fields": [
+        {
+          "name": "top",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "right",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "bottom",
+          "offset": 8,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "left",
+          "offset": 12,
+          "kind": "f32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Border",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 80,
+      "alignment": 4,
+      "doc": "A border's width and colour for each side, inside the rectangle it is drawn on.",
+      "fields": [
+        {
+          "name": "widths",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Sides",
+          "default": {}
+        },
+        {
+          "name": "top",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {}
+        },
+        {
+          "name": "right",
+          "offset": 32,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {}
+        },
+        {
+          "name": "bottom",
+          "offset": 48,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {}
+        },
+        {
+          "name": "left",
+          "offset": 64,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {}
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::CornerRadii",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A radius for each corner of a rectangle, in UI units; zero is a sharp corner.",
+      "fields": [
+        {
+          "name": "topLeft",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "topRight",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "bottomRight",
+          "offset": 8,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "bottomLeft",
+          "offset": 12,
+          "kind": "f32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::FillRule",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Which points a path's fill covers: those it winds round at all, or those it winds round an odd number of times.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "NonZero",
+          "value": 0
+        },
+        {
+          "name": "EvenOdd",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::GradientSpread",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "What a gradient does past its ends: keeps its end colours, or starts again.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Pad",
+          "value": 0
+        },
+        {
+          "name": "Repeat",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::GradientStop",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 20,
+      "alignment": 4,
+      "doc": "A gradient's colour at one point along it, from 0 at its start to 1 at its end.",
+      "fields": [
+        {
+          "name": "offset",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "colour",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {}
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::GroupBlend2D",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How an offscreen group's premultiplied image combines with what is under it.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Normal",
+          "value": 0,
+          "doc": "Drawn over: RGB and alpha `One` / `OneMinusSrcAlpha`."
+        },
+        {
+          "name": "Additive",
+          "value": 1,
+          "doc": "Added: RGB `One` / `One`; alpha `Zero` / `One`, so the target's alpha is kept."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::GroupFilter2D",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "The filter an offscreen group's image is drawn through when it is composited.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "None",
+          "value": 0,
+          "doc": "The image as it is."
+        },
+        {
+          "name": "Blur",
+          "value": 1,
+          "doc": "A Gaussian blur of `radius` local units."
+        },
+        {
+          "name": "DropShadow",
+          "value": 2,
+          "doc": "The image's alpha, blurred by `radius`, tinted `shadowColour` and drawn `offset` away, under it."
+        },
+        {
+          "name": "BackdropBlur",
+          "value": 3,
+          "doc": "What is under the group's bounds blurred by `radius` and drawn back there, then the image over it as `None` draws it. The one composite that reads the target it draws into; it draws even when the group is empty."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Math::Vec2",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::GroupFilter",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 32,
+      "alignment": 4,
+      "doc": "What an offscreen group's image is drawn through when it is composited: nothing, a Gaussian blur, a drop shadow of its alpha under it, or a blur of what is under it (Painter::BackdropBlur). Lengths are UI units under the transform the group begins under.",
+      "fields": [
+        {
+          "name": "kind",
+          "offset": 0,
+          "kind": "enum",
+          "type": "Fenrir::GroupFilter2D",
+          "default": "None",
+          "doc": "Which filter."
+        },
+        {
+          "name": "radius",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0,
+          "doc": "The blur's, or the shadow's blur, radius."
+        },
+        {
+          "name": "offset",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 0,
+            "y": 0
+          },
+          "doc": "Where the shadow is drawn from the group."
+        },
+        {
+          "name": "colour",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "doc": "The shadow's colour, straight alpha."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::LineCap",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How the open ends of a stroke are drawn.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Butt",
+          "value": 0,
+          "doc": "Flat, at the end point."
+        },
+        {
+          "name": "Round",
+          "value": 1,
+          "doc": "A half disc about the end point."
+        },
+        {
+          "name": "Square",
+          "value": 2,
+          "doc": "Flat, half the width past the end point."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::LineJoin",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How a stroke turns a corner, on its outer side.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Miter",
+          "value": 0,
+          "doc": "The outer edges extended to meet, or a bevel where they would reach past the miter limit."
+        },
+        {
+          "name": "Round",
+          "value": 1,
+          "doc": "An arc about the corner."
+        },
+        {
+          "name": "Bevel",
+          "value": 2,
+          "doc": "A straight edge across the corner."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::NineSlice",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 24,
+      "alignment": 4,
+      "doc": "Nine-slice insets: the image's corners keep their size, its edges stretch along one axis and its middle along both. `insets` are in the image's pixels, measured on an image of `imageSize` pixels, and drawn at the same size in UI units, scaled down evenly when the rectangle is smaller than they are.",
+      "fields": [
+        {
+          "name": "insets",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Sides",
+          "default": {}
+        },
+        {
+          "name": "imageSize",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 1,
+            "y": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Rect2D",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A rectangle in local 2D coordinates: logical units from the top-left, Y down.",
+      "fields": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "width",
+          "offset": 8,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "height",
+          "offset": 12,
+          "kind": "f32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::SamplerFilter",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How a texture is filtered between its pixels and its mips.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Nearest",
+          "value": 0,
+          "doc": "The nearest pixel of the nearest mip."
+        },
+        {
+          "name": "Bilinear",
+          "value": 1,
+          "doc": "Linear between pixels, from the nearest mip."
+        },
+        {
+          "name": "Trilinear",
+          "value": 2,
+          "doc": "Linear between pixels and between mips."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::SamplerWrap",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "What a texture does with coordinates outside [0, 1].",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Repeat",
+          "value": 0
+        },
+        {
+          "name": "MirroredRepeat",
+          "value": 1
+        },
+        {
+          "name": "ClampToEdge",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::SamplerDescription",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 8,
+      "alignment": 4,
+      "doc": "How a texture parameter is sampled (ADR-0024): its wrap along each axis, filter and anisotropy. The renderer core shares one sampler between parameters with equal descriptions. Default made, it is the spec's default sampler: repeat, trilinear, anisotropy 8.",
+      "fields": [
+        {
+          "name": "wrapU",
+          "offset": 0,
+          "kind": "enum",
+          "type": "Fenrir::SamplerWrap",
+          "default": "Repeat",
+          "doc": "The wrap across the texture's width, the U coordinate (glTF's S)."
+        },
+        {
+          "name": "wrapV",
+          "offset": 1,
+          "kind": "enum",
+          "type": "Fenrir::SamplerWrap",
+          "default": "Repeat",
+          "doc": "The wrap down the texture's height, the V coordinate (glTF's T)."
+        },
+        {
+          "name": "filter",
+          "offset": 2,
+          "kind": "enum",
+          "type": "Fenrir::SamplerFilter",
+          "default": "Trilinear"
+        },
+        {
+          "name": "anisotropy",
+          "offset": 4,
+          "kind": "u32",
+          "default": 8,
+          "doc": "The most anisotropic filtering taken, 1 for none. The renderer clamps it to what the device has."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptPainter::ImageDraw",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 60,
+      "alignment": 4,
+      "doc": "An image drawn into a rectangle: the image, its sampler, nine-slice insets when NineSliced, and a tint.",
+      "fields": [
+        {
+          "name": "image",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::AssetHandle<Fenrir::Image>",
+          "default": {}
+        },
+        {
+          "name": "sampler",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::SamplerDescription",
+          "default": {
+            "wrapU": "ClampToEdge",
+            "wrapV": "ClampToEdge",
+            "filter": "Bilinear",
+            "anisotropy": 1
+          }
+        },
+        {
+          "name": "nineSliced",
+          "offset": 16,
+          "kind": "bool",
+          "default": false,
+          "doc": "Whether NineSlice applies: false stretches the image over the rectangle."
+        },
+        {
+          "name": "nineSlice",
+          "offset": 20,
+          "kind": "struct",
+          "type": "Fenrir::NineSlice",
+          "default": {}
+        },
+        {
+          "name": "tint",
+          "offset": 44,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {}
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptPainter::PaintKind",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Which paint a Paint is.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Solid",
+          "value": 0,
+          "doc": "One colour."
+        },
+        {
+          "name": "LinearGradient",
+          "value": 1,
+          "doc": "A gradient along the line from Start to End."
+        },
+        {
+          "name": "RadialGradient",
+          "value": 2,
+          "doc": "A gradient from Focal out to the circle of Radius about Centre."
+        },
+        {
+          "name": "ImagePattern",
+          "value": 3,
+          "doc": "An image repeated over Rect, tinted by Colour."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Transform2D",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 24,
+      "alignment": 4,
+      "doc": "A 2D affine transform: where it sends the X axis, the Y axis and the origin. A point `p` goes to `x * p.x + y * p.y + origin`. Default constructed, it is the identity.",
+      "fields": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 1,
+            "y": 0
+          }
+        },
+        {
+          "name": "y",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 0,
+            "y": 1
+          }
+        },
+        {
+          "name": "origin",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptPainter::Paint",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 280,
+      "alignment": 4,
+      "doc": "How a fill is coloured: a solid colour, a linear or radial gradient of up to eight stops, or an image pattern. Colours have straight alpha. Gradient and pattern coordinates are in the paint's own space, which Transform places in the shape's space. A gradient of more than two stops draws with its first and last: a script's painter has no stop texture.",
+      "fields": [
+        {
+          "name": "kind",
+          "offset": 0,
+          "kind": "enum",
+          "type": "Fenrir::ScriptPainter::PaintKind",
+          "default": "Solid",
+          "doc": "Which paint, and so which fields below it reads."
+        },
+        {
+          "name": "colour",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {},
+          "doc": "The solid colour, or the image pattern's tint."
+        },
+        {
+          "name": "start",
+          "offset": 20,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 0,
+            "y": 0
+          },
+          "doc": "A linear gradient's start (offset 0) and end (offset 1)."
+        },
+        {
+          "name": "end",
+          "offset": 28,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 1,
+            "y": 0
+          }
+        },
+        {
+          "name": "centre",
+          "offset": 36,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 0,
+            "y": 0
+          },
+          "doc": "A radial gradient's circle (offset 1) and focal point (offset 0)."
+        },
+        {
+          "name": "radius",
+          "offset": 44,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "focal",
+          "offset": 48,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "name": "spread",
+          "offset": 56,
+          "kind": "enum",
+          "type": "Fenrir::GradientSpread",
+          "default": "Pad",
+          "doc": "What a gradient does past its ends."
+        },
+        {
+          "name": "stopCount",
+          "offset": 60,
+          "kind": "i32",
+          "default": 0,
+          "doc": "How many of Stops a gradient uses, at most eight."
+        },
+        {
+          "name": "stops",
+          "offset": 64,
+          "kind": "array",
+          "elementKind": "struct",
+          "elementType": "Fenrir::GradientStop",
+          "length": 8,
+          "default": [
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {}
+          ],
+          "doc": "A gradient's stops, sorted by offset."
+        },
+        {
+          "name": "transform",
+          "offset": 224,
+          "kind": "struct",
+          "type": "Fenrir::Transform2D",
+          "default": {},
+          "doc": "Places the paint's own space in the shape's."
+        },
+        {
+          "name": "image",
+          "offset": 248,
+          "kind": "struct",
+          "type": "Fenrir::AssetHandle<Fenrir::Image>",
+          "default": {},
+          "doc": "An image pattern's image."
+        },
+        {
+          "name": "sampler",
+          "offset": 256,
+          "kind": "struct",
+          "type": "Fenrir::SamplerDescription",
+          "default": {
+            "wrapU": "ClampToEdge",
+            "wrapV": "ClampToEdge",
+            "filter": "Bilinear",
+            "anisotropy": 1
+          },
+          "doc": "How an image pattern's image is sampled, and what lies outside Rect."
+        },
+        {
+          "name": "rect",
+          "offset": 264,
+          "kind": "struct",
+          "type": "Fenrir::Rect2D",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "doc": "Where one copy of an image pattern's image lies."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptPainter::PainterId",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 8,
+      "alignment": 8,
+      "doc": "A painter over the window overlay (Painter.Overlay), which the engine keeps while the C# system that got it runs: a number, so copying it copies no painter. Every Painter call takes one. When the system returns, what it painted is submitted to the overlay and the painter ends; its id is never handed out again, so a later call on it does nothing. The default names none.",
+      "fields": [
+        {
+          "name": "value",
+          "offset": 0,
+          "kind": "u64",
+          "default": 0,
+          "doc": "Which painter: zero for none."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptPainter::Path2D",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 8,
+      "alignment": 8,
+      "doc": "A path a script made (Path2D.Create) and the engine keeps until the script destroys it: subpaths of lines and Bezier curves in UI units, built through its calls and drawn by Painter.FillPath, Painter.StrokePath and Painter.BeginMask. Plain data, so copying it does not copy the path. A destroyed path's calls do nothing; the default names none.",
+      "fields": [
+        {
+          "name": "id",
+          "offset": 0,
+          "kind": "u64",
+          "default": 0,
+          "doc": "Which path: zero for none."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptPainter::StrokeStyle",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 52,
+      "alignment": 4,
+      "doc": "How a path is stroked: its width in UI units (zero is a hairline, one pixel wide), its caps and joins, and up to eight dash lengths, alternating on and off from each subpath's start, DashOffset into the pattern.",
+      "fields": [
+        {
+          "name": "width",
+          "offset": 0,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "cap",
+          "offset": 4,
+          "kind": "enum",
+          "type": "Fenrir::LineCap",
+          "default": "Butt"
+        },
+        {
+          "name": "join",
+          "offset": 5,
+          "kind": "enum",
+          "type": "Fenrir::LineJoin",
+          "default": "Miter"
+        },
+        {
+          "name": "miterLimit",
+          "offset": 8,
+          "kind": "f32",
+          "default": 4,
+          "doc": "The longest miter, as a multiple of the width, before a corner is bevelled."
+        },
+        {
+          "name": "dashCount",
+          "offset": 12,
+          "kind": "i32",
+          "default": 0,
+          "doc": "How many of Dashes the stroke uses; zero is a solid line."
+        },
+        {
+          "name": "dashes",
+          "offset": 16,
+          "kind": "array",
+          "elementKind": "f32",
+          "length": 8,
+          "default": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "dashOffset",
+          "offset": 48,
+          "kind": "f32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Shadow",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 36,
+      "alignment": 4,
+      "doc": "A box shadow: the rectangle's shape moved by `offset`, grown by `spread` and blurred by `blur` (the CSS blur radius, twice the Gaussian's standard deviation). An outset shadow is drawn outside the rectangle only, an inset one inside it only.",
+      "fields": [
+        {
+          "name": "offset",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "name": "blur",
+          "offset": 8,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "spread",
+          "offset": 12,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "colour",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          }
+        },
+        {
+          "name": "inset",
+          "offset": 32,
+          "kind": "bool",
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::TextShadow",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 24,
+      "alignment": 4,
+      "doc": "A text shadow: the text drawn again under itself, moved by `offset` (UI units) and in `colour`.",
+      "fields": [
+        {
+          "name": "offset",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "name": "colour",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::Colour",
+          "default": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "doc": "Straight alpha, as every painter colour."
+        }
+      ]
+    }
+  ]
+}

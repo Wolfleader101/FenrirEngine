@@ -8,13 +8,17 @@ namespace Fenrir.Renderer;
 // The renderer's components (MeshRenderer, InstancedMeshRenderer, Camera and its unions, the lights, SkinnedMesh), its
 // scene resources (Sky and its kinds, SkyLight), RendererStats and RendererNative are generated from FenrirRenderer's
 // headers and Scripting/src/RendererScripting.cpp (Generated/), and so are Renderer's pass-throughs (Generated/Renderer.cs,
-// from the natives' @facade marks: picking, bounds, stats, the shadow budgets, CameraAt and SpawnModel, the last two
-// returning the native's output as their value). This part of the facade holds what a description cannot say: the class
-// doc and the SpawnModel overload that defaults the parent.
+// from the natives' @facade marks: picking, bounds, the frustum, stats, the shadow budgets, the culling switches and
+// level-of-detail thresholds, CameraAt and SpawnModel, the last two returning the native's output as their value). This
+// part of the facade holds what a description cannot say: the class doc and the SpawnModel overload that defaults the
+// parent.
 
 /// <summary>
-/// The renderer from C#: picking, bounds, stats, the shadow budgets and spawning models, as FenrirRenderer's
-/// <c>Renderer</c> and <c>SpawnModel</c> offer them in C++ (whose documentation says what each does).
+/// The renderer from C#: picking, bounds, the frustum a camera sees, stats, the shadow budgets, the culling switches
+/// and level-of-detail thresholds (ADR-0057; scripting never reaches <c>RendererConfig</c>, so the setters are C#'s
+/// way to <c>gpuCulling</c>, <c>occlusionCulling</c>, <c>lodErrorPixels</c> and <c>minProjectedPixels</c>) and spawning
+/// models, as FenrirRenderer's <c>Renderer</c> and <c>SpawnModel</c> offer them in C++ (whose documentation says what
+/// each does).
 /// </summary>
 /// <remarks>
 /// Inside a <c>Fenrir.*</c> namespace, <c>Renderer</c> names this namespace: write <c>Fenrir.Renderer.Renderer</c> there, or

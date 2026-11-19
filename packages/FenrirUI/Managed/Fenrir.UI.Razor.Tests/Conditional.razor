@@ -1,0 +1,16 @@
+@* An @if element between two others, with a control's value and a text entry's (RebuildTests). *@
+<panel id="@("box")">
+    <label id="@("first")">First</label>
+    @if (Show)
+    {
+        <label id="@("middle")">Middle</label>
+    }
+    <slider value="@Volume" />
+    <textentry value="@Name" />
+</panel>
+
+@code {
+    public bool Show;
+    public float Volume = 0.5f;
+    public string Name = "Ada";
+}

@@ -8,6 +8,7 @@
 #include "Iris/Iris.hpp"
 #include "FenrirMath/Colour.hpp"
 #include "FenrirMath/Math.hpp"
+#include "FenrirMath/Frustum.hpp"
 #include "FenrirScripting/BoundMappings.hpp"
 
 #include <cstdint>
@@ -43,6 +44,22 @@ static_assert(sizeof(Fenrir::Math::AABB) == 24 && alignof(Fenrir::Math::AABB) ==
               "Fenrir::Math::AABB is not the layout FenrirMath.api.json describes: "
               "regenerate the description, then this binding");
 
+static_assert(sizeof(Fenrir::Math::Vec4) == 16 && alignof(Fenrir::Math::Vec4) == 4,
+              "Fenrir::Math::Vec4 is not the layout FenrirMath.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fenrir::Math::Frustum>
+{
+    static constexpr std::string_view typeName = "Fenrir.Math.Frustum";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<Fenrir::Math::Vec4[6]>("planes", 0),
+        Iris::Field<std::uint64_t>("count", 96));
+};
+static_assert(sizeof(Fenrir::Math::Frustum) == 104 && alignof(Fenrir::Math::Frustum) == 8,
+              "Fenrir::Math::Frustum is not the layout FenrirMath.api.json describes: "
+              "regenerate the description, then this binding");
+
 static_assert(sizeof(Fenrir::Math::Mat4) == 64 && alignof(Fenrir::Math::Mat4) == 4,
               "Fenrir::Math::Mat4 is not the layout FenrirMath.api.json describes: "
               "regenerate the description, then this binding");
@@ -65,10 +82,6 @@ static_assert(sizeof(Fenrir::Math::Ray) == 24 && alignof(Fenrir::Math::Ray) == 4
 
 static_assert(sizeof(Fenrir::Math::Vec2) == 8 && alignof(Fenrir::Math::Vec2) == 4,
               "Fenrir::Math::Vec2 is not the layout FenrirMath.api.json describes: "
-              "regenerate the description, then this binding");
-
-static_assert(sizeof(Fenrir::Math::Vec4) == 16 && alignof(Fenrir::Math::Vec4) == 4,
-              "Fenrir::Math::Vec4 is not the layout FenrirMath.api.json describes: "
               "regenerate the description, then this binding");
 
 // clang-format on

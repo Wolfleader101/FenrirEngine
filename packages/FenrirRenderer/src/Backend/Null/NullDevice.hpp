@@ -17,10 +17,11 @@ namespace Fenrir::Graphics
 {
     /**
      * @brief The null backend (ADR-0016): every handle and book a backend keeps, no window, context or GPU, and nothing
-     * drawn. It keeps the CommandLists submitted since the frame began, every stale handle a submitted command named,
-     * each buffer's bytes, each binding group's bindings, each texture's description and written mip levels, each
-     * pipeline's sample count, variant keys and render state, and the labels of buffers, textures, groups and
-     * pipelines, for RendererProbe to read. It has every DeviceFeature, which RendererProbe can turn off.
+     * drawn. It keeps the CommandLists submitted since the frame began, every stale handle a submitted command named
+     * and every indirect draw that failed its checks (ADR-0057), each buffer's bytes, each binding group's bindings,
+     * each texture's description and written mip levels, each pipeline's sample count, variant keys and render state,
+     * and the labels of buffers, textures, groups and pipelines, for RendererProbe to read. It has every DeviceFeature,
+     * which RendererProbe can turn off.
      */
     class NullDevice final : public GraphicsDevice
     {
@@ -44,6 +45,11 @@ namespace Fenrir::Graphics
                                                            std::string_view label) override;
 
         bool WriteBuffer(BufferHandle buffer, std::size_t offset, std::span<const std::byte> bytes) override;
+        /**
+         * @copydoc GraphicsDevice::ReadBuffer What WriteBuffer or a copy last put there: a dispatch writes nothing, so
+         * bytes only a dispatch wrote read as zeros.
+         */
+        bool ReadBuffer(BufferHandle buffer, std::size_t offset, std::span<std::byte> bytes) override;
         bool WriteTexture(TextureHandle texture, std::uint32_t mipLevel, std::uint32_t layer,
                           std::span<const std::byte> texels) override;
 
@@ -76,11 +82,15 @@ namespace Fenrir::Graphics
         {
         };
 
-        /** @brief A buffer's bytes as last written, and its label, for RendererProbe. */
+        /** @brief A buffer's bytes as last written, its uses and its label, for RendererProbe. */
         struct NullBuffer
         {
             std::vector<std::byte> bytes;
+            BufferUsage usage = BufferUsage::None;
             std::string label;
+            /** @brief The frame it was made, last written, copied into or declared StorageWrite in: ReadBuffer waits
+             * it out. */
+            std::uint64_t writtenFrame = 0;
         };
 
         /** @brief What a binding group binds, and its label, for RendererProbe. */
@@ -112,6 +122,19 @@ namespace Fenrir::Graphics
         };
 
         void CheckLive(bool live, const char* what);
+        /** @brief Records a StaleUses line, `what` going wrong, when `ok` is false. */
+        void Check(bool ok, const char* what);
+        /**
+         * @brief The checks a replay of an indirect draw would trip over: its buffer live with Indirect usage, the pass
+         * declaring IndirectRead on it, its offset and stride whole words, its commands inside the buffer and the
+         * index buffer bound at its start.
+         */
+        void CheckIndirectDraw(const CmdDrawIndexedIndirect& draw, const PassDesc* pass, std::size_t indexOffset);
+        /**
+         * @brief Applies a buffer copy to the bytes it keeps, so a copied buffer reads as the GPU's would; one past
+         * either buffer's end is a StaleUses line instead.
+         */
+        void CopyBytes(const CmdCopyBuffer& copy);
 
         DeviceConfig m_config;
         /** @brief What Features reports: everything, unless RendererProbe turned some off. */
@@ -126,7 +149,10 @@ namespace Fenrir::Graphics
         TextureHandle m_backbuffer;
         /** @brief What Submit received since the frame began, in order. */
         std::vector<CommandList> m_submitted;
-        /** @brief One line per stale or empty handle a submitted command named, since the device was made. */
+        /**
+         * @brief One line per stale or empty handle a submitted command named, and per indirect draw that failed a
+         * check, since the device was made.
+         */
         std::vector<std::string> m_staleUses;
         std::uint64_t m_presents = 0;
     };

@@ -38,6 +38,10 @@
 #error "cgltf's or ufbx's include path reaches a target outside FenrirAssets: they must be linked PRIVATE."
 #endif
 
+#if defined(MESHOPTIMIZER_VERSION) || __has_include(<meshoptimizer.h>) || __has_include("meshoptimizer.h")
+#error "meshoptimizer reaches a target outside FenrirAssets: GenerateLods uses it behind the seam, linked PRIVATE."
+#endif
+
 #if __has_include(<glslang/Public/ShaderLang.h>) || __has_include(<spirv_reflect.h>)
 #error "FenrirShaderCompiler's libraries reach FenrirAssets's users: only the build-time tool may link them."
 #endif

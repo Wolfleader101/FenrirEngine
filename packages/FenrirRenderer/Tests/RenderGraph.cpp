@@ -9,6 +9,8 @@
 #include "RendererProbe.hpp"
 
 using Fenrir::RendererProbe;
+using Fenrir::Graphics::BufferHandle;
+using Fenrir::Graphics::BufferUsage;
 using Fenrir::Graphics::LoadOp;
 using Fenrir::Graphics::QueueKind;
 using Fenrir::Graphics::TextureDesc;
@@ -130,6 +132,46 @@ TEST_CASE("A pass sampling what an imported texture held before the frame runs b
     INFO("no cycle: Opaque reads the old contents first, then the history is written");
     REQUIRE(compiled.Ok());
     REQUIRE(Names(graph, compiled.order) == std::vector<std::string>{"Opaque", "SceneHistory", "Output"});
+}
+
+TEST_CASE("A pass reading what an imported buffer held before the frame runs before a later pass writes it",
+          "[renderer][graph]")
+{
+    RenderGraph graph;
+    const GraphResource backbuffer = graph.ImportTexture("Backbuffer", TextureHandle{1, 1}, Target());
+    const GraphResource depth = graph.CreateTexture("SceneDepth", Target());
+    const GraphResource words = graph.ImportBuffer("CullVisibility", BufferHandle{3, 1}, {64, BufferUsage::Storage});
+    // The cull pass's first phase reads last frame's words; its second, after the depth the first phase's survivors
+    // drew, writes this frame's (ADR-0057).
+    graph.AddPass(
+        "Cull", RenderStage::Cull, QueueKind::Compute,
+        [&](PassBuilder& pass) {
+            pass.StorageReadPrevious(words);
+            pass.StorageWrite(words);
+        },
+        nullptr);
+    DrawOnto(graph, "DepthPrepass", RenderStage::DepthPrepass, depth);
+    graph.AddPass(
+        "Cull", RenderStage::DepthPrepass, QueueKind::Compute,
+        [&](PassBuilder& pass) {
+            pass.Sample(depth);
+            pass.StorageRead(words);
+            pass.StorageWrite(words);
+        },
+        nullptr);
+    graph.AddPass(
+        "Output", RenderStage::Output, QueueKind::Graphics,
+        [&](PassBuilder& pass) {
+            pass.Sample(depth);
+            pass.ColourAttachment(backbuffer);
+        },
+        nullptr);
+
+    const GraphCompilation compiled = graph.Compile();
+
+    INFO("no cycle: the first phase reads the old words first, the second writes them after the depth");
+    REQUIRE(compiled.Ok());
+    REQUIRE(Names(graph, compiled.order) == std::vector<std::string>{"Cull", "DepthPrepass", "Cull", "Output"});
 }
 
 TEST_CASE("Sampling what a transient held before the frame is an error", "[renderer][graph]")

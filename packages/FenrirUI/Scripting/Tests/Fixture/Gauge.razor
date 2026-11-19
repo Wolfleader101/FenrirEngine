@@ -1,0 +1,7 @@
+@* A label showing its parameter, for the child component tests (Razor.cpp). *@
+@namespace UIScriptFixture
+<label class="gauge" id="gauge">Level: @Value</label>
+
+@code {
+    [Parameter] public int Value { get; set; }
+}

@@ -44,6 +44,8 @@ elseif(SCENE STREQUAL "Joints (C++)")
 elseif(SCENE STREQUAL "Joints (C#)")
     set(keys 13)
     set(expected
+        # The readings panel (scripts/ReadingsPanel.razor) mounted in the scene's demo slot.
+        "PhysicsDemo: the readings panel is in the joints-csharp-readings demo slot"
         "Joints \\(C#\\): C# built a bridge, a lift, a spring rope and a limb, with 8 joints\\."
         "Bridge middle \\(Hinge\\): force"
         "K: the bridge's middle joint is fixed: the middle planks are one beam\\."
@@ -79,6 +81,8 @@ elseif(SCENE STREQUAL "Character (C++)")
 elseif(SCENE STREQUAL "Character (C#)")
     set(keys 62)
     set(expected
+        # The readings panel (scripts/ReadingsPanel.razor) mounted in the scene's demo slot.
+        "PhysicsDemo: the readings panel is in the character-csharp-readings demo slot"
         "Character \\(C#\\): C# built a slide ramp, an ice patch, a crouch tunnel, a trigger pad, a lift and a test wall"
         "Autopilot: walking the route"
         "Tick [0-9]+: character in air -> on ground"
@@ -170,6 +174,8 @@ elseif(SCENE STREQUAL "Tank (C++)")
 elseif(SCENE STREQUAL "Vehicles (C#)")
     set(keys 63)
     set(expected
+        # The readings panel (scripts/ReadingsPanel.razor) mounted in the scene's demo slot.
+        "PhysicsDemo: the readings panel is in the vehicles-csharp-readings demo slot"
         "Vehicles \\(C#\\): C# built a track of bumps, a ramp and a grass patch, a car .* and its trailer .* on a ball joint\\."
         "P: autopilot: driving the track"
         "Autopilot: waypoint [0-9]+ reached"

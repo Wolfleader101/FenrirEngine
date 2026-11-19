@@ -19,9 +19,11 @@ internal-structs = ["Fenrir::ScriptAssetHandle"]
 [cpp]
 # On the include path, for the bindings that use this one.
 mappings = "../include/FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
+include = "FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
 includes = [
     "FenrirAssets/AssetHandle.hpp",
     "FenrirAssets/MaterialData.hpp",
+    "FenrirAssets/MeshData.hpp",
     "FenrirAssets/ShaderContainer.hpp",
     "FenrirAssetsScripting/ScriptAssets.hpp",
 ]

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -49,7 +50,10 @@ namespace Fenrir
             return Null(core).m_submitted;
         }
 
-        /** @brief One line per stale or empty handle a submitted command named. */
+        /**
+         * @brief One line per stale or empty handle a submitted command named, and per indirect draw that failed one
+         * of the null backend's checks (ADR-0057).
+         */
         [[nodiscard]] static const std::vector<std::string>& StaleUses(const Graphics::GraphicsDevice& device)
         {
             return Null(device).m_staleUses;
@@ -108,18 +112,22 @@ namespace Fenrir
             return TransientCount(core.m_transients);
         }
 
-        /** @brief One camera's reflection textures, kept across frames (ADR-0056). */
+        /**
+         * @brief One camera's pyramid and reflection textures, kept across frames (ADR-0056, ADR-0057): a camera that
+         * only culls by occlusion has the pyramid alone.
+         */
         struct ReflectionTextures
         {
             /** @brief Its camera's entity id. */
             std::uint32_t camera = 0;
+            /** @brief Empty without reflections. */
             Graphics::TextureHandle history;
-            /** @brief The pyramid the last frame drew, then last frame's other one. */
+            /** @brief The pyramid the last frame drew, then last frame's other one (empty without reflections). */
             Graphics::TextureHandle pyramid;
             Graphics::TextureHandle previousPyramid;
         };
 
-        /** @brief Every camera's reflection textures the renderer keeps, by camera, on any backend. */
+        /** @brief Every camera's pyramid and reflection textures the renderer keeps, by camera, on any backend. */
         [[nodiscard]] static std::vector<ReflectionTextures> Reflections(const Renderer& renderer)
         {
             std::vector<ReflectionTextures> textures;
@@ -129,6 +137,73 @@ namespace Fenrir
                     {camera, entry.history, entry.pyramids.at(entry.current), entry.pyramids.at(1 - entry.current)});
             }
             return textures;
+        }
+
+        /**
+         * @brief One view's cull pass buffers (ADR-0057), as the last frame left them: the indirect commands its
+         * DepthPrepass and Opaque passes drew from and the indirection their instances read, and how many runs and
+         * candidates the pass counted; empty handles for a view with no opaque runs.
+         */
+        struct CullBuffers
+        {
+            Graphics::BufferHandle commands;
+            Graphics::BufferHandle indirection;
+            std::uint32_t runs = 0;
+            std::uint32_t candidates = 0;
+            /** @brief How many phases the pass ran: 2 with occlusion culling, else 1. */
+            std::uint32_t phases = 1;
+            /** @brief How many commands each phase has: the second phase's first command's index. */
+            std::uint32_t commandsPerPhase = 0;
+        };
+
+        /** @brief Every view the last frame drew, in the order their passes were added, with its cull buffers. */
+        [[nodiscard]] static std::vector<CullBuffers> Culls(const Renderer& renderer)
+        {
+            std::vector<CullBuffers> culls;
+            for (const Render::DrawnView& view : renderer.m_state->scene->DrawnViews())
+            {
+                culls.push_back({view.cullCommands, view.cullIndirection, view.cullRuns, view.cullCandidates,
+                                 view.cullPhases, view.cullCommandsPerPhase});
+            }
+            return culls;
+        }
+
+        /**
+         * @brief Every shadow view the last frame culled (ADR-0057): each camera's cascades, each shadowed spot and
+         * point light, in the order their cull passes were added, with the volume each tested, what it chose levels
+         * by, and its cull buffers, on any backend.
+         */
+        [[nodiscard]] static const std::vector<Render::DrawnShadowView>& ShadowCulls(const Renderer& renderer)
+        {
+            return renderer.m_state->scene->DrawnShadowViews();
+        }
+
+        /**
+         * @brief One slot of the cull readback ring (ADR-0057): its buffer, which frame's command buffers it holds,
+         * and how many commands that frame copied into it.
+         */
+        struct CullReadbackSlot
+        {
+            Graphics::BufferHandle buffer;
+            std::optional<std::uint64_t> frame;
+            std::uint32_t commands = 0;
+        };
+
+        /** @brief The cull readback ring's slots, by frame index modulo their count, on any backend. */
+        [[nodiscard]] static std::vector<CullReadbackSlot> CullReadbacks(const Renderer& renderer)
+        {
+            std::vector<CullReadbackSlot> slots;
+            for (const auto& slot : renderer.m_state->scene->m_cullReadbacks)
+            {
+                slots.push_back({slot.buffer, slot.frame, slot.commands});
+            }
+            return slots;
+        }
+
+        /** @brief Each camera's frozen cull while culling is frozen (ADR-0057), on any backend. */
+        [[nodiscard]] static const std::vector<Render::FrozenCull>& FrozenCulls(const Renderer& renderer)
+        {
+            return renderer.m_state->scene->FrozenCulls();
         }
 
         /** @brief The renderer core a valid Renderer owner draws with. */

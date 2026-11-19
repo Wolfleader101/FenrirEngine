@@ -5,21 +5,25 @@
 #include <atomic>
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
+#include <format>
 #include <iterator>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirDebugDraw/DebugDrawing.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "FenrirUI/UI.hpp"
 #include "FenrirWindow/Window.hpp"
-#include "ImGuiOverlay.hpp"
 
 #ifdef FENRIR_DEMO_SCRIPTING
 #include "DemoScripting.hpp"
@@ -43,6 +47,9 @@ namespace FenrirDemo
 
         // A smoke run's frames are this long, so it runs the same however fast the machine is.
         constexpr double SmokeFrameSeconds = 1.0 / 60.0;
+
+        // The frame stats' frame time and fps are averaged over windows this long, so they can be read.
+        constexpr double FrameStatsWindow = 0.5;
 
         /** @brief Counts the errors (and fatal messages) the app's logger is given, GL debug errors included. */
         class ErrorCounter : public Fenrir::ILogger
@@ -108,6 +115,95 @@ namespace FenrirDemo
             // Key codes and scancodes are named alike: a smoke run presses keys as a US layout places them.
             return static_cast<Fenrir::Scancode>(static_cast<std::uint16_t>(key));
         }
+
+        /**
+         * @brief Where the demo UI kit's files are read from: the source tree's examples/DemoScaffold/assets while it
+         * is there, so an edit there is what hot reload shows and a rebuild keeps, and the asset root otherwise.
+         * FENRIR_DEMO_SOURCE_ASSETS is the scaffold's own definition.
+         */
+        std::filesystem::path DemoUIFolder(const Fenrir::AssetStore& store)
+        {
+#ifdef FENRIR_DEMO_SOURCE_ASSETS
+            const std::filesystem::path source{FENRIR_DEMO_SOURCE_ASSETS};
+            std::error_code error;
+            if (std::filesystem::exists(source / "ui/demo.css", error))
+            {
+                return source;
+            }
+#endif
+            return store.Root();
+        }
+
+        /**
+         * @brief DemoConfig::frameStats's frame time and fps: averaged over windows of FrameStatsWindow seconds, and
+         * over the frames so far until the first window is whole.
+         */
+        class FrameStats
+        {
+          public:
+            /** @brief Adds a frame of `deltaTime` seconds. */
+            void Count(double deltaTime)
+            {
+                if (deltaTime <= 0.0)
+                {
+                    return;
+                }
+                m_seconds += deltaTime;
+                ++m_frames;
+                const bool windowWhole = m_seconds >= FrameStatsWindow;
+                if (windowWhole || !m_shownWhole)
+                {
+                    m_frameSeconds = m_seconds / m_frames;
+                    m_framesPerSecond = m_frames / m_seconds;
+                }
+                if (windowWhole)
+                {
+                    m_shownWhole = true;
+                    m_seconds = 0.0;
+                    m_frames = 0;
+                }
+            }
+
+            [[nodiscard]] double FrameSeconds() const noexcept
+            {
+                return m_frameSeconds;
+            }
+            [[nodiscard]] double FramesPerSecond() const noexcept
+            {
+                return m_framesPerSecond;
+            }
+
+          private:
+            double m_seconds = 0.0;
+            std::uint32_t m_frames = 0;
+            bool m_shownWhole = false;
+            double m_frameSeconds = 0.0;
+            double m_framesPerSecond = 0.0;
+        };
+
+        /** @brief The demo UI kit as an app resource, removed when this owner ends: after the app's packages. */
+        class DemoUIResource
+        {
+          public:
+            DemoUIResource(Fenrir::App& app, DemoUIConfig config) : m_app(app)
+            {
+                app.AddResource<DemoUI>(app, std::move(config));
+            }
+            DemoUIResource(const DemoUIResource&) = delete;
+            DemoUIResource& operator=(const DemoUIResource&) = delete;
+            DemoUIResource(DemoUIResource&&) = delete;
+            DemoUIResource& operator=(DemoUIResource&&) = delete;
+            ~DemoUIResource()
+            {
+                if (m_app.TryGetResource<DemoUI>() != nullptr)
+                {
+                    m_app.RemoveResource<DemoUI>();
+                }
+            }
+
+          private:
+            Fenrir::App& m_app;
+        };
     } // namespace
 
     DemoRunOptions DemoRunOptions::FromEnvironment(std::vector<std::string>* problems)
@@ -194,15 +290,16 @@ namespace FenrirDemo
             std::optional<Fenrir::Assets> assets;
             std::optional<Fenrir::DebugDrawing> debugDrawing;
             std::optional<Fenrir::Renderer> renderer;
-            // DemoConfig::installPackages's owners: after the scaffold's packages, which they need, and before
-            // Scripting.
+            std::optional<Fenrir::UI> ui;
+            // The demo UI kit, over FenrirUI.
+            std::optional<DemoUIResource> kit;
+            // DemoConfig::installPackages's owners: after the scaffold's packages and the kit, which they need, and
+            // before Scripting.
             std::shared_ptr<void> appPackages;
 #ifdef FENRIR_DEMO_SCRIPTING
             // Last, so it ends first, while the packages its extensions reach are there.
             std::optional<Fenrir::Scripting> scripting;
 #endif
-            // DemoConfig::imguiOverlay: ended first, while the input and the asset store it uses are there.
-            std::optional<ImGuiOverlay> imgui;
 
             // The App's own first scene, kept empty and active between leaving one demo scene and entering the next.
             std::string holderScene;
@@ -210,6 +307,13 @@ namespace FenrirDemo
             std::optional<std::size_t> current;
             // Scene entries so far, which a C# scene's CSharpScene marker carries.
             std::uint32_t entries = 0;
+            // The scenes entered so far in the run, by index: a scene's tutorial shows on its first entry only.
+            std::vector<bool> entered;
+            // The scene a click on the scene switcher picked, entered at the next BeforeTicks.
+            std::optional<std::size_t> picked;
+
+            // DemoConfig::frameStats's frame time and fps.
+            FrameStats frameStats;
 
             Fenrir::Entity freeFly;
             bool freeFlyOn = true;
@@ -218,8 +322,6 @@ namespace FenrirDemo
             float yaw = 0.0f;
             float pitch = 0.0f;
             float speed = BaseSpeed;
-
-            bool helpShown = false;
 
             // Smoke runs: the scenes to run in order, the one running, and its frames so far.
             std::vector<std::size_t> smokeScenes;
@@ -312,12 +414,23 @@ namespace FenrirDemo
                 EnterScene(named.value_or(0));
             }
 
+            /** @brief The demo UI kit; null when FenrirUI did not install. */
+            [[nodiscard]] DemoUI* Kit() const
+            {
+                return kit ? app->TryGetResource<DemoUI>() : nullptr;
+            }
+
             // Destroys the active demo scene's FenrirScene, leaving the holder scene active.
             void LeaveScene()
             {
                 if (!current || app == nullptr)
                 {
                     return;
+                }
+                // Its rows first, while the state they are bound to is there.
+                if (DemoUI* demoUI = Kit())
+                {
+                    demoUI->ClearScene();
                 }
                 app->ChangeActiveScene(holderScene);
                 app->DestroyScene(config.scenes[*current].name);
@@ -342,6 +455,20 @@ namespace FenrirDemo
                     scene.AddResource<CSharpScene>(CSharpScene{demoScene.csharpScene, entries});
                 }
 
+                // The scene's Tutorial button first, so its section comes before the scene's own.
+                if (DemoUI* demoUI = Kit(); demoUI != nullptr && demoScene.tutorial)
+                {
+                    demoUI->SceneSection(demoScene.name)
+                        .Button(
+                            "Tutorial", [demoUI, &demoScene] { demoUI->ShowTutorial(*demoScene.tutorial); },
+                            "Shows the scene's tutorial again from its first step");
+                }
+                // Its demo slot next, before the scene's own sections.
+                if (DemoUI* demoUI = Kit(); demoUI != nullptr && !demoScene.razorPanel.empty())
+                {
+                    demoUI->SceneSlot(demoScene.razorPanel);
+                }
+
                 // The free-fly camera first, so the scene can find it.
                 Fenrir::EntityList& entities = scene.GetEntityList();
                 freeFly = entities.CreateEntity();
@@ -361,7 +488,24 @@ namespace FenrirDemo
                 freeFlyOn = !AnySceneCamera(scene);
                 freeFly.GetComponent<Fenrir::Camera>().enabled = freeFlyOn;
 
-                Log().Info("Scene {}/{}: {}. F1 for help.", index + 1, config.scenes.size(), demoScene.name);
+                Log().Info("Scene {}/{}: {}. F1 hides or shows the demo UI kit.", index + 1, config.scenes.size(),
+                           demoScene.name);
+                if (DemoUI* demoUI = Kit())
+                {
+                    demoUI->SetActiveScene(index);
+                    demoUI->SetHelp(config.appName + ": " + demoScene.name + " (" + std::to_string(index + 1) + "/" +
+                                        std::to_string(config.scenes.size()) + ")",
+                                    HelpRows(demoScene));
+                }
+                // A run that presses keys by itself is watched by no one, so it shows no tutorial.
+                entered.resize(config.scenes.size());
+                const bool first = !entered[index];
+                entered[index] = true;
+                if (DemoUI* demoUI = Kit();
+                    demoUI != nullptr && demoScene.tutorial && first && !Smoke() && !run.pressKeys)
+                {
+                    demoUI->ShowTutorial(*demoScene.tutorial);
+                }
             }
 
             [[nodiscard]] bool AnySceneCamera(Fenrir::Scene& scene) const
@@ -396,8 +540,7 @@ namespace FenrirDemo
 
             [[nodiscard]] Fenrir::Math::Quat FreeFlyRotation() const
             {
-                return Fenrir::Math::AngleAxis(yaw, Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f)) *
-                       Fenrir::Math::AngleAxis(pitch, Fenrir::Math::Vec3(1.0f, 0.0f, 0.0f));
+                return YawPitch(yaw, pitch);
             }
 
             void PlaceFreeFly(const Fenrir::Math::Vec3& position)
@@ -448,72 +591,20 @@ namespace FenrirDemo
                 Log().Info("F3: the free-fly camera is {}", freeFlyOn ? "on" : "off");
             }
 
-            [[nodiscard]] std::vector<std::string> HelpLines() const
+            // The help's key rows: the scaffold's, the app's, then the scene's.
+            [[nodiscard]] std::vector<DemoKeyRow> HelpRows(const DemoScene& scene) const
             {
-                const DemoScene& scene = config.scenes[*current];
-                std::vector<std::string> lines;
-                lines.push_back(config.appName + ": " + scene.name + " (" + std::to_string(*current + 1) + "/" +
-                                std::to_string(config.scenes.size()) + ")");
-                lines.push_back("Scene keys: " + (scene.keyHelp.empty() ? std::string("none") : scene.keyHelp));
-                if (!config.appKeyHelp.empty())
-                {
-                    lines.push_back("F2: " + config.appKeyHelp);
-                }
-                lines.emplace_back("PageDown/PageUp: next/previous scene. F1: this help. F3: free-fly camera on/off.");
-                lines.emplace_back("Free-fly camera: hold the right mouse button to look, and with it held WASD to "
-                                   "move, Shift to go faster and the wheel to change speed. Left click: scene click.");
-                return lines;
-            }
-
-            void UpdateHelp(const Fenrir::Keyboard& keyboard)
-            {
-                if (keyboard.JustPressed(Fenrir::Key::F1))
-                {
-                    helpShown = !helpShown;
-                    if (helpShown)
-                    {
-                        for (const std::string& line : HelpLines())
-                        {
-                            Log().Info("Help: {}", line);
-                        }
-                    }
-                }
-                if (!helpShown)
-                {
-                    return;
-                }
-                // Debug screen text, in the window's bottom-left corner, clear of the on-screen messages the renderer
-                // stacks from its top-left.
-                if (auto* draw = app->GetActiveScene().GetResource<Fenrir::DebugDraw>())
-                {
-                    constexpr float margin = 16.0f;
-                    constexpr float lineHeight = 20.0f;
-                    // Long lines wrap at a word, so the panel fits a window of the default size.
-                    constexpr std::size_t widest = 100;
-                    std::vector<std::string> lines;
-                    for (std::string line : HelpLines())
-                    {
-                        while (line.size() > widest)
-                        {
-                            const std::size_t space = line.rfind(' ', widest);
-                            // Past the indent of a wrapped line, or a word longer than a line is cut.
-                            const bool atWord = space != std::string::npos && space > 2;
-                            const std::size_t cut = atWord ? space : widest;
-                            lines.push_back(line.substr(0, cut));
-                            line.erase(0, atWord ? cut + 1 : cut);
-                            line.insert(0, "  ");
-                        }
-                        lines.push_back(line);
-                    }
-                    const float height =
-                        static_cast<float>(Fenrir::Window::LogicalSize(*app, Fenrir::Window::MainWindow()).height);
-                    float y = std::max(margin, height - margin - lineHeight * static_cast<float>(lines.size()));
-                    for (const std::string& line : lines)
-                    {
-                        draw->ScreenText({margin, y}, line, Fenrir::Colour::White);
-                        y += lineHeight;
-                    }
-                }
+                std::vector<DemoKeyRow> rows{
+                    {"PageDown/PageUp", "next/previous scene"},
+                    {"F1", "hide or show the demo UI kit"},
+                    {"F3", "free-fly camera on/off"},
+                    {"Right mouse", "hold to look with the free-fly camera"},
+                    {"Right mouse + WASD", "fly; Shift goes faster, the wheel changes the speed"},
+                    {"Left click", "scene click"},
+                };
+                rows.insert(rows.end(), config.appKeyRows.begin(), config.appKeyRows.end());
+                rows.insert(rows.end(), scene.keyRows.begin(), scene.keyRows.end());
+                return rows;
             }
 
             void UpdateFreeFly(const Fenrir::Keyboard& keyboard, const Fenrir::Mouse& mouse, float deltaTime)
@@ -538,7 +629,9 @@ namespace FenrirDemo
 
                 const Fenrir::Math::Vec2 motion = mouse.Motion();
                 yaw -= motion.x * LookPerUnit;
-                pitch = std::clamp(pitch - motion.y * LookPerUnit, -MaxPitch, MaxPitch);
+                const FreeFlyLook* look = app->TryGetResource<FreeFlyLook>();
+                const float pitchMotion = look != nullptr && look->invertPitch ? -motion.y : motion.y;
+                pitch = std::clamp(pitch - pitchMotion * LookPerUnit, -MaxPitch, MaxPitch);
 
                 const float notches = mouse.Scroll().y;
                 if (notches != 0.0f)
@@ -636,14 +729,9 @@ namespace FenrirDemo
                 releaseNextFrame.push_back(key);
             }
 
-            // BeforeTicks: the scene list, the help panel, the free-fly camera and the scene click.
+            // BeforeTicks: the scene list, the free-fly camera and the scene click. F1 is the demo UI kit's own.
             void BeforeTicks()
             {
-                // Before anything makes an ImGui window this frame.
-                if (imgui)
-                {
-                    imgui->BeginFrame();
-                }
                 if (!started)
                 {
                     Start();
@@ -655,7 +743,18 @@ namespace FenrirDemo
                 const auto& keyboard = app->GetResource<Fenrir::Keyboard>();
                 const auto& mouse = app->GetResource<Fenrir::Mouse>();
 
-                if (keyboard.JustPressed(Fenrir::Key::PageDown))
+                if (config.frameStats)
+                {
+                    frameStats.Count(app->GetTime().deltaTime);
+                }
+                if (picked)
+                {
+                    // Entered as PageDown enters a scene, and in a smoke run as well.
+                    const std::size_t index = *picked;
+                    picked.reset();
+                    EnterScene(index);
+                }
+                else if (keyboard.JustPressed(Fenrir::Key::PageDown))
                 {
                     Step(1);
                 }
@@ -667,13 +766,59 @@ namespace FenrirDemo
                 {
                     ToggleFreeFly();
                 }
-                UpdateHelp(keyboard);
                 UpdateFreeFly(keyboard, mouse, static_cast<float>(app->GetTime().deltaTime));
                 UpdateClick(mouse);
                 if (Smoke())
                 {
                     FeedSmokeKeys();
                 }
+            }
+
+            // The kit's app sections the scaffold feeds: the scene switcher first, then the frame stats.
+            void AddAppSections(DemoUI& demoUI, const std::weak_ptr<DemoState>& weak)
+            {
+                std::vector<std::string> names;
+                names.reserve(config.scenes.size());
+                for (const DemoScene& scene : config.scenes)
+                {
+                    names.push_back(scene.name);
+                }
+                demoUI.SetScenes(std::move(names), [weak](std::size_t index) {
+                    // The active scene's button leaves it be: PageDown would leave it.
+                    if (const auto locked = weak.lock(); locked && locked->current != index)
+                    {
+                        locked->picked = index;
+                    }
+                });
+                if (!config.frameStats)
+                {
+                    return;
+                }
+                // Pulled in the kit's build stage work, after the scenes' Update: the renderer's stats are the last
+                // frame's, which is the one the window shows.
+                const DemoSection frame = demoUI.AppSection("Frame");
+                const auto pulled = [weak](auto read) {
+                    return [weak, read] {
+                        const auto locked = weak.lock();
+                        return locked ? read(*locked) : std::string();
+                    };
+                };
+                frame.Readout("Frame time", pulled([](const DemoState& state) {
+                                  return std::format("{:.1f} ms", state.frameStats.FrameSeconds() * 1000.0);
+                              }));
+                frame.Readout("FPS", pulled([](const DemoState& state) {
+                                  return std::format("{:.0f}", state.frameStats.FramesPerSecond());
+                              }));
+                const auto stat = [&](std::string label, std::uint32_t Fenrir::RendererStats::* field) {
+                    frame.Readout(std::move(label), pulled([field](const DemoState& state) {
+                                      return state.renderer && state.renderer->IsValid()
+                                                 ? std::to_string(state.renderer->Stats().*field)
+                                                 : std::string("-");
+                                  }));
+                };
+                stat("Draws", &Fenrir::RendererStats::draws);
+                stat("Instances", &Fenrir::RendererStats::instances);
+                stat("Shadow draws", &Fenrir::RendererStats::shadowDraws);
             }
 
             // Update: the scene's own update, then a smoke run's or FENRIR_DEMO_KEYS's bookkeeping.
@@ -724,6 +869,10 @@ namespace FenrirDemo
         state->run = run;
         state->config = std::move(config);
         state->holderScene = app.GetActiveScene().GetName();
+        if (app.TryGetResource<FreeFlyLook>() == nullptr)
+        {
+            app.AddResource<FreeFlyLook>();
+        }
         app.Logger()->AddLogger(state->errors);
         for (const std::string& problem : problems)
         {
@@ -737,8 +886,8 @@ namespace FenrirDemo
             window.title = state->config.appName;
             // A smoke run is a check, not a show: its window is never shown.
             window.visible = !smoke;
-            // ImGui turns text input on where it wants text, with its caret for the IME.
-            window.textInputByDefault = !state->config.imguiOverlay;
+            // The demo UI kit turns text input on where it wants text, with its caret for the IME.
+            window.textInputByDefault = false;
             state->window = Fenrir::Window::Install(app, window);
         }
         state->input = Fenrir::Input::Install(app);
@@ -759,6 +908,28 @@ namespace FenrirDemo
             renderer.vsync = Fenrir::Vsync::Off;
         }
         state->renderer = Fenrir::Renderer::Install(app, renderer);
+        // FenrirUI for every demo app, and the kit over it, before the app's packages, whose roots may need it.
+        state->ui = Fenrir::UI::Install(app);
+        if (state->ui->IsValid())
+        {
+            DemoUIConfig kit;
+            kit.folder = DemoUIFolder(state->assets->Store());
+            // A smoke run is a check of the files as built, not an editing session.
+            kit.hotReload = !smoke;
+            kit.target = state->config.demoUITarget;
+#if defined(FENRIR_DEMO_SCRIPTING) && defined(FENRIR_DEMO_UI_SCRIPTING)
+            // Scripting is installed below for an app with a script assembly, and with FenrirUI's scripting extension
+            // a script can mount into a scene slot.
+            kit.scripting = !state->config.scriptAssembly.empty();
+#endif
+            state->kit.emplace(app, std::move(kit));
+            app.GetResource<DemoUI>().SetTitle(state->config.appName);
+        }
+        // Before the app's packages, so the switcher and the frame stats are the panel's first app sections.
+        if (DemoUI* demoUI = state->Kit())
+        {
+            state->AddAppSections(*demoUI, state);
+        }
         if (state->config.installPackages)
         {
             state->appPackages = state->config.installPackages(app);
@@ -779,11 +950,6 @@ namespace FenrirDemo
         }
 #endif
 
-        if (state->config.imguiOverlay)
-        {
-            state->imgui.emplace(app, state->assets->Store());
-        }
-
         std::weak_ptr<Detail::DemoState> weak = state;
         app.AddSequentialSystem(Fenrir::SchedulePriority::BeforeTicks, [weak](Fenrir::App&) {
             if (const auto locked = weak.lock())
@@ -797,16 +963,6 @@ namespace FenrirDemo
                 locked->Update();
             }
         });
-        if (state->imgui)
-        {
-            // After every scene's Update: what ImGui drew this frame goes to the overlay before Render.
-            app.AddSequentialSystem(Fenrir::SchedulePriority::PostUpdate, [weak](Fenrir::App&) {
-                if (const auto locked = weak.lock(); locked && locked->imgui)
-                {
-                    locked->imgui->EndFrame();
-                }
-            });
-        }
         return DemoScaffold(std::move(state));
     }
 

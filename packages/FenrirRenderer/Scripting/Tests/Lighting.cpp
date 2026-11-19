@@ -116,24 +116,24 @@ namespace
         camera.target = ImageTarget{AssetHandle<Image>{5, 6}};
         camera.background = ColourBackground{{0.2f, 0.3f, 0.4f, 0.5f}};
         camera.drawDebug = false;
-        camera.exposure = 1.5f;
-        camera.tonemapper = Tonemapper::Aces;
-        camera.bloom = {0.2f, 0.3f};
-        camera.anamorphicStreaks = {0.15f, 0.6f, {0.3f, 0.5f, 1.0f, 0.7f}};
-        camera.lensFlare = {0.04f, 6, 0.35f, 0.5f, 0.2f, 0.02f, AssetHandle<Image>{7, 8}, 2.5f};
-        camera.colourGrading = {5000.0f,
-                                0.2f,
-                                1.3f,
-                                {0.1f, 0.6f, 0.7f, 0.9f},
-                                {0.9f, 0.1f, 0.7f, 0.8f},
-                                0.4f,
-                                0.8f,
-                                {1.1f, 1.2f, 0.9f},
-                                {0.01f, 0.02f, 0.03f},
-                                {0.9f, 1.1f, 1.2f}};
-        camera.chromaticAberration = {0.02f};
-        camera.vignette = {0.4f, 0.3f, 0.6f, 0.2f};
-        camera.filmGrain = {0.05f, 0.5f, 2.0f};
+        camera.look.exposure = 1.5f;
+        camera.look.tonemapper = Tonemapper::Aces;
+        camera.look.bloom = {0.2f, 0.3f};
+        camera.look.anamorphicStreaks = {0.15f, 0.6f, {0.3f, 0.5f, 1.0f, 0.7f}};
+        camera.look.lensFlare = {0.04f, 6, 0.35f, 0.5f, 0.2f, 0.02f, AssetHandle<Image>{7, 8}, 2.5f};
+        camera.look.colourGrading = {5000.0f,
+                                     0.2f,
+                                     1.3f,
+                                     {0.1f, 0.6f, 0.7f, 0.9f},
+                                     {0.9f, 0.1f, 0.7f, 0.8f},
+                                     0.4f,
+                                     0.8f,
+                                     {1.1f, 1.2f, 0.9f},
+                                     {0.01f, 0.02f, 0.03f},
+                                     {0.9f, 1.1f, 1.2f}};
+        camera.look.chromaticAberration = {0.02f};
+        camera.look.vignette = {0.4f, 0.3f, 0.6f, 0.2f};
+        camera.look.filmGrain = {0.05f, 0.5f, 2.0f};
         camera.ambientOcclusion = {true, 0.8f, 1.7f};
         camera.reflections = {true, 0.75f, 30.0f, 0.25f, 0.45f};
         camera.debugView = CameraDebugView::ReflectionConfidence;
@@ -205,7 +205,7 @@ TEST_CASE("An instance list made in C# draws as one instanced draw of its copies
         REQUIRE(data->transforms.size() == 5);
         REQUIRE(data->colours.size() == 5);
     }
-    const std::vector<RecordedDraw> opaque = DrawsIn(test.Submitted(), "Opaque");
+    const std::vector<RecordedDraw> opaque = DrawsIn(test, "Opaque");
     INFO("The Opaque pass should hold one draw of C#'s five copies");
     REQUIRE(opaque.size() == 1);
     REQUIRE(opaque.front().draw.instanceCount == 5);
@@ -226,7 +226,7 @@ TEST_CASE("An instance list C# replaces is uploaded again and draws its new copi
         REQUIRE(test.Call<bool>(InstanceListCallsType, "Replace", 8));
     }
     test.Frame();
-    const std::vector<RecordedDraw> opaque = DrawsIn(test.Submitted(), "Opaque");
+    const std::vector<RecordedDraw> opaque = DrawsIn(test, "Opaque");
     INFO("The Opaque pass should draw the replaced list's eight copies, uploaded again at revision 2");
     REQUIRE(opaque.size() == 1);
     REQUIRE(opaque.front().draw.instanceCount == 8);
@@ -260,7 +260,7 @@ TEST_CASE("Every RendererStats count crosses between C++ and C# in its own place
 {
     // A frame on the null backend leaves the skinning counts zero, so each count is given a value of its own here.
     RendererScriptingApp test;
-    const RendererStats stats{1, 2, 3, 4, 5, 6, 7, 8};
+    const RendererStats stats{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
     const RendererStats echoed = test.Call<RendererStats>(RoundTripCallsType, "EchoStats", stats);
     INFO("RendererStats C++ passed C# come back with these counts changed:" << Differences(stats, echoed));
     REQUIRE(Iris::FieldDifferences(stats, echoed, taggedUnions).empty());
@@ -269,7 +269,7 @@ TEST_CASE("Every RendererStats count crosses between C++ and C# in its own place
 TEST_CASE("The spot shadow budget C# sets decides whether a shadowed spot light draws shadows", "[renderer][scripting]")
 {
     RendererScriptingApp test;
-    // A casting mesh at (1, 2, 3) and a camera at (0, 0, 5), and a spot light behind the mesh pointing at it along -Z.
+    // A casting mesh at (1, 2, 3) and a camera at (1, 2, 5), and a spot light behind the mesh pointing at it along -Z.
     test.Call<void>(SceneBuilderType, "Arm");
     test.ApplyChanges();
     Entity spot = test.Entities().CreateEntity();
@@ -295,7 +295,7 @@ TEST_CASE("The point shadow budget C# sets decides whether a shadowed point ligh
           "[renderer][scripting]")
 {
     RendererScriptingApp test;
-    // A casting mesh at (1, 2, 3) and a camera at (0, 0, 5), and a point light just behind the mesh.
+    // A casting mesh at (1, 2, 3) and a camera at (1, 2, 5), and a point light just behind the mesh.
     test.Call<void>(SceneBuilderType, "Arm");
     test.ApplyChanges();
     Entity point = test.Entities().CreateEntity();

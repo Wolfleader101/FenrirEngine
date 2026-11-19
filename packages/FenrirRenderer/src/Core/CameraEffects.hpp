@@ -6,7 +6,7 @@
 
 namespace Fenrir::Render
 {
-    /** @brief A view's chromatic aberration (ADR-0059), the core's copy of Camera::chromaticAberration. */
+    /** @brief A view's chromatic aberration (ADR-0059), the core's copy of CameraLook::chromaticAberration. */
     struct ChromaticAberrationSettings
     {
         /**
@@ -16,7 +16,7 @@ namespace Fenrir::Render
         float intensity = 0.0f;
     };
 
-    /** @brief A view's vignette (ADR-0059), the core's copy of Camera::vignette. */
+    /** @brief A view's vignette (ADR-0059), the core's copy of CameraLook::vignette. */
     struct VignetteSettings
     {
         /** @brief How much of the light is taken at the corners, in [0, 1]; 0 or less takes none. */
@@ -29,7 +29,7 @@ namespace Fenrir::Render
         float roundness = 1.0f;
     };
 
-    /** @brief A view's film grain (ADR-0059), the core's copy of Camera::filmGrain. */
+    /** @brief A view's film grain (ADR-0059), the core's copy of CameraLook::filmGrain. */
     struct FilmGrainSettings
     {
         /** @brief How far the grain moves the encoded colour, at most; 0 or less adds none. */

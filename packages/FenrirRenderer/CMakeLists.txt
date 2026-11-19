@@ -106,6 +106,7 @@ add_library(FenrirRendererCore STATIC
     src/Core/ColourGrading.hpp
     src/Core/ColourGrading.cpp
     src/Core/LensFlare.hpp
+    src/Core/LevelOfDetail.hpp
     src/Core/LensFlare.cpp
     src/Core/Tonemapping.hpp
     src/Core/Tonemapping.cpp
@@ -193,6 +194,8 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinReflectionTrace VERTEX Shad
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinSkinning COMPUTE Shaders/Builtin/skinning.comp EMBED)
 # Light clustering (ADR-0049): each view's point, spot and rect lights listed in its clusters.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinLightClusters COMPUTE Shaders/Builtin/light_clusters.comp EMBED)
+# GPU culling (ADR-0057): each view's cull pass writes its indirection and counts its indirect commands.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinCull COMPUTE Shaders/Builtin/cull.comp EMBED)
 # MSAA: the variant that resolves a multisampled SceneColor. OCCLUSION: the one that shows one channel of a texture as
 # grey (ambient occlusion, the shadow atlases, reflection confidence). REFLECTIONS: the one that shows a view's
 # reflections, last frame's history at its hits. ABERRATION: the one that reads each channel at its own point, a
@@ -206,10 +209,11 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDebugTriangles VERTEX Shade
                    FRAGMENT Shaders/Builtin/debug.frag EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDebugText VERTEX Shaders/Builtin/debug_text.vert
                    FRAGMENT Shaders/Builtin/debug_text.frag EMBED)
-# builtin:2d (ADR-0027), the 2D render feature's own shader on the ImGui vertex layout. The renderer picks the keys from
-# the 2D pipeline description: INPUT_SRGB (sRGB vertex colours), PREMULTIPLY (PremultipliedAlpha), GAMMA (the gamma path).
+# builtin:2d (ADR-0027), the 2D render feature's own shader on the position, UV, RGBA8 vertex layout. The renderer
+# picks the keys from the 2D pipeline description: INPUT_SRGB (sRGB vertex colours), PREMULTIPLY (PremultipliedAlpha), GAMMA (the gamma path).
+# BLUR and SHADOW are the 2D feature's own, for offscreen groups' blur, drop shadow and backdrop blur (ADR-0060).
 fenrir_add_shaders(FenrirRendererCore PROGRAM Builtin2D VERTEX Shaders/Builtin/2d.vert FRAGMENT Shaders/Builtin/2d.frag
-                   KEYS INPUT_SRGB PREMULTIPLY GAMMA EMBED)
+                   KEYS INPUT_SRGB PREMULTIPLY GAMMA BLUR SHADOW EMBED)
 
 add_library(FenrirRenderer STATIC
     include/FenrirRenderer/Components.hpp

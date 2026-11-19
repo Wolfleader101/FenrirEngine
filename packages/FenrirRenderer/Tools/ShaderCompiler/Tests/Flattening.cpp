@@ -62,10 +62,10 @@ TEST_CASE("The GL copy flattens every resource kind's bindings and zeroes the se
 {
     const auto gl = Resources(true);
 
-    INFO("the fixture's nineteen resources are all decorated: its own eight, Frame.glsl's three sky textures, light "
+    INFO("the fixture's twenty-one resources are all decorated: its own eight, Frame.glsl's three sky textures, light "
          "buffer, two LTC tables, spot shadow records and atlas and point shadow records and cubes, and Draw.glsl's "
-         "instance-list buffer");
-    REQUIRE(gl.size() == 19);
+         "instance-list buffer, palette and indirection");
+    REQUIRE(gl.size() == 21);
     for (const auto& [name, decoration] : gl)
     {
         INFO(name << "'s descriptor set is zeroed");
@@ -83,11 +83,14 @@ TEST_CASE("The GL copy flattens every resource kind's bindings and zeroes the se
     REQUIRE(gl.at("first").binding == 16u);
     REQUIRE(gl.at("middle").binding == 17u);
     REQUIRE(gl.at("second").binding == 18u);
-    INFO("storage blocks: draws (set 3 binding 0), fenrirInstances (3, 1) and lights (3, 3) are set 3's storage "
-         "blocks 0, 1 and 2");
+    INFO("storage blocks: draws (set 3 binding 0), fenrirInstances (3, 1), fenrirPalette (3, 2), fenrirVisible (3, 3) "
+         "and lights (3, 4) are set 3's storage blocks 0 to 4; Draw.glsl declares all four of its own, so the palette "
+         "is the third in every program (ADR-0057)");
     REQUIRE(gl.at("draws").binding == 24u);
     REQUIRE(gl.at("fenrirInstances").binding == 25u);
-    REQUIRE(gl.at("lights").binding == 26u);
+    REQUIRE(gl.at("fenrirPalette").binding == 26u);
+    REQUIRE(gl.at("fenrirVisible").binding == 27u);
+    REQUIRE(gl.at("lights").binding == 28u);
 }
 
 TEST_CASE("The SPIR-V kept for Vulkan has the sets and bindings as written", "[shader-compiler][flattening]")
@@ -97,9 +100,9 @@ TEST_CASE("The SPIR-V kept for Vulkan has the sets and bindings as written", "[s
     INFO("extra is still set 1 binding 2");
     REQUIRE(spirv.at("extra").set == 1u);
     REQUIRE(spirv.at("extra").binding == 2u);
-    INFO("lights is still set 3 binding 3");
+    INFO("lights is still set 3 binding 4");
     REQUIRE(spirv.at("lights").set == 3u);
-    REQUIRE(spirv.at("lights").binding == 3u);
+    REQUIRE(spirv.at("lights").binding == 4u);
 }
 
 TEST_CASE("The GL copy reads VertexId where the shader read gl_VertexIndex", "[shader-compiler][flattening]")
@@ -140,9 +143,11 @@ TEST_CASE("Each binding is reflected with its set, kind and name", "[shader-comp
             variant.bindings, [&](const Fenrir::ShaderBinding& b) { return b.set == set && b.binding == binding; });
     };
 
-    INFO("nineteen bindings across both stages, ten of them Frame.glsl's sky textures, light buffer, LTC tables, spot "
-         "shadow records and atlas and point shadow records and cubes, and one Draw.glsl's instance-list buffer");
-    REQUIRE(variant.bindings.size() == 19);
+    INFO(
+        "twenty-one bindings across both stages, ten of them Frame.glsl's sky textures, light buffer, LTC tables, "
+        "spot shadow records and atlas and point shadow records and cubes, and three Draw.glsl's instance-list buffer, "
+        "palette and indirection");
+    REQUIRE(variant.bindings.size() == 21);
     INFO("set 0 binding 0 is the FrameData uniform block from Fenrir/Frame.glsl");
     REQUIRE(find(0, 0)->kind == Fenrir::ShaderBindingKind::UniformBuffer);
     REQUIRE(find(0, 0)->name == "FrameData");
@@ -161,8 +166,9 @@ TEST_CASE("A storage block ending in a runtime array is reflected one record lon
         variant.bindings, [](const Fenrir::ShaderBinding& b) { return b.set == 3 && b.binding == 0; });
     REQUIRE(draws != variant.bindings.end());
 
-    INFO("DrawData holds DrawItem items[]: two mat4s, a uint, a float, two uints and a vec4, 160 bytes in std430");
-    REQUIRE(draws->size == 160);
+    INFO("DrawData holds DrawItem items[]: two mat4s, a uint, a float, two uints and three vec4s, 192 bytes in "
+         "std430");
+    REQUIRE(draws->size == 192);
 }
 
 TEST_CASE("The vertex stage's inputs are reflected by location", "[shader-compiler][reflection]")

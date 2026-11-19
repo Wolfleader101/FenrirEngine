@@ -68,6 +68,12 @@ TEST_CASE("C#'s new Bounds() has C++'s Fenrir::Math::AABB{} defaults, field by f
     CheckDefaults<Fenrir::Math::AABB>(Fenrir::ScriptingProbe::Component(app.scripting), "Bounds");
 }
 
+TEST_CASE("C#'s new Frustum() has C++'s Fenrir::Math::Frustum{} defaults, field by field", "[scripting][bindings]")
+{
+    Fenrir::Testing::ScriptingApp app;
+    CheckDefaults<Fenrir::Math::Frustum>(Fenrir::ScriptingProbe::Component(app.scripting), "Frustum");
+}
+
 TEST_CASE("C#'s new Ray() has C++'s Fenrir::Math::Ray{} defaults, field by field", "[scripting][bindings]")
 {
     Fenrir::Testing::ScriptingApp app;

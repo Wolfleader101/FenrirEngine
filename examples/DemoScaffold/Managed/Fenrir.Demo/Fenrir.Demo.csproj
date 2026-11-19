@@ -10,8 +10,46 @@
     <RootNamespace>Fenrir.Demo</RootNamespace>
     <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
   </PropertyGroup>
-  <!-- The demo scaffold's shared C# assembly (examples/DemoScaffold/README.md): the CSharpScene marker and the scene-click
-       event, which every demo app's scripts project references. Built against the scripting SDK (for the generators and
-       Fenrir.Math); CMake passes -p:FenrirScriptingSdk=<the SDK folder>/. The host shares it with every script load. -->
+  <!-- The demo scaffold's shared C# assembly (examples/DemoScaffold/README.md): the CSharpScene marker, the scene-click
+       event and DemoUI, how a script finds the demo UI kit's root and a scene's demo slot, which every demo app's
+       scripts project references. Plain C#, with no natives (ADR-0072). Built against the scripting SDK (for the
+       generators and Fenrir.Math) and FenrirUI's contract and the ones it builds on; CMake passes
+       -p:FenrirScriptingSdk=<the SDK folder>/ and -p:Fenrir<Name>ContractDir=<the folder holding its dll>/ for each,
+       or -p:FenrirDemoUI=false where FenrirUI's scripting is not built, which leaves DemoUI out. The host shares it with
+       every script load, after FenrirUI's contract. -->
   <Import Project="$(MSBuildThisFileDirectory)../../../../packages/FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <ItemGroup Condition="'$(FenrirDemoUI)' == 'false'">
+    <Compile Remove="DemoUI.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(FenrirDemoUI)' != 'false' And '$(FenrirUIContractDir)' != ''">
+    <Reference Include="Fenrir.Input">
+      <HintPath>$(FenrirInputContractDir)Fenrir.Input.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Assets">
+      <HintPath>$(FenrirAssetsContractDir)Fenrir.Assets.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Text">
+      <HintPath>$(FenrirTextContractDir)Fenrir.Text.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Painter">
+      <HintPath>$(FenrirPainterContractDir)Fenrir.Painter.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.UI">
+      <HintPath>$(FenrirUIContractDir)Fenrir.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <!-- In an editor, which passes no folders, the contracts come from their source projects. -->
+  <ItemGroup Condition="'$(FenrirDemoUI)' != 'false' And '$(FenrirUIContractDir)' == ''">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../../packages/FenrirInput/Managed/Fenrir.Input/Fenrir.Input.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../../packages/FenrirUI/Managed/Fenrir.UI/Fenrir.UI.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
 </Project>

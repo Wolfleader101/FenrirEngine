@@ -47,9 +47,9 @@ public sealed class BindingTests
             Assert.True(generated.ContainsKey(Path.GetFullPath(file)), $"{file} is committed but no longer generated.");
         }
 
-        Assert.True(generated.Count == 27,
-                    $"The fixture should give 19 mirrors, the natives' class, its two facade parts, the mappings, the " +
-                    $"natives header, the registration and the defaults test's two files, but gave {generated.Count} files.");
+        Assert.True(generated.Count == 28,
+                    $"The fixture should give 19 mirrors, the natives' class, its two facade parts, the stages' class, the " +
+                    $"mappings, the natives header, the registration and the defaults test's two files, but gave {generated.Count} files.");
     }
 
     [Fact]
@@ -165,6 +165,28 @@ public sealed class BindingTests
     }
 
     [Fact]
+    public void TheMadeExtensionSharesTheAssembliesListedAfterItsContract()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace("function = \"Fixture::Bindings::Register\"\n", "function = \"Fixture::Bindings::Register\"\nmaker = \"Fixture::Bindings::MakeExtension\"\nshares = [\"First.dll\", \"Second.dll\"]\n", StringComparison.Ordinal));
+
+        var registration = Output(Generator.Generate(config, [FixtureDescription]), "FixtureRegistration.cpp");
+
+        const string shared = "        extension.sharedAssemblies = {\"Fixture.Bindings.dll\", \"First.dll\", \"Second.dll\"};\n";
+        Assert.True(registration.Contains(shared, StringComparison.Ordinal), $"The registration should hold\n{shared}\nbut is:\n{registration}");
+    }
+
+    [Fact]
+    public void SharesWithoutAMakerIsAnError()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace("function = \"Fixture::Bindings::Register\"\n", "function = \"Fixture::Bindings::Register\"\nshares = [\"First.dll\"]\n", StringComparison.Ordinal));
+
+        var error = Assert.Throws<BindingException>(() => Generator.Generate(config, [FixtureDescription]));
+        Assert.Contains("[registration] shares needs maker", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WithoutAMakerTheHeaderDeclaresTheRegisterFunctionAndTheRegistrationDefinesItAlone()
     {
         var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);
@@ -210,6 +232,55 @@ public sealed class BindingTests
 
         Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal),
                     $"Binding should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void StagesGiveAClassOfTheirNamesAndTheExtensionsStagesFromOneList()
+    {
+        var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);
+        var stages = generated[Path.Combine(FixtureDirectory, "Contract", "Generated", "FixtureStages.cs")];
+        var registration = generated[Path.Combine(FixtureDirectory, "Native", "Generated", "FixtureRegistration.cpp")];
+
+        Assert.Contains("public static class FixtureStages", stages, StringComparison.Ordinal);
+        Assert.Contains("public const string Early = \"Fixture.Bindings.Early\";", stages, StringComparison.Ordinal);
+        Assert.Contains("/// <summary>Runs first: what a &lt;Stage&gt; summary says, escaped.</summary>", stages, StringComparison.Ordinal);
+        Assert.True(stages.IndexOf("Early", StringComparison.Ordinal) < stages.IndexOf("Late =", StringComparison.Ordinal),
+                    "The constants should be in the configuration's order.");
+        Assert.Contains("extension.stages = {\"Fixture.Bindings.Early\", \"Fixture.Bindings.Late\"};", registration,
+                        StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("class = \"FixtureStages\"", "class = \"Body\"", "[stages] class Body is also the name of a mirror")]
+    [InlineData("class = \"FixtureStages\"", "class = \"FixtureNative\"", "[stages] class FixtureNative is also the name of a mirror")]
+    [InlineData("Late = { name = \"Fixture.Bindings.Late\"", "Late = { name = \"Fixture.Bindings.Early\"", "[stages.names] Early and Late both name Fixture.Bindings.Early")]
+    [InlineData("Late = { name = \"Fixture.Bindings.Late\", summary = \"Runs last.\" }", "Late = \"Fixture.Bindings.Late\"", "stage 'Late' is a table")]
+    public void AStagesSectionTheBindingCannotHonourFailsSayingWhy(string from, string to, string diagnostic)
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace(from, to, StringComparison.Ordinal));
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [FixtureDescription]));
+
+        Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal),
+                    $"Expected the diagnostic '{diagnostic}', but failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void StagesWithoutARegistrationFailSayingTheyNeedOne()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text =>
+        {
+            var start = text.IndexOf("[registration]", StringComparison.Ordinal);
+            var end = text.IndexOf("\n\n", start, StringComparison.Ordinal);
+            return WithoutNatives(text[..start] + text[end..]);
+        });
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [FixtureDescription]));
+
+        Assert.True(exception.Message.Contains("[stages] needs [registration]", StringComparison.Ordinal),
+                    $"Stages without a registration should say they need one, but failed with\n  {exception.Message}");
     }
 
     [Fact]
@@ -513,7 +584,7 @@ public sealed class BindingTests
         var first = Generator.Write(config, Generator.Generate(config, [description]));
         var second = Generator.Write(config, Generator.Generate(config, [description]));
 
-        Assert.True(first.Count == 27, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
+        Assert.True(first.Count == 28, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
         Assert.True(second.Count == 0, $"A second run should write nothing, but reported:\n{string.Join('\n', second)}");
     }
 

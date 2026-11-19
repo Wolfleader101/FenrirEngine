@@ -13,8 +13,10 @@ namespace LightingDemo.Scripts;
 // up to 1024 moving coloured point and spot lights (every fourth a spot), made here from Fenrir.Renderer's components.
 // Where C++ marks each light with a sphere entity, this scene draws every marker as one copy of an instance list, made
 // with Assets.AddInstanceList and rewritten each frame, through one InstancedMeshRenderer. The scaffold gives its
-// FenrirScene a CSharpScene resource naming it (src/ManyLights.cpp, ManyLightsCSharpScene); the lighting panel's keys
-// (T, E, B, O, G) are C++'s, as in every LightingDemo scene. Every system here acts only while the scene is active.
+// FenrirScene a CSharpScene resource naming it (src/ManyLights.cpp, ManyLightsCSharpScene); the lighting panel's
+// sections and keys (T, E, B, O, G, H) are C++'s, as in every LightingDemo scene. The scene's own switches are a Razor
+// panel, ManyLightsPanel.razor, which ManyLightsPanelSetup.cs mounts into the scene's demo slot; each is on a key below
+// too, so the scene works without it. Every system here acts only while the scene is active.
 //
 //   M   16, 64, 100, 256 or 1024 lights.
 //   P   the lights moving or still.
@@ -81,6 +83,14 @@ public static class ManyLights
             if (marker.Built != 0)
                 return true;
         return false;
+    }
+
+    // Budgets[`budget`] for the renderer's spot and point shadows, as V and the panel step them.
+    public static void SetBudget(int budget)
+    {
+        Budget = budget;
+        Renderer.SetSpotShadowBudget(Budgets[budget].Spot);
+        Renderer.SetPointShadowBudget(Budgets[budget].Point);
     }
 
     // Hue `hue` (0 to 1 round the wheel) at full saturation and value, linear.
@@ -289,9 +299,7 @@ public sealed class ManyLightsBuilder : ISystem
         ManyLights.Time = 0;
         ManyLights.SpotShadows = true;
         ManyLights.PointShadows = true;
-        ManyLights.Budget = 0;
-        Renderer.SetSpotShadowBudget(ManyLights.Budgets[0].Spot);
-        Renderer.SetPointShadowBudget(ManyLights.Budgets[0].Point);
+        ManyLights.SetBudget(0);
         for (int i = 0; i < ManyLights.MaxLights; ++i)
         {
             float spread = i * 0.618034f % 1;
@@ -369,10 +377,8 @@ public sealed class ManyLightsUpdater : ISystem
         }
         if (Keyboard.JustPressed(Key.V))
         {
-            ManyLights.Budget = (ManyLights.Budget + 1) % ManyLights.Budgets.Length;
+            ManyLights.SetBudget((ManyLights.Budget + 1) % ManyLights.Budgets.Length);
             var (spot, point) = ManyLights.Budgets[ManyLights.Budget];
-            Renderer.SetSpotShadowBudget(spot);
-            Renderer.SetPointShadowBudget(point);
             context.Log.Info($"V: shadow budgets of {spot} spot and {point} point lights");
         }
 

@@ -10,16 +10,42 @@
   </PropertyGroup>
   <!-- The C# half of ScriptingDemo's showcase (examples/ScriptingDemo/README.md). fenrir_add_demo_app's SCRIPTS builds it,
        passing -p:FenrirScriptingSdk=<the SDK folder>/ and the folder of each contract (-p:Fenrir<Name>ContractDir=). The
-       contracts are compile-time only: the host shares its own copies. The showcase needs only Fenrir.Input's, for the key
-       event, and Fenrir.Demo's, which every demo app's scripts reference. -->
+       contracts are compile-time only: the host shares its own copies. The showcase needs Fenrir.Input's, for the key
+       event, Fenrir.Renderer's (and Fenrir.Assets's, which it builds on), for the culling switch and stats,
+       Fenrir.Demo's, which every demo app's scripts reference, and Fenrir.UI's (and Fenrir.Text's and Fenrir.Painter's,
+       which it builds on), for the Razor panel in Showcase's demo slot. fenrir_add_demo_app adds
+       Fenrir.Demo.Razor.props, which compiles the panel with the demo UI kit's shared Razor components. -->
   <Import Project="$(MSBuildThisFileDirectory)../../../packages/FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <!-- In an editor, which passes no folders, the props come from here. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../DemoScaffold/Managed/Fenrir.Demo.Razor.props"
+          Condition="'$(FenrirDemoContractDir)' == ''" />
   <ItemGroup Condition="'$(FenrirDemoContractDir)' != ''">
     <Reference Include="Fenrir.Input">
       <HintPath>$(FenrirInputContractDir)Fenrir.Input.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Fenrir.Assets">
+      <HintPath>$(FenrirAssetsContractDir)Fenrir.Assets.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Renderer">
+      <HintPath>$(FenrirRendererContractDir)Fenrir.Renderer.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Fenrir.Demo">
       <HintPath>$(FenrirDemoContractDir)Fenrir.Demo.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Text">
+      <HintPath>$(FenrirTextContractDir)Fenrir.Text.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Painter">
+      <HintPath>$(FenrirPainterContractDir)Fenrir.Painter.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.UI">
+      <HintPath>$(FenrirUIContractDir)Fenrir.UI.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
@@ -28,7 +54,16 @@
     <ProjectReference Include="$(MSBuildThisFileDirectory)../../../packages/FenrirInput/Managed/Fenrir.Input/Fenrir.Input.csproj">
       <Private>false</Private>
     </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../packages/FenrirAssets/Managed/Fenrir.Assets/Fenrir.Assets.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../packages/FenrirRenderer/Managed/Fenrir.Renderer/Fenrir.Renderer.csproj">
+      <Private>false</Private>
+    </ProjectReference>
     <ProjectReference Include="$(MSBuildThisFileDirectory)../../DemoScaffold/Managed/Fenrir.Demo/Fenrir.Demo.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../packages/FenrirUI/Managed/Fenrir.UI/Fenrir.UI.csproj">
       <Private>false</Private>
     </ProjectReference>
   </ItemGroup>

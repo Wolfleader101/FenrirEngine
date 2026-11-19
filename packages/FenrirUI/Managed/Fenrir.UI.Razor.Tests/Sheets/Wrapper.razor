@@ -1,0 +1,6 @@
+@* The child of Holder (ScopeTests): a frame around what it is given. *@
+<panel class="frame">@ChildContent</panel>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

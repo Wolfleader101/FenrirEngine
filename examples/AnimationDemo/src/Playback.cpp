@@ -84,6 +84,28 @@ namespace AnimationDemo
             animator.playing = state.playing;
         }
 
+        /** @brief The walker's playback, in a section of the demo panel, pulled each frame while the scene is there. */
+        void AddReadouts(Fenrir::App& app, Fenrir::Scene& scene, const PlaybackState& state)
+        {
+            const FenrirDemo::DemoSection walker = SceneSection(app, "Walker");
+            const auto playback = [&scene, &state] {
+                return Fenrir::Animation::Playback(scene, state.walker.skeleton);
+            };
+            walker.Readout("Clip", [&state] { return std::string(ClipNames.at(state.clip)); });
+            walker.Readout("Time", [&app, &state, playback] {
+                const Fenrir::ClipData* clip = app.GetResource<Fenrir::AssetStore>().TryGet(state.clips.at(state.clip));
+                return std::format("{:.2f} / {:.2f} s", playback().time, clip != nullptr ? clip->duration : 0.0f);
+            });
+            walker.Readout("Speed", [&state] { return std::format("{:.2f}", state.speed); });
+            walker.Readout("Loop",
+                           [&state] { return std::string(state.loop == Fenrir::ClipLoop::Loop ? "Loop" : "Once"); });
+            walker.Readout("Playing", [&state, playback] {
+                return std::format("{}{}", state.playing ? "playing" : "paused",
+                                   playback().finished ? ", finished" : "");
+            });
+            walker.Readout("Laps", [playback] { return std::to_string(playback().completedLoops); });
+        }
+
         void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
         {
             AddStage(app, scene);
@@ -112,6 +134,7 @@ namespace AnimationDemo
             (void)state.events.Read(app);
             (void)state.finished.Read(app);
             (void)state.dropped.Read(app);
+            AddReadouts(app, scene, state);
         }
 
         void ReadEvents(Fenrir::App& app, PlaybackState& state, Fenrir::DebugDraw& draw)
@@ -209,15 +232,6 @@ namespace AnimationDemo
             HandleKeys(app, scene, *state);
             ReadEvents(app, *state, *draw);
 
-            const Fenrir::PlaybackInfo info = Fenrir::Animation::Playback(scene, state->walker.skeleton);
-            const Fenrir::ClipData* clip = app.GetResource<Fenrir::AssetStore>().TryGet(state->clips.at(state->clip));
-            draw->ScreenText({16.0f, 120.0f},
-                             std::format("Walker: {} {:.2f} / {:.2f} s, speed {:.2f}, {}, {}{}, laps {}",
-                                         ClipNames.at(state->clip), info.time, clip != nullptr ? clip->duration : 0.0f,
-                                         state->speed, state->loop == Fenrir::ClipLoop::Loop ? "Loop" : "Once",
-                                         state->playing ? "playing" : "paused", info.finished ? ", finished" : "",
-                                         info.completedLoops),
-                             Colour::White);
             const Fenrir::TextOptions above{.relativeTo = state->flutterer.skeleton, .size = 16.0f};
             draw->WorldText(
                 Vec3(0.0f, 2.6f, 0.0f),
@@ -234,9 +248,39 @@ namespace AnimationDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Playback";
-        scene.keyHelp =
-            "1-5: Idle, Walk, Run, Sprint, Call. Up/Down: speed. R: reverse. L: Loop or Once. Space: pause. "
-            "Left/Right: seek 0.25 s. Home: seek to 0.";
+        scene.keyRows = {{"1-5", "Idle, Walk, Run, Sprint, Call"},
+                         {"Up/Down", "speed up / slow down"},
+                         {"R", "reverse"},
+                         {"L", "Loop or Once"},
+                         {"Space", "pause or play"},
+                         {"Left/Right", "seek 0.25 s back / on"},
+                         {"Home", "seek to 0"}};
+        // The app's first scene: the scaffold's keys, then this scene's.
+        scene.tutorial = FenrirDemo::DemoTutorial{
+            .title = "AnimationDemo",
+            .steps = {{.title = "The scenes",
+                       .text = "Each scene shows one part of FenrirAnimation and FenrirSkeleton. The Scenes section at "
+                               "the top of the demo panel, on the right, enters any of them; PageDown and PageUp step "
+                               "through them in turn.",
+                       .keys = {{"PageDown/PageUp", "the next or previous scene"}}},
+                      {.title = "The demo panel",
+                       .text = "The panel shows each scene's readouts, and the help at the bottom left lists its keys. "
+                               "F1 hides or shows them both, and this card.",
+                       .keys = {{"F1", "hide or show the demo panel and the help"}}},
+                      {.title = "The camera",
+                       .text = "Hold the right mouse button to look around and move with WASD: Shift is faster, and "
+                               "the wheel changes the speed. F3 turns the free-fly camera off and on.",
+                       .keys = {{"Right mouse + WASD", "look and move"}, {"F3", "the free-fly camera off or on"}}},
+                      {.title = "Playback",
+                       .text = "The human on the left plays a clip through its Animator, under these keys; the Walker "
+                               "section shows what it plays. The mannequin on the right sends more clip events than a "
+                               "frame may carry, and counts the dropped ones above its head.",
+                       .keys = {{"1-5", "Idle, Walk, Run, Sprint, Call"},
+                                {"Up/Down", "speed up / slow down"},
+                                {"R", "reverse"},
+                                {"L", "Loop or Once"},
+                                {"Space", "pause or play"},
+                                {"Left/Right, Home", "seek 0.25 s back / on, seek to 0"}}}}};
         scene.keys = {Fenrir::Key::Num3,  Fenrir::Key::Up,    Fenrir::Key::R,    Fenrir::Key::Space,
                       Fenrir::Key::Right, Fenrir::Key::Space, Fenrir::Key::Num5, Fenrir::Key::L,
                       Fenrir::Key::Left,  Fenrir::Key::Home,  Fenrir::Key::Down, Fenrir::Key::Num2};

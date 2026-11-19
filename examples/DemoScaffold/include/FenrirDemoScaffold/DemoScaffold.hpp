@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "FenrirAssets/MeshData.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirInput/InputTypes.hpp"
 #include "FenrirMath/Math.hpp"
@@ -18,13 +20,15 @@
 #endif
 
 // The demo scaffold (GLOSSARY.md): what every demo app is built on. DemoScaffold::Install installs the engine packages
-// a demo app needs and adds the free-fly camera, the scene list, the scene-click event, the help panel and the
-// smoke-run switches. Demo code, not engine code: the engine knows scenes, not demo scenes.
+// a demo app needs, FenrirUI among them, and adds the demo UI kit (DemoUI.hpp), the free-fly camera, the scene list,
+// the scene-click event, the help and the smoke-run switches. Demo code, not engine code: the engine knows scenes, not
+// demo scenes.
 
 namespace Fenrir
 {
     class App;
     class Scene;
+    class UITarget;
 } // namespace Fenrir
 
 namespace FenrirDemo
@@ -51,10 +55,25 @@ namespace FenrirDemo
      */
     struct DemoScene
     {
-        /** @brief The scene's name, unique in the app: shown in the help panel, and what FENRIR_DEMO_SCENE names. */
+        /** @brief The scene's name, unique in the app: shown in the help, and what FENRIR_DEMO_SCENE names. */
         std::string name;
-        /** @brief The scene's keys, one line for the help panel. */
-        std::string keyHelp;
+        /** @brief The scene's key rows, the help's last. */
+        std::vector<DemoKeyRow> keyRows;
+        /**
+         * @brief The scene's demo tutorial: shown the first time the scene is entered in a run, but never in a smoke
+         * run or with FENRIR_DEMO_KEYS, and again from the Tutorial button in the scene's section, titled after the
+         * scene, which the scaffold adds before `spawn` adds the scene's own.
+         */
+        std::optional<DemoTutorial> tutorial;
+        /**
+         * @brief The id of the scene's demo slot (GLOSSARY.md), for a scene with a Razor panel: an element of this id
+         * in the demo panel (DemoUI::SceneSlot), made when the scene is entered, after its Tutorial section and before
+         * `spawn` adds its own sections, and gone when it is left. The app's C# finds it by this id
+         * (`DemoUI.TryGetSceneSlot` in the Fenrir.Demo assembly) and mounts its Razor panel into it. Without scripting
+         * the slot shows a note that the panel needs it, so every switch on the panel needs a key in `keyRows`
+         * (ADR-0072). Unique in the app; empty for none.
+         */
+        std::string razorPanel;
         /** @brief The keys a smoke run or FENRIR_DEMO_KEYS presses in this scene, in order. */
         std::vector<Fenrir::Key> keys;
         /** @brief Where the free-fly camera starts. */
@@ -116,26 +135,29 @@ namespace FenrirDemo
     /** @brief How DemoScaffold::Install sets a demo app up. */
     struct DemoConfig
     {
-        /** @brief The app's name: the window's title and the help panel's first line. */
+        /** @brief The app's name: the window's title, the demo panel's title and the help's first line. */
         std::string appName = "Demo";
         /**
          * @brief The window's icon, an RGBA8 image (PNG or JPEG) loaded through the asset store, relative to its root:
          * by default Fenrir's icon from the shared assets (examples/assets/icons). Empty keeps SDL's default icon.
          */
         std::string iconPath = "icons/fenrir.png";
-        /** @brief What F2 does in this app, one line for the help panel; empty when F2 does nothing. */
-        std::string appKeyHelp;
+        /** @brief The app's key rows (F2 and anything app-wide), in the help after the scaffold's. */
+        std::vector<DemoKeyRow> appKeyRows;
         /** @brief The ordered scene list; PageDown and PageUp step through it, wrapping. */
         std::vector<DemoScene> scenes;
+        /**
+         * @brief Adds the demo panel's "Frame" section, after the scene switcher: the frame time and fps, averaged
+         * over half a second, and the draws, instances and shadow draws of the renderer's last frame (Renderer::Stats).
+         */
+        bool frameStats = false;
         /** @brief The renderer's MSAA samples per pixel (RendererConfig::msaa); 1 is off. */
         std::uint32_t msaa = 1;
         /**
-         * @brief Installs the scaffold's ImGuiOverlay (examples/DemoScaffold/README.md): Dear ImGui over the main
-         * window, drawn on the overlay layer ImGuiOverlayLayer and seeing input before the game. A scene's `update`
-         * then makes ImGui windows with ImGui's own functions (`<imgui.h>`). The window's text input is then on only
-         * where ImGui asks for it (WindowConfig::textInputByDefault is false).
+         * @brief The demo UI kit's 2D target: the tests' seam, which captures it. Null, the app's, draws it on the main
+         * window's overlay.
          */
-        bool imguiOverlay = false;
+        std::shared_ptr<Fenrir::UITarget> demoUITarget;
         /** @brief The smoke-run switches; DemoScaffold reads them from the environment unless given. */
         std::optional<DemoRunOptions> run;
         /**
@@ -146,27 +168,21 @@ namespace FenrirDemo
         std::filesystem::path scriptAssembly;
         /**
          * @brief Installs the app's own packages that need the scaffold's (FenrirSkeleton and FenrirAnimation need
-         * FenrirAssets) and must come before Scripting (a script's pose stage systems are placed when it loads): run
-         * by Install after the renderer and before Scripting. What it returns holds the packages' owners: the scaffold
-         * keeps it, and destroys it after Scripting ends and before its own packages. Empty, nothing runs.
+         * FenrirAssets; a UI root needs FenrirUI) and must come before Scripting (a script's pose stage systems are
+         * placed when it loads): run by Install after the renderer, FenrirUI and the demo UI kit, and before Scripting.
+         * What it returns holds the packages' owners: the scaffold keeps it, and destroys it after Scripting ends and
+         * before its own packages. Empty, nothing runs.
          */
         std::function<std::shared_ptr<void>(Fenrir::App& app)> installPackages;
 #ifdef FENRIR_DEMO_SCRIPTING
         /**
          * @brief The app's own scripting extensions (its components and events shared with C#), which Scripting runs
-         * with after the packages' and the scaffold's. Only with scripting built (FENRIR_DEMO_SCRIPTING).
+         * with after the packages' (the text, painter and UI ones among them) and the scaffold's. Only with scripting
+         * built (FENRIR_DEMO_SCRIPTING).
          */
         std::vector<Fenrir::ScriptingExtension> scriptingExtensions;
 #endif
     };
-
-    /** @brief The overlay layer the ImGuiOverlay draws on; a scene's own 2D draw lists on lower layers draw under it.
-     */
-    inline constexpr std::int32_t ImGuiOverlayLayer = 1000;
-
-    /** @brief The ImGuiOverlay's input router priority: it sees input before routers of lower priority, and the game.
-     */
-    inline constexpr int ImGuiOverlayRouterPriority = 1000;
 
     /**
      * @brief Sent when the scene is left-clicked (without the right mouse button held): the ray, from
@@ -180,14 +196,39 @@ namespace FenrirDemo
         Fenrir::Math::Vec2 position{0.0f, 0.0f};
     };
 
+    /**
+     * @brief How the free-fly camera looks, an app resource DemoScaffold::Install adds: a game's settings change it
+     * while the app runs.
+     */
+    struct FreeFlyLook
+    {
+        /** @brief Moving the mouse up turns the camera down. */
+        bool invertPitch = false;
+    };
+
     /** @brief The exit code of a smoke run that could not start its backend, which CTest reports as skipped. */
     inline constexpr int SkippedExitCode = 4;
+
+    /**
+     * @brief The rotation of a yaw about +Y, then a pitch about the turned +X, in radians: the way DemoCameraStart's
+     * yaw and pitch turn a camera. Positive yaw turns -Z towards -X (to the left, seen from above), and positive pitch
+     * turns it towards +Y (up), so a camera with this rotation looks along -Z turned left by `yaw` and up by `pitch`.
+     */
+    [[nodiscard]] Fenrir::Math::Quat YawPitch(float yaw, float pitch);
+
+    /**
+     * @brief A quad of `width` by `height`, centred on the origin in the XY plane and facing +Z, for screens, boards
+     * and other flat panels: four vertices with normal +Z, tangent +X (bitangent sign +1) and UV0 (0, 0) at the
+     * top-left corner and (`repeat`, `repeat`) at the bottom-right, v growing down, so an image is drawn the right
+     * way up and tiled `repeat` times across each side.
+     */
+    [[nodiscard]] Fenrir::MeshData ScreenQuad(float width, float height, float repeat = 1.0f);
 
     /**
      * @brief The owner of a demo app's engine packages and scaffold (GLOSSARY.md: demo scaffold). Move-only; destroy it
      * before the App.
      *
-     * Keys: PageDown and PageUp step to the next and previous scene, wrapping; F1 shows or hides the help panel; F3
+     * Keys: PageDown and PageUp step to the next and previous scene, wrapping; F1 hides or shows the demo UI kit; F3
      * turns the free-fly camera on or off (back to the scene's own camera). F2 is the app's. Every other key is the
      * scene's, but the free-fly camera moves with WASD only while the right mouse button is held.
      */
@@ -195,12 +236,13 @@ namespace FenrirDemo
     {
       public:
         /**
-         * @brief Installs Input, Assets, DebugDrawing and the Renderer on `config.run`'s backend, and FenrirWindow
-         * before them for any backend but Null, and adds the scaffold's systems. When scripting is built
-         * (FENRIR_ENABLE_SCRIPTING) and `config.scriptAssembly` is given, it installs Scripting last, running that
-         * assembly with every installed package's scripting extension and the scaffold's own (the Fenrir.Demo
-         * assembly: CSharpScene and DemoSceneClickEvent), then `config.scriptingExtensions`; a script assembly that
-         * fails to load is logged as an error. The first frame enters the scene FENRIR_DEMO_SCENE names, or the first.
+         * @brief Installs Input, Assets, DebugDrawing, the Renderer on `config.run`'s backend and FenrirUI, and
+         * FenrirWindow before them for any backend but Null, adds the demo UI kit (the DemoUI app resource), and adds
+         * the scaffold's systems. When scripting is built (FENRIR_ENABLE_SCRIPTING) and `config.scriptAssembly` is
+         * given, it installs Scripting last, running that assembly with every installed package's scripting extension
+         * (the text, painter and UI ones too) and the scaffold's own (the Fenrir.Demo assembly: CSharpScene and
+         * DemoSceneClickEvent), then `config.scriptingExtensions`; a script assembly that fails to load is logged as
+         * an error. The first frame enters the scene FENRIR_DEMO_SCENE names, or the first.
          * A backend that cannot start leaves the renderer invalid (logged), and Run then returns without running.
          */
         [[nodiscard]] static DemoScaffold Install(Fenrir::App& app, DemoConfig config);
@@ -209,7 +251,10 @@ namespace FenrirDemo
         DemoScaffold& operator=(DemoScaffold&& other) noexcept;
         DemoScaffold(const DemoScaffold&) = delete;
         DemoScaffold& operator=(const DemoScaffold&) = delete;
-        /** @brief Destroys the active demo scene, then the engine packages, renderer first. */
+        /**
+         * @brief Destroys the active demo scene, then Scripting, the app's packages, the demo UI kit and the engine
+         * packages, FenrirUI and the renderer first.
+         */
         ~DemoScaffold();
 
         /**

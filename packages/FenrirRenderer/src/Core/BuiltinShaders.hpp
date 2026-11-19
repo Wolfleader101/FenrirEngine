@@ -34,7 +34,8 @@ namespace Fenrir::Render
         DebugTriangles,
         /** @brief `builtin:debug-text`: debug text from the debug font's signed-distance-field atlas. */
         DebugText,
-        /** @brief `builtin:2d`: 2D draw lists on the ImGui vertex layout, textured and vertex-coloured (ADR-0027). */
+        /** @brief `builtin:2d`: 2D draw lists on the position, UV, RGBA8 vertex layout, textured and vertex-coloured
+         * (ADR-0027). */
         Draw2D,
         /** @brief `builtin:panorama`: a panorama sky's image drawn into one face and mip of its cube texture. */
         Panorama,
@@ -67,6 +68,11 @@ namespace Fenrir::Render
          * clusters (ADR-0049).
          */
         LightClusters,
+        /**
+         * @brief `builtin:cull`: a view's cull pass, each candidate kept written into its indirection and counted into
+         * its run's indirect command (ADR-0057).
+         */
+        Cull,
         /** @brief `builtin:hi-z`: a level of a view's Hi-Z pyramid, COPY level 0 from SceneDepth (ADR-0056). */
         HiZ,
         /**

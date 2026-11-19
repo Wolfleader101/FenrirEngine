@@ -58,7 +58,7 @@ TEST_CASE("An image one camera draws is what a material sampling it reads", "[re
         Fenrir::Math::AngleAxis(3.14159265f, Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f));
     Fenrir::Camera& camera = imageCamera.AddComponent<Fenrir::Camera>();
     camera.target = Fenrir::ImageTarget{image};
-    camera.tonemapper = Fenrir::Tonemapper::None;
+    camera.look.tonemapper = Fenrir::Tonemapper::None;
     camera.background = Fenrir::ColourBackground{Fenrir::Colour{0.5f, 0.5f, 0.5f, 1.0f}};
     test.AddCamera();
     test.AddQuad(1.0f, 2.0f, SampledMaterial(test, image));
@@ -78,12 +78,12 @@ TEST_CASE("Two cameras into one image each write only their viewport", "[rendere
     const auto image = TargetImage(test, 32, 16);
     Fenrir::Camera& left = test.AddCamera();
     left.target = Fenrir::ImageTarget{image};
-    left.tonemapper = Fenrir::Tonemapper::None;
+    left.look.tonemapper = Fenrir::Tonemapper::None;
     left.viewport = {0.0f, 0.0f, 0.5f, 1.0f};
     left.background = Fenrir::ColourBackground{Fenrir::Colour::Red};
     Fenrir::Camera& bottomRight = test.AddCamera();
     bottomRight.target = Fenrir::ImageTarget{image};
-    bottomRight.tonemapper = Fenrir::Tonemapper::None;
+    bottomRight.look.tonemapper = Fenrir::Tonemapper::None;
     bottomRight.viewport = {0.5f, 0.5f, 0.5f, 0.5f};
     bottomRight.background = Fenrir::ColourBackground{Fenrir::Colour::Blue};
 
@@ -107,7 +107,7 @@ TEST_CASE("With msaa 4 the scene renders and Output resolves it with no GL error
     const auto image = TargetImage(test, Size, Size);
     Fenrir::Camera& intoImage = test.AddCamera();
     intoImage.target = Fenrir::ImageTarget{image};
-    intoImage.tonemapper = Fenrir::Tonemapper::None;
+    intoImage.look.tonemapper = Fenrir::Tonemapper::None;
     intoImage.background = Fenrir::ColourBackground{Fenrir::Colour::Green};
     // And one into the window, resolved into the backbuffer.
     test.AddCamera();

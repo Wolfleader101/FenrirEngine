@@ -2,6 +2,6 @@
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
-add_executable(FenrirMathTests Colour.cpp)
+add_executable(FenrirMathTests Colour.cpp Frustum.cpp)
 target_link_libraries(FenrirMathTests PRIVATE FenrirMath Catch2::Catch2WithMain)
 add_test(NAME FenrirMath COMMAND FenrirMathTests)

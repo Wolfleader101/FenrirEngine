@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <numbers>
 #include <string>
 #include <vector>
 
@@ -411,7 +412,10 @@ TEST_CASE("RendererProbe on null: as the camera moves, the budget follows it", "
     AddSpotLight(test, {0.0f, 3.0f, 0.0f});
     test.Frame();
 
+    // Past the cube, turned back to face it: a camera the cube is behind draws nothing to read the lights from.
     camera.GetComponent<Fenrir::Transform>().pos = {0.0f, 0.0f, -15.0f};
+    camera.GetComponent<Fenrir::Transform>().rot =
+        Fenrir::Math::AngleAxis(std::numbers::pi_v<float>, Vec3(0.0f, 1.0f, 0.0f));
     test.Frame();
     const std::vector<Vec3> moved = LightPositions(test, 2);
     INFO("the two spots nearest the camera's new place are shadowed, nearest first");

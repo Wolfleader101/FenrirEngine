@@ -56,6 +56,12 @@ namespace
     }
 } // namespace
 
+TEST_CASE("C#'s new LodSettings() has C++'s Fenrir::LodSettings{} defaults, field by field", "[assets][scripting][bindings]")
+{
+    Fenrir::Testing::AssetsScriptingApp app;
+    CheckDefaults<Fenrir::LodSettings>(Fenrir::ScriptingProbe::Component(app.scripting), "LodSettings");
+}
+
 TEST_CASE("C#'s new SamplerDescription() has C++'s Fenrir::SamplerDescription{} defaults, field by field", "[assets][scripting][bindings]")
 {
     Fenrir::Testing::AssetsScriptingApp app;

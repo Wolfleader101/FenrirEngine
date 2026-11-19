@@ -1,6 +1,8 @@
 add_library(FenrirMath STATIC
+    src/Frustum.cpp
     src/Math.cpp
     include/FenrirMath/Colour.hpp
+    include/FenrirMath/Frustum.hpp
     include/FenrirMath/Math.hpp
     include/FenrirMath/Math_fwd.hpp
 )

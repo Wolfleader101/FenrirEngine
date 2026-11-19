@@ -98,6 +98,8 @@ namespace Fenrir
         [[nodiscard]] static CursorMode GetCursorMode(App& app, WindowId window);
         /** @brief Sets the cursor shown over `window`. False if SDL refuses. */
         static bool SetCursorShape(App& app, WindowId window, CursorShape shape);
+        /** @brief The cursor shown over `window`, as last set; Arrow for a window FenrirWindow does not keep. */
+        [[nodiscard]] static CursorShape GetCursorShape(App& app, WindowId window);
 
         /** @brief The system clipboard's text, or empty if it holds none. */
         [[nodiscard]] static std::string ClipboardText(App& app);

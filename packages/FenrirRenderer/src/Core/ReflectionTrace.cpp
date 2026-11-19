@@ -100,11 +100,24 @@ namespace Fenrir::Render
     {
         HiZPyramid pyramid;
         pyramid.size = size;
-        pyramid.levels.emplace_back(depth.begin(), depth.end());
-        const std::uint32_t mips = MipCount(size.width, size.height);
-        for (std::uint32_t level = 1; level < mips; ++level)
+        // The march reads the nearest depth alone; the farthest is reduced beside it as the pyramid holds it.
+        std::vector<HiZTexel> texels;
+        for (const float d : depth)
         {
-            pyramid.levels.push_back(ReduceHiZ(pyramid.levels.back(), MipSize(size, level - 1)));
+            texels.push_back({d, d});
+        }
+        const std::uint32_t mips = MipCount(size.width, size.height);
+        for (std::uint32_t level = 0; level < mips; ++level)
+        {
+            if (level > 0)
+            {
+                texels = ReduceHiZ(texels, MipSize(size, level - 1));
+            }
+            std::vector<float>& nearest = pyramid.levels.emplace_back();
+            for (const HiZTexel& texel : texels)
+            {
+                nearest.push_back(texel.nearest);
+            }
         }
         return pyramid;
     }
@@ -282,7 +295,7 @@ namespace Fenrir::Render
     GraphResource ReflectionTrace::AddPass(RenderGraph& graph, std::uint64_t frameIndex,
                                            const ReflectionTraceView& view)
     {
-        if (view.history.IsEmpty() || m_pipeline.IsEmpty())
+        if (!view.history.HasReflections() || m_pipeline.IsEmpty())
         {
             return {};
         }

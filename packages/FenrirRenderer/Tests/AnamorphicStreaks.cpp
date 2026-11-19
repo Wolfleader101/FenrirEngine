@@ -87,7 +87,7 @@ namespace
     Fenrir::Camera& AddStreakingCamera(RendererTestApp& test, float intensity)
     {
         Fenrir::Camera& camera = test.AddCamera().GetComponent<Fenrir::Camera>();
-        camera.anamorphicStreaks.intensity = intensity;
+        camera.look.anamorphicStreaks.intensity = intensity;
         test.AddMeshRenderer(test.Mesh(), test.Material());
         return camera;
     }
@@ -147,7 +147,7 @@ TEST_CASE("A camera's streaks are off by default and add no pass", "[renderer][s
     test.AddCamera();
     test.AddMeshRenderer(test.Mesh(), test.Material());
     INFO("a camera's streak intensity is 0 by default");
-    REQUIRE(Fenrir::Camera{}.anamorphicStreaks.intensity == 0.0f);
+    REQUIRE(Fenrir::Camera{}.look.anamorphicStreaks.intensity == 0.0f);
 
     test.Frame();
     const std::vector<std::string> labels = Labels(test.Passes());
@@ -162,13 +162,13 @@ TEST_CASE("A camera's streaks run in PostProcess beside its bloom, from bloom's 
 {
     RendererTestApp test;
     Fenrir::Camera& camera = AddStreakingCamera(test, 0.1f);
-    camera.anamorphicStreaks.length = 0.6f;
+    camera.look.anamorphicStreaks.length = 0.6f;
 
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
     INFO("the streaks' downsamples read bloom's level 0 before bloom's upsamples blend over it; the rest of their "
          "passes follow bloom's composite");
-    std::vector<std::string> expected{"BrdfLut", "DepthPrepass", "Opaque", "Background"};
+    std::vector<std::string> expected{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background"};
     expected.insert(expected.end(), 6, "BloomDownsample");
     expected.insert(expected.end(), 8, "StreakDownsample");
     expected.insert(expected.end(), 5, "BloomUpsample");
@@ -176,7 +176,8 @@ TEST_CASE("A camera's streaks run in PostProcess beside its bloom, from bloom's 
     expected.insert(expected.end(), 7, "StreakUpsample");
     expected.emplace_back("StreakComposite");
     expected.emplace_back("Output");
-    REQUIRE(Labels(passes) == expected);
+    expected.emplace_back("CullReadback");
+    REQUIRE(Labels(passes) == RendererTest::WithOcclusion(expected));
 
     const TextureHandle sceneColour = RendererTest::Labelled(passes, "Opaque").at(0).pass.colour.at(0).texture;
     const TextureHandle bloomLevel0 = RendererTest::Labelled(passes, "BloomDownsample").at(0).pass.colour.at(0).texture;
@@ -233,7 +234,7 @@ TEST_CASE("The streak composite carries the camera's tint at unit luminance, and
 {
     RendererTestApp test;
     Fenrir::Camera& camera = AddStreakingCamera(test, 3.0f);
-    camera.anamorphicStreaks.tint = Fenrir::Colour{0.2f, 0.4f, 1.0f, 1.0f};
+    camera.look.anamorphicStreaks.tint = Fenrir::Colour{0.2f, 0.4f, 1.0f, 1.0f};
 
     test.Frame();
     const BloomBlock block = BlockOf(test, RendererTest::Labelled(test.Passes(), "StreakComposite").at(0));
@@ -251,17 +252,18 @@ TEST_CASE("A camera with bloom off still streaks, running bloom's first downsamp
 {
     RendererTestApp test;
     Fenrir::Camera& camera = AddStreakingCamera(test, 0.1f);
-    camera.bloom.intensity = 0.0f;
+    camera.look.bloom.intensity = 0.0f;
 
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
-    std::vector<std::string> expected{"BrdfLut", "DepthPrepass", "Opaque", "Background", "BloomDownsample"};
+    std::vector<std::string> expected{"Cull", "BrdfLut", "DepthPrepass", "Opaque", "Background", "BloomDownsample"};
     expected.insert(expected.end(), 8, "StreakDownsample");
     expected.insert(expected.end(), 7, "StreakUpsample");
     expected.emplace_back("StreakComposite");
     expected.emplace_back("Output");
+    expected.emplace_back("CullReadback");
     INFO("one downsample of SceneColor into a level 0, then the streaks' passes; no bloom upsample or composite");
-    REQUIRE(Labels(passes) == expected);
+    REQUIRE(Labels(passes) == RendererTest::WithOcclusion(expected));
 
     const PassRecord level0 = RendererTest::Labelled(passes, "BloomDownsample").at(0);
     const TextureHandle sceneColour = RendererTest::Labelled(passes, "Opaque").at(0).pass.colour.at(0).texture;
@@ -281,7 +283,7 @@ TEST_CASE("Each view streaks by its own camera's settings", "[renderer][streaks]
     Fenrir::Camera& right = test.AddCamera().GetComponent<Fenrir::Camera>();
     right.viewport = {0.5f, 0.0f, 0.5f, 1.0f};
     right.order = 1;
-    right.anamorphicStreaks.intensity = 0.2f;
+    right.look.anamorphicStreaks.intensity = 0.2f;
     test.AddMeshRenderer(test.Mesh(), test.Material());
 
     test.Frame();

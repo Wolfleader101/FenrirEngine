@@ -34,10 +34,10 @@ namespace
         Fenrir::Camera& camera = test.AddCamera();
         camera.projection = Fenrir::Orthographic{static_cast<float>(Size), 0.1f, 100.0f};
         camera.background = Fenrir::ColourBackground{Fenrir::Colour::Black};
-        camera.bloom.intensity = bloom;
-        camera.lensFlare.intensity = intensity;
-        camera.lensFlare.haloWidth = 0.0f;
-        camera.lensFlare.chromaticOffset = 0.0f;
+        camera.look.bloom.intensity = bloom;
+        camera.look.lensFlare.intensity = intensity;
+        camera.look.lensFlare.haloWidth = 0.0f;
+        camera.look.lensFlare.chromaticOffset = 0.0f;
 
         Fenrir::AssetStore& store = test.assets.Store();
         const auto material = store.CreateMaterial(
@@ -77,16 +77,16 @@ namespace
         data.height = Height;
         const auto image = store.Add<Fenrir::Image>(std::move(data), Fenrir::AssetOwner::App());
         Fenrir::Camera& camera = test.AddCamera();
-        camera.bloom = Fenrir::Bloom{};
+        camera.look.bloom = Fenrir::Bloom{};
         camera.target = Fenrir::ImageTarget{image};
         camera.background = Fenrir::ColourBackground{Fenrir::Colour::Black};
-        camera.lensFlare.intensity = 0.2f;
-        camera.lensFlare.chromaticOffset = 0.03f;
+        camera.look.lensFlare.intensity = 0.2f;
+        camera.look.lensFlare.chromaticOffset = 0.03f;
         if (dirty)
         {
-            camera.lensFlare.dirt =
+            camera.look.lensFlare.dirt =
                 store.Add<Fenrir::Image>(Fenrir::GenerateLensDirt(Width, Height, 3), Fenrir::AssetOwner::App());
-            camera.lensFlare.dirtIntensity = 6.0f;
+            camera.look.lensFlare.dirtIntensity = 6.0f;
         }
 
         const auto sphere = store.Add<Fenrir::Mesh>(RendererTest::Sphere(), Fenrir::AssetOwner::App());
@@ -133,9 +133,9 @@ TEST_CASE("A bright spot at the centre lights a halo ring at the halo's radius",
     GlScene test;
     test.RequireOpenGL();
     Fenrir::Camera& camera = AddSpot(test, 64.0f, 0.0f, 1.0f, 0.0f);
-    camera.lensFlare.ghostCount = 0;
-    camera.lensFlare.haloRadius = 0.7f;
-    camera.lensFlare.haloWidth = 0.15f;
+    camera.look.lensFlare.ghostCount = 0;
+    camera.look.lensFlare.haloRadius = 0.7f;
+    camera.look.lensFlare.haloWidth = 0.15f;
     const GlProbe::Image frame = test.Frame(Size, Size);
     INFO("no GL error or other error was logged");
     REQUIRE(test.messages->errors.empty());
@@ -161,8 +161,8 @@ TEST_CASE("Lens dirt that is black leaves bloom as it was, and white doubles its
         Fenrir::Camera& camera = AddSpot(test, Value, 0.0f, 0.0f, Bloom);
         if (dirt >= 0)
         {
-            camera.lensFlare.dirt = AddDirt(test, static_cast<std::uint8_t>(dirt));
-            camera.lensFlare.dirtIntensity = dirtIntensity;
+            camera.look.lensFlare.dirt = AddDirt(test, static_cast<std::uint8_t>(dirt));
+            camera.look.lensFlare.dirtIntensity = dirtIntensity;
         }
         GlProbe::Image frame = test.Frame(Size, Size);
         INFO("no GL error or other error was logged");

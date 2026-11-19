@@ -46,7 +46,7 @@ TEST_CASE("A MeshRenderer that is not visible is not drawn", "[renderer][facade]
 {
     RendererTestApp test;
     // Without bloom, whose passes Bloom.cpp checks.
-    test.AddCamera().GetComponent<Fenrir::Camera>().bloom.intensity = 0.0f;
+    test.AddCamera().GetComponent<Fenrir::Camera>().look.bloom.intensity = 0.0f;
     Fenrir::Entity entity = test.AddMeshRenderer(test.Mesh(), test.Material());
     entity.GetComponent<Fenrir::MeshRenderer>().visible = false;
 

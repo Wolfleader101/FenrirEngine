@@ -42,8 +42,8 @@ public partial struct LensFlare
     /// </summary>
     public float HaloWidth = 0.1f;
     /// <summary>
-    /// How far red and blue are read apart in each ghost and the halo, in the same distance: 0.01 by default, so the
-    /// ghosts fringe red outside and blue inside.
+    /// How far red and blue are read apart in each ghost and the halo, along the line through the view's centre, in the
+    /// same distance: 0.01 by default, so the ghosts fringe.
     /// </summary>
     public float ChromaticOffset = 0.01f;
     /// <summary>

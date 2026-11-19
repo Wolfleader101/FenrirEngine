@@ -1,13 +1,18 @@
 # FenrirMath's selection (ADR-0042, tools/describe-api/README.md): the headers to read, relative to this file, and each
 # type the package shares with bindings, with its role. Its vectors, quaternion and matrix are glm's, which every binding
 # has its own of, so they are bound types: described by layout only. Its colour, ray and box are plain data, which the
-# math binding (packages/FenrirScripting/api/FenrirMath.binding.toml) mirrors and every other binding names.
-headers = ["../include/FenrirMath/Colour.hpp", "../include/FenrirMath/Math.hpp"]
+# math binding (packages/FenrirScripting/api/FenrirMath.binding.toml) mirrors and every other binding names. Its frustum
+# (ADR-0057) keeps its planes and their count private behind Planes(): described with that layout, so a binding's mirror
+# holds the same bytes and gives them back through accessors of its own.
+headers = ["../include/FenrirMath/Colour.hpp", "../include/FenrirMath/Math.hpp", "../include/FenrirMath/Frustum.hpp"]
+
+private-members = ["Fenrir::Math::Frustum"]
 
 [types]
 "Fenrir::Colour" = "shared-struct"
 "Fenrir::Math::Ray" = "shared-struct"
 "Fenrir::Math::AABB" = "shared-struct"
+"Fenrir::Math::Frustum" = "shared-struct"
 "Fenrir::Math::Vec2" = "bound-type"
 "Fenrir::Math::Vec3" = "bound-type"
 "Fenrir::Math::Vec4" = "bound-type"

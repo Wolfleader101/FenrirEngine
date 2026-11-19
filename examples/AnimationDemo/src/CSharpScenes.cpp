@@ -12,10 +12,16 @@ namespace AnimationDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Playback (C#)";
-        scene.keyHelp =
-            "C# plays the human. 1-5: crossfade to Idle, Walk, Run, Sprint, Call. Up/Down: speed. R: reverse. "
-            "L: Loop or Once. Space: pause. Left/Right: seek 0.25 s. Home: seek to 0. M: ramp the upper-body "
-            "layer in or out.";
+        scene.keyRows = {{"1-5", "crossfade to Idle, Walk, Run, Sprint, Call"},
+                         {"Up/Down", "speed up / slow down"},
+                         {"R", "reverse"},
+                         {"L", "Loop or Once"},
+                         {"Space", "pause or play"},
+                         {"Left/Right", "seek 0.25 s back / on"},
+                         {"Home", "seek to 0"},
+                         {"M", "ramp the upper-body layer in or out"}};
+        // Its readouts, in Razor (scripts/PlaybackPanel.razor), mounted by scripts/PanelSetup.cs.
+        scene.razorPanel = PlaybackCSharpSlot;
         scene.keys = {Fenrir::Key::Num3,  Fenrir::Key::M,     Fenrir::Key::Up,   Fenrir::Key::R, Fenrir::Key::Space,
                       Fenrir::Key::Right, Fenrir::Key::Space, Fenrir::Key::Num5, Fenrir::Key::L, Fenrir::Key::Left,
                       Fenrir::Key::Home,  Fenrir::Key::M,     Fenrir::Key::Num2};
@@ -29,9 +35,14 @@ namespace AnimationDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Bone attachments (C#)";
-        scene.keyHelp = "C# attaches a blade to hand_r, a hat to Head and a tag to no bone. W: drop the blade "
-                        "(KeepWorld). K: leave the hat (KeepLocal). R: attach both again. Left/Right: slide the blade "
-                        "along its bone. N: the C# Modify system's nod on or off. C: the next clip.";
+        scene.keyRows = {{"W", "drop the blade (KeepWorld)"},
+                         {"K", "leave the hat (KeepLocal)"},
+                         {"R", "attach both again"},
+                         {"Left/Right", "slide the blade along its bone"},
+                         {"N", "the C# Modify system's nod on or off"},
+                         {"C", "the next clip"}};
+        // Its readouts, in Razor (scripts/AttachmentsPanel.razor), mounted by scripts/PanelSetup.cs.
+        scene.razorPanel = BoneAttachmentsCSharpSlot;
         scene.keys = {Fenrir::Key::Right, Fenrir::Key::W, Fenrir::Key::K, Fenrir::Key::N,
                       Fenrir::Key::C,     Fenrir::Key::R, Fenrir::Key::N, Fenrir::Key::Left};
         scene.camera = {{0.0f, 1.5f, 4.0f}, 0.0f, -0.12f};

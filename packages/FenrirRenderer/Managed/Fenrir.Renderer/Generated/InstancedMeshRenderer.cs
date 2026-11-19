@@ -13,10 +13,12 @@ namespace Fenrir.Renderer;
 /// revision has moved on, so a list that never changes uploads once, however far the entity moves.
 /// </summary>
 /// <remarks>
-/// One draw a pass, whatever the count: never merged with other items, and never culled, copy by copy or whole. A
-/// transparent material sorts the whole list by the entity's world position. An empty or stale mesh or list is skipped
-/// (a stale one logged once per handle), as is a mesh with skin data; an empty or stale material draws with the
-/// fallback material, as a MeshRenderer's does.
+/// One draw a pass, whatever the count: never merged with other items. Its world bounds are the box around every copy's
+/// mesh box (ADR-0057; Renderer::GetWorldBounds), by which a camera it is wholly outside of leaves the whole list out;
+/// an opaque or masked list's copies are then culled one by one in the camera's cull pass, and a transparent list is
+/// sorted whole by the entity's world position. An empty or stale mesh or list is skipped (a stale one logged once per
+/// handle), as is a mesh with skin data; an empty or stale material draws with the fallback material, as a
+/// MeshRenderer's does.
 /// </remarks>
 [NativeComponent("Fenrir.Renderer.InstancedMeshRenderer")]
 public partial struct InstancedMeshRenderer : IComponent

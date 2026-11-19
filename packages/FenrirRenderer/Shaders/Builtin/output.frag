@@ -17,6 +17,9 @@
 // four texels round each resolved and blended bilinearly, nine resolves instead of one. The vignette, a
 // multiply after the exposure, and the film grain, after the tonemap, follow every variant but OCCLUSION, and are
 // mirrored in src/Core/CameraEffects.cpp as the grade is.
+// An effect that is off costs nothing (ADR-0059), by one rule: an effect that changes what Output reads is a key, so
+// the plain variant reads as it did (ABERRATION); an effect that is per-pixel arithmetic is a bit of `effects`, which
+// the CPU sets only when the effect is on, and costs a uniform branch when off (the grade, the vignette, the grain).
 #include "Fenrir/Constants.glsl"
 
 #if defined(REFLECTIONS)
@@ -37,8 +40,9 @@ layout(set = 1, binding = 0, std140) uniform OutputData
     uint tonemapper;
     // With OCCLUSION, the channel drawn as grey: 0 red, 2 blue.
     uint greyChannel;
-    // Whether the colour is graded: 0 for an identity grade, which is skipped. The rest is Render::ColourGrade.
-    uint grade;
+    // Which per-pixel effects apply: Effect* bits, set by the CPU only for an effect that is on. The grade's members
+    // below are Render::ColourGrade.
+    uint effects;
     // Linear Rec. 709 to itself, from the white the camera names to D65.
     mat3 whiteBalance;
     // Each tint at unit luminance.
@@ -53,13 +57,18 @@ layout(set = 1, binding = 0, std140) uniform OutputData
     vec3 power;
     // With ABERRATION, how far red and blue are read apart, as a fraction of the half-diagonal at the corners.
     float aberration;
-    // The vignette's intensity (0 off), radius, smoothness and roundness.
+    // With EffectVignette, the vignette's intensity, radius, smoothness and roundness.
     vec4 vignette;
-    // The grain's intensity (0 off), response and size, in pixels.
+    // With EffectGrain, the grain's intensity, response and size, in pixels.
     vec3 grain;
     // The frame's index, which the grain's noise is a hash of with each cell.
     uint frameIndex;
 } settings;
+
+// The bits of `effects`, as src/Core/SceneRenderer.cpp's OutputGrade, OutputVignette and OutputGrain number them.
+const uint EffectGrade = 1u;
+const uint EffectVignette = 2u;
+const uint EffectGrain = 4u;
 
 layout(location = 0) in vec2 vNdc;
 layout(location = 0) out vec4 outColour;
@@ -133,7 +142,7 @@ vec3 Aces(vec3 colour)
 // toning by luminance in log2, saturation around luminance, then the ASC CDL with negatives clamped before its power.
 vec3 Grade(vec3 colour)
 {
-    if (settings.grade == 0u)
+    if ((settings.effects & EffectGrade) == 0u)
     {
         return colour;
     }
@@ -157,7 +166,7 @@ vec3 Vignette(vec3 colour, vec2 uv, vec2 size)
     float radius = settings.vignette.y;
     float smoothness = settings.vignette.z;
     float roundness = settings.vignette.w;
-    if (intensity <= 0.0)
+    if ((settings.effects & EffectVignette) == 0u)
     {
         return colour;
     }
@@ -188,7 +197,7 @@ vec3 Grain(vec3 colour, vec2 uv, vec2 size)
     float intensity = settings.grain.x;
     float response = settings.grain.y;
     float cellSize = settings.grain.z;
-    if (intensity <= 0.0)
+    if ((settings.effects & EffectGrain) == 0u)
     {
         return colour;
     }

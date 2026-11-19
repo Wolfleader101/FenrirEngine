@@ -12,6 +12,7 @@ add_library(FenrirAssets STATIC
     include/FenrirAssets/AssetStore.hpp
     include/FenrirAssets/BoneMaskData.hpp
     include/FenrirAssets/ClipData.hpp
+    include/FenrirAssets/FontData.hpp
     include/FenrirAssets/ImageData.hpp
     include/FenrirAssets/InstanceListData.hpp
     include/FenrirAssets/MaterialData.hpp
@@ -32,9 +33,11 @@ add_library(FenrirAssets STATIC
     src/SkinPreparation.cpp
     src/CubemapLoading.hpp
     src/CubemapLoading.cpp
+    src/ImageEdits.cpp
     src/Materials.cpp
     src/ModelLoading.cpp
     src/ModelData.cpp
+    src/MeshLods.cpp
     src/SpawnNodes.cpp
 
     src/Importers/ImageImporter.hpp
@@ -46,7 +49,7 @@ add_library(FenrirAssets STATIC
     src/Importers/Ufbx/UfbxModelImporter.cpp
 )
 
-target_link_libraries(FenrirAssets PUBLIC FenrirApp FenrirScene FenrirMath FenrirShaderContainer PRIVATE FenrirStbImage FenrirCgltf FenrirUfbx)
+target_link_libraries(FenrirAssets PUBLIC FenrirApp FenrirScene FenrirMath FenrirShaderContainer PRIVATE FenrirStbImage FenrirCgltf FenrirUfbx meshoptimizer)
 
 target_include_directories(FenrirAssets PUBLIC include PRIVATE src)
 

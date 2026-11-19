@@ -15,6 +15,7 @@
 
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirMath/Colour.hpp"
+#include "FenrirMath/Frustum.hpp"
 #include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 #include "FenrirScripting/Scripting.hpp"
 
@@ -50,6 +51,7 @@ namespace
         ExpectTheMirrorMatches<Colour>(*component, "Fenrir.Math.Colour");
         ExpectTheMirrorMatches<Math::Ray>(*component, "Fenrir.Math.Ray");
         ExpectTheMirrorMatches<Math::AABB>(*component, "Fenrir.Math.Bounds");
+        ExpectTheMirrorMatches<Math::Frustum>(*component, "Fenrir.Math.Frustum");
         // Transform stays in the scripting contract, built from Fenrir.Math's Vector3 and Quaternion.
         ExpectTheMirrorMatches<Transform>(*component, "Fenrir.Scripting.Transform");
     }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -494,6 +496,17 @@ namespace Fenrir::Math
     Mat4 QuatToMat4(const Quat& quat);
 
     Vec3 EulerFromMat4(const Mat4& mat);
+
+    /**
+     * @brief The eight corners of `box`, bit 0 of the index picking max x over min x, bit 1 max y and bit 2 max z.
+     */
+    [[nodiscard]] std::array<Vec3, 8> Corners(const AABB& box);
+
+    /** @brief The box around both of `a` and `b`. */
+    [[nodiscard]] AABB Union(const AABB& a, const AABB& b);
+
+    /** @brief `box` moved by `matrix`: the box around its eight corners, each moved as a point. */
+    [[nodiscard]] AABB Moved(const AABB& box, const Mat4& matrix);
 
     bool RayAABBIntersect(const Ray& ray, const AABB& aabb, const Mat4& transformMatrix);
 

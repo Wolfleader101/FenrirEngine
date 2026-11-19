@@ -36,11 +36,19 @@ namespace RendererDemo
     [[nodiscard]] FenrirDemo::DemoScene DebugDrawing();
 
     /**
-     * @brief Overlay: a raw DrawList2D on the window overlay showing layers, scissors and the four blend modes, and an
-     * ImGui window with a text field and a slider over a spinning cube whose keys and clicks stop while ImGui has the
-     * pointer or the keyboard.
+     * @brief Overlay: a raw DrawList2D on the window overlay showing layers, scissors and the four blend modes,
+     * labelled in FenrirText, and a demo panel section with a label's text entry, a spin slider, the scene's state and
+     * the live input claims, over a spinning cube whose keys and clicks stop while the demo panel has the pointer or
+     * the keyboard.
      */
     [[nodiscard]] FenrirDemo::DemoScene OverlayScene();
+
+    /**
+     * @brief Painter: FenrirPainter's analytic shapes, paints and clips painted into a list on the window overlay:
+     * rectangles, rounded rectangles, a border, shadows, a circle, an arc, a ring, gradients, images and a rotating
+     * rounded clip, captioned in FenrirText; keys switch the blend space and pause the animation.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene PainterScene();
 
     /** @brief Meshes and materials (C#)'s number, which its C# systems know it by (scripts/MeshesAndMaterials.cs). */
     inline constexpr std::uint32_t MeshesAndMaterialsCSharpScene = 1;
@@ -56,7 +64,8 @@ namespace RendererDemo
 
     /**
      * @brief Debug draw (C#): a twin of Debug draw, the same shapes, text and keys, spawned, drawn and run entirely by
-     * C# systems through the Fenrir.DebugDraw facade (scripts/DebugDrawScene.cs). For an app with scripting.
+     * C# systems through the Fenrir.DebugDraw facade (scripts/DebugDrawScene.cs), with a Razor panel of its group
+     * switches in its demo slot (scripts/DebugDrawPanel.razor). For an app with scripting.
      */
     [[nodiscard]] FenrirDemo::DemoScene DebugDrawingCSharp();
 

@@ -1,0 +1,7 @@
+@* A frame wrapping its ChildContent in a panel, for the child component tests (Razor.cpp). *@
+@namespace UIScriptFixture
+<panel class="frame" id="frame">@ChildContent</panel>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

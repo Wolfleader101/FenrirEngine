@@ -238,7 +238,28 @@ namespace PhysicsDemo
 
         FenrirDemo::DemoScene scene;
         scene.name = SceneName;
-        scene.keyHelp = "None of its own: watch the paddle sweep the stack, and F2 cycle the physics debug lines.";
+        // No keys of its own: the paddle sweeps the stack, and F2 (the app's) steps the debug lines.
+        scene.tutorial = FenrirDemo::DemoTutorial{
+            .title = "PhysicsDemo",
+            .steps = {
+                {.title = "The scenes",
+                 .text = "Physics scenes, each C++ one followed by its C# twin. Here a paddle sweeps a stack of boxes. "
+                         "Step through the scenes with PageDown and PageUp, or click one in the Scenes section.",
+                 .keys = {{"PageDown/PageUp", "next/previous scene"}}},
+                {.title = "The demo UI",
+                 .text = "The panel on the right holds the scenes, the readings and the switches, and the help at the "
+                         "bottom left every key. F1 hides all of it, for a clear view, and shows it again.",
+                 .keys = {{"F1", "hide or show the demo UI kit"}}},
+                {.title = "Debug lines",
+                 .text = "F2 steps physics's debug lines: colliders, contacts, velocities and the rest. The Physics "
+                         "section's Debug lines row picks them too. Press F2.",
+                 .keys = {{"F2", "step the physics debug lines"}},
+                 .done = [](Fenrir::App& app) { return AnyJustPressed(app, {Fenrir::Key::F2}); }},
+                {.title = "The free-fly camera",
+                 .text = "Hold the right mouse button to look round and WASD to fly; Shift goes faster and the wheel "
+                         "changes the speed. A scene with a camera of its own starts with the free-fly camera off: "
+                         "F3 switches between them.",
+                 .keys = {{"Right mouse + WASD", "look and fly"}, {"F3", "free-fly camera on/off"}}}}};
         // F2 round every category and back to off.
         scene.keys.assign(9, Fenrir::Key::F2);
         scene.camera.position = {0.0f, 1.0f, 6.0f};
@@ -253,7 +274,8 @@ namespace PhysicsDemo
     {
         FenrirDemo::DemoScene scene;
         scene.name = "Playground (C#)";
-        scene.keyHelp = "J kicks the bodies into the air, a left click casts a ray (it logs what it hit and pokes it).";
+        scene.keyRows = {{"J", "kick the bodies into the air"},
+                         {"Left click", "cast a ray: log what it hit and poke it"}};
         scene.keys = {Fenrir::Key::J};
         scene.camera.position = {0.0f, 1.0f, 6.0f};
         scene.camera.pitch = -0.2f;

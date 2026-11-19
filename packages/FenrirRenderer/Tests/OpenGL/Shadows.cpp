@@ -81,10 +81,10 @@ namespace
         entity.GetComponent<Fenrir::Transform>().pos = position;
         entity.GetComponent<Fenrir::Transform>().rot = rotation;
         Fenrir::Camera& camera = entity.AddComponent<Fenrir::Camera>();
-        camera.bloom.intensity = 0.0f;
+        camera.look.bloom.intensity = 0.0f;
         camera.target = Fenrir::ImageTarget{target};
         // No tonemap, so a probe reads the lit value itself, clamped.
-        camera.tonemapper = Fenrir::Tonemapper::None;
+        camera.look.tonemapper = Fenrir::Tonemapper::None;
         return camera;
     }
 
@@ -299,7 +299,7 @@ TEST_CASE("Posts' shadows across every cascade boundary match their golden image
     const auto target = Target(test, 160, 90);
     Fenrir::Camera& camera =
         AddCameraAt(test, {0.0f, 1.2f, 0.5f}, Fenrir::Math::AngleAxis(-0.18f, Vec3(1.0f, 0.0f, 0.0f)), target);
-    camera.tonemapper = Fenrir::Tonemapper::AgX;
+    camera.look.tonemapper = Fenrir::Tonemapper::AgX;
     if (tinted)
     {
         camera.debugView = Fenrir::CameraDebugView::ShadowCascades;

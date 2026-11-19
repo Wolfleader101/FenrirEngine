@@ -39,7 +39,7 @@ namespace
         GlSkinScene()
         {
             camera = app.GetActiveScene().GetEntityList().CreateEntity();
-            camera.AddComponent<Fenrir::Camera>().bloom.intensity = 0.0f;
+            camera.AddComponent<Fenrir::Camera>().look.bloom.intensity = 0.0f;
         }
 
         Fenrir::Skeletons skeletons{Fenrir::Skeletons::Install(app)};

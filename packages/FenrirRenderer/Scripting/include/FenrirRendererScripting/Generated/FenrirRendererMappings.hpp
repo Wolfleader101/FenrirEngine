@@ -8,12 +8,13 @@
 #include "Iris/Iris.hpp"
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirRenderer/Renderer.hpp"
+#include "FenrirRenderer/WorldTargets2D.hpp"
 #include "FenrirAssetsScripting/AssetMappings.hpp"
 #include "FenrirScripting/BoundMappings.hpp"
-#include "../../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirScriptingMappings.hpp"
-#include "../../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
-#include "../../../../../FenrirInput/Scripting/include/FenrirInputScripting/Generated/FenrirInputMappings.hpp"
-#include "../../../../../FenrirAssets/Scripting/include/FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
+#include "FenrirScripting/Generated/FenrirMathMappings.hpp"
+#include "FenrirInputScripting/Generated/FenrirInputMappings.hpp"
+#include "FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
 
 #include <cstdint>
 #include <string_view>
@@ -191,6 +192,48 @@ static_assert(sizeof(Fenrir::LensFlare) == 36 && alignof(Fenrir::LensFlare) == 4
               "regenerate the description, then this binding");
 
 template <>
+struct Iris::EnumMapping<Fenrir::Tonemapper>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.Tonemapper";
+};
+static_assert(sizeof(Fenrir::Tonemapper) == 1 && alignof(Fenrir::Tonemapper) == 1,
+              "Fenrir::Tonemapper is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fenrir::Vignette>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.Vignette";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<float>("Intensity", 0),
+        Iris::Field<float>("Radius", 4),
+        Iris::Field<float>("Smoothness", 8),
+        Iris::Field<float>("Roundness", 12));
+};
+static_assert(sizeof(Fenrir::Vignette) == 16 && alignof(Fenrir::Vignette) == 4,
+              "Fenrir::Vignette is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fenrir::CameraLook>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.CameraLook";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<float>("Exposure", 0),
+        Iris::Field<Fenrir::Tonemapper>("Tonemapper", 4),
+        Iris::Field<Fenrir::Bloom>("Bloom", 8),
+        Iris::Field<Fenrir::AnamorphicStreaks>("AnamorphicStreaks", 16),
+        Iris::Field<Fenrir::LensFlare>("LensFlare", 40),
+        Iris::Field<Fenrir::ColourGrading>("ColourGrading", 76),
+        Iris::Field<Fenrir::ChromaticAberration>("ChromaticAberration", 164),
+        Iris::Field<Fenrir::Vignette>("Vignette", 168),
+        Iris::Field<Fenrir::FilmGrain>("FilmGrain", 184));
+};
+static_assert(sizeof(Fenrir::CameraLook) == 196 && alignof(Fenrir::CameraLook) == 4,
+              "Fenrir::CameraLook is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
 struct Iris::StructMapping<Fenrir::Orthographic>
 {
     static constexpr std::string_view typeName = "Fenrir.Renderer.Orthographic";
@@ -297,15 +340,6 @@ static_assert(sizeof(Fenrir::RenderTarget) == 12 && alignof(Fenrir::RenderTarget
               "regenerate the description, then this binding");
 
 template <>
-struct Iris::EnumMapping<Fenrir::Tonemapper>
-{
-    static constexpr std::string_view typeName = "Fenrir.Renderer.Tonemapper";
-};
-static_assert(sizeof(Fenrir::Tonemapper) == 1 && alignof(Fenrir::Tonemapper) == 1,
-              "Fenrir::Tonemapper is not the layout FenrirRenderer.api.json describes: "
-              "regenerate the description, then this binding");
-
-template <>
 struct Iris::StructMapping<Fenrir::Viewport>
 {
     static constexpr std::string_view typeName = "Fenrir.Renderer.Viewport";
@@ -320,20 +354,6 @@ static_assert(sizeof(Fenrir::Viewport) == 16 && alignof(Fenrir::Viewport) == 4,
               "regenerate the description, then this binding");
 
 template <>
-struct Iris::StructMapping<Fenrir::Vignette>
-{
-    static constexpr std::string_view typeName = "Fenrir.Renderer.Vignette";
-    static constexpr auto fields = Iris::StructFields(
-        Iris::Field<float>("Intensity", 0),
-        Iris::Field<float>("Radius", 4),
-        Iris::Field<float>("Smoothness", 8),
-        Iris::Field<float>("Roundness", 12));
-};
-static_assert(sizeof(Fenrir::Vignette) == 16 && alignof(Fenrir::Vignette) == 4,
-              "Fenrir::Vignette is not the layout FenrirRenderer.api.json describes: "
-              "regenerate the description, then this binding");
-
-template <>
 struct Iris::StructMapping<Fenrir::Camera>
 {
     static constexpr std::string_view typeName = "Fenrir.Renderer.Camera";
@@ -345,15 +365,7 @@ struct Iris::StructMapping<Fenrir::Camera>
         Iris::Field<Fenrir::RenderTarget>("Target", 40),
         Iris::Field<Fenrir::CameraBackground>("Background", 52),
         Iris::Field<bool>("DrawDebug", 72),
-        Iris::Field<float>("Exposure", 76),
-        Iris::Field<Fenrir::Tonemapper>("Tonemapper", 80),
-        Iris::Field<Fenrir::Bloom>("Bloom", 84),
-        Iris::Field<Fenrir::AnamorphicStreaks>("AnamorphicStreaks", 92),
-        Iris::Field<Fenrir::LensFlare>("LensFlare", 116),
-        Iris::Field<Fenrir::ColourGrading>("ColourGrading", 152),
-        Iris::Field<Fenrir::ChromaticAberration>("ChromaticAberration", 240),
-        Iris::Field<Fenrir::Vignette>("Vignette", 244),
-        Iris::Field<Fenrir::FilmGrain>("FilmGrain", 260),
+        Iris::Field<Fenrir::CameraLook>("Look", 76),
         Iris::Field<Fenrir::AmbientOcclusion>("AmbientOcclusion", 272),
         Iris::Field<Fenrir::Reflections>("Reflections", 284),
         Iris::Field<Fenrir::CameraDebugView>("DebugView", 304));
@@ -415,6 +427,10 @@ struct Iris::StructMapping<Fenrir::InstancedMeshRenderer>
 };
 static_assert(sizeof(Fenrir::InstancedMeshRenderer) == 28 && alignof(Fenrir::InstancedMeshRenderer) == 4,
               "Fenrir::InstancedMeshRenderer is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
+static_assert(sizeof(Fenrir::Math::Vec4) == 16 && alignof(Fenrir::Math::Vec4) == 4,
+              "Fenrir::Math::Vec4 is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
 static_assert(sizeof(Fenrir::Math::Vec2) == 8 && alignof(Fenrir::Math::Vec2) == 4,
@@ -488,14 +504,21 @@ struct Iris::StructMapping<Fenrir::RendererStats>
     static constexpr auto fields = Iris::StructFields(
         Iris::Field<std::uint32_t>("Draws", 0),
         Iris::Field<std::uint32_t>("Instances", 4),
-        Iris::Field<std::uint32_t>("Passes", 8),
-        Iris::Field<std::uint32_t>("Uploads", 12),
-        Iris::Field<std::uint32_t>("PaletteBytesUploaded", 16),
-        Iris::Field<std::uint32_t>("DistinctPalettesWritten", 20),
-        Iris::Field<std::uint32_t>("SkinnedDraws", 24),
-        Iris::Field<std::uint32_t>("ShadowDraws", 28));
+        Iris::Field<std::uint32_t>("InstancesDrawn", 8),
+        Iris::Field<std::uint32_t[8]>("DrawnByLod", 12),
+        Iris::Field<std::uint32_t[2]>("DrawnByPhase", 44),
+        Iris::Field<std::uint32_t>("Passes", 52),
+        Iris::Field<std::uint32_t>("Uploads", 56),
+        Iris::Field<std::uint32_t>("PaletteBytesUploaded", 60),
+        Iris::Field<std::uint32_t>("DistinctPalettesWritten", 64),
+        Iris::Field<std::uint32_t>("SkinnedDraws", 68),
+        Iris::Field<std::uint32_t>("ShadowDraws", 72),
+        Iris::Field<std::uint32_t>("Lists2D", 76),
+        Iris::Field<std::uint32_t>("Commands2D", 80),
+        Iris::Field<std::uint32_t>("Groups2D", 84),
+        Iris::Field<std::uint32_t>("TransientImageBytes2D", 88));
 };
-static_assert(sizeof(Fenrir::RendererStats) == 32 && alignof(Fenrir::RendererStats) == 4,
+static_assert(sizeof(Fenrir::RendererStats) == 92 && alignof(Fenrir::RendererStats) == 4,
               "Fenrir::RendererStats is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
@@ -560,6 +583,18 @@ struct Iris::StructMapping<Fenrir::SpotLight>
 };
 static_assert(sizeof(Fenrir::SpotLight) == 44 && alignof(Fenrir::SpotLight) == 4,
               "Fenrir::SpotLight is not the layout FenrirRenderer.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fenrir::WorldQuad2D>
+{
+    static constexpr std::string_view typeName = "Fenrir.Renderer.WorldQuad2D";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<Fenrir::Math::Vec2>("Size", 0),
+        Iris::Field<float>("UnitsPerWorldUnit", 8));
+};
+static_assert(sizeof(Fenrir::WorldQuad2D) == 12 && alignof(Fenrir::WorldQuad2D) == 4,
+              "Fenrir::WorldQuad2D is not the layout FenrirRenderer.api.json describes: "
               "regenerate the description, then this binding");
 
 // clang-format on

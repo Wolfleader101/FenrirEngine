@@ -1,0 +1,11 @@
+@* Child Razor components keyed by objects, which a script generation's types could be (ChildComponentTests). *@
+<panel class="keyed">
+    @foreach (object key in Keys)
+    {
+        <Unmounting @key="key" />
+    }
+</panel>
+
+@code {
+    public List<object> Keys = [];
+}

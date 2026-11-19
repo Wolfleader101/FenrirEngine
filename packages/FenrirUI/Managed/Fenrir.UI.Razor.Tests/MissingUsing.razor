@@ -1,0 +1,9 @@
+@* A handler written as though Microsoft.AspNetCore.Components.Web were imported, which it is not: the directive is not
+   recognised, so it reaches the builder as an attribute (RebuildTests). *@
+<button id="@("go")" @onclick="Go">Go</button>
+
+@code {
+    public int Clicks;
+
+    private void Go() => ++Clicks;
+}

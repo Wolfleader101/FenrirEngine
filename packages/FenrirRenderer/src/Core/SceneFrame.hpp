@@ -3,6 +3,7 @@
 #include <compare>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
 
 #include "Core/CameraEffects.hpp"
@@ -14,6 +15,7 @@
 #include "Device/GraphicsSurface.hpp"
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirMath/Colour.hpp"
+#include "FenrirMath/Frustum.hpp"
 #include "FenrirMath/Math.hpp"
 
 namespace Fenrir::Render
@@ -71,6 +73,12 @@ namespace Fenrir::Render
          */
         std::optional<Math::Vec3> sortPoint;
         /**
+         * @brief The item's world bounds when the facade knows them better than its mesh's box under `world`: a
+         * skinned item's skinned bounds (ADR-0035). Empty for that box. Its draw record carries them, and a
+         * transparent item is culled by them (ADR-0057). Not read for an instance list, whose bounds the core keeps.
+         */
+        std::optional<Math::AABB> bounds;
+        /**
          * @brief Whether it is drawn into the sun's shadow cascades and the spot and point lights' shadow maps
          * (ADR-0050): an `Opaque` or `Masked` one only, a Masked one cut out by its alpha cutoff as the depth prepass
          * cuts it.
@@ -78,7 +86,7 @@ namespace Fenrir::Render
         bool castShadows = true;
     };
 
-    /** @brief A view's bloom (ADR-0049), the core's copy of Camera::bloom. */
+    /** @brief A view's bloom (ADR-0049), the core's copy of CameraLook::bloom. */
     struct BloomSettings
     {
         /** @brief How much of the bloom SceneColor is mixed with, in [0, 1]; 0 or less adds no pass. */
@@ -87,7 +95,7 @@ namespace Fenrir::Render
         float radius = 0.7f;
     };
 
-    /** @brief A view's anamorphic streaks (ADR-0059), the core's copy of Camera::anamorphicStreaks. */
+    /** @brief A view's anamorphic streaks (ADR-0059), the core's copy of CameraLook::anamorphicStreaks. */
     struct AnamorphicStreaksSettings
     {
         /** @brief How much of the streaks SceneColor is mixed with, in [0, 1]; 0 or less adds no pass. */
@@ -98,7 +106,7 @@ namespace Fenrir::Render
         Math::Vec3 tint{1.0f};
     };
 
-    /** @brief A view's lens flare and lens dirt (ADR-0059), the core's copy of Camera::lensFlare. */
+    /** @brief A view's lens flare and lens dirt (ADR-0059), the core's copy of CameraLook::lensFlare. */
     struct LensFlareSettings
     {
         /** @brief How much of the flare SceneColor is mixed with, in [0, 1]; 0 or less adds no pass. */
@@ -175,6 +183,29 @@ namespace Fenrir::Render
         ReflectionConfidence,
     };
 
+    /** @brief A view's look (ADR-0059), the core's copy of Camera::look. */
+    struct LookSettings
+    {
+        /** @brief The view's exposure in EV stops (CameraLook::exposure): Output scales by 2^exposure. */
+        float exposure = 0.0f;
+        /** @brief How Output maps the exposed colour into its target (CameraLook::tonemapper). */
+        Tonemapper tonemapper = Tonemapper::AgX;
+        /** @brief How Output grades the exposed colour before its tonemapper (CameraLook::colourGrading). */
+        ColourGradingSettings colourGrading;
+        /** @brief How its `PostProcess` bloom mixes into SceneColor (CameraLook::bloom). */
+        BloomSettings bloom;
+        /** @brief How its `PostProcess` streaks mix into SceneColor after the bloom (CameraLook::anamorphicStreaks). */
+        AnamorphicStreaksSettings anamorphicStreaks;
+        /** @brief Its `PostProcess` ghosts and halo after the streaks, and its lens dirt (CameraLook::lensFlare). */
+        LensFlareSettings lensFlare;
+        /** @brief How far Output reads red and blue apart towards the corners (CameraLook::chromaticAberration). */
+        ChromaticAberrationSettings chromaticAberration;
+        /** @brief How Output darkens the exposed colour towards the corners (CameraLook::vignette). */
+        VignetteSettings vignette;
+        /** @brief The film grain Output adds to the tonemapped colour (CameraLook::filmGrain). */
+        FilmGrainSettings filmGrain;
+    };
+
     /**
      * @brief One camera's view of the scene (ADR-0026): drawn into its own scene targets at its viewport's size, then
      * written by Output into its viewport of its render target.
@@ -200,24 +231,8 @@ namespace Fenrir::Render
         Graphics::PixelRect viewport;
         /** @brief Whether the view draws the scene's debug drawing in its `Debug` stage (Camera::drawDebug). */
         bool drawDebug = true;
-        /** @brief The view's exposure in EV stops (Camera::exposure): Output scales by 2^exposure. */
-        float exposure = 0.0f;
-        /** @brief How Output maps the exposed colour into its target (Camera::tonemapper). */
-        Tonemapper tonemapper = Tonemapper::AgX;
-        /** @brief How Output grades the exposed colour before its tonemapper (Camera::colourGrading). */
-        ColourGradingSettings colourGrading;
-        /** @brief How its `PostProcess` bloom mixes into SceneColor (Camera::bloom). */
-        BloomSettings bloom;
-        /** @brief How its `PostProcess` streaks mix into SceneColor after the bloom (Camera::anamorphicStreaks). */
-        AnamorphicStreaksSettings anamorphicStreaks;
-        /** @brief Its `PostProcess` ghosts and halo after the streaks, and its lens dirt (Camera::lensFlare). */
-        LensFlareSettings lensFlare;
-        /** @brief How far Output reads red and blue apart towards the corners (Camera::chromaticAberration). */
-        ChromaticAberrationSettings chromaticAberration;
-        /** @brief How Output darkens the exposed colour towards the corners (Camera::vignette). */
-        VignetteSettings vignette;
-        /** @brief The film grain Output adds to the tonemapped colour (Camera::filmGrain). */
-        FilmGrainSettings filmGrain;
+        /** @brief Its `PostProcess` effects and Output's exposure, grade, tonemapper and grain (Camera::look). */
+        LookSettings look;
         /** @brief Its GTAO, which builtin:lit's sky light is darkened by in `Opaque` (Camera::ambientOcclusion). */
         AmbientOcclusionSettings ambientOcclusion;
         /** @brief Its screen-space reflections' history and pyramids (Camera::reflections). */
@@ -322,6 +337,12 @@ namespace Fenrir::Render
      * `height * aspect` wide, centred on the view axis, with depth 1 at `near` and 0 at `far` in front of the camera.
      */
     [[nodiscard]] Math::Mat4 ReversedZOrthographic(float height, float aspect, float near, float far);
+
+    /**
+     * @brief The box around `box` under each of `copies` (ADR-0057): an instance list's bounds in its drawing entity's
+     * local space, for the box of the mesh it draws. The zero box at the origin for no copies.
+     */
+    [[nodiscard]] Math::AABB CopiesBounds(std::span<const Math::Mat4> copies, const Math::AABB& box);
 
     /**
      * @brief The pixels of a target `size` that a normalised viewport (fractions from the top-left) covers: its edges

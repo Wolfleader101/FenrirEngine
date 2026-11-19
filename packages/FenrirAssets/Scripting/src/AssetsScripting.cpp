@@ -291,6 +291,100 @@ namespace Fenrir
         }
 
         /**
+         * @brief Gives `mesh` levels of detail made by meshoptimizer, as C++'s GenerateLods does (ADR-0057): its data
+         * is replaced by GenerateLods(data, settings), levels it already had included, and its revision bumped so every
+         * user sees the change. A mesh GenerateLods leaves as it is (no whole triangles, more than one submesh) comes
+         * back with no levels.
+         * @param[in] settings What the chain aims for: C#'s `new LodSettings()` is C++'s default.
+         * @return Whether it was done: false for a stale handle.
+         * @facade Assets.GenerateLods
+         */
+        bool GenerateLods(const CallContext& context, AssetsScripting& assets, const AssetHandle<Mesh>* mesh,
+                          const LodSettings* settings)
+        {
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Mesh>(guard, *mesh);
+            return store != nullptr && store->Replace(*mesh, Fenrir::GenerateLods(*store->TryGet(*mesh), *settings));
+        }
+
+        /**
+         * @brief Appends a level of detail to `mesh` by hand (ADR-0057): `indices` into its vertex streams, three per
+         * triangle, with `error` the greatest distance, in the mesh's units, by which the level departs from full
+         * detail, greater than the previous level's (0 for the mesh's own triangles). Its revision is bumped.
+         * ReplaceMesh drops every level.
+         * @return Whether the store accepted it: false for a stale handle, or a level that breaks the store's rules
+         * (not whole triangles, an index past the positions, an error not greater than the previous level's, or a mesh
+         * of more than one submesh), logged, which leaves the mesh unchanged.
+         * @facade Assets.AddMeshLod
+         */
+        bool AddMeshLod(const CallContext& context, AssetsScripting& assets, const AssetHandle<Mesh>* mesh,
+                        const std::uint32_t* indices, std::int32_t indexCount, float error)
+        {
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Mesh>(guard, *mesh);
+            if (store == nullptr)
+            {
+                return false;
+            }
+            MeshData data = *store->TryGet(*mesh);
+            const std::span<const std::uint32_t> indexValues = SpanOf(indices, indexCount);
+            data.lods.push_back({{indexValues.begin(), indexValues.end()}, error});
+            return store->Replace(*mesh, std::move(data));
+        }
+
+        /**
+         * @brief Copies the error of each of `mesh`'s levels of detail into `errors`, coarsest last, as many as fit:
+         * level `i + 1`'s at entry `i` (level 0, the mesh's own triangles, has error 0 and no entry).
+         * @return How many levels the mesh has beyond its own triangles, so a result larger than the span says how
+         * large a span would hold them all; zero for a mesh drawn at full detail only, or a stale handle.
+         * @facade Assets.GetMeshLodErrors
+         */
+        std::int32_t GetMeshLodErrors(const CallContext& context, AssetsScripting& assets,
+                                      const AssetHandle<Mesh>* mesh, float* errors, std::int32_t capacity)
+        {
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Mesh>(guard, *mesh);
+            if (store == nullptr)
+            {
+                return 0;
+            }
+            const std::vector<MeshLod>& lods = store->TryGet(*mesh)->lods;
+            const std::span<float> room = SpanOf(errors, capacity);
+            for (std::size_t level = 0; level < lods.size() && level < room.size(); ++level)
+            {
+                room[level] = lods[level].error;
+            }
+            return static_cast<std::int32_t>(lods.size());
+        }
+
+        /**
+         * @brief Copies the indices of `mesh`'s level of detail `level` into `indices`, as many as fit: level 0 is the
+         * mesh's own triangles, level `i` its `i`th coarser level.
+         * @param[in] mesh One handle, not a span of them, though `level` follows it.
+         * @return How many indices the level holds, so a result larger than the span says how large a span would hold
+         * them all; zero for a level the mesh does not have, or a stale handle.
+         * @facade Assets.GetMeshLodIndices
+         */
+        std::int32_t GetMeshLodIndices(const CallContext& context, AssetsScripting& assets,
+                                       const AssetHandle<Mesh>* mesh, std::int32_t level, std::uint32_t* indices,
+                                       std::int32_t capacity)
+        {
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Mesh>(guard, *mesh);
+            if (store == nullptr || level < 0)
+            {
+                return 0;
+            }
+            const MeshData& data = *store->TryGet(*mesh);
+            if (level == 0)
+            {
+                return CopyInto(data.indices, indices, capacity);
+            }
+            const std::size_t coarser = static_cast<std::size_t>(level) - 1;
+            return coarser < data.lods.size() ? CopyInto(data.lods[coarser].indices, indices, capacity) : 0;
+        }
+
+        /**
          * @brief Adds a render target for `owner`: an RGBA8 sRGB image of this size with no pixels, which a camera
          * draws into and materials sample (ADR-0026).
          * @param[out] image The image; the empty handle if either side is under one pixel.

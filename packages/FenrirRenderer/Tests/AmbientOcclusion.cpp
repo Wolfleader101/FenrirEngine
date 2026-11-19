@@ -59,11 +59,11 @@ namespace
         Fenrir::Camera& left = test.AddCamera().GetComponent<Fenrir::Camera>();
         left.viewport = {0.0f, 0.0f, 0.5f, 1.0f};
         left.ambientOcclusion.enabled = true;
-        left.bloom.intensity = 0.0f;
+        left.look.bloom.intensity = 0.0f;
         Fenrir::Camera& right = test.AddCamera().GetComponent<Fenrir::Camera>();
         right.viewport = {0.5f, 0.0f, 0.5f, 1.0f};
         right.order = 1;
-        right.bloom.intensity = 0.0f;
+        right.look.bloom.intensity = 0.0f;
         test.AddMeshRenderer(test.Mesh(), test.Material());
         return left;
     }
@@ -73,7 +73,7 @@ namespace
     Fenrir::Camera& AddOccludedCamera(RendererTestApp& test)
     {
         Fenrir::Camera& camera = test.AddCamera().GetComponent<Fenrir::Camera>();
-        camera.bloom.intensity = 0.0f;
+        camera.look.bloom.intensity = 0.0f;
         camera.ambientOcclusion = {true, 0.75f, 2.0f};
         test.AddMeshRenderer(test.Mesh(), test.Material());
         return camera;
@@ -109,13 +109,13 @@ TEST_CASE("Ambient occlusion is on only when enabled with a radius and an intens
 TEST_CASE("A default camera's view has no GTAO pass", "[renderer][gtao]")
 {
     RendererTestApp test;
-    test.AddCamera().GetComponent<Fenrir::Camera>().bloom.intensity = 0.0f;
+    test.AddCamera().GetComponent<Fenrir::Camera>().look.bloom.intensity = 0.0f;
     test.AddMeshRenderer(test.Mesh(), test.Material());
 
     test.Frame();
-    INFO("the prepass, the scene and Output only");
-    REQUIRE(Labels(test.Passes()) ==
-            std::vector<std::string>{"BrdfLut", "DepthPrepass", "Opaque", "Background", "Output"});
+    INFO("the prepass (in its two occlusion phases), the scene and Output only");
+    REQUIRE(Labels(test.Passes()) == RendererTest::WithOcclusion({"Cull", "BrdfLut", "DepthPrepass", "Opaque",
+                                                                  "Background", "Output", "CullReadback"}));
 }
 
 TEST_CASE("A camera with ambient occlusion at intensity 0 has no GTAO pass", "[renderer][gtao]")
@@ -134,9 +134,10 @@ TEST_CASE("GTAO's passes run between a camera's DepthPrepass and Opaque", "[rend
     AddOccludedCamera(test);
 
     test.Frame();
-    INFO("the horizon search, then two denoise passes, before Opaque");
-    REQUIRE(Labels(test.Passes()) == std::vector<std::string>{"BrdfLut", "DepthPrepass", "GtaoHorizons", "GtaoDenoise",
-                                                              "GtaoDenoise", "Opaque", "Background", "Output"});
+    INFO("the horizon search, then two denoise passes, after the prepass's second phase and before Opaque");
+    REQUIRE(Labels(test.Passes()) ==
+            RendererTest::WithOcclusion({"Cull", "BrdfLut", "DepthPrepass", "GtaoHorizons", "GtaoDenoise",
+                                         "GtaoDenoise", "Opaque", "Background", "Output", "CullReadback"}));
 }
 
 TEST_CASE("GTAO's horizon search reads the prepass's depth and normals into an occlusion and an edge target",
@@ -285,8 +286,8 @@ TEST_CASE("A camera showing its ambient occlusion has Output draw it, and the li
     test.Frame();
     const std::vector<PassRecord> passes = test.Passes();
     INFO("nothing reads SceneColor, so Opaque and Background go");
-    REQUIRE(Labels(passes) == std::vector<std::string>{"BrdfLut", "DepthPrepass", "GtaoHorizons", "GtaoDenoise",
-                                                       "GtaoDenoise", "Output"});
+    REQUIRE(Labels(passes) == RendererTest::WithOcclusion({"Cull", "BrdfLut", "DepthPrepass", "GtaoHorizons",
+                                                           "GtaoDenoise", "GtaoDenoise", "Output", "CullReadback"}));
     INFO("Output samples the view's occlusion");
     REQUIRE(Samples(Labelled(passes, "Output").at(0), Labelled(passes, "GtaoDenoise").at(1).pass.colour.at(0).texture));
 }
@@ -299,8 +300,12 @@ TEST_CASE("A camera showing its ambient occlusion with it off draws Output alone
     camera.ambientOcclusion.enabled = false;
 
     test.Frame();
-    INFO("it shows black: Output, sampling nothing of the frame's");
-    REQUIRE(Labels(test.Passes()) == std::vector<std::string>{"BrdfLut", "Output"});
+    INFO("it shows black: Output, sampling nothing of the frame's; the cull passes and the pyramid's build stay, as "
+         "they write what the camera keeps across frames, but the prepass's second phase goes with Opaque");
+    std::vector<std::string> expected{"Cull", "BrdfLut", "DepthPrepass"};
+    expected.insert(expected.end(), 11, "HiZ");
+    expected.insert(expected.end(), {"Cull", "Output", "CullReadback"});
+    REQUIRE(Labels(test.Passes()) == expected);
     INFO("no error was logged");
     REQUIRE(test.messages->errors.empty());
 }

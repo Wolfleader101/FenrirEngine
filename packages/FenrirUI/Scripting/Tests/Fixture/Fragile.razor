@@ -1,0 +1,12 @@
+@* A Razor component whose build throws when asked, for the rebuild tests (Razor.cpp). *@
+@namespace UIScriptFixture
+@{
+    if (Throw)
+        throw new InvalidOperationException("Fragile was asked to throw");
+}
+<label id="fragile">Fragile: @Value</label>
+
+@code {
+    public int Value;
+    public bool Throw;
+}

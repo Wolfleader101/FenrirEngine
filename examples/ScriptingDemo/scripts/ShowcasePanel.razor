@@ -1,0 +1,59 @@
+@* Showcase's Razor panel (examples/ScriptingDemo/README.md), which ShowcasePanelSetup mounts into the scene's demo slot:
+   the demo UI kit's shared Razor components (Fenrir.Demo.Razor), styled like the C++ rows. It reads and writes the
+   scene's SpinDial through Context, so R and [ and ] (Controls.cs) and the panel agree, and shows how many sparks are
+   alive. *@
+@using System.Globalization
+@using Fenrir.Demo.Razor
+@using Fenrir.Scripting
+<DemoSection Title="Spin (Razor)">
+    <Toggle Label="Reversed" @bind-Value="Reversed" Hint="Turns the boxes the other way; R does too" />
+    <Range Label="Speed" @bind-Value="Speed" Min="SpinDial.MinSpeed" Max="SpinDial.MaxSpeed" Logarithmic="true"
+           Hint="How fast the boxes turn; [ and ] step it" />
+    <Readout Label="Sparks alive" Value="@Sparks.ToString(CultureInfo.InvariantCulture)" />
+</DemoSection>
+
+@code {
+    private bool Reversed
+    {
+        get
+        {
+            foreach (var (_, dial) in Context.Query<SpinDial>())
+                return dial.Reversed != 0;
+            return false;
+        }
+        set
+        {
+            foreach (var (_, dial) in Context.Query<SpinDial>())
+                dial.Reversed = value ? 1 : 0;
+        }
+    }
+
+    private float Speed
+    {
+        get
+        {
+            foreach (var (_, dial) in Context.Query<SpinDial>())
+                return dial.Speed;
+            return 1.0f;
+        }
+        set
+        {
+            foreach (var (_, dial) in Context.Query<SpinDial>())
+                dial.Speed = Math.Clamp(value, SpinDial.MinSpeed, SpinDial.MaxSpeed);
+        }
+    }
+
+    private int Sparks
+    {
+        get
+        {
+            int alive = 0;
+            foreach (var _ in Context.Query<Lifetime>())
+                alive++;
+            return alive;
+        }
+    }
+
+    // Rebuilt when a key changed the dial or a spark came or went.
+    protected override int BuildHash() => HashCode.Combine(Reversed, Speed, Sparks);
+}

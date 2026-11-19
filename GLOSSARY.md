@@ -148,7 +148,7 @@ The shared assembly `Fenrir.Scripting` that every script assembly compiles again
 *Avoid:* engine API assembly, SDK (that is the contract plus its source generator).
 
 **Math contract**
-The shared assembly `Fenrir.Math` (ADR-0029): FenrirMath's types for C# (`Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Matrix4x4`, `Colour`, `Ray`, `Bounds`), each laid out as its C++ counterpart, with no native functions. The built-in extension shares it before the scripting contract, which is built on it, so every package's contract can use it. The generated bindings name its `Vector3` and `Quaternion` for FenrirMath's vector and quaternion, which FenrirMath's API description records as bound types. Since ADR-0043, `Colour`, `Ray` and `Bounds` are generated mirrors from that description, through the math binding, and the glm-backed five are bound types; `Bounds` is the one C# type for `Math::AABB`.
+The shared assembly `Fenrir.Math` (ADR-0029): FenrirMath's types for C# (`Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Matrix4x4`, `Colour`, `Ray`, `Bounds`, `Frustum`), each laid out as its C++ counterpart, with no native functions. The built-in extension shares it before the scripting contract, which is built on it, so every package's contract can use it. The generated bindings name its `Vector3` and `Quaternion` for FenrirMath's vector and quaternion, which FenrirMath's API description records as bound types. Since ADR-0043, `Colour`, `Ray`, `Bounds` and `Frustum` are generated mirrors from that description, through the math binding, and the glm-backed five are bound types; `Bounds` is the one C# type for `Math::AABB`.
 *Avoid:* math library (FenrirMath's functions stay in C++).
 
 **Scripting extension**
@@ -196,7 +196,7 @@ A plain-data C++ resource, scene or app, that C# sees as a blittable struct mark
 *Avoid:* singleton, global, resource mirror (informal).
 
 **Facade**
-A static C# class over a package's generated native functions, its generated part the pass-throughs each native's `@facade` names and its hand-written part what a description cannot say: overloads that are not renames, generic methods, properties over outputs, constants, defaults and conversions. It stands for a C++ resource with behaviour (`Keyboard`, `Mouse`, `Gamepads`, `Window`, `Assets`, `Materials`, `Renderer`, `DebugDraw`, physics's `PhysicsWorld`): its answers come from C++, so C# never re-implements the rules (ADR-0029, ADR-0043). A generated facade method takes by value what its declaration takes `in`, and when its mark names one output (`returns`) gives that output as its value, the C++ default when the call did nothing.
+A static C# class over a package's generated native functions, its generated part the pass-throughs each native's `@facade` names and its hand-written part what a description cannot say: overloads that are not renames, generic methods, properties over outputs, constants, defaults and conversions. It stands for a C++ resource with behaviour (`Keyboard`, `Mouse`, `Gamepads`, `Window`, `Assets`, `Materials`, `Renderer`, `DebugDraw`, physics's `PhysicsWorld`, text's `Fonts`, the painter's `Painter`): its answers come from C++, so C# never re-implements the rules (ADR-0029, ADR-0043). A generated facade method takes by value what its declaration takes `in`, and when its mark names one output (`returns`) gives that output as its value, the C++ default when the call did nothing.
 *Avoid:* wrapper (that is a one-field struct), API class, service.
 
 **Wrapper**
@@ -486,6 +486,10 @@ How much a tyre is sliding over the ground rather than rolling. Along the wheel,
 One of 32 groups a body belongs to (it may belong to several). With its *collision mask*, the layers it collides with, it decides which bodies can touch: two touch only when each one's mask includes a layer of the other.
 *Avoid:* channel, group (a *collision group*, bodies that ignore each other, is a separate idea).
 
+**Collision group**
+`CollisionGroup`: an optional component on a body entity holding one plain integer game code picks; bodies with the same non-zero group never touch each other, whatever their layers allow, and 0 is no group. A character body's applies to its move; a trigger's is its own entity's. Queries ignore it (physics map ticket "How do general collision groups work?").
+*Avoid:* ignore list, exclusion, sub-group, collision exception (Godot's), layer (a *collision layer* decides who may touch; a group removes contact the layers allow).
+
 ## FenrirEngine rendering
 
 **Graphics API**
@@ -529,7 +533,7 @@ One step of the render graph: the resources it uses and how, a render stage, and
 *Avoid:* pass (alone, when a graphics device pass could be meant), render node.
 
 **Render stage**
-Where in the frame a render pass runs, from a fixed list: `Shadow`, `Opaque`, `Background`, `Transparent`, `Debug`, `PostProcess`, `Output`, `Overlay`.
+Where in the frame a render pass runs, from a fixed list: `Cull`, `Prepare`, `Skinning`, `Shadow`, `DepthPrepass`, `Opaque`, `Background`, `Transparent`, `Debug`, `PostProcess`, `Output`, `Overlay` (ADR-0049, ADR-0050, ADR-0057).
 *Avoid:* phase (a *phase* is FenrirApp's, such as `Render`), layer, queue.
 
 **Render feature**
@@ -589,47 +593,51 @@ The rectangle of its render target a view draws into, given as fractions of the 
 *Avoid:* view (the drawing itself), screen rect, scissor.
 
 **Render target**
-Where a view's output goes: a window, or an image asset made with a size but no pixels, which materials and the overlay sample like any image (ADR-0026).
+Where a view's output goes: a window, or an image asset made with a size but no pixels, which materials and the overlay sample like any image (ADR-0026). An image 2D target draws into the same images, which may also be linear there (ADR-0060).
 *Avoid:* render texture (no separate type), framebuffer, scene targets (a view's own intermediate colour and depth).
 
 **Exposure**
 A camera's brightness setting in EV stops, applied in its view's `Output` before the tonemapper: the linear colour times 2^exposure, so each +1 doubles it (ADR-0049).
 *Avoid:* gain, brightness, EV (alone, as the setting's name).
 
+**Look**
+How a camera turns the scene's light into its picture, one plain value on it (`Camera::look`, a `CameraLook`, ADR-0059): its exposure, tonemapper, bloom, anamorphic streaks, lens flare and dirt, colour grade, chromatic aberration, vignette and film grain. Copying it gives another camera the same look.
+*Avoid:* post-process settings, post-process profile, camera effects (the effects are its parts), environment (Godot's word, which also holds the sky and fog).
+
 **Tonemapper**
 How a view's `Output` maps its exposed HDR colour into the [0, 1] its render target stores: `AgX` (the default), `PbrNeutral`, `Aces`, or `None`, which clamps (ADR-0049).
-*Avoid:* tone curve, colour grade (the look set before it), tonemapping operator.
+*Avoid:* tone curve, colour grade (the grade set before it), tonemapping operator.
 
 **Colour grade**
-A camera's look, set in its view's `Output` on the exposed scene colour before the tonemapper (`Camera::colourGrading`, ADR-0059): white balance, contrast around mid grey, split toning, saturation and the ASC CDL, in that order. Identity by default.
-*Avoid:* LUT (a baked look, not yet supported), colour correction, post-process volume (the settings live on `Camera`).
+The part of a camera's look set in its view's `Output` on the exposed scene colour before the tonemapper (`CameraLook::colourGrading`, ADR-0059): white balance, contrast around mid grey, split toning, saturation and the ASC CDL, in that order. Identity by default.
+*Avoid:* LUT (a baked look, not yet supported), colour correction, post-process volume (the settings live on `Camera::look`).
 
 **Chromatic aberration**
-Colour fringes towards a view's edges, as a lens bends each wavelength by its own amount: its `Output` reads each channel of SceneColor at its own point, red moved outwards and blue inwards by its camera's `chromaticAberration.intensity` of the half-diagonal at the corners, the centre as it is (ADR-0059).
+Colour fringes towards a view's edges, as a lens bends each wavelength by its own amount: its `Output` reads each channel of SceneColor at its own point, red moved outwards and blue inwards by its camera's `look.chromaticAberration.intensity` of the half-diagonal at the corners, the centre as it is (ADR-0059).
 *Avoid:* colour fringing (what it looks like, not the effect), lateral colour, RGB split.
 
 **Vignette**
-A view darkened towards its corners, as a lens's falloff darkens them: its `Output` multiplies the exposed linear colour by a falloff from its centre before the colour grade and the tonemapper, set by its camera's `vignette` (ADR-0059).
+A view darkened towards its corners, as a lens's falloff darkens them: its `Output` multiplies the exposed linear colour by a falloff from its centre before the colour grade and the tonemapper, set by its camera's `look.vignette` (ADR-0059).
 *Avoid:* lens shading, edge darkening.
 
 **Film grain**
-Noise its `Output` adds to a view after the tonemapper, in the range the viewer sees, weighted towards the mid-tones as film grain shows, and moving each frame: its camera's `filmGrain` (ADR-0059).
+Noise its `Output` adds to a view after the tonemapper, in the range the viewer sees, weighted towards the mid-tones as film grain shows, and moving each frame: its camera's `look.filmGrain` (ADR-0059).
 *Avoid:* noise (alone), dither (a different thing, for banding).
 
 **Bloom**
-Bright pixels bleeding light into their surroundings: a view's SceneColor blurred over ever wider areas and mixed back into it before `Output` by its camera's `bloom.intensity`, with no threshold, keeping the scene's energy (ADR-0049).
+Bright pixels bleeding light into their surroundings: a view's SceneColor blurred over ever wider areas and mixed back into it before `Output` by its camera's `look.bloom.intensity`, with no threshold, keeping the scene's energy (ADR-0049).
 *Avoid:* glow (what bloom looks like, not the effect), bright pass or threshold (there is none), lens flare (a different effect).
 
 **Anamorphic streaks**
-Bright pixels drawn out into long, thin horizontal lines, as an anamorphic lens draws them: a horizontal-only blur chain from bloom's first level, mixed into SceneColor after the bloom by its camera's `anamorphicStreaks.intensity`, times a tint at unit luminance, with no threshold, keeping the scene's energy (ADR-0059).
+Bright pixels drawn out into long, thin horizontal lines, as an anamorphic lens draws them: a horizontal-only blur chain from bloom's first level, mixed into SceneColor after the bloom by its camera's `look.anamorphicStreaks.intensity`, times a tint at unit luminance, with no threshold, keeping the scene's energy (ADR-0059).
 *Avoid:* streak filter, star filter or starburst (a different, per-light effect), lens flare (ghosts and a halo, a different effect).
 
 **Lens flare**
-Ghosts of a view's bright parts mirrored through its centre along the line from them, and a halo ring, each colour fringed apart, as light reflecting between a lens's elements draws them: John Chapman's pseudo lens flare, read from bloom's second level and mixed into SceneColor after the streaks by its camera's `lensFlare.intensity`, with no threshold, keeping a flat view as it is (ADR-0059).
+Ghosts of a view's bright parts mirrored through its centre along the line from them, and a halo ring, each colour fringed apart, as light reflecting between a lens's elements draws them: John Chapman's pseudo lens flare, read from bloom's second level and mixed into SceneColor after the streaks by its camera's `look.lensFlare.intensity`, with no threshold, keeping a flat view as it is (ADR-0059).
 *Avoid:* starburst or sprite flare (per-light effects placed by a light's screen position, not built), glare (what a bright sky's flare looks like, not the effect).
 
 **Lens dirt**
-A greyscale image of the smudges and dust on a camera's lens, stretched over its view, which raises each pixel's share of the bloom and the lens flare where it is bright, so a bright light lights up the dirt: its camera's `lensFlare.dirt`, scaled by `lensFlare.dirtIntensity`, the share held at or below 1 so the mix stays a blend (ADR-0059).
+A greyscale image of the smudges and dust on a camera's lens, stretched over its view, which raises each pixel's share of the bloom and the lens flare where it is bright, so a bright light lights up the dirt: its camera's `look.lensFlare.dirt`, scaled by `lensFlare.dirtIntensity`, the share held at or below 1 so the mix stays a blend (ADR-0059).
 *Avoid:* dirt mask, lens texture.
 
 **Punctual light**
@@ -680,6 +688,30 @@ A component that lights the scene from its entity: a *directional light* (the su
 An asset holding the placements of many copies of one mesh, each a transform relative to the entity that draws them and an optional colour. An `InstancedMeshRenderer` draws one, with no entity per copy.
 *Avoid:* instance buffer, multimesh, batch.
 
+**Frustum**
+The volume a view sees, as the planes that bound it in world space: `Math::Frustum` (FenrirMath, public, ADR-0057), built from a reversed-Z view-projection, five planes for a perspective view whose far plane is at infinity and six for an orthographic one, with a sphere test and a box test that moves a box's eight corners by a matrix and keeps the box unless every corner is outside one plane. `Renderer::GetFrustum` gives a camera's; the renderer leaves every item or instance list whose world bounds are outside it out of the view on the CPU, and the cull pass repeats its tests on the GPU over each remaining opaque or masked copy (`RendererConfig::gpuCulling` turns that half off).
+*Avoid:* view volume, clip volume, culling planes.
+
+**Indirect draw**
+A draw whose arguments the GPU reads from a buffer of commands (`DrawIndexedIndirectCommand`: index count, instance count, first index, base vertex, base instance) rather than from the command list: `CmdDrawIndexedIndirect` names the buffer, an offset, how many commands and their stride, and a pass declares `IndirectRead` on the buffer. The cull pass writes the commands a view draws (ADR-0057).
+*Avoid:* GPU draw, GPU-driven draw, draw call. A *multi-draw* is one indirect draw of many commands.
+
+**Cull pass**
+The compute pass, one per view and per *shadow view* and first in the frame (the `Cull` stage), that decides which of the view's *candidates*, its opaque and masked runs' items and instance list copies, are drawn (ADR-0057), run a second time after the prepass's first draws, in the `DepthPrepass` stage, for *occlusion culling*: it copies each run's *command template* (its indirect command with no instances) over the view's command buffer, then counts each candidate it keeps into the command of the *level of detail* it chooses for it (the coarsest whose error projects under `RendererConfig::lodErrorPixels` at the candidate's distance, one command per run and level) and writes the candidate's entry into the view's *indirection*, one `(record, copy)` per instance drawn, declared in `Fenrir/Draw.glsl` as `fenrirVisible` and read by its `CurrentDraw()` at the instance's index. A *group table* entry per 64 candidates names a work group's run, so one dispatch culls the view; a *level table* entry per command template holds its level's error, which level of its run's it is, which the pass chooses by, and how many instances a kept candidate draws as (six for a point light's instanced faces). At the frame's end the view's commands are copied into a *readback ring*, read `FramesInFlight` frames later into `RendererStats::instancesDrawn` and `drawnByLod`; `Renderer::SetCullingFrozen` keeps each camera's planes while its view follows it.
+*Avoid:* culling shader, visibility buffer (that is another technique), compaction pass.
+
+**Occlusion culling**
+Dropping, per camera, the candidates wholly behind what the camera already sees (ADR-0057; `RendererConfig::occlusionCulling`, on by default; `Renderer::SetOcclusionCulling`), in two phases of the *cull pass*: the first keeps the candidates *visible* last frame (a word per candidate the second phase writes, kept while the camera's candidates keep their order, identity and count), the depth prepass draws them, the camera's *Hi-Z pyramid* is built from that depth, and the second tests every candidate inside the frustum by its box's screen rectangle against the pyramid level whose texels cover it in at most 2 x 2, drawing what shows and was not drawn. `RendererStats::drawnByPhase` counts each phase's draws. Shadow views never cull by occlusion.
+*Avoid:* occlusion query, Hi-Z culling (the test is one part of it), visibility buffer, the GTAO sense of "occlusion" (ambient occlusion is a lighting term).
+
+**Hi-Z pyramid**
+A camera's pyramid of depth (ADR-0056, ADR-0057): an RG32F texture at the view's size with a full mip chain, red the nearest and green the farthest reversed-Z depth of each texel's footprint, level 0 the prepass's depth (the nearest and the farthest of each pixel's samples under MSAA) and each level below the largest nearest and the smallest farthest of the 2 x 2 texels above it, the third row or column folded into the last texel where a level's side is odd. Built by `HiZ` fragment passes, one a level: after the prepass's first phase for *occlusion culling*, and again from the complete depth for a reflecting camera's `ReflectionTrace`, which marches its nearest depth; a reflecting camera keeps two, swapping each frame, so last frame's survives.
+*Avoid:* depth mipmap, HZB (write it out), Z-buffer pyramid.
+
+**Shadow view**
+One cascade of a camera's sun shadow, one shadowed spot light's atlas tile, or one shadowed point light's cube, as a view of the *cull pass* (ADR-0057): each gets a cull of its own over the *shadow candidates* (the opaque and masked runs whose renderer casts), against the light's volume rather than a camera's frustum (a cascade's box with its near plane left open, `Core/ShadowViews.hpp`'s `CascadeCullVolume`; a spot light's cone; a point light's range sphere, `WithinRange`), choosing each caster's *level of detail* by the camera the shadows are for, never by the light, and the shadow passes draw from its command buffer. A point light's six faces draw from its one cull. Shadow views never cull by occlusion.
+*Avoid:* light view, shadow camera, light frustum (a point light has none).
+
 **Shadow cascade**
 One of the directional light's shadow maps for one camera: an orthographic view along the light round a slice of the camera's view, nearer slices smaller and so sharper, out to the light's shadow distance. Each is a sphere snapped to whole texels, so its shadows hold still as the camera moves and turns (ADR-0050).
 *Avoid:* split (the depth where one cascade gives way to the next), CSM level, shadow LOD.
@@ -717,33 +749,125 @@ Debug text stacked in a corner of the window, newest first, which a later messag
 ## FenrirEngine 2D drawing
 
 **FenrirDraw2D**
-The engine's package of 2D draw data: plain data with no GPU code, knowing no renderer or UI. UI libraries and a future painter produce it; FenrirRenderer draws it (ADR-0027).
-*Avoid:* UI renderer, canvas (a future painter's surface), ImGui backend.
+The engine's package of 2D draw data: plain data with no GPU code, knowing no renderer or UI. UI libraries and FenrirPainter's painter produce it; FenrirRenderer draws it (ADR-0027).
+*Avoid:* UI renderer, canvas (other engines' painter surface), UI backend.
 
 **2D draw list**
-`DrawList2D`: one batch of 2D drawing as plain data: vertex and index bytes, 2D pipeline descriptions, and commands with textures, a scissor and an index range, in local logical coordinates. The same list can be shown on screen, in a texture or in the world; the target decides where.
-*Avoid:* draw list (alone: the frame's 3D one), draw data (ImGui's), display list.
+`DrawList2D`: one batch of 2D drawing as plain data: vertex and index bytes, 2D pipeline descriptions, and commands (draws with textures, a scissor and an index range, and the begins and ends of offscreen groups), in local logical coordinates. The same list can be shown on screen, in a texture or in the world; the target decides where.
+*Avoid:* draw list (alone: the frame's 3D one), draw data (other UI libraries'), display list.
 
 **2D pipeline description**
 A plain value saying how a 2D draw list's triangles are drawn: shader, vertex layout, index type, blend mode, input colour space and blend space. The renderer makes and caches a device pipeline from it.
 *Avoid:* material (a 3D asset), pipeline handle (the device's).
 
 **2D target**
-Where FenrirRenderer's 2D render feature draws a 2D draw list, supplying the transform from local to clip space, depth and how a scissor is realised. The window overlay is the only one built; an image target and a world-space target are planned.
+Where FenrirRenderer's 2D render feature draws a 2D draw list, supplying the transform from local to clip space, depth and how a scissor is realised. The window overlay, the image 2D target (a list drawn into an image asset, ADR-0060) and the world-space 2D target are built.
 *Avoid:* render target (a camera's image), canvas, layer.
+
+**World-space 2D target**
+A quad in the scene a 2D draw list is drawn on: an entity with `WorldQuad2D` (its size in world units and logical units per world unit), drawn among each view's transparent items with no hardware scissor, its clips the painter's per-pixel ones (ADR-0060). A UI root on one is a world root.
+*Avoid:* world canvas, billboard (it turns only if the game turns it), screen (the image root's quad in UIDemo).
 
 **Overlay layer**
 The integer a 2D draw list is submitted to a window's overlay with: layers draw lowest first, and debug screen text draws above them all.
 *Avoid:* z-order, render stage (`Overlay` is the stage they all draw in), sort key.
 
-## FenrirEngine assets
+**Offscreen group**
+A run of a 2D draw list's commands drawn into an image of their own and then composited back as one: with an opacity, a blend mode, a filter, or as a mask (ADR-0060). Groups nest.
+*Avoid:* layer (an overlay layer is an ordering integer; Skia's and Vello's "layer" is this), render pass, surface.
+
+## FenrirEngine painting and UI
+
+**Painter**
+The recording API of FenrirPainter: a value that takes paths, shapes, images and text with a paint, a transform and a clip, and appends them to one 2D draw list. It keeps nothing between frames.
+*Avoid:* canvas, draw context, graphics (a `Graphics` in other engines draws straight to the GPU).
+
+**Paint**
+How a fill or a stroke is coloured: a solid colour, a gradient or an image, with its own transform.
+*Avoid:* brush (XAML's word for the same), shader (an asset here), style (a stylesheet's).
+
+**Element**
+One node of FenrirUI's tree: it has a parent, children, classes, a resolved style and a laid-out rectangle, and it is what markup tags and stylesheet selectors name.
+*Avoid:* panel (s&box's word, and a container here), widget, control (a built-in element with behaviour, such as a button), node (an ECS entity's scene word).
+
+**UI root**
+An element tree of its own with the 2D target it draws into and its scale rule. A window's overlay, an image and a quad in the world each hold their own.
+*Avoid:* canvas, document (markup loads into a root, it is not the root), screen.
+
+**Element id**
+`ElementId`: an index and a version naming one element of a UI root, stale once the element is removed. It is not an entity.
+*Avoid:* handle (Iris's term), node id, entity.
+
+**Control**
+A built-in element with behaviour of its own, such as a button, slider, scroll view or text entry, styled by the default stylesheet a game replaces.
+*Avoid:* widget, component (an ECS term), element (the general node).
+
+**Markup document**
+A file of element tags, attributes and includes that loads into a UI root as elements. It carries structure and ids, never logic or bindings.
+*Avoid:* layout file (layout is what Yoga computes), template (an include is a file, not a parameterised template), UXML, RML, XAML.
+
+**Stylesheet**
+A file of CSS rules, custom properties, keyframes and font faces that FenrirUI matches against elements to resolve their style.
+*Avoid:* theme (Godot's resource; the default stylesheet is the engine's only theme opinion), SCSS, USS, skin.
+
+**Scale rule**
+How a UI root maps its UI units to its target's logical units: by default so that 1080 UI units span the target's pixel height, or one to one with the target's logical units.
+*Avoid:* DPI scale (the window's content scale, one of its inputs), zoom, reference resolution.
+
+**UI event**
+`UIEvent`: the engine event a UI root sends once, at its target element, for each click, press, release, hover, scroll, key, text, focus, blur, change, submit or cancel (ADR-0065). Systems read it through an event reader.
+*Avoid:* UI message, signal, DOM event.
+
+**UI listener**
+C++ attached to one element for one kind of UI event, called when the event happens to the element or bubbles up to it from an element under it, until one stops its propagation. Unlike an event reader, it is called at the time; C# reads the UI event instead.
+*Avoid:* handler, callback, delegate.
+
+**Paint stage**
+The work `UIRoots` runs each frame after every UI root has laid out and before any paints (`UIRoots::AddPaintStage`), lowest order first: it paints into elements through `UIRoot::PaintInto`, whose painter draws under the element's transform and clips into a list of the element's own, which the root's paint appends after the element's boxes and before its children. C# systems join it as the extension stage `Fenrir.UI.Paint` (`UIStages.Paint`) and paint through the Painter facade (ADR-0039, ADR-0061).
+*Avoid:* render stage (the renderer's), paint pass (the root's painting of its tree), draw callback.
+
+**Focusable**
+Of an element: a click on it or under it, Tab and Shift+Tab, a gamepad direction and code can give it the focus, which sends it keys and text. Elements are not focusable until made so; the controls make themselves focusable.
+*Avoid:* tab stop, selectable (Unity's).
+
+**Gamepad navigation**
+Moving a UI root's focus with the D-pad or the left stick to the focusable element nearest in that direction, with A activating and B cancelling, while the root has the focus (ADR-0065).
+*Avoid:* spatial navigation (the web's name), selection (Unity's).
+
+**Pointer ray**
+The ray, in world space, a game gives a world root each frame with its button's state (`UIRoot::SetPointerRay`): the root meets it with its quad and hit-tests there. Which camera and cursor, or controller, it comes from is the game's choice (ADR-0057's line).
+*Avoid:* raycast (physics's), pick ray (the renderer's picking), cursor (the window's mouse, or the virtual cursor).
+
+**Virtual cursor**
+A per-root switch that turns the left stick into pointer motion and A into a left click, drawn as the root's `virtual-cursor` element.
+*Avoid:* gamepad mouse, fake pointer.
+
+**Razor component**
+A C# class compiled from a `.razor` file, whose markup and `@code` describe the elements it keeps in a UI root. One managed object per mounted instance, holding UI-local state only (ADR-0067, ADR-0068). Always say *Razor component*: a bare *component* is the ECS's.
+*Avoid:* panel (s&box's), view, widget, component (alone).
+
+**Mount**
+To place a Razor component into an element of a UI root, which builds it there and keeps it until it is unmounted, its host or root goes, or its script generation is released. (An asset root is never "mounted".)
+*Avoid:* attach, spawn, instantiate.
+
+**Razor dispatcher**
+The shipped C# stage systems that run every mounted Razor component, one in `Fenrir.UI.Build` and one in `Fenrir.UI.Paint`: they run the Razor components' handlers for the frame's UI events, rebuild the ones that need it, and call their paint overrides (ADR-0068).
+*Avoid:* renderer (Blazor's word, and the engine's renderer), UI manager.
+
+**Build stage**
+FenrirUI's hosted work at the start of each frame's styling, before transitions and the cascade, in which elements are made and changed for that frame's layout. C# systems join it as the extension stage `Fenrir.UI.Build`, and the Razor dispatcher runs there.
+*Avoid:* update stage, render tree pass.
+
+**Scope class**
+The class every element a Razor component builds carries, its mounted host included, and which its scoped stylesheets require on every rule's last selector, so that a Razor component's styles reach only its own elements unless `::deep` says otherwise (ADR-0070).
+*Avoid:* scope attribute (Blazor's), CSS module.
 
 **FenrirAssets**
 The engine's asset package: loads files into plain CPU-side data and owns it behind asset handles. It has no GPU code; FenrirRenderer and animation each turn its data into their own form (ADR-0021).
 *Avoid:* resource manager, asset server, asset database (cooking and an editor database are out of scope).
 
 **Asset**
-One piece of plain data FenrirAssets holds: a mesh, image, material, skeleton, clip, shader container, model or data asset, loaded from a file or added from code.
+One piece of plain data FenrirAssets holds: a mesh, image, material, skeleton, clip, font, shader container, model or data asset, loaded from a file or added from code.
 *Avoid:* resource (Iris and physics use it otherwise), file.
 
 **Data asset**
@@ -797,6 +921,10 @@ The one shape every text file the engine writes has: the file format's version, 
 **Format version**
 The envelope's own version, raised only when the envelope's shape changes; a type's changes raise its type version instead (ADR-0077).
 *Avoid:* file version, schema version.
+
+**Level of detail**
+One of a mesh's coarser triangle lists over its own vertex streams (`MeshLod`), with the greatest distance in local units by which it departs from full detail, its *error*. Level 0 is the mesh's own indices, with error 0; `MeshData::lods` holds the rest, coarser and with a larger error each. `GenerateLods` makes them through meshoptimizer; the renderer picks the coarsest whose error projects below a pixel threshold (ADR-0057).
+*Avoid:* LOD mesh (a level is not a mesh of its own), LOD group, mip (for geometry).
 
 ## FenrirEngine animation
 
@@ -912,8 +1040,36 @@ A number FenrirSkeleton advances whenever a skeleton instance's final pose chang
 A per-bone scale, default 1, that gameplay sets on a skeleton instance to say how much its pose override entries count, apart from the entries themselves; set per bone or over a subtree, latest assignment winning (ADR-0038).
 *Avoid:* blend weight (pose blending's), physics weight, influence.
 
+**Ragdoll**
+`Ragdoll`: a component on a skeleton entity (one per skeleton) naming the collision group, root body and state of the ragdoll bodies that follow and drive its bones. The bodies and the joints between them are ordinary rigid bodies and joints (ADR-0053).
+*Avoid:* rig, physics asset, physical skeleton.
+
+**Ragdoll body**
+`RagdollBody`: a component on a rigid body entity naming its ragdoll, the bone it follows and drives by name, and the body's offset from that bone. Kinematic while the ragdoll follows its skeleton, it is the character's hit box: a hit names the body entity, and game code reads the bone name from it (ADR-0053).
+*Avoid:* part (Jolt's), physical bone (Godot's), hitbox component.
+
+**Ragdoll description**
+`RagdollDescription`: the plain-data value a ragdoll is built from: its *ragdoll parts* (each a bone name, a parent, a collision shape, an offset, a mass, a joint kind and a strength scale) and the ragdoll's defaults. Derived from a skeleton and a *humanoid bone map* by `DescribeHumanoid`, or filled by hand, then spawned by `BuildRagdoll` (physics map ticket "From what description is a ragdoll built, and with which bodies, joints, motors and strengths?").
+*Avoid:* physics asset, rig definition, wizard.
+
+**Humanoid bone map**
+`HumanoidBones`: named slots (hips, spine, chest, head, and each side's upper arm, lower arm, hand, upper leg, lower leg, foot) that game code fills with a rig's bone names, any of them empty. The ragdoll derivation never guesses a slot from a name.
+*Avoid:* avatar (Unity's), retarget map.
+
+**Stature**
+A skeleton's head-to-foot distance in its rest pose, which the ragdoll derivation sizes capsule radii and leaf parts from, because bone lengths (a short spine bone) do not scale a body's girth.
+*Avoid:* height (an entity's), scale.
+
+**Strength**
+How hard a powered ragdoll's motors drive towards the base pose: one value in [0, 1] on the ragdoll, scaled per part, that the glue turns into each motor's maximum torque, frequency and damping, so it means the same on every rig.
+*Avoid:* stiffness, blend weight (an *override weight* is how much the simulated pose shows, not how hard it is driven).
+
+**Ragdoll mode**
+`RagdollMode`: whether a ragdoll's bodies are *following* (kinematic, moved each tick to the simulation pose), *simulating* (dynamic, writing pose overrides) or *powered* (dynamic, motors driving towards the base pose); set on the ragdoll and overridable per body, and applied by the glue to motion types and motors (ADR-0054). A *partial ragdoll* is a simulating subtree under a following parent.
+*Avoid:* kinematic ragdoll, active ragdoll, blend in/out, physics blend weight.
+
 **Ragdoll glue**
-App code, or a package the physics map's ragdoll spec defines, that joins a ragdoll's bodies to a skeleton: it writes body poses in as pose overrides and reads the base pose for motor targets, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038).
+FenrirRagdoll's systems, which join a ragdoll's bodies to its skeleton: each tick they move following bodies to the simulation pose, and each frame they write simulating bodies' poses in as pose overrides and read the base pose for motor targets, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038, ADR-0040, ADR-0053).
 *Avoid:* ragdoll system, physics animation.
 
 **Skinned mesh**
@@ -1020,7 +1176,7 @@ A callback registered on FenrirInput with a priority, such as a UI, that sees ea
 
 **Input claim**
 What a router says it is doing with input in a window: the pointer is over it, it has captured the pointer, it has keyboard focus, or it wants text; plus an app-wide gamepad claim. Claims describe the interaction and drive text input; routers decide what is consumed.
-*Avoid:* capture flag, want-capture (ImGui's), focus (alone).
+*Avoid:* capture flag, want-capture, focus (alone).
 
 **Control owner**
 Whoever took a key's, button's or pointer's press: the router that consumed it, or the game. Its repeats and its release go to the same owner, and a cancelled control's release goes to no one.
@@ -1029,9 +1185,37 @@ Whoever took a key's, button's or pointer's press: the router that consumed it, 
 ## FenrirEngine demo apps
 
 **Demo app**
-One executable under `examples/` per feature area (RendererDemo, ScriptingDemo, PhysicsDemo, AnimationDemo, LightingDemo), built on the demo scaffold, with an ordered list of scenes; a C++ scene and its C# twin are separate entries. An app may be split further when it outgrows one list. Not a reference for engine code beyond what it shows.
+One executable under `examples/` per feature area (RendererDemo, ScriptingDemo, PhysicsDemo, AnimationDemo, LightingDemo, UIDemo), built on the demo scaffold, with an ordered list of scenes; a C++ scene and its C# twin are separate entries. An app may be split further when it outgrows one list. Not a reference for engine code beyond what it shows.
 *Avoid:* DemoApp (the legacy single app, which the demo apps replaced), sample, example (alone).
 
 **Demo scaffold**
-What every demo app is built on: the `FenrirDemoScaffold` library (`examples/DemoScaffold/`), its `fenrir_add_demo_app` CMake function and its `Fenrir.Demo` C# assembly. It installs the engine packages, and holds the free-fly camera, the scene list, the scene-click event, the help panel, the smoke-run switches and the optional ImGui overlay.
+What every demo app is built on: the `FenrirDemoScaffold` library (`examples/DemoScaffold/`), its `fenrir_add_demo_app` CMake function and its `Fenrir.Demo` C# assembly. It installs the engine packages, FenrirUI among them, and holds the demo UI kit, the free-fly camera, the scene list, the scene-click event, the help and the smoke-run switches.
 *Avoid:* demo framework, demo base, harness.
+
+**Demo UI kit**
+The demo scaffold's UI over FenrirUI that every demo app shares (ADR-0071): the demo panel, the help, the demo tutorial and the hint line, in one theme. Demo code, not an engine package.
+*Avoid:* debug UI, dev UI, demo HUD, overlay (alone: the renderer's).
+
+**Demo panel**
+The demo UI kit's side panel: the scene switcher, the readouts, the switches and any demo slots of the active scene and the app.
+*Avoid:* debug window, tweak panel, inspector.
+
+**Readout**
+A row of the demo panel showing a name and a live value, which the scene or app pushes or the kit pulls once a frame.
+*Avoid:* stat, debug text (the renderer's screen text).
+
+**Switch row**
+A row of the demo panel bound to a value it changes: a toggle, range, choice, colour, button or text entry.
+*Avoid:* widget, tweakable.
+
+**Key row**
+One line of the help: the keys and what they do, for the scaffold, the app or a scene. Separate from the keys a smoke run presses.
+*Avoid:* key help (the single line it replaces), binding (a game's remappable input).
+
+**Demo tutorial**
+A scene's ordered steps, shown in a card the first time the scene is entered in a run, never in a smoke run.
+*Avoid:* onboarding, walkthrough.
+
+**Demo slot**
+An element of the demo panel with a known id, given to a scene that asks for it, where C# mounts a Razor component (ADR-0072).
+*Avoid:* mount point (alone), placeholder.

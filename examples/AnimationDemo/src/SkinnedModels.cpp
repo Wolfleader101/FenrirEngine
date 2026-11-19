@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
@@ -189,5 +190,11 @@ namespace AnimationDemo
         light.AddComponent<Fenrir::DirectionalLight>();
         // A pale blue-grey sky, drawn behind the stage and lighting it from every side (ADR-0047).
         scene.AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour{0.35f, 0.38f, 0.45f, 1.0f}});
+    }
+
+    FenrirDemo::DemoSection SceneSection(Fenrir::App& app, std::string title)
+    {
+        FenrirDemo::DemoUI* kit = app.TryGetResource<FenrirDemo::DemoUI>();
+        return kit != nullptr ? kit->SceneSection(std::move(title)) : FenrirDemo::DemoSection{};
     }
 } // namespace AnimationDemo

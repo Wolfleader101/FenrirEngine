@@ -31,9 +31,9 @@ namespace
         Fenrir::Camera& camera = test.AddCamera();
         camera.projection = Fenrir::Orthographic{static_cast<float>(Size), 0.1f, 100.0f};
         camera.background = Fenrir::ColourBackground{Fenrir::Colour::Black};
-        camera.bloom.intensity = bloomIntensity;
-        camera.anamorphicStreaks.intensity = intensity;
-        camera.anamorphicStreaks.length = length;
+        camera.look.bloom.intensity = bloomIntensity;
+        camera.look.anamorphicStreaks.intensity = intensity;
+        camera.look.anamorphicStreaks.length = length;
         test.AddQuad(2.0f, 1.0f, "builtin:unlit", Fenrir::Colour{value, value, value, 1.0f});
         return camera;
     }
@@ -133,7 +133,7 @@ TEST_CASE("A tinted streak keeps the frame's luminance", "[renderer][gl][streaks
     GlScene test;
     test.RequireOpenGL();
     Fenrir::Camera& camera = AddSpot(test, Value, 0.5f, 0.7f, 0.0f);
-    camera.anamorphicStreaks.tint = Fenrir::Colour{0.2f, 0.4f, 1.0f, 1.0f};
+    camera.look.anamorphicStreaks.tint = Fenrir::Colour{0.2f, 0.4f, 1.0f, 1.0f};
     const GlProbe::Image frame = test.Frame(Size, Size);
     INFO("no GL error or other error was logged");
     REQUIRE(test.messages->errors.empty());
@@ -172,7 +172,7 @@ TEST_CASE("A small emissive sphere streaking blue over black matches its golden 
     Fenrir::Camera& camera = test.AddCamera();
     camera.target = Fenrir::ImageTarget{image};
     camera.background = Fenrir::ColourBackground{Fenrir::Colour::Black};
-    camera.anamorphicStreaks = {0.2f, 0.8f, Fenrir::Colour{0.3f, 0.55f, 1.0f, 1.0f}};
+    camera.look.anamorphicStreaks = {0.2f, 0.8f, Fenrir::Colour{0.3f, 0.55f, 1.0f, 1.0f}};
 
     const auto sphere = store.Add<Fenrir::Mesh>(RendererTest::Sphere(), Fenrir::AssetOwner::App());
     const auto glowing = store.CreateMaterial(

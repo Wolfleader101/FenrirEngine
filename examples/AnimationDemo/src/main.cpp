@@ -50,6 +50,8 @@ int main()
                      AnimationDemo::Blending(), AnimationDemo::BoneAttachments(app), AnimationDemo::GoingLimp(),
                      AnimationDemo::Crowd()};
     config.msaa = 4;
+    // The demo panel's Frame section: the frame time, fps, draws and instances, which Crowd's readouts sit beside.
+    config.frameStats = true;
     // The scaffold keeps them, after its own packages and before Scripting.
     config.installPackages = [](Fenrir::App& installing) -> std::shared_ptr<void> {
         return std::make_shared<AnimationPackages>(installing);

@@ -71,6 +71,55 @@ public static partial class Renderer
     public static bool SetPointShadowBudget(uint budget) => RendererNative.SetPointShadowBudget(budget);
 
     /// <summary>
+    /// Turns the GPU frustum test (RendererConfig::gpuCulling, ADR-0057) on or off from the next frame, as
+    /// Renderer::SetGpuCulling does: off, every cull pass keeps every candidate at level 0 and runs no occlusion phase,
+    /// for comparison; the coarse cull of whole entities on the CPU stays on. Scripting never reaches RendererConfig,
+    /// so this is C#'s way to the switch.
+    /// </summary>
+    /// <returns>Whether the app has a renderer.</returns>
+    public static bool SetGpuCulling(bool on) => RendererNative.SetGpuCulling(on);
+
+    /// <summary>
+    /// Turns occlusion culling (RendererConfig::occlusionCulling, ADR-0057) on or off from the next frame, as
+    /// Renderer::SetOcclusionCulling does: off, each camera's cull pass runs once and keeps every copy inside its
+    /// frustum, for comparison. Shadow views never cull by occlusion.
+    /// </summary>
+    /// <returns>Whether the app has a renderer.</returns>
+    public static bool SetOcclusionCulling(bool on) => RendererNative.SetOcclusionCulling(on);
+
+    /// <summary>
+    /// Freezes culling from the next frame, or thaws it, as Renderer::SetCullingFrozen does (ADR-0057): frozen, each
+    /// camera keeps the frustum and position it has in that frame and culls against them however it moves after, and
+    /// the Debug stage draws each frozen frustum's edges, so flying out of it shows what was kept. Freezing while
+    /// frozen keeps the first frame's volumes.
+    /// </summary>
+    /// <returns>Whether the app has a renderer.</returns>
+    public static bool SetCullingFrozen(bool on) => RendererNative.SetCullingFrozen(on);
+
+    /// <summary>
+    /// Sets both level-of-detail thresholds from the next frame, as Renderer::SetLodSelection does
+    /// (RendererConfig::lodErrorPixels and minProjectedPixels, ADR-0057): each copy of a mesh with levels draws at the
+    /// coarsest level whose error, scaled by the copy's largest axis scale and projected at its distance from the
+    /// camera, is under `lodErrorPixels` pixels, and a copy whose bounding sphere's radius projects under
+    /// `minProjectedPixels` is dropped (0: never). Scripting never reaches RendererConfig, so this is C#'s way to both.
+    /// </summary>
+    /// <param name="lodErrorPixels">The error, in pixels, a drawn level may show; 1 by default.</param>
+    /// <param name="minProjectedPixels">The radius, in pixels, under which a copy is dropped; 0 by default.</param>
+    /// <returns>Whether the app has a renderer.</returns>
+    public static bool SetLodSelection(float lodErrorPixels, float minProjectedPixels) =>
+        RendererNative.SetLodSelection(lodErrorPixels, minProjectedPixels);
+
+    /// <summary>
+    /// The volume `camera` sees now (ADR-0057): the planes the renderer culls by, in world space from the camera's
+    /// world matrix and its target's size, for a game that culls or streams its own entities. Five planes for a
+    /// perspective camera, whose far plane is at infinity, six for an orthographic one.
+    /// </summary>
+    /// <param name="frustum">The frustum; one with no planes, which everything is inside, when there is none.</param>
+    /// <returns>Whether there is one: false with no renderer, no such camera, or a camera that draws nothing.</returns>
+    public static bool GetFrustum(Entity camera, out Frustum frustum) =>
+        RendererNative.GetFrustum(in camera, out frustum);
+
+    /// <summary>
     /// Spawns `model` into the active scene as C++'s SpawnModel does, under `parent` unless it is no entity: a root
     /// named after the file holding one entity per node, each mesh a MeshRenderer, each skinned mesh with a SkinnedMesh
     /// naming its skeleton's owner, and with FenrirSkeleton installed a SkeletonPose on each owner and bone attachments

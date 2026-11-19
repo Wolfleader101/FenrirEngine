@@ -1,0 +1,532 @@
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <format>
+#include <functional>
+#include <numbers>
+#include <optional>
+#include <utility>
+#include <vector>
+
+#include "FenrirApp/App.hpp"
+#include "FenrirAssets/Assets.hpp"
+#include "FenrirDemoScaffold/DemoUI.hpp"
+#include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirECS/EntityList.hpp"
+#include "FenrirInput/Input.hpp"
+#include "FenrirInput/InputRouter.hpp"
+#include "FenrirRenderer/Components.hpp"
+#include "FenrirRenderer/Renderer.hpp"
+#include "FenrirRenderer/SpawnModel.hpp"
+#include "FenrirRenderer/WorldTargets2D.hpp"
+#include "FenrirScene/Scene.hpp"
+#include "FenrirUI/UI.hpp"
+#include "FenrirUI/UIRoot.hpp"
+#include "FenrirUI/UITarget.hpp"
+#include "UIDemo.hpp"
+
+namespace UIDemo
+{
+    namespace
+    {
+        using Fenrir::Math::Vec3;
+        using FenrirDemo::ScreenQuad;
+        using FenrirDemo::YawPitch;
+
+        constexpr float Pi = std::numbers::pi_v<float>;
+        // The minimap's render target, square, and how many metres of the room its height spans.
+        constexpr std::uint32_t MinimapPixels = 256;
+        constexpr float MinimapMetres = 16.0f;
+        // Stamina drains while the camera moves faster than this, in metres a second, and refills otherwise.
+        constexpr float MovingSpeed = 0.5f;
+        constexpr float StaminaDrain = 30.0f;
+        constexpr float StaminaRefill = 20.0f;
+        constexpr float HitDamage = 15.0f;
+        // The menu's screen on the north wall: its width in metres, and how high its centre is.
+        constexpr float ScreenMetres = 3.2f;
+        constexpr float ScreenCentreHeight = 2.0f;
+        // The light terminal: where its quad's centre is, turned towards the camera's start and tilted back a little.
+        const Vec3 TerminalPosition{2.6f, 1.35f, 2.2f};
+        constexpr float TerminalYaw = -0.7f;
+        constexpr float TerminalTilt = -0.3f;
+        // The capsule and its name plate, which floats over it and turns to face the camera.
+        const Vec3 CapsulePosition{-2.6f, 0.8f, 1.8f};
+        constexpr float PlateHeight = 2.05f;
+        constexpr float PlateWidth = 1.0f;
+        constexpr float PlateDepth = 0.32f;
+
+        /**
+         * @brief What the player did this frame, which the room's tutorial steps end on: set by the room's Update and
+         * read by the steps' `done` later in the frame.
+         */
+        struct RoomEvents
+        {
+            bool fired = false;
+            bool reloaded = false;
+            bool hit = false;
+            bool terminalPressed = false;
+        };
+
+        /** @brief The room's own state, a scene resource. */
+        struct RoomState
+        {
+            Fenrir::Entity player;
+            Fenrir::Entity minimapCamera;
+            Fenrir::AssetHandle<Fenrir::Image> minimap;
+            std::optional<Vec3> lastCameraPosition;
+            Fenrir::EventReader<FenrirDemo::DemoSceneClickEvent> clicks;
+            /** @brief The lamps, which take the terminal's colour. */
+            std::vector<Fenrir::Entity> lamps;
+            /** @brief The name plate's quad, turned to the camera each frame. */
+            Fenrir::Entity plate;
+            RoomEvents events;
+        };
+
+        void Spawn(Fenrir::App& app, Fenrir::Scene& scene)
+        {
+            Fenrir::AssetStore& store = app.GetResource<Fenrir::AssetStore>();
+            // The scene owns what it loads and makes, so its assets go when it is left.
+            const auto cube = store.Load<Fenrir::Mesh>("cube.obj#Mesh0", scene);
+            const auto sphere = store.Load<Fenrir::Mesh>("sphere.obj#Mesh0", scene);
+            const auto crate = store.Load<Fenrir::Model>("BoxTextured/BoxTextured.gltf", scene);
+            if (!cube.Ok() || !sphere.Ok() || !crate.Ok())
+            {
+                app.Logger()->Error("UIDemo: the cube, sphere or textured box did not load from the asset root");
+                return;
+            }
+            const auto lit = store.Load<Fenrir::Shader>("builtin:lit", scene).handle;
+            const auto material = [&](std::uint32_t srgb, float roughness) {
+                const auto made = store.CreateMaterial(lit, scene);
+                store.SetColour(made, "baseColour", Fenrir::Colour::FromSrgb(srgb));
+                store.SetFloat(made, "roughness", roughness);
+                return made;
+            };
+
+            Fenrir::EntityList& entities = scene.GetEntityList();
+            const auto place = [&](Fenrir::AssetHandle<Fenrir::Mesh> mesh, Fenrir::AssetHandle<Fenrir::Material> paint,
+                                   const Vec3& position, const Vec3& scale) {
+                Fenrir::Entity entity = entities.CreateEntity();
+                auto& transform = entity.AddComponent<Fenrir::Transform>();
+                transform.pos = position;
+                transform.scale = scale;
+                entity.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{mesh, paint});
+                return entity;
+            };
+
+            // A room of 14 by 14 metres with walls 4 high and no ceiling, so the top-down camera sees in.
+            const auto floor = material(0x7A746CFF, 0.8f);
+            const auto wall = material(0xB8B0A4FF, 0.9f);
+            place(cube.handle, floor, {0.0f, -0.1f, 0.0f}, {14.0f, 0.2f, 14.0f});
+            place(cube.handle, wall, {0.0f, 2.0f, -7.1f}, {14.4f, 4.0f, 0.2f});
+            place(cube.handle, wall, {0.0f, 2.0f, 7.1f}, {14.4f, 4.0f, 0.2f});
+            place(cube.handle, wall, {-7.1f, 2.0f, 0.0f}, {0.2f, 4.0f, 14.0f});
+            place(cube.handle, wall, {7.1f, 2.0f, 0.0f}, {0.2f, 4.0f, 14.0f});
+
+            // Pillars, crates and a few spheres to move round, so the compass and the minimap have something to show.
+            const auto pillar = material(0x3C4656FF, 0.5f);
+            for (const float x : {-3.5f, 3.5f})
+            {
+                for (const float z : {-3.5f, 3.5f})
+                {
+                    place(cube.handle, pillar, {x, 2.0f, z}, {0.6f, 4.0f, 0.6f});
+                }
+            }
+            const std::array<Vec3, 4> crates{Vec3{-5.5f, 0.5f, -5.5f}, Vec3{-4.4f, 0.5f, -5.6f},
+                                             Vec3{-5.0f, 1.5f, -5.5f}, Vec3{5.6f, 0.5f, 1.0f}};
+            for (std::size_t i = 0; i < crates.size(); ++i)
+            {
+                Fenrir::Entity box = Fenrir::SpawnModel(app, scene, crate.handle);
+                auto& transform = box.GetComponent<Fenrir::Transform>();
+                transform.pos = crates.at(i);
+                transform.rot = YawPitch(0.4f * static_cast<float>(i), 0.0f);
+            }
+            // The screen faces the camera's start, so the menu in a texture is in view at once. Its material is unlit
+            // so the image shows the colours the menu was styled in, and it is 16 by 9, as its image is, so the menu
+            // is not stretched.
+            if (const Menu* menu = app.TryGetResource<Menu>(); menu != nullptr)
+            {
+                const float height = ScreenMetres * static_cast<float>(ScreenHeight) / static_cast<float>(ScreenWidth);
+                place(cube.handle, material(0x16181CFF, 0.4f), {0.0f, ScreenCentreHeight, -6.99f},
+                      {ScreenMetres + 0.16f, height + 0.16f, 0.02f});
+                const auto unlit = store.Load<Fenrir::Shader>("builtin:unlit", scene).handle;
+                const auto screen = store.CreateMaterial(unlit, scene);
+                store.SetTexture(screen, "baseColourTexture", menu->ScreenImage());
+                const auto quad = store.Add<Fenrir::Mesh>(ScreenQuad(ScreenMetres, height), scene);
+                place(quad, screen, {0.0f, ScreenCentreHeight, -6.975f}, Vec3(1.0f));
+            }
+
+            constexpr std::array<std::uint32_t, 3> ballColours{0xD04040FF, 0x40A060FF, 0x4070E0FF};
+            for (std::size_t i = 0; i < ballColours.size(); ++i)
+            {
+                const float x = -1.5f + 1.5f * static_cast<float>(i);
+                place(sphere.handle, material(ballColours.at(i), 0.3f), {x, 0.4f, 4.5f}, Vec3(0.8f));
+            }
+
+            // A dim sun through the open top and three warm lamps along the walls.
+            Fenrir::Entity sun = entities.CreateEntity();
+            sun.AddComponent<Fenrir::Transform>().rot = YawPitch(0.7f, -1.0f);
+            sun.AddComponent<Fenrir::DirectionalLight>().intensity = 0.6f;
+            const std::array<Vec3, 3> lamps{Vec3{-5.5f, 3.2f, 0.0f}, Vec3{5.5f, 3.2f, -4.0f}, Vec3{0.0f, 3.2f, 5.5f}};
+            RoomState state;
+            for (const Vec3& position : lamps)
+            {
+                Fenrir::Entity lamp = entities.CreateEntity();
+                lamp.AddComponent<Fenrir::Transform>().pos = position;
+                Fenrir::PointLight light;
+                light.colour = Fenrir::Colour::FromSrgb(WorldUI::WarmLight);
+                light.intensity = 6.0f;
+                light.range = 9.0f;
+                lamp.AddComponent<Fenrir::PointLight>(light);
+                state.lamps.push_back(lamp);
+            }
+            scene.AddResource<Fenrir::Sky>(Fenrir::ColourSky{Fenrir::Colour{0.05f, 0.06f, 0.08f, 1.0f}});
+
+            // The world roots (ADR-0060): the light terminal on a stand, and a capsule with its name plate. Each is a
+            // quad entity the room places; the UI draws a root on it, in the scene's Transparent pass.
+            if (WorldUI* world = app.TryGetResource<WorldUI>(); world != nullptr)
+            {
+                const Fenrir::Math::Quat facing = YawPitch(TerminalYaw, TerminalTilt);
+                const auto dark = material(0x16181CFF, 0.4f);
+                // A post from the floor to the terminal's lower edge, and a dark backing just behind its quad.
+                const float post = TerminalPosition.y - TerminalHeight * 0.45f;
+                place(cube.handle, dark, {TerminalPosition.x, post * 0.5f, TerminalPosition.z}, {0.12f, post, 0.12f});
+                Fenrir::Entity backing = place(cube.handle, dark, TerminalPosition + facing * Vec3(0.0f, 0.0f, -0.03f),
+                                               {TerminalWidth + 0.08f, TerminalHeight + 0.08f, 0.04f});
+                backing.GetComponent<Fenrir::Transform>().rot = facing;
+                Fenrir::Entity terminal = entities.CreateEntity();
+                auto& terminalTransform = terminal.AddComponent<Fenrir::Transform>();
+                terminalTransform.pos = TerminalPosition;
+                terminalTransform.rot = facing;
+                terminal.AddComponent<Fenrir::WorldQuad2D>(
+                    Fenrir::WorldQuad2D{{TerminalWidth, TerminalHeight}, WorldUnitsPerMetre});
+
+                place(sphere.handle, material(0xC89A50FF, 0.35f), CapsulePosition, {0.6f, 1.6f, 0.6f});
+                state.plate = entities.CreateEntity();
+                state.plate.AddComponent<Fenrir::Transform>().pos = {CapsulePosition.x, PlateHeight, CapsulePosition.z};
+                state.plate.AddComponent<Fenrir::WorldQuad2D>(
+                    Fenrir::WorldQuad2D{{PlateWidth, PlateDepth}, WorldUnitsPerMetre});
+                world->Attach(terminal, state.plate);
+            }
+
+            // The player is the components the HUD shows; the free-fly camera is its eyes.
+            state.player = entities.CreateEntity();
+            state.player.AddComponent<Health>();
+            state.player.AddComponent<Stamina>();
+            state.player.AddComponent<Ammo>();
+
+            // The minimap: an orthographic camera looking straight down, drawing into an image the HUD shows.
+            Fenrir::ImageData target;
+            target.width = MinimapPixels;
+            target.height = MinimapPixels;
+            state.minimap = store.Add<Fenrir::Image>(std::move(target), scene);
+            Fenrir::Camera minimap;
+            minimap.projection = Fenrir::Orthographic{MinimapMetres, 0.1f, 60.0f};
+            minimap.target = Fenrir::ImageTarget{state.minimap};
+            minimap.background = Fenrir::ColourBackground{Fenrir::Colour{0.02f, 0.03f, 0.05f, 1.0f}};
+            state.minimapCamera = entities.CreateEntity();
+            auto& minimapTransform = state.minimapCamera.AddComponent<Fenrir::Transform>();
+            minimapTransform.pos = {0.0f, 30.0f, 0.0f};
+            minimapTransform.rot = YawPitch(0.0f, -Pi * 0.5f);
+            state.minimapCamera.AddComponent<Fenrir::Camera>(minimap);
+
+            // Clicks made before the room are not its.
+            (void)state.clicks.Read(app);
+            scene.AddResource<RoomState>(std::move(state));
+        }
+
+        /**
+         * @brief Whether the pointer ray of any world root is over one of its elements: the terminal's, or one a script
+         * made and aims (the C# variant's sign), whose clicks are not shots either.
+         */
+        bool AnyWorldRootAimed(Fenrir::App& app)
+        {
+            const auto* roots = app.TryGetResource<Fenrir::UIRoots>();
+            if (roots == nullptr)
+            {
+                return false;
+            }
+            return std::ranges::any_of(roots->GetRoots(), [](const Fenrir::UIRoot* root) {
+                const Fenrir::UITarget* target = root->GetConfig().target.get();
+                return target != nullptr && target->TakesPointerRay() && root->GetHovered().IsValid();
+            });
+        }
+
+        /** @brief The camera drawing into the main window: the enabled one of highest order. Null when none is. */
+        Fenrir::Entity WindowCamera(Fenrir::Scene& scene)
+        {
+            Fenrir::EntityList& entities = scene.GetEntityList();
+            const std::array<Fenrir::ComponentType, 2> cameras{Fenrir::ComponentType::Native<Fenrir::Camera>(),
+                                                               Fenrir::ComponentType::Native<Fenrir::Transform>()};
+            Fenrir::Entity found;
+            std::int32_t order = 0;
+            entities.ForEachWith(cameras, [&](std::uint32_t id) {
+                Fenrir::Entity entity = entities.GetEntity(id);
+                const auto& camera = entity.GetComponent<Fenrir::Camera>();
+                if (camera.enabled && camera.target.Is<Fenrir::WindowTarget>() &&
+                    (!found.IsValid() || camera.order > order))
+                {
+                    found = entity;
+                    order = camera.order;
+                }
+            });
+            return found;
+        }
+
+        /** @brief Degrees clockwise from north (-Z) that `rotation` looks along, seen from above. */
+        float Heading(const Fenrir::Math::Quat& rotation)
+        {
+            const Vec3 forward = rotation * Vec3(0.0f, 0.0f, -1.0f);
+            const float degrees = std::atan2(forward.x, -forward.z) * 180.0f / Pi;
+            return degrees < 0.0f ? degrees + 360.0f : degrees;
+        }
+
+        /**
+         * @brief The game's side of the player: firing, reloading, taking hits and stamina. A click on the terminal,
+         * or on another world root's element (`aimed` at it), is that root's, not a shot.
+         */
+        void RunPlayer(Fenrir::App& app, RoomState& state, Hud& hud, float delta, float cameraSpeed, bool aimed)
+        {
+            const auto& keyboard = app.GetResource<Fenrir::Keyboard>();
+            auto& ammo = state.player.GetComponent<Ammo>();
+            auto& health = state.player.GetComponent<Health>();
+            auto& stamina = state.player.GetComponent<Stamina>();
+
+            // A left click on the room reaches the scene through the HUD, which takes no pointer input.
+            std::int32_t shots = keyboard.JustPressed(Fenrir::Key::F) ? 1 : 0;
+            for ([[maybe_unused]] const FenrirDemo::DemoSceneClickEvent& click : state.clicks.Read(app))
+            {
+                shots += aimed ? 0 : 1;
+            }
+            state.events.fired = shots > 0;
+            for (; shots > 0 && ammo.loaded > 0; --shots)
+            {
+                --ammo.loaded;
+                hud.AddHitMarker();
+            }
+            if (keyboard.JustPressed(Fenrir::Key::R))
+            {
+                state.events.reloaded = true;
+                const std::int32_t taken = std::min(ammo.capacity - ammo.loaded, ammo.reserve);
+                ammo.loaded += taken;
+                ammo.reserve -= taken;
+                // An empty reserve fills again, so the demo never runs dry.
+                if (ammo.reserve == 0 && ammo.loaded == 0)
+                {
+                    ammo.reserve = 90;
+                }
+            }
+            if (keyboard.JustPressed(Fenrir::Key::H))
+            {
+                state.events.hit = true;
+                health.current -= HitDamage;
+                if (health.current <= 0.0f)
+                {
+                    health.current = health.max;
+                }
+            }
+            const float rate = cameraSpeed > MovingSpeed ? -StaminaDrain : StaminaRefill;
+            stamina.current = std::clamp(stamina.current + rate * delta, 0.0f, stamina.max);
+        }
+
+        void Update(Fenrir::App& app, Fenrir::Scene& scene)
+        {
+            RoomState* state = scene.GetResource<RoomState>();
+            Hud* hud = app.TryGetResource<Hud>();
+            Menu* menu = app.TryGetResource<Menu>();
+            if (state == nullptr || hud == nullptr || menu == nullptr || !state->player.IsValid())
+            {
+                return;
+            }
+            const float delta = static_cast<float>(app.GetTime().deltaTime);
+            state->events = {};
+
+            // The menu's system: Escape and the menu root's UI events.
+            menu->Update();
+            const Settings& settings = menu->GetSettings();
+            if (auto* look = app.TryGetResource<FenrirDemo::FreeFlyLook>())
+            {
+                look->invertPitch = settings.invertLook;
+            }
+
+            float heading = 0.0f;
+            float cameraSpeed = 0.0f;
+            if (const Fenrir::Entity camera = WindowCamera(scene); camera.IsValid())
+            {
+                // The settings' field of view, on the camera drawing into the window.
+                if (auto& lens = camera.GetComponent<Fenrir::Camera>().projection; lens.Is<Fenrir::Perspective>())
+                {
+                    lens.As<Fenrir::Perspective>().verticalFov = Fenrir::Math::DegToRad(settings.fieldOfView);
+                }
+                const auto& transform = camera.GetComponent<Fenrir::Transform>();
+                heading = Heading(transform.rot);
+                if (state->lastCameraPosition && delta > 0.0f)
+                {
+                    cameraSpeed = Fenrir::Math::Magnitude(transform.pos - *state->lastCameraPosition) / delta;
+                }
+                state->lastCameraPosition = transform.pos;
+                // The minimap follows the camera across the room, north up.
+                auto& above = state->minimapCamera.GetComponent<Fenrir::Transform>();
+                above.pos = {transform.pos.x, above.pos.y, transform.pos.z};
+            }
+
+            // The terminal's pointer: a ray from the window's camera through the cursor, while nothing on the window
+            // (the menu, the demo UI kit's panels) has the pointer and the camera is not being turned.
+            bool aimed = false;
+            if (WorldUI* world = app.TryGetResource<WorldUI>(); world != nullptr)
+            {
+                std::optional<Fenrir::Math::Ray> ray;
+                bool pressed = false;
+                const auto& mouse = app.GetResource<Fenrir::Mouse>();
+                const auto* claims = app.TryGetResource<Fenrir::InputClaims>();
+                const bool taken = claims != nullptr && claims->For(Fenrir::WindowId{1}).pointer;
+                const Fenrir::Entity camera = WindowCamera(scene);
+                if (camera.IsValid() && !menu->IsOpen() && !taken && !mouse.IsDown(Fenrir::MouseButton::Right))
+                {
+                    ray = Fenrir::Renderer::ScreenPointToRay(app, camera, mouse.Position());
+                    pressed = mouse.IsDown(Fenrir::MouseButton::Left);
+                }
+                const bool terminalAimed = world->Update(ray, pressed);
+                state->events.terminalPressed = terminalAimed && pressed;
+                // A script's world root takes its ray in its own system, so its hover may be the last frame's.
+                aimed = terminalAimed || AnyWorldRootAimed(app);
+                for (const Fenrir::Entity& lamp : state->lamps)
+                {
+                    lamp.GetComponent<Fenrir::PointLight>().colour = world->GetLightColour();
+                }
+                // The name plate turns about Y to face the camera.
+                if (camera.IsValid() && state->plate.IsValid())
+                {
+                    const Vec3 eye = camera.GetComponent<Fenrir::Transform>().pos;
+                    auto& plate = state->plate.GetComponent<Fenrir::Transform>();
+                    plate.rot = YawPitch(std::atan2(eye.x - plate.pos.x, eye.z - plate.pos.z), 0.0f);
+                }
+            }
+
+            // While the menu is open the game is paused: the room's keys do nothing.
+            if (!menu->IsOpen())
+            {
+                RunPlayer(app, *state, *hud, delta, cameraSpeed, aimed);
+            }
+
+            // The HUD's system: what the player's components hold, pushed into the HUD's elements (ADR-0065).
+            HudFrame frame;
+            frame.health = state->player.GetComponent<Health>();
+            frame.stamina = state->player.GetComponent<Stamina>();
+            frame.ammo = state->player.GetComponent<Ammo>();
+            frame.heading = heading;
+            frame.minimap = state->minimap;
+            frame.playerName = settings.playerName;
+            frame.shown = settings.showHud;
+            frame.paused = menu->IsOpen();
+            hud->Show(frame);
+            hud->Update(delta);
+        }
+
+        /** @brief A tutorial step's `done`: true on the frame the room's player did `event`. */
+        std::function<bool(Fenrir::App&)> Happened(bool RoomEvents::* event)
+        {
+            return [event](Fenrir::App& app) {
+                const RoomState* state = app.GetActiveScene().GetResource<RoomState>();
+                return state != nullptr && state->events.*event;
+            };
+        }
+
+        /**
+         * @brief The room's demo tutorial: the HUD's keys, the terminal, and last the pause menu, as the Escape that
+         * opens it closes the card first.
+         */
+        FenrirDemo::DemoTutorial RoomTutorial()
+        {
+            return FenrirDemo::DemoTutorial{
+                .title = "The HUD",
+                .steps =
+                    {
+                        {.title = "Fire",
+                         .text =
+                             "Press F or click the room to fire. Each shot puts a hit marker at the centre and takes a "
+                             "round from the ammo counter, bottom right.",
+                         .keys = {{"F / left click", "fire"}},
+                         .done = Happened(&RoomEvents::fired)},
+                        {.title = "Reload",
+                         .text = "Press R to fill the magazine from the reserve. Once both are empty the reserve fills "
+                                 "again.",
+                         .keys = {{"R", "reload"}},
+                         .done = Happened(&RoomEvents::reloaded)},
+                        {.title = "Take a hit",
+                         .text =
+                             "Press H to take 15 damage: the health bar, bottom right, drops, and fills again at zero. "
+                             "Moving drains the stamina bar under it, which refills while you stand.",
+                         .keys = {{"H", "take a hit"}, {"Right mouse + WASD", "move, draining stamina"}},
+                         .done = Happened(&RoomEvents::hit)},
+                        {.title = "The light terminal",
+                         .text =
+                             "The screen on a stand to your right is a UI root in the room. Aim the cursor at it and "
+                             "click its buttons, or drag its slider, to colour the lamps.",
+                         .keys = {{"Aim + left click", "press the terminal's buttons"}},
+                         .done = Happened(&RoomEvents::terminalPressed)},
+                        {.title = "The pause menu",
+                         .text =
+                             "Close this card, then press Escape for the pause menu. Use it with the mouse, the keys "
+                             "or a gamepad. Its settings change the field of view and the HUD's name, and the demo "
+                             "panel shows the volume and field of view they set.",
+                         .keys = {{"Escape", "open the menu, or back out of it"},
+                                  {"Tab / Shift+Tab, Enter", "move the focus, press"},
+                                  {"D-pad, A / B", "move the focus, press / back out"}}},
+                    },
+            };
+        }
+    } // namespace
+
+    void AddPanelSection(Fenrir::App& app)
+    {
+        auto* kit = app.TryGetResource<FenrirDemo::DemoUI>();
+        Hud* hud = app.TryGetResource<Hud>();
+        Menu* menu = app.TryGetResource<Menu>();
+        if (kit == nullptr || hud == nullptr || menu == nullptr)
+        {
+            return;
+        }
+        // An app section outlives the room. It reads the Hud and the Menu, app resources the scaffold ends after the
+        // kit's last frame.
+        const FenrirDemo::DemoSection section = kit->AppSection("UIDemo");
+        section.Separator("Hot reload");
+        // A root's hot reload toggle, over the path of the stylesheet it reloads.
+        const auto hotReload = [&section](const std::string& whose, Fenrir::UIRoot& root, const std::string& path) {
+            section.Toggle(whose + " hot reload",
+                           FenrirDemo::DemoValue<bool>([&root] { return root.IsHotReloadOn(); },
+                                                       [&root](const bool& on) { root.SetHotReload(on); }),
+                           "Reloads the " + whose +
+                               "'s files when they change: edit the stylesheet below while the "
+                               "demo runs");
+            section.Text(path);
+        };
+        hotReload("HUD", hud->Root(), hud->StylesheetPath());
+        hotReload("Menu", menu->Root(), menu->StylesheetPath());
+        section.Separator("Settings");
+        // The engine has no audio yet: the volume is only kept and shown.
+        section.Readout("Volume", [menu] { return std::format("{:.0f} (no audio yet)", menu->GetSettings().volume); });
+        section.Readout("Field of view",
+                        [menu] { return std::format("{:.0f} degrees", menu->GetSettings().fieldOfView); });
+    }
+
+    FenrirDemo::DemoScene Room()
+    {
+        FenrirDemo::DemoScene scene;
+        scene.name = "The HUD";
+        scene.keyRows = {{"F / left click", "fire: a hit marker, one round down"},
+                         {"R", "reload from the reserve"},
+                         {"H", "take a hit: health down, refilled at zero"},
+                         {"Right mouse + WASD", "move, draining stamina"},
+                         {"Escape", "the pause menu; B on a gamepad backs out"},
+                         {"Aim + left click", "the light terminal's buttons and slider set the lamps"}};
+        scene.tutorial = RoomTutorial();
+        // The smoke keys end by opening the menu and closing it again.
+        scene.keys = {Fenrir::Key::F, Fenrir::Key::F, Fenrir::Key::H,      Fenrir::Key::F,
+                      Fenrir::Key::R, Fenrir::Key::H, Fenrir::Key::Escape, Fenrir::Key::Escape};
+        scene.camera = {{0.0f, 1.7f, 5.0f}, 0.0f, -0.1f};
+        scene.spawn = Spawn;
+        scene.update = Update;
+        return scene;
+    }
+} // namespace UIDemo

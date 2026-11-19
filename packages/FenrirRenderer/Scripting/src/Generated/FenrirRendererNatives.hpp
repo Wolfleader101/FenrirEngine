@@ -22,6 +22,11 @@ namespace Fenrir::RendererNatives
     bool Stats(const Fenrir::CallContext&, Fenrir::RendererScripting&, Fenrir::RendererStats* stats);
     bool SetSpotShadowBudget(const Fenrir::CallContext&, Fenrir::RendererScripting&, std::uint32_t budget);
     bool SetPointShadowBudget(const Fenrir::CallContext&, Fenrir::RendererScripting&, std::uint32_t budget);
+    bool SetGpuCulling(const Fenrir::CallContext&, Fenrir::RendererScripting&, bool on);
+    bool SetOcclusionCulling(const Fenrir::CallContext&, Fenrir::RendererScripting&, bool on);
+    bool SetCullingFrozen(const Fenrir::CallContext&, Fenrir::RendererScripting&, bool on);
+    bool SetLodSelection(const Fenrir::CallContext&, Fenrir::RendererScripting&, float lodErrorPixels, float minProjectedPixels);
+    bool GetFrustum(const Fenrir::CallContext&, Fenrir::RendererScripting&, const Fenrir::Entity* camera, Fenrir::Math::Frustum* frustum);
     bool SpawnModel(const Fenrir::CallContext&, Fenrir::RendererScripting&, const Fenrir::AssetHandle<Fenrir::Model>* model, const Fenrir::Entity* parent, Fenrir::Entity* root);
 } // namespace Fenrir::RendererNatives
 

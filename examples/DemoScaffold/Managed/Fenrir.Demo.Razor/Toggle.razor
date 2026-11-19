@@ -1,0 +1,28 @@
+@* A toggle row of the demo panel, as the kit's C++ DemoSection::Toggle makes one: a label and a checkbox over a bool,
+   bound from the parent with @bind-Value. Its hint shows in the kit's hint line while it is hovered or focused. *@
+@namespace Fenrir.Demo.Razor
+@using Fenrir.UI
+@using Fenrir.UI.Razor
+@using Microsoft.AspNetCore.Components.Web
+@inherits UIComponent
+<panel class="demo-row demo-toggle">
+    <label class="demo-row-label">@Label</label>
+    <checkbox class="demo-checkbox" @bind="Value" @bind:after="Raise" />
+    @if (Hint.Length > 0)
+    {
+        <label class="demo-row-hint">@Hint</label>
+    }
+</panel>
+
+@code {
+    /// <summary>The row's label.</summary>
+    [Parameter] public string Label { get; set; } = "";
+    /// <summary>Whether the box is checked.</summary>
+    [Parameter] public bool Value { get; set; }
+    /// <summary>Raised with the new value when the box is clicked.</summary>
+    [Parameter] public EventCallback<bool> ValueChanged { get; set; }
+    /// <summary>What the kit's hint line shows while the row is hovered or focused; empty for none.</summary>
+    [Parameter] public string Hint { get; set; } = "";
+
+    private void Raise() => _ = ValueChanged.InvokeAsync(Value);
+}

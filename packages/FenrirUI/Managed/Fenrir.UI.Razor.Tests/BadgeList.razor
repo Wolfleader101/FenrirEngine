@@ -1,0 +1,11 @@
+@* Badges keyed by name in a loop (ChildComponentTests). *@
+<panel class="list">
+    @foreach (string name in Names)
+    {
+        <Badge @key="name" Text="@name" />
+    }
+</panel>
+
+@code {
+    public List<string> Names = [];
+}
