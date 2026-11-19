@@ -33,6 +33,7 @@ One spec for Flightless Frenzy as a complete, small game built on FenrirEngine, 
 - [What did the old game ship?](issues/02-what-the-old-game-shipped.md): a third-person game of about 1,080 lines of C++ with one hand-placed level; cages freed by proximity, a frame-counting timer, three lives; no real jump, power-ups that only score, uncollectable coins, no enemies, menus or animation; a three-band toon shader; assets carry no licence or stated origin.
 - [Raise the engine gaps the inventory found](issues/14-raise-the-engine-gaps-the-inventory-found.md): eleven issues in `.scratch/engine-gaps/issues/` beside audio; building against the engine from outside `examples/` and pause block part of the game, C# reach blocks part of a C# game, the rest can be stubbed; scene files are already being planned on the unmerged `fenrir-serialisation` map.
 - [How does the game build against the engine?](issues/03-how-the-game-builds-against-the-engine.md): a CMake project of its own with its own presets, adding the engine by path as it would a submodule, examples off; only package targets and engine CMake functions; its own start-up and solution; unit tests but no smoke run, no CI for now; the script-build and asset-copy helpers move into the engine first.
+- [C++, C#, or a split?](issues/04-cpp-csharp-or-a-split.md): gameplay and UI in C# with Razor panels; a C++ host that only starts the app, installs packages and registers shaders; the engine binds parenting and scenes for C# before the game needs them; run state on one entity until C# can define resources; rules as plain C# types under `dotnet test`.
 
 ## Not yet specified
 
@@ -41,7 +42,6 @@ One spec for Flightless Frenzy as a complete, small game built on FenrirEngine, 
 - **How the story is told:** an opening, an ending, or nothing beyond the title screen.
 - **Weather, day and night, and particles** beyond what "What does the game look like?" decides.
 - **Difficulty:** one setting or several.
-- **How game code is unit-tested**, once the language is chosen (no smoke runs: settled).
 - **CI for the game:** none for now.
 - **The game's vocabulary:** whether its terms (friend, cage, coin, power-up, exit) go in `GLOSSARY.md` or a glossary of the game's own.
 - **How the game is packaged** to hand to someone else to play.

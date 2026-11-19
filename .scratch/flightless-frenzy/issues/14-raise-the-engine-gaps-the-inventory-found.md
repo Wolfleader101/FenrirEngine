@@ -21,7 +21,7 @@ Eleven issues raised under `.scratch/engine-gaps/issues/`, beside the audio one,
 
 **Blocks only a C# game, in part**
 
-- [C# cannot switch scenes, stop the app, parent entities or add a shader](../../engine-gaps/issues/11-what-csharp-cannot-reach.md): a C++ host can stand in for all but parenting.
+- [C# cannot switch scenes, stop the app or parent entities](../../engine-gaps/issues/11-what-csharp-cannot-reach.md): narrowed and renamed after "C++, C#, or a split?" chose C#; it now blocks the game, and C#-defined resources became [their own issue](../../engine-gaps/issues/13-csharp-defined-resources.md).
 
 **Can be stubbed**
 

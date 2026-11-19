@@ -1,4 +1,4 @@
-# C# cannot switch scenes, stop the app, parent entities or add a shader
+# C# cannot switch scenes, stop the app or parent entities
 
 Status: needs-triage
 Blocked by: none
@@ -7,22 +7,25 @@ Blocked by: none
 
 Not bound to C# today:
 
-- creating, switching and destroying scenes;
-- `App.Stop` (quitting goes through `Window.RequestClose`), the tick rate and elapsed time;
-- entity parenting: `Relationship` is read-only;
-- registering a custom material shader (C# loads materials by `builtin:` name only), and renderer configuration;
-- resources defined in C# ("left for later", `docs/adr/0029-*.md:42`).
+- **Entity parenting:** `Relationship` is read-only from C#, so a script cannot make one entity the child of another.
+- **Scenes:** creating, switching and destroying scenes.
+- **The app:** `App.Stop` (quitting goes through `Window.RequestClose`), the tick rate and elapsed time.
+
+Registering a custom material shader and renderer configuration are also C++-only; the game keeps those in its C++ host and does not ask for them here. C#-defined resources are [their own issue](13-csharp-defined-resources.md).
 
 ## Who needs it
 
-Flightless Frenzy ([map](../../flightless-frenzy/map.md)), if "C++, C#, or a split?" puts its gameplay in C#. Then it needs scene switching between the title and the level, parenting (a pickup's effect on Kiki, a cage's contents), a place for game state that is not a component (the timer, the score), and its toon material on the entities it spawns.
+Flightless Frenzy ([map](../../flightless-frenzy/map.md)), whose gameplay and UI are all C# ([C++, C#, or a split?](../../flightless-frenzy/issues/04-cpp-csharp-or-a-split.md)):
+
+- **Parenting:** a cage holding a friend, a pickup's effect following Kiki, a camera rig.
+- **Scenes:** the title screen and the level are separate scenes, and a level restarts by destroying and recreating its scene, which resets its physics world.
 
 ## Does anything plan it?
 
-Only C#-defined resources, as "left for later" in ADR-0029.
+No.
 
 ## Does it block the game?
 
-Only a C# game, and then in part. A small C++ host can switch scenes and register shaders on the game's behalf, and state can sit on a single entity. Parenting from C# has no such stand-in.
+Yes, in two steps. Parenting has no stand-in and likely blocks an early ticket. Scenes block the restart and title-screen tickets, not the first playable slice. It was agreed both are fixed in the engine, not worked around in the game or its host.
 
 ## Comments
