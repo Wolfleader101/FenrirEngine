@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: superseded by ADR-0073
 ---
 
 # FenrirRenderer's shaders are GLSL, compiled to SPIR-V at build time
+
+*Superseded by ADR-0073 (proposed 2026-11-19): the language becomes Slang, moved one program at a time; SPIR-V at build time, the shader container, `fenrir_add_shaders` and the declared layouts below stand.*
 
 FenrirRenderer draws with OpenGL today, and Vulkan, D3D12 or Metal must be able to replace it without touching the code above the graphics device (ADR-0016). Shaders are where that is hardest to keep: every API wants its own language or binary. So every shader, the engine's, a user's or a UI overlay's, is written once in GLSL and compiled at build time to SPIR-V, and SPIR-V is the only shader input the graphics device accepts. OpenGL 4.6 loads that SPIR-V directly; later backends take the same bytes or what SPIRV-Cross makes of them.
 

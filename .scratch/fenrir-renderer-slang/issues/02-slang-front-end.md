@@ -1,0 +1,22 @@
+# 02: The Slang front end: `.slang` stages compile through Slang beside the GLSL ones
+
+**What to build:** `FenrirShaderCompiler` compiles a stage whose file ends in `.slang` through Slang's compilation API and everything else through glslang, both into the same `CompiledStage`, so a program may be all Slang, all GLSL, or one stage of each (ADR-0073, "The move is gradual, program by program, with two front ends"). Reflection for Slang stages is ticket 03; this ticket gets SPIR-V out with the right options and the right diagnostics, and a Slang program through the container tests.
+
+- **A `SlangStageCompiler`** beside `StageCompiler` (`src/SlangStageCompiler.cpp`, `.hpp`), with a process-wide global session (as `GlslangProcess` is) and one session per stage: search paths from `--include` (the stage's own directory first, then `INCLUDE_DIRECTORIES`, then the engine's), preprocessor macros from `--key` (`NAME=1`, as the GLSL preamble gives them), target `spirv`, profile `spirv_1_0`, `-matrix-layout-row-major` (ADR-0073: it gives glslang's `ColMajor`), `-emit-spirv-directly`, no debug info, Slang's optimizer at its default. The entry point is the one function with `[shader("vertex")]`, `[shader("fragment")]` or `[shader("compute")]` matching the stage; a file with none, or more than one for the stage, is an error naming the file.
+- **Dispatch:** `CompileStage` picks the front end by extension; `Program.cpp` and `Arguments.cpp` change only where they assume GLSL (the preamble, the `.vert`/`.frag`/`.comp` names in messages). `fenrir_add_shaders` accepts `.slang` for `VERTEX`, `FRAGMENT` and `COMPUTE` with no new argument, and its header comment says so.
+- **Diagnostics** come from Slang's diagnostic blob, re-emitted through `Diagnostics` in the tool's `file:line: error: message` shape, so IDEs and the must-fail fixtures match them as they match glslang's. Slang's warnings are errors for the tool's own build (`FenrirRendererCore`'s programs) and warnings for users', as the GLSL path treats them.
+- **The depfile** lists every file Slang loaded (the session's dependency file list), so editing a module rebuilds the programs that import it, as `Includer` records includes today.
+- **Fixtures:** `Tests/fixtures/plain.slang` (a vertex and a fragment entry point in one file, used as both stages) and `twod.slang`, each the Slang twin of its GLSL fixture; `Containers.cpp` builds a Slang program and a mixed program (GLSL vertex, Slang fragment) and reads the containers back.
+- **Rules deferred to 03:** every rule `RuleChecker` enforces on glslang's AST is left unchecked for Slang stages in this ticket, and the ticket's fixtures obey them by construction.
+
+**Blocked by:** 01 (Slang fetched at configure time).
+
+**Touches:** `packages/FenrirRenderer/Tools/ShaderCompiler/src/`, `packages/FenrirRenderer/Tools/ShaderCompiler/Tests/`, `packages/FenrirRenderer/Tools/ShaderCompiler/CMakeLists.txt`, `cmake/FenrirShaders.cmake`
+
+**Status:** ready-for-agent
+
+- [ ] `plain.slang` builds into a container whose two stages' SPIR-V is version 1.0, passes `spirv-val --target-env vulkan1.0`, and whose uniform block's matrix members are decorated `ColMajor`.
+- [ ] A mixed program (GLSL vertex, Slang fragment) builds, and the fragment's `Location` inputs match the vertex's outputs.
+- [ ] `--key FIRST` defines `FIRST` for a `.slang` stage, and a `#ifdef FIRST` branch is in the SPIR-V only with it (the `Variants.cpp` cases, repeated for a Slang twin of `variants.frag`).
+- [ ] A Slang error is reported as `<file>:<line>: error: <message>` and the build fails; an entry point missing for the stage is reported naming the file.
+- [ ] The depfile names the imported module file, and `touch`ing it rebuilds the program (a CTest case through `fenrir_add_shaders`, as `ExpectBuildFailure.cmake` runs the tool).

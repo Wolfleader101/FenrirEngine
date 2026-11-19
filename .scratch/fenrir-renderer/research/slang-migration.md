@@ -123,6 +123,10 @@ Where these sources are pinned:
 
 **Governance.** Khronos hosts Slang under its Slang Initiative (announced 2024-11-21), and Valve, id Software and others are named as users ([Khronos press release](https://www.khronos.org/news/press/khronos-group-launches-slang-initiative-hosting-open-source-compiler-contributed-by-nvidia)). Khronos's Vulkan-Samples accept Slang shaders ([README L23–L33](https://github.com/KhronosGroup/Vulkan-Samples/blob/56a72bd1c43268781a75d73a520e4458b6cac766/shaders/README.adoc#L23-L33)), and the Vulkan Tutorial compiles with `slangc` ([source](https://github.com/KhronosGroup/Vulkan-Tutorial/blob/54b886e3d9126c3bb61badfcdec2c001ead055e2/en/03_Drawing_a_triangle/02_Graphics_pipeline_basics/01_Shader_modules.adoc#L8-L35)). It is not going away, but none of these users is on OpenGL.
 
+### What followed
+
+ADR-0073 (proposed 2026-11-19) supersedes ADR-0018 with the decisions §4 asked for, and `.scratch/fenrir-renderer-slang/` holds the spec and its twelve tickets.
+
 ### What the re-runs changed
 
 Nothing in Slang changed between the three runs (same `slangc` 2026.17). What changed is the engine, and each run made trap 4 more concrete: a repro, then stripped resources in real built-ins, then a shipped program whose indirection buffer would be bound one slot off. The variant count grew from 8 to 32 for the largest program. Neither moved the recommendation; both raise the priority of ticket 4 (reflection from Slang's layout) and of the flattening question in §4.
