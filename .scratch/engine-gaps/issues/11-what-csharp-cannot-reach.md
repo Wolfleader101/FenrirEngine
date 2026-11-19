@@ -1,6 +1,6 @@
 # C# cannot switch scenes, stop the app or parent entities
 
-Status: needs-triage
+Status: ready-for-agent
 Blocked by: none
 
 ## What is missing
@@ -31,3 +31,4 @@ Yes, in two steps. Parenting has no stand-in and likely blocks an early ticket. 
 ## Comments
 
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [How does C# parent entities?](18-how-csharp-parents-entities.md), [How does C# create, switch and destroy scenes, and stop the app?](19-how-csharp-reaches-scenes-and-the-app.md).
+- 2026-11-19, round 2 of [Engine gaps for Flightless Frenzy](../map.md): spec-ready in [How does C# parent entities?](18-how-csharp-parents-entities.md) and [How does C# create, switch and destroy scenes, and stop the app?](19-how-csharp-reaches-scenes-and-the-app.md).

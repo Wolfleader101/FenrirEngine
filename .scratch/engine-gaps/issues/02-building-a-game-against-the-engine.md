@@ -1,6 +1,6 @@
 # A game cannot build its scripts or copy its assets without demo code
 
-Status: needs-triage
+Status: ready-for-agent
 Blocked by: none
 
 ## What is missing
@@ -28,3 +28,4 @@ Yes, its first ticket: the game cannot configure against the engine until item 3
 ## Comments
 
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [What breaks when the engine is built as a subdirectory?](16-build-the-engine-as-a-subdirectory.md), [What CMake functions does the engine give a game?](17-what-cmake-functions-a-game-gets.md).
+- 2026-11-19, round 2 of [Engine gaps for Flightless Frenzy](../map.md): spec-ready in [What CMake functions does the engine give a game?](17-what-cmake-functions-a-game-gets.md), from what [What breaks when the engine is built as a subdirectory?](16-build-the-engine-as-a-subdirectory.md) found.

@@ -1,6 +1,6 @@
 # No pause and no time scale
 
-Status: needs-triage
+Status: ready-for-agent
 Blocked by: none
 
 ## What is missing
@@ -22,3 +22,4 @@ It blocks the pause menu done properly. The game could stub it by having every o
 ## Comments
 
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [What are pause and time scale?](21-what-pause-and-time-scale-are.md).
+- 2026-11-19, round 2 of [Engine gaps for Flightless Frenzy](../map.md): spec-ready, with an ADR, in [What are pause and time scale?](21-what-pause-and-time-scale-are.md).

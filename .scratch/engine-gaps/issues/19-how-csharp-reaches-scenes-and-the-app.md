@@ -1,7 +1,7 @@
 # How does C# create, switch and destroy scenes, and stop the app?
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: none
 Settles: [C# cannot switch scenes, stop the app or parent entities](11-what-csharp-cannot-reach.md) (scenes and the app)
 
@@ -23,3 +23,14 @@ Outcome: a spec-ready design.
 - No `App.Stop` binding; `Window.RequestClose` is bound (`packages/FenrirWindow/Managed/Fenrir.Window/Generated/Window.cs:74`).
 - C# `Time` is only `DeltaTime` and `TickRate` (`packages/FenrirScripting/Managed/Fenrir.Scripting/Time.cs`).
 - Every package touches only `app.GetActiveScene()` (`packages/FenrirPhysics/src/Physics.cpp:22,49,60`, `packages/FenrirSkeleton/src/Skeletons.cpp:139,181`, renderer README:52); `ForEachScene` (`App.hpp:635`) is not for per-frame work.
+
+## Answer
+
+Grilled 2026-11-19 in round 2 of [Engine gaps for Flightless Frenzy](../map.md); every recommendation was accepted. **Spec-ready.**
+
+- **Scenes, by name as in C++** (`App::CreateScene`, `ChangeActiveScene`, `DestroyScene`): `Scenes.Create(name)`, `Scenes.SetActive(name)`, `Scenes.Destroy(name)` and `Scenes.Active`.
+- **When they take effect:** at the end of the frame, in the order asked. A restart is create a new scene, make it active, destroy the old one, all in one frame. Destroying the active scene is still refused, as C++ refuses it.
+- **What a new scene starts with:** every installed package sets up its per-scene state (physics world, renderer and UI state) for every scene. C# does not choose.
+- **Which scene scripts run in:** a script assembly's systems run against whichever scene is active, as every package does. Per-scene script sets come back only if a game needs several scenes simulating at once.
+- **The app:** `App.Stop()`, plus `Time.Elapsed`, `Time.FrameCount` and `Time.TickCount` as read-only values beside `DeltaTime` and `TickRate`.
+- **Scene files** stay the `fenrir-serialisation` map's (its ticket 16); `Scenes.Create` leaves room for a scene loaded from a file to arrive the same way.

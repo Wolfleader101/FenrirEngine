@@ -1,6 +1,6 @@
 # C# cannot define resources
 
-Status: needs-triage
+Status: ready-for-agent
 Blocked by: none
 
 ## What is missing
@@ -22,3 +22,4 @@ No. The game keeps this state as components on one "run" entity until C# can def
 ## Comments
 
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [How does C# define its own resources?](20-how-csharp-defines-resources.md).
+- 2026-11-19, round 2 of [Engine gaps for Flightless Frenzy](../map.md): spec-ready in [How does C# define its own resources?](20-how-csharp-defines-resources.md).

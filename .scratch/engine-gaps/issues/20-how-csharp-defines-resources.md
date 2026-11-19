@@ -1,7 +1,7 @@
 # How does C# define its own resources?
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: none
 Settles: [C# cannot define resources](13-csharp-defined-resources.md)
 
@@ -20,3 +20,14 @@ Outcome: a spec-ready design, or a pointer to the `fenrir-serialisation` map's t
 ## Facts (checked 2026-11-19)
 
 - C# reaches resources through `Resources.Get/TryGet/GetReadOnly/Insert/Remove` (`packages/FenrirScripting/Managed/Fenrir.Scripting/Resources.cs`), for `MakeSceneResource` types a native extension registered (`packages/FenrirScripting/README.md:605,687-735,718`). C# can define components (README:238); nothing mentions C#-defined resources.
+
+## Answer
+
+Grilled 2026-11-19 in round 2 of [Engine gaps for Flightless Frenzy](../map.md); every recommendation was accepted. **Spec-ready, designed here.**
+
+- **Declaring one:** a blittable C# struct marked `[SceneResource]` or `[AppResource]`, admitted through the script report beside C# components and kept in native memory like them.
+- **Lifetime:** an app resource is made when its assembly is admitted. A scene resource is made with each scene and dies with it, so a level restart resets the run's state for free.
+- **On reload,** a resource whose shape changed resets to its defaults, with a warning.
+- **Reading and writing** go through the existing `Resources.Get<T>` and its family.
+- **Deferred:** `Res<T>` system parameters.
+- **Left to the `fenrir-serialisation` map** (its ticket 16): how a C# scene resource is described and written into scene files (ADR-0064).

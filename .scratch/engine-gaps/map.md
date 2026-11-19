@@ -45,6 +45,11 @@ Within the renderer features, the four tickets are independent of each other as 
 <!-- one line per resolved ticket: [title](issues/NN-slug.md): gist -->
 
 - [What breaks when the engine is built as a subdirectory?](issues/16-build-the-engine-as-a-subdirectory.md): two plain variables (`IRIS_BRIDGE_DIR`, `FENRIR_SHADER_INCLUDE_DIR`) never reach the game and stop scripts and shaders; the engine's C++20, warnings and compile commands stay in its own scope; a nested build tree passes MSVC's path limit; the deferred checks work; C# needs the built SDK's props and a contract path per contract.
+- [What CMake functions does the engine give a game?](issues/17-what-cmake-functions-a-game-gets.md): `fenrir_add_scripts` and `fenrir_copy_assets` in `cmake/FenrirGame.cmake`, the demo functions their callers; a contracts props file for editors; directory variables, C++20 and build outputs fixed for a parent; a missing contract logged; a hand-run outside project in `tests/`; a README section; spec-ready.
+- [How does C# parent entities?](issues/18-how-csharp-parents-entities.md): `entity.Parent`, keeping the world transform unless asked, applied as a deferred change; spec-ready.
+- [How does C# create, switch and destroy scenes, and stop the app?](issues/19-how-csharp-reaches-scenes-and-the-app.md): `Scenes.Create/SetActive/Destroy/Active` by name, applied at the end of the frame in order; every package in every scene; scripts run on the active scene; `App.Stop` and read-only time counts; spec-ready.
+- [How does C# define its own resources?](issues/20-how-csharp-defines-resources.md): blittable structs marked `[SceneResource]` or `[AppResource]`, native like C# components, scene ones dying with their scene, read through `Resources`; file description left to `fenrir-serialisation`; spec-ready.
+- [What are pause and time scale?](issues/21-what-pause-and-time-scale-are.md): one global scale feeding the accumulator with the step fixed, `Time.Paused` apart from it, UI and temporal effects unscaled, `Time.UnscaledDeltaTime` for the rest; spec-ready with an ADR.
 - [Does C# get a loaded mesh's positions?](issues/33-does-csharp-get-a-loaded-meshs-positions.md): yes, `Assets.GetMeshPositions` into a span, shaped like `GetMeshLodIndices`, in the C# reach effort; spec-ready.
 - [Does the engine offer input actions or dead zones?](issues/29-does-the-engine-offer-input-actions.md): radial per-stick dead zones in FenrirInput, settable, raw values still readable, spec-ready; the action layer deferred until a game wants rebinding.
 - [Do arrow keys move UI focus?](issues/30-do-arrow-keys-move-ui-focus.md): arrow keys always drive directional navigation after the focused element's refusal; W and S are the game's through a public call that sends a direction; spec-ready.
@@ -56,7 +61,7 @@ Within the renderer features, the four tickets are independent of each other as 
 ## Not yet specified
 
 - **Spec boundaries:** how the spec-ready designs become specs: one spec per effort, or per ticket (fog and per-entity parameters may be small enough to share one renderer spec; parenting and scenes may share one C# spec). Settled once each effort's tickets close.
-- **Which ADRs:** pause and time scale and the frame's game passes look hard to reverse; each ticket says whether it is one.
+- **Which ADRs:** pause and time scale has one, written with its spec; the frame's game passes may; each renderer ticket says whether it is one.
 - **Collision from a model** stays in its ticket's waiting state until the levels and scenes design says how a level's geometry and collision are authored; it may graduate into a pointer to that map instead.
 - **Volumetric light:** the renderer map's shafts and froxels, past the plain fog the game needs; whether it is named as a later spec there comes out of "What fog does the renderer offer?".
 - **Gaps a later game ticket raises:** the game's unresolved tickets ("How does Kiki move?", "What does the player play with?", "What are the enemies?", the toon-look prototype, "How are levels authored and loaded?") may raise new engine gaps; each arrives as a new issue here, `needs-triage`, and is charted then.

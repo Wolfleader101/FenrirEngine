@@ -232,12 +232,24 @@ Where an entity is in the scene, as opposed to its `Transform`, which is relativ
 *Avoid:* global transform, absolute transform.
 
 **Scene resource**
-State a package keeps in one scene, one value per type, ended with the scene (a scene's physics world is one).
+State a package or a script assembly keeps in one scene, one value per type, ended with the scene (a scene's physics world is one).
 *Avoid:* singleton, global, scene component (a *component* belongs to an entity).
 
 **App resource**
-State a package keeps for the whole app rather than one scene, one value per type, ended with the App (the input devices and the asset store are ones).
+State a package or a script assembly keeps for the whole app rather than one scene, one value per type, ended with the App (the input devices and the asset store are ones).
 *Avoid:* singleton, global, app-wide state (informal).
+
+**Time scale**
+How fast game time runs against real time, one value for the whole app: it scales the fixed tick's accumulation and the frame's delta time, while the fixed step itself stays the same.
+*Avoid:* game speed, slow motion (an effect a game makes with it), per-scene time scale.
+
+**Pause**
+The app's game time stopped, apart from the time scale, so resuming restores the scale that was set: no fixed ticks run and frame time reads zero, while unscaled time runs on.
+*Avoid:* freeze, a time scale of 0 (pause is its own flag).
+
+**Unscaled time**
+Real frame time, ignoring the time scale and pause: what the UI, the renderer's temporal effects and any system that must keep running read.
+*Avoid:* real time (alone), wall-clock time.
 
 ## FenrirEngine physics
 
