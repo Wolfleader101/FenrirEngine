@@ -1,0 +1,38 @@
+---
+status: accepted
+---
+
+# A scene file is authoring data holding described components by entity id and described scene resources, and is read once
+
+A `Scene` today is a name, an `EntityList` and a type-indexed map of resources that nothing writes to disk; demo scenes are C++ spawn functions. A scene file must give back the same scene: its entities, their components (native and C#), the hierarchy with sibling order, and the scene resources. The research found every authoring format gives entities a file-level id apart from the run-time handle and remaps on load (Godot's `unique_id`, Unity's `fileID`, Unreal's `ActorGuid`, Bevy's `#[entities]` fields), writes parents first with sibling order meaningful, keeps scene-level state as a type-keyed map applied after entities (Bevy, the closest to Fenrir's scene resources), and keeps unknown types as placeholders where it can (Godot). Nine component fields hold an `Entity`, all resolved tolerantly each frame; `Name` is `char[256]` described as 256 bytes; `Relationship` is four `Entity` links; `WorldTransform` is always computed. The user fixed the file's role: authoring data that a game loads once, as in Godot and Unity, with save games the game's own.
+
+We decided that **a scene file is a `Fenrir::Scene` data asset in the one envelope (ADR-0063), holding described components under entity ids and described scene resources, read when a scene is created from it and never written by the running game**:
+
+1. **One scene per file, no name inside it.** The scene's run-time name comes from the caller, defaulting to the file's asset path. `data` holds `resources` then `entities`.
+2. **An entity's id is a component.** Every saved entity carries `Fenrir::EntityId`, a described component holding a readable random id (eight bytes, shown as a string), written first in its block, added at load, minted at save for any entity without one. `Name` is a display string, not an identity.
+3. **`Entity` is a kind.** The API description gains an `entity` kind; the writer writes an `Entity` field as the target's id, the reader fills it from the id map once every entity exists. A null handle writes `null`; a target outside the file writes `null` with one diagnostic at save.
+4. **Hierarchy is `parent` plus file order.** A child block carries `parent: "<id>"`; blocks are depth-first with children directly after their parent; sibling order is file order, rebuilt through `AddChild` in sequence. `Relationship` and `WorldTransform` are never written.
+5. **Described components are written, state is not.** Every `component`-role type the entity has, native or C#, by canonical name with defaults omitted. Not written: components with no description, `Relationship`, `WorldTransform`, and described components marked `@transient` (a new doc command for plain run-time data such as `ContactEvents`). An entity carrying the `Fenrir::Transient` tag component is skipped with its children. The save result counts what was skipped; nothing warns.
+6. **Fixed character arrays are strings.** `char[N]` fields get a `fixed-string` kind, written as a string literal and read back cut at N-1 bytes on a UTF-8 boundary with a diagnostic.
+7. **Scene resources are a map by canonical type name.** `resources` holds every described `scene-resource`-role type (`Fenrir::Sky`, `Fenrir::SkyLight`), defaults omitted, written before `entities` and applied after them so an `entity` field in a resource resolves. Behaviour-carrying resources (`PhysicsWorld`, `SkeletonPoses`, `Animators`, `DebugDraw`) are created by their packages as today and never written; a package wanting per-scene settings in the file adds a described settings resource beside its behaviour one.
+8. **Load is two passes inside one frame.** Pass one reserves every entity and builds the id map; pass two adds components in file order, resolves `entity` fields and completes each entity. Watches see one add per component, before any system runs that frame; no transaction or "scene loaded" event is introduced.
+9. **Unknown components are kept opaque.** A component whose canonical name the registry lacks goes into a per-entity `Fenrir::UnknownComponents` holder as its raw tree, with one diagnostic per type per load, and is written back unchanged. It never attaches retroactively.
+10. **Scenes in code stay; a spawned model saves expanded.** The demos' spawn functions and `SpawnModel` are unchanged, and a scene they build can be saved with ids minted then. A model's spawned entities save as ordinary entities with their asset paths.
+11. **Authoring data, read once.** The engine reads a scene file when a scene is created from it and never writes one on its own at game run time. The save path serves tools, a future editor and code that wants a built scene as a file. A save game is the game's own file, composed from the same public blocks: the type registry and per-type visitors, the JSON5 reader and writer, and the entity id map. *Scene* is also the word for a map, as in Godot and Unity; a separately compiled map form is the cooked form's question.
+
+## Considered options
+
+- **A file-only id with no run-time home.** Simplest at load, but a re-save renumbers every entity and defeats every merge; every engine that merges keeps the id on the object.
+- **`Name` as the identity.** Non-unique, 255 bytes, and what a designer edits most; Source's `targetname` shows the cost.
+- **Writing `Relationship` as a component.** Four raw links per entity, order recovered by chasing them; `parent` plus file order is what Godot and Unity write and what people read.
+- **Writing every component, described or not.** Impossible: an undescribed component has no fields to walk, and per-entity package state is rebuilt by the package at load anyway.
+- **One structural event per load.** Unity's and Bevy's instancing give one; Fenrir's systems already reconcile each frame, so the event would have no consumer until an editor exists.
+- **The live scene writing itself back during play, or an engine save-game system.** Neither Godot, Unity nor Unreal offers one; what a game saves is its own choice, and the blocks are public.
+
+## Consequences
+
+- FenrirECS gains `EntityId`, `Transient` and `UnknownComponents` components; `tools/describe-api` gains the `entity` and `fixed-string` kinds and the `@transient` doc command; `AddChild` order on load is the file's.
+- Nine `Entity` fields are written as ids; a component added later with an `Entity` field is covered by the kind, not by a list.
+- The load/save ticket of the serialisation map decides the API that reads a file into a scene (and additively into an existing one) and writes a scene out; the prefab ticket decides whether a model instance or a sub-scene is kept as one reference; the hot-reload ticket decides whether a changed file re-reads.
+- A game's save files are its own and fall outside this effort; the map's fog records the question of a convenience API.
+- Nothing in this ADR constrains what a cooked scene looks like beyond ADR-0063's tree.

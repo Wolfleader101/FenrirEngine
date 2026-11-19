@@ -235,6 +235,18 @@ Where an entity is in the scene, as opposed to its `Transform`, which is relativ
 State a package keeps in one scene, one value per type, ended with the scene (a scene's physics world is one).
 *Avoid:* singleton, global, scene component (a *component* belongs to an entity).
 
+**Scene file**
+The file a scene is created from: its described scene resources, and its entities with their entity ids, parents, order and described components. Authoring data, read when the scene is made and never written by the running game; what a level editor edits and what a game calls a map or level (ADR-0064).
+*Avoid:* map file, level file (the game's words), save file (a game's own), world.
+
+**Entity id**
+The readable random string a scene file gives an entity, held in its `EntityId` component, minted once when the entity is first saved and kept for its life. It is how a file names an entity, for a parent or a component's entity field; it is not the run-time `Entity`, which is reassigned on every load (ADR-0064).
+*Avoid:* entity handle, fileID, GUID, name (the display string).
+
+**Transient**
+Not written to a scene file: a component whose description says so, or an entity tagged `Transient` with its children (a free-fly camera, a debug entity). Everything else described is written (ADR-0064).
+*Avoid:* runtime-only, editor-only, hidden, don't-save.
+
 **App resource**
 State a package keeps for the whole app rather than one scene, one value per type, ended with the App (the input devices and the asset store are ones).
 *Avoid:* singleton, global, app-wide state (informal).
