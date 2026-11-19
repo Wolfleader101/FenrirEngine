@@ -284,8 +284,16 @@ The package that turns a described value into a value tree and back through the 
 *Avoid:* FenrirJson, FenrirText, serialiser (informal), FenrirAssets (which owns the envelope and the doors).
 
 **Value tree**
-The in-memory form of a file's contents: objects, arrays, strings, numbers, booleans and nulls, with comments kept as trivia, between a described value and its JSON5 text (ADR-0065).
+The in-memory form of a file's contents: objects, arrays, strings, numbers, booleans and nulls, with comments kept as trivia, between a described value and its JSON5 text (ADR-0065). For a C#-typed data asset it is the store's truth, with the managed instance a view of it (ADR-0069).
 *Avoid:* DOM, document, AST, JSON object.
+
+**Tree encoding**
+FenrirSerialisation's compact binary form of a value tree, used in memory to hand a data asset between C++ and C#; never written to a text file (ADR-0069).
+*Avoid:* wire format, binary JSON, BSON, MessagePack.
+
+**Codec**
+The generated pair that turns a data asset class into a value tree and back, emitted per C++ data asset type by the binding generator and per C# data asset type by the scripting source generator (ADR-0069).
+*Avoid:* serializer, converter, marshaller, mapper.
 
 **Type registry**
 The run-time table of every described type the running engine knows, by canonical name: its role, fields, kinds, defaults, docs and metadata, filled from each package's generated type registration at `Install` and from C# at admission. A file reader, writer or inspector reaches a type's fields only through it (ADR-0060).
