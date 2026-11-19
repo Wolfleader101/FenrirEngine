@@ -1,0 +1,32 @@
+---
+status: accepted
+---
+
+# FenrirSerialisation bridges described values and JSON5 trees, and FenrirAssets loads and saves scenes and data assets
+
+Scene files (ADR-0078) and data assets (ADR-0075) are JSON5 in one envelope (ADR-0077), read through the type registry (ADR-0074). Something must own the tree, the reader and writer, the walk from a described value to a tree and back, and the doors game code calls. Today `FenrirAssets` links `FenrirApp` and `FenrirScene` publicly, spawns models into a scene, and returns a `LoadResult` with `Succeeded`, `Partial` and `Failed`, a diagnostic and failed units (ADR-0021, ADR-0031); material edits go through one `EditMaterial(handle, action)` door that bumps the revision; its tests run on a headless `App` with a recording logger over a fixtures root. ADR-0078 made the bridge and the writer public blocks a game's save files compose, so they cannot sit behind a private seam.
+
+We decided that **a new `FenrirSerialisation` package owns the tree, the JSON5 reader and writer and the bridge to described values, and that `FenrirAssets` owns the envelope and every load and save door**:
+
+1. **Three layers.** `FenrirTypes` holds the registry and visitors and knows no tree. `FenrirSerialisation` holds the value tree (object, array, string, number, bool, null, comments as trivia), the JSON5 reader and writer, the bridge that walks a described value through the registry's visitor into a tree and back, upgrader application and located diagnostics; it depends on `FenrirTypes` and `FenrirLogger` only and knows no files, assets or scenes. `FenrirAssets` depends on it and owns the envelope, data asset load and save, scene load and save, and the move function.
+2. **Scene files are instantiated, not stored.** A scene file has no `AssetHandle` and no store slot. `Assets::LoadScene(path, name = path)` creates the scene through `App::CreateScene` and fills it; `Assets::LoadSceneInto(Scene&, path, Entity parent = {})` adds the file's entities under an optional parent, as `SpawnNodes` does. Both are synchronous on the main thread; what the file references loads with the filled scene as owner. An additive load ignores the file's `resources` and counts them: the target scene's resources stand. Switching the active scene is the caller's.
+3. **One scene result.** `SceneLoadResult` carries the status (`Succeeded`, `Partial`, `Failed`), the root entities created, counts of entities, components, unknown components kept, fields dropped, references left empty and resources skipped, and the located diagnostics, each logged once through the store's logger. `Failed` means the envelope did not parse or named the wrong type; otherwise `Partial` with the scene as far as it read.
+4. **Saving is an engine function.** `Assets::SaveScene(const Scene&, path) -> SaveResult` writes every non-transient entity in ADR-0078's layout, minting `EntityId` components where missing (the call mutates the scene), counts what it skipped and names each reference written as `null`. It writes to the asset root path atomically, beside then rename. No key binding or dev-loop command ships in the engine.
+5. **Data assets use the store's doors.** `Load<T>(path, owner)` for any registered data asset type, with `LoadResult<T>` gaining a `diagnostics` list beside `failedUnits` and `Partial` for a tolerant load; `TryGet<T>` for the shared read-only instance; `Add<T>(value, owner, name)`; `Edit<T>(handle, action)` returning a mutable pointer and bumping the revision, generalising `EditMaterial`; `Replace<T>` as today; `Save<T>(handle)` to the asset's own path and `Save<T>(handle, path)` to a new one. Sub-assets load by `path#name` and share the parsed file.
+6. **The move tool is a function plus a thin CLI.** `Assets::Move(root, from, to, registry) -> MoveResult` needs no running store: it renames the file, rewrites every reference across the root's `.json5` files (knowing which strings are asset paths from the registry's field kinds) and reports each file changed, with a dry run. `tools/move-asset` calls it; a future editor calls it too.
+7. **Tests at each layer.** `FenrirSerialisation` tests register types by hand and check round trip, byte identity over the emit subset, comment survival, upgraders in order and every diagnostic's position; the format research's sword and scene samples are golden files the writer must reproduce. `FenrirAssets` tests load fixture scenes and data assets into the headless `App`, save them back and compare; a test package's `.api.toml` runs the real generator. No window.
+
+## Considered options
+
+- **Everything in `FenrirAssets` behind a private seam**, as importers are. Cheapest, but the bridge and writer would be private, and ADR-0078 made them the blocks a game's save files use.
+- **The tree and bridge in `FenrirTypes`.** One package fewer, but `FenrirTypes` sits below the ECS and would then know a file format's shape; it stays the registry alone.
+- **A scene file as a store asset with a handle.** Would give deduplication and owners for free, but a scene is instantiated into an `EntityList`, not shared read-only, and two loads of one file must be two scenes.
+- **A scene saving itself (`Scene::Save`).** `FenrirScene` knows no files or registry, and would come to depend on both; the asset package already crosses into scenes.
+- **Additive loads applying the file's resources.** Bevy's order, but the target scene's physics world and sky are its own; last-wins resources from a sub-scene surprise more than they help.
+
+## Consequences
+
+- A new package, `FenrirSerialisation`, between `FenrirTypes` and `FenrirAssets`; `FenrirAssets` gains `LoadScene`, `LoadSceneInto`, `SaveScene`, `Save<T>`, `Edit<T>`, named `Add`, `Move`, `SceneLoadResult`, `SaveResult`, `MoveResult`, and a `diagnostics` list on `LoadResult`.
+- `App::CreateScene` is called by `LoadScene` with the caller's name; its lack of a duplicate-name check is unchanged and the caller's to mind.
+- A game's save files compose `FenrirSerialisation` without `FenrirAssets`.
+- The C# ticket decides how these doors reach scripts through the facade; the hot-reload ticket decides who calls `Replace` and `LoadSceneInto` when a file changes; asynchronous loading stays deferred as ADR-0021 left it.
