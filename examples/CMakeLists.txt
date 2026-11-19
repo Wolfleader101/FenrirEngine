@@ -23,5 +23,7 @@ if(FENRIR_BUILD_EXAMPLES AND FENRIR_ENABLE_RENDERER AND FENRIR_ENABLE_UI)
     # The physics scenes need physics; their C# twins come with scripting.
     if(FENRIR_ENABLE_PHYSICS)
         add_subdirectory(PhysicsDemo)
+        # PROTOTYPE, throwaway: Flightless Frenzy's movement grey box, on the prototype branch only.
+        add_subdirectory(KikiMovePrototype)
     endif()
 endif()
