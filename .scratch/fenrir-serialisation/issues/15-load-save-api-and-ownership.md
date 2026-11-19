@@ -1,7 +1,7 @@
 # Who loads and saves files, and what is the API?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 10, 13
 
 ## Question
