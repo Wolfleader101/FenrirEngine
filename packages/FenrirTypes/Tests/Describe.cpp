@@ -1,0 +1,26 @@
+#include "TestTypes.hpp"
+
+#include "FenrirTypes/Describe.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
+
+#include <catch2/catch_test_macros.hpp>
+
+TEST_CASE("Describe<T> yields the description the registration added, by identity", "[types][describe]")
+{
+    Fenrir::TypeRegistry registry;
+    REQUIRE(registry.Register(TypesTest::TransformDescription));
+    REQUIRE(registry.Register(TypesTest::WeaponDataDescription));
+    REQUIRE(registry.Register(TypesTest::SwordDescription));
+
+    INFO("Describe<Transform> is the object the registry holds for its name");
+    REQUIRE(&Fenrir::Describe<TypesTest::Transform>::Description() == registry.Find("TypesTest::Transform"));
+
+    INFO("Describe<Sword> is the object the registry holds for its name");
+    REQUIRE(&Fenrir::Describe<TypesTest::Sword>::Description() == registry.Find("TypesTest::Sword"));
+}
+
+TEST_CASE("Only a type something describes is Described", "[types][describe]")
+{
+    STATIC_REQUIRE(Fenrir::Described<TypesTest::Transform>);
+    STATIC_REQUIRE_FALSE(Fenrir::Described<TypesTest::Gem>);
+}
