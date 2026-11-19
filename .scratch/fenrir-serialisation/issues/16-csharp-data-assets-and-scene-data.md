@@ -1,7 +1,7 @@
 # How does C# define data asset types and reach scene and asset data?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 10, 15
 
 ## Question
