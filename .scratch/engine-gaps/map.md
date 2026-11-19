@@ -50,6 +50,7 @@ Within the renderer features, the four tickets are independent of each other as 
 - [What do fullscreen and display settings look like?](issues/31-what-fullscreen-and-display-settings-are.md): windowed and borderless fullscreen on the current display, from C++ and C#, spec-ready; exclusive modes and display lists deferred; MSAA stays fixed.
 - [Does the engine offer navigation?](issues/32-does-the-engine-offer-navigation.md): deferred; a navigation mesh from given geometry is an engine block, but no game asks yet.
 - [How do engines split particles between the engine and the game?](issues/24-how-engines-split-particles.md): every engine owns the runtime and a behaviour vocabulary and the game owns the effect as data, played by one call; they differ on CPU or GPU, vocabulary size and collision; FenrirEngine has only instance lists, no camera-facing quad, no soft-particle depth and no pass a package can add.
+- [How do engines let a game add a render pass and draw outlines?](issues/22-how-engines-add-render-passes-and-outlines.md): every engine runs a game callback at named frame points reading the frame's depth and normals, and outlines chosen objects by layer, flag or material pass; FenrirRenderer makes scene depth and normals already but exposes no pass, no front-face cull, no stencil and no per-object mask.
 
 ## Not yet specified
 
