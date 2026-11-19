@@ -20,3 +20,5 @@ No.
 No. Menus work with the mouse, Tab and a gamepad today.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [Do arrow keys move UI focus?](30-do-arrow-keys-move-ui-focus.md).

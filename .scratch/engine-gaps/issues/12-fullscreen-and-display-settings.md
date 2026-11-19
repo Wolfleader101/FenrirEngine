@@ -20,3 +20,5 @@ No. Several windows are planned on the renderer map (`.scratch/fenrir-renderer/m
 No. The game runs in a window until this exists.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [What do fullscreen and display settings look like?](31-what-fullscreen-and-display-settings-are.md).

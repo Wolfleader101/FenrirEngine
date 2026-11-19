@@ -20,3 +20,5 @@ Barely: particles are one line under "Not yet specified" on the renderer map (`.
 Yes: it must be resolved before the game is complete (the user, 2026-11-19). The game's effects come from the engine, not from instanced meshes the game moves itself. It does not block the first playable slice, which can run with no effects.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [How do engines split particles between the engine and the game?](24-how-engines-split-particles.md), [What is the engine's particle system?](25-what-the-particle-system-is.md).

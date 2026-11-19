@@ -20,3 +20,5 @@ Yes, on an unmerged planning branch: the `fenrir-serialisation` map (`origin/cla
 No. A format that describes this game's own things is the game's to define, and it can read a small level file or markers in a model until the engine's scene files exist. "How are levels authored and loaded?" decides the stopgap. This game is a first real client for that map's decisions.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): a pointer to the `fenrir-serialisation` map (`claude/wayfinder-serializable-resources-246b15`); no decision ticket here.

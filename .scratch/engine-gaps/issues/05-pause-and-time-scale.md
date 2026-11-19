@@ -20,3 +20,5 @@ No.
 It blocks the pause menu done properly. The game could stub it by having every one of its systems check a paused flag, but physics and animation would keep running, so a stub pauses only what the game wrote.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [What are pause and time scale?](21-what-pause-and-time-scale-are.md).

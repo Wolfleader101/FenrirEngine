@@ -22,3 +22,5 @@ Yes: it must be resolved before the game is complete (the user, 2026-11-19). Out
 Checked 2026-11-19: an inverted-hull outline drawn as a second material is not possible either. A material can set only its blend mode and `doubleSided`; it cannot cull front faces (`packages/FenrirAssets/include/FenrirAssets/MaterialData.hpp:93-107`).
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [How do engines let a game add a render pass and draw outlines?](22-how-engines-add-render-passes-and-outlines.md), [How does a game draw outlines and add its own render pass?](23-how-a-game-draws-outlines-and-adds-a-pass.md).

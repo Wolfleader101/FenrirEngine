@@ -20,3 +20,5 @@ Only the "left for later" line in ADR-0029.
 No. The game keeps this state as components on one "run" entity until C# can define resources, then moves it. The user wants the engine to gain this.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [How does C# define its own resources?](20-how-csharp-defines-resources.md).

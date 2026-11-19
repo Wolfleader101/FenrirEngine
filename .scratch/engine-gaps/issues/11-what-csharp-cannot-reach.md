@@ -29,3 +29,5 @@ No.
 Yes, in two steps. Parenting has no stand-in and likely blocks an early ticket. Scenes block the restart and title-screen tickets, not the first playable slice. It was agreed both are fixed in the engine, not worked around in the game or its host.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [How does C# parent entities?](18-how-csharp-parents-entities.md), [How does C# create, switch and destroy scenes, and stop the app?](19-how-csharp-reaches-scenes-and-the-app.md).

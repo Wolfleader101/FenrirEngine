@@ -20,3 +20,5 @@ Only as a line: "fog and volumetric light" sits under "Not yet specified" on the
 Yes: it must be resolved before the game is complete (the user, 2026-11-19). The game does not fake it inside its own material shader. It does not block the first playable slice.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [What fog does the renderer offer?](26-what-fog-the-renderer-offers.md).

@@ -20,3 +20,5 @@ No; the README rules it out for now.
 No. The game can read both devices and merge them in its own code. Raised so triage can confirm it stays the game's, or decide dead zones at least belong in the engine.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [Does the engine offer input actions or dead zones?](29-does-the-engine-offer-input-actions.md).

@@ -26,3 +26,5 @@ No. ADR-0071 leaves lifting scaffold pieces into the engine as "a later decision
 Yes, its first ticket: the game cannot configure against the engine until item 3 holds, and cannot build scripts (if it has C#) or find its assets without items 1 and 2. It was agreed these are engine work done ahead of the game's first ticket, not copies written inside the game.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [What breaks when the engine is built as a subdirectory?](16-build-the-engine-as-a-subdirectory.md), [What CMake functions does the engine give a game?](17-what-cmake-functions-a-game-gets.md).

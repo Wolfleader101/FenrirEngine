@@ -20,3 +20,5 @@ Only as a line: per-entity material overrides are planned on the renderer map (`
 Yes: it must be resolved before the game is complete (the user, 2026-11-19). It does not block the first playable slice; cloned materials work until then.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [How does one entity get its own material parameters?](27-how-one-entity-gets-its-own-material-parameters.md).
