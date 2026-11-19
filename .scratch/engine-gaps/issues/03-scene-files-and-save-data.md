@@ -9,7 +9,7 @@ The engine has no scene, level or prefab file format, no entity or component ser
 
 ## Who needs it
 
-Flightless Frenzy ([map](../../flightless-frenzy/map.md)): its one level must be data, so that a second level is new data and not new code, and it places cages, coins, power-ups, enemies and an exit in it. It may also keep best times and options between runs ("What is the game loop?" decides).
+Flightless Frenzy ([map](../../flightless-frenzy/map.md)): its one level must be data, so that a second level is new data and not new code, and it places cages, coins, power-ups, enemies and an exit in it. It keeps its best score and best time between runs, but writes that file itself with .NET ([What is the game loop?](../../flightless-frenzy/issues/06-the-game-loop.md)), so it does not wait on an engine save API.
 
 ## Does anything plan it?
 
