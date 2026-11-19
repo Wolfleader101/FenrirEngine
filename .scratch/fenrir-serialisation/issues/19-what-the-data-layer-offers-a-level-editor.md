@@ -1,7 +1,7 @@
 # What must the scene format and engine API offer a level editor?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 05, 06, 13, 14
 
 ## Question
