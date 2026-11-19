@@ -1,7 +1,7 @@
 # How are assets identified, and how do files reference them?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 01, 02, 10
 
 ## Question
