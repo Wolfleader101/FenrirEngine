@@ -1,7 +1,7 @@
 # Which text format do files use, and how are they versioned and migrated?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 02, 03, 10
 
 ## Question
