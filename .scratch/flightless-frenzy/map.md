@@ -8,11 +8,12 @@ One spec for Flightless Frenzy as a complete, small game built on FenrirEngine, 
 
 ## Notes
 
-- **Sources are inspiration, not a spec:** the 2022 game design document, the user guide and the Project Vakol engine document (PDFs outside the repo), and the old code at <https://github.com/Wolfleader101/Project_Vakol>. "What did the old game ship?" holds what they say.
+- **The game design document is the source of truth for what the game is meant to be** (the user, 2026-11-19). The 2022 code was rushed and did not complete it: use "What did the old game ship?" for history and for mistakes to avoid, never as the reference for a rule or a number. Where the decisions settled while charting trim the design document, they stand.
+- **Sources:** the 2022 game design document, the user guide and the Project Vakol engine document (PDFs outside the repo), and the old code at <https://github.com/Wolfleader101/Project_Vakol>. "What did the old game ship?" holds what they say.
 - **The core as described in 2022:** a timed 3D platformer. Free every caged friend by walking into the cage, collect coins for score, reach the exit before the timer runs out. Three power-ups: speed boost, slowed timer, double jump. The code delivered less than this, and in third person: see "What did the old game ship?".
 - **Engine gaps are raised, not worked around.** Anything the game needs that FenrirEngine lacks becomes its own issue under `.scratch/engine-gaps/issues/`, `Status: needs-triage`, linked from the map ticket that found it, saying whether it blocks the game or can be stubbed. It is not built inside the game.
 - **The engine/game line:** the engine provides building blocks; what the world is belongs to the game.
-- **Use what the engine offers:** renderer and lighting, physics, animation, FenrirUI and Razor panels, C# scripting. Ragdolls are specified but not yet built. "What does FenrirEngine give a game today?" is the inventory decisions rest on.
+- **Use what the engine offers:** renderer and lighting, physics, animation, FenrirUI and Razor panels, C# scripting. The game does not need ragdolls: the design document has none, and they are not yet built. "What does FenrirEngine give a game today?" is the inventory decisions rest on.
 - **Settled while charting** (2026-11-19; the tickets below build on these and do not reopen them):
   - The reimagining starts from the design document's vision, trimmed, with the shipped loop as its spine: Kiki the Kiwi, a virtual New Zealand, friends caged by poachers.
   - **Camera:** third person, with Kiki on screen, as the working intent; "How does Kiki move?" compares it against first person before it is locked.
@@ -30,11 +31,12 @@ One spec for Flightless Frenzy as a complete, small game built on FenrirEngine, 
 
 - [What does FenrirEngine give a game today?](issues/01-what-fenrirengine-gives-a-game.md): the engine covers running, input, rendering with a game's own material shaders, physics with a character body, animation, UI and C# scripting; it lacks a way to build against it from outside, any level or save format, time scale and pause, particles, outlines, animation state machines, navigation, an input action layer, and scene switching and parenting from C#; ragdolls are specified but unbuilt.
 - [What did the old game ship?](issues/02-what-the-old-game-shipped.md): a third-person game of about 1,080 lines of C++ with one hand-placed level; cages freed by proximity, a frame-counting timer, three lives; no real jump, power-ups that only score, uncollectable coins, no enemies, menus or animation; a three-band toon shader; assets carry no licence or stated origin.
+- [Raise the engine gaps the inventory found](issues/14-raise-the-engine-gaps-the-inventory-found.md): eleven issues in `.scratch/engine-gaps/issues/` beside audio; building against the engine from outside `examples/` and pause block part of the game, C# reach blocks part of a C# game, the rest can be stubbed; scene files are already being planned on the unmerged `fenrir-serialisation` map.
 
 ## Not yet specified
 
 - **The level itself:** its layout, landmarks, where the cages, coins, power-ups, enemies and exit sit, and its time limit. Waits on the movement numbers, the enemies, the power-ups and how levels are authored.
-- **What freed friends do:** run off, gather at the exit, follow Kiki; and where else the game shows off physics (ragdolls, things to knock over).
+- **What freed friends do:** run off, gather at the exit, follow Kiki;.
 - **How the story is told:** an opening, an ending, or nothing beyond the title screen.
 - **Weather, day and night, and particles** beyond what "What does the game look like?" decides.
 - **Difficulty:** one setting or several.
