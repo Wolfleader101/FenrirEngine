@@ -1,7 +1,7 @@
 # What must the development formats guarantee so a cooked shipping form can follow?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 11, 12, 13
 
 ## Question
