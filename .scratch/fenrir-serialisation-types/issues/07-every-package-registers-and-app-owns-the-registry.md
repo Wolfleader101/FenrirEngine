@@ -9,7 +9,7 @@
 - **Per-package defaults test:** each package's test suite gains a generated-shape test that the registration's defaults equal `T{}` field by field through the visitor, the shape of the binding's `<Package>DefaultsTests.cpp`; the registry generator emits it as a test source the package's `Tests/CMakeLists.txt` includes, or the test is one template the FenrirTypes tests export and each package instantiates, whichever the implementer finds smaller.
 - **Docs:** `README.md`'s API-description paragraph names the registration beside the description and binding; each package's `CMakeLists.txt` header comment says it registers types.
 
-**Blocked by:** 06.
+**Blocked by:** 06, 11.
 
 **Touches:** every described package's `CMakeLists.txt`, `api/*.api.toml`, new `include/<Package>/Generated/<Package>Types.hpp` and `src/Generated/<Package>Types.cpp`, and its `Install` source and `Tests/`; `packages/FenrirApp/` (`App.hpp`, `App.cpp`, tests); `README.md`
 

@@ -80,12 +80,13 @@ A new package, **FenrirTypes**, below FenrirMath and FenrirECS, depending on not
 | 04 | describe-api: `data-asset` and `settings` roles, the owning kinds, the base type, the role refusals; Iris.Bindings skips them | 03 |
 | 05 | generate-type-registry: the tool, the CMake module and target, table-driven visitors for fixed-layout types, against the fixture | 01, 04 |
 | 06 | Generated visitors for owning types and base chains, attachments by role, the FenrirTypes test package through the real tools | 05 |
-| 07 | Every package's registration committed and compiled in; `App` owns the registry; each `Install` registers | 06 |
+| 07 | Every package's registration committed and compiled in; `App` owns the registry; each `Install` registers | 06, 11 |
 | 08 | `ComponentType::ForName` and the resource doors as attachments in FenrirECS, FenrirScene and FenrirApp | 07 |
 | 09 | The six configs join their selections under `settings`, `ScriptingConfig::extensions` `@transient`, `Describe<T>` for each | 07 |
 | 10 | CI's check gains `fenrir-generate-type-registry` and runs with the renderer on; README and tool READMEs | 09 |
+| 11 | Tagged unions in FenrirTypes and the generator: the tag, the alternatives, a visit of the live one, the select door (added when ticket 05 found the gap) | 06 |
 
-Tickets 02, 03 and 04 all edit `tools/describe-api/` and its fixture, so they stack in that order; 01 touches only the new `packages/FenrirTypes/` and runs beside them off the base. Tickets 05 and 06 both write `tools/generate-type-registry/` and stack after 04 and 01. Tickets 07, 08 and 09 each touch several packages' `CMakeLists.txt`, selections and generated files, so they stack after 06; 10 edits the workflow and READMEs last.
+Tickets 02, 03 and 04 all edit `tools/describe-api/` and its fixture, so they stack in that order; 01 touches only the new `packages/FenrirTypes/` and runs beside them off the base. Tickets 05 and 06 both write `tools/generate-type-registry/` and stack after 04 and 01; 11 writes the same tool and `packages/FenrirTypes/`, so it stacks after 06. Tickets 07, 08 and 09 each touch several packages' `CMakeLists.txt`, selections and generated files, so they stack after 11; 10 edits the workflow and READMEs last.
 
 ## Out of scope
 
@@ -99,5 +100,6 @@ The value tree, the JSON5 reader and writer, the bridge from a visited value to 
 - A `list` element may itself be a `list`; an `optional` may not wrap an `optional`; a `string`, `path` and `fixed-string` default is its literal and a `list`, `optional`, `reference` and `entity` default is empty.
 - A scalar's default may be any constant expression libclang evaluates, so `RendererConfig::debugValidation`'s named constant describes without a spelling change (ADR-0043 changed spellings instead).
 - `[registration]` names `header`, `source`, `function` and `includes`; the header is public so `Describe<T>` is visible to a game calling `Project::Get<T>()`.
+- A `tagged-union` (the description's category since ADR-0042) is a `TypeDescription` with its tag, its alternatives at the union's offset and its default alternative; its visit pushes the tag, then the live alternative alone, and a mutable caller switches alternatives through one door that writes the tag and the new alternative's defaults (the format writes it as `{kind, ...}`). Ticket 05 found that ticket 01's FenrirTypes had none of this; ticket 05 refuses tagged unions and ticket 11 adds them before 07 registers the packages that hold them.
 - Iris.Bindings skips `data-asset` and `settings` types and the owning kinds until the C# spec, rather than failing on them, so the dirty-tree check passes between the two specs.
 - The tool recognises `Fenrir::Entity` and `Fenrir::AssetHandle<T>` by qualified name, as it will the standard library's types; it stays binding-agnostic but not engine-agnostic.
