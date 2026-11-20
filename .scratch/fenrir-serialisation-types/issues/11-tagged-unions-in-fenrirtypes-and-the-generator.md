@@ -12,10 +12,18 @@
 
 **Touches:** `packages/FenrirTypes/` (`include/FenrirTypes/`, `src/`, `Tests/`, `Tests/Package/`), `tools/generate-type-registry/src/` and `tests/`, `tools/describe-api/tests/Fixture/` (the fixture's `.api.toml` if the ticket-05 skip flag lives there)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `TypeDescription` holds a tagged union's tag, union offset, alternatives and default alternative; `PublicHeaders` passes.
-- [ ] A recording `FieldVisitor` over `Fixture::Shape` sees the tag then only the live alternative, for each alternative.
-- [ ] Selecting an alternative writes the tag and that alternative's defaults; writing the tag through `ValueRef` is a diagnostic, not a write.
-- [ ] The generator writes `Fixture::Shape`, `Fixture::Collider` and `Fixture::Sky` instead of refusing them, and the ticket-05 refusal and skip are gone.
-- [ ] The test package's tagged union registers, and its committed registration regenerates byte-identical.
+- [x] `TypeDescription` holds a tagged union's tag, union offset, alternatives and default alternative; `PublicHeaders` passes.
+- [x] A recording `FieldVisitor` over `Fixture::Shape` sees the tag then only the live alternative, for each alternative.
+- [x] Selecting an alternative writes the tag and that alternative's defaults; writing the tag through `ValueRef` is a diagnostic, not a write.
+- [x] The generator writes `Fixture::Shape`, `Fixture::Collider` and `Fixture::Sky` instead of refusing them, and the ticket-05 refusal and skip are gone.
+- [x] The test package's tagged union registers, and its committed registration regenerates byte-identical.
+
+## Comments
+
+- Built in `claude/ser-types-11-tagged-unions`. The door is `bool TypeDescription::SelectAlternative(void* instance, std::int64_t tagValue) const`. It ends the live alternative's value, value-initialises the new one (a struct through its description's `Construct`, an entity as the null entity, an array element by element, anything else as zero bytes) and then writes the tag. It returns false and changes nothing for a type that is not a tagged union, or for a tag value that selects no alternative. `LiveAlternative(instance)` and `IsTaggedUnion()` sit beside it. The format's writer needs the first and the reader the second; the "description's category" is `IsTaggedUnion()`, not a new field.
+- Writing the tag through `ValueRef` is refused, as a result rather than a message: `ValueType::unionTag` is set on the tag's type, and `SetEnumValue` now returns `bool`, false for that tag and for a value of another kind. `ValueRef` has no diagnostics channel. A caller such as the format's bridge can log the refusal with its own location.
+- Not on a checkbox: `TypeRegistry::Register` refuses a tagged union whose alternative reaches an owning kind, following "fixed-layout only". The generator fails on a tag that is not an enum, a tag enum not described before the union, an alternative's tag that is none of the enum's enumerators, and a `defaultKind` that names no alternative.
+- Outside Touches: removing `--skip-unsupported` took `SKIP_UNSUPPORTED` out of `cmake/FenrirGenerateTypeRegistry.cmake` and `tools/generate-type-registry/CMakeLists.txt`. The generator's README and the glossary's "Tagged union" entry now say how FenrirTypes describes one (an alternative is an entry of the description's `kinds`). The fixture's `.api.toml` needed no change, since the skip flag was a CMake argument.
+- The test package gains `Test::Trigger`, a component holding `Test::Volume`: a box alternative (the default) and a scalar `m_radius` alternative whose tag value is 2, not its index.
