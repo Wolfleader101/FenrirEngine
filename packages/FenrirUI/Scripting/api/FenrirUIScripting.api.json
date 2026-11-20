@@ -194,28 +194,6 @@
       ]
     },
     {
-      "name": "Fenrir::Entity",
-      "category": "struct",
-      "role": "shared-struct",
-      "size": 16,
-      "alignment": 8,
-      "doc": "Entity class that is used to interact with the entity list. This forms the basis of the ECS",
-      "fields": [
-        {
-          "name": "m_entityId",
-          "offset": 0,
-          "kind": "u32",
-          "default": 4294967295
-        },
-        {
-          "name": "m_entityList",
-          "offset": 8,
-          "kind": "pointer",
-          "default": null
-        }
-      ]
-    },
-    {
       "name": "Fenrir::Key",
       "category": "enum",
       "size": 2,
@@ -1021,9 +999,8 @@
         {
           "name": "entity",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The entity of the active scene whose WorldQuad2D it draws on."
         },
         {

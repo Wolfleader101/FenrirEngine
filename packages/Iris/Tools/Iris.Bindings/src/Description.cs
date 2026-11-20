@@ -31,6 +31,12 @@ internal enum Role
 internal sealed record FieldKind(string Kind, string? Type, string? ElementKind, string? ElementType, int Length)
 {
     public bool IsArray => Kind == "array";
+
+    /// <summary>
+    /// The type a <c>reference</c> (or an array of them) names, which is read as the bound handle of it: kept so a
+    /// handle no description describes is diagnosed as the reference's.
+    /// </summary>
+    public string? Target { get; init; }
 }
 
 /// <summary>A struct field, or a tagged union's tag (its default is the tag value of the default kind).</summary>
@@ -220,17 +226,91 @@ internal static class Description
     private static Field ReadField(JsonElement field, string where)
     {
         var name = String(field, "name", where);
-        return new Field(name, Integer(field, "offset", where), ReadKind(field, $"{where}::{name}"),
-                         Property(field, "default", $"{where}::{name}").Clone(), OptionalString(field, "doc"));
+        var subject = $"{where}::{name}";
+        var described = Property(field, "default", subject);
+        var kind = String(field, "kind", subject);
+        var element = kind == "array" ? String(field, "elementKind", subject) : null;
+        var value = (kind, element) switch
+        {
+            ("entity" or "reference", _) => Empty(described, kind, subject),
+            ("fixed-string", _) => TextBytes(described, Integer(field, "length", subject), subject),
+            ("array", "entity" or "reference") =>
+                Json(described.ValueKind == JsonValueKind.Array
+                         ? $"[{string.Join(",", described.EnumerateArray().Select(item => Empty(item, element!, subject).GetRawText()))}]"
+                         : throw new BindingException($"{subject}: 'default' is not a list")),
+            _ => described.Clone(),
+        };
+        return new Field(name, Integer(field, "offset", where), ReadKind(field, subject), value, OptionalString(field, "doc"));
     }
+
+    // describe-api's fixed-layout kinds are read as the shapes they bind as (SCHEMA.md of the input format, "Kinds"): an
+    // `entity` as the engine's entity, the built-in binding's mirror of FenrirECS's `Fenrir::Entity`; a `fixed-string` as
+    // the array of `u8` its bytes are; a `reference` as the asset handle of its target, a bound type the assets binding
+    // binds. So a binding generates what it did when the description recorded them by those shapes.
+
+    /// <summary>The engine's entity, which an <c>entity</c> kind holds.</summary>
+    internal const string EntityType = "Fenrir::Entity";
+
+    /// <summary>The bound handle a <c>reference</c> to <paramref name="target" /> holds.</summary>
+    internal static string HandleType(string target) => $"Fenrir::AssetHandle<{target}>";
 
     private static FieldKind ReadKind(JsonElement field, string where)
     {
         var kind = String(field, "kind", where);
-        return kind == "array"
-                   ? new FieldKind(kind, null, String(field, "elementKind", where), OptionalString(field, "elementType"),
-                                   Integer(field, "length", where))
-                   : new FieldKind(kind, OptionalString(field, "type"), null, null, 0);
+        switch (kind)
+        {
+            case "array":
+                var described = String(field, "elementKind", where);
+                var elementTarget = described == "reference" ? String(field, "elementTarget", where) : null;
+                var (elementKind, elementType) = described switch
+                {
+                    "entity" => ("struct", EntityType),
+                    "reference" => ("struct", HandleType(elementTarget!)),
+                    _ => (described, OptionalString(field, "elementType")),
+                };
+                return new FieldKind(kind, null, elementKind, elementType, Integer(field, "length", where))
+                {
+                    Target = elementTarget,
+                };
+            case "entity":
+                return new FieldKind("struct", EntityType, null, null, 0);
+            case "reference":
+                var target = String(field, "target", where);
+                return new FieldKind("struct", HandleType(target), null, null, 0) { Target = target };
+            case "fixed-string":
+                return new FieldKind("array", null, "u8", null, Integer(field, "length", where));
+            default:
+                return new FieldKind(kind, OptionalString(field, "type"), null, null, 0);
+        }
+    }
+
+    // An entity's or reference's default, which names nothing (null), as its struct's own defaults ({}).
+    private static JsonElement Empty(JsonElement value, string kind, string where) =>
+        value.ValueKind == JsonValueKind.Null
+            ? Json("{}")
+            : throw new BindingException($"{where}: an {kind}'s 'default' is not null");
+
+    // A fixed string's default text as its bytes: UTF-8, then zeros to the length.
+    private static JsonElement TextBytes(JsonElement value, int length, string where)
+    {
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw new BindingException($"{where}: a fixed string's 'default' is not a string");
+        }
+
+        var bytes = System.Text.Encoding.UTF8.GetBytes(value.GetString()!);
+        if (bytes.Length >= length)
+        {
+            throw new BindingException($"{where}: the default leaves no room in its {length} bytes for the terminator");
+        }
+
+        return Json($"[{string.Join(",", bytes.Concat(new byte[length - bytes.Length]))}]");
+    }
+
+    private static JsonElement Json(string text)
+    {
+        using var document = JsonDocument.Parse(text);
+        return document.RootElement.Clone();
     }
 
     internal static JsonElement Property(JsonElement element, string key, string where) =>

@@ -962,6 +962,76 @@
       "defaultKind": "m_box"
     },
     {
+      "name": "Fixture::Socket",
+      "category": "struct",
+      "role": "component",
+      "size": 96,
+      "alignment": 8,
+      "doc": "A component holding the three fixed-layout kinds a file writes as values of their own: an entity, a fixed string and an asset reference.",
+      "fields": [
+        {
+          "name": "owner",
+          "offset": 0,
+          "kind": "entity",
+          "default": null,
+          "doc": "An entity: 16 bytes, its own kind, Fenrir::Entity never described."
+        },
+        {
+          "name": "target",
+          "offset": 16,
+          "kind": "entity",
+          "default": null,
+          "doc": "Another, given its own defaults."
+        },
+        {
+          "name": "label",
+          "offset": 32,
+          "kind": "fixed-string",
+          "length": 32,
+          "default": "Socket",
+          "doc": "A fixed string of 32 bytes, its default the literal."
+        },
+        {
+          "name": "title",
+          "offset": 64,
+          "kind": "fixed-string",
+          "length": 8,
+          "default": "",
+          "doc": "A UTF-8 fixed string, empty."
+        },
+        {
+          "name": "bytes",
+          "offset": 72,
+          "kind": "array",
+          "elementKind": "u8",
+          "length": 4,
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "doc": "Bytes, not text: still an array of u8."
+        },
+        {
+          "name": "mesh",
+          "offset": 76,
+          "kind": "reference",
+          "target": "Fenrir::Mesh",
+          "default": null,
+          "doc": "An asset reference: its target is the handle's type."
+        },
+        {
+          "name": "lod",
+          "offset": 84,
+          "kind": "reference",
+          "target": "Fenrir::Mesh",
+          "default": null,
+          "doc": "Another, given its own defaults."
+        }
+      ]
+    },
+    {
       "name": "Fixture::Tag",
       "category": "struct",
       "role": "shared-struct",
@@ -985,16 +1055,10 @@
         {
           "name": "m_label",
           "offset": 16,
-          "kind": "array",
-          "elementKind": "u8",
+          "kind": "fixed-string",
           "length": 4,
-          "default": [
-            97,
-            0,
-            0,
-            0
-          ],
-          "doc": "Characters: bytes, on every target."
+          "default": "a",
+          "doc": "Characters: a fixed string, its default the text its characters spell."
         }
       ]
     },

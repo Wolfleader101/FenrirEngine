@@ -1370,6 +1370,130 @@ public sealed class BindingTests
         Assert.True(changes.Count == 0, "The doc command keys and components changed the binding:\n" + string.Join("\n", changes));
     }
 
+    // describe-api's fixed-layout kinds (SCHEMA.md, "Kinds"): each binds as the shape it was described as before it had a
+    // kind of its own, so the generated files do not move.
+
+    [Fact]
+    public void AnEntityBindsAsTheBuiltInEntityAStructOfItWasBoundAs()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var asStruct = Generator.Generate(config, [WriteDescription(directory, root => HoldAnEntity(root, new JsonObject
+        {
+            ["kind"] = "struct", ["type"] = "Fenrir::Entity", ["default"] = new JsonObject(),
+        }))]);
+        var asEntity = Generator.Generate(config, [WriteDescription(directory, root => HoldAnEntity(root, new JsonObject
+        {
+            ["kind"] = "entity", ["default"] = null,
+        }))]);
+
+        Assert.Contains(" Entity Owner", Mirror(asEntity, "Hit.cs"), StringComparison.Ordinal);
+        var changes = Changes(asStruct, asEntity);
+        Assert.True(changes.Count == 0, "An entity kind bound otherwise than its struct:\n" + string.Join("\n", changes));
+
+        // The engine's entity, as FenrirECS describes it, and a field of Hit holding one by the kind given.
+        static void HoldAnEntity(JsonNode root, JsonObject kind)
+        {
+            root["types"]!.AsArray().Insert(0, new JsonObject
+            {
+                ["name"] = "Fenrir::Entity", ["category"] = "struct", ["role"] = "shared-struct", ["size"] = 16,
+                ["alignment"] = 8,
+                ["fields"] = new JsonArray(
+                    new JsonObject { ["name"] = "m_entityId", ["offset"] = 0, ["kind"] = "u32", ["default"] = 4294967295 },
+                    new JsonObject { ["name"] = "m_entityList", ["offset"] = 8, ["kind"] = "pointer", ["default"] = null }),
+            });
+            var field = new JsonObject { ["name"] = "owner", ["offset"] = 32 };
+            foreach (var (key, value) in kind)
+            {
+                field[key] = value?.DeepClone();
+            }
+
+            Type(root, "Fixture::Hit")["fields"]!.AsArray().Add(field);
+        }
+    }
+
+    [Fact]
+    public void AFixedStringBindsAsTheFixedByteBufferAnArrayOfU8WasBoundAs()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var asBytes = Generator.Generate(config, [WriteDescription(directory, root => Label(root, new JsonObject
+        {
+            ["kind"] = "array", ["elementKind"] = "u8", ["length"] = 4, ["default"] = new JsonArray(97, 0, 0, 0),
+        }))]);
+        var asText = Generator.Generate(config, [WriteDescription(directory, root => Label(root, new JsonObject
+        {
+            ["kind"] = "fixed-string", ["length"] = 4, ["default"] = "a",
+        }))]);
+
+        Assert.Contains(" fixed byte Label[4];", Mirror(asText, "Tag.cs"), StringComparison.Ordinal);
+        var changes = Changes(asBytes, asText);
+        Assert.True(changes.Count == 0, "A fixed string bound otherwise than its bytes:\n" + string.Join("\n", changes));
+
+        // Tag's label, a fixed buffer of the binding's, held by the kind given.
+        static void Label(JsonNode root, JsonObject kind)
+        {
+            var label = Field(root, "Fixture::Tag", "m_label").AsObject();
+            foreach (var key in new[] { "kind", "elementKind", "length", "default" })
+            {
+                label.Remove(key);
+            }
+
+            foreach (var (key, value) in kind)
+            {
+                label[key] = value?.DeepClone();
+            }
+        }
+    }
+
+    [Fact]
+    public void AReferenceBindsAsTheBoundHandleItsTargetNames()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, string.Join('\n', File.ReadAllLines(FixtureConfig)
+                                                             .SkipWhile(line => line != "[bound-types]").Skip(1)
+                                                             .TakeWhile(line => line.Length > 0)) +
+                                           "\n\"Fenrir::AssetHandle<Fenrir::Mesh>\" = { type = \"MeshHandle\", include = \"BoundMappings.hpp\" }\n");
+        var asStruct = Generator.Generate(config, [WriteDescription(directory, root => HoldAMesh(root, new JsonObject
+        {
+            ["kind"] = "struct", ["type"] = "Fenrir::AssetHandle<Fenrir::Mesh>", ["default"] = new JsonObject(),
+        }))]);
+        var asReference = Generator.Generate(config, [WriteDescription(directory, root => HoldAMesh(root, new JsonObject
+        {
+            ["kind"] = "reference", ["target"] = "Fenrir::Mesh", ["default"] = null,
+        }))]);
+
+        Assert.Contains(" MeshHandle Mesh", Mirror(asReference, "Hit.cs"), StringComparison.Ordinal);
+        var changes = Changes(asStruct, asReference);
+        Assert.True(changes.Count == 0, "A reference bound otherwise than its bound handle:\n" + string.Join("\n", changes));
+
+        var missing = WriteDescription(directory, root => HoldAMesh(root, new JsonObject
+        {
+            ["kind"] = "reference", ["target"] = "Fenrir::Font", ["default"] = null,
+        }));
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [missing]));
+        Assert.True(exception.Message.Contains("Fixture::Hit::mesh: a reference to Fenrir::Font, whose handle " +
+                                               "Fenrir::AssetHandle<Fenrir::Font> no description read describes", StringComparison.Ordinal),
+                    $"A reference whose handle nothing describes should fail naming it, but failed with\n  {exception.Message}");
+
+        // The handle as FenrirAssets describes it, and a field of Hit holding one by the kind given.
+        static void HoldAMesh(JsonNode root, JsonObject kind)
+        {
+            root["types"]!.AsArray().Insert(0, new JsonObject
+            {
+                ["name"] = "Fenrir::AssetHandle<Fenrir::Mesh>", ["category"] = "bound-type", ["role"] = "bound-type",
+                ["size"] = 8, ["alignment"] = 4,
+            });
+            var field = new JsonObject { ["name"] = "mesh", ["offset"] = 32 };
+            foreach (var (key, value) in kind)
+            {
+                field[key] = value?.DeepClone();
+            }
+
+            Type(root, "Fixture::Hit")["fields"]!.AsArray().Add(field);
+        }
+    }
+
     [Theory]
     [InlineData("Alike", "")]
     [InlineData("Differently", "Fixture::Hit is also described by")]

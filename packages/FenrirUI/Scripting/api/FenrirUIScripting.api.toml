@@ -17,10 +17,6 @@ headers = [
     "../../../FenrirPainter/Scripting/include/FenrirPainterScripting/ScriptPainter.hpp",
 ]
 
-# The world root's settings hold the engine's Entity, which keeps its value and entity list private: described here as
-# nested with the layout FenrirECS shares, and mirrored by the built-in binding.
-private-members = ["Fenrir::Entity"]
-
 [types]
 "Fenrir::ScriptUI::RootSettings" = "shared-struct"
 "Fenrir::ScriptUI::ImageRootSettings" = "shared-struct"
@@ -37,8 +33,6 @@ private-members = ["Fenrir::Entity"]
 "Fenrir::ScriptPainter::PainterId" = "shared-struct"
 # The text binding's.
 "Fenrir::Rect2D" = "shared-struct"
-# The built-in binding's.
-"Fenrir::Entity" = "shared-struct"
 # The math binding's.
 "Fenrir::Math::Ray" = "shared-struct"
 "Fenrir::Math::Vec2" = "bound-type"

@@ -319,9 +319,9 @@
         {
           "name": "image",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Image>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::Image",
+          "default": null
         },
         {
           "name": "sampler",

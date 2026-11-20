@@ -193,7 +193,11 @@ tagged union's mirror too); a resource in `read-only` gets the read-only interfa
 (`SamplesArray Samples`, with `N` as its `Length` constant; a private field `planes` gets `PlanesArray`), filled by the constructor, since C# cannot initialise one; an array in `fixed-buffers` is a
 `fixed` buffer (`public fixed byte Text[256];`) in an `unsafe` mirror instead, which a read-only mirror cannot hold. A
 field in `private-fields` is `private`, and its mirror turns off the compiler's unused-field warnings: native code reads
-it. A pointer is `pointer-type` at its offset, an empty struct an empty struct.
+it. A pointer is `pointer-type` at its offset, an empty struct an empty struct. The description's fixed-layout kinds
+bind as the shapes they hold: an `entity` as the mirror of `Fenrir::Entity` (the built-in binding's, from FenrirECS's
+description), a `fixed-string` as the array of `u8` its bytes are (a `fixed` buffer when `fixed-buffers` names it, its
+default text as those bytes), and a `reference` as the bound type `Fenrir::AssetHandle<target>`, which a description read
+must describe and `[bound-types]` bind; one no description describes fails naming the field.
 
 **Tagged unions.** The mirror holds the storage only, as the scripting SDK's tagged-union generator consumes it:
 `[TaggedUnion]`, `[StructLayout(LayoutKind.Explicit)]`, `[FieldOffset(0)] private Tag _type;` and one

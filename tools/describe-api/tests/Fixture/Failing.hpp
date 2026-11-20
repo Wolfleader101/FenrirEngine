@@ -2,6 +2,33 @@
 
 // Types the tool refuses, one per diagnostic. The tests select each one alone and check the diagnostic it gives.
 
+#include <cstdint>
+
+namespace Fenrir
+{
+    class Entity
+    {
+      public:
+        Entity() = default;
+        Entity(std::uint32_t id, void* entityList) : m_entityId(id), m_entityList(entityList)
+        {
+        }
+
+      private:
+        std::uint32_t m_entityId = 0xFFFFFFFFu;
+        void* m_entityList = nullptr;
+    };
+
+    struct Mesh;
+
+    template <typename T>
+    struct AssetHandle
+    {
+        std::uint32_t index = 0;
+        std::uint32_t generation = 0;
+    };
+} // namespace Fenrir
+
 namespace Failing
 {
     float Scale();
@@ -144,5 +171,20 @@ namespace Failing
     struct UnevaluatedDefault
     {
         int count = Count() * 2;
+    };
+
+    struct NamedEntity
+    {
+        Fenrir::Entity owner{7, nullptr};
+    };
+
+    struct NamedAsset
+    {
+        Fenrir::AssetHandle<Fenrir::Mesh> mesh{1, 1};
+    };
+
+    struct ComputedText
+    {
+        char label[8] = {static_cast<char>(Count())};
     };
 } // namespace Failing

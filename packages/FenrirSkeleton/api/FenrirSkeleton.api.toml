@@ -8,10 +8,9 @@ headers = [
     "../../FenrirAssets/include/FenrirAssets/SkinningSource.hpp",
 ]
 
-# BoneAttachment holds the engine's Entity, which keeps its value and entity list private, and its BoneName, which keeps
-# its bytes private behind Set (ADR-0037): both described with the layout they share, Entity mirrored by the built-in
-# binding.
-private-members = ["Fenrir::Entity", "Fenrir::BoneName"]
+# BoneAttachment holds its BoneName, which keeps its bytes private behind Set (ADR-0037): described with the layout it
+# shares, its bytes a fixed string.
+private-members = ["Fenrir::BoneName"]
 
 [types]
 # The skeleton extension's components.

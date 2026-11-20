@@ -8,6 +8,33 @@
 #include <limits>
 #include <numbers>
 
+// The engine's entity and asset handle, as the tool recognises them by qualified name: the shapes FenrirECS and
+// FenrirAssets declare, so the fixture reads without the engine's headers.
+namespace Fenrir
+{
+    class Entity
+    {
+      public:
+        Entity() = default;
+        Entity(std::uint32_t id, void* entityList) : m_entityId(id), m_entityList(entityList)
+        {
+        }
+
+      private:
+        std::uint32_t m_entityId = 0xFFFFFFFFu;
+        void* m_entityList = nullptr;
+    };
+
+    struct Mesh;
+
+    template <typename T>
+    struct AssetHandle
+    {
+        std::uint32_t index = 0;
+        std::uint32_t generation = 0;
+    };
+} // namespace Fenrir
+
 namespace Fixture
 {
     /** @brief A bound type built like a maths library's vector: each component in an anonymous union of names. */
@@ -283,7 +310,7 @@ namespace Fixture
         /** @brief An Id: its default is the constant its initialiser converts to. */
         Id m_id = noId;
         const void* m_owner = nullptr;
-        /** @brief Characters: bytes, on every target. */
+        /** @brief Characters: a fixed string, its default the text its characters spell. */
         char m_label[4] = {'a'};
     };
 
@@ -428,5 +455,27 @@ namespace Fixture
     struct Folder
     {
         bool open = false;
+    };
+
+    /**
+     * @brief A component holding the three fixed-layout kinds a file writes as values of their own: an entity, a
+     * fixed string and an asset reference.
+     */
+    struct Socket
+    {
+        /** @brief An entity: 16 bytes, its own kind, Fenrir::Entity never described. */
+        Fenrir::Entity owner;
+        /** @brief Another, given its own defaults. */
+        Fenrir::Entity target = Fenrir::Entity();
+        /** @brief A fixed string of 32 bytes, its default the literal. */
+        char label[32] = "Socket";
+        /** @brief A UTF-8 fixed string, empty. */
+        char8_t title[8] = {};
+        /** @brief Bytes, not text: still an array of u8. */
+        std::uint8_t bytes[4] = {};
+        /** @brief An asset reference: its target is the handle's type. */
+        Fenrir::AssetHandle<Fenrir::Mesh> mesh;
+        /** @brief Another, given its own defaults. */
+        Fenrir::AssetHandle<Fenrir::Mesh> lod{};
     };
 } // namespace Fixture

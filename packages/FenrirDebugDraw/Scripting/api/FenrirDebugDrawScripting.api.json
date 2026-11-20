@@ -58,28 +58,6 @@
       ]
     },
     {
-      "name": "Fenrir::Entity",
-      "category": "struct",
-      "role": "nested",
-      "size": 16,
-      "alignment": 8,
-      "doc": "Entity class that is used to interact with the entity list. This forms the basis of the ECS",
-      "fields": [
-        {
-          "name": "m_entityId",
-          "offset": 0,
-          "kind": "u32",
-          "default": 4294967295
-        },
-        {
-          "name": "m_entityList",
-          "offset": 8,
-          "kind": "pointer",
-          "default": null
-        }
-      ]
-    },
-    {
       "name": "Fenrir::Math::Vec3",
       "category": "bound-type",
       "role": "bound-type",
@@ -281,9 +259,8 @@
         {
           "name": "relativeTo",
           "offset": 8,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The entity the positions are relative to, or none."
         },
         {
@@ -328,9 +305,8 @@
         {
           "name": "relativeTo",
           "offset": 8,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The entity the item is relative to, or none."
         },
         {
